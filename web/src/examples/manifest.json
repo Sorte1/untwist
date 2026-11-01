@@ -1,0 +1,50 @@
+[
+  {
+    "name": "obfuscator.io — string array",
+    "source": "fixtures/reference/deobfuscate/obfuscator.io.js",
+    "licence": "fixtures/LICENSE-reference",
+    "bytes": 3234
+  },
+  {
+    "name": "obfuscator.io — control flow",
+    "source": "fixtures/reference/deobfuscate/obfuscator.io-control-flow.js",
+    "licence": "fixtures/LICENSE-reference",
+    "bytes": 2230
+  },
+  {
+    "name": "webpack 5 bundle",
+    "source": "fixtures/reference/unpack/webpack-5.js",
+    "licence": "fixtures/LICENSE-reference",
+    "bytes": 2448
+  },
+  {
+    "name": "webpack 4 bundle",
+    "source": "fixtures/reference/unpack/webpack-4.js",
+    "licence": "fixtures/LICENSE-reference",
+    "bytes": 1801
+  },
+  {
+    "name": "Vite / Rollup bundle",
+    "source": "fixtures/unpack-bundlers/rollup/vite-iife.js",
+    "licence": "fixtures/unpack-bundlers/licenses/LICENSE-vite",
+    "bytes": 4563
+  },
+  {
+    "name": "Browserify bundle",
+    "source": "fixtures/reference/unpack/browserify.js",
+    "licence": "fixtures/LICENSE-reference",
+    "bytes": 1813
+  },
+  {
+    "name": "React createElement calls (JSX)",
+    "source": "fixtures/jsx/classic.js",
+    "licence": null,
+    "bytes": 853
+  },
+  {
+    "name": "esbuild async helpers (untranspile)",
+    "source": "fixtures/untranspile/esbuild/async.0.28.1-es2015.js",
+    "licence": "fixtures/unpack-bundlers/licenses/LICENSE-esbuild",
+    "bytes": 2162
+  }
+]

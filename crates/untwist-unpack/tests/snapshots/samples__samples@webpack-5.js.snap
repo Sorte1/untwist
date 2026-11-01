@@ -1,0 +1,35 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/webpack-5.js
+---
+type: webpack
+entry: 2
+
+=== 2 -> index.js (entry)
+"use strict";
+const lib = require("./3.js");
+console.log(lib);
+
+=== 3 -> 3.js
+"use strict";
+require.r(exports);
+const a = require(4);
+const obj = { version: "2.0.0" };
+require.d(exports, {
+  default: () => a.foo,
+  version: () => obj.version
+});
+
+=== 4 -> 4.js
+"use strict";
+require.r(exports);
+const b = 2;
+require.d(exports, {
+  foo: () => b,
+  obj: () => x
+});
+var x = {};
+require.r(x);
+require.d(x, { Console: () => bar });
+function bar() {}

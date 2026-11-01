@@ -1,0 +1,14 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/webpack-5-json.js
+---
+type: webpack
+entry: <none>
+
+=== 0 -> 0.js
+const json = require("./1.js");
+console.log(json);
+
+=== 1 -> 1.js
+module.exports = { foo: "bar" };

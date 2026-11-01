@@ -1,0 +1,161 @@
+# Known divergences from the reference deobfuscator: Unpack
+
+Untwist's unpack stage is verified against the reference deobfuscator by `cargo xtask diff-unpack`; the items below are deliberate, not bugs.
+
+- Module paths are stored in one normalised POSIX form with **no `./` prefix** (`3.js`, `index.js`, `node_modules/lib/index.js`), so `bundle.json` reads `"path": "3.js"` where the reference deobfuscator writes `"path": "./3.js"`. The file names on disk are identical, and `relative_path` re-adds the `./` when a specifier is emitted, so every generated `require("…")` and `import … from "…"` is byte-identical to the reference deobfuscator's. The reference deobfuscator is itself inconsistent here: browserify entries are already stored as `index.js` with no prefix while unreachable browserify modules keep `./<id>.js`.
+- `bundle.json` writes `"entryId": null` when no entry module was found; the reference deobfuscator writes the empty string. `entry_id` is an `Option<String>` internally rather than a `''` sentinel.
+- `bundle.json` carries two fields the reference deobfuscator does not: `isEntry` per module, and a `chunkIds` array. The reference deobfuscator captures chunk ids in its JSONP matcher and then discards them.
+- Cross-chunk requires that cannot be resolved are reported as diagnostic notes (`module <id>: require("<id>") has no module in this bundle`) instead of being injected into the output as a `/*the reference deobfuscator:missing*/` leading comment. `xtask::diff::normalize` prints with comments disabled, so this is a non-difference in the differential test.
+- A module id that would escape the output directory (`../tmp.js`, `./\..\node_modules\debug\src\index`) is replaced at path-assignment time with `_unsafe_<sanitised id>.js` plus a note. The reference deobfuscator keeps the traversing path and throws inside `save()`, losing the whole bundle. Two modules that resolve to the same output path are uniquified with `-2`, `-3` stem suffixes and a note; the reference deobfuscator does not detect path collisions at all and silently overwrites.
+- Extracted module programs start with a **script** source type, so a module is ESM only after its own `require.r(exports)` call. Untwist's parser tries `SourceType::mjs()` first and keeps it whenever a file has no errors, so inheriting the bundle's source type would mark every module ESM.
+- Browserify's `./utils` versus `utils/index.js` ambiguity is resolved by constraint: a module whose path came from an extensionless relative request is moved to `<stem>/index.js` when its own relative requests escape the tree from `<stem>.js` but not from `<stem>/`. The reference deobfuscator marks this case `test.skip` and always produces `utils.js`. The inference is conservative and leaves all three passing `path.test.ts` cases and all four browserify fixtures unchanged.
+- Several input files are detected separately and their module maps merged into one bundle before paths are assigned, so a require that crosses a chunk boundary resolves. The reference deobfuscator has no multi-file API; every cross-chunk require becomes a missing marker.
+- User path mappings are a closed enum of four shapes (string literal, numeric literal, identifier, `object.property` member) rather than arbitrary `@codemod/matchers` matchers; a regexp-literal matcher is not implemented in v1. A mapping key that matches a second module is skipped and the first module keeps it, where the reference deobfuscator throws `Mapping X is already used.` Mappings that matched nothing become notes; the reference deobfuscator tracks them in a variable it never reads.
+- Webpack helpers nobody undoes (`require.t`, `require.e`, `require.S`) and forms this crate did not match (a surviving `require.d`, `require.r` or `require.n`) are reported as notes. The reference deobfuscator leaves them in the output silently.
+- `convert_default_require` resolves the `require.n` argument and the getter variable by **name** over the whole module program (first `require(<number>)` declarator wins) rather than through scope bindings. A module that shadows one of those names in an inner scope would diverge; webpack's generated names make that unreachable in practice.
+- Detection never mutates the input program — module bodies are `CloneIn`-ed — so unpacking no longer has to run after codegen, and a webpack 5 bundle sitting at the top level of a file with no IIFE wrapper is detected, which the reference deobfuscator's `BlockStatement`-keyed visitor cannot see. The webpack 5 container search also backtracks over candidate declarations and requires a non-empty container, so a `var __webpack_module_cache__ = {}` declared before the real container no longer defeats detection.
+- An expression-bodied arrow is never accepted as a module factory (the reference deobfuscator builds `t.program(undefined)` from one and crashes), and a var injection whose parameter has no matching argument produces `var x;` instead of crashing the reference deobfuscator's template.
+- `-o DIR` with `--force` deletes only an explicit list of files: `deobfuscated.js`, `bundle.json`, the files the current run is about to write, and the module paths recorded in an existing `bundle.json`. No directory is ever removed and nothing recursive happens; the reference deobfuscator's CLI clears the whole output directory recursively.
+- Object literals with a single property print on one line (`var x = { Console: bar };`) because `oxc_codegen` only goes multi-line above one property, where Babel always breaks. This is a printer difference and disappears under `xtask::diff::normalize`.
+- A user path-mapping key is a literal path exactly when it starts with `.` (not only `./`): `resolve_mapping_path` in `mappings.rs` refuses `../escape.js` as unsafe instead of turning it into `node_modules/../escape.js`, because `PosixPath::parse` rejects any normalised path starting with `../` regardless of how the key was written.
+- A module whose derived or resolved path is refused by `PosixPath::parse` gets the `_unsafe_<id>.js` fallback from `fallback_path` plus a `Note` (`module <id>: unsafe path <source> replaced by <path>`) from `assign_paths`, and this holds after a chunk merge retags a module's entry id too: `Module::assign_default_path` is the single place that derives a path, applies the fallback and records `unsafe_path_source`, so `Module::new` and `merge_bundles`'s retagging both go through it and both re-emit the note.
+- `-o DIR` refuses to write or `--force`-delete through any symlink component below DIR (DIR itself may be a symlink): `writer::symlink_free` walks every path segment below DIR with `symlink_metadata` and refuses if any is a symlink, and `writer::is_contained` canonicalizes the deepest existing ancestor of the target and requires it to stay under DIR; both `write_all` and `clean` (the `--force` deletion path) are gated by this and report each refusal instead of writing or deleting through it, excluding it from `files_written`. The reference deobfuscator's CLI only throws on lexical `..` traversal at save time and has no symlink awareness at all.
+- The `symlink_free`/`is_contained` containment check is check-then-act, not atomic: an attacker able to write inside DIR while `untwist -o DIR` is running can still race it. `write_all` writes each file through a same-directory temp file and `rename`, so a hard link planted at the target path no longer leaks the write into the link's other name (`rename` replaces DIR's own directory entry and leaves the other name alone), and a symlink planted at the target's own leaf position isn't followed by `rename` either. The residual gap is an intermediate path segment (a directory component, not the leaf) that is swapped for a symlink between the check and the write: `NamedTempFile::new_in` and the following `rename` both re-resolve that segment at call time and would follow it. Closing this fully needs `O_NOFOLLOW`/`openat`-based path resolution, which is out of scope here.
+- **The webpack entry marker is `.s`, and nothing else.** The reference deobfuscator matches only
+  `__webpack_require__.s` (`unpack/webpack/common-matchers.ts:143`); its own closed-unmerged PR #34
+  proposed adding `.j`, but `.j` is webpack 5's `RuntimeGlobals.chunkId` — the id of the chunk currently
+  executing, never an entry module id — which is exactly why that PR was closed rather than merged:
+  `fixtures/reference/unpack/webpack-5-no-entry.js` assigns `__webpack_require__.j = 377` for
+  `installedChunks['377']`, and `377` names no module. Untwist rules `.j` out alongside the issue's other
+  four names — `.e`, `.d`, `.m` and `.r`, the ensure-chunk, define, module-table and `__esModule`-setter
+  helpers — and pins the collision case (a chunk id that happens to equal a real module id) in
+  `fixtures/unpack-gaps/webpack-5-chunk-id-j.js`, so a chunk id is never read as the entry even when it
+  matches one.
+- **A startup body with several top-level `require(id)` calls records the first as the entry, and says
+  so.** The reference deobfuscator takes the first silently (`common-matchers.ts:157-164`), which is what reference deobfuscator issue
+  #68 objects to: there is no canonical entry in such a bundle and the answer looks certain. Untwist
+  records the same id — `bundle.json`'s `entryId` is where a reader starts, and dropping it loses more
+  than an imprecise hint does — with a note naming the count (`Bundle::entry_candidates`, set by the
+  webpack-4 detector when no `.s` marker is assigned and carried through a chunk merge with the
+  entry it belongs to), so the uncertainty is visible.
+- **A Promise-based chunk-loading runtime's entry id now comes from its `.O` registration.**
+  webpack 5's `output.chunkLoading: "require"` runtime (`__webpack_require__.O`/`.f.require`
+  against an `installedChunks` map, reference deobfuscator issue #33) still pushes its modules through the same
+  `self["webpackChunk…"]` global the JSONP detector already matches, so measuring against
+  `fixtures/unpack-gaps/webpack-5-promise-chunk.js` found the modules and chunk ids correctly and
+  only `entry_id` came back `None` — nothing read the `.O(0, [chunk], () => require(id))` call that
+  names the chunk's requested module. `registered_entry_id`/`required_id` in `chunk.rs` read it from
+  the first such registration anywhere in the program's top-level statements (unwrapping a top-level
+  `SequenceExpression`'s elements, since minifiers chain several `.O(...)` calls with the comma
+  operator, and following both arrow-body forms — expression and block — since minifiers emit
+  either).
+- **the reference deobfuscator's closed-unmerged PR #50 shapes are fixtures now.** Its two webpack 4
+  shapes are built by webpack 4.47.0 from the shared app: `fixtures/unpack-bundlers/webpack/webpack4-dev-paths.js`
+  (readable `./app/…` ids, `__webpack_require__.t` around a JSON import) and `webpack4-externals.js`
+  (a factory calling the host's own `require("path")`). Both unpack, and the written modules run
+  under node with the bundle's output. The host `require` stays the host's (see below);
+  `require.t(id, 9)` becomes `require(id)`; every other `.t` mode, and webpack's `.r/.d/.o/.n` where a
+  module keeps them, are taken verbatim from the bundle's own prelude into `_runtime/webpack.js`
+  behind a synthesized `__webpack_require__(id) = require(<path>)`.
+- **the reference deobfuscator's ESM conversion runs only where it is proven.** The reference deobfuscator
+  turns every harmony module into ESM: a numeric harmony import of a CommonJS target becomes
+  `import * as x` (the namespace lacks the target's properties), a `.d` on a namespace object
+  becomes `export const` (the namespace stays empty), a getter becomes an eager `export let`, and
+  imports hoist above earlier effects. By default Untwist writes `export`s only for a module whose
+  conversion is proven (strict, harmony, `.d` only on `exports` with getters reading distinct
+  top-level bindings, no leftover `exports`/`module`/`this`/`arguments`, no require cycle, no
+  `__esModule` observation, no interop target, every consumer a plain member read) and keeps its
+  `require`s, so evaluation order is unchanged; every other module stays CommonJS with its helpers
+  in `_runtime/webpack.js`. The webpack 5 inline entry is written as `index.js` under the same
+  rules. The conservative comparison mode keeps the reference deobfuscator's conversion, so `diff-unpack` is unchanged; several default
+  the reference deobfuscator snapshots were re-pinned for it.
+
+- **A factory parameter is not renamed onto a name its body already reads free.**
+  the reference deobfuscator renames webpack's `(e, t, i)` and browserify's factory parameters to `module`,
+  `exports` and `require` even when the body also reads the host's own `require` (or `module`,
+  `exports`): `require.hmd(e)` beside `i.d(t, …)` becomes `require.hmd(e)` beside `require.d(…)`,
+  so the host's reference is captured by the runtime's and node sees a different program
+  (`crates/untwist/tests/host_require.rs` runs both). Untwist gives such a parameter a fresh name
+  (`_require`) instead; the conservative comparison mode keeps the reference deobfuscator's fold, so `diff-unpack` is unchanged. The default
+  snapshot of `fixtures/reference/unpack/webpack-esm.js` was re-pinned for it.
+
+### Bundlers the reference deobfuscator does not unpack
+
+The reference deobfuscator detects only webpack and browserify (its issue #117). Untwist also splits the bundlers
+below. Every kind follows one contract: a written module set must behave like the bundle under
+node, or no bundle is written and the whole program is output as before, with the note
+`unpack: <kind> bundle shape found but not proven; no bundle is written`. A refusal is never a
+failure; the shapes each kind accepts and refuses are pinned by `fixtures/unpack-bundlers/`
+(generated by the real bundlers at exact versions, plus hand-written `min-`/`neg-` shapes) and run
+under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only modes.
+`bundle.json`'s `"type"` names the kind in lower case (`esbuild`, `rollup`, `systemjs`, `amd`,
+`umd`, `parcel`, `metro`, `turbopack`, `closure`).
+
+- **Detection order.** The reference deobfuscator's four detectors run first, unchanged, then Closure's module
+  manager, SystemJS, esbuild (Bun's wrapper unwrapped first), Metro, Parcel and Turbopack, then a
+  UMD/AMD/SystemJS wrapper's single module is run back through the splitting kinds (an esbuild
+  bundle inside UMD splits), then AMD/UMD itself. Rollup/Vite scope hoisting runs last and only
+  when asked (below). The new probes look only at the top-level statements and one wrapper body,
+  so a non-bundle input is not re-parsed.
+- **Output form.** A CommonJS factory becomes a module with its own body and CJS names; an
+  ESM-shaped module (SystemJS, a Rollup split) is written as ESM; esbuild's lazy `__esm` init stays
+  a lazy exported `init_x` function, because lazy-once is not import hoisting. A path-like id the
+  bundler recorded (esbuild keys or `// path` comments, SystemJS names, AMD ids, Parcel and
+  Turbopack asset paths) becomes the module's path through the usual traversal and collision
+  checks; otherwise `<id>.js`. The entry is `index.js`, reserved even against a module whose own id
+  is `index` (that module gets `index-2.js`).
+- **The runtime module.** A helper whose semantics are not `require`'s (esbuild's
+  `__toESM`/`__esm`, webpack's `.t`, Parcel's hoisted helpers) is moved verbatim from the bundle
+  into `_runtime/<kind>.js`, which the modules that use it require; it must itself be closed (only
+  globals and other helpers free). Metro's `importDefault`/`importAll` live inside Metro's polyfill
+  closure, so `_runtime/metro.js` holds a synthesized `metroRequire(id)` plus copies of Metro's two
+  interop functions. Closure's shared `var`s live in a null-prototype holder,
+  `_runtime/closure.js`.
+- **Free host names are never renamed, and never captured.** A factory that reads a free
+  `require`, `module`, `exports`, `__filename` or `__dirname` the bundler did not map is refused
+  (except a bare `require("pkg")` of a host package, which is kept as the host's), since the
+  written file would see a different value.
+- **Rollup/Vite scope hoisting is opt-in: `--split-hoisted`.** A hoisted bundle has no module
+  boundaries of its own, so the split is a heuristic over the wrapper's top-level declarations
+  (clusters by reference adjacency, a binding's writers kept with its owner). It is refused for a
+  sloppy wrapper, any top-level statement besides the wrapper, any `currentScript` read, and any
+  binding written across a module edge. `game.js` reads `document.currentScript` and is therefore
+  not split.
+- **Closure.** Only the module manager's `try {…} catch (e) { X._DumpException(e) }` segments
+  are split (ids from `/*_M:id*/` markers or begin/end loader calls checked against the
+  `_ModuleManager_initialize` graph). Closure ADVANCED property renaming stays a non-goal. A Closure
+  bundle inside a UMD or AMD factory is not re-fed: its top-level `this` is the factory's receiver,
+  which an AMD loader sets to `exports`.
+- **Metro.** Factories with 5 or 6 parameters (Metro < 0.52) are refused.
+- **SystemJS.** The entry is the first named register (SystemJS's named-register extension never
+  instantiates an anonymous register beside named ones). Setters must be plain binding, namespace or
+  re-export forms, and static cycles are refused; `_context.meta` is refused rather than mapped to
+  `import.meta`, whose `url` depends on the file's location.
+- **AMD and UMD.** AMD needs every top-level statement to be a `define`, all anonymous (one) or all named;
+  dependency cycles, loader plugins (`!`), the `define(function (require) {…})` sugar and a `module`
+  dependency are refused. A UMD wrapper's non-factory arguments must be inert (`this`, a literal,
+  a `typeof X !== "undefined" ? X : …` guard).
+- **Parcel.** Both runtimes are accepted, the registry (`--no-scope-hoist`) only when its runtime
+  text matches one of five recorded forms after α-renaming (`parcel/runtimes/`; if a later
+  prepare or unminify change rewrites that runtime differently, Parcel registry bundles are refused
+  until the forms are re-recorded). Dependency maps with a repeated or `__proto__` key are refused.
+  A require that is neither a module of the bundle nor a node builtin is refused: Parcel externals
+  are not accepted, which also keeps an `Object.prototype` name (`require("constructor")`, which
+  Parcel's runtime resolves through the prototype) from being read as an external. Accepting
+  externals later must exclude those names explicitly. A lazy chunk that the inputs
+  supply is linked into one bundle.
+- **Turbopack.** Browser chunks with a registration naming their runtime entries, and server chunks
+  given together with Next's page loader and `[turbopack]_runtime.js`, are split. A chunk whose
+  factories use Turbopack's interop, async or chunk-loading helpers (`i`, `s`, `A`, `l`, …) is
+  refused: those helpers live only in the runtime file, so they cannot be moved. Browser multi-chunk
+  input is refused (no node oracle).
+- **A throwing factory is re-run.** Parcel's and Turbopack's runtimes (like webpack 4's and Metro's,
+  as before) keep a module that threw cached; node's `require` deletes the cache entry and re-runs it. esbuild's
+  `__commonJS` resets like node and is exact.
+- **Several input files are one program.** Unpack never sees the input file
+  names, only their texts, so a chunk load (Parcel's `module.require("./lazy.<hash>.js")`, Next's
+  loader `R.c(...)`) is linked to the input that defines the ids it names, not to the file the
+  specifier names. This is the premise webpack's JSONP chunk merge already used. If the inputs are
+  not the whole program, a load that would have read some other file is resolved to the given
+  input with the same ids; a load whose ids no input defines refuses the group. Passing input
+  names through to unpack, so the specifiers can be checked, is not in 5e.

@@ -1,0 +1,4 @@
+function hi() {
+  console.log(/*reference:decode_error*/undefined);
+}
+hi();

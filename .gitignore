@@ -1,0 +1,40 @@
+# reference deobfuscator clone (UNTWIST_REFERENCE_DIR), not part of this repo
+/reference/
+
+/target/
+/fixtures/generated/
+/tools/corpus/node_modules/
+/tools/bundlers/node_modules/
+/tools/gap-sweep/node_modules/
+**/*.snap.new
+**/*.pending-snap
+web/node_modules
+web/dist
+web/src/engine/pkg
+
+# local third-party samples and tool state, never committed
+/export/
+/game.js
+/game_old.js
+/.wrangler/
+/tools/obfuscated/node_modules/
+
+/target
+/out/
+/test.js
+*.pid
+
+# local working notes, never committed
+/.[s]uperpowers/
+/.[c]laude/
+[C]LAUDE.md
+AGENTS.md
+/docs/[s]uperpowers/
+/docs/research/
+/benches/*.md
+!/benches/README.md
+
+# third-party real-world sample, kept locally only
+/fixtures/real-world/game.js
+/fixtures/real-world/game.js.snap
+/fixtures/corpus-export/

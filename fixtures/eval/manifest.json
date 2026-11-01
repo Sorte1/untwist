@@ -1,0 +1,506 @@
+[
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot0-shift0.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot0-shift0-ct.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot0-shift1cc.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot0-shift1cc-ct.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot1-shift0.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot1-shift0-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot1-shift1cc.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot1-shift1cc-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot5-shift0.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot5-shift0-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot5-shift1cc.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "none-rot5-shift1cc-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot0-shift0.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot0-shift0-ct.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot0-shift1cc.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot0-shift1cc-ct.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot1-shift0.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot1-shift0-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot1-shift1cc.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot1-shift1cc-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot5-shift0.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot5-shift0-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot5-shift1cc.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "base64-rot5-shift1cc-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot0-shift0.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot0-shift0-ct.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot0-shift1cc.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot0-shift1cc-ct.js",
+    "rotator_index": null
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot1-shift0.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot1-shift0-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot1-shift1cc.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot1-shift1cc-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot5-shift0.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot5-shift0-ct.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot5-shift1cc.js",
+    "rotator_index": 0
+  },
+  {
+    "array_fn": "a",
+    "decoders": [
+      "b"
+    ],
+    "expected": [
+      "log",
+      "Hello World!",
+      "console",
+      "deobfuscate"
+    ],
+    "file": "rc4-rot5-shift1cc-ct.js",
+    "rotator_index": 0
+  }
+]

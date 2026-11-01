@@ -1,0 +1,365 @@
+use oxc_ast::ast::*;
+use oxc_ast_visit::VisitJs;
+use oxc_semantic::Scoping;
+use oxc_span::Span;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use rustc_hash::FxHashMap;
+use std::borrow::Cow;
+use std::cell::RefCell;
+
+use super::bind::Bindings;
+use super::fresh::Fresh;
+use super::sites::*;
+use super::{AKey, ASite, Agnostic};
+use crate::proof::ProtoRoot;
+use untwist_eval::value::JsString;
+
+#[derive(Clone, Copy, Default)]
+pub(super) struct Watch<'k> {
+    pub(super) names: &'k [&'k str],
+    pub(super) props: &'k [&'k str],
+    pub(super) fns: &'k [SymbolId],
+    pub(super) depth: u8,
+    pub(super) observe: bool,
+    pub(super) defer: bool,
+}
+
+const LINEAR_LOOKUP: usize = 16;
+
+#[inline(always)]
+fn listed<T: Ord>(list: &[T], item: &T) -> bool {
+    if list.len() <= LINEAR_LOOKUP {
+        return list.contains(item);
+    }
+    searched(list, item)
+}
+
+#[inline(never)]
+fn searched<T: Ord>(list: &[T], item: &T) -> bool {
+    list.binary_search(item).is_ok()
+}
+
+impl Watch<'_> {
+    #[inline(always)]
+    pub(super) fn has_name(&self, name: &str) -> bool {
+        listed(self.names, &name)
+    }
+
+    #[inline(always)]
+    pub(super) fn has_prop(&self, name: &str) -> bool {
+        listed(self.props, &name)
+    }
+
+    #[inline(always)]
+    pub(super) fn has_fn(&self, symbol: SymbolId) -> bool {
+        listed(self.fns, &symbol)
+    }
+}
+
+fn ordered<T: Ord + Copy>(list: &[T]) -> Cow<'_, [T]> {
+    if list.len() <= LINEAR_LOOKUP || list.is_sorted_by(|left, right| left < right) {
+        return Cow::Borrowed(list);
+    }
+    let mut owned = list.to_vec();
+    owned.sort_unstable();
+    owned.dedup();
+    Cow::Owned(owned)
+}
+
+pub(super) type Inputs<'k> = (
+    Option<&'k FxHashMap<Span, &'k JsString>>,
+    &'k [Span],
+    Watch<'k>,
+);
+
+pub(super) fn run<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    bindings: &Bindings<'_, 'a>,
+    (resolve, machinery, watch): Inputs<'_>,
+    fresh_calls: bool,
+    symbol_safe: bool,
+) -> (Agnostic<'a>, bool, bool) {
+    let fresh = Fresh {
+        scoping,
+        bindings,
+        sealed: RefCell::default(),
+    };
+    let mut sites = Sites::new(fresh, (resolve, machinery, watch), fresh_calls, symbol_safe);
+    sites.inline_budget = inline_budget(program);
+    sites.visit_program(program);
+    sites.judge_collected()
+}
+
+const INLINE_BYTES_PER_INPUT_BYTE: usize = 4;
+const INLINE_BYTES_FLOOR: usize = 1 << 16;
+
+fn inline_budget(program: &Program<'_>) -> usize {
+    (program.span.size() as usize)
+        .saturating_mul(INLINE_BYTES_PER_INPUT_BYTE)
+        .max(INLINE_BYTES_FLOOR)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Judged {
+    source: bool,
+    symbol_safe: bool,
+}
+
+pub(super) fn settle<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    (resolve, machinery, watch): Inputs<'_>,
+) -> (Agnostic<'a>, Vec<SymbolId>) {
+    let (names, props, fns) = (
+        ordered(watch.names),
+        ordered(watch.props),
+        ordered(watch.fns),
+    );
+    let watch = Watch {
+        names: &names,
+        props: &props,
+        fns: &fns,
+        ..watch
+    };
+    settle_ordered(program, scoping, (resolve, machinery, watch))
+}
+
+fn settle_ordered<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    (resolve, machinery, watch): Inputs<'_>,
+) -> (Agnostic<'a>, Vec<SymbolId>) {
+    let mut bindings = Bindings::collect(program, scoping, !watch.names.is_empty(), resolve);
+    let globals = script_globals(program, scoping);
+    let mut judged = Judged {
+        source: bindings.global_source(),
+        symbol_safe: bindings.symbol_safe(),
+    };
+    if judged.source {
+        bindings.hide_calls(&globals);
+    }
+    let mut settled = Vec::new();
+    loop {
+        let mut out = analyse(
+            program,
+            scoping,
+            &bindings,
+            (resolve, machinery, watch),
+            judged.symbol_safe,
+        );
+        let written = Written::of(&out.sites, machinery);
+        let next = Judged {
+            source: judged.source || out.global_source,
+            symbol_safe: judged.symbol_safe && !written.may_be("Symbol"),
+        };
+        if next.source && !judged.source {
+            bindings.hide_calls(&globals);
+        }
+        let rebound = rebound_globals(&out, &globals, &bindings, (next.source, &written));
+        if rebound.is_empty() && next == judged {
+            let (reach, observed) = rebound_ambient(&out, scoping, &written);
+            out.realm_rebound |= roots_rebound(scoping, &out.sites, machinery);
+            out.global_source = judged.source;
+            out.reach = out.reach.or(reach);
+            out.observed = final_observed(&out, &written, observed);
+            out.bootstrap = bindings.bootstrap_refusal;
+            return (out, settled);
+        }
+        judged = next;
+        bindings.make_opaque(&rebound);
+        settled.extend(rebound);
+    }
+}
+
+pub(super) fn analyse<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    bindings: &Bindings<'_, 'a>,
+    inputs: Inputs<'_>,
+    symbol_safe: bool,
+) -> Agnostic<'a> {
+    let (mut out, mut chains, natives) = run(program, scoping, bindings, inputs, true, symbol_safe);
+    if !natives {
+        let source = out.global_source;
+        drop(out);
+        let rerun = run(program, scoping, bindings, inputs, false, symbol_safe);
+        out = rerun.0;
+        out.global_source |= source;
+        chains = rerun.1;
+    }
+    if !chains {
+        let span = out.sites.first().map_or(Span::default(), |site| site.span);
+        out.sites.push(ASite {
+            span,
+            key: AKey::Unknown,
+            identity: false,
+            root: ProtoRoot::Either,
+            outside: !super::inside(inputs.1, span),
+        });
+    }
+    out
+}
+
+pub(super) fn script_globals(program: &Program<'_>, scoping: &Scoping) -> Vec<SymbolId> {
+    if untwist_core::semantic::has_module_syntax(program) {
+        return Vec::new();
+    }
+    let declared = SymbolFlags::FunctionScopedVariable.union(SymbolFlags::Function);
+    scoping
+        .get_bindings(scoping.root_scope_id())
+        .iter()
+        .filter(|(_, symbol)| scoping.symbol_flags(**symbol).intersects(declared))
+        .map(|(_, symbol)| *symbol)
+        .collect()
+}
+
+fn is_index_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.bytes().all(|byte| byte.is_ascii_digit())
+        && (name == "0" || !name.starts_with('0'))
+}
+
+#[derive(Default)]
+pub(super) struct Written<'k> {
+    named: Vec<&'k str>,
+    index: bool,
+    any: bool,
+}
+
+impl<'k> Written<'k> {
+    fn of(sites: &'k [ASite<'_>], machinery: &[Span]) -> Self {
+        let outside = |site: &&ASite<'_>| {
+            !machinery
+                .iter()
+                .any(|outer| outer.start <= site.span.start && site.span.end <= outer.end)
+        };
+        let keys = || sites.iter().filter(outside).map(|site| &site.key);
+        let any = keys().any(|key| matches!(key, AKey::Pending(_) | AKey::Unknown));
+        if any {
+            return Self {
+                any,
+                ..Self::default()
+            };
+        }
+        let mut named =
+            Vec::with_capacity(keys().filter(|key| matches!(key, AKey::Named(_))).count());
+        let mut index = false;
+        for key in keys() {
+            match key {
+                AKey::Named(name) => {
+                    index |= is_index_name(name);
+                    named.push(name.as_ref());
+                }
+                AKey::Index => index = true,
+                AKey::Pending(_) | AKey::Unknown => {}
+            }
+        }
+        named.sort_unstable();
+        named.dedup();
+        Self { named, index, any }
+    }
+
+    fn names(&self, name: &str) -> bool {
+        self.named.binary_search(&name).is_ok()
+    }
+
+    pub(super) fn may_be(&self, name: &str) -> bool {
+        self.any || self.names(name) || (self.index && is_index_name(name))
+    }
+
+    pub(super) fn may_be_element(&self) -> bool {
+        self.any || self.index || self.names("length")
+    }
+}
+
+fn rebound_globals(
+    out: &Agnostic<'_>,
+    globals: &[SymbolId],
+    bindings: &Bindings<'_, '_>,
+    (source, written): (bool, &Written<'_>),
+) -> Vec<SymbolId> {
+    if globals.is_empty() || out.saturated || out.code_text.is_some() {
+        return Vec::new();
+    }
+    globals
+        .iter()
+        .filter(|symbol| {
+            !bindings.is_opaque(**symbol)
+                && (written.may_be(bindings.symbol_name(**symbol))
+                    || (source && bindings.state_written(**symbol, written)))
+        })
+        .copied()
+        .collect()
+}
+
+fn final_observed(
+    out: &Agnostic<'_>,
+    written: &Written<'_>,
+    observed: Option<Span>,
+) -> Option<Span> {
+    out.observed
+        .or(observed)
+        .or_else(|| keyed_observed(out, written))
+        .or_else(|| out.observe_stored.filter(|_| out.stores_global))
+}
+
+fn keyed_observed(out: &Agnostic<'_>, written: &Written<'_>) -> Option<Span> {
+    out.observe_keyed
+        .iter()
+        .find(|(_, key)| out.code_text.is_some() || written.may_be(key))
+        .map(|(span, _)| *span)
+}
+
+fn rebound_ambient(
+    out: &Agnostic<'_>,
+    scoping: &Scoping,
+    written: &Written<'_>,
+) -> (Option<Span>, Option<Span>) {
+    let unresolved = scoping.root_unresolved_references();
+    let assigned = |name: &str| {
+        unresolved.get(name).is_some_and(|references| {
+            references
+                .iter()
+                .any(|reference| scoping.get_reference(*reference).is_write())
+        })
+    };
+    let rebound = |name: &str| out.saturated || written.may_be(name) || assigned(name);
+    let first = |observe: bool| {
+        out.ambient
+            .iter()
+            .find(|(_, name, kind)| *kind == observe && rebound(name))
+            .map(|(span, _, _)| *span)
+    };
+    (first(false), first(true))
+}
+
+pub(super) const PRECISE_ROOTS: [&str; 7] = [
+    "String", "Array", "Object", "Function", "Number", "RegExp", "Symbol",
+];
+
+pub(super) fn roots_rebound(scoping: &Scoping, sites: &[ASite<'_>], machinery: &[Span]) -> bool {
+    let unresolved = scoping.root_unresolved_references();
+    let rewritten = PRECISE_ROOTS.iter().any(|name| {
+        unresolved.get(*name).is_some_and(|references| {
+            references
+                .iter()
+                .any(|reference| scoping.get_reference(*reference).is_write())
+        })
+    });
+    let inside = |span: Span| {
+        machinery
+            .iter()
+            .any(|outer| outer.start <= span.start && span.end <= outer.end)
+    };
+    rewritten
+        || sites.iter().any(|site| {
+            site.root == ProtoRoot::Either
+                && !inside(site.span)
+                && match &site.key {
+                    AKey::Named(name) => PRECISE_ROOTS.contains(&name.as_ref()),
+                    AKey::Index => false,
+                    AKey::Pending(_) | AKey::Unknown => true,
+                }
+        })
+}

@@ -1,0 +1,15 @@
+Untwist
+Copyright (c) 2026 sorte1
+
+Untwist is a reimplementation of webcrack (https://github.com/j4k0xb/webcrack)
+in Rust. Its pass behaviour is compatible with or ported from webcrack, and the
+fixtures under fixtures/reference/ are taken from webcrack. webcrack is licensed
+under the MIT License:
+
+    Copyright (c) 2023 j4k0xb
+
+The full webcrack license text is in fixtures/LICENSE-reference.
+
+vendor/regress is a fork of regress (https://github.com/ridiculousfish/regress)
+by ridiculousfish, licensed under MIT OR Apache-2.0; its license files are in
+that directory.

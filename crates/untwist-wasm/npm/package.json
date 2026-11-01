@@ -1,0 +1,53 @@
+{
+  "name": "@untwist/wasm",
+  "version": "0.1.0",
+  "description": "JavaScript deobfuscator, unminifier and unbundler, compiled to WebAssembly",
+  "license": "MIT OR Apache-2.0",
+  "author": "sorte1",
+  "homepage": "https://untwist.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sorte1/untwist.git",
+    "directory": "crates/untwist-wasm/npm"
+  },
+  "bugs": {
+    "url": "https://github.com/Sorte1/untwist/issues"
+  },
+  "keywords": [
+    "javascript",
+    "deobfuscator",
+    "deobfuscate",
+    "unminify",
+    "unpack",
+    "webpack",
+    "wasm"
+  ],
+  "type": "module",
+  "main": "./untwist_wasm.js",
+  "module": "./untwist_wasm.js",
+  "types": "./untwist_wasm.d.ts",
+  "exports": {
+    ".": {
+      "types": "./untwist_wasm.d.ts",
+      "default": "./untwist_wasm.js"
+    },
+    "./untwist_wasm_bg.wasm": "./untwist_wasm_bg.wasm"
+  },
+  "files": [
+    "untwist_wasm.js",
+    "untwist_wasm.d.ts",
+    "untwist_wasm_bg.wasm",
+    "untwist_wasm_bg.wasm.d.ts",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "node build.mjs",
+    "prepack": "node build.mjs --check"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

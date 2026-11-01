@@ -1,0 +1,10 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/webpack-path-traversal.js
+---
+type: webpack
+entry: 386
+note: module ../tmp.js: unsafe path "../tmp.js" replaced by _unsafe____tmp_js.js
+
+=== ../tmp.js -> _unsafe____tmp_js.js

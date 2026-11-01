@@ -1,0 +1,66 @@
+use oxc_ast::ast::{Function, Program};
+use oxc_codegen::{Codegen, CodegenOptions, CommentOptions, Context, Gen, IndentChar};
+
+use crate::reflow::reflow;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PrintStyle {
+    Pretty,
+    Compact,
+}
+
+fn codegen(program: &Program<'_>, style: PrintStyle) -> String {
+    let options = match style {
+        PrintStyle::Pretty => CodegenOptions {
+            minify: false,
+            indent_char: IndentChar::Space,
+            indent_width: 2,
+            comments: CommentOptions::default(),
+            ..CodegenOptions::default()
+        },
+        PrintStyle::Compact => CodegenOptions {
+            minify: true,
+            comments: CommentOptions::disabled(),
+            ..CodegenOptions::default()
+        },
+    };
+    let mut code = Codegen::new().with_options(options).build(program).code;
+    code.truncate(code.trim_end().len());
+    code.shrink_to_fit();
+    code
+}
+
+pub fn pretty_codegen(program: &Program<'_>) -> String {
+    codegen(program, PrintStyle::Pretty)
+}
+
+pub fn function_text(function: &Function<'_>, minify: bool) -> String {
+    let mut codegen = Codegen::new().with_options(CodegenOptions {
+        minify,
+        indent_char: IndentChar::Space,
+        indent_width: 0,
+        comments: CommentOptions::disabled(),
+        ..CodegenOptions::default()
+    });
+    function.print(&mut codegen, Context::empty());
+    let text = codegen.into_source_text();
+    match text
+        .strip_prefix('(')
+        .and_then(|inner| inner.strip_suffix(')'))
+    {
+        Some(inner) => inner.to_string(),
+        None => text,
+    }
+}
+
+pub fn compact_function_text(function: &Function<'_>) -> String {
+    function_text(function, false).replace('\n', "")
+}
+
+pub fn print(program: &Program<'_>, style: PrintStyle) -> String {
+    let code = codegen(program, style);
+    match style {
+        PrintStyle::Pretty => reflow(code),
+        PrintStyle::Compact => code,
+    }
+}

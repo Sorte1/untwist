@@ -1,0 +1,31 @@
+[package]
+name = "untwist-unpack"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "webpack", "bundle", "unbundle", "browserify"]
+categories = ["development-tools", "parser-implementations"]
+description = "Bundle detection and module extraction for webpack, browserify, esbuild, Parcel and other bundles"
+
+[dependencies]
+untwist-core = { path = "../untwist-core", version = "0.1.0" }
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_ast_visit.workspace = true
+oxc_semantic.workspace = true
+oxc_span.workspace = true
+oxc_str.workspace = true
+oxc_syntax.workspace = true
+oxc_traverse.workspace = true
+indexmap.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+untwist-testing = { path = "../untwist-testing" }
+untwist-unminify = { path = "../untwist-unminify" }
+insta.workspace = true

@@ -1,0 +1,2 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,201,e=>{"use strict";var t=e.i(202);console.log("eval index "+t.value+" "+t.default.value),e.s(["done",0,!0])},202,(e,t,r)=>{console.log("eval leaf"),r.value=42}]);
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,{otherChunks:[],runtimeModuleIds:[201]}]);

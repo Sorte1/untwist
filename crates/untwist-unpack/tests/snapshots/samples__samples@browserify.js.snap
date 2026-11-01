@@ -1,0 +1,37 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/browserify.js
+---
+type: browserify
+entry: 2
+
+=== 1 -> add.js
+function add(a, b) {
+  return a + b;
+}
+module.exports = add;
+
+=== 2 -> index.js (entry)
+const sum = require("./sum");
+const numbers = [1, 2, 3];
+const result = sum(numbers);
+const outputElement = document.getElementById("output");
+outputElement.innerHTML = result;
+
+=== 3 -> reduce.js
+function reduce(list, iteratee, memo) {
+  list.forEach(function (item) {
+    memo = iteratee(item, memo);
+  });
+  return memo;
+}
+module.exports = reduce;
+
+=== 4 -> sum.js
+var reduce = require("./reduce");
+var add = require("./add");
+function sum(list) {
+  return reduce(list, add, 0);
+}
+module.exports = sum;

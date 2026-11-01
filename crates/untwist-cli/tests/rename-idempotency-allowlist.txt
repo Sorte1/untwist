@@ -1,0 +1,10 @@
+# Rename idempotency allowlist, read by crates/untwist-cli/tests/rename_acceptance.rs
+# (renaming_an_already_renamed_output_changes_nothing, release-only: cargo test --release -p
+# untwist-cli --test rename_acceptance), which runs every fixture of the three
+# diff-mangle corpora (fixtures/unminify, fixtures/reference/deobfuscate, fixtures/reference/unpack)
+# through the whole pipeline under --rename <mode> --no-unpack, feeds the output back once and
+# requires the two outputs to be byte-identical. Rule: one line per `<mode> <path>` (mode is
+# mangle, simple or unique; the path is relative to the repository root) naming an output that is
+# NOT idempotent, followed by `#` and the mechanism. An entry is a measured, reported gap awaiting a
+# decision, never a pin of the non-idempotent output; the row fails on any file the list does not
+# name and on any listed file that has become idempotent, so a stale line is dropped at once.

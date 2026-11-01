@@ -1,0 +1,10 @@
+{
+  "name": "untwist-gap-sweep",
+  "private": true,
+  "type": "module",
+  "description": "Residue meter and runners for the untwist versus reference deobfuscator gap sweep.",
+  "dependencies": {
+    "@babel/parser": "7.29.2",
+    "@babel/traverse": "7.29.0"
+  }
+}

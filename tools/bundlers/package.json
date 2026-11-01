@@ -1,0 +1,24 @@
+{
+  "name": "untwist-unpack-bundlers",
+  "private": true,
+  "description": "Pinned bundlers used by tools/bundlers/build.mjs to generate fixtures/unpack-bundlers, and the module loaders tools/unpack-run.mjs runs those fixtures with.",
+  "dependencies": {
+    "@babel/core": "7.29.7",
+    "@babel/plugin-transform-modules-commonjs": "7.29.7",
+    "@rollup/plugin-commonjs": "29.0.3",
+    "@rollup/plugin-json": "6.1.0",
+    "esbuild": "0.28.2",
+    "metro": "0.87.2",
+    "metro-config": "0.87.2",
+    "metro-runtime": "0.87.2",
+    "next": "16.4.3",
+    "parcel": "2.16.4",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "requirejs": "2.3.8",
+    "rollup": "4.66.0",
+    "systemjs": "6.15.1",
+    "vite": "8.3.5",
+    "webpack": "4.47.0"
+  }
+}

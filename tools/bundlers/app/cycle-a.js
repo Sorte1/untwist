@@ -1,0 +1,8 @@
+console.log("eval cycle-a start");
+exports.early = "a-early";
+const b = require("./cycle-b.js");
+exports.late = "a-late";
+exports.report = function () {
+  return b.seen + " " + b.check();
+};
+console.log("eval cycle-a end");

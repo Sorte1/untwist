@@ -1,0 +1,41 @@
+s1-l1|var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; g.reverse(); console.log(arr[0], arr[1], arr[2]);
+s1-sort|var arr = ['b', 'c', 'a', 'd']; var g = arr; g.sort(); console.log(arr[0], arr[1], arr[2]);
+s1-pop|var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; g.pop(); g.pop(); g.pop(); console.log(arr[0], arr[1], arr[2]);
+s1-shift|var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; g.shift(); console.log(arr[0], arr[1], arr[2]);
+s1-unshift|var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; g.unshift('X'); console.log(arr[0], arr[1], arr[2]);
+s1-splice|var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; g.splice(0, 1, 'X'); console.log(arr[0], arr[1], arr[2]);
+s1-fill|var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; g.fill('X'); console.log(arr[0], arr[1], arr[2]);
+s1-copywithin|var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; g.copyWithin(0, 2); console.log(arr[0], arr[1], arr[2]);
+s1-length|var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; g.length = 1; console.log(arr[0], arr[1], arr[2]);
+s1-chain|var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; var h = g; h.reverse(); console.log(arr[0], arr[1], arr[2]);
+s1-fn|function f() { var arr = ['hello', 'world', 'foo', 'bar']; var g = arr; g.reverse(); return [arr[0], arr[1]].join(' '); } console.log(f());
+s1-const|const arr = ['hello', 'world', 'foo', 'bar']; const g = arr; g.reverse(); console.log(arr[0], arr[1], arr[2]);
+s1-let|let arr = ['hello', 'world', 'foo', 'bar']; let g = arr; g.sort(); console.log(arr[0], arr[1], arr[2]);
+s1-sortfn|var arr = ['a', 'b', 'c', 'd']; var g = arr; g.sort(function (x, y) { return x < y ? 1 : -1; }); console.log(arr[0], arr[1], arr[2]);
+s1-block|var arr = ['hello', 'world', 'foo', 'bar']; { var g = arr; } g.reverse(); console.log(arr[0], arr[1], arr[2]);
+ga-1|var arr = ['a', 'b', 'c']; var g = arr; console.log(g[0], arr[1]);
+ga-fn|function f() { var arr = ['a', 'b', 'c']; var g = arr; return g[0] + arr[1]; } console.log(f());
+ga-const|const arr = ['a', 'b', 'c']; const g = arr; console.log(g[2], arr[0]);
+ga-let|let arr = ['a', 'b', 'c']; let g = arr; console.log(arr[2], g[1]);
+ga-chain|var arr = ['a', 'b', 'c']; var g = arr; var h = g; console.log(h[0], arr[1]);
+ga-nested|var arr = ['a', 'b', 'c']; var g = arr; function k() { return g[1]; } console.log(arr[0], k());
+ga-two|var arr = ['a', 'b', 'c']; var g = arr; var h = arr; console.log(g[0], h[1], arr[2]);
+ga-template|var arr = ['a', 'b', 'c']; var g = arr; console.log(`${g[0]}-${arr[1]}`);
+ga-object|var arr = ['a', 'b', 'c']; var g = arr; var o = { x: g[0], y: arr[1] }; console.log(o.x, o.y);
+ga-key|var arr = ['a', 'b', 'c']; var g = arr; var o = { a: 1, b: 2 }; console.log(o[g[0]], arr[1]);
+ga-cond|var arr = ['a', 'b', 'c']; var g = arr; console.log(g[0] === 'a' ? arr[1] : arr[2]);
+ga-arrow|const arr = ['a', 'b', 'c']; const g = arr; const k = () => g[2]; console.log(k(), arr[0]);
+vp-call|var arr = ['a', 'b']; try { arr[0](); } catch (e) { console.log(e.message); }
+vp-base-call|var arr = ['a', 'b']; try { arr[0].x(); } catch (e) { console.log(e.message); }
+vp-new|var arr = ['a', 'b']; try { new arr[0](); } catch (e) { console.log(e.message); }
+vp-seq|var arr = ['a', 'b']; try { (0, arr[0])(); } catch (e) { console.log(e.message); }
+vp-or|var arr = ['a', 'b']; try { (arr[0] || arr[1])(); } catch (e) { console.log(e.message); }
+vp-paren|var arr = ['a', 'b']; try { (arr[1])(); } catch (e) { console.log(e.message); }
+vp-tag|var arr = ['a', 'b']; try { arr[0]`x`; } catch (e) { console.log(e.message); }
+vp-forof|var arr = ['a', undefined]; try { for (var q of arr[1]) {} } catch (e) { console.log(e.message); }
+vp-destructure|var arr = ['a', undefined]; try { var { x } = arr[1]; } catch (e) { console.log(e.message); }
+vp-spread|var arr = ['a', undefined]; try { console.log([...arr[1]]); } catch (e) { console.log(e.message); }
+vp-base-deep|var arr = ['a', 'b']; try { arr[0].y.z(); } catch (e) { console.log(e.message); }
+vp-assign-destructure|var arr = ['a', undefined]; var x; try { ({ x } = arr[1]); } catch (e) { console.log(e.message); }
+vp-alias-call|var arr = ['a', 'b']; var g = arr; try { g[0](); } catch (e) { console.log(e.message); }
+vp-value|var arr = ['a', 'b']; console.log(arr[0].length, typeof arr[1], arr[0] + arr[1]);

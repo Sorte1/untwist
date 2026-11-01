@@ -1,0 +1,120 @@
+# path	bundler	loader	flags	sha256
+esbuild/esbuild-iife.js	esbuild@0.28.2	node	--bundle --platform=node --format=iife	effc1419ad6704d4e79817c53919e3c096289056d2f0e064512a0d9aa3ca1642
+esbuild/esbuild-iife-min.js	esbuild@0.28.2	node	--bundle --platform=node --format=iife --minify	0ad87d39ab4ba7d31f3bce46efc4170be3cfe3ad7bc4f17d6213092c56af1e6c
+esbuild/esbuild-cjs.js	esbuild@0.28.2	node	--bundle --platform=node --format=cjs	11ff1f604620469f63dbf1f7e0a5fc0b567a4c92df7c522145d9b6ddf725c2d6
+esbuild/esbuild-cjs-min.js	esbuild@0.28.2	node	--bundle --platform=node --format=cjs --minify	179cac352be1b661842e10d8290e353a8c92aadc180bb70e5bc27c09c22cf2cb
+esbuild/esbuild-esm.js	esbuild@0.28.2	node	--bundle --platform=node --format=esm --banner:js=<createRequire>	9bcb14de76291a0958d31a06a9d2a2b2428bb3a3695b26d7f1b7a8fbcfa615e6
+esbuild/esbuild-esm-min.js	esbuild@0.28.2	node	--bundle --platform=node --format=esm --minify --banner:js=<createRequire>	3e681782f1662455d31b11a475432090e12b2551250e24c4bf3defdd170f257b
+bun/bun-node.js	bun@1.4.2	node	build --target=node --format=cjs	2ffa1b5504672d219668578cc49519818cb3c78a4b316b00d5e90590b6f56f41
+bun/bun-cjs.js	bun@1.4.2	bun-cjs	build --target=bun --format=cjs	9bf1a927975c2dee2fc429f0b7fce0025b5be3857e53df9cf49aab4d6a5955be
+rollup/rollup-iife.js	rollup@4.66.0	node	--format=iife commonjs(strictRequires, ignore path) json inlineDynamicImports	8bc906215e5961d3750a96d8618a1090c5b578d30bf5d5308eb147669cfc1235
+umd/rollup-umd.js	rollup@4.66.0	node	--format=umd commonjs(strictRequires, ignore path) json inlineDynamicImports	bcdc558b66fed6c5df6fce057d0961a4eaec6e9a244a70a5fecd4d704d1c6507
+systemjs/rollup-system.js	rollup@4.66.0	systemjs	--format=system commonjs(strictRequires, external path) json inlineDynamicImports	c711a31af4045aa3b12b863f472f02b6dc82e2119792ad653609d7790d232709
+amd/rollup-amd.js	rollup@4.66.0	amd	--format=amd commonjs(strictRequires, external path) json inlineDynamicImports	69150e2c16d7f50b55e3b062985c48a00a0da66ee097b236241ee3137add0ce8
+rollup/vite-iife.js	vite@8.3.5	node	build.lib formats=[iife] build.ssr ssr.noExternal ssr.external=[path] minify=false	cdccfdf40a086af95784fa566fc862ec5de1f8a5865e9b462dba91b0a24bc52e
+parcel/hoist/index.js	parcel@2.16.4	node	context=node outputFormat=commonjs optimize=false scopeHoist=true	010fa057a6497a7f649c87973a07b2e7d298db69ac4accfc7d66cb1d38d5d0c9
+parcel/hoist/lazy.58e54a87.js	parcel@2.16.4	chunk	context=node outputFormat=commonjs optimize=false scopeHoist=true	ca5c09a04a7f0bc01532ed62660987c42745c0bb56d7930201e83c3736f68fed
+parcel/nohoist/index.js	parcel@2.16.4	node	context=node outputFormat=commonjs optimize=false scopeHoist=false	72be0272ea5be2959200275814fa0b1ca601cef4295638ffdacc951e59a9dbb3
+parcel/nohoist/lazy.99d34c29.js	parcel@2.16.4	chunk	context=node outputFormat=commonjs optimize=false scopeHoist=false	f48aae574095e1b62542ce0791eaa74f131a1a4c2da002a7890d87de34cad77b
+parcel/single-hoist.js	parcel@2.16.4	node	context=node outputFormat=commonjs optimize=false scopeHoist=true app=no-lazy-chunk	27eef2b5d0b0b38c9c49edb505b44ba5c4416333b4a89ba4eff48fa3f736c6dc
+parcel/single-hoist-min.js	parcel@2.16.4	node	context=node outputFormat=commonjs optimize=true scopeHoist=true app=no-lazy-chunk	a983b59717f88080a3958a169e9590aa5f79190c4886a32896918f6815c5e416
+parcel/single-nohoist.js	parcel@2.16.4	node	context=node outputFormat=commonjs optimize=false scopeHoist=false app=no-lazy-chunk	57e2b0edd5b7d19e742c318a5ab2279b4d67f07af43b473133212458d20c1aa1
+parcel/single-nohoist-min.js	parcel@2.16.4	node	context=node outputFormat=commonjs optimize=true scopeHoist=false app=no-lazy-chunk	83929419ff4383fd3329402d252a0b77db8258eb8b3125800e5231ba6efb2d86
+metro/metro.js	metro@0.87.2	node	runBuild dev=false minify=false experimentalImportSupport path->metro-node-path.js	72b87cb98ca3e43bdeb7bde2ba625812126d805944269cde10b61f42d90e6192
+webpack/webpack4-dev-paths.js	webpack@4.47.0	node	mode=development devtool=false target=node maxChunks=1	21547e6d3049369c60681ebdb3306986461f0599925abffea1915995babc1076
+webpack/webpack4-externals.js	webpack@4.47.0	node	mode=production minimize=false target=node externals={path:'commonjs path'} maxChunks=1	dee3fcbd110246d7632d777693d3fedceeeb5d70cf7991c1342518179db76d0f
+webpack/webpack5-dev.js	webpack@5.98.0 (next@16.4.3)	node	mode=development devtool=false target=node maxChunks=1	00500bb60f768f59755724ecdd597e5d41e16aacf89824a30d99490154dde6de
+webpack/webpack5-prod.js	webpack@5.98.0 (next@16.4.3)	node	mode=production minimize=false concatenateModules=false target=node maxChunks=1	e74c306690825196ef54c380c88483c4ddbd9f77696a5f0c2e941d5a09f0aeac
+webpack/webpack5-prod-min.js	webpack@5.98.0 (next@16.4.3)	node	mode=production concatenateModules=false target=node maxChunks=1 terser compress.passes=2 mangle comments=false wrap_func_args=false	f7e3e0d3838dcaa771875404e003b0e354134843ce83f54794ca5d972b6b5942
+webpack/webpack5-prod-concat.js	webpack@5.98.0 (next@16.4.3)	node	mode=production minimize=false target=node externals={path:'commonjs path'} maxChunks=1	b19ef99291f490dd8edc1a466287394652b9d2d6a62431bc7b824f497e584a6a
+webpack/webpack5-prod-concat-min.js	webpack@5.98.0 (next@16.4.3)	node	mode=production target=node externals={path:'commonjs path'} maxChunks=1 terser compress.passes=2 mangle comments=false wrap_func_args=false	553d4d1295ff5e3597303e1d4583899a85e3b8603a0e4cdc514e35bf663d894e
+turbopack/server/server/chunks/ssr/[externals]_path_1ulxq_vdi8_o7._.js	next@16.4.3	chunk	next build --turbopack, server (ssr) chunk	e0ba85871f2b35bb3718442b9fa6a5aa11ed261bfb8d56b6ed0e983341998488
+turbopack/server/server/chunks/ssr/[turbopack]_runtime.js	next@16.4.3	chunk	next build --turbopack, server (ssr) chunk	b618c5c8166f9e4de37ca5a443fa37152052ecaa523005d3d6171e1a33416106
+turbopack/server/server/chunks/ssr/node_modules__work_next_src_1am5ze_f8hydp._.js	next@16.4.3	chunk	next build --turbopack, server (ssr) chunk	1084e7576d3ef5ded4b50a18be25cf448f0e94c1804c060e66806940285c7403
+turbopack/server/server/chunks/ssr/node_modules__work_next_src_1k301osa1_9sg._.js	next@16.4.3	chunk	next build --turbopack, server (ssr) chunk	d357666dfb79e4e8ae53321a4c2357884489c0759f6cc7ba5c1271b2c391ec60
+turbopack/server/server/chunks/ssr/node_modules__work_next_src_data_json_[json]_cjs_0hzgw30-hqo9e._.js	next@16.4.3	chunk	next build --turbopack, server (ssr) chunk	7ae2b8482b2a03c70bba4518f5e9e515e0f6fef218ec0553d29baf7ba94567b3
+turbopack/server/index.js	derived	node	Next's server page loader shape, naming the app's chunks and module	3d491a315b554e9dd51e4a006ab7e86e11645c7242e7871e6b49124021db73d2
+turbopack/browser-chunk.js	next@16.4.3	none	next build --turbopack, browser chunk holding the app (no node loader)	f42e6982576536a0447eb6e7de4baff25a4c3a9d2dadce05788ca810188f794d
+amd/min-amd-named.js	hand-written	amd	smallest accepted shape	4868e3a489462bc9096eb6216c54be430ea6782c9ec587f67a43466aa06e67a1
+turbopack/min-entry/chunk.js	hand-written	chunk	browser chunk: a module push and a registration push naming two runtime entries	67c9ffb76c11917ba6f09c9488da34ff93507411dcd35c10ae657325ed010dee
+turbopack/min-entry/index.js	derived	node	loads the chunk, then Turbopack's browser runtime, with the browser globals the runtime reads	5453a14a9426b6bc3440289429f78254da2996fbd33c831c389fa3cd9e649189
+turbopack/min-entry/runtime.js	next@16.4.3	chunk	next build --turbopack, browser runtime chunk (static/chunks/turbopack-*.js), copied	8bbb58cbfd4633c1d828c6bc37bc32abc768a149c01b1dfc4f5131fd81274551
+turbopack/neg-entry/chunk.js	hand-written	chunk	refusal shape: an ESM module calling the runtime's esmImport/esmExport	6fe655aaa8a5fddf9b8f2c1acc2a3d08a381753d19d58d017ae5b4995e901fa4
+turbopack/neg-entry/index.js	derived	node	loads the chunk, then Turbopack's browser runtime, with the browser globals the runtime reads	5453a14a9426b6bc3440289429f78254da2996fbd33c831c389fa3cd9e649189
+turbopack/neg-entry/runtime.js	next@16.4.3	chunk	next build --turbopack, browser runtime chunk (static/chunks/turbopack-*.js), copied	8bbb58cbfd4633c1d828c6bc37bc32abc768a149c01b1dfc4f5131fd81274551
+amd/min-amd.js	hand-written	amd	smallest accepted shape	547b290e93f3051390deca7e70bbbcce49dc16a747f24f83d180b8f2c4bf33dc
+amd/neg-amd-cjs-wrapper.js	hand-written	amd	refusal shape	98964b8f8c9d3c3d54068344f71e5ecb10823833b39b3c3b8db82bc5360756c6
+amd/neg-amd-cycle.js	hand-written	amd	refusal shape	c8ea8fc26e8763fdd11ea4cdf330cc4d111bb12d6f6f21f3d59b9ed3d8a4cc3a
+amd/neg-amd-early-return.js	hand-written	amd	refusal shape	d3ab587fdd9de331feb0abd3a75319a0fe4565fd295f2ac062bc8a2c6218da1c
+amd/neg-amd-host-read.js	hand-written	amd	refusal shape	b6505531b0f9ee23334afe7367739a67cbf0e66c23208ea01ad728ee88aa304e
+amd/neg-amd-mixed.js	hand-written	amd	refusal shape	2a989fb00950f8c16a4d783a2a363757dca275302f264a303e833b5939aef22f
+amd/neg-amd-require-dep.js	hand-written	amd	refusal shape	8883888b81753225b90051eb4bf15f4c1046b9c3e389a2124e357141b21680a4
+amd/neg-amd-spread-deps.js	hand-written	amd	refusal shape	3fae548499ceb6899e3bed6131cf052652b084ab13c29134d9b3c9a9e3f628a3
+amd/neg-amd-this.js	hand-written	amd	refusal shape	dc5e74ad1ee5a18aa105417def17b3ae7955bcbb6c4ce1b775676e06b1f33148
+amd/neg-amd-top-level-code.js	hand-written	amd	refusal shape	a235e16b80b3c7cdc12c36a31e1ab61842bbd5cffa0f3a3d2f32c69ec012a1a1
+bun/min-bun-cjs.js	hand-written	bun-cjs	smallest accepted shape	dc1f21e64dd4cd719ca13bfb3987014b1e2341c5408fd20e7c0ac397f31390c6
+closure/min-closure.js	hand-written	node	smallest accepted shape	4d4bafdcee1707a093f134fae1321f8ad463a24988c6b07058d111be66ca0bb4
+closure/neg-closure-duplicate-ids.js	hand-written	node	refusal shape	73180be1fac788f5219a7abf9d8a22b31cf90bd20fd38628aa3ca1f967495e61
+closure/neg-closure-two-initializers.js	hand-written	node	refusal shape	ae200740be4d70bfd1b180f65c470a0383d5585a3a6d264208dd9653bc4583f5
+closure/neg-closure-unguarded.js	hand-written	node	refusal shape	068b008bb7929334bbdcfcee81c9f042d84034502b0635e1d2cb9f3f94022c82
+closure/neg-closure-unmarked.js	hand-written	node	refusal shape	80d2ded08d8f52c4d70eff46fbb86eac4fc66541d481b5d9f6dc0916fdeee41a
+closure/min-closure-three.js	hand-written	node	three modules sharing one namespace	17851846de1de31b9b57ae58ad24c446190f4ed7e2e9917cde54b2879690c63b
+closure/neg-closure-shared-var.js	hand-written	node	refusal shape	46846866daee83489cf444c1fa4625becf6578a7e65a8e58ff4c3457c8e1c8d9
+closure/neg-closure-return.js	hand-written	node	refusal shape	13b0191f7077a30399256a7a5db83163e27be8df4dd5e5286e19c5abe6748d20
+closure/neg-closure-late-unmarked.js	hand-written	node	refusal shape	3dbd3b5e3cf16bebb8f8338dcad38f2435446384211070834ed51a26e918107e
+closure/neg-closure-param-write.js	hand-written	node	refusal shape	7090b064bb1e7f80822bf46918425d45f0e69c7e1d6d71994ae7f389c707f73c
+closure/neg-closure-shell.js	hand-written	node	refusal shape	9749cdc58f9f4a416e463bcc0073ccb17af9df760ecca1fd280099a7fd6da8a1
+esbuild/min-esbuild-cjs.js	hand-written	node	smallest accepted shape	c5f792c007405fce48a71a6b387a8825d1ca1cb4a396df7544156bdd91e4ed95
+esbuild/min-esbuild-esm.js	hand-written	node	smallest accepted shape	52c55e7e85e883337dbd356df07c8dea660699caa2842a02a585e1d7112b920f
+esbuild/min-esbuild-runtime.js	hand-written	node	smallest accepted shape	1e3eb333ba6b174aa82e06f7148904fc78673b697e594bb192f51e2fc3716942
+esbuild/neg-esbuild-lazy-only.js	hand-written	node	refusal shape	84f271df1bea86ea784c5265a427045ffc365832f192f2ef3281a837639888bc
+metro/min-metro-interop.js	hand-written	node	smallest accepted shape	6ce5766a339708cf2304253a747b33c7db9cfaba1385f77c986f35fcb0008c83
+metro/min-metro.js	hand-written	node	smallest accepted shape	a40b5d1033b6db7b1ae443ca8e3db853ba236e2844048e3c3e0aa7ad9c08f38e
+metro/neg-metro-bad-call.js	hand-written	node	refusal shape	6a8b38a71178100c86f8fff68c50eb8e9aa8e5472359e86fa8ae06514ff3cda6
+metro/neg-metro-five-params.js	hand-written	node	refusal shape	e3b56d9f26010df5b9dbb5e6ef62b7b3e3faeab133f01519d388914d0c93a3c5
+rollup/min-rollup-forward.js	hand-written	node	smallest accepted shape	e230bb4a65bf40b754b4131d6a547964dd75d3078185b7b4cd7df8e932a3b51c
+parcel/min-parcel-entries.js	hand-written	node	smallest accepted shape	7f20ed8bd42a8be81f2292594d1ef31a402e600f33f53aeab9cf69a1f382dd40
+parcel/min-parcel-hoist-seq.js	hand-written	node	smallest accepted shape	66d23770b415f3a939c70a73e92ad6313f063ef0d4d213ac32321d8f5820f578
+parcel/min-parcel-hoist.js	hand-written	node	smallest accepted shape	b107cfa890191ee4c9a6cec122f715aadc929c5946a690de002ed6d6bdd5b9dd
+parcel/min-parcel-nohoist.js	hand-written	node	smallest accepted shape	2f0f3006ee0d226d8779cc6b679c310d8692510004fd8528e733dc88b4c625de
+parcel/neg-parcel-bundle-binding.js	hand-written	node	refusal shape	c84c6e70843aa626190668441ecf1e87bf2362c5b9983ffac1d358811a0e2f91
+parcel/neg-parcel-chunk-load.js	hand-written	node	refusal shape	069eeff775c258595769aa3c8511de0becb05e78f744685aaf8ef91697923e97
+parcel/neg-parcel-foreign-id.js	hand-written	node	refusal shape	0ce6e04369b702db500c0c847963f5fe51722e743a901d4dbca2728d0965bda4
+parcel/neg-parcel-late-register.js	hand-written	node	refusal shape	59dba44e212076fe6c43fce87cb88c16b95051c959e85668979f130927355f18
+parcel/neg-parcel-no-registry.js	hand-written	node	refusal shape	461e24e79a4509a2a850c8c5ddaad8e507817a9b610de4eb4ba562b9e8596812
+rollup/min-rollup-hoisted.js	hand-written	node	smallest accepted shape	104b5d6e47c7e394ca54e4f553972610dd1ac6765fd8616677d37d7b99f73589
+rollup/neg-rollup-cross-write.js	hand-written	node	refusal shape	67ee0bf9d51e8243a7f57f1e58198fe0564a9edb438599b6eefd5469365bdd9d
+rollup/neg-rollup-host-module.js	hand-written	node	refusal shape	64d0b1d0ecf4c9c2a3145bf50758530c16eb28e68d00ccf3a7fb411f3e186404
+rollup/neg-rollup-one-module.js	hand-written	node	refusal shape	061488dfc9d5abb68b382caaa4e97834e4482d80c00a5d7b0d34359a75927edb
+rollup/neg-rollup-sloppy.js	hand-written	node	refusal shape	e295157bd0126a6cd945e5adfb3282e9fde3c1ea1d22551eccfbea27de703a64
+systemjs/min-system-named.js	hand-written	systemjs	smallest accepted shape	4326bbddb3dfec5ecfcf1b5066a4b0c67680f2f4390225294a94122bfba28564
+systemjs/min-system.js	hand-written	systemjs	smallest accepted shape	2474d9e5935778fd013309a0c1422b70344fde59f4ac5aca02774981ded9ba45
+systemjs/neg-system-computed-deps.js	hand-written	systemjs	refusal shape	42e04e9573df8f72fa951afb81eb8ced95d874ab1fd0d01178e09a3e50034d91
+systemjs/neg-system-cycle.js	hand-written	systemjs	refusal shape	22635dbd18987e720bfa2c7f4ff95e4a3d8ae9027867d0b73792b11c25d6e038
+systemjs/neg-system-default-export-param.js	hand-written	systemjs	refusal shape	3f2f99266decc40c96ad23d3ad452d0efc6942f16fbbabcb8bc4ca37819e93f4
+systemjs/neg-system-setter-shape.js	hand-written	systemjs	refusal shape	6132faa0cdf0eaab2f22d065e933b9241b7af24be13ad62c78b6253973d8db82
+systemjs/neg-system-unsorted-entry.js	hand-written	systemjs	refusal shape	ca3d66d6d64d8646c71c734fd8f8beaab3f7bfcd9fce678000b86e5f8070f322
+umd/min-umd-deps.js	hand-written	node	smallest accepted shape	733c6ec3480920bf1aeac50ef7f3d3b8518b3134586f9f32f898b53a0aae46ea
+umd/min-umd-factory-first.js	hand-written	node	smallest accepted shape	5377dc3fb2ab42bda5894856b3bedda3a7f73137932ad1178bf67623eb1f5709
+umd/min-umd.js	hand-written	node	smallest accepted shape	79ed9e49e0aa927b2a0044206b9547a00f73d19fde2d0849bce384dc66f6df32
+umd/neg-umd-extra-statement.js	hand-written	node	refusal shape	16d18bd0480e3460e04617e24cea938c43f058ee9fd7e17f7815ecaaea278475
+umd/neg-umd-relative-require.js	hand-written	node	refusal shape	e76ecd8f76bc3e73554937a9769670cedbcba288e13ba73971aa619e704a8b0c
+umd/neg-umd-two-wrappers.js	hand-written	node	refusal shape	0132873c2e2f64539c8ab98a37148ad6b88f3a47ccc3f6ac19f2d6bb8f358613
+umd/neg-umd-unknown-env.js	hand-written	node	refusal shape	35d82f939f865d26e3b04f38e0ac77a4ee1f9a9b95856ebbba1c8bf8a4e6b3e7
+turbopack/min-server/index.js	hand-written	node	Next's server page loader shape: the runtime, two server chunks, one module	a884c5accb338223529c94dede5ad4e162969e154e2c0f2c5a95571763b4c6d6
+turbopack/min-server/server/chunks/ssr/[turbopack]_runtime.js	next@16.4.3	chunk	next build --turbopack, server (ssr) runtime chunk, copied	b618c5c8166f9e4de37ca5a443fa37152052ecaa523005d3d6171e1a33416106
+turbopack/min-server/server/chunks/ssr/app.js	hand-written	chunk	server chunk: a strict arrow wrapper, cross-chunk requires, a value export, a cycle	eac182fe150c1f04fb9ff7aa9c7d2b125b73a6d00f0e9ce551bd40165420b899
+turbopack/min-server/server/chunks/ssr/lib.js	hand-written	chunk	server chunk: two CommonJS modules	a5e88d4f26ca74406660b1762c5f60fe89da781b94d8bee07fe2bc28d5a9e4ac
+turbopack/neg-server/index.js	hand-written	node	Next's server page loader shape: the runtime, two server chunks, one module	a884c5accb338223529c94dede5ad4e162969e154e2c0f2c5a95571763b4c6d6
+turbopack/neg-server/server/chunks/ssr/[turbopack]_runtime.js	next@16.4.3	chunk	next build --turbopack, server (ssr) runtime chunk, copied	b618c5c8166f9e4de37ca5a443fa37152052ecaa523005d3d6171e1a33416106
+turbopack/neg-server/server/chunks/ssr/app.js	hand-written	chunk	refusal shape: a server chunk calling the runtime's esmImport/esmExport	b646c6166a1ce672e44d5b7b62beaaf272a86a43a9b13669199fcb258c612759
+turbopack/neg-server/server/chunks/ssr/lib.js	hand-written	chunk	server chunk: two CommonJS modules	a5e88d4f26ca74406660b1762c5f60fe89da781b94d8bee07fe2bc28d5a9e4ac
+esbuild/min-esbuild-in-amd.js	hand-written	amd	smallest accepted shape	f577afe593210fb52e1bb45f50d9775d575f5b491b42e7bbdb7c14be8cadce8e
+esbuild/min-esbuild-in-system.js	hand-written	systemjs	smallest accepted shape	5f6097c8c2924089cc64652ac00b58cafe34d390083746c327a4b797a36553bd
+esbuild/min-esbuild-in-umd.js	hand-written	node	smallest accepted shape	453d3a29622777563032b13926ed95290b36870c2ffe02788f7489eca092de80
+webpack/min-webpack5-precision.js	hand-written	node	webpack 5 shape: .r-less harmony, dynamic import, guarded .ab	77449fa8a5f7f3f7b941a789124e876a937d623b7cf4145c6e95482e3eb66e44
+webpack/min-webpack5-locals.js	hand-written	node	minified webpack 5 shape: .t reading bare prelude vars	0949421d8d799d55a27b3c7a25302ead19408c0442ed28a381c78a8b46d1ebc8
+closure/min-closure-shared-var.js	hand-written	node	segments sharing vars through the holder	321797bfdb9f1f68dee7711b8b389c58a526467a5afa98f37516f2dacbacf380
+closure/min-closure-loader.js	hand-written	node	ids from begin/end loader calls checked against the initializer graph	dd4326a3dfa34d912adae84b7da8029f9e647cae29a66126e50fb37d1c15191c
+closure/neg-closure-loader-graph.js	hand-written	node	refusal shape	9a38702ca24202bf0abc4cd9af44c533a83747e814fd73264af0027d50fc3073
+closure/neg-closure-annex-b.js	hand-written	node	refusal shape: a block function read from another segment (Annex B)	8a0ee17efaffea3d0e66763d5868d99eec71a33b5e30a345c80cdcc6399fdc91

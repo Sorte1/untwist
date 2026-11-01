@@ -1,0 +1,15 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/browserify-2.js
+---
+type: browserify
+entry: 2
+
+=== 1 -> lib.js
+module.exports = 1;
+
+=== 2 -> index.js (entry)
+const vscode = require("vscode");
+const lib = require("./lib");
+console.log(lib);

@@ -1,0 +1,292 @@
+[
+  {
+    "name": "block-statements",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
+    "name": "sequence",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
+    "name": "split-variable-declarations",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
+    "name": "find-string-array",
+    "stage": "deobfuscate",
+    "unsafe": false
+  },
+  {
+    "name": "find-decoders",
+    "stage": "deobfuscate",
+    "unsafe": false
+  },
+  {
+    "name": "inline-object-props",
+    "stage": "deobfuscate",
+    "unsafe": false
+  },
+  {
+    "name": "inline-decoder-wrappers",
+    "stage": "deobfuscate",
+    "unsafe": false
+  },
+  {
+    "name": "inline-decoded-strings",
+    "stage": "deobfuscate",
+    "unsafe": false
+  },
+  {
+    "name": "remove-decoder-machinery",
+    "stage": "deobfuscate",
+    "unsafe": false
+  },
+  {
+    "name": "unstamp-remaining-machinery",
+    "stage": "deobfuscate",
+    "unsafe": false
+  },
+  {
+    "name": "layers",
+    "stage": "deobfuscate",
+    "unsafe": false
+  },
+  {
+    "name": "default-parameters",
+    "stage": "transpile",
+    "unsafe": false
+  },
+  {
+    "name": "logical-assignments",
+    "stage": "transpile",
+    "unsafe": false
+  },
+  {
+    "name": "nullish-coalescing",
+    "stage": "transpile",
+    "unsafe": false
+  },
+  {
+    "name": "nullish-coalescing-assignment",
+    "stage": "transpile",
+    "unsafe": false
+  },
+  {
+    "name": "optional-chaining",
+    "stage": "transpile",
+    "unsafe": false
+  },
+  {
+    "name": "template-literals",
+    "stage": "transpile",
+    "unsafe": true
+  },
+  {
+    "name": "computed-properties",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "for-to-while",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "infinity",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "invert-boolean-logic",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "json-parse",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "logical-to-if",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "merge-else-if",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "merge-strings",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "number-expressions",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "remove-double-not",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "split-for-loop-vars",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "string-literal-in-template-literal",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "ternary-to-if",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "truncate-number-literal",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "typeof-undefined",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "unary-expressions",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "unminify-booleans",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "void-to-undefined",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "yoda",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "unwrap-comma-call",
+    "stage": "unminify",
+    "unsafe": false
+  },
+  {
+    "name": "untranspile-helpers",
+    "stage": "untranspile",
+    "unsafe": false
+  },
+  {
+    "name": "self-defending",
+    "stage": "protections",
+    "unsafe": false
+  },
+  {
+    "name": "debug-protection",
+    "stage": "protections",
+    "unsafe": false
+  },
+  {
+    "name": "jsx",
+    "stage": "jsx",
+    "unsafe": true
+  },
+  {
+    "name": "jsx-new",
+    "stage": "jsx",
+    "unsafe": true
+  },
+  {
+    "name": "dead-code",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
+    "name": "control-flow-object",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
+    "name": "control-flow-switch",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
+    "name": "merge-object-assignments",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
+    "name": "evaluate-globals",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
+    "name": "var-transformation",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
+    "name": "dead-assignment-elimination",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
+    "name": "fold-literal-chains",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
+    "name": "let-to-const",
+    "stage": "lexical",
+    "unsafe": false
+  },
+  {
+    "name": "var-to-let",
+    "stage": "lexical",
+    "unsafe": false
+  },
+  {
+    "name": "function-to-arrow",
+    "stage": "lexical",
+    "unsafe": false
+  },
+  {
+    "name": "merge-member-declarations",
+    "stage": "lexical",
+    "unsafe": false
+  },
+  {
+    "name": "rename-simple",
+    "stage": "rename",
+    "unsafe": false
+  },
+  {
+    "name": "rename-unique",
+    "stage": "rename",
+    "unsafe": false
+  },
+  {
+    "name": "mangle",
+    "stage": "rename",
+    "unsafe": false
+  },
+  {
+    "name": "rename-shorthand",
+    "stage": "rename",
+    "unsafe": false
+  }
+]

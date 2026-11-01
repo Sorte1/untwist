@@ -1,0 +1,13 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/webpack-5-method.js
+---
+type: webpack
+entry: 2
+note: module 2: require("3") has no module in this bundle
+
+=== 2 -> index.js (entry)
+"use strict";
+const lib = require("./3.js");
+console.log(lib);

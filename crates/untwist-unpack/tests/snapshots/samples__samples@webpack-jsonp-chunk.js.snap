@@ -1,0 +1,16 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/webpack-jsonp-chunk.js
+---
+type: webpack
+entry: <none>
+chunks: 15
+note: module 2wwy: require("w6GO") has no module in this bundle
+
+=== 2wwy -> 2wwy.js
+const a = require("./E8gZ.js");
+const b = require("./w6GO.js");
+
+=== E8gZ -> E8gZ.js
+module.exports = 4;

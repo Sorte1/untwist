@@ -1,0 +1,30 @@
+[package]
+name = "untwist-regress"
+version = "0.12.0"
+edition = "2024"
+authors = ["ridiculousfish <corydoras@ridiculousfish.com>", "sorte1"]
+description = "A fork of regress 0.12.0 (ECMAScript regular expressions) that adds a step-budgeted search, used by untwist"
+readme = "README.md"
+keywords = ["regex", "regexp"]
+categories = ["text-processing"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Sorte1/untwist"
+homepage = "https://untwist.dev"
+
+[lib]
+name = "regress"
+path = "src/lib.rs"
+
+[features]
+default = ["backend-pikevm", "std"]
+alloc = ["dep:hashbrown", "memchr/alloc"]
+backend-pikevm = []
+index-positions = []
+pattern = []
+prohibit-unsafe = []
+std = ["memchr/std"]
+utf16 = []
+
+[dependencies]
+hashbrown = { version = ">=0.16, <0.18", optional = true }
+memchr = { version = "2.4.0", default-features = false }

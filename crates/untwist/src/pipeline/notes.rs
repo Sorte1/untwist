@@ -1,0 +1,199 @@
+use std::collections::HashSet;
+
+use untwist_core::catalogue;
+use untwist_core::pass::{note_survives_retraction, Note, NoteKind};
+use untwist_core::reflow::GuardTally;
+use untwist_deobfuscate::notes;
+
+pub use super::refusal::ADMIT_PANICKED;
+pub use super::refusal::NESTED_TOO_DEEP;
+pub use super::refusal::PARENTHESES_TOO_DEEP;
+pub use super::refusal::PRINT_TOO_LARGE;
+pub use super::refusal::TYPESCRIPT_IN_JAVASCRIPT;
+pub use super::refusal::UNPACK_TEXT_TOO_DEEP;
+pub use super::refusal::WORKER_DIED;
+
+pub const PANICKED: &str = "this input panicked part-way through a pass; its output is the tree \
+     as far as the passes got and may not run; the other inputs continued";
+
+pub const UNPACK_PANICKED: &str =
+    "panicked while unpacking; the inputs are written without a bundle";
+
+pub const UNPACK_TEXT_UNPARSABLE: &str = "a final text failed to parse while unpacking; the \
+     inputs are written without a bundle";
+
+pub const SLOT_NOT_RESERVED: &str = "unique rename could not reserve its counter block for this \
+     input, so the rename stage was skipped";
+
+pub const ANONYMOUS_SHELL_STRIPPED: &str = "a function anonymous(...) shell around the whole \
+     program was removed; the program is its body";
+
+pub const ANONYMOUS_SHELL_KEPT: &str = "a function anonymous(...) shell around the whole program \
+     was recognised but left in place because";
+
+pub const GUARD_ON_ONE_LINE: &str = "a self-defending check that reads a function's own source \
+     survived; the function it reads was printed on one line, as the obfuscator emitted it:";
+
+pub const GUARD_KEPT_ACROSS_LINES: &str = "a self-defending check that reads a function's own \
+     source survived, but that function holds a line break no one-line print can remove, so the \
+     output may not run as the input did:";
+
+pub const REACH_REASON: &str = ": code that may hold the global object, or code from text, may \
+     reach the string array's function by a key that may be its name or by an enumeration that \
+     yields values, so the decoder calls were left alone; the report lists the details";
+
+catalogue!(
+    PIPELINE_NOTES,
+    REACH_REASON,
+    PANICKED,
+    UNPACK_PANICKED,
+    UNPACK_TEXT_UNPARSABLE,
+    SLOT_NOT_RESERVED,
+    ANONYMOUS_SHELL_STRIPPED,
+    ANONYMOUS_SHELL_KEPT,
+    GUARD_ON_ONE_LINE,
+    GUARD_KEPT_ACROSS_LINES,
+    NESTED_TOO_DEEP,
+    PARENTHESES_TOO_DEEP,
+    PRINT_TOO_LARGE,
+    UNPACK_TEXT_TOO_DEEP,
+    TYPESCRIPT_IN_JAVASCRIPT,
+    WORKER_DIED,
+    ADMIT_PANICKED
+);
+
+pub(super) type StageRun = (&'static str, usize, usize);
+
+fn superseded_run(runs: &[StageRun], index: usize) -> bool {
+    let (stage, _, _) = runs[index];
+    runs[index + 1..]
+        .iter()
+        .any(|(later, _, _)| *later == stage)
+}
+
+pub(super) fn retain_last_spanned(notes: Vec<Note>, runs: &[StageRun]) -> Vec<Note> {
+    let mut superseded = vec![false; notes.len()];
+    for index in 0..runs.len() {
+        if !superseded_run(runs, index) {
+            continue;
+        }
+        let (_, start, end) = runs[index];
+        for slot in superseded.iter_mut().take(end).skip(start) {
+            *slot = true;
+        }
+    }
+    notes
+        .into_iter()
+        .enumerate()
+        .filter(|(index, note)| !superseded[*index] || note_survives_retraction(note))
+        .map(|(_, note)| note)
+        .collect()
+}
+
+fn guard_note(kind: NoteKind, message: &str, count: u32) -> Option<Note> {
+    (count > 0).then(|| Note {
+        pass: "pipeline",
+        kind,
+        message: format!("{message} {count}"),
+        span: None,
+    })
+}
+
+pub(super) fn guard_notes(tally: GuardTally) -> impl Iterator<Item = Note> {
+    let compacted = guard_note(NoteKind::Progress, GUARD_ON_ONE_LINE, tally.compacted);
+    let kept = guard_note(NoteKind::Refusal, GUARD_KEPT_ACROSS_LINES, tally.kept);
+    compacted.into_iter().chain(kept)
+}
+
+const MACHINERY_PASS: &str = "remove-decoder-machinery";
+const KEPT_PREFIX: &str = "decoder machinery kept: ";
+
+fn kept_count(note: &Note) -> Option<u64> {
+    if note.pass != MACHINERY_PASS || note.kind != NoteKind::Refusal {
+        return None;
+    }
+    let rest = note.message.strip_prefix(KEPT_PREFIX)?;
+    let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+    let tail = rest.get(digits..)?;
+    (tail == notes::MACHINERY_REFERENCES_KEPT)
+        .then(|| rest.get(..digits)?.parse().ok())
+        .flatten()
+}
+
+fn reach_detail(note: &Note) -> bool {
+    note.kind == NoteKind::Refusal
+        && (note.message == notes::STRING_ARRAY_GLOBAL_REACH
+            || note.message.starts_with(notes::WEBPACK_BOOTSTRAP_UNPROVEN))
+}
+
+pub(super) fn consolidate_reach(mut notes: Vec<Note>) -> Vec<Note> {
+    let refused = notes.iter().any(|note| {
+        note.kind == NoteKind::Refusal && note.message == notes::STRING_ARRAY_GLOBAL_REACH
+    });
+    let head = notes
+        .iter()
+        .enumerate()
+        .filter_map(|(index, note)| kept_count(note).map(|count| (count, index)))
+        .max_by_key(|(count, index)| (*count, std::cmp::Reverse(*index)))
+        .map(|(_, index)| index);
+    let (true, Some(head)) = (refused, head) else {
+        return notes;
+    };
+    for (index, note) in notes.iter_mut().enumerate() {
+        if index == head {
+            note.message.push_str(REACH_REASON);
+        } else if reach_detail(note) || kept_count(note).is_some() {
+            note.kind = NoteKind::Progress;
+        }
+    }
+    notes
+}
+
+pub(super) fn dedupe_spanned(notes: Vec<Note>) -> Vec<Note> {
+    let mut seen: HashSet<Note> = HashSet::new();
+    notes
+        .into_iter()
+        .filter(|note| note.span.is_none() || seen.insert(note.clone()))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dedupe_spanned;
+    use oxc_span::Span;
+    use untwist_core::pass::{Note, NoteKind};
+
+    fn note(kind: NoteKind, message: &str, span: Option<Span>) -> Note {
+        Note {
+            pass: "t",
+            kind,
+            message: message.to_string(),
+            span,
+        }
+    }
+
+    #[test]
+    fn a_spanned_duplicate_keeps_its_first_occurrence() {
+        let span = Some(Span::new(1, 2));
+        let kept = dedupe_spanned(vec![
+            note(NoteKind::Refusal, "x", span),
+            note(NoteKind::Refusal, "y", None),
+            note(NoteKind::Refusal, "x", span),
+        ]);
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0].message, "x");
+        assert_eq!(kept[1].message, "y");
+    }
+
+    #[test]
+    fn spanless_duplicates_and_different_kinds_are_all_kept() {
+        let span = Some(Span::new(1, 2));
+        let kept = dedupe_spanned(vec![
+            note(NoteKind::Refusal, "x", None),
+            note(NoteKind::Refusal, "x", None),
+            note(NoteKind::Progress, "x", span),
+            note(NoteKind::Refusal, "x", span),
+        ]);
+        assert_eq!(kept.len(), 4);
+    }
+}

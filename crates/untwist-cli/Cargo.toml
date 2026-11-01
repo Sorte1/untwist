@@ -1,0 +1,40 @@
+[package]
+name = "untwist-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "deobfuscator", "unminify", "webpack", "cli"]
+categories = ["command-line-utilities", "development-tools", "web-programming"]
+description = "Command-line JavaScript deobfuscator, unminifier and unbundler"
+
+[[bin]]
+name = "untwist"
+path = "src/main.rs"
+
+[features]
+peak-probe = []
+test-hooks = ["untwist/test-hooks"]
+
+[dependencies]
+untwist = { path = "../untwist", version = "0.1.0" }
+clap.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sysinfo.workspace = true
+
+[[bench]]
+name = "peak"
+harness = false
+required-features = ["peak-probe"]
+
+[dev-dependencies]
+untwist = { path = "../untwist", features = ["test-hooks"] }
+untwist-testing = { path = "../untwist-testing" }
+untwist-rename = { path = "../untwist-rename" }
+tempfile.workspace = true

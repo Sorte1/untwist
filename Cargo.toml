@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "vendor/regress", "xtask"]
+exclude = ["fuzz"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Sorte1/untwist"
+homepage = "https://untwist.dev"
+readme = "README.md"
+rust-version = "1.98"
+authors = ["sorte1"]
+
+[workspace.dependencies]
+oxc_allocator = "=0.148.0"
+oxc_ast = "=0.148.0"
+oxc_ast_visit = "=0.148.0"
+oxc_parser = "=0.148.0"
+oxc_semantic = "=0.148.0"
+oxc_span = "=0.148.0"
+oxc_str = "=0.148.0"
+oxc_syntax = "=0.148.0"
+oxc_traverse = "=0.148.0"
+oxc_codegen = "=0.148.0"
+oxc_diagnostics = "=0.148.0"
+oxc_ecmascript = { version = "=0.148.0", features = ["constant_evaluation"] }
+regress = { package = "untwist-regress", version = "=0.12.0", path = "vendor/regress", default-features = false, features = ["backend-pikevm", "std", "utf16"] }
+rustc-hash = "2.1"
+indexmap = "2.14"
+hashbrown = { version = "0.17", default-features = false }
+thiserror = "2.0"
+anyhow = "1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ryu-js = "1.0"
+clap = { version = "4.6", features = ["derive"] }
+rayon = "1.12"
+insta = { version = "1.48", features = ["glob"] }
+criterion = "0.8"
+tempfile = "3.27.0"
+similar = "3"
+stacker = "=0.1.25"
+psm = "=0.1.32"
+sha2 = "0.10"
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+panic = "unwind"
+
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3

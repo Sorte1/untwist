@@ -1,0 +1,33 @@
+[package]
+name = "untwist-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "ast", "oxc", "deobfuscator"]
+categories = ["development-tools", "parser-implementations"]
+description = "Parsing, printing and the pass framework shared by the untwist crates"
+
+[dependencies]
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_ast_visit.workspace = true
+oxc_parser.workspace = true
+oxc_semantic.workspace = true
+oxc_span.workspace = true
+oxc_str.workspace = true
+oxc_syntax.workspace = true
+oxc_traverse.workspace = true
+oxc_codegen.workspace = true
+oxc_diagnostics.workspace = true
+rustc-hash.workspace = true
+
+[features]
+test-hooks = []
+
+[dev-dependencies]
+untwist-core = { path = ".", features = ["test-hooks"] }

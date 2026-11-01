@@ -1,0 +1,39 @@
+# Fixtures whose `untwist --rename mangle` output differs from the reference deobfuscator's `-m` mangle by a
+# deliberate difference (see docs/known-divergences/rename.md).
+# One repo-relative path per line, with the reason on the line above.
+#
+# fixtures/real-world/game.js is deliberately NOT in this differential: it is
+# 10.7 MB and would run node the reference deobfuscator twice per invocation. diff-deobfuscate
+# carries it instead. fixtures/eval is excluded too: it is generated
+# and gitignored, so a differential over it would not reproduce from a clean
+# checkout; crates/untwist-eval/tests/corpus.rs covers it for totality.
+
+# Self-exclusion: `function f` may keep the name `f`; the reference deobfuscator's generateUid sees `f`
+# bound by the very binding it is renaming (ast-utils/scope.ts:15) and emits `f2`.
+fixtures/unminify/booleans-and-sequences.js
+# Not a rename difference: the mangled names match the reference deobfuscator exactly. `template-literals` is
+# Safety::Unsafe and off by default, so untwist still prints the .concat chain; same reason
+# this fixture is on xtask/diff-allowlist.txt.
+fixtures/unminify/strings-templates.js
+# Self-exclusion on `function f` again, plus the reference deobfuscator's own default-parameters transform
+# (transpile/transforms/default-parameters.ts:152-153) moves the identifier into `params` by
+# node mutation and removes the declaration without re-registering the binding, so mangle's
+# `if (!binding) return` (transforms/mangle.ts:21) skips the parameter. untwist names it `p`,
+# which the reference deobfuscator itself produces when handed the same unminified code directly.
+fixtures/unminify/transpiled-babel.js
+# Self-exclusion: `for (var u = 0, v = o.length; ...)` in the base64 decoder may keep the
+# name `v`; the reference deobfuscator's generateUid sees `v` bound by the very binding it is renaming and
+# emits `v7`, so every later `v` suffix in that file is one higher than untwist's.
+fixtures/reference/deobfuscate/obfuscator.io-multi-encoders.js
+# Not a rename difference: the mangled names match the reference deobfuscator exactly. oxc_codegen keeps the
+# parentheses of `var vF = (function () { ... })()` via its pife flag and the reference deobfuscator's printer
+# drops them (the IIFE-parentheses item at the top of docs/known-divergences/unminify.md, which the
+# `## Rename` section says reaches this differential too).
+fixtures/reference/deobfuscate/obfuscator.io-var-functions.js
+# Not a rename difference: the mangled names match the reference deobfuscator exactly; the same IIFE
+# parentheses on `var vF = (function () { ... })()`.
+fixtures/reference/deobfuscate/obfuscator.io.js
+# Not a rename difference: the mangled names match the reference deobfuscator exactly; the same IIFE
+# parentheses on the browserify container `window.__require = (function () { ... })()`, for
+# which this fixture is on xtask/diff-allowlist.txt.
+fixtures/reference/unpack/browserify-cocos2d.js

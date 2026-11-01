@@ -1,0 +1,8 @@
+# Known lane mismatches for `cargo xtask diff-layers`, one `<fixture> <lane>` per line.
+# --unsafe peels a payload that declares names, assuming nothing observes the difference; each of these observes it by design
+eval/decl-delete-ident.js unsafe
+eval/decl-delete.js unsafe
+eval/decl-descriptor.js unsafe
+eval/strict-payload.js unsafe
+# the RangeError's stderr echoes the throwing source line, which is the peeled layer's (engine error text is not treated as observable behaviour)
+eval/cycle-two.js safe

@@ -1,0 +1,97 @@
+name: Web e2e (WebKit)
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "web/**"
+      - "crates/**"
+      - "fixtures/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/web-e2e-webkit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-e2e-webkit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WASM_BINDGEN_VERSION: "0.2.129"
+  BINARYEN_VERSION: "116"
+  BINARYEN_SHA256: "c55b74f3109cdae97490faf089b0286d3bba926bb6ea5ed00c8c784fc53718fd"
+
+jobs:
+  webkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Rust toolchain from rust-toolchain.toml, with wasm32
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+
+      - name: Cache cargo registry, wasm-bindgen and the targets
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/wasm-bindgen
+            target/release
+            target/wasm32-unknown-unknown
+          key: web-e2e-${{ runner.os }}-${{ env.WASM_BINDGEN_VERSION }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: web-e2e-${{ runner.os }}-${{ env.WASM_BINDGEN_VERSION }}-
+
+      - name: wasm-bindgen-cli
+        run: |
+          if [ "$(wasm-bindgen --version 2>/dev/null)" != "wasm-bindgen $WASM_BINDGEN_VERSION" ]; then
+            cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked --force
+          fi
+
+      - name: binaryen (wasm-opt)
+        run: |
+          curl -fsSL -o binaryen.tar.gz "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz"
+          echo "${BINARYEN_SHA256}  binaryen.tar.gz" | sha256sum -c -
+          tar -xzf binaryen.tar.gz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-version_${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: The CLI the e2e rows compare against
+        run: cargo build --release -p untwist-cli
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the site
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: WebKit and its system libraries
+        working-directory: web
+        run: npx playwright install --with-deps webkit
+
+      - name: The e2e suite on WebKit
+        working-directory: web
+        env:
+          UNTWIST_WEBKIT: "1"
+          UNTWIST_BIN: ${{ github.workspace }}/target/release/untwist
+        run: npx playwright test --project=webkit
+
+      - name: Keep the failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: webkit-test-results
+          path: web/test-results
+          retention-days: 7

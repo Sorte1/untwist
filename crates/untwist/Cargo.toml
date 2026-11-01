@@ -1,0 +1,57 @@
+[package]
+name = "untwist"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "deobfuscator", "unminify", "webpack", "reverse-engineering"]
+categories = ["development-tools", "parser-implementations", "web-programming"]
+description = "Fast JavaScript deobfuscator, unminifier and unbundler that never runs the code it reads"
+
+[lib]
+bench = false
+
+[features]
+default = ["parallel"]
+parallel = ["dep:rayon"]
+module-spans = ["dep:oxc_span"]
+test-hooks = ["untwist-core/test-hooks", "untwist-eval/test-hooks", "untwist-rename/test-hooks", "untwist-unminify/test-hooks"]
+
+[dependencies]
+untwist-core = { path = "../untwist-core", version = "0.1.0" }
+untwist-deobfuscate = { path = "../untwist-deobfuscate", version = "0.1.0" }
+untwist-eval = { path = "../untwist-eval", version = "0.1.0" }
+untwist-jsx = { path = "../untwist-jsx", version = "0.1.0" }
+untwist-rename = { path = "../untwist-rename", version = "0.1.0" }
+untwist-unminify = { path = "../untwist-unminify", version = "0.1.0" }
+untwist-unpack = { path = "../untwist-unpack", version = "0.1.0" }
+anyhow.workspace = true
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_diagnostics.workspace = true
+oxc_span = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+untwist = { path = ".", features = ["test-hooks"] }
+criterion.workspace = true
+oxc_span.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+untwist-testing = { path = "../untwist-testing" }
+stacker.workspace = true
+
+[[bench]]
+name = "unminify"
+harness = false
+
+[[bench]]
+name = "memory"
+harness = false

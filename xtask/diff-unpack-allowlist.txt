@@ -1,0 +1,4 @@
+# The reference deobfuscator's save() throws "detected path traversal" on these two module ids and exits non-zero;
+# untwist writes _unsafe_*.js plus a note instead (see docs/known-divergences/unpack.md)
+fixtures/reference/unpack/webpack-path-traversal.js
+fixtures/reference/unpack/webpack-path-traversal-windows.js

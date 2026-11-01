@@ -1,0 +1,5 @@
+[alias]
+xtask = "run -p xtask --"
+
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "opt-level=2"]

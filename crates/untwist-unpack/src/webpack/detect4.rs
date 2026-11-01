@@ -1,0 +1,119 @@
+use oxc_allocator::Allocator;
+use oxc_ast::ast::*;
+
+use crate::matcher::{argument_expression, call_parts, single_param_name};
+use crate::model::{Bodies, Bundle, BundleKind};
+use crate::webpack::container::is_module_container;
+use crate::webpack::extract::{extract_modules_with, strip_trailing_marker_comment};
+use crate::webpack::gate::{routable, Prelude};
+use crate::webpack::helpers::prelude_runtime;
+use crate::webpack::require_fn::{
+    count_required_entry_ids, find_assigned_entry_id, find_required_entry_id, require_function,
+};
+use crate::webpack::runtime_module::member_names_in;
+use crate::UnpackOptions;
+
+struct Webpack4<'k, 'a> {
+    container: &'k Expression<'a>,
+    params: &'k FormalParameters<'a>,
+    body: &'k FunctionBody<'a>,
+    require_name: &'k str,
+}
+
+fn webpack4<'k, 'a>(expr: &'k Expression<'a>) -> Option<Webpack4<'k, 'a>> {
+    let (callee, arguments) = call_parts(expr)?;
+    if arguments.len() != 1 {
+        return None;
+    }
+    let container = argument_expression(arguments.first()?)?;
+    if !is_module_container(container) {
+        return None;
+    }
+    let Expression::FunctionExpression(bootstrap) = callee else {
+        return None;
+    };
+    if bootstrap.id.is_some() || bootstrap.generator || bootstrap.r#async {
+        return None;
+    }
+    let container_name = single_param_name(&bootstrap.params)?;
+    let body = bootstrap.body.as_deref()?;
+    let require_name = body
+        .statements
+        .iter()
+        .find_map(|stmt| require_function(stmt, container_name))?
+        .name;
+    Some(Webpack4 {
+        container,
+        params: &bootstrap.params,
+        body,
+        require_name,
+    })
+}
+
+pub fn is_webpack4(expr: &Expression<'_>) -> bool {
+    webpack4(expr).is_some()
+}
+
+pub fn detect_webpack4<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    expr: &Expression<'a>,
+) -> Option<Bundle<'a>> {
+    detect_webpack4_with(
+        alloc,
+        source,
+        expr,
+        &mut Bodies::Cloned,
+        UnpackOptions::default(),
+    )
+}
+
+pub fn detect_webpack4_with<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    expr: &Expression<'a>,
+    bodies: &mut Bodies<'a>,
+    options: UnpackOptions,
+) -> Option<Bundle<'a>> {
+    let Webpack4 {
+        container,
+        params,
+        body,
+        require_name,
+    } = webpack4(expr)?;
+    let assigned = find_assigned_entry_id(&body.statements, require_name, None);
+    let entry_id = assigned
+        .clone()
+        .or_else(|| find_required_entry_id(&body.statements, require_name, None));
+
+    let mut bundle = Bundle::new(BundleKind::Webpack, entry_id);
+    if assigned.is_none() {
+        bundle.entry_candidates = count_required_entry_ids(&body.statements, require_name);
+    }
+    bundle.runtime = prelude_runtime(
+        alloc,
+        (Some(params), &body.statements),
+        require_name,
+        bodies,
+    );
+    if !matches!(bodies, Bodies::Taken(_))
+        && !routable(
+            source.source_text,
+            container,
+            &Prelude {
+                runtime: bundle.runtime.as_ref(),
+                mentioned: member_names_in(require_name, &body.statements),
+            },
+            options,
+        )
+    {
+        return None;
+    }
+    let entry_id = bundle.entry_id.as_deref();
+    (bundle.modules, bundle.fresh_requires) =
+        extract_modules_with(alloc, source, (container, entry_id), bodies, options);
+    for module in bundle.modules.values_mut() {
+        strip_trailing_marker_comment(module.program_mut());
+    }
+    Some(bundle)
+}

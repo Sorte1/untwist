@@ -1,0 +1,36 @@
+# Fixtures
+
+Inputs for the test suite and the `cargo xtask` differentials. A program that "prints" writes its
+own observables, so node must print the same thing before and after Untwist.
+
+| Folder | What it holds | Used by |
+|---|---|---|
+| `behaviour/` | Programs that print, one string-array, rotator or decoder hazard each; `.mjs` files run as modules | `cargo xtask diff-behaviour`, `crates/untwist/tests/decode_behaviour.rs` |
+| `builtin-replaced/` | Programs that print, a string-array unit beside a write to a built-in | `crates/untwist/tests/builtin_replaced_behaviour.rs` |
+| `corpus-npm/` | Generated npm-style modules obfuscated with several decoder shapes | `cargo xtask corpus-npm`, `crates/untwist-deobfuscate/tests/corpus_npm.rs` |
+| `dead-code/` | Programs that print, one rule of the safe `dead-code` fold each | `crates/untwist/tests/dead_code_behaviour.rs` |
+| `deobfuscate-gaps/` | Synthetic inputs for known deobfuscation gaps | `crates/untwist-deobfuscate/tests/` |
+| `eval/` | Decoder corpus over every array, rotator, decoder and encoding combination; do not hand-edit | `cargo xtask corpus`, `crates/untwist-eval/tests/` |
+| `generated/` | Large generated bundles, not committed | `cargo xtask corpus-bundle`, the big-bundle tests |
+| `jsx/` | `createElement` and `jsx()` call shapes | `cargo xtask diff-jsx`, `crates/untwist-jsx/tests/fixtures.rs` |
+| `layers/` | `eval`, `Function`, `atob` and p.a.c.k.e.r. layers, as classic scripts that print | `cargo xtask diff-layers`, `crates/untwist/tests/layers_*.rs` |
+| `obfuscated/` | javascript-obfuscator output from `tools/obfuscated/gen.mjs`; `MANIFEST` and `EXPECT` describe each file | `cargo xtask obf-matrix` |
+| `real-shapes/` | Obfuscator and webpack machinery reduced from real bundles by `tools/real-shapes/reduce.mjs` | `cargo xtask obf-matrix` |
+| `real-world/` | Optional local `game.js` and its reference snapshot, not committed; `game-truth.mjs` prints its array truth | the `real_world` tests, which skip when it is absent |
+| `reference/` | Samples and expected output from the reference deobfuscator (MIT, `LICENSE-reference`) | `cargo xtask diff-deobfuscate`, `diff-unpack`, `crates/untwist-deobfuscate/tests/fixtures.rs` |
+| `spelled-name/` | Programs that print, whose machinery names are also spelled as property keys | `crates/untwist/tests/spelled_name_behaviour.rs` |
+| `unminify/` | Minified programs for the unminify passes | `cargo xtask diff-unminify`, `diff-mangle` |
+| `unpack-bundlers/` | Bundler output from `tools/bundlers/` plus hand-written `min-*` and `neg-*` shapes; `MANIFEST` lists each | `cargo xtask diff-unpack-behaviour`, `crates/untwist-unpack/tests/` |
+| `unpack-gaps/` | Hand-written bundles for known unpacking gaps | `crates/untwist-unpack/tests/` |
+| `untranspile/` | TypeScript, swc, Babel, esbuild and terser output from `tools/untranspile/gen.mjs`, as programs that print | `cargo xtask diff-behaviour`, `crates/untwist-unminify/tests/` |
+
+Third-party inputs keep their licence beside them: `LICENSE-reference`,
+`LICENSE-javascript-obfuscator` and `unpack-bundlers/licenses/`.
+
+## Adding a fixture
+
+Put the file in the folder whose test should pick it up, name it after the shape it covers, and make
+it print what it computes so node can check it. Generated folders (`eval/`, `corpus-npm/`,
+`obfuscated/`, `unpack-bundlers/`, `untranspile/`) are rewritten by their generator, so change the
+generator instead. Run the folder's test or differential; add an allowlist entry only for a
+divergence documented in `docs/known-divergences/`.

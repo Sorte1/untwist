@@ -1,0 +1,90 @@
+.details {
+  border-top: 1px solid var(--border);
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.details-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.details-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px 24px;
+}
+
+.details-pairs {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 3px 14px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.details-pairs dt {
+  color: var(--muted);
+  white-space: pre;
+}
+
+.details-pairs dd {
+  margin: 0;
+  font-family: var(--mono);
+  word-break: break-word;
+}
+
+.vlist {
+  overflow: auto;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+}
+
+.stage-row {
+  display: grid;
+  grid-template-columns: 18px minmax(120px, 2fr) repeat(3, minmax(56px, 1fr)) minmax(96px, 1.4fr) minmax(72px, 1fr);
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-bottom: 1px solid var(--hair);
+  cursor: pointer;
+}
+
+.stage-head {
+  font-family: var(--sans);
+  color: var(--muted);
+  cursor: default;
+}
+
+.pass-row {
+  color: var(--muted);
+  cursor: default;
+}
+
+.note-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--hair);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mono {
+  font-family: var(--mono);
+}

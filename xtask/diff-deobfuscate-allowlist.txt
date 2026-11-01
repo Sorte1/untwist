@@ -1,0 +1,16 @@
+# Every fixture under fixtures/reference/deobfuscate/, plus
+# fixtures/real-world/game.js, matches the reference deobfuscator's own committed snapshot
+# after normalisation, except the entries below, each with its reason.
+# Do not add entries here without recording, in the same commit, which
+# pass owes the difference.
+# untwist strips the `function anonymous(hash, hash)` new Function shell that
+# V8 prints around a dumped script, hoisting its parameters as a var
+# declaration; the reference deobfuscator keeps it. See the ## Deobfuscate section of
+# docs/known-divergences/deobfuscate.md.
+fixtures/real-world/game.js
+# The string-array pass refuses a rotator that runs before its string array is bound (`var c =
+# function` after the rotator): node throws a TypeError at the rotator, and
+# the reference deobfuscator decodes as if it had run. See "A rotator that runs before its
+# machinery is bound" in the ## Deobfuscate section of
+# docs/known-divergences/deobfuscate.md.
+fixtures/reference/deobfuscate/obfuscator.io-var-functions.js

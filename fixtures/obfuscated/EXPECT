@@ -1,0 +1,15 @@
+# fixture-glob	cell-glob (lane/rename/output)	check	xfail|allow	reason
+# An xfail cell that passes fails the run: remove its line when the cause is fixed.
+obfuscated/webpack4-*.js	*	unpacked	xfail	a refusal keeps the string array, so the webpack 4 bootstrap's member names stay decoder calls and the bundle is not detected
+obfuscated/*.js	*	decoded	xfail	a refusal keeps the string array (the global-reach note; see fixtures/builtin-replaced); see warn-summary
+reference/deobfuscate/obfuscator.io-high.js	unsafe/*	node	allow	the input never exits (its debug protection loops) and --unsafe removes that protection
+real-shapes/*.js	*	node	allow	a reduced shape keeps only the obfuscator and webpack machinery with stub modules, so its input throws or idles; behaviour is checked on fixtures/obfuscated
+real-shapes/game-10.0-shell.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
+real-shapes/game-6.0-7.0.js	safe/*	decoded	xfail	the safe lane refuses and keeps the string array (--unsafe decodes it)
+real-shapes/game-6.0-7.0-webpack4.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
+real-shapes/game-7.0-7.2-eval.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
+real-shapes/game-7.0-7.2-webpack4-eval.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
+real-shapes/game-7.0-shell-webpack4.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
+real-shapes/game-9.0-9.2-shell.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
+real-shapes/game-9.2-base64-rc4.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
+real-shapes/loader-6.0-7.2-selfdefending.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)

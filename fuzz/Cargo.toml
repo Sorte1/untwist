@@ -1,0 +1,37 @@
+[package]
+name = "untwist-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+untwist = { path = "../crates/untwist", features = ["test-hooks"] }
+untwist-core = { path = "../crates/untwist-core" }
+untwist-deobfuscate = { path = "../crates/untwist-deobfuscate" }
+untwist-unminify = { path = "../crates/untwist-unminify" }
+untwist-jsx = { path = "../crates/untwist-jsx" }
+oxc_allocator = "=0.148.0"
+
+[[bin]]
+name = "pipeline"
+path = "fuzz_targets/pipeline.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "passes"
+path = "fuzz_targets/passes.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "evaluator"
+path = "fuzz_targets/evaluator.rs"
+test = false
+doc = false

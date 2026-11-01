@@ -1,0 +1,10 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/webpack-path-traversal-windows.js
+---
+type: webpack
+entry: 386
+note: module ./\..\node_modules\debug\src\index: unsafe path "./\\..\\node_modules\\debug\\src\\index.js" replaced by _unsafe_______node_modules_debug_src_index.js
+
+=== ./\..\node_modules\debug\src\index -> _unsafe_______node_modules_debug_src_index.js

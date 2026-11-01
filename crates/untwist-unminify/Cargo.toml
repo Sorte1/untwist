@@ -1,0 +1,36 @@
+[package]
+name = "untwist-unminify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "unminify", "beautifier", "transpiler"]
+categories = ["development-tools", "parser-implementations"]
+description = "Unminify and untranspile passes that turn minified JavaScript back into readable source"
+
+[dependencies]
+untwist-core = { path = "../untwist-core", version = "0.1.0" }
+untwist-eval = { path = "../untwist-eval", version = "0.1.0" }
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_ast_visit.workspace = true
+oxc_parser.workspace = true
+oxc_semantic.workspace = true
+oxc_span.workspace = true
+oxc_str.workspace = true
+oxc_syntax.workspace = true
+oxc_traverse.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[features]
+test-hooks = []
+
+[dev-dependencies]
+untwist-testing = { path = "../untwist-testing" }
+insta.workspace = true

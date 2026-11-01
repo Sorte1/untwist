@@ -1,0 +1,13 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/webpack-object.js
+---
+type: webpack
+entry: 386
+
+=== 386 -> index.js (entry)
+const r = require("./387.js").default;
+
+=== 387 -> 387.js
+module.exports = "test";

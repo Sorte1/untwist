@@ -1,0 +1,10 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/webpack-5-no-entry.js
+---
+type: webpack
+entry: <none>
+
+=== 97418 -> 97418.js
+module.exports = "foo";

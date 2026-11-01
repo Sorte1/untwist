@@ -1,0 +1,37 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/webpack-var-injection.js
+---
+type: webpack
+entry: 0
+
+=== 0 -> index.js (entry)
+const __webpack_require__ = require("./_runtime/webpack.js");
+__webpack_require__.r(exports);
+var m = require("./1.js");
+var n = require("./2.js");
+console.log(m, n);
+
+=== 1 -> 1.js
+module.exports = 1;
+
+=== 2 -> 2.js
+module.exports = 2;
+
+=== _runtime/webpack -> _runtime/webpack.js
+var __webpack_module_paths__ = {
+  "0": "../index.js",
+  "1": "../1.js",
+  "2": "../2.js"
+};
+var n = function (id) {
+  return require(__webpack_module_paths__[id]);
+};
+n.r = function (e) {
+  if (typeof Symbol != "undefined" && Symbol.toStringTag) {
+    Object.defineProperty(e, Symbol.toStringTag, { value: "Module" });
+  }
+  Object.defineProperty(e, "__esModule", { value: true });
+};
+module.exports = n;

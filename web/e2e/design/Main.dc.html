@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Deobfuscator playground</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; background: {{t.bg}}; color: {{t.text}}; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px; line-height: 1.45">
+
+<header style="position: relative; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid {{t.border}}; background: {{t.panel}}">
+<div style="display: flex; align-items: center; gap: 10px; margin-right: 6px">
+<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="{{t.accent}}"></rect><g fill="none" stroke-linecap="round" stroke-width="2.2"><path d="M4.5 15.5C8.5 15.5 8.5 8.5 12.5 8.5H19.5" stroke="#1A1300"></path><path d="M4.5 8.5C8.5 8.5 8.5 15.5 12.5 15.5H19.5" stroke="{{t.accent}}" stroke-width="4.6"></path><path d="M4.5 8.5C8.5 8.5 8.5 15.5 12.5 15.5H19.5" stroke="#1A1300"></path></g></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 15px; letter-spacing: -0.01em">deob</span>
+<span style="color: {{t.muted}}">playground</span>
+</div>
+
+<div style="position: relative">
+<button type="button" onClick="{{toggleEx}}" aria-expanded="{{exOpenStr}}" aria-haspopup="listbox" style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 12px; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; cursor: pointer"><span style="color: {{t.muted}}">Example</span><span style="font-weight: 500">{{example}}</span><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg></button>
+<sc-if value="{{exOpen}}" hint-placeholder-val="{{ false }}">
+<div role="listbox" aria-label="Example inputs" style="position: absolute; top: 40px; left: 0; width: 360px; padding: 6px; border-radius: 8px; border: 1px solid {{t.btnBorder}}; background: {{t.panel}}; box-shadow: 0 12px 32px rgba(0,0,0,0.28); display: flex; flex-direction: column; gap: 2px">
+<div style="padding: 6px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">From test fixtures</div>
+<sc-for list="{{examples}}" as="ex" hint-placeholder-count="6">
+<button type="button" role="option" aria-selected="{{ex.selStr}}" onClick="{{ex.pick}}" style="display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; border: 0; border-radius: 6px; background: {{ex.bg}}; color: {{t.text}}; font: inherit; text-align: left; cursor: pointer"><span style="font-weight: 500">{{ex.name}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: {{t.muted}}">{{ex.src}}</span></button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="flex: 1 1 auto"></div>
+
+<span style="display: inline-flex; align-items: center; gap: 6px; color: {{t.muted}}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>Runs in your browser — nothing is uploaded</span>
+
+<div style="display: flex; align-items: center; gap: 10px; padding-left: 12px; border-left: 1px solid {{t.border}}">
+<span style="display: inline-flex; align-items: center; gap: 6px; color: {{t.muted}}"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{statusDot}}"></span>{{statusLabel}}</span>
+<span aria-live="polite" style="min-width: 64px; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-variant-numeric: tabular-nums; color: {{t.text}}">{{elapsedLabel}}</span>
+<button type="button" onClick="{{cancel}}" disabled="{{notRunning}}" style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; font-weight: 500; cursor: pointer; opacity: {{cancelOpacity}}"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1.5"></rect></svg>Cancel</button>
+<button type="button" onClick="{{run}}" style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 14px; border-radius: 6px; border: 1px solid {{t.accent}}; background: {{t.accent}}; color: #1A1300; font: inherit; font-weight: 600; cursor: pointer"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 2.5v11l9-5.5z"></path></svg>{{runLabel}}<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500; padding: 1px 5px; border-radius: 4px; background: rgba(26,19,0,0.14)">Ctrl ↵</span></button>
+</div>
+
+<button type="button" onClick="{{toggleTheme}}" aria-label="{{themeAria}}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; cursor: pointer">
+<sc-if value="{{isDark}}" hint-placeholder-val="{{ true }}"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"></path></svg></sc-if>
+<sc-if value="{{isLight}}" hint-placeholder-val="{{ false }}"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5z"></path></svg></sc-if>
+</button>
+</header>
+
+<div style="flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: stretch">
+
+<aside aria-label="Options" style="flex: 1 1 248px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px; padding: 18px 16px; border-right: 1px solid {{t.border}}; background: {{t.panel}}">
+<section style="display: flex; flex-direction: column; gap: 4px">
+<h2 style="margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Transforms</h2>
+<sc-for list="{{opts}}" as="o" hint-placeholder-count="4">
+<div style="display: flex; align-items: flex-start; gap: 12px; padding: 8px 0">
+<div style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px">
+<span style="font-weight: 500">{{o.label}}</span>
+<span style="font-size: 12px; color: {{t.muted}}">{{o.hint}}</span>
+</div>
+<button type="button" role="switch" aria-checked="{{o.aria}}" aria-label="{{o.label}}" onClick="{{o.toggle}}" style="flex: 0 0 auto; display: flex; align-items: center; width: 36px; height: 20px; margin-top: 1px; padding: 0; border: 0; border-radius: 10px; background: {{o.trackBg}}; cursor: pointer"><span style="display: block; width: 16px; height: 16px; margin-left: {{o.knobMl}}; border-radius: 50%; background: {{o.knobBg}}; box-shadow: 0 1px 2px rgba(0,0,0,0.25)"></span></button>
+</div>
+</sc-for>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Rename mode</h2>
+<div role="group" aria-label="Rename mode" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 2px; border-radius: 7px; border: 1px solid {{t.border}}; background: {{t.code}}">
+<sc-for list="{{renames}}" as="r" hint-placeholder-count="3"><button type="button" aria-pressed="{{r.pressed}}" onClick="{{r.pick}}" style="height: 28px; border-radius: 5px; border: 1px solid {{r.border}}; background: {{r.bg}}; color: {{r.color}}; font: inherit; font-weight: 500; cursor: pointer">{{r.label}}</button></sc-for>
+</div>
+<span style="font-size: 12px; color: {{t.muted}}">{{renameHint}}</span>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Fuel limit</h2>
+<div style="display: flex; align-items: center; gap: 8px">
+<label for="fuel" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Fuel limit in millions of instructions</label>
+<input id="fuel" type="number" min="1" step="50" value="{{fuel}}" onInput="{{setFuel}}" disabled="{{fuelInf}}" style="width: 96px; height: 30px; box-sizing: border-box; padding: 0 8px; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.code}}; color: {{t.text}}; font-family: 'IBM Plex Mono', monospace; font-size: 13px; opacity: {{fuelOpacity}}">
+<span style="color: {{t.muted}}">M instructions</span>
+</div>
+<label style="display: flex; align-items: center; gap: 8px; cursor: pointer"><input type="checkbox" checked="{{fuelInf}}" onChange="{{toggleInf}}" style="width: 15px; height: 15px; margin: 0; accent-color: {{t.accent}}">No limit</label>
+<span style="font-size: 12px; color: {{t.muted}}">Stops a runaway run and returns partial output. Lower it to see the limit fire.</span>
+</section>
+
+<div style="flex: 1 1 auto"></div>
+
+<section style="display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid {{t.border}}">
+<span style="font-size: 12px; color: {{t.muted}}">Settings live in the URL</span>
+<code style="display: block; padding: 6px 8px; border-radius: 5px; background: {{t.code}}; border: 1px solid {{t.border}}; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: {{t.muted}}; word-break: break-all">{{query}}</code>
+<button type="button" onClick="{{copyLink}}" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; font-weight: 500; cursor: pointer"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg>{{linkLabel}}</button>
+<span style="font-size: 12px; color: {{t.muted}}">Your code is never put in the link.</span>
+</section>
+</aside>
+
+<main style="flex: 999 1 640px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; padding: 12px">
+
+<sc-if value="{{isOutput}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-wrap: wrap; gap: 12px">
+
+<sc-if value="{{inputHidden}}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{showInput}}" aria-label="Show input" style="flex: 0 0 40px; height: {{outH}}; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 10px 0; border: 1px solid {{t.border}}; border-radius: 8px; background: {{t.head}}; color: {{t.muted}}; font: inherit; cursor: pointer"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"></rect><path d="M6 2.5v11M9 6.5 10.5 8 9 9.5"></path></svg><span style="writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase">Input · webpack5.js</span></button>
+</sc-if>
+<sc-if value="{{inputShown}}" hint-placeholder-val="{{ true }}">
+<section aria-label="Input" style="position: relative; flex: 1 1 420px; min-width: 0; height: 560px; display: flex; flex-direction: column; border: 1px solid {{t.border}}; border-radius: 8px; background: {{t.code}}; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid {{t.border}}; background: {{t.head}}">
+<h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Input</h2>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">{{inName}}</span>
+<div style="flex: 1 1 auto"></div>
+<button type="button" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; cursor: pointer"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6z"></path><path d="M9 2v4h4"></path><path d="M8 12V8.5M6.5 10 8 8.5 9.5 10"></path></svg>Open file</button>
+<button type="button" aria-label="Clear input" style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.muted}}; cursor: pointer"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+<button type="button" onClick="{{hideInput}}" aria-label="Hide input" style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.muted}}; cursor: pointer"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"></rect><path d="M6 2.5v11M10.5 6.5 9 8l1.5 1.5"></path></svg></button>
+</div>
+<div style="flex: 1 1 auto; overflow: auto; padding: 10px 0; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 20px">
+<sc-for list="{{inLines}}" as="ln" hint-placeholder-count="7"><div style="display: flex; min-width: max-content"><span style="flex: 0 0 44px; box-sizing: border-box; padding-right: 14px; text-align: right; color: {{t.faint}}; user-select: none">{{ln.n}}</span><span style="white-space: pre; padding-right: 16px"><sc-for list="{{ln.toks}}" as="tk"><span style="color: {{tk.c}}">{{tk.s}}</span></sc-for></span></div></sc-for>
+</div>
+<div style="display: flex; gap: 14px; padding: 6px 14px; border-top: 1px solid {{t.border}}; background: {{t.head}}; font-size: 12px; color: {{t.muted}}"><span>{{inMeta}}</span><div style="flex: 1 1 auto"></div><span>Paste, type or drop a file anywhere</span></div>
+<sc-if value="{{dropOverlay}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 2px dashed {{t.accent}}; border-radius: 8px; background: {{t.overlay}}">
+<svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6z"></path><path d="M9 2v4h4"></path><path d="M8 12V8.5M6.5 10 8 8.5 9.5 10"></path></svg>
+<span style="font-size: 15px; font-weight: 500">Drop to load game.js</span>
+<span style="color: {{t.muted}}">9.8 MB · read locally, never uploaded</span>
+</div>
+</sc-if>
+</section>
+</sc-if>
+
+<section aria-label="Output" style="position: relative; flex: 1 1 420px; min-width: 0; height: {{outH}}; display: flex; flex-direction: column; border: 1px solid {{t.border}}; border-radius: 8px; background: {{t.code}}; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid {{t.border}}; background: {{t.head}}">
+<h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Output</h2>
+<div role="group" aria-label="Output view" style="display: flex; gap: 2px; padding: 2px; border-radius: 7px; border: 1px solid {{t.border}}; background: {{t.code}}">
+<sc-for list="{{views}}" as="v" hint-placeholder-count="2"><button type="button" aria-pressed="{{v.pressed}}" onClick="{{v.pick}}" style="height: 24px; padding: 0 10px; border-radius: 5px; border: 1px solid {{v.border}}; background: {{v.bg}}; color: {{v.color}}; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer">{{v.label}}</button></sc-for>
+</div>
+<div style="flex: 1 1 auto"></div>
+<button type="button" onClick="{{toggleEdit}}" aria-pressed="{{editPressed}}" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid {{editBorder}}; background: {{editBg}}; color: {{t.text}}; font: inherit; cursor: pointer"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"></path></svg>Edit</button>
+<button type="button" onClick="{{copyOut}}" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; cursor: pointer"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"></path></svg>{{copyLabel}}</button>
+<button type="button" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; cursor: pointer"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"></path></svg>{{downloadLabel}}</button>
+<button type="button" onClick="{{toggleFocus}}" aria-label="{{focusAria}}" aria-pressed="{{focusPressed}}" style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; cursor: pointer"><sc-if value="{{inputShown}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"></path></svg></sc-if><sc-if value="{{inputHidden}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5l4-4M6.5 9.5l-4 4"></path></svg></sc-if></button>
+</div>
+<div style="flex: 1 1 auto; min-height: 0; display: flex">
+<sc-if value="{{showTree}}" hint-placeholder-val="{{ true }}">
+<nav aria-label="Modules" style="flex: 0 0 168px; overflow: auto; padding: 8px 6px; border-right: 1px solid {{t.border}}; background: {{t.head}}">
+<div style="display: flex; align-items: center; gap: 6px; padding: 4px 8px; color: {{t.muted}}; font-size: 12px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.4 1.5h5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg>bundle · {{modCount}}</div>
+<sc-for list="{{tree}}" as="f" hint-placeholder-count="5"><button type="button" aria-current="{{f.current}}" onClick="{{f.pick}}" style="display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; padding: 0 8px 0 20px; border: 0; border-left: 2px solid {{f.bar}}; border-radius: 0 5px 5px 0; background: {{f.bg}}; color: {{f.color}}; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: left; cursor: pointer"><span style="flex: 1 1 auto">{{f.name}}</span><sc-if value="{{f.isEntry}}" hint-placeholder-val="{{ false }}"><span style="font-family: 'IBM Plex Sans', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: {{t.muted}}">entry</span></sc-if></button></sc-for>
+</nav>
+</sc-if>
+<div style="position: relative; flex: 1 1 auto; min-width: 0; overflow: auto; padding: 10px 0; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 20px">
+<sc-for list="{{outLines}}" as="ln" hint-placeholder-count="10"><div style="display: flex; min-width: max-content"><span style="flex: 0 0 44px; box-sizing: border-box; padding-right: 12px; text-align: right; border-right: 2px solid {{ln.mark}}; color: {{t.faint}}; user-select: none">{{ln.n}}</span><span style="white-space: pre; padding-left: 10px; padding-right: 16px"><sc-for list="{{ln.toks}}" as="tk"><span style="color: {{tk.c}}; background: {{tk.b}}; text-decoration: {{tk.u}}; text-underline-offset: 3px; border-right: {{tk.bl}}">{{tk.s}}</span></sc-for></span></div></sc-for>
+<sc-if value="{{showLsp}}" hint-placeholder-val="{{ false }}">
+<div role="tooltip" style="position: absolute; top: 92px; left: 174px; width: 400px; border-radius: 8px; border: 1px solid {{t.btnBorder}}; background: {{t.panel}}; box-shadow: 0 12px 32px rgba(0,0,0,0.28); font-size: 12px; overflow: hidden">
+<div style="padding: 8px 12px; white-space: pre-wrap; border-bottom: 1px solid {{t.border}}"><span style="color: {{t.kw}}">function</span> <span style="color: {{t.fn}}">clamp</span>(value: <span style="color: {{t.num}}">number</span>, min: <span style="color: {{t.num}}">number</span>, max: <span style="color: {{t.num}}">number</span>): <span style="color: {{t.num}}">number</span></div>
+<div style="padding: 8px 12px 6px; font-family: 'IBM Plex Sans', sans-serif; color: {{t.muted}}">Types inferred from usage · defined in 12.js:1</div>
+<div style="display: flex; gap: 6px; padding: 2px 8px 8px; font-family: 'IBM Plex Sans', sans-serif"><button type="button" onClick="{{gotoDef}}" style="display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 5px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; font-size: 12px; cursor: pointer">Go to definition<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: {{t.muted}}">F12</span></button><button type="button" style="height: 26px; padding: 0 8px; border-radius: 5px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; font-size: 12px; cursor: pointer">2 references</button><button type="button" style="height: 26px; padding: 0 8px; border-radius: 5px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; font-size: 12px; cursor: pointer">Rename symbol</button></div>
+</div>
+<div role="listbox" aria-label="Completions" style="position: absolute; top: 212px; left: 144px; width: 340px; padding: 4px; box-sizing: border-box; border-radius: 8px; border: 1px solid {{t.btnBorder}}; background: {{t.panel}}; box-shadow: 0 12px 32px rgba(0,0,0,0.28); font-size: 12px">
+<sc-for list="{{completions}}" as="c" hint-placeholder-count="4"><div role="option" aria-selected="{{c.sel}}" style="display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 8px; border-radius: 5px; background: {{c.bg}}"><span style="width: 14px; text-align: center; font-weight: 500; color: {{c.kc}}">{{c.kind}}</span><span><span style="font-weight: 600">cl</span>{{c.rest}}</span><span style="margin-left: auto; font-family: 'IBM Plex Sans', sans-serif; font-size: 11px; color: {{t.muted}}">{{c.detail}}</span></div></sc-for>
+<div style="margin-top: 4px; padding: 5px 8px 2px; border-top: 1px solid {{t.hair}}; font-family: 'IBM Plex Sans', sans-serif; font-size: 11px; color: {{t.muted}}">Enter to insert · Esc to close · Cannot find name 'cl'</div>
+</div>
+</sc-if>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 30px; box-sizing: border-box; padding: 4px 8px 4px 14px; border-top: 1px solid {{t.border}}; background: {{t.head}}; font-size: 12px; color: {{t.muted}}"><span>{{outMeta}}</span>
+<sc-if value="{{editable}}" hint-placeholder-val="{{ false }}"><span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 2px; height: 12px; background: {{t.accent}}"></span>{{editedLabel}}</span><span style="color: {{problemColor}}">{{problemLabel}}</span><span>TypeScript language service · ready</span></sc-if>
+<div style="flex: 1 1 auto"></div>
+<sc-if value="{{editable}}" hint-placeholder-val="{{ false }}"><span>Run replaces your edits</span><button type="button" onClick="{{resetEdits}}" style="height: 22px; padding: 0 8px; border-radius: 5px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; font-size: 12px; cursor: pointer">Reset to output</button></sc-if>
+<sc-if value="{{notEditable}}" hint-placeholder-val="{{ true }}"><span>Read-only</span></sc-if>
+</div>
+<sc-if value="{{running}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: {{t.overlay}}">
+<span style="font-size: 15px; font-weight: 500">Running in a worker · {{elapsedLabel}}</span>
+<span style="color: {{t.muted}}">The page stays responsive. Cancel terminates the worker.</span>
+</div>
+</sc-if>
+</section>
+
+</div>
+</sc-if>
+
+<sc-if value="{{isDiff}}" hint-placeholder-val="{{ false }}">
+<section aria-label="Before and after" style="position: relative; height: 560px; display: flex; flex-direction: column; border: 1px solid {{t.border}}; border-radius: 8px; background: {{t.code}}; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid {{t.border}}; background: {{t.head}}">
+<h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Output</h2>
+<div role="group" aria-label="Output view" style="display: flex; gap: 2px; padding: 2px; border-radius: 7px; border: 1px solid {{t.border}}; background: {{t.code}}">
+<sc-for list="{{views}}" as="v" hint-placeholder-count="2"><button type="button" aria-pressed="{{v.pressed}}" onClick="{{v.pick}}" style="height: 24px; padding: 0 10px; border-radius: 5px; border: 1px solid {{v.border}}; background: {{v.bg}}; color: {{v.color}}; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer">{{v.label}}</button></sc-for>
+</div>
+<span style="display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; font-size: 12px; color: {{t.muted}}"><span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; color: {{t.delMark}}">−</span>before (input)<span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; margin-left: 8px; color: {{t.addMark}}">+</span>after ({{outName}})</span>
+<div style="flex: 1 1 auto"></div>
+<button type="button" onClick="{{copyOut}}" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid {{t.btnBorder}}; background: {{t.btn}}; color: {{t.text}}; font: inherit; cursor: pointer"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"></path></svg>{{copyLabel}}</button>
+</div>
+<div style="flex: 1 1 auto; min-height: 0; display: flex">
+<sc-if value="{{showTree}}" hint-placeholder-val="{{ true }}">
+<nav aria-label="Modules" style="flex: 0 0 168px; overflow: auto; padding: 8px 6px; border-right: 1px solid {{t.border}}; background: {{t.head}}">
+<div style="display: flex; align-items: center; gap: 6px; padding: 4px 8px; color: {{t.muted}}; font-size: 12px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.4 1.5h5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"></path></svg>bundle · {{modCount}}</div>
+<sc-for list="{{tree}}" as="f" hint-placeholder-count="5"><button type="button" aria-current="{{f.current}}" onClick="{{f.pick}}" style="display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; padding: 0 8px 0 20px; border: 0; border-left: 2px solid {{f.bar}}; border-radius: 0 5px 5px 0; background: {{f.bg}}; color: {{f.color}}; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: left; cursor: pointer"><span style="flex: 1 1 auto">{{f.name}}</span><sc-if value="{{f.isEntry}}" hint-placeholder-val="{{ false }}"><span style="font-family: 'IBM Plex Sans', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: {{t.muted}}">entry</span></sc-if></button></sc-for>
+</nav>
+</sc-if>
+<div style="flex: 1 1 auto; min-width: 0; overflow: auto; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 20px">
+<div style="position: sticky; top: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid {{t.border}}; background: {{t.head}}; font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; color: {{t.muted}}"><span style="padding: 6px 14px">Before · {{inName}}</span><span style="padding: 6px 14px; border-left: 1px solid {{t.border}}">After · {{outName}}</span></div>
+<sc-for list="{{diffRows}}" as="row" hint-placeholder-count="10"><div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))"><div style="display: flex; background: {{row.lBg}}"><span style="flex: 0 0 40px; box-sizing: border-box; padding-right: 8px; text-align: right; color: {{t.faint}}; user-select: none">{{row.l.n}}</span><span style="flex: 0 0 16px; color: {{t.delMark}}; user-select: none">{{row.lMark}}</span><span style="flex: 1 1 auto; min-width: 0; padding-right: 12px; white-space: pre-wrap; word-break: break-all"><sc-for list="{{row.l.toks}}" as="tk"><span style="color: {{tk.c}}">{{tk.s}}</span></sc-for></span></div><div style="display: flex; border-left: 1px solid {{t.border}}; background: {{row.rBg}}"><span style="flex: 0 0 40px; box-sizing: border-box; padding-right: 8px; text-align: right; color: {{t.faint}}; user-select: none">{{row.r.n}}</span><span style="flex: 0 0 16px; color: {{t.addMark}}; user-select: none">{{row.rMark}}</span><span style="flex: 1 1 auto; min-width: 0; padding-right: 12px; white-space: pre-wrap; word-break: break-all"><sc-for list="{{row.r.toks}}" as="tk"><span style="color: {{tk.c}}">{{tk.s}}</span></sc-for></span></div></div></sc-for>
+</div>
+</div>
+<sc-if value="{{running}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: {{t.overlay}}">
+<span style="font-size: 15px; font-weight: 500">Running in a worker · {{elapsedLabel}}</span>
+<span style="color: {{t.muted}}">The page stays responsive. Cancel terminates the worker.</span>
+</div>
+</sc-if>
+</section>
+</sc-if>
+
+<section aria-label="Diagnostics" style="display: flex; flex-direction: column; border: 1px solid {{t.border}}; border-radius: 8px; background: {{t.panel}}; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; min-height: 44px; padding: 6px 14px; border-bottom: 1px solid {{t.border}}; background: {{t.head}}">
+<h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Diagnostics</h2>
+<span style="color: {{t.muted}}">Exit <span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; color: {{exitColor}}">{{exitCode}}</span></span>
+<span style="color: {{t.muted}}">Total <span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; color: {{t.text}}">{{totalLabel}}</span></span>
+<span style="color: {{t.muted}}">Limits <span style="font-weight: 500; color: {{limitsColor}}">{{limitsLabel}}</span></span>
+<span style="color: {{t.muted}}">Warnings <span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; color: {{t.text}}">{{warnCount}}</span></span>
+</div>
+<div style="display: flex; flex-wrap: wrap">
+
+<div style="flex: 2 1 380px; min-width: 0; box-sizing: border-box; padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 2px">
+<sc-if value="{{done}}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{warnings}}" as="w" hint-placeholder-count="3"><div style="display: flex; align-items: baseline; gap: 10px; padding: 5px 0; border-bottom: 1px solid {{t.hair}}"><span style="flex: 0 0 44px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500; text-transform: uppercase; color: {{w.color}}">{{w.lvl}}</span><span style="flex: 0 0 64px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: {{t.muted}}">{{w.src}}</span><span style="flex: 1 1 auto; min-width: 0">{{w.text}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: {{t.muted}}">{{w.loc}}</span></div></sc-for>
+</sc-if>
+<sc-if value="{{running}}" hint-placeholder-val="{{ false }}"><div style="padding: 6px 0; color: {{t.muted}}">Waiting for the worker. Diagnostics arrive with the result.</div></sc-if>
+<sc-if value="{{cancelled}}" hint-placeholder-val="{{ false }}"><div style="padding: 6px 0; color: {{t.muted}}">Worker terminated after {{elapsedLabel}}. No partial output was kept; the last result is still shown above.</div></sc-if>
+</div>
+
+<div style="flex: 1 1 220px; box-sizing: border-box; padding: 10px 14px 14px; border-left: 1px solid {{t.border}}; display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Safety limits</span>
+<div style="display: flex; flex-direction: column; gap: 5px">
+<div style="display: flex; justify-content: space-between"><span>Fuel</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: {{t.muted}}">{{fuelUsedLabel}}</span></div>
+<div style="height: 6px; border-radius: 3px; background: {{t.track}}; overflow: hidden"><div style="height: 6px; width: {{fuelPct}}; border-radius: 3px; background: {{fuelBar}}"></div></div>
+</div>
+<div style="display: flex; justify-content: space-between"><span>Recursion depth</span><span style="color: {{t.muted}}">{{depthLabel}}</span></div>
+<div style="display: flex; justify-content: space-between"><span>Output size</span><span style="color: {{t.muted}}">{{sizeLabel}}</span></div>
+</div>
+
+<div style="flex: 1 1 220px; box-sizing: border-box; padding: 10px 14px 14px; border-left: 1px solid {{t.border}}; display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{t.muted}}">Analysis</span>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px dashed {{t.btnBorder}}; border-radius: 6px; color: {{t.muted}}">
+<div style="display: flex; justify-content: space-between"><span>Detected obfuscator</span><span>after 5k</span></div>
+<div style="display: flex; justify-content: space-between"><span>Per-stage timings</span><span>after 5k</span></div>
+</div>
+</div>
+
+</div>
+</section>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"accent":{"editor":"color","default":"#F2B33D","options":["#F2B33D","#7CC7FF","#B5E07A","#FF9E7A"]},"dropOverlay":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      theme: null, view: 'output', mod: '37.js',
+      opts: { unpack: true, jsx: false, unsafe: false },
+      rename: 'Safe', fuel: 500, fuelInf: false,
+      status: 'done', elapsed: 1840, exOpen: false,
+      example: 'webpack 5 bundle', copied: '', inputHidden: false, editable: false
+    };
+  }
+
+  componentWillUnmount() {
+    if (this.timer) clearInterval(this.timer);
+    if (this.copyTimer) clearTimeout(this.copyTimer);
+  }
+
+  pal(theme) {
+    if (theme === 'light') return {
+      bg: '#F4F3EF', panel: '#FFFFFF', head: '#FAF9F6', code: '#FFFFFF', border: '#DDDAD2', hair: '#EEECE6',
+      text: '#16181B', muted: '#575E66', faint: '#6E747B', track: '#D9D6CE', knob: '#FFFFFF', sel: '#EFECE4',
+      btn: '#FFFFFF', btnBorder: '#D2CEC4', overlay: 'rgba(244,243,239,0.86)',
+      kw: '#B4470E', str: '#2E7D32', num: '#7B3FB8', fn: '#0B62A8', com: '#6E747B', plain: '#16181B',
+      delBg: 'rgba(214,90,40,0.09)', addBg: 'rgba(30,110,220,0.09)', delMark: '#B8461A', addMark: '#1A63C7',
+      warn: '#8A5300', info: '#0B62A8', err: '#B3261E', ok: '#1F6F3A'
+    };
+    return {
+      bg: '#0D0F12', panel: '#14171B', head: '#171A1F', code: '#101317', border: '#262B32', hair: '#1D2126',
+      text: '#E7E9EC', muted: '#9AA3AD', faint: '#7A838D', track: '#2A3038', knob: '#9AA3AD', sel: '#22272E',
+      btn: '#1C2026', btnBorder: '#2F353D', overlay: 'rgba(13,15,18,0.82)',
+      kw: '#F59E6B', str: '#A5D6A7', num: '#D2A8FF', fn: '#7CC7FF', com: '#7A838D', plain: '#E7E9EC',
+      delBg: 'rgba(255,138,92,0.10)', addBg: 'rgba(106,176,255,0.12)', delMark: '#FF8A5C', addMark: '#6AB0FF',
+      warn: '#F2B33D', info: '#7CC7FF', err: '#FF7A6B', ok: '#8FD19E'
+    };
+  }
+
+  data() {
+    if (this._data) return this._data;
+    const input = [
+      '(()=>{"use strict";var e={12:(e,t,n)=>{n.d(t,{u:()=>r,t:()=>o});function r(e,t,n){return Math.min(Math.max(e,t),n)}function o(e,t,n){return e+(t-e)*n}},',
+      '37:function(e,t,n){"use strict";n.d(t,{a:function(){return o},b:function(){return r}});var i=n(12);function o(e,t){void 0===t&&(t=2);var n=(0,i.u)(e,0,1e6);return n.toFixed(t).padStart(8," ")}var r="1.4.2"},',
+      '104:(e,t,n)=>{n.d(t,{Z:()=>r});class r{constructor(){this.handlers=new Map}on(e,t){const n=this.handlers.get(e)??[];n.push(t),this.handlers.set(e,n)}emit(e,t){for(const n of this.handlers.get(e)??[])n(t)}}},',
+      '241:(e,t,n)=>{n.d(t,{U:()=>o});var r=n(104);function o({retries:e=1}={}){const t=new r.Z;let n=0;const o=()=>{const r=new WebSocket("wss://example.invalid/live");r.onmessage=e=>t.emit("score",Number(e.data)),r.onclose=()=>n++<e&&o()};return o(),t}}},',
+      't={};function n(r){var o=t[r];if(void 0!==o)return o.exports;var i=t[r]={exports:{}};return e[r](i,i.exports,n),i.exports}',
+      'n.d=(e,t)=>{for(var r in t)n.o(t,r)&&!n.o(e,r)&&Object.defineProperty(e,r,{enumerable:!0,get:t[r]})},n.o=(e,t)=>Object.prototype.hasOwnProperty.call(e,t);',
+      'var r=n(37),o=n(241);const i=(0,o.U)({retries:3});i.on("score",e=>{document.querySelector("#score").textContent=(0,r.a)(e)}),console.log(`build ${r.b}`)})();'
+    ].join('\n');
+    const out = {
+      'index.js': [
+        'import { formatScore, VERSION } from "./37.js";',
+        'import { createClient } from "./241.js";',
+        '',
+        'const client = createClient({ retries: 3 });',
+        '',
+        'client.on("score", (score) => {',
+        '  document.querySelector("#score").textContent = formatScore(score);',
+        '});',
+        '',
+        'console.log(`build ${VERSION}`);'
+      ].join('\n'),
+      '12.js': [
+        'export function clamp(value, min, max) {',
+        '  return Math.min(Math.max(value, min), max);',
+        '}',
+        '',
+        'export function lerp(a, b, t) {',
+        '  return a + (b - a) * t;',
+        '}'
+      ].join('\n'),
+      '37.js': [
+        'import { clamp } from "./12.js";',
+        '',
+        'export function formatScore(score, digits = 2) {',
+        '  const value = clamp(score, 0, 1e6);',
+        '  return value.toFixed(digits).padStart(8, " ");',
+        '}',
+        '',
+        'export const VERSION = "1.4.2";'
+      ].join('\n'),
+      '104.js': [
+        'export default class Emitter {',
+        '  constructor() {',
+        '    this.handlers = new Map();',
+        '  }',
+        '  on(type, fn) {',
+        '    const list = this.handlers.get(type) ?? [];',
+        '    list.push(fn);',
+        '    this.handlers.set(type, list);',
+        '  }',
+        '  emit(type, payload) {',
+        '    for (const fn of this.handlers.get(type) ?? []) fn(payload);',
+        '  }',
+        '}'
+      ].join('\n'),
+      '241.js': [
+        'import Emitter from "./104.js";',
+        '',
+        'export function createClient({ retries = 1 } = {}) {',
+        '  const events = new Emitter();',
+        '  let attempt = 0;',
+        '  const connect = () => {',
+        '    const ws = new WebSocket("wss://example.invalid/live");',
+        '    ws.onmessage = (e) => events.emit("score", Number(e.data));',
+        '    ws.onclose = () => attempt++ < retries && connect();',
+        '  };',
+        '  connect();',
+        '  return events;',
+        '}'
+      ].join('\n')
+    };
+    const diff37 = [
+      ['37: function (e, t, n) {', null],
+      ['  "use strict";', null],
+      ['  n.d(t, { a: function () { return o; }, b: function () { return r; } });', null],
+      ['  var i = n(12);', 'import { clamp } from "./12.js";'],
+      [null, ''],
+      ['  function o(e, t) {', 'export function formatScore(score, digits = 2) {'],
+      ['    void 0 === t && (t = 2);', null],
+      ['    var n = (0, i.u)(e, 0, 1e6);', '  const value = clamp(score, 0, 1e6);'],
+      ['    return n.toFixed(t).padStart(8, " ");', '  return value.toFixed(digits).padStart(8, " ");'],
+      ['  }', '}'],
+      [null, ''],
+      ['  var r = "1.4.2";', 'export const VERSION = "1.4.2";'],
+      ['}', null]
+    ];
+    const inLine = { 'index.js': 6, '12.js': 0, '104.js': 2, '241.js': 3 };
+    this._data = { input, out, diff37, inLine, mods: ['index.js', '12.js', '37.js', '104.js', '241.js'] };
+    return this._data;
+  }
+
+  tok(line, t) {
+    const re = /(\/\/.*$)|(`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(var|let|const|function|return|if|while|for|of|in|import|export|from|new|this|class|default|void|typeof|else)\b|\b(0x[0-9a-fA-F]+|\d+(?:\.\d+)?(?:e\d+)?)\b|([A-Za-z_$][\w$]*)(?=\s*\()/g;
+    const out = [];
+    let last = 0, m;
+    while ((m = re.exec(line))) {
+      if (m.index > last) out.push({ s: line.slice(last, m.index), c: t.plain });
+      const c = m[1] ? t.com : m[2] ? t.str : m[3] ? t.kw : m[4] ? t.num : t.fn;
+      out.push({ s: m[0], c });
+      last = re.lastIndex;
+      if (m[0].length === 0) re.lastIndex++;
+    }
+    if (last < line.length) out.push({ s: line.slice(last), c: t.plain });
+    if (!out.length) out.push({ s: ' ', c: t.plain });
+    return out.map((o) => Object.assign({ b: 'transparent', u: 'none', bl: 'none' }, o));
+  }
+
+  lines(src, t) {
+    return src.split('\n').map((l, i) => ({ n: String(i + 1), mark: 'transparent', toks: this.tok(l, t) }));
+  }
+
+  pairRows(pairs, t) {
+    let ln = 0, rn = 0;
+    const empty = { n: '', toks: [{ s: ' ', c: t.plain }] };
+    return pairs.map(([l, r]) => {
+      const L = l === null ? empty : { n: String(++ln), toks: this.tok(l, t) };
+      const R = r === null ? empty : { n: String(++rn), toks: this.tok(r, t) };
+      const same = l !== null && r !== null && l.trim() === r.trim();
+      return {
+        l: L, r: R,
+        lBg: l === null || same ? 'transparent' : t.delBg,
+        rBg: r === null || same || r === '' ? 'transparent' : t.addBg,
+        lMark: l === null || same ? '' : '−',
+        rMark: r === null || same || r === '' ? '' : '+'
+      };
+    });
+  }
+
+  run() {
+    if (this.state.status === 'running') return;
+    const start = Date.now();
+    this.setState({ status: 'running', elapsed: 0, exOpen: false });
+    if (this.timer) clearInterval(this.timer);
+    this.timer = setInterval(() => {
+      const e = Date.now() - start;
+      if (e >= 1840) {
+        clearInterval(this.timer);
+        this.timer = null;
+        this.setState({ status: 'done', elapsed: 1840 });
+      } else {
+        this.setState({ elapsed: e });
+      }
+    }, 50);
+  }
+
+  cancel() {
+    if (this.state.status !== 'running') return;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    this.setState({ status: 'cancelled' });
+  }
+
+  flash(which) {
+    this.setState({ copied: which });
+    if (this.copyTimer) clearTimeout(this.copyTimer);
+    this.copyTimer = setTimeout(() => this.setState({ copied: '' }), 1200);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const theme = s.theme || this.props.theme || 'dark';
+    const t = this.pal(theme);
+    const accent = this.props.accent || '#F2B33D';
+    t.accent = accent;
+    const D = this.data();
+    const running = s.status === 'running';
+    const done = s.status === 'done';
+    const cancelled = s.status === 'cancelled';
+    const unpack = !!s.opts.unpack;
+
+    const optDefs = [
+      { k: 'unpack', label: 'Unpack bundles', hint: 'Split webpack, Browserify and Vite bundles into one file per module' },
+      { k: 'jsx', label: 'Decompile JSX', hint: 'Turn createElement calls back into JSX' },
+      { k: 'unsafe', label: 'Unsafe transforms', hint: 'More aggressive; can change behaviour in edge cases' }
+    ];
+    const opts = optDefs.map((o) => {
+      const on = !!s.opts[o.k];
+      return {
+        label: o.label, hint: o.hint, aria: on ? 'true' : 'false',
+        toggle: () => this.setState((p) => ({ opts: Object.assign({}, p.opts, { [o.k]: !p.opts[o.k] }) })),
+        trackBg: on ? accent : t.track, knobMl: on ? '18px' : '2px', knobBg: on ? '#1A1300' : t.knob
+      };
+    });
+
+    const seg = (on) => ({ bg: on ? t.btn : 'transparent', border: on ? t.btnBorder : 'transparent', color: on ? t.text : t.muted, pressed: on ? 'true' : 'false' });
+    const renames = ['Off', 'Safe', 'Full'].map((r) => Object.assign({ label: r, pick: () => this.setState({ rename: r }) }, seg(r === s.rename)));
+    const renameHints = { Off: 'Keep identifiers exactly as in the input.', Safe: 'Rename mangled names when the new name is provably unused.', Full: 'Also rename from usage, e.g. parameters and exports.' };
+    const views = [['output', 'Output'], ['diff', 'Diff']].map(([k, label]) => Object.assign({ label, pick: () => this.setState({ view: k }) }, seg(s.view === k)));
+
+    const exDefs = [
+      ['obfuscator.io — string array', 'fixtures/obfuscator-io/string-array.js'],
+      ['obfuscator.io — control flow', 'fixtures/obfuscator-io/control-flow.js'],
+      ['webpack 5 bundle', 'fixtures/webpack/webpack5.js'],
+      ['webpack 4 bundle', 'fixtures/webpack/webpack4.js'],
+      ['Vite / Rollup chunk', 'fixtures/vite/chunk.js'],
+      ['Browserify bundle', 'fixtures/browserify/bundle.js'],
+      ['Dean Edwards packer', 'fixtures/packer/packed.js']
+    ];
+    const examples = exDefs.map(([name, src]) => ({
+      name, src, selStr: name === s.example ? 'true' : 'false',
+      bg: name === s.example ? t.sel : 'transparent',
+      pick: () => this.setState({ example: name, exOpen: false })
+    }));
+
+    const mod = D.out[s.mod] ? s.mod : '37.js';
+    const tree = D.mods.map((m) => ({
+      name: m, isEntry: m === 'index.js', current: m === mod ? 'true' : 'false',
+      pick: () => this.setState({ mod: m }),
+      bg: m === mod ? t.sel : 'transparent', color: m === mod ? t.text : t.muted, bar: m === mod ? accent : 'transparent'
+    }));
+    const outSrc = unpack ? D.out[mod] : D.mods.map((m) => D.out[m]).join('\n\n');
+    const outName = unpack ? mod : 'output.js';
+    const outLines = this.lines(outSrc, t);
+    const lspOn = !!s.editable && unpack && mod === '37.js';
+    if (lspOn) {
+      const tk = (x) => Object.assign({ c: t.plain, b: 'transparent', u: 'none', bl: 'none' }, x);
+      outLines[3].toks.forEach((k) => { if (k.s === 'clamp') { k.b = t.sel; k.u = 'underline dotted'; } });
+      outLines.push({ n: String(outLines.length + 1), mark: accent, toks: [tk({ s: ' ' })] });
+      outLines.push({ n: String(outLines.length + 1), mark: accent, toks: [tk({ s: 'console.' }), tk({ s: 'log', c: t.fn }), tk({ s: '(' }), tk({ s: 'cl', u: 'underline wavy ' + t.err, bl: '1.5px solid ' + t.text })] });
+    }
+
+    let pairs;
+    const inArr = D.input.split('\n');
+    if (!unpack) {
+      const outArr = outSrc.split('\n');
+      const n = Math.max(inArr.length, outArr.length);
+      pairs = [];
+      for (let i = 0; i < n; i++) pairs.push([i < inArr.length ? inArr[i] : null, i < outArr.length ? outArr[i] : null]);
+    } else if (mod === '37.js') {
+      pairs = D.diff37;
+    } else {
+      const outArr = outSrc.split('\n');
+      pairs = outArr.map((r, i) => [i === 0 ? inArr[D.inLine[mod]] : null, r]);
+    }
+    const diffRows = this.pairRows(pairs, t);
+
+    const fuelHit = done && !s.fuelInf && Number(s.fuel) < 190;
+    const warnings = [];
+    if (fuelHit) warnings.push({ lvl: 'error', src: 'fuel', text: 'Fuel limit reached at ' + s.fuel + 'M instructions. Output is partial.', loc: '', color: t.err });
+    if (unpack) warnings.push({ lvl: 'info', src: 'unpack', text: 'webpack 5 runtime detected, 5 modules extracted', loc: '', color: t.info });
+    else warnings.push({ lvl: 'info', src: 'unpack', text: 'Unpack is off, so the bundle stays one file', loc: '', color: t.info });
+    if (!s.opts.unsafe) warnings.push({ lvl: 'warn', src: 'unsafe', text: '2 sequence expressions left as they are. Turn on unsafe transforms to split them.', loc: '241.js:8', color: t.warn });
+    if (s.opts.jsx) warnings.push({ lvl: 'warn', src: 'jsx', text: 'No React runtime found, so the JSX pass was skipped', loc: '', color: t.warn });
+    if (s.rename !== 'Off') warnings.push({ lvl: 'warn', src: 'rename', text: '3 bindings kept because their names collide with globals', loc: 'index.js', color: t.warn });
+    const nWarn = warnings.filter((w) => w.lvl !== 'info').length;
+
+    const elapsedLabel = (s.elapsed / 1000).toFixed(2) + ' s';
+    const fuelLimit = s.fuelInf ? null : Math.max(1, Number(s.fuel) || 1);
+    const used = fuelHit ? fuelLimit : 190;
+    const pct = fuelLimit ? Math.min(100, Math.round((used / fuelLimit) * 100)) : 12;
+
+    const q = '?unpack=' + (s.opts.unpack ? 1 : 0) + '&jsx=' + (s.opts.jsx ? 1 : 0) + '&unsafe=' + (s.opts.unsafe ? 1 : 0) + '&rename=' + s.rename.toLowerCase() + '&fuel=' + (s.fuelInf ? 'none' : s.fuel);
+
+    return {
+      t, opts, renames, views, examples, tree, outLines, diffRows, warnings,
+      renameHint: renameHints[s.rename],
+      example: s.example, exOpen: s.exOpen, exOpenStr: s.exOpen ? 'true' : 'false',
+      toggleEx: () => this.setState((p) => ({ exOpen: !p.exOpen })),
+      isDark: theme === 'dark', isLight: theme === 'light',
+      themeAria: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+      toggleTheme: () => this.setState({ theme: theme === 'dark' ? 'light' : 'dark' }),
+      isOutput: s.view === 'output', isDiff: s.view === 'diff',
+      running, done, cancelled, notRunning: !running,
+      cancelOpacity: running ? '1' : '0.45',
+      run: () => this.run(), cancel: () => this.cancel(),
+      runLabel: running ? 'Running…' : 'Run',
+      statusLabel: running ? 'Running' : cancelled ? 'Cancelled' : fuelHit ? 'Stopped by limit' : 'Done',
+      statusDot: running ? accent : cancelled ? t.muted : fuelHit ? t.err : t.ok,
+      elapsedLabel,
+      inName: 'webpack5.js', inMeta: '2.1 KB · 7 lines',
+      inLines: this.lines(D.input, t),
+      dropOverlay: !!this.props.dropOverlay,
+      showTree: unpack, modCount: '5 modules', outName,
+      outMeta: outName + ' · ' + outLines.length + ' lines',
+      copyOut: () => this.flash('out'), copyLabel: s.copied === 'out' ? 'Copied' : 'Copy',
+      copyLink: () => this.flash('link'), linkLabel: s.copied === 'link' ? 'Link copied' : 'Copy settings link',
+      downloadLabel: unpack ? 'Download .zip' : 'Download .js',
+      fuel: s.fuel, fuelInf: s.fuelInf, fuelOpacity: s.fuelInf ? '0.5' : '1',
+      setFuel: (e) => this.setState({ fuel: e.target.value }),
+      toggleInf: () => this.setState((p) => ({ fuelInf: !p.fuelInf })),
+      inputHidden: !!s.inputHidden, inputShown: !s.inputHidden,
+      hideInput: () => this.setState({ inputHidden: true, editable: true }),
+      showInput: () => this.setState({ inputHidden: false }),
+      toggleFocus: () => this.setState((p) => (p.inputHidden ? { inputHidden: false } : { inputHidden: true, editable: true })),
+      focusAria: s.inputHidden ? 'Show input pane' : 'Hide input for a full-width output',
+      focusPressed: s.inputHidden ? 'true' : 'false',
+      outH: s.inputHidden ? '680px' : '560px',
+      editable: !!s.editable, notEditable: !s.editable,
+      toggleEdit: () => this.setState((p) => ({ editable: !p.editable })),
+      editPressed: s.editable ? 'true' : 'false',
+      editBg: s.editable ? t.sel : t.btn, editBorder: s.editable ? accent : t.btnBorder,
+      showLsp: lspOn,
+      gotoDef: () => this.setState({ mod: '12.js' }),
+      completions: [
+        { kind: 'ƒ', rest: 'amp', detail: '12.js · imported', bg: t.sel, sel: 'true', kc: t.fn },
+        { kind: 'ƒ', rest: 'earInterval', detail: 'lib.dom', bg: 'transparent', sel: 'false', kc: t.fn },
+        { kind: 'ƒ', rest: 'earTimeout', detail: 'lib.dom', bg: 'transparent', sel: 'false', kc: t.fn },
+        { kind: 'k', rest: 'ass', detail: 'keyword', bg: 'transparent', sel: 'false', kc: t.kw }
+      ],
+      editedLabel: lspOn ? 'Edited · 2 lines' : 'No edits yet',
+      problemLabel: lspOn ? '1 problem' : 'No problems',
+      problemColor: lspOn ? t.err : t.muted,
+      resetEdits: () => this.setState({ editable: false }),
+      query: q,
+      exitCode: done ? (fuelHit ? '2' : '0') : running ? '…' : 'killed',
+      exitColor: done ? (fuelHit ? t.err : t.text) : t.muted,
+      totalLabel: done ? '1.84 s' : elapsedLabel,
+      limitsLabel: done ? (fuelHit ? 'fuel' : 'none fired') : '—',
+      limitsColor: fuelHit ? t.err : t.text,
+      warnCount: done ? String(nWarn) : '—',
+      fuelUsedLabel: done ? used + 'M / ' + (fuelLimit ? fuelLimit + 'M' : 'no limit') : '—',
+      fuelPct: done ? pct + '%' : '0%',
+      fuelBar: fuelHit ? t.err : accent,
+      depthLabel: done ? '41 / 512' : '—',
+      sizeLabel: done ? '3.4 KB · ok' : '—'
+    };
+  }
+}
+</script>
+</body>
+</html>

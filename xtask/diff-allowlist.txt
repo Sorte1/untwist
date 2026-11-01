@@ -1,0 +1,4 @@
+# template-literals (concat-to-template) is Safety::Unsafe and off by default; matches the reference deobfuscator exactly with --unsafe
+fixtures/unminify/strings-templates.js
+# oxc_codegen preserves original "(function(){})()" IIFE parens via its pife flag; the reference deobfuscator's printer omits them; semantically identical
+fixtures/reference/unpack/browserify-cocos2d.js

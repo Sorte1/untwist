@@ -1,0 +1,21 @@
+import { say } from "./say.js";
+import greet, { shout } from "./greet.js";
+import * as math from "./math.js";
+import { counter, bump } from "./live.js";
+import { loud, triple } from "./reexport.js";
+import data from "./data.json";
+import cjs from "./cjs.js";
+import cycle from "./cycle-a.js";
+
+say("eval index");
+say("greet " + greet("ada") + " " + shout("bob"));
+say("math " + Object.keys(math).sort().join(",") + " " + math.add(2, 3));
+say("live " + counter);
+bump();
+say("live " + counter);
+say("reexport " + loud("x") + " " + triple(4));
+say("json " + data.name + " " + data.items.length);
+say("cjs " + cjs.join("a", "b") + " " + cjs.tag);
+say("cycle " + cycle.report());
+import("./data.json").then((lazy) => say("json lazy " + (lazy.default || lazy).name));
+import("./lazy.js").then((lazy) => say("lazy " + lazy.value + " " + lazy.default));

@@ -1,0 +1,618 @@
+%ArrayIteratorPrototype%.next	pure
+%AsyncFunction%	runner
+%AsyncGeneratorFunction%	runner
+%AsyncGeneratorFunction%.prototype.prototype.next	pure
+%AsyncGeneratorFunction%.prototype.prototype.return	pure
+%AsyncGeneratorFunction%.prototype.prototype.throw	pure
+%AsyncIteratorPrototype%.@@asyncIterator	pure
+%GeneratorFunction%	runner
+%GeneratorFunction%.prototype.prototype.next	pure
+%GeneratorFunction%.prototype.prototype.return	pure
+%GeneratorFunction%.prototype.prototype.throw	pure
+%IteratorHelperPrototype%.next	pure
+%IteratorHelperPrototype%.return	pure
+%MapIteratorPrototype%.next	pure
+%RegExpStringIteratorPrototype%.next	pure
+%SegmentIteratorPrototype%.next	pure
+%SegmentsPrototype%.@@iterator	pure
+%SegmentsPrototype%.containing	pure
+%SetIteratorPrototype%.next	pure
+%StringIteratorPrototype%.next	pure
+%ThrowTypeError%	pure
+%TypedArray%	slot
+%TypedArray%.@@species [get]	pure
+%TypedArray%.from	slot
+%TypedArray%.of	slot
+%TypedArray%.prototype.@@toStringTag [get]	pure
+%TypedArray%.prototype.at	slot
+%TypedArray%.prototype.buffer [get]	pure
+%TypedArray%.prototype.byteLength [get]	pure
+%TypedArray%.prototype.byteOffset [get]	pure
+%TypedArray%.prototype.copyWithin	slot
+%TypedArray%.prototype.entries	slot
+%TypedArray%.prototype.every	slot
+%TypedArray%.prototype.fill	slot
+%TypedArray%.prototype.filter	slot
+%TypedArray%.prototype.find	slot
+%TypedArray%.prototype.findIndex	slot
+%TypedArray%.prototype.findLast	slot
+%TypedArray%.prototype.findLastIndex	slot
+%TypedArray%.prototype.forEach	slot
+%TypedArray%.prototype.includes	slot
+%TypedArray%.prototype.indexOf	slot
+%TypedArray%.prototype.join	slot
+%TypedArray%.prototype.keys	slot
+%TypedArray%.prototype.lastIndexOf	slot
+%TypedArray%.prototype.length [get]	pure
+%TypedArray%.prototype.map	slot
+%TypedArray%.prototype.reduce	slot
+%TypedArray%.prototype.reduceRight	slot
+%TypedArray%.prototype.reverse	slot
+%TypedArray%.prototype.set	slot
+%TypedArray%.prototype.slice	slot
+%TypedArray%.prototype.some	slot
+%TypedArray%.prototype.sort	slot
+%TypedArray%.prototype.subarray	slot
+%TypedArray%.prototype.toLocaleString	slot
+%TypedArray%.prototype.toReversed	slot
+%TypedArray%.prototype.toSorted	slot
+%TypedArray%.prototype.values	slot
+%TypedArray%.prototype.with	slot
+%WrapForValidIteratorPrototype%.next	pure
+%WrapForValidIteratorPrototype%.return	pure
+AggregateError	pure
+Array	pure
+Array.@@species [get]	pure
+Array.from	index
+Array.fromAsync	index
+Array.isArray	pure
+Array.of	index
+Array.prototype.at	pure
+Array.prototype.concat	index
+Array.prototype.copyWithin	mutator
+Array.prototype.entries	pure
+Array.prototype.every	pure
+Array.prototype.fill	mutator
+Array.prototype.filter	index
+Array.prototype.find	pure
+Array.prototype.findIndex	pure
+Array.prototype.findLast	pure
+Array.prototype.findLastIndex	pure
+Array.prototype.flat	index
+Array.prototype.flatMap	index
+Array.prototype.forEach	pure
+Array.prototype.includes	pure
+Array.prototype.indexOf	pure
+Array.prototype.join	pure
+Array.prototype.keys	pure
+Array.prototype.lastIndexOf	pure
+Array.prototype.map	index
+Array.prototype.pop	mutator
+Array.prototype.push	mutator
+Array.prototype.reduce	pure
+Array.prototype.reduceRight	pure
+Array.prototype.reverse	mutator
+Array.prototype.shift	mutator
+Array.prototype.slice	index
+Array.prototype.some	pure
+Array.prototype.sort	mutator
+Array.prototype.splice	mutator
+Array.prototype.toLocaleString	pure
+Array.prototype.toReversed	pure
+Array.prototype.toSorted	pure
+Array.prototype.toSpliced	pure
+Array.prototype.toString	pure
+Array.prototype.unshift	mutator
+Array.prototype.values	pure
+Array.prototype.with	pure
+ArrayBuffer	slot
+ArrayBuffer.@@species [get]	pure
+ArrayBuffer.isView	slot
+ArrayBuffer.prototype.byteLength [get]	pure
+ArrayBuffer.prototype.detached [get]	pure
+ArrayBuffer.prototype.maxByteLength [get]	pure
+ArrayBuffer.prototype.resizable [get]	pure
+ArrayBuffer.prototype.resize	slot
+ArrayBuffer.prototype.slice	slot
+ArrayBuffer.prototype.transfer	slot
+ArrayBuffer.prototype.transferToFixedLength	slot
+Atomics.add	slot
+Atomics.and	slot
+Atomics.compareExchange	slot
+Atomics.exchange	slot
+Atomics.isLockFree	slot
+Atomics.load	slot
+Atomics.notify	slot
+Atomics.or	slot
+Atomics.store	slot
+Atomics.sub	slot
+Atomics.wait	slot
+Atomics.waitAsync	slot
+Atomics.xor	slot
+BigInt	pure
+BigInt.asIntN	pure
+BigInt.asUintN	pure
+BigInt.prototype.toLocaleString	pure
+BigInt.prototype.toString	pure
+BigInt.prototype.valueOf	pure
+BigInt64Array	pure
+BigUint64Array	pure
+Boolean	pure
+Boolean.prototype.toString	pure
+Boolean.prototype.valueOf	pure
+DataView	slot
+DataView.prototype.buffer [get]	pure
+DataView.prototype.byteLength [get]	pure
+DataView.prototype.byteOffset [get]	pure
+DataView.prototype.getBigInt64	slot
+DataView.prototype.getBigUint64	slot
+DataView.prototype.getFloat32	slot
+DataView.prototype.getFloat64	slot
+DataView.prototype.getInt16	slot
+DataView.prototype.getInt32	slot
+DataView.prototype.getInt8	slot
+DataView.prototype.getUint16	slot
+DataView.prototype.getUint32	slot
+DataView.prototype.getUint8	slot
+DataView.prototype.setBigInt64	slot
+DataView.prototype.setBigUint64	slot
+DataView.prototype.setFloat32	slot
+DataView.prototype.setFloat64	slot
+DataView.prototype.setInt16	slot
+DataView.prototype.setInt32	slot
+DataView.prototype.setInt8	slot
+DataView.prototype.setUint16	slot
+DataView.prototype.setUint32	slot
+DataView.prototype.setUint8	slot
+Date	pure
+Date.UTC	pure
+Date.now	pure
+Date.parse	pure
+Date.prototype.@@toPrimitive	pure
+Date.prototype.getDate	pure
+Date.prototype.getDay	pure
+Date.prototype.getFullYear	pure
+Date.prototype.getHours	pure
+Date.prototype.getMilliseconds	pure
+Date.prototype.getMinutes	pure
+Date.prototype.getMonth	pure
+Date.prototype.getSeconds	pure
+Date.prototype.getTime	pure
+Date.prototype.getTimezoneOffset	pure
+Date.prototype.getUTCDate	pure
+Date.prototype.getUTCDay	pure
+Date.prototype.getUTCFullYear	pure
+Date.prototype.getUTCHours	pure
+Date.prototype.getUTCMilliseconds	pure
+Date.prototype.getUTCMinutes	pure
+Date.prototype.getUTCMonth	pure
+Date.prototype.getUTCSeconds	pure
+Date.prototype.getYear	pure
+Date.prototype.setDate	slot
+Date.prototype.setFullYear	slot
+Date.prototype.setHours	slot
+Date.prototype.setMilliseconds	slot
+Date.prototype.setMinutes	slot
+Date.prototype.setMonth	slot
+Date.prototype.setSeconds	slot
+Date.prototype.setTime	slot
+Date.prototype.setUTCDate	slot
+Date.prototype.setUTCFullYear	slot
+Date.prototype.setUTCHours	slot
+Date.prototype.setUTCMilliseconds	slot
+Date.prototype.setUTCMinutes	slot
+Date.prototype.setUTCMonth	slot
+Date.prototype.setUTCSeconds	slot
+Date.prototype.setYear	slot
+Date.prototype.toDateString	pure
+Date.prototype.toISOString	pure
+Date.prototype.toJSON	pure
+Date.prototype.toLocaleDateString	pure
+Date.prototype.toLocaleString	pure
+Date.prototype.toLocaleTimeString	pure
+Date.prototype.toString	pure
+Date.prototype.toTimeString	pure
+Date.prototype.toUTCString	pure
+Date.prototype.valueOf	pure
+Error	pure
+Error.captureStackTrace	own
+Error.prepareStackTrace	pure
+Error.prototype.toString	pure
+EvalError	pure
+FinalizationRegistry	pure
+FinalizationRegistry.prototype.register	slot
+FinalizationRegistry.prototype.unregister	slot
+Float32Array	pure
+Float64Array	pure
+Function	runner
+Function.prototype	pure
+Function.prototype.@@hasInstance	pure
+Function.prototype.apply	forwarder
+Function.prototype.bind	forwarder
+Function.prototype.call	forwarder
+Function.prototype.toString	pure
+Int16Array	pure
+Int32Array	pure
+Int8Array	pure
+Intl.Collator	pure
+Intl.Collator.prototype.compare [get]	pure
+Intl.Collator.prototype.resolvedOptions	pure
+Intl.Collator.supportedLocalesOf	pure
+Intl.DateTimeFormat	pure
+Intl.DateTimeFormat.prototype.format [get]	pure
+Intl.DateTimeFormat.prototype.formatRange	pure
+Intl.DateTimeFormat.prototype.formatRangeToParts	pure
+Intl.DateTimeFormat.prototype.formatToParts	pure
+Intl.DateTimeFormat.prototype.resolvedOptions	pure
+Intl.DateTimeFormat.supportedLocalesOf	pure
+Intl.DisplayNames	pure
+Intl.DisplayNames.prototype.of	pure
+Intl.DisplayNames.prototype.resolvedOptions	pure
+Intl.DisplayNames.supportedLocalesOf	pure
+Intl.ListFormat	pure
+Intl.ListFormat.prototype.format	pure
+Intl.ListFormat.prototype.formatToParts	pure
+Intl.ListFormat.prototype.resolvedOptions	pure
+Intl.ListFormat.supportedLocalesOf	pure
+Intl.Locale	pure
+Intl.Locale.prototype.baseName [get]	pure
+Intl.Locale.prototype.calendar [get]	pure
+Intl.Locale.prototype.calendars [get]	pure
+Intl.Locale.prototype.caseFirst [get]	pure
+Intl.Locale.prototype.collation [get]	pure
+Intl.Locale.prototype.collations [get]	pure
+Intl.Locale.prototype.hourCycle [get]	pure
+Intl.Locale.prototype.hourCycles [get]	pure
+Intl.Locale.prototype.language [get]	pure
+Intl.Locale.prototype.maximize	pure
+Intl.Locale.prototype.minimize	pure
+Intl.Locale.prototype.numberingSystem [get]	pure
+Intl.Locale.prototype.numberingSystems [get]	pure
+Intl.Locale.prototype.numeric [get]	pure
+Intl.Locale.prototype.region [get]	pure
+Intl.Locale.prototype.script [get]	pure
+Intl.Locale.prototype.textInfo [get]	pure
+Intl.Locale.prototype.timeZones [get]	pure
+Intl.Locale.prototype.toString	pure
+Intl.Locale.prototype.weekInfo [get]	pure
+Intl.NumberFormat	pure
+Intl.NumberFormat.prototype.format [get]	pure
+Intl.NumberFormat.prototype.formatRange	pure
+Intl.NumberFormat.prototype.formatRangeToParts	pure
+Intl.NumberFormat.prototype.formatToParts	pure
+Intl.NumberFormat.prototype.resolvedOptions	pure
+Intl.NumberFormat.supportedLocalesOf	pure
+Intl.PluralRules	pure
+Intl.PluralRules.prototype.resolvedOptions	pure
+Intl.PluralRules.prototype.select	pure
+Intl.PluralRules.prototype.selectRange	pure
+Intl.PluralRules.supportedLocalesOf	pure
+Intl.RelativeTimeFormat	pure
+Intl.RelativeTimeFormat.prototype.format	pure
+Intl.RelativeTimeFormat.prototype.formatToParts	pure
+Intl.RelativeTimeFormat.prototype.resolvedOptions	pure
+Intl.RelativeTimeFormat.supportedLocalesOf	pure
+Intl.Segmenter	pure
+Intl.Segmenter.prototype.resolvedOptions	pure
+Intl.Segmenter.prototype.segment	pure
+Intl.Segmenter.supportedLocalesOf	pure
+Intl.getCanonicalLocales	pure
+Intl.supportedValuesOf	pure
+Iterator	pure
+Iterator.from	pure
+Iterator.prototype.@@iterator	pure
+Iterator.prototype.@@toStringTag [get]	pure
+Iterator.prototype.@@toStringTag [set]	accessor
+Iterator.prototype.constructor [get]	pure
+Iterator.prototype.constructor [set]	accessor
+Iterator.prototype.drop	pure
+Iterator.prototype.every	pure
+Iterator.prototype.filter	pure
+Iterator.prototype.find	pure
+Iterator.prototype.flatMap	pure
+Iterator.prototype.forEach	pure
+Iterator.prototype.map	pure
+Iterator.prototype.reduce	pure
+Iterator.prototype.some	pure
+Iterator.prototype.take	pure
+Iterator.prototype.toArray	pure
+JSON.isRawJSON	pure
+JSON.parse	construct
+JSON.rawJSON	pure
+JSON.stringify	pure
+Map	pure
+Map.@@species [get]	pure
+Map.groupBy	pure
+Map.prototype.clear	slot
+Map.prototype.delete	slot
+Map.prototype.entries	slot
+Map.prototype.forEach	slot
+Map.prototype.get	slot
+Map.prototype.has	slot
+Map.prototype.keys	slot
+Map.prototype.set	slot
+Map.prototype.size [get]	pure
+Map.prototype.values	slot
+Math.abs	pure
+Math.acos	pure
+Math.acosh	pure
+Math.asin	pure
+Math.asinh	pure
+Math.atan	pure
+Math.atan2	pure
+Math.atanh	pure
+Math.cbrt	pure
+Math.ceil	pure
+Math.clz32	pure
+Math.cos	pure
+Math.cosh	pure
+Math.exp	pure
+Math.expm1	pure
+Math.floor	pure
+Math.fround	pure
+Math.hypot	pure
+Math.imul	pure
+Math.log	pure
+Math.log10	pure
+Math.log1p	pure
+Math.log2	pure
+Math.max	pure
+Math.min	pure
+Math.pow	pure
+Math.random	pure
+Math.round	pure
+Math.sign	pure
+Math.sin	pure
+Math.sinh	pure
+Math.sqrt	pure
+Math.tan	pure
+Math.tanh	pure
+Math.trunc	pure
+Number	pure
+Number.isFinite	pure
+Number.isInteger	pure
+Number.isNaN	pure
+Number.isSafeInteger	pure
+Number.prototype.toExponential	pure
+Number.prototype.toFixed	pure
+Number.prototype.toLocaleString	pure
+Number.prototype.toPrecision	pure
+Number.prototype.toString	pure
+Number.prototype.valueOf	pure
+Object	pure
+Object.assign	definer
+Object.create	pure
+Object.defineProperties	definer
+Object.defineProperty	definer
+Object.entries	pure
+Object.freeze	pure
+Object.fromEntries	construct
+Object.getOwnPropertyDescriptor	reader
+Object.getOwnPropertyDescriptors	reader
+Object.getOwnPropertyNames	pure
+Object.getOwnPropertySymbols	pure
+Object.getPrototypeOf	pure
+Object.groupBy	pure
+Object.hasOwn	pure
+Object.is	pure
+Object.isExtensible	pure
+Object.isFrozen	pure
+Object.isSealed	pure
+Object.keys	pure
+Object.preventExtensions	pure
+Object.prototype.__defineGetter__	definer
+Object.prototype.__defineSetter__	definer
+Object.prototype.__lookupGetter__	reader
+Object.prototype.__lookupSetter__	reader
+Object.prototype.__proto__ [get]	pure
+Object.prototype.__proto__ [set]	definer
+Object.prototype.hasOwnProperty	pure
+Object.prototype.isPrototypeOf	pure
+Object.prototype.propertyIsEnumerable	pure
+Object.prototype.toLocaleString	pure
+Object.prototype.toString	pure
+Object.prototype.valueOf	pure
+Object.seal	pure
+Object.setPrototypeOf	definer
+Object.values	pure
+Promise	pure
+Promise.@@species [get]	pure
+Promise.all	pure
+Promise.allSettled	pure
+Promise.any	pure
+Promise.prototype.catch	pure
+Promise.prototype.finally	pure
+Promise.prototype.then	pure
+Promise.race	pure
+Promise.reject	pure
+Promise.resolve	pure
+Promise.withResolvers	pure
+Proxy	construct
+Proxy.revocable	construct
+RangeError	pure
+ReferenceError	pure
+Reflect.apply	forwarder
+Reflect.construct	construct
+Reflect.defineProperty	definer
+Reflect.deleteProperty	definer
+Reflect.get	reader
+Reflect.getOwnPropertyDescriptor	reader
+Reflect.getPrototypeOf	pure
+Reflect.has	pure
+Reflect.isExtensible	pure
+Reflect.ownKeys	pure
+Reflect.preventExtensions	pure
+Reflect.set	definer
+Reflect.setPrototypeOf	definer
+RegExp	pure
+RegExp.$& [get]	pure
+RegExp.$& [set]	accessor
+RegExp.$' [get]	pure
+RegExp.$' [set]	accessor
+RegExp.$+ [get]	pure
+RegExp.$+ [set]	accessor
+RegExp.$1 [get]	pure
+RegExp.$1 [set]	accessor
+RegExp.$2 [get]	pure
+RegExp.$2 [set]	accessor
+RegExp.$3 [get]	pure
+RegExp.$3 [set]	accessor
+RegExp.$4 [get]	pure
+RegExp.$4 [set]	accessor
+RegExp.$5 [get]	pure
+RegExp.$5 [set]	accessor
+RegExp.$6 [get]	pure
+RegExp.$6 [set]	accessor
+RegExp.$7 [get]	pure
+RegExp.$7 [set]	accessor
+RegExp.$8 [get]	pure
+RegExp.$8 [set]	accessor
+RegExp.$9 [get]	pure
+RegExp.$9 [set]	accessor
+RegExp.$_ [get]	pure
+RegExp.$_ [set]	accessor
+RegExp.$` [get]	pure
+RegExp.$` [set]	accessor
+RegExp.@@species [get]	pure
+RegExp.input [get]	pure
+RegExp.input [set]	accessor
+RegExp.lastMatch [get]	pure
+RegExp.lastMatch [set]	accessor
+RegExp.lastParen [get]	pure
+RegExp.lastParen [set]	accessor
+RegExp.leftContext [get]	pure
+RegExp.leftContext [set]	accessor
+RegExp.prototype.@@match	own
+RegExp.prototype.@@matchAll	own
+RegExp.prototype.@@replace	own
+RegExp.prototype.@@search	own
+RegExp.prototype.@@split	own
+RegExp.prototype.compile	own
+RegExp.prototype.dotAll [get]	pure
+RegExp.prototype.exec	own
+RegExp.prototype.flags [get]	pure
+RegExp.prototype.global [get]	pure
+RegExp.prototype.hasIndices [get]	pure
+RegExp.prototype.ignoreCase [get]	pure
+RegExp.prototype.multiline [get]	pure
+RegExp.prototype.source [get]	pure
+RegExp.prototype.sticky [get]	pure
+RegExp.prototype.test	own
+RegExp.prototype.toString	pure
+RegExp.prototype.unicode [get]	pure
+RegExp.prototype.unicodeSets [get]	pure
+RegExp.rightContext [get]	pure
+RegExp.rightContext [set]	accessor
+Set	pure
+Set.@@species [get]	pure
+Set.prototype.add	slot
+Set.prototype.clear	slot
+Set.prototype.delete	slot
+Set.prototype.difference	slot
+Set.prototype.entries	slot
+Set.prototype.forEach	slot
+Set.prototype.has	slot
+Set.prototype.intersection	slot
+Set.prototype.isDisjointFrom	slot
+Set.prototype.isSubsetOf	slot
+Set.prototype.isSupersetOf	slot
+Set.prototype.size [get]	pure
+Set.prototype.symmetricDifference	slot
+Set.prototype.union	slot
+Set.prototype.values	slot
+SharedArrayBuffer	slot
+SharedArrayBuffer.@@species [get]	pure
+SharedArrayBuffer.prototype.byteLength [get]	pure
+SharedArrayBuffer.prototype.grow	slot
+SharedArrayBuffer.prototype.growable [get]	pure
+SharedArrayBuffer.prototype.maxByteLength [get]	pure
+SharedArrayBuffer.prototype.slice	slot
+String	pure
+String.fromCharCode	pure
+String.fromCodePoint	pure
+String.prototype.@@iterator	pure
+String.prototype.anchor	pure
+String.prototype.at	pure
+String.prototype.big	pure
+String.prototype.blink	pure
+String.prototype.bold	pure
+String.prototype.charAt	pure
+String.prototype.charCodeAt	pure
+String.prototype.codePointAt	pure
+String.prototype.concat	pure
+String.prototype.endsWith	pure
+String.prototype.fixed	pure
+String.prototype.fontcolor	pure
+String.prototype.fontsize	pure
+String.prototype.includes	pure
+String.prototype.indexOf	pure
+String.prototype.isWellFormed	pure
+String.prototype.italics	pure
+String.prototype.lastIndexOf	pure
+String.prototype.link	pure
+String.prototype.localeCompare	pure
+String.prototype.match	pure
+String.prototype.matchAll	pure
+String.prototype.normalize	pure
+String.prototype.padEnd	pure
+String.prototype.padStart	pure
+String.prototype.repeat	pure
+String.prototype.replace	pure
+String.prototype.replaceAll	pure
+String.prototype.search	pure
+String.prototype.slice	pure
+String.prototype.small	pure
+String.prototype.split	pure
+String.prototype.startsWith	pure
+String.prototype.strike	pure
+String.prototype.sub	pure
+String.prototype.substr	pure
+String.prototype.substring	pure
+String.prototype.sup	pure
+String.prototype.toLocaleLowerCase	pure
+String.prototype.toLocaleUpperCase	pure
+String.prototype.toLowerCase	pure
+String.prototype.toString	pure
+String.prototype.toUpperCase	pure
+String.prototype.toWellFormed	pure
+String.prototype.trim	pure
+String.prototype.trimEnd	pure
+String.prototype.trimStart	pure
+String.prototype.valueOf	pure
+String.raw	pure
+Symbol	pure
+Symbol.for	pure
+Symbol.keyFor	pure
+Symbol.prototype.@@toPrimitive	pure
+Symbol.prototype.description [get]	pure
+Symbol.prototype.toString	pure
+Symbol.prototype.valueOf	pure
+SyntaxError	pure
+TypeError	pure
+URIError	pure
+Uint16Array	pure
+Uint32Array	pure
+Uint8Array	pure
+Uint8ClampedArray	pure
+WeakMap	pure
+WeakMap.prototype.delete	slot
+WeakMap.prototype.get	slot
+WeakMap.prototype.has	slot
+WeakMap.prototype.set	slot
+WeakRef	pure
+WeakRef.prototype.deref	slot
+WeakSet	pure
+WeakSet.prototype.add	slot
+WeakSet.prototype.delete	slot
+WeakSet.prototype.has	slot
+decodeURI	pure
+decodeURIComponent	pure
+encodeURI	pure
+encodeURIComponent	pure
+escape	pure
+eval	runner
+isFinite	pure
+isNaN	pure
+parseFloat	pure
+parseInt	pure
+unescape	pure

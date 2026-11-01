@@ -1,0 +1,15 @@
+---
+source: crates/untwist-unpack/tests/samples.rs
+expression: rendered
+input_file: fixtures/reference/unpack/browserify-cocos2d.js
+---
+type: browserify
+entry: BattleHint
+
+=== BattleHint -> index.js (entry)
+
+
+=== GChangeCount -> GChangeCount.js
+
+
+=== pako_deflate.min -> pako_deflate.min.js

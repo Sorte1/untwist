@@ -1,0 +1,519 @@
+use oxc_allocator::{CloneIn, GetAllocator, Vec as AVec};
+use oxc_ast::ast::*;
+use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_semantic::Scoping;
+use oxc_span::{GetSpan, Span};
+use oxc_str::Ident;
+use oxc_syntax::operator::AssignmentOperator;
+use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashSet;
+use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
+use untwist_core::ast_util::matcher::is_literal_argument;
+use untwist_core::ast_util::prop::identifier_name;
+use untwist_core::ast_util::search::{expression_at, statement_at};
+use untwist_core::pass::Cx;
+use untwist_core::semantic::{is_constant_binding, read_reference_count, write_reference_count};
+
+use crate::init_order::{scan_init_order, DeclarationSlot, InitOrder};
+use crate::notes;
+use crate::probe::{expression_contains, holds_own_scope};
+use crate::stamp::{decoder_index, decoder_name};
+use crate::units::MachineryDepth;
+
+use super::variables::{variable_facts, Assignment, VariableFacts};
+use super::{decoder_call, is_splittable_branch};
+
+#[derive(Default, Hash)]
+struct Pending {
+    ternaries: Vec<(Span, Span, Span, Span, usize)>,
+    externals: Vec<SymbolId>,
+    bare: Vec<Span>,
+}
+
+struct Scan<'s> {
+    scoping: &'s Scoping,
+    units: MachineryDepth,
+    pending: Pending,
+}
+
+impl<'a> VisitJs<'a> for Scan<'_> {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        let entered = self.units.enter(it);
+        if !self.units.inside() {
+            if let Statement::ExpressionStatement(stmt) = it {
+                if identifier_name(&stmt.expression)
+                    .and_then(decoder_index)
+                    .is_some()
+                {
+                    self.pending.bare.push(it.span());
+                }
+            }
+        }
+        walk_js::walk_statement(self, it);
+        self.units.leave(entered);
+    }
+
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        if self.units.inside() {
+            walk_js::walk_expression(self, it);
+            return;
+        }
+        let Some((index, call)) = decoder_call(it) else {
+            walk_js::walk_expression(self, it);
+            return;
+        };
+        if let [Argument::ConditionalExpression(conditional)] = call.arguments.as_slice() {
+            self.pending.ternaries.push((
+                it.span(),
+                conditional.test.span(),
+                conditional.consequent.span(),
+                conditional.alternate.span(),
+                index,
+            ));
+            for branch in [&conditional.consequent, &conditional.alternate] {
+                if !is_splittable_branch(branch) {
+                    collect_symbols(branch, self.scoping, &mut self.pending.externals);
+                }
+            }
+            walk_js::walk_expression(self, it);
+            return;
+        }
+        for argument in &call.arguments {
+            let Some(expr) = argument.as_expression() else {
+                continue;
+            };
+            if is_literal_argument(expr) {
+                continue;
+            }
+            collect_symbols(expr, self.scoping, &mut self.pending.externals);
+        }
+        walk_js::walk_expression(self, it);
+    }
+}
+
+fn scan_pending(program: &Program<'_>, scoping: &Scoping) -> Pending {
+    let mut scan = Scan {
+        scoping,
+        units: MachineryDepth::every_unit(),
+        pending: Pending::default(),
+    };
+    scan.visit_program(program);
+    scan.pending
+}
+
+fn pending_after(
+    changes: usize,
+    pending: Pending,
+    program: &Program<'_>,
+    scoping: &Scoping,
+) -> Pending {
+    let pending = if changes == 0 {
+        pending
+    } else {
+        scan_pending(program, scoping)
+    };
+    #[cfg(debug_assertions)]
+    crate::fused::check::record("pending", crate::fused::check::digest_of(&pending));
+    pending
+}
+
+fn collect_symbols(expr: &Expression<'_>, scoping: &Scoping, out: &mut Vec<SymbolId>) {
+    let mut probe = SymbolProbe { scoping, out };
+    probe.visit_expression(expr);
+}
+
+struct SymbolProbe<'s> {
+    scoping: &'s Scoping,
+    out: &'s mut Vec<SymbolId>,
+}
+
+impl<'a> VisitJs<'a> for SymbolProbe<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if let Some(symbol) = it
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+        {
+            self.out.push(symbol);
+        }
+        walk_js::walk_identifier_reference(self, it);
+    }
+}
+
+fn decoder_call_of<'a>(index: usize, argument: &Expression<'_>, cx: &Cx<'a, '_>) -> Expression<'a> {
+    let span = argument.span();
+    let callee = Expression::new_identifier(span, Ident::from_str_in(&decoder_name(index), cx), cx);
+    let arguments = AVec::from_iter_in([Argument::from(argument.clone_in(cx.allocator()))], cx);
+    Expression::new_call_expression(span, callee, None, arguments, false, cx)
+}
+
+fn split_ternaries<'a>(program: &mut Program<'a>, pending: &Pending, cx: &mut Cx<'a, '_>) -> usize {
+    let mut edits = ExprEdits::new();
+    for (call_span, test, consequent, alternate, index) in pending.ternaries.iter().copied() {
+        let view: &Program<'_> = program;
+        let (Some(test), Some(consequent), Some(alternate)) = (
+            expression_at(view, test),
+            expression_at(view, consequent),
+            expression_at(view, alternate),
+        ) else {
+            cx.note(notes::TERNARY_NOT_FOUND, Some(call_span));
+            continue;
+        };
+        if [test, consequent, alternate]
+            .iter()
+            .any(|expr| expression_contains(expr, holds_own_scope))
+        {
+            cx.note(notes::TERNARY_HOLDS_A_SCOPE, Some(call_span));
+            continue;
+        }
+        if !is_splittable_branch(consequent) || !is_splittable_branch(alternate) {
+            continue;
+        }
+        let replacement = Expression::new_conditional_expression(
+            call_span,
+            test.clone_in(cx.allocator()),
+            decoder_call_of(index, consequent, cx),
+            decoder_call_of(index, alternate, cx),
+            &*cx,
+        );
+        edits.insert(call_span, replacement);
+    }
+    edits.apply(program, cx.allocator(), cx.scoping_mut())
+}
+
+#[cfg(debug_assertions)]
+fn facts_digest(facts: &VariableFacts<'_>, symbol: SymbolId) -> u64 {
+    use crate::fused::check;
+    let members = check::sorted(
+        facts
+            .members
+            .iter()
+            .map(|(span, list)| ((span.start, span.end), *list)),
+    );
+    check::digest_of(&(
+        symbol.index(),
+        (facts.statement, facts.declaration, facts.init),
+        (facts.assignments, facts.references),
+        members,
+    ))
+}
+
+fn is_sole_assignment(
+    view: &Program<'_>,
+    statement: Span,
+    symbol: SymbolId,
+    scoping: &Scoping,
+) -> bool {
+    let Some(Statement::ExpressionStatement(stmt)) = statement_at(view, statement) else {
+        return false;
+    };
+    let Expression::AssignmentExpression(assignment) = &stmt.expression else {
+        return false;
+    };
+    if assignment.operator != AssignmentOperator::Assign {
+        return false;
+    }
+    let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
+        return false;
+    };
+    target
+        .reference_id
+        .get()
+        .and_then(|id| scoping.get_reference(id).symbol_id())
+        == Some(symbol)
+}
+
+fn references_run_after_the_initialiser(
+    facts: &VariableFacts<'_>,
+    order: &InitOrder,
+) -> Option<Span> {
+    let statement = facts.statement?;
+    let slot = order.declaration_slot(statement)?;
+    facts
+        .references
+        .iter()
+        .all(|reference| order.reference_is_initialised_before_use(slot, reference.span))
+        .then_some(statement)
+}
+
+fn note_init_order_budget(
+    order: &InitOrder,
+    mark: usize,
+    symbol: SymbolId,
+    span: Option<Span>,
+    cx: &mut Cx<'_, '_>,
+) {
+    if order.budget_exhausted() == mark {
+        return;
+    }
+    let name = cx.scoping().symbol_name(symbol).to_string();
+    cx.note(notes::init_order_budget(&name), span);
+}
+
+fn inline_constant_variable<'a>(
+    view: &Program<'a>,
+    facts: &VariableFacts<'_>,
+    symbol: SymbolId,
+    order: &InitOrder,
+    cx: &mut Cx<'a, '_>,
+    edits: &mut ExprEdits<'a>,
+    removals: &mut StmtEdits<'a>,
+) {
+    let Some(init) = facts.init else {
+        return;
+    };
+    let Some(init) = expression_at(view, init).filter(|expr| is_literal_argument(expr)) else {
+        cx.note(notes::NO_LITERAL_INITIALISER, facts.declaration);
+        return;
+    };
+    let mark = order.budget_exhausted();
+    if references_run_after_the_initialiser(facts, order).is_none() {
+        cx.note(notes::USE_BEFORE_INITIALISATION, facts.statement);
+        note_init_order_budget(order, mark, symbol, facts.statement, cx);
+        return;
+    }
+    for reference in facts.references {
+        edits.insert(reference.span, init.clone_in(cx.allocator()));
+    }
+    let Some(declaration) = facts.declaration else {
+        return;
+    };
+    if !facts.members.contains_key(&declaration) {
+        return;
+    }
+    if facts.references.len() != read_reference_count(cx.scoping(), symbol) {
+        return;
+    }
+    removals.remove(declaration);
+}
+
+struct AssignmentSlot {
+    index: usize,
+    value: Span,
+    expression: Span,
+}
+
+fn assignment_slots(
+    facts: &VariableFacts<'_>,
+    assignments: &[Assignment],
+    order: &InitOrder,
+) -> Option<(DeclarationSlot, Vec<AssignmentSlot>)> {
+    let anchor = order.declaration_slot(facts.statement?)?;
+    let mut slots = Vec::with_capacity(assignments.len());
+    for assignment in assignments {
+        let slot = order.declaration_slot(assignment.statement)?;
+        if !anchor.same_list(slot) {
+            return None;
+        }
+        slots.push(AssignmentSlot {
+            index: slot.index(),
+            value: assignment.value,
+            expression: assignment.expression,
+        });
+    }
+    Some((anchor, slots))
+}
+
+fn nearest_slot(slots: &[AssignmentSlot], use_index: usize) -> Option<&AssignmentSlot> {
+    slots
+        .iter()
+        .filter(|slot| slot.index < use_index)
+        .max_by_key(|slot| slot.index)
+}
+
+fn inline_assigned_references<'a>(
+    view: &Program<'a>,
+    facts: &VariableFacts<'_>,
+    assignments: &[Assignment],
+    order: &InitOrder,
+    cx: &mut Cx<'a, '_>,
+    edits: &mut ExprEdits<'a>,
+) -> usize {
+    let Some((anchor, slots)) = assignment_slots(facts, assignments, order) else {
+        cx.note(notes::REFERENCE_NOT_DOMINATED, refusal_span(facts));
+        return 0;
+    };
+    let mut rewritten = 0;
+    for reference in facts.references {
+        let Some(site) = order.slot_of_reference(anchor, reference.span) else {
+            cx.note(notes::REFERENCE_NOT_DOMINATED, Some(reference.span));
+            continue;
+        };
+        let Some(nearest) = nearest_slot(&slots, site.index()) else {
+            cx.note(notes::NO_PRECEDING_ASSIGNMENT, Some(reference.span));
+            continue;
+        };
+        let Some(value) = expression_at(view, nearest.value) else {
+            cx.note(notes::NO_PRECEDING_ASSIGNMENT, Some(nearest.expression));
+            continue;
+        };
+        if edits.insert(reference.span, value.clone_in(cx.allocator())) {
+            rewritten += 1;
+        }
+    }
+    rewritten
+}
+
+fn literal_assignments(view: &Program<'_>, facts: &VariableFacts<'_>) -> Vec<Assignment> {
+    facts
+        .assignments
+        .iter()
+        .filter(|assignment| expression_at(view, assignment.value).is_some_and(is_literal_argument))
+        .copied()
+        .collect()
+}
+
+fn can_remove_assigned(
+    view: &Program<'_>,
+    facts: &VariableFacts<'_>,
+    assignments: &[Assignment],
+    symbol: SymbolId,
+    scoping: &Scoping,
+) -> bool {
+    assignments
+        .iter()
+        .all(|assignment| is_sole_assignment(view, assignment.statement, symbol, scoping))
+        && facts.references.len() == read_reference_count(scoping, symbol)
+}
+
+fn refusal_span(facts: &VariableFacts<'_>) -> Option<Span> {
+    facts
+        .declaration
+        .or_else(|| facts.references.first().map(|reference| reference.span))
+}
+
+fn assigned_refusal(
+    facts: &VariableFacts<'_>,
+    assignments: &[Assignment],
+    symbol: SymbolId,
+    scoping: &Scoping,
+) -> Option<&'static str> {
+    if !shares_the_declaration_list(facts, assignments) {
+        return Some(notes::ASSIGNMENT_NOT_BESIDE_THE_DECLARATION);
+    }
+    if assignments.len() != write_reference_count(scoping, symbol) {
+        return Some(notes::NON_LITERAL_WRITE);
+    }
+    None
+}
+
+fn shares_the_declaration_list(facts: &VariableFacts<'_>, assignments: &[Assignment]) -> bool {
+    let Some(list) = facts.declaration.and_then(|span| facts.members.get(&span)) else {
+        return false;
+    };
+    assignments
+        .iter()
+        .all(|assignment| facts.members.get(&assignment.statement) == Some(list))
+}
+
+fn inline_assigned_variable<'a>(
+    view: &Program<'a>,
+    facts: &VariableFacts<'_>,
+    symbol: SymbolId,
+    order: &InitOrder,
+    cx: &mut Cx<'a, '_>,
+    edits: &mut ExprEdits<'a>,
+    removals: &mut StmtEdits<'a>,
+) {
+    let assignments = literal_assignments(view, facts);
+    if assignments.is_empty() {
+        return;
+    }
+    if let Some(reason) = assigned_refusal(facts, &assignments, symbol, cx.scoping()) {
+        cx.note(reason, refusal_span(facts));
+        return;
+    }
+    let rewritten = inline_assigned_references(view, facts, &assignments, order, cx, edits);
+    if rewritten != facts.references.len()
+        || !can_remove_assigned(view, facts, &assignments, symbol, cx.scoping())
+    {
+        return;
+    }
+    for assignment in &assignments {
+        removals.remove(assignment.statement);
+    }
+    if let Some(declaration) = facts.declaration {
+        removals.remove(declaration);
+    }
+}
+
+fn external_symbols(pending: &Pending) -> Vec<SymbolId> {
+    let mut seen = FxHashSet::default();
+    pending
+        .externals
+        .iter()
+        .copied()
+        .filter(|symbol| seen.insert(*symbol))
+        .collect()
+}
+
+fn plan_externals<'a>(
+    program: &Program<'a>,
+    symbols: &[SymbolId],
+    order: &InitOrder,
+    cx: &mut Cx<'a, '_>,
+    edits: &mut ExprEdits<'a>,
+    removals: &mut StmtEdits<'a>,
+) {
+    let variables = variable_facts(program, cx.scoping(), symbols);
+    for (index, symbol) in symbols.iter().copied().enumerate() {
+        let Some(facts) = variables.facts(index) else {
+            continue;
+        };
+        #[cfg(debug_assertions)]
+        crate::fused::check::record("variable-facts", facts_digest(&facts, symbol));
+        if is_constant_binding(cx.scoping(), symbol) {
+            inline_constant_variable(program, &facts, symbol, order, cx, edits, removals);
+        } else {
+            inline_assigned_variable(program, &facts, symbol, order, cx, edits, removals);
+        }
+    }
+}
+
+fn inline_external_variables<'a>(
+    program: &mut Program<'a>,
+    pending: &Pending,
+    cx: &mut Cx<'a, '_>,
+) -> usize {
+    let symbols = external_symbols(pending);
+    if symbols.is_empty() {
+        return 0;
+    }
+    let order = scan_init_order(program, cx);
+    let mut edits = ExprEdits::new();
+    let mut removals = StmtEdits::new();
+    plan_externals(program, &symbols, &order, cx, &mut edits, &mut removals);
+    let wanted = edits.len() + removals.len();
+    let applied = edits.apply(program, cx.allocator(), cx.scoping_mut())
+        + removals.apply(program, cx.allocator(), cx.scoping_mut());
+    if applied != wanted {
+        cx.note(
+            notes::planned_and_applied_edits(crate::decoded::PASS, wanted, applied),
+            None,
+        );
+    }
+    applied
+}
+
+fn remove_bare_references<'a>(
+    program: &mut Program<'a>,
+    pending: &Pending,
+    cx: &mut Cx<'a, '_>,
+) -> usize {
+    let mut removals = StmtEdits::new();
+    for span in pending.bare.iter().copied() {
+        removals.remove(span);
+    }
+    removals.apply(program, cx.allocator(), cx.scoping_mut())
+}
+
+pub fn normalize_calls<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) -> usize {
+    let first = scan_pending(program, cx.scoping());
+    let pending = pending_after(0, first, program, cx.scoping());
+    let ternaries = split_ternaries(program, &pending, cx);
+    let pending = pending_after(ternaries, pending, program, cx.scoping());
+    let externals = inline_external_variables(program, &pending, cx);
+    let pending = pending_after(externals, pending, program, cx.scoping());
+    let bare = remove_bare_references(program, &pending, cx);
+    ternaries + externals + bare
+}

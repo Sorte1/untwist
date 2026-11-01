@@ -1,0 +1,22 @@
+[
+  { "settings": {}, "flags": "" },
+  { "settings": { "unpack": false }, "flags": "--no-unpack" },
+  { "settings": { "jsx": false }, "flags": "--no-jsx" },
+  { "settings": { "unsafe": true }, "flags": "--unsafe" },
+  { "settings": { "rename": "simple" }, "flags": "--rename simple" },
+  { "settings": { "rename": "unique" }, "flags": "--rename unique" },
+  { "settings": { "rename": "mangle" }, "flags": "--rename mangle" },
+  { "settings": { "fuel": 1000 }, "flags": "--fuel 1000" },
+  { "settings": { "fuel": null }, "flags": "--fuel unlimited" },
+  { "settings": { "deob": false }, "flags": "--no-deobfuscate" },
+  { "settings": { "unmin": false }, "flags": "--no-unminify" },
+  { "settings": { "human": true }, "flags": "--keep-human-names" },
+  { "settings": { "iter": 3 }, "flags": "--max-iterations 3" },
+  { "settings": { "single": true }, "flags": "--single-file" },
+  { "settings": { "off": "dead-code" }, "flags": "--disable dead-code" },
+  { "settings": { "off": "sequence,yoda" }, "flags": "--disable sequence,yoda" },
+  {
+    "settings": { "unpack": false, "jsx": false, "unsafe": true, "rename": "unique", "fuel": 7, "deob": false, "unmin": false, "human": true, "iter": 2, "single": true, "off": "layers" },
+    "flags": "--no-unpack --no-jsx --unsafe --rename unique --fuel 7 --no-deobfuscate --no-unminify --keep-human-names --max-iterations 2 --single-file --disable layers"
+  }
+]

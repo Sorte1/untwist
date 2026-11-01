@@ -1,0 +1,5 @@
+# Every fixture under fixtures/jsx/ matches the reference deobfuscator's own JSX output after
+# normalisation (the reference deobfuscator --no-unpack --no-deobfuscate against
+# untwist --unsafe in the conservative comparison mode, --no-unpack --no-deobfuscate). This list is empty
+# by design: a fixture that differs is a defect in untwist-jsx or in the
+# fixture, never an entry here.

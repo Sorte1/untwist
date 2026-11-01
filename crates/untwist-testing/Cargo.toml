@@ -1,0 +1,20 @@
+[package]
+name = "untwist-testing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared test fixtures and snapshot-testing helpers for untwist crates"
+publish = false
+
+[dependencies]
+untwist-core = { path = "../untwist-core" }
+oxc_allocator.workspace = true
+insta.workspace = true
+tempfile.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+oxc_ast.workspace = true
+oxc_str.workspace = true
+oxc_syntax.workspace = true

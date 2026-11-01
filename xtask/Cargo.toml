@@ -1,0 +1,21 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+similar.workspace = true
+tempfile.workspace = true
+untwist-core = { path = "../crates/untwist-core" }
+untwist-eval = { path = "../crates/untwist-eval", features = ["value-api"] }
+oxc_ast.workspace = true
+untwist-testing = { path = "../crates/untwist-testing" }
+oxc_allocator.workspace = true
+oxc_ast_visit.workspace = true
+oxc_syntax.workspace = true
