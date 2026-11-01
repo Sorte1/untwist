@@ -20,7 +20,8 @@ pub const LAYER_TOO_DEEP: &str = "a layer was kept: its text nests deeper than t
 pub const LAYER_TOO_LARGE: &str = "a layer was kept: its text or its printed output is over the \
      budget this input was admitted with";
 
-pub const LAYER_NEEDS_UNSAFE: &str = "a layer was kept: peeling it assumes nothing observes that its \
+pub const LAYER_NEEDS_UNSAFE: &str =
+    "a layer was kept: peeling it assumes nothing observes that its \
      top-level bindings change from eval bindings to script bindings; pass --unsafe to peel it";
 
 pub const LAYER_SHAPE: &str = "a layer was kept: its call or its site is not a shape the layer \

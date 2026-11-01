@@ -590,7 +590,10 @@ fn corpus() -> &'static [String] {
     CORPUS.get_or_init(|| {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let game = root.join("fixtures/real-world/game.js");
-        let mut files: Vec<PathBuf> = Some(game).filter(|path| path.is_file()).into_iter().collect();
+        let mut files: Vec<PathBuf> = Some(game)
+            .filter(|path| path.is_file())
+            .into_iter()
+            .collect();
         let expected = CORPUS_FILES - 1 + files.len();
         let mut npm: Vec<PathBuf> = std::fs::read_dir(root.join("fixtures/corpus-npm"))
             .map(|entries| entries.flatten().map(|entry| entry.path()).collect())
