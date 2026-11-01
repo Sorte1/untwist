@@ -66,11 +66,11 @@ output.write_to("out-dir")?;
 ### npm (WebAssembly)
 
 ```sh
-npm install @untwist/wasm
+npm install untwist
 ```
 
 ```js
-import init, { run } from '@untwist/wasm';
+import init, { run } from 'untwist';
 
 await init();
 const result = run(source, '--unsafe', false);
@@ -174,7 +174,7 @@ The workspace layout:
 | `untwist-unpack` | Bundle detection and module extraction |
 | `untwist-rename` | Identifier renaming |
 | `untwist-jsx` | JSX reconstruction |
-| `untwist-wasm` | The WebAssembly build (npm `@untwist/wasm`) |
+| `untwist-wasm` | The WebAssembly build (npm `untwist`) |
 | `untwist-regress` | A fork of [regress](https://github.com/ridiculousfish/regress) with a step-budgeted search |
 
 Some tests read a large real-world sample at `fixtures/real-world/game.js`, which is not

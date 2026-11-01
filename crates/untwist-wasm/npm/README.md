@@ -1,4 +1,4 @@
-# @untwist/wasm
+# untwist
 
 [Untwist](https://github.com/Sorte1/untwist) is a JavaScript deobfuscator, unminifier and
 unbundler written in Rust. This package is its WebAssembly build, the engine behind the playground
@@ -7,7 +7,7 @@ for byte. The input is never executed: string decoders run in a sandboxed, step-
 interpreter.
 
 ```sh
-npm install @untwist/wasm
+npm install untwist
 ```
 
 ## Usage
@@ -15,7 +15,7 @@ npm install @untwist/wasm
 The package is an ES module built with `wasm-bindgen --target web`. Call `init` once first.
 
 ```js
-import init, { run } from '@untwist/wasm';
+import init, { run } from 'untwist';
 
 await init();
 const result = run('var a = !0;', '--no-unpack', false);
@@ -26,9 +26,9 @@ In Node, pass the module bytes to `init`:
 
 ```js
 import { readFile } from 'node:fs/promises';
-import init, { run } from '@untwist/wasm';
+import init, { run } from 'untwist';
 
-const wasm = await readFile(new URL(import.meta.resolve('@untwist/wasm/untwist_wasm_bg.wasm')));
+const wasm = await readFile(new URL(import.meta.resolve('untwist/untwist_wasm_bg.wasm')));
 await init({ module_or_path: wasm });
 const result = run(source, '--unsafe', false);
 ```

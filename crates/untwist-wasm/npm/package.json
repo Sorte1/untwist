@@ -1,5 +1,5 @@
 {
-  "name": "@untwist/wasm",
+  "name": "untwist",
   "version": "0.1.0",
   "description": "JavaScript deobfuscator, unminifier and unbundler, compiled to WebAssembly",
   "license": "MIT OR Apache-2.0",

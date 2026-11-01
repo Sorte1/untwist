@@ -21,5 +21,5 @@ First public release.
   Turbopack and Closure bundles, with opt-in splitting of Rollup and Vite scope-hoisted bundles
   and unpacking of several input files together.
 - Identifier renaming (`mangle`, `simple`, `unique`) and JSX reconstruction.
-- The `untwist` command-line tool, the `untwist` library crate, and the `@untwist/wasm`
+- The `untwist` command-line tool, the `untwist` library crate, and the `untwist`
   WebAssembly package used by the playground at https://untwist.dev.
