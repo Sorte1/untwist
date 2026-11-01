@@ -27,6 +27,10 @@ pub struct JsString(Rc<StrInner>);
 pub(crate) struct ReservedString(std::rc::Weak<StrInner>);
 
 impl ReservedString {
+    pub(crate) fn upgrade(&self) -> Option<JsString> {
+        self.0.upgrade().map(JsString)
+    }
+
     #[cfg(feature = "test-hooks")]
     pub(crate) fn identity(&self) -> usize {
         std::rc::Weak::as_ptr(&self.0) as *const () as usize

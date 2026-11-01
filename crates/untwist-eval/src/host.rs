@@ -37,6 +37,13 @@ pub trait Host<'a> {
     fn enter_nesting(&mut self) -> EvalResult<()>;
     fn leave_nesting(&mut self);
     fn get_prototype_of(&mut self, value: &Value<'a>) -> Eval<'a, Value<'a>>;
+    fn shared_regex(&mut self, pattern: &str, flags: &str) -> Option<regress::Regex> {
+        let _ = (pattern, flags);
+        None
+    }
+    fn share_regex(&mut self, pattern: &str, flags: &str, regex: &regress::Regex) {
+        let _ = (pattern, flags, regex);
+    }
     fn refuse_global_object(&self, target: &Value<'a>) -> EvalResult<()> {
         let _ = target;
         Ok(())

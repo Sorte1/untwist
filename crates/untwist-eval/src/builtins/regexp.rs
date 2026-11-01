@@ -167,8 +167,15 @@ pub fn compile_regexp<'a>(
         return Err(rejected(host, "invalid regular expression flags"));
     }
     let ascii_subject_only = refuse_unmodelled_pattern(&pattern, &flag_text)?;
-    let Ok(regex) = Regex::with_flags(&pattern, Flags::from(flag_text.as_str())) else {
-        return Err(rejected(host, "invalid regular expression"));
+    let regex = match host.shared_regex(&pattern, &flag_text) {
+        Some(regex) => regex,
+        None => {
+            let Ok(regex) = Regex::with_flags(&pattern, Flags::from(flag_text.as_str())) else {
+                return Err(rejected(host, "invalid regular expression"));
+            };
+            host.share_regex(&pattern, &flag_text, &regex);
+            regex
+        }
     };
     let compiled = host.new_object(
         ObjKind::RegExp(Rc::new(RegExpData {

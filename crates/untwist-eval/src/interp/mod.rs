@@ -3,6 +3,7 @@ pub(crate) use arguments::needs_arguments_object;
 mod call;
 pub(crate) use call::{detach_when_scope_ends, function_expression_name};
 pub mod lexical;
+mod shared;
 
 use oxc_ast::ast::{Program, Statement};
 use std::rc::Rc;
@@ -47,6 +48,13 @@ fn refuse_unmodelled<'a>(
     Ok(found)
 }
 
+fn code_address(code: FnCode<'_>) -> usize {
+    match code {
+        FnCode::Function(function) => std::ptr::from_ref(function) as usize,
+        FnCode::Arrow(arrow) => std::ptr::from_ref(arrow) as usize,
+    }
+}
+
 pub struct Interp<'a> {
     pub realm: Realm<'a>,
     pub names: Names<'a>,
@@ -62,6 +70,8 @@ pub struct Interp<'a> {
     arguments_name: Name,
     pub(crate) prototype_key: PropKey,
     pub(crate) functions: crate::compile::FnTable<'a>,
+    regexes: shared::SharedRegexes,
+    sources: shared::SharedSources,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -118,6 +128,8 @@ impl<'a> Interp<'a> {
             arguments_name,
             prototype_key: PropKey::Name(JsString::from_str(call::PROTOTYPE_KEY)),
             functions: crate::compile::FnTable::default(),
+            regexes: shared::SharedRegexes::default(),
+            sources: shared::SharedSources::default(),
         }
     }
 
@@ -254,11 +266,17 @@ impl<'a> Interp<'a> {
                 Bail::Unsupported(&"the source text of a method, which starts at its key").into(),
             ),
             Some(code) => {
+                let node = code_address(code);
+                if let Some(shared) = self.sources.get(node) {
+                    return Ok(shared);
+                }
                 let units: Vec<u16> = function_source(self.source_text, code)
                     .encode_utf16()
                     .collect();
                 let charge = self.reserve(text_bytes(units.len()))?;
-                Ok(JsString::charged(units, charge))
+                let text = JsString::charged(units, charge);
+                self.sources.keep(node, &text);
+                Ok(text)
             }
             None => Err(Bail::Unsupported(&"the source text of a built-in").into()),
         }
@@ -392,6 +410,14 @@ impl<'a> Interp<'a> {
 impl<'a> Host<'a> for Interp<'a> {
     fn spend(&mut self, steps: u64) -> EvalResult<()> {
         self.budget.spend(steps)
+    }
+
+    fn shared_regex(&mut self, pattern: &str, flags: &str) -> Option<regress::Regex> {
+        self.regexes.get(pattern, flags)
+    }
+
+    fn share_regex(&mut self, pattern: &str, flags: &str, regex: &regress::Regex) {
+        self.regexes.offer(pattern, flags, regex);
     }
 
     fn refuse_global_object(&self, target: &Value<'a>) -> EvalResult<()> {
