@@ -1,0 +1,43 @@
+name: Clean up Pages deployments
+
+on:
+  pull_request:
+    types: [closed]
+  delete:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'delete' || github.event.ref_type == 'branch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Remove the closed branch's previews
+        if: github.event_name == 'pull_request' || github.event_name == 'delete'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.event.ref }}
+        run: node .github/scripts/pages-cleanup.mjs branch "$BRANCH"
+      - name: Keep the newest production builds and drop stale previews
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_PRODUCTION: '5'
+        run: node .github/scripts/pages-cleanup.mjs sweep
