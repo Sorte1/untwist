@@ -31,6 +31,15 @@ pub const SINK_ROOT_NAMES: [&str; 6] = [
 ];
 pub(super) const MAX_SINK_DEPTH: u32 = 4;
 
+const GLOBAL_KEYS: [&str; 5] = ["__proto__", "top", "parent", "opener", "content"];
+
+pub(super) fn is_code_key(key: &str) -> bool {
+    key == "constructor"
+        || SINK_ROOT_NAMES.contains(&key)
+        || GLOBAL_OBJECTS.contains(&key)
+        || GLOBAL_KEYS.contains(&key)
+}
+
 struct Escape<'s> {
     scoping: &'s Scoping,
     globals: &'s FxHashSet<&'static str>,
@@ -325,6 +334,37 @@ impl<'s> Escape<'s> {
         false
     }
 
+    fn on_decoded_global_key(&mut self, member: &ComputedMemberExpression<'_>) -> bool {
+        let Expression::CallExpression(key_call) = member.expression.without_parentheses() else {
+            return false;
+        };
+        if !self.is_global_object(&member.object) {
+            return false;
+        }
+        if let Some(key) = self.resolve.and_then(|resolve| resolve(key_call.span)) {
+            self.on_global_key(&key, member.span);
+            return true;
+        }
+        if self.pending_exempt.is_none() {
+            return false;
+        }
+        let forcing = self.pending_call_span(&member.expression).is_some();
+        self.pending.push(PendingSite::GlobalKey {
+            outer_span: member.span,
+            key_span: key_call.span,
+            forcing,
+        });
+        true
+    }
+
+    fn on_global_key(&mut self, key: &str, span: Span) {
+        if is_code_key(key) {
+            self.flag_code(span);
+        } else {
+            self.flag_name(key, span);
+        }
+    }
+
     fn unwrap_sequence<'e, 'x>(expr: &'e Expression<'x>) -> &'e Expression<'x> {
         let unparenthesized = expr.without_parentheses();
         if let Expression::SequenceExpression(sequence) = unparenthesized {
@@ -563,6 +603,10 @@ impl<'a> VisitJs<'a> for Escape<'_> {
         };
         if let Some(key) = it.static_property_name() {
             self.note_definer_read(&it.object, key.as_str(), it.span);
+        }
+        if key.is_none() && self.on_decoded_global_key(it) {
+            self.visit_expression(&it.expression);
+            return;
         }
         if !self.on_member(&it.object, key, it.span) {
             self.visit_expression(&it.object);

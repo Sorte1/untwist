@@ -227,8 +227,22 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 
+    fn takes_selectors(&self, callee: &Expression<'a>) -> bool {
+        let Some(member) = callee.without_parentheses().as_member_expression() else {
+            return false;
+        };
+        let keys = self.member_keys(member);
+        !keys.is_empty()
+            && keys.iter().all(
+                |key| matches!(key, AKey::Named(name) if SELECTOR_TAKERS.contains(&name.as_ref())),
+            )
+    }
+
     pub(super) fn literal_texts(&mut self, call: &'a CallExpression<'a>) {
-        if self.in_machinery(call.span) || self.out.code_text.is_some() {
+        if self.in_machinery(call.span)
+            || self.out.code_text.is_some()
+            || self.takes_selectors(&call.callee)
+        {
             return;
         }
         let mut texts = Vec::new();

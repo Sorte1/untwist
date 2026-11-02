@@ -410,6 +410,117 @@ fn a_numeric_key_written_on_an_object_reassigned_to_a_prototype_stays_refused() 
 }
 
 #[test]
+fn a_property_read_off_function_does_not_block_decoding_a_proxy_call() {
+    let source = behaviour_fixture("rc4-function-prototype-read-beside-a-proxy-call.js");
+    for (mode, options) in modes() {
+        let code = Pipeline::new(options).run(&source).code().to_string();
+        assert!(!code.contains("b(460, \"DiKO\")"), "{mode}:\n{code}");
+        assert!(
+            code.contains("helpers.log(x, y)")
+                && code.contains("console.log(\"Hello World!\", differs(1, 2), native)"),
+            "{mode}:\n{code}"
+        );
+    }
+}
+
+#[test]
+fn the_function_constructor_read_through_its_prototype_stays_refused() {
+    let source = behaviour_fixture("rc4-function-constructor-read-beside-a-proxy-call.js");
+    for (mode, options) in modes() {
+        let out = Pipeline::new(options).run(&source);
+        assert!(
+            out.code().contains("b(461, \"DiKO\")"),
+            "{mode}:\n{}",
+            out.code()
+        );
+        assert!(
+            out.notes.iter().any(|found| found
+                .message
+                .contains("may reach the string array's function")),
+            "{mode}: {:?}",
+            out.notes
+        );
+    }
+}
+
+#[test]
+fn a_selector_that_parses_as_code_does_not_block_decoding() {
+    let source = behaviour_fixture("rc4-selector-argument-that-parses-as-code.js");
+    for (mode, options) in modes() {
+        let code = Pipeline::new(options).run(&source).code().to_string();
+        assert!(
+            code.contains("console.log(\"Hello World!\", found)"),
+            "{mode}:\n{code}"
+        );
+    }
+}
+
+#[test]
+fn a_decoded_key_read_on_window_does_not_block_decoding() {
+    let source = behaviour_fixture("rc4-decoded-key-read-on-window.js");
+    for (mode, options) in modes() {
+        let code = Pipeline::new(options).run(&source).code().to_string();
+        assert!(
+            code.contains("window.console.toString()")
+                && code.contains("console.log(\"Hello World!\", native)"),
+            "{mode}:\n{code}"
+        );
+    }
+}
+
+#[test]
+fn a_decoded_key_on_window_that_names_function_stays_refused() {
+    let source = behaviour_fixture("rc4-decoded-function-key-read-on-window.js");
+    for (mode, options) in modes() {
+        let out = Pipeline::new(options).run(&source);
+        assert!(
+            out.code().contains("window[b(461, \"DiKO\")]"),
+            "{mode}:\n{}",
+            out.code()
+        );
+    }
+}
+
+#[test]
+fn a_decoded_key_on_window_that_names_another_global_object_stays_refused() {
+    let source = behaviour_fixture("rc4-decoded-self-key-on-window-patches-the-decoder.js");
+    for (mode, options) in modes() {
+        let out = Pipeline::new(options).run(&source);
+        assert!(
+            out.code().contains("b(462, \"DiKO\")"),
+            "{mode}:\n{}",
+            out.code()
+        );
+    }
+}
+
+#[test]
+fn the_global_object_taken_through_the_function_prototype_constructor_stays_refused() {
+    let source = behaviour_fixture("rc4-function-prototype-constructor-patches-the-decoder.js");
+    for (mode, options) in modes() {
+        let out = Pipeline::new(options).run(&source);
+        assert!(
+            out.code().contains("b(461, \"DiKO\")"),
+            "{mode}:\n{}",
+            out.code()
+        );
+    }
+}
+
+#[test]
+fn code_text_passed_to_an_unknown_host_method_stays_refused() {
+    let source = behaviour_fixture("rc4-code-argument-to-an-unknown-host-call.js");
+    for (mode, options) in modes() {
+        let out = Pipeline::new(options).run(&source);
+        assert!(
+            out.code().contains("b(461, \"DiKO\")"),
+            "{mode}:\n{}",
+            out.code()
+        );
+    }
+}
+
+#[test]
 fn the_fixtures_that_patch_object_stay_refused() {
     for (name, note) in [
         (

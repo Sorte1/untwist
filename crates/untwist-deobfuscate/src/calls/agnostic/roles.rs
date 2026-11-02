@@ -43,6 +43,15 @@ pub(super) const RUNNERS: [&str; 14] = [
     "_compile",
 ];
 
+pub(super) const SELECTOR_TAKERS: [&str; 6] = [
+    "querySelector",
+    "querySelectorAll",
+    "closest",
+    "matches",
+    "webkitMatchesSelector",
+    "msMatchesSelector",
+];
+
 pub(super) const CONSTRUCTS: [&str; 5] =
     ["construct", "revocable", "Proxy", "fromEntries", "parse"];
 

@@ -4,7 +4,7 @@ use rustc_hash::FxHashSet;
 
 use untwist_eval::object::PROTOTYPE_LINKS;
 
-use super::escape::{EscapeContext, EscapeScan};
+use super::escape::{is_code_key, EscapeContext, EscapeScan};
 use super::escape_scan::scan_decoded_text;
 use super::written::WrittenKey;
 
@@ -13,6 +13,11 @@ pub enum PendingSite {
     Sink {
         outer_span: Span,
         arg_span: Span,
+        forcing: bool,
+    },
+    GlobalKey {
+        outer_span: Span,
+        key_span: Span,
         forcing: bool,
     },
     ProxyKey {
@@ -54,6 +59,17 @@ pub fn resolve_pending_sites(
                 resolve,
                 *outer_span,
                 *arg_span,
+            ),
+            PendingSite::GlobalKey {
+                outer_span,
+                key_span,
+                ..
+            } => resolve_global_key_site(
+                &mut names,
+                &mut span,
+                globals,
+                resolve,
+                (*outer_span, *key_span),
             ),
             PendingSite::ProxyKey { .. } => {
                 resolve_proxy_key_site(&mut names, &mut span, context, resolve, site)
@@ -107,6 +123,27 @@ fn flag_all_into(
     span.get_or_insert(at);
     names.extend(globals.iter().copied());
     names.insert(PROTOTYPE_LINKS);
+}
+
+fn resolve_global_key_site(
+    names: &mut FxHashSet<&'static str>,
+    span: &mut Option<Span>,
+    globals: &FxHashSet<&'static str>,
+    resolve: &dyn Fn(Span) -> Option<String>,
+    (outer_span, key_span): (Span, Span),
+) {
+    let Some(key) = resolve(key_span) else {
+        flag_all_into(names, span, globals, outer_span);
+        return;
+    };
+    if is_code_key(&key) {
+        flag_all_into(names, span, globals, outer_span);
+        return;
+    }
+    if let Some(&canonical) = globals.get(key.as_str()) {
+        span.get_or_insert(outer_span);
+        names.insert(canonical);
+    }
 }
 
 fn resolve_sink_site(

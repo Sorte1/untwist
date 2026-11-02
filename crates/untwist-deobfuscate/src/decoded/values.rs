@@ -61,6 +61,9 @@ fn pending_site_spans(scan: &PreScan, spans: &mut FxHashSet<Span>) {
             PendingSite::Sink { arg_span, .. } => {
                 spans.insert(*arg_span);
             }
+            PendingSite::GlobalKey { key_span, .. } => {
+                spans.insert(*key_span);
+            }
             PendingSite::ProxyKey { key_span, .. } => {
                 spans.insert(*key_span);
             }
