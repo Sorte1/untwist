@@ -26,6 +26,8 @@ pub(super) const READERS: [&str; 5] = [
     "__lookupSetter__",
 ];
 
+pub(super) const TARGETED_READERS: [&str; 2] = ["get", "getOwnPropertyDescriptor"];
+
 pub(super) const RUNNERS: [&str; 14] = [
     "eval",
     "Function",

@@ -508,6 +508,69 @@ fn the_global_object_taken_through_the_function_prototype_constructor_stays_refu
 }
 
 #[test]
+fn a_dead_branch_behind_a_table_assembled_from_decoded_keys_does_not_block_decoding() {
+    let source = behaviour_fixture("rc4-dead-branch-behind-an-assembled-table.js");
+    for (mode, options) in modes() {
+        let code = Pipeline::new(options).run(&source).code().to_string();
+        assert!(
+            !code.contains("b(46") && code.contains("console.log(\"Hello World!\");"),
+            "{mode}:\n{code}"
+        );
+    }
+}
+
+#[test]
+fn a_live_branch_behind_an_assembled_table_stays_refused() {
+    for name in [
+        "rc4-live-branch-behind-an-assembled-table.js",
+        "rc4-assembled-table-written-through-its-alias.js",
+        "rc4-assembled-table-written-elsewhere.js",
+        "rc4-assembled-table-under-a-frozen-object-prototype.js",
+        "rc4-assembled-table-rebound-through-arguments.js",
+    ] {
+        let source = behaviour_fixture(name);
+        for (mode, options) in modes() {
+            let out = Pipeline::new(options).run(&source);
+            assert!(
+                out.code().contains("b(461, \"DiKO\")"),
+                "{name} {mode}:\n{}",
+                out.code()
+            );
+        }
+    }
+}
+
+#[test]
+fn a_map_get_with_an_unknown_key_does_not_block_decoding() {
+    let source = behaviour_fixture("rc4-map-get-with-an-unknown-key.js");
+    for (mode, options) in modes() {
+        let code = Pipeline::new(options).run(&source).code().to_string();
+        assert!(
+            code.contains("console.log(\"Hello World!\", lookup("),
+            "{mode}:\n{code}"
+        );
+    }
+}
+
+#[test]
+fn a_reflective_get_with_an_unknown_key_stays_refused() {
+    for name in [
+        "rc4-reflect-get-with-an-unknown-key.js",
+        "rc4-bound-reflect-get-under-a-get-key.js",
+    ] {
+        let source = behaviour_fixture(name);
+        for (mode, options) in modes() {
+            let out = Pipeline::new(options).run(&source);
+            assert!(
+                out.code().contains("b(461, \"DiKO\")"),
+                "{name} {mode}:\n{}",
+                out.code()
+            );
+        }
+    }
+}
+
+#[test]
 fn code_text_passed_to_an_unknown_host_method_stays_refused() {
     let source = behaviour_fixture("rc4-code-argument-to-an-unknown-host-call.js");
     for (mode, options) in modes() {

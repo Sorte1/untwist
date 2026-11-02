@@ -1,3 +1,4 @@
+mod assembled;
 mod bind;
 mod bootstrap;
 mod consume;

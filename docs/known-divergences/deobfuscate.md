@@ -367,9 +367,20 @@
   function in node's realm (from the standard globals and the hidden intrinsics, through
   prototypes, statics and accessors) and fails on one that is not classified in
   `tests/data/intrinsics.tsv`, or whose keys the check does not judge by its class (definer,
-  reader, mutator, runner, forwarder, construct). Host APIs fall under premise 1. Writes that
+  reader, mutator, runner, forwarder, construct). A call of a method named `get` or
+  `getOwnPropertyDescriptor` judges its keys from the second argument on, where `Reflect.get`,
+  `Object.getOwnPropertyDescriptor` and `Reflect.getOwnPropertyDescriptor` take their key, so
+  `map.get(key)` is not a reflective read; a reader stored under such a name is already an escaped
+  definer read. A keyed reader or writer called without its key argument, and with no spread at or
+  before it, reads or writes the key `undefined`. Host APIs fall under premise 1. Writes that
   change only index keys (`Array.of` or a species constructor returning a prototype) are not
-  judged: no fold reads a hole. The accepted precision losses are a binding
+  judged: no fold reads a hole. A branch whose test folds through an object table is skipped:
+  the table is an object literal, or one assembled as `var t = {…}; t[k] = v; …; var a = t;` by
+  contiguous statements that are the only references to `t` (not a parameter), whose keys are
+  literals or decoder calls resolved to the strings the decode predicts and are no own key of
+  `Object.prototype`, and that no write outside the machinery on a base that may be
+  `Object.prototype` may shadow; until a decoded value first differs from its prediction the test
+  evaluates as folded, so the skipped branch never runs. The accepted precision losses are a binding
   that aliases another root under the same key (`var N = Number; N.prototype.join = …`), a
   prototype reached through a fresh root or the global object (`globalThis.Number.prototype.join =
   …`), and an unknown key on the `Array` constructor (it may be `Symbol.species`). `game.js` keeps

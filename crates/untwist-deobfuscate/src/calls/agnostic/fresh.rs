@@ -3,12 +3,14 @@ use oxc_semantic::Scoping;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
+use std::borrow::Cow;
 
+use super::assembled::literal_fields;
 use super::bind::{
     class_constructs_fresh, function_constructs_fresh, function_uses_this, Bindings, Defs,
 };
 
-type Fields<'a> = Option<FxHashMap<&'a str, &'a Expression<'a>>>;
+type Fields<'a> = Option<FxHashMap<Cow<'a, str>, &'a Expression<'a>>>;
 
 pub(super) struct Fresh<'s, 'a> {
     pub(super) scoping: &'s Scoping,
@@ -293,7 +295,7 @@ impl<'a> Fresh<'_, 'a> {
     fn with_sealed<R>(
         &self,
         symbol: SymbolId,
-        read: impl Fn(&FxHashMap<&'a str, &'a Expression<'a>>) -> Option<R>,
+        read: impl Fn(&FxHashMap<Cow<'a, str>, &'a Expression<'a>>) -> Option<R>,
     ) -> Option<R> {
         if let Some(fields) = self.sealed.borrow().get(&symbol) {
             return fields.as_ref().and_then(&read);
@@ -347,29 +349,17 @@ impl<'a> Fresh<'_, 'a> {
         let [Some(init)] = defs.inits else {
             return None;
         };
-        let Expression::ObjectExpression(object) = init.without_parentheses() else {
-            return None;
+        let entries = match init.without_parentheses() {
+            Expression::ObjectExpression(object) => literal_fields(object)?,
+            Expression::Identifier(_) => self.bindings.assembled.get(&symbol)?.fields.clone(),
+            _ => return None,
         };
         let mut fields = FxHashMap::default();
-        for property in &object.properties {
-            let ObjectPropertyKind::ObjectProperty(p) = property else {
-                return None;
-            };
-            if p.kind != PropertyKind::Init || p.computed {
+        for (name, value) in entries {
+            if defs.method_called && self.field_mutates_this(value) {
                 return None;
             }
-            let name = match &p.key {
-                PropertyKey::StaticIdentifier(name) => name.name.as_str(),
-                PropertyKey::StringLiteral(text) => text.value.as_str(),
-                _ => return None,
-            };
-            if name == "__proto__" {
-                return None;
-            }
-            if defs.method_called && self.field_mutates_this(&p.value) {
-                return None;
-            }
-            fields.insert(name, &p.value);
+            fields.insert(name, value);
         }
         Some(fields)
     }

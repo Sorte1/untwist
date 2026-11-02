@@ -35,7 +35,8 @@ const TESTS: [&str; 4] = [
     "(function () {}) instanceof Object",
 ];
 
-const KEEPING_WRITES: [&str; 38] = [
+const KEEPING_WRITES: [&str; 39] = [
+    "var d = Object.getOwnPropertyDescriptor({}, 'x');",
     "",
     "var o = {}; o.x = 1;",
     "var arr = []; arr[0] = 'x'; delete arr[0];",
@@ -92,7 +93,7 @@ const REFUSING_WRITES: [&str; 24] = [
     "function keep(f) { return f; } keep(Object);",
     "Array.prototype.__proto__ = null;",
     "Object.assign(Array.prototype, {});",
-    "var d = Object.getOwnPropertyDescriptor({}, 'x');",
+    "var d = Object.getOwnPropertyDescriptor(Object, 'defineProperty');",
     "var k = 'x'; for (var i = 0; i < 2; i++) { k = k + i; } var v = [][k];",
     "var oc = []; var C = oc?.constructor;",
     "class A extends Array { m() { return super.constructor; } } var F = new A().m();",
