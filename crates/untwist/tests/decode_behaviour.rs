@@ -373,6 +373,43 @@ fn the_instanceof_object_fixtures_are_decoded() {
 }
 
 #[test]
+fn a_numeric_key_written_on_an_object_reassigned_only_to_literals_is_decoded() {
+    let source = behaviour_fixture("rc4-numeric-key-on-object-assigned-after-null.js");
+    for (mode, options) in modes() {
+        let code = Pipeline::new(options).run(&source).code().to_string();
+        assert!(
+            !code.contains("b(461") && !code.contains("b(462"),
+            "{mode}:\n{code}"
+        );
+        assert!(
+            code.contains("new Error(\"Hello World!\")")
+                && code.contains("console.log(\"log\", \"console\", errors[\"28\"])"),
+            "{mode}:\n{code}"
+        );
+    }
+}
+
+#[test]
+fn a_numeric_key_written_on_an_object_reassigned_to_a_prototype_stays_refused() {
+    let source = behaviour_fixture("rc4-numeric-key-on-object-reassigned-to-prototype.js");
+    for (mode, options) in modes() {
+        let out = Pipeline::new(options).run(&source);
+        assert!(
+            out.code().contains("b(460, \"DiKO\")"),
+            "{mode}:\n{}",
+            out.code()
+        );
+        assert!(
+            out.notes.iter().any(|found| found
+                .message
+                .contains("the program replaces a standard built-in")),
+            "{mode}: {:?}",
+            out.notes
+        );
+    }
+}
+
+#[test]
 fn the_fixtures_that_patch_object_stay_refused() {
     for (name, note) in [
         (

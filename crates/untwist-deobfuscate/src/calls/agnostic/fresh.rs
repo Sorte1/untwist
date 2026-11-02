@@ -115,14 +115,27 @@ impl<'a> Fresh<'_, 'a> {
         if self.numeric_binding(id, depth, None) {
             return true;
         }
-        let Some(defs) = self.defs(id) else {
+        let Some(defs) = self
+            .symbol(id)
+            .and_then(|symbol| self.bindings.defs.get(symbol))
+        else {
             return false;
         };
-        (defs.callable || !defs.inits.is_empty())
+        if defs.opaque {
+            return false;
+        }
+        let inits_fresh = (defs.callable || !defs.inits.is_empty())
             && defs
                 .inits
                 .iter()
-                .all(|init| init.is_none_or(|init| self.fresh_at(init, depth)))
+                .all(|init| init.is_none_or(|init| self.fresh_at(init, depth)));
+        inits_fresh && (!defs.mutated || self.writes_fresh(defs.writes, depth))
+    }
+
+    fn writes_fresh(&self, writes: &[Option<&Expression<'_>>], depth: u8) -> bool {
+        writes
+            .iter()
+            .all(|value| value.is_some_and(|value| self.fresh_at(value, depth)))
     }
 
     fn constructs_fresh(&self, callee: &Expression<'_>, depth: u8) -> bool {
