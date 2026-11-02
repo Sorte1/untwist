@@ -54,6 +54,22 @@ const OWN_WRITERS: [&str; 2] = ["__defineGetter__", "__defineSetter__"];
 
 const BATCH_WRITERS: [&str; 2] = ["assign", "defineProperties"];
 
+enum KeyedArgument<'k, 'a> {
+    Given(&'k Expression<'a>),
+    Absent,
+    Spread,
+}
+
+fn keyed_argument<'k, 'a>(call: &'k CallExpression<'a>, at: usize) -> KeyedArgument<'k, 'a> {
+    if call.arguments.iter().take(at + 1).any(Argument::is_spread) {
+        return KeyedArgument::Spread;
+    }
+    match call.arguments.get(at).and_then(Argument::as_expression) {
+        Some(expr) => KeyedArgument::Given(expr),
+        None => KeyedArgument::Absent,
+    }
+}
+
 fn open(key: &AKey<'_>) -> bool {
     matches!(key, AKey::Pending(_) | AKey::Unknown) && dynamic_paths()
 }
@@ -383,10 +399,10 @@ impl<'a> Sites<'_, 'a> {
         }
         if unknown || names_one_of(keys, &VALUE_KEYED) {
             let base = call.arguments.first().and_then(Argument::as_expression);
-            self.reach_base_keyed(base, call.arguments.get(1), call.span);
+            self.reach_base_keyed(base, keyed_argument(call, 1), call.span);
         }
         if unknown || names_one_of(keys, &OWN_WRITERS) {
-            self.reach_base_keyed(Some(member.object()), call.arguments.first(), call.span);
+            self.reach_base_keyed(Some(member.object()), keyed_argument(call, 0), call.span);
         }
         if unknown || names_one_of(keys, &BATCH_WRITERS) {
             self.reach_batch(call);
@@ -405,19 +421,21 @@ impl<'a> Sites<'_, 'a> {
     fn reach_base_keyed(
         &mut self,
         base: Option<&Expression<'a>>,
-        key: Option<&Argument<'a>>,
+        key: KeyedArgument<'_, 'a>,
         span: Span,
     ) {
         let Some(base) = base else {
             return;
         };
-        let key = key.and_then(Argument::as_expression);
-        if key.is_some_and(|key| self.paired_sites_safe(base, key)) {
-            return;
+        if let KeyedArgument::Given(key) = key {
+            if self.paired_sites_safe(base, key) {
+                return;
+            }
         }
         let hit = match key {
-            Some(expr) => self.key_hits(expr),
-            None => dynamic_paths(),
+            KeyedArgument::Given(expr) => self.key_hits(expr),
+            KeyedArgument::Absent => self.watched_name("undefined"),
+            KeyedArgument::Spread => dynamic_paths(),
         };
         if hit {
             self.reach_base(base, span);

@@ -127,13 +127,19 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     fn note_reader_arguments(&mut self, call: &CallExpression<'a>, keys: &[AKey<'a>]) {
-        let reads = keys
+        let Some(first_key) = keys
             .iter()
-            .any(|key| matches!(key, AKey::Named(name) if READERS.contains(&name.as_ref())));
-        if !reads {
+            .filter_map(|key| match key {
+                AKey::Named(name) if READERS.contains(&name.as_ref()) => {
+                    Some(first_key_argument(name))
+                }
+                _ => None,
+            })
+            .min()
+        else {
             return;
-        }
-        for argument in &call.arguments {
+        };
+        for argument in call.arguments.iter().skip(first_key) {
             if let Some(expr) = argument.as_expression() {
                 let keys = self.key_set(expr);
                 for key in keys {
@@ -518,4 +524,8 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         }
         walk_js::walk_variable_declarator(self, it);
     }
+}
+
+fn first_key_argument(reader: &str) -> usize {
+    usize::from(TARGETED_READERS.contains(&reader))
 }

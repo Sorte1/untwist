@@ -6,6 +6,7 @@ use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 
+use super::assembled::{assembled_tables, AssembledTables};
 use super::bootstrap::{self, Resolve};
 pub(super) use super::defs::Defs;
 use super::defs::{
@@ -226,6 +227,7 @@ pub(super) struct Bindings<'s, 'a> {
     tables: Vec<SymbolId>,
     uncalled: Vec<u32>,
     pub(super) bootstrap_refusal: Option<&'static str>,
+    pub(super) assembled: AssembledTables<'a>,
 }
 
 impl<'s, 'a> Bindings<'s, 'a> {
@@ -255,6 +257,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             tables: Vec::new(),
             uncalled: Vec::new(),
             bootstrap_refusal: None,
+            assembled: assembled_tables(program, scoping, resolve),
         };
         bindings.visit_program(program);
         bindings.defs.finish();

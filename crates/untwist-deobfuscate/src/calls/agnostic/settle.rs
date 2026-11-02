@@ -7,6 +7,7 @@ use rustc_hash::FxHashMap;
 use std::borrow::Cow;
 use std::cell::RefCell;
 
+use super::assembled::{broken_tables, drop_tables};
 use super::bind::Bindings;
 use super::fresh::Fresh;
 use super::sites::*;
@@ -157,7 +158,9 @@ fn settle_ordered<'a>(
             bindings.hide_calls(&globals);
         }
         let rebound = rebound_globals(&out, &globals, &bindings, (next.source, &written));
-        if rebound.is_empty() && next == judged {
+        let broken = broken_tables(&out, &bindings.assembled, machinery);
+        drop_tables(&mut bindings.assembled, &broken);
+        if rebound.is_empty() && broken.is_empty() && next == judged {
             let (reach, observed) = rebound_ambient(&out, scoping, &written);
             out.realm_rebound |= roots_rebound(scoping, &out.sites, machinery);
             out.global_source = judged.source;
