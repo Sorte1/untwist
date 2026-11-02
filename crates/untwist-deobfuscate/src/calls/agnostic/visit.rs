@@ -10,6 +10,35 @@ use super::sites::*;
 use super::AKey;
 
 impl<'s, 'a> Sites<'s, 'a> {
+    fn stringified_runner(&self, call: &CallExpression<'a>) -> Option<Span> {
+        if !call.arguments.is_empty() {
+            return None;
+        }
+        let member = call.callee.without_parentheses().as_member_expression()?;
+        if !self.keys_are(member, &["toString"]) {
+            return None;
+        }
+        let mut base = member.object().without_parentheses();
+        while let Some(inner) = base.as_member_expression() {
+            if !self.keys_are(inner, &["prototype", "constructor", "toString"]) {
+                return None;
+            }
+            base = inner.object().without_parentheses();
+        }
+        let Expression::Identifier(id) = base else {
+            return None;
+        };
+        (RUNNERS.contains(&id.name.as_str()) && self.fresh.symbol(id).is_none()).then_some(id.span)
+    }
+
+    fn keys_are(&self, member: &MemberExpression<'a>, allowed: &[&str]) -> bool {
+        let keys = self.member_keys(member);
+        !keys.is_empty()
+            && keys
+                .iter()
+                .all(|key| matches!(key, AKey::Named(name) if allowed.contains(&name.as_ref())))
+    }
+
     fn is_intrinsic_value(&self, expr: &Expression<'a>) -> bool {
         match expr.without_parentheses() {
             Expression::Identifier(id) => {
@@ -33,6 +62,9 @@ impl<'s, 'a> Sites<'s, 'a> {
     pub(super) fn note_call_shape(&mut self, call: &CallExpression<'a>) {
         let callee = call.callee.without_parentheses();
         self.direct.insert(span_key(callee.span()));
+        if let Some(runner) = self.stringified_runner(call) {
+            self.direct.insert(span_key(runner));
+        }
         let Some(member) = callee.as_member_expression() else {
             return;
         };
