@@ -18,6 +18,16 @@ export function extraNote(count: number, name: string): string | undefined {
   return count > 1 ? `${count} files given; only the first, ${name}, was loaded` : undefined;
 }
 
+export const EMPTY_DROP_NOTE = 'The browser passed no file to the page. Use Open file, or paste the code.';
+
+export async function loadDropped(files: readonly File[], loader: Loader): Promise<void> {
+  if (files.length === 0) {
+    loader.note(EMPTY_DROP_NOTE);
+    return;
+  }
+  await loadFiles(files, loader);
+}
+
 export async function loadFiles(files: readonly File[], loader: Loader): Promise<void> {
   const [file] = files;
   if (file === undefined) {
@@ -111,7 +121,7 @@ export function mountDropOverlay(store: Store<AppState>, loader: Loader): void {
     event.preventDefault();
     event.stopPropagation();
     hide();
-    void loadFiles([...(event.dataTransfer?.files ?? [])], loader);
+    void loadDropped([...(event.dataTransfer?.files ?? [])], loader);
   }, true);
   wireOpenFile(loader);
 }

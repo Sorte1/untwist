@@ -29,6 +29,8 @@ async function outputText(page: Page): Promise<string> {
   return text;
 }
 
+const EMPTY_DROP = 'The browser passed no file to the page. Use Open file, or paste the code.';
+
 async function dropFile(page: Page, name: string, text: string): Promise<void> {
   const transfer = await page.evaluateHandle(
     ([fileName, body]) => {
@@ -133,4 +135,15 @@ test('a drag that hides its types until the drop is still accepted, and its file
   expect(accepted).toBe(true);
   await dropFile(page, 'hidden-types.js', 'var hidden = !0;');
   await expect(page.locator('#input-name, .mono-name').first()).toContainText('hidden-types.js');
+});
+
+test('a drop that hands the page no file says so instead of doing nothing', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    for (const type of ['dragenter', 'dragover', 'drop']) {
+      document.body.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
+    }
+  });
+  await expect(page.locator('#drop-overlay')).toHaveCount(0);
+  await expect(page.locator('#input-hint')).toHaveText(EMPTY_DROP);
 });
