@@ -5,7 +5,6 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
-use untwist_core::ast_util::inline::inline_function_call;
 use untwist_core::ast_util::readonly::{
     is_readonly_object_outside, scan_symbol_uses, ObjectUses, PropRead,
 };
@@ -21,8 +20,8 @@ use crate::notes;
 
 use super::dead::{dead_branch_spans, dead_write_statements};
 use super::{
-    call_site_is_safe, cff_props, emit_logical_refusals, object_declaration, CffValue, Refusal,
-    SiteSafety, PASS,
+    call_site_is_safe, cff_props, emit_logical_refusals, inline_site, object_declaration, CffValue,
+    Refusal, SiteSafety, PASS,
 };
 
 pub struct DeclaredObject {
@@ -144,7 +143,7 @@ fn substitute_function<'a, 'p>(
         }
         SiteSafety::Refused(Refusal::Shape) => return None,
     }
-    Some((call_span, inline_function_call(function, arguments, &*cx)?))
+    Some((call_span, inline_site(function, arguments, &*cx)?))
 }
 
 fn substitute_read<'a, 'p>(
