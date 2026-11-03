@@ -135,6 +135,10 @@ export function diffPlan(state: AppState, current: string | null = null): DiffPl
   return { ...plan, kind: 'big' };
 }
 
+function toggleWrap(store: Store<AppState>): void {
+  store.update((state) => ({ ...state, settings: { ...state.settings, wrap: !state.settings.wrap } }));
+}
+
 function setView(store: Store<AppState>, view: 'output' | 'diff'): void {
   store.update((state) => ({ ...state, settings: { ...state.settings, view } }));
 }
@@ -148,6 +152,7 @@ export function mountDiffView(store: Store<AppState>, current: () => string): vo
   let pending: PendingDiff | null = null;
   byId('view-output').addEventListener('click', () => setView(store, 'output'));
   byId('view-diff').addEventListener('click', () => setView(store, 'diff'));
+  byId('diff-wrap').addEventListener('click', () => toggleWrap(store));
   const showNote = (text: string | null) => {
     note.hidden = text === null;
     setText(note, text ?? '');
@@ -172,7 +177,7 @@ export function mountDiffView(store: Store<AppState>, current: () => string): vo
         }
         pending = null;
         const view = bigView(result);
-        const mounted = view.kind === 'merge' ? loaded.mountDiff(container, plan.before, plan.after, result.ranges) : mountSummary(container, result);
+        const mounted = view.kind === 'merge' ? loaded.mountDiff(container, plan.before, plan.after, store.get().settings.wrap, result.ranges) : mountSummary(container, result);
         handle = mounted;
         container.dataset['chunks'] = String(mounted.chunks);
         container.dataset['view'] = view.kind;
@@ -201,7 +206,7 @@ export function mountDiffView(store: Store<AppState>, current: () => string): vo
       showBig(merge, plan);
       return;
     }
-    const mounted = merge.mountDiff(container, plan.before, plan.after);
+    const mounted = merge.mountDiff(container, plan.before, plan.after, state.settings.wrap);
     container.dataset['chunks'] = String(mounted.chunks);
     container.dataset['view'] = 'merge';
     handle = mounted;
@@ -209,14 +214,15 @@ export function mountDiffView(store: Store<AppState>, current: () => string): vo
   store.subscribe((state, previous) => {
     const diff = state.settings.view === 'diff';
     document.body.classList.toggle('diff-mode', diff);
-    for (const [id, on] of [['view-output', !diff], ['view-diff', diff]] as const) {
+    for (const [id, on] of [['view-output', !diff], ['view-diff', diff], ['diff-wrap', state.settings.wrap]] as const) {
       byId(id).setAttribute('aria-pressed', String(on));
     }
     const changed =
       state.run.result !== previous.run.result ||
       state.selectedModule !== previous.selectedModule ||
       state.input !== previous.input ||
-      state.compare !== previous.compare;
+      state.compare !== previous.compare ||
+      state.settings.wrap !== previous.settings.wrap;
     if (!diff) {
       clear();
       shown = null;

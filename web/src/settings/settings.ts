@@ -16,6 +16,7 @@ export interface Settings {
   readonly single: boolean;
   readonly off: string;
   readonly view: View;
+  readonly wrap: boolean;
   readonly theme: ThemeChoice | null;
   readonly input: InputVisibility;
 }
@@ -36,6 +37,7 @@ export const DEFAULTS: Settings = {
   single: false,
   off: '',
   view: 'output',
+  wrap: false,
   theme: null,
   input: 'shown',
 };

@@ -71,3 +71,50 @@ test('game.js against its 10 MB output lists the changes, since its input lines 
   const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
   expect(long.filter((ms) => ms > 100)).toEqual([]);
 });
+
+async function sideBoxes(page: Page): Promise<Array<{ left: number; right: number; contentRight: number; scrollWidth: number; clientWidth: number }>> {
+  return page.evaluate(() => {
+    const root = document.querySelector('#diff .editor-host')?.shadowRoot;
+    return [...(root?.querySelectorAll<HTMLElement>('.cm-mergeViewEditor') ?? [])].map((side) => {
+      const box = side.getBoundingClientRect();
+      const visible = [...side.querySelectorAll<HTMLElement>('.cm-line')].map((line) => {
+        const range = document.createRange();
+        range.selectNodeContents(line);
+        const rects = [...range.getClientRects()].filter((rect) => rect.top < box.bottom && rect.bottom > box.top && rect.left < box.right);
+        return rects.length === 0 ? box.left : Math.max(...rects.map((rect) => Math.min(rect.right, box.right + 1)));
+      });
+      const scroller = side.querySelector<HTMLElement>('.cm-scroller');
+      return { left: box.left, right: box.right, contentRight: Math.max(box.left, ...visible), scrollWidth: scroller?.scrollWidth ?? 0, clientWidth: scroller?.clientWidth ?? 0 };
+    });
+  });
+}
+
+const LONG = `var a = !0;\nvar long = ["${'x'.repeat(400)}", !1];`;
+
+test('long diff lines scroll each side on its own by default, and wrap when Wrap is on', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApp(page);
+  await paste(page, LONG);
+  await runAndWait(page);
+  await page.locator('#view-diff').click();
+  await chunks(page);
+  const wrap = page.locator('#diff-wrap');
+  await expect(wrap).toBeVisible();
+  await expect(wrap).toHaveAttribute('aria-pressed', 'false');
+  const scrolled = await sideBoxes(page);
+  expect(scrolled).toHaveLength(2);
+  const [a, b] = scrolled as [(typeof scrolled)[number], (typeof scrolled)[number]];
+  expect(Math.abs(a.right - a.left - (b.right - b.left))).toBeLessThanOrEqual(2);
+  expect(a.right).toBeLessThanOrEqual(b.left + 1);
+  for (const side of scrolled) {
+    expect(side.scrollWidth).toBeGreaterThan(side.clientWidth);
+    expect(side.contentRight).toBeLessThanOrEqual(side.right + 1);
+  }
+  await wrap.click();
+  await expect(wrap).toHaveAttribute('aria-pressed', 'true');
+  expect(page.url()).toContain('wrap=1');
+  await expect.poll(async () => (await sideBoxes(page)).every((side) => side.scrollWidth <= side.clientWidth + 1)).toBe(true);
+  expect(await sideText(page, 'b')).toContain('x'.repeat(400));
+  await page.reload();
+  await expect(page.locator('#diff-wrap')).toHaveAttribute('aria-pressed', 'true');
+});

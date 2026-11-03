@@ -1274,8 +1274,18 @@ button.diag-row:hover .diag-loc {
   display: none;
 }
 
-.diff-legend, .diff-body, #diff-note {
+.diff-legend, .diff-body, #diff-note, .diff-wrap {
   display: none;
+}
+
+.diff-mode .diff-wrap {
+  display: inline-flex;
+}
+
+.diff-wrap[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--diff-add-tint);
+  border-color: var(--accent);
 }
 
 .diff-mode .diff-legend {
@@ -1307,6 +1317,8 @@ button.diag-row:hover .diag-loc {
 
 .diff-mode .diff-body {
   display: flex;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .diff-mode #diff-note:not([hidden]) {
