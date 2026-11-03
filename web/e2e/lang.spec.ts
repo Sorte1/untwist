@@ -139,7 +139,9 @@ test('completion keeps the scope bindings while the line is half typed', async (
   await cursorAt(page, 'let sum = 0;', 0);
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
-  await page.keyboard.type('if (s');
+  await page.keyboard.type('if (');
+  await page.keyboard.press('Delete');
+  await page.keyboard.type('s');
   await expect(page.locator('.edit-problems')).not.toHaveText('No problems');
   await page.keyboard.press('Control+Space');
   await expect(page.locator('#output-editor .cm-tooltip-autocomplete li').first()).toContainText('sum');

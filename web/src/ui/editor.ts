@@ -39,6 +39,8 @@ export const outputLook = Prec.highest(
   }),
 );
 
+export const editorKeys = defaultKeymap.filter((binding) => binding.key !== 'Mod-Enter');
+
 export function access(editable: boolean): Extension {
   return [EditorState.readOnly.of(!editable), EditorView.editable.of(editable)];
 }
@@ -55,7 +57,7 @@ export function baseExtensions(editable: boolean, gate: Extension = access(edita
     gate,
     editable ? [] : EditorView.contentAttributes.of({ tabindex: '0' }),
     editable ? history() : [],
-    keymap.of([...defaultKeymap, ...(editable ? historyKeymap : []), ...searchKeymap]),
+    keymap.of([...editorKeys, ...(editable ? historyKeymap : []), ...searchKeymap]),
   ];
 }
 

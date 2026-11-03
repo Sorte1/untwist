@@ -3,6 +3,7 @@ import { EditorView } from '@codemirror/view';
 import { byId, linesLabel, setText, sizeLabel } from '../dom';
 import { inputOf, PREVIEW_CHARS, type AppState, type InputState } from '../state';
 import type { Store } from '../store';
+import { codeEditing } from './editing';
 import { access as accessOf, baseExtensions, makeEditor, replaceDoc } from './editor';
 
 const UNTITLED = 'untitled.js';
@@ -17,7 +18,7 @@ function pastedText(view: EditorView, pasted: string): string {
   return doc.sliceString(0, from) + pasted + doc.sliceString(to);
 }
 
-export function mountInputPane(store: Store<AppState>): EditorView {
+export function mountInputPane(store: Store<AppState>, module: Promise<WebAssembly.Module>): EditorView {
   const access = new Compartment();
   let shownRevision = 0;
   let applying = false;
@@ -31,7 +32,9 @@ export function mountInputPane(store: Store<AppState>): EditorView {
       store.update((state) => ({ ...state, input: next }));
     }
   });
-  const view = makeEditor(byId('input-editor'), 'Input code', [baseExtensions(true, access.of(accessOf(true))), typed]);
+  const editing = codeEditing(module);
+  const view = makeEditor(byId('input-editor'), 'Input code', [baseExtensions(true, access.of(accessOf(true))), editing.extension, typed]);
+  editing.attach(view, byId('input-editor'));
   view.dom.addEventListener(
     'paste',
     (event) => {

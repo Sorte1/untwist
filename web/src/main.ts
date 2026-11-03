@@ -102,7 +102,7 @@ function main(): void {
     store.update((state) => runCancelled(state, performance.now()));
   };
   mountToolbar(store, { run, cancel });
-  const inputView = mountInputPane(store);
+  const inputView = mountInputPane(store, engine.module);
   const outputView = mountOutputPane(store, engine.module);
   mountModuleTree(store);
   mountDownload(store, () => outputView.state.doc.toString());
