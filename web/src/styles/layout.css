@@ -625,6 +625,27 @@ button, input {
   border-left: 1px solid var(--border);
 }
 
+.pane {
+  --pane-strand: var(--strand-a);
+  transition: box-shadow 120ms;
+}
+
+.pane-output {
+  --pane-strand: var(--strand-b);
+}
+
+.pane:has(> .pane-body:focus-within) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pane-strand) 55%, transparent);
+}
+
+.pane:has(> .pane-body:focus-within) > .pane-head {
+  background: color-mix(in srgb, var(--pane-strand) 9%, var(--head));
+}
+
+.pane:has(> .pane-body:focus-within) .pane-title {
+  color: var(--pane-strand);
+}
+
 .diff-mode .pane-output {
   border-left: 0;
   border-image: linear-gradient(90deg, var(--strand-a) 50%, var(--strand-b) 50%) 1;
