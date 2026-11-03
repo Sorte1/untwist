@@ -85,3 +85,53 @@ export function snippetOf(text: string, from: number, to: number): Snippet {
     after: tail.length > AFTER_CHARS ? `${tail.slice(0, AFTER_CHARS)}${ELLIPSIS}` : tail,
   };
 }
+
+export interface Range {
+  readonly from: number;
+  readonly to: number;
+}
+
+export function nearestMatch(text: string, needle: string, near: number): Range | null {
+  if (needle === '') {
+    return null;
+  }
+  let best: number | null = null;
+  for (let at = text.indexOf(needle); at !== -1; at = text.indexOf(needle, at + 1)) {
+    if (best === null || Math.abs(at - near) < Math.abs(best - near)) {
+      best = at;
+    }
+    if (at > near) {
+      break;
+    }
+  }
+  return best === null ? null : { from: best, to: best + needle.length };
+}
+
+function sharedEnds(original: string, edited: string): { readonly prefix: number; readonly suffix: number } {
+  const shortest = Math.min(original.length, edited.length);
+  let prefix = 0;
+  while (prefix < shortest && original.charCodeAt(prefix) === edited.charCodeAt(prefix)) {
+    prefix += 1;
+  }
+  let suffix = 0;
+  while (suffix < shortest - prefix && original.charCodeAt(original.length - 1 - suffix) === edited.charCodeAt(edited.length - 1 - suffix)) {
+    suffix += 1;
+  }
+  return { prefix, suffix };
+}
+
+export function mappedRange(original: string, edited: string, hit: Range): Range {
+  if (original === edited) {
+    return hit;
+  }
+  const { prefix, suffix } = sharedEnds(original, edited);
+  if (hit.to <= prefix) {
+    return hit;
+  }
+  const shift = edited.length - original.length;
+  if (hit.from >= original.length - suffix) {
+    return { from: hit.from + shift, to: hit.to + shift };
+  }
+  const at = Math.min(hit.from, edited.length);
+  return nearestMatch(edited, original.slice(hit.from, hit.to), hit.from) ?? { from: at, to: at };
+}
