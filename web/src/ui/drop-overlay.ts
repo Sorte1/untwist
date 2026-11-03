@@ -53,8 +53,12 @@ function describe(overlay: HTMLElement, transfer: DataTransfer): void {
   detail?.replaceChildren(file === undefined ? 'Read locally, never uploaded' : `${sizeLabel(file.size)} · read locally, never uploaded`);
 }
 
+export function mayCarryFiles(types: readonly string[]): boolean {
+  return types.length === 0 || types.includes('Files');
+}
+
 function carriesFiles(event: DragEvent): boolean {
-  return event.dataTransfer?.types.includes('Files') ?? false;
+  return event.dataTransfer !== null && mayCarryFiles([...event.dataTransfer.types]);
 }
 
 function wireOpenFile(loader: Loader): void {
