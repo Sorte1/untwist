@@ -1,26 +1,13 @@
 import { StateEffect, StateField, type Extension } from '@codemirror/state';
 import { EditorView, hoverTooltip, showTooltip, type Tooltip } from '@codemirror/view';
+import { globals, memberBuiltin } from './builtins';
+import { builtinCard, button, el, signatureLine, stringCard, valueLine, whereLabel } from './cards';
+import { describeAt, ownerOf } from './complete';
+import { memberNameAt, stringAt } from './context';
 import { definitionAt, goToDefinition, parsed, referencesAt, showReferences, type DefinitionReply, type LangHooks, type RenameReply } from './extensions';
+import { decodeJsString, hasEscapes } from './js-string';
 
 const openRename = StateEffect.define<number | null>();
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = ''): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  node.className = className;
-  node.textContent = text;
-  return node;
-}
-
-function button(label: string, hint: string, action: () => void): HTMLButtonElement {
-  const node = el('button', 'cm-lang-btn', label);
-  node.type = 'button';
-  if (hint !== '') {
-    node.append(el('span', 'cm-lang-key', hint));
-  }
-  node.addEventListener('mousedown', (event) => event.preventDefault());
-  node.addEventListener('click', action);
-  return node;
-}
 
 async function applyRename(view: EditorView, hooks: LangHooks, pos: number, name: string): Promise<string | null> {
   const reply = parsed<RenameReply>(await hooks.client.query('rename', pos, name));
@@ -92,23 +79,14 @@ function focusInput(view: EditorView): void {
   input?.select();
 }
 
-function lineOf(view: EditorView, pos: number): number {
-  return view.state.doc.lineAt(Math.min(pos, view.state.doc.length)).number;
-}
-
-function whereLabel(view: EditorView, definition: DefinitionReply): string {
-  if (definition.module !== undefined) {
-    const name = definition.name === '*' || definition.name === undefined ? '' : ` · ${definition.name}`;
-    return `From ${definition.module}${name}`;
-  }
-  return `Declared on line ${lineOf(view, definition.span[0])}`;
-}
-
 function cardDom(view: EditorView, hooks: LangHooks, pos: number, definition: DefinitionReply, count: number, open: (view: EditorView) => boolean): HTMLElement {
   const word = view.state.wordAt(pos);
   const dom = el('div', 'cm-lang-card cm-lang-hover');
-  const signature = el('div', 'cm-lang-sig');
-  signature.append(el('span', 'cm-lang-kind', definition.kind), document.createTextNode(' '), el('span', 'cm-lang-name', word === null ? '' : view.state.sliceDoc(word.from, word.to)));
+  const name = word === null ? '' : view.state.sliceDoc(word.from, word.to);
+  dom.append(signatureLine(definition.kind, name, definition));
+  if (definition.value !== undefined) {
+    dom.append(valueLine(definition.value, definition.decoded === true));
+  }
   const actions = el('div', 'cm-lang-actions');
   actions.append(
     button('Go to definition', 'F12', () => void goToDefinition(view, hooks, pos)),
@@ -118,19 +96,45 @@ function cardDom(view: EditorView, hooks: LangHooks, pos: number, definition: De
       open(view);
     }),
   );
-  dom.append(signature, el('div', 'cm-lang-where', whereLabel(view, definition)), actions);
+  dom.append(el('div', 'cm-lang-where', whereLabel(view, definition)), actions);
   return dom;
+}
+
+async function builtinAt(view: EditorView, hooks: LangHooks, pos: number, word: { from: number; to: number }): Promise<HTMLElement | null> {
+  const member = memberNameAt(view.state, pos);
+  if (member !== null) {
+    const described = member.subject.name === null ? null : await describeAt(hooks.client, member.subject.from, member.subject.name);
+    const owner = ownerOf(member.subject, described);
+    const builtin = memberBuiltin(owner, member.property);
+    return builtin === null ? null : builtinCard(builtin, owner.global ? owner.name : '');
+  }
+  const builtin = globals().get(view.state.sliceDoc(word.from, word.to));
+  return builtin === undefined ? null : builtinCard(builtin, '');
+}
+
+function decodedAt(view: EditorView, pos: number): { from: number; to: number; dom: HTMLElement } | null {
+  const string = stringAt(view.state, pos);
+  if (string === null || !hasEscapes(string.literal)) {
+    return null;
+  }
+  const value = decodeJsString(string.literal);
+  return value === null ? null : { from: string.from, to: string.to, dom: stringCard(value) };
 }
 
 export function hovering(hooks: LangHooks, open: (view: EditorView) => boolean): Extension {
   return hoverTooltip(async (view, pos) => {
+    const decoded = decodedAt(view, pos);
+    if (decoded !== null) {
+      return { pos: decoded.from, end: decoded.to, above: false, create: () => ({ dom: decoded.dom }) };
+    }
     const word = view.state.wordAt(pos);
     if (word === null) {
       return null;
     }
     const definition = await definitionAt(hooks.client, pos);
     if (definition === null) {
-      return null;
+      const dom = await builtinAt(view, hooks, pos, word);
+      return dom === null ? null : { pos: word.from, end: word.to, above: false, create: () => ({ dom }) };
     }
     const count = (await referencesAt(hooks.client, pos)).length;
     return { pos: word.from, end: word.to, above: false, create: () => ({ dom: cardDom(view, hooks, pos, definition, count, open) }) };

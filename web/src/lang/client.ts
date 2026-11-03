@@ -2,7 +2,7 @@ export const DEBOUNCE_MS = 300;
 export const RESPAWN_FLOOR_BYTES = 64 * 1024 * 1024;
 export const RESPAWN_RATIO = 32;
 
-export type QueryOp = 'definition' | 'references' | 'rename' | 'completions';
+export type QueryOp = 'definition' | 'references' | 'rename' | 'completions' | 'describe';
 
 export interface Problem {
   readonly message: string;
@@ -36,7 +36,7 @@ export interface WorkerLike {
   terminate(): void;
 }
 
-export type LangStatus = 'loading' | 'analysing' | 'ready' | 'off' | 'failed';
+export type LangStatus = 'idle' | 'loading' | 'analysing' | 'ready' | 'off' | 'failed';
 
 export interface LangEvents {
   readonly status: (status: LangStatus) => void;
@@ -163,6 +163,14 @@ export class LangClient {
     return value instanceof Uint32Array ? [...value] : [];
   }
 
+  cancel(): void {
+    if (this.#timer !== null) {
+      clearTimeout(this.#timer);
+      this.#timer = null;
+    }
+    this.#source = null;
+  }
+
   dispose(): void {
     if (this.#timer !== null) {
       clearTimeout(this.#timer);
@@ -180,6 +188,11 @@ export class LangClient {
   }
 
   async #analyze(text: string, gen: number): Promise<void> {
+    if (text === '' && this.#worker === null) {
+      this.#events.status('idle');
+      this.#events.analyzed({ available: true, problems: [], ms: 0, memoryBytes: 0 });
+      return;
+    }
     if (!(await this.#start()) || gen !== this.#gen) {
       return;
     }

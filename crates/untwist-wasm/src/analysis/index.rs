@@ -29,6 +29,7 @@ pub enum Kind {
     Function,
     Class,
     Import,
+    Param,
     Other,
 }
 
@@ -41,6 +42,7 @@ impl Kind {
             Kind::Function => "function",
             Kind::Class => "class",
             Kind::Import => "import",
+            Kind::Param => "param",
             Kind::Other => "binding",
         }
     }
@@ -71,6 +73,47 @@ pub struct Scope {
     pub hazard: bool,
     pub var_scope: bool,
     pub strict: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Form {
+    #[default]
+    Unknown,
+    String,
+    Number,
+    Boolean,
+    Regexp,
+    Array,
+    Object,
+    Function,
+    Class,
+    Instance(u32),
+}
+
+impl Form {
+    pub fn label(self, names: &Names) -> Option<String> {
+        let label = match self {
+            Form::Unknown => return None,
+            Form::String => "string",
+            Form::Number => "number",
+            Form::Boolean => "boolean",
+            Form::Regexp => "regexp",
+            Form::Array => "array",
+            Form::Object => "object",
+            Form::Function => "function",
+            Form::Class => "class",
+            Form::Instance(name) => return Some(format!("new {}", names.get(name))),
+        };
+        Some(label.to_string())
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Detail {
+    pub form: Form,
+    pub value: Option<Box<str>>,
+    pub decoded: bool,
+    pub params: Option<Box<[Box<str>]>>,
 }
 
 #[derive(Clone, Debug)]
@@ -127,6 +170,8 @@ pub struct Index {
     pub exports: Vec<(Box<str>, [u32; 2])>,
     pub names: Names,
     pub problems: Vec<Problem>,
+    pub details: FxHashMap<u32, Detail>,
+    pub properties: Vec<(u32, u32, u32)>,
 }
 
 impl Index {
@@ -205,6 +250,29 @@ impl Index {
             current = scope.parent;
         }
         0
+    }
+
+    pub fn detail(&self, symbol: u32) -> Option<&Detail> {
+        self.details.get(&symbol)
+    }
+
+    pub fn resolve(&self, pos: u32, name: &str) -> Option<u32> {
+        let name = self.names.find(name)?;
+        self.ancestors(self.scope_at(pos))
+            .find_map(|scope| self.binding(scope, name))
+    }
+
+    pub fn properties_of(&self, symbol: u32, object: u32) -> impl Iterator<Item = &str> + '_ {
+        let key = (symbol, object);
+        let from = self
+            .properties
+            .partition_point(|entry| (entry.0, entry.1) < key);
+        self.properties
+            .get(from..)
+            .unwrap_or_default()
+            .iter()
+            .take_while(move |entry| (entry.0, entry.1) == key)
+            .map(|entry| self.names.get(entry.2))
     }
 
     pub fn ancestors(&self, from: u32) -> impl Iterator<Item = u32> + '_ {

@@ -2,22 +2,32 @@ use std::cell::Cell;
 
 use oxc_ast::ast::{
     Argument, AssignmentExpression, AssignmentTarget, AssignmentTargetPropertyIdentifier,
-    BindingIdentifier, BindingPattern, BindingProperty, Class, Declaration, ExportDeclaration,
-    ExportDefaultDeclaration, ExportDefaultDeclarationKind, ExportNamedDeclaration, Expression,
-    Function, IdentifierReference, ImportDeclaration, ImportDeclarationSpecifier, ImportSpecifier,
-    JSXElementName, ModuleExportName, ObjectProperty, StaticMemberExpression, VariableDeclarator,
+    BindingIdentifier, BindingPattern, BindingProperty, Class, ComputedMemberExpression,
+    Declaration, ExportDeclaration, ExportDefaultDeclaration, ExportDefaultDeclarationKind,
+    ExportNamedDeclaration, Expression, FormalParameters, Function, IdentifierReference,
+    ImportDeclaration, ImportDeclarationSpecifier, ImportSpecifier, JSXElementName,
+    ModuleExportName, ObjectProperty, StaticMemberExpression, VariableDeclarator,
 };
 use oxc_ast::AstKind;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::{ScopeFlags, ScopeId, Scoping, SymbolFlags, SymbolId};
 use oxc_span::{GetSpan, Span};
 
-use super::index::{Kind, Link, Member, Names, Occurrence, Shape, Symbol, NONE};
+use rustc_hash::FxHashMap;
+
+use super::index::{Detail, Form, Kind, Link, Member, Names, Occurrence, Shape, Symbol, NONE};
+use super::insight::{
+    class_init, constant_detail, constructor_params, function_init, object_init, object_keys,
+    params_of,
+};
 use super::offsets::Utf16Map;
 
 pub struct Collector<'s> {
     pub scoping: &'s Scoping,
     pub map: &'s Utf16Map,
+    pub text: &'s str,
+    pub details: FxHashMap<u32, Detail>,
+    pub properties: Vec<(u32, u32, u32)>,
     pub names: Names,
     pub occurrences: Vec<Occurrence>,
     pub symbols: Vec<Symbol>,
@@ -79,7 +89,7 @@ fn is_exports_object(object: &Expression<'_>) -> bool {
 }
 
 impl<'s> Collector<'s> {
-    pub fn new(scoping: &'s Scoping, map: &'s Utf16Map) -> Self {
+    pub fn new(scoping: &'s Scoping, map: &'s Utf16Map, text: &'s str) -> Self {
         let mut names = Names::default();
         let symbols = scoping
             .symbol_ids()
@@ -98,6 +108,9 @@ impl<'s> Collector<'s> {
         Self {
             scoping,
             map,
+            text,
+            details: FxHashMap::default(),
+            properties: Vec::new(),
             names,
             occurrences: Vec::new(),
             symbols,
@@ -206,6 +219,69 @@ impl<'s> Collector<'s> {
         }
     }
 
+    fn callable(
+        &mut self,
+        id: Option<&BindingIdentifier<'_>>,
+        form: Form,
+        params: Box<[Box<str>]>,
+    ) {
+        if let Some(symbol) = id.and_then(|id| id.symbol_id.get()) {
+            self.details.insert(
+                index_of(symbol.index()),
+                Detail {
+                    form,
+                    params: Some(params),
+                    ..Detail::default()
+                },
+            );
+        }
+    }
+
+    fn record_init(&mut self, id: &BindingIdentifier<'_>, init: &Expression<'_>) {
+        let Some(symbol) = id.symbol_id.get() else {
+            return;
+        };
+        if let Some(params) = function_init(init) {
+            self.callable(Some(id), Form::Function, params_of(params, self.text));
+        } else if let Some(class) = class_init(init) {
+            self.callable(Some(id), Form::Class, constructor_params(class, self.text));
+        } else if !self.scoping.symbol_is_mutated(symbol) {
+            if let Some(detail) = constant_detail(init, self.text, &mut self.names) {
+                self.details.insert(index_of(symbol.index()), detail);
+            }
+        }
+        if let Some(object) = object_init(init) {
+            for key in object_keys(object) {
+                let name = self.names.intern(&key);
+                self.properties.push((index_of(symbol.index()), NONE, name));
+            }
+        }
+    }
+
+    fn property_seen(&mut self, object: &Expression<'_>, property: &str) {
+        let Expression::Identifier(object) = object else {
+            return;
+        };
+        let key = match self.symbol_of_reference(object) {
+            Some(symbol) => (index_of(symbol.index()), NONE),
+            None => (NONE, self.names.intern(&object.name)),
+        };
+        let name = self.names.intern(property);
+        self.properties.push((key.0, key.1, name));
+    }
+
+    fn mark_params(&mut self, pattern: &BindingPattern<'_>) {
+        for id in pattern.get_binding_identifiers() {
+            if let Some(symbol) = id
+                .symbol_id
+                .get()
+                .and_then(|symbol| self.symbol_mut(symbol))
+            {
+                symbol.kind = Kind::Param;
+            }
+        }
+    }
+
     fn named_binding(&mut self, id: Option<&BindingIdentifier<'_>>) {
         if let Some(id) = id {
             self.record_binding(id);
@@ -269,11 +345,21 @@ impl<'a> VisitJs<'a> for Collector<'_> {
     }
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.callable(
+            it.id.as_ref(),
+            Form::Function,
+            params_of(&it.params, self.text),
+        );
         self.named_binding(it.id.as_ref());
         walk_js::walk_function(self, it, flags);
     }
 
     fn visit_class(&mut self, it: &Class<'a>) {
+        self.callable(
+            it.id.as_ref(),
+            Form::Class,
+            constructor_params(it, self.text),
+        );
         self.named_binding(it.id.as_ref());
         walk_js::walk_class(self, it);
     }
@@ -359,11 +445,31 @@ impl<'a> VisitJs<'a> for Collector<'_> {
         walk_js::walk_export_default_declaration(self, it);
     }
 
+    fn visit_formal_parameters(&mut self, it: &FormalParameters<'a>) {
+        for item in &it.items {
+            self.mark_params(&item.pattern);
+        }
+        if let Some(rest) = &it.rest {
+            self.mark_params(&rest.rest.argument);
+        }
+        walk_js::walk_formal_parameters(self, it);
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        if let Expression::StringLiteral(property) = &it.expression {
+            self.property_seen(&it.object, &property.value);
+        }
+        walk_js::walk_computed_member_expression(self, it);
+    }
+
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
         if let (BindingPattern::BindingIdentifier(id), Some(source)) =
             (&it.id, require_source(it.init.as_ref()))
         {
             self.link(id.symbol_id.get(), source, "*");
+        }
+        if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
+            self.record_init(id, init);
         }
         walk_js::walk_variable_declarator(self, it);
     }
@@ -382,6 +488,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
     }
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        self.property_seen(&it.object, &it.property.name);
         if let Expression::Identifier(object) = &it.object {
             let symbol = self.symbol_of_reference(object);
             let linked = symbol

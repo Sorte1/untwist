@@ -10,11 +10,18 @@ import LangWorker from './lang.worker.ts?worker';
 import { langLook } from './look';
 import { hovering, renaming } from './tooltips';
 
+export type Pane = 'input' | 'output';
+
 export interface EditDeps {
   readonly view: EditorView;
   readonly gate: Compartment;
   readonly store: Store<AppState>;
   readonly module: Promise<WebAssembly.Module>;
+  readonly pane: Pane;
+}
+
+function shownInput(state: AppState): boolean {
+  return !state.input.large;
 }
 
 function megabytes(bytes: number): string {
@@ -23,6 +30,8 @@ function megabytes(bytes: number): string {
 
 export function statusText(status: LangStatus, capBytes: number | null): string {
   switch (status) {
+    case 'idle':
+      return '';
     case 'loading':
       return 'Language features · loading';
     case 'analysing':
@@ -72,13 +81,16 @@ function moduleHost(store: Store<AppState>, client: LangClient, view: EditorView
 class Language {
   readonly #deps: EditDeps;
   readonly #client: LangClient;
-  readonly #problemsLabel = byId('output-problems');
-  readonly #statusLabel = byId('output-lang');
+  readonly #problemsLabel: HTMLElement;
+  readonly #statusLabel: HTMLElement;
   #status: LangStatus = 'loading';
   #problems = 0;
+  #enabled = true;
 
   constructor(deps: EditDeps) {
     this.#deps = deps;
+    this.#problemsLabel = byId(`${deps.pane}-problems`);
+    this.#statusLabel = byId(`${deps.pane}-lang`);
     this.#client = new LangClient(() => new LangWorker() as unknown as WorkerLike, deps.module, {
       status: (status) => {
         this.#status = status;
@@ -92,18 +104,31 @@ class Language {
       },
     });
     deps.view.dispatch({ effects: deps.gate.reconfigure(this.#extensions()) });
-    deps.store.subscribe((state, previous) => {
-      if (state.run.result !== previous.run.result || state.selectedModule !== previous.selectedModule) {
-        this.#analyse();
-      }
-    });
+    deps.store.subscribe((state, previous) => this.#stored(state, previous));
+    this.#enabled = this.#wanted(deps.store.get());
     this.#analyse();
     this.#paint();
   }
 
+  #wanted(state: AppState): boolean {
+    return this.#deps.pane === 'output' || shownInput(state);
+  }
+
+  #stored(state: AppState, previous: AppState): void {
+    const enabled = this.#wanted(state);
+    const toggled = enabled !== this.#enabled;
+    this.#enabled = enabled;
+    const output = this.#deps.pane === 'output' && (state.run.result !== previous.run.result || state.selectedModule !== previous.selectedModule);
+    if (toggled || output) {
+      this.#analyse();
+      this.#paint();
+    }
+  }
+
   #extensions() {
     const { store, view } = this.#deps;
-    const hooks: LangHooks = { client: this.#client, host: moduleHost(store, this.#client, view) };
+    const host = this.#deps.pane === 'output' ? moduleHost(store, this.#client, view) : null;
+    const hooks: LangHooks = { client: this.#client, host };
     const rename = renaming(hooks);
     return [
       navigation(hooks, rename.open),
@@ -115,21 +140,28 @@ class Language {
   }
 
   #updated(update: ViewUpdate): void {
-    if (update.docChanged) {
+    if (update.docChanged && this.#enabled) {
       this.#client.changed(() => update.view.state.doc.toString());
     }
   }
 
   #analyse(): void {
     const view = this.#deps.view;
+    if (!this.#enabled) {
+      this.#client.cancel();
+      this.#problems = 0;
+      applyProblems(view, []);
+      return;
+    }
     this.#client.changed(() => view.state.doc.toString());
     this.#client.flush();
   }
 
   #paint(): void {
     const shown = this.#status === 'ready' ? this.#problems : 0;
-    this.#problemsLabel.hidden = false;
-    this.#statusLabel.hidden = false;
+    const shownLabels = this.#enabled && this.#status !== 'idle';
+    this.#problemsLabel.hidden = !shownLabels;
+    this.#statusLabel.hidden = !shownLabels;
     setText(this.#problemsLabel, problemsText(shown));
     this.#problemsLabel.dataset['count'] = String(shown);
     setText(this.#statusLabel, statusText(this.#status, this.#client.capBytes));

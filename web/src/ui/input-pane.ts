@@ -4,6 +4,7 @@ import { byId, linesLabel, setText, sizeLabel } from '../dom';
 import { inputOf, PREVIEW_CHARS, type AppState, type InputState } from '../state';
 import type { Store } from '../store';
 import { codeEditing } from './editing';
+import { mountLanguage } from './language-mount';
 import { access as accessOf, baseExtensions, makeEditor, replaceDoc } from './editor';
 
 const UNTITLED = 'untitled.js';
@@ -33,8 +34,10 @@ export function mountInputPane(store: Store<AppState>, module: Promise<WebAssemb
     }
   });
   const editing = codeEditing(module);
-  const view = makeEditor(byId('input-editor'), 'Input code', [baseExtensions(true, access.of(accessOf(true))), editing.extension, typed]);
+  const lang = new Compartment();
+  const view = makeEditor(byId('input-editor'), 'Input code', [baseExtensions(true, access.of(accessOf(true))), editing.extension, lang.of([]), typed]);
   editing.attach(view, byId('input-editor'));
+  mountLanguage(store, view, lang, module, 'input');
   view.dom.addEventListener(
     'paste',
     (event) => {

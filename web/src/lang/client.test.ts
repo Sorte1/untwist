@@ -99,6 +99,29 @@ describe('LangClient', () => {
     expect(workers[0]?.analyses().map((m) => m.text)).toEqual(['ab']);
   });
 
+  test('an empty text is clean without starting a worker', async () => {
+    const { client, workers, statuses, problems } = setup();
+    client.changed(() => '');
+    client.flush();
+    await settle();
+    expect(workers).toHaveLength(0);
+    expect(statuses).toEqual(['idle']);
+    expect(problems).toEqual([0]);
+    client.changed(() => 'a');
+    client.flush();
+    await settle();
+    expect(workers[0]?.analyses().map((m) => m.text)).toEqual(['a']);
+  });
+
+  test('a cancelled edit is never analysed', async () => {
+    const { client, workers } = setup();
+    client.changed(() => 'a');
+    client.cancel();
+    vi.advanceTimersByTime(DEBOUNCE_MS);
+    await settle();
+    expect(workers).toHaveLength(0);
+  });
+
   test('a stale analysis and a stale answer are dropped', async () => {
     const { client, workers, problems } = setup();
     client.changed(() => 'a');

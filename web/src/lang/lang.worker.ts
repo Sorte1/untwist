@@ -1,6 +1,8 @@
 import { analysis_cap_bytes, analyze, initSync, type Analysis } from '../engine/pkg/untwist_wasm.js';
 import type { LangReply, LangRequest, QueryOp } from './client';
 
+const LENIENT_OPS: ReadonlySet<QueryOp> = new Set(['completions', 'describe']);
+
 let memory: WebAssembly.Memory | null = null;
 let current: Analysis | null = null;
 let lastClean: Analysis | null = null;
@@ -60,6 +62,8 @@ function answer(analysis: Analysis, op: QueryOp, pos: number, name: string): unk
       return analysis.rename(pos, name);
     case 'completions':
       return analysis.completions(pos);
+    case 'describe':
+      return analysis.describe(pos, name) ?? null;
   }
 }
 
@@ -78,7 +82,7 @@ function handle(request: LangRequest): void {
   } else if (request.kind === 'analyze') {
     analyzeText(request.gen, request.text);
   } else if (request.kind === 'query') {
-    const source = request.op === 'completions' && current !== lastClean ? (lastClean ?? current) : current;
+    const source = LENIENT_OPS.has(request.op) && current !== lastClean ? (lastClean ?? current) : current;
     const value = source === null ? null : answer(source, request.op, request.pos, request.name);
     reply({ kind: 'answer', id: request.id, gen: currentGen, value });
   } else {
