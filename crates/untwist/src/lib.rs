@@ -19,6 +19,7 @@ pub use pipeline::{
 };
 #[cfg(feature = "refusal-spans")]
 pub use pipeline::{RefusalSite, SiteAt};
+pub use pipeline::{Snapshot, SnapshotCode};
 pub use plugin::{PluginCtor, Plugins, Stage};
 pub use report::{stage_rows, StageReport, StageRow};
 pub use stats::{CollisionStats, DecodeStats, RunStats};

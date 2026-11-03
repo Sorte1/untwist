@@ -10,6 +10,7 @@ mod refusal;
 #[cfg(feature = "refusal-spans")]
 mod refusal_spans;
 mod shell;
+mod snapshots;
 mod stages;
 mod unpack;
 
@@ -30,6 +31,7 @@ use input::InputResult;
 use ladder::Ladder;
 #[cfg(feature = "refusal-spans")]
 pub use refusal_spans::{RefusalSite, SiteAt};
+pub use snapshots::{Snapshot, SnapshotCode};
 
 pub use notes::{
     ADMIT_PANICKED, ANONYMOUS_SHELL_KEPT, ANONYMOUS_SHELL_STRIPPED, GUARD_KEPT_ACROSS_LINES,
@@ -50,6 +52,7 @@ pub struct Output {
     pub single_file: bool,
     pub heap_peak: u64,
     pub stats: crate::stats::RunStats,
+    pub snapshots: Vec<Snapshot>,
     #[cfg(feature = "refusal-spans")]
     pub refusal_spans: Vec<String>,
     #[cfg(feature = "refusal-spans")]
@@ -131,6 +134,7 @@ struct OutputParts {
     stats: crate::stats::RunStats,
     guards: GuardRecord,
     unbundled: bool,
+    snapshots: Vec<Snapshot>,
     #[cfg(feature = "refusal-spans")]
     refusal_spans: Vec<String>,
     #[cfg(feature = "refusal-spans")]
@@ -148,6 +152,12 @@ impl OutputParts {
         for (index, result) in results.into_iter().enumerate() {
             #[cfg(feature = "refusal-spans")]
             parts.absorb_sites(index, several, result.refusal_sites);
+            parts
+                .snapshots
+                .extend(result.snapshots.rows.into_iter().map(|row| Snapshot {
+                    input: index,
+                    ..row
+                }));
             parts.unbundled &= result.refused || result.unbundled;
             parts.codes.push(result.code);
             parts.stages.extend(result.stages);
@@ -190,6 +200,7 @@ impl OutputParts {
             single_file,
             heap_peak: self.heap_peak,
             stats: self.stats,
+            snapshots: self.snapshots,
             #[cfg(feature = "refusal-spans")]
             refusal_spans: self.refusal_spans,
             #[cfg(feature = "refusal-spans")]

@@ -2,7 +2,9 @@ import { comparePlan } from '../compare';
 import { byId, setText } from '../dom';
 import { diffInWorker, type PendingDiff, type WorkerDiff } from '../diff/client';
 import type { Hunk } from '../diff/lines';
+import type { View } from '../settings/settings';
 import { utf8Bytes, lineStats, type AppState } from '../state';
+import { stepSides } from '../steps';
 import type { Store } from '../store';
 import { virtualList } from './details/virtual-list';
 import { currentBundle } from './module-tree';
@@ -26,6 +28,7 @@ interface Sides {
 
 export type DiffPlan =
   | { readonly kind: 'off'; readonly note: string }
+  | { readonly kind: 'code'; readonly text: string; readonly name: string; readonly note: string | null }
   | ({ readonly kind: 'diff' } & Sides)
   | ({ readonly kind: 'big' } & Sides);
 
@@ -99,6 +102,9 @@ function edited(name: string, engine: string, current: string | null): { readonl
 }
 
 function sides(state: AppState, current: string | null): DiffPlan {
+  if (state.settings.view === 'steps') {
+    return stepSides(state);
+  }
   const compared = comparePlan(state);
   if (compared !== null) {
     const note = compared.safe === compared.unsafe ? 'Safe and Unsafe give the same output.' : null;
@@ -139,7 +145,7 @@ function toggleWrap(store: Store<AppState>): void {
   store.update((state) => ({ ...state, settings: { ...state.settings, wrap: !state.settings.wrap } }));
 }
 
-function setView(store: Store<AppState>, view: 'output' | 'diff'): void {
+function setView(store: Store<AppState>, view: View): void {
   store.update((state) => ({ ...state, settings: { ...state.settings, view } }));
 }
 
@@ -152,6 +158,7 @@ export function mountDiffView(store: Store<AppState>, current: () => string): vo
   let pending: PendingDiff | null = null;
   byId('view-output').addEventListener('click', () => setView(store, 'output'));
   byId('view-diff').addEventListener('click', () => setView(store, 'diff'));
+  byId('view-steps').addEventListener('click', () => setView(store, 'steps'));
   byId('diff-wrap').addEventListener('click', () => toggleWrap(store));
   const showNote = (text: string | null) => {
     note.hidden = text === null;
@@ -197,7 +204,13 @@ export function mountDiffView(store: Store<AppState>, current: () => string): vo
     const plan = diffPlan(state, current());
     shown = plan;
     showNote(plan.note);
+    byId('diff-legend').dataset['off'] = String(plan.kind === 'code');
     if (plan.kind === 'off' || merge === null) {
+      return;
+    }
+    if (plan.kind === 'code') {
+      handle = merge.mountCode(container, plan.text, state.settings.wrap);
+      container.dataset['view'] = 'code';
       return;
     }
     setText(byId('diff-after'), plan.afterName);
@@ -212,9 +225,10 @@ export function mountDiffView(store: Store<AppState>, current: () => string): vo
     handle = mounted;
   };
   store.subscribe((state, previous) => {
-    const diff = state.settings.view === 'diff';
+    const { view } = state.settings;
+    const diff = view !== 'output';
     document.body.classList.toggle('diff-mode', diff);
-    for (const [id, on] of [['view-output', !diff], ['view-diff', diff], ['diff-wrap', state.settings.wrap]] as const) {
+    for (const [id, on] of [['view-output', !diff], ['view-diff', view === 'diff'], ['view-steps', view === 'steps'], ['diff-wrap', state.settings.wrap]] as const) {
       byId(id).setAttribute('aria-pressed', String(on));
     }
     const changed =
@@ -222,6 +236,8 @@ export function mountDiffView(store: Store<AppState>, current: () => string): vo
       state.selectedModule !== previous.selectedModule ||
       state.input !== previous.input ||
       state.compare !== previous.compare ||
+      state.steps !== previous.steps ||
+      view !== previous.settings.view ||
       state.settings.wrap !== previous.settings.wrap;
     if (!diff) {
       clear();

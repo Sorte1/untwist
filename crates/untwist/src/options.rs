@@ -79,6 +79,7 @@ pub struct Options {
     pub test_hooks: TestHooks,
     pub disabled_passes: Vec<&'static str>,
     pub refusal_spans: bool,
+    pub stage_snapshots: Option<usize>,
 }
 
 impl Default for Options {
@@ -105,6 +106,7 @@ impl Default for Options {
             test_hooks: TestHooks::default(),
             disabled_passes: Vec::new(),
             refusal_spans: false,
+            stage_snapshots: None,
         }
     }
 }

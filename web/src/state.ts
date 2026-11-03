@@ -2,6 +2,7 @@ import type { RunResult } from './engine/types';
 import { explainedLine, firedLimits, PARTIAL_LIMITS, type ExplainedLimit } from './limits';
 import type { StageMark } from './progress';
 import { DEFAULTS, type Settings } from './settings/settings';
+import { NO_STEPS, type StepsState } from './steps';
 
 export type Theme = 'dark' | 'light';
 export type EngineStatus = 'loading' | 'ready' | 'failed';
@@ -56,6 +57,7 @@ export interface AppState {
   readonly settingsProblems: readonly string[];
   readonly selectedModule: number | null;
   readonly compare: CompareState;
+  readonly steps: StepsState;
 }
 
 export function utf8Bytes(text: string): number {
@@ -106,6 +108,7 @@ export function initialState(theme: Theme, settings: Settings = DEFAULTS, settin
     input: inputOf('', 'untitled.js', 0),
     run: { status: 'idle', startedAt: 0, elapsedMs: 0, result: null, error: null, ranFlags: null, outputFlags: null, ranInput: null, outputInput: null, stages: [] },
     compare: NO_COMPARE,
+    steps: NO_STEPS,
   };
 }
 

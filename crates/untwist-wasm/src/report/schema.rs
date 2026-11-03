@@ -1,5 +1,5 @@
 use serde::Serialize;
-use untwist::{stage_rows, Output, RefusalSite, StageRow};
+use untwist::{stage_rows, Output, RefusalSite, Snapshot, SnapshotCode, StageRow};
 use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 use untwist_core::pass::{Note, NoteKind};
 
@@ -40,6 +40,14 @@ struct SiteRow<'a> {
     layer: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     input_span: Option<[u32; 2]>,
+}
+
+#[derive(Serialize)]
+struct SnapshotRow {
+    stage: &'static str,
+    round: u32,
+    layer: u32,
+    kept: &'static str,
 }
 
 #[derive(Serialize)]
@@ -101,6 +109,8 @@ struct Report<'a> {
     stats: &'a untwist::RunStats,
     #[serde(skip_serializing_if = "Option::is_none")]
     bundle: Option<BundleRow<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    snapshots: Vec<SnapshotRow>,
 }
 
 pub struct RunFacts<'a> {
@@ -177,6 +187,22 @@ fn site_rows<'a>(sites: &'a [RefusalSite], source: &str) -> Vec<SiteRow<'a>> {
         .collect()
 }
 
+fn snapshot_rows(snapshots: &[Snapshot]) -> Vec<SnapshotRow> {
+    snapshots
+        .iter()
+        .map(|snapshot| SnapshotRow {
+            stage: snapshot.stage,
+            round: snapshot.round,
+            layer: snapshot.layer,
+            kept: match snapshot.code {
+                SnapshotCode::Text(_) => "text",
+                SnapshotCode::Unchanged => "unchanged",
+                SnapshotCode::OverCap => "over-cap",
+            },
+        })
+        .collect()
+}
+
 fn bundle_row<'a>(output: &'a Output, stdout: &str) -> Option<BundleRow<'a>> {
     let bundle = output.bundle.as_ref()?;
     let spans_hold = !output.single_file && output.codes.len() == 1;
@@ -249,6 +275,7 @@ pub fn report_json(output: &Output, facts: &RunFacts<'_>) -> String {
         },
         stats: &output.stats,
         bundle: bundle_row(output, facts.stdout),
+        snapshots: snapshot_rows(&output.snapshots),
     };
     serde_json::to_string(&report).unwrap_or_default()
 }

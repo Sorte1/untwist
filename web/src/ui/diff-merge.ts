@@ -45,6 +45,21 @@ export function refinedChanges(before: string, after: string, ranges: Int32Array
   return changes;
 }
 
+export function mountCode(parent: HTMLElement, text: string, wrap: boolean): DiffHandle {
+  const host = document.createElement('div');
+  host.className = wrap ? 'editor-host diff-host diff-wrap' : 'editor-host diff-host';
+  parent.append(host);
+  const root = host.attachShadow({ mode: 'open' });
+  const view = new EditorView({ doc: text, extensions: [baseExtensions(false), lines(wrap)], parent: root, root });
+  return {
+    chunks: 0,
+    destroy: () => {
+      view.destroy();
+      host.remove();
+    },
+  };
+}
+
 export function mountDiff(parent: HTMLElement, before: string, after: string, wrap: boolean, ranges?: Int32Array): DiffHandle {
   const host = document.createElement('div');
   host.className = wrap ? 'editor-host diff-host diff-wrap' : 'editor-host diff-host';

@@ -1322,6 +1322,10 @@ button.diag-row:hover .diag-loc {
   white-space: nowrap;
 }
 
+.diff-mode .diff-legend[data-off='true'] {
+  display: none;
+}
+
 .diff-legend .del-mark, .diff-legend .add-mark {
   font-family: var(--mono);
   font-weight: 500;

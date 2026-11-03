@@ -22,6 +22,7 @@ use super::boundary::Boundary;
 use super::layer::{Counters, Layering, Peeled, RoomSeed};
 use super::notes::{consolidate_reach, dedupe_spanned, guard_notes};
 use super::shell::strip_shell;
+use super::snapshots::Snapshots;
 use super::stages::StageCx;
 use super::{summarize_diagnostics, Pipeline, Reservation, PANICKED, TYPESCRIPT_IN_JAVASCRIPT};
 use crate::options::Progress;
@@ -39,6 +40,7 @@ pub(super) struct InputResult {
     pub(super) heap_peak: u64,
     pub(super) guards: GuardRecord,
     pub(super) unbundled: bool,
+    pub(super) snapshots: Snapshots,
     #[cfg(feature = "refusal-spans")]
     pub(super) refusal_sites: Vec<super::RefusalSite>,
 }
@@ -148,7 +150,10 @@ impl Pipeline {
         reservation: Reservation<'_>,
         (room, reserved): (Option<InputRoom>, u64),
     ) -> InputResult {
-        let mut result = InputResult::default();
+        let mut result = InputResult {
+            snapshots: Snapshots::new(self.options.stage_snapshots),
+            ..InputResult::default()
+        };
         let _boundary = Boundary::enter();
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let processed = self.process(source, (reservation, room, reserved), &mut result)?;
@@ -257,6 +262,7 @@ impl Pipeline {
             return Step::Kept(reason);
         }
         *fallback = None;
+        result.snapshots.enter_layer(layering.peeled());
         #[cfg(feature = "refusal-spans")]
         let recorder = self.records_refusal_spans().then(|| {
             (
@@ -305,6 +311,7 @@ impl Pipeline {
             stages: &mut result.stages,
             notes: &mut result.notes,
             heap_peak: &mut result.heap_peak,
+            snapshots: &mut result.snapshots,
         };
         let sem = build_scoping(site.program);
         if checked && declares_an_interface(&sem.scoping) {
@@ -368,6 +375,7 @@ enum Step {
 struct Marks {
     stages: usize,
     notes: usize,
+    snapshots: usize,
     heap_peak: u64,
     counters: Counters,
     room: Option<RoomSeed>,
@@ -378,6 +386,7 @@ impl Marks {
         Self {
             stages: result.stages.len(),
             notes: result.notes.len(),
+            snapshots: result.snapshots.mark(),
             heap_peak: result.heap_peak,
             counters: layering.mark(),
             room: room.map(RoomSeed::of),
@@ -387,6 +396,7 @@ impl Marks {
     fn restore(&self, result: &mut InputResult, layering: &mut Layering) {
         result.stages.truncate(self.stages);
         result.notes.truncate(self.notes);
+        result.snapshots.restore(self.snapshots);
         result.heap_peak = self.heap_peak;
         layering.restore(self.counters);
     }
