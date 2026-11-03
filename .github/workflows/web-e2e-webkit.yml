@@ -3,7 +3,7 @@ name: Web e2e (WebKit)
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - "web/**"
       - "crates/**"
