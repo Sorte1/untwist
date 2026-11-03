@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, openApp, paste, runAndWait, test } from './fixtures';
+import { expect, openApp, openDiagnostics, openSettings, paste, runAndWait, test } from './fixtures';
 
 function decoder(loops: number): string {
   const loop = (name: string, body: string) => `for (var ${name} = 0; ${name} < ${loops}; ${name}++) { ${body} }`;
@@ -24,6 +24,7 @@ test('No limit really lifts the fuel: a decoder over 50M steps decodes only with
   await runAndWait(page);
   expect(await outputText(page)).toContain('b(0) + b(1)');
   await expect(page.locator('#diag-list')).toContainText('step budget exhausted');
+  await openSettings(page);
   await page.locator('#fuel-inf').check();
   expect(page.url()).toContain('fuel=unlimited');
   await runAndWait(page);
@@ -53,6 +54,7 @@ test('a limit no setting lifts is named in plain words, with why, in the chip an
   await expect(chip).not.toHaveText('none fired');
   await expect(chip).not.toHaveText(/(^|, )(budget|refused|unpack-text|eval-cap|stack)(,|$)/);
   expect(await chip.getAttribute('title')).toMatch(/not affected by the fuel setting/);
+  await openDiagnostics(page);
   await page.locator('#details-tab').click();
   await expect(page.locator('#details')).toContainText('not affected by the fuel setting');
 });

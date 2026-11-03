@@ -64,22 +64,37 @@ test('the keyboard reaches every control with a visible focus ring, and leaves t
   await paste(page, 'var a = !0;');
   await runAndWait(page);
   await page.locator('body').click({ position: { x: 5, y: 5 } });
-  const seen = await tabCycle(page, 60);
-  const ids = new Set(seen.map((item) => item.id));
-  for (const id of ['run', 'theme', 'unpack', 'jsx', 'unsafe', 'none', 'mangle', 'fuel-inf', 'copy-link', 'clear-input', 'view-diff', 'copy-output', 'download', 'details-tab']) {
+  const main = await tabCycle(page, 40);
+  const ids = new Set(main.map((item) => item.id));
+  for (const id of ['examples', 'safe', 'settings-toggle', 'theme', 'run', 'clear-input', 'view-diff', 'copy-output', 'download', 'diag-toggle']) {
     expect(ids, id).toContain(id);
   }
-  expect(seen.some((item) => item.inEditor === 'input-editor')).toBe(true);
-  expect(seen.some((item) => item.inEditor === 'output-editor')).toBe(true);
-  const afterInput = seen.findIndex((item) => item.inEditor === 'input-editor');
-  expect(seen[afterInput + 1]?.inEditor ?? null).not.toBe('input-editor');
-  const unringed = seen.filter((item) => item.tag !== 'body' && !/^(solid|auto) [1-9]/.test(item.outline));
+  expect(main.some((item) => item.inEditor === 'input-editor')).toBe(true);
+  expect(main.some((item) => item.inEditor === 'output-editor')).toBe(true);
+  const afterInput = main.findIndex((item) => item.inEditor === 'input-editor');
+  expect(main[afterInput + 1]?.inEditor ?? null).not.toBe('input-editor');
+  await page.locator('#settings-toggle').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#settings')).toBeVisible();
+  const settings = await tabCycle(page, 16);
+  const settingIds = new Set(settings.map((item) => item.id));
+  for (const id of ['settings-close', 'unpack', 'jsx', 'none', 'mangle', 'fuel', 'fuel-inf', 'copy-link']) {
+    expect(settingIds, id).toContain(id);
+  }
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#settings')).toBeHidden();
+  await page.locator('#diag-toggle').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#diagnostics')).toBeVisible();
+  const panel = await tabCycle(page, 4);
+  expect(panel.map((item) => item.id)).toContain('details-tab');
+  const unringed = [...main, ...settings, ...panel].filter((item) => item.tag !== 'body' && !/^(solid|auto) [1-9]/.test(item.outline));
   expect(unringed).toEqual([]);
 });
 
 test('a keyboard-only run: tab into the input, type, Ctrl+Enter, copy', async ({ page }) => {
   await openApp(page);
-  await page.locator('body').click({ position: { x: 5, y: 900 } });
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
   for (let index = 0; index < 80 && (await focused(page)).inEditor !== 'input-editor'; index += 1) {
     await page.keyboard.press('Tab');
   }

@@ -112,7 +112,8 @@ test('hide input round-trips through the link', async ({ page }) => {
   await page.reload();
   await expect(page.locator('#run')).toBeEnabled({ timeout: 30_000 });
   await expect(page.locator('#input-pane')).toBeHidden();
-  await expect(page.locator('#output-pane')).toHaveCSS('height', '680px');
+  const wide = await page.locator('#output-pane').boundingBox();
+  expect(wide?.width ?? 0).toBeGreaterThan(1300);
   await page.locator('#show-input').click();
   await expect(page.locator('#input-pane')).toBeVisible();
   expect(new URL(page.url()).hash).toBe('');

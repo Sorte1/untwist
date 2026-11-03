@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { expect, openApp, paste, readRepo, repoPath, runAndWait, sha256, test } from './fixtures';
+import { expect, openApp, openSettings, paste, readRepo, repoPath, runAndWait, sha256, test } from './fixtures';
 
 const FIXTURE = 'fixtures/reference/deobfuscate/obfuscator.io-control-flow.js';
 
@@ -21,6 +21,7 @@ async function outputText(page: Page): Promise<string> {
 
 test('the Passes section lists every pass the CLI lists, all on by default', async ({ page }) => {
   await openApp(page);
+  await openSettings(page);
   await page.locator('#passes summary').click();
   const listed = cli(['--list-passes'], FIXTURE)
     .split('\n')
@@ -35,6 +36,7 @@ test('the Passes section lists every pass the CLI lists, all on by default', asy
 
 test('unticking passes writes the link, runs as the CLI --disable does, and Turn all on resets', async ({ page, context }) => {
   await openApp(page);
+  await openSettings(page);
   await page.locator('#passes summary').click();
   await page.locator('#passes-list input[data-pass="find-string-array"]').uncheck();
   await page.locator('#passes-list input[data-pass="unminify-booleans"]').uncheck();
@@ -45,6 +47,7 @@ test('unticking passes writes the link, runs as the CLI --disable does, and Turn
   const expected = cli(['--disable', 'find-string-array,unminify-booleans'], FIXTURE);
   expect(sha256(await outputText(page))).toBe(sha256(expected));
   expect(expected).not.toBe(cli([], FIXTURE));
+  await openSettings(page);
   await page.locator('#copy-link').click();
   const link = await page.evaluate(() => navigator.clipboard.readText());
   const second = await context.newPage();

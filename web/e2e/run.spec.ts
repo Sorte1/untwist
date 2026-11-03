@@ -16,13 +16,9 @@ const MASKED = [
   '#elapsed',
   '.examples',
   '.brand-name',
-  '.opt-transforms .opt:nth-of-type(2) .switch',
-  '.opt-rename',
-  '.opt-fuel',
-  '.opt-link',
-  '.diag-head',
   '.privacy',
   '#mode-group',
+  '#diag-toggle',
 ];
 
 async function outputText(page: Page): Promise<string> {

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { expect, openApp, paste, readRepo, repoPath, runAndWait, saved, test, skipWithoutGame } from './fixtures';
+import { expect, openApp, openDiagnostics, paste, readRepo, repoPath, runAndWait, saved, test, skipWithoutGame } from './fixtures';
 
 const FIXTURE = 'fixtures/reference/deobfuscate/obfuscator.io-control-flow.js';
 const MS_FIELDS = new Set(['per_pass_ms', 'fixpoint_per_pass_ms', 'iterations_ms', 'elapsed_ms']);
@@ -25,6 +25,7 @@ async function runFixture(page: Page, text: string): Promise<void> {
   await openApp(page);
   await paste(page, text);
   await runAndWait(page);
+  await openDiagnostics(page);
 }
 
 async function downloadedReport(page: Page): Promise<{ stages: Row[] }> {
@@ -91,6 +92,7 @@ test('Details shows the fuel used, the peak call depth, the collision reasons an
   await openApp(page, '#rename=simple');
   await paste(page, readRepo(FIXTURE));
   await runAndWait(page);
+  await openDiagnostics(page);
   await page.locator('#details-tab').click();
   const pair = (label: string) => page.locator('#details .details-pairs dt', { hasText: new RegExp(`^\\s*${label}$`) }).locator('xpath=following-sibling::dd[1]');
   const cli = JSON.parse(

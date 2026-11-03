@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, openApp, paste, runAndWait, test } from './fixtures';
+import { expect, openApp, openSettings, paste, runAndWait, test } from './fixtures';
 
 const JSX_INPUT = 'const React = require("react");\nexport const a = React.createElement("div", { id: "x" }, "hi");\n';
 
@@ -14,7 +14,7 @@ function radio(page: Page, mode: 'safe' | 'unsafe') {
   return page.locator(`#mode-group [role="radio"][data-mode="${mode}"]`);
 }
 
-test('the header Safe / Unsafe control stays in sync with the panel switch, the link and the Run mark', async ({ page }) => {
+test('the one Safe / Unsafe control drives the link, the warning and the Run mark', async ({ page }) => {
   await openApp(page);
   await expect(page.locator('#mode-group')).toHaveAttribute('role', 'radiogroup');
   await expect(radio(page, 'safe')).toHaveAttribute('aria-checked', 'true');
@@ -25,7 +25,7 @@ test('the header Safe / Unsafe control stays in sync with the panel switch, the 
   await radio(page, 'unsafe').click();
   await expect(radio(page, 'unsafe')).toHaveAttribute('aria-checked', 'true');
   await expect(radio(page, 'safe')).toHaveAttribute('aria-checked', 'false');
-  await expect(page.locator('.switch[data-key="unsafe"]')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('.switch[data-key="unsafe"]')).toHaveCount(0);
   await expect(page.locator('#mode-warning')).toBeVisible();
   await expect(page.locator('#mode-warning')).toContainText('may change behaviour in edge cases; assumes built-ins are not modified');
   await expect(page.locator('#settings-changed')).toBeVisible();
@@ -33,7 +33,7 @@ test('the header Safe / Unsafe control stays in sync with the panel switch, the 
   await expect(page.locator('#output-mode')).toHaveText('Safe');
   await runAndWait(page);
   await expect(page.locator('#output-mode')).toHaveText('Unsafe');
-  await page.locator('.switch[data-key="unsafe"]').click();
+  await radio(page, 'safe').click();
   await expect(radio(page, 'safe')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#mode-warning')).toBeHidden();
   expect(page.url()).toContain('unsafe=0');
@@ -43,7 +43,6 @@ test('a fresh visit opens in Unsafe mode, and a link with unsafe=0 opens in Safe
   await page.goto('./');
   await expect(page.locator('#run')).toBeEnabled({ timeout: 30_000 });
   await expect(radio(page, 'unsafe')).toHaveAttribute('aria-checked', 'true');
-  await expect(page.locator('.switch[data-key="unsafe"]')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#mode-warning')).toBeVisible();
   await paste(page, 'var a = !0;');
   await runAndWait(page);
@@ -96,6 +95,7 @@ test('JSX shows as inactive in Safe mode, and Unsafe really decompiles it', asyn
   await expect(page.locator('#jsx-hint')).not.toHaveText(/Inactive/);
   await runAndWait(page);
   expect(await outputText(page)).toContain('<div');
+  await openSettings(page);
   await page.locator('.switch[data-key="jsx"]').click();
   await radio(page, 'safe').click();
   await expect(page.locator('#jsx-opt')).not.toHaveAttribute('data-inactive', '');

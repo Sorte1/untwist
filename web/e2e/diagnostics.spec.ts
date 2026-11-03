@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, openApp, paste, readRepo, runAndWait, test } from './fixtures';
+import { expect, openApp, openDiagnostics, paste, readRepo, runAndWait, test } from './fixtures';
 
 const REFUSAL_FIXTURE = 'fixtures/behaviour/06-rotator-in-uncalled-function.js';
 const REFUSAL_PASS = 'inline-decoded-strings';
@@ -19,6 +19,7 @@ async function runWith(page: Page, text: string): Promise<void> {
   await openApp(page);
   await paste(page, text);
   await runAndWait(page);
+  await openDiagnostics(page);
 }
 
 test('a parse error is an error row at its input location, and the click selects it', async ({ page }) => {
