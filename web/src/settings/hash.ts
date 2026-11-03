@@ -1,3 +1,4 @@
+import { SHARED_KEYS } from '../share/link';
 import { offList } from './passes';
 import { DEFAULTS, RENAME_MODES, type Settings } from './settings';
 
@@ -77,6 +78,9 @@ export function parseHash(hash: string): Parsed {
   for (const part of body.split('&').filter((item) => item !== '')) {
     const [rawKey = '', rawValue = ''] = part.split('=', 2);
     const key = decodeURIComponent(rawKey) as Key;
+    if (SHARED_KEYS.includes(key)) {
+      continue;
+    }
     if (!(key in CODECS)) {
       problems.push(`Unknown setting "${decodeURIComponent(rawKey)}" in the link was ignored.`);
       continue;

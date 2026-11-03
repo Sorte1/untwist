@@ -757,6 +757,7 @@ button, input {
 #input-meta, #output-meta {
   font-family: var(--mono);
   font-size: 11px;
+  white-space: nowrap;
 }
 
 #input-hint {

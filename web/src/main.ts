@@ -27,6 +27,7 @@ import { mountPaletteKey } from './ui/palette-key';
 import { mountPasses } from './ui/passes';
 import { mountRecentMenu } from './ui/recent-menu';
 import { mountSettingsPanel } from './ui/settings-panel';
+import { mountShareLink } from './ui/share-link';
 import { mountStatusBar } from './ui/status-bar';
 import { mountDetailsToggle } from './ui/details/toggle';
 import { mountSummaryChip } from './ui/summary-chip';
@@ -119,6 +120,7 @@ function main(): void {
   const pickExample = mountExamplesMenu(store, loader);
   mountRecentMenu(store, loader);
   mountDropOverlay(store, loader);
+  mountShareLink(store, loader);
   mountSummaryChip(store);
   mountOptions(store);
   mountPasses(store);
