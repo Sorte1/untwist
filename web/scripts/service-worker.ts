@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import type { Plugin, ResolvedConfig } from 'vite';
 import { injectPrecache, precacheEntries, versionOf } from '../src/pwa/precache.ts';
@@ -37,8 +37,11 @@ export function serviceWorker(): Plugin {
       if (sw?.type !== 'chunk' || html?.type !== 'asset') {
         this.error(`the build lacks ${SW_FILE} or index.html`);
       }
-      const entries = precacheEntries([...Object.keys(bundle), ...publicFiles(config?.publicDir ?? '')]);
-      sw.code = injectPrecache(sw.code, entries, versionOf(entries, String(html.source)));
+      const publicDir = config?.publicDir ?? '';
+      const unhashed = publicFiles(publicDir);
+      const entries = precacheEntries([...Object.keys(bundle), ...unhashed]);
+      const contents = unhashed.filter((file) => entries.includes(file)).map((file) => readFileSync(join(publicDir, file)));
+      sw.code = injectPrecache(sw.code, entries, versionOf(entries, [String(html.source), ...contents]));
     },
   };
 }
