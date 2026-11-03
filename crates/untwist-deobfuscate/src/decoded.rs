@@ -25,8 +25,8 @@ use crate::bridge::{
 use crate::calls::normalize_calls;
 use crate::notes;
 use crate::proof::{
-    build_escape_context, encode_names, names_machinery, scan_pending, EscapeContext, PendingSite,
-    PreScan, ProtoWrite,
+    build_escape_context, builtins_assumed_pristine, encode_names, names_machinery, scan_pending,
+    EscapeContext, PendingSite, PreScan, ProtoWrite,
 };
 use crate::stamp::{
     is_unedited, unstamp_block_note, unstamp_blocked, unstamp_names, RefusedByDecode,
@@ -269,7 +269,9 @@ fn judge_unit(
     }
     let relies_on_prototypes =
         !evaluator.proto_reads.is_empty() && resolved_roots.contains(PROTOTYPE_LINKS);
-    let replaced = if relies_on_prototypes {
+    let replaced = if builtins_assumed_pristine() {
+        None
+    } else if relies_on_prototypes {
         Some("an object's prototype link".to_string())
     } else if let Some(name) = evaluator
         .builtin_roots

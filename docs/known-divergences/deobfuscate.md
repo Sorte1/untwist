@@ -879,6 +879,20 @@
   `crates/untwist-deobfuscate/tests/instanceof_object.rs` and the files of `fixtures/behaviour/` in
   `cargo xtask diff-behaviour`.
 
+- **Under `--unsafe` the built-ins are assumed pristine, even when the program visibly patches
+  one, as the reference deobfuscator assumes.** The rule above refuses a unit when a write in the
+  program, code text it cannot resolve, or a runner or definer it cannot follow may replace a
+  built-in the decoders or rotator use. In the unsafe lane that check does not run: the unit is
+  decoded with the standard built-ins, whatever the program writes. A program that really
+  patches such a built-in, such as `String.prototype.charCodeAt = …` after the rotator, prints
+  something else after `--unsafe`, as it does after the reference deobfuscator; the default lane
+  and the conservative comparison mode still refuse it and print what node prints.
+  javascript-obfuscator output whose source takes `require` (`fixtures/obfuscated/`, and the
+  reduced `fixtures/unsafe-parity/`) is the common case: holding a code loader may patch anything,
+  so the default lane keeps its string array. Pinned by `crates/untwist/tests/unsafe_parity.rs`,
+  and by the patched rows of `fail_closed_rows.rs`, `key_judged_rows.rs` and `realm_shapes.rs`,
+  which print node's output by default and the pristine decode under `--unsafe`.
+
 - **Replacing a decoder through a name built from another unit's decoded halves is the stated
   premise and is not refused**. A program
   assembles a decoder's name from two strings another unit decodes and runs

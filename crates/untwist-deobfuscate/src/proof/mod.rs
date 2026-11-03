@@ -126,6 +126,10 @@ pub const STANDARD_GLOBALS: &[&str] = &[
 
 pub const GLOBAL_OBJECTS: &[&str] = &["window", "self", "globalThis", "global", "frames"];
 
+pub fn builtins_assumed_pristine() -> bool {
+    !untwist_core::semantic::with_observes()
+}
+
 pub fn has_with_statement(scoping: &Scoping) -> bool {
     untwist_core::semantic::with_observes()
         && scoping

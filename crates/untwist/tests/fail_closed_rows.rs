@@ -1,7 +1,9 @@
 use untwist::{Options, Pipeline};
-use untwist_testing::node_rows::{self, node_or_skip, Mode};
+use untwist_testing::node_rows::{self, node_or_skip};
 
 const ROWS: &str = include_str!("data/fail_closed_rows.txt");
+
+const PATCHED_BUILT_IN_ROWS: [&str; 4] = ["g-d1", "g-e5", "g-r1", "g-r2"];
 
 fn transformed(options: &Options, source: &str) -> String {
     Pipeline::new(options.clone())
@@ -18,7 +20,7 @@ fn rows() -> Vec<(String, String)> {
 }
 
 #[test]
-fn every_fail_closed_shape_runs_like_node_in_both_modes() {
+fn every_fail_closed_shape_runs_like_node_by_default_and_as_pristine_built_ins_under_unsafe() {
     let Some(node) = node_or_skip() else {
         return;
     };
@@ -31,7 +33,7 @@ fn every_fail_closed_shape_runs_like_node_in_both_modes() {
     };
     let run_safe = |source: &str| transformed(&safe, source);
     let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
-    let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];
-    let wrong = node_rows::mismatches(&node, &programs, &modes);
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    let rows = node_rows::pristine_under_unsafe(&node, &programs, (&run_safe, &run_unsafe));
+    assert!(rows.wrong.is_empty(), "{}", rows.wrong.join("\n"));
+    assert_eq!(rows.pristine, PATCHED_BUILT_IN_ROWS);
 }
