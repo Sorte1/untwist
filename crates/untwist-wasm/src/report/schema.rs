@@ -37,7 +37,7 @@ struct NoteRow<'a> {
 #[serde(rename_all = "camelCase")]
 struct SiteRow<'a> {
     what: &'a str,
-    layer: usize,
+    layer: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     input_span: Option<[u32; 2]>,
 }

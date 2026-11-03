@@ -22,7 +22,7 @@
 
 .why-row {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr);
   column-gap: 12px;
   row-gap: 2px;
   width: 100%;

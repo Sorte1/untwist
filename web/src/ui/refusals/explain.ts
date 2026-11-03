@@ -96,6 +96,7 @@ function explained(index: LineIndex, { sentence, span, layer }: Reason): Explana
 }
 
 interface Reason {
+  readonly what: string;
   readonly sentence: string;
   readonly span: readonly [number, number] | undefined;
   readonly layer: number;
@@ -105,6 +106,7 @@ function reasons(report: string): Reason[] {
   const { sites, notes } = parsed(report);
   if (sites.length > 0) {
     return sites.map((site) => ({
+      what: site.what,
       sentence: sentenceFor(site.what),
       span: site.layer === 0 && isSpan(site.inputSpan) ? site.inputSpan : undefined,
       layer: site.layer,
@@ -112,7 +114,7 @@ function reasons(report: string): Reason[] {
   }
   return notes
     .filter((note) => note.kind === 'refusal' && note.pass === DECODE_PASS)
-    .map((note) => ({ sentence: note.message, span: isSpan(note.inputSpan) ? note.inputSpan : undefined, layer: 0 }));
+    .map((note) => ({ what: '', sentence: note.message, span: isSpan(note.inputSpan) ? note.inputSpan : undefined, layer: 0 }));
 }
 
 function uniqueBy<T>(items: readonly T[], key: (item: T) => string): T[] {
@@ -127,9 +129,18 @@ function uniqueBy<T>(items: readonly T[], key: (item: T) => string): T[] {
   });
 }
 
+function rank(reason: Reason): number {
+  return reason.what.startsWith('BUILTIN_PATCHED') ? 0 : reason.what === 'GLOBAL_REACH' ? 1 : 2;
+}
+
+function placeOf({ sentence, span, layer }: Reason): string {
+  return span === undefined ? `layer ${layer}|${sentence}` : span.join(',');
+}
+
 export function explainRefusals(report: string, text: string): Explained {
   const index = lineIndex(text);
-  const rows = uniqueBy(reasons(report), ({ sentence, span, layer }) => `${span?.join(',') ?? `layer ${layer}`}|${sentence}`)
+  const ranked = reasons(report).sort((a, b) => rank(a) - rank(b));
+  const rows = uniqueBy(ranked, placeOf)
     .map((reason) => explained(index, reason))
     .sort((a, b) => (a.span?.[0] ?? Infinity) - (b.span?.[0] ?? Infinity));
   return { shown: rows.slice(0, SHOWN_SITES), more: Math.max(0, rows.length - SHOWN_SITES) };

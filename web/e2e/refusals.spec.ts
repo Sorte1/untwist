@@ -7,6 +7,10 @@ async function inputText(page: Page): Promise<string> {
   return (await page.locator('#input-editor .cm-content').textContent()) ?? '';
 }
 
+function windowRow(page: Page) {
+  return page.locator('#refusal-why-panel button.why-row', { has: page.locator('.why-code', { hasText: /^window\[k\]$/ }) }).first();
+}
+
 async function refusedRun(page: Page, hash = ''): Promise<void> {
   await openApp(page, hash);
   await paste(page, readRepo(FIXTURE));
@@ -24,7 +28,7 @@ test('Why? names the line that kept the decoder, quotes it, and the click select
   await expect(why).toHaveAttribute('aria-expanded', 'true');
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('Why Safe mode left the decoder calls in place');
-  const row = panel.locator('button.why-row', { has: page.locator('.why-code', { hasText: 'window[k]' }) }).first();
+  const row = windowRow(page);
   await expect(row.locator('.why-loc')).toHaveText('Line 4');
   await expect(row.locator('.why-text')).toContainText('so the decoder calls were left alone');
   await row.click();
@@ -37,13 +41,15 @@ test('Why? names the line that kept the decoder, quotes it, and the click select
 });
 
 test('a jump from Why? shows a hidden input first', async ({ page }) => {
-  await refusedRun(page, '#input=hidden');
+  await refusedRun(page);
+  await page.locator('#hide-input').click();
   await expect(page.locator('#input-pane')).toBeHidden();
   await page.locator('#refusal-why').click();
-  await page.locator('#refusal-why-panel button.why-row').first().click();
+  await windowRow(page).click();
   await expect(page.locator('#input-pane')).toBeVisible();
+  await expect(page.locator('#input-editor .cm-editor')).toHaveClass(/cm-focused/);
   await page.keyboard.type('Z');
-  expect(await inputText(page)).toContain('Z');
+  expect(await inputText(page)).toContain('console.log(b(0x0) + b(0x1), Z);');
 });
 
 test('the explanation closes with the banner when a run decodes the strings', async ({ page }) => {

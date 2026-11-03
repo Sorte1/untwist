@@ -37,12 +37,14 @@ describe('the refusal explanations', () => {
     expect(rows.more).toBe(0);
   });
 
-  it('keep one row per place and reason, and sites outside the input last and without a jump', () => {
+  it('keep one row per place with its strongest reason, and sites outside the input last and without a jump', () => {
     const rows = explainRefusals(
       report([
         { what: 'code from text', layer: 1 },
-        { what: 'escaped read (definer)', layer: 0, inputSpan: at('window[k]') },
+        { what: 'code from text', layer: 0, inputSpan: at('window[k]') },
         { what: 'escaped read (definer runner)', layer: 0, inputSpan: at('window[k]') },
+        { what: 'GLOBAL_REACH', layer: 0, inputSpan: at('window[k]') },
+        { what: 'write by an unknown key', layer: 0 },
         { what: 'write by an unknown key', layer: 0 },
       ]),
       SOURCE,
@@ -52,6 +54,7 @@ describe('the refusal explanations', () => {
       ['Unpacked code', '', undefined],
       ['Rewritten code', '', undefined],
     ]);
+    expect(rows.shown[0]?.sentence).toMatch(/^may reach the string array/);
     expect(rows.shown[1]?.sentence).toMatch(/^runs code built from text/);
   });
 

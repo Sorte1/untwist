@@ -16,7 +16,7 @@ pub struct SiteAt {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RefusalSite {
     pub input: usize,
-    pub layer: usize,
+    pub layer: u32,
     pub at: Option<SiteAt>,
     pub what: String,
 }
@@ -70,7 +70,7 @@ fn site_at(lines: &Lines<'_>, span: &RefusalSpan) -> Option<SiteAt> {
     })
 }
 
-pub(super) fn located(text: &str, layer: usize, spans: Vec<RefusalSpan>) -> Vec<RefusalSite> {
+pub(super) fn located(text: &str, layer: u32, spans: Vec<RefusalSpan>) -> Vec<RefusalSite> {
     if spans.is_empty() {
         return Vec::new();
     }
