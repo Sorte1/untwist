@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mayCarryFiles } from './drop-overlay';
+import { EMPTY_DROP_NOTE, loadDropped, mayCarryFiles } from './drop-overlay';
 
 describe('mayCarryFiles', () => {
   it('accepts a drag that says it carries files', () => {
@@ -14,5 +14,13 @@ describe('mayCarryFiles', () => {
   it('leaves text dragged inside the page alone', () => {
     expect(mayCarryFiles(['text/plain'])).toBe(false);
     expect(mayCarryFiles(['text/plain', 'text/html'])).toBe(false);
+  });
+});
+
+describe('loadDropped', () => {
+  it('notes a drop that carried no file', async () => {
+    const notes: string[] = [];
+    await loadDropped([], { load: () => 0, open: () => 0, note: (text) => notes.push(text) });
+    expect(notes).toEqual([EMPTY_DROP_NOTE]);
   });
 });
