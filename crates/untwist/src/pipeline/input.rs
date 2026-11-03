@@ -123,6 +123,9 @@ impl Pipeline {
         untwist_deobfuscate::init_order::reset_capacity_hint();
         forget_failures();
         let _observers = assume_observers(self.observers());
+        let _flow_rules = untwist_deobfuscate::value_flow::assume_disabled_flow_rules(
+            &self.options.disabled_passes,
+        );
         let _turn = (self.options.rename == RenameMode::Unique)
             .then(|| TurnGuard::new(reservation.state, index));
         let stats_sink = reservation.stats;

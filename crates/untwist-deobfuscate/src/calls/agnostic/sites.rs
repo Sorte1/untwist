@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::hash::BuildHasher;
 
+use super::flow::Flow;
 use super::fresh::Fresh;
 use super::roles::*;
 use super::source::SOURCE_KEYS;
@@ -122,6 +123,7 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) text_judged: bool,
     pub(super) forward_calls: FxHashSet<Span>,
     pub(super) pending_texts: RefCell<Vec<String>>,
+    pub(super) flow: &'s Flow,
 }
 
 impl<'s, 'a> Sites<'s, 'a> {
@@ -130,6 +132,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         (resolve, machinery, watch): super::settle::Inputs<'s>,
         fresh_calls: bool,
         symbol_safe: bool,
+        flow: &'s Flow,
     ) -> Self {
         Self {
             fresh,
@@ -164,6 +167,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             text_judged: false,
             forward_calls: FxHashSet::default(),
             pending_texts: RefCell::default(),
+            flow,
         }
     }
 

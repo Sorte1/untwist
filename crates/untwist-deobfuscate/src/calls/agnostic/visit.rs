@@ -459,6 +459,7 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
             && parent_keys.iter().any(|key| origin_of(key).any())
             && !self.holds_array(it.object())
         {
+            let _ = self.flow.sink_of(it.span());
             for key in parent_keys.iter() {
                 self.mark_origin(origin_of(key), it.span(), "escaped read");
             }

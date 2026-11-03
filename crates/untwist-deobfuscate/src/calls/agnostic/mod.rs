@@ -3,6 +3,7 @@ mod bind;
 mod bootstrap;
 mod consume;
 mod defs;
+mod flow;
 mod forward;
 mod fresh;
 mod holds;
