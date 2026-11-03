@@ -36,10 +36,17 @@ export function mountSteps(store: Store<AppState>, engine: Engine): { readonly c
       render(bar, store);
     }
   };
+  const cancel = () => {
+    engine.cancel();
+    store.update(stepsCancelled);
+  };
   store.subscribe((state, previous) => {
     const on = state.settings.view === 'steps';
     bar.hidden = !on;
     if (!on) {
+      if (state.steps.status === 'running') {
+        queueMicrotask(cancel);
+      }
       return;
     }
     if (wantsSteps(state)) {
@@ -58,10 +65,5 @@ export function mountSteps(store: Store<AppState>, engine: Engine): { readonly c
       paint();
     }
   });
-  return {
-    cancel: () => {
-      engine.cancel();
-      store.update(stepsCancelled);
-    },
-  };
+  return { cancel };
 }
