@@ -70,7 +70,7 @@ fn definition_and_references_follow_shadowing_in_functions_catch_and_classes() {
     let definition = analysis.definition(at(SHADOWS, "q", 7)).unwrap();
     assert_eq!(
         definition,
-        format!("{{\"span\":[{param},{}],\"kind\":\"var\"}}", param + 1)
+        format!("{{\"span\":[{param},{}],\"kind\":\"param\"}}", param + 1)
     );
     assert_eq!(analysis.definition(at(SHADOWS, "g", 0)), None);
 }

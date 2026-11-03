@@ -11,6 +11,10 @@ async function sideText(page: Page, side: 'a' | 'b'): Promise<string> {
   }, side);
 }
 
+function engineWorkers(page: Page): number {
+  return page.workers().filter((worker) => !worker.url().includes('lang.worker')).length;
+}
+
 async function compareMemory(page: Page): Promise<number> {
   return page.evaluate(() => {
     const mark = performance.getEntriesByName('untwist:compare-done').at(-1) as PerformanceMark | undefined;
@@ -31,7 +35,7 @@ test('Compare with Unsafe runs the other mode and opens the diff, Safe on the le
   await expect(page.locator('#diff')).toHaveAttribute('data-chunks', /^[1-9][0-9]*$/);
   expect(await sideText(page, 'a')).toContain('createElement');
   expect(await sideText(page, 'b')).toContain('<div');
-  expect(page.workers().length).toBeLessThanOrEqual(1);
+  expect(engineWorkers(page)).toBeLessThanOrEqual(1);
   await expect(page.locator('#compare-label')).toHaveText('Compare with Unsafe');
 });
 

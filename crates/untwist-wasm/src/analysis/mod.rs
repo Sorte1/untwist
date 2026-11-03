@@ -2,16 +2,19 @@ mod build;
 mod collect;
 mod complete;
 mod index;
+mod insight;
 mod offsets;
 mod rename;
 
+#[cfg(test)]
+mod insight_tests;
 #[cfg(test)]
 mod tests;
 
 use serde::Serialize;
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use index::Index;
+use index::{Index, NONE};
 pub use rename::Outcome;
 
 pub const ANALYSIS_CAP_BYTES: u32 = 12 << 20;
@@ -29,6 +32,14 @@ struct Definition<'a> {
     module: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    form: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value: Option<&'a str>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    decoded: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    params: Option<&'a [Box<str>]>,
 }
 
 #[wasm_bindgen]
@@ -44,18 +55,70 @@ pub fn analysis_cap_bytes() -> u32 {
     ANALYSIS_CAP_BYTES
 }
 
+#[derive(Serialize)]
+struct Described<'a> {
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    form: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value: Option<&'a str>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    decoded: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    params: Option<&'a [Box<str>]>,
+    properties: Vec<&'a str>,
+}
+
+fn sorted(mut list: Vec<&str>) -> Vec<&str> {
+    list.sort_unstable();
+    list.dedup();
+    list
+}
+
 impl Analysis {
+    fn described(&self, pos: u32, name: &str) -> Option<Described<'_>> {
+        let index = self.index.as_ref()?;
+        let Some(symbol) = index.resolve(pos, name) else {
+            let object = index.names.find(name)?;
+            return Some(Described {
+                kind: "global",
+                form: None,
+                value: None,
+                decoded: false,
+                params: None,
+                properties: sorted(index.properties_of(NONE, object).collect()),
+            });
+        };
+        let detail = index.detail(symbol);
+        Some(Described {
+            kind: index
+                .symbol(symbol)
+                .map_or("binding", |entry| entry.kind.label()),
+            form: detail.and_then(|detail| detail.form.label(&index.names)),
+            value: detail.and_then(|detail| detail.value.as_deref()),
+            decoded: detail.is_some_and(|detail| detail.decoded),
+            params: detail.and_then(|detail| detail.params.as_deref()),
+            properties: sorted(index.properties_of(symbol, NONE).collect()),
+        })
+    }
+
     fn definition_of(&self, pos: u32) -> Option<Definition<'_>> {
         let index = self.index.as_ref()?;
         if let Some(symbol) = index
             .occurrence_at(pos)
-            .and_then(|occ| index.symbol(occ.symbol))
+            .and_then(|occ| index.symbol(occ.symbol).map(|symbol| (occ.symbol, symbol)))
         {
+            let (id, symbol) = symbol;
+            let detail = index.detail(id);
             return Some(Definition {
                 span: symbol.decl,
                 kind: symbol.kind.label(),
                 module: symbol.link.as_ref().map(|link| link.module.as_ref()),
                 name: symbol.link.as_ref().map(|link| link.name.as_ref()),
+                form: detail.and_then(|detail| detail.form.label(&index.names)),
+                value: detail.and_then(|detail| detail.value.as_deref()),
+                decoded: detail.is_some_and(|detail| detail.decoded),
+                params: detail.and_then(|detail| detail.params.as_deref()),
             });
         }
         let member = index.member_at(pos)?;
@@ -66,6 +129,10 @@ impl Analysis {
             kind: "member",
             module: Some(link.module.as_ref()),
             name: Some(member.name.as_ref()),
+            form: None,
+            value: None,
+            decoded: false,
+            params: None,
         })
     }
 
@@ -114,6 +181,10 @@ impl Analysis {
             .map(|index| complete::completions(index, pos))
             .unwrap_or_default();
         serde_json::to_string(&list).unwrap_or_default()
+    }
+
+    pub fn describe(&self, pos: u32, name: &str) -> Option<String> {
+        serde_json::to_string(&self.described(pos, name)?).ok()
     }
 
     pub fn problems_json(&self) -> String {

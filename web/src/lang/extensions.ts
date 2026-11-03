@@ -1,8 +1,11 @@
-import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
-import { setDiagnostics, type Diagnostic } from '@codemirror/lint';
+import { autocompletion } from '@codemirror/autocomplete';
+import { lintKeymap, setDiagnostics, type Diagnostic } from '@codemirror/lint';
 import { Prec, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, tooltips, type DecorationSet } from '@codemirror/view';
 import type { LangClient, Problem } from './client';
+import { completionSource } from './complete';
+import { parsed } from './parsed';
+import { signatureHelp } from './signature';
 
 export interface ModuleHost {
   open(module: string, name: string): Promise<boolean>;
@@ -18,25 +21,15 @@ export interface DefinitionReply {
   readonly kind: string;
   readonly module?: string;
   readonly name?: string;
-}
-
-interface CompletionItem {
-  readonly label: string;
-  readonly kind: string;
+  readonly form?: string;
+  readonly value?: string;
+  readonly decoded?: boolean;
+  readonly params?: readonly string[];
 }
 
 export type RenameReply = { readonly edits: readonly (readonly [number, number, string])[] } | { readonly refused: string };
 
-export function parsed<T>(value: unknown): T | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return null;
-  }
-}
+export { parsed };
 
 export async function definitionAt(client: LangClient, pos: number): Promise<DefinitionReply | null> {
   return parsed<DefinitionReply>(await client.query('definition', pos));
@@ -107,32 +100,6 @@ export function applyProblems(view: EditorView, problems: readonly Problem[]): v
   view.dispatch(setDiagnostics(view.state, diagnostics));
 }
 
-function typeOf(kind: string): string {
-  switch (kind) {
-    case 'function':
-    case 'class':
-    case 'keyword':
-      return kind;
-    default:
-      return 'variable';
-  }
-}
-
-function completionSource(client: LangClient) {
-  return async (context: CompletionContext): Promise<CompletionResult | null> => {
-    const word = context.matchBefore(/[\w$]*/);
-    if (word === null || (word.from === word.to && !context.explicit)) {
-      return null;
-    }
-    const items = parsed<CompletionItem[]>(await client.query('completions', context.pos));
-    if (items === null || context.aborted) {
-      return null;
-    }
-    const options: Completion[] = items.map((item, index) => ({ label: item.label, type: typeOf(item.kind), detail: item.kind, boost: Math.max(-99, 99 - index) }));
-    return { from: word.from, options, validFor: /^[\w$]*$/ };
-  };
-}
-
 export function navigation(hooks: LangHooks, rename: (view: EditorView) => boolean): Extension {
   const at = (view: EditorView) => view.state.selection.main.head;
   return [
@@ -143,6 +110,8 @@ export function navigation(hooks: LangHooks, rename: (view: EditorView) => boole
         { key: 'F2', run: rename },
       ]),
     ),
+    keymap.of(lintKeymap),
+    signatureHelp(hooks.client),
     EditorView.domEventHandlers({
       mousedown(event, view) {
         if (!(event.ctrlKey || event.metaKey) || event.button !== 0) {

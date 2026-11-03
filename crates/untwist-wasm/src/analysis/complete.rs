@@ -7,6 +7,8 @@ use super::index::{Index, Occurrence, NONE};
 pub struct Completion<'a> {
     pub label: &'a str,
     pub kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<&'a [Box<str>]>,
 }
 
 const KEYWORDS: [&str; 38] = [
@@ -58,7 +60,14 @@ pub fn completions(index: &Index, pos: u32) -> Vec<Completion<'_>> {
             let label = index.names.get(*name);
             if seen.insert(label) {
                 let kind = index.symbol(*symbol).map_or("binding", |s| s.kind.label());
-                list.push(Completion { label, kind });
+                let params = index
+                    .detail(*symbol)
+                    .and_then(|detail| detail.params.as_deref());
+                list.push(Completion {
+                    label,
+                    kind,
+                    params,
+                });
             }
         }
     }
@@ -73,6 +82,7 @@ pub fn completions(index: &Index, pos: u32) -> Vec<Completion<'_>> {
             list.push(Completion {
                 label,
                 kind: "global",
+                params: None,
             });
         }
     }
@@ -81,6 +91,7 @@ pub fn completions(index: &Index, pos: u32) -> Vec<Completion<'_>> {
             list.push(Completion {
                 label,
                 kind: "keyword",
+                params: None,
             });
         }
     }

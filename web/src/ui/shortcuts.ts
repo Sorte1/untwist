@@ -18,6 +18,7 @@ export const SHORTCUTS: readonly ShortcutGroup[] = [
     title: 'Edit',
     shortcuts: [
       { action: 'Run', keys: 'Mod-Enter' },
+      { action: 'Command palette', keys: 'Mod-k' },
       { action: 'Format document', keys: 'Shift-Alt-f' },
       { action: 'Toggle comment', keys: 'Mod-/' },
       { action: 'Move line up or down', keys: 'Alt-↑|↓' },
@@ -49,6 +50,18 @@ export const SHORTCUTS: readonly ShortcutGroup[] = [
       { action: 'Fold or unfold', keys: 'Ctrl-Shift-[|]', mac: 'Mod-Alt-[|]' },
       { action: 'Fold or unfold all', keys: 'Ctrl-Alt-[|]' },
       { action: 'Keyboard shortcuts', keys: 'F1' },
+    ],
+  },
+  {
+    title: 'Code',
+    shortcuts: [
+      { action: 'Suggestions', keys: 'Ctrl-Space' },
+      { action: 'Parameter hints', keys: 'Shift-Mod-Space' },
+      { action: 'Go to definition', keys: 'F12|Mod-click' },
+      { action: 'Find references', keys: 'Shift-F12' },
+      { action: 'Rename symbol', keys: 'F2' },
+      { action: 'Next problem', keys: 'F8' },
+      { action: 'Problems list', keys: 'Shift-Mod-m' },
     ],
   },
 ];

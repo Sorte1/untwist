@@ -5,6 +5,7 @@ import { seconds, type AppState } from '../state';
 import type { Store } from '../store';
 import { currentBundle } from './module-tree';
 import { codeEditing } from './editing';
+import { mountLanguage } from './language-mount';
 import { baseExtensions, makeEditor, outputLook } from './editor';
 import { outputEdits } from './output-edits';
 
@@ -18,23 +19,6 @@ export function shownText(state: AppState): { readonly text: string; readonly na
   }
   const bundle = currentBundle(state);
   return { text: result.modules[index] ?? '', name: bundle?.modules[index]?.path ?? `module ${index}` };
-}
-
-function mountLanguage(store: Store<AppState>, view: EditorView, gate: Compartment, module: Promise<WebAssembly.Module>): void {
-  byId('output-editor').addEventListener(
-    'focusin',
-    () => {
-      import('../lang/edit').then(
-        (lang) => lang.attachLanguage({ view, gate, store, module }),
-        () => {
-          const status = byId('output-lang');
-          status.hidden = false;
-          setText(status, 'Language features failed to load');
-        },
-      );
-    },
-    { once: true },
-  );
 }
 
 function mountCopy(view: EditorView): void {
@@ -60,7 +44,7 @@ export function mountOutputPane(store: Store<AppState>, module: Promise<WebAssem
   const view = makeEditor(byId('output-editor'), 'Output code', [baseExtensions(true), editing.extension, gate.of([]), outputLook, edits.extension]);
   editing.attach(view, byId('output-editor'));
   mountCopy(view);
-  mountLanguage(store, view, gate, module);
+  mountLanguage(store, view, gate, module, 'output');
   byId('reset-output').addEventListener('click', () => {
     edits.replace(view, shownText(store.get()).text);
     view.focus();

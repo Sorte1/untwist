@@ -123,6 +123,8 @@ fn finish(mut collector: Collector<'_>, problems: Vec<Problem>) -> Index {
         exports: std::mem::take(&mut collector.exports),
         names: std::mem::take(&mut collector.names),
         problems,
+        details: std::mem::take(&mut collector.details),
+        properties: std::mem::take(&mut collector.properties),
     };
     settle(&mut index);
     index
@@ -131,6 +133,8 @@ fn finish(mut collector: Collector<'_>, problems: Vec<Problem>) -> Index {
 fn settle(index: &mut Index) {
     index.occurrences.sort_unstable_by_key(|occ| occ.start);
     index.members.sort_unstable_by_key(|member| member.start);
+    index.properties.sort_unstable();
+    index.properties.dedup();
     let fixed: Vec<u32> = index
         .occurrences
         .iter()
@@ -180,7 +184,7 @@ pub fn build(text: &str) -> Index {
             .map(|diagnostic| problem(diagnostic, &map, "error")),
     );
     let scoping = semantic.semantic.scoping();
-    let mut collector = Collector::new(scoping, &map);
+    let mut collector = Collector::new(scoping, &map, text);
     collector.visit_program(program);
     finish(collector, problems)
 }

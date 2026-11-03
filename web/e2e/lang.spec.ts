@@ -115,7 +115,7 @@ test('a typo shows one problem, and reset restores the output', async ({ page })
   await page.locator(OUTPUT).click();
   await page.keyboard.press('Control+End');
   await page.keyboard.type('let broken = ;');
-  await expect(page.locator('.edit-problems')).toHaveText('1 problem');
+  await expect(page.locator('#output-problems')).toHaveText('1 problem');
   await expect(page.locator('#output-editor .cm-lintRange-error')).toHaveCount(1);
   await page.getByRole('button', { name: 'Reset to output' }).click();
   await expect(page.locator('#output-edit-mark')).toBeHidden();
@@ -142,7 +142,7 @@ test('completion keeps the scope bindings while the line is half typed', async (
   await page.keyboard.type('if (');
   await page.keyboard.press('Delete');
   await page.keyboard.type('s');
-  await expect(page.locator('.edit-problems')).not.toHaveText('No problems');
+  await expect(page.locator('#output-problems')).not.toHaveText('No problems');
   await page.keyboard.press('Control+Space');
   await expect(page.locator('#output-editor .cm-tooltip-autocomplete li').first()).toContainText('sum');
 });
