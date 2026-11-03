@@ -39,7 +39,9 @@ The end-to-end specs compare the page with the native CLI found through `UNTWIST
 
 The input never leaves the browser. The page loads only its own static assets under a strict CSP,
 has no analytics and self-hosts its fonts. Settings live in the URL hash (`#unsafe=1&rename=unique`),
-which never reaches a server, and never include the input or the output.
+which never reaches a server. Copy link on the input adds the input, deflated into the hash as
+`code=`; an input whose link text would pass 32 KiB gets a settings-only link. Opening such a link
+loads the input and waits for Run. The output never goes into a link.
 
 ## Limits
 

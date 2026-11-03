@@ -6,6 +6,7 @@ export const DEFAULT_HINT = 'Paste, type or drop a file anywhere';
 
 export interface Loader {
   load(text: string, name: string, note?: string): number;
+  open(text: string, name: string, note?: string): number;
   note(text: string): void;
 }
 
@@ -21,15 +22,20 @@ export function mountLoader(store: Store<AppState>, run: () => void): Loader {
     noted = store.get().input.revision;
     setText(hint, text);
   };
+  const open = (text: string, name: string, message?: string) => {
+    store.update((state) => ({ ...state, input: inputOf(text, name, state.input.revision + 1) }));
+    const revision = store.get().input.revision;
+    noted = revision;
+    setText(hint, message ?? DEFAULT_HINT);
+    return revision;
+  };
   return {
     load(text, name, message) {
-      store.update((state) => ({ ...state, input: inputOf(text, name, state.input.revision + 1) }));
-      const revision = store.get().input.revision;
-      noted = revision;
-      setText(hint, message ?? DEFAULT_HINT);
+      const revision = open(text, name, message);
       run();
       return revision;
     },
+    open,
     note,
   };
 }
