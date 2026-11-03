@@ -12,6 +12,7 @@ use super::refusal::UNPACK_TEXT_TOO_DEEP;
 use super::stages::round_of;
 use super::Pipeline;
 use crate::bundle::BundleOutput;
+use crate::options::Progress;
 use crate::report::StageReport;
 
 impl Pipeline {
@@ -65,6 +66,7 @@ impl Pipeline {
         stages: &mut Vec<StageReport>,
         notes: &mut Vec<Note>,
     ) -> Option<BundleOutput> {
+        self.options.progress(Progress::StageBegins("unpack"));
         if unbundled {
             return unpack_nothing(codes, guard, stages, notes);
         }

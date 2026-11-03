@@ -23,6 +23,7 @@ export type WorkerRequest =
 
 export type WorkerReply =
   | { readonly kind: 'ready' }
+  | { readonly kind: 'stage'; readonly name: string }
   | { readonly kind: 'failed'; readonly message: string }
   | { readonly kind: 'trap'; readonly trap: TrapKind; readonly message: string }
   | { readonly kind: 'done'; readonly result: Omit<RunResult, 'trap' | 'workerMs'> };

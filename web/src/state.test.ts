@@ -11,6 +11,7 @@ import {
   runFinished,
   runStarted,
   skippedLabel,
+  stageBegan,
   statusLabel,
   ticked,
   utf8Bytes,
@@ -33,6 +34,24 @@ const result = (overrides: Partial<RunResult> = {}): RunResult => ({
 });
 
 const ready = (): AppState => ({ ...initialState('dark'), engine: 'ready' });
+
+describe('the stages of a run', () => {
+  it('keeps each stage the worker announces while the run goes, and starts empty', () => {
+    const running = runStarted(ready(), 1000);
+    expect(running.run.stages).toEqual([]);
+    const staged = stageBegan(stageBegan(running, 'prepare', 1010), 'deobfuscate', 1200);
+    expect(staged.run.stages).toEqual([
+      { name: 'prepare', at: 1010 },
+      { name: 'deobfuscate', at: 1200 },
+    ]);
+    expect(runStarted(runFinished(staged, result(), 1300), 2000).run.stages).toEqual([]);
+  });
+
+  it('ignores a stage that arrives after the run ended', () => {
+    const done = runFinished(runStarted(ready(), 1000), result(), 1100);
+    expect(stageBegan(done, 'unpack', 1200)).toBe(done);
+  });
+});
 
 describe('the run states', () => {
   it('goes idle → running → done, with the elapsed time and the exit code', () => {

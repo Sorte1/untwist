@@ -66,12 +66,12 @@ export class Engine {
     return this.#current !== null;
   }
 
-  async run(source: string, flags: string): Promise<RunResult> {
-    const first = await this.#runOnce(source, flags, false);
+  async run(source: string, flags: string, onStage: (name: string) => void = () => undefined): Promise<RunResult> {
+    const first = await this.#runOnce(source, flags, false, onStage);
     if (first.kind === 'done') {
       return { ...first.result, trap: null, workerMs: first.wallMs };
     }
-    const refused = await this.#runOnce(source, flags, true);
+    const refused = await this.#runOnce(source, flags, true, onStage);
     if (refused.kind !== 'done') {
       throw new Error(`the refused re-run trapped too: ${refused.message}`);
     }
@@ -105,7 +105,7 @@ export class Engine {
     return this.#warm;
   }
 
-  async #runOnce(source: string, flags: string, refused: boolean): Promise<Finished> {
+  async #runOnce(source: string, flags: string, refused: boolean, onStage: (name: string) => void): Promise<Finished> {
     const { worker, ready } = this.#prewarm();
     this.#warm = null;
     try {
@@ -118,7 +118,9 @@ export class Engine {
           const posted = performance.now();
           worker.onmessage = (event: MessageEvent<WorkerReply>) => {
             const reply = event.data;
-            if (reply.kind === 'done' || reply.kind === 'trap') {
+            if (reply.kind === 'stage') {
+              onStage(reply.name);
+            } else if (reply.kind === 'done' || reply.kind === 'trap') {
               performance.mark('untwist:result-received');
               resolve({ ...reply, wallMs: performance.now() - posted });
             } else if (reply.kind === 'failed') {

@@ -13,6 +13,7 @@ pub enum Progress {
     InputFinished(usize),
     InputsFinished,
     UnpackBegins,
+    StageBegins(&'static str),
 }
 
 type ProgressFn = dyn Fn(Progress) + Send + Sync;

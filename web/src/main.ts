@@ -1,7 +1,7 @@
 import './styles/tokens.css';
 import './styles/layout.css';
 import { Cancelled, Engine } from './engine/engine';
-import { initialState, runCancelled, runFailed, runFinished, runStarted, ticked, type AppState, type InputState } from './state';
+import { initialState, runCancelled, runFailed, runFinished, runStarted, stageBegan, ticked, type AppState, type InputState } from './state';
 import { flagsFrom } from './settings/flags';
 import { registerServiceWorker } from './pwa/register';
 import { parseHash, writeHash } from './settings/hash';
@@ -26,6 +26,7 @@ import { mountOutputPane } from './ui/output-pane';
 import { mountPaletteKey } from './ui/palette-key';
 import { mountPasses } from './ui/passes';
 import { mountRecentMenu } from './ui/recent-menu';
+import { mountRunProgress } from './ui/run-progress';
 import { mountSettingsPanel } from './ui/settings-panel';
 import { mountShareLink } from './ui/share-link';
 import { mountStatusBar } from './ui/status-bar';
@@ -62,7 +63,8 @@ function starter(store: Store<AppState>, engine: Engine): (input: InputState, fl
     }
     store.update((current) => runStarted(current, performance.now(), flags, input));
     startClock(store);
-    engine.run(input.text, flags).then(
+    const staged = (name: string) => store.update((current) => stageBegan(current, name, performance.now()));
+    engine.run(input.text, flags, staged).then(
       (result) => store.update((current) => runFinished(current, result, performance.now())),
       (error: unknown) => {
         if (!(error instanceof Cancelled)) {
@@ -114,6 +116,7 @@ function main(): void {
   mountDownload(store, () => outputView.state.doc.toString());
   mountDiffView(store, () => outputView.state.doc.toString());
   mountStatusBar(store);
+  mountRunProgress(store);
   mountDiagnostics(store, inputView);
   mountFocusMode(store);
   const loader = mountLoader(store, run);

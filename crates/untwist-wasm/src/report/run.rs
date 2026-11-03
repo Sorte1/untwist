@@ -1,8 +1,9 @@
-use untwist::{Options, Pipeline};
+use untwist::{Isolation, Options, Pipeline, ProgressSink};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use super::clock;
 use super::schema::{bare_json, report_json, RunFacts};
+use super::stages;
 use crate::limits::{self, limits_of};
 use crate::{exit_code, isolation, options_from, stderr_of, stdout_of, USAGE_ERROR};
 
@@ -109,11 +110,28 @@ fn report_with(source: &str, options: Options) -> RunReport {
 
 #[wasm_bindgen]
 pub fn run_report(source: &str, flags: &str, refused: bool) -> RunReport {
+    report_for(source, flags, refused, None)
+}
+
+#[wasm_bindgen]
+pub fn run_report_staged(source: &str, flags: &str, refused: bool) -> RunReport {
+    report_for(source, flags, refused, Some(stages::sink()))
+}
+
+fn report_for(
+    source: &str,
+    flags: &str,
+    refused: bool,
+    progress: Option<ProgressSink>,
+) -> RunReport {
     match options_from(flags) {
         Ok(options) => report_with(
             source,
             Options {
-                isolation: isolation(refused),
+                isolation: Isolation {
+                    progress,
+                    ..isolation(refused)
+                },
                 ..options
             },
         ),
@@ -131,9 +149,82 @@ pub fn run_report(source: &str, flags: &str, refused: bool) -> RunReport {
 
 #[cfg(test)]
 mod tests {
-    use super::run_report;
+    use std::sync::{Arc, Mutex, PoisonError};
+
+    use untwist::{Progress, ProgressSink};
+
+    use super::{report_for, run_report, run_report_staged};
     use crate::report::SCHEMA;
     use crate::run;
+
+    const DECODED: &str = "function a() { var h = ['He', 'llo']; a = function () { return h; }; return a(); }\n\
+        function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return e[f]; }; return b(c, d); }\n\
+        console.log(b(0x0) + b(0x1));";
+
+    fn stage_rows(report: &str) -> Vec<(String, u64)> {
+        let value: serde_json::Value = serde_json::from_str(report).unwrap_or_default();
+        value["stages"]
+            .as_array()
+            .map(|rows| {
+                rows.iter()
+                    .map(|row| {
+                        let name = row["stage"].as_str().unwrap_or_default().to_string();
+                        (name, row["changes"].as_u64().unwrap_or(0))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn stages_of(source: &str, flags: &str) -> (Vec<&'static str>, super::RunReport) {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let into = Arc::clone(&seen);
+        let sink = ProgressSink::new(move |progress| {
+            if let Progress::StageBegins(name) = progress {
+                into.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .push(name);
+            }
+        });
+        let out = report_for(source, flags, false, Some(sink));
+        let names = seen.lock().unwrap_or_else(PoisonError::into_inner).clone();
+        (names, out)
+    }
+
+    #[test]
+    fn a_staged_run_announces_each_stage_in_order_and_prints_what_a_plain_run_prints() {
+        let (names, staged) = stages_of(DECODED, "--rename simple");
+        let plain = run_report(DECODED, "--rename simple", false);
+        assert_eq!(staged.stdout(), plain.stdout());
+        assert_eq!(staged.stderr(), plain.stderr());
+        assert_eq!(staged.code(), plain.code());
+        let rows = stage_rows(&staged.report_json());
+        assert!(!rows.is_empty());
+        assert_eq!(rows, stage_rows(&plain.report_json()));
+        assert_eq!(names.first(), Some(&"prepare"), "{names:?}");
+        let at = |stage: &str| names.iter().position(|name| *name == stage);
+        for stage in ["deobfuscate", "unminify", "rename", "cleanup", "unpack"] {
+            assert!(at(stage).is_some(), "{stage} missing from {names:?}");
+        }
+        assert!(at("deobfuscate") < at("unminify"), "{names:?}");
+        assert!(at("cleanup") < at("unpack"), "{names:?}");
+    }
+
+    #[test]
+    fn stages_left_out_by_the_flags_are_not_announced() {
+        let (names, _) = stages_of(DECODED, "--no-deobfuscate --no-unminify --no-unpack");
+        for stage in ["deobfuscate", "unminify", "cleanup", "unpack", "rename"] {
+            assert!(!names.contains(&stage), "{stage} in {names:?}");
+        }
+    }
+
+    #[test]
+    fn the_staged_run_without_a_listener_is_the_plain_run() {
+        let staged = run_report_staged(DECODED, "", false);
+        let plain = run_report(DECODED, "", false);
+        assert_eq!(staged.stdout(), plain.stdout());
+        assert_eq!(staged.code(), plain.code());
+    }
 
     fn same(source: &str, flags: &str, refused: bool) {
         let expected = run(source, flags, refused);
