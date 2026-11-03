@@ -1,7 +1,8 @@
 # Untwist playground
 
 The playground at [untwist.dev](https://untwist.dev) runs Untwist in the browser. Paste, drop or
-open a script, or pick an example, and press Run. The WebAssembly build (`crates/untwist-wasm`)
+open a script, or pick an example, and press Run. Ctrl+K (⌘K) opens a command palette for the
+examples, settings, modules and actions. The WebAssembly build (`crates/untwist-wasm`)
 works in a Web Worker; you can read, edit and download the output and the unpacked modules, compare
 before and after, and read the diagnostics and the run report. For the same flags the output is
 byte for byte the `untwist` CLI's.
@@ -41,7 +42,15 @@ The input never leaves the browser. The page loads only its own static assets un
 has no analytics and self-hosts its fonts. Settings live in the URL hash (`#unsafe=1&rename=unique`),
 which never reaches a server. Copy link on the input adds the input, deflated into the hash as
 `code=`; an input whose link text would pass 32 KiB gets a settings-only link. Opening such a link
-loads the input and waits for Run. The output never goes into a link.
+loads the input and waits for Run. The output never goes into a link. The Recent menu keeps the
+last ten inputs you ran (up to 512 KB each) with their settings in this browser's `localStorage`;
+Clear removes them, and without storage they last for the tab only.
+
+## Offline
+
+After the first visit a service worker keeps the page, its assets and the engine, so the
+playground opens and runs without a network. A new version waits until you press Reload in
+the prompt. See [`DEPLOY.md`](DEPLOY.md#offline).
 
 ## Limits
 

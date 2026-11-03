@@ -1,0 +1,51 @@
+.recent {
+  position: relative;
+}
+
+#recent {
+  border-color: var(--border);
+}
+
+.recent-menu {
+  max-height: calc(100dvh - var(--bar-h) - 24px);
+  overflow: auto;
+}
+
+.recent-empty {
+  margin: 0;
+  padding: 6px 10px 8px;
+}
+
+.recent-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 4px 2px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.recent-foot .hint {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 720px) {
+  .recent-text, #recent .chevron {
+    display: none;
+  }
+
+  #recent {
+    width: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .recent-menu {
+    position: fixed;
+    top: calc(var(--bar-h) + 4px);
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+  }
+}

@@ -3,6 +3,7 @@ import './styles/layout.css';
 import { Cancelled, Engine } from './engine/engine';
 import { initialState, runCancelled, runFailed, runFinished, runStarted, ticked, type AppState, type InputState } from './state';
 import { flagsFrom } from './settings/flags';
+import { registerServiceWorker } from './pwa/register';
 import { parseHash, writeHash } from './settings/hash';
 import { createStore, type Store } from './store';
 import { applyTheme, preferredTheme } from './theme';
@@ -19,9 +20,12 @@ import { mountInputPane } from './ui/input-pane';
 import { mountModeSwitch } from './ui/mode-switch';
 import { mountStringsBanner } from './ui/strings-banner';
 import { mountModuleTree } from './ui/module-tree';
+import { mountModuleSearch } from './ui/module-search';
 import { mountOptions } from './ui/options';
 import { mountOutputPane } from './ui/output-pane';
+import { mountPaletteKey } from './ui/palette-key';
 import { mountPasses } from './ui/passes';
+import { mountRecentMenu } from './ui/recent-menu';
 import { mountSettingsPanel } from './ui/settings-panel';
 import { mountShareLink } from './ui/share-link';
 import { mountStatusBar } from './ui/status-bar';
@@ -103,16 +107,18 @@ function main(): void {
     store.update((state) => runCancelled(state, performance.now()));
   };
   mountToolbar(store, { run, cancel });
-  const inputView = mountInputPane(store);
+  const inputView = mountInputPane(store, engine.module);
   const outputView = mountOutputPane(store, engine.module);
   mountModuleTree(store);
+  mountModuleSearch(store, outputView);
   mountDownload(store, () => outputView.state.doc.toString());
   mountDiffView(store, () => outputView.state.doc.toString());
   mountStatusBar(store);
   mountDiagnostics(store, inputView);
   mountFocusMode(store);
   const loader = mountLoader(store, run);
-  mountExamplesMenu(store, loader);
+  const pickExample = mountExamplesMenu(store, loader);
+  mountRecentMenu(store, loader);
   mountDropOverlay(store, loader);
   mountShareLink(store, loader);
   mountSummaryChip(store);
@@ -123,6 +129,7 @@ function main(): void {
   mountModeSwitch(store);
   mountStringsBanner(store, start);
   mountDetailsToggle(store, () => flagsFrom(store.get().settings));
+  mountPaletteKey(store, { run, pickExample });
   requestAnimationFrame(() => performance.mark('untwist:editors-painted'));
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -138,6 +145,7 @@ function main(): void {
     },
     (error: unknown) => store.update((state) => ({ ...state, engine: 'failed', engineError: message(error) })),
   );
+  registerServiceWorker(engine.ready());
 }
 
 main();
