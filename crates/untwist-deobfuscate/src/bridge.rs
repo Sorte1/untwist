@@ -317,6 +317,16 @@ fn guard_unit<'p>(
     let own = own_pending_spans(patches, calls);
     let verdict = patch_refusal(patches, inputs.scoping, &used, &own);
     if let Some(refusal) = verdict.refusal {
+        #[cfg(feature = "test-hooks")]
+        crate::refusal_spans::record(
+            || {
+                format!(
+                    "BUILTIN_PATCHED: {}",
+                    refusal.detail.as_deref().unwrap_or("")
+                )
+            },
+            refusal.span,
+        );
         return Err(refusal);
     }
     let symbols = machinery_names(inputs)

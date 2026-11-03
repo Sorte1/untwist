@@ -7,6 +7,7 @@ pub const LADDER_FIRST: &str = "UNTWIST_TEST_LADDER_FIRST";
 pub const SCAN_OFF: &str = "UNTWIST_TEST_SCAN_OFF";
 pub const HEAP_BUDGET: &str = "UNTWIST_TEST_HEAP_BUDGET";
 pub const ADMIT_PANIC: &str = "UNTWIST_TEST_ADMIT_PANIC";
+pub const REFUSAL_SPANS: &str = "UNTWIST_TEST_REFUSAL_SPANS";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SupervisorHook {
@@ -66,6 +67,7 @@ pub fn test_hooks_from(read: impl Fn(&str) -> Option<std::ffi::OsString>) -> unt
             .map(|bytes| bytes as u64),
         admit_panic: number(read(ADMIT_PANIC).as_deref()),
         layer_stub: None,
+        refusal_spans: flag(read(REFUSAL_SPANS).as_deref()),
     }
 }
 
@@ -80,7 +82,7 @@ pub fn test_hooks() -> untwist::TestHooks {
 mod tests {
     use super::{
         role, supervisor_hook_from, test_hooks_from, Role, SupervisorHook, ADMIT_PANIC,
-        HEAP_BUDGET, LADDER_FIRST, LADDER_REFUSE, SCAN_OFF,
+        HEAP_BUDGET, LADDER_FIRST, LADDER_REFUSE, REFUSAL_SPANS, SCAN_OFF,
     };
     use std::ffi::{OsStr, OsString};
 
@@ -148,8 +150,10 @@ mod tests {
             (SCAN_OFF, "1"),
             (HEAP_BUDGET, "1048576"),
             (ADMIT_PANIC, "3"),
+            (REFUSAL_SPANS, "1"),
         ]));
         assert_eq!(hooks.admit_panic, Some(3));
+        assert!(hooks.refusal_spans);
         assert_eq!(hooks.ladder_refuse, 2);
         assert_eq!(hooks.ladder_first, Some(64 << 20));
         assert!(hooks.scan_off);

@@ -22,6 +22,8 @@ pub mod notes;
 pub mod object_props;
 pub mod probe;
 pub mod proof;
+#[cfg(feature = "test-hooks")]
+pub mod refusal_spans;
 pub mod removal;
 pub mod self_defending;
 pub mod stamp;
