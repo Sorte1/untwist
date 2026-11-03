@@ -86,3 +86,132 @@ fn a_returned_value_that_is_called_reaches_a_sink() {
 fn an_iife_return_that_is_called_reaches_a_sink() {
     reaches_sink("const o = {}; function f(k) { (function () { return o[k]; })()(); }");
 }
+
+#[test]
+fn a_destructured_value_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { var { a } = o[k]; return a; }");
+}
+
+#[test]
+fn a_value_destructured_by_assignment_reaches_a_sink() {
+    reaches_sink("const o = {}; var a; function f(k) { ({ a } = o[k]); }");
+}
+
+#[test]
+fn a_value_iterated_by_for_of_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { for (const x of o[k]) { x; } }");
+}
+
+#[test]
+fn a_value_enumerated_by_for_in_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { for (const x in o[k]) { x; } }");
+}
+
+#[test]
+fn a_thrown_value_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { throw o[k]; }");
+}
+
+#[test]
+fn a_value_in_a_with_head_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { with (o[k]) { k; } }");
+}
+
+#[test]
+fn an_awaited_value_reaches_a_sink() {
+    reaches_sink("const o = {}; async function f(k) { await o[k]; }");
+}
+
+#[test]
+fn a_yielded_value_reaches_a_sink() {
+    reaches_sink("const o = {}; function* f(k) { yield o[k]; }");
+}
+
+#[test]
+fn a_superclass_value_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { class C extends o[k] {} return C; }");
+}
+
+#[test]
+fn a_class_field_value_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { class C { x = o[k]; } return C; }");
+}
+
+#[test]
+fn a_value_spread_into_a_call_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { g(...o[k]); }");
+}
+
+#[test]
+fn a_value_spread_into_an_array_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { var a = [...o[k]]; return a; }");
+}
+
+#[test]
+fn a_value_spread_into_an_object_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { var a = { ...o[k] }; return a; }");
+}
+
+#[test]
+fn a_value_interpolated_into_a_tagged_template_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { tag`x ${o[k]} y`; }");
+}
+
+#[test]
+fn a_value_returned_from_a_getter_reaches_a_sink() {
+    reaches_sink(
+        "const o = {}; function f(k) { var obj = { get g() { return o[k]; } }; return obj; }",
+    );
+}
+
+#[test]
+fn a_value_passed_to_a_function_that_reads_arguments_reaches_a_sink() {
+    reaches_sink(
+        "const o = {}; function g() { return arguments[0](); } function f(k) { g(o[k]); }",
+    );
+}
+
+#[test]
+fn a_value_passed_to_a_rest_parameter_reaches_a_sink() {
+    reaches_sink("const o = {}; function g(...xs) { xs[0](); } function f(k) { g(o[k]); }");
+}
+
+#[test]
+fn a_value_stored_then_read_by_an_unknown_key_reaches_a_sink() {
+    reaches_sink("const o = {}; const t = {}; function f(k) { t.foo = o[k]; var g = t[k]; g(); }");
+}
+
+#[test]
+fn a_value_used_as_an_unknown_key_receiver_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k, m) { o[k][m](); }");
+}
+
+#[test]
+fn a_value_passed_to_a_shadowed_native_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { var String = bar; return String(o[k]); }");
+}
+
+#[test]
+fn a_value_passed_to_a_reassigned_global_native_reaches_a_sink() {
+    reaches_sink("const o = {}; String = bar; function f(k) { return String(o[k]); }");
+}
+
+#[test]
+fn a_value_passed_to_a_native_after_an_unknown_global_write_reaches_a_sink() {
+    reaches_sink("const o = {}; window[x] = bar; function f(k) { return String(o[k]); }");
+}
+
+#[test]
+fn a_value_passed_to_an_unshadowed_native_is_inert() {
+    inert("const o = {}; export function f(k) { return String(o[k]); }");
+}
+
+#[test]
+fn a_parameter_default_value_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { function g(a = o[k]) { a(); } g(); }");
+}
+
+#[test]
+fn an_arrow_parameter_default_value_reaches_a_sink() {
+    reaches_sink("const o = {}; function f(k) { var g = (a = o[k]) => a(); g(); }");
+}

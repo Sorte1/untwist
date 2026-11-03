@@ -6,7 +6,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 
-use super::funcs::{param_symbol, Func};
+use super::funcs::{Pre, RetFate};
 use super::{Flow, UNREACHED};
 use crate::calls::agnostic::sites::span_key;
 use untwist_eval::value::JsString;
@@ -54,15 +54,10 @@ fn named<'k>(name: Cow<'k, str>) -> Key<'k> {
     }
 }
 
-pub(super) enum Callee<'k, 'a> {
-    Declared(SymbolId),
-    Direct(&'k FormalParameters<'a>),
-}
-
 pub(super) struct Collector<'s> {
     scoping: &'s Scoping,
     resolve: Option<&'s FxHashMap<Span, &'s JsString>>,
-    funcs: FxHashMap<SymbolId, Func>,
+    pre: Pre,
     next: u32,
     reads: FxHashMap<u64, u32>,
     binds: Vec<u32>,
@@ -79,12 +74,12 @@ impl<'s> Collector<'s> {
     pub(super) fn new(
         scoping: &'s Scoping,
         resolve: Option<&'s FxHashMap<Span, &'s JsString>>,
-        funcs: FxHashMap<SymbolId, Func>,
+        pre: Pre,
     ) -> Self {
         Self {
             scoping,
             resolve,
-            funcs,
+            pre,
             next: 0,
             reads: FxHashMap::default(),
             binds: vec![UNREACHED; scoping.symbols_len()],
@@ -152,6 +147,7 @@ impl<'s> Collector<'s> {
         }
         let any = self.any_node();
         self.edge(any, node);
+        self.edge(node, any);
         node
     }
 
@@ -170,6 +166,42 @@ impl<'s> Collector<'s> {
 
     pub(super) fn sink(&mut self, node: u32, span: Span) {
         self.sinks.push((node, span));
+    }
+
+    pub(super) fn sink_expr(&mut self, expr: &Expression<'_>, span: Span) {
+        match expr.without_parentheses() {
+            Expression::ConditionalExpression(cond) => {
+                self.sink_expr(&cond.consequent, span);
+                self.sink_expr(&cond.alternate, span);
+            }
+            Expression::LogicalExpression(logical) => {
+                self.sink_expr(&logical.left, span);
+                self.sink_expr(&logical.right, span);
+            }
+            other => {
+                if let Some(node) = self.node_of(other) {
+                    self.sink(node, span);
+                }
+            }
+        }
+    }
+
+    pub(super) fn route_into(&mut self, expr: &Expression<'_>, dest: u32) {
+        match expr.without_parentheses() {
+            Expression::ConditionalExpression(cond) => {
+                self.route_into(&cond.consequent, dest);
+                self.route_into(&cond.alternate, dest);
+            }
+            Expression::LogicalExpression(logical) => {
+                self.route_into(&logical.left, dest);
+                self.route_into(&logical.right, dest);
+            }
+            other => {
+                if let Some(node) = self.node_of(other) {
+                    self.edge(node, dest);
+                }
+            }
+        }
     }
 
     pub(super) fn symbol_of(&self, id: &IdentifierReference<'_>) -> Option<SymbolId> {
@@ -218,7 +250,11 @@ impl<'s> Collector<'s> {
                 Some(self.read_node(inner.span()))
             }
             Expression::CallExpression(call) => self.call_result(call),
-            Expression::AssignmentExpression(assign) => self.node_of(&assign.right),
+            Expression::AssignmentExpression(assign)
+                if assign.operator == AssignmentOperator::Assign =>
+            {
+                self.node_of(&assign.right)
+            }
             Expression::SequenceExpression(seq) => {
                 seq.expressions.last().and_then(|last| self.node_of(last))
             }
@@ -226,42 +262,53 @@ impl<'s> Collector<'s> {
         }
     }
 
-    fn call_result(&mut self, call: &CallExpression<'_>) -> Option<u32> {
-        let start = match call.callee.without_parentheses() {
+    pub(super) fn accessor_start(&self, expr: &Expression<'_>) -> Option<u32> {
+        match expr.without_parentheses() {
+            Expression::FunctionExpression(func) => Some(func.span.start),
+            Expression::ArrowFunctionExpression(arrow) => Some(arrow.span.start),
+            _ => None,
+        }
+    }
+
+    fn callee_start(&self, callee: &Expression<'_>) -> Option<u32> {
+        match callee.without_parentheses() {
             Expression::FunctionExpression(func) => Some(func.span.start),
             Expression::ArrowFunctionExpression(arrow) => Some(arrow.span.start),
             Expression::Identifier(id) => self
                 .symbol_of(id)
-                .and_then(|symbol| self.funcs.get(&symbol))
-                .map(|func| func.span_start),
-            _ => None,
-        };
-        start.map(|span_start| self.ret_node(span_start))
-    }
-
-    pub(super) fn resolved_callee<'k, 'a>(
-        &self,
-        callee: &'k Expression<'a>,
-    ) -> Option<Callee<'k, 'a>> {
-        match callee.without_parentheses() {
-            Expression::FunctionExpression(func) => Some(Callee::Direct(&func.params)),
-            Expression::ArrowFunctionExpression(arrow) => Some(Callee::Direct(&arrow.params)),
-            Expression::Identifier(id) => self
-                .symbol_of(id)
-                .filter(|symbol| self.funcs.contains_key(symbol))
-                .map(Callee::Declared),
+                .and_then(|symbol| self.pre.by_symbol.get(&symbol).copied()),
             _ => None,
         }
     }
 
-    fn param_at(&self, callee: &Callee<'_, '_>, index: usize) -> Option<SymbolId> {
-        match callee {
-            Callee::Direct(params) => params.items.get(index).and_then(param_symbol),
-            Callee::Declared(symbol) => self
-                .funcs
-                .get(symbol)
-                .and_then(|func| func.params.get(index).copied().flatten()),
+    fn call_result(&mut self, call: &CallExpression<'_>) -> Option<u32> {
+        let start = self.callee_start(&call.callee)?;
+        match self.pre.fate_of(start) {
+            Some(RetFate::Routes) => Some(self.ret_node(start)),
+            _ => None,
         }
+    }
+
+    pub(super) fn resolved_callee(&self, callee: &Expression<'_>) -> Option<u32> {
+        let start = self.callee_start(callee)?;
+        match self.pre.funcs.get(&start) {
+            Some(func) if !func.opaque => Some(start),
+            _ => None,
+        }
+    }
+
+    fn param_at(&self, start: u32, index: usize) -> Option<SymbolId> {
+        self.pre
+            .funcs
+            .get(&start)
+            .and_then(|func| func.params.get(index).copied().flatten())
+    }
+
+    fn param_count(&self, start: u32) -> usize {
+        self.pre
+            .funcs
+            .get(&start)
+            .map_or(0, |func| func.params.len())
     }
 
     pub(super) fn forwards(&self, member: &MemberExpression<'_>) -> bool {
@@ -272,16 +319,31 @@ impl<'s> Collector<'s> {
         }
     }
 
+    fn native_rebindable(&self, name: &str) -> bool {
+        self.pre.global_unknown_write || self.pre.global_writes.contains(name)
+    }
+
     pub(super) fn inert_native(&self, callee: &Expression<'_>) -> bool {
         match callee.without_parentheses() {
-            Expression::Identifier(id) => INERT_IDENT_NATIVES.contains(&id.name.as_str()),
+            Expression::Identifier(id) => {
+                INERT_IDENT_NATIVES.contains(&id.name.as_str())
+                    && self.symbol_of(id).is_none()
+                    && !self.native_rebindable(&id.name)
+            }
             other => other.as_member_expression().is_some_and(|member| {
-                match member.object().without_parentheses() {
-                    Expression::Identifier(obj) if obj.name == "console" => true,
-                    Expression::Identifier(obj) if obj.name == "JSON" => matches!(
-                        self.key_of_member(member),
-                        Key::Named(name) if name == "stringify"
-                    ),
+                let Expression::Identifier(obj) = member.object().without_parentheses() else {
+                    return false;
+                };
+                let base_known = matches!(obj.name.as_str(), "console" | "JSON");
+                if !base_known || self.symbol_of(obj).is_some() || self.native_rebindable(&obj.name)
+                {
+                    return false;
+                }
+                match self.key_of_member(member) {
+                    Key::Named(name) => {
+                        let known = obj.name != "JSON" || name == "stringify";
+                        known && !self.pre.written_keys.contains(name.as_ref())
+                    }
                     _ => false,
                 }
             }),
@@ -290,40 +352,73 @@ impl<'s> Collector<'s> {
 
     pub(super) fn sink_arguments(&mut self, arguments: &[Argument<'_>], span: Span) {
         for argument in arguments {
-            if let Some(node) = argument.as_expression().and_then(|e| self.node_of(e)) {
-                self.sink(node, span);
+            if let Some(expr) = argument.as_expression() {
+                self.sink_expr(expr, span);
             }
         }
     }
 
-    pub(super) fn bind_arguments(&mut self, callee: &Callee<'_, '_>, arguments: &[Argument<'_>]) {
+    pub(super) fn has_spread(arguments: &[Argument<'_>]) -> bool {
+        arguments
+            .iter()
+            .any(|argument| matches!(argument, Argument::SpreadElement(_)))
+    }
+
+    pub(super) fn sink_spreads(&mut self, arguments: &[Argument<'_>], span: Span) {
+        for argument in arguments {
+            if let Argument::SpreadElement(spread) = argument {
+                self.sink_expr(&spread.argument, span);
+            }
+        }
+    }
+
+    pub(super) fn bind_arguments(&mut self, start: u32, arguments: &[Argument<'_>], span: Span) {
+        let params = self.param_count(start);
         for (index, argument) in arguments.iter().enumerate() {
-            let Some(value) = argument.as_expression().and_then(|e| self.node_of(e)) else {
+            let Some(expr) = argument.as_expression() else {
                 continue;
             };
-            if let Some(bind) = self
-                .param_at(callee, index)
+            if index >= params {
+                self.sink_expr(expr, span);
+                continue;
+            }
+            match self
+                .param_at(start, index)
                 .and_then(|param| self.bind_node(param))
             {
-                self.edge(value, bind);
+                Some(bind) => self.route_into(expr, bind),
+                None => self.sink_expr(expr, span),
             }
         }
     }
 
-    pub(super) fn store(&mut self, value: u32, key: &Key<'_>, span: Span) {
+    pub(super) fn store_expr(&mut self, value: &Expression<'_>, key: &Key<'_>, span: Span) {
         let holder = self.field_node(key);
-        self.edge(value, holder);
+        self.route_into(value, holder);
         let implicit = match key {
-            Key::Named(name) => IMPLICIT_CALL_FIELDS.contains(&name.as_ref()),
+            Key::Named(name) => {
+                IMPLICIT_CALL_FIELDS.contains(&name.as_ref())
+                    || self.pre.accessor_names.contains(name.as_ref())
+            }
             Key::Any => true,
             Key::Index => false,
         };
         if implicit {
-            self.sink(value, span);
+            self.sink_expr(value, span);
         }
     }
 
-    pub(super) fn solve(self) -> Flow {
+    pub(super) fn solve(mut self) -> Flow {
+        for (&start, &ret) in &self.rets {
+            if let Some(RetFate::Sink) = self.pre.fate_of(start) {
+                let span = self
+                    .pre
+                    .funcs
+                    .get(&start)
+                    .map_or(Span::new(start, start), |func| func.span);
+                self.sinks.push((ret, span));
+            }
+        }
         let nodes = self.next as usize;
         let mut starts = vec![0u32; nodes + 1];
         for &(_, to) in &self.edges {

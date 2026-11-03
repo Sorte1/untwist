@@ -14,9 +14,9 @@ impl<'a> VisitJs<'a> for Collector<'_> {
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
         self.fn_stack.push(it.span.start);
-        if let Some(node) = it.get_expression().and_then(|e| self.node_of(e)) {
+        if let Some(body) = it.get_expression() {
             let ret = self.ret_node(it.span.start);
-            self.edge(node, ret);
+            self.route_into(body, ret);
         }
         walk_js::walk_arrow_function_expression(self, it);
         self.fn_stack.pop();
@@ -24,10 +24,8 @@ impl<'a> VisitJs<'a> for Collector<'_> {
 
     fn visit_return_statement(&mut self, it: &ReturnStatement<'a>) {
         if let (Some(&top), Some(argument)) = (self.fn_stack.last(), it.argument.as_ref()) {
-            if let Some(node) = self.node_of(argument) {
-                let ret = self.ret_node(top);
-                self.edge(node, ret);
-            }
+            let ret = self.ret_node(top);
+            self.route_into(argument, ret);
         }
         walk_js::walk_return_statement(self, it);
     }
@@ -41,51 +39,64 @@ impl<'a> VisitJs<'a> for Collector<'_> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if let Some(callee) = self.resolved_callee(&it.callee) {
-            self.bind_arguments(&callee, &it.arguments);
-        } else {
-            let callee = it.callee.without_parentheses();
-            if let Some(node) = self.node_of(callee) {
-                self.sink(node, it.span);
-            }
-            if let Some(member) = callee.as_member_expression() {
-                if self.forwards(member) {
-                    if let Some(node) = self.node_of(member.object()) {
-                        self.sink(node, it.span);
+        let spread = Self::has_spread(&it.arguments);
+        self.sink_spreads(&it.arguments, it.span);
+        match self.resolved_callee(&it.callee).filter(|_| !spread) {
+            Some(start) => self.bind_arguments(start, &it.arguments, it.span),
+            None => {
+                let callee = it.callee.without_parentheses();
+                self.sink_expr(callee, it.span);
+                if let Some(member) = callee.as_member_expression() {
+                    if self.forwards(member) {
+                        self.sink_expr(member.object(), it.span);
                     }
                 }
-            }
-            if !self.inert_native(callee) {
-                self.sink_arguments(&it.arguments, it.span);
+                if !self.inert_native(callee) {
+                    self.sink_arguments(&it.arguments, it.span);
+                }
             }
         }
         walk_js::walk_call_expression(self, it);
     }
 
     fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
-        if let Some(node) = self.node_of(&it.callee) {
-            self.sink(node, it.span);
-        }
+        self.sink_expr(&it.callee, it.span);
         self.sink_arguments(&it.arguments, it.span);
+        self.sink_spreads(&it.arguments, it.span);
         walk_js::walk_new_expression(self, it);
     }
 
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
-        if let Some(node) = self.node_of(&it.tag) {
-            self.sink(node, it.span);
+        self.sink_expr(&it.tag, it.span);
+        for expression in &it.quasi.expressions {
+            self.sink_expr(expression, it.span);
         }
         walk_js::walk_tagged_template_expression(self, it);
     }
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
-        if it.operator == AssignmentOperator::Assign {
-            if let Some(value) = self.node_of(&it.right) {
-                if let Some(member) = it.left.as_member_expression() {
-                    let key = self.key_of_member(member);
-                    self.store(value, &key, it.span);
-                } else if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
+        let routes = matches!(
+            it.operator,
+            AssignmentOperator::Assign
+                | AssignmentOperator::LogicalOr
+                | AssignmentOperator::LogicalAnd
+                | AssignmentOperator::LogicalNullish
+        );
+        if routes {
+            match &it.left {
+                AssignmentTarget::AssignmentTargetIdentifier(id) => {
                     if let Some(bind) = self.symbol_of(id).and_then(|s| self.bind_node(s)) {
-                        self.edge(value, bind);
+                        self.route_into(&it.right, bind);
+                    }
+                }
+                AssignmentTarget::ArrayAssignmentTarget(_)
+                | AssignmentTarget::ObjectAssignmentTarget(_) => {
+                    self.sink_expr(&it.right, it.span);
+                }
+                other => {
+                    if let Some(member) = other.as_member_expression() {
+                        let key = self.key_of_member(member);
+                        self.store_expr(&it.right, &key, it.span);
                     }
                 }
             }
@@ -94,22 +105,48 @@ impl<'a> VisitJs<'a> for Collector<'_> {
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
-        if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, it.init.as_ref()) {
-            if let Some(value) = self.node_of(init) {
-                if let Some(bind) = id.symbol_id.get().and_then(|s| self.bind_node(s)) {
-                    self.edge(value, bind);
+        if let Some(init) = it.init.as_ref() {
+            match &it.id {
+                BindingPattern::BindingIdentifier(id) => {
+                    if let Some(bind) = id.symbol_id.get().and_then(|s| self.bind_node(s)) {
+                        self.route_into(init, bind);
+                    }
                 }
+                _ => self.sink_expr(init, it.span),
             }
         }
         walk_js::walk_variable_declarator(self, it);
     }
 
+    fn visit_assignment_pattern(&mut self, it: &AssignmentPattern<'a>) {
+        self.sink_expr(&it.right, it.span);
+        walk_js::walk_assignment_pattern(self, it);
+    }
+
+    fn visit_formal_parameter(&mut self, it: &FormalParameter<'a>) {
+        if let Some(initializer) = it.initializer.as_ref() {
+            self.sink_expr(initializer, it.span);
+        }
+        walk_js::walk_formal_parameter(self, it);
+    }
+
     fn visit_object_expression(&mut self, it: &ObjectExpression<'a>) {
         for property in &it.properties {
-            if let ObjectPropertyKind::ObjectProperty(prop) = property {
-                if let Some(value) = self.node_of(&prop.value) {
-                    let key = self.key_of_property(&prop.key);
-                    self.store(value, &key, it.span);
+            match property {
+                ObjectPropertyKind::ObjectProperty(prop) => match prop.kind {
+                    PropertyKind::Init => {
+                        let key = self.key_of_property(&prop.key);
+                        self.store_expr(&prop.value, &key, it.span);
+                    }
+                    PropertyKind::Get | PropertyKind::Set => {
+                        if let Some(start) = self.accessor_start(&prop.value) {
+                            let ret = self.ret_node(start);
+                            self.sink(ret, it.span);
+                        }
+                    }
+                },
+                ObjectPropertyKind::SpreadProperty(spread) => {
+                    self.sink_expr(&spread.argument, it.span);
                 }
             }
         }
@@ -118,11 +155,78 @@ impl<'a> VisitJs<'a> for Collector<'_> {
 
     fn visit_array_expression(&mut self, it: &ArrayExpression<'a>) {
         for element in &it.elements {
-            if let Some(value) = element.as_expression().and_then(|e| self.node_of(e)) {
-                let holder = self.field_node(&Key::Index);
-                self.edge(value, holder);
+            match element {
+                ArrayExpressionElement::SpreadElement(spread) => {
+                    self.sink_expr(&spread.argument, it.span);
+                }
+                other => {
+                    if let Some(value) = other.as_expression() {
+                        let holder = self.field_node(&Key::Index);
+                        self.route_into(value, holder);
+                    }
+                }
             }
         }
         walk_js::walk_array_expression(self, it);
+    }
+
+    fn visit_class(&mut self, it: &Class<'a>) {
+        if let Some(heritage) = it.heritage.as_ref() {
+            self.sink_expr(&heritage.expression, it.span);
+        }
+        for element in &it.body.body {
+            match element {
+                ClassElement::PropertyDefinition(prop) => {
+                    if let Some(value) = prop.value.as_ref() {
+                        self.sink_expr(value, prop.span);
+                    }
+                }
+                ClassElement::AccessorProperty(prop) => {
+                    if let Some(value) = prop.value.as_ref() {
+                        self.sink_expr(value, prop.span);
+                    }
+                }
+                ClassElement::MethodDefinition(method) => {
+                    if matches!(method.kind, MethodDefinitionKind::Get) {
+                        let ret = self.ret_node(method.value.span.start);
+                        self.sink(ret, method.span);
+                    }
+                }
+                _ => {}
+            }
+        }
+        walk_js::walk_class(self, it);
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        self.sink_expr(&it.right, it.span);
+        walk_js::walk_for_in_statement(self, it);
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.sink_expr(&it.right, it.span);
+        walk_js::walk_for_of_statement(self, it);
+    }
+
+    fn visit_throw_statement(&mut self, it: &ThrowStatement<'a>) {
+        self.sink_expr(&it.argument, it.span);
+        walk_js::walk_throw_statement(self, it);
+    }
+
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.sink_expr(&it.object, it.span);
+        walk_js::walk_with_statement(self, it);
+    }
+
+    fn visit_yield_expression(&mut self, it: &YieldExpression<'a>) {
+        if let Some(argument) = it.argument.as_ref() {
+            self.sink_expr(argument, it.span);
+        }
+        walk_js::walk_yield_expression(self, it);
+    }
+
+    fn visit_await_expression(&mut self, it: &AwaitExpression<'a>) {
+        self.sink_expr(&it.argument, it.span);
+        walk_js::walk_await_expression(self, it);
     }
 }

@@ -13,7 +13,7 @@ use rustc_hash::FxHashMap;
 use super::sites::span_key;
 use crate::value_flow::{flow_rule_disabled, VALUE_FLOW_SINKS};
 use collect::Collector;
-use funcs::FuncScan;
+use funcs::Prescan;
 use untwist_eval::value::JsString;
 
 const UNREACHED: u32 = u32::MAX;
@@ -30,9 +30,9 @@ impl Flow {
         scoping: &Scoping,
         resolve: Option<&FxHashMap<Span, &JsString>>,
     ) -> Self {
-        let mut funcs = FxHashMap::default();
-        FuncScan { funcs: &mut funcs }.visit_program(program);
-        let mut collector = Collector::new(scoping, resolve, funcs);
+        let mut prescan = Prescan::new(scoping);
+        prescan.visit_program(program);
+        let mut collector = Collector::new(scoping, resolve, prescan.finish());
         collector.visit_program(program);
         collector.solve()
     }

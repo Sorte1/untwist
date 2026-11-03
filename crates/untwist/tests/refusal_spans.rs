@@ -46,7 +46,7 @@ fn refused_as(out: &Output, prefix: &str) -> bool {
 fn an_escaped_read_is_reported_beside_the_refusal_it_causes_and_unsafe_decodes_past_it() {
     let source = patched_after_rotator(
         READS_SLICE,
-        "const o = {}; export function f(k) { return o[k]; }",
+        "const o = {}; export function f(k) { var x = o[k]; x.call(String.prototype, 'slice', function () {}); }",
     );
     let at = position_of(&source, "o[k]");
     let out = run(&source, false);
@@ -83,7 +83,7 @@ fn an_escaped_read_is_reported_beside_the_refusal_it_causes_and_unsafe_decodes_p
 fn every_escaped_read_is_reported_not_only_the_first() {
     let source = patched_after_rotator(
         READS_SLICE,
-        "const o = {}; export function f(k) { return o[k]; }\nexport function g(j) { return '' + o[j]; }",
+        "const o = {}; export function f(k) { var x = o[k]; x.call(String.prototype, 'slice', function () {}); }\nexport function g(j) { var y = o[j]; y.call(String.prototype, 'slice', function () {}); }",
     );
     let out = run(&source, false);
     for needle in ["o[k]", "o[j]"] {

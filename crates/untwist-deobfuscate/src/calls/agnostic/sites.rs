@@ -248,17 +248,29 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     pub(super) fn mark_origin(&mut self, origin: Origin, span: Span, reason: &'static str) {
+        self.mark_origin_sink(origin, span, reason, true);
+    }
+
+    pub(super) fn mark_origin_sink(
+        &mut self,
+        origin: Origin,
+        span: Span,
+        reason: &'static str,
+        has_sink: bool,
+    ) {
         self.out.global_source |= origin.runner;
         if self.in_machinery(span) {
             return;
         }
         #[cfg(feature = "refusal-spans")]
         self.trail(span, || format!("{reason}{}", roles_of(origin)));
-        if origin.definer && self.out.unbounded.is_none() {
-            self.out.unbounded = Some((span, reason));
-        }
-        if origin.runner && self.out.runner_unbounded.is_none() {
-            self.out.runner_unbounded = Some((span, reason));
+        if has_sink {
+            if origin.definer && self.out.unbounded.is_none() {
+                self.out.unbounded = Some((span, reason));
+            }
+            if origin.runner && self.out.runner_unbounded.is_none() {
+                self.out.runner_unbounded = Some((span, reason));
+            }
         }
         self.bind_unbounded |= origin.bind;
         self.apply_unbounded |= origin.apply;
