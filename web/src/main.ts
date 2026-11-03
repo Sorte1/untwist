@@ -3,6 +3,7 @@ import './styles/layout.css';
 import { Cancelled, Engine } from './engine/engine';
 import { initialState, runCancelled, runFailed, runFinished, runStarted, ticked, type AppState, type InputState } from './state';
 import { flagsFrom } from './settings/flags';
+import { registerServiceWorker } from './pwa/register';
 import { parseHash, writeHash } from './settings/hash';
 import { createStore, type Store } from './store';
 import { applyTheme, preferredTheme } from './theme';
@@ -19,10 +20,12 @@ import { mountInputPane } from './ui/input-pane';
 import { mountModeSwitch } from './ui/mode-switch';
 import { mountStringsBanner } from './ui/strings-banner';
 import { mountModuleTree } from './ui/module-tree';
+import { mountModuleSearch } from './ui/module-search';
 import { mountOptions } from './ui/options';
 import { mountOutputPane } from './ui/output-pane';
 import { mountPaletteKey } from './ui/palette-key';
 import { mountPasses } from './ui/passes';
+import { mountRecentMenu } from './ui/recent-menu';
 import { mountSettingsPanel } from './ui/settings-panel';
 import { mountStatusBar } from './ui/status-bar';
 import { mountDetailsToggle } from './ui/details/toggle';
@@ -103,9 +106,10 @@ function main(): void {
     store.update((state) => runCancelled(state, performance.now()));
   };
   mountToolbar(store, { run, cancel });
-  const inputView = mountInputPane(store);
+  const inputView = mountInputPane(store, engine.module);
   const outputView = mountOutputPane(store, engine.module);
   mountModuleTree(store);
+  mountModuleSearch(store, outputView);
   mountDownload(store, () => outputView.state.doc.toString());
   mountDiffView(store, () => outputView.state.doc.toString());
   mountStatusBar(store);
@@ -113,6 +117,7 @@ function main(): void {
   mountFocusMode(store);
   const loader = mountLoader(store, run);
   const pickExample = mountExamplesMenu(store, loader);
+  mountRecentMenu(store, loader);
   mountDropOverlay(store, loader);
   mountSummaryChip(store);
   mountOptions(store);
@@ -138,6 +143,7 @@ function main(): void {
     },
     (error: unknown) => store.update((state) => ({ ...state, engine: 'failed', engineError: message(error) })),
   );
+  registerServiceWorker(engine.ready());
 }
 
 main();

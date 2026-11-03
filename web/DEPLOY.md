@@ -28,7 +28,18 @@ runs `wrangler pages deploy web/dist --project-name=untwist --branch=<branch>`.
 - The engine sits in `/assets/wasm/` and is served as `application/wasm`, which
   `WebAssembly.compileStreaming` needs.
 
+- `sw.js` is `no-cache`, so a deploy reaches the browsers on their next visit.
+
 The page also carries its own Content-Security-Policy `<meta>` (see `vite.config.ts`).
+
+## Offline
+
+The build writes `sw.js`, a service worker that precaches the page, every hashed asset and the
+wasm engine under a cache named after the build. The page registers it once the engine is
+ready and the browser is idle. It serves those files from the cache first, with the headers
+they were fetched with, so an offline page keeps COOP/COEP. A new deploy installs beside the
+old one and waits; the page then offers a Reload, which switches to it and drops the old cache.
+`e2e/offline.spec.ts` serves `dist/` with the rules in `_headers` to check all of this.
 
 ## By hand
 

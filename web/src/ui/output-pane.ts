@@ -4,6 +4,7 @@ import { byId, linesLabel, setText } from '../dom';
 import { seconds, type AppState } from '../state';
 import type { Store } from '../store';
 import { currentBundle } from './module-tree';
+import { codeEditing } from './editing';
 import { baseExtensions, makeEditor, outputLook } from './editor';
 import { outputEdits } from './output-edits';
 
@@ -55,7 +56,9 @@ function mountCopy(view: EditorView): void {
 export function mountOutputPane(store: Store<AppState>, module: Promise<WebAssembly.Module>): EditorView {
   const gate = new Compartment();
   const edits = outputEdits();
-  const view = makeEditor(byId('output-editor'), 'Output code', [baseExtensions(true), gate.of([]), outputLook, edits.extension]);
+  const editing = codeEditing(module);
+  const view = makeEditor(byId('output-editor'), 'Output code', [baseExtensions(true), editing.extension, gate.of([]), outputLook, edits.extension]);
+  editing.attach(view, byId('output-editor'));
   mountCopy(view);
   mountLanguage(store, view, gate, module);
   byId('reset-output').addEventListener('click', () => {

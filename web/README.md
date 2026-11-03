@@ -40,7 +40,15 @@ The end-to-end specs compare the page with the native CLI found through `UNTWIST
 
 The input never leaves the browser. The page loads only its own static assets under a strict CSP,
 has no analytics and self-hosts its fonts. Settings live in the URL hash (`#unsafe=1&rename=unique`),
-which never reaches a server, and never include the input or the output.
+which never reaches a server, and never include the input or the output. The Recent menu keeps the
+last ten inputs you ran (up to 512 KB each) with their settings in this browser's `localStorage`;
+Clear removes them, and without storage they last for the tab only.
+
+## Offline
+
+After the first visit a service worker keeps the page, its assets and the engine, so the
+playground opens and runs without a network. A new version waits until you press Reload in
+the prompt. See [`DEPLOY.md`](DEPLOY.md#offline).
 
 ## Limits
 

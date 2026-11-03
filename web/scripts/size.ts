@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
@@ -11,6 +11,7 @@ const WASM = resolve(process.env.UNTWIST_WEB_WASM ?? join(WEB, 'src/engine/pkg/u
 const INITIAL_JS_GZIP = 180_000;
 const CSS_GZIP = 15_000;
 const FONT_BYTES = 120_000;
+const SW_GZIP = 4_000;
 const WASM_BASELINE_BYTES = 9_058_021;
 const WASM_GROWTH = 0.04;
 
@@ -30,9 +31,11 @@ function manifest(): Manifest {
   return JSON.parse(readFileSync(join(DIST, '.vite/manifest.json'), 'utf8'));
 }
 
+const NOT_LOADED_BY_THE_PAGE: readonly string[] = ['sw.js'];
+
 function initialChunks(chunks: Manifest): Chunk[] {
   const seen = new Set<string>();
-  const pending = Object.keys(chunks).filter((key) => chunks[key]?.isEntry === true);
+  const pending = Object.keys(chunks).filter((key) => chunks[key]?.isEntry === true && !NOT_LOADED_BY_THE_PAGE.includes(chunks[key]?.file ?? ''));
   while (pending.length > 0) {
     const key = pending.pop();
     if (key === undefined || seen.has(key)) {
@@ -79,6 +82,7 @@ function main(): number {
   check(failures, 'initial css gzip', gzipOf(filesOf(initial, (chunk) => chunk.css ?? [])), CSS_GZIP);
   const fonts = walk(DIST).filter((file) => file.endsWith('.woff2'));
   check(failures, 'font bytes', fonts.reduce((sum, file) => sum + statSync(file).size, 0), FONT_BYTES);
+  check(failures, 'service worker gzip', gzipOf(NOT_LOADED_BY_THE_PAGE.filter((file) => existsSync(join(DIST, file)))), SW_GZIP);
   wasmRow(failures);
   for (const failure of failures) {
     console.log(`SIZE-FAIL: ${failure}`);
