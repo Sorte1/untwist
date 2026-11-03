@@ -682,6 +682,10 @@ impl InlineDecodedStrings {
             };
             if edits.insert(*span, expression) {
                 planned += 1;
+                crate::decoded_strings::record(*span, || match value {
+                    Some(DecodedValue::Str(text)) => Some(text.to_lossy_string()),
+                    _ => None,
+                });
             }
         }
         let applied = edits.apply(program, cx.allocator(), cx.scoping_mut());

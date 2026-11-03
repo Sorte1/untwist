@@ -8,6 +8,7 @@ pub mod dead_assignment;
 pub mod dead_code;
 pub mod debug_protection;
 pub mod decoded;
+pub mod decoded_strings;
 pub mod decoder;
 pub mod directives;
 pub mod driver;

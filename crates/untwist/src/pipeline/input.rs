@@ -41,6 +41,7 @@ pub(super) struct InputResult {
     pub(super) guards: GuardRecord,
     pub(super) unbundled: bool,
     pub(super) snapshots: Snapshots,
+    pub(super) decoded_strings: Vec<super::DecodedSite>,
     #[cfg(feature = "refusal-spans")]
     pub(super) refusal_sites: Vec<super::RefusalSite>,
 }
@@ -263,6 +264,12 @@ impl Pipeline {
         }
         *fallback = None;
         result.snapshots.enter_layer(layering.peeled());
+        let decoding = self.options.decoded_strings.then(|| {
+            (
+                layering.peeled(),
+                untwist_deobfuscate::decoded_strings::Recorder::start(),
+            )
+        });
         #[cfg(feature = "refusal-spans")]
         let recorder = self.records_refusal_spans().then(|| {
             (
@@ -279,6 +286,10 @@ impl Pipeline {
         if let Some((layer, recorder)) = recorder {
             let sites = super::refusal_spans::located(text, layer, recorder.finish());
             result.refusal_sites.extend(sites);
+        }
+        if let Some((layer, recorder)) = decoding {
+            let found = super::decoded::sited(text.len(), layer, recorder.finish());
+            result.decoded_strings.extend(found);
         }
         match staged {
             Ok(Staged::TypeScript) => Step::Done(None),

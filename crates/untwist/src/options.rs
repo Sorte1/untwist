@@ -80,6 +80,7 @@ pub struct Options {
     pub disabled_passes: Vec<&'static str>,
     pub refusal_spans: bool,
     pub stage_snapshots: Option<usize>,
+    pub decoded_strings: bool,
 }
 
 impl Default for Options {
@@ -107,6 +108,7 @@ impl Default for Options {
             disabled_passes: Vec::new(),
             refusal_spans: false,
             stage_snapshots: None,
+            decoded_strings: false,
         }
     }
 }
