@@ -43,6 +43,12 @@ which never reaches a server, and never include the input or the output. The Rec
 last ten inputs you ran (up to 512 KB each) with their settings in this browser's `localStorage`;
 Clear removes them, and without storage they last for the tab only.
 
+## Offline
+
+After the first visit a service worker keeps the page, its assets and the engine, so the
+playground opens and runs without a network. A new version waits until you press Reload in
+the prompt. See [`DEPLOY.md`](DEPLOY.md#offline).
+
 ## Limits
 
 | What | Limit | Above it |
