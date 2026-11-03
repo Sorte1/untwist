@@ -1,11 +1,15 @@
 import { StateEffect, StateField, type Extension } from '@codemirror/state';
-import { EditorView, hoverTooltip, showTooltip, type Tooltip } from '@codemirror/view';
+import { closeHoverTooltips, EditorView, hoverTooltip, showTooltip, type Tooltip } from '@codemirror/view';
 import { globals, memberBuiltin } from './builtins';
 import { builtinCard, button, el, signatureLine, stringCard, valueLine, whereLabel } from './cards';
 import { describeAt, ownerOf } from './complete';
 import { memberNameAt, stringAt } from './context';
 import { definitionAt, goToDefinition, parsed, referencesAt, showReferences, type DefinitionReply, type LangHooks, type RenameReply } from './extensions';
 import { decodeJsString, hasEscapes } from './js-string';
+import { PREVIEW_LINES, previewLines, previewNote, type PreviewLine } from './rename-preview';
+
+const PREVIEW_MS = 120;
+const DEFAULT_NOTE = 'Enter to rename · Esc to cancel';
 
 const openRename = StateEffect.define<number | null>();
 
@@ -23,6 +27,51 @@ async function applyRename(view: EditorView, hooks: LangHooks, pos: number, name
   return null;
 }
 
+function previewRows(preview: HTMLElement, lines: readonly PreviewLine[]): void {
+  const rows = lines.slice(0, PREVIEW_LINES).map((line) => {
+    const row = el('div', 'cm-lang-rename-line');
+    const text = el('span', 'cm-lang-rename-text');
+    text.append(...line.parts.map((part) => (part.changed ? el('mark', 'cm-lang-rename-new', part.text) : document.createTextNode(part.text))));
+    row.append(el('span', 'cm-lang-rename-num', String(line.line)), text);
+    return row;
+  });
+  const more = lines.length - rows.length;
+  preview.replaceChildren(...rows, ...(more > 0 ? [el('div', 'cm-lang-rename-more', `and ${more.toLocaleString('en-US')} more ${more === 1 ? 'line' : 'lines'}`)] : []));
+}
+
+function renamePreview(view: EditorView, hooks: LangHooks, pos: number, input: HTMLInputElement, note: HTMLElement, preview: HTMLElement): () => void {
+  const original = input.value;
+  let ticket = 0;
+  const say = (text: string, refused: boolean) => {
+    note.textContent = text;
+    note.classList.toggle('cm-lang-refused', refused);
+  };
+  return () => {
+    ticket += 1;
+    const asked = ticket;
+    const name = input.value.trim();
+    if (name === '' || name === original) {
+      say(DEFAULT_NOTE, false);
+      preview.replaceChildren();
+      return;
+    }
+    void hooks.client.query('rename', pos, name).then((value) => {
+      if (asked !== ticket) {
+        return;
+      }
+      const reply = parsed<RenameReply>(value);
+      if (reply === null || 'refused' in reply) {
+        say(reply === null ? 'The text changed; try again.' : `Not renamed: ${reply.refused}.`, true);
+        preview.replaceChildren();
+        return;
+      }
+      const lines = previewLines(view.state, reply.edits);
+      say(previewNote(reply.edits.length, lines.length), false);
+      previewRows(preview, lines);
+    });
+  };
+}
+
 function renameDom(view: EditorView, hooks: LangHooks, pos: number): HTMLElement {
   const word = view.state.wordAt(pos);
   const dom = el('div', 'cm-lang-card cm-lang-rename');
@@ -31,7 +80,17 @@ function renameDom(view: EditorView, hooks: LangHooks, pos: number): HTMLElement
   const input = el('input', 'cm-lang-input');
   input.value = word === null ? '' : view.state.sliceDoc(word.from, word.to);
   input.setAttribute('aria-label', 'New name');
-  const note = el('div', 'cm-lang-note', 'Enter to rename · Esc to cancel');
+  const note = el('div', 'cm-lang-note', DEFAULT_NOTE);
+  note.setAttribute('aria-live', 'polite');
+  const preview = el('div', 'cm-lang-rename-preview');
+  const refresh = renamePreview(view, hooks, pos, input, note, preview);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  input.addEventListener('input', () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+    timer = setTimeout(refresh, PREVIEW_MS);
+  });
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -43,11 +102,12 @@ function renameDom(view: EditorView, hooks: LangHooks, pos: number): HTMLElement
         if (message !== null) {
           note.textContent = message;
           note.classList.add('cm-lang-refused');
+          preview.replaceChildren();
         }
       });
     }
   });
-  dom.append(el('div', 'cm-lang-title', 'Rename symbol'), input, note);
+  dom.append(el('div', 'cm-lang-title', 'Rename symbol'), input, note, preview);
   return dom;
 }
 
@@ -67,7 +127,7 @@ export function renaming(hooks: LangHooks): { readonly extension: Extension; rea
     provide: (f) => showTooltip.from(f),
   });
   const open = (view: EditorView) => {
-    view.dispatch({ effects: openRename.of(view.state.selection.main.head) });
+    view.dispatch({ effects: [openRename.of(view.state.selection.main.head), closeHoverTooltips] });
     return true;
   };
   return { extension: field, open };

@@ -59,6 +59,7 @@ export const SHORTCUTS: readonly ShortcutGroup[] = [
       { action: 'Parameter hints', keys: 'Shift-Mod-Space' },
       { action: 'Go to definition', keys: 'F12|Mod-click' },
       { action: 'Find references', keys: 'Shift-F12' },
+      { action: 'Next or previous reference', keys: 'F4|Shift-F4' },
       { action: 'Rename symbol', keys: 'F2' },
       { action: 'Next problem', keys: 'F8' },
       { action: 'Problems list', keys: 'Shift-Mod-m' },
