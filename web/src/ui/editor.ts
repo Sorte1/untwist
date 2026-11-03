@@ -1,7 +1,7 @@
 import { javascriptLanguage } from '@codemirror/lang-javascript';
 import { HighlightStyle, LanguageSupport, syntaxHighlighting } from '@codemirror/language';
 import { EditorState, Prec, Transaction, type Extension } from '@codemirror/state';
-import { drawSelection, EditorView, highlightSpecialChars, keymap, lineNumbers } from '@codemirror/view';
+import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, highlightSpecialChars, keymap, lineNumbers } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { tags } from '@lezer/highlight';
@@ -18,16 +18,19 @@ const look = EditorView.theme({
   '&': { flex: '1 1 auto', minWidth: '0', height: '100%', backgroundColor: 'var(--code)', color: 'var(--plain)', fontSize: '12.5px' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': { fontFamily: 'var(--mono)', lineHeight: '20px', padding: '10px 0' },
-  '.cm-content': { padding: '0', caretColor: 'var(--text)' },
+  '.cm-content': { padding: '0', caretColor: 'var(--pane-strand, var(--text))' },
   '.cm-line': { padding: '0 16px 0 0' },
   '.cm-gutters': { backgroundColor: 'var(--code)', color: 'var(--faint)', border: 'none' },
   '.cm-lineNumbers .cm-gutterElement': { minWidth: '44px', padding: '0 14px 0 0', boxSizing: 'border-box' },
   '.cm-activeLine': { backgroundColor: 'transparent' },
+  '&.cm-focused .cm-activeLine': { backgroundColor: 'var(--active-line)' },
+  '&.cm-focused .cm-activeLineGutter': { backgroundColor: 'var(--active-line)', color: 'var(--text)' },
+  '.cm-activeLineGutter': { backgroundColor: 'transparent' },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
     backgroundColor: 'var(--selection) !important',
     boxShadow: 'inset 0 0 0 1px var(--info)',
   },
-  '.cm-cursor': { borderLeftColor: 'var(--text)' },
+  '.cm-cursor, .cm-dropCursor': { borderLeft: '2px solid var(--pane-strand, var(--text))', marginLeft: '-1px' },
   '.cm-selectionMatch': { backgroundColor: 'var(--selection)', outline: '1px solid var(--btn-border)' },
   '.cm-panels': { backgroundColor: 'var(--head)', color: 'var(--text)', borderColor: 'var(--border)' },
 });
@@ -48,6 +51,8 @@ export function access(editable: boolean): Extension {
 export function baseExtensions(editable: boolean, gate: Extension = access(editable)): Extension[] {
   return [
     lineNumbers(),
+    highlightActiveLine(),
+    highlightActiveLineGutter(),
     highlightSpecialChars(),
     drawSelection(),
     highlightSelectionMatches(),

@@ -60,6 +60,7 @@
   --track: #3E3A52;
   --knob: #EDEBF5;
   --sel: #302C3E;
+  --active-line: rgba(255, 255, 255, 0.045);
   --btn: #272434;
   --btn-border: #3A3650;
   --overlay: rgba(22, 20, 30, 0.86);
@@ -102,6 +103,7 @@
   --track: #CFCBDB;
   --knob: #FFFFFF;
   --sel: #E2DFEB;
+  --active-line: rgba(28, 26, 37, 0.045);
   --btn: #FFFFFF;
   --btn-border: #CFCBDB;
   --overlay: rgba(252, 251, 254, 0.88);
