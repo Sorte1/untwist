@@ -84,3 +84,13 @@ test('a new run records its own steps', async ({ page }) => {
   await expect.poll(() => sideText(page, 'a')).toContain('!0');
   await expect.poll(() => sideText(page, 'b')).toContain('true');
 });
+
+test('leaving Steps while it records stops the recording, and coming back records again', async ({ page }) => {
+  await openApp(page, '#unsafe=1');
+  await paste(page, readRepo(FIXTURE));
+  await runAndWait(page);
+  await page.locator('#view-steps').click();
+  await page.locator('#view-output').click();
+  await page.locator('#view-steps').click();
+  await expect(page.locator('#steps-bar .step-chip').first()).toHaveText('Input', { timeout: 60_000 });
+});
