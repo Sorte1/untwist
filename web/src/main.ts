@@ -19,6 +19,7 @@ import { mountInputPane } from './ui/input-pane';
 import { mountModeSwitch } from './ui/mode-switch';
 import { mountStringsBanner } from './ui/strings-banner';
 import { mountModuleTree } from './ui/module-tree';
+import { mountModuleSearch } from './ui/module-search';
 import { mountOptions } from './ui/options';
 import { mountOutputPane } from './ui/output-pane';
 import { mountPasses } from './ui/passes';
@@ -105,6 +106,7 @@ function main(): void {
   const inputView = mountInputPane(store);
   const outputView = mountOutputPane(store, engine.module);
   mountModuleTree(store);
+  mountModuleSearch(store, outputView);
   mountDownload(store, () => outputView.state.doc.toString());
   mountDiffView(store, () => outputView.state.doc.toString());
   mountStatusBar(store);
