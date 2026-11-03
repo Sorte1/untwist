@@ -5,6 +5,8 @@ import type { AppState } from '../state';
 import type { Store } from '../store';
 import type { Loader } from './load-input';
 
+type Codec = typeof import('../share/codec');
+
 const COPIED_MS = 1200;
 const LABEL = 'Copy link';
 const OPENED = 'Opened from a link. Press Run.';
@@ -39,15 +41,32 @@ function wireCopy(store: Store<AppState>, loader: Loader): void {
     window.clearTimeout(timer);
     timer = window.setTimeout(() => setText(label, LABEL), COPIED_MS);
   };
-  const copy = async () => {
-    const { packCode } = await import('../share/codec');
-    const state = store.get();
-    const plan = planLink(writeHash(state.settings), state.input, packCode);
-    await navigator.clipboard.writeText(urlOf(plan.hash));
-    return plan;
+  let codec: Codec | null = null;
+  let loading: Promise<Codec> | null = null;
+  const load = (): Promise<Codec> => {
+    loading ??= import('../share/codec').then(
+      (module) => {
+        codec = module;
+        return module;
+      },
+      (error: unknown) => {
+        loading = null;
+        throw error;
+      },
+    );
+    return loading;
   };
-  byId('share-link').addEventListener('click', () => {
-    copy().then(
+  const copyWith = (module: Codec): Promise<LinkPlan> => {
+    const state = store.get();
+    const plan = planLink(writeHash(state.settings), state.input, module.packCode);
+    return navigator.clipboard.writeText(urlOf(plan.hash)).then(() => plan);
+  };
+  const button = byId('share-link');
+  for (const warm of ['pointerenter', 'pointerdown', 'focus']) {
+    button.addEventListener(warm, () => void load().catch(() => undefined));
+  }
+  button.addEventListener('click', () => {
+    (codec === null ? load().then(copyWith) : copyWith(codec)).then(
       (plan) => {
         flash('Copied');
         loader.note(noteOf(plan));
