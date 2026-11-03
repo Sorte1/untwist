@@ -101,11 +101,11 @@ fn compiled_run(source: &str, options: &Options) -> (Run, CompileCensus) {
     (default, census)
 }
 
-fn compared(path: &Path, tally: &mut Tally) {
+fn compared(path: &Path, input: &str, tally: &mut Tally) {
     let source = std::fs::read_to_string(path).expect("read an input");
     for (label, options) in option_sets() {
         let (default, census) = compiled_run(&source, &options);
-        freeze(&relative(path), label, &default);
+        freeze(input, label, &default);
         tally.runs += 1;
         tally.units += default.units.len();
         tally.calls += census.calls;
@@ -139,14 +139,14 @@ fn group_tallies() -> Vec<(&'static str, Tally)> {
     for (name, dir) in GROUPS {
         let mut tally = Tally::default();
         for path in sources(&root.join(dir)) {
-            compared(&path, &mut tally);
+            compared(&path, &relative(&path), &mut tally);
         }
         report(name, &tally);
         tallies.push((name, tally));
     }
     if let Some(game) = untwist_testing::real_world_path("game.js") {
         let mut real = Tally::default();
-        compared(&game, &mut real);
+        compared(&game, GAME, &mut real);
         report("real-world", &real);
         tallies.push(("real-world", real));
     }
