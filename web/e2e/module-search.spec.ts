@@ -88,3 +88,20 @@ test('a new run keeps the query and searches the new modules', async ({ page }) 
   await expect(page.locator('#module-search')).toHaveValue('exports');
   await expect(page.locator(HITS)).toHaveCount(before);
 });
+
+test('a hit in the shown module still lands on its match after the module was edited', async ({ page }) => {
+  await loadBundle(page);
+  await page.locator('#module-search').fill('require');
+  const hit = page.locator(HITS).last();
+  const path = (await hit.getAttribute('data-path')) ?? '';
+  await page.locator('#module-list .tree-item', { hasText: path }).evaluate((item: HTMLElement) => item.click());
+  await expect(page.locator('#output-meta')).toHaveText(new RegExp(`^${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} · `));
+  await page.locator('#output-editor .cm-content').click();
+  await page.keyboard.press('ControlOrMeta+Home');
+  await page.keyboard.type('// edited\n');
+  await hit.click();
+  await page.keyboard.type('ZZZ');
+  const text = await outputText(page);
+  expect(text.startsWith('// edited\n')).toBe(true);
+  expect(text).toMatch(/ZZZ\.[a-z]\(/);
+});

@@ -1,14 +1,17 @@
 import { deflateSync, Inflate } from 'fflate';
+import { LINK_CODE_CAP } from './link';
 
 export const SHARED_TEXT_CAP = 4 * 1024 * 1024;
+export const PACKED_CAP = 2 * LINK_CODE_CAP;
 
 const CHUNK = 0x8000;
+const INFLATE_SLICE = 4096;
 const UNREADABLE = 'The code in the link could not be read.';
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
 class LinkTooLarge extends Error {
-  constructor() {
-    super(`The code in the link is larger than ${SHARED_TEXT_CAP / (1024 * 1024)} MB.`);
+  constructor(message = `The code in the link is larger than ${SHARED_TEXT_CAP / (1024 * 1024)} MB.`) {
+    super(message);
   }
 }
 
@@ -40,7 +43,9 @@ function inflated(bytes: Uint8Array): Uint8Array {
     chunks.push(chunk);
     ended = final;
   });
-  stream.push(bytes, true);
+  for (let at = 0; at < bytes.length; at += INFLATE_SLICE) {
+    stream.push(bytes.subarray(at, at + INFLATE_SLICE), at + INFLATE_SLICE >= bytes.length);
+  }
   if (!ended) {
     throw new Error(UNREADABLE);
   }
@@ -57,6 +62,9 @@ export function packCode(text: string): string {
 }
 
 export function unpackCode(packed: string): string {
+  if (packed.length > PACKED_CAP) {
+    throw new LinkTooLarge('The code in the link is too long to open.');
+  }
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(inflated(fromBase64Url(packed)));
   } catch (error) {

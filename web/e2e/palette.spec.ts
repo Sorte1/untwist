@@ -41,7 +41,14 @@ test('Ctrl+K opens an accessible palette that filters as you type and closes on 
   await expect(page.locator(OPTIONS).first()).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.type('zzzz');
   await expect(page.locator(OPTIONS)).toHaveCount(0);
-  await expect(page.locator('#palette')).toContainText('No matching command');
+  await expect(page.locator('#palette [role=status]')).toHaveText('No matching command');
+  await expect(input).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace');
+  await expect(input).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#palette [role=status]')).toHaveText('');
   await page.keyboard.press('Escape');
   await expect(page.locator('#palette')).toBeHidden();
   await expect(page.locator('#examples')).toBeFocused();

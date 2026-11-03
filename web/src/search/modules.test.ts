@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { searchModules, snippetOf } from './modules';
+import { mappedRange, nearestMatch, searchModules, snippetOf } from './modules';
 
 const MODULES = ['const a = require("./b");\nexport default a;', 'function Foo() {}\nfoo();\nFOO = 1;', 'nothing here'];
 
@@ -53,5 +53,38 @@ describe('snippetOf', () => {
     expect(snip.before.startsWith('…')).toBe(true);
     expect(snip.before.length).toBeLessThanOrEqual(25);
     expect(snip.after).toBe('');
+  });
+});
+
+describe('nearestMatch', () => {
+  it('finds the occurrence closest to a position', () => {
+    const text = 'foo bar foo baz foo';
+    expect(nearestMatch(text, 'foo', 9)).toEqual({ from: 8, to: 11 });
+    expect(nearestMatch(text, 'foo', 0)).toEqual({ from: 0, to: 3 });
+    expect(nearestMatch(text, 'foo', 30)).toEqual({ from: 16, to: 19 });
+  });
+
+  it('gives null when the text does not hold the needle', () => {
+    expect(nearestMatch('bar', 'foo', 0)).toBeNull();
+    expect(nearestMatch('bar', '', 0)).toBeNull();
+  });
+});
+
+describe('mappedRange', () => {
+  const original = 'foo bar foo baz foo';
+
+  it('keeps the range of an unedited text and of a match before the edit', () => {
+    expect(mappedRange(original, original, { from: 8, to: 11 })).toEqual({ from: 8, to: 11 });
+    expect(mappedRange(original, `${original}\n// added`, { from: 8, to: 11 })).toEqual({ from: 8, to: 11 });
+  });
+
+  it('shifts a match after the edit by what the edit added or removed', () => {
+    expect(mappedRange(original, `// added\n${original}`, { from: 8, to: 11 })).toEqual({ from: 17, to: 20 });
+    expect(mappedRange(original, original.slice(4), { from: 8, to: 11 })).toEqual({ from: 4, to: 7 });
+  });
+
+  it('falls back to the nearest same text for a match inside the edit, and to a caret without one', () => {
+    expect(mappedRange(original, 'foo bar  foo baz foo', { from: 8, to: 11 })).toEqual({ from: 9, to: 12 });
+    expect(mappedRange('abc require def', 'abc def', { from: 4, to: 11 })).toEqual({ from: 4, to: 4 });
   });
 });

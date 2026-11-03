@@ -1,6 +1,6 @@
 import { deflateSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { packCode, SHARED_TEXT_CAP, unpackCode } from './codec';
+import { PACKED_CAP, packCode, SHARED_TEXT_CAP, unpackCode } from './codec';
 
 function generated(lines: number): string {
   return Array.from({ length: lines }, (_, index) => `var v${index} = "${(index * 2654435761) % 1000003}";`).join('\n');
@@ -30,6 +30,10 @@ describe('packCode and unpackCode', () => {
     expect(() => unpackCode('_____')).toThrow(/could not be read/);
     const notUtf8 = Buffer.from(deflateSync(new Uint8Array([0x76, 0xff, 0xfe]))).toString('base64url');
     expect(() => unpackCode(notUtf8)).toThrow(/could not be read/);
+  });
+
+  it('refuse a code longer than any link made here, before inflating it', () => {
+    expect(() => unpackCode('A'.repeat(PACKED_CAP + 4))).toThrow(/too long/);
   });
 
   it('refuse a link that inflates past the cap', () => {

@@ -1,7 +1,7 @@
 import { EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { byId, setText } from '../dom';
-import { searchModules, snippetOf, HIT_LIMIT, type Found, type Hit } from '../search/modules';
+import { mappedRange, searchModules, snippetOf, HIT_LIMIT, type Found, type Hit } from '../search/modules';
 import type { AppState } from '../state';
 import type { Store } from '../store';
 import { currentBundle, treeOrder, type BundleInfo } from './module-tree';
@@ -92,9 +92,9 @@ export function mountModuleSearch(store: Store<AppState>, view: EditorView): voi
       selectedModule: hit.module,
       settings: state.settings.view === 'diff' ? { ...state.settings, view: 'output' } : state.settings,
     }));
-    const length = view.state.doc.length;
-    const from = Math.min(hit.from, length);
-    view.dispatch({ selection: EditorSelection.single(from, Math.min(hit.to, length)), effects: EditorView.scrollIntoView(from, { y: 'center' }) });
+    const original = store.get().run.result?.modules[hit.module] ?? '';
+    const range = mappedRange(original, view.state.doc.toString(), hit);
+    view.dispatch({ selection: EditorSelection.single(range.from, range.to), effects: EditorView.scrollIntoView(range.from, { y: 'center' }) });
     view.focus();
   };
   const paint = () => {
@@ -121,6 +121,9 @@ export function mountModuleSearch(store: Store<AppState>, view: EditorView): voi
     timer = window.setTimeout(paint, DEBOUNCE_MS);
   });
   input.addEventListener('keydown', (event) => {
+    if (event.isComposing) {
+      return;
+    }
     if (event.key === 'Escape' && input.value !== '') {
       event.preventDefault();
       event.stopPropagation();

@@ -35,12 +35,14 @@ describe('precacheEntries', () => {
 });
 
 describe('versionOf', () => {
-  it('changes with the file list and with the page, and is stable otherwise', () => {
-    const base = versionOf(['./', 'assets/a-1.js'], '<html>');
+  it('changes with the file list, the page and the unhashed files, and is stable otherwise', () => {
+    const icon = new Uint8Array([1, 2, 3]);
+    const base = versionOf(['./', 'assets/a-1.js', 'favicon.svg'], ['<html>', icon]);
     expect(base).toMatch(/^[0-9a-f]{16}$/);
-    expect(versionOf(['./', 'assets/a-1.js'], '<html>')).toBe(base);
-    expect(versionOf(['./', 'assets/a-2.js'], '<html>')).not.toBe(base);
-    expect(versionOf(['./', 'assets/a-1.js'], '<html lang>')).not.toBe(base);
+    expect(versionOf(['./', 'assets/a-1.js', 'favicon.svg'], ['<html>', icon])).toBe(base);
+    expect(versionOf(['./', 'assets/a-2.js', 'favicon.svg'], ['<html>', icon])).not.toBe(base);
+    expect(versionOf(['./', 'assets/a-1.js', 'favicon.svg'], ['<html lang>', icon])).not.toBe(base);
+    expect(versionOf(['./', 'assets/a-1.js', 'favicon.svg'], ['<html>', new Uint8Array([1, 2, 4])])).not.toBe(base);
   });
 });
 

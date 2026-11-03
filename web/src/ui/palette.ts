@@ -1,3 +1,4 @@
+import { setText } from '../dom';
 import { EXAMPLES } from '../examples/examples';
 import { exampleCommands, moduleCommands, settingCommands } from '../palette/commands';
 import { filterCommands, type Command } from '../palette/match';
@@ -82,6 +83,7 @@ interface Parts {
   readonly dialog: HTMLDialogElement;
   readonly input: HTMLInputElement;
   readonly list: HTMLElement;
+  readonly empty: HTMLElement;
 }
 
 function build(): Parts {
@@ -106,11 +108,13 @@ function build(): Parts {
   list.id = 'palette-list';
   list.setAttribute('role', 'listbox');
   list.setAttribute('aria-label', 'Commands');
+  const empty = element('div', 'palette-empty');
+  empty.setAttribute('role', 'status');
   const foot = element('div', 'palette-foot');
   foot.append(element('span', '', '↑ ↓ to move'), element('span', '', '↵ to run'), element('span', '', 'Esc to close'));
-  dialog.append(search, list, foot);
+  dialog.append(search, list, empty, foot);
   document.body.append(dialog);
-  return { dialog, input, list };
+  return { dialog, input, list, empty };
 }
 
 function optionOf(command: Command, index: number): HTMLElement {
@@ -126,7 +130,7 @@ function optionOf(command: Command, index: number): HTMLElement {
 }
 
 export function createPalette(store: Store<AppState>, actions: PaletteActions): { toggle(): void } {
-  const { dialog, input, list } = build();
+  const { dialog, input, list, empty } = build();
   let all: Command[] = [];
   let shown: Command[] = [];
   let active = 0;
@@ -146,7 +150,10 @@ export function createPalette(store: Store<AppState>, actions: PaletteActions): 
   };
   const render = () => {
     shown = filterCommands(all, input.value);
-    list.replaceChildren(...(shown.length === 0 ? [element('div', 'palette-empty', 'No matching command')] : shown.map(optionOf)));
+    list.replaceChildren(...shown.map(optionOf));
+    list.hidden = shown.length === 0;
+    input.setAttribute('aria-expanded', String(shown.length > 0));
+    setText(empty, shown.length === 0 ? 'No matching command' : '');
     mark(0, true);
   };
   const close = () => {
@@ -162,6 +169,9 @@ export function createPalette(store: Store<AppState>, actions: PaletteActions): 
   };
   input.addEventListener('input', render);
   input.addEventListener('keydown', (event) => {
+    if (event.isComposing) {
+      return;
+    }
     const steps: Readonly<Record<string, number>> = { ArrowDown: 1, ArrowUp: -1, PageDown: 8, PageUp: -8 };
     const step = steps[event.key];
     if (step !== undefined) {

@@ -10,8 +10,12 @@ export function precacheEntries(files: readonly string[]): string[] {
   return [...new Set(kept)].sort();
 }
 
-export function versionOf(entries: readonly string[], html: string): string {
-  return createHash('sha256').update(entries.join('\n')).update('\0').update(html).digest('hex').slice(0, VERSION_CHARS);
+export function versionOf(entries: readonly string[], contents: readonly (string | Uint8Array)[]): string {
+  const hash = createHash('sha256').update(entries.join('\n'));
+  for (const content of contents) {
+    hash.update('\0').update(content);
+  }
+  return hash.digest('hex').slice(0, VERSION_CHARS);
 }
 
 export function injectPrecache(code: string, entries: readonly string[], version: string): string {
