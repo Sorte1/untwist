@@ -51,7 +51,7 @@ test('a run names each stage as the worker reaches it', async ({ page }) => {
   expect(first('prepare')).toBeLessThan(first('deobfuscate'));
   expect(first('deobfuscate')).toBeLessThan(first('unminify'));
   expect(first('cleanup')).toBeLessThan(first('unpack'));
-  expect(stages.some((line) => /^Stage: (unminify|cleanup) · round 2$/.test(line))).toBe(true);
+  expect(stages).toContain('Stage: deobfuscate · round 2');
   await expect(page.locator('#running')).toBeHidden();
 });
 

@@ -161,6 +161,21 @@ mod tests {
         function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return e[f]; }; return b(c, d); }\n\
         console.log(b(0x0) + b(0x1));";
 
+    fn stage_rows(report: &str) -> Vec<(String, u64)> {
+        let value: serde_json::Value = serde_json::from_str(report).unwrap_or_default();
+        value["stages"]
+            .as_array()
+            .map(|rows| {
+                rows.iter()
+                    .map(|row| {
+                        let name = row["stage"].as_str().unwrap_or_default().to_string();
+                        (name, row["changes"].as_u64().unwrap_or(0))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     fn stages_of(source: &str, flags: &str) -> (Vec<&'static str>, super::RunReport) {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let into = Arc::clone(&seen);
@@ -183,7 +198,9 @@ mod tests {
         assert_eq!(staged.stdout(), plain.stdout());
         assert_eq!(staged.stderr(), plain.stderr());
         assert_eq!(staged.code(), plain.code());
-        assert_eq!(staged.report_json().len(), plain.report_json().len());
+        let rows = stage_rows(&staged.report_json());
+        assert!(!rows.is_empty());
+        assert_eq!(rows, stage_rows(&plain.report_json()));
         assert_eq!(names.first(), Some(&"prepare"), "{names:?}");
         let at = |stage: &str| names.iter().position(|name| *name == stage);
         for stage in ["deobfuscate", "unminify", "rename", "cleanup", "unpack"] {

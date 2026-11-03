@@ -12,6 +12,7 @@ use super::refusal::UNPACK_TEXT_TOO_DEEP;
 use super::stages::round_of;
 use super::Pipeline;
 use crate::bundle::BundleOutput;
+use crate::options::Progress;
 use crate::report::StageReport;
 
 impl Pipeline {
@@ -65,6 +66,7 @@ impl Pipeline {
         stages: &mut Vec<StageReport>,
         notes: &mut Vec<Note>,
     ) -> Option<BundleOutput> {
+        self.options.progress(Progress::StageBegins("unpack"));
         if unbundled {
             return unpack_nothing(codes, guard, stages, notes);
         }
@@ -92,7 +94,7 @@ impl Pipeline {
         stages: &mut Vec<StageReport>,
         notes: &mut Vec<Note>,
     ) -> Option<untwist_unpack::Bundle<'a>> {
-        let started = self.begin("unpack");
+        let started = Instant::now();
         let (bundle, unpack_notes) = untwist_unpack::unpack_inputs(
             alloc,
             programs,
