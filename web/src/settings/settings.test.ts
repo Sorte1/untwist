@@ -101,3 +101,15 @@ describe('changedCount', () => {
     expect(changedCount({ ...DEFAULTS, off: 'dead-code,layers', iter: 3, single: true })).toBe(3);
   });
 });
+
+describe('a malformed link', () => {
+  it('reports a broken percent escape as a problem instead of throwing', () => {
+    const parsed = parseHash('#unpack=%&%zz=1&rename=unique');
+    expect(parsed.settings.rename).toBe('unique');
+    expect(parsed.settings.unpack).toBe(DEFAULTS.unpack);
+    expect(parsed.problems).toEqual([
+      'Setting "unpack" has an invalid value "%"; the default is used.',
+      'Unknown setting "%zz" in the link was ignored.',
+    ]);
+  });
+});

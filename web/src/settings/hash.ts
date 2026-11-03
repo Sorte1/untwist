@@ -64,6 +64,14 @@ const CODECS: Readonly<Record<Key, Codec>> = {
 
 const KEYS = Object.keys(CODECS) as Key[];
 
+function decoded(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export function writeHash(settings: Settings): string {
   const parts = KEYS.filter((key) => settings[key] !== DEFAULTS[key]).map(
     (key) => `${key}=${encodeURIComponent(CODECS[key].write(settings[key]))}`,
@@ -77,17 +85,17 @@ export function parseHash(hash: string): Parsed {
   const entries: Array<[Key, Settings[Key]]> = [];
   for (const part of body.split('&').filter((item) => item !== '')) {
     const [rawKey = '', rawValue = ''] = part.split('=', 2);
-    const key = decodeURIComponent(rawKey) as Key;
+    const key = decoded(rawKey) as Key;
     if (SHARED_KEYS.includes(key)) {
       continue;
     }
     if (!(key in CODECS)) {
-      problems.push(`Unknown setting "${decodeURIComponent(rawKey)}" in the link was ignored.`);
+      problems.push(`Unknown setting "${decoded(rawKey)}" in the link was ignored.`);
       continue;
     }
-    const value = CODECS[key].read(decodeURIComponent(rawValue));
+    const value = CODECS[key].read(decoded(rawValue));
     if (value === undefined) {
-      problems.push(`Setting "${key}" has an invalid value "${decodeURIComponent(rawValue)}"; the default is used.`);
+      problems.push(`Setting "${key}" has an invalid value "${decoded(rawValue)}"; the default is used.`);
       continue;
     }
     entries.push([key, value]);
