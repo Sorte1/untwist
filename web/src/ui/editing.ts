@@ -119,6 +119,16 @@ export interface Editing {
   attach(view: EditorView, host: HTMLElement): void;
 }
 
+function foldPlaceholder(view: EditorView, unfold: (event: Event) => void): HTMLElement {
+  const element = document.createElement('span');
+  element.textContent = '…';
+  element.className = 'cm-foldPlaceholder';
+  element.setAttribute('aria-label', view.state.phrase('folded code'));
+  element.title = view.state.phrase('unfold');
+  element.addEventListener('mousedown', unfold);
+  return element;
+}
+
 export function codeEditing(module: Promise<WebAssembly.Module>): Editing {
   const extras = new Compartment();
   return {
@@ -127,7 +137,7 @@ export function codeEditing(module: Promise<WebAssembly.Module>): Editing {
       EditorState.phrases.of(PHRASES),
       EditorView.clickAddsSelectionRange.of((event) => event.altKey),
       rectangularSelection({ eventFilter: (event) => event.altKey && event.shiftKey }),
-      codeFolding({ placeholderText: '…' }),
+      codeFolding({ placeholderText: '…', placeholderDOM: foldPlaceholder }),
       foldGutter({ markerDOM: foldMarker }),
       bracketMatching(),
       indentOnInput(),
