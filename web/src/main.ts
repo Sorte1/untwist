@@ -23,6 +23,7 @@ import { mountModuleTree } from './ui/module-tree';
 import { mountModuleSearch } from './ui/module-search';
 import { mountOptions } from './ui/options';
 import { mountOutputPane } from './ui/output-pane';
+import { mountPaletteKey } from './ui/palette-key';
 import { mountPasses } from './ui/passes';
 import { mountRecentMenu } from './ui/recent-menu';
 import { mountSettingsPanel } from './ui/settings-panel';
@@ -115,7 +116,7 @@ function main(): void {
   mountDiagnostics(store, inputView);
   mountFocusMode(store);
   const loader = mountLoader(store, run);
-  mountExamplesMenu(store, loader);
+  const pickExample = mountExamplesMenu(store, loader);
   mountRecentMenu(store, loader);
   mountDropOverlay(store, loader);
   mountSummaryChip(store);
@@ -126,6 +127,7 @@ function main(): void {
   mountModeSwitch(store);
   mountStringsBanner(store, start);
   mountDetailsToggle(store, () => flagsFrom(store.get().settings));
+  mountPaletteKey(store, { run, pickExample });
   requestAnimationFrame(() => performance.mark('untwist:editors-painted'));
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
