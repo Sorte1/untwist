@@ -105,13 +105,14 @@ fn marker(record: Record) {
     }
 }
 
-fn record_of(progress: Progress) -> Record {
+fn record_of(progress: Progress) -> Option<Record> {
     let index = |index: usize| u64::try_from(index).unwrap_or(u64::MAX);
     match progress {
-        Progress::InputBegins(at) => Record::Begin(index(at)),
-        Progress::InputFinished(at) => Record::Finish(index(at)),
-        Progress::InputsFinished => Record::AfterInputs,
-        Progress::UnpackBegins => Record::Unpack,
+        Progress::InputBegins(at) => Some(Record::Begin(index(at))),
+        Progress::InputFinished(at) => Some(Record::Finish(index(at))),
+        Progress::InputsFinished => Some(Record::AfterInputs),
+        Progress::UnpackBegins => Some(Record::Unpack),
+        Progress::StageBegins(_) => None,
     }
 }
 
@@ -119,10 +120,13 @@ fn isolation(rerun: Rerun) -> (Isolation, bool) {
     let emit_aborts = rerun.abort == Abort::AfterEmit;
     let abort = rerun.abort;
     let progress = ProgressSink::new(move |progress| {
+        let Some(record) = record_of(progress) else {
+            return;
+        };
         if abort.cuts(progress) {
-            cut_record(record_of(progress), &[]);
+            cut_record(record, &[]);
         }
-        marker(record_of(progress));
+        marker(record);
         if abort.after(progress) {
             std::process::abort();
         }

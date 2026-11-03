@@ -19,6 +19,7 @@ use untwist_unminify::{
 
 use super::notes::{retain_last_spanned, StageRun, SLOT_NOT_RESERVED};
 use super::{Pipeline, Reservation};
+use crate::options::Progress;
 use crate::plugin::Stage;
 use crate::report::StageReport;
 
@@ -56,6 +57,11 @@ fn record_sweep(site: &mut StageCx<'_, '_>, started: Instant, report: RunReport)
 }
 
 impl Pipeline {
+    pub(super) fn begin(&self, stage: &'static str) -> Instant {
+        self.options.progress(Progress::StageBegins(stage));
+        Instant::now()
+    }
+
     pub(super) fn front_stages<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {
         let sem = self.plugin_stage(Stage::AfterParse, site, sem);
         let (sem, prepared) = self.prepare_stage(site, sem);
@@ -123,7 +129,7 @@ impl Pipeline {
         if !self.options.unminify {
             return Some(sem);
         }
-        let started = Instant::now();
+        let started = self.begin("lexical");
         let mut group = PassGroup::from_ctors(&lexical_ctors(), site.pass_opts.clone());
         let renames = self.options.rename != RenameMode::None;
         let (kept, report) = run_last_traversal(site.alloc, site.program, sem, &mut group, renames);
@@ -203,7 +209,7 @@ impl Pipeline {
         if !self.options.deobfuscate {
             return sem;
         }
-        let started = Instant::now();
+        let started = self.begin("protections");
         let (sem, report) = run_protections(site.alloc, site.program, sem, site.pass_opts);
         site.record("protections", started, report);
         sem
@@ -218,7 +224,7 @@ impl Pipeline {
         if !self.options.deobfuscate {
             return (sem, 0);
         }
-        let started = Instant::now();
+        let started = self.begin("cleanup");
         let settling = (site.pass_opts, slot);
         let (sem, report) = run_cleanup_settling(site.alloc, site.program, sem, settling);
         let changes = report.total_changes;
@@ -235,7 +241,7 @@ impl Pipeline {
             let sem = self.stage("prepare", &prepare_ctors(), site, sem);
             return (sem, PreparedSlot::default());
         }
-        let started = Instant::now();
+        let started = self.begin("prepare");
         let mut group = PassGroup::from_ctors(&prepare_ctors(), site.pass_opts.clone());
         let (sem, report, last) =
             run_to_fixpoint_noting_last(site.alloc, site.program, sem, &mut group);
@@ -251,7 +257,7 @@ impl Pipeline {
         if !self.options.deobfuscate {
             return sem;
         }
-        let started = Instant::now();
+        let started = self.begin("deobfuscate");
         let (sem, report) =
             run_deobfuscate_prepared(site.alloc, site.program, (sem, prepared), site.pass_opts);
         *site.heap_peak = (*site.heap_peak).max(report.heap_charged);
@@ -263,7 +269,7 @@ impl Pipeline {
         if !self.options.deobfuscate {
             return sem;
         }
-        let started = Instant::now();
+        let started = self.begin("deobfuscate");
         let (sem, report) = run_machinery_sweep(site.alloc, site.program, sem, site.pass_opts);
         if report.iterations > 0 {
             record_sweep(site, started, report);
@@ -279,7 +285,7 @@ impl Pipeline {
         if !self.options.deobfuscate {
             return (sem, false);
         }
-        let started = Instant::now();
+        let started = self.begin("deobfuscate");
         let (sem, report) = run_final_machinery(site.alloc, site.program, sem, site.pass_opts);
         if report.iterations == 0 {
             return (sem, false);
@@ -318,7 +324,7 @@ impl Pipeline {
         site: &mut StageCx<'a, '_>,
         (sem, opts): (Semantics, PassOptions),
     ) -> Semantics {
-        let started = Instant::now();
+        let started = self.begin(name);
         let mut group = PassGroup::new(passes, opts);
         let (sem, report) = run_to_fixpoint(site.alloc, site.program, sem, &mut group);
         site.record(name, started, report);
@@ -329,7 +335,7 @@ impl Pipeline {
         if !self.options.jsx {
             return sem;
         }
-        let started = Instant::now();
+        let started = self.begin("jsx");
         let (sem, report) = untwist_jsx::run_jsx(site.alloc, site.program, sem, site.pass_opts);
         site.record("jsx", started, report);
         sem

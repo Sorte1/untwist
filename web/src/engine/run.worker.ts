@@ -1,4 +1,4 @@
-import { initSync, run_report } from './pkg/untwist_wasm.js';
+import { initSync, run_report_staged } from './pkg/untwist_wasm.js';
 import type { TrapKind, WorkerReply, WorkerRequest } from './types';
 
 let memory: WebAssembly.Memory | null = null;
@@ -6,6 +6,8 @@ let memory: WebAssembly.Memory | null = null;
 function reply(message: WorkerReply): void {
   self.postMessage(message);
 }
+
+(globalThis as { untwistStage?: (name: string) => void }).untwistStage = (name) => reply({ kind: 'stage', name });
 
 function trapKind(error: unknown): TrapKind | null {
   if (error instanceof RangeError && /Maximum call stack size exceeded/.test(error.message)) {
@@ -38,7 +40,7 @@ function modulesOf(output: { module_count(): number; module_code(index: number):
 function run(source: string, flags: string, refused: boolean): void {
   const started = performance.now();
   try {
-    const output = run_report(source, flags, refused);
+    const output = run_report_staged(source, flags, refused);
     const result = {
       stdout: output.stdout,
       stderr: output.stderr,

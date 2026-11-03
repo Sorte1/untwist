@@ -1,0 +1,70 @@
+.run-steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  max-width: min(560px, calc(100% - 32px));
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.run-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.run-step::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--faint);
+  border-radius: 50%;
+}
+
+.run-step[data-state='done'] {
+  color: var(--text);
+}
+
+.run-step[data-state='done']::before {
+  border-color: var(--strand-b);
+  background: var(--strand-b);
+}
+
+.run-step[data-state='current'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.run-step[data-state='current']::before {
+  border-color: var(--strand-a);
+  background: var(--strand-a);
+  animation: step-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes step-pulse {
+  to {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run-step[data-state='current']::before {
+    animation: none;
+  }
+}
+
+.running-stage {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: normal;
+  word-spacing: normal;
+  color: var(--text);
+}
+
+.running-stage:empty {
+  display: none;
+}

@@ -92,7 +92,7 @@ impl Pipeline {
         stages: &mut Vec<StageReport>,
         notes: &mut Vec<Note>,
     ) -> Option<untwist_unpack::Bundle<'a>> {
-        let started = Instant::now();
+        let started = self.begin("unpack");
         let (bundle, unpack_notes) = untwist_unpack::unpack_inputs(
             alloc,
             programs,

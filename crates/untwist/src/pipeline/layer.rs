@@ -262,7 +262,7 @@ impl Pipeline {
         let program: &Program<'_> = site.program;
         let probe = layers::probe(program)?;
         let index = layering.peeled().saturating_add(1);
-        let started = Instant::now();
+        let started = self.begin(LAYER_PASS);
         let cx = layering.cx(self.options.unsafe_transforms);
         let decoded = self.decode_layer(program, sem, probe, &cx)?;
         let source = program.source_text;

@@ -1,5 +1,6 @@
 import type { RunResult } from './engine/types';
 import { explainedLine, firedLimits, PARTIAL_LIMITS, type ExplainedLimit } from './limits';
+import type { StageMark } from './progress';
 import { DEFAULTS, type Settings } from './settings/settings';
 
 export type Theme = 'dark' | 'light';
@@ -29,6 +30,7 @@ export interface RunState {
   readonly outputFlags: string | null;
   readonly ranInput: InputState | null;
   readonly outputInput: InputState | null;
+  readonly stages: readonly StageMark[];
 }
 
 export type CompareStatus = 'idle' | 'running' | 'done' | 'failed';
@@ -102,7 +104,7 @@ export function initialState(theme: Theme, settings: Settings = DEFAULTS, settin
     engine: 'loading',
     engineError: null,
     input: inputOf('', 'untitled.js', 0),
-    run: { status: 'idle', startedAt: 0, elapsedMs: 0, result: null, error: null, ranFlags: null, outputFlags: null, ranInput: null, outputInput: null },
+    run: { status: 'idle', startedAt: 0, elapsedMs: 0, result: null, error: null, ranFlags: null, outputFlags: null, ranInput: null, outputInput: null, stages: [] },
     compare: NO_COMPARE,
   };
 }
@@ -116,7 +118,14 @@ export function runStarted(state: AppState, now: number, flags = '', input: Inpu
   if (state.run.status === 'running') {
     return state;
   }
-  return { ...state, run: { ...state.run, status: 'running', startedAt: now, elapsedMs: 0, error: null, ranFlags: flags, ranInput: input } };
+  return { ...state, run: { ...state.run, status: 'running', startedAt: now, elapsedMs: 0, error: null, ranFlags: flags, ranInput: input, stages: [] } };
+}
+
+export function stageBegan(state: AppState, name: string, now: number): AppState {
+  if (state.run.status !== 'running') {
+    return state;
+  }
+  return { ...state, run: { ...state.run, stages: [...state.run.stages, { name, at: now }] } };
 }
 
 export function ticked(state: AppState, now: number): AppState {
