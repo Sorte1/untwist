@@ -13,7 +13,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::ExprEdits;
 use untwist_core::pass::{CodeTextSeen, Cx, Interest, Pass};
 use untwist_eval::bail::{Bail, EvalResult};
-use untwist_eval::budget::STEP_BUDGET;
+use untwist_eval::budget::default_fuel;
 use untwist_eval::decode::{is_decoded_string, Decoded as DecodedValue, InterpEvaluator};
 use untwist_eval::object::PROTOTYPE_LINKS;
 use untwist_eval::rotation::RotationMemo;
@@ -725,7 +725,10 @@ impl<'a> Pass<'a> for InlineDecodedStrings {
         let unedited = is_unedited(cx);
 
         let limits = DecodeLimits {
-            fuel: cx.opts.fuel.unwrap_or(STEP_BUDGET),
+            fuel: cx
+                .opts
+                .fuel
+                .unwrap_or_else(|| default_fuel(cx.opts.unsafe_transforms)),
             defer_budget: &self.defer_budget,
             defer_disabled: cx.defer_disabled(),
             nested_root: cx.opts.nested_root,

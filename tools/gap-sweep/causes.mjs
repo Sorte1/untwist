@@ -12,9 +12,11 @@ export const CAUSES = [
   ["array-escapes", "the string array is reachable from code outside the unit", /reachable from code outside its declaration/, "decoder"],
   ["decoder-impure", "a decoder escapes, mutates the array or reads outer state", /a decoder of the unit (is used other|reads a binding|does more than)/, "decoder"],
   ["stateful-decoder", "a stateful decoder whose state is not a proven memo or init gate", /stateful decoder/, "decoder"],
+  ["decode-budget", "the decode spent its interpreter step budget (--fuel)", /step budget exhausted/, "decoder"],
   ["evaluator-gap", "the evaluator bails on a construct it does not model", /decoding bailed|unsupported construct|did not decode to a string/, "decoder"],
   ["simple-array-access", "a simple string array is read other than by literal index, so it is not inlined", /simple string array not inlined/, "index"],
   ["object-props-refused", "an object of proxy functions or constants was left in place", /inline-object-props:/, "proxy"],
+  ["cff-object-kept", "a control-flow object was kept: one of its call sites cannot take the substitution", /control-flow object kept/, "proxy"],
   ["unsafe-only", "the residue clears only under --unsafe (dead-code injection hides it from the default lane)", /$^/, "decoder"],
 ];
 

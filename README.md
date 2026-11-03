@@ -103,7 +103,7 @@ Common flags:
 | `--disable PASS` | Turn off individual passes; `--list-passes` prints them all. |
 | `--report text\|json` | Print what every stage and pass did. `-v` is short for `--report text`. |
 | `-j, --jobs N` | Process up to `N` inputs in parallel. The output does not depend on `N`. |
-| `--fuel N` | Interpreter steps a string-array decode may spend before giving up (default 50,000,000). |
+| `--fuel N` | Interpreter steps a string-array decode may spend before giving up (default 50,000,000, or 1,000,000,000 with `--unsafe`). |
 
 `untwist --help` lists every flag.
 

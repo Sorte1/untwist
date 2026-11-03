@@ -4,6 +4,13 @@
 engine. The items below are deliberate; every one of them is pinned by
 `crates/untwist-eval/tests/divergences.rs` unless its bullet names another file.
 
+- A decode unit may spend **50,000,000 interpreter steps, and 1,000,000,000 under `--unsafe`**
+  (`--fuel` sets either). The reference deobfuscator runs the decoder in a sandbox with a ten
+  second timeout instead. A rotator whose checksum matches only after thousands of rotations of a
+  large array costs the search hundreds of millions of steps: one Krunker 9.2 build needs about
+  265 million, some three seconds of work. The default lane gives up on such a search and leaves
+  the calls; `--unsafe` finishes it, as the reference deobfuscator does. Pinned by
+  `crates/untwist/tests/unsafe_fuel.rs`.
 - `f.bind(null).toString()` returns the **target's** source text. V8 returns
   `function () { [native code] }` for a bound function. Self-defending checks that regex the
   source of a bound function therefore see the original body. While decoding, the source text
