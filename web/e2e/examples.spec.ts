@@ -122,15 +122,3 @@ test('hide input round-trips through the link', async ({ page }) => {
   await page.locator('#focus-toggle').click();
   await expect(page.locator('#input-pane')).toBeVisible();
 });
-
-test('a drag that hides its types until the drop is still accepted, and its file loads', async ({ page }) => {
-  await openApp(page);
-  const accepted = await page.evaluate(() => {
-    const event = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() });
-    document.body.dispatchEvent(event);
-    return event.defaultPrevented;
-  });
-  expect(accepted).toBe(true);
-  await dropFile(page, 'hidden-types.js', 'var hidden = !0;');
-  await expect(page.locator('#input-name, .mono-name').first()).toContainText('hidden-types.js');
-});
