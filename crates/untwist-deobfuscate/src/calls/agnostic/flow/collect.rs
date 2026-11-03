@@ -9,6 +9,7 @@ use rustc_hash::FxHashMap;
 use super::funcs::{Pre, RetFate};
 use super::{Flow, UNREACHED};
 use crate::calls::agnostic::sites::span_key;
+use crate::calls::agnostic::text::closed_runner_read;
 use untwist_eval::value::JsString;
 
 const INERT_IDENT_NATIVES: [&str; 6] = [
@@ -249,6 +250,9 @@ impl<'s> Collector<'s> {
             Expression::StaticMemberExpression(_) | Expression::ComputedMemberExpression(_) => {
                 Some(self.read_node(inner.span()))
             }
+            Expression::CallExpression(call) if self.reads_closed_runner(call) => {
+                Some(self.read_node(call.span))
+            }
             Expression::CallExpression(call) => self.call_result(call),
             Expression::AssignmentExpression(assign)
                 if assign.operator == AssignmentOperator::Assign =>
@@ -268,6 +272,10 @@ impl<'s> Collector<'s> {
             Expression::ArrowFunctionExpression(arrow) => Some(arrow.span.start),
             _ => None,
         }
+    }
+
+    pub(super) fn reads_closed_runner(&self, call: &CallExpression<'_>) -> bool {
+        closed_runner_read(call, self.scoping).is_some()
     }
 
     fn callee_start(&self, callee: &Expression<'_>) -> Option<u32> {

@@ -9,12 +9,16 @@ fn span_of(source: &str, needle: &str) -> Span {
     Span::new(start, start + needle.len() as u32)
 }
 
-fn reaches(source: &str) -> Option<Span> {
+fn reaches_at(source: &str, needle: &str) -> Option<Span> {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, source);
     let semantics = build_scoping(&parsed.program);
     let flow = Flow::collect(&parsed.program, &semantics.scoping, None);
-    flow.sink_of(span_of(source, "o[k]"))
+    flow.sink_of(span_of(source, needle))
+}
+
+fn reaches(source: &str) -> Option<Span> {
+    reaches_at(source, "o[k]")
 }
 
 fn inert(source: &str) {
@@ -214,4 +218,30 @@ fn a_parameter_default_value_reaches_a_sink() {
 #[test]
 fn an_arrow_parameter_default_value_reaches_a_sink() {
     reaches_sink("const o = {}; function f(k) { var g = (a = o[k]) => a(); g(); }");
+}
+
+const CLOSED_EVAL: &str = "eval('require;')";
+
+#[test]
+fn a_closed_eval_of_a_runner_used_only_by_typeof_is_inert() {
+    let source = "const host = eval('require;'); console.log(typeof host);";
+    assert!(reaches_at(source, CLOSED_EVAL).is_none(), "{source}");
+}
+
+#[test]
+fn an_unused_closed_eval_of_a_runner_is_inert() {
+    let source = "eval('require;');";
+    assert!(reaches_at(source, CLOSED_EVAL).is_none(), "{source}");
+}
+
+#[test]
+fn a_called_closed_eval_of_a_runner_reaches_a_sink() {
+    let source = "const host = eval('require;'); host('vm');";
+    assert!(reaches_at(source, CLOSED_EVAL).is_some(), "{source}");
+}
+
+#[test]
+fn a_closed_eval_whose_runner_name_is_bound_is_not_a_read() {
+    let source = "var require = 1; const host = eval('require;'); console.log(typeof host);";
+    assert!(reaches_at(source, CLOSED_EVAL).is_some(), "{source}");
 }

@@ -39,6 +39,9 @@ impl<'a> VisitJs<'a> for Collector<'_> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.reads_closed_runner(it) {
+            self.read_node(it.span);
+        }
         let spread = Self::has_spread(&it.arguments);
         self.sink_spreads(&it.arguments, it.span);
         match self.resolved_callee(&it.callee).filter(|_| !spread) {
