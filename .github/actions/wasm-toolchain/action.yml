@@ -1,0 +1,54 @@
+name: wasm toolchain
+description: Rust from rust-toolchain.toml with wasm32, wasm-bindgen-cli and binaryen, as the site and the npm package build with
+
+inputs:
+  wasm-bindgen-version:
+    description: wasm-bindgen-cli version, matching the wasm-bindgen crate in Cargo.lock
+    default: "0.2.129"
+  binaryen-version:
+    description: binaryen release
+    default: "116"
+  binaryen-sha256:
+    description: SHA-256 of the binaryen x86_64-linux tarball
+    default: "c55b74f3109cdae97490faf089b0286d3bba926bb6ea5ed00c8c784fc53718fd"
+
+runs:
+  using: composite
+  steps:
+    - name: Rust toolchain from rust-toolchain.toml, with wasm32
+      shell: bash
+      run: |
+        rustup show active-toolchain || rustup toolchain install
+        rustup target add wasm32-unknown-unknown
+
+    - name: Cache cargo registry, wasm-bindgen and the wasm target
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          ~/.cargo/bin/wasm-bindgen
+          target/release
+          target/wasm32-unknown-unknown
+        key: deploy-web-${{ runner.os }}-${{ inputs.wasm-bindgen-version }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+        restore-keys: deploy-web-${{ runner.os }}-${{ inputs.wasm-bindgen-version }}-
+
+    - name: wasm-bindgen-cli
+      shell: bash
+      env:
+        WASM_BINDGEN_VERSION: ${{ inputs.wasm-bindgen-version }}
+      run: |
+        if [ "$(wasm-bindgen --version 2>/dev/null)" != "wasm-bindgen $WASM_BINDGEN_VERSION" ]; then
+          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked --force
+        fi
+
+    - name: binaryen (wasm-opt)
+      shell: bash
+      env:
+        BINARYEN_VERSION: ${{ inputs.binaryen-version }}
+        BINARYEN_SHA256: ${{ inputs.binaryen-sha256 }}
+      run: |
+        curl -fsSL -o "$RUNNER_TEMP/binaryen.tar.gz" "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz"
+        echo "${BINARYEN_SHA256}  $RUNNER_TEMP/binaryen.tar.gz" | sha256sum -c -
+        tar -xzf "$RUNNER_TEMP/binaryen.tar.gz" -C "$RUNNER_TEMP"
+        echo "$RUNNER_TEMP/binaryen-version_${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
