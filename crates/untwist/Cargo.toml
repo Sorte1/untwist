@@ -19,7 +19,8 @@ bench = false
 default = ["parallel"]
 parallel = ["dep:rayon"]
 module-spans = ["dep:oxc_span"]
-test-hooks = ["untwist-core/test-hooks", "untwist-deobfuscate/test-hooks", "untwist-eval/test-hooks", "untwist-rename/test-hooks", "untwist-unminify/test-hooks"]
+refusal-spans = ["untwist-deobfuscate/refusal-spans"]
+test-hooks = ["refusal-spans", "untwist-core/test-hooks", "untwist-deobfuscate/test-hooks", "untwist-eval/test-hooks", "untwist-rename/test-hooks", "untwist-unminify/test-hooks"]
 
 [dependencies]
 untwist-core = { path = "../untwist-core", version = "0.1.0" }

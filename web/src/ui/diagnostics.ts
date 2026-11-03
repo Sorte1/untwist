@@ -108,6 +108,15 @@ export function revealIn(view: EditorView, text: string, span: readonly [number,
   view.focus();
 }
 
+export function revealInInput(store: Store<AppState>, input: EditorView, text: string, span: readonly [number, number]): void {
+  if (store.get().settings.input === 'hidden') {
+    showInput(store);
+    requestAnimationFrame(() => revealIn(input, text, span));
+    return;
+  }
+  revealIn(input, text, span);
+}
+
 export function mountDiagnostics(store: Store<AppState>, input: EditorView): void {
   const holder = byId('diag-list');
   const count = byId('warn-count');
@@ -116,15 +125,9 @@ export function mountDiagnostics(store: Store<AppState>, input: EditorView): voi
   const reveal = (row: DiagnosticRow) => {
     const span = row.inputSpan;
     const text = ran?.text;
-    if (span === undefined || text === undefined) {
-      return;
+    if (span !== undefined && text !== undefined) {
+      revealInInput(store, input, text, span);
     }
-    if (store.get().settings.input === 'hidden') {
-      showInput(store);
-      requestAnimationFrame(() => revealIn(input, text, span));
-      return;
-    }
-    revealIn(input, text, span);
   };
   const list = virtualList<Shown>(ROW_HEIGHT, VISIBLE_ROWS, (shown) => drawRow(shown, reveal));
   list.element.classList.add('diag-rows');

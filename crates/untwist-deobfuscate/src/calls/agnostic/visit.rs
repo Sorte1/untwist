@@ -382,7 +382,7 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
             for argument in &it.arguments {
                 if let Some(expr) = argument.as_expression() {
                     if self.is_intrinsic_value(expr) {
-                        #[cfg(feature = "test-hooks")]
+                        #[cfg(feature = "refusal-spans")]
                         self.trail(it.span, || {
                             "an intrinsic passed to a user function".to_string()
                         });

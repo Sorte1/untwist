@@ -248,7 +248,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         if self.in_machinery(span) {
             return;
         }
-        #[cfg(feature = "test-hooks")]
+        #[cfg(feature = "refusal-spans")]
         self.trail(span, || format!("{reason}{}", roles_of(origin)));
         if origin.definer && self.out.unbounded.is_none() {
             self.out.unbounded = Some((span, reason));
@@ -272,7 +272,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         if self.in_machinery(span) {
             return;
         }
-        #[cfg(feature = "test-hooks")]
+        #[cfg(feature = "refusal-spans")]
         self.trail(span, || "code from text".to_string());
         if self.out.code_text.is_none() {
             self.out.code_text = Some(span);
@@ -283,7 +283,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         self.saturated = true;
     }
 
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "refusal-spans")]
     pub(super) fn trail(&mut self, span: Span, what: impl FnOnce() -> String) {
         if crate::refusal_spans::active() && !self.in_machinery(span) {
             self.out
@@ -323,7 +323,7 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(feature = "refusal-spans")]
 fn roles_of(origin: Origin) -> String {
     let roles = [
         (origin.definer, "definer"),

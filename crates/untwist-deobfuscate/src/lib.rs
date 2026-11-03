@@ -22,7 +22,7 @@ pub mod notes;
 pub mod object_props;
 pub mod probe;
 pub mod proof;
-#[cfg(feature = "test-hooks")]
+#[cfg(feature = "refusal-spans")]
 pub mod refusal_spans;
 pub mod removal;
 pub mod self_defending;

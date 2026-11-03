@@ -172,7 +172,7 @@ fn record_builtin_patched(
     replaced: &str,
 ) {
     decoded.notes.extend(drained(evaluator));
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "refusal-spans")]
     if let Some(span) = span {
         crate::refusal_spans::record(|| format!("BUILTIN_PATCHED: {replaced}"), span);
     }
@@ -285,7 +285,7 @@ fn judge_unit(
         )
         .or_else(|| prototype_conflict(&evaluator.proto_reads, late, value_map))
         .map(|write| {
-            #[cfg(feature = "test-hooks")]
+            #[cfg(feature = "refusal-spans")]
             crate::refusal_spans::record(
                 || {
                     let proof = &request.guard.proto_writes;
@@ -534,7 +534,7 @@ fn guard_and_reach<'p>(
         (Some(&strings), &plan.machinery_spans()),
         watched.as_ref().map(reach::Watched::watch),
     );
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "refusal-spans")]
     crate::refusal_spans::extend(&found.trail);
     for (span, text) in found.extra {
         value_map.insert(span, JsString::from(text.as_str()));
@@ -572,7 +572,7 @@ fn judge_runs<'p>(
         let unit = run.request.unit;
         let reached = reached.as_ref().filter(|_| !spelled);
         if let Some((note, span)) = refused_before_judging(&run, reached, &decoding) {
-            #[cfg(feature = "test-hooks")]
+            #[cfg(feature = "refusal-spans")]
             if note == notes::STRING_ARRAY_GLOBAL_REACH {
                 crate::refusal_spans::record(|| "GLOBAL_REACH".to_string(), span);
             }

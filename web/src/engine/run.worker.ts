@@ -37,10 +37,10 @@ function modulesOf(output: { module_count(): number; module_code(index: number):
   return modules;
 }
 
-function run(source: string, flags: string, refused: boolean): void {
+function run(source: string, flags: string, refused: boolean, extras: string): void {
   const started = performance.now();
   try {
-    const output = run_report_staged(source, flags, refused);
+    const output = run_report_staged(source, flags, refused, extras);
     const result = {
       stdout: output.stdout,
       stderr: output.stderr,
@@ -69,6 +69,6 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   if (request.kind === 'init') {
     init(request.module);
   } else {
-    run(request.source, request.flags, request.refused);
+    run(request.source, request.flags, request.refused, request.extras);
   }
 };

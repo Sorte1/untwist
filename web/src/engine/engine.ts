@@ -2,6 +2,8 @@ import wasmUrl from './pkg/untwist_wasm_bg.wasm?url';
 import RunWorker from './run.worker.ts?worker';
 import type { RunResult, WorkerReply } from './types';
 
+export const REPORT_EXTRAS = 'refusals';
+
 export class Cancelled extends Error {
   constructor() {
     super('cancelled');
@@ -128,7 +130,7 @@ export class Engine {
             }
           };
           worker.onerror = (event) => reject(new Error(event.message));
-          worker.postMessage({ kind: 'run', source, flags, refused });
+          worker.postMessage({ kind: 'run', source, flags, refused, extras: REPORT_EXTRAS });
         };
         ready.then(start, reject);
       });
