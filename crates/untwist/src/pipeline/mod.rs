@@ -7,6 +7,8 @@ mod notes;
 mod parallel;
 mod plugins;
 mod refusal;
+#[cfg(feature = "test-hooks")]
+mod refusal_spans;
 mod shell;
 mod stages;
 mod unpack;
@@ -46,6 +48,8 @@ pub struct Output {
     pub single_file: bool,
     pub heap_peak: u64,
     pub stats: crate::stats::RunStats,
+    #[cfg(feature = "test-hooks")]
+    pub refusal_spans: Vec<String>,
 }
 
 impl Output {
@@ -123,6 +127,8 @@ struct OutputParts {
     stats: crate::stats::RunStats,
     guards: GuardRecord,
     unbundled: bool,
+    #[cfg(feature = "test-hooks")]
+    refusal_spans: Vec<String>,
 }
 
 impl OutputParts {
@@ -131,7 +137,19 @@ impl OutputParts {
             unbundled: true,
             ..OutputParts::default()
         };
+        #[cfg(feature = "test-hooks")]
+        let several = results.len() > 1;
         for (index, result) in results.into_iter().enumerate() {
+            #[cfg(feature = "test-hooks")]
+            parts
+                .refusal_spans
+                .extend(result.refusal_spans.iter().map(|span| {
+                    if several {
+                        format!("input {index}: {span}")
+                    } else {
+                        span.clone()
+                    }
+                }));
             parts.unbundled &= result.refused || result.unbundled;
             parts.codes.push(result.code);
             parts.stages.extend(result.stages);
@@ -160,6 +178,8 @@ impl OutputParts {
             single_file,
             heap_peak: self.heap_peak,
             stats: self.stats,
+            #[cfg(feature = "test-hooks")]
+            refusal_spans: self.refusal_spans,
         }
     }
 }

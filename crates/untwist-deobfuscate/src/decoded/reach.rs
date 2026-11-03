@@ -74,6 +74,8 @@ impl<'p> Watched<'p> {
         let strings = decoded_strings(runs);
         let machinery = plan.machinery_spans();
         let found = global_reach(program, scoping, (Some(&strings), &machinery), self.watch());
+        #[cfg(feature = "test-hooks")]
+        crate::refusal_spans::extend(&found.trail);
         let span = found.reach?;
         Some(self.reached_at(span, found.bootstrap))
     }

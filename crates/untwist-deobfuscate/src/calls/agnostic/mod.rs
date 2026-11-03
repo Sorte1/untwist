@@ -98,6 +98,8 @@ pub struct Agnostic<'a> {
     pub(super) stores_global: bool,
     pub(super) pending_texts: Vec<String>,
     pub bootstrap: Option<&'static str>,
+    #[cfg(feature = "test-hooks")]
+    pub(super) trail: Vec<crate::refusal_spans::RefusalSpan>,
 }
 
 pub fn agnostic<'a>(
@@ -127,6 +129,8 @@ pub struct GlobalReach {
     pub reach: Option<Span>,
     pub observed: Option<Span>,
     pub bootstrap: Option<&'static str>,
+    #[cfg(feature = "test-hooks")]
+    pub trail: Vec<crate::refusal_spans::RefusalSpan>,
 }
 
 fn reach_watch<'k>(reach: ReachWatch<'k>) -> settle::Watch<'k> {
@@ -148,6 +152,8 @@ fn reach_of(found: &Agnostic<'_>) -> GlobalReach {
         reach: found.reach.or(found.reach_code),
         observed: found.observed,
         bootstrap: found.bootstrap,
+        #[cfg(feature = "test-hooks")]
+        trail: found.trail.clone(),
     }
 }
 
@@ -244,6 +250,8 @@ pub struct GuardWrites<'a> {
     pub extra: Vec<(Span, String)>,
     pub reach: Option<Span>,
     pub bootstrap: Option<&'static str>,
+    #[cfg(feature = "test-hooks")]
+    pub trail: Vec<crate::refusal_spans::RefusalSpan>,
 }
 
 pub fn guard_writes<'a>(
@@ -256,6 +264,8 @@ pub fn guard_writes<'a>(
     let found = settle(program, scoping, (resolve, machinery, watch)).0;
     let reached = reach_of(&found).reach;
     let bootstrap = found.bootstrap;
+    #[cfg(feature = "test-hooks")]
+    let trail = guard_trail(&found, machinery);
     let mut extra = Vec::new();
     let mut writes: Vec<ProtoWrite<'a>> = guard_bail(&found, machinery)
         .map(|span| ProtoWrite {
@@ -279,7 +289,26 @@ pub fn guard_writes<'a>(
         extra,
         reach: reached,
         bootstrap,
+        #[cfg(feature = "test-hooks")]
+        trail,
     }
+}
+
+#[cfg(feature = "test-hooks")]
+fn guard_trail(found: &Agnostic<'_>, machinery: &[Span]) -> Vec<crate::refusal_spans::RefusalSpan> {
+    if !crate::refusal_spans::active() {
+        return Vec::new();
+    }
+    let keyed = found
+        .sites
+        .iter()
+        .filter(|site| !inside(machinery, site.span))
+        .filter(|site| matches!(site.key, AKey::Pending(_) | AKey::Unknown))
+        .map(|site| crate::refusal_spans::RefusalSpan {
+            what: "write by an unknown key".to_string(),
+            span: site.span,
+        });
+    found.trail.iter().cloned().chain(keyed).collect()
 }
 
 fn inside(machinery: &[Span], span: Span) -> bool {

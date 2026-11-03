@@ -52,6 +52,7 @@ pub struct TestHooks {
     pub heap_budget: Option<u64>,
     pub admit_panic: Option<usize>,
     pub layer_stub: Option<&'static [(&'static str, &'static str)]>,
+    pub refusal_spans: bool,
 }
 
 #[derive(Clone, Debug)]

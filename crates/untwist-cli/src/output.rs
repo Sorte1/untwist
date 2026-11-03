@@ -26,6 +26,9 @@ struct OutputJson<'a> {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     unpack_panicked: bool,
     stats: &'a untwist::RunStats,
+    #[cfg(feature = "test-hooks")]
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    refusal_span: &'a [String],
 }
 
 pub fn to_json(
@@ -56,6 +59,8 @@ pub fn to_json(
         depth_refused: &output.depth_refused,
         unpack_panicked: output.unpack_panicked,
         stats: &output.stats,
+        #[cfg(feature = "test-hooks")]
+        refusal_span: &output.refusal_spans,
     };
     serde_json::to_string_pretty(&json)
 }
@@ -120,6 +125,10 @@ pub fn text_report(output: &Output) -> String {
     for note in &output.notes {
         text.push_str(&format!("note: {}: {}\n", note.pass, note.message));
     }
+    #[cfg(feature = "test-hooks")]
+    for span in &output.refusal_spans {
+        text.push_str(&format!("refusal_span: {span}\n"));
+    }
     text
 }
 
@@ -180,6 +189,21 @@ mod tests {
         let json = to_json(&out, None, &[]).unwrap();
         assert!(compact(&json).contains("\"depth_refused\":[0,3]"), "{json}");
         assert!(super::text_report(&out).contains("parse_errors: 0\ndepth_refused: 0, 3\n"));
+    }
+
+    #[cfg(feature = "test-hooks")]
+    #[test]
+    fn the_reports_list_refusal_spans_only_when_there_are_some() {
+        let mut out = untwist::Pipeline::new(untwist::Options::default()).run("x;");
+        assert!(!to_json(&out, None, &[]).unwrap().contains("refusal_span"));
+        assert!(!super::text_report(&out).contains("refusal_span"));
+        out.refusal_spans = vec!["3:7 GLOBAL_REACH".to_string()];
+        let json = to_json(&out, None, &[]).unwrap();
+        assert!(
+            compact(&json).contains("\"refusal_span\":[\"3:7GLOBAL_REACH\"]"),
+            "{json}"
+        );
+        assert!(super::text_report(&out).ends_with("refusal_span: 3:7 GLOBAL_REACH\n"));
     }
 
     #[test]

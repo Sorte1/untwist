@@ -248,6 +248,8 @@ impl<'s, 'a> Sites<'s, 'a> {
         if self.in_machinery(span) {
             return;
         }
+        #[cfg(feature = "test-hooks")]
+        self.trail(span, || format!("{reason}{}", roles_of(origin)));
         if origin.definer && self.out.unbounded.is_none() {
             self.out.unbounded = Some((span, reason));
         }
@@ -270,6 +272,8 @@ impl<'s, 'a> Sites<'s, 'a> {
         if self.in_machinery(span) {
             return;
         }
+        #[cfg(feature = "test-hooks")]
+        self.trail(span, || "code from text".to_string());
         if self.out.code_text.is_none() {
             self.out.code_text = Some(span);
         }
@@ -277,6 +281,15 @@ impl<'s, 'a> Sites<'s, 'a> {
             self.out.reach_code.get_or_insert(span);
         }
         self.saturated = true;
+    }
+
+    #[cfg(feature = "test-hooks")]
+    pub(super) fn trail(&mut self, span: Span, what: impl FnOnce() -> String) {
+        if crate::refusal_spans::active() && !self.in_machinery(span) {
+            self.out
+                .trail
+                .push(crate::refusal_spans::RefusalSpan { what: what(), span });
+        }
     }
 
     pub(super) fn walks_on(&self) -> bool {
@@ -308,4 +321,21 @@ impl<'s, 'a> Sites<'s, 'a> {
             _ => {}
         }
     }
+}
+
+#[cfg(feature = "test-hooks")]
+fn roles_of(origin: Origin) -> String {
+    let roles = [
+        (origin.definer, "definer"),
+        (origin.runner, "runner"),
+        (origin.bind, "bind"),
+        (origin.apply, "apply"),
+        (origin.construct, "construct"),
+    ];
+    let named: Vec<&str> = roles
+        .iter()
+        .filter(|(held, _)| *held)
+        .map(|(_, name)| *name)
+        .collect();
+    format!(" ({})", named.join(" "))
 }

@@ -193,6 +193,13 @@ pub(super) fn analyse<'a>(
     }
     if !chains {
         let span = out.sites.first().map_or(Span::default(), |site| site.span);
+        #[cfg(feature = "test-hooks")]
+        if crate::refusal_spans::active() {
+            out.trail.push(crate::refusal_spans::RefusalSpan {
+                what: "a folded chain's assumed key may be written".to_string(),
+                span,
+            });
+        }
         out.sites.push(ASite {
             span,
             key: AKey::Unknown,

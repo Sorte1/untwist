@@ -172,6 +172,10 @@ fn record_builtin_patched(
     replaced: &str,
 ) {
     decoded.notes.extend(drained(evaluator));
+    #[cfg(feature = "test-hooks")]
+    if let Some(span) = span {
+        crate::refusal_spans::record(|| format!("BUILTIN_PATCHED: {replaced}"), span);
+    }
     decoded
         .notes
         .push((format!("{}: {replaced}", notes::BUILTIN_PATCHED), span));
@@ -280,7 +284,26 @@ fn judge_unit(
             value_map,
         )
         .or_else(|| prototype_conflict(&evaluator.proto_reads, late, value_map))
-        .map(|write| describe_write(write, value_map))
+        .map(|write| {
+            #[cfg(feature = "test-hooks")]
+            crate::refusal_spans::record(
+                || {
+                    let proof = &request.guard.proto_writes;
+                    let kept = proof.iter().any(|own| std::ptr::eq(own, write));
+                    let source = match (kept, write.key) {
+                        (true, _) => "the patch proof",
+                        (false, crate::proof::PatchKey::Whole) => {
+                            "the agnostic check, standing for code from text or a saturated check"
+                        }
+                        (false, _) => "the agnostic check",
+                    };
+                    let what = describe_write(write, value_map);
+                    format!("BUILTIN_PATCHED write: {what}, from {source}")
+                },
+                write.span,
+            );
+            describe_write(write, value_map)
+        })
     };
     if let Some(replaced) = replaced {
         record_builtin_patched(decoded, &mut evaluator, resolved_span, &replaced);
@@ -511,6 +534,8 @@ fn guard_and_reach<'p>(
         (Some(&strings), &plan.machinery_spans()),
         watched.as_ref().map(reach::Watched::watch),
     );
+    #[cfg(feature = "test-hooks")]
+    crate::refusal_spans::extend(&found.trail);
     for (span, text) in found.extra {
         value_map.insert(span, JsString::from(text.as_str()));
     }
@@ -547,6 +572,10 @@ fn judge_runs<'p>(
         let unit = run.request.unit;
         let reached = reached.as_ref().filter(|_| !spelled);
         if let Some((note, span)) = refused_before_judging(&run, reached, &decoding) {
+            #[cfg(feature = "test-hooks")]
+            if note == notes::STRING_ARRAY_GLOBAL_REACH {
+                crate::refusal_spans::record(|| "GLOBAL_REACH".to_string(), span);
+            }
             decoded.notes.push((note.to_string(), Some(span)));
             if let Some((_, _, Some(reason))) =
                 reached.filter(|_| note == notes::STRING_ARRAY_GLOBAL_REACH)
