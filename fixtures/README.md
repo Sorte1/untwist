@@ -15,6 +15,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `jsx/` | `createElement` and `jsx()` call shapes | `cargo xtask diff-jsx`, `crates/untwist-jsx/tests/fixtures.rs` |
 | `layers/` | `eval`, `Function`, `atob` and p.a.c.k.e.r. layers, as classic scripts that print | `cargo xtask diff-layers`, `crates/untwist/tests/layers_*.rs` |
 | `obfuscated/` | javascript-obfuscator output from `tools/obfuscated/gen.mjs`; `MANIFEST` and `EXPECT` describe each file | `cargo xtask obf-matrix` |
+| `obfuscator-io/` | javascript-obfuscator 5.9.1 output over every free option, pairs of the high-impact options and the four presets, from `tools/obfuscated/matrix.mjs`; `MANIFEST`, `EXPECT`, `ORACLE` (webcrack's results) and `BASELINE` describe each file | `cargo xtask obf-options` |
 | `real-shapes/` | Obfuscator and webpack machinery reduced from real bundles by `tools/real-shapes/reduce.mjs` | `cargo xtask obf-matrix` |
 | `real-world/` | Optional local `game.js` and its reference snapshot, not committed; `game-truth.mjs` prints its array truth | the `real_world` tests, which skip when it is absent |
 | `reference/` | Samples and expected output from the reference deobfuscator (MIT, `LICENSE-reference`) | `cargo xtask diff-deobfuscate`, `diff-unpack`, `crates/untwist-deobfuscate/tests/fixtures.rs` |
@@ -31,6 +32,6 @@ Third-party inputs keep their licence beside them: `LICENSE-reference`,
 
 Put the file in the folder whose test should pick it up, name it after the shape it covers, and make
 it print what it computes so node can check it. Generated folders (`eval/`, `corpus-npm/`,
-`obfuscated/`, `unpack-bundlers/`, `untranspile/`) are rewritten by their generator, so change the
+`obfuscated/`, `obfuscator-io/`, `unpack-bundlers/`, `untranspile/`) are rewritten by their generator, so change the
 generator instead. Run the folder's test or differential; add an allowlist entry only for a
 divergence documented in `docs/known-divergences/`.
