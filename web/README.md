@@ -41,6 +41,12 @@ The input never leaves the browser. The page loads only its own static assets un
 has no analytics and self-hosts its fonts. Settings live in the URL hash (`#unsafe=1&rename=unique`),
 which never reaches a server, and never include the input or the output.
 
+## Offline
+
+After the first visit a service worker keeps the page, its assets and the engine, so the
+playground opens and runs without a network. A new version waits until you press Reload in
+the prompt. See [`DEPLOY.md`](DEPLOY.md#offline).
+
 ## Limits
 
 | What | Limit | Above it |

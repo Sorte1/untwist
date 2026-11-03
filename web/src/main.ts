@@ -3,6 +3,7 @@ import './styles/layout.css';
 import { Cancelled, Engine } from './engine/engine';
 import { initialState, runCancelled, runFailed, runFinished, runStarted, ticked, type AppState, type InputState } from './state';
 import { flagsFrom } from './settings/flags';
+import { registerServiceWorker } from './pwa/register';
 import { parseHash, writeHash } from './settings/hash';
 import { createStore, type Store } from './store';
 import { applyTheme, preferredTheme } from './theme';
@@ -136,6 +137,7 @@ function main(): void {
     },
     (error: unknown) => store.update((state) => ({ ...state, engine: 'failed', engineError: message(error) })),
   );
+  registerServiceWorker(engine.ready());
 }
 
 main();

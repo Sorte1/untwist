@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from 'vite';
+import { serviceWorker } from './scripts/service-worker.ts';
 
 const CSP = [
   "default-src 'self'",
@@ -27,7 +28,7 @@ function contentSecurityPolicy(): Plugin {
 
 export default defineConfig({
   base: './',
-  plugins: [contentSecurityPolicy()],
+  plugins: [contentSecurityPolicy(), serviceWorker()],
   build: {
     target: 'es2022',
     manifest: true,
