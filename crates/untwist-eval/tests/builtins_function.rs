@@ -65,3 +65,11 @@ fn apply_with_a_non_object_second_argument_throws() {
         Err("throw error:TypeError".to_string())
     );
 }
+
+#[test]
+fn a_function_source_read_twice_is_the_same_text_for_each_function() {
+    assert_eq!(
+        eval("function f(){return 1;} function g(){return 22;} var a = f['toString'](), b = f['toString'](), c = g['toString'](); (a === b) + ':' + (a === c) + ':' + c['length']"),
+        Ok("string:true:false:24".to_string())
+    );
+}

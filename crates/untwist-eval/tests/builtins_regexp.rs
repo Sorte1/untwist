@@ -250,3 +250,19 @@ fn a_bounded_backtracking_search_still_answers() {
     let source = format!("/^(a+)+b$/['test']('{}c')", "a".repeat(12));
     assert_eq!(eval(&source), Ok("boolean:false".to_string()));
 }
+
+#[test]
+fn regular_expressions_built_from_the_same_pattern_keep_their_own_flags_and_last_index() {
+    assert_eq!(
+        eval("var r1 = new RegExp('a', 'g'), r2 = new RegExp('a', 'g'), r3 = new RegExp('a'); r1['test']('a') + ':' + r1['test']('a') + ':' + r2['test']('a') + ':' + r3['test']('a') + ':' + r3['test']('a')"),
+        Ok("string:true:false:true:true:true".to_string())
+    );
+}
+
+#[test]
+fn a_shared_pattern_compiled_with_other_flags_is_not_reused() {
+    assert_eq!(
+        eval("new RegExp('a', 'i')['test']('A') + ':' + new RegExp('a')['test']('A')"),
+        Ok("string:true:false".to_string())
+    );
+}
