@@ -32,6 +32,7 @@ export type LangReply =
 
 export interface WorkerLike {
   onmessage: ((event: MessageEvent<LangReply>) => void) | null;
+  onerror: ((event: ErrorEvent) => void) | null;
   postMessage(message: LangRequest): void;
   terminate(): void;
 }
@@ -212,6 +213,12 @@ export class LangClient {
       this.#worker = worker;
       this.#ready = new Promise((resolve) => {
         worker.onmessage = (event) => this.#receive(event.data, resolve);
+        worker.onerror = (event) => {
+          event.preventDefault();
+          this.#events.status('failed');
+          resolve(false);
+          this.#stop();
+        };
         this.#module.then(
           (module) => worker.postMessage({ kind: 'init', module }),
           () => resolve(false),

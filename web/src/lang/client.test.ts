@@ -3,6 +3,7 @@ import { aboveCap, DEBOUNCE_MS, LangClient, resolveModule, utf8Length, wasteful,
 
 class FakeWorker implements WorkerLike {
   onmessage: ((event: MessageEvent<LangReply>) => void) | null = null;
+  onerror: ((event: ErrorEvent) => void) | null = null;
   readonly sent: LangRequest[] = [];
   terminated = false;
 
@@ -168,3 +169,45 @@ describe('LangClient', () => {
     expect(workers[1]?.analyses().map((m) => m.text)).toEqual(['a']);
   });
 });
+
+describe('a worker that fails to load', () => {
+  test('reports failed, stops the worker and swallows the error event', async () => {
+    const workers: FailingWorker[] = [];
+    const statuses: string[] = [];
+    const client = new LangClient(
+      () => {
+        const worker = new FailingWorker();
+        workers.push(worker);
+        return worker;
+      },
+      Promise.resolve({} as WebAssembly.Module),
+      { status: (s) => statuses.push(s), analyzed: () => undefined },
+    );
+    client.changed(() => 'var a = 1;');
+    client.flush();
+    await settle();
+    const event = workers[0]?.fail();
+    await settle();
+    expect(event?.defaultPrevented).toBe(true);
+    expect(statuses.at(-1)).toBe('failed');
+    expect(workers[0]?.terminated).toBe(true);
+  });
+});
+
+class FailingWorker implements WorkerLike {
+  onmessage: ((event: MessageEvent<LangReply>) => void) | null = null;
+  onerror: ((event: ErrorEvent) => void) | null = null;
+  terminated = false;
+
+  postMessage(): void {}
+
+  terminate(): void {
+    this.terminated = true;
+  }
+
+  fail(): ErrorEvent {
+    const event = new Event('error', { cancelable: true }) as ErrorEvent;
+    this.onerror?.(event);
+    return event;
+  }
+}
