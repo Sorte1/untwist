@@ -51,7 +51,7 @@ function dismissOnOutside(holder: HTMLElement, open: () => boolean, close: () =>
   });
 }
 
-export function mountExamplesMenu(store: Store<AppState>, loader: Loader): void {
+export function mountExamplesMenu(store: Store<AppState>, loader: Loader): (example: Example) => void {
   const button = byId<HTMLButtonElement>('examples');
   const holder = button.parentElement ?? document.body;
   let menu: HTMLElement | null = null;
@@ -97,4 +97,5 @@ export function mountExamplesMenu(store: Store<AppState>, loader: Loader): void 
       paint();
     }
   });
+  return pick;
 }
