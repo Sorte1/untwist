@@ -7,8 +7,8 @@ export const MODES: readonly Mode[] = ['safe', 'unsafe'];
 export const UNSAFE_WARNING = 'may change behaviour in edge cases; assumes built-ins are not modified';
 
 export const JSX_HINTS = {
-  active: 'Turn createElement calls back into JSX; runs in Unsafe mode',
-  inactive: 'Inactive in Safe mode: JSX decompiling needs Unsafe',
+  active: 'Turn createElement calls back into JSX',
+  inactive: 'Inactive in Safe mode; needs Unsafe',
 } as const;
 
 const LABELS: Readonly<Record<Mode, string>> = { safe: 'Safe', unsafe: 'Unsafe' };

@@ -12,6 +12,7 @@ import {
   lineColumn,
   lineIndex,
   shownMessage,
+  stripLabel,
   warningCount,
   type DiagnosticRow,
   type LineIndex,
@@ -110,6 +111,7 @@ export function revealIn(view: EditorView, text: string, span: readonly [number,
 export function mountDiagnostics(store: Store<AppState>, input: EditorView): void {
   const holder = byId('diag-list');
   const count = byId('warn-count');
+  const strip = byId('diag-count');
   let ran: InputState | null = null;
   const reveal = (row: DiagnosticRow) => {
     const span = row.inputSpan;
@@ -141,7 +143,11 @@ export function mountDiagnostics(store: Store<AppState>, input: EditorView): voi
     first = false;
     const note = noteFor(run, state.engineError);
     const rows = note === null && run.result !== null ? diagnosticsOf(run.result.report, run.result.stderr) : [];
-    setText(count, note === null && run.result !== null ? String(warningCount(rows)) : '—');
+    const finished = note === null && run.result !== null;
+    setText(count, finished ? String(warningCount(rows)) : '—');
+    const label = stripLabel(finished ? rows : null, state.settingsProblems.length);
+    setText(strip, label.text);
+    strip.dataset['tone'] = label.tone;
     const problems = state.settingsProblems.map(settingsRow);
     if (note !== null || rows.length === 0) {
       holder.replaceChildren(...problems, noteElement(note ?? 'No diagnostics.'));

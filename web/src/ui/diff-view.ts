@@ -94,7 +94,11 @@ function overWorkerCap(text: string): boolean {
   return text.length > BIG_DIFF_CAP_BYTES || utf8Bytes(text) > BIG_DIFF_CAP_BYTES;
 }
 
-function sides(state: AppState): DiffPlan {
+function edited(name: string, engine: string, current: string | null): { readonly after: string; readonly afterName: string } {
+  return current === null || current === engine ? { after: engine, afterName: name } : { after: current, afterName: `${name} (edited)` };
+}
+
+function sides(state: AppState, current: string | null): DiffPlan {
   const compared = comparePlan(state);
   if (compared !== null) {
     const note = compared.safe === compared.unsafe ? 'Safe and Unsafe give the same output.' : null;
@@ -107,21 +111,21 @@ function sides(state: AppState): DiffPlan {
   const bundle = currentBundle(state);
   const index = state.selectedModule;
   if (bundle === null || index === null) {
-    return { kind: 'diff', before: state.input.text, after: result.stdout, beforeName: 'input', afterName: 'output.js', note: null };
+    return { kind: 'diff', before: state.input.text, ...edited('output.js', result.stdout, current), beforeName: 'input', note: null };
   }
   const module = bundle.modules[index];
   const code = result.modules[index] ?? '';
   const name = module?.path ?? `module ${index}`;
   if (module?.span === undefined) {
     const note = 'This module has no span in the bundle text, so the left side is the whole processed bundle.';
-    return { kind: 'diff', before: result.stdout, after: code, beforeName: 'bundle', afterName: name, note };
+    return { kind: 'diff', before: result.stdout, ...edited(name, code, current), beforeName: 'bundle', note };
   }
   const [from, to] = module.span;
-  return { kind: 'diff', before: result.stdout.slice(from, to), after: code, beforeName: 'bundle slice', afterName: name, note: null };
+  return { kind: 'diff', before: result.stdout.slice(from, to), ...edited(name, code, current), beforeName: 'bundle slice', note: null };
 }
 
-export function diffPlan(state: AppState): DiffPlan {
-  const plan = sides(state);
+export function diffPlan(state: AppState, current: string | null = null): DiffPlan {
+  const plan = sides(state, current);
   if (plan.kind !== 'diff' || (!tooBig(plan.before) && !tooBig(plan.after))) {
     return plan;
   }
@@ -131,11 +135,15 @@ export function diffPlan(state: AppState): DiffPlan {
   return { ...plan, kind: 'big' };
 }
 
+function toggleWrap(store: Store<AppState>): void {
+  store.update((state) => ({ ...state, settings: { ...state.settings, wrap: !state.settings.wrap } }));
+}
+
 function setView(store: Store<AppState>, view: 'output' | 'diff'): void {
   store.update((state) => ({ ...state, settings: { ...state.settings, view } }));
 }
 
-export function mountDiffView(store: Store<AppState>): void {
+export function mountDiffView(store: Store<AppState>, current: () => string): void {
   const container = byId('diff');
   const note = byId('diff-note');
   let merge: Merge | null = null;
@@ -144,6 +152,7 @@ export function mountDiffView(store: Store<AppState>): void {
   let pending: PendingDiff | null = null;
   byId('view-output').addEventListener('click', () => setView(store, 'output'));
   byId('view-diff').addEventListener('click', () => setView(store, 'diff'));
+  byId('diff-wrap').addEventListener('click', () => toggleWrap(store));
   const showNote = (text: string | null) => {
     note.hidden = text === null;
     setText(note, text ?? '');
@@ -168,7 +177,7 @@ export function mountDiffView(store: Store<AppState>): void {
         }
         pending = null;
         const view = bigView(result);
-        const mounted = view.kind === 'merge' ? loaded.mountDiff(container, plan.before, plan.after, result.ranges) : mountSummary(container, result);
+        const mounted = view.kind === 'merge' ? loaded.mountDiff(container, plan.before, plan.after, store.get().settings.wrap, result.ranges) : mountSummary(container, result);
         handle = mounted;
         container.dataset['chunks'] = String(mounted.chunks);
         container.dataset['view'] = view.kind;
@@ -185,7 +194,7 @@ export function mountDiffView(store: Store<AppState>): void {
   };
   const paint = (state: AppState) => {
     clear();
-    const plan = diffPlan(state);
+    const plan = diffPlan(state, current());
     shown = plan;
     showNote(plan.note);
     if (plan.kind === 'off' || merge === null) {
@@ -197,7 +206,7 @@ export function mountDiffView(store: Store<AppState>): void {
       showBig(merge, plan);
       return;
     }
-    const mounted = merge.mountDiff(container, plan.before, plan.after);
+    const mounted = merge.mountDiff(container, plan.before, plan.after, state.settings.wrap);
     container.dataset['chunks'] = String(mounted.chunks);
     container.dataset['view'] = 'merge';
     handle = mounted;
@@ -205,14 +214,15 @@ export function mountDiffView(store: Store<AppState>): void {
   store.subscribe((state, previous) => {
     const diff = state.settings.view === 'diff';
     document.body.classList.toggle('diff-mode', diff);
-    for (const [id, on] of [['view-output', !diff], ['view-diff', diff]] as const) {
+    for (const [id, on] of [['view-output', !diff], ['view-diff', diff], ['diff-wrap', state.settings.wrap]] as const) {
       byId(id).setAttribute('aria-pressed', String(on));
     }
     const changed =
       state.run.result !== previous.run.result ||
       state.selectedModule !== previous.selectedModule ||
       state.input !== previous.input ||
-      state.compare !== previous.compare;
+      state.compare !== previous.compare ||
+      state.settings.wrap !== previous.settings.wrap;
     if (!diff) {
       clear();
       shown = null;
@@ -222,7 +232,7 @@ export function mountDiffView(store: Store<AppState>): void {
       return;
     }
     if (merge === null) {
-      shown = diffPlan(state);
+      shown = diffPlan(state, current());
       import('./diff-merge').then((module) => {
         merge = module;
         paint(store.get());

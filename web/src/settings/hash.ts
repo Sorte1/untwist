@@ -56,6 +56,7 @@ const CODECS: Readonly<Record<Key, Codec>> = {
   single: flag,
   off: { read: offList, write: (value) => String(value) },
   view: choice(['output', 'diff']),
+  wrap: flag,
   theme: { read: (raw) => (raw === 'dark' || raw === 'light' ? raw : undefined), write: (value) => String(value) },
   input: choice(['shown', 'hidden']),
 };

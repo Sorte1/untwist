@@ -1,6 +1,6 @@
 import { javascriptLanguage } from '@codemirror/lang-javascript';
 import { HighlightStyle, LanguageSupport, syntaxHighlighting } from '@codemirror/language';
-import { EditorState, Prec, type Extension } from '@codemirror/state';
+import { EditorState, Prec, Transaction, type Extension } from '@codemirror/state';
 import { drawSelection, EditorView, highlightSpecialChars, keymap, lineNumbers } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
@@ -69,6 +69,11 @@ export function makeEditor(parent: HTMLElement, label: string, extensions: Exten
   return view;
 }
 
-export function replaceDoc(view: EditorView, text: string): void {
-  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, selection: { anchor: 0 }, scrollIntoView: true });
+export function replaceDoc(view: EditorView, text: string, undoable = true): void {
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: text },
+    selection: { anchor: 0 },
+    scrollIntoView: true,
+    annotations: undoable ? [] : [Transaction.addToHistory.of(false)],
+  });
 }

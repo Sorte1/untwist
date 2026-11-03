@@ -1,4 +1,5 @@
 import { Change, diff, MergeView } from '@codemirror/merge';
+import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { baseExtensions } from './editor';
 
@@ -10,6 +11,12 @@ const look = EditorView.theme({
   '&.cm-merge-a .cm-changeGutter': { borderLeft: '2px solid var(--del-mark)' },
   '&.cm-merge-b .cm-changeGutter': { borderLeft: '2px solid var(--add-mark)' },
 });
+
+const SIDES = '.cm-mergeViewEditor { min-width: 0; }';
+
+function lines(wrap: boolean): Extension {
+  return wrap ? EditorView.lineWrapping : [];
+}
 
 export interface DiffHandle {
   readonly chunks: number;
@@ -38,14 +45,17 @@ export function refinedChanges(before: string, after: string, ranges: Int32Array
   return changes;
 }
 
-export function mountDiff(parent: HTMLElement, before: string, after: string, ranges?: Int32Array): DiffHandle {
+export function mountDiff(parent: HTMLElement, before: string, after: string, wrap: boolean, ranges?: Int32Array): DiffHandle {
   const host = document.createElement('div');
-  host.className = 'editor-host diff-host';
+  host.className = wrap ? 'editor-host diff-host diff-wrap' : 'editor-host diff-host';
   parent.append(host);
   const root = host.attachShadow({ mode: 'open' });
+  const sides = new CSSStyleSheet();
+  sides.replaceSync(SIDES);
+  root.adoptedStyleSheets = [...root.adoptedStyleSheets, sides];
   const view = new MergeView({
-    a: { doc: before, extensions: [baseExtensions(false), look] },
-    b: { doc: after, extensions: [baseExtensions(false), look] },
+    a: { doc: before, extensions: [baseExtensions(false), look, lines(wrap)] },
+    b: { doc: after, extensions: [baseExtensions(false), look, lines(wrap)] },
     parent: root,
     root,
     gutter: true,

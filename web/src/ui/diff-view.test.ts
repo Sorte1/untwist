@@ -56,4 +56,12 @@ describe('the worker diff view', () => {
     expect(hunkLabel({ fromA: 7, toA: 7, fromB: 6, toB: 9 })).toBe('after line 7 → 7–9: +3');
     expect(hunkLabel({ fromA: 0, toA: 1, fromB: 0, toB: 0 })).toBe('line 1 → removed: −1');
   });
+
+  it('diffs the current output text, and names it as edited when it differs from the run', () => {
+    const state = withResult({}, null);
+    expect(diffPlan(state, 'var a = true;\n')).toMatchObject({ after: 'var a = true;\n', afterName: 'output.js' });
+    expect(diffPlan(state, 'var a = false;\n')).toMatchObject({ before: 'var a = !0;', after: 'var a = false;\n', afterName: 'output.js (edited)' });
+    const bundled = withResult({ report, modules: ['a();', 'b();'], stdout: '0123456789abc' }, 1);
+    expect(diffPlan(bundled, 'b(1);')).toMatchObject({ before: '45678', after: 'b(1);', afterName: 'b.js (edited)' });
+  });
 });

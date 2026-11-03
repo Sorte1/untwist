@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { flagsFrom } from './flags';
 import { parseHash, writeHash } from './hash';
-import { CLI_DEFAULTS, DEFAULT_FUEL, DEFAULTS, RENAME_MODES, type Settings } from './settings';
+import { changedCount, CLI_DEFAULTS, DEFAULT_FUEL, DEFAULTS, RENAME_MODES, type Settings } from './settings';
 import cases from './flags.json';
 
 function pick<T>(values: readonly T[], seed: number): T {
@@ -23,6 +23,7 @@ function generated(seed: number): Settings {
     single: bit(7),
     off: pick(['', 'dead-code', 'layers'], seed >> 5),
     view: bit(8) ? 'diff' : 'output',
+    wrap: bit(10),
     theme: pick([null, 'dark', 'light'] as const, seed >> 4),
     input: bit(9) ? 'hidden' : 'shown',
   };
@@ -89,5 +90,14 @@ describe('the settings hash', () => {
     const parsed = parseHash('#bogus=1&unsafe=yes&fuel=-3&rename=full&iter=0&jsx=0');
     expect(parsed.settings).toEqual({ ...DEFAULTS, jsx: false });
     expect(parsed.problems).toHaveLength(5);
+  });
+});
+
+describe('changedCount', () => {
+  it('counts the transform settings that differ from the defaults, not the mode, view, wrap, theme or input', () => {
+    expect(changedCount(DEFAULTS)).toBe(0);
+    expect(changedCount({ ...DEFAULTS, unsafe: false, view: 'diff', wrap: true, theme: 'light', input: 'hidden' })).toBe(0);
+    expect(changedCount({ ...DEFAULTS, unpack: false, rename: 'unique', fuel: null })).toBe(3);
+    expect(changedCount({ ...DEFAULTS, off: 'dead-code,layers', iter: 3, single: true })).toBe(3);
   });
 });

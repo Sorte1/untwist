@@ -50,6 +50,20 @@ export async function openApp(page: Page, hash = ''): Promise<void> {
   await expect(page.locator('#run')).toBeEnabled({ timeout: 30_000 });
 }
 
+export async function openSettings(page: Page): Promise<void> {
+  if (!(await page.locator('#settings').isVisible())) {
+    await page.locator('#settings-toggle').click();
+  }
+  await expect(page.locator('#settings')).toBeVisible();
+}
+
+export async function openDiagnostics(page: Page): Promise<void> {
+  if (await page.locator('#diagnostics').isHidden()) {
+    await page.locator('#diag-toggle').click();
+  }
+  await expect(page.locator('#diagnostics')).toBeVisible();
+}
+
 export async function runAndWait(page: Page): Promise<void> {
   await page.locator('#run').click();
   await expect(page.locator('#status-label')).toHaveText(/Done|Stopped by limit/, { timeout: 120_000 });

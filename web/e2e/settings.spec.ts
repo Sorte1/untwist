@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { expect, openApp, paste, readRepo, repoPath, runAndWait, sha256, test, skipWithoutGame } from './fixtures';
+import { expect, openApp, openSettings, paste, readRepo, repoPath, runAndWait, sha256, test, skipWithoutGame } from './fixtures';
 
 const FIXTURE = 'fixtures/reference/deobfuscate/obfuscator.io-control-flow.js';
 const FLAGS = '--no-unpack --no-jsx --unsafe --rename unique --fuel 1000 --no-unminify --keep-human-names --max-iterations 3 --single-file';
@@ -21,7 +21,9 @@ async function outputText(page: Page): Promise<string> {
 }
 
 async function setEverything(page: Page): Promise<void> {
-  for (const key of ['unpack', 'jsx', 'unsafe']) {
+  await page.locator('#mode-group [data-mode="unsafe"]').click();
+  await openSettings(page);
+  for (const key of ['unpack', 'jsx']) {
     await page.locator(`.switch[data-key="${key}"]`).click();
   }
   await page.locator('#rename-group [data-mode="unique"]').click();
@@ -37,6 +39,7 @@ async function setEverything(page: Page): Promise<void> {
 async function controls(page: Page): Promise<string[]> {
   return page.evaluate(() => [
     ...[...document.querySelectorAll('.switch[data-key]')].map((el) => `${el.getAttribute('data-key')}=${el.getAttribute('aria-checked')}`),
+    `mode=${document.querySelector('#mode-group [aria-checked="true"]')?.getAttribute('data-mode')}`,
     `rename=${document.querySelector('#rename-group [aria-pressed="true"]')?.getAttribute('data-mode')}`,
     `fuel=${(document.getElementById('fuel') as HTMLInputElement).value}/${(document.getElementById('fuel-inf') as HTMLInputElement).checked}`,
     ...[...document.querySelectorAll<HTMLInputElement>('#advanced input[type=checkbox]')].map((el) => `${el.dataset['key']}=${el.checked}`),
@@ -67,7 +70,7 @@ test('a settings change marks the Run button until the next run', async ({ page 
   await paste(page, 'var a = !0;');
   await runAndWait(page);
   await expect(page.locator('#settings-changed')).toBeHidden();
-  await page.locator('.switch[data-key="unsafe"]').click();
+  await page.locator('#mode-group [data-mode="unsafe"]').click();
   await expect(page.locator('#settings-changed')).toBeVisible();
   await expect(page.locator('#status-label')).toHaveText('Done');
   await runAndWait(page);
@@ -76,7 +79,7 @@ test('a settings change marks the Run button until the next run', async ({ page 
 
 test('an invalid link falls back to the defaults with one info line each', async ({ page }) => {
   await openApp(page, '#bogus=1&rename=full&unsafe=1');
-  await expect(page.locator('.switch[data-key="unsafe"]')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('#mode-group [data-mode="unsafe"]')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#rename-group [aria-pressed="true"]')).toHaveAttribute('data-mode', 'none');
   await expect(page.locator('#diag-list .diag-info')).toHaveCount(2);
 });

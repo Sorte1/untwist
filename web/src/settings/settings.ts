@@ -16,6 +16,7 @@ export interface Settings {
   readonly single: boolean;
   readonly off: string;
   readonly view: View;
+  readonly wrap: boolean;
   readonly theme: ThemeChoice | null;
   readonly input: InputVisibility;
 }
@@ -36,6 +37,7 @@ export const DEFAULTS: Settings = {
   single: false,
   off: '',
   view: 'output',
+  wrap: false,
   theme: null,
   input: 'shown',
 };
@@ -51,4 +53,10 @@ export const RENAME_HINTS: Readonly<Record<RenameMode, string>> = {
 
 export function sameSettings(a: Settings, b: Settings): boolean {
   return (Object.keys(DEFAULTS) as Array<keyof Settings>).every((key) => a[key] === b[key]);
+}
+
+const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'jsx', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'off'];
+
+export function changedCount(settings: Settings): number {
+  return PANEL_KEYS.filter((key) => settings[key] !== DEFAULTS[key]).length;
 }

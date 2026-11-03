@@ -11,11 +11,11 @@ export interface Rect {
 }
 
 const FONTS: ReadonlyArray<readonly [string, string, number]> = [
-  ['IBM Plex Sans', 'ibm-plex-sans-latin-400-normal.woff2', 400],
-  ['IBM Plex Sans', 'ibm-plex-sans-latin-500-normal.woff2', 500],
-  ['IBM Plex Sans', 'ibm-plex-sans-latin-600-normal.woff2', 600],
-  ['IBM Plex Mono', 'ibm-plex-mono-latin-400-normal.woff2', 400],
-  ['IBM Plex Mono', 'ibm-plex-mono-latin-500-normal.woff2', 500],
+  ['Spline Sans', 'spline-sans-latin-400-normal.woff2', 400],
+  ['Spline Sans', 'spline-sans-latin-500-normal.woff2', 500],
+  ['Spline Sans', 'spline-sans-latin-600-normal.woff2', 600],
+  ['Spline Sans Mono', 'spline-sans-mono-latin-400-normal.woff2', 400],
+  ['Spline Sans Mono', 'spline-sans-mono-latin-500-normal.woff2', 500],
 ];
 
 function fontFaces(): string {
@@ -37,7 +37,7 @@ function renderInPage({ html, theme }: { html: string; theme: string }): void {
     setState(): void {}
   }
   const Component = new Function('DCLogic', `${script}\nreturn Component;`)(DCLogic);
-  const vals = new Component({ theme, accent: '#F2B33D', dropOverlay: false }).renderVals();
+  const vals = new Component({ theme }).renderVals();
   const evaluate = (expr: string, scope: Record<string, unknown>): unknown =>
     new Function(...Object.keys(scope), `return (${expr});`)(...Object.values(scope));
   const fill = (text: string, scope: Record<string, unknown>): string =>
