@@ -6,15 +6,20 @@ Every asset name except `index.html`, `_headers` and the font licences carries a
 
 ## Cloudflare Pages through GitHub Actions
 
-`.github/workflows/deploy-web.yml` runs on a push that touches `web/**`, `crates/**`,
-`Cargo.toml`, `Cargo.lock` or the workflow itself, and on a manual run. It builds the site and
-runs `wrangler pages deploy web/dist --project-name=untwist --branch=<branch>`.
+`.github/workflows/deploy-web.yml` builds the site and runs
+`wrangler pages deploy web/dist --project-name=untwist --branch=<branch>`.
 
+- **Production.** Only a release deploys to production: pushing a `vX.Y.Z` tag runs
+  `.github/workflows/release.yml`, which calls this workflow with `production: true` and
+  deploys with `--branch=main`. To redeploy a release by hand, run "Deploy web" from the
+  Actions tab on the release tag with "production" ticked. See `RELEASING.md`.
+- **Previews.** A push to any branch other than `main` that touches `web/**`, `crates/**`,
+  `Cargo.toml`, `Cargo.lock` or the workflow gets its own preview URL, and the link is posted
+  on the branch's open pull request. A push to `main` deploys nothing.
 - **Secrets.** `CLOUDFLARE_API_TOKEN` (Account › Cloudflare Pages › Edit) and
-  `CLOUDFLARE_ACCOUNT_ID`, as repository secrets. Without them the workflow builds and skips
-  the deploy. Only the deploy step reads them; the job's token is `contents: read`.
-- **Project.** A Pages project named `untwist` with production branch `master`. A push to
-  `master` deploys to production; a push to any other branch gets its own preview URL.
+  `CLOUDFLARE_ACCOUNT_ID`, as repository secrets. Without them a preview build skips the
+  deploy and a production deploy fails. Only the deploy step reads them.
+- **Project.** A Pages project named `untwist` with production branch `main`.
 - **Domain.** `untwist.dev` is attached to the project in the Cloudflare dashboard.
 
 ## Headers
@@ -47,5 +52,5 @@ old one and waits; the page then offers a Reload, which switches to it and drops
 cd web
 npm ci
 npm run build
-npx wrangler pages deploy dist --project-name=untwist --branch=master
+npx wrangler pages deploy dist --project-name=untwist --branch=main
 ```
