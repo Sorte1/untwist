@@ -57,8 +57,7 @@ async function startEditing(page: Page, source: string): Promise<string> {
   await paste(page, source);
   await runAndWait(page);
   const output = await outputText(page);
-  await page.locator('#edit-output').click();
-  await expect(page.locator('#edit-output')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator(OUTPUT).focus();
   await expect(page.locator(STATUS)).toHaveText('Language features · ready');
   return output;
 }
@@ -78,7 +77,7 @@ async function longestTask(page: Page): Promise<number> {
 
 test('rename a local: the text changes at exactly its references', async ({ page }) => {
   const output = await startEditing(page, SOURCE);
-  await expect(page.locator('#output-edit-meta')).toContainText('No edits yet');
+  await expect(page.locator('#output-edit-mark')).toBeHidden();
   await expect(page.locator('#output-edit-meta')).toContainText('No problems');
   await watchLongTasks(page);
   await cursorAt(page, 'let sum', 4);
@@ -119,7 +118,8 @@ test('a typo shows one problem, and reset restores the output', async ({ page })
   await expect(page.locator('.edit-problems')).toHaveText('1 problem');
   await expect(page.locator('#output-editor .cm-lintRange-error')).toHaveCount(1);
   await page.getByRole('button', { name: 'Reset to output' }).click();
-  await expect(page.locator('#output-readonly')).toBeVisible();
+  await expect(page.locator('#output-edit-mark')).toBeHidden();
+  await expect(page.locator('#output-edit-actions')).toBeHidden();
   expect(await outputText(page)).toBe(output);
 });
 
@@ -164,7 +164,7 @@ test("game.js's output is under the 12 MiB cap: the features are on and referenc
   await openApp(page);
   await paste(page, readRepo('fixtures/real-world/game.js'));
   await runAndWait(page);
-  await page.locator('#edit-output').click();
+  await page.locator(OUTPUT).focus();
   await expect(page.locator(STATUS)).toHaveText('Language features · ready', { timeout: 60_000 });
   const marks = await page.evaluate(() =>
     performance.getEntriesByName('untwist:lang-analyzed').map((mark) => (mark as PerformanceMark).detail as { ms: number; memoryBytes: number }),
@@ -190,7 +190,7 @@ test('go to definition follows a required module to its export', async ({ page }
   await runAndWait(page);
   await page.locator('#module-list .tree-item', { hasText: 'index.js' }).first().click();
   await expect(page.locator('#output-meta')).toContainText('index.js');
-  await page.locator('#edit-output').click();
+  await page.locator(OUTPUT).focus();
   await expect(page.locator(STATUS)).toHaveText('Language features · ready');
   await cursorAt(page, '_0__.c)', 5);
   await page.keyboard.press('F12');

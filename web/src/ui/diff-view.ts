@@ -94,7 +94,11 @@ function overWorkerCap(text: string): boolean {
   return text.length > BIG_DIFF_CAP_BYTES || utf8Bytes(text) > BIG_DIFF_CAP_BYTES;
 }
 
-function sides(state: AppState): DiffPlan {
+function edited(name: string, engine: string, current: string | null): { readonly after: string; readonly afterName: string } {
+  return current === null || current === engine ? { after: engine, afterName: name } : { after: current, afterName: `${name} (edited)` };
+}
+
+function sides(state: AppState, current: string | null): DiffPlan {
   const compared = comparePlan(state);
   if (compared !== null) {
     const note = compared.safe === compared.unsafe ? 'Safe and Unsafe give the same output.' : null;
@@ -107,21 +111,21 @@ function sides(state: AppState): DiffPlan {
   const bundle = currentBundle(state);
   const index = state.selectedModule;
   if (bundle === null || index === null) {
-    return { kind: 'diff', before: state.input.text, after: result.stdout, beforeName: 'input', afterName: 'output.js', note: null };
+    return { kind: 'diff', before: state.input.text, ...edited('output.js', result.stdout, current), beforeName: 'input', note: null };
   }
   const module = bundle.modules[index];
   const code = result.modules[index] ?? '';
   const name = module?.path ?? `module ${index}`;
   if (module?.span === undefined) {
     const note = 'This module has no span in the bundle text, so the left side is the whole processed bundle.';
-    return { kind: 'diff', before: result.stdout, after: code, beforeName: 'bundle', afterName: name, note };
+    return { kind: 'diff', before: result.stdout, ...edited(name, code, current), beforeName: 'bundle', note };
   }
   const [from, to] = module.span;
-  return { kind: 'diff', before: result.stdout.slice(from, to), after: code, beforeName: 'bundle slice', afterName: name, note: null };
+  return { kind: 'diff', before: result.stdout.slice(from, to), ...edited(name, code, current), beforeName: 'bundle slice', note: null };
 }
 
-export function diffPlan(state: AppState): DiffPlan {
-  const plan = sides(state);
+export function diffPlan(state: AppState, current: string | null = null): DiffPlan {
+  const plan = sides(state, current);
   if (plan.kind !== 'diff' || (!tooBig(plan.before) && !tooBig(plan.after))) {
     return plan;
   }
@@ -135,7 +139,7 @@ function setView(store: Store<AppState>, view: 'output' | 'diff'): void {
   store.update((state) => ({ ...state, settings: { ...state.settings, view } }));
 }
 
-export function mountDiffView(store: Store<AppState>): void {
+export function mountDiffView(store: Store<AppState>, current: () => string): void {
   const container = byId('diff');
   const note = byId('diff-note');
   let merge: Merge | null = null;
@@ -185,7 +189,7 @@ export function mountDiffView(store: Store<AppState>): void {
   };
   const paint = (state: AppState) => {
     clear();
-    const plan = diffPlan(state);
+    const plan = diffPlan(state, current());
     shown = plan;
     showNote(plan.note);
     if (plan.kind === 'off' || merge === null) {
@@ -222,7 +226,7 @@ export function mountDiffView(store: Store<AppState>): void {
       return;
     }
     if (merge === null) {
-      shown = diffPlan(state);
+      shown = diffPlan(state, current());
       import('./diff-merge').then((module) => {
         merge = module;
         paint(store.get());

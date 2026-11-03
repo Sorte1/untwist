@@ -106,7 +106,7 @@ function main(): void {
   const outputView = mountOutputPane(store, engine.module);
   mountModuleTree(store);
   mountDownload(store, () => outputView.state.doc.toString());
-  mountDiffView(store);
+  mountDiffView(store, () => outputView.state.doc.toString());
   mountStatusBar(store);
   mountDiagnostics(store, inputView);
   mountFocusMode(store);

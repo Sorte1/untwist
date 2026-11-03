@@ -4,7 +4,8 @@ import { byId, linesLabel, setText } from '../dom';
 import { seconds, type AppState } from '../state';
 import type { Store } from '../store';
 import { currentBundle } from './module-tree';
-import { access, baseExtensions, makeEditor, outputLook, replaceDoc } from './editor';
+import { baseExtensions, makeEditor, outputLook } from './editor';
+import { outputEdits } from './output-edits';
 
 const COPIED_MS = 1200;
 
@@ -18,21 +19,24 @@ export function shownText(state: AppState): { readonly text: string; readonly na
   return { text: result.modules[index] ?? '', name: bundle?.modules[index]?.path ?? `module ${index}` };
 }
 
-function mountEditToggle(store: Store<AppState>, view: EditorView, gate: Compartment, module: Promise<WebAssembly.Module>): void {
-  const edit = byId<HTMLButtonElement>('edit-output');
-  let mode: Promise<{ toggle(): void }> | null = null;
-  edit.addEventListener('click', () => {
-    mode ??= import('../lang/edit').then((lang) => lang.createEditMode({ view, gate, store, module }));
-    mode.then((loaded) => loaded.toggle(), () => edit.setAttribute('title', 'Editing failed to load'));
-  });
-  store.subscribe((state) => {
-    edit.disabled = state.run.result === null;
-  });
+function mountLanguage(store: Store<AppState>, view: EditorView, gate: Compartment, module: Promise<WebAssembly.Module>): void {
+  byId('output-editor').addEventListener(
+    'focusin',
+    () => {
+      import('../lang/edit').then(
+        (lang) => lang.attachLanguage({ view, gate, store, module }),
+        () => {
+          const status = byId('output-lang');
+          status.hidden = false;
+          setText(status, 'Language features failed to load');
+        },
+      );
+    },
+    { once: true },
+  );
 }
 
-export function mountOutputPane(store: Store<AppState>, module: Promise<WebAssembly.Module>): EditorView {
-  const gate = new Compartment();
-  const view = makeEditor(byId('output-editor'), 'Output code', [baseExtensions(false, gate.of(access(false))), outputLook]);
+function mountCopy(view: EditorView): void {
   const copy = byId<HTMLButtonElement>('copy-output');
   const copyLabel = byId('copy-label');
   let timer = 0;
@@ -46,16 +50,27 @@ export function mountOutputPane(store: Store<AppState>, module: Promise<WebAssem
       () => setText(copyLabel, 'Copy failed'),
     );
   });
-  mountEditToggle(store, view, gate, module);
+}
+
+export function mountOutputPane(store: Store<AppState>, module: Promise<WebAssembly.Module>): EditorView {
+  const gate = new Compartment();
+  const edits = outputEdits();
+  const view = makeEditor(byId('output-editor'), 'Output code', [baseExtensions(true), gate.of([]), outputLook, edits.extension]);
+  mountCopy(view);
+  mountLanguage(store, view, gate, module);
+  byId('reset-output').addEventListener('click', () => {
+    edits.replace(view, shownText(store.get()).text);
+    view.focus();
+  });
   store.subscribe((state, previous) => {
     const result = state.run.result;
     if (result !== previous.run.result || state.selectedModule !== previous.selectedModule) {
       const shown = shownText(state);
-      replaceDoc(view, shown.text);
+      edits.replace(view, shown.text);
       requestAnimationFrame(() => performance.mark('untwist:output-shown'));
       setText(byId('output-meta'), `${shown.name} · ${linesLabel(result === null ? 0 : view.state.doc.lines)}`);
     }
-    copy.disabled = result === null;
+    byId<HTMLButtonElement>('copy-output').disabled = result === null;
     const running = state.run.status === 'running';
     byId('running').hidden = !running;
     if (running) {
