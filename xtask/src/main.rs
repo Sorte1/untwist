@@ -68,6 +68,12 @@ enum Cmd {
     DepthOracleChild(xtask::depth_oracle::ChildRequest),
     #[command(flatten)]
     Layers(xtask::layers::Command),
+    Bump {
+        version: String,
+    },
+    CheckVersion {
+        tag: String,
+    },
 }
 
 fn repo_root() -> PathBuf {
@@ -425,6 +431,27 @@ fn run_diff_behaviour(files: Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
+fn today() -> Result<String> {
+    let since_epoch = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
+    let days = i64::try_from(since_epoch.as_secs() / 86_400)?;
+    Ok(xtask::release::civil_date(days))
+}
+
+fn bump(version: &str) -> Result<()> {
+    let root = repo_root();
+    let version = xtask::release::bump(&root, version, &today()?)?;
+    let status = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+        .args(["update", "--workspace"])
+        .current_dir(&root)
+        .status()
+        .context("spawn cargo update")?;
+    if !status.success() {
+        bail!("cargo update --workspace failed; Cargo.lock still has the old version");
+    }
+    println!("bumped to {version}; commit, then tag v{version} and push with --follow-tags");
+    Ok(())
+}
+
 fn run_diff_eval(seed: u64, cases: usize) -> Result<()> {
     let Some(node) = untwist_testing::node::node() else {
         bail!("diff-eval needs node on PATH (or UNTWIST_NODE)");
@@ -489,5 +516,11 @@ fn main() -> Result<()> {
         Cmd::DepthOracle(request) => xtask::depth_oracle::run(&request),
         Cmd::DepthOracleChild(child) => xtask::depth_oracle::run_child(&child),
         Cmd::Layers(command) => command.run(&repo_root()),
+        Cmd::Bump { version } => bump(&version),
+        Cmd::CheckVersion { tag } => {
+            xtask::release::check_version(&repo_root(), &tag)?;
+            println!("{tag} matches every version");
+            Ok(())
+        }
     }
 }

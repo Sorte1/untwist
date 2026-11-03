@@ -13,4 +13,5 @@ pub mod freeze_records;
 pub mod layers;
 pub mod obf_matrix;
 pub mod reference;
+pub mod release;
 pub mod unpack_behaviour;
