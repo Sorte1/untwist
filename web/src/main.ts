@@ -22,6 +22,7 @@ import { mountModuleTree } from './ui/module-tree';
 import { mountOptions } from './ui/options';
 import { mountOutputPane } from './ui/output-pane';
 import { mountPasses } from './ui/passes';
+import { mountRecentMenu } from './ui/recent-menu';
 import { mountSettingsPanel } from './ui/settings-panel';
 import { mountStatusBar } from './ui/status-bar';
 import { mountDetailsToggle } from './ui/details/toggle';
@@ -112,6 +113,7 @@ function main(): void {
   mountFocusMode(store);
   const loader = mountLoader(store, run);
   mountExamplesMenu(store, loader);
+  mountRecentMenu(store, loader);
   mountDropOverlay(store, loader);
   mountSummaryChip(store);
   mountOptions(store);
