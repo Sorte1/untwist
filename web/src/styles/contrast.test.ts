@@ -46,7 +46,11 @@ describe('text contrast (WCAG AA, 4.5:1)', () => {
     });
   }
 
-  it('holds for the label on the accent Run button', () => {
-    expect(contrast('#1A1300', '#F2B33D')).toBeGreaterThan(4.5);
-  });
+  for (const theme of ["[data-theme='dark']", "[data-theme='light']"]) {
+    it(`holds for the label on the accent Run button and on the Unsafe mode tint, ${theme}`, () => {
+      const colours = palette(theme);
+      expect(contrast(colours.get('on-accent') ?? '', colours.get('accent') ?? '')).toBeGreaterThan(4.5);
+      expect(contrast(colours.get('warn') ?? '', colours.get('warn-bg') ?? '')).toBeGreaterThan(4.5);
+    });
+  }
 });

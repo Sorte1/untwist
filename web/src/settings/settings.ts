@@ -52,3 +52,9 @@ export const RENAME_HINTS: Readonly<Record<RenameMode, string>> = {
 export function sameSettings(a: Settings, b: Settings): boolean {
   return (Object.keys(DEFAULTS) as Array<keyof Settings>).every((key) => a[key] === b[key]);
 }
+
+const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'jsx', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'off'];
+
+export function changedCount(settings: Settings): number {
+  return PANEL_KEYS.filter((key) => settings[key] !== DEFAULTS[key]).length;
+}

@@ -88,3 +88,31 @@ export function docPosition(text: string, offset: number): number {
   }
   return offset - joined;
 }
+
+export type StripTone = 'err' | 'warn' | 'muted' | 'text';
+
+export interface StripLabel {
+  readonly text: string;
+  readonly tone: StripTone;
+}
+
+function counted(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+export function stripLabel(rows: readonly DiagnosticRow[] | null, notes: number): StripLabel {
+  const count = (level: Level) => rows?.filter((row) => row.level === level).length ?? 0;
+  const errors = count('error');
+  const warnings = count('warning');
+  const infos = count('info') + notes;
+  if (errors > 0) {
+    return { text: [counted(errors, 'error'), ...(warnings > 0 ? [counted(warnings, 'warning')] : [])].join(', '), tone: 'err' };
+  }
+  if (warnings > 0) {
+    return { text: counted(warnings, 'warning'), tone: 'warn' };
+  }
+  if (infos > 0) {
+    return { text: counted(infos, 'note'), tone: 'text' };
+  }
+  return rows === null ? { text: 'Diagnostics', tone: 'text' } : { text: 'No warnings', tone: 'muted' };
+}

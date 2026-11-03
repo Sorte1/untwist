@@ -9,7 +9,7 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-<meta name="theme-color" content="#0D0F12">
+<meta name="theme-color" content="#1C1A25">
 <script type="module" src="/src/main.ts"></script>
 </head>
 <body>
@@ -17,134 +17,127 @@
 
 <header class="bar">
 <div class="brand">
-<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" class="brand-mark"></rect><g fill="none" stroke-linecap="round" stroke-width="2.2"><path d="M4.5 15.5C8.5 15.5 8.5 8.5 12.5 8.5H19.5" stroke="#1A1300"></path><path d="M4.5 8.5C8.5 8.5 8.5 15.5 12.5 15.5H19.5" stroke="#F2B33D" stroke-width="4.6"></path><path d="M4.5 8.5C8.5 8.5 8.5 15.5 12.5 15.5H19.5" stroke="#1A1300"></path></g></svg>
-<span class="brand-name">Untwist</span>
-<span class="muted">playground</span>
+<svg class="brand-mark" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke-linecap="round"><path class="strand strand-b" d="M3 16C7.5 16 8 8 12.5 8H21"></path><path class="strand-gap" d="M3 8C7.5 8 8 16 12.5 16H21"></path><path class="strand strand-a" d="M3 8C7.5 8 8 16 12.5 16H21"></path></g></svg>
+<span class="brand-name">untwist</span>
 </div>
 
 <div class="examples">
-<button type="button" class="btn btn-tall" id="examples" aria-expanded="false" aria-haspopup="listbox"><span class="muted">Example</span><span class="strong" id="example-name">none</span><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg></button>
+<button type="button" class="btn btn-bar" id="examples" aria-expanded="false" aria-haspopup="listbox"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h4M6.5 2v4L3 12.5A1 1 0 0 0 3.9 14h8.2a1 1 0 0 0 .9-1.5L9.5 6V2"></path><path d="M4.6 10h6.8"></path></svg><span class="examples-text"><span class="muted">Example</span> <span class="strong" id="example-name">none</span></span><svg class="chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg></button>
 </div>
 
 <div class="grow"></div>
 
-<span class="privacy muted"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>Runs in your browser — nothing is uploaded</span>
+<div role="radiogroup" aria-label="Transform mode" aria-describedby="mode-warning" class="mode-seg" id="mode-group"><button type="button" role="radio" class="mode-btn" data-mode="safe" aria-checked="false" tabindex="-1">Safe</button><button type="button" role="radio" class="mode-btn" data-mode="unsafe" aria-checked="true" tabindex="0">Unsafe</button></div>
 
-<div class="run-group">
-<div role="radiogroup" aria-label="Transform mode" aria-describedby="mode-warning" class="seg seg-inline mode-seg" id="mode-group"><button type="button" role="radio" class="seg-btn" data-mode="safe" aria-checked="false" tabindex="-1">Safe</button><button type="button" role="radio" class="seg-btn" data-mode="unsafe" aria-checked="true" tabindex="0">Unsafe</button></div>
-<span class="status muted"><span class="dot" id="status-dot"></span><span id="status-label">Loading engine</span></span>
-<span class="chip chip-skipped" id="skipped-chip" tabindex="0" hidden></span>
-<span class="elapsed" id="elapsed" aria-live="polite">0.00 s</span>
-<button type="button" class="btn btn-tall" id="cancel" disabled><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1.5"></rect></svg>Cancel</button>
-<button type="button" class="btn-run" id="run" disabled><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 2.5v11l9-5.5z"></path></svg><span id="run-label">Run</span><span class="changed-dot" id="settings-changed" title="Settings changed since the last run" hidden></span><span class="kbd">Ctrl ↵</span></button>
+<button type="button" class="btn btn-bar" id="settings-toggle" popovertarget="settings" aria-controls="settings" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2.5 4.5h6M11.5 4.5h2M2.5 11.5h2M7.5 11.5h6"></path><circle cx="10" cy="4.5" r="1.5"></circle><circle cx="6" cy="11.5" r="1.5"></circle></svg><span class="btn-text">Settings</span><span class="count" id="settings-count" hidden></span></button>
+
+<div class="settings" id="settings" popover role="dialog" aria-labelledby="settings-title">
+<div class="settings-head">
+<h2 class="settings-title" id="settings-title">Settings</h2>
+<button type="button" class="btn btn-square theme-alt" aria-label="Switch to light theme"><svg class="icon-sun" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"></path></svg><svg class="icon-moon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5z"></path></svg></button>
+<button type="button" class="btn btn-square" id="settings-close" popovertarget="settings" popovertargetaction="hide" aria-label="Close settings"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
 </div>
+<div class="settings-body">
 
-<button type="button" class="btn btn-icon" id="theme" aria-label="Switch to light theme">
-<svg class="icon-sun" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"></path></svg>
-<svg class="icon-moon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5z"></path></svg>
-</button>
-<p class="mode-warning" id="mode-warning"><strong>Unsafe</strong> <span id="mode-warning-text"></span></p>
-</header>
-
-<div class="body">
-
-<aside class="options" aria-label="Options">
-<section class="opt-section opt-transforms">
-<h2 class="label">Transforms</h2>
-<div class="opt"><div class="opt-text"><span class="strong">Unpack bundles</span><span class="hint">Split webpack, Browserify and Vite bundles into one file per module</span></div><button type="button" role="switch" class="switch" data-key="unpack" aria-checked="true" aria-label="Unpack bundles"><span></span></button></div>
-<div class="opt" id="jsx-opt"><div class="opt-text"><span class="strong">Decompile JSX</span><span class="hint" id="jsx-hint">Turn createElement calls back into JSX; runs in Unsafe mode</span></div><button type="button" role="switch" class="switch" data-key="jsx" aria-checked="true" aria-label="Decompile JSX" aria-describedby="jsx-hint"><span></span></button></div>
-<div class="opt"><div class="opt-text"><span class="strong">Unsafe transforms</span><span class="hint">More aggressive; can change behaviour in edge cases</span></div><button type="button" role="switch" class="switch" data-key="unsafe" aria-checked="true" aria-label="Unsafe transforms"><span></span></button></div>
+<section class="set-group">
+<h3 class="set-title">Transforms</h3>
+<div class="opt" title="Split webpack, Browserify and Vite bundles into one file per module"><span class="opt-name">Unpack bundles</span><button type="button" role="switch" class="switch" data-key="unpack" aria-checked="true" aria-label="Unpack bundles"><span></span></button></div>
+<div class="opt" id="jsx-opt"><span class="opt-text"><span class="opt-name">Decompile JSX</span><span class="hint" id="jsx-hint">Turn createElement calls back into JSX</span></span><button type="button" role="switch" class="switch" data-key="jsx" aria-checked="true" aria-label="Decompile JSX" aria-describedby="jsx-hint"><span></span></button></div>
 </section>
 
-<section class="opt-section opt-rename">
-<h2 class="label">Rename mode</h2>
-<div role="group" aria-label="Rename mode" class="seg seg-4" id="rename-group">
+<section class="set-group">
+<h3 class="set-title" id="rename-title">Rename identifiers</h3>
+<div role="group" aria-labelledby="rename-title" class="seg seg-4" id="rename-group">
 <button type="button" class="seg-btn" data-mode="none" aria-pressed="true">none</button><button type="button" class="seg-btn" data-mode="simple" aria-pressed="false">simple</button><button type="button" class="seg-btn" data-mode="unique" aria-pressed="false">unique</button><button type="button" class="seg-btn" data-mode="mangle" aria-pressed="false">mangle</button>
 </div>
 <span class="hint" id="rename-hint">Keep identifiers exactly as in the input (the default).</span>
 </section>
 
-<section class="opt-section opt-fuel">
-<h2 class="label">Fuel limit</h2>
+<section class="set-group" title="Evaluator steps the string-array decoder may spend per decode unit. The default is 50,000,000; Cancel still stops a long run.">
+<h3 class="set-title"><label for="fuel">Fuel limit</label></h3>
 <div class="fuel-row">
-<label for="fuel" class="sr-only">Fuel limit in evaluator steps</label>
-<input id="fuel" type="number" class="fuel-input" min="1" step="1000000" value="50000000">
+<input id="fuel" type="number" class="num-input" min="1" step="1000000" value="50000000" aria-describedby="fuel-hint">
 <span class="muted">steps</span>
-</div>
 <label class="check"><input type="checkbox" id="fuel-inf">No limit</label>
-<span class="hint">Evaluator steps the string-array decoder may spend per decode unit; the default is 50,000,000. No limit lifts it, and Cancel still stops a long run.</span>
-</section>
-
-<details class="opt-section opt-advanced" id="advanced">
-<summary class="label">Advanced</summary>
-<label class="check"><input type="checkbox" data-key="deob" data-inverted="1">No deobfuscate</label>
-<span class="hint">Skip the deobfuscate stage: string arrays, decoders, control flow and protections.</span>
-<label class="check"><input type="checkbox" data-key="unmin" data-inverted="1">No unminify</label>
-<span class="hint">Skip the unminify stage that restores readable statements and expressions.</span>
-<label class="check"><input type="checkbox" data-key="human">Keep human names</label>
-<span class="hint">In simple and unique, leave identifiers that already look human-written alone.</span>
-<label class="check"><input type="checkbox" data-key="single">Single file</label>
-<span class="hint">Write every unpacked module into one file, with a banner per module.</span>
-<div class="fuel-row">
-<label for="max-iterations" class="muted">Max iterations</label>
-<input id="max-iterations" type="number" class="fuel-input" min="1" placeholder="∞">
 </div>
-<span class="hint">Stop a stage after N passes over the program (default: run until nothing changes).</span>
-</details>
-
-<details class="opt-section opt-advanced" id="passes">
-<summary class="label">Passes <span class="muted" id="passes-off"></span></summary>
-<span class="hint">Every pass runs by default. Untick one to leave it out of the run (the CLI's --disable); unsafe passes run only in Unsafe mode.</span>
-<button type="button" class="btn btn-center" id="passes-reset" disabled>Turn all passes on</button>
-<div id="passes-list" class="pass-list"></div>
-</details>
-
-<div class="grow"></div>
-
-<section class="opt-section opt-link">
-<span class="hint">Settings live in the URL</span>
-<code class="query" id="query">#</code>
-<button type="button" class="btn btn-tall btn-center" id="copy-link"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg><span id="copy-link-label">Copy settings link</span></button>
-<span class="hint">Your code is never put in the link.</span>
+<span class="hint" id="fuel-hint">Decoder steps per decode unit</span>
 </section>
-</aside>
 
-<main class="main">
+<details class="set-fold" id="advanced">
+<summary class="set-title">Advanced</summary>
+<div class="fold-body">
+<label class="check" title="Skip the deobfuscate stage: string arrays, decoders, control flow and protections"><input type="checkbox" data-key="deob" data-inverted="1">No deobfuscate</label>
+<label class="check" title="Skip the unminify stage that restores readable statements and expressions"><input type="checkbox" data-key="unmin" data-inverted="1">No unminify</label>
+<label class="check" title="In simple and unique, leave identifiers that already look human-written alone"><input type="checkbox" data-key="human">Keep human names</label>
+<label class="check" title="Write every unpacked module into one file, with a banner per module"><input type="checkbox" data-key="single">Single file</label>
+<div class="fuel-row" title="Stop a stage after N passes over the program (default: run until nothing changes)">
+<label for="max-iterations">Max iterations</label>
+<input id="max-iterations" type="number" class="num-input num-short" min="1" placeholder="∞">
+</div>
+</div>
+</details>
+
+<details class="set-fold" id="passes">
+<summary class="set-title">Passes <span class="muted" id="passes-off"></span></summary>
+<div class="fold-body">
+<div class="passes-bar"><span class="hint">Untick a pass to leave it out (--disable)</span><button type="button" class="btn btn-small" id="passes-reset" disabled>Turn all on</button></div>
+<div id="passes-list" class="pass-list"></div>
+</div>
+</details>
+
+</div>
+<div class="settings-foot">
+<code class="query" id="query">#</code>
+<button type="button" class="btn btn-small" id="copy-link"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg><span id="copy-link-label">Copy settings link</span></button>
+<span class="hint">Settings live in the link; your code never does.</span>
+</div>
+</div>
+
+<button type="button" class="btn btn-bar btn-icon" id="theme" aria-label="Switch to light theme">
+<svg class="icon-sun" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"></path></svg>
+<svg class="icon-moon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5z"></path></svg>
+</button>
+
+<button type="button" class="btn btn-bar btn-cancel" id="cancel" disabled hidden><svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1.5"></rect></svg><span class="btn-text">Cancel</span></button>
+<button type="button" class="btn-run" id="run" disabled><svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 2.5v11l9-5.5z"></path></svg><span id="run-label">Run</span><span class="changed-dot" id="settings-changed" title="Settings changed since the last run" hidden></span><span class="kbd">Ctrl ↵</span></button>
+</header>
+
+<main class="workspace">
 <div class="panes">
 
 <button type="button" class="input-rail" id="show-input" aria-label="Show input" hidden><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"></rect><path d="M6 2.5v11M9 6.5 10.5 8 9 9.5"></path></svg><span class="input-rail-label" id="input-rail-label">Input</span></button>
 
-<section class="pane" id="input-pane" aria-label="Input">
+<section class="pane pane-input" id="input-pane" aria-label="Input">
 <div class="pane-head">
-<h2 class="label">Input</h2>
+<h2 class="pane-title"><svg class="glyph" width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><g fill="none" stroke-linecap="round"><path class="strand strand-a" d="M1.5 9.5C7 9.5 11 2.5 16.5 2.5"></path><path class="strand-gap" d="M1.5 2.5C7 2.5 11 9.5 16.5 9.5"></path><path class="strand strand-a" d="M1.5 2.5C7 2.5 11 9.5 16.5 9.5"></path></g></svg>Input</h2>
 <span class="mono-name" id="input-name">untitled.js</span>
 <span class="chip" id="input-chip" hidden></span>
 <div class="grow"></div>
 <input type="file" id="open-file-input" multiple hidden>
-<button type="button" class="btn btn-small" id="open-file"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6z"></path><path d="M9 2v4h4"></path><path d="M8 12V8.5M6.5 10 8 8.5 9.5 10"></path></svg>Open file</button>
-<button type="button" class="btn btn-square muted" id="clear-input" aria-label="Clear input"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
-<button type="button" class="btn btn-square muted" id="hide-input" aria-label="Hide input"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"></rect><path d="M6 2.5v11M10.5 6.5 9 8l1.5 1.5"></path></svg></button>
+<button type="button" class="btn btn-small" id="open-file" title="Open a file"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6z"></path><path d="M9 2v4h4"></path><path d="M8 12V8.5M6.5 10 8 8.5 9.5 10"></path></svg><span class="btn-label">Open file</span></button>
+<button type="button" class="btn btn-square" id="clear-input" aria-label="Clear input" title="Clear input"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+<button type="button" class="btn btn-square" id="hide-input" aria-label="Hide input" title="Hide input"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"></rect><path d="M6 2.5v11M10.5 6.5 9 8l1.5 1.5"></path></svg></button>
 </div>
 <div class="pane-body" id="input-editor"></div>
 <div class="pane-foot"><span id="input-meta">0 B · 1 line</span><div class="grow"></div><span id="input-hint">Paste, type or drop a file anywhere</span></div>
 </section>
 
-<section class="pane" id="output-pane" aria-label="Output">
+<section class="pane pane-output" id="output-pane" aria-label="Output">
 <div class="pane-head">
-<h2 class="label">Output</h2>
+<h2 class="pane-title"><svg class="glyph" width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><g fill="none" stroke-linecap="round"><path class="strand strand-b" d="M1.5 3.5H16.5M1.5 8.5H16.5"></path></g></svg>Output</h2>
 <div role="group" aria-label="Output view" class="seg seg-inline">
-<button type="button" class="seg-btn" id="view-output" aria-pressed="true">Output</button><button type="button" class="seg-btn" id="view-diff" aria-pressed="false">Diff</button>
+<button type="button" class="seg-btn" id="view-output" aria-pressed="true">Code</button><button type="button" class="seg-btn" id="view-diff" aria-pressed="false">Diff</button>
 </div>
-<span class="diff-legend" id="diff-legend"><span class="del-mark">−</span>before (<span id="diff-before">input</span>)<span class="add-mark">+</span>after (<span id="diff-after">output.js</span>)</span>
+<span class="diff-legend" id="diff-legend"><span class="del-mark">−</span><span id="diff-before">input</span><span class="add-mark">+</span><span id="diff-after">output.js</span></span>
 <div class="grow"></div>
-<button type="button" class="btn btn-small" id="edit-output" aria-pressed="false" disabled><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"></path></svg>Edit</button>
+<button type="button" class="btn btn-small" id="edit-output" title="Edit the output" aria-pressed="false" disabled><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"></path></svg><span class="btn-label">Edit</span></button>
 <button type="button" class="btn btn-small" id="compare-modes" disabled><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h9M9.5 2.5 12 5 9.5 7.5M13 11H4M6.5 8.5 4 11l2.5 2.5"></path></svg><span class="btn-label" id="compare-label">Compare with Unsafe</span></button>
-<button type="button" class="btn btn-small" id="copy-output" disabled><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"></path></svg><span id="copy-label">Copy</span></button>
+<button type="button" class="btn btn-small" id="copy-output" title="Copy the output" disabled><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"></path></svg><span class="btn-label" id="copy-label">Copy</span></button>
 <button type="button" class="btn btn-small" id="download" title="Download the output" disabled><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"></path></svg><span class="btn-label" id="download-label">Download .js</span></button>
 <button type="button" class="btn btn-square" id="focus-toggle" aria-label="Hide input for a full-width output" aria-pressed="false"><svg class="icon-expand" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"></path></svg><svg class="icon-collapse" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5l4-4M6.5 9.5l-4 4"></path></svg></button>
 </div>
 <div class="strings-banner" id="strings-banner" role="status" hidden>
-<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.75 14.75 13.5H1.25z"></path><path d="M8 6v3.5M8 11.5v.01"></path></svg>
+<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.75 14.75 13.5H1.25z"></path><path d="M8 6v3.5M8 11.5v.01"></path></svg>
 <p class="strings-banner-text"><strong id="strings-banner-text"></strong> <span id="strings-banner-detail"></span></p>
 <button type="button" class="btn btn-small" id="run-unsafe">Run in Unsafe</button>
 </div>
@@ -158,33 +151,42 @@
 </div>
 <div class="pane-foot"><span id="output-meta">output.js · 0 lines</span><span id="download-note" hidden></span><span id="diff-note" hidden></span><span class="edit-meta" id="output-edit-meta" hidden></span><div class="grow"></div><span class="edit-actions" id="output-edit-actions" hidden></span><span id="output-readonly">Read-only</span></div>
 <div class="running" id="running" hidden>
-<span class="running-title">Running in a worker · <span id="running-elapsed">0.00 s</span></span>
-<span class="muted">The page stays responsive. Cancel terminates the worker.</span>
+<svg class="running-mark" width="56" height="56" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke-linecap="round"><path class="strand strand-b" d="M3 16C7.5 16 8 8 12.5 8H21"></path><path class="strand-gap" d="M3 8C7.5 8 8 16 12.5 16H21"></path><path class="strand strand-a" d="M3 8C7.5 8 8 16 12.5 16H21"></path></g></svg>
+<span class="running-title">Untwisting · <span id="running-elapsed">0.00 s</span></span>
+<span class="muted">Running in a worker; the page stays responsive.</span>
 </div>
 </section>
 
 </div>
 
-<section class="diagnostics" aria-label="Diagnostics">
+</main>
+
+<footer class="strip">
+<span class="status"><span class="dot" id="status-dot"></span><span id="status-label">Loading engine</span></span>
+<span class="elapsed" id="elapsed" aria-live="polite">0.00 s</span>
+<span class="chip chip-skipped" id="skipped-chip" tabindex="0" hidden></span>
+<p class="mode-warning" id="mode-warning"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.75 14.75 13.5H1.25z"></path><path d="M8 6v3.5M8 11.5v.01"></path></svg><span class="mode-warning-text"><strong>Unsafe</strong> <span id="mode-warning-text"></span></span></p>
+<div class="grow"></div>
+<span class="privacy" title="Runs in your browser — nothing is uploaded"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg><span class="privacy-text">Runs in your browser — nothing is uploaded</span></span>
+<button type="button" class="strip-toggle" id="diag-toggle" aria-expanded="false" aria-controls="diagnostics"><span id="diag-count">Diagnostics</span><svg class="chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10l4-4 4 4"></path></svg></button>
+</footer>
+
+<section class="diagnostics" id="diagnostics" aria-label="Diagnostics" hidden>
 <div class="diag-head">
-<h2 class="label">Diagnostics</h2>
-<span class="muted">Mode <span class="figure-sans" id="output-mode">—</span></span>
-<span class="muted">Exit <span class="figure" id="exit-code">—</span></span>
-<span class="muted">Total <span class="figure text" id="total">—</span></span>
-<span class="muted">Limits <span class="figure-sans" id="limits">—</span></span>
-<span class="muted">Warnings <span class="figure" id="warn-count">—</span></span>
+<span class="fig"><span class="muted">Mode</span> <span class="figure-sans" id="output-mode">—</span></span>
+<span class="fig"><span class="muted">Exit</span> <span class="figure" id="exit-code">—</span></span>
+<span class="fig"><span class="muted">Total</span> <span class="figure text" id="total">—</span></span>
+<span class="fig"><span class="muted">Limits</span> <span class="figure-sans" id="limits">—</span></span>
+<span class="fig"><span class="muted">Warnings</span> <span class="figure" id="warn-count">—</span></span>
 <div class="grow"></div>
 <span class="chip" id="summary-chip" hidden></span>
 <button type="button" class="btn btn-small" id="details-tab" aria-expanded="false" aria-controls="details">Details</button>
 </div>
-<div class="diag-body">
+<div class="diag-scroll">
 <div class="diag-list" id="diag-list"><div class="diag-note">Paste some code and press Run.</div></div>
-</div>
 <div class="details" id="details" hidden></div>
-</section>
-
-</main>
 </div>
+</section>
 </div>
 </body>
 </html>

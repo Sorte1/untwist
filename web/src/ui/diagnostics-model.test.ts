@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diagnosticsOf, docPosition, levelLabel, lineColumn, lineIndex, shownMessage, warningCount } from './diagnostics-model';
+import { diagnosticsOf, docPosition, levelLabel, lineColumn, lineIndex, shownMessage, stripLabel, warningCount } from './diagnostics-model';
 
 describe('diagnosticsOf', () => {
   it('reads the report rows and drops malformed ones', () => {
@@ -47,5 +47,21 @@ describe('positions', () => {
     expect(docPosition(text, 3)).toBe(2);
     expect(docPosition(text, 6)).toBe(4);
     expect(docPosition('a\nb', 2)).toBe(2);
+  });
+});
+
+describe('stripLabel', () => {
+  const row = (level: 'error' | 'warning' | 'info') => ({ level, pass: 'p', message: 'm' });
+
+  it('names the diagnostics before a run, with the link notes when there are some', () => {
+    expect(stripLabel(null, 0)).toEqual({ text: 'Diagnostics', tone: 'text' });
+    expect(stripLabel(null, 2)).toEqual({ text: '2 notes', tone: 'text' });
+  });
+
+  it('counts errors first, then warnings, then notes', () => {
+    expect(stripLabel([row('error'), row('warning'), row('warning')], 0)).toEqual({ text: '1 error, 2 warnings', tone: 'err' });
+    expect(stripLabel([row('warning'), row('info')], 0)).toEqual({ text: '1 warning', tone: 'warn' });
+    expect(stripLabel([row('info')], 1)).toEqual({ text: '2 notes', tone: 'text' });
+    expect(stripLabel([], 0)).toEqual({ text: 'No warnings', tone: 'muted' });
   });
 });
