@@ -18,6 +18,7 @@ export interface RunResult extends RunFields {
   readonly snapshots?: readonly (string | null)[];
   readonly decodedStrings?: string;
   readonly decodedCount?: number;
+  readonly links?: string;
 }
 
 export type WorkerRequest =

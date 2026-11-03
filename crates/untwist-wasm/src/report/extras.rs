@@ -5,6 +5,7 @@ pub struct Extras {
     pub refusals: bool,
     pub snapshots: bool,
     pub strings: bool,
+    pub links: bool,
 }
 
 impl Extras {
@@ -22,6 +23,10 @@ impl Extras {
                 },
                 "strings" => Self {
                     strings: true,
+                    ..extras
+                },
+                "links" => Self {
+                    links: true,
                     ..extras
                 },
                 _ => extras,
@@ -49,5 +54,6 @@ mod tests {
         assert_eq!(Extras::from_words("refusals").snapshot_cap(), None);
         assert!(Extras::from_words("refusals strings").strings);
         assert!(!Extras::from_words("refusals").strings);
+        assert!(Extras::from_words("links").links);
     }
 }

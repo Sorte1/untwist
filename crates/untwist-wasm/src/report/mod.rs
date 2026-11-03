@@ -2,6 +2,7 @@ mod clock;
 mod detect;
 mod diagnostics;
 mod extras;
+mod links;
 mod run;
 mod schema;
 mod stages;

@@ -61,6 +61,7 @@ function run(source: string, flags: string, refused: boolean, extras: string): v
       snapshots: snapshotsOf(output),
       decodedStrings: output.decoded_strings_json(),
       decodedCount: output.decoded_count(),
+      links: output.links_json(),
       engineMs: performance.now() - started,
       memoryBytes: memory?.buffer.byteLength ?? 0,
     };

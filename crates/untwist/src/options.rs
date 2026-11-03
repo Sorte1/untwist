@@ -81,6 +81,7 @@ pub struct Options {
     pub refusal_spans: bool,
     pub stage_snapshots: Option<usize>,
     pub decoded_strings: bool,
+    pub statement_spans: bool,
 }
 
 impl Default for Options {
@@ -109,6 +110,7 @@ impl Default for Options {
             refusal_spans: false,
             stage_snapshots: None,
             decoded_strings: false,
+            statement_spans: false,
         }
     }
 }

@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
 use untwist_core::ast_util::respan::reset_synthetic_spans;
+use untwist_core::ast_util::statements::statement_spans;
 use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{has_error, parse_program, parse_with, Parsed, SourceType};
 use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions};
@@ -42,6 +43,7 @@ pub(super) struct InputResult {
     pub(super) unbundled: bool,
     pub(super) snapshots: Snapshots,
     pub(super) decoded_strings: Vec<super::DecodedSite>,
+    pub(super) statement_spans: Option<Vec<(u32, u32)>>,
     #[cfg(feature = "refusal-spans")]
     pub(super) refusal_sites: Vec<super::RefusalSite>,
 }
@@ -294,7 +296,12 @@ impl Pipeline {
         match staged {
             Ok(Staged::TypeScript) => Step::Done(None),
             Ok(Staged::Peeled(peeled)) => Step::Peel(peeled),
-            Ok(Staged::Done) => Step::Done(Some(pretty_codegen(&parsed.program))),
+            Ok(Staged::Done) => {
+                if first && self.options.statement_spans {
+                    result.statement_spans = Some(statement_spans(&parsed.program));
+                }
+                Step::Done(Some(pretty_codegen(&parsed.program)))
+            }
             Err(_) => {
                 result.note_panicked();
                 Step::Done(Some(pretty_codegen(&parsed.program)))
