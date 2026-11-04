@@ -56,6 +56,7 @@ pub struct Output {
     pub stats: crate::stats::RunStats,
     pub snapshots: Vec<Snapshot>,
     pub decoded_strings: Vec<DecodedSite>,
+    pub statement_spans: Option<Vec<(u32, u32)>>,
     #[cfg(feature = "refusal-spans")]
     pub refusal_spans: Vec<String>,
     #[cfg(feature = "refusal-spans")]
@@ -139,6 +140,7 @@ struct OutputParts {
     unbundled: bool,
     snapshots: Vec<Snapshot>,
     decoded_strings: Vec<DecodedSite>,
+    statement_spans: Option<Vec<(u32, u32)>>,
     #[cfg(feature = "refusal-spans")]
     refusal_spans: Vec<String>,
     #[cfg(feature = "refusal-spans")]
@@ -151,7 +153,6 @@ impl OutputParts {
             unbundled: true,
             ..OutputParts::default()
         };
-        #[cfg(feature = "refusal-spans")]
         let several = results.len() > 1;
         for (index, result) in results.into_iter().enumerate() {
             #[cfg(feature = "refusal-spans")]
@@ -168,6 +169,7 @@ impl OutputParts {
                     input: index,
                     ..site
                 }));
+            parts.statement_spans = result.statement_spans.filter(|_| !several);
             parts.unbundled &= result.refused || result.unbundled;
             parts.codes.push(result.code);
             parts.stages.extend(result.stages);
@@ -212,6 +214,7 @@ impl OutputParts {
             stats: self.stats,
             snapshots: self.snapshots,
             decoded_strings: self.decoded_strings,
+            statement_spans: self.statement_spans,
             #[cfg(feature = "refusal-spans")]
             refusal_spans: self.refusal_spans,
             #[cfg(feature = "refusal-spans")]

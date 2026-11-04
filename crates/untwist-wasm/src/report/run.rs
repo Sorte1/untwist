@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 use super::clock;
 use super::extras::Extras;
+use super::links::links_json;
 use super::schema::{bare_json, report_json, RunFacts};
 use super::stages;
 use super::strings::decoded_json;
@@ -21,6 +22,7 @@ pub struct RunReport {
     snapshots: Vec<Option<String>>,
     decoded: String,
     decoded_count: u32,
+    links: String,
 }
 
 #[wasm_bindgen]
@@ -60,6 +62,10 @@ impl RunReport {
     pub fn module_code(&self, index: u32) -> Option<String> {
         let index = usize::try_from(index).ok()?;
         self.modules.get(index).cloned()
+    }
+
+    pub fn links_json(&self) -> String {
+        self.links.clone()
     }
 
     pub fn decoded_count(&self) -> u32 {
@@ -119,6 +125,12 @@ fn report_with(source: &str, options: Options) -> RunReport {
                 .collect()
         })
         .unwrap_or_default();
+    let links = result
+        .statement_spans
+        .as_deref()
+        .filter(|_| !result.single_file && result.codes.len() == 1)
+        .map(|spans| links_json(source, &stdout, spans))
+        .unwrap_or_default();
     let decoded = decoded_json(&result.decoded_strings, source);
     let decoded_count = u32::try_from(result.decoded_strings.len()).unwrap_or(u32::MAX);
     let snapshots = std::mem::take(&mut result.snapshots)
@@ -139,6 +151,7 @@ fn report_with(source: &str, options: Options) -> RunReport {
         snapshots,
         decoded,
         decoded_count,
+        links,
     }
 }
 
@@ -176,6 +189,7 @@ fn report_for(
                 refusal_spans: extras.refusals,
                 stage_snapshots: extras.snapshot_cap(),
                 decoded_strings: extras.strings,
+                statement_spans: extras.links,
                 ..options
             },
         ),
@@ -190,6 +204,7 @@ fn report_for(
             snapshots: Vec::new(),
             decoded: String::new(),
             decoded_count: 0,
+            links: String::new(),
         },
     }
 }
@@ -431,6 +446,57 @@ mod tests {
             ]
         );
         assert_eq!(table["more"], 0);
+    }
+
+    fn linked(source: &str, flags: &str) -> (super::RunReport, Vec<(String, String)>) {
+        let out = report_for(source, flags, false, None, Extras::from_words("links"));
+        let rows: Vec<[usize; 4]> = serde_json::from_str(&out.links_json()).unwrap_or_default();
+        let output: Vec<u16> = out.stdout().encode_utf16().collect();
+        let input: Vec<u16> = source.encode_utf16().collect();
+        let slice = |units: &[u16], from: usize, to: usize| {
+            String::from_utf16(units.get(from..to).unwrap_or_default()).unwrap_or_default()
+        };
+        let pairs = rows
+            .iter()
+            .map(|row| {
+                (
+                    slice(&output, row[0], row[1]),
+                    slice(&input, row[2], row[3]),
+                )
+            })
+            .collect();
+        (out, pairs)
+    }
+
+    #[test]
+    fn asked_for_links_each_output_statement_points_at_the_input_it_came_from() {
+        let source = format!("var accent = \"\u{e9}\";\n{DECODED}");
+        let (out, pairs) = linked(&source, "");
+        assert_eq!(out.stdout(), run_report(&source, "", false).stdout());
+        assert!(
+            pairs.contains(&(
+                "console.log(\"Hello\");".to_string(),
+                "console.log(b(0x0) + b(0x1));".to_string()
+            )),
+            "{pairs:?}"
+        );
+        assert!(
+            pairs.contains(&(
+                "var accent = \"\u{e9}\";".to_string(),
+                "var accent = \"\u{e9}\";".to_string()
+            )),
+            "{pairs:?}"
+        );
+    }
+
+    #[test]
+    fn links_are_left_out_unless_asked_for_or_when_the_output_joins_several_texts() {
+        assert_eq!(
+            run_report_staged(DECODED, "", false, "refusals").links_json(),
+            ""
+        );
+        let (single, pairs) = linked(DECODED, "--single-file");
+        assert!(pairs.is_empty(), "{pairs:?} {}", single.links_json());
     }
 
     #[test]

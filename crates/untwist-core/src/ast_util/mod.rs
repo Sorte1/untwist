@@ -11,3 +11,4 @@ pub mod rename;
 pub mod respan;
 pub mod scope;
 pub mod search;
+pub mod statements;
