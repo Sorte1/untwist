@@ -70,6 +70,8 @@ pub struct StageRow<'a> {
 pub struct WorkRow {
     changes: u32,
     walk: &'static str,
+    lists_parked: u32,
+    statements_shelved: u32,
 }
 
 #[cfg(feature = "test-hooks")]
@@ -79,7 +81,14 @@ fn work_rows(stage: &StageReport) -> Vec<WorkRow> {
         .iter()
         .map(|traversal| WorkRow {
             changes: traversal.changes,
-            walk: if traversal.walked { "walked" } else { "parked" },
+            walk: match (traversal.walked, traversal.steered, traversal.confirming) {
+                (false, _, _) => "parked",
+                (true, _, true) => "confirming",
+                (true, false, false) => "walked",
+                (true, true, false) => "steered",
+            },
+            lists_parked: traversal.lists_parked,
+            statements_shelved: traversal.statements_shelved,
         })
         .collect()
 }

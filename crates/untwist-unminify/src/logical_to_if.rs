@@ -1,7 +1,7 @@
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::{GetSpan, SPAN};
-use untwist_core::pass::{Cx, Interest, Pass, StatementKind, StatementVariants};
+use untwist_core::pass::{Cx, Interest, Locality, Pass, StatementKind, StatementVariants};
 
 #[derive(Default)]
 pub struct LogicalToIf;
@@ -38,6 +38,10 @@ const ACTED_ON_STATEMENTS: StatementVariants =
 impl<'a> Pass<'a> for LogicalToIf {
     fn name(&self) -> &'static str {
         "logical-to-if"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

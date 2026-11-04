@@ -2,7 +2,7 @@ use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::{GetSpan, Span};
 use oxc_traverse::Ancestor;
-use untwist_core::pass::{Cx, Interest, Pass, StatementKind, StatementVariants};
+use untwist_core::pass::{Cx, Interest, Locality, Pass, StatementKind, StatementVariants};
 
 #[derive(Default)]
 pub struct SplitVariableDeclarations;
@@ -125,6 +125,10 @@ impl<'a> Pass<'a> for SplitVariableDeclarations {
         "split-variable-declarations"
     }
 
+    fn locality(&self) -> Locality {
+        Locality::Neutral
+    }
+
     fn interest(&self) -> Interest {
         (Interest::ENTER_STATEMENTS | Interest::EXIT_STATEMENT).on_statements(ACTED_ON_STATEMENTS)
     }
@@ -148,6 +152,9 @@ impl<'a> Pass<'a> for SplitVariableDeclarations {
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
         if !in_single_statement_slot(cx) || !needs_split(stmt) {
             return;
+        }
+        if matches!(stmt, Statement::VariableDeclaration(node) if node.kind.is_lexical()) {
+            cx.binding_moved();
         }
         let span = stmt.span();
         let placeholder = Statement::new_empty_statement(span, &*cx);

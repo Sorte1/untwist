@@ -6,7 +6,7 @@ use oxc_span::Span;
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::{
-    Cx, ExpressionKind, ExpressionVariants, Interest, Pass, PassCtor, StatementKind,
+    Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass, PassCtor, StatementKind,
     StatementVariants,
 };
 use untwist_core::semantic::{has_module_syntax, program_is_strict, scope_hazard};
@@ -252,6 +252,7 @@ impl UntranspileHelpers {
         }
         self.table.insert(symbol, helper);
         self.identified = true;
+        cx.walk_whole_round();
     }
 
     fn sweep_rules(&self, scope: ScopeId, cx: &Cx<'_, '_>) -> Option<SweepRules> {
@@ -638,6 +639,14 @@ impl<'a> Pass<'a> for UntranspileHelpers {
             | Interest::EXIT_EXPRESSION)
             .on_expressions(ACTED_ON_EXPRESSIONS)
             .on_statements(ACTED_ON_STATEMENTS)
+    }
+
+    fn locality(&self) -> Locality {
+        if self.dormant || !self.identified {
+            Locality::Local
+        } else {
+            Locality::Program
+        }
     }
 
     fn retired(&self) -> Interest {

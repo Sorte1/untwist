@@ -1,6 +1,6 @@
 use oxc_allocator::ReplaceWith;
 use oxc_ast::ast::*;
-use untwist_core::pass::{Cx, Interest, Pass, StatementKind, StatementVariants};
+use untwist_core::pass::{Cx, Interest, Locality, Pass, StatementKind, StatementVariants};
 
 #[derive(Default)]
 pub struct ForToWhile;
@@ -15,6 +15,10 @@ const ACTED_ON_STATEMENTS: StatementVariants =
 impl<'a> Pass<'a> for ForToWhile {
     fn name(&self) -> &'static str {
         "for-to-while"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

@@ -8,7 +8,7 @@ use oxc_span::{ContentEq, Span, SPAN};
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::ast_util::scope::binding_symbol;
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct NullishCoalescing {
@@ -29,6 +29,10 @@ impl<'a> Pass<'a> for NullishCoalescing {
         "nullish-coalescing"
     }
 
+    fn locality(&self) -> Locality {
+        Locality::Local
+    }
+
     fn interest(&self) -> Interest {
         (Interest::ENTER_PROGRAM
             | Interest::EXIT_VARIABLE_DECLARATION
@@ -44,9 +48,9 @@ impl<'a> Pass<'a> for NullishCoalescing {
     fn exit_variable_declaration(
         &mut self,
         node: &mut VariableDeclaration<'a>,
-        _cx: &mut Cx<'a, '_>,
+        cx: &mut Cx<'a, '_>,
     ) {
-        self.temps.record_declaration(node);
+        self.temps.record_declaration(node, cx);
     }
 
     fn exit_expression(&mut self, node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {

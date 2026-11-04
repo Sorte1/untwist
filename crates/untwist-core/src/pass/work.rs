@@ -4,6 +4,10 @@ use std::cell::RefCell;
 pub struct Traversal {
     pub changes: u32,
     pub walked: bool,
+    pub steered: bool,
+    pub lists_parked: u32,
+    pub statements_shelved: u32,
+    pub confirming: bool,
 }
 
 thread_local! {

@@ -1,7 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_span::GetSpan;
 use untwist_core::ast_util::literal::{is_false_literal, is_true_literal};
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct UnminifyBooleans;
@@ -39,6 +39,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants =
 impl<'a> Pass<'a> for UnminifyBooleans {
     fn name(&self) -> &'static str {
         "unminify-booleans"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

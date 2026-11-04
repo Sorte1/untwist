@@ -1,7 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_str::Ident;
 use oxc_syntax::reference::ReferenceFlags;
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct Infinity;
@@ -27,6 +27,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants =
 impl<'a> Pass<'a> for Infinity {
     fn name(&self) -> &'static str {
         "infinity"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

@@ -4,9 +4,10 @@ use oxc_allocator::Allocator;
 use untwist::{Options, Output, Pipeline, StopReason};
 use untwist_core::parse::parse_program;
 use untwist_core::pass::{
-    full_rounds_for_tests, probe_variants_for_tests, run_to_fixpoint, stale_settled_for_tests,
-    take_variant_violations_for_tests, walk_every_group_for_tests, Cx, Interest, Note, Pass,
-    PassGroup, PassOptions,
+    full_rounds_for_tests, probe_variants_for_tests, run_to_fixpoint, run_to_fixpoint_noting_last,
+    skip_innermost_list_for_tests, stale_settled_for_tests, take_variant_violations_for_tests,
+    treat_as_neutral_for_tests, walk_every_group_for_tests, walk_every_list_for_tests, Cx,
+    Interest, Locality, Note, Pass, PassGroup, PassOptions,
 };
 use untwist_core::print::{print, PrintStyle};
 use untwist_core::semantic::build_scoping;
@@ -108,6 +109,15 @@ fn run(source: &str, mode: Mode, full: bool) -> Observed {
     observed(out)
 }
 
+fn confirming_changes(out: &Output) -> u32 {
+    out.stages
+        .iter()
+        .flat_map(|row| row.work.iter())
+        .filter(|traversal| traversal.confirming)
+        .map(|traversal| traversal.changes)
+        .sum()
+}
+
 fn assert_scoped_equals_full(label: &str, source: &str) {
     for mode in MODES {
         let scoped = run(source, mode, false);
@@ -129,11 +139,22 @@ const DIFF_SETS: [&str; 6] = [
     "fixtures/corpus-npm",
 ];
 
+const UNTRANSPILE_SETS: [&str; 7] = [
+    "fixtures/untranspile/babel",
+    "fixtures/untranspile/esbuild",
+    "fixtures/untranspile/hand",
+    "fixtures/untranspile/samples",
+    "fixtures/untranspile/swc",
+    "fixtures/untranspile/terser",
+    "fixtures/untranspile/ts",
+];
+
 const SLOW_IN_DEBUG: [&str; 2] = ["obfuscator.io-high.js", "obfuscator.io-multi-encoders.js"];
 
 fn corpora(slow: bool) -> Vec<(String, String)> {
     DIFF_SETS
         .iter()
+        .chain(UNTRANSPILE_SETS.iter())
         .flat_map(|dir| js_files_in(dir))
         .filter(|(label, _)| SLOW_IN_DEBUG.iter().any(|name| label.ends_with(name)) == slow)
         .collect()
@@ -143,7 +164,7 @@ fn corpora(slow: bool) -> Vec<(String, String)> {
 fn the_corpora_equal_forced_full_rounds() {
     let _serial = serial();
     let files = corpora(false);
-    assert!(files.len() >= 150, "{}", files.len());
+    assert!(files.len() >= 400, "{}", files.len());
     for (label, source) in files {
         assert_scoped_equals_full(&label, &source);
     }
@@ -160,6 +181,14 @@ fn game_js_and_the_high_preset_equal_forced_full_rounds() {
     for (label, source) in slow_files() {
         assert_scoped_equals_full(&label, &source);
         assert_parked_equals_walked(&label, &source);
+        assert_steered_equals_every_list(&label, &source);
+    }
+    if let Some(source) = real_world_fixture("game.js") {
+        assert!(steered_away(&source, "unminify") > 0);
+        skip_innermost_list_for_tests(true);
+        let mutant = run(&source, MODES[0], false);
+        skip_innermost_list_for_tests(false);
+        assert!(mutant != run(&source, MODES[0], true));
     }
 }
 
@@ -182,6 +211,227 @@ fn assert_parked_equals_walked(label: &str, source: &str) {
             mode.name
         );
     }
+}
+
+fn every_list(source: &str, mode: Mode) -> Observed {
+    walk_every_list_for_tests(true);
+    let walked = run(source, mode, false);
+    walk_every_list_for_tests(false);
+    walked
+}
+
+fn assert_steered_equals_every_list(label: &str, source: &str) {
+    for mode in MODES {
+        let out = Pipeline::new(options(mode)).run(source);
+        assert_eq!(
+            confirming_changes(&out),
+            0,
+            "{label} ({}): a confirming full round changed the program",
+            mode.name
+        );
+        let steered = observed(out);
+        let walked = every_list(source, mode);
+        assert!(
+            steered == walked,
+            "{label} ({}): parking clean statement lists diverges from walking every list",
+            mode.name
+        );
+    }
+}
+
+#[test]
+fn l1_the_corpora_equal_runs_that_walk_every_list() {
+    let _serial = serial();
+    for (label, source) in corpora(false) {
+        assert_steered_equals_every_list(&label, &source);
+    }
+}
+
+fn steered_away(source: &str, stage: &str) -> u32 {
+    let out = Pipeline::new(options(MODES[0])).run(source);
+    out.stages
+        .iter()
+        .filter(|row| row.stage == stage)
+        .flat_map(|row| row.work.iter())
+        .map(|traversal| traversal.lists_parked + traversal.statements_shelved)
+        .sum()
+}
+
+struct Peel;
+
+impl<'a> Pass<'a> for Peel {
+    fn name(&self) -> &'static str {
+        "peel"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
+    }
+
+    fn interest(&self) -> Interest {
+        Interest::EXIT_STATEMENT
+    }
+
+    fn exit_statement(&mut self, stmt: &mut oxc_ast::ast::Statement<'a>, cx: &mut Cx<'a, '_>) {
+        use oxc_ast::ast::{Expression, Statement, UnaryOperator};
+        let Statement::ExpressionStatement(statement) = stmt else {
+            return;
+        };
+        let Expression::UnaryExpression(outer) = &mut statement.expression else {
+            return;
+        };
+        if outer.operator != UnaryOperator::LogicalNot {
+            return;
+        }
+        let Expression::UnaryExpression(inner) = &mut outer.argument else {
+            return;
+        };
+        if inner.operator != UnaryOperator::LogicalNot {
+            return;
+        }
+        let span = inner.span;
+        let placeholder = Expression::new_null_literal(span, &*cx);
+        let argument = std::mem::replace(&mut inner.argument, placeholder);
+        statement.expression = argument;
+        cx.changed();
+    }
+}
+
+struct Notices;
+
+impl<'a> Pass<'a> for Notices {
+    fn name(&self) -> &'static str {
+        "notices"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
+    }
+
+    fn interest(&self) -> Interest {
+        Interest::EXIT_STATEMENT
+    }
+
+    fn exit_statement(&mut self, stmt: &mut oxc_ast::ast::Statement<'a>, cx: &mut Cx<'a, '_>) {
+        if let oxc_ast::ast::Statement::DebuggerStatement(statement) = stmt {
+            cx.note("debugger kept", Some(statement.span));
+        }
+    }
+}
+
+const NOTED_CASCADE: &str = "function f() {\n  debugger;\n}\nfunction g() {\n  h();\n}\nfunction i() {\n  j();\n}\n!!!!!!!!k;\n";
+
+fn noted(full: bool) -> (Option<Vec<Note>>, Vec<Note>, u32) {
+    full_rounds_for_tests(full);
+    untwist_core::pass::take_work_for_tests();
+    let alloc = Allocator::default();
+    let mut parsed = parse_program(&alloc, NOTED_CASCADE);
+    let sem = build_scoping(&parsed.program);
+    let passes: Vec<Box<dyn Pass<'_>>> = vec![Box::new(Peel), Box::new(Notices)];
+    let mut group = PassGroup::new(passes, PassOptions::default());
+    let (_, report, last) =
+        run_to_fixpoint_noting_last(&alloc, &mut parsed.program, sem, &mut group);
+    full_rounds_for_tests(false);
+    let shelved = untwist_core::pass::take_work_for_tests()
+        .iter()
+        .map(|traversal| traversal.lists_parked + traversal.statements_shelved)
+        .sum();
+    (last, report.notes, shelved)
+}
+
+#[test]
+fn n1_a_note_from_a_parked_region_is_carried_into_every_steered_round() {
+    let _serial = serial();
+    let (full_last, full_notes, _) = noted(true);
+    let (last, notes, shelved) = noted(false);
+    assert!(shelved > 0);
+    assert_eq!(last, full_last);
+    assert_eq!(notes, full_notes);
+    assert_eq!(notes.len(), 1, "{notes:#?}");
+}
+
+#[derive(Default)]
+struct Census {
+    seen: usize,
+}
+
+const CENSUS: &str = "census";
+
+impl<'a> Pass<'a> for Census {
+    fn name(&self) -> &'static str {
+        CENSUS
+    }
+
+    fn interest(&self) -> Interest {
+        Interest::ENTER_PROGRAM | Interest::EXIT_PROGRAM | Interest::EXIT_STATEMENT
+    }
+
+    fn enter_program(&mut self, _program: &mut oxc_ast::ast::Program<'a>, _cx: &mut Cx<'a, '_>) {
+        self.seen = 0;
+    }
+
+    fn exit_statement(&mut self, _stmt: &mut oxc_ast::ast::Statement<'a>, _cx: &mut Cx<'a, '_>) {
+        self.seen += 1;
+    }
+
+    fn exit_program(&mut self, _program: &mut oxc_ast::ast::Program<'a>, cx: &mut Cx<'a, '_>) {
+        cx.progress(format!("census saw {} statements", self.seen), None);
+    }
+}
+
+const TWO_CASCADES: &str = "function f() {\n  function g() {\n    !!!!!!!!!!a;\n  }\n  !!!!!!!!b;\n}\nfunction h() {}\nfunction i() {}\nfunction j() {}\n";
+
+type Peeled = (String, u32, Vec<(&'static str, u32)>);
+
+fn peeled(source: &str, full: bool) -> Peeled {
+    full_rounds_for_tests(full);
+    let alloc = Allocator::default();
+    let mut parsed = parse_program(&alloc, source);
+    let sem = build_scoping(&parsed.program);
+    let passes: Vec<Box<dyn Pass<'_>>> = vec![Box::new(Peel)];
+    let mut group = PassGroup::new(passes, PassOptions::default());
+    let (_, report) = run_to_fixpoint(&alloc, &mut parsed.program, sem, &mut group);
+    full_rounds_for_tests(false);
+    let printed = print(&parsed.program, PrintStyle::Compact);
+    (printed, report.iterations, report.per_pass)
+}
+
+#[test]
+fn c4_a_parked_ancestor_of_an_edit_diverges_on_a_named_source() {
+    let _serial = serial();
+    let full = peeled(TWO_CASCADES, true);
+    assert_eq!(peeled(TWO_CASCADES, false), full);
+    skip_innermost_list_for_tests(true);
+    let mutant = peeled(TWO_CASCADES, false);
+    skip_innermost_list_for_tests(false);
+    assert_ne!(mutant, full);
+}
+
+const CENSUS_SOURCE: &str =
+    "function a() {\n  b();\n  c();\n}\nfunction d() {\n  e();\n}\n!!!!!!f;\n";
+
+fn census(full: bool) -> (Vec<Note>, String) {
+    full_rounds_for_tests(full);
+    let alloc = Allocator::default();
+    let mut parsed = parse_program(&alloc, CENSUS_SOURCE);
+    let sem = build_scoping(&parsed.program);
+    let passes: Vec<Box<dyn Pass<'_>>> = vec![Box::new(Peel), Box::new(Census::default())];
+    let mut group = PassGroup::new(passes, PassOptions::default());
+    let (_, report) = run_to_fixpoint(&alloc, &mut parsed.program, sem, &mut group);
+    full_rounds_for_tests(false);
+    (report.notes, print(&parsed.program, PrintStyle::Compact))
+}
+
+#[test]
+fn c5_a_program_pass_taken_as_neutral_diverges_on_a_named_source() {
+    let _serial = serial();
+    let full = census(true);
+    assert_eq!(census(false), full);
+    treat_as_neutral_for_tests(Some(CENSUS));
+    let mutant = census(false);
+    treat_as_neutral_for_tests(None);
+    assert_ne!(mutant, full);
+    assert_eq!(mutant.1, full.1);
 }
 
 #[test]

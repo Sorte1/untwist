@@ -2,7 +2,7 @@ use oxc_ast::ast::*;
 use oxc_span::{GetSpan, Span};
 use oxc_traverse::Ancestor;
 use untwist_core::depth::LIFT_DEPTH_MAX;
-use untwist_core::pass::{Cx, Interest, Pass, StatementKind, StatementVariants};
+use untwist_core::pass::{Cx, Interest, Locality, Pass, StatementKind, StatementVariants};
 
 use crate::{nullish_coalescing, optional_chaining, remove_double_not};
 
@@ -211,6 +211,10 @@ const ACTED_ON_STATEMENTS: StatementVariants = StatementVariants::of(&[
 impl<'a> Pass<'a> for TernaryToIf {
     fn name(&self) -> &'static str {
         "ternary-to-if"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

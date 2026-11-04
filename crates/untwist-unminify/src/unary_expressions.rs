@@ -1,7 +1,7 @@
 use oxc_allocator::{ReplaceWith, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_span::GetSpan;
-use untwist_core::pass::{Cx, Interest, Pass, StatementKind, StatementVariants};
+use untwist_core::pass::{Cx, Interest, Locality, Pass, StatementKind, StatementVariants};
 
 #[derive(Default)]
 pub struct UnaryExpressions;
@@ -58,6 +58,10 @@ const ACTED_ON_STATEMENTS: StatementVariants =
 impl<'a> Pass<'a> for UnaryExpressions {
     fn name(&self) -> &'static str {
         "unary-expressions"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

@@ -1,6 +1,6 @@
 use oxc_ast::ast::*;
 use oxc_span::{ContentEq, GetSpan};
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 use untwist_eval::fold::{const_from_literal, const_to_expression, fold_binary, fold_unary, Const};
 
 use crate::merge_strings::{literal_chain, waits_for_its_chain_root};
@@ -81,6 +81,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants = ExpressionVariants::of(&[
 impl<'a> Pass<'a> for NumberExpressions {
     fn name(&self) -> &'static str {
         "number-expressions"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

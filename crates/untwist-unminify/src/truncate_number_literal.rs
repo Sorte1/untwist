@@ -1,5 +1,5 @@
 use oxc_ast::ast::*;
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 use untwist_eval::coerce::to_int32;
 
 #[derive(Default)]
@@ -27,6 +27,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants =
 impl<'a> Pass<'a> for TruncateNumberLiteral {
     fn name(&self) -> &'static str {
         "truncate-number-literal"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

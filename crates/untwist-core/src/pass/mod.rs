@@ -9,7 +9,7 @@ mod work;
 use std::cell::Cell;
 use std::rc::Rc;
 
-use oxc_allocator::{Allocator, GetAllocator, Vec as AVec};
+use oxc_allocator::{Address, Allocator, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::{AstBuilder, GetAstBuilder};
 use oxc_semantic::Scoping;
@@ -17,7 +17,6 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use oxc_traverse::TraverseCtx;
-use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::ast_util::global::is_global_name_at;
 use crate::ast_util::rename::unique_name_avoiding;
@@ -28,9 +27,11 @@ pub use driver::{
     ITERATION_CEILING,
 };
 pub use group::PassGroup;
+use group::Scratch;
 #[cfg(feature = "test-hooks")]
 pub use group::{
-    probe_variants_for_tests, take_variant_violations_for_tests, walk_every_group_for_tests,
+    probe_variants_for_tests, skip_innermost_list_for_tests, take_variant_violations_for_tests,
+    treat_as_neutral_for_tests, walk_every_group_for_tests,
 };
 pub use interest::{
     ExpressionKind, ExpressionVariants, Interest, StatementKind, StatementVariants,
@@ -39,7 +40,7 @@ pub use interest::{
 pub use repeated::{RepeatedSites, SPANNED_NOTE_CAP};
 pub use settled::{edits, replay_allowed};
 #[cfg(feature = "test-hooks")]
-pub use settled::{full_rounds_for_tests, stale_settled_for_tests};
+pub use settled::{full_rounds_for_tests, stale_settled_for_tests, walk_every_list_for_tests};
 #[cfg(feature = "test-hooks")]
 pub use work::{take_work_for_tests, Traversal};
 
@@ -51,6 +52,13 @@ pub fn note_survives_retraction(note: &Note) -> bool {
 pub enum Safety {
     Safe,
     Unsafe,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Locality {
+    Program,
+    Local,
+    Neutral,
 }
 
 #[derive(Clone, Debug)]
@@ -69,6 +77,10 @@ pub struct PassOptions {
     pub defer_disabled: Cell<bool>,
     #[doc(hidden)]
     pub round_requested: Cell<bool>,
+    #[doc(hidden)]
+    pub walk_whole: Cell<bool>,
+    #[doc(hidden)]
+    pub binding_moved: Cell<bool>,
     #[doc(hidden)]
     pub changes_before_program_hook: Cell<u32>,
     #[doc(hidden)]
@@ -149,6 +161,8 @@ impl Default for PassOptions {
             deferred_pending: Cell::new(false),
             defer_disabled: Cell::new(false),
             round_requested: Cell::new(false),
+            walk_whole: Cell::new(false),
+            binding_moved: Cell::new(false),
             changes_before_program_hook: Cell::new(0),
             changes_by_others_before_program_hook: Cell::new(0),
             code_text: CodeTextSeen::default(),
@@ -181,17 +195,18 @@ pub struct Cx<'a, 'c> {
     pub opts: &'c PassOptions,
     pub notes: &'c mut Vec<Note>,
     pub pass_name: &'static str,
-    invented: &'c mut FxHashSet<String>,
-    renamed: &'c mut FxHashMap<SymbolId, String>,
+    scratch: &'c mut Scratch,
 }
 
 impl<'a> Cx<'a, '_> {
     pub fn changed(&mut self) {
         *self.changes += 1;
+        self.scratch.marks.changed();
     }
 
     pub fn changed_by(&mut self, count: usize) {
         *self.changes += count as u32;
+        self.scratch.marks.changed();
     }
 
     pub fn defer(&mut self) {
@@ -200,6 +215,23 @@ impl<'a> Cx<'a, '_> {
 
     pub fn request_round(&mut self) {
         self.opts.round_requested.set(true);
+    }
+
+    #[inline]
+    pub fn pins(&self) -> bool {
+        self.scratch.marks.pins()
+    }
+
+    pub fn pin(&mut self, node: Address) {
+        self.scratch.marks.pin(node, self.tcx);
+    }
+
+    pub fn walk_whole_round(&self) {
+        self.opts.walk_whole.set(true);
+    }
+
+    pub fn binding_moved(&self) {
+        self.opts.binding_moved.set(true);
     }
 
     pub fn defer_disabled(&self) -> bool {
@@ -241,23 +273,23 @@ impl<'a> Cx<'a, '_> {
     }
 
     pub fn invent_name(&mut self, base: &str) -> Option<String> {
-        let name = unique_name_avoiding(base, self.tcx.scoping(), self.invented, self)?
+        let name = unique_name_avoiding(base, self.tcx.scoping(), &self.scratch.invented, self)?
             .as_str()
             .to_string();
-        self.invented.insert(name.clone());
+        self.scratch.invented.insert(name.clone());
         Some(name)
     }
 
     pub fn planned_name(&self, symbol: SymbolId) -> Option<&str> {
-        self.renamed.get(&symbol).map(String::as_str)
+        self.scratch.renamed.get(&symbol).map(String::as_str)
     }
 
     pub fn plan_rename(&mut self, symbol: SymbolId, name: String) {
-        self.renamed.insert(symbol, name);
+        self.scratch.renamed.insert(symbol, name);
     }
 
     pub fn take_renames(&mut self) -> Vec<(SymbolId, String)> {
-        self.renamed.drain().collect()
+        self.scratch.renamed.drain().collect()
     }
 
     pub fn note(&mut self, message: impl Into<String>, span: Option<Span>) {
@@ -269,12 +301,16 @@ impl<'a> Cx<'a, '_> {
     }
 
     pub fn note_kind(&mut self, kind: NoteKind, message: impl Into<String>, span: Option<Span>) {
-        self.notes.push(Note {
+        let note = Note {
             pass: self.pass_name,
             kind,
             message: message.into(),
             span,
-        });
+        };
+        if !note_survives_retraction(&note) {
+            self.scratch.marks.note(&note);
+        }
+        self.notes.push(note);
     }
 
     pub fn block(&mut self, span: Span, body: AVec<'a, Statement<'a>>) -> Statement<'a> {
@@ -324,6 +360,9 @@ pub trait Pass<'a> {
     }
     fn retired(&self) -> Interest {
         Interest::NONE
+    }
+    fn locality(&self) -> Locality {
+        Locality::Program
     }
     fn enter_program(&mut self, _node: &mut Program<'a>, _cx: &mut Cx<'a, '_>) {}
     fn exit_program(&mut self, _node: &mut Program<'a>, _cx: &mut Cx<'a, '_>) {}

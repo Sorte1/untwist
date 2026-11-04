@@ -3,7 +3,9 @@ use oxc_allocator::{Box as ABox, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_span::SPAN;
 use oxc_str::Str;
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass, Safety};
+use untwist_core::pass::{
+    Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass, Safety,
+};
 
 #[derive(Default)]
 pub struct TemplateLiterals;
@@ -20,6 +22,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants = ExpressionVariants::of(&[
 impl<'a> Pass<'a> for TemplateLiterals {
     fn name(&self) -> &'static str {
         "template-literals"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

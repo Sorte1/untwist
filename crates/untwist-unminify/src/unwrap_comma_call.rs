@@ -2,7 +2,7 @@ use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
 use untwist_core::ast_util::global::pure_value_reads_globals;
 use untwist_core::ast_util::literal::{is_pure_value, is_undefined_like};
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 use untwist_core::semantic::scope_hazard;
 
 pub const PASS: &str = "unwrap-comma-call";
@@ -54,6 +54,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants =
 impl<'a> Pass<'a> for UnwrapCommaCall {
     fn name(&self) -> &'static str {
         PASS
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

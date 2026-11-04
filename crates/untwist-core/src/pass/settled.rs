@@ -13,6 +13,15 @@ static FULL_ROUNDS: AtomicBool = AtomicBool::new(false);
 static STALE: AtomicBool = AtomicBool::new(false);
 
 #[cfg(feature = "test-hooks")]
+static EVERY_LIST: AtomicBool = AtomicBool::new(false);
+
+#[cfg(feature = "test-hooks")]
+#[doc(hidden)]
+pub fn walk_every_list_for_tests(on: bool) {
+    EVERY_LIST.store(on, Ordering::SeqCst);
+}
+
+#[cfg(feature = "test-hooks")]
 #[doc(hidden)]
 pub fn full_rounds_for_tests(on: bool) {
     FULL_ROUNDS.store(on, Ordering::SeqCst);
@@ -39,6 +48,13 @@ pub fn edits() -> u64 {
 pub fn replay_allowed() -> bool {
     #[cfg(feature = "test-hooks")]
     return !FULL_ROUNDS.load(Ordering::SeqCst);
+    #[cfg(not(feature = "test-hooks"))]
+    return true;
+}
+
+pub(crate) fn parking_allowed() -> bool {
+    #[cfg(feature = "test-hooks")]
+    return replay_allowed() && !EVERY_LIST.load(Ordering::SeqCst);
     #[cfg(not(feature = "test-hooks"))]
     return true;
 }
