@@ -75,6 +75,11 @@ export const test = base.extend<Fixtures>({
   pageErrors: [
     async ({ page }, use) => {
       const errors: string[] = [];
+      await page.addInitScript(() => {
+        document.addEventListener('securitypolicyviolation', (event) => {
+          console.error(`CSP ${event.violatedDirective} blocked ${event.blockedURI} from ${event.sourceFile}:${event.lineNumber} ${event.sample}`);
+        });
+      });
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('console', (message) => {
         if (message.type() === 'error') {
