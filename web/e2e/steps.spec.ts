@@ -26,6 +26,12 @@ async function steppedRun(page: Page): Promise<void> {
   await expect(page.locator('#steps-bar .step-chip').first()).toBeVisible({ timeout: 60_000 });
 }
 
+async function compareWith(page: Page, label: string): Promise<void> {
+  await page.locator('#step-against').click();
+  await page.locator('#step-against-list').getByRole('option', { name: label, exact: true }).click();
+  await expect(page.locator('#step-against')).toHaveText(label);
+}
+
 test('Steps records each stage on demand and opens on the first one that changed the code', async ({ page }) => {
   await steppedRun(page);
   await expect(page.locator('#view-steps')).toHaveAttribute('aria-pressed', 'true');
@@ -47,14 +53,20 @@ test('a chosen step is set against the step before it, another step, or shown on
   await expect(page.locator('#diff-after')).toHaveText('deobfuscate');
   await expect.poll(() => sideText(page, 'b')).toContain('"Hello"');
   expect(await sideText(page, 'a')).toContain('b(0)');
-  await page.locator('#step-against').selectOption({ label: 'Input' });
+  await compareWith(page, 'Input');
   await expect(page.locator('#diff-before')).toHaveText('Input');
   await expect.poll(() => sideText(page, 'a')).toContain('0x0');
-  await page.locator('#step-against').selectOption('none');
+  await compareWith(page, 'nothing');
   await expect(page.locator('#diff')).toHaveAttribute('data-view', 'code');
   await expect(page.locator('#diff-legend')).toBeHidden();
   await expect.poll(() => codeText(page)).toContain('"Hello"');
-  await page.locator('#step-against').selectOption('prev');
+  await compareWith(page, 'the step before');
+  await expect(page.locator('#steps-bar select')).toHaveCount(0);
+  await page.locator('#step-against').click();
+  await expect(page.locator('#step-against-list [aria-selected="true"]')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#step-against-list')).toBeHidden();
+  await expect(page.locator('#step-against')).toBeFocused();
   await page.locator('#steps-bar .step-chip[aria-pressed="true"]').focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('#steps-bar .step-chip[aria-pressed="true"]')).toBeFocused();
@@ -80,7 +92,7 @@ test('a new run records its own steps', async ({ page }) => {
   await page.locator('#view-steps').click();
   await expect(page.locator('#steps-bar .step-chip').first()).toHaveText('Input', { timeout: 60_000 });
   await chip(page, 'Output').click();
-  await page.locator('#step-against').selectOption({ label: 'Input' });
+  await compareWith(page, 'Input');
   await expect.poll(() => sideText(page, 'a')).toContain('!0');
   await expect.poll(() => sideText(page, 'b')).toContain('true');
 });

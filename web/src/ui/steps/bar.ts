@@ -6,7 +6,12 @@ import type { Store } from '../../store';
 interface Built {
   readonly steps: StepsState['steps'];
   readonly chips: readonly HTMLButtonElement[];
-  readonly select: HTMLSelectElement;
+  readonly against: AgainstMenu;
+}
+
+interface AgainstMenu {
+  readonly root: HTMLElement;
+  readonly show: (value: string) => void;
 }
 
 const built = new WeakMap<HTMLElement, Built>();
@@ -42,17 +47,72 @@ function chipsOf(state: StepsState, store: Store<AppState>): HTMLButtonElement[]
   });
 }
 
-function selectOf(state: StepsState, store: Store<AppState>): HTMLSelectElement {
-  const select = make('select', 'step-select');
-  select.id = 'step-against';
-  const option = (value: string, label: string) => {
-    const element = make('option', '', label);
-    element.value = value;
-    return element;
+function againstMenu(state: StepsState, store: Store<AppState>): AgainstMenu {
+  const root = make('div', 'step-against-menu');
+  const trigger = make('button', 'step-select');
+  trigger.type = 'button';
+  trigger.id = 'step-against';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+  const list = make('div', 'examples-menu step-against-list');
+  list.id = 'step-against-list';
+  list.setAttribute('role', 'listbox');
+  list.setAttribute('aria-label', 'Compare with');
+  list.hidden = true;
+  trigger.setAttribute('aria-controls', list.id);
+  const choices: Array<[string, string]> = [['prev', 'the step before'], ['none', 'nothing'], ...state.steps.map((step, index): [string, string] => [String(index), step.label])];
+  const options = choices.map(([value, label]) => {
+    const option = make('button', 'example-option step-against-option', label);
+    option.type = 'button';
+    option.dataset['value'] = value;
+    option.setAttribute('role', 'option');
+    return option;
+  });
+  list.append(...options);
+  const close = (focus: boolean) => {
+    list.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', outside, true);
+    if (focus) {
+      trigger.focus();
+    }
   };
-  select.append(option('prev', 'the step before'), option('none', 'nothing'), ...state.steps.map((step, index) => option(String(index), step.label)));
-  select.addEventListener('change', () => choose(store, { against: againstOf(select.value) }));
-  return select;
+  const outside = (event: Event) => {
+    if (!root.contains(event.target as Node)) {
+      close(false);
+    }
+  };
+  const open = () => {
+    list.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    document.addEventListener('pointerdown', outside, true);
+    (options.find((option) => option.getAttribute('aria-selected') === 'true') ?? options[0])?.focus();
+  };
+  trigger.addEventListener('click', () => (list.hidden ? open() : close(true)));
+  list.addEventListener('click', (event) => {
+    const value = (event.target as HTMLElement).closest<HTMLElement>('[role=option]')?.dataset['value'];
+    if (value !== undefined) {
+      close(true);
+      choose(store, { against: againstOf(value) });
+    }
+  });
+  list.addEventListener('keydown', (event) => {
+    const at = options.indexOf(document.activeElement as HTMLButtonElement);
+    const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close(true);
+    } else if (step !== 0) {
+      event.preventDefault();
+      options[Math.min(Math.max(at + step, 0), options.length - 1)]?.focus();
+    }
+  });
+  root.append(trigger, list);
+  const show = (value: string) => {
+    options.forEach((option) => option.setAttribute('aria-selected', String(option.dataset['value'] === value)));
+    trigger.textContent = choices.find(([choice]) => choice === value)?.[1] ?? choices[0]?.[1] ?? '';
+  };
+  return { root, show };
 }
 
 function build(bar: HTMLElement, state: StepsState, store: Store<AppState>): Built {
@@ -70,13 +130,14 @@ function build(bar: HTMLElement, state: StepsState, store: Store<AppState>): Bui
       chips[at]?.focus();
     }
   });
-  const select = selectOf(state, store);
-  const label = make('label', 'step-against', 'Compare with');
-  label.htmlFor = select.id;
+  const menu = againstMenu(state, store);
+  const label = make('span', 'step-against', 'Compare with');
+  label.id = 'step-against-label';
+  menu.root.querySelector('#step-against')?.setAttribute('aria-labelledby', `${label.id} step-against`);
   const against = make('div', 'step-against-row');
-  against.append(label, select);
+  against.append(label, menu.root);
   bar.replaceChildren(list, against);
-  return { steps: state.steps, chips, select };
+  return { steps: state.steps, chips, against: menu };
 }
 
 export function renderSteps(bar: HTMLElement, store: Store<AppState>): void {
@@ -92,5 +153,5 @@ export function renderSteps(bar: HTMLElement, store: Store<AppState>): void {
   built.set(bar, shown);
   shown.chips.forEach((chip, index) => chip.setAttribute('aria-pressed', String(index === state.at)));
   shown.chips[state.at]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  shown.select.value = String(state.against);
+  shown.against.show(String(state.against));
 }
