@@ -12,6 +12,7 @@ pub mod diff_eval;
 pub mod freeze_records;
 pub mod layers;
 pub mod obf_matrix;
+pub mod obf_options;
 pub mod reference;
 pub mod release;
 pub mod unpack_behaviour;
