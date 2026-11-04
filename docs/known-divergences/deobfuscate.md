@@ -586,6 +586,38 @@
   sit immediately after the declaration, since a literal has no evaluation to move but a folded
   call does. Class static blocks are never scanned, so a `var` declared inside one is refused
   silently. The reference deobfuscator has no such pass.
+- **`fold-pure-calls` evaluates a call to a small pure helper when every argument is a literal.**
+  The reference deobfuscator only decodes the javascript-obfuscator string-array shape, so
+  `let dec = (a) => ["hello", "log"][a]; console[dec(1)](dec(0));` stays as it is there. This cleanup
+  pass finds a function declaration, or a single-declarator `let`, `const` or `var` whose
+  initialiser is an arrow or function expression, whose body is one returned expression, with
+  simple parameters and neither `async` nor a generator. The expression is checked statically and
+  then evaluated without running any input code: literals, parameters, unary, binary, logical,
+  conditional, sequence and template expressions over primitives, and member reads of an array or
+  object literal, a string, or a never-written binding whose initialiser is a flat literal. Any
+  other node, a call, `this`, `arguments`, an assignment, a free name other than `undefined`,
+  `NaN` or `Infinity`, or an operator applied to an object refuses the helper. A read only folds
+  when it hits an own element or property: an index out of range, a hole, an inherited key such as
+  `constructor` or a non-canonical index such as `"01"` leaves the call alone, so a call that
+  would return `undefined` is skipped rather than folded, as are `NaN`, `Infinity` and strings
+  over 64 KiB. Both lanes require the helper binding and every binding it reads to be written
+  nowhere and declared once, an array or object it reads to be used only through member reads
+  that are not a call, a tag or a `delete` target, the call to be a plain call with literal
+  arguments, and the call to come after the `let`/`const`/`var` declarations it depends on in
+  their own statement list, outside any function declaration nested in that scope (which may be
+  hoisted and run earlier). A declaration in a `switch` case, a `var` in a nested block and a
+  block-level function are never candidates. A helper whose every reference was folded is
+  removed, and so is a binding it read that nothing else reads. A name that a block-level
+  function also declares refuses the helper, as in the other inlining passes. For a top-level
+  helper or binding of a classic script both lanes ask the global-reach question the simple string
+  array asks: a write that may rebind one of the names through the global object or code text
+  refuses the helper, and a read that may observe a top-level `var` or function through the global
+  object keeps its declaration while the calls still fold. The safe lane further requires every
+  reference to the helper to be a direct call. The unsafe lane drops that condition, assuming as the
+  reference deobfuscator does that a function value handed elsewhere is not replaced, and its
+  global-reach check, like every other one in that lane, takes a key the program cannot resolve to
+  name nothing; `fixtures/pure-calls/kept-global-rebind.js` is a program where that assumption is
+  wrong.
 - **A binding that is declared twice is never constant.** `is_constant_binding` requires the
   symbol to have no redeclarations as well as no writes, because `var x = 1; var x = 2;` is two
   initialisations and a consumer that read the binding as constant would fold the first value into

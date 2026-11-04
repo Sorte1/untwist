@@ -61,6 +61,7 @@ pub const PASSES: &[PassInfo] = &[
     pass("control-flow-switch", "cleanup", false),
     pass("merge-object-assignments", "cleanup", false),
     pass("evaluate-globals", "cleanup", false),
+    pass("fold-pure-calls", "cleanup", false),
     pass("var-transformation", "cleanup", false),
     pass("dead-assignment-elimination", "cleanup", false),
     pass("fold-literal-chains", "cleanup", false),

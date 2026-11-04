@@ -9,9 +9,9 @@ const GAME: &str = "fixtures/real-world/game.js";
 const HIGH: &str = "fixtures/reference/deobfuscate/obfuscator.io-high.js";
 
 const BASE_PINS: [(&str, &str, Mode, &str); 10] = [
-    ("g-d", GAME, Mode::Safe, "8e2ccbf4"),
+    ("g-d", GAME, Mode::Safe, "116fc842"),
     ("g-p", GAME, Mode::Conservative, "5e3dabe1"),
-    ("g-u", GAME, Mode::Unsafe, "c046b313"),
+    ("g-u", GAME, Mode::Unsafe, "d077b1d0"),
     ("g-up", GAME, Mode::UnsafeParity, "9ce29007"),
     ("h-d", HIGH, Mode::Safe, "44ea11f5"),
     ("h-p", HIGH, Mode::Conservative, "44ea11f5"),

@@ -8,7 +8,7 @@ console.log(b(0x0) + b(0x1));";
 const A_FREE_NAME_IN_THE_WAY: &str = "\
 var a = 1;
 function f(x, y) { return a + x + y; }
-console.log(f(2, 3));";
+console.log(f(2, input));";
 
 fn options() -> Options {
     Options {
