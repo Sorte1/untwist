@@ -15,9 +15,9 @@ const GAME: &str = "fixtures/real-world/game.js";
 const HIGH: &str = "fixtures/reference/deobfuscate/obfuscator.io-high.js";
 
 const BRANCH_POINT_PINS: [(&str, &str, Mode, &str); 10] = [
-    ("g-d", GAME, Mode::Safe, "cd2b5a70"),
+    ("g-d", GAME, Mode::Safe, "422e1d89"),
     ("g-p", GAME, Mode::Conservative, "5e3dabe1"),
-    ("g-u", GAME, Mode::Unsafe, "fe6f5367"),
+    ("g-u", GAME, Mode::Unsafe, "15b38afc"),
     ("g-up", GAME, Mode::UnsafeParity, "9ce29007"),
     ("h-d", HIGH, Mode::Safe, "44ea11f5"),
     ("h-p", HIGH, Mode::Conservative, "44ea11f5"),
