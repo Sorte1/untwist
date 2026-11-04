@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
@@ -41,6 +43,23 @@ fn token_at(text: &str, name: &str) -> bool {
 
 fn names_in(text: &str, name: &str) -> bool {
     !name.is_empty() && text.len() >= name.len() && token_at(text, name)
+}
+
+pub fn regex_name_text(pattern: &str) -> Cow<'_, str> {
+    if !pattern.contains('\\') {
+        return Cow::Borrowed(pattern);
+    }
+    let mut text = String::with_capacity(pattern.len());
+    let mut escaped = false;
+    for c in pattern.chars() {
+        text.push(if escaped && c.is_ascii_alphabetic() {
+            ' '
+        } else {
+            c
+        });
+        escaped = !escaped && c == '\\';
+    }
+    Cow::Owned(text)
 }
 
 pub fn names_a_token(text: &str, names: &[&str]) -> bool {
@@ -101,7 +120,7 @@ impl<'a> VisitJs<'a> for Spelled<'_> {
     }
 
     fn visit_reg_exp_literal(&mut self, it: &RegExpLiteral<'a>) {
-        self.check(it.regex.pattern.text.as_str(), it.span);
+        self.check(&regex_name_text(it.regex.pattern.text.as_str()), it.span);
     }
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {

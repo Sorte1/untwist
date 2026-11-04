@@ -34,8 +34,8 @@ pub(crate) use escape_scan::{
 };
 pub use foreign::{ForeignUnits, Reliance};
 pub use names::{
-    names_a_token, redeclared, scan_names, spelled_at, writes_outside, written_outside, NameScan,
-    Write,
+    names_a_token, redeclared, regex_name_text, scan_names, spelled_at, writes_outside,
+    written_outside, NameScan, Write,
 };
 pub use pending::{resolve_pending_sites, PendingSite, PreScan};
 pub use rotator::{rotator_refusal_at, LiteralBindings, RotatorSite};

@@ -49,6 +49,20 @@ fn a_regular_expression_source_spells_a_name() {
 }
 
 #[test]
+fn a_letter_a_regular_expression_escapes_does_not_spell_a_name() {
+    let alloc = Allocator::default();
+    let source = "s.replace(/\\b\\w/g, f); t.match(/\\\\b/); u.test(/x[\\d]/);";
+    let parsed = parse_program(&alloc, source);
+    let found = spelled_at(&parsed.program, &["b", "w", "d", "x", "y"]);
+    let text = |i: usize| found[i].map(|span| &source[span.start as usize..span.end as usize]);
+    assert_eq!(text(0), Some("/\\\\b/"));
+    assert_eq!(found[1], None);
+    assert_eq!(found[2], None);
+    assert_eq!(text(3), Some("/x[\\d]/"));
+    assert_eq!(found[4], None);
+}
+
+#[test]
 fn a_write_outside_the_decoder_statement_is_found() {
     let alloc = Allocator::default();
     let source = "function b() { b = function () {}; }\nb = 1;";
