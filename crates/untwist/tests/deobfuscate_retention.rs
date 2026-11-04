@@ -70,11 +70,11 @@ fn assert_no_kept_machinery_note(label: &str, output: &Output) {
     );
 }
 
-fn assert_high_decodes_fully(label: &str, source: &str, observed_in_conservative: bool) {
+fn assert_high_decodes_fully(label: &str, source: &str, observed: bool) {
     for (mode, options) in modes() {
         let output = Pipeline::new(options).run(source);
         let label_mode = format!("{label} ({mode})");
-        if mode == "default" || observed_in_conservative {
+        if observed {
             assert_machinery_kept_under_name_observation(&label_mode, &output);
         } else {
             assert_machinery_gone(&label_mode, output.code(), &HIGH_MACHINERY);
