@@ -393,6 +393,47 @@ fn the_default_merges_only_a_computed_key_that_resolves_to_a_safe_literal() {
     }
 }
 
+fn run_unsafe_lane<'a>(alloc: &'a Allocator, source: &'a str) -> String {
+    let (code, report) = untwist_testing::transform_report(
+        alloc,
+        source,
+        &[untwist_deobfuscate::merge_object_assignments::boxed],
+        PassOptions {
+            unsafe_transforms: true,
+            ..PassOptions::default()
+        },
+    );
+    assert!(report.converged(), "{:?}", report.stop);
+    code
+}
+
+const A_SYMBOL_KEYED_RUN: &str = "const tag = Symbol(\"tag\");\nconst other = Symbol.for(f());\nconst obj = {};\nobj[tag] = 1;\nobj[other] = 2;\nobj.b = 3;\nlog(obj);";
+
+#[test]
+fn the_unsafe_lane_merges_a_computed_key_bound_to_a_fresh_symbol() {
+    let alloc = Allocator::default();
+    let out = run_unsafe_lane(&alloc, A_SYMBOL_KEYED_RUN);
+    assert!(out.contains("[tag]: 1"), "{out}");
+    assert!(out.contains("[other]: 2"), "{out}");
+    assert!(out.contains("b: 3"), "{out}");
+    let (safe, _) = run_superset(&alloc, A_SYMBOL_KEYED_RUN);
+    assert!(safe.contains("obj[tag] = 1"), "{safe}");
+}
+
+#[test]
+fn the_unsafe_lane_refuses_a_symbol_key_it_cannot_prove_fresh() {
+    for source in [
+        "function Symbol(x) {\n  return x;\n}\nconst tag = Symbol(\"__proto__\");\nconst obj = {};\nobj[tag] = 1;\nlog(obj);",
+        "let tag = Symbol(\"t\");\ntag = g;\nconst obj = {};\nobj[tag] = 1;\nlog(obj);",
+        "const tag = Symbol.keyFor(s);\nconst obj = {};\nobj[tag] = 1;\nlog(obj);",
+        "const tag = String(\"__proto__\");\nconst obj = {};\nobj[tag] = 1;\nlog(obj);",
+    ] {
+        let alloc = Allocator::default();
+        let out = run_unsafe_lane(&alloc, source);
+        assert!(out.contains("obj[tag] = 1"), "{source} -> {out}");
+    }
+}
+
 #[test]
 fn the_default_refuses_a_computed_key_it_cannot_resolve_to_a_safe_literal() {
     for (source, kept) in [
