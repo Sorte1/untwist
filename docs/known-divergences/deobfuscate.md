@@ -314,7 +314,11 @@
   of a script is also read as written whenever the program may hold the global object (premise 2).
   `Symbol.<name>` is a well-known symbol only through the unshadowed global `Symbol` when the
   program neither assigns `Symbol` nor contains a write, on any base, whose key may be `Symbol`
-  (premise 2); otherwise it is an unknown key. `Function` and `eval` reached through any forwarder
+  (premise 2); otherwise it is an unknown key. Under the same condition a binding whose only value
+  is a call of that `Symbol` is a symbol key, which names no property of the global object. An
+  object rest pattern reads unknown keys, unless its source is an object literal, or a binding to
+  one that nothing writes or calls a method on and that is only read, spread or destructured: then
+  it reads exactly that literal's keys, its spreads included. `Function` and `eval` reached through any forwarder
   (`.call`, `.apply`, `Reflect.apply`) with non-literal text count as code runners. An identity
   write (`O.k = O.k` on the same unaliased prototype, directly or through a substituted helper)
   writes nothing. A chain consults its method keys, the implicit keys (`toString`, `valueOf`,

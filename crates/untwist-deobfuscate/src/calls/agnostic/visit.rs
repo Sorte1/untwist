@@ -10,6 +10,8 @@ use super::sites::*;
 use super::text::closed_runner_read;
 use super::AKey;
 
+const REST_DEPTH: u8 = 4;
+
 impl<'s, 'a> Sites<'s, 'a> {
     fn stringified_runner(&self, call: &CallExpression<'a>) -> Option<Span> {
         if !call.arguments.is_empty() {
@@ -170,6 +172,45 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 
+    fn own_keys(&self, expr: &Expression<'a>, depth: u8) -> Option<Vec<AKey<'a>>> {
+        let next = depth.checked_sub(1)?;
+        let object = match expr.without_parentheses() {
+            Expression::ObjectExpression(object) => &**object,
+            Expression::Identifier(id) => self.fresh.keyed_literal(id)?,
+            _ => return None,
+        };
+        let mut keys = Vec::new();
+        for property in &object.properties {
+            match property {
+                ObjectPropertyKind::ObjectProperty(p) => match self.property_key(&p.key) {
+                    AKey::Pending(_) | AKey::Unknown => return None,
+                    key => keys.push(key),
+                },
+                ObjectPropertyKind::SpreadProperty(spread) => {
+                    keys.extend(self.own_keys(&spread.argument, next)?);
+                }
+            }
+        }
+        Some(keys)
+    }
+
+    fn note_known_rest(&mut self, span: Span, base: &Expression<'a>) {
+        match self.own_keys(base, REST_DEPTH).filter(|_| !span.is_empty()) {
+            Some(keys) => self.known_rests.insert(span, keys),
+            None => self.known_rests.remove(&span),
+        };
+    }
+
+    fn mark_rest(&mut self, span: Span) {
+        let Some(keys) = self.known_rests.remove(&span) else {
+            self.mark_origin(origin_of(&AKey::Unknown), span, "rest pattern");
+            return;
+        };
+        for key in keys {
+            self.mark_origin(origin_of(&key), span, "rest pattern");
+        }
+    }
+
     pub(super) fn pattern_key(&mut self, key: &PropertyKey<'a>, span: Span) {
         let keys = match key {
             PropertyKey::StaticIdentifier(name) => {
@@ -209,6 +250,9 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
                     .then(|| span_key(member.span()));
             }
             if let AssignmentTarget::ObjectAssignmentTarget(target) = &held.left {
+                if target.rest.is_some() {
+                    self.note_known_rest(target.span, &held.right);
+                }
                 self.reach_assignment_target(target, &held.right);
             }
         }
@@ -513,21 +557,24 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
 
     fn visit_object_pattern(&mut self, it: &ObjectPattern<'a>) {
         if it.rest.is_some() {
-            let origin = origin_of(&AKey::Unknown);
-            self.mark_origin(origin, it.span, "rest pattern");
+            self.mark_rest(it.span);
         }
         walk_js::walk_object_pattern(self, it);
     }
 
     fn visit_object_assignment_target(&mut self, it: &ObjectAssignmentTarget<'a>) {
         if it.rest.is_some() {
-            let origin = origin_of(&AKey::Unknown);
-            self.mark_origin(origin, it.span, "rest pattern");
+            self.mark_rest(it.span);
         }
         walk_js::walk_object_assignment_target(self, it);
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let (BindingPattern::ObjectPattern(object), Some(init)) = (&it.id, &it.init) {
+            if object.rest.is_some() {
+                self.note_known_rest(object.span, init);
+            }
+        }
         if let Some(init) = &it.init {
             self.reach_binding(&it.id, init);
             self.note_forwarders(&it.id, init);
