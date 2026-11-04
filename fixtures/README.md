@@ -27,6 +27,13 @@ own observables, so node must print the same thing before and after Untwist.
 Third-party inputs keep their licence beside them: `LICENSE-reference`,
 `LICENSE-javascript-obfuscator` and `unpack-bundlers/licenses/`.
 
+Not every sample in `reference/deobfuscate/` comes from the reference deobfuscator.
+`obfuscator.io-site-memo-reset.js` is the obfuscator.io website's output for `console.log("")`.
+`obfuscator.io-memo-reset-*.js` are javascript-obfuscator 5.9.0 output for the `hi()` program
+the other samples print, with a string array encoded as base64, rc4, or both together with
+`selfDefending` and `debugProtection`. Both kinds carry the decoder memo reset gate that
+javascript-obfuscator 5 emits. Their `.snap` files hold the program before obfuscation.
+
 ## Adding a fixture
 
 Put the file in the folder whose test should pick it up, name it after the shape it covers, and make

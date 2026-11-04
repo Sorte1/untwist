@@ -1,4 +1,4 @@
-const REFERENCE_DEOBFUSCATE_FIXTURES: usize = 16;
+const REFERENCE_DEOBFUSCATE_FIXTURES: usize = 20;
 const JSX_FIXTURES: usize = 6;
 
 fn count_js_files(dir: &str) -> usize {

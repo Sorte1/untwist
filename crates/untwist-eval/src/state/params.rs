@@ -1,9 +1,13 @@
 use oxc_ast::ast::{
-    AssignmentTarget, BindingPattern, ComputedMemberExpression, Expression, Function,
+    AssignmentOperator, AssignmentTarget, BindingPattern, ComputedMemberExpression, Expression,
+    Function,
 };
 use oxc_ast::ast::{IdentifierReference, Statement};
 use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_syntax::operator::BinaryOperator;
+use oxc_syntax::scope::ScopeFlags;
 
+use super::recipe::{fold_constant, Prim};
 use crate::stack;
 
 struct ParamUsage<'a> {
@@ -95,4 +99,90 @@ pub(super) fn used_params(function: &Function<'_>) -> Vec<bool> {
         visit_body(&mut usage, &body.statements);
     }
     usage.used
+}
+
+struct ArgumentsUse {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for ArgumentsUse {
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        stack::maybe_grow_dyn(&mut || walk_js::walk_expression(self, it));
+    }
+
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        stack::maybe_grow_dyn(&mut || walk_js::walk_statement(self, it));
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= it.name.as_str() == "arguments";
+    }
+}
+
+fn reads_arguments(function: &Function<'_>) -> bool {
+    let mut usage = ArgumentsUse { found: false };
+    usage.visit_function(function, ScopeFlags::Function);
+    usage.found
+}
+
+fn shifted_param<'a>(statement: &Statement<'a>) -> Option<&'a str> {
+    let Statement::ExpressionStatement(node) = statement else {
+        return None;
+    };
+    let Expression::AssignmentExpression(assignment) = node.expression.without_parentheses() else {
+        return None;
+    };
+    let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
+        return None;
+    };
+    let Expression::BinaryExpression(shift) = assignment.right.without_parentheses() else {
+        return None;
+    };
+    let name = target.name.as_str();
+    let reads_itself = matches!(shift.left.without_parentheses(),
+        Expression::Identifier(id) if id.name.as_str() == name);
+    let by_a_number = matches!(fold_constant(&shift.right, &[]), Some(Prim::Num(_)));
+    let shaped = assignment.operator == AssignmentOperator::Assign
+        && shift.operator == BinaryOperator::Subtraction
+        && reads_itself
+        && by_a_number;
+    shaped.then_some(name)
+}
+
+pub(super) fn numeric_params(function: &Function<'_>) -> Vec<bool> {
+    let params = &function.params;
+    let mut numeric = vec![false; params.items.len()];
+    let plain = params.rest.is_none()
+        && params
+            .items
+            .iter()
+            .all(|param| param.initializer.is_none() && param_name(&param.pattern).is_some());
+    if !plain || reads_arguments(function) {
+        return numeric;
+    }
+    let first = function
+        .body
+        .as_ref()
+        .and_then(|body| body.statements.first());
+    let Some(name) = first.and_then(shifted_param) else {
+        return numeric;
+    };
+    let names: Vec<Option<&str>> = params
+        .items
+        .iter()
+        .map(|param| param_name(&param.pattern))
+        .collect();
+    if let [index] = positions_of(&names, name)[..] {
+        numeric[index] = true;
+    }
+    numeric
+}
+
+fn positions_of(names: &[Option<&str>], name: &str) -> Vec<usize> {
+    names
+        .iter()
+        .enumerate()
+        .filter(|(_, slot)| **slot == Some(name))
+        .map(|(index, _)| index)
+        .collect()
 }

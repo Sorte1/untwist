@@ -58,8 +58,8 @@ impl Tally {
 }
 
 const NODE_BYTES: u64 = 94;
-const LAZINESS_K_TWO_SESSIONS: f64 = 2.65;
-const LAZINESS_K_PER_SESSION: f64 = 1.37;
+const LAZINESS_K_TWO_SESSIONS: f64 = 2.86;
+const LAZINESS_K_PER_SESSION: f64 = 1.43;
 const HIGH_PRESET: &str = "obfuscator.io-high.js";
 
 #[derive(Default)]

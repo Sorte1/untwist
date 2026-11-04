@@ -7,6 +7,7 @@ mod params;
 mod probe;
 pub(crate) mod recipe;
 mod registry;
+mod reset;
 
 pub use monitor::{
     address_of, class_of, enter_gate, enter_invocation, leave_gate, leave_invocation, note_capture,
@@ -54,11 +55,19 @@ pub struct MemoShape {
     pub container_key: Option<PropKey>,
 }
 
+#[derive(Clone)]
+pub struct ResetShape {
+    pub guard: Span,
+    pub memo: PropKey,
+}
+
 #[derive(Clone, Default)]
 pub struct Shape {
     pub gates: Vec<GateShape>,
+    pub resets: Vec<ResetShape>,
     pub memos: Vec<MemoShape>,
     pub used_params: Vec<Vec<bool>>,
+    pub numeric_params: Vec<Vec<bool>>,
     pub conditional: Vec<(Span, PropKey)>,
     pub rewrites: Vec<(Span, usize)>,
     pub captured_memo: bool,
@@ -122,7 +131,28 @@ pub fn shape(program: &DecoderProgram<'_>) -> MachineryState {
     if !any_triggers {
         return MachineryState::Stateless;
     }
-    classify(program, owned)
+    let resets = reset_gates(program, &owned);
+    classify(program, owned, &resets)
+}
+
+fn reset_gates<'a>(
+    program: &DecoderProgram<'a>,
+    owned: &[(Owner, Collected<'a>)],
+) -> Vec<reset::ResetGate<'a>> {
+    program
+        .decoders
+        .iter()
+        .enumerate()
+        .filter_map(|(index, decoder)| {
+            let decoder = reset::Decoder {
+                function: decoder.function,
+                name: decoder.name,
+                index,
+                string_array: program.string_array.name,
+            };
+            reset::find(&decoder, owned)
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -186,6 +216,7 @@ fn matching_read(
 fn classify<'a>(
     program: &DecoderProgram<'a>,
     owned: Vec<(Owner, Collected<'a>)>,
+    resets: &[reset::ResetGate<'a>],
 ) -> MachineryState {
     if let Some(reason) = refuse_on_non_member_triggers(&owned) {
         return MachineryState::Refused(reason);
@@ -199,7 +230,7 @@ fn classify<'a>(
     if refuse_on_read_arguments_store(&owned) {
         return MachineryState::Refused(&UNPROVEN_GENERIC);
     }
-    match classify_member_triggers(program, &owned) {
+    match classify_member_triggers(program, &owned, resets) {
         Ok(shape) if containers::uses_are_recognized(&owned) => MachineryState::Candidate(shape),
         Ok(_) => MachineryState::Refused(&UNPROVEN_GENERIC),
         Err(reason) => MachineryState::Refused(reason),
@@ -251,24 +282,60 @@ fn refuse_on_duplicate_gates(owned: &[(Owner, Collected<'_>)]) -> Option<&'stati
     None
 }
 
+fn reset_write(
+    resets: &[reset::ResetGate<'_>],
+    owner: Owner,
+    span: Span,
+    peel: &MemberPeel<'_>,
+) -> Option<GateShape> {
+    let found = resets
+        .iter()
+        .find(|gate| owner == Owner::Decoder(gate.owner) && gate.writes.contains(&span))?;
+    let FinalKey::Static(key) = peel.final_key else {
+        return None;
+    };
+    Some(GateShape {
+        container: peel.container_span,
+        key: PropKey::Name(JsString::from_str(key)),
+        guard: found.region,
+    })
+}
+
+fn reset_shapes(resets: &[reset::ResetGate<'_>]) -> Vec<ResetShape> {
+    resets
+        .iter()
+        .map(|gate| ResetShape {
+            guard: gate.region,
+            memo: PropKey::Name(JsString::from_str(gate.memo_key)),
+        })
+        .collect()
+}
+
 fn classify_member_triggers<'a>(
     program: &DecoderProgram<'a>,
     owned: &[(Owner, Collected<'a>)],
+    resets: &[reset::ResetGate<'a>],
 ) -> Result<Shape, &'static &'static str> {
     let mut gates_out = Vec::new();
     let mut memos_out = Vec::new();
     for (owner, collected) in owned {
         for trigger in &collected.triggers {
             match &trigger.kind {
-                TriggerKind::Member(peel) => classify_one_member(
-                    program,
-                    *owner,
-                    collected,
-                    trigger.span,
-                    peel,
-                    &mut gates_out,
-                    &mut memos_out,
-                )?,
+                TriggerKind::Member(peel) => {
+                    if let Some(gate) = reset_write(resets, *owner, trigger.span, peel) {
+                        gates_out.push(gate);
+                        continue;
+                    }
+                    classify_one_member(
+                        program,
+                        *owner,
+                        collected,
+                        trigger.span,
+                        peel,
+                        &mut gates_out,
+                        &mut memos_out,
+                    )?
+                }
                 TriggerKind::CapturedMemo(peel) => {
                     check_captured_memo(program, *owner, collected, peel)?
                 }
@@ -276,7 +343,8 @@ fn classify_member_triggers<'a>(
             }
         }
     }
-    let used_params = used_params_for_memo_owners(program, &memos_out);
+    let used_params = params_for_memo_owners(program, &memos_out, params::used_params);
+    let numeric_params = params_for_memo_owners(program, &memos_out, params::numeric_params);
     let captured_memo = owned.iter().any(|(_, collected)| {
         collected
             .triggers
@@ -286,8 +354,10 @@ fn classify_member_triggers<'a>(
     let memoised = captured_memo || !memos_out.is_empty();
     Ok(Shape {
         gates: gates_out,
+        resets: reset_shapes(resets),
         memos: memos_out,
         used_params,
+        numeric_params,
         conditional: gates::conditional_flags(owned),
         rewrites: template_rewrites(owned),
         captured_memo,
@@ -320,9 +390,10 @@ fn template_rewrites(owned: &[(Owner, Collected<'_>)]) -> Vec<(Span, usize)> {
         .collect()
 }
 
-fn used_params_for_memo_owners(
+fn params_for_memo_owners(
     program: &DecoderProgram<'_>,
     memos: &[MemoShape],
+    judge: fn(&Function<'_>) -> Vec<bool>,
 ) -> Vec<Vec<bool>> {
     program
         .decoders
@@ -330,7 +401,7 @@ fn used_params_for_memo_owners(
         .enumerate()
         .map(|(index, decoder)| {
             if memos.iter().any(|memo| memo.owner == index) {
-                params::used_params(decoder.function)
+                judge(decoder.function)
             } else {
                 Vec::new()
             }
