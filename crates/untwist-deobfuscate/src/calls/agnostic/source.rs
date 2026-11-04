@@ -113,6 +113,12 @@ impl Sources {
         saved
     }
 
+    pub(super) fn enter_bound_method(&mut self, function: &Function<'_>) -> Frame {
+        let saved = self.enter_function(function);
+        self.frame.this_global = false;
+        saved
+    }
+
     pub(super) fn enter_class(&mut self, own_this: bool) -> Frame {
         let saved = self.frame;
         self.frame = Frame {
