@@ -46,8 +46,12 @@ fn every_row_has_a_known_prefix() {
     }
 }
 
+fn patches_before_the_decode(label: &str) -> bool {
+    label.starts_with("ref-") || label.starts_with("guard-closed-eval-")
+}
+
 #[test]
-fn the_default_and_unsafe_lanes_run_like_node() {
+fn the_default_lane_runs_like_node_and_unsafe_decodes_with_pristine_built_ins() {
     let Some(node) = node_or_skip() else {
         return;
     };
@@ -57,9 +61,14 @@ fn the_default_and_unsafe_lanes_run_like_node() {
     let aggressive = options(true, false);
     let run_safe = |source: &str| transformed(&safe, source);
     let run_unsafe = |source: &str| transformed(&aggressive, source);
-    let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];
-    let wrong = node_rows::mismatches(&node, &programs, &modes);
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    let lanes = node_rows::pristine_under_unsafe(&node, &programs, (&run_safe, &run_unsafe));
+    assert!(lanes.wrong.is_empty(), "{}", lanes.wrong.join("\n"));
+    let expected: Vec<String> = programs
+        .iter()
+        .map(|(label, _)| label.clone())
+        .filter(|label| patches_before_the_decode(label))
+        .collect();
+    assert_eq!(lanes.pristine, expected);
 }
 
 #[test]
