@@ -1,5 +1,5 @@
 export type RenameMode = 'none' | 'simple' | 'unique' | 'mangle';
-export type View = 'output' | 'diff';
+export type View = 'output' | 'diff' | 'steps';
 export type ThemeChoice = 'dark' | 'light';
 export type InputVisibility = 'shown' | 'hidden';
 

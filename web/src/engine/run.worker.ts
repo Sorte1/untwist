@@ -37,6 +37,15 @@ function modulesOf(output: { module_count(): number; module_code(index: number):
   return modules;
 }
 
+function snapshotsOf(output: { snapshot_count(): number; snapshot_code(index: number): string | undefined }): Array<string | null> {
+  const codes: Array<string | null> = [];
+  const count = output.snapshot_count();
+  for (let index = 0; index < count; index += 1) {
+    codes.push(output.snapshot_code(index) ?? null);
+  }
+  return codes;
+}
+
 function run(source: string, flags: string, refused: boolean, extras: string): void {
   const started = performance.now();
   try {
@@ -49,6 +58,7 @@ function run(source: string, flags: string, refused: boolean, extras: string): v
       report: output.report_json(),
       bundleJson: output.bundle_json() ?? null,
       modules: modulesOf(output),
+      snapshots: snapshotsOf(output),
       engineMs: performance.now() - started,
       memoryBytes: memory?.buffer.byteLength ?? 0,
     };

@@ -18,6 +18,7 @@ use untwist_unminify::{
 };
 
 use super::notes::{retain_last_spanned, StageRun, SLOT_NOT_RESERVED};
+use super::snapshots::Snapshots;
 use super::{Pipeline, Reservation};
 use crate::options::Progress;
 use crate::plugin::Stage;
@@ -35,6 +36,7 @@ pub(super) struct StageCx<'a, 'r> {
     pub(super) stages: &'r mut Vec<StageReport>,
     pub(super) notes: &'r mut Vec<Note>,
     pub(super) heap_peak: &'r mut u64,
+    pub(super) snapshots: &'r mut Snapshots,
 }
 
 impl StageCx<'_, '_> {
@@ -43,6 +45,7 @@ impl StageCx<'_, '_> {
         self.stages
             .push(StageReport::from_run(name, round, started, &report));
         self.notes.extend(report.notes);
+        self.snapshots.take(name, round, self.program);
     }
 }
 

@@ -29,6 +29,7 @@ import { mountRecentMenu } from './ui/recent-menu';
 import { mountRunProgress } from './ui/run-progress';
 import { mountSettingsPanel } from './ui/settings-panel';
 import { mountShareLink } from './ui/share-link';
+import { mountSteps } from './ui/steps-view';
 import { mountStatusBar } from './ui/status-bar';
 import { mountDetailsToggle } from './ui/details/toggle';
 import { mountSummaryChip } from './ui/summary-chip';
@@ -103,9 +104,11 @@ function main(): void {
   const start = starter(store, engine);
   const run = runner(store, start);
   const compare = mountCompareModes(store, new Engine(engine.module, false));
+  const steps = mountSteps(store, new Engine(engine.module, false));
   const cancel = () => {
     engine.cancel();
     compare.cancel();
+    steps.cancel();
     store.update((state) => runCancelled(state, performance.now()));
   };
   mountToolbar(store, { run, cancel });

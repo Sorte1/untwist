@@ -1,4 +1,4 @@
-use untwist::{Isolation, Options, Pipeline, ProgressSink};
+use untwist::{Isolation, Options, Pipeline, ProgressSink, SnapshotCode};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use super::clock;
@@ -17,6 +17,7 @@ pub struct RunReport {
     report: String,
     bundle_json: Option<String>,
     modules: Vec<String>,
+    snapshots: Vec<Option<String>>,
 }
 
 #[wasm_bindgen]
@@ -56,6 +57,15 @@ impl RunReport {
     pub fn module_code(&self, index: u32) -> Option<String> {
         let index = usize::try_from(index).ok()?;
         self.modules.get(index).cloned()
+    }
+
+    pub fn snapshot_count(&self) -> u32 {
+        u32::try_from(self.snapshots.len()).unwrap_or(u32::MAX)
+    }
+
+    pub fn snapshot_code(&self, index: u32) -> Option<String> {
+        let index = usize::try_from(index).ok()?;
+        self.snapshots.get(index).cloned().flatten()
     }
 }
 
@@ -98,6 +108,13 @@ fn report_with(source: &str, options: Options) -> RunReport {
                 .collect()
         })
         .unwrap_or_default();
+    let snapshots = std::mem::take(&mut result.snapshots)
+        .into_iter()
+        .map(|row| match row.code {
+            SnapshotCode::Text(code) => Some(code),
+            SnapshotCode::Unchanged | SnapshotCode::OverCap => None,
+        })
+        .collect();
     RunReport {
         stdout,
         stderr,
@@ -106,6 +123,7 @@ fn report_with(source: &str, options: Options) -> RunReport {
         report,
         bundle_json,
         modules,
+        snapshots,
     }
 }
 
@@ -141,6 +159,7 @@ fn report_for(
                     ..isolation(refused)
                 },
                 refusal_spans: extras.refusals,
+                stage_snapshots: extras.snapshot_cap(),
                 ..options
             },
         ),
@@ -152,6 +171,7 @@ fn report_for(
             report: bare_json(),
             bundle_json: None,
             modules: Vec::new(),
+            snapshots: Vec::new(),
         },
     }
 }
@@ -258,7 +278,7 @@ mod tests {
 
     #[test]
     fn asked_for_refusals_the_report_points_at_the_code_that_kept_the_decoder() {
-        let wants = Extras { refusals: true };
+        let wants = Extras::from_words("refusals");
         for prefix in ["", "var accent = \"\u{e9}\u{1f600}\";\n"] {
             let source = format!("{prefix}{REFUSED_IN_SAFE}");
             let out = report_for(&source, "", false, None, wants);
@@ -287,10 +307,81 @@ mod tests {
             "--unsafe",
             false,
             None,
-            Extras { refusals: true },
+            Extras::from_words("refusals"),
         );
         assert!(refusal_sites(&decoded.report_json()).is_empty());
         assert!(!decoded.stdout().contains("b(0)"), "{}", decoded.stdout());
+    }
+
+    fn snapshot_rows(report: &str) -> Vec<(String, u64, String)> {
+        let value: serde_json::Value = serde_json::from_str(report).unwrap_or_default();
+        value["snapshots"]
+            .as_array()
+            .map(|rows| {
+                rows.iter()
+                    .map(|row| {
+                        let stage = row["stage"].as_str().unwrap_or_default().to_string();
+                        let kept = row["kept"].as_str().unwrap_or_default().to_string();
+                        (stage, row["round"].as_u64().unwrap_or(0), kept)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn asked_for_snapshots_a_run_keeps_the_code_after_each_stage_it_reports() {
+        let wants = Extras {
+            snapshots: true,
+            ..Extras::default()
+        };
+        let out = report_for(DECODED, "--rename simple", false, None, wants);
+        let plain = run_report(DECODED, "--rename simple", false);
+        assert_eq!(out.stdout(), plain.stdout());
+        let report = out.report_json();
+        let rows = snapshot_rows(&report);
+        let value: serde_json::Value = serde_json::from_str(&report).unwrap_or_default();
+        let reported: Vec<(String, u64)> = value["stages"]
+            .as_array()
+            .map(|stages| {
+                stages
+                    .iter()
+                    .map(|row| {
+                        let stage = row["stage"].as_str().unwrap_or_default().to_string();
+                        (stage, row["round"].as_u64().unwrap_or(0))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(!rows.is_empty());
+        assert_eq!(u32::try_from(rows.len()).ok(), Some(out.snapshot_count()));
+        assert_eq!(rows.first().map(|row| row.0.as_str()), Some("prepare"));
+        for (stage, round, _) in &rows {
+            assert!(
+                reported.contains(&(stage.clone(), *round)),
+                "{stage} {round} not in {reported:?}"
+            );
+        }
+        for (index, (stage, _, kept)) in rows.iter().enumerate() {
+            let code = out.snapshot_code(u32::try_from(index).unwrap_or(u32::MAX));
+            assert_eq!(code.is_some(), kept == "text", "{stage} {kept}");
+        }
+        let texts: Vec<String> = (0..out.snapshot_count())
+            .filter_map(|index| out.snapshot_code(index))
+            .collect();
+        assert!(texts.iter().any(|code| code.contains("b(0)")), "{texts:?}");
+        assert!(
+            texts.iter().any(|code| code.contains("\"Hello\"")),
+            "{texts:?}"
+        );
+        assert!(rows.iter().any(|row| row.2 == "unchanged"), "{rows:?}");
+    }
+
+    #[test]
+    fn without_the_extra_no_snapshot_is_printed() {
+        let out = run_report_staged(DECODED, "", false, "refusals");
+        assert_eq!(out.snapshot_count(), 0);
+        assert!(!out.report_json().contains("\"snapshots\""));
     }
 
     fn same(source: &str, flags: &str, refused: bool) {
