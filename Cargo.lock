@@ -2062,6 +2062,7 @@ dependencies = [
  "sha2",
  "similar 3.2.0",
  "tempfile",
+ "untwist",
  "untwist-core",
  "untwist-eval",
  "untwist-testing",

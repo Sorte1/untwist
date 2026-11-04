@@ -19,3 +19,6 @@ untwist-testing = { path = "../crates/untwist-testing" }
 oxc_allocator.workspace = true
 oxc_ast_visit.workspace = true
 oxc_syntax.workspace = true
+
+[dev-dependencies]
+untwist = { path = "../crates/untwist" }
