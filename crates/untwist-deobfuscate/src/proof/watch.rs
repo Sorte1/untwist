@@ -135,7 +135,10 @@ macro_rules! watch_texts {
 
         fn visit_reg_exp_literal(&mut self, it: &oxc_ast::ast::RegExpLiteral<'a>) {
             if WATCHING {
-                self.watch.text(it.regex.pattern.text.as_str(), it.span);
+                self.watch.text(
+                    &$crate::proof::regex_name_text(it.regex.pattern.text.as_str()),
+                    it.span,
+                );
             }
         }
 
