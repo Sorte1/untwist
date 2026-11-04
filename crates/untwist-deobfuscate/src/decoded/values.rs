@@ -58,12 +58,9 @@ fn pending_site_spans(scan: &PreScan, spans: &mut FxHashSet<Span>) {
     root_keys::written_spans(scan, spans);
     for site in &scan.pending {
         match site {
-            PendingSite::Sink { arg_span, .. } => {
-                spans.insert(*arg_span);
-            }
-            PendingSite::GlobalKey { key_span, .. } => {
-                spans.insert(*key_span);
-            }
+            PendingSite::Sink { text: key, .. }
+            | PendingSite::GlobalKey { key, .. }
+            | PendingSite::RootKey { key, .. } => key.pending_spans(spans),
             PendingSite::ProxyKey { key_span, .. } => {
                 spans.insert(*key_span);
             }

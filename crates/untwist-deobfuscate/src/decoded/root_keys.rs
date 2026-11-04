@@ -8,7 +8,7 @@ use untwist_eval::decode::DecoderProgram;
 use untwist_eval::object::PROTOTYPE_LINKS;
 
 use super::UnitRun;
-use crate::proof::{PreScan, WrittenKey};
+use crate::proof::PreScan;
 
 struct RootReads<'s, 'a> {
     scoping: &'s Scoping,
@@ -65,22 +65,10 @@ fn reads_on_roots<'a>(
     reads.keys
 }
 
-fn written_name(key: &WrittenKey, resolve: &dyn Fn(Span) -> Option<String>) -> Option<String> {
-    match key {
-        WrittenKey::Name(name) => Some(name.clone()),
-        WrittenKey::Pending(span) => resolve(*span),
-        WrittenKey::Concat(parts) => parts
-            .iter()
-            .map(|part| written_name(part, resolve))
-            .collect::<Option<Vec<String>>>()
-            .map(|parts| parts.concat()),
-    }
-}
-
 fn written_names(scan: &PreScan, resolve: &dyn Fn(Span) -> Option<String>) -> FxHashSet<String> {
     scan.written
         .iter()
-        .filter_map(|key| written_name(key, resolve))
+        .filter_map(|key| key.resolved(resolve))
         .collect()
 }
 
@@ -122,22 +110,8 @@ pub(super) fn refuse_written_roots(
     }
 }
 
-fn pending_spans(key: &WrittenKey, spans: &mut FxHashSet<Span>) {
-    match key {
-        WrittenKey::Name(_) => {}
-        WrittenKey::Pending(span) => {
-            spans.insert(*span);
-        }
-        WrittenKey::Concat(parts) => {
-            for part in parts {
-                pending_spans(part, spans);
-            }
-        }
-    }
-}
-
 pub(super) fn written_spans(scan: &PreScan, spans: &mut FxHashSet<Span>) {
     for key in &scan.written {
-        pending_spans(key, spans);
+        key.pending_spans(spans);
     }
 }

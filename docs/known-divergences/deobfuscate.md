@@ -906,6 +906,13 @@
   apply, with the decoder's own premise below. A built-in the decode reads by name (`String`,
   `decodeURIComponent`) is still judged by key as well as by root: the unit is refused when any
   write in the program, on any base, names that built-in or a key the unit's machinery reads on it.
+  Some keys and code texts are built only from string literals, `+`, template literals and calls:
+  `String[d(1)]`, `Function(d(1) + d(2) + ")")`, `globalThis[d(1) + "x"]`. Such a key or text is
+  judged after the decode, as its spelled twin, with the strings the unit itself decoded. This
+  holds when every call in it is one of the unit's own decoder calls. A key that decodes to
+  `constructor` or a code name still counts as code. Any other part, such as a parameter, a method
+  call or a proxy object's member, leaves the key unknown. Code inside a class body is strict, so
+  its `this` is never taken for the global object.
   Pinned by `crates/untwist/tests/decode_behaviour.rs` (node-checked, both modes, as a module and
   as a script), `crates/untwist/tests/alias_resolver.rs`, `crates/untwist/tests/realm_shapes.rs`,
   `crates/untwist-deobfuscate/tests/instanceof_object.rs` and the files of `fixtures/behaviour/` in

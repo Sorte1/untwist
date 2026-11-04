@@ -18,7 +18,7 @@ use super::pending::{PendingSite, PreScan};
 use super::proxy_objects::scan_proxy_functions;
 use super::text_writes::writes_in_text;
 use super::unsafe_bindings::scan_unsafe_bindings;
-use super::written::{definer_written_keys, member_written_key, WrittenKey};
+use super::written::{definer_written_keys, member_written_key, text_template, WrittenKey};
 use super::GLOBAL_OBJECTS;
 
 pub const SINK_ROOT_NAMES: [&str; 6] = [
@@ -32,6 +32,10 @@ pub const SINK_ROOT_NAMES: [&str; 6] = [
 pub(super) const MAX_SINK_DEPTH: u32 = 4;
 
 const GLOBAL_KEYS: [&str; 5] = ["__proto__", "top", "parent", "opener", "content"];
+
+fn pending_template(expr: &Expression<'_>) -> Option<WrittenKey> {
+    text_template(expr).filter(WrittenKey::is_pending)
+}
 
 pub(super) fn is_code_key(key: &str) -> bool {
     key == "constructor"
@@ -48,6 +52,7 @@ struct Escape<'s> {
     resolve: Option<&'s dyn Fn(Span) -> Option<String>>,
     depth: u32,
     this_stack: Vec<bool>,
+    class_depth: u32,
     pending_binding: Option<SymbolId>,
     context: &'s EscapeContext,
     pending_exempt: Option<&'s FxHashSet<Span>>,
@@ -244,6 +249,7 @@ impl<'s> Escape<'s> {
         let mut child = Escape::new(self.scoping, self.globals, self.context, self.resolve);
         child.depth = self.depth;
         child.this_stack = self.this_stack.clone();
+        child.class_depth = self.class_depth;
         child.pending_exempt = self.pending_exempt;
         child
     }
@@ -262,6 +268,7 @@ impl<'s> Escape<'s> {
             resolve,
             depth: 0,
             this_stack: Vec::new(),
+            class_depth: 0,
             pending_binding: None,
             context,
             pending_exempt: None,
@@ -335,26 +342,75 @@ impl<'s> Escape<'s> {
     }
 
     fn on_decoded_global_key(&mut self, member: &ComputedMemberExpression<'_>) -> bool {
-        let Expression::CallExpression(key_call) = member.expression.without_parentheses() else {
+        let Some(key) = pending_template(&member.expression) else {
             return false;
         };
         if !self.is_global_object(&member.object) {
             return false;
         }
-        if let Some(key) = self.resolve.and_then(|resolve| resolve(key_call.span)) {
-            self.on_global_key(&key, member.span);
+        if let Some(resolved) = self.resolve_template(&key) {
+            self.on_global_key(&resolved, member.span);
             return true;
         }
         if self.pending_exempt.is_none() {
             return false;
         }
-        let forcing = self.pending_call_span(&member.expression).is_some();
+        let forcing = self.template_forcing(&member.expression);
         self.pending.push(PendingSite::GlobalKey {
             outer_span: member.span,
-            key_span: key_call.span,
+            key,
             forcing,
         });
         true
+    }
+
+    fn on_decoded_root_key(&mut self, member: &ComputedMemberExpression<'_>) -> bool {
+        if self.is_global_object(&member.object) {
+            return false;
+        }
+        let Some(&root) = self
+            .global_name(&member.object)
+            .and_then(|name| self.globals.get(name))
+        else {
+            return false;
+        };
+        let Some(key) = pending_template(&member.expression) else {
+            return false;
+        };
+        if let Some(resolved) = self.resolve_template(&key) {
+            if is_code_key(&resolved) {
+                self.flag_code(member.span);
+            }
+            return true;
+        }
+        if self.pending_exempt.is_none() {
+            return false;
+        }
+        let forcing = self.template_forcing(&member.expression);
+        self.pending.push(PendingSite::RootKey {
+            outer_span: member.span,
+            root,
+            key,
+            forcing,
+        });
+        true
+    }
+
+    fn resolve_template(&self, template: &WrittenKey) -> Option<String> {
+        template.resolved(&|span| self.resolve.and_then(|resolve| resolve(span)))
+    }
+
+    fn template_forcing(&self, expr: &Expression<'_>) -> bool {
+        match expr.without_parentheses() {
+            Expression::BinaryExpression(binary) => {
+                self.template_forcing(&binary.left) || self.template_forcing(&binary.right)
+            }
+            Expression::TemplateLiteral(template) => template
+                .expressions
+                .iter()
+                .any(|part| self.template_forcing(part)),
+            other => self.pending_call_span(other).is_some(),
+        }
     }
 
     fn on_global_key(&mut self, key: &str, span: Span) {
@@ -451,18 +507,7 @@ impl<'s> Escape<'s> {
     }
 
     fn resolve_string_expr(&self, expr: &Expression<'_>) -> Option<String> {
-        match expr.without_parentheses() {
-            Expression::StringLiteral(literal) => Some(literal.value.as_str().to_string()),
-            Expression::BinaryExpression(binary)
-                if binary.operator == oxc_syntax::operator::BinaryOperator::Addition =>
-            {
-                let left = self.resolve_string_expr(&binary.left)?;
-                let right = self.resolve_string_expr(&binary.right)?;
-                Some(left + &right)
-            }
-            Expression::CallExpression(call) => (self.resolve?)(call.span),
-            _ => None,
-        }
+        self.resolve_template(&text_template(expr)?)
     }
 
     fn walk_call<'a>(&mut self, it: &CallExpression<'a>)
@@ -496,11 +541,11 @@ impl<'s> Escape<'s> {
 
     fn check_sink_pending_fallback(&mut self, first: &Expression<'_>, span: Span) -> bool {
         if self.pending_exempt.is_some() {
-            if let Expression::CallExpression(call) = first.without_parentheses() {
-                let forcing = self.pending_call_span(first).is_some();
+            if let Some(text) = pending_template(first) {
+                let forcing = self.template_forcing(first);
                 self.pending.push(PendingSite::Sink {
                     outer_span: span,
-                    arg_span: call.span,
+                    text,
                     forcing,
                 });
                 return true;
@@ -604,7 +649,7 @@ impl<'a> VisitJs<'a> for Escape<'_> {
         if let Some(key) = it.static_property_name() {
             self.note_definer_read(&it.object, key.as_str(), it.span);
         }
-        if key.is_none() && self.on_decoded_global_key(it) {
+        if key.is_none() && (self.on_decoded_global_key(it) || self.on_decoded_root_key(it)) {
             self.visit_expression(&it.expression);
             return;
         }
@@ -657,6 +702,12 @@ impl<'a> VisitJs<'a> for Escape<'_> {
         self.pending_binding = prev;
     }
 
+    fn visit_class(&mut self, it: &Class<'a>) {
+        self.class_depth += 1;
+        walk_js::walk_class(self, it);
+        self.class_depth -= 1;
+    }
+
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         let symbol_id = self
             .pending_binding
@@ -666,7 +717,7 @@ impl<'a> VisitJs<'a> for Escape<'_> {
         if it.has_use_strict_directive() {
             flags |= ScopeFlags::StrictMode;
         }
-        let is_strict = flags.contains(ScopeFlags::StrictMode);
+        let is_strict = flags.contains(ScopeFlags::StrictMode) || self.class_depth > 0;
         let is_constructor_only =
             symbol_id.is_some_and(|sid| !self.context.unsafe_bindings.contains(&sid));
         let is_global_this = !is_strict && !is_constructor_only;
