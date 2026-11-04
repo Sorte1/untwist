@@ -240,6 +240,10 @@ impl<'a> Lazy<'a> {
         }
     }
 
+    pub(crate) fn scope(&self) -> &Rc<ScopeChain> {
+        &self.scope
+    }
+
     #[inline]
     pub(crate) fn run(
         &self,
