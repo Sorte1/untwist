@@ -131,7 +131,8 @@ pub struct Args {
         value_name = "N",
         value_parser = fuel_steps,
         help = "interpreter steps the string-array decoder may spend per decode unit before it \
-                gives up and leaves the call sites alone (default 50000000; unlimited lifts it)"
+                gives up and leaves the call sites alone (default 50000000, or 1000000000 with --unsafe; \
+                unlimited lifts it)"
     )]
     pub fuel: Option<u64>,
     #[arg(

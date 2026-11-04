@@ -1,4 +1,5 @@
 use untwist::{Isolation, Options, Pipeline, ProgressSink, SnapshotCode};
+use untwist_eval::budget::default_fuel;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use super::clock;
@@ -93,7 +94,10 @@ pub fn engine_info() -> String {
 
 fn report_with(source: &str, options: Options) -> RunReport {
     clock::register();
-    let (fuel, max_iterations) = (options.fuel, options.max_iterations);
+    let fuel = options
+        .fuel
+        .unwrap_or_else(|| default_fuel(options.unsafe_transforms));
+    let (fuel, max_iterations) = (Some(fuel), options.max_iterations);
     let before = limits::fired();
     let mut result = Pipeline::new(options).run(source);
     let fired = limits::fired().since(before);

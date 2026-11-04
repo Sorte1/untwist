@@ -3,6 +3,15 @@ use untwist_core::depth::WASM_V8_ROOM;
 use crate::bail::{Bail, EvalResult};
 
 pub const STEP_BUDGET: u64 = 50_000_000;
+pub const UNSAFE_STEP_BUDGET: u64 = 1_000_000_000;
+
+pub fn default_fuel(unsafe_transforms: bool) -> u64 {
+    if unsafe_transforms {
+        UNSAFE_STEP_BUDGET
+    } else {
+        STEP_BUDGET
+    }
+}
 #[cfg(not(target_arch = "wasm32"))]
 pub const CALL_DEPTH_CAP: u32 = 1_000;
 #[cfg(target_arch = "wasm32")]
