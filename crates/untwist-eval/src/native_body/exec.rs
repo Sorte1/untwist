@@ -130,7 +130,7 @@ impl<'a> Interp<'a> {
         Ok(())
     }
 
-    pub(super) fn lookup(
+    pub(super) fn intact_member(
         &mut self,
         run: &mut Run,
         (receiver, key, mark): (&Value<'a>, &str, u64),

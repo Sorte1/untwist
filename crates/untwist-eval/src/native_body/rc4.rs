@@ -233,7 +233,7 @@ impl<'a> Interp<'a> {
         run.owe(plan.costs.head + plan.costs.test);
         run.part();
         let receiver = Value::Str(key.clone());
-        if !self.lookup(&mut run, (&receiver, "charCodeAt", plan.get), CHAR_CODE_AT)? {
+        if !self.intact_member(&mut run, (&receiver, "charCodeAt", plan.get), CHAR_CODE_AT)? {
             self.refund(&run);
             return Ok(false);
         }
@@ -319,7 +319,7 @@ impl<'a> Interp<'a> {
     ) -> Eval<'a, bool> {
         run.part();
         let string = self.read_lazy(run, (&plan.string, plan.marks[0]), at)?;
-        if !self.lookup(
+        if !self.intact_member(
             run,
             (&string, "fromCharCode", plan.marks[1]),
             FROM_CHAR_CODE,
@@ -327,7 +327,7 @@ impl<'a> Interp<'a> {
             return Ok(false);
         }
         let receiver = Value::Str(text.clone());
-        if !self.lookup(run, (&receiver, "charCodeAt", plan.marks[2]), CHAR_CODE_AT)? {
+        if !self.intact_member(run, (&receiver, "charCodeAt", plan.marks[2]), CHAR_CODE_AT)? {
             return Ok(false);
         }
         self.first_call(run, plan.marks[3])?;

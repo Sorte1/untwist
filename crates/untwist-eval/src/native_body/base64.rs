@@ -418,7 +418,7 @@ impl<'a> Interp<'a> {
         run.part();
         if !state.checks[0] {
             let receiver = Value::Str(state.input.clone());
-            let found = self.lookup(run, (&receiver, "charAt", plan.test.get), CHAR_AT)?;
+            let found = self.intact_member(run, (&receiver, "charAt", plan.test.get), CHAR_AT)?;
             if !found {
                 return Ok(false);
             }
@@ -443,7 +443,7 @@ impl<'a> Interp<'a> {
         run.part();
         if !state.checks[1] {
             let receiver = Value::Str(JsString::from_str(ALPHABET));
-            let found = self.lookup(run, (&receiver, "indexOf", plan.body.get), INDEX_OF)?;
+            let found = self.intact_member(run, (&receiver, "indexOf", plan.body.get), INDEX_OF)?;
             if !found {
                 return Ok(false);
             }
@@ -491,7 +491,7 @@ impl<'a> Interp<'a> {
         };
         if !state.checks[2] {
             let receiver = Value::Str(text.clone());
-            let found = self.lookup(run, (&receiver, "charCodeAt", probe), CHAR_CODE_AT)?;
+            let found = self.intact_member(run, (&receiver, "charCodeAt", probe), CHAR_CODE_AT)?;
             if !found {
                 return Ok(None);
             }
@@ -520,7 +520,8 @@ impl<'a> Interp<'a> {
         let path = state.emit.char;
         if !state.checks[3] {
             let string = self.read_lazy(run, (&plan.string, path.string), at)?;
-            let found = self.lookup(run, (&string, "fromCharCode", path.from), FROM_CHAR_CODE)?;
+            let found =
+                self.intact_member(run, (&string, "fromCharCode", path.from), FROM_CHAR_CODE)?;
             if !found {
                 return Ok(false);
             }
@@ -586,18 +587,18 @@ impl<'a> Interp<'a> {
     ) -> Eval<'a, bool> {
         run.part();
         let text = Value::Str(source.clone());
-        if !self.lookup(run, (&text, "charCodeAt", plan.gets[0]), CHAR_CODE_AT)? {
+        if !self.intact_member(run, (&text, "charCodeAt", plan.gets[0]), CHAR_CODE_AT)? {
             return Ok(false);
         }
         self.first_call(run, plan.call)?;
         let code = Value::Number(f64::from(unit));
-        if !self.lookup(run, (&code, "toString", plan.gets[1]), NUMBER_TO_STRING)? {
+        if !self.intact_member(run, (&code, "toString", plan.gets[1]), NUMBER_TO_STRING)? {
             return Ok(false);
         }
         let hex = number_to_radix_string(f64::from(unit), 16);
         run.owe(concat_charge(2, hex_digits(unit)));
         let piece = Value::Str(JsString::from_str(&format!("00{hex}")));
-        if !self.lookup(run, (&piece, "slice", plan.gets[2]), SLICE)? {
+        if !self.intact_member(run, (&piece, "slice", plan.gets[2]), SLICE)? {
             return Ok(false);
         }
         run.end(plan.body);

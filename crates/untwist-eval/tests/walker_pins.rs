@@ -427,8 +427,10 @@ const ROOT_DECLARATIONS: &str =
     "the compiled evaluator: a top-level let and a var bound by name on the root, as the walker binds them";
 const SESSION: &str =
     "session entry: the root env, the machinery closures, the string-array and decoder calls";
+const NATIVE_LOOPS: &str =
+    "native decoder loops: a compiled frame's slots, read before the loop and written back after it";
 
-const INVENTORY: [(&str, &str, usize, &str); 72] = [
+const INVENTORY: [(&str, &str, usize, &str); 76] = [
     ("builtins/charged.rs", "FrameRef<'", 3, HOLDER),
     ("builtins/mod.rs", "FrameRef<'", 7, REALM),
     ("builtins/mod.rs", "Frame<'", 1, REALM),
@@ -440,7 +442,7 @@ const INVENTORY: [(&str, &str, usize, &str); 72] = [
     ("compile/assign.rs", "FrameRef<'", 3, COMPILED),
     ("compile/block.rs", "FrameRef<'", 4, COMPILED),
     ("compile/block.rs", "make_closure(", 1, COMPILED),
-    ("compile/call.rs", "FrameRef<'", 6, COMPILED),
+    ("compile/call.rs", "FrameRef<'", 7, COMPILED),
     ("compile/call.rs", "make_closure(", 1, COMPILED),
     ("compile/declare.rs", "FrameRef<'", 3, COMPILED),
     ("compile/depth.rs", "FrameRef<'", 2, COMPILED),
@@ -502,6 +504,10 @@ const INVENTORY: [(&str, &str, usize, &str); 72] = [
     ("interp/mod.rs", "hoist(", 2, INTERPRETER),
     ("interp/mod.rs", "make_closure(", 2, INTERPRETER),
     ("interp/mod.rs", "new_env(", 1, INTERPRETER),
+    ("native_body/base64.rs", "FrameRef<'", 6, NATIVE_LOOPS),
+    ("native_body/exec.rs", "FrameRef<'", 7, NATIVE_LOOPS),
+    ("native_body/mod.rs", "FrameRef<'", 1, NATIVE_LOOPS),
+    ("native_body/rc4.rs", "FrameRef<'", 7, NATIVE_LOOPS),
     ("release.rs", "FrameRef<'", 2, HOLDER),
     ("release.rs", "Frame<'", 3, HOLDER),
     ("semantics/assign.rs", "FrameRef<'", 1, SHARED),
