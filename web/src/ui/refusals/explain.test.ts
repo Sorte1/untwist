@@ -55,7 +55,7 @@ describe('the refusal explanations', () => {
       ['Rewritten code', '', undefined],
     ]);
     expect(rows.shown[0]?.sentence).toMatch(/^may reach the string array/);
-    expect(rows.shown[1]?.sentence).toMatch(/^runs code built from text/);
+    expect(rows.shown[1]?.sentence).toMatch(/^may run code built from text/);
   });
 
   it('quote one line of code at most, cut to a readable length', () => {

@@ -38,7 +38,7 @@ const READS: Readonly<Record<string, string>> = {
   'destructured read': `destructures an object in a way that may hand out a built-in, ${UNTRUSTED}`,
   'rest pattern': `destructures an object in a way that may hand out a built-in, ${UNTRUSTED}`,
   'escaped runner name': `lets a built-in that runs code escape, ${UNTRUSTED}`,
-  'code from text': `runs code built from text, which Safe mode can't see into, ${UNTRUSTED}`,
+  'code from text': `may run code built from text, which Safe mode can't see into, ${UNTRUSTED}`,
   'an intrinsic passed to a user function': `hands a built-in to one of the program's functions, which may change it, ${UNTRUSTED}`,
   "a folded chain's assumed key may be written": `may write a key the decoder's lookups assume, ${UNTRUSTED}`,
   'write by an unknown key': `writes a property by a key Safe mode can't work out, which may replace a built-in, ${UNTRUSTED}`,
