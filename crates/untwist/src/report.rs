@@ -17,6 +17,8 @@ pub struct StageReport {
     pub iteration_elapsed: Vec<IterationTiming>,
     pub elapsed: Duration,
     pub stop: StopReason,
+    #[cfg(feature = "test-hooks")]
+    pub work: Vec<untwist_core::pass::Traversal>,
 }
 
 impl StageReport {
@@ -38,6 +40,8 @@ impl StageReport {
             iteration_elapsed: report.iteration_elapsed.clone(),
             elapsed: started.elapsed(),
             stop: report.stop,
+            #[cfg(feature = "test-hooks")]
+            work: untwist_core::pass::take_work_for_tests(),
         }
     }
 }
@@ -57,6 +61,27 @@ pub struct StageRow<'a> {
     iterations_ms: Vec<IterationMs>,
     elapsed_ms: f64,
     stop: &'static str,
+    #[cfg(feature = "test-hooks")]
+    work: Vec<WorkRow>,
+}
+
+#[cfg(feature = "test-hooks")]
+#[derive(Serialize)]
+pub struct WorkRow {
+    changes: u32,
+    walk: &'static str,
+}
+
+#[cfg(feature = "test-hooks")]
+fn work_rows(stage: &StageReport) -> Vec<WorkRow> {
+    stage
+        .work
+        .iter()
+        .map(|traversal| WorkRow {
+            changes: traversal.changes,
+            walk: if traversal.walked { "walked" } else { "parked" },
+        })
+        .collect()
 }
 
 fn millis(elapsed: Duration) -> f64 {
@@ -98,6 +123,8 @@ pub fn stage_rows(stages: &[StageReport]) -> Vec<StageRow<'_>> {
             iterations_ms: iterations_ms(s),
             elapsed_ms: millis(s.elapsed),
             stop: s.stop.as_str(),
+            #[cfg(feature = "test-hooks")]
+            work: work_rows(s),
         })
         .collect()
 }

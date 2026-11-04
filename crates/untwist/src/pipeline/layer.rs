@@ -220,6 +220,8 @@ fn peel_report(stages: &[StageReport], started: Instant) -> StageReport {
         iteration_elapsed: Vec::new(),
         elapsed,
         stop: StopReason::Converged,
+        #[cfg(feature = "test-hooks")]
+        work: Vec::new(),
     }
 }
 

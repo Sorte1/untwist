@@ -480,6 +480,11 @@ impl<'p, 'a> Traverse<'a, ()> for SinglePassRunner<'p, 'a> {
 
     fn exit_program(&mut self, node: &mut Program<'a>, _ctx: &mut TraverseCtx<'a, ()>) {
         unpark(node, &mut self.parked);
+        #[cfg(feature = "test-hooks")]
+        super::work::record(super::work::Traversal {
+            changes: *self.count,
+            walked: false,
+        });
     }
 }
 
@@ -621,6 +626,11 @@ impl<'a> Traverse<'a, ()> for PassGroup<'a> {
             node,
             ctx,
         );
+        #[cfg(feature = "test-hooks")]
+        super::work::record(super::work::Traversal {
+            changes: self.total_changes(),
+            walked: self.walks,
+        });
     }
 
     by_variant! {

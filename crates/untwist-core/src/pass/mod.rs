@@ -3,6 +3,8 @@ pub mod group;
 pub mod interest;
 pub mod repeated;
 mod settled;
+#[cfg(feature = "test-hooks")]
+mod work;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -38,6 +40,8 @@ pub use repeated::{RepeatedSites, SPANNED_NOTE_CAP};
 pub use settled::{edits, replay_allowed};
 #[cfg(feature = "test-hooks")]
 pub use settled::{full_rounds_for_tests, stale_settled_for_tests};
+#[cfg(feature = "test-hooks")]
+pub use work::{take_work_for_tests, Traversal};
 
 pub fn note_survives_retraction(note: &Note) -> bool {
     note.span.is_none() || note.kind == NoteKind::Progress
