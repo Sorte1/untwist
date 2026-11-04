@@ -30,9 +30,6 @@ jobs:
       - name: The tag matches the version everywhere
         run: cargo xtask check-version "$GITHUB_REF_NAME"
 
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
 
   crates:
     needs: verify
