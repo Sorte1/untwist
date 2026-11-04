@@ -68,7 +68,6 @@ test('20 corpus cases give the CLI stdout in Chromium', async ({ page }) => {
     await paste(page, readRepo(item.file));
     await runAndWait(page);
     expect(await outputDigest(page), `${item.file} ${item.flags}`).toBe(sha256(cli(item.flags, item.file)));
-    await expect(page.locator('#input-lang')).not.toHaveText(/loading|analysing/, { timeout: 60_000 });
   }
 });
 

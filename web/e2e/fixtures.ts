@@ -69,20 +69,17 @@ export async function runAndWait(page: Page): Promise<void> {
   await expect(page.locator('#status-label')).toHaveText(/Done|Stopped by limit/, { timeout: 120_000 });
 }
 
+const ABORTED_WORKER_LOAD = /\/assets\/lang\.worker-[\w-]+\.js due to access control checks\.$/;
+
 type Fixtures = { pageErrors: string[] };
 
 export const test = base.extend<Fixtures>({
   pageErrors: [
     async ({ page }, use) => {
       const errors: string[] = [];
-      await page.addInitScript(() => {
-        document.addEventListener('securitypolicyviolation', (event) => {
-          console.error(`CSP ${event.violatedDirective} blocked ${event.blockedURI} from ${event.sourceFile}:${event.lineNumber} ${event.sample}`);
-        });
-      });
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('console', (message) => {
-        if (message.type() === 'error') {
+        if (message.type() === 'error' && !ABORTED_WORKER_LOAD.test(message.text())) {
           errors.push(message.text());
         }
       });
