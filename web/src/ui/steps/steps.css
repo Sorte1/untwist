@@ -67,10 +67,27 @@
   color: var(--muted);
 }
 
+.step-against-menu {
+  position: relative;
+}
+
+.step-against-list {
+  top: 30px;
+  right: 0;
+  left: auto;
+  width: 220px;
+  max-height: 50dvh;
+  overflow: auto;
+}
+
 .step-select {
   height: 26px;
   max-width: 180px;
-  padding: 0 6px;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
   border: 1px solid var(--btn-border);
   border-radius: var(--radius);
   background: var(--code);
