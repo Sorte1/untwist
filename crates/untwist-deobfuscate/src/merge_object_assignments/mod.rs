@@ -6,6 +6,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
+use untwist_core::ast_util::global::is_global_reference;
 use untwist_core::ast_util::literal::is_safe_literal;
 use untwist_core::ast_util::prop::prop_name;
 use untwist_core::ast_util::readonly::{scan_symbol_uses, PropRead, SymbolUses};
@@ -524,7 +525,7 @@ fn resolvable_dynamic_keys(
     program: &Program<'_>,
     scoping: &Scoping,
     candidates: &FxHashSet<SymbolId>,
-    memo: &mut FxHashMap<SymbolId, bool>,
+    (memo, pristine): (&mut FxHashMap<SymbolId, bool>, bool),
 ) -> FxHashSet<SymbolId> {
     if candidates.is_empty() {
         return FxHashSet::default();
@@ -544,13 +545,43 @@ fn resolvable_dynamic_keys(
                 init.map(|init| (init.span(), std::mem::discriminant(init))),
             )),
         );
-        memo.insert(*symbol, init.is_some_and(is_a_safe_literal_key));
+        let safe = init.is_some_and(|init| {
+            is_a_safe_literal_key(init) || (pristine && is_a_symbol(init, scoping))
+        });
+        memo.insert(*symbol, safe);
     }
     candidates
         .iter()
         .copied()
         .filter(|symbol| memo.get(symbol).copied().unwrap_or(false))
         .collect()
+}
+
+fn global_is_written(scoping: &Scoping, name: &str) -> bool {
+    scoping
+        .root_unresolved_references()
+        .iter()
+        .filter(|(unresolved, _)| unresolved.as_str() == name)
+        .any(|(_, ids)| ids.iter().any(|id| scoping.get_reference(*id).is_write()))
+}
+
+fn is_a_symbol(init: &Expression<'_>, scoping: &Scoping) -> bool {
+    let Expression::CallExpression(call) = init.without_parentheses() else {
+        return false;
+    };
+    let root = match call.callee.without_parentheses() {
+        Expression::Identifier(id) => id,
+        Expression::StaticMemberExpression(member) if member.property.name == "for" => {
+            let Expression::Identifier(id) = member.object.without_parentheses() else {
+                return false;
+            };
+            id
+        }
+        _ => return false,
+    };
+    root.name == "Symbol"
+        && is_global_reference(scoping, root)
+        && !global_is_written(scoping, "Symbol")
 }
 
 fn is_a_safe_literal_key(init: &Expression<'_>) -> bool {
@@ -594,7 +625,9 @@ impl<'a> Pass<'a> for MergeObjectAssignments {
         }
         let (keys, found) = keys_and_candidates(program, cx.scoping(), cx.opts.extended);
         if let Some(keys) = keys.as_ref() {
-            self.resolved = resolvable_dynamic_keys(program, cx.scoping(), keys, &mut self.memo);
+            let pristine = cx.opts.unsafe_transforms;
+            self.resolved =
+                resolvable_dynamic_keys(program, cx.scoping(), keys, (&mut self.memo, pristine));
         }
         let conservative = (!cx.opts.extended).then_some(&self.folded);
         let candidates = folded_only(found, conservative);
