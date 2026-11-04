@@ -5,6 +5,7 @@ use super::clock;
 use super::extras::Extras;
 use super::schema::{bare_json, report_json, RunFacts};
 use super::stages;
+use super::strings::decoded_json;
 use crate::limits::{self, limits_of};
 use crate::{exit_code, isolation, options_from, stderr_of, stdout_of, USAGE_ERROR};
 
@@ -18,6 +19,8 @@ pub struct RunReport {
     bundle_json: Option<String>,
     modules: Vec<String>,
     snapshots: Vec<Option<String>>,
+    decoded: String,
+    decoded_count: u32,
 }
 
 #[wasm_bindgen]
@@ -57,6 +60,14 @@ impl RunReport {
     pub fn module_code(&self, index: u32) -> Option<String> {
         let index = usize::try_from(index).ok()?;
         self.modules.get(index).cloned()
+    }
+
+    pub fn decoded_count(&self) -> u32 {
+        self.decoded_count
+    }
+
+    pub fn decoded_strings_json(&self) -> String {
+        self.decoded.clone()
     }
 
     pub fn snapshot_count(&self) -> u32 {
@@ -108,6 +119,8 @@ fn report_with(source: &str, options: Options) -> RunReport {
                 .collect()
         })
         .unwrap_or_default();
+    let decoded = decoded_json(&result.decoded_strings, source);
+    let decoded_count = u32::try_from(result.decoded_strings.len()).unwrap_or(u32::MAX);
     let snapshots = std::mem::take(&mut result.snapshots)
         .into_iter()
         .map(|row| match row.code {
@@ -124,6 +137,8 @@ fn report_with(source: &str, options: Options) -> RunReport {
         bundle_json,
         modules,
         snapshots,
+        decoded,
+        decoded_count,
     }
 }
 
@@ -160,6 +175,7 @@ fn report_for(
                 },
                 refusal_spans: extras.refusals,
                 stage_snapshots: extras.snapshot_cap(),
+                decoded_strings: extras.strings,
                 ..options
             },
         ),
@@ -172,6 +188,8 @@ fn report_for(
             bundle_json: None,
             modules: Vec::new(),
             snapshots: Vec::new(),
+            decoded: String::new(),
+            decoded_count: 0,
         },
     }
 }
@@ -382,6 +400,44 @@ mod tests {
         let out = run_report_staged(DECODED, "", false, "refusals");
         assert_eq!(out.snapshot_count(), 0);
         assert!(!out.report_json().contains("\"snapshots\""));
+    }
+
+    #[test]
+    fn asked_for_strings_a_run_lists_each_decoded_call_site_with_its_value() {
+        let source = format!("var accent = \"\u{e9}\";\n{DECODED}");
+        let out = report_for(&source, "", false, None, Extras::from_words("strings"));
+        assert_eq!(out.stdout(), run_report(&source, "", false).stdout());
+        assert_eq!(out.decoded_count(), 2);
+        let table: serde_json::Value =
+            serde_json::from_str(&out.decoded_strings_json()).unwrap_or_default();
+        let units: Vec<u16> = source.encode_utf16().collect();
+        let rows: Vec<(String, String)> = table["rows"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|row| {
+                let from = usize::try_from(row[0].as_u64()?).ok()?;
+                let to = usize::try_from(row[1].as_u64()?).ok()?;
+                let call = String::from_utf16(units.get(from..to)?).ok()?;
+                Some((call, row[2].as_str()?.to_string()))
+            })
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("b(0x0)".to_string(), "He".to_string()),
+                ("b(0x1)".to_string(), "llo".to_string())
+            ]
+        );
+        assert_eq!(table["more"], 0);
+    }
+
+    #[test]
+    fn without_the_extra_no_string_is_listed() {
+        let out = run_report_staged(DECODED, "", false, "refusals");
+        assert_eq!(out.decoded_count(), 0);
+        assert_eq!(out.decoded_strings_json(), "");
     }
 
     fn same(source: &str, flags: &str, refused: bool) {

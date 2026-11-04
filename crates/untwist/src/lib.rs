@@ -17,9 +17,9 @@ pub use pipeline::{
     PIPELINE_NOTES, PRINT_TOO_LARGE, TYPESCRIPT_IN_JAVASCRIPT, UNPACK_PANICKED,
     UNPACK_TEXT_TOO_DEEP, WORKER_DIED,
 };
+pub use pipeline::{DecodedSite, Snapshot, SnapshotCode};
 #[cfg(feature = "refusal-spans")]
 pub use pipeline::{RefusalSite, SiteAt};
-pub use pipeline::{Snapshot, SnapshotCode};
 pub use plugin::{PluginCtor, Plugins, Stage};
 pub use report::{stage_rows, StageReport, StageRow};
 pub use stats::{CollisionStats, DecodeStats, RunStats};

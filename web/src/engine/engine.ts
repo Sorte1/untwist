@@ -2,7 +2,7 @@ import wasmUrl from './pkg/untwist_wasm_bg.wasm?url';
 import RunWorker from './run.worker.ts?worker';
 import type { RunResult, WorkerReply } from './types';
 
-export const REPORT_EXTRAS = 'refusals';
+export const REPORT_EXTRAS = 'refusals strings';
 
 export class Cancelled extends Error {
   constructor() {

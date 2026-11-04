@@ -59,6 +59,8 @@ function run(source: string, flags: string, refused: boolean, extras: string): v
       bundleJson: output.bundle_json() ?? null,
       modules: modulesOf(output),
       snapshots: snapshotsOf(output),
+      decodedStrings: output.decoded_strings_json(),
+      decodedCount: output.decoded_count(),
       engineMs: performance.now() - started,
       memoryBytes: memory?.buffer.byteLength ?? 0,
     };

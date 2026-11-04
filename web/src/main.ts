@@ -30,6 +30,7 @@ import { mountRunProgress } from './ui/run-progress';
 import { mountSettingsPanel } from './ui/settings-panel';
 import { mountShareLink } from './ui/share-link';
 import { mountSteps } from './ui/steps-view';
+import { mountStringsTab } from './ui/strings-tab';
 import { mountStatusBar } from './ui/status-bar';
 import { mountDetailsToggle } from './ui/details/toggle';
 import { mountSummaryChip } from './ui/summary-chip';
@@ -134,6 +135,7 @@ function main(): void {
   mountDiagnosticsPanel();
   mountModeSwitch(store);
   mountStringsBanner(store, start, inputView);
+  mountStringsTab(store, inputView);
   mountDetailsToggle(store, () => flagsFrom(store.get().settings));
   mountPaletteKey(store, { run, pickExample });
   requestAnimationFrame(() => performance.mark('untwist:editors-painted'));

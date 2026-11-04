@@ -1,4 +1,5 @@
 mod boundary;
+mod decoded;
 mod input;
 mod ladder;
 mod layer;
@@ -27,6 +28,7 @@ use crate::bundle::BundleOutput;
 use crate::diagnostics::format_diagnostic;
 use crate::options::{Options, Progress};
 use crate::report::StageReport;
+pub use decoded::DecodedSite;
 use input::InputResult;
 use ladder::Ladder;
 #[cfg(feature = "refusal-spans")]
@@ -53,6 +55,7 @@ pub struct Output {
     pub heap_peak: u64,
     pub stats: crate::stats::RunStats,
     pub snapshots: Vec<Snapshot>,
+    pub decoded_strings: Vec<DecodedSite>,
     #[cfg(feature = "refusal-spans")]
     pub refusal_spans: Vec<String>,
     #[cfg(feature = "refusal-spans")]
@@ -135,6 +138,7 @@ struct OutputParts {
     guards: GuardRecord,
     unbundled: bool,
     snapshots: Vec<Snapshot>,
+    decoded_strings: Vec<DecodedSite>,
     #[cfg(feature = "refusal-spans")]
     refusal_spans: Vec<String>,
     #[cfg(feature = "refusal-spans")]
@@ -157,6 +161,12 @@ impl OutputParts {
                 .extend(result.snapshots.rows.into_iter().map(|row| Snapshot {
                     input: index,
                     ..row
+                }));
+            parts
+                .decoded_strings
+                .extend(result.decoded_strings.into_iter().map(|site| DecodedSite {
+                    input: index,
+                    ..site
                 }));
             parts.unbundled &= result.refused || result.unbundled;
             parts.codes.push(result.code);
@@ -201,6 +211,7 @@ impl OutputParts {
             heap_peak: self.heap_peak,
             stats: self.stats,
             snapshots: self.snapshots,
+            decoded_strings: self.decoded_strings,
             #[cfg(feature = "refusal-spans")]
             refusal_spans: self.refusal_spans,
             #[cfg(feature = "refusal-spans")]

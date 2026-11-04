@@ -424,6 +424,7 @@ mod tests {
             heap_peak: 0,
             stats: crate::RunStats::default(),
             snapshots: Vec::new(),
+            decoded_strings: Vec::new(),
             #[cfg(feature = "refusal-spans")]
             refusal_spans: Vec::new(),
             #[cfg(feature = "refusal-spans")]

@@ -4,6 +4,7 @@ pub const SNAPSHOT_CAP_BYTES: usize = 24 * 1024 * 1024;
 pub struct Extras {
     pub refusals: bool,
     pub snapshots: bool,
+    pub strings: bool,
 }
 
 impl Extras {
@@ -17,6 +18,10 @@ impl Extras {
                 },
                 "snapshots" => Self {
                     snapshots: true,
+                    ..extras
+                },
+                "strings" => Self {
+                    strings: true,
                     ..extras
                 },
                 _ => extras,
@@ -42,5 +47,7 @@ mod tests {
         assert!(both.refusals && both.snapshots);
         assert_eq!(both.snapshot_cap(), Some(super::SNAPSHOT_CAP_BYTES));
         assert_eq!(Extras::from_words("refusals").snapshot_cap(), None);
+        assert!(Extras::from_words("refusals strings").strings);
+        assert!(!Extras::from_words("refusals").strings);
     }
 }
