@@ -310,6 +310,9 @@ pub const DEOBFUSCATE_SPANS_EXHAUSTED: &str =
 pub const SCOPE_HAZARD: &str =
     "may reach the decoder by a name this stage renames or removes; deobfuscating anyway";
 pub const ROUND_CAP: &str = "deobfuscate round cap";
+pub const DECODE_DEFERRED_AT_STOP: &str =
+    "string-array decoding was still deferred when the deobfuscate rounds stopped, so its call \
+     sites were left alone";
 pub const PREPARATION_STOPPED_EARLY: &str = "preparation stopped early";
 const PLANNED_AND_APPLIED: &str = "and applied";
 pub const EDIT_PLAN_INCOMPLETE: &str = " of its edits";
@@ -611,6 +614,7 @@ catalogue!(
     DEBUG_PROTECTION_NO_USABLE_SPAN,
     DEOBFUSCATE_SPANS_EXHAUSTED,
     ROUND_CAP,
+    DECODE_DEFERRED_AT_STOP,
     PREPARATION_STOPPED_EARLY,
     INIT_ORDER_OVERFLOW,
     EDIT_PLAN_INCOMPLETE,

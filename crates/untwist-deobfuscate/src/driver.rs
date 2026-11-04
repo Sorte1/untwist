@@ -202,6 +202,7 @@ struct Aggregate {
     notes: NoteSet,
     stage_stop: Option<StopReason>,
     capped: bool,
+    deferred: bool,
     stamped: bool,
     skipped_noted: bool,
 }
@@ -221,6 +222,7 @@ impl Aggregate {
             notes: NoteSet::default(),
             stage_stop: None,
             capped: false,
+            deferred: false,
             stamped: false,
             skipped_noted: false,
         }
@@ -237,6 +239,7 @@ impl Aggregate {
 
     fn begin_round(&mut self) {
         self.stage_stop = None;
+        self.deferred = false;
     }
 
     fn absorb(&mut self, index: usize, report: RunReport) -> u32 {
@@ -308,6 +311,14 @@ impl Aggregate {
                 pass: "deobfuscate",
                 kind: NoteKind::Refusal,
                 message: notes::round_cap(DEOBFUSCATE_MAX_ROUNDS),
+                span: None,
+            });
+        }
+        if self.deferred {
+            self.push_note(Note {
+                pass: "deobfuscate",
+                kind: NoteKind::Refusal,
+                message: notes::DECODE_DEFERRED_AT_STOP.to_string(),
                 span: None,
             });
         }
@@ -464,6 +475,7 @@ fn run_round<'a>(
             let mut group = stage_group(index, ctor, opts, shared);
             let (next, report) = run_once(alloc, program, sem, &mut group);
             sem = next;
+            aggregate.deferred |= group.deferred_pending();
             changes += aggregate.absorb(index, report);
             if index == WRAPPERS {
                 clear_kept_order();
@@ -660,17 +672,22 @@ fn run_rounds<'a>(
         stage_options(0, opts),
     );
     let mut sem = sem;
+    let disabled = opts.defer_disabled.get();
     loop {
         let (next, changes) = run_round(alloc, program, sem, opts, &mut finder, shared, aggregate);
         sem = next;
         aggregate.rounds += 1;
-        if changes == 0 {
+        let retry = changes == 0 && aggregate.deferred && !opts.defer_disabled.get();
+        if changes == 0 && !retry {
+            opts.defer_disabled.set(disabled);
             return sem;
         }
         if aggregate.rounds >= DEOBFUSCATE_MAX_ROUNDS {
             aggregate.capped = true;
+            opts.defer_disabled.set(disabled);
             return sem;
         }
+        opts.defer_disabled.set(disabled || retry);
     }
 }
 
