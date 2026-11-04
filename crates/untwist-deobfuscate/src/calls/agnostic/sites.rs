@@ -123,7 +123,7 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) text_judged: bool,
     pub(super) forward_calls: FxHashSet<Span>,
     pub(super) pending_texts: RefCell<Vec<String>>,
-    pub(super) flow: &'s Flow,
+    pub(super) flow: &'s Flow<'s, 'a>,
 }
 
 impl<'s, 'a> Sites<'s, 'a> {
@@ -132,7 +132,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         (resolve, machinery, watch): super::settle::Inputs<'s>,
         fresh_calls: bool,
         symbol_safe: bool,
-        flow: &'s Flow,
+        flow: &'s Flow<'s, 'a>,
     ) -> Self {
         Self {
             fresh,

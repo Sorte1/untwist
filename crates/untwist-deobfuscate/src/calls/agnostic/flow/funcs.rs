@@ -6,6 +6,8 @@ use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::calls::agnostic::text::closed_runner_read;
+
 const SEEN: u8 = 1;
 const NON_CALLEE: u8 = 2;
 
@@ -30,6 +32,7 @@ pub(super) struct Pre {
     pub(super) global_unknown_write: bool,
     pub(super) written_keys: FxHashSet<String>,
     pub(super) accessor_names: FxHashSet<String>,
+    pub(super) closed_reads: FxHashSet<u32>,
 }
 
 impl Pre {
@@ -72,6 +75,7 @@ pub(super) struct Prescan<'s> {
     global_unknown_write: bool,
     written_keys: FxHashSet<String>,
     accessor_names: FxHashSet<String>,
+    closed_reads: FxHashSet<u32>,
     stack: Vec<u32>,
 }
 
@@ -89,6 +93,7 @@ impl<'s> Prescan<'s> {
             global_unknown_write: false,
             written_keys: FxHashSet::default(),
             accessor_names: FxHashSet::default(),
+            closed_reads: FxHashSet::default(),
             stack: Vec::new(),
         }
     }
@@ -104,6 +109,7 @@ impl<'s> Prescan<'s> {
             global_unknown_write,
             written_keys,
             accessor_names,
+            closed_reads,
             ..
         } = self;
         let named_starts: FxHashSet<u32> = by_symbol.values().copied().collect();
@@ -147,6 +153,7 @@ impl<'s> Prescan<'s> {
             global_unknown_write,
             written_keys,
             accessor_names,
+            closed_reads,
         }
     }
 
@@ -286,6 +293,9 @@ impl<'a> VisitJs<'a> for Prescan<'_> {
         self.note_iife(&it.callee);
         if let Expression::Identifier(id) = it.callee.without_parentheses() {
             self.callee_next = Some(id.span.start);
+            if id.name == "eval" && closed_runner_read(it, self.scoping).is_some() {
+                self.closed_reads.insert(it.span.start);
+            }
         }
         walk_js::walk_call_expression(self, it);
     }

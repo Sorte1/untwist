@@ -13,7 +13,7 @@ fn reaches_at(source: &str, needle: &str) -> Option<Span> {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, source);
     let semantics = build_scoping(&parsed.program);
-    let flow = Flow::collect(&parsed.program, &semantics.scoping, None);
+    let flow = Flow::new(&parsed.program, &semantics.scoping, None);
     flow.sink_of(span_of(source, needle))
 }
 

@@ -81,7 +81,7 @@ pub(super) fn run<'s, 'a>(
     (resolve, machinery, watch): Inputs<'s>,
     fresh_calls: bool,
     symbol_safe: bool,
-    flow: &'s Flow,
+    flow: &'s Flow<'s, 'a>,
 ) -> (Agnostic<'a>, bool, bool) {
     let fresh = Fresh {
         scoping,
@@ -140,7 +140,7 @@ fn settle_ordered<'a>(
     (resolve, machinery, watch): Inputs<'_>,
 ) -> (Agnostic<'a>, Vec<SymbolId>) {
     let mut bindings = Bindings::collect(program, scoping, !watch.names.is_empty(), resolve);
-    let flow = Flow::collect(program, scoping, resolve);
+    let flow = Flow::new(program, scoping, resolve);
     let globals = script_globals(program, scoping);
     let mut judged = Judged {
         source: bindings.global_source(),
@@ -191,7 +191,7 @@ pub(super) fn analyse<'s, 'a>(
     bindings: &'s Bindings<'s, 'a>,
     inputs: Inputs<'s>,
     symbol_safe: bool,
-    flow: &'s Flow,
+    flow: &'s Flow<'s, 'a>,
 ) -> Agnostic<'a> {
     let (mut out, mut chains, natives) =
         run(program, scoping, bindings, inputs, true, symbol_safe, flow);

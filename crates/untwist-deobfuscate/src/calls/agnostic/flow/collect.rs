@@ -7,9 +7,8 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 
 use super::funcs::{Pre, RetFate};
-use super::{Flow, UNREACHED};
+use super::{Graph, UNREACHED};
 use crate::calls::agnostic::sites::span_key;
-use crate::calls::agnostic::text::closed_runner_read;
 use untwist_eval::value::JsString;
 
 const INERT_IDENT_NATIVES: [&str; 6] = [
@@ -275,7 +274,7 @@ impl<'s> Collector<'s> {
     }
 
     pub(super) fn reads_closed_runner(&self, call: &CallExpression<'_>) -> bool {
-        closed_runner_read(call, self.scoping).is_some()
+        !self.pre.closed_reads.is_empty() && self.pre.closed_reads.contains(&call.span.start)
     }
 
     fn callee_start(&self, callee: &Expression<'_>) -> Option<u32> {
@@ -416,7 +415,7 @@ impl<'s> Collector<'s> {
         }
     }
 
-    pub(super) fn solve(mut self) -> Flow {
+    pub(super) fn solve(mut self) -> Graph {
         for (&start, &ret) in &self.rets {
             if let Some(RetFate::Sink) = self.pre.fate_of(start) {
                 let span = self
@@ -463,7 +462,7 @@ impl<'s> Collector<'s> {
                 }
             }
         }
-        Flow {
+        Graph {
             reads: self.reads,
             reached,
             sinks: spans,
