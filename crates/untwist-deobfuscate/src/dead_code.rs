@@ -5,6 +5,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{Span, SPAN};
 use oxc_str::Ident;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
+use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -12,7 +13,7 @@ use untwist_core::ast_util::rename::{is_name_taken, Renames, UNIQUE_NAME_SUFFIX_
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
 };
-use untwist_core::semantic::program_is_strict;
+use untwist_core::semantic::{program_is_strict, scope_hazard};
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 use crate::notes;
@@ -199,6 +200,52 @@ fn hoisted_by<'a>(statement: Option<&Statement<'a>>) -> Hoisted<'a> {
     hoisted
 }
 
+#[derive(Default)]
+struct References {
+    ids: FxHashSet<ReferenceId>,
+}
+
+impl<'a> Visit<'a> for References {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if let Some(id) = it.reference_id.get() {
+            self.ids.insert(id);
+        }
+    }
+}
+
+fn references_in(statement: Option<&Statement<'_>>) -> FxHashSet<ReferenceId> {
+    let mut references = References::default();
+    if let Some(statement) = statement {
+        references.visit_statement(statement);
+    }
+    references.ids
+}
+
+fn seen_elsewhere(symbol: SymbolId, dropped: &FxHashSet<ReferenceId>, scoping: &Scoping) -> bool {
+    scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
+        || scoping
+            .get_resolved_reference_ids(symbol)
+            .iter()
+            .any(|reference| !dropped.contains(reference))
+}
+
+fn still_needed<'a>(
+    names: Vec<(Ident<'a>, Option<SymbolId>)>,
+    dropped: Option<&Statement<'a>>,
+    scoping: &Scoping,
+) -> Vec<(Ident<'a>, Option<SymbolId>)> {
+    if scope_hazard(scoping).is_some() || has_with(scoping) {
+        return names;
+    }
+    let references = references_in(dropped);
+    names
+        .into_iter()
+        .filter(|(_, symbol)| {
+            symbol.is_none_or(|symbol| seen_elsewhere(symbol, &references, scoping))
+        })
+        .collect()
+}
+
 fn var_statement<'a>(names: &[(Ident<'a>, Option<SymbolId>)], cx: &Cx<'a, '_>) -> Statement<'a> {
     let declarators = AVec::from_iter_in(
         names.iter().map(|&(name, symbol)| {
@@ -256,13 +303,14 @@ impl<'a> DeadCode<'a> {
             stmts.push(Statement::IfStatement(node));
             return false;
         }
+        let names = still_needed(hoisted.names, dropped, cx.scoping());
         let IfStatement {
             consequent,
             alternate,
             ..
         } = node.unbox();
-        if !hoisted.names.is_empty() {
-            stmts.push(var_statement(&hoisted.names, cx));
+        if !names.is_empty() {
+            stmts.push(var_statement(&names, cx));
         }
         match if value { Some(consequent) } else { alternate } {
             None => {}

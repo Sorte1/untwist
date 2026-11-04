@@ -36,7 +36,7 @@ pair-calls+self	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-calls+split	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-calls+unicode	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-cff+calls	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
-pair-cff+dead	10	7/10	10/10	10/10	0	safe-dead-code-vars (1), safe-global-key-reach (2)
+pair-cff+dead	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-cff+debug	10	6/10	10/10	10/10	0	safe-debug-protection-kept (2), safe-global-key-reach (2)
 pair-cff+keys	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-cff+num	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
@@ -45,15 +45,15 @@ pair-cff+self	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-cff+split	10	8/10	10/10	1/10	0	safe-global-key-reach (2)
 pair-cff+unicode	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-cff+wrap	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
-pair-dead+calls	10	7/10	10/10	10/10	0	safe-dead-code-vars (1), safe-global-key-reach (2)
-pair-dead+debug	10	4/10	10/10	10/10	0	safe-debug-protection-kept (4), safe-global-key-reach (2)
-pair-dead+keys	10	7/10	10/10	10/10	0	safe-dead-code-vars (1), safe-global-key-reach (2)
+pair-dead+calls	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
+pair-dead+debug	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
+pair-dead+keys	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-dead+num	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-dead+rc4	10	4/10	10/10	10/10	0	builtin-replaced-decoded-key (1), safe-global-key-reach (2), safe-global-names (3)
-pair-dead+self	10	7/10	10/10	10/10	0	safe-global-key-reach (2), safe-global-names (1)
+pair-dead+self	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-dead+split	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
-pair-dead+unicode	10	7/10	10/10	10/10	0	safe-dead-code-vars (1), safe-global-key-reach (2)
-pair-dead+wrap	10	7/10	10/10	10/10	0	safe-dead-code-vars (1), safe-global-key-reach (2)
+pair-dead+unicode	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
+pair-dead+wrap	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-keys+debug	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-keys+self	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 pair-keys+unicode	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
@@ -87,7 +87,7 @@ pair-wrap+unicode	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 preset-default	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 preset-high	10	0/10	10/10	10/10	0	safe-decode-step-budget (10)
 preset-low	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
-preset-medium	10	1/10	10/10	10/10	0	builtin-replaced-decoded-key (3), safe-global-key-reach (4), safe-global-names (2)
+preset-medium	10	2/10	10/10	10/10	0	builtin-replaced-decoded-key (3), safe-global-key-reach (4), safe-global-names (1)
 rename-globals	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 rename-properties-safe	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 rename-properties-unsafe	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
@@ -115,9 +115,8 @@ wrappers-function-params-5	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 wrappers-unchained	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
 safe-global-key-reach	104	209	209	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve (an object spread or rest enumerates values, a Symbol-valued computed key), so the unit's call sites are left alone
-safe-global-names	17	44	44	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
+safe-global-names	16	42	42	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
 builtin-replaced-decoded-key	13	23	23	0	a call or write on a built-in whose key is itself a decoder call (String.fromCharCode, Map.prototype.set, Object.keys, the console override's prototype writes) is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused; the earlier stateful-decoder note is from a round before the wrappers were inlined
-safe-dead-code-vars	5	5	5	0	safe lane: folding a dead-code-injection branch keeps the var it hoisted, an unused declaration the unsafe lane drops
 safe-domain-lock-reach	2	20	20	0	safe lane: the domain lock's own for-in scan of the global object is a global reach, so the unit is refused before the lock is removed
-safe-debug-protection-kept	2	6	6	0	safe lane: after control-flow flattening or dead-code injection a reference to the debug protection function survives outside the statements the pass removes, so it stays and its Function global getter then blocks the unit
 safe-decode-step-budget	1	10	10	0	safe lane: decoding the high preset's rc4 unit runs out of the evaluator's step budget
+safe-debug-protection-kept	1	2	2	0	safe lane: after control-flow flattening or dead-code injection a reference to the debug protection function survives outside the statements the pass removes, so it stays and its Function global getter then blocks the unit
