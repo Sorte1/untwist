@@ -130,7 +130,7 @@ function main(): void {
   mountSettingsPanel(store);
   mountDiagnosticsPanel();
   mountModeSwitch(store);
-  mountStringsBanner(store, start);
+  mountStringsBanner(store, start, inputView);
   mountDetailsToggle(store, () => flagsFrom(store.get().settings));
   mountPaletteKey(store, { run, pickExample });
   requestAnimationFrame(() => performance.mark('untwist:editors-painted'));

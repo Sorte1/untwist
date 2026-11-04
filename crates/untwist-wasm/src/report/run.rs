@@ -2,6 +2,7 @@ use untwist::{Isolation, Options, Pipeline, ProgressSink};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use super::clock;
+use super::extras::Extras;
 use super::schema::{bare_json, report_json, RunFacts};
 use super::stages;
 use crate::limits::{self, limits_of};
@@ -110,12 +111,18 @@ fn report_with(source: &str, options: Options) -> RunReport {
 
 #[wasm_bindgen]
 pub fn run_report(source: &str, flags: &str, refused: bool) -> RunReport {
-    report_for(source, flags, refused, None)
+    report_for(source, flags, refused, None, Extras::default())
 }
 
 #[wasm_bindgen]
-pub fn run_report_staged(source: &str, flags: &str, refused: bool) -> RunReport {
-    report_for(source, flags, refused, Some(stages::sink()))
+pub fn run_report_staged(source: &str, flags: &str, refused: bool, extras: &str) -> RunReport {
+    report_for(
+        source,
+        flags,
+        refused,
+        Some(stages::sink()),
+        Extras::from_words(extras),
+    )
 }
 
 fn report_for(
@@ -123,6 +130,7 @@ fn report_for(
     flags: &str,
     refused: bool,
     progress: Option<ProgressSink>,
+    extras: Extras,
 ) -> RunReport {
     match options_from(flags) {
         Ok(options) => report_with(
@@ -132,6 +140,7 @@ fn report_for(
                     progress,
                     ..isolation(refused)
                 },
+                refusal_spans: extras.refusals,
                 ..options
             },
         ),
@@ -154,7 +163,7 @@ mod tests {
     use untwist::{Progress, ProgressSink};
 
     use super::{report_for, run_report, run_report_staged};
-    use crate::report::SCHEMA;
+    use crate::report::{Extras, SCHEMA};
     use crate::run;
 
     const DECODED: &str = "function a() { var h = ['He', 'llo']; a = function () { return h; }; return a(); }\n\
@@ -186,7 +195,7 @@ mod tests {
                     .push(name);
             }
         });
-        let out = report_for(source, flags, false, Some(sink));
+        let out = report_for(source, flags, false, Some(sink), Extras::default());
         let names = seen.lock().unwrap_or_else(PoisonError::into_inner).clone();
         (names, out)
     }
@@ -220,10 +229,68 @@ mod tests {
 
     #[test]
     fn the_staged_run_without_a_listener_is_the_plain_run() {
-        let staged = run_report_staged(DECODED, "", false);
+        let staged = run_report_staged(DECODED, "", false, "");
         let plain = run_report(DECODED, "", false);
         assert_eq!(staged.stdout(), plain.stdout());
         assert_eq!(staged.code(), plain.code());
+    }
+
+    const REFUSED_IN_SAFE: &str = "function a() { var h = ['He', 'llo']; a = function () { return h; }; return a(); }\n\
+        function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return e[f]; }; return b(c, d); }\n\
+        var k = 'x' + 1;\n\
+        console.log(b(0x0) + b(0x1), window[k]);";
+
+    fn refusal_sites(report: &str) -> Vec<serde_json::Value> {
+        let value: serde_json::Value = serde_json::from_str(report).unwrap_or_default();
+        value["refusalSites"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn slice_of(source: &str, site: &serde_json::Value) -> Option<String> {
+        let units: Vec<u16> = source.encode_utf16().collect();
+        let span = site["inputSpan"].as_array()?;
+        let from = usize::try_from(span.first()?.as_u64()?).ok()?;
+        let to = usize::try_from(span.get(1)?.as_u64()?).ok()?;
+        String::from_utf16(units.get(from..to)?).ok()
+    }
+
+    #[test]
+    fn asked_for_refusals_the_report_points_at_the_code_that_kept_the_decoder() {
+        let wants = Extras { refusals: true };
+        for prefix in ["", "var accent = \"\u{e9}\u{1f600}\";\n"] {
+            let source = format!("{prefix}{REFUSED_IN_SAFE}");
+            let out = report_for(&source, "", false, None, wants);
+            let plain = run_report(&source, "", false);
+            assert_eq!(out.stdout(), plain.stdout());
+            assert_eq!(out.stderr(), plain.stderr());
+            let sites = refusal_sites(&out.report_json());
+            assert!(sites.iter().all(|site| site["layer"] == 0), "{sites:?}");
+            let slices: Vec<String> = sites
+                .iter()
+                .filter_map(|site| slice_of(&source, site))
+                .collect();
+            assert!(
+                slices.iter().any(|slice| slice == "window[k]"),
+                "{slices:?} from {sites:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn without_the_extra_or_a_refusal_the_report_lists_no_sites() {
+        let unasked = run_report_staged(REFUSED_IN_SAFE, "", false, "").report_json();
+        assert!(!unasked.contains("refusalSites"), "{unasked}");
+        let decoded = report_for(
+            REFUSED_IN_SAFE,
+            "--unsafe",
+            false,
+            None,
+            Extras { refusals: true },
+        );
+        assert!(refusal_sites(&decoded.report_json()).is_empty());
+        assert!(!decoded.stdout().contains("b(0)"), "{}", decoded.stdout());
     }
 
     fn same(source: &str, flags: &str, refused: bool) {

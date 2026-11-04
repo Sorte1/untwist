@@ -19,7 +19,7 @@ export interface RunResult extends RunFields {
 
 export type WorkerRequest =
   | { readonly kind: 'init'; readonly module: WebAssembly.Module }
-  | { readonly kind: 'run'; readonly source: string; readonly flags: string; readonly refused: boolean };
+  | { readonly kind: 'run'; readonly source: string; readonly flags: string; readonly refused: boolean; readonly extras: string };
 
 export type WorkerReply =
   | { readonly kind: 'ready' }

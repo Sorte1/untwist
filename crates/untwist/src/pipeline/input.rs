@@ -39,8 +39,8 @@ pub(super) struct InputResult {
     pub(super) heap_peak: u64,
     pub(super) guards: GuardRecord,
     pub(super) unbundled: bool,
-    #[cfg(feature = "test-hooks")]
-    pub(super) refusal_spans: Vec<String>,
+    #[cfg(feature = "refusal-spans")]
+    pub(super) refusal_sites: Vec<super::RefusalSite>,
 }
 
 impl InputResult {
@@ -164,10 +164,10 @@ impl Pipeline {
         };
         settle(outcome, source, &mut result);
         result.notes = consolidate_reach(dedupe_spanned(std::mem::take(&mut result.notes)));
-        #[cfg(feature = "test-hooks")]
+        #[cfg(feature = "refusal-spans")]
         {
-            let spans = std::mem::take(&mut result.refusal_spans);
-            result.refusal_spans = super::refusal_spans::kept(&result.notes, spans);
+            let sites = std::mem::take(&mut result.refusal_sites);
+            result.refusal_sites = super::refusal_spans::kept(&result.notes, sites);
         }
         result
     }
@@ -216,6 +216,11 @@ impl Pipeline {
         }
     }
 
+    #[cfg(feature = "refusal-spans")]
+    fn records_refusal_spans(&self) -> bool {
+        self.options.refusal_spans || self.options.hooks().refusal_spans
+    }
+
     fn observers(&self) -> Observers {
         match (self.options.extended(), self.options.unsafe_transforms) {
             (false, _) => Observers::Every,
@@ -252,21 +257,22 @@ impl Pipeline {
             return Step::Kept(reason);
         }
         *fallback = None;
-        #[cfg(feature = "test-hooks")]
-        let recorder = self
-            .options
-            .hooks()
-            .refusal_spans
-            .then(untwist_deobfuscate::refusal_spans::Recorder::start);
+        #[cfg(feature = "refusal-spans")]
+        let recorder = self.records_refusal_spans().then(|| {
+            (
+                layering.peeled(),
+                untwist_deobfuscate::refusal_spans::Recorder::start(),
+            )
+        });
         let staged = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let tree = (&alloc, &mut parsed.program);
             let checked = first && errors == 0;
             self.stage_layer(tree, (reservation, room, checked), layering, result)
         }));
-        #[cfg(feature = "test-hooks")]
-        if let Some(recorder) = recorder {
-            let spans = super::refusal_spans::located(text, recorder.finish());
-            result.refusal_spans.extend(spans);
+        #[cfg(feature = "refusal-spans")]
+        if let Some((layer, recorder)) = recorder {
+            let sites = super::refusal_spans::located(text, layer, recorder.finish());
+            result.refusal_sites.extend(sites);
         }
         match staged {
             Ok(Staged::TypeScript) => Step::Done(None),

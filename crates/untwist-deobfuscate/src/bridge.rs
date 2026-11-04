@@ -317,7 +317,7 @@ fn guard_unit<'p>(
     let own = own_pending_spans(patches, calls);
     let verdict = patch_refusal(patches, inputs.scoping, &used, &own);
     if let Some(refusal) = verdict.refusal {
-        #[cfg(feature = "test-hooks")]
+        #[cfg(feature = "refusal-spans")]
         crate::refusal_spans::record(
             || {
                 format!(

@@ -1,5 +1,5 @@
 use serde::Serialize;
-use untwist::{stage_rows, Output, StageRow};
+use untwist::{stage_rows, Output, RefusalSite, StageRow};
 use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 use untwist_core::pass::{Note, NoteKind};
 
@@ -29,6 +29,15 @@ struct NoteRow<'a> {
     pass: &'static str,
     kind: &'static str,
     message: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input_span: Option<[u32; 2]>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SiteRow<'a> {
+    what: &'a str,
+    layer: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     input_span: Option<[u32; 2]>,
 }
@@ -83,6 +92,8 @@ struct Report<'a> {
     engine: Engine,
     stages: Vec<StageRow<'a>>,
     notes: Vec<NoteRow<'a>>,
+    #[serde(rename = "refusalSites", skip_serializing_if = "Vec::is_empty")]
+    refusal_sites: Vec<SiteRow<'a>>,
     diagnostics: Vec<Diagnostic<'a>>,
     limits: Limits<'a>,
     detection: Detection<'a>,
@@ -146,6 +157,26 @@ fn note_rows<'a>(notes: &'a [Note], source: &str) -> Vec<NoteRow<'a>> {
         .collect()
 }
 
+fn site_span(site: &RefusalSite, source: &str, index: &Utf16Index) -> Option<[u32; 2]> {
+    let at = site.at.filter(|_| site.layer == 0)?;
+    let fits = at.start <= at.end
+        && at.end < SYNTHETIC_BASE
+        && usize::try_from(at.end).ok()? <= source.len();
+    fits.then(|| Some([index.at(at.start)?, index.at(at.end)?]))?
+}
+
+fn site_rows<'a>(sites: &'a [RefusalSite], source: &str) -> Vec<SiteRow<'a>> {
+    let index = Utf16Index::new(source, !sites.is_empty());
+    sites
+        .iter()
+        .map(|site| SiteRow {
+            what: &site.what,
+            layer: site.layer,
+            input_span: site_span(site, source, &index),
+        })
+        .collect()
+}
+
 fn bundle_row<'a>(output: &'a Output, stdout: &str) -> Option<BundleRow<'a>> {
     let bundle = output.bundle.as_ref()?;
     let spans_hold = !output.single_file && output.codes.len() == 1;
@@ -195,6 +226,7 @@ pub fn report_json(output: &Output, facts: &RunFacts<'_>) -> String {
         stages: stage_rows(&output.stages),
         diagnostics: diagnostic_rows(output, facts, &notes),
         notes,
+        refusal_sites: site_rows(&output.refusal_sites, facts.source),
         limits: Limits {
             fired: facts
                 .limits

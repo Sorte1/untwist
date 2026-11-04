@@ -98,7 +98,7 @@ pub struct Agnostic<'a> {
     pub(super) stores_global: bool,
     pub(super) pending_texts: Vec<String>,
     pub bootstrap: Option<&'static str>,
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "refusal-spans")]
     pub(super) trail: Vec<crate::refusal_spans::RefusalSpan>,
 }
 
@@ -129,7 +129,7 @@ pub struct GlobalReach {
     pub reach: Option<Span>,
     pub observed: Option<Span>,
     pub bootstrap: Option<&'static str>,
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "refusal-spans")]
     pub trail: Vec<crate::refusal_spans::RefusalSpan>,
 }
 
@@ -152,7 +152,7 @@ fn reach_of(found: &Agnostic<'_>) -> GlobalReach {
         reach: found.reach.or(found.reach_code),
         observed: found.observed,
         bootstrap: found.bootstrap,
-        #[cfg(feature = "test-hooks")]
+        #[cfg(feature = "refusal-spans")]
         trail: found.trail.clone(),
     }
 }
@@ -250,7 +250,7 @@ pub struct GuardWrites<'a> {
     pub extra: Vec<(Span, String)>,
     pub reach: Option<Span>,
     pub bootstrap: Option<&'static str>,
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "refusal-spans")]
     pub trail: Vec<crate::refusal_spans::RefusalSpan>,
 }
 
@@ -264,7 +264,7 @@ pub fn guard_writes<'a>(
     let found = settle(program, scoping, (resolve, machinery, watch)).0;
     let reached = reach_of(&found).reach;
     let bootstrap = found.bootstrap;
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "refusal-spans")]
     let trail = guard_trail(&found, machinery);
     let mut extra = Vec::new();
     let mut writes: Vec<ProtoWrite<'a>> = guard_bail(&found, machinery)
@@ -289,12 +289,12 @@ pub fn guard_writes<'a>(
         extra,
         reach: reached,
         bootstrap,
-        #[cfg(feature = "test-hooks")]
+        #[cfg(feature = "refusal-spans")]
         trail,
     }
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(feature = "refusal-spans")]
 fn guard_trail(found: &Agnostic<'_>, machinery: &[Span]) -> Vec<crate::refusal_spans::RefusalSpan> {
     if !crate::refusal_spans::active() {
         return Vec::new();

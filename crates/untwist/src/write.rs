@@ -423,8 +423,10 @@ mod tests {
             single_file: false,
             heap_peak: 0,
             stats: crate::RunStats::default(),
-            #[cfg(feature = "test-hooks")]
+            #[cfg(feature = "refusal-spans")]
             refusal_spans: Vec::new(),
+            #[cfg(feature = "refusal-spans")]
+            refusal_sites: Vec::new(),
         }
     }
 

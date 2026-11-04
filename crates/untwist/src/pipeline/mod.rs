@@ -7,7 +7,7 @@ mod notes;
 mod parallel;
 mod plugins;
 mod refusal;
-#[cfg(feature = "test-hooks")]
+#[cfg(feature = "refusal-spans")]
 mod refusal_spans;
 mod shell;
 mod stages;
@@ -28,6 +28,8 @@ use crate::options::{Options, Progress};
 use crate::report::StageReport;
 use input::InputResult;
 use ladder::Ladder;
+#[cfg(feature = "refusal-spans")]
+pub use refusal_spans::{RefusalSite, SiteAt};
 
 pub use notes::{
     ADMIT_PANICKED, ANONYMOUS_SHELL_KEPT, ANONYMOUS_SHELL_STRIPPED, GUARD_KEPT_ACROSS_LINES,
@@ -48,8 +50,10 @@ pub struct Output {
     pub single_file: bool,
     pub heap_peak: u64,
     pub stats: crate::stats::RunStats,
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "refusal-spans")]
     pub refusal_spans: Vec<String>,
+    #[cfg(feature = "refusal-spans")]
+    pub refusal_sites: Vec<RefusalSite>,
 }
 
 impl Output {
@@ -127,8 +131,10 @@ struct OutputParts {
     stats: crate::stats::RunStats,
     guards: GuardRecord,
     unbundled: bool,
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "refusal-spans")]
     refusal_spans: Vec<String>,
+    #[cfg(feature = "refusal-spans")]
+    refusal_sites: Vec<RefusalSite>,
 }
 
 impl OutputParts {
@@ -137,19 +143,11 @@ impl OutputParts {
             unbundled: true,
             ..OutputParts::default()
         };
-        #[cfg(feature = "test-hooks")]
+        #[cfg(feature = "refusal-spans")]
         let several = results.len() > 1;
         for (index, result) in results.into_iter().enumerate() {
-            #[cfg(feature = "test-hooks")]
-            parts
-                .refusal_spans
-                .extend(result.refusal_spans.iter().map(|span| {
-                    if several {
-                        format!("input {index}: {span}")
-                    } else {
-                        span.clone()
-                    }
-                }));
+            #[cfg(feature = "refusal-spans")]
+            parts.absorb_sites(index, several, result.refusal_sites);
             parts.unbundled &= result.refused || result.unbundled;
             parts.codes.push(result.code);
             parts.stages.extend(result.stages);
@@ -162,6 +160,20 @@ impl OutputParts {
             parts.guards.absorb(result.guards);
         }
         parts
+    }
+
+    #[cfg(feature = "refusal-spans")]
+    fn absorb_sites(&mut self, input: usize, several: bool, sites: Vec<RefusalSite>) {
+        self.refusal_spans
+            .extend(refusal_spans::spans_of(&sites).into_iter().map(|span| {
+                if several {
+                    format!("input {input}: {span}")
+                } else {
+                    span
+                }
+            }));
+        self.refusal_sites
+            .extend(sites.into_iter().map(|site| RefusalSite { input, ..site }));
     }
 
     fn into_output(self, bundle: Option<BundleOutput>, single_file: bool) -> Output {
@@ -178,8 +190,10 @@ impl OutputParts {
             single_file,
             heap_peak: self.heap_peak,
             stats: self.stats,
-            #[cfg(feature = "test-hooks")]
+            #[cfg(feature = "refusal-spans")]
             refusal_spans: self.refusal_spans,
+            #[cfg(feature = "refusal-spans")]
+            refusal_sites: self.refusal_sites,
         }
     }
 }

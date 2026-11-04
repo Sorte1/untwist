@@ -28,7 +28,8 @@ rustc-hash.workspace = true
 hashbrown.workspace = true
 
 [features]
-test-hooks = []
+refusal-spans = []
+test-hooks = ["refusal-spans"]
 
 [dev-dependencies]
 untwist-deobfuscate = { path = ".", features = ["test-hooks"] }

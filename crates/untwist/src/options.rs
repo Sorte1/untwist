@@ -78,6 +78,7 @@ pub struct Options {
     #[cfg(feature = "test-hooks")]
     pub test_hooks: TestHooks,
     pub disabled_passes: Vec<&'static str>,
+    pub refusal_spans: bool,
 }
 
 impl Default for Options {
@@ -103,6 +104,7 @@ impl Default for Options {
             #[cfg(feature = "test-hooks")]
             test_hooks: TestHooks::default(),
             disabled_passes: Vec::new(),
+            refusal_spans: false,
         }
     }
 }
