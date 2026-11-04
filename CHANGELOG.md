@@ -4,7 +4,36 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - Unreleased
+## [Unreleased]
+
+## [0.2.0] - 2026-11-04
+
+### Added
+
+- `--unsafe` now decodes everything webcrack 2.16 decodes on every free javascript-obfuscator
+  option, checked by an option matrix of 1,100 generated samples in CI.
+- Calls to pure lookup helpers with literal arguments fold to their value, so
+  `console[dec(2)](dec(0), dec(1))` prints as `console.log("hello", "worold")`.
+- A whole-program value-flow analysis lets the safe lane decode string arrays whose reads
+  escape into code it can prove inert.
+- Decoders that reset their memo cache (newer javascript-obfuscator releases) are decoded.
+- Playground: refusal explanations, pass-by-pass stepping, a decoded-strings table and linked
+  selection.
+
+### Changed
+
+- `--unsafe` assumes built-ins are pristine even when the program patches one, as webcrack does,
+  and gets a larger step budget.
+
+### Fixed
+
+- Regex escapes such as `\b` no longer count as spelling a decoder name.
+- Decodes deferred while wrappers were still being inlined are retried instead of silently
+  skipped.
+- Computed `Object.keys` keys and unused hoisted variables left behind by dead-code injection.
+- The playground's Steps view works in Safari under the strict content security policy.
+
+## [0.1.0] - 2026-11-01
 
 First public release.
 
