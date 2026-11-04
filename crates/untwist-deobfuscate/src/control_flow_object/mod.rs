@@ -6,7 +6,7 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use untwist_core::ast_util::edit::ExprEdits;
 use untwist_core::ast_util::global::is_global_reference;
 use untwist_core::ast_util::inline::{
-    inline_function_call, param_names, rest_param, returned_expression,
+    inline_function_call, inline_spread_forward, param_names, rest_param, returned_expression,
 };
 use untwist_core::ast_util::matcher::call_parts;
 use untwist_core::ast_util::prop::{
@@ -417,6 +417,18 @@ fn call_site_is_safe(
     shape_verdict(reference_route(function, arguments))
 }
 
+fn inline_site<'p, 'a>(
+    function: &Function<'p>,
+    arguments: &AVec<'p, Argument<'p>>,
+    cx: &Cx<'a, '_>,
+) -> Option<Expression<'a>> {
+    let inlined = inline_function_call(function, arguments, cx);
+    if inlined.is_some() || !cx.opts.unsafe_transforms {
+        return inlined;
+    }
+    inline_spread_forward(function, arguments, cx)
+}
+
 fn shape_verdict(safe: bool) -> SiteSafety {
     match safe {
         true => SiteSafety::Safe,
@@ -543,7 +555,7 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
             }
             SiteSafety::Refused(Refusal::Shape) => return,
         }
-        let Some(inlined) = inline_function_call(function, arguments, &*cx) else {
+        let Some(inlined) = inline_site(function, arguments, &*cx) else {
             return;
         };
         self.edits.insert(expr.span(), inlined);

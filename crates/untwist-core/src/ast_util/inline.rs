@@ -127,6 +127,52 @@ impl<'a> VisitMut<'a> for Substitute<'_, 'a, '_> {
     }
 }
 
+fn forwards_in_order(call: &CallExpression<'_>, names: &[&str]) -> bool {
+    let Some((first, rest)) = names.split_first() else {
+        return false;
+    };
+    let Expression::Identifier(callee) = &call.callee else {
+        return false;
+    };
+    callee.name == *first
+        && call.arguments.len() == rest.len()
+        && call.arguments.iter().zip(rest).all(
+            |(argument, name)| matches!(argument, Argument::Identifier(id) if id.name == *name),
+        )
+}
+
+pub fn inline_spread_forward<'p, 'a>(
+    function: &Function<'p>,
+    arguments: &AVec<'p, Argument<'p>>,
+    b: &impl GetAstBuilder<'a>,
+) -> Option<Expression<'a>> {
+    let names = param_names(function)?;
+    let (last, leading) = arguments.split_last()?;
+    let spread_last = matches!(last, Argument::SpreadElement(_))
+        && !leading
+            .iter()
+            .any(|argument| matches!(argument, Argument::SpreadElement(_)));
+    if !spread_last || leading.is_empty() || arguments.len() != names.len() {
+        return None;
+    }
+    let Some(Expression::CallExpression(call)) = returned_expression(function) else {
+        return None;
+    };
+    if call.optional || !forwards_in_order(call, &names) {
+        return None;
+    }
+    let builder = b.builder();
+    let allocator = builder.allocator();
+    let callee = leading.first()?.as_expression()?.clone_in(allocator);
+    let forwarded: AVec<'a, Argument<'a>> = AVec::from_iter_in(
+        arguments.iter().skip(1).map(|a| a.clone_in(allocator)),
+        builder,
+    );
+    Some(Expression::new_call_expression(
+        SPAN, callee, None, forwarded, false, builder,
+    ))
+}
+
 pub fn inline_function_call<'p, 'a>(
     function: &Function<'p>,
     arguments: &AVec<'p, Argument<'p>>,

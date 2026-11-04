@@ -542,7 +542,12 @@
   already defines it`, because which value a read sees is not decidable from the folded literal. A
   call site that fails any of these keeps its call and the object is kept with it, reported as
   a partial fold. The reference deobfuscator substitutes by name with no such gate, which is how it miscompiles a
-  spread argument or a duplicated key.
+  spread argument or a duplicated key. Under `--unsafe` one spread is substituted as it does: a
+  forwarder `function (a, b) { return a(b); }` called as `o.k(f, ...xs)` becomes `f(...xs)`.
+  javascript-obfuscator emits that forwarder for `f(...xs)`, so the input passes `f` only the
+  first element of `xs` and the output passes all of them, as the source did
+  (`fixtures/obfuscated/webpack4-heavy.js`). Pinned by
+  `crates/untwist/tests/unsafe_spread_forwarder.rs`.
 - **What `cargo xtask diff-behaviour` actually compares.** Every fixture is deobfuscated in both
   modes — the conservative comparison mode with `--unsafe --no-unpack --no-jsx` and `--unsafe --no-unpack --no-jsx` — and input
   and output are run under node; a fixture is `behaviour ok` only when both modes agree with the
