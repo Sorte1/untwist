@@ -118,6 +118,7 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) walked_unbound: FxHashSet<oxc_syntax::symbol::SymbolId>,
     pub(super) inline_budget: usize,
     pub(super) symbol_safe: bool,
+    pub(super) map_safe: bool,
     pub(super) param_values: RefCell<FxHashMap<oxc_syntax::symbol::SymbolId, bool>>,
     pub(super) param_keys: RefCell<FxHashMap<oxc_syntax::symbol::SymbolId, bool>>,
     pub(super) text_judged: bool,
@@ -132,7 +133,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         fresh: Fresh<'s, 'a>,
         (resolve, machinery, watch): super::settle::Inputs<'s>,
         fresh_calls: bool,
-        symbol_safe: bool,
+        pristine: super::settle::Pristine,
         flow: &'s Flow<'s, 'a>,
     ) -> Self {
         Self {
@@ -162,7 +163,8 @@ impl<'s, 'a> Sites<'s, 'a> {
             inlining: Vec::new(),
             walked_unbound: FxHashSet::default(),
             inline_budget: 0,
-            symbol_safe,
+            symbol_safe: pristine.symbol,
+            map_safe: pristine.map,
             param_values: RefCell::default(),
             param_keys: RefCell::default(),
             text_judged: false,

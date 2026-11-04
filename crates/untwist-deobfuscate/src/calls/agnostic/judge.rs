@@ -367,7 +367,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             return;
         };
         let args = arg_elems(&call.arguments);
-        for key in self.member_keys(member) {
+        for key in self.call_keys(member) {
             match key {
                 AKey::Named(name) if name == "call" || name == "apply" => {
                     self.forwarded(call, member, &name);

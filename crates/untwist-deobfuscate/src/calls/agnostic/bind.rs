@@ -14,6 +14,7 @@ use super::defs::{
     METHOD_CALLED, MUTATED, OPAQUE,
 };
 use super::live::iife_returned;
+use super::native_map;
 use super::settle::Written;
 use super::source::Sources;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -196,17 +197,6 @@ pub(super) fn class_constructs_fresh(class: &Class<'_>) -> bool {
     })
 }
 
-fn bare_symbol_written(scoping: &Scoping) -> bool {
-    scoping
-        .root_unresolved_references()
-        .get("Symbol")
-        .is_some_and(|references| {
-            references
-                .iter()
-                .any(|reference| scoping.get_reference(*reference).is_write())
-        })
-}
-
 pub(super) struct Bindings<'s, 'a> {
     scoping: &'s Scoping,
     pub(super) defs: DefTable<'a>,
@@ -217,6 +207,8 @@ pub(super) struct Bindings<'s, 'a> {
     pub(super) inlinable: FxHashSet<u32>,
     hidden: FxHashSet<u32>,
     symbol_rebind: bool,
+    map_rebind: bool,
+    pub(super) unsealed_maps: FxHashSet<SymbolId>,
     pub(super) sources: Sources,
     calls_of: Vec<(SymbolId, &'a CallExpression<'a>)>,
     pub(super) params: FxHashMap<SymbolId, (SymbolId, usize)>,
@@ -248,6 +240,8 @@ impl<'s, 'a> Bindings<'s, 'a> {
             inlinable: FxHashSet::default(),
             hidden: FxHashSet::default(),
             symbol_rebind: false,
+            map_rebind: false,
+            unsealed_maps: FxHashSet::default(),
             sources: Sources::new(program),
             calls_of: Vec::new(),
             params: FxHashMap::default(),
@@ -263,7 +257,9 @@ impl<'s, 'a> Bindings<'s, 'a> {
         };
         bindings.visit_program(program);
         bindings.defs.finish();
-        bindings.symbol_rebind |= bare_symbol_written(scoping);
+        bindings.symbol_rebind |= native_map::bare_global_written(scoping, "Symbol");
+        bindings.map_rebind = native_map::constructor_rebound(scoping);
+        bindings.unsealed_maps = native_map::unsealed_maps(program, scoping);
         let annex = std::mem::take(&mut bindings.annex);
         bindings.defs.each_present_mut(|symbol, def| {
             def.set_to(MUTATED, scoping.symbol_is_mutated(symbol));
@@ -452,6 +448,10 @@ impl<'s, 'a> Bindings<'s, 'a> {
 
     pub(super) fn symbol_safe(&self) -> bool {
         !self.symbol_rebind
+    }
+
+    pub(super) fn map_safe(&self) -> bool {
+        !self.map_rebind
     }
 
     pub(super) fn global_source(&self) -> bool {
