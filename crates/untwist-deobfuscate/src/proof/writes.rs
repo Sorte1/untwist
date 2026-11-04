@@ -430,6 +430,9 @@ pub fn patch_refusal<'a>(
     own_calls: &FxHashSet<Span>,
 ) -> PatchVerdict<'a> {
     let mut verdict = PatchVerdict::default();
+    if super::builtins_assumed_pristine() {
+        return verdict;
+    }
     for site in sites.iter().filter(|site| unshadowed(site, scoping)) {
         match decide(site, used, own_calls) {
             Decision::Refuse => {

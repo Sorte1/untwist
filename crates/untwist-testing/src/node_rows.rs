@@ -63,6 +63,54 @@ pub fn mismatches(node: &Path, programs: &[(String, String)], modes: &[Mode<'_>]
     wrong
 }
 
+pub fn pristine(printed: &str) -> String {
+    printed.replace('?', "!")
+}
+
+pub type Lane<'l> = &'l dyn Fn(&str) -> String;
+
+#[derive(Default)]
+pub struct LaneRows {
+    pub wrong: Vec<String>,
+    pub pristine: Vec<String>,
+}
+
+pub fn pristine_under_unsafe(
+    node: &Path,
+    programs: &[(String, String)],
+    (safe, unsafe_lane): (Lane<'_>, Lane<'_>),
+) -> LaneRows {
+    let dir = tempfile::tempdir().unwrap();
+    let mut rows = LaneRows::default();
+    for (label, source) in programs {
+        let before = printed(node, dir.path(), source);
+        let safe_code = safe(source);
+        let after = printed(node, dir.path(), &safe_code);
+        if before.is_err() || after != before {
+            rows.wrong.push(format!(
+                "{label} (default): node printed {before:?}, untwist's output printed {after:?}"
+            ));
+            continue;
+        }
+        let unsafe_code = unsafe_lane(source);
+        let after = printed(node, dir.path(), &unsafe_code);
+        if after == before {
+            continue;
+        }
+        let expected = before.as_deref().map(pristine);
+        let decoded = matches!((&after, &expected), (Ok(seen), Ok(want)) if seen == want);
+        if decoded && unsafe_code != safe_code {
+            rows.pristine.push(label.clone());
+            continue;
+        }
+        rows.wrong.push(format!(
+            "{label} (unsafe): node printed {before:?}, the pristine decode prints {expected:?}, \
+             untwist's output printed {after:?}"
+        ));
+    }
+    rows
+}
+
 const DYNAMIC_CODE: [&str; 4] = ["eval", "with", "Function", "constructor"];
 
 pub fn runs_dynamic_code(program: &str) -> bool {

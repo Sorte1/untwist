@@ -43,27 +43,40 @@ fn refused_as(out: &Output, prefix: &str) -> bool {
 }
 
 #[test]
-fn an_escaped_read_is_reported_where_it_reads_beside_the_refusal_it_causes() {
+fn an_escaped_read_is_reported_beside_the_refusal_it_causes_and_unsafe_decodes_past_it() {
     let source = patched_after_rotator(
         READS_SLICE,
         "const o = {}; export function f(k) { return o[k]; }",
     );
     let at = position_of(&source, "o[k]");
-    for unsafe_transforms in [false, true] {
-        let out = run(&source, unsafe_transforms);
-        assert!(refused_as(&out, notes::BUILTIN_PATCHED), "{:#?}", out.notes);
-        let spans = &out.refusal_spans;
-        assert!(
-            spans
-                .iter()
-                .any(|span| span.starts_with(&format!("{at} escaped read (definer"))),
-            "{spans:#?}"
-        );
-        assert!(
-            spans.iter().any(|span| span.contains(" BUILTIN_PATCHED")),
-            "{spans:#?}"
-        );
-    }
+    let out = run(&source, false);
+    assert!(refused_as(&out, notes::BUILTIN_PATCHED), "{:#?}", out.notes);
+    let spans = &out.refusal_spans;
+    assert!(
+        spans
+            .iter()
+            .any(|span| span.starts_with(&format!("{at} escaped read (definer"))),
+        "{spans:#?}"
+    );
+    assert!(
+        spans.iter().any(|span| span.contains(" BUILTIN_PATCHED")),
+        "{spans:#?}"
+    );
+    let pristine = run(&source, true);
+    assert!(
+        !refused_as(&pristine, notes::BUILTIN_PATCHED),
+        "{:#?}",
+        pristine.notes
+    );
+    assert!(
+        !pristine
+            .refusal_spans
+            .iter()
+            .any(|span| span.contains(" BUILTIN_PATCHED")),
+        "{:#?}",
+        pristine.refusal_spans
+    );
+    assert!(pristine.code().contains("\"log!\""), "{}", pristine.code());
 }
 
 #[test]
