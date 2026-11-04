@@ -9,6 +9,7 @@ use std::cell::RefCell;
 
 use super::assembled::{broken_tables, drop_tables};
 use super::bind::Bindings;
+use super::flow::Flow;
 use super::fresh::Fresh;
 use super::sites::*;
 use super::{AKey, ASite, Agnostic};
@@ -73,20 +74,27 @@ pub(super) type Inputs<'k> = (
     Watch<'k>,
 );
 
-pub(super) fn run<'a>(
+pub(super) fn run<'s, 'a>(
     program: &'a Program<'a>,
-    scoping: &Scoping,
-    bindings: &Bindings<'_, 'a>,
-    (resolve, machinery, watch): Inputs<'_>,
+    scoping: &'s Scoping,
+    bindings: &'s Bindings<'s, 'a>,
+    (resolve, machinery, watch): Inputs<'s>,
     fresh_calls: bool,
     symbol_safe: bool,
+    flow: &'s Flow<'s, 'a>,
 ) -> (Agnostic<'a>, bool, bool) {
     let fresh = Fresh {
         scoping,
         bindings,
         sealed: RefCell::default(),
     };
-    let mut sites = Sites::new(fresh, (resolve, machinery, watch), fresh_calls, symbol_safe);
+    let mut sites = Sites::new(
+        fresh,
+        (resolve, machinery, watch),
+        fresh_calls,
+        symbol_safe,
+        flow,
+    );
     sites.inline_budget = inline_budget(program);
     sites.visit_program(program);
     sites.judge_collected()
@@ -132,6 +140,7 @@ fn settle_ordered<'a>(
     (resolve, machinery, watch): Inputs<'_>,
 ) -> (Agnostic<'a>, Vec<SymbolId>) {
     let mut bindings = Bindings::collect(program, scoping, !watch.names.is_empty(), resolve);
+    let flow = Flow::new(program, scoping, resolve);
     let globals = script_globals(program, scoping);
     let mut judged = Judged {
         source: bindings.global_source(),
@@ -148,6 +157,7 @@ fn settle_ordered<'a>(
             &bindings,
             (resolve, machinery, watch),
             judged.symbol_safe,
+            &flow,
         );
         let written = Written::of(&out.sites, machinery);
         let next = Judged {
@@ -175,18 +185,20 @@ fn settle_ordered<'a>(
     }
 }
 
-pub(super) fn analyse<'a>(
+pub(super) fn analyse<'s, 'a>(
     program: &'a Program<'a>,
-    scoping: &Scoping,
-    bindings: &Bindings<'_, 'a>,
-    inputs: Inputs<'_>,
+    scoping: &'s Scoping,
+    bindings: &'s Bindings<'s, 'a>,
+    inputs: Inputs<'s>,
     symbol_safe: bool,
+    flow: &'s Flow<'s, 'a>,
 ) -> Agnostic<'a> {
-    let (mut out, mut chains, natives) = run(program, scoping, bindings, inputs, true, symbol_safe);
+    let (mut out, mut chains, natives) =
+        run(program, scoping, bindings, inputs, true, symbol_safe, flow);
     if !natives {
         let source = out.global_source;
         drop(out);
-        let rerun = run(program, scoping, bindings, inputs, false, symbol_safe);
+        let rerun = run(program, scoping, bindings, inputs, false, symbol_safe, flow);
         out = rerun.0;
         out.global_source |= source;
         chains = rerun.1;

@@ -1,5 +1,6 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
+use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 
 use super::roles::*;
@@ -8,7 +9,47 @@ use super::AKey;
 
 const FUNCTION_RUNNERS: [&str; 4] = ["Function", "constructor", "compileFunction", "_compile"];
 
+pub(super) fn closed_runner_read<'a>(
+    call: &CallExpression<'a>,
+    scoping: &Scoping,
+) -> Option<&'a str> {
+    if call.optional || !call.callee.is_specific_id("eval") {
+        return None;
+    }
+    let [Argument::StringLiteral(literal)] = call.arguments.as_slice() else {
+        return None;
+    };
+    let name = literal
+        .value
+        .as_str()
+        .trim()
+        .trim_end_matches(';')
+        .trim_end();
+    if !RUNNERS.contains(&name) {
+        return None;
+    }
+    let names = untwist_core::semantic::closed_eval_names(call)?;
+    if names.len() != 1 || names[0] != name {
+        return None;
+    }
+    let bound = scoping.symbol_ids().any(|symbol| {
+        let bound_name = scoping.symbol_name(symbol);
+        bound_name == name || bound_name == "eval"
+    });
+    (!bound).then_some(name)
+}
+
 impl<'s, 'a> Sites<'s, 'a> {
+    pub(super) fn mark_closed_runner_read(&mut self, span: Span) {
+        self.out.global_source = true;
+        let has_sink = self.flow.sink_of(span).is_some();
+        let origin = Origin {
+            runner: true,
+            ..Origin::default()
+        };
+        self.mark_origin_sink(origin, span, "closed eval of a runner", has_sink);
+    }
+
     pub(super) fn text_writes(&self, text: &str, function: bool) -> bool {
         let body = if function {
             format!("(function () {{\n{text}\n}});")

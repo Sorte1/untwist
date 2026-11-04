@@ -35,7 +35,7 @@ const TESTS: [&str; 4] = [
     "(function () {}) instanceof Object",
 ];
 
-const KEEPING_WRITES: [&str; 39] = [
+const KEEPING_WRITES: [&str; 40] = [
     "var d = Object.getOwnPropertyDescriptor({}, 'x');",
     "",
     "var o = {}; o.x = 1;",
@@ -75,9 +75,10 @@ const KEEPING_WRITES: [&str; 39] = [
     "var has = 'constructor' in [];",
     "var k = 'constr' + 'uctor'; var has = k in [];",
     "var o = { __proto__: [] };",
+    "var k = 'x'; for (var i = 0; i < 2; i++) { k = k + i; } var v = [][k];",
 ];
 
-const REFUSING_WRITES: [&str; 24] = [
+const REFUSING_WRITES: [&str; 23] = [
     "Function('Object = function () {}')();",
     "Function`Object = function () {}`();",
     "var k = 'constructor'; var F = [][k][k]; F`Object = function () {}`();",
@@ -94,7 +95,6 @@ const REFUSING_WRITES: [&str; 24] = [
     "Array.prototype.__proto__ = null;",
     "Object.assign(Array.prototype, {});",
     "var d = Object.getOwnPropertyDescriptor(Object, 'defineProperty');",
-    "var k = 'x'; for (var i = 0; i < 2; i++) { k = k + i; } var v = [][k];",
     "var oc = []; var C = oc?.constructor;",
     "class A extends Array { m() { return super.constructor; } } var F = new A().m();",
     "Reflect.setPrototypeOf(Array.prototype, null);",

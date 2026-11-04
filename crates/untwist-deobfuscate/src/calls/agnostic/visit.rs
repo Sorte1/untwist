@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use super::keys::Keys;
 use super::roles::*;
 use super::sites::*;
+use super::text::closed_runner_read;
 use super::AKey;
 
 impl<'s, 'a> Sites<'s, 'a> {
@@ -399,7 +400,11 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         if let Some(function) = self.runner_callee(&it.callee) {
             if !self.creation_only.contains(&span_key(it.span)) {
                 self.reach_text(it.span, &it.arguments);
-                self.check_text(it.span, &it.arguments, function);
+                if closed_runner_read(it, self.fresh.scoping).is_some() {
+                    self.mark_closed_runner_read(it.span);
+                } else {
+                    self.check_text(it.span, &it.arguments, function);
+                }
             }
         }
         if !self.fresh.is_user_function(&it.callee) {
@@ -459,8 +464,9 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
             && parent_keys.iter().any(|key| origin_of(key).any())
             && !self.holds_array(it.object())
         {
+            let has_sink = self.flow.sink_of(it.span()).is_some();
             for key in parent_keys.iter() {
-                self.mark_origin(origin_of(key), it.span(), "escaped read");
+                self.mark_origin_sink(origin_of(key), it.span(), "escaped read", has_sink);
             }
         }
         walk_js::walk_member_expression(self, it);

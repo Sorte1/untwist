@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::hash::BuildHasher;
 
+use super::flow::Flow;
 use super::fresh::Fresh;
 use super::roles::*;
 use super::source::SOURCE_KEYS;
@@ -122,6 +123,7 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) text_judged: bool,
     pub(super) forward_calls: FxHashSet<Span>,
     pub(super) pending_texts: RefCell<Vec<String>>,
+    pub(super) flow: &'s Flow<'s, 'a>,
 }
 
 impl<'s, 'a> Sites<'s, 'a> {
@@ -130,6 +132,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         (resolve, machinery, watch): super::settle::Inputs<'s>,
         fresh_calls: bool,
         symbol_safe: bool,
+        flow: &'s Flow<'s, 'a>,
     ) -> Self {
         Self {
             fresh,
@@ -164,6 +167,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             text_judged: false,
             forward_calls: FxHashSet::default(),
             pending_texts: RefCell::default(),
+            flow,
         }
     }
 
@@ -244,17 +248,29 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     pub(super) fn mark_origin(&mut self, origin: Origin, span: Span, reason: &'static str) {
+        self.mark_origin_sink(origin, span, reason, true);
+    }
+
+    pub(super) fn mark_origin_sink(
+        &mut self,
+        origin: Origin,
+        span: Span,
+        reason: &'static str,
+        has_sink: bool,
+    ) {
         self.out.global_source |= origin.runner;
         if self.in_machinery(span) {
             return;
         }
         #[cfg(feature = "refusal-spans")]
         self.trail(span, || format!("{reason}{}", roles_of(origin)));
-        if origin.definer && self.out.unbounded.is_none() {
-            self.out.unbounded = Some((span, reason));
-        }
-        if origin.runner && self.out.runner_unbounded.is_none() {
-            self.out.runner_unbounded = Some((span, reason));
+        if has_sink {
+            if origin.definer && self.out.unbounded.is_none() {
+                self.out.unbounded = Some((span, reason));
+            }
+            if origin.runner && self.out.runner_unbounded.is_none() {
+                self.out.runner_unbounded = Some((span, reason));
+            }
         }
         self.bind_unbounded |= origin.bind;
         self.apply_unbounded |= origin.apply;

@@ -9,6 +9,11 @@ use untwist_testing::node_rows::{node_or_skip, printed};
 const REDUCED: &str = "fixtures/unsafe-parity";
 const OBFUSCATED: &str = "fixtures/obfuscated";
 const MACHINERY_KEPT: &str = "decoder machinery kept";
+const DEFAULT_DECODES: [&str; 1] = ["eval-host.js"];
+
+fn default_decodes(label: &str) -> bool {
+    DEFAULT_DECODES.contains(&file_name(label))
+}
 
 fn lane(unsafe_transforms: bool) -> Options {
     Options {
@@ -82,9 +87,44 @@ fn the_unsafe_output_of_a_reduced_fixture_prints_what_its_source_prints() {
 #[test]
 fn the_default_lane_still_keeps_every_reduced_string_array() {
     for (label, source) in js_files_in(REDUCED) {
+        if default_decodes(&label) {
+            continue;
+        }
         let out = Pipeline::new(lane(false)).run(&source);
         assert!(refused(&out), "{label}: {:?}", out.notes);
         assert!(out.code().contains("_0x"), "{label}:\n{}", out.code());
+    }
+}
+
+#[test]
+fn the_default_lane_decodes_a_closed_eval_whose_runner_value_stays_inert() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let fixtures: Vec<(String, String)> = js_files_in(REDUCED)
+        .into_iter()
+        .filter(|(label, _)| default_decodes(label))
+        .collect();
+    assert_eq!(fixtures.len(), DEFAULT_DECODES.len(), "{REDUCED}");
+    for (label, source) in fixtures {
+        let out = Pipeline::new(lane(false)).run(&source);
+        let blocked = out.notes.iter().any(|note| {
+            note.message.starts_with(notes::BUILTIN_PATCHED)
+                || note.message.starts_with(notes::STRING_ARRAY_GLOBAL_REACH)
+        });
+        assert!(!blocked, "{label}: {:?}", out.notes);
+        assert!(out.code().contains("alpha"), "{label}:\n{}", out.code());
+        let expected = printed(
+            &node,
+            dir.path(),
+            &beside(&label, "sources", file_name(&label)),
+        );
+        let actual = printed(&node, dir.path(), out.code());
+        assert!(
+            expected.is_ok() && expected == actual,
+            "{label}: the source printed {expected:?}, the output printed {actual:?}"
+        );
     }
 }
 
