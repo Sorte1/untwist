@@ -270,7 +270,7 @@ fn every_pass_impl_names_exactly_the_hooks_it_overrides() {
         }
     }
     assert_eq!(
-        blocks, 57,
+        blocks, 58,
         "the production pass census moved; re-count and update"
     );
 }

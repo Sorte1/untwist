@@ -16,6 +16,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `layers/` | `eval`, `Function`, `atob` and p.a.c.k.e.r. layers, as classic scripts that print | `cargo xtask diff-layers`, `crates/untwist/tests/layers_*.rs` |
 | `obfuscated/` | javascript-obfuscator output from `tools/obfuscated/gen.mjs`; `MANIFEST` and `EXPECT` describe each file | `cargo xtask obf-matrix` |
 | `obfuscator-io/` | javascript-obfuscator 5.9.1 output over every free option, pairs of the high-impact options and the four presets, from `tools/obfuscated/matrix.mjs`; `MANIFEST`, `EXPECT`, `ORACLE` (webcrack's results) and `BASELINE` describe each file | `cargo xtask obf-options`, `xtask/tests/obf_options_drift.rs` |
+| `pure-calls/` | Programs that print, a pure helper called with literal arguments that `fold-pure-calls` folds, or a near miss it must leave alone | `crates/untwist/tests/pure_calls_behaviour.rs` |
 | `real-shapes/` | Obfuscator and webpack machinery reduced from real bundles by `tools/real-shapes/reduce.mjs` | `cargo xtask obf-matrix` |
 | `real-world/` | Optional local `game.js` and its reference snapshot, not committed; `game-truth.mjs` prints its array truth | the `real_world` tests, which skip when it is absent |
 | `reference/` | Samples and expected output from the reference deobfuscator (MIT, `LICENSE-reference`) | `cargo xtask diff-deobfuscate`, `diff-unpack`, `crates/untwist-deobfuscate/tests/fixtures.rs` |

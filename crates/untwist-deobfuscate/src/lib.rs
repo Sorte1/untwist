@@ -23,6 +23,7 @@ pub mod notes;
 pub mod object_props;
 pub mod probe;
 pub mod proof;
+pub mod pure_calls;
 #[cfg(feature = "refusal-spans")]
 pub mod refusal_spans;
 pub mod removal;

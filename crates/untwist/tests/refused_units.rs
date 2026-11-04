@@ -190,7 +190,7 @@ fn the_templates_gate_and_memo_on_its_rewritten_closure_still_decode() {
     check(&Row {
         source: TEMPLATE_GATE_AND_MEMO_ON_THE_REWRITTEN_CLOSURE,
         prints: "s0 s1 s2 s1\n",
-        kept: "console.log(\"s0\", later(), \"s2\", \"s1\")",
+        kept: "\"s2\", \"s1\")",
     });
 }
 

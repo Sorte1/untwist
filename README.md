@@ -123,7 +123,8 @@ input.
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
 patched, even when the program visibly patches one, and a few passes that rest on heuristics are
 allowed to run. These are `dead-code` (deletes branches behind constant comparisons),
-`template-literals`, and JSX reconstruction.
+`template-literals`, and JSX reconstruction. `fold-pure-calls` also folds calls to a pure helper
+that is passed around as a value or that the program could rebind through a key it cannot resolve.
 This decodes more on aggressively protected code. It is the right choice when you trust that the
 input does not tamper with the runtime, and the wrong one for code written to fool analysis.
 

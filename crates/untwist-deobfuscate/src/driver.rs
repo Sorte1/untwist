@@ -21,7 +21,8 @@ use crate::stamp::{find_stamped, has_stamped_array, names_stamped_array, Refused
 use crate::{
     array_rotator, control_flow_object, control_flow_switch, dead_assignment, dead_code,
     debug_protection, decoded, decoder, evaluate_globals, fold_chains, merge_object_assignments,
-    object_props, removal, self_defending, string_array, unstamp, var_transformation, wrappers,
+    object_props, pure_calls, removal, self_defending, string_array, unstamp, var_transformation,
+    wrappers,
 };
 
 fn group_of<'a>(ctors: &[PassCtor<'a>], opts: PassOptions) -> PassGroup<'a> {
@@ -101,6 +102,7 @@ pub const CLEANUP_ORDER: &[&str] = &[
     "merge-object-assignments",
     "inline-object-props",
     "evaluate-globals",
+    "fold-pure-calls",
     "var-transformation",
     "dead-assignment-elimination",
     "fold-literal-chains",
@@ -111,6 +113,7 @@ pub fn cleanup_ctors<'a>() -> Vec<PassCtor<'a>> {
         merge_object_assignments::boxed,
         object_props::boxed_superset,
         evaluate_globals::boxed,
+        pure_calls::boxed,
         var_transformation::boxed,
         dead_assignment::boxed,
         fold_chains::boxed,

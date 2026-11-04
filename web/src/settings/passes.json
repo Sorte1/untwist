@@ -235,6 +235,11 @@
     "unsafe": false
   },
   {
+    "name": "fold-pure-calls",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
     "name": "var-transformation",
     "stage": "cleanup",
     "unsafe": false
