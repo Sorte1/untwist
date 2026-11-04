@@ -382,6 +382,48 @@ fn the_default_lane_keeps_a_var_the_discarded_branch_declares() {
 }
 
 #[test]
+fn the_default_lane_drops_a_var_only_the_discarded_branch_uses() {
+    assert_eq!(
+        default_lane(
+            "function g() {\n  if (\"a\" !== \"a\") {\n    var x = 1;\n    h(x);\n  }\n  return 2;\n}"
+        ),
+        "function g() {\n  return 2;\n}"
+    );
+    assert_eq!(
+        default_lane(
+            "function g() {\n  if (\"a\" === \"a\") {\n    f();\n  } else {\n    var x, y = x;\n  }\n  return y;\n}"
+        ),
+        "function g() {\n  var y;\n  f();\n  return y;\n}"
+    );
+}
+
+#[test]
+fn the_default_lane_keeps_a_discarded_var_that_other_code_can_still_see() {
+    assert_eq!(
+        default_lane(
+            "function g() {\n  if (\"a\" !== \"a\") {\n    var x = 1;\n  }\n  return typeof x;\n}"
+        ),
+        "function g() {\n  var x;\n  return typeof x;\n}"
+    );
+    assert_eq!(
+        default_lane(
+            "function g() {\n  if (\"a\" !== \"a\") {\n    var x = 1;\n  }\n  return function () {\n    return x;\n  };\n}"
+        ),
+        "function g() {\n  var x;\n  return function () {\n    return x;\n  };\n}"
+    );
+    assert_eq!(
+        default_lane("if (\"a\" !== \"a\") {\n  var x = 1;\n}"),
+        "var x;"
+    );
+    assert_eq!(
+        default_lane(
+            "function g() {\n  if (\"a\" !== \"a\") {\n    var x = 1;\n  }\n  return eval(\"x\");\n}"
+        ),
+        "function g() {\n  var x;\n  return eval(\"x\");\n}"
+    );
+}
+
+#[test]
 fn the_default_lane_keeps_the_conditional_when_the_discarded_branch_declares_a_function() {
     let sloppy = "if (\"a\" !== \"a\") {\n  {\n    function f() {}\n  }\n}\nconsole.log(f);";
     assert_eq!(
