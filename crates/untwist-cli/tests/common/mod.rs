@@ -15,12 +15,10 @@ pub fn stdin_output(source: &str, args: &[&str]) -> std::process::Output {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(source.as_bytes())
-        .unwrap();
+    let written = child.stdin.take().unwrap().write_all(source.as_bytes());
+    if let Err(error) = written {
+        assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe, "{error}");
+    }
     child.wait_with_output().unwrap()
 }
 
