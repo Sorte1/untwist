@@ -1,7 +1,9 @@
 # fixture-glob	cell-glob (lane/rename/output)	check	xfail|allow	reason
 # An xfail cell that passes fails the run: remove its line when the cause is fixed.
-obfuscated/webpack4-*.js	*	unpacked	xfail	a refusal keeps the string array, so the webpack 4 bootstrap's member names stay decoder calls and the bundle is not detected
-obfuscated/*.js	*	decoded	xfail	a refusal keeps the string array (the global-reach note; see fixtures/builtin-replaced); see warn-summary
+obfuscated/webpack4-*.js	safe/*	unpacked	xfail	a refusal keeps the string array, so the webpack 4 bootstrap's member names stay decoder calls and the bundle is not detected
+obfuscated/webpack4-*.js	unsafe/*/dir	unpacked	xfail	webpack 4 concatenated the app's ES modules, so the decoded bundle holds two modules, fewer than the check wants
+obfuscated/webpack4-*.js	unsafe/*/single-file	unpacked	xfail	webpack 4 concatenated the app's ES modules, so the decoded bundle holds two modules, fewer than the check wants
+obfuscated/*.js	safe/*	decoded	xfail	a refusal keeps the string array (the global-reach note; see fixtures/builtin-replaced); see warn-summary
 reference/deobfuscate/obfuscator.io-high.js	unsafe/*	node	allow	the input never exits (its debug protection loops) and --unsafe removes that protection
 real-shapes/*.js	*	node	allow	a reduced shape keeps only the obfuscator and webpack machinery with stub modules, so its input throws or idles; behaviour is checked on fixtures/obfuscated
 real-shapes/game-10.0-shell.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)

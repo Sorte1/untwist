@@ -1,5 +1,5 @@
 use untwist::{Options, Pipeline};
-use untwist_testing::node_rows::{self, node_or_skip, patched_after_rotator, Mode};
+use untwist_testing::node_rows::{self, node_or_skip, patched_after_rotator};
 
 const JOIN_TEST: &str = "[1, 2].join('') === '12'";
 const NODE_PRINTS: &str = "log?\nHello World!?\ndeobfuscate?\nexit 0\n";
@@ -588,7 +588,6 @@ fn agrees_with_node(programs: &[(String, String)], expected: Option<&str>) {
     };
     let run_safe = |source: &str| transformed(&safe, source);
     let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
-    let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];
     let dir = tempfile::tempdir().unwrap();
     for (label, source) in programs.iter().filter(|_| expected.is_some()) {
         let seen = node_rows::printed(&node, dir.path(), source).unwrap();
@@ -597,8 +596,8 @@ fn agrees_with_node(programs: &[(String, String)], expected: Option<&str>) {
             "{label}: node printed {seen:?}"
         );
     }
-    let wrong = node_rows::mismatches(&node, programs, &modes);
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    let rows = node_rows::pristine_under_unsafe(&node, programs, (&run_safe, &run_unsafe));
+    assert!(rows.wrong.is_empty(), "{}", rows.wrong.join("\n"));
 }
 
 #[test]

@@ -20,6 +20,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `real-world/` | Optional local `game.js` and its reference snapshot, not committed; `game-truth.mjs` prints its array truth | the `real_world` tests, which skip when it is absent |
 | `reference/` | Samples and expected output from the reference deobfuscator (MIT, `LICENSE-reference`) | `cargo xtask diff-deobfuscate`, `diff-unpack`, `crates/untwist-deobfuscate/tests/fixtures.rs` |
 | `spelled-name/` | Programs that print, whose machinery names are also spelled as property keys | `crates/untwist/tests/spelled_name_behaviour.rs` |
+| `unsafe-parity/` | javascript-obfuscator output that the reference deobfuscator decodes and the safe lane refuses; `MANIFEST` names each source under `sources/` and the options | `crates/untwist/tests/unsafe_parity.rs` |
 | `unminify/` | Minified programs for the unminify passes | `cargo xtask diff-unminify`, `diff-mangle` |
 | `unpack-bundlers/` | Bundler output from `tools/bundlers/` plus hand-written `min-*` and `neg-*` shapes; `MANIFEST` lists each | `cargo xtask diff-unpack-behaviour`, `crates/untwist-unpack/tests/` |
 | `unpack-gaps/` | Hand-written bundles for known unpacking gaps | `crates/untwist-unpack/tests/` |
