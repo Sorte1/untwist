@@ -1,10 +1,11 @@
 {
   "name": "untwist-obfuscated-fixtures",
   "private": true,
-  "description": "Pinned javascript-obfuscator, webpack 4/5 and acorn used by tools/obfuscated/gen.mjs to generate fixtures/obfuscated and by tools/real-shapes to reduce real inputs.",
+  "description": "Pinned javascript-obfuscator 4.2.2 and 5.9.1, webpack 4/5 and acorn used by tools/obfuscated/gen.mjs to generate fixtures/obfuscated, by tools/obfuscated/matrix.mjs to generate fixtures/obfuscator-io and by tools/real-shapes to reduce real inputs.",
   "dependencies": {
     "acorn": "8.15.0",
     "javascript-obfuscator": "4.2.2",
+    "javascript-obfuscator-5": "npm:javascript-obfuscator@5.9.1",
     "terser-webpack-plugin": "1.4.6",
     "webpack": "4.47.0",
     "webpack5": "npm:webpack@5.98.0"

@@ -1,4 +1,5 @@
-fixtures/corpus-npm/*.js are output of javascript-obfuscator 4.2.2
+fixtures/corpus-npm/*.js are output of javascript-obfuscator 4.2.2 and
+fixtures/obfuscator-io/*.js are output of javascript-obfuscator 5.9.1
 (https://github.com/javascript-obfuscator/javascript-obfuscator), BSD-2-Clause.
 
 Copyright (C) 2016-2024 Timofey Kachalov

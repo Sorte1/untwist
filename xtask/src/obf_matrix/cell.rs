@@ -132,7 +132,7 @@ pub struct Runner {
     pub timeout: Duration,
 }
 
-fn read_lossy(path: &Path) -> String {
+pub fn read_lossy(path: &Path) -> String {
     let mut bytes = Vec::new();
     if let Ok(mut file) = File::open(path) {
         let _ = file.read_to_end(&mut bytes);
@@ -194,7 +194,7 @@ fn js_files(dir: &Path, base: &Path, out: &mut Vec<(String, PathBuf)>) -> Result
     Ok(())
 }
 
-fn wait_with_timeout(child: &mut std::process::Child, limit: Duration) -> Result<Option<i32>> {
+pub fn wait_with_timeout(child: &mut std::process::Child, limit: Duration) -> Result<Option<i32>> {
     let started = Instant::now();
     loop {
         if let Some(status) = child.try_wait()? {

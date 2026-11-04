@@ -1,0 +1,83 @@
+const _0x5cb395 = _0x7a6a;
+(function (_0x1afc07, _0x24db9f) {
+    const _0x2ebf2a = _0x7a6a, _0x16d05a = _0x1afc07();
+    while (!![]) {
+        try {
+            const _0x3d492d = parseInt(_0x2ebf2a(0x91)) / 0x1 + -parseInt(_0x2ebf2a(0x93)) / 0x2 * (parseInt(_0x2ebf2a(0x96)) / 0x3) + parseInt(_0x2ebf2a(0x8b)) / 0x4 + -parseInt(_0x2ebf2a(0x87)) / 0x5 * (-parseInt(_0x2ebf2a(0x97)) / 0x6) + parseInt(_0x2ebf2a(0x95)) / 0x7 * (-parseInt(_0x2ebf2a(0x8c)) / 0x8) + -parseInt(_0x2ebf2a(0x9a)) / 0x9 + parseInt(_0x2ebf2a(0x92)) / 0xa;
+            if (_0x3d492d === _0x24db9f)
+                break;
+            else
+                _0x16d05a['push'](_0x16d05a['shift']());
+        } catch (_0x1ce0fd) {
+            _0x16d05a['push'](_0x16d05a['shift']());
+        }
+    }
+}(_0x3626, 0xb3696));
+function factorial(_0x475b38) {
+    return _0x475b38 <= 0x1 ? 0x1 : _0x475b38 * factorial(_0x475b38 - 0x1);
+}
+function compose(_0x136de1, _0x15fcff) {
+    return function (_0x4d9e02) {
+        return _0x15fcff(_0x136de1(_0x4d9e02));
+    };
+}
+function _0x7a6a(_0x3399a5, _0x3dec7c) {
+    _0x3399a5 = _0x3399a5 - 0x86;
+    const _0x362688 = _0x3626();
+    let _0x7a6a68 = _0x362688[_0x3399a5];
+    return _0x7a6a68;
+}
+function makeCounter(_0x38f11d) {
+    var _0x26f4ab = _0x38f11d;
+    return {
+        'next': function () {
+            return _0x26f4ab += 0x1, _0x26f4ab;
+        },
+        'reset': function () {
+            return _0x26f4ab = _0x38f11d, _0x26f4ab;
+        }
+    };
+}
+const double = _0x23a196 => _0x23a196 * 0x2, increment = _0x393bab => _0x393bab + 0x1, pipeline = compose(double, increment);
+function sum(..._0x2958f9) {
+    return _0x2958f9['reduce']((_0x12fe87, _0x3ddc4c) => _0x12fe87 + _0x3ddc4c, 0x0);
+}
+function greetAll(_0x11bdbb = 'hi', ..._0x3a02b0) {
+    const _0x4f0b50 = _0x7a6a;
+    return _0x3a02b0[_0x4f0b50(0x90)](_0x21cde4 => _0x11bdbb + '\x20' + _0x21cde4)['join'](';\x20');
+}
+const counter = makeCounter(0xa);
+function _0x3626() {
+    const _0x725da = [
+        'counter',
+        'map',
+        '711185qPABXT',
+        '11896380gVrmPf',
+        '710322CWZXQG',
+        'greet',
+        '7942151zeyEyh',
+        '3BQcXQm',
+        '474fqOVzN',
+        'south',
+        'pipeline',
+        '13200282bZFEdd',
+        'reset',
+        '34300RkiaWT',
+        'apply',
+        'log',
+        'next',
+        '4994236WhdaTB',
+        '8cGwqua',
+        'factorial',
+        'sum'
+    ];
+    _0x3626 = function () {
+        return _0x725da;
+    };
+    return _0x3626();
+}
+counter[_0x5cb395(0x8a)](), counter[_0x5cb395(0x8a)](), console[_0x5cb395(0x89)](_0x5cb395(0x8d), factorial(0x7)), console[_0x5cb395(0x89)](_0x5cb395(0x99), pipeline(0x14)), console['log'](_0x5cb395(0x8f), counter[_0x5cb395(0x8a)](), counter[_0x5cb395(0x86)]()), console[_0x5cb395(0x89)](_0x5cb395(0x8e), sum(0x4, 0x8, 0xf, 0x10, 0x17, 0x2a)), console[_0x5cb395(0x89)](_0x5cb395(0x94), greetAll(undefined, 'north', _0x5cb395(0x98))), console[_0x5cb395(0x89)](_0x5cb395(0x88), Math['max'][_0x5cb395(0x88)](null, [
+    0x3,
+    0x9,
+    0x1
+]));

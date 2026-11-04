@@ -42,6 +42,7 @@ enum Cmd {
     },
     DiffUnpackBehaviour(xtask::unpack_behaviour::Request),
     ObfMatrix(xtask::obf_matrix::Request),
+    ObfOptions(xtask::obf_options::Request),
     CorpusExport(xtask::corpus_export::Request),
     Corpus,
     CorpusNpm {
@@ -484,6 +485,7 @@ fn main() -> Result<()> {
         Cmd::DiffBehaviour { files } => run_diff_behaviour(files),
         Cmd::DiffUnpackBehaviour(request) => xtask::unpack_behaviour::run(&repo_root(), &request),
         Cmd::ObfMatrix(request) => xtask::obf_matrix::run(&repo_root(), &request),
+        Cmd::ObfOptions(request) => xtask::obf_options::run(&repo_root(), &request),
         Cmd::CorpusExport(request) => xtask::corpus_export::run(&repo_root(), &request),
         Cmd::DiffEval { seed, cases } => run_diff_eval(seed, cases),
         Cmd::Corpus => {

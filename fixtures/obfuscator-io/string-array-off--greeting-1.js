@@ -1,0 +1,1 @@
+function greet(_0x19c873){return'hello,\x20'+_0x19c873;}var guests=['ada','grace','linus'];for(var i=0x0;i<guests['length'];i++){console['log'](greet(guests[i]));}console['log']('done\x20with\x20'+guests['length']+'\x20guests');

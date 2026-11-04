@@ -1,0 +1,9 @@
+{
+  "name": "untwist-webcrack-oracle",
+  "private": true,
+  "type": "module",
+  "description": "Pinned webcrack, run by cargo xtask obf-options as a parity oracle on the generated fixtures/obfuscator-io files only.",
+  "dependencies": {
+    "webcrack": "2.16.0"
+  }
+}

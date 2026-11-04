@@ -152,7 +152,10 @@ and rename. The output is byte for byte what the CLI gives for the same flags. T
 Untwist's output is checked against webcrack's with differential harnesses (`cargo xtask
 diff-unminify`, `diff-deobfuscate`, `diff-unpack`, `diff-mangle`, `diff-jsx`), which run Untwist in
 an internal comparison mode limited to the passes webcrack has. Decoded output is also checked by
-running both the input and the output under Node and comparing what they print.
+running both the input and the output under Node and comparing what they print. `cargo xtask
+obf-options` runs javascript-obfuscator 5.9.1 output for every free option, pairs of the
+high-impact ones and the four presets through both lanes and a pinned webcrack, and requires each
+output to keep no obfuscator machinery and to print what the original program prints.
 
 ## Building from source
 
@@ -180,7 +183,8 @@ The workspace layout:
 Some tests read a large real-world sample at `fixtures/real-world/game.js`, which is not
 distributed with the repository; they are skipped when it is absent. The `cargo xtask diff-*`
 harnesses need a built webcrack clone in `reference/` (or set `UNTWIST_REFERENCE_DIR`) and a CLI
-built with `cargo build --release -p untwist-cli --features test-hooks`. Test inputs are described
+built with `cargo build --release -p untwist-cli --features test-hooks`; `cargo xtask obf-options
+--webcrack` also needs `npm ci --prefix tools/webcrack`. Test inputs are described
 in [`fixtures/README.md`](fixtures/README.md).
 
 ## License
