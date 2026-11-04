@@ -2,7 +2,6 @@
 # safe, unsafe and webcrack count fixtures that are perfect: they run, keep no obfuscator machinery, simplify every expression back and print what the original prints
 # parity gaps first: cells where webcrack is perfect on a fixture and --unsafe is not
 # parity-gap cell	fixtures	unsafe causes on those fixtures
-names-mangled	1	spelled-decoder-name (1)
 object-keys	1	object-keys-computed-key (1)
 pair-calls+keys	1	object-keys-computed-key (1)
 pair-cff+keys	1	object-keys-computed-key (1)
@@ -38,7 +37,7 @@ index-shift-off	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 indexes-mixed	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 indexes-string	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 names-dictionary	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
-names-mangled	10	7/10	9/10	10/10	1	safe-global-key-reach (2), spelled-decoder-name (2)
+names-mangled	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 names-mangled-shuffled	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 names-prefix	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
 numbers-to-expressions	10	8/10	10/10	10/10	0	safe-global-key-reach (2)
@@ -137,4 +136,3 @@ safe-domain-lock-reach	2	20	20	0	safe lane: the domain lock's own for-in scan of
 safe-debug-protection-kept	2	6	6	0	safe lane: after control-flow flattening or dead-code injection a reference to the debug protection function survives outside the statements the pass removes, so it stays and its Function global getter then blocks the unit
 safe-decode-step-budget	1	10	10	0	safe lane: decoding the high preset's rc4 unit runs out of the evaluator's step budget
 unexplained-decode-miss	1	2	4	1	the medium preset's base64 unit keeps every reference undecoded and no pass says why
-spelled-decoder-name	1	1	2	1	with mangled names the string array function and decoder get one-letter names that a string or property name in the program also spells, so find-decoders leaves the unit undecoded
