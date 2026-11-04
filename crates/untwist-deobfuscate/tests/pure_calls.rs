@@ -310,12 +310,11 @@ fn a_script_global_the_program_rebinds_by_a_known_key_is_left_alone_in_both_lane
 }
 
 #[test]
-fn a_script_global_the_program_observes_keeps_its_declaration_in_the_unsafe_lane() {
+fn a_script_global_the_program_observes_is_folded_but_kept_in_both_lanes() {
     let source =
         "var t = [\"x\"];\nfunction dec(a) { return t[a]; }\nconsole.log(\"dec\" in this, dec(0));";
-    assert_eq!(safe(source), safe_identity(source));
     assert_eq!(
-        unsafe_lane(source),
+        both(source),
         "var t = [\"x\"];\nfunction dec(a) {\n  return t[a];\n}\nconsole.log(\"dec\" in this, \"x\");"
     );
 }
