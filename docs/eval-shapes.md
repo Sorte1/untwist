@@ -85,6 +85,8 @@ proves the default budget suffices.
 | function wrappers, swapped parameters | `obfuscator.io-function-wrapper.js` | hoisted inner function declarations, closures |
 | calls-transform object indirection | `obfuscator.io-calls-transform.js`; corpus `*-ct` | member reads on local objects |
 | high preset `StatesClass` self-check | `obfuscator.io-high.js`; `robustness.rs` | `new`, prototype dispatch, `RegExp`, `Function.prototype.toString` |
+| memo reset gate on `array[0]` (javascript-obfuscator 5) | `obfuscator.io-memo-reset-*.js`, `obfuscator.io-site-memo-reset.js`; `memo_reset_gate.rs` | a gate proven to replace only its own memo with `{}` and store `array[0]` in a key nothing else reads |
+| index passed as a hex string at some sites and a number at others | `obfuscator.io-site-memo-reset.js`; `memo_reset_gate.rs` | a decoder whose first statement is `index = index - shift` and that never reads `arguments`, so both forms fill one memo entry |
 | `void 0` array entries | `obfuscator.io-string-array-undefined.js` | decode-error marker path |
 | out-of-range and negative indexes | `obfuscator.io.js` | `undefined` on OOB read |
 

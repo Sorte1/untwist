@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use oxc_span::Span;
 use rustc_hash::FxHashMap;
 
+use crate::coerce::to_number_units;
 use crate::value::{JsObject, JsString, ObjKind, ObjRef, PropKey, Value};
 
 use super::registry::{self_owner, sub_owner};
@@ -74,6 +75,7 @@ thread_local! {
     static FRAME_STACK: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
     static GATE_DEPTH: Cell<usize> = const { Cell::new(0) };
     static GATE_FLAGS: RefCell<Vec<Option<PropKey>>> = const { RefCell::new(Vec::new()) };
+    static GATE_RESETS: RefCell<Vec<Option<PropKey>>> = const { RefCell::new(Vec::new()) };
     static GATE_LEN_MASK: Cell<u64> = const { Cell::new(0) };
     pub(super) static ARGUMENTS_SUB: Cell<bool> = const { Cell::new(false) };
 }
@@ -112,6 +114,7 @@ fn release_state() {
     TABLE.with(|table| drop(std::mem::take(&mut *table.borrow_mut())));
     FRAME_STACK.with(|stack| drop(std::mem::take(&mut *stack.borrow_mut())));
     GATE_FLAGS.with(|flags| drop(std::mem::take(&mut *flags.borrow_mut())));
+    GATE_RESETS.with(|resets| drop(std::mem::take(&mut *resets.borrow_mut())));
     super::probe::reset();
 }
 
@@ -125,6 +128,7 @@ pub fn set_state_tracing(shape: Option<&Shape>) -> StateTracingGuard<'_> {
             FRAME_STACK.with(|stack| stack.borrow_mut().clear());
             GATE_DEPTH.with(|depth| depth.set(0));
             GATE_FLAGS.with(|flags| flags.borrow_mut().clear());
+            GATE_RESETS.with(|resets| resets.borrow_mut().clear());
             EPOCH.with(|epoch| epoch.set(0));
             VIOLATION.with(|violation| violation.set(false));
             ARGUMENTS_SUB.with(|flag| flag.set(false));
@@ -242,20 +246,24 @@ fn register_rewrite(span: Span, obj: &ObjRef<'_>) {
     }
 }
 
+fn canon_argument(value: &Value<'_>, numeric: bool) -> Canon {
+    match value {
+        Value::Str(text) if numeric => Canon::Num(to_number_units(text.units()).to_bits()),
+        other => canon(other),
+    }
+}
+
 fn push_frame(decoder: usize, args: &[Value<'_>], awaiting_forward: bool) {
-    let used = ACTIVE_SHAPE.with(|shape| {
-        shape
-            .borrow()
-            .used_params
-            .get(decoder)
-            .cloned()
-            .unwrap_or_default()
+    let (used, numeric) = ACTIVE_SHAPE.with(|shape| {
+        let shape = shape.borrow();
+        let of = |params: &[Vec<bool>]| params.get(decoder).cloned().unwrap_or_default();
+        (of(&shape.used_params), of(&shape.numeric_params))
     });
     let read_args = args
         .iter()
         .enumerate()
         .filter(|(index, _)| used.get(*index).copied().unwrap_or(true))
-        .map(|(_, value)| canon(value))
+        .map(|(index, value)| canon_argument(value, numeric.get(index).copied().unwrap_or(false)))
         .collect();
     let epoch = EPOCH.with(Cell::get);
     FRAME_STACK.with(|stack| {
@@ -479,12 +487,30 @@ fn in_conditional_gate() -> bool {
     gate_depth() > 0 && conditional_flag().is_some()
 }
 
+fn is_fresh_plain(object: &ObjRef<'_>) -> bool {
+    let fresh = {
+        let borrowed = object.borrow();
+        matches!(borrowed.kind, ObjKind::Plain(_)) && borrowed.props.is_empty()
+    };
+    let addr = address_of(object);
+    fresh && self_owner(addr).is_none() && sub_owner(addr).is_none()
+}
+
+fn resets_memo(key: &PropKey, value: &Value<'_>) -> bool {
+    let resetting = GATE_RESETS.with(|resets| resets.borrow().last().cloned().flatten());
+    resetting.as_ref() == Some(key) && value.as_object().is_some_and(is_fresh_plain)
+}
+
 fn finish_self_write(container: &ObjRef<'_>, owner: usize, key: &PropKey, value: &Value<'_>) {
     if conditional_flag().is_some_and(|flag| &flag != key) {
         breach();
         return;
     }
-    if gate_depth() == 0 || !is_a_gate_key(key) || overwrites_sub(container, key) {
+    if gate_depth() == 0 || !is_a_gate_key(key) {
+        breach();
+        return;
+    }
+    if overwrites_sub(container, key) && !resets_memo(key, value) {
         breach();
         return;
     }
@@ -722,6 +748,17 @@ fn is_gate_span(span: Span) -> bool {
     ACTIVE_SHAPE.with(|shape| shape.borrow().gates.iter().any(|gate| gate.guard == span))
 }
 
+fn reset_memo_at(span: Span) -> Option<PropKey> {
+    ACTIVE_SHAPE.with(|shape| {
+        shape
+            .borrow()
+            .resets
+            .iter()
+            .find(|reset| reset.guard == span)
+            .map(|reset| reset.memo.clone())
+    })
+}
+
 fn conditional_flag_at(span: Span) -> Option<PropKey> {
     ACTIVE_SHAPE.with(|shape| {
         shape
@@ -744,6 +781,8 @@ pub fn enter_gate(span: Span) -> bool {
     super::probe::note_gate_entered(span);
     GATE_DEPTH.with(|depth| depth.set(depth.get() + 1));
     GATE_FLAGS.with(|flags| flags.borrow_mut().push(flag));
+    let memo = reset_memo_at(span);
+    GATE_RESETS.with(|resets| resets.borrow_mut().push(memo));
     true
 }
 
@@ -752,6 +791,7 @@ pub fn leave_gate(entered: bool, normal: bool) {
         return;
     }
     GATE_FLAGS.with(|flags| flags.borrow_mut().pop());
+    GATE_RESETS.with(|resets| resets.borrow_mut().pop());
     GATE_DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
     if !normal {
         breach();
