@@ -75,9 +75,24 @@ const DEFAULT_REASONS: [(&str, &str); 11] = [
 
 type Key = (String, &'static str, &'static str);
 
-struct Failed<'j> {
-    detail: &'j str,
-    note: &'j str,
+pub struct Failed<'j> {
+    pub detail: &'j str,
+    pub note: &'j str,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Shape {
+    pub domain_lock: bool,
+    pub key_shaped: bool,
+}
+
+impl Shape {
+    fn of(entry: &Entry) -> Shape {
+        Shape {
+            domain_lock: entry.cell.starts_with("domain-lock"),
+            key_shaped: entry.source.ends_with("objects.js") || entry.source.ends_with("mixed.js"),
+        }
+    }
 }
 
 pub struct Suggestion {
@@ -123,21 +138,20 @@ fn is_dead_declarations(detail: &str) -> bool {
 }
 
 fn machinery_cause(
-    entry: &Entry,
+    shape: Shape,
     lane: &str,
     failed: &Failed<'_>,
     notes: &[String],
 ) -> Option<&'static str> {
     let (detail, note) = (failed.detail, failed.note);
     let safe = lane == "safe";
-    let shaped = entry.source.ends_with("objects.js") || entry.source.ends_with("mixed.js");
     if by_note(note) == Some(SPELLED) {
         return Some(SPELLED);
     }
-    if safe && entry.cell.starts_with("domain-lock") {
+    if safe && shape.domain_lock {
         return Some(DOMAIN_LOCK);
     }
-    if safe && shaped && note.contains(REACH_NOTE) {
+    if safe && shape.key_shaped && note.contains(REACH_NOTE) {
         return Some(KEY_REACH);
     }
     if let Some(cause) = by_note(note) {
@@ -163,14 +177,14 @@ fn machinery_cause(
     None
 }
 
-fn cause_of(
-    entry: &Entry,
+pub fn cause_of(
+    shape: Shape,
     lane: &str,
     checks: &BTreeMap<&str, Failed<'_>>,
     notes: &[String],
 ) -> Option<&'static str> {
     if let Some(failed) = checks.get("machinery") {
-        return machinery_cause(entry, lane, failed, notes);
+        return machinery_cause(shape, lane, failed, notes);
     }
     let only_simplified = checks.len() == 1
         && checks
@@ -218,7 +232,7 @@ fn lane_cause(
         .lanes
         .get(lane)
         .map_or(&[][..], |run| run.notes.as_slice());
-    match cause_of(&outcome.entry, lane, &failing, notes) {
+    match cause_of(Shape::of(&outcome.entry), lane, &failing, notes) {
         Some(cause) => Ok(Some(cause)),
         None => {
             let names: Vec<&str> = failing.keys().copied().collect();

@@ -22,3 +22,6 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - run: npm ci --prefix tools/obfuscated --ignore-scripts --no-audit --no-fund
+      - run: cargo build -p untwist-cli
+      - run: cargo run -q -p xtask -- obf-fuzz --seed 3 --count 100 --jobs 4 --untwist target/debug/untwist --minimise none
