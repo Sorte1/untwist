@@ -10,6 +10,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Unminify rounds after the first skip unchanged statements: about 6 % faster on large inputs.
 
+### Fixed
+
+- The default lane decodes a string array when a key or code text is built from decoded strings, such as
+  `String[d(1)](...)` or `Function(d(1) + d(2))`; these were refused as a possible patch of a built-in.
+
 ## [0.2.1] - 2026-11-05
 
 ### Fixed
