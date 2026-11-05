@@ -9,8 +9,8 @@ pub enum PrintStyle {
     Compact,
 }
 
-fn codegen(program: &Program<'_>, style: PrintStyle) -> String {
-    let options = match style {
+fn options(style: PrintStyle) -> CodegenOptions {
+    match style {
         PrintStyle::Pretty => CodegenOptions {
             minify: false,
             indent_char: IndentChar::Space,
@@ -23,8 +23,14 @@ fn codegen(program: &Program<'_>, style: PrintStyle) -> String {
             comments: CommentOptions::disabled(),
             ..CodegenOptions::default()
         },
-    };
-    let mut code = Codegen::new().with_options(options).build(program).code;
+    }
+}
+
+fn codegen(program: &Program<'_>, style: PrintStyle) -> String {
+    let mut code = Codegen::new()
+        .with_options(options(style))
+        .build(program)
+        .code;
     code.truncate(code.trim_end().len());
     code.shrink_to_fit();
     code
@@ -34,16 +40,7 @@ pub fn pretty_codegen(program: &Program<'_>) -> String {
     codegen(program, PrintStyle::Pretty)
 }
 
-pub fn function_text(function: &Function<'_>, minify: bool) -> String {
-    let mut codegen = Codegen::new().with_options(CodegenOptions {
-        minify,
-        indent_char: IndentChar::Space,
-        indent_width: 0,
-        comments: CommentOptions::disabled(),
-        ..CodegenOptions::default()
-    });
-    function.print(&mut codegen, Context::empty());
-    let text = codegen.into_source_text();
+fn unwrapped(text: String) -> String {
     match text
         .strip_prefix('(')
         .and_then(|inner| inner.strip_suffix(')'))
@@ -51,6 +48,29 @@ pub fn function_text(function: &Function<'_>, minify: bool) -> String {
         Some(inner) => inner.to_string(),
         None => text,
     }
+}
+
+fn printed_alone(function: &Function<'_>, options: CodegenOptions) -> String {
+    let mut codegen = Codegen::new().with_options(options);
+    function.print(&mut codegen, Context::empty());
+    unwrapped(codegen.into_source_text())
+}
+
+pub fn function_text(function: &Function<'_>, minify: bool) -> String {
+    printed_alone(
+        function,
+        CodegenOptions {
+            minify,
+            indent_char: IndentChar::Space,
+            indent_width: 0,
+            comments: CommentOptions::disabled(),
+            ..CodegenOptions::default()
+        },
+    )
+}
+
+pub fn pretty_function_text(function: &Function<'_>) -> String {
+    printed_alone(function, options(PrintStyle::Pretty))
 }
 
 pub fn compact_function_text(function: &Function<'_>) -> String {

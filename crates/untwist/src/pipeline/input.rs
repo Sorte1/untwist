@@ -8,7 +8,7 @@ use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{has_error, parse_program, parse_with, Parsed, SourceType};
 use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions};
 use untwist_core::print::pretty_codegen;
-use untwist_core::reflow::{reflow_recorded, reflow_recorded_lending, GuardRecord};
+use untwist_core::reflow::{print_placing, Check, GuardRecord, Printed};
 use untwist_core::semantic::{
     assume_observers, build_scoping, forget_failures, Observers, Semantics,
 };
@@ -183,13 +183,30 @@ impl Pipeline {
         result
     }
 
-    fn reflow(&self, processed: String, unbundled: &mut bool) -> (String, GuardRecord) {
-        if !self.options.unpack || !premise_admits(&processed) {
-            return reflow_recorded(processed);
+    fn reflow(&self, printed: Printed, unbundled: &mut bool) -> (String, GuardRecord) {
+        let lending =
+            self.options.unpack && (printed.is_placed() || premise_admits(printed.text()));
+        let options = self.unpack_options();
+        let mut check = |program: &Program<'_>| holds_a_bundle_with(program, options);
+        let (code, record, held) = printed.finish(lending.then_some(&mut check as Check<'_>));
+        if let Some(held) = held {
+            *unbundled = !held;
         }
-        reflow_recorded_lending(processed, &mut |program| {
-            *unbundled = !holds_a_bundle_with(program, self.unpack_options());
-        })
+        (code, record)
+    }
+
+    fn printed<'a>(&self, alloc: &'a Allocator, program: &mut Program<'a>, clean: bool) -> Printed {
+        if !clean {
+            return Printed::unplaced(pretty_codegen(program));
+        }
+        let options = self.unpack_options();
+        let mut check = |program: &Program<'_>| holds_a_bundle_with(program, options);
+        let lend = self.options.unpack.then_some(&mut check as Check<'_>);
+        let printed = print_placing(alloc, program, lend);
+        match premise_admits(printed.text()) {
+            true => printed,
+            false => printed.unplace(program),
+        }
     }
 
     fn process(
@@ -197,7 +214,7 @@ impl Pipeline {
         source: &str,
         (reservation, room, reserved): (Reservation<'_>, Option<InputRoom>, u64),
         result: &mut InputResult,
-    ) -> Option<String> {
+    ) -> Option<Printed> {
         let (fuel, heap) = self.layer_budget(source.len());
         let mut layering = Layering::new(source.len(), reserved, fuel, heap);
         let mut current: Cow<'_, str> = Cow::Borrowed(source);
@@ -303,11 +320,11 @@ impl Pipeline {
                 if first && self.options.statement_spans {
                     result.statement_spans = Some(statement_spans(&parsed.program));
                 }
-                Step::Done(Some(pretty_codegen(&parsed.program)))
+                Step::Done(Some(self.printed(&alloc, &mut parsed.program, errors == 0)))
             }
             Err(_) => {
                 result.note_panicked();
-                Step::Done(Some(pretty_codegen(&parsed.program)))
+                Step::Done(Some(Printed::unplaced(pretty_codegen(&parsed.program))))
             }
         }
     }
@@ -388,7 +405,7 @@ enum Staged {
 }
 
 enum Step {
-    Done(Option<String>),
+    Done(Option<Printed>),
     Peel(Peeled),
     Kept(Refusal),
 }
@@ -501,7 +518,7 @@ mod tests {
     use untwist_eval::stack_reserve::StackReserve;
     use untwist_rename::unique::shared_state;
 
-    const ANONYMOUS: &str = "var f = function(){ return [1,,2]; };";
+    const ANONYMOUS: &str = "var f = function(){ return [1, 2, 3]; };";
 
     #[test]
     fn the_arena_scope_hands_back_text_its_reflow_has_not_touched() {
@@ -518,7 +535,7 @@ mod tests {
             stack: &stack,
             stats: &stats,
         };
-        let unreflowed = pipeline
+        let printed = pipeline
             .process(
                 ANONYMOUS,
                 (reservation, None, 0),
@@ -526,8 +543,10 @@ mod tests {
             )
             .unwrap();
         let finished = pipeline.run_input(0, ANONYMOUS, reservation);
-        assert_ne!(unreflowed, finished.code);
-        assert_eq!(reflow(unreflowed), finished.code);
+        assert!(printed.is_placed());
+        assert_ne!(printed.text(), finished.code);
+        assert_eq!(reflow(printed.text().to_string()), finished.code);
+        assert_eq!(printed.finish(None).0, finished.code);
     }
 
     #[test]

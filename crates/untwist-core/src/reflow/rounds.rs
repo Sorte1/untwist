@@ -10,8 +10,12 @@ thread_local! {
 pub struct Witnessed {
     pub compared: usize,
     pub in_rounds: usize,
+    pub placed: usize,
+    pub reparsed: usize,
     pub differing: Vec<String>,
 }
+
+type Finished = (String, GuardRecord, Option<bool>);
 
 pub fn recording<R>(body: impl FnOnce() -> R) -> (R, Witnessed) {
     let outer = WITNESS.with(|slot| slot.replace(Some(Witnessed::default())));
@@ -66,4 +70,39 @@ fn difference(rounds: &str, one_parse: &str, count: usize) -> String {
         excerpt(rounds),
         excerpt(one_parse)
     )
+}
+
+fn placed_difference(expected: &Finished, finished: &Finished, lending: bool) -> Option<String> {
+    let held = expected.2.filter(|_| lending);
+    if held != finished.2 {
+        return Some(format!(
+            "the bundle check answers {:?} on the program and {held:?} on the reparsed text",
+            finished.2
+        ));
+    }
+    if expected.1 != finished.1 {
+        return Some("the placed reflow records other guards than the reparsed text".to_string());
+    }
+    (expected.0 != finished.0)
+        .then(|| difference(&expected.0, &finished.0, 0).replacen("rounds", "reparsed", 1))
+}
+
+pub(super) fn witness_placed(
+    placed: bool,
+    lending: bool,
+    expected: &Finished,
+    finished: &Finished,
+) {
+    let differs = placed_difference(expected, finished, lending);
+    WITNESS.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(witnessed) = slot.as_mut() else {
+            return;
+        };
+        match placed {
+            true => witnessed.placed += 1,
+            false => witnessed.reparsed += 1,
+        }
+        witnessed.differing.extend(differs);
+    });
 }

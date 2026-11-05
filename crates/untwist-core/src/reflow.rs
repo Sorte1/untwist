@@ -7,12 +7,16 @@ use crate::parse::{has_error, parse_program};
 
 mod guard_key;
 mod guards;
+mod placed;
 #[cfg(debug_assertions)]
 mod rounds;
 
 use crate::guard_shape::may_be_a_guard;
 use guards::{splice_guards, Guard};
 pub use guards::{GuardRecord, GuardTally};
+#[cfg(feature = "test-hooks")]
+pub use placed::{flip_bundle_answer_for_tests, misplace_an_edit_for_tests};
+pub use placed::{print_placing, Check, Printed};
 #[cfg(debug_assertions)]
 pub use rounds::{recording, Witnessed};
 
@@ -68,11 +72,36 @@ fn keyword_end(text: &str) -> Option<usize> {
     text.starts_with(KEYWORD).then_some(KEYWORD.len())
 }
 
-fn holds_an_elision(array: &ArrayExpression<'_>) -> bool {
-    array
-        .elements
-        .iter()
-        .any(|element| matches!(element, ArrayExpressionElement::Elision(_)))
+trait Elements {
+    fn bounds(&self) -> (u32, u32);
+    fn count(&self) -> usize;
+    fn elided(&self) -> bool;
+    fn element(&self, index: usize) -> (u32, u32);
+}
+
+impl Elements for ArrayExpression<'_> {
+    fn bounds(&self) -> (u32, u32) {
+        (self.span.start, self.span.end)
+    }
+
+    fn count(&self) -> usize {
+        self.elements.len()
+    }
+
+    fn elided(&self) -> bool {
+        self.elements
+            .iter()
+            .any(|element| matches!(element, ArrayExpressionElement::Elision(_)))
+    }
+
+    fn element(&self, index: usize) -> (u32, u32) {
+        let span = self.elements[index].span();
+        (span.start, span.end)
+    }
+}
+
+fn spans<A: Elements>(array: &A) -> impl Iterator<Item = (u32, u32)> + Clone + '_ {
+    (0..array.count()).map(|index| array.element(index))
 }
 
 impl<const GUARDS: bool> Scan<'_, GUARDS> {
@@ -89,15 +118,15 @@ impl<const GUARDS: bool> Scan<'_, GUARDS> {
             .push(Edit::Insert(function.span.start + after_keyword as u32));
     }
 
-    fn gaps(&self, array: &ArrayExpression<'_>) -> Vec<(u32, u32)> {
-        let mut gaps = Vec::with_capacity(array.elements.len() + 1);
-        let mut previous = array.span.start + 1;
-        for element in &array.elements {
-            let span = element.span();
-            gaps.push((previous, span.start));
-            previous = span.end;
+    fn gaps<A: Elements>(&self, array: &A) -> Vec<(u32, u32)> {
+        let (start, end) = array.bounds();
+        let mut gaps = Vec::with_capacity(array.count() + 1);
+        let mut previous = start + 1;
+        for (from, to) in spans(array) {
+            gaps.push((previous, from));
+            previous = to;
         }
-        gaps.push((previous, array.span.end - 1));
+        gaps.push((previous, end - 1));
         gaps
     }
 
@@ -125,8 +154,8 @@ impl<const GUARDS: bool> Scan<'_, GUARDS> {
         })
     }
 
-    fn collapsible_gaps(&self, array: &ArrayExpression<'_>) -> Option<Vec<(u32, u32)>> {
-        if array.elements.len() <= 2 || holds_an_elision(array) {
+    fn collapsible_gaps<A: Elements>(&self, array: &A) -> Option<Vec<(u32, u32)>> {
+        if array.count() <= 2 || array.elided() {
             return None;
         }
         let gaps = self.gaps(array);
@@ -155,14 +184,11 @@ impl<const GUARDS: bool> Scan<'_, GUARDS> {
         }
     }
 
-    fn consider(&mut self, array: &ArrayExpression<'_>, marks: Marks) {
-        if array.elements.len() <= 2 || holds_an_elision(array) {
+    fn consider<A: Elements>(&mut self, array: &A, marks: Marks) {
+        if array.count() <= 2 || array.elided() {
             return;
         }
-        let spans = array.elements.iter().map(|element| {
-            let span = element.span();
-            (span.start, span.end)
-        });
+        let spans = spans(array);
         if spans.clone().any(|element| self.holds_a_break(element)) {
             if self.cascade {
                 self.cascade_into(array, spans, marks);
@@ -174,9 +200,9 @@ impl<const GUARDS: bool> Scan<'_, GUARDS> {
         }
     }
 
-    fn cascade_into(
+    fn cascade_into<A: Elements>(
         &mut self,
-        array: &ArrayExpression<'_>,
+        array: &A,
         spans: impl Iterator<Item = (u32, u32)>,
         marks: Marks,
     ) {

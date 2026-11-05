@@ -1,12 +1,39 @@
 use oxc_allocator::Allocator;
 use untwist_core::parse::parse_program;
 use untwist_core::print::{pretty_codegen, print, PrintStyle};
-use untwist_core::reflow::{reflow, reflow_recorded, reflow_tallied, GuardRecord, GuardTally};
+use untwist_core::reflow::{
+    misplace_an_edit_for_tests, print_placing, reflow, reflow_recorded, reflow_tallied,
+    GuardRecord, GuardTally,
+};
+
+fn placed(source: &str) -> (bool, String, GuardRecord) {
+    let alloc = Allocator::default();
+    let mut parsed = parse_program(&alloc, source);
+    let printed = print_placing(&alloc, &mut parsed.program, None);
+    let placed = printed.is_placed();
+    let (code, record, _) = printed.finish(None);
+    (placed, code, record)
+}
+
+fn placed_as_reparsed(source: &str) -> (String, GuardRecord) {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    let reparsed = reflow_recorded(pretty_codegen(&parsed.program));
+    let (_, code, record) = placed(source);
+    assert_eq!(
+        (code, record),
+        reparsed,
+        "the placed reflow differs: {source}"
+    );
+    reparsed
+}
 
 fn pretty(source: &str) -> String {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, source);
-    print(&parsed.program, PrintStyle::Pretty)
+    let printed = print(&parsed.program, PrintStyle::Pretty);
+    assert_eq!(placed_as_reparsed(source).0, printed);
+    printed
 }
 
 fn guard_tally(compacted: u32, kept: u32) -> GuardTally {
@@ -14,9 +41,8 @@ fn guard_tally(compacted: u32, kept: u32) -> GuardTally {
 }
 
 fn tallied(source: &str) -> (String, GuardTally) {
-    let alloc = Allocator::default();
-    let parsed = parse_program(&alloc, source);
-    reflow_tallied(pretty_codegen(&parsed.program))
+    let (code, record) = placed_as_reparsed(source);
+    (code, record.tally())
 }
 
 fn assert_compacted(source: &str, target: &str, compact: &str) {
@@ -528,7 +554,9 @@ fn reprinted(code: &str) -> String {
 }
 
 fn recorded(code: &str) -> (String, GuardRecord) {
-    reflow_recorded(reprinted(code))
+    let reparsed = reflow_recorded(reprinted(code));
+    assert_eq!(placed_as_reparsed(code), reparsed);
+    reparsed
 }
 
 #[test]
@@ -799,4 +827,37 @@ fn a_controller_with_dead_code_and_proxy_tables_is_matched() {
         target,
         "function () {if (q[d(3)](q.z, d(4))) {return u[v];} else if (fn) {const x = fn[d(5)](c, arguments);fn = null;return x;}}",
     );
+}
+
+#[test]
+fn guards_are_placed_from_the_printed_program_without_a_reparse() {
+    for source in [
+        LITERAL_APPLY_GUARD,
+        GUARD_STATEMENTS,
+        ONE_DECLARATION_GUARD,
+        &nested_guards(2, "b.apply"),
+        &format!("var a = [1, 2, 3];\nvar g = function () {{}};\n{LITERAL_APPLY_GUARD}"),
+    ] {
+        let (placed, code, record) = placed(source);
+        assert!(placed, "{source}");
+        assert_eq!((code, record), recorded(source), "{source}");
+    }
+}
+
+#[test]
+fn a_guard_placed_a_byte_off_differs_from_the_reparse() {
+    let source = format!("var a = [1, 2, 3];\n{LITERAL_APPLY_GUARD}");
+    misplace_an_edit_for_tests(true);
+    let (placed, code, _) = placed(&source);
+    misplace_an_edit_for_tests(false);
+    assert!(placed);
+    assert_ne!(code, recorded(&source).0);
+}
+
+#[test]
+fn a_guard_beside_text_spelled_like_its_marker_is_reflowed_through_the_reparse() {
+    let source = format!("{LITERAL_APPLY_GUARD}\nvar z = \"\u{e000}\";");
+    let (placed, code, record) = placed(&source);
+    assert!(!placed);
+    assert_eq!((code, record), recorded(&source));
 }
