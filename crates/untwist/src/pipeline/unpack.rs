@@ -149,6 +149,8 @@ fn push_unpack_row(stages: &mut Vec<StageReport>, started: Instant, modules: u32
         iteration_elapsed: Vec::new(),
         elapsed,
         stop: StopReason::Converged,
+        #[cfg(feature = "test-hooks")]
+        work: Vec::new(),
     });
 }
 

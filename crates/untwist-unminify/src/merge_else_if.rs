@@ -1,7 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_span::SPAN;
 use oxc_syntax::operator::UnaryOperator;
-use untwist_core::pass::{Cx, Interest, Pass, StatementKind, StatementVariants};
+use untwist_core::pass::{Cx, Interest, Locality, Pass, StatementKind, StatementVariants};
 
 #[derive(Default)]
 pub struct MergeElseIf;
@@ -18,8 +18,21 @@ fn negated_test<'a>(statement: &IfStatement<'a>) -> bool {
         if unary.operator == UnaryOperator::LogicalNot)
 }
 
+fn slot_declares(stmt: &Statement<'_>) -> bool {
+    match stmt {
+        Statement::FunctionDeclaration(_) | Statement::ClassDeclaration(_) => true,
+        Statement::VariableDeclaration(declaration) => declaration.kind.is_lexical(),
+        Statement::IfStatement(nested) => {
+            slot_declares(&nested.consequent)
+                || nested.alternate.as_ref().is_some_and(slot_declares)
+        }
+        Statement::LabeledStatement(labeled) => slot_declares(&labeled.body),
+        _ => false,
+    }
+}
+
 impl MergeElseIf {
-    fn merge_else(&mut self, stmt: &mut Statement<'_>) -> bool {
+    fn merge_else(&mut self, stmt: &mut Statement<'_>, cx: &Cx<'_, '_>) -> bool {
         let Statement::IfStatement(statement) = stmt else {
             return false;
         };
@@ -35,6 +48,9 @@ impl MergeElseIf {
         let Some(nested) = block.body.pop() else {
             return false;
         };
+        if slot_declares(&nested) {
+            cx.binding_moved();
+        }
         *alternate = nested;
         true
     }
@@ -72,12 +88,16 @@ impl<'a> Pass<'a> for MergeElseIf {
         "merge-else-if"
     }
 
+    fn locality(&self) -> Locality {
+        Locality::Neutral
+    }
+
     fn interest(&self) -> Interest {
         Interest::EXIT_STATEMENT.on_statements(ACTED_ON_STATEMENTS)
     }
 
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
-        if self.merge_else(stmt) || (cx.opts.extended && self.invert(stmt, cx)) {
+        if self.merge_else(stmt, cx) || (cx.opts.extended && self.invert(stmt, cx)) {
             cx.changed();
         }
     }

@@ -4,7 +4,7 @@ use oxc_ast::ast::*;
 use oxc_span::SPAN;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use untwist_core::ast_util::scope::binding_symbol;
-use untwist_core::pass::{Cx, Interest, Pass};
+use untwist_core::pass::{Cx, Interest, Locality, Pass};
 
 const MAX_PARAMETER_INDEX: usize = 256;
 
@@ -26,6 +26,10 @@ enum DefaultForm {
 impl<'a> Pass<'a> for DefaultParameters {
     fn name(&self) -> &'static str {
         "default-parameters"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Local
     }
 
     fn interest(&self) -> Interest {

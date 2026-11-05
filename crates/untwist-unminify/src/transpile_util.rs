@@ -1,7 +1,9 @@
+use oxc_allocator::UnstableAddress;
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::{ContentEq, Span, SPAN};
 use oxc_syntax::symbol::SymbolId;
+use oxc_traverse::Ancestor;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::global::is_global_undefined;
 use untwist_core::ast_util::scope::binding_symbol;
@@ -30,6 +32,36 @@ pub fn has_reference_counts(
         && write_reference_count(cx.scoping(), symbol) == writes
 }
 
+#[cold]
+#[inline(never)]
+fn pin_unless_at_function_top(declaration: &VariableDeclaration<'_>, cx: &mut Cx<'_, '_>) {
+    if !declared_at_function_top(cx) {
+        cx.pin(declaration.unstable_address());
+    }
+}
+
+fn declared_at_function_top(cx: &Cx<'_, '_>) -> bool {
+    let list = cx.tcx.ancestors().find(|ancestor| {
+        matches!(
+            ancestor,
+            Ancestor::ProgramBody(_)
+                | Ancestor::FunctionBodyStatements(_)
+                | Ancestor::StaticBlockBody(_)
+                | Ancestor::BlockStatementBody(_)
+                | Ancestor::SwitchCaseConsequent(_)
+                | Ancestor::TSModuleBlockBody(_)
+        )
+    });
+    matches!(
+        list,
+        Some(
+            Ancestor::ProgramBody(_)
+                | Ancestor::FunctionBodyStatements(_)
+                | Ancestor::StaticBlockBody(_)
+        )
+    )
+}
+
 pub fn is_undefined_identifier(expr: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
     is_global_undefined(expr, cx.scoping())
 }
@@ -46,17 +78,27 @@ impl TempVars {
         self.consumed.clear();
     }
 
-    pub fn record_declaration(&mut self, declaration: &VariableDeclaration<'_>) {
+    #[inline]
+    pub fn record_declaration(
+        &mut self,
+        declaration: &VariableDeclaration<'_>,
+        cx: &mut Cx<'_, '_>,
+    ) {
         if declaration.kind != VariableDeclarationKind::Var {
             return;
         }
+        let mut recorded = false;
         for declarator in &declaration.declarations {
             if declarator.init.is_some() {
                 continue;
             }
             if let Some(symbol) = binding_symbol(&declarator.id) {
                 self.declared.insert(symbol);
+                recorded = true;
             }
+        }
+        if recorded && cx.pins() {
+            pin_unless_at_function_top(declaration, cx);
         }
     }
 

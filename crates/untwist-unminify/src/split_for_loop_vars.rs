@@ -2,7 +2,7 @@ use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
 use untwist_core::ast_util::scope::{binding_symbol, references_symbol};
-use untwist_core::pass::{Cx, Interest, Pass};
+use untwist_core::pass::{Cx, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct SplitForLoopVars;
@@ -87,6 +87,10 @@ fn hoist_prefix<'a>(
 impl<'a> Pass<'a> for SplitForLoopVars {
     fn name(&self) -> &'static str {
         "split-for-loop-vars"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

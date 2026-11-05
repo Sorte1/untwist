@@ -5,7 +5,9 @@ use oxc_span::SourceType;
 use untwist_core::depth::{
     limits_for, scan_as, Goal, Limits, C_P1, PRINT_GROWTH, PRINT_LENGTH_FACTOR,
 };
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, InputRoom, Interest, Pass};
+use untwist_core::pass::{
+    Cx, ExpressionKind, ExpressionVariants, InputRoom, Interest, Locality, Pass,
+};
 use untwist_eval::stack::room;
 
 #[derive(Default)]
@@ -66,6 +68,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants =
 impl<'a> Pass<'a> for JsonParse {
     fn name(&self) -> &'static str {
         "json-parse"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

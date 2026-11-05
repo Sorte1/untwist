@@ -2,7 +2,7 @@ use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::{GetSpan, SPAN};
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
-use untwist_core::pass::{Cx, Interest, Pass, StatementKind, StatementVariants};
+use untwist_core::pass::{Cx, Interest, Locality, Pass, StatementKind, StatementVariants};
 
 #[derive(Default)]
 pub struct BlockStatements;
@@ -38,7 +38,18 @@ fn loop_scope_id(stmt: &Statement<'_>) -> Option<ScopeId> {
     }
 }
 
+fn declares(stmt: &Statement<'_>) -> bool {
+    match stmt {
+        Statement::FunctionDeclaration(_) | Statement::ClassDeclaration(_) => true,
+        Statement::VariableDeclaration(declaration) => declaration.kind.is_lexical(),
+        _ => false,
+    }
+}
+
 fn wrap_in_block<'a>(slot: &mut Statement<'a>, parent_scope: ScopeId, cx: &mut Cx<'a, '_>) {
+    if declares(slot) {
+        cx.binding_moved();
+    }
     let scope_id = cx.tcx.insert_scope_below_statement_from_scope_id(
         &*slot,
         parent_scope,
@@ -63,6 +74,10 @@ const ACTED_ON_STATEMENTS: StatementVariants = StatementVariants::of(&[
 impl<'a> Pass<'a> for BlockStatements {
     fn name(&self) -> &'static str {
         "block-statements"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

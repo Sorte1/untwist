@@ -7,7 +7,7 @@ use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::ContentEq;
 use oxc_syntax::symbol::SymbolId;
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct NullishCoalescingAssignment {
@@ -26,6 +26,10 @@ impl<'a> Pass<'a> for NullishCoalescingAssignment {
         "nullish-coalescing-assignment"
     }
 
+    fn locality(&self) -> Locality {
+        Locality::Local
+    }
+
     fn interest(&self) -> Interest {
         (Interest::ENTER_PROGRAM
             | Interest::EXIT_VARIABLE_DECLARATION
@@ -41,9 +45,9 @@ impl<'a> Pass<'a> for NullishCoalescingAssignment {
     fn exit_variable_declaration(
         &mut self,
         node: &mut VariableDeclaration<'a>,
-        _cx: &mut Cx<'a, '_>,
+        cx: &mut Cx<'a, '_>,
     ) {
-        self.temps.record_declaration(node);
+        self.temps.record_declaration(node, cx);
     }
 
     fn exit_expression(&mut self, node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {

@@ -80,8 +80,8 @@ fn snapshot<N: Probed>(node: &N, cx: &Cx<'_, '_>) -> Snapshot {
         arena: cx.allocator().used_bytes(),
         changes: *cx.changes,
         notes: cx.notes.len(),
-        invented: cx.invented.len(),
-        renamed: cx.renamed.len(),
+        invented: cx.scratch.invented.len(),
+        renamed: cx.scratch.renamed.len(),
         deferred: cx.opts.deferred_pending.get(),
         code_text: cx.opts.code_text.is_marked(),
         symbols: scoping.symbols_len(),
@@ -123,8 +123,7 @@ macro_rules! probes {
                     hooks,
                     opts,
                     notes,
-                    invented,
-                    renamed,
+                    scratch,
                     ..
                 } = self;
                 for &index in &hooks[Interest::$bit.slot()] {
@@ -140,8 +139,7 @@ macro_rules! probes {
                         opts,
                         notes,
                         pass_name: name,
-                        invented,
-                        renamed,
+                        scratch,
                     };
                     if <$node_ty>::includes(&interest, node.kind_index()) {
                         pass.$hook(node, &mut cx);

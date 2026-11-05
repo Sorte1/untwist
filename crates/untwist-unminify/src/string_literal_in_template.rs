@@ -3,7 +3,7 @@ use oxc_ast::ast::*;
 use oxc_span::Span;
 use oxc_str::Str;
 use oxc_traverse::Ancestor;
-use untwist_core::pass::{Cx, Interest, Pass};
+use untwist_core::pass::{Cx, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct StringLiteralInTemplate;
@@ -94,6 +94,10 @@ impl Pending {
 impl<'a> Pass<'a> for StringLiteralInTemplate {
     fn name(&self) -> &'static str {
         "string-literal-in-template-literal"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

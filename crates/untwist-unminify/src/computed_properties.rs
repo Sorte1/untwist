@@ -3,7 +3,7 @@ use oxc_ast::ast::*;
 use oxc_span::GetSpan;
 use oxc_str::Ident;
 use oxc_syntax::identifier::is_identifier_name;
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct ComputedProperties;
@@ -186,6 +186,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants = ExpressionVariants::of(&[
 impl<'a> Pass<'a> for ComputedProperties {
     fn name(&self) -> &'static str {
         "computed-properties"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

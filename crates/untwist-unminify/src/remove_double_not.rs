@@ -1,7 +1,8 @@
 use oxc_allocator::ReplaceWith;
 use oxc_ast::ast::*;
 use untwist_core::pass::{
-    Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
+    Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass, StatementKind,
+    StatementVariants,
 };
 
 const ARRAY_METHODS: [&str; 7] = [
@@ -96,6 +97,10 @@ const ACTED_ON_STATEMENTS: StatementVariants = StatementVariants::of(&[
 impl<'a> Pass<'a> for RemoveDoubleNot {
     fn name(&self) -> &'static str {
         "remove-double-not"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

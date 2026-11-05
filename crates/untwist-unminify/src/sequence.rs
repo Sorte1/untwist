@@ -6,7 +6,8 @@ use oxc_syntax::scope::ScopeFlags;
 use oxc_traverse::Ancestor;
 use untwist_core::ast_util::literal::is_safe_literal;
 use untwist_core::pass::{
-    Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
+    Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass, StatementKind,
+    StatementVariants,
 };
 
 use crate::sequence_hazard::is_hoist_order_safe;
@@ -442,6 +443,10 @@ impl<'a> Pass<'a> for Sequence {
         "sequence"
     }
 
+    fn locality(&self) -> Locality {
+        Locality::Neutral
+    }
+
     fn interest(&self) -> Interest {
         (Interest::ENTER_STATEMENTS
             | Interest::EXIT_STATEMENTS
@@ -467,6 +472,9 @@ impl<'a> Pass<'a> for Sequence {
         }
         if !in_single_statement_slot(cx) || !is_expandable(stmt) {
             return;
+        }
+        if matches!(stmt, Statement::VariableDeclaration(node) if node.kind.is_lexical()) {
+            cx.binding_moved();
         }
         let span = stmt.span();
         let placeholder = Statement::new_empty_statement(span, &*cx);

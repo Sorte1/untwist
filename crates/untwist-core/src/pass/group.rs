@@ -3,9 +3,7 @@ use std::time::Duration;
 use oxc_allocator::{Allocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
-use oxc_syntax::symbol::SymbolId;
 use oxc_traverse::{traverse_mut, Traverse, TraverseCtx};
-use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::clock::Instant;
 
@@ -13,7 +11,7 @@ use super::interest::{
     ExpressionKind, ExpressionVariants, Interest, StatementKind, StatementVariants,
     EXPRESSION_KINDS, HOOK_COUNT, STATEMENT_KINDS,
 };
-use super::{Cx, Note, Pass, PassCtor, PassOptions, Safety};
+use super::{Cx, Locality, Note, Pass, PassCtor, PassOptions, Safety};
 
 type ProgramHook<'a> = fn(&mut (dyn Pass<'a> + 'a), &mut Program<'a>, &mut Cx<'a, '_>);
 
@@ -25,6 +23,14 @@ const RETIRABLE: u16 = !Interest::ENTER_PROGRAM.hook_bits();
 
 #[cfg(feature = "test-hooks")]
 mod probe;
+mod scope;
+mod walk;
+
+use scope::Scope;
+pub(super) use scope::Scratch;
+
+#[cfg(feature = "test-hooks")]
+pub use scope::mutants::{skip_innermost_list_for_tests, treat_as_neutral_for_tests};
 
 #[cfg(feature = "test-hooks")]
 pub use probe::{probe_variants_for_tests, take_variant_violations_for_tests};
@@ -56,10 +62,10 @@ pub struct PassGroup<'a> {
     tables: Tables,
     opts: PassOptions,
     notes: Vec<Note>,
-    invented: FxHashSet<String>,
-    renamed: FxHashMap<SymbolId, String>,
+    scratch: Scratch,
     declared: bool,
     retiring: bool,
+    scope: Scope<'a>,
 }
 
 fn filtered<'a>(
@@ -204,10 +210,10 @@ impl<'a> PassGroup<'a> {
             tables,
             opts,
             notes: Vec::new(),
-            invented: FxHashSet::default(),
-            renamed: FxHashMap::default(),
+            scratch: Scratch::default(),
             declared,
             retiring: false,
+            scope: Scope::default(),
         }
     }
 
@@ -291,10 +297,79 @@ impl<'a> PassGroup<'a> {
         self.elapsed
             .iter_mut()
             .for_each(|elapsed| *elapsed = Duration::ZERO);
-        self.invented.clear();
-        self.renamed.clear();
+        self.scratch.invented.clear();
+        self.scratch.renamed.clear();
         self.opts.deferred_pending.set(false);
         self.opts.round_requested.set(false);
+        self.opts.walk_whole.set(false);
+        self.opts.binding_moved.set(false);
+    }
+
+    pub fn forget_marks(&mut self) {
+        self.scope.forget();
+    }
+
+    pub fn begin_marks(&mut self) {
+        self.scope.restart();
+    }
+
+    pub fn was_steered(&self) -> bool {
+        self.scope.was_steered()
+    }
+
+    pub fn confirm_next(&mut self) {
+        self.scope.confirm_next();
+    }
+
+    pub fn fall_back(&mut self) {
+        self.scope.fall_back();
+    }
+
+    fn hooks_nodes(&self, index: usize) -> bool {
+        let program = Interest::ENTER_PROGRAM.union(Interest::EXIT_PROGRAM);
+        self.hooks
+            .iter()
+            .enumerate()
+            .any(|(slot, list)| !program.includes(Interest::bit_at(slot)) && list.contains(&index))
+    }
+
+    fn scopes(&self) -> bool {
+        self.passes.iter().enumerate().all(|(index, pass)| {
+            locality_of(pass.as_ref()) != Locality::Program || !self.hooks_nodes(index)
+        })
+    }
+
+    fn settles(&self) -> bool {
+        !self.opts.round_requested.get()
+            && !self.opts.binding_moved.get()
+            && self
+                .passes
+                .iter()
+                .zip(&self.counts)
+                .all(|(pass, count)| *count == 0 || locality_of(pass.as_ref()) == Locality::Neutral)
+    }
+
+    fn steerable(&self) -> bool {
+        #[cfg(feature = "test-hooks")]
+        if self.mode == Mode::Probe {
+            return false;
+        }
+        super::settled::parking_allowed()
+    }
+
+    fn begin_scope(&mut self, scopes: usize) {
+        let recording = self.walks && self.scopes();
+        let steerable = self.steerable();
+        let neutral = self
+            .passes
+            .iter()
+            .map(|pass| locality_of(pass.as_ref()) == Locality::Neutral);
+        let marks = &mut self.scratch.marks;
+        self.scope
+            .begin(marks, recording, steerable, neutral, scopes);
+        if self.total_changes() > 0 {
+            self.scratch.marks.unplace();
+        }
     }
 
     pub fn reset_passes(&mut self) {
@@ -341,8 +416,7 @@ impl<'a> PassGroup<'a> {
             counts,
             opts,
             notes,
-            invented,
-            renamed,
+            scratch,
             ..
         } = self;
         counts[index] = 0;
@@ -354,8 +428,7 @@ impl<'a> PassGroup<'a> {
             name: names[index],
             opts,
             notes,
-            invented,
-            renamed,
+            scratch,
             parked: None,
         };
         let scoping = traverse_mut(&mut runner, alloc, program, scoping, ());
@@ -379,8 +452,7 @@ impl<'a> PassGroup<'a> {
             hooks,
             opts,
             notes,
-            invented,
-            renamed,
+            scratch,
             ..
         } = self;
         for &index in &hooks[hook.slot()] {
@@ -400,12 +472,12 @@ impl<'a> PassGroup<'a> {
                 opts,
                 notes,
                 pass_name: name,
-                invented,
-                renamed,
+                scratch,
             };
             call(pass.as_mut(), node, &mut cx);
             *time += started.elapsed();
         }
+        scratch.marks.quiet();
     }
 }
 
@@ -458,8 +530,7 @@ struct SinglePassRunner<'p, 'a> {
     name: &'static str,
     opts: &'p PassOptions,
     notes: &'p mut Vec<Note>,
-    invented: &'p mut FxHashSet<String>,
-    renamed: &'p mut FxHashMap<SymbolId, String>,
+    scratch: &'p mut Scratch,
     parked: Option<AVec<'a, Statement<'a>>>,
 }
 
@@ -471,8 +542,7 @@ impl<'p, 'a> Traverse<'a, ()> for SinglePassRunner<'p, 'a> {
             opts: self.opts,
             notes: self.notes,
             pass_name: self.name,
-            invented: self.invented,
-            renamed: self.renamed,
+            scratch: self.scratch,
         };
         self.pass.enter_program(node, &mut cx);
         self.parked = park(node, ctx);
@@ -480,109 +550,12 @@ impl<'p, 'a> Traverse<'a, ()> for SinglePassRunner<'p, 'a> {
 
     fn exit_program(&mut self, node: &mut Program<'a>, _ctx: &mut TraverseCtx<'a, ()>) {
         unpark(node, &mut self.parked);
+        #[cfg(feature = "test-hooks")]
+        super::work::record(super::work::Traversal {
+            changes: *self.count,
+            ..super::work::Traversal::default()
+        });
     }
-}
-
-macro_rules! listed {
-    ($self:ident, $hook:ident, $bit:ident, $node:ident, $ctx:ident) => {{
-        let PassGroup {
-            passes,
-            names,
-            counts,
-            hooks,
-            opts,
-            notes,
-            invented,
-            renamed,
-            ..
-        } = $self;
-        for &index in &hooks[Interest::$bit.slot()] {
-            let (Some(pass), Some(count), Some(name)) = (
-                passes.get_mut(index),
-                counts.get_mut(index),
-                names.get(index),
-            ) else {
-                continue;
-            };
-            let mut cx = Cx {
-                tcx: $ctx,
-                changes: count,
-                opts,
-                notes,
-                pass_name: name,
-                invented,
-                renamed,
-            };
-            pass.$hook($node, &mut cx);
-        }
-    }};
-}
-
-macro_rules! forward {
-    ($($hook:ident($node_ty:ty) => $bit:ident;)*) => {
-        $(
-            fn $hook(&mut self, node: &mut $node_ty, ctx: &mut TraverseCtx<'a, ()>) {
-                listed!(self, $hook, $bit, node, ctx)
-            }
-        )*
-    };
-}
-
-macro_rules! by_variant {
-    ($($hook:ident($node_ty:ty) => $probe:ident, $bit:ident;)*) => {
-        $(
-            #[inline]
-            fn $hook(&mut self, node: &mut $node_ty, ctx: &mut TraverseCtx<'a, ()>) {
-                match self.mode {
-                    Mode::ByVariant => {
-                        let mut kind = node.kind_index();
-                        let Some(&first) = self.tables.$hook.get(kind) else {
-                            return;
-                        };
-                        let mut bits = first;
-                        let Self {
-                            passes,
-                            names,
-                            counts,
-                            tables,
-                            opts,
-                            notes,
-                            invented,
-                            renamed,
-                            ..
-                        } = self;
-                        while bits != 0 {
-                            let index = bits.trailing_zeros() as usize;
-                            bits &= bits - 1;
-                            let (Some(pass), Some(count), Some(name)) =
-                                (passes.get_mut(index), counts.get_mut(index), names.get(index))
-                            else {
-                                continue;
-                            };
-                            let mut cx = Cx {
-                                tcx: ctx,
-                                changes: count,
-                                opts,
-                                notes,
-                                pass_name: name,
-                                invented,
-                                renamed,
-                            };
-                            pass.$hook(node, &mut cx);
-                            let now = node.kind_index();
-                            if now != kind {
-                                kind = now;
-                                bits = tables.$hook.get(kind).copied().unwrap_or(0) & above(index);
-                            }
-                        }
-                    }
-                    Mode::List => listed!(self, $hook, $bit, node, ctx),
-                    #[cfg(feature = "test-hooks")]
-                    Mode::Probe => self.$probe(node, ctx),
-                }
-            }
-        )*
-    };
 }
 
 fn park<'a>(
@@ -599,47 +572,10 @@ fn unpark<'a>(program: &mut Program<'a>, parked: &mut Option<AVec<'a, Statement<
     }
 }
 
-impl<'a> Traverse<'a, ()> for PassGroup<'a> {
-    fn enter_program(&mut self, node: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
-        self.run_program_hook(
-            Interest::ENTER_PROGRAM,
-            |pass, node, cx| pass.enter_program(node, cx),
-            node,
-            ctx,
-        );
-        self.apply_retirement();
-        if !self.walks {
-            self.parked = park(node, ctx);
-        }
+pub(super) fn locality_of(pass: &dyn Pass<'_>) -> Locality {
+    #[cfg(feature = "test-hooks")]
+    if scope::mutants::treated_as_neutral(pass.name()) {
+        return Locality::Neutral;
     }
-
-    fn exit_program(&mut self, node: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
-        unpark(node, &mut self.parked);
-        self.run_program_hook(
-            Interest::EXIT_PROGRAM,
-            |pass, node, cx| pass.exit_program(node, cx),
-            node,
-            ctx,
-        );
-    }
-
-    by_variant! {
-        enter_expression(Expression<'a>) => probe_enter_expression, ENTER_EXPRESSION;
-        exit_expression(Expression<'a>) => probe_exit_expression, EXIT_EXPRESSION;
-        enter_statement(Statement<'a>) => probe_enter_statement, ENTER_STATEMENT;
-        exit_statement(Statement<'a>) => probe_exit_statement, EXIT_STATEMENT;
-    }
-
-    forward! {
-        enter_statements(AVec<'a, Statement<'a>>) => ENTER_STATEMENTS;
-        exit_statements(AVec<'a, Statement<'a>>) => EXIT_STATEMENTS;
-        exit_function(Function<'a>) => EXIT_FUNCTION;
-        exit_arrow_function_expression(ArrowFunctionExpression<'a>) => EXIT_ARROW_FUNCTION_EXPRESSION;
-        exit_variable_declaration(VariableDeclaration<'a>) => EXIT_VARIABLE_DECLARATION;
-        exit_object_property(ObjectProperty<'a>) => EXIT_OBJECT_PROPERTY;
-        exit_method_definition(MethodDefinition<'a>) => EXIT_METHOD_DEFINITION;
-        exit_property_definition(PropertyDefinition<'a>) => EXIT_PROPERTY_DEFINITION;
-        exit_template_literal(TemplateLiteral<'a>) => EXIT_TEMPLATE_LITERAL;
-        exit_assignment_target(AssignmentTarget<'a>) => EXIT_ASSIGNMENT_TARGET;
-    }
+    pass.locality()
 }

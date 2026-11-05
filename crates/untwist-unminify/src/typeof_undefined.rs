@@ -1,6 +1,6 @@
 use oxc_ast::ast::*;
 use oxc_span::GetSpan;
-use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct TypeofUndefined;
@@ -37,6 +37,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants =
 impl<'a> Pass<'a> for TypeofUndefined {
     fn name(&self) -> &'static str {
         "typeof-undefined"
+    }
+
+    fn locality(&self) -> Locality {
+        Locality::Neutral
     }
 
     fn interest(&self) -> Interest {

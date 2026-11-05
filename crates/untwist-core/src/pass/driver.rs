@@ -8,7 +8,6 @@ use std::time::Duration;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
 use oxc_semantic::{Scoping, Stats};
-use oxc_traverse::traverse_mut;
 
 use crate::clock::Instant;
 use crate::print::{print, PrintStyle};
@@ -123,6 +122,7 @@ fn retry_deferred_pass<'a>(
     tally.ledger.absorb(group.take_notes(), tally.iterations);
     tally.last = None;
     if redo_changes > 0 {
+        group.forget_marks();
         settled::edited();
         tally.total_changes += redo_changes;
         let latest = group.per_pass_changes();
@@ -149,7 +149,8 @@ fn run_one_iteration<'a>(
     let is_last_allowed = state.tally.iterations + 1 >= state.cap;
     group.set_defer_disabled(is_last_allowed);
     let before = Shape::of(&scoping);
-    let (traversed, mut timing) = timed_traverse(alloc, program, scoping, group);
+    let (traversed, timing) = timed_traverse(alloc, program, scoping, group);
+    let (traversed, mut timing) = confirm_settled(alloc, program, (traversed, timing), group);
     let mut changes = state.tally.absorb(group);
     let deferred_only = changes == 0 && group.deferred_pending() && !is_last_allowed;
     let mut scoping = traversed;
@@ -246,6 +247,7 @@ fn fixpoint<'a>(
         patched,
     } = sem;
     group.opts().scoping_patched.set(patched);
+    group.begin_marks();
     let cap = group.opts().max_iterations.unwrap_or(ITERATION_CEILING);
     let mut tally = Tally {
         keep_last,
@@ -290,12 +292,31 @@ fn timed_traverse<'a>(
 ) -> (Scoping, IterationTiming) {
     group.begin_iteration();
     let clock = Instant::now();
-    let traversed = traverse_mut(group, alloc, program, scoping, ());
+    let traversed = group.traverse(alloc, program, scoping);
     let timing = IterationTiming::traversed(clock.elapsed());
     if group.total_changes() > 0 {
         settled::edited();
     }
     (traversed, timing)
+}
+
+fn confirm_settled<'a>(
+    alloc: &'a Allocator,
+    program: &mut Program<'a>,
+    (traversed, steered): (Scoping, IterationTiming),
+    group: &mut PassGroup<'a>,
+) -> (Scoping, IterationTiming) {
+    if group.total_changes() > 0 || !group.was_steered() {
+        return (traversed, steered);
+    }
+    drop(group.take_notes());
+    group.confirm_next();
+    let (confirmed, timing) = timed_traverse(alloc, program, traversed, group);
+    if group.total_changes() > 0 {
+        group.fall_back();
+    }
+    let both = IterationTiming::traversed(steered.traverse() + timing.traverse());
+    (confirmed, both)
 }
 
 fn timed_rebuild(
@@ -476,6 +497,7 @@ pub fn run_once<'a>(
         mut patched,
     } = sem;
     group.opts().scoping_patched.set(patched);
+    group.begin_marks();
 
     let before = Shape::of(&scoping);
     let (traversed, mut timing) = timed_traverse(alloc, program, scoping, group);

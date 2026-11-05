@@ -50,6 +50,8 @@ pub(super) fn strip_shell<'a>(
         iteration_elapsed: Vec::new(),
         elapsed,
         stop: StopReason::Converged,
+        #[cfg(feature = "test-hooks")]
+        work: Vec::new(),
     });
     notes.push(Note {
         pass: STRIP_SHELL,
