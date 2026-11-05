@@ -370,7 +370,9 @@ fn should_defer(
     defer_budget.set(defer_budget.get() - 1);
     let (_, scan) = prescan_for(cache, program, scoping, plan);
     let has_forcing_pending = scan.pending.iter().any(|site| match site {
-        PendingSite::Sink { forcing, .. } | PendingSite::GlobalKey { forcing, .. } => *forcing,
+        PendingSite::Sink { forcing, .. }
+        | PendingSite::GlobalKey { forcing, .. }
+        | PendingSite::RootKey { forcing, .. } => *forcing,
         PendingSite::ProxyKey {
             strict_names,
             forcing,

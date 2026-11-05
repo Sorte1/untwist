@@ -12,12 +12,18 @@ use super::written::WrittenKey;
 pub enum PendingSite {
     Sink {
         outer_span: Span,
-        arg_span: Span,
+        text: WrittenKey,
         forcing: bool,
     },
     GlobalKey {
         outer_span: Span,
-        key_span: Span,
+        key: WrittenKey,
+        forcing: bool,
+    },
+    RootKey {
+        outer_span: Span,
+        root: &'static str,
+        key: WrittenKey,
         forcing: bool,
     },
     ProxyKey {
@@ -49,27 +55,24 @@ pub fn resolve_pending_sites(
     for site in &scan.pending {
         match site {
             PendingSite::Sink {
-                outer_span,
-                arg_span,
-                ..
-            } => resolve_sink_site(
-                &mut names,
-                &mut span,
-                globals,
-                resolve,
-                *outer_span,
-                *arg_span,
-            ),
+                outer_span, text, ..
+            } => resolve_sink_site(&mut names, &mut span, globals, resolve, (*outer_span, text)),
             PendingSite::GlobalKey {
+                outer_span, key, ..
+            } => {
+                resolve_global_key_site(&mut names, &mut span, globals, resolve, (*outer_span, key))
+            }
+            PendingSite::RootKey {
                 outer_span,
-                key_span,
+                root,
+                key,
                 ..
-            } => resolve_global_key_site(
+            } => resolve_root_key_site(
                 &mut names,
                 &mut span,
                 globals,
                 resolve,
-                (*outer_span, *key_span),
+                (*outer_span, root, key),
             ),
             PendingSite::ProxyKey { .. } => {
                 resolve_proxy_key_site(&mut names, &mut span, context, resolve, site)
@@ -125,14 +128,31 @@ fn flag_all_into(
     names.insert(PROTOTYPE_LINKS);
 }
 
+fn resolve_root_key_site(
+    names: &mut FxHashSet<&'static str>,
+    span: &mut Option<Span>,
+    globals: &FxHashSet<&'static str>,
+    resolve: &dyn Fn(Span) -> Option<String>,
+    (outer_span, root, key): (Span, &'static str, &WrittenKey),
+) {
+    match key.resolved(resolve) {
+        Some(key) if is_code_key(&key) => flag_all_into(names, span, globals, outer_span),
+        Some(_) => {}
+        None => {
+            span.get_or_insert(outer_span);
+            names.insert(root);
+        }
+    }
+}
+
 fn resolve_global_key_site(
     names: &mut FxHashSet<&'static str>,
     span: &mut Option<Span>,
     globals: &FxHashSet<&'static str>,
     resolve: &dyn Fn(Span) -> Option<String>,
-    (outer_span, key_span): (Span, Span),
+    (outer_span, key): (Span, &WrittenKey),
 ) {
-    let Some(key) = resolve(key_span) else {
+    let Some(key) = key.resolved(resolve) else {
         flag_all_into(names, span, globals, outer_span);
         return;
     };
@@ -151,10 +171,9 @@ fn resolve_sink_site(
     span: &mut Option<Span>,
     globals: &FxHashSet<&'static str>,
     resolve: &dyn Fn(Span) -> Option<String>,
-    outer_span: Span,
-    arg_span: Span,
+    (outer_span, text): (Span, &WrittenKey),
 ) {
-    let Some(text) = resolve(arg_span) else {
+    let Some(text) = text.resolved(resolve) else {
         flag_all_into(names, span, globals, outer_span);
         return;
     };
