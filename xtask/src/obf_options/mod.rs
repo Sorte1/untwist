@@ -3,6 +3,7 @@ pub mod machinery;
 pub mod manifest;
 pub mod oracle;
 pub mod report;
+pub mod suggest;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -39,6 +40,11 @@ pub struct Request {
         help = "write EXPECT lines for the unexpected failures to this file"
     )]
     pub draft_expect: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "write a whole suggested EXPECT, every failure classified by cause, keeping each cause's reason from the current EXPECT"
+    )]
+    pub suggest_expect: Option<PathBuf>,
     #[arg(long, help = "also print every expected failure")]
     pub verbose: bool,
 }
@@ -240,8 +246,8 @@ fn oracle_rows(
 }
 
 fn write_outputs(
-    request: &Request,
-    cells: &[report::CellRow],
+    (root, request): (&Path, &Request),
+    (rules, cells): (&[expect::Rule], &[report::CellRow]),
     judged: &[Judged],
     outcomes: &[Outcome],
     oracle: &BTreeMap<String, oracle::Row>,
@@ -251,6 +257,9 @@ fn write_outputs(
     }
     if let Some(path) = &request.draft_expect {
         report::write_draft(path, judged, outcomes)?;
+    }
+    if let Some(path) = &request.suggest_expect {
+        suggest::write(path, &root.join(EXPECT), rules, judged, outcomes)?;
     }
     Ok(())
 }
@@ -273,7 +282,13 @@ pub fn run(root: &Path, request: &Request) -> Result<()> {
     report::print_cells(&cells);
     report::print_causes(&judged);
     report::print_parity(&outcomes, &oracle, request.verbose);
-    write_outputs(request, &cells, &judged, &outcomes, &oracle)?;
+    write_outputs(
+        (root, request),
+        (&rules, &cells),
+        &judged,
+        &outcomes,
+        &oracle,
+    )?;
     for problem in &problems {
         println!("harness: {problem}");
     }

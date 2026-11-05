@@ -158,6 +158,8 @@ running both the input and the output under Node and comparing what they print. 
 obf-options` runs javascript-obfuscator 5.9.1 output for every free option, pairs of the
 high-impact ones and the four presets through both lanes and a pinned webcrack, and requires each
 output to keep no obfuscator machinery and to print what the original program prints.
+`--suggest-expect <file>` writes a whole replacement for its `EXPECT`. Each failure is named by its
+cause, and each cause keeps the reason it already has in `EXPECT`.
 
 ## Building from source
 
