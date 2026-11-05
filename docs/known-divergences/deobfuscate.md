@@ -350,7 +350,13 @@
   and every host name are sources; `delete` of an undeclared name; a `with` statement; `import()`; a
   code runner called or forwarded, whatever its text, or read as a value (a key that may be
   `constructor` or that the check cannot resolve included); and a member or pattern key
-  `prepareStackTrace`, or a write whose key may be `prepareStackTrace`. A source refuses nothing by
+  `prepareStackTrace`, or a write whose key may be `prepareStackTrace`. The last two kinds (a runner
+  read, a key that may be `constructor` or `prepareStackTrace`) do not count inside a unit's own
+  machinery: the base64 and RC4 decoders read their cache and their RC4 table by computed keys,
+  and those reads and writes reach only objects the decoder created, so an encoded string array no
+  longer makes a program a source that the same program with a plain array is not
+  (`crates/untwist/tests/machinery_source_rows.rs`, node-checked; a source in the machinery's
+  syntax itself, such as a sloppy `this`, still counts). A source refuses nothing by
   itself. When the program may hold the global object, the check assumes that unseen code reads,
   calls and writes every global property at any time, and judges what that can change by key, never
   by base. **Overwrite** (judged in every program): a top-level binding of a script is read as

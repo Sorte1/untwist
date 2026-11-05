@@ -13,6 +13,7 @@ use super::roles::*;
 use super::source::SOURCE_KEYS;
 use super::{root_folds, AKey, ASite, Agnostic};
 use crate::proof::{prototype_root_ref, ProtoRoot, GLOBAL_OBJECTS};
+use crate::value_flow::{flow_rule_disabled, MACHINERY_SOURCE_BOUND};
 use untwist_core::semantic::{observers, Observers};
 use untwist_eval::value::JsString;
 
@@ -309,6 +310,10 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     pub(super) fn mark_source(&mut self, span: Span, what: &'static str) {
+        let exempt = self.in_machinery(span) || flow_rule_disabled(MACHINERY_SOURCE_BOUND);
+        if exempt {
+            return;
+        }
         #[cfg(feature = "refusal-spans")]
         if !self.out.global_source {
             self.out.source_at = Some((span, what));
