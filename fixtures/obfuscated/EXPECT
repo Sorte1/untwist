@@ -4,7 +4,8 @@ obfuscated/webpack4-*.js	safe/*	unpacked	xfail	a refusal keeps the string array,
 obfuscated/webpack4-*.js	unsafe/*/dir	unpacked	xfail	webpack 4 concatenated the app's ES modules, so the decoded bundle holds two modules, fewer than the check wants
 obfuscated/webpack4-*.js	unsafe/*/single-file	unpacked	xfail	webpack 4 concatenated the app's ES modules, so the decoded bundle holds two modules, fewer than the check wants
 obfuscated/*.js	safe/*	decoded	xfail	a refusal keeps the string array (the global-reach note; see fixtures/builtin-replaced); see warn-summary
-reference/deobfuscate/obfuscator.io-high.js	unsafe/*	node	allow	the input never exits (its debug protection loops) and --unsafe removes that protection
+reference/deobfuscate/obfuscator.io-high.js	*	node	allow	the input never exits (its debug protection loops) and both lanes remove that protection
+reference/deobfuscate/obfuscator.io-site-memo-reset.js	unsafe/*	node	allow	the input disables console output and --unsafe removes that protection, so the decoded log prints
 real-shapes/*.js	*	node	allow	a reduced shape keeps only the obfuscator and webpack machinery with stub modules, so its input throws or idles; behaviour is checked on fixtures/obfuscated
 real-shapes/game-10.0-shell.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
 real-shapes/game-6.0-7.0.js	safe/*	decoded	xfail	the safe lane refuses and keeps the string array (--unsafe decodes it)
