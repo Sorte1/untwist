@@ -98,6 +98,23 @@ fn report_diagnostics(err: &mut dyn Write, result: &Output) -> io::Result<()> {
 
 const STDERR: &str = "write to stderr";
 
+fn report_wasm(err: &mut dyn Write, result: &Output) -> io::Result<()> {
+    for note in result.notes.iter().filter(|note| note.pass == "wasm") {
+        match note.kind {
+            untwist::NoteKind::Refusal => writeln!(err, "warning: {}", note.message)?,
+            untwist::NoteKind::Progress => writeln!(err, "note: {}", note.message)?,
+        }
+    }
+    for reference in &result.wasm_unresolved {
+        writeln!(
+            err,
+            "note: wasm module {} was not resolved; it is loaded from {}",
+            reference.name, reference.url
+        )?;
+    }
+    Ok(())
+}
+
 const OUTPUT_FILES: &[&str] = &[DEOBFUSCATED, BUNDLE_JSON];
 
 enum ResolvedOutput {
@@ -239,10 +256,12 @@ fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
     }
     let sources = read_inputs(args, session.stdin.take())?;
     let borrowed: Vec<&str> = sources.iter().map(String::as_str).collect();
-    let result = Pipeline::new(std::mem::take(&mut session.options)).run_many(&borrowed);
+    let mut result = Pipeline::new(std::mem::take(&mut session.options)).run_many(&borrowed);
     (session.emitted)();
+    result.settle_wasm(&untwist::WasmSupply::default(), args.output.is_some());
     let err = &mut *session.err;
     report_diagnostics(err, &result).context(STDERR)?;
+    report_wasm(err, &result).context(STDERR)?;
 
     let report = args
         .report

@@ -25,6 +25,7 @@ pub mod share;
 pub mod systemjs;
 pub mod turbopack;
 pub mod umd;
+pub mod wasm;
 pub mod webpack;
 
 use oxc_allocator::Allocator;

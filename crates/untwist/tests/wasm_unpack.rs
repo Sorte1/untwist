@@ -1,0 +1,220 @@
+use untwist::{NoteKind, Options, Output, Pipeline, WasmOrigin, WasmSupply};
+
+fn fixture_path(name: &str) -> String {
+    format!("{}/tests/wasm/{name}", env!("CARGO_MANIFEST_DIR"))
+}
+
+fn fixture(name: &str) -> String {
+    std::fs::read_to_string(fixture_path(name)).unwrap()
+}
+
+fn wasm_bytes(name: &str) -> Vec<u8> {
+    std::fs::read(fixture_path(name)).unwrap()
+}
+
+fn run(source: &str) -> Output {
+    Pipeline::new(Options::default()).run(source)
+}
+
+fn settled(source: &str) -> Output {
+    let mut output = run(source);
+    output.settle_wasm(&WasmSupply::default(), true);
+    output
+}
+
+fn wasm_notes(output: &Output) -> Vec<&str> {
+    output
+        .notes
+        .iter()
+        .filter(|note| note.pass == "wasm")
+        .map(|note| note.message.as_str())
+        .collect()
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let word = chunk.iter().enumerate().fold(0u32, |word, (index, byte)| {
+            word | u32::from(*byte) << (16 - 8 * index)
+        });
+        for index in 0..4 {
+            match index <= chunk.len() {
+                true => out.push(ALPHABET[(word >> (18 - 6 * index) & 63) as usize] as char),
+                false => out.push('='),
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn wasm_bindgen_glue_gets_its_payload_extracted_and_its_imports_and_exports_named() {
+    let out = settled(&fixture("bindgen.js"));
+    assert_eq!(out.wasm.len(), 1);
+    let file = &out.wasm[0];
+    assert_eq!(file.path, "wasm/deobfuscated.wasm");
+    assert_eq!(file.origin, WasmOrigin::Embedded);
+    assert_eq!(file.bytes, wasm_bytes("bindgen.wasm"));
+    assert_eq!(file.renamed, 3);
+    assert!(wasm_notes(&out).is_empty());
+    insta::assert_snapshot!(out.code());
+}
+
+#[test]
+fn emscripten_single_file_names_the_glue_from_the_wasm_name_section() {
+    let out = settled(&fixture("emscripten.js"));
+    assert_eq!(out.wasm.len(), 1);
+    assert_eq!(out.wasm[0].bytes, wasm_bytes("emscripten.wasm"));
+    assert_eq!(out.wasm[0].renamed, 5);
+    insta::assert_snapshot!(out.code());
+}
+
+#[test]
+fn webpack_inline_wasm_is_extracted_per_module_and_the_hashed_async_module_is_listed() {
+    let out = settled(&fixture("webpack.js"));
+    let bundle = out.bundle.as_ref().expect("the webpack bundle unpacks");
+    let module = |path: &str| {
+        bundle
+            .modules
+            .iter()
+            .find(|module| module.path == path)
+            .map(|module| module.code.as_str())
+            .unwrap()
+    };
+    assert_eq!(out.wasm.len(), 1);
+    assert_eq!(out.wasm[0].path, "wasm/index.wasm");
+    assert_eq!(out.wasm[0].bytes, wasm_bytes("webpack.wasm"));
+    assert!(module("src/inline.js").contains("\"../wasm/index.wasm\""));
+    assert!(module("src/index.js").contains("function log(e)"));
+    assert_eq!(
+        out.wasm_unresolved
+            .iter()
+            .map(|reference| reference.name.as_str())
+            .collect::<Vec<_>>(),
+        ["3f2a91c0d1e2b3a4.module.wasm"]
+    );
+    insta::assert_snapshot!(module("src/index.js"));
+}
+
+#[test]
+fn a_malformed_payload_is_refused_and_its_literal_kept() {
+    let mut bytes = b"\0asm\x01\0\0\0".to_vec();
+    bytes.extend([0x02, 0x7f, 0xff, 0xff]);
+    let payload = base64(&bytes);
+    let out = settled(&format!(
+        "const b = \"{payload}\";\nWebAssembly.instantiate(b);"
+    ));
+    assert!(out.wasm.is_empty());
+    assert!(out.code().contains(&payload));
+    let notes = wasm_notes(&out);
+    assert_eq!(notes.len(), 1);
+    assert!(
+        notes[0].contains("is not a well-formed wasm module"),
+        "{notes:?}"
+    );
+    assert!(out
+        .notes
+        .iter()
+        .any(|note| note.pass == "wasm" && note.kind == NoteKind::Refusal));
+}
+
+#[test]
+fn a_payload_with_the_wrong_version_is_refused() {
+    let payload = base64(b"\0asm\x02\0\0\0");
+    let out = settled(&format!("WebAssembly.instantiate(\"{payload}\");"));
+    assert!(out.wasm.is_empty());
+    assert!(wasm_notes(&out)[0].contains("version"));
+}
+
+#[test]
+fn an_oversize_payload_is_refused_without_being_decoded() {
+    let mut out = run("");
+    let payload = format!(
+        "AGFzbQEAAAA{}",
+        "A".repeat(untwist_unpack::wasm::MAX_WASM_BYTES / 3 * 4 + 4)
+    );
+    out.codes = vec![format!("WebAssembly.instantiate(\"{payload}\");")];
+    out.settle_wasm(&WasmSupply::default(), true);
+    assert!(out.wasm.is_empty());
+    assert!(out.codes[0].contains(&payload));
+    assert!(wasm_notes(&out)[0].contains("size limit"));
+}
+
+#[test]
+fn a_module_that_does_not_cover_its_glue_gives_no_names() {
+    let glue = fixture("bindgen.js");
+    let start = glue.find("AGFzbQ").unwrap();
+    let end = start + glue[start..].find('"').unwrap();
+    let swapped = format!(
+        "{}{}{}",
+        &glue[..start],
+        base64(&wasm_bytes("webpack.wasm")),
+        &glue[end..]
+    );
+    let out = settled(&swapped);
+    assert_eq!(out.wasm.len(), 1);
+    assert_eq!(out.wasm[0].renamed, 0);
+    assert!(out.code().contains("function Q(e, t)"));
+    let notes = wasm_notes(&out);
+    assert!(notes[0].contains("does not match the glue"), "{notes:?}");
+}
+
+#[test]
+fn remote_wasm_is_reported_only_where_it_is_loaded_and_never_fetched() {
+    let source = r#"
+        fetch("pkg/app_bg.wasm?v=3");
+        __wbg_init(new URL("other_bg.wasm", import.meta.url));
+        Module.locateFile("a.out.wasm");
+        var wasmBinaryFile = "game.wasm";
+        require("./src/add.wasm");
+        var ids = { "./src/add.wasm": 1 };
+        console.log("not.wasm");
+    "#;
+    let out = settled(source);
+    let names: Vec<(&str, &str)> = out
+        .wasm_unresolved
+        .iter()
+        .map(|reference| (reference.name.as_str(), reference.url.as_str()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            ("app_bg.wasm", "pkg/app_bg.wasm?v=3"),
+            ("other_bg.wasm", "other_bg.wasm"),
+            ("a.out.wasm", "a.out.wasm"),
+            ("game.wasm", "game.wasm"),
+        ]
+    );
+    assert_eq!(out.wasm_references().len(), 4);
+}
+
+#[test]
+fn without_extraction_the_glue_is_named_and_the_literal_kept() {
+    let mut out = run(&fixture("bindgen.js"));
+    out.settle_wasm(&WasmSupply::default(), false);
+    assert!(out.code().contains("AGFzbQ"));
+    assert!(out.code().contains("function __wbg_log_9a1b2c(e, t)"));
+    assert_eq!(out.wasm.len(), 1);
+}
+
+#[test]
+fn text_without_wasm_is_left_byte_for_byte() {
+    let mut out = run("var a = [0, 1, 2];\nfetch('x.js');");
+    let before = out.code().to_string();
+    out.settle_wasm(&WasmSupply::default(), true);
+    assert_eq!(out.code(), before);
+    assert!(out.wasm.is_empty() && out.wasm_unresolved.is_empty());
+}
+
+#[test]
+fn extracted_wasm_is_written_beside_the_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = settled(&fixture("bindgen.js"));
+    let report = out.write_to(dir.path()).unwrap();
+    assert!(report.files.contains(&"wasm/deobfuscated.wasm".to_string()));
+    assert_eq!(
+        std::fs::read(dir.path().join("wasm/deobfuscated.wasm")).unwrap(),
+        wasm_bytes("bindgen.wasm")
+    );
+}

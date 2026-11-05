@@ -61,6 +61,12 @@ pub struct Output {
     pub refusal_spans: Vec<String>,
     #[cfg(feature = "refusal-spans")]
     pub refusal_sites: Vec<RefusalSite>,
+    pub wasm: Vec<crate::wasm::WasmFile>,
+    pub wasm_unresolved: Vec<crate::wasm::WasmReference>,
+}
+
+pub(crate) fn admits_reparse(text: &str) -> bool {
+    input::guard_admits(input::FinalTextGuard::Scan, text)
 }
 
 impl Output {
@@ -219,6 +225,8 @@ impl OutputParts {
             refusal_spans: self.refusal_spans,
             #[cfg(feature = "refusal-spans")]
             refusal_sites: self.refusal_sites,
+            wasm: Vec::new(),
+            wasm_unresolved: Vec::new(),
         }
     }
 }

@@ -26,6 +26,10 @@ struct OutputJson<'a> {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     unpack_panicked: bool,
     stats: &'a untwist::RunStats,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    wasm: &'a [untwist::WasmFile],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    wasm_unresolved: &'a [untwist::WasmReference],
     #[cfg(feature = "test-hooks")]
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     refusal_span: &'a [String],
@@ -59,6 +63,8 @@ pub fn to_json(
         depth_refused: &output.depth_refused,
         unpack_panicked: output.unpack_panicked,
         stats: &output.stats,
+        wasm: &output.wasm,
+        wasm_unresolved: &output.wasm_unresolved,
         #[cfg(feature = "test-hooks")]
         refusal_span: &output.refusal_spans,
     };
@@ -121,6 +127,23 @@ pub fn text_report(output: &Output) -> String {
     if !output.depth_refused.is_empty() {
         let indices: Vec<String> = output.depth_refused.iter().map(usize::to_string).collect();
         text.push_str(&format!("depth_refused: {}\n", indices.join(", ")));
+    }
+    for file in &output.wasm {
+        text.push_str(&format!(
+            "wasm: {} ({}, {} bytes, {} imports, {} exports, {} renamed)\n",
+            file.path,
+            file.origin.as_str(),
+            file.byte_length,
+            file.imports,
+            file.exports,
+            file.renamed
+        ));
+    }
+    for reference in &output.wasm_unresolved {
+        text.push_str(&format!(
+            "wasm_unresolved: {} {}\n",
+            reference.name, reference.url
+        ));
     }
     for note in &output.notes {
         text.push_str(&format!("note: {}: {}\n", note.pass, note.message));

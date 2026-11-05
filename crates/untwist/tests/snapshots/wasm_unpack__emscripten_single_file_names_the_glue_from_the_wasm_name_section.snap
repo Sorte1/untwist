@@ -1,0 +1,47 @@
+---
+source: crates/untwist/tests/wasm_unpack.rs
+expression: out.code()
+---
+var Module = typeof Module != "undefined" ? Module : {};
+var wasmBinaryFile = "./wasm/deobfuscated.wasm";
+var wasmExports;
+var HEAPU8;
+function emscripten_memcpy_big(e, t, n) {
+  HEAPU8.copyWithin(e, t, t + n);
+}
+function abort() {
+  throw new Error("abort");
+}
+var Ya = {
+  a: emscripten_memcpy_big,
+  b: abort
+};
+function Hb(e) {
+  wasmExports = e.exports;
+  HEAPU8 = new Uint8Array(wasmExports.c.buffer);
+  Module._main = wasmExports.d;
+  return wasmExports;
+}
+function Rb(e) {
+  const t = atob(e.slice(37));
+  const n = new Uint8Array(t.length);
+  for (let r = 0; r < t.length; ++r) {
+    n[r] = t.charCodeAt(r);
+  }
+  return n;
+}
+function Ib() {
+  const e = { a: Ya };
+  return WebAssembly.instantiate(Rb(wasmBinaryFile), e).then(function (t) {
+    return Hb(t.instance);
+  });
+}
+var main = function () {
+  return (main = wasmExports.d).apply(null, arguments);
+};
+var malloc = Module._malloc = function () {
+  return (malloc = Module._malloc = wasmExports.e).apply(null, arguments);
+};
+Ib().then(function () {
+  main();
+});

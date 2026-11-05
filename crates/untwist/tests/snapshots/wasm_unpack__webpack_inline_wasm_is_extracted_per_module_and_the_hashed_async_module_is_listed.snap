@@ -1,0 +1,14 @@
+---
+source: crates/untwist/tests/wasm_unpack.rs
+expression: "module(\"src/index.js\")"
+---
+"use strict";
+const r = require("./add.wasm.js");
+const s = require("./inline.js");
+const m = new WebAssembly.Module("../wasm/index.wasm");
+const i = new WebAssembly.Instance(m, { "./env.js": { log: log } });
+console.log(i.exports.add(1, 2), s);
+function log(e) {
+  console.log(e);
+}
+r.then((e) => e.add(2, 3));

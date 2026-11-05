@@ -58,7 +58,7 @@ impl Output {
 pub struct PlannedFile {
     pub path: PathBuf,
     pub relative: String,
-    pub contents: String,
+    pub contents: Vec<u8>,
 }
 
 pub fn is_safe_relative(path: &str) -> bool {
@@ -126,16 +126,20 @@ fn single_file_plan(dir: &Path, result: &Output) -> Vec<PlannedFile> {
     let mut planned = vec![PlannedFile {
         path: dir.join(DEOBFUSCATED),
         relative: DEOBFUSCATED.to_string(),
-        contents: result.concatenated().into_owned(),
+        contents: result.concatenated().into_owned().into_bytes(),
     }];
-    let Some(bundle) = result.bundle.as_ref() else {
-        return planned;
-    };
-    planned.push(PlannedFile {
-        path: dir.join(BUNDLE_JSON),
-        relative: BUNDLE_JSON.to_string(),
-        contents: bundle.bundle_json(),
-    });
+    if let Some(bundle) = result.bundle.as_ref() {
+        planned.push(PlannedFile {
+            path: dir.join(BUNDLE_JSON),
+            relative: BUNDLE_JSON.to_string(),
+            contents: bundle.bundle_json().into_bytes(),
+        });
+    }
+    planned.extend(result.wasm.iter().map(|file| PlannedFile {
+        path: dir.join(&file.path),
+        relative: file.path.clone(),
+        contents: file.bytes.clone(),
+    }));
     planned
 }
 
@@ -157,30 +161,27 @@ impl ModulePlan {
         self.planned.push(PlannedFile {
             path: dir.join(&relative),
             relative,
-            contents: code.to_string(),
+            contents: code.as_bytes().to_vec(),
         });
     }
 
-    fn plan_module(&mut self, dir: &Path, file: crate::bundle::FileOutput) {
-        if !is_safe_relative(&file.path) {
-            self.refused.push(PlanRefusal::Unsafe(file.path));
+    fn plan_module(&mut self, dir: &Path, path: String, contents: Vec<u8>) {
+        if !is_safe_relative(&path) {
+            self.refused.push(PlanRefusal::Unsafe(path));
             return;
         }
-        if !self.taken.insert(file.path.clone()) {
-            let owner = match self.outputs.contains(&file.path) {
+        if !self.taken.insert(path.clone()) {
+            let owner = match self.outputs.contains(&path) {
                 true => OWNER_OUTPUT,
                 false => OWNER_MODULE,
             };
-            self.refused.push(PlanRefusal::Collision {
-                path: file.path,
-                owner,
-            });
+            self.refused.push(PlanRefusal::Collision { path, owner });
             return;
         }
         self.planned.push(PlannedFile {
-            path: dir.join(&file.path),
-            relative: file.path.clone(),
-            contents: file.code,
+            path: dir.join(&path),
+            relative: path,
+            contents,
         });
     }
 }
@@ -198,8 +199,11 @@ fn plan_per_module(
     }
     if let Some(bundle) = result.bundle.as_ref() {
         for file in bundle.files() {
-            plan.plan_module(dir, file);
+            plan.plan_module(dir, file.path, file.code.into_bytes());
         }
+    }
+    for file in &result.wasm {
+        plan.plan_module(dir, file.path.clone(), file.bytes.clone());
     }
     (plan.planned, plan.refused)
 }
@@ -304,11 +308,11 @@ fn create_temp_file(parent: &Path) -> io::Result<tempfile::NamedTempFile> {
     tempfile::Builder::new().tempfile_in(parent)
 }
 
-fn write_via_temp_file(path: &Path, contents: &str) -> Result<()> {
+fn write_via_temp_file(path: &Path, contents: &[u8]) -> Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let mut temp = create_temp_file(parent)
         .with_context(|| format!("create temp file in {}", parent.display()))?;
-    temp.write_all(contents.as_bytes())
+    temp.write_all(contents)
         .with_context(|| format!("write {}", path.display()))?;
     temp.persist(path)
         .map(|_| ())
@@ -430,6 +434,8 @@ mod tests {
             refusal_spans: Vec::new(),
             #[cfg(feature = "refusal-spans")]
             refusal_sites: Vec::new(),
+            wasm: Vec::new(),
+            wasm_unresolved: Vec::new(),
         }
     }
 
@@ -504,8 +510,8 @@ mod tests {
             .iter()
             .find(|file| file.relative == DEOBFUSCATED)
             .expect("deobfuscated file planned");
-        assert_eq!(deobfuscated.contents, "deobfuscated code");
-        assert!(planned.iter().all(|file| file.contents != "module code"));
+        assert_eq!(deobfuscated.contents, b"deobfuscated code");
+        assert!(planned.iter().all(|file| file.contents != b"module code"));
         assert!(refused.iter().any(
             |refusal| matches!(refusal, PlanRefusal::Collision { path, .. } if path == DEOBFUSCATED)
         ));
