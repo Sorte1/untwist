@@ -79,9 +79,7 @@ pub(super) fn reached(
         .map(|(symbol, _)| (*symbol, scope.visible(scoping, *symbol)))
         .filter(|(_, visible)| *visible != Visible::Nested)
         .collect();
-    if !cx.opts.unsafe_transforms {
-        judge_globals(program, scoping, &globals, &mut kept);
-    }
+    judge_globals(program, scoping, &globals, &mut kept);
     kept
 }
 
