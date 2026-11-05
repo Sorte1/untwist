@@ -105,7 +105,7 @@ pub fn behaviour_of(
     })
 }
 
-fn notes_of(stderr: &str) -> Vec<String> {
+pub fn notes_of(stderr: &str) -> Vec<String> {
     stderr
         .lines()
         .filter(|line| {
