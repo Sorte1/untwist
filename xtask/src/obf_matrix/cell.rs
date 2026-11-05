@@ -130,6 +130,7 @@ pub struct Runner {
     pub node: Option<PathBuf>,
     pub root: PathBuf,
     pub timeout: Duration,
+    pub env: Vec<(&'static str, &'static str)>,
 }
 
 pub fn read_lossy(path: &Path) -> String {
@@ -313,7 +314,10 @@ impl Runner {
         } else {
             Command::new(&self.untwist)
         };
-        command.args(cell.flags(out_dir)).arg(input);
+        command
+            .args(cell.flags(out_dir))
+            .arg(input)
+            .envs(self.env.iter().copied());
         command
     }
 

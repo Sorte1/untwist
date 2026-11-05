@@ -41,7 +41,7 @@ pub(super) fn closed_runner_read<'a>(
 
 impl<'s, 'a> Sites<'s, 'a> {
     pub(super) fn mark_closed_runner_read(&mut self, span: Span) {
-        self.out.global_source = true;
+        self.mark_source(span, "a closed eval of a runner");
         let has_sink = self.flow.sink_of(span).is_some();
         let origin = Origin {
             runner: true,
@@ -67,7 +67,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         arguments: &[Argument<'a>],
         function: bool,
     ) {
-        self.out.global_source = true;
+        self.mark_source(call_span, "code from text");
         if self.text_unsafe(arguments, function) {
             self.text_judged = true;
             self.mark_code(call_span);
@@ -81,7 +81,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         quasi: &TemplateLiteral<'a>,
         function: bool,
     ) {
-        self.out.global_source = true;
+        self.mark_source(span, "code from a template");
         let text = quasi
             .quasis
             .first()
@@ -152,7 +152,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         let Some(text_function) = self.runner_callee(function) else {
             return;
         };
-        self.out.global_source = true;
+        self.mark_source(call.span, "a forwarded runner");
         self.reach_forwarded(call, forward);
         let call_texts = forward.call.then(|| {
             let texts: Vec<Option<&Expression<'a>>> = call
@@ -255,7 +255,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         let Some(text_function) = self.runner_callee(arg) else {
             return;
         };
-        self.out.global_source = true;
+        self.mark_source(call.span, "a proxied runner");
         self.direct
             .insert(span_key(arg.without_parentheses().span()));
         let inner: &'a CallExpression<'a> = self.alloc(inner);

@@ -317,6 +317,7 @@ pub fn runner(root: &Path, untwist: Option<&PathBuf>, node: bool) -> Result<Runn
         node,
         root: root.to_path_buf(),
         timeout: TIMEOUT,
+        env: Vec::new(),
     })
 }
 

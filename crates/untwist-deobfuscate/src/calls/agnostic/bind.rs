@@ -458,6 +458,11 @@ impl<'s, 'a> Bindings<'s, 'a> {
         self.sources.found()
     }
 
+    #[cfg(feature = "refusal-spans")]
+    pub(super) fn first_source(&self) -> Option<(oxc_span::Span, &'static str)> {
+        self.sources.first()
+    }
+
     pub(super) fn symbol_name(&self, symbol: SymbolId) -> &'s str {
         self.scoping.symbol_name(symbol)
     }
@@ -749,12 +754,12 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
         }
     }
 
-    fn visit_this_expression(&mut self, _it: &ThisExpression) {
-        self.sources.note_this();
+    fn visit_this_expression(&mut self, it: &ThisExpression) {
+        self.sources.note_this(it.span);
     }
 
-    fn visit_super(&mut self, _it: &Super) {
-        self.sources.note_this();
+    fn visit_super(&mut self, it: &Super) {
+        self.sources.note_this(it.span);
     }
 
     fn visit_property_definition(&mut self, it: &PropertyDefinition<'a>) {
@@ -788,12 +793,12 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
     }
 
     fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
-        self.sources.note();
+        self.sources.note(it.span, "a with statement");
         walk_js::walk_with_statement(self, it);
     }
 
     fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {
-        self.sources.note();
+        self.sources.note(it.span, "a dynamic import");
         walk_js::walk_import_expression(self, it);
     }
 

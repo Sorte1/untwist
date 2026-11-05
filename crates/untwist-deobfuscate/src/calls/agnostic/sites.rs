@@ -184,11 +184,14 @@ impl<'s, 'a> Sites<'s, 'a> {
         kind: &'static str,
         root: ProtoRoot,
     ) {
-        self.out.global_source |= match &key {
+        let source = match &key {
             AKey::Named(name) => SOURCE_KEYS.contains(&name.as_ref()),
             AKey::Index => false,
             AKey::Pending(_) | AKey::Unknown => true,
         };
+        if source {
+            self.mark_source(span, "a write by a key that may be prepareStackTrace");
+        }
         let outside = !self.in_machinery(span);
         if outside {
             let open = matches!(key, AKey::Unknown)
@@ -260,7 +263,9 @@ impl<'s, 'a> Sites<'s, 'a> {
         reason: &'static str,
         has_sink: bool,
     ) {
-        self.out.global_source |= origin.runner;
+        if origin.runner {
+            self.mark_source(span, "code from text");
+        }
         if self.in_machinery(span) {
             return;
         }
@@ -299,6 +304,16 @@ impl<'s, 'a> Sites<'s, 'a> {
             self.out.reach_code.get_or_insert(span);
         }
         self.saturated = true;
+    }
+
+    pub(super) fn mark_source(&mut self, span: Span, what: &'static str) {
+        #[cfg(feature = "refusal-spans")]
+        if !self.out.global_source {
+            self.out.source_at = Some((span, what));
+        }
+        #[cfg(not(feature = "refusal-spans"))]
+        let _ = (span, what);
+        self.out.global_source = true;
     }
 
     #[cfg(feature = "refusal-spans")]

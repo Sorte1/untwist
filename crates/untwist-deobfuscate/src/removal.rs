@@ -63,7 +63,19 @@ fn observed_names_of(
         fns: &fns,
         observe: true,
     };
-    global_reach(program, scoping, (None, &machinery), watch).observed
+    let reach = global_reach(program, scoping, (None, &machinery), watch);
+    #[cfg(feature = "refusal-spans")]
+    record_observed(&reach);
+    reach.observed
+}
+
+#[cfg(feature = "refusal-spans")]
+fn record_observed(reach: &crate::calls::agnostic::GlobalReach) {
+    let Some(span) = reach.observed else {
+        return;
+    };
+    crate::refusal_spans::record(|| "MACHINERY_NAME_OBSERVED".to_string(), span);
+    crate::refusal_spans::extend(reach.source.as_slice());
 }
 
 #[derive(Default)]

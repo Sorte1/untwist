@@ -90,6 +90,7 @@ fn refused_here(notes: &[Note]) -> bool {
     notes.iter().any(|note| {
         note.message.starts_with(notes::BUILTIN_PATCHED)
             || note.message == notes::STRING_ARRAY_GLOBAL_REACH
+            || note.message == notes::MACHINERY_NAME_OBSERVED
     })
 }
 
@@ -183,6 +184,8 @@ mod tests {
             ["1:1 x", "2:1 y"]
         );
         let reached = note(notes::STRING_ARRAY_GLOBAL_REACH);
-        assert_eq!(kept(&[reached], sites).len(), 2);
+        assert_eq!(kept(&[reached], sites.clone()).len(), 2);
+        let observed = note(notes::MACHINERY_NAME_OBSERVED);
+        assert_eq!(kept(&[observed], sites).len(), 2);
     }
 }

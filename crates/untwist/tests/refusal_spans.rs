@@ -147,3 +147,31 @@ fn several_inputs_name_the_input_each_span_belongs_to() {
         out.refusal_spans
     );
 }
+
+#[test]
+fn a_names_refusal_is_reported_at_the_observing_call_and_its_global_source() {
+    let patch =
+        "var g = this; function show(o) { console.log(Object.keys(o).length > 0); } show(g);";
+    let source = patched_after_rotator("true", patch);
+    let out = run(&source, false);
+    assert!(
+        refused_as(&out, notes::MACHINERY_NAME_OBSERVED),
+        "{:#?}",
+        out.notes
+    );
+    let observed = format!(
+        "{} MACHINERY_NAME_OBSERVED",
+        position_of(&source, "Object.keys(o)")
+    );
+    let origin = format!(
+        "{} global source: a this that may be the global object",
+        position_of(&source, "this;")
+    );
+    for expected in [observed, origin] {
+        assert!(
+            out.refusal_spans.contains(&expected),
+            "{expected}: {:#?}",
+            out.refusal_spans
+        );
+    }
+}

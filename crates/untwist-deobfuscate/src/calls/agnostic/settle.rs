@@ -174,6 +174,10 @@ fn settle_ordered<'a>(
             let (reach, observed) = rebound_ambient(&out, scoping, &written);
             out.realm_rebound |= roots_rebound(scoping, &out.sites, machinery);
             out.global_source = judged.source;
+            #[cfg(feature = "refusal-spans")]
+            {
+                out.source_at = bindings.first_source().or(out.source_at);
+            }
             out.reach = out.reach.or(reach);
             out.observed = final_observed(&out, &written, observed);
             out.bootstrap = bindings.bootstrap_refusal;
@@ -197,10 +201,16 @@ pub(super) fn analyse<'s, 'a>(
         run(program, scoping, bindings, inputs, true, symbol_safe, flow);
     if !natives {
         let source = out.global_source;
+        #[cfg(feature = "refusal-spans")]
+        let source_at = out.source_at;
         drop(out);
         let rerun = run(program, scoping, bindings, inputs, false, symbol_safe, flow);
         out = rerun.0;
         out.global_source |= source;
+        #[cfg(feature = "refusal-spans")]
+        {
+            out.source_at = out.source_at.or(source_at);
+        }
         chains = rerun.1;
     }
     if !chains {

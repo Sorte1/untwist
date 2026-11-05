@@ -1,4 +1,5 @@
 use oxc_ast::ast::*;
+use oxc_span::{GetSpan, Span};
 
 use super::bind::Bindings;
 
@@ -82,6 +83,8 @@ pub(super) struct Frame {
 pub(super) struct Sources {
     frame: Frame,
     found: bool,
+    #[cfg(feature = "refusal-spans")]
+    first: Option<(Span, &'static str)>,
 }
 
 impl Sources {
@@ -94,6 +97,8 @@ impl Sources {
         Self {
             frame,
             found: false,
+            #[cfg(feature = "refusal-spans")]
+            first: None,
         }
     }
 
@@ -126,11 +131,24 @@ impl Sources {
         self.found
     }
 
-    pub(super) fn note_this(&mut self) {
-        self.found |= self.frame.this_global;
+    #[cfg(feature = "refusal-spans")]
+    pub(super) fn first(&self) -> Option<(Span, &'static str)> {
+        self.first
     }
 
-    pub(super) fn note(&mut self) {
+    pub(super) fn note_this(&mut self, span: Span) {
+        if self.frame.this_global {
+            self.note(span, "a this that may be the global object");
+        }
+    }
+
+    pub(super) fn note(&mut self, span: Span, what: &'static str) {
+        #[cfg(feature = "refusal-spans")]
+        if self.first.is_none() {
+            self.first = Some((span, what));
+        }
+        #[cfg(not(feature = "refusal-spans"))]
+        let _ = (span, what);
         self.found = true;
     }
 
@@ -153,7 +171,8 @@ impl<'a> Bindings<'_, 'a> {
             && self.reference_symbol(id).is_none()
             && !self.sources.standard(&id.name)
         {
-            self.sources.note();
+            self.sources
+                .note(id.span, "a free name that may be a host global");
         }
     }
 
@@ -172,7 +191,7 @@ impl<'a> Bindings<'_, 'a> {
             MemberExpression::PrivateFieldExpression(_) => false,
         };
         if keyed {
-            self.sources.note();
+            self.sources.note(member.span(), "a prepareStackTrace key");
         }
         if let Expression::Identifier(id) = member.object().without_parentheses() {
             self.scan_identifier(id);
@@ -181,7 +200,7 @@ impl<'a> Bindings<'_, 'a> {
 
     pub(super) fn scan_pattern_key(&mut self, key: &PropertyKey<'a>) {
         if source_key(key) {
-            self.sources.note();
+            self.sources.note(key.span(), "a prepareStackTrace key");
         }
     }
 
@@ -189,7 +208,7 @@ impl<'a> Bindings<'_, 'a> {
         let deleted = matches!(unary.argument.without_parentheses(),
             Expression::Identifier(id) if self.reference_symbol(id).is_none());
         if deleted {
-            self.sources.note();
+            self.sources.note(unary.span, "a deleted free name");
         }
     }
 }
