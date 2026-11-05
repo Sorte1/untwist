@@ -13,7 +13,7 @@ categories = ["development-tools", "parser-implementations"]
 description = "Bundle detection and module extraction for webpack, browserify, esbuild, Parcel and other bundles"
 
 [dependencies]
-untwist-core = { path = "../untwist-core", version = "0.2.0" }
+untwist-core = { path = "../untwist-core", version = "0.2.1" }
 oxc_allocator.workspace = true
 oxc_ast.workspace = true
 oxc_ast_visit.workspace = true
