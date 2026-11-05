@@ -8,25 +8,43 @@ pub struct DecodedString {
     pub value: String,
 }
 
+#[derive(Default)]
+struct Found {
+    rows: Vec<(Span, usize, usize)>,
+    text: String,
+}
+
+impl Found {
+    fn into_strings(self) -> Vec<DecodedString> {
+        self.rows
+            .into_iter()
+            .map(|(span, start, end)| DecodedString {
+                span,
+                value: self.text[start..end].to_string(),
+            })
+            .collect()
+    }
+}
+
 thread_local! {
-    static FOUND: RefCell<Option<Vec<DecodedString>>> = const { RefCell::new(None) };
+    static FOUND: RefCell<Option<Found>> = const { RefCell::new(None) };
 }
 
 pub struct Recorder {
-    outer: Option<Option<Vec<DecodedString>>>,
+    outer: Option<Option<Found>>,
 }
 
 impl Recorder {
     pub fn start() -> Self {
-        let outer = FOUND.with(|found| found.replace(Some(Vec::new())));
+        let outer = FOUND.with(|found| found.replace(Some(Found::default())));
         Self { outer: Some(outer) }
     }
 
     pub fn finish(mut self) -> Vec<DecodedString> {
-        self.restore().unwrap_or_default()
+        self.restore().map(Found::into_strings).unwrap_or_default()
     }
 
-    fn restore(&mut self) -> Option<Vec<DecodedString>> {
+    fn restore(&mut self) -> Option<Found> {
         let outer = self.outer.take()?;
         FOUND.with(|found| found.replace(outer))
     }
@@ -42,7 +60,9 @@ pub(crate) fn record(span: Span, value: impl FnOnce() -> Option<String>) {
     FOUND.with(|found| {
         if let Some(found) = found.borrow_mut().as_mut() {
             if let Some(value) = value() {
-                found.push(DecodedString { span, value });
+                let start = found.text.len();
+                found.text.push_str(&value);
+                found.rows.push((span, start, found.text.len()));
             }
         }
     });
