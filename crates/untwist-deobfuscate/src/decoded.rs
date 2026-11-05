@@ -444,6 +444,7 @@ struct DecodeLimits<'d> {
     defer_budget: &'d Cell<u32>,
     defer_disabled: bool,
     nested_root: bool,
+    unsafe_lane: bool,
 }
 
 fn reads_prototypes(runs: &[UnitRun<'_, '_>]) -> bool {
@@ -488,6 +489,7 @@ fn decode_program(
         &plan,
         (program, scoping, limits.nested_root),
         (&mut cache, heap),
+        limits.unsafe_lane,
     );
     if code_text {
         published.mark();
@@ -553,11 +555,13 @@ fn judge_runs<'p>(
     plan: &DecodePlan<'p>,
     (program, scoping, nested_root): (&'p Program<'p>, &Scoping, bool),
     (cache, heap): (&mut ScanCache, &mut InputHeap),
+    unsafe_lane: bool,
 ) -> bool {
     let (any_builtin_roots_touched, mut value_map) =
         value_map_for(&runs, plan, program, scoping, cache);
     let (reached, late_writes) =
         guard_and_reach(&runs, plan, (program, scoping, nested_root), &mut value_map);
+    let reached = reached.filter(|_| !unsafe_lane);
     let late = late_writes.as_deref();
     let (resolved_roots, resolved_span, code_text) = if any_builtin_roots_touched {
         judge_resolved_roots(cache, (program, scoping), (plan, late), &runs, &value_map)
@@ -734,6 +738,7 @@ impl<'a> Pass<'a> for InlineDecodedStrings {
             defer_budget: &self.defer_budget,
             defer_disabled: cx.defer_disabled(),
             nested_root: cx.opts.nested_root,
+            unsafe_lane: cx.opts.unsafe_transforms,
         };
         let mut heap = self.heap.borrow_mut();
         heap.start(

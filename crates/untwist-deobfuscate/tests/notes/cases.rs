@@ -636,12 +636,12 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
-        source: Source::Whole(A_UNIT_REACHED_THROUGH_THE_GLOBAL_OBJECT),
+        source: Source::DefaultLane(A_UNIT_REACHED_THROUGH_THE_GLOBAL_OBJECT),
         expects: notes::STRING_ARRAY_GLOBAL_REACH,
         mode: Match::Contains,
     },
     Case {
-        source: Source::Whole(A_BOOTSTRAP_WHOSE_TABLE_IS_WRITTEN),
+        source: Source::DefaultLane(A_BOOTSTRAP_WHOSE_TABLE_IS_WRITTEN),
         expects: notes::WEBPACK_BOOTSTRAP_UNPROVEN,
         mode: Match::Contains,
     },
