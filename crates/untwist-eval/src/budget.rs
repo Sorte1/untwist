@@ -4,6 +4,7 @@ use crate::bail::{Bail, EvalResult};
 
 pub const STEP_BUDGET: u64 = 50_000_000;
 pub const UNSAFE_STEP_BUDGET: u64 = 1_000_000_000;
+pub const SAFE_STEPS_PER_DISTINCT_CALL: u64 = 500_000;
 
 pub fn default_fuel(unsafe_transforms: bool) -> u64 {
     if unsafe_transforms {
@@ -11,6 +12,14 @@ pub fn default_fuel(unsafe_transforms: bool) -> u64 {
     } else {
         STEP_BUDGET
     }
+}
+
+pub fn safe_unit_fuel(distinct_calls: usize) -> u64 {
+    u64::try_from(distinct_calls)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(SAFE_STEPS_PER_DISTINCT_CALL)
+        .saturating_add(STEP_BUDGET)
+        .min(UNSAFE_STEP_BUDGET)
 }
 #[cfg(not(target_arch = "wasm32"))]
 pub const CALL_DEPTH_CAP: u32 = 1_000;

@@ -1,6 +1,7 @@
 use untwist_eval::bail::Bail;
 use untwist_eval::budget::{
-    loop_cap, Budget, CALL_DEPTH_CAP, MIN_LOOP_ITERATIONS, NESTING_DEPTH_CAP, STEP_BUDGET,
+    loop_cap, safe_unit_fuel, Budget, CALL_DEPTH_CAP, MIN_LOOP_ITERATIONS, NESTING_DEPTH_CAP,
+    SAFE_STEPS_PER_DISTINCT_CALL, STEP_BUDGET, UNSAFE_STEP_BUDGET,
 };
 
 #[test]
@@ -46,6 +47,17 @@ fn default_budget_uses_the_spec_step_count() {
     let mut budget = Budget::default();
     assert!(budget.spend(STEP_BUDGET).is_ok());
     assert!(matches!(budget.spend(1), Err(Bail::Fuel)));
+}
+
+#[test]
+fn the_safe_unit_budget_grows_with_distinct_calls_up_to_the_unsafe_cap() {
+    assert_eq!(safe_unit_fuel(0), STEP_BUDGET);
+    assert_eq!(
+        safe_unit_fuel(600),
+        STEP_BUDGET + 600 * SAFE_STEPS_PER_DISTINCT_CALL
+    );
+    assert_eq!(safe_unit_fuel(1_900), UNSAFE_STEP_BUDGET);
+    assert_eq!(safe_unit_fuel(usize::MAX), UNSAFE_STEP_BUDGET);
 }
 
 #[test]

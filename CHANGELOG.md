@@ -36,6 +36,9 @@ All notable changes to this project are documented in this file. The format is b
   longer count as observing its names. The last rests on a stated premise, see the README.
 - Unminify rounds after the first skip unchanged statements: about 6 % faster on large inputs.
 - The playground worker keeps the decoded strings in one buffer while it runs, so the 10 MB sample peaks about 26 MiB lower (190 MiB instead of 216 MiB).
+- The default lane's decode step budget grows with the distinct decoder calls a unit decodes
+  (50 M plus 500 k a call, at most the 1 B `--unsafe` uses), so the high preset's rc4 strings
+  no longer run out of steps.
 
 ### Fixed
 
