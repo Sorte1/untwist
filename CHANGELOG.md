@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- `--unsafe` decodes a string array beside code that may hold the global object, such as
+  core-js's global lookup or Babel's spread and construct helpers, as webcrack does. Such
+  bundles were left fully encoded; the default lane still refuses them.
+
 ## [0.2.0] - 2026-11-04
 
 ### Added
