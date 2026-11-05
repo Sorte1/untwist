@@ -7,6 +7,7 @@ pub(crate) mod reruns;
 mod stdout;
 #[cfg(unix)]
 mod supervisor;
+mod wasm_supply;
 pub(crate) mod worker;
 
 use std::io::{self, Read, Write};
@@ -108,7 +109,7 @@ fn report_wasm(err: &mut dyn Write, result: &Output) -> io::Result<()> {
     for reference in &result.wasm_unresolved {
         writeln!(
             err,
-            "note: wasm module {} was not resolved; it is loaded from {}",
+            "note: wasm module {} was not resolved; it is loaded from {}; save it under that name and pass --wasm-dir, or pass --fetch-wasm",
             reference.name, reference.url
         )?;
     }
@@ -258,8 +259,10 @@ fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
     let borrowed: Vec<&str> = sources.iter().map(String::as_str).collect();
     let mut result = Pipeline::new(std::mem::take(&mut session.options)).run_many(&borrowed);
     (session.emitted)();
-    result.settle_wasm(&untwist::WasmSupply::default(), args.output.is_some());
     let err = &mut *session.err;
+    let mut supply = wasm_supply::supply(args, err)?;
+    wasm_supply::fetch_unsupplied(args, &result, &mut supply, err).context(STDERR)?;
+    result.settle_wasm(&supply, args.output.is_some());
     report_diagnostics(err, &result).context(STDERR)?;
     report_wasm(err, &result).context(STDERR)?;
 

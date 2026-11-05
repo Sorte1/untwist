@@ -218,3 +218,31 @@ fn extracted_wasm_is_written_beside_the_output() {
         wasm_bytes("bindgen.wasm")
     );
 }
+
+#[test]
+fn a_supplied_name_matches_exactly_or_with_its_hash_segments_dropped() {
+    let file = |name: &str| untwist::SuppliedWasm {
+        name: name.to_string(),
+        bytes: Vec::new(),
+        origin: WasmOrigin::Supplied,
+        url: None,
+    };
+    let supply = WasmSupply {
+        files: vec![
+            file("3f2a91.module.wasm"),
+            file("app.wasm"),
+            file("x.1a2b3c.wasm"),
+            file("x.wasm"),
+        ],
+    };
+    let found = |name: &str| supply.find(name).map(|file| file.name.as_str());
+    assert_eq!(found("3f2a91.module.wasm"), Some("3f2a91.module.wasm"));
+    assert_eq!(found("app.9e8d7c6b.wasm"), Some("app.wasm"));
+    assert_eq!(
+        found("x.ffffff.wasm"),
+        None,
+        "two files fit, so neither is taken"
+    );
+    assert_eq!(found("other.wasm"), None);
+    assert_eq!(found("aaaaaa.module.wasm"), None);
+}
