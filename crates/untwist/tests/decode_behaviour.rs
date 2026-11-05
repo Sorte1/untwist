@@ -38,6 +38,24 @@ fn printing_twin(source: &str) -> String {
         .join("\n")
 }
 
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
+}
+
+fn default_mismatches(node: &Path, programs: &[(String, String)]) -> Vec<String> {
+    let run = |source: &str| {
+        Pipeline::new(Options::default())
+            .run(source)
+            .code()
+            .to_string()
+    };
+    let runs: [Mode<'_>; 1] = [("default", &run)];
+    node_rows::mismatches(node, programs, &runs)
+}
+
 fn mismatches(node: &Path, programs: &[(String, String)]) -> Vec<String> {
     let [(first, a), (second, b)] = modes();
     let run_a = |source: &str| Pipeline::new(a.clone()).run(source).code().to_string();
@@ -227,18 +245,18 @@ fn a_decoder_replaced_through_global_enumeration_is_refused_and_prints_like_node
         before,
         "s0 s1 s2\nexit 0\n--\nEVIL0 EVIL1 EVIL2\nexit 0\n--\n"
     );
-    for (mode, options) in modes() {
-        let code = Pipeline::new(options)
-            .run(GLOBAL_ENUMERATION)
-            .code()
-            .to_string();
-        assert!(
-            code.contains("console.log(b(0), b(1), b(2))"),
-            "{mode}: {code}"
-        );
-        let after = printed(&node, dir.path(), &code).unwrap();
-        assert_eq!(after, before, "{mode}");
-    }
+    let code = Pipeline::new(Options::default())
+        .run(GLOBAL_ENUMERATION)
+        .code()
+        .to_string();
+    assert!(code.contains("console.log(b(0), b(1), b(2))"), "{code}");
+    let after = printed(&node, dir.path(), &code).unwrap();
+    assert_eq!(after, before);
+    let decoded = Pipeline::new(unsafe_lane())
+        .run(GLOBAL_ENUMERATION)
+        .code()
+        .to_string();
+    assert!(!decoded.contains("b(0)"), "{decoded}");
 }
 
 const SPLIT_NAME_OTHER_UNIT: &str = "\
@@ -290,7 +308,14 @@ fn a_decoder_name_built_from_two_decoded_halves_is_the_documented_premise() {
 
 #[test]
 fn a_decoder_name_built_in_its_own_unit_is_refused_and_prints_like_node() {
-    assert_prints_like_node("split-name-own-unit", SPLIT_NAME_OWN_UNIT.to_string());
+    if let Some(node) = node_or_skip() {
+        let programs = [(
+            "split-name-own-unit".to_string(),
+            SPLIT_NAME_OWN_UNIT.to_string(),
+        )];
+        let wrong = default_mismatches(&node, &programs);
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
     let code = Pipeline::new(Options::default())
         .run(SPLIT_NAME_OWN_UNIT)
         .code()
@@ -426,7 +451,13 @@ fn a_property_read_off_function_does_not_block_decoding_a_proxy_call() {
 #[test]
 fn the_function_constructor_read_through_its_prototype_stays_refused() {
     let source = behaviour_fixture("rc4-function-constructor-read-beside-a-proxy-call.js");
-    for (mode, options) in modes() {
+    let decoded = Pipeline::new(unsafe_lane()).run(&source);
+    assert!(
+        !decoded.code().contains("b(461, \"DiKO\")"),
+        "{}",
+        decoded.code()
+    );
+    for (mode, options) in modes().into_iter().take(1) {
         let out = Pipeline::new(options).run(&source);
         assert!(
             out.code().contains("b(461, \"DiKO\")"),

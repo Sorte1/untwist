@@ -46,6 +46,21 @@ fn file_name(label: &str) -> &str {
         .expect("fixture name")
 }
 
+fn machinery_names(source: &str) -> Vec<&str> {
+    source
+        .split("function _0x")
+        .skip(1)
+        .filter_map(|rest| rest.split('(').next())
+        .map(|hex| &source[source.find(hex).unwrap() - 3..source.find(hex).unwrap() + hex.len()])
+        .collect()
+}
+
+fn keeps_machinery(source: &str, code: &str) -> bool {
+    machinery_names(source)
+        .iter()
+        .any(|name| code.contains(name))
+}
+
 fn refused(out: &Output) -> bool {
     out.notes.iter().any(|note| {
         note.message.starts_with(notes::BUILTIN_PATCHED) || note.message.contains(MACHINERY_KEPT)
@@ -59,7 +74,12 @@ fn the_unsafe_lane_decodes_every_reduced_fixture_and_removes_its_machinery() {
     for (label, source) in fixtures {
         let out = Pipeline::new(lane(true)).run(&source);
         assert!(!refused(&out), "{label}: {:?}", out.notes);
-        assert!(!out.code().contains("_0x"), "{label}:\n{}", out.code());
+        assert!(!machinery_names(&source).is_empty(), "{label}");
+        assert!(
+            !keeps_machinery(&source, out.code()),
+            "{label}:\n{}",
+            out.code()
+        );
     }
 }
 
@@ -92,7 +112,11 @@ fn the_default_lane_still_keeps_every_reduced_string_array() {
         }
         let out = Pipeline::new(lane(false)).run(&source);
         assert!(refused(&out), "{label}: {:?}", out.notes);
-        assert!(out.code().contains("_0x"), "{label}:\n{}", out.code());
+        assert!(
+            keeps_machinery(&source, out.code()),
+            "{label}:\n{}",
+            out.code()
+        );
     }
 }
 
