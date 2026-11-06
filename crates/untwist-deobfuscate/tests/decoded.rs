@@ -692,7 +692,9 @@ fn a_terser_rotator_that_calls_the_array_twice_is_refused() {
     ));
     assert!(!code.contains("console.log(\"Hello World!\")"), "{code}");
     assert!(
-        notes.iter().any(|note| note.contains("the rotator reads or writes")),
+        notes
+            .iter()
+            .any(|note| note.contains("the rotator reads or writes")),
         "{notes:?}"
     );
 }
@@ -704,7 +706,9 @@ fn a_terser_rotator_that_runs_code_before_calling_the_array_is_refused() {
     ));
     assert!(!code.contains("console.log(\"Hello World!\")"), "{code}");
     assert!(
-        notes.iter().any(|note| note.contains("the rotator reads or writes")),
+        notes
+            .iter()
+            .any(|note| note.contains("the rotator reads or writes")),
         "{notes:?}"
     );
 }
