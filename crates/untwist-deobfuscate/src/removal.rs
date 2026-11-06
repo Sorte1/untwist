@@ -20,11 +20,17 @@ use crate::notes;
 use crate::stamp::{find_stamped, find_stamped_named, is_unedited, string_array_name, Stamped};
 use crate::units::MachineryDepth;
 
+#[derive(Clone, Copy, Default)]
+pub struct Observation {
+    pub observed: Option<Span>,
+    pub outside_premise: Option<Span>,
+}
+
 pub(crate) fn observed_global_names(
     program: &Program<'_>,
     scoping: &Scoping,
     nested_root: bool,
-) -> Option<Span> {
+) -> Observation {
     let stamped = find_stamped(program);
     let units = units_of(program, &stamped);
     observed_names_of(program, scoping, nested_root, (&stamped, &units))
@@ -35,12 +41,12 @@ fn observed_names_of(
     scoping: &Scoping,
     nested_root: bool,
     (stamped, units): (&Stamped<'_>, &[Machinery]),
-) -> Option<Span> {
+) -> Observation {
     if nested_root
         || untwist_core::semantic::has_module_syntax(program)
         || observers() == Observers::None
     {
-        return None;
+        return Observation::default();
     }
     let root = scoping.root_scope_id();
     let mut names: Vec<&str> = Vec::new();
@@ -54,7 +60,7 @@ fn observed_names_of(
         }
     }
     if names.is_empty() {
-        return None;
+        return Observation::default();
     }
     let machinery: Vec<Span> = units.iter().flat_map(Machinery::statements).collect();
     let watch = ReachWatch {
@@ -66,7 +72,10 @@ fn observed_names_of(
     let reach = global_reach(program, scoping, (None, &machinery), watch);
     #[cfg(feature = "refusal-spans")]
     record_observed(&reach);
-    reach.observed
+    Observation {
+        observed: reach.observed,
+        outside_premise: reach.outside_premise,
+    }
 }
 
 #[cfg(feature = "refusal-spans")]
@@ -262,7 +271,7 @@ pub const NAME: &str = "remove-decoder-machinery";
 #[derive(Default)]
 pub struct ObservedNames {
     generation: Cell<u32>,
-    judged: Cell<Option<(u32, Option<Span>)>>,
+    judged: Cell<Option<(u32, Observation)>>,
 }
 
 impl ObservedNames {
@@ -277,18 +286,19 @@ impl ObservedNames {
         nested_root: bool,
     ) -> Option<Span> {
         self.judge_with(|| observed_global_names(program, scoping, nested_root))
+            .observed
     }
 
-    fn judge_with(&self, judge: impl FnOnce() -> Option<Span>) -> Option<Span> {
+    fn judge_with(&self, judge: impl FnOnce() -> Observation) -> Observation {
         let generation = self.generation.get();
-        if let Some((judged_at, span)) = self.judged.get() {
+        if let Some((judged_at, found)) = self.judged.get() {
             if judged_at == generation {
-                return span;
+                return found;
             }
         }
-        let span = judge();
-        self.judged.set(Some((generation, span)));
-        span
+        let found = judge();
+        self.judged.set(Some((generation, found)));
+        found
     }
 }
 
@@ -313,7 +323,7 @@ impl RemoveDecoderMachinery {
         program: &Program<'_>,
         cx: &Cx<'_, '_>,
         found: (&Stamped<'_>, &[Machinery]),
-    ) -> Option<Span> {
+    ) -> Observation {
         let judge = || observed_names_of(program, cx.scoping(), cx.opts.nested_root, found);
         match &self.observed {
             Some(observed) => observed.judge_with(judge),
@@ -331,9 +341,13 @@ impl RemoveDecoderMachinery {
         if spans.is_empty() {
             return spans;
         }
-        if let Some(span) = self.observed_span(program, cx, (&stamped, &units)) {
+        let found = self.observed_span(program, cx, (&stamped, &units));
+        if let Some(span) = found.observed {
             cx.note(notes::MACHINERY_NAME_OBSERVED.to_string(), Some(span));
             return Vec::new();
+        }
+        if let Some(span) = found.outside_premise {
+            cx.progress(notes::MACHINERY_REMOVED_UNDER_OUTSIDE_PREMISE, Some(span));
         }
         spans
     }

@@ -106,6 +106,12 @@ function a() { var h = ['log']; a = function () { return h; }; return a(); }
 function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return e[f]; }; return b(c, d); }
 console.log(b(0), Object.keys(this).length);";
 
+const A_GLOBAL_HANDED_TO_A_REQUIRED_PATH: &str = "\
+function a() { var h = ['log', 'node:path']; a = function () { return h; }; return a(); }
+function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return e[f]; }; return b(c, d); }
+var path = require(b(1));
+try { path.basename(this); } catch (error) { console.log(b(0)); }";
+
 const AN_ARRAY_OF_ARRAYS: &str = "\
 function __STRING_ARRAY__() { var h = [['x']]; __STRING_ARRAY__ = function () { return h; }; return __STRING_ARRAY__(); }
 function __DECODE_0__(c, d) { var e = __STRING_ARRAY__(); return e[c]; }
@@ -662,6 +668,11 @@ pub const CASES: &[Case] = &[
     Case {
         source: Source::Whole(A_UNIT_WHOSE_GLOBAL_NAMES_ARE_LISTED),
         expects: notes::MACHINERY_NAME_OBSERVED,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(A_GLOBAL_HANDED_TO_A_REQUIRED_PATH),
+        expects: notes::MACHINERY_REMOVED_UNDER_OUTSIDE_PREMISE,
         mode: Match::Contains,
     },
     Case {

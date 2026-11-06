@@ -166,6 +166,10 @@ pub const MACHINERY_NAME_OBSERVED: &str =
     "code may observe the names of the global object, where this unit's string array function \
      or decoders are properties, so the machinery was kept as written and only its calls were \
      inlined";
+pub const MACHINERY_REMOVED_UNDER_OUTSIDE_PREMISE: &str =
+    "the machinery was dropped under the outside-code premise: code from outside the file (a \
+     require result or the loader itself) is handed a value that may hold the global object, and \
+     that code does not depend on the names the obfuscator picked for the machinery";
 pub const STRING_ARRAY_GLOBAL_REACH: &str =
     "code that may hold the global object, or code from text, may reach the string array's \
      function by a key that may be its name or by an enumeration that yields values, so the \
@@ -555,6 +559,7 @@ catalogue!(
     ARRAY_ALIAS_NAME_OBSERVED,
     BLOCK_FUNCTION_NAME,
     MACHINERY_NAME_OBSERVED,
+    MACHINERY_REMOVED_UNDER_OUTSIDE_PREMISE,
     STRING_ARRAY_GLOBAL_REACH,
     WEBPACK_BOOTSTRAP_UNPROVEN,
     UNATTRIBUTED_DECODER,

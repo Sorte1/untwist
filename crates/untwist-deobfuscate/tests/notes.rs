@@ -21,6 +21,7 @@ const PROGRESS: &[&str] = &[
     notes::CONTROL_FLOW_DEAD_WRITE_KEPT,
     notes::NO_STRING_ARRAY_NOTE,
     notes::SIMPLE_ARRAY_NAME_OBSERVED,
+    notes::MACHINERY_REMOVED_UNDER_OUTSIDE_PREMISE,
 ];
 
 fn pinned() -> Vec<&'static str> {

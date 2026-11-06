@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use untwist_deobfuscate::calls::agnostic::key_roles;
+use untwist_deobfuscate::calls::agnostic::{key_roles, QUIET_INTRINSICS};
 use untwist_testing::node::run;
 use untwist_testing::node_rows::node_or_skip;
 
@@ -100,4 +100,15 @@ fn every_intrinsic_function_in_node_s_realm_is_classified() {
         walked.len()
     );
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn every_quiet_intrinsic_is_a_classified_function_that_runs_no_code_of_its_own() {
+    let classes = classes();
+    let wrong: Vec<String> = QUIET_INTRINSICS
+        .iter()
+        .filter(|path| !matches!(classes.get(*path), Some(&"pure" | &"construct")))
+        .map(|path| format!("{path}: {:?}", classes.get(path)))
+        .collect();
+    assert!(wrong.is_empty(), "{wrong:?}");
 }

@@ -13,6 +13,7 @@ use super::roles::KEY_DEPTH;
 use super::sites::Sites;
 use super::source::is_ambient_intrinsic;
 use super::AKey;
+use crate::value_flow::{flow_rule_disabled, OBSERVER_LIST};
 
 const ALIAS_DEPTH: u8 = 4;
 
@@ -210,6 +211,15 @@ impl<'a> Sites<'_, 'a> {
         if let Some(key) = self.applies_user_function(callee) {
             self.out.observe_keyed.push((span, Cow::Borrowed(key)));
             return;
+        }
+        if flow_rule_disabled(OBSERVER_LIST) {
+            return;
+        }
+        if let Some(quiet) = self.quiet_callee(callee) {
+            if self.hands_global(arguments) {
+                self.judge_quiet(quiet, span);
+                return;
+            }
         }
         let eff = self.effective_callee(callee);
         if self.evaluation_throws(eff, arguments, span) {
