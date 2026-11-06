@@ -95,6 +95,8 @@ pub struct PassOptions {
     #[doc(hidden)]
     pub scoping_patched: Cell<bool>,
     #[doc(hidden)]
+    pub scoping_canonical: Cell<bool>,
+    #[doc(hidden)]
     pub shares_init_order: bool,
     pub disabled_rules: Vec<&'static str>,
 }
@@ -170,6 +172,7 @@ impl Default for PassOptions {
             nested_root: false,
             keep_script_globals: false,
             scoping_patched: Cell::new(false),
+            scoping_canonical: Cell::new(true),
             shares_init_order: false,
             disabled_rules: Vec::new(),
         }
@@ -255,8 +258,14 @@ impl<'a> Cx<'a, '_> {
         self.tcx.scoping_mut()
     }
 
-    pub fn compact_patched_scoping(&mut self) {
-        if self.opts.scoping_patched.replace(false) {
+    pub fn compact_patched_scoping(&mut self, program: &Program<'a>) {
+        let patched = self.opts.scoping_patched.replace(false);
+        crate::semantic::forget_renames(program);
+        if !self.opts.scoping_canonical.replace(true) {
+            *self.tcx.scoping_mut() = crate::semantic::build_scoping(program).scoping;
+            return;
+        }
+        if patched {
             let compact = self
                 .tcx
                 .scoping()

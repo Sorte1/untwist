@@ -1,10 +1,12 @@
 use std::num::NonZeroUsize;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use untwist::{Options, Pipeline};
+use untwist::{Options, Output, Pipeline, RenameMode};
+use untwist_core::pass::Note;
 use untwist_core::semantic::{
-    check_patches_for_tests, forget_failures, last_stale_for_tests, refresh_counts_for_tests,
-    skip_one_deletion_for_tests,
+    check_patches_for_tests, force_rebuilds_for_tests, forget_failures,
+    keep_one_dead_binding_for_tests, last_stale_for_tests, misplace_one_scope_for_tests,
+    refresh_counts_for_tests, skip_one_deletion_for_tests, trust_id_order_for_tests, RefreshCounts,
 };
 use untwist_testing::{js_files_in, real_world_fixture};
 
@@ -214,5 +216,215 @@ fn game_js_patches_its_lexical_round_before_rename() {
     assert!(
         lexical_patches(&source) > 0,
         "game.js: the lexical round was rebuilt"
+    );
+}
+
+type StageRow = (&'static str, u32, u32, u32, Vec<(&'static str, u32)>);
+
+#[derive(Debug, PartialEq)]
+struct Observed {
+    codes: Vec<String>,
+    notes: Vec<Note>,
+    stages: Vec<StageRow>,
+    panicked: Vec<usize>,
+}
+
+fn observed(out: Output) -> Observed {
+    let stages = out
+        .stages
+        .iter()
+        .map(|stage| {
+            (
+                stage.stage,
+                stage.round,
+                stage.iterations,
+                stage.changes,
+                stage.per_pass.clone(),
+            )
+        })
+        .collect();
+    Observed {
+        codes: out.codes,
+        notes: out.notes,
+        stages,
+        panicked: out.panicked,
+    }
+}
+
+fn run_counted(source: &str, options: Options, forced: bool) -> (Observed, RefreshCounts) {
+    forget_failures();
+    let before = refresh_counts_for_tests();
+    force_rebuilds_for_tests(forced);
+    let out = Pipeline::new(options).run(source);
+    force_rebuilds_for_tests(false);
+    let after = refresh_counts_for_tests();
+    let counts = RefreshCounts {
+        patched: after.patched - before.patched,
+        rebuilt: after.rebuilt - before.rebuilt,
+        built: after.built - before.built,
+        checked: after.checked - before.checked,
+        stale: after.stale - before.stale,
+    };
+    (observed(out), counts)
+}
+
+fn rename_modes() -> [(&'static str, Options); 3] {
+    let mode = |rename| Options {
+        rename,
+        ..Options::default()
+    };
+    [
+        ("rename simple", mode(RenameMode::Simple)),
+        ("rename mangle", mode(RenameMode::Mangle)),
+        ("rename unique", mode(RenameMode::Unique)),
+    ]
+}
+
+fn patches_equal_forced_rebuilds(label: &str, source: &str, renames: bool) -> usize {
+    let mut patched = 0;
+    let modes = modes()
+        .into_iter()
+        .chain(renames.then(rename_modes).into_iter().flatten());
+    for (mode, options) in modes {
+        let (rebuilt, forced) = run_counted(source, options.clone(), true);
+        assert_eq!(
+            forced.patched, 0,
+            "{label} ({mode}): a forced round patched"
+        );
+        let (kept, counts) = run_counted(source, options, false);
+        assert!(
+            kept == rebuilt,
+            "{label} ({mode}): the patched rounds diverge from forced rebuilds"
+        );
+        patched += counts.patched;
+    }
+    patched
+}
+
+#[test]
+fn every_corpus_output_with_patches_equals_forced_rebuilds() {
+    let _serial = serial();
+    let files = corpora(false);
+    assert!(files.len() >= 150, "{}", files.len());
+    let patched: usize = files
+        .iter()
+        .map(|(label, source)| patches_equal_forced_rebuilds(label, source, true))
+        .sum();
+    assert!(patched >= 500, "only {patched} rounds were patched");
+}
+
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "the high preset, the multi-encoder fixture and the 10.7 MB game.js; run with cargo \
+              test --release -p untwist --test scoping_patch"
+)]
+fn game_js_and_the_high_preset_with_patches_equal_forced_rebuilds() {
+    let _serial = serial();
+    let mut files = corpora(true);
+    files.extend(real_world_fixture("game.js").map(|source| ("game.js".to_string(), source)));
+    for (label, source) in files {
+        let renames = label == "game.js";
+        let patched = patches_equal_forced_rebuilds(&label, &source, renames);
+        assert!(patched > 0, "{label}: no round was patched");
+    }
+}
+
+const REBUILDS_ON_GAME_JS: usize = 4;
+
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "the 10.7 MB game.js; run with cargo test --release -p untwist --test scoping_patch"
+)]
+fn game_js_rebuilds_its_scoping_at_most_four_times() {
+    let _serial = serial();
+    let Some(source) = real_world_fixture("game.js") else {
+        return;
+    };
+    for (mode, options) in modes() {
+        let (_, counts) = run_counted(&source, options, false);
+        println!(
+            "game.js ({mode}): {} built, {} rebuilt, {} patched",
+            counts.built, counts.rebuilt, counts.patched
+        );
+        assert!(
+            counts.rebuilt <= REBUILDS_ON_GAME_JS,
+            "game.js ({mode}): {} rebuilds",
+            counts.rebuilt
+        );
+    }
+}
+
+fn stale_under(mutant: fn(bool), source: &str) -> bool {
+    forget_failures();
+    let before = refresh_counts_for_tests();
+    mutant(true);
+    check_patches_for_tests(true);
+    let out = Pipeline::new(Options::default()).run(source);
+    check_patches_for_tests(false);
+    mutant(false);
+    let after = refresh_counts_for_tests();
+    after.stale > before.stale && !out.panicked.is_empty()
+}
+
+const REPARENTED: &str = "if (a) {\n  b();\n} else {\n  if (c) {\n    d();\n  }\n}\n";
+
+#[test]
+fn a_patch_that_leaves_a_scope_under_its_old_parent_turns_s1_red() {
+    let _serial = serial();
+    assert!(
+        !stale_under(|_| {}, REPARENTED),
+        "the clean patch went stale"
+    );
+    assert!(
+        stale_under(misplace_one_scope_for_tests, REPARENTED),
+        "the misplaced scope went unseen"
+    );
+}
+
+const UNLINKED: &str = "fixtures/unminify/rename-derived-names.js";
+
+#[test]
+fn a_patch_that_leaves_a_removed_binding_linked_turns_s1_red_on_a_named_fixture() {
+    let _serial = serial();
+    let source = js_files_in("fixtures/unminify")
+        .into_iter()
+        .find(|(label, _)| label.ends_with("rename-derived-names.js"))
+        .map(|(_, source)| source)
+        .unwrap_or_else(|| panic!("{UNLINKED}"));
+    assert!(
+        !stale_under(|_| {}, &source),
+        "{UNLINKED}: the clean patch went stale"
+    );
+    assert!(
+        stale_under(keep_one_dead_binding_for_tests, &source),
+        "{UNLINKED}: the linked binding went unseen"
+    );
+}
+
+const ID_ORDERED: &str = "fixtures/unminify/for-loops.js";
+
+#[test]
+fn a_rename_plan_read_in_id_order_from_a_patched_scoping_turns_c7_red_on_a_named_fixture() {
+    let _serial = serial();
+    let source = js_files_in("fixtures/unminify")
+        .into_iter()
+        .find(|(label, _)| label.ends_with("for-loops.js"))
+        .map(|(_, source)| source)
+        .unwrap_or_else(|| panic!("{ID_ORDERED}"));
+    let options = Options {
+        rename: RenameMode::Mangle,
+        ..Options::default()
+    };
+    let (rebuilt, _) = run_counted(&source, options.clone(), true);
+    let (kept, _) = run_counted(&source, options.clone(), false);
+    assert!(kept == rebuilt, "{ID_ORDERED}: the patched rounds diverge");
+    trust_id_order_for_tests(true);
+    let (trusted, _) = run_counted(&source, options, false);
+    trust_id_order_for_tests(false);
+    assert!(
+        trusted != rebuilt,
+        "{ID_ORDERED}: the id-ordered rename plan went unseen"
     );
 }

@@ -61,6 +61,7 @@ pub fn run_last_traversal<'a>(
 ) -> (Option<Semantics>, RunReport) {
     group.begin_iteration();
     group.opts().scoping_patched.set(sem.patched);
+    group.opts().scoping_canonical.set(sem.canonical);
     let (stats, before) = (sem.stats, Shape::of(&sem.scoping));
     let started = Instant::now();
     let traversed = oxc_traverse::traverse_mut(group, alloc, program, sem.scoping, ());

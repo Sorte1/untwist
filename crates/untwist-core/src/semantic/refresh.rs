@@ -14,15 +14,21 @@ use super::{has_module_syntax, rebuild_scoping, Semantics};
 
 mod apply;
 mod bindings;
+mod claims;
+mod dead;
 mod hooks;
+mod mutants;
 mod params;
 mod references;
 mod scopes;
 
+use claims::Claims;
+
 const SEEN: u32 = 1 << 31;
 const REPLACED: u32 = 1 << 30;
 const LISTED: u32 = 1 << 29;
-const NO_KEY: u32 = LISTED - 1;
+const PARAMS: u32 = 1 << 28;
+const NO_KEY: u32 = PARAMS - 1;
 const FRAMES: usize = 64;
 const GROWTH_SHARE: u32 = 8;
 
@@ -48,6 +54,7 @@ struct Frame {
     names: u64,
     early: usize,
     outer: Option<usize>,
+    moved: bool,
 }
 
 struct Packed(u64);
@@ -85,6 +92,7 @@ enum Context {
     },
     ClassName {
         declaration: bool,
+        scope: Option<ScopeId>,
     },
     CatchParam(SymbolFlags),
 }
@@ -95,6 +103,7 @@ struct Fresh<'a> {
     symbol: Option<SymbolId>,
     scope: ScopeId,
     flags: ReferenceFlags,
+    params: bool,
 }
 
 struct Walk<'s, 'a> {
@@ -111,17 +120,24 @@ struct Walk<'s, 'a> {
     flag_fixes: Vec<(ReferenceId, ReferenceFlags)>,
     context: Option<Context>,
     flags: ReferenceFlags,
-    next_scope: usize,
-    next_symbol: usize,
+    scopes: Claims,
+    symbols: Claims,
+    parent_fixes: Vec<(ScopeId, ScopeId)>,
+    scope_flag_fixes: Vec<(ScopeId, ScopeFlags)>,
     nodes: u32,
     references: u32,
     failed: bool,
+    params_open: u32,
 }
 
 struct Walked<'a> {
     slots: Vec<Slot>,
     fresh: Vec<Fresh<'a>>,
     flag_fixes: Vec<(ReferenceId, ReferenceFlags)>,
+    parent_fixes: Vec<(ScopeId, ScopeId)>,
+    scope_flag_fixes: Vec<(ScopeId, ScopeFlags)>,
+    dead: dead::Dead,
+    canonical: bool,
     stats: Stats,
 }
 
@@ -139,10 +155,6 @@ impl Shape {
             symbols: scoping.symbols_len(),
             references: scoping.references_len(),
         }
-    }
-
-    fn bound_as(self, before: Self) -> bool {
-        (self.scopes, self.symbols) == (before.scopes, before.symbols)
     }
 }
 
@@ -193,14 +205,16 @@ fn remember_failure(passes: u64) {
 
 pub fn forget_failures() {
     FAILED.with(|cell| cell.set(([0; REMEMBERED], 0)));
+    super::renamed::forget();
 }
 
 pub fn refresh_scoping(
     program: &Program<'_>,
-    held: Scoping,
+    mut held: Scoping,
     stats: Stats,
     round: Round,
 ) -> Semantics {
+    super::renamed::replay(program, &mut held);
     let presize = presized(stats, round.before, Shape::of(&held));
     match patch(program, held, round) {
         Some(mut patched) => {
@@ -216,22 +230,24 @@ pub fn refresh_scoping(
 }
 
 fn patch(program: &Program<'_>, held: Scoping, round: Round) -> Option<Semantics> {
-    if !Shape::of(&held).bound_as(round.before)
+    if forced_rebuild()
         || failed_before(round.passes)
         || program.source_type.is_typescript()
         || has_module_syntax(program)
     {
         return None;
     }
-    let patched = walk(program, &held).and_then(|walked| apply::apply(held, walked));
+    let mut walk = walker(&held);
+    walk.visit_program(program);
+    let patched = walk.finish().and_then(|walked| apply::apply(held, walked));
     if patched.is_none() && round.passes != 0 {
         remember_failure(round.passes);
     }
     patched
 }
 
-fn walk<'a>(program: &Program<'a>, scoping: &Scoping) -> Option<Walked<'a>> {
-    let mut walk = Walk {
+fn walker<'s, 'a>(scoping: &'s Scoping) -> Walk<'s, 'a> {
+    Walk {
         scoping,
         frames: Vec::new(),
         innermost: None,
@@ -245,14 +261,15 @@ fn walk<'a>(program: &Program<'a>, scoping: &Scoping) -> Option<Walked<'a>> {
         flag_fixes: Vec::new(),
         context: None,
         flags: ReferenceFlags::empty(),
-        next_scope: 0,
-        next_symbol: 0,
+        scopes: Claims::new(scoping.scopes_len()),
+        symbols: Claims::new(scoping.symbols_len()),
+        parent_fixes: Vec::new(),
+        scope_flag_fixes: Vec::new(),
         nodes: 0,
         references: 0,
         failed: false,
-    };
-    walk.visit_program(program);
-    walk.finish()
+        params_open: 0,
+    }
 }
 
 fn unresolved_index(scoping: &Scoping) -> (Vec<Slot>, Vec<Ident<'_>>) {
@@ -283,35 +300,45 @@ impl<'a> Walk<'_, 'a> {
         self.failed = true;
     }
 
+    #[inline]
     fn prepare(&mut self) {
         if !self.prepared {
-            self.prepared = true;
-            (self.slots, self.keys) = unresolved_index(self.scoping);
+            self.index_unresolved();
         }
+    }
+
+    #[inline(never)]
+    fn index_unresolved(&mut self) {
+        self.prepared = true;
+        (self.slots, self.keys) = unresolved_index(self.scoping);
     }
 
     fn finish(mut self) -> Option<Walked<'a>> {
         self.prepare();
         let complete = !self.failed
             && self.frames.is_empty()
-            && self.next_scope == self.scoping.scopes_len()
-            && self.next_symbol == self.scoping.symbols_len()
             && self.keys.len() < NO_KEY as usize
-            && self.redeclarations_complete()
-            && self.bindings_complete();
+            && self.redeclarations_complete();
         if !complete {
             return None;
         }
+        let dead = dead::Dead::of(&self)?;
+        let canonical = mutants::trusts_id_order()
+            || (dead.is_empty() && self.scopes.in_order() && self.symbols.in_order());
         let stats = Stats::new(
             self.nodes,
-            u32::try_from(self.scoping.scopes_len()).ok()?,
-            u32::try_from(self.scoping.symbols_len()).ok()?,
+            u32::try_from(self.scopes.count()).ok()?,
+            u32::try_from(self.symbols.count()).ok()?,
             self.references,
         );
         Some(Walked {
             slots: self.slots,
             fresh: self.fresh,
             flag_fixes: self.flag_fixes,
+            parent_fixes: self.parent_fixes,
+            scope_flag_fixes: self.scope_flag_fixes,
+            dead,
+            canonical,
             stats,
         })
     }
@@ -320,15 +347,6 @@ impl<'a> Walk<'_, 'a> {
         self.redeclared
             .iter()
             .all(|(&symbol, &seen)| self.scoping.symbol_redeclarations(symbol).len() == seen)
-    }
-
-    fn bindings_complete(&self) -> bool {
-        let bound: usize = self
-            .scoping
-            .iter_bindings()
-            .map(|(_, bindings)| bindings.len())
-            .sum();
-        bound == self.scoping.symbols_len()
     }
 }
 
@@ -341,6 +359,12 @@ mod tally {
     pub(super) fn patched(_program: &Program<'_>, _patched: &Semantics) {}
 
     pub(super) fn rebuilt() {}
+
+    pub(super) fn built() {}
+
+    pub(super) fn forced_rebuild() -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "test-hooks")]
@@ -358,13 +382,18 @@ mod tally {
     pub struct RefreshCounts {
         pub patched: usize,
         pub rebuilt: usize,
+        pub built: usize,
+
         pub checked: usize,
         pub stale: usize,
     }
 
     static CHECK: AtomicBool = AtomicBool::new(false);
+    static FORCE: AtomicBool = AtomicBool::new(false);
     static PATCHED: AtomicUsize = AtomicUsize::new(0);
     static REBUILT: AtomicUsize = AtomicUsize::new(0);
+    static BUILT: AtomicUsize = AtomicUsize::new(0);
+
     static CHECKED: AtomicUsize = AtomicUsize::new(0);
     static STALE: AtomicUsize = AtomicUsize::new(0);
     static LAST: Mutex<String> = Mutex::new(String::new());
@@ -377,10 +406,20 @@ mod tally {
         CHECK.store(on, Ordering::SeqCst);
     }
 
+    pub fn force_rebuilds_for_tests(on: bool) {
+        FORCE.store(on, Ordering::SeqCst);
+    }
+
+    pub(super) fn forced_rebuild() -> bool {
+        FORCE.load(Ordering::SeqCst)
+    }
+
     pub fn refresh_counts_for_tests() -> RefreshCounts {
         RefreshCounts {
             patched: PATCHED.load(Ordering::SeqCst),
             rebuilt: REBUILT.load(Ordering::SeqCst),
+            built: BUILT.load(Ordering::SeqCst),
+
             checked: CHECKED.load(Ordering::SeqCst),
             stale: STALE.load(Ordering::SeqCst),
         }
@@ -402,12 +441,28 @@ mod tally {
     pub(super) fn rebuilt() {
         REBUILT.fetch_add(1, Ordering::SeqCst);
     }
+
+    pub(super) fn built() {
+        BUILT.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
 #[cfg(feature = "test-hooks")]
 pub use apply::skip_one_deletion_for_tests;
 #[cfg(feature = "test-hooks")]
+pub use dead::mutants::keep_one_dead_binding_for_tests;
+#[cfg(feature = "test-hooks")]
+pub use mutants::trust_id_order_for_tests;
+#[cfg(feature = "test-hooks")]
+pub use scopes::mutants::misplace_one_scope_for_tests;
+use tally::forced_rebuild;
+
+pub(super) fn count_build() {
+    tally::built();
+}
+
+#[cfg(feature = "test-hooks")]
 pub use tally::{
-    check_patches_for_tests, last_stale_for_tests, refresh_counts_for_tests, RefreshCounts,
-    STALE_PATCH,
+    check_patches_for_tests, force_rebuilds_for_tests, last_stale_for_tests,
+    refresh_counts_for_tests, RefreshCounts, STALE_PATCH,
 };

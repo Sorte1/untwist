@@ -178,7 +178,7 @@ fn run_one_iteration<'a>(
         passes: state.tally.round,
     };
     let (rebuilt, elapsed) = timed_rebuild(program, scoping, stats, round);
-    group.opts().scoping_patched.set(rebuilt.patched);
+    hold_flags(group, &rebuilt);
     group.reset_passes();
     timing.set_rebuild(elapsed);
 
@@ -241,12 +241,12 @@ fn fixpoint<'a>(
     group: &mut PassGroup<'a>,
     keep_last: bool,
 ) -> (Semantics, RunReport, Option<Vec<Note>>) {
+    hold_flags(group, &sem);
     let Semantics {
         mut scoping,
         mut stats,
-        patched,
+        ..
     } = sem;
-    group.opts().scoping_patched.set(patched);
     group.begin_marks();
     let cap = group.opts().max_iterations.unwrap_or(ITERATION_CEILING);
     let mut tally = Tally {
@@ -272,16 +272,21 @@ fn fixpoint<'a>(
 
     let last = tally.last.take();
     let report = finish_report(tally, stop, cap);
-    let patched = group.opts().scoping_patched.get();
-    (
-        Semantics {
-            scoping,
-            stats,
-            patched,
-        },
-        report,
-        last,
-    )
+    (held_semantics(group, scoping, stats), report, last)
+}
+
+fn hold_flags(group: &PassGroup<'_>, sem: &Semantics) {
+    group.opts().scoping_patched.set(sem.patched);
+    group.opts().scoping_canonical.set(sem.canonical);
+}
+
+fn held_semantics(group: &PassGroup<'_>, scoping: Scoping, stats: Stats) -> Semantics {
+    Semantics {
+        scoping,
+        stats,
+        patched: group.opts().scoping_patched.get(),
+        canonical: group.opts().scoping_canonical.get(),
+    }
 }
 
 fn timed_traverse<'a>(
@@ -491,12 +496,12 @@ pub fn run_once<'a>(
     sem: Semantics,
     group: &mut PassGroup<'a>,
 ) -> (Semantics, RunReport) {
+    hold_flags(group, &sem);
     let Semantics {
         mut scoping,
         mut stats,
-        mut patched,
+        ..
     } = sem;
-    group.opts().scoping_patched.set(patched);
     group.begin_marks();
 
     let before = Shape::of(&scoping);
@@ -511,13 +516,12 @@ pub fn run_once<'a>(
             passes: round_of(&per_pass),
         };
         let (rebuilt, elapsed) = timed_rebuild(program, traversed, stats, round);
+        hold_flags(group, &rebuilt);
         scoping = rebuilt.scoping;
         stats = rebuilt.stats;
-        patched = rebuilt.patched;
         timing.set_rebuild(elapsed);
     } else {
         scoping = traversed;
-        patched = group.opts().scoping_patched.get();
     }
 
     let report = RunReport {
@@ -533,14 +537,7 @@ pub fn run_once<'a>(
         notes: group.take_notes(),
         heap_charged: 0,
     };
-    (
-        Semantics {
-            scoping,
-            stats,
-            patched,
-        },
-        report,
-    )
+    (held_semantics(group, scoping, stats), report)
 }
 
 pub fn scoping_after_traversal(
@@ -551,11 +548,7 @@ pub fn scoping_after_traversal(
     group: &PassGroup<'_>,
 ) -> Semantics {
     if group.total_changes() == 0 {
-        return Semantics {
-            scoping: traversed,
-            stats,
-            patched: group.opts().scoping_patched.get(),
-        };
+        return held_semantics(group, traversed, stats);
     }
     let round = Round { before, passes: 0 };
     refresh_scoping(program, traversed, stats, round)

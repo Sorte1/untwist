@@ -163,6 +163,7 @@ impl<'a> VisitJs<'a> for Walk<'_, 'a> {
         }
         let context = Context::ClassName {
             declaration: it.is_declaration(),
+            scope: it.scope_id.get(),
         };
         self.within(Some(context), |walk| walk_js::walk_class(walk, it));
     }

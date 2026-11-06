@@ -42,7 +42,15 @@ impl<'a> Renames<'a> {
     }
 
     pub fn apply(&self, program: &mut Program<'a>, scoping: &Scoping) -> usize {
-        self.run(scoping, |applier| applier.visit_program(program))
+        let count = self.run(scoping, |applier| applier.visit_program(program));
+        if count > 0 {
+            let renames = self
+                .map
+                .iter()
+                .map(|(symbol, name)| (*symbol, name.as_str()));
+            crate::semantic::note_renames(program, scoping, renames);
+        }
+        count
     }
 
     pub fn apply_bindings(&self, program: &mut Program<'a>) -> usize {

@@ -192,8 +192,9 @@ pub fn redeclared(scoping: &Scoping, symbol: SymbolId) -> Option<Span> {
                 .contains(SymbolFlags::Function)
         })
         .filter(|candidate| *candidate != symbol && scoping.symbol_name(*candidate) == name)
-        .find(|candidate| is_block_level(scoping, *candidate, home))
+        .filter(|candidate| is_block_level(scoping, *candidate, home))
         .map(|candidate| scoping.symbol_span(candidate))
+        .min_by_key(|span| span.start)
 }
 
 fn encloses(outer: Span, inner: Span) -> bool {
