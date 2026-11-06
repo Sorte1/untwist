@@ -41,6 +41,27 @@ fn assigned_value<'k, 'a>(
     (target.name.as_str() == name).then_some(&assignment.right)
 }
 
+fn is_bare_var_declaration(statement: &Statement<'_>, shape_names: &[&str]) -> bool {
+    let Statement::VariableDeclaration(declaration) = statement else {
+        return false;
+    };
+    declaration.kind == VariableDeclarationKind::Var
+        && declaration.declarations.iter().all(|declarator| {
+            declarator.init.is_none()
+                && binding_name(&declarator.id).is_some_and(|name| !shape_names.contains(&name))
+        })
+}
+
+fn live_statements<'k, 'a>(
+    statements: &'k [Statement<'a>],
+    shape_names: &[&str],
+) -> Vec<&'k Statement<'a>> {
+    statements
+        .iter()
+        .filter(|statement| !is_bare_var_declaration(statement, shape_names))
+        .collect()
+}
+
 fn applies_the_guarded_function(init: &Expression<'_>, context: &str, fn_name: &str) -> bool {
     let Some((callee, arguments)) = call_parts(init) else {
         return false;
@@ -68,8 +89,9 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
     let Statement::BlockStatement(block) = &statement.consequent else {
         return false;
     };
+    let live = live_statements(&block.body, &[context, fn_name, "arguments"]);
     let [Statement::VariableDeclaration(declaration), Statement::ExpressionStatement(reset), Statement::ReturnStatement(ret)] =
-        block.body.as_slice()
+        live.as_slice()
     else {
         return false;
     };
@@ -125,8 +147,9 @@ fn inner_matches(inner: &Function<'_>, flag: &str) -> bool {
     let Some(body) = inner.body.as_ref() else {
         return false;
     };
+    let live = live_statements(&body.statements, &[flag]);
     let [Statement::VariableDeclaration(declaration), Statement::ExpressionStatement(reset), Statement::ReturnStatement(ret)] =
-        body.statements.as_slice()
+        live.as_slice()
     else {
         return false;
     };
@@ -151,8 +174,9 @@ pub fn is_call_controller(expr: &Expression<'_>) -> bool {
     let Some(body) = outer.body.as_ref() else {
         return false;
     };
+    let live = live_statements(&body.statements, &[]);
     let [Statement::VariableDeclaration(first_call), Statement::ReturnStatement(ret)] =
-        body.statements.as_slice()
+        live.as_slice()
     else {
         return false;
     };

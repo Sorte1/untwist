@@ -226,3 +226,41 @@ fn extended_a_directive_the_input_already_had_is_kept() {
     assert_eq!(out.trim(), "\"use strict\";\nconsole.log(1);");
     assert_eq!(common::directive_count(&out), 1);
 }
+
+#[test]
+fn bare_var_declarations_left_inside_the_controller_do_not_hide_it() {
+    let alloc = Allocator::default();
+    let controller = CONTROLLER
+        .replace(
+            "if (h) {\n",
+            "if (h) {\n        var k;\n        var l, m;\n",
+        )
+        .replace("    f = ![];\n", "    var n;\n    f = ![];\n");
+    let source = format!(
+        "function hi() {{\n{controller}  var sd = e(this, function () {{ return sd.toString().search('(((.+)+)+)+$'); }});\n  sd();\n  console.log('x');\n}}"
+    );
+    let out = run(&alloc, &source);
+    assert_eq!(out.trim(), "function hi() {\n  console.log(\"x\");\n}");
+}
+
+#[test]
+fn a_bare_var_that_shadows_the_controllers_flag_keeps_it() {
+    let alloc = Allocator::default();
+    let controller = CONTROLLER.replace("    f = ![];\n", "    var f;\n    f = ![];\n");
+    let source = format!(
+        "function hi() {{\n{controller}  var sd = e(this, function () {{ return 1; }});\n  sd();\n  console.log('x');\n}}"
+    );
+    let out = run(&alloc, &source);
+    assert!(out.contains("sd()"), "{out}");
+}
+
+#[test]
+fn a_bare_var_that_shadows_the_guarded_function_keeps_it() {
+    let alloc = Allocator::default();
+    let controller = CONTROLLER.replace("if (h) {\n", "if (h) {\n        var h;\n");
+    let source = format!(
+        "function hi() {{\n{controller}  var sd = e(this, function () {{ return 1; }});\n  sd();\n  console.log('x');\n}}"
+    );
+    let out = run(&alloc, &source);
+    assert!(out.contains("sd()"), "{out}");
+}
