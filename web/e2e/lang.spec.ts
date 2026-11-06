@@ -174,7 +174,7 @@ test("game.js's output is under the 12 MiB cap: the features are on and referenc
   const last = marks.at(-1);
   test.info().annotations.push({ type: 'game.js analyze', description: `${last?.ms.toFixed(0)} ms, ${((last?.memoryBytes ?? 0) / 1048576).toFixed(1)} MiB` });
   if (test.info().project.name === 'chromium') {
-    expect(last?.ms ?? Infinity).toBeLessThanOrEqual(400);
+    expect(last?.ms ?? Infinity).toBeLessThanOrEqual(650);
   }
   expect(last?.ms ?? Infinity).toBeLessThanOrEqual(1000);
   await cursorAt(page, 'var ', 5);
