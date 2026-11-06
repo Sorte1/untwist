@@ -10,13 +10,17 @@ use oxc_syntax::node::NodeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::module::WasmSummary;
+use super::module::{ExportKind, WasmSummary};
 use super::rename::{Claimed, Renamer};
 
 const MIN_GLUE_MODULE_LEN: usize = 3;
 const MIN_NAME_LEN: usize = 3;
 const MAX_NAME_LEN: usize = 64;
 const EXPORTS_HOLDER: &str = "wasmExports";
+const IMPORTS_OBJECT: &str = "wasmImports";
+const MEMORY_BINDING: &str = "wasmMemory";
+const TABLE_BINDING: &str = "wasmTable";
+const EXPORTS_PROPERTY: &str = "asm";
 const MISSING_SHOWN: usize = 3;
 const NOT_NAMES: &[&str] = &[
     "arguments",
@@ -45,9 +49,18 @@ struct Glue<'s, 'm> {
     semantic: &'s Semantic<'s>,
     modules: FxHashSet<&'m str>,
     holders: FxHashSet<SymbolId>,
+    exports_owners: FxHashSet<SymbolId>,
     provided: Vec<Provided>,
+    import_objects: FxHashSet<SymbolId>,
     reads: Vec<String>,
     bindings: Vec<(SymbolId, String)>,
+    key_exports: FxHashMap<String, FxHashSet<String>>,
+    symbol_keys: FxHashMap<SymbolId, FxHashSet<String>>,
+}
+
+enum Link<'e> {
+    Symbol(SymbolId),
+    Key(&'e str),
 }
 
 fn static_key<'a>(key: &'a PropertyKey<'a>) -> Option<&'a str> {
@@ -193,6 +206,48 @@ impl<'s> Glue<'s, '_> {
                 _ => {}
             }
         }
+        self.collect_exports_owners();
+    }
+
+    fn collect_exports_owners(&mut self) {
+        for node in self.nodes().iter() {
+            let AstKind::AssignmentExpression(assign) = node.kind() else {
+                continue;
+            };
+            let Some(target) = assign.left.as_member_expression() else {
+                continue;
+            };
+            if target.static_property_name().and_then(|name| name.as_str())
+                != Some(EXPORTS_PROPERTY)
+            {
+                continue;
+            }
+            let value = unchained(&assign.right);
+            let holds_exports = is_instance_exports(value)
+                || self
+                    .symbol_of(value)
+                    .is_some_and(|symbol| self.holders.contains(&symbol));
+            if let (Some(owner), true) = (self.symbol_of(target.object()), holds_exports) {
+                self.exports_owners.insert(owner);
+            }
+        }
+    }
+
+    fn holds_exports(&self, object: &Expression<'_>) -> bool {
+        let object = object.without_parentheses();
+        if is_instance_exports(object)
+            || self
+                .symbol_of(object)
+                .is_some_and(|symbol| self.holders.contains(&symbol))
+        {
+            return true;
+        }
+        object.as_member_expression().is_some_and(|member| {
+            member.static_property_name().and_then(|name| name.as_str()) == Some(EXPORTS_PROPERTY)
+                && self
+                    .symbol_of(member.object())
+                    .is_some_and(|owner| self.exports_owners.contains(&owner))
+        })
     }
 
     fn export_read<'e>(&self, expression: &'e Expression<'e>) -> Option<&'e str> {
@@ -200,11 +255,7 @@ impl<'s> Glue<'s, '_> {
         let name = member
             .static_property_name()
             .and_then(|name| name.as_str())?;
-        let object = member.object().without_parentheses();
-        let from_holder = self
-            .symbol_of(object)
-            .is_some_and(|s| self.holders.contains(&s));
-        (from_holder || is_instance_exports(object)).then_some(name)
+        self.holds_exports(member.object()).then_some(name)
     }
 
     fn is_write_target(&self, id: NodeId, span: Span) -> bool {
@@ -247,11 +298,7 @@ impl<'s> Glue<'s, '_> {
         object: &'e Expression<'e>,
         name: Option<&'e str>,
     ) -> Option<&'e str> {
-        let object = object.without_parentheses();
-        let from_holder = self
-            .symbol_of(object)
-            .is_some_and(|s| self.holders.contains(&s));
-        (from_holder || is_instance_exports(object)).then_some(name?)
+        self.holds_exports(object).then_some(name?)
     }
 
     fn collect_bindings(&mut self) {
@@ -284,6 +331,96 @@ impl<'s> Glue<'s, '_> {
         }
     }
 
+    fn push_target<'e>(&self, links: &mut Vec<Link<'e>>, target: &'e AssignmentTarget<'e>) {
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = target {
+            if let Some(symbol) = self.scoping().get_reference(id.reference_id()).symbol_id() {
+                links.push(Link::Symbol(symbol));
+            }
+            return;
+        }
+        let Some(member) = target.as_member_expression() else {
+            return;
+        };
+        if !matches!(
+            member.object().without_parentheses(),
+            Expression::Identifier(_)
+        ) {
+            return;
+        }
+        if let Some(key) = member.static_property_name().and_then(|name| name.as_str()) {
+            links.push(Link::Key(key));
+        }
+    }
+
+    fn chain<'e>(
+        &self,
+        links: &mut Vec<Link<'e>>,
+        mut expression: &'e Expression<'e>,
+    ) -> &'e Expression<'e> {
+        loop {
+            expression = expression.without_parentheses();
+            match expression {
+                Expression::AssignmentExpression(assign)
+                    if assign.operator == AssignmentOperator::Assign =>
+                {
+                    self.push_target(links, &assign.left);
+                    expression = &assign.right;
+                }
+                _ => return expression,
+            }
+        }
+    }
+
+    fn collect_wrappers(&mut self) {
+        let nodes = self.nodes();
+        for node in nodes.iter() {
+            let mut links = Vec::new();
+            let value = match node.kind() {
+                AstKind::VariableDeclarator(declarator) => {
+                    let (Some(id), Some(init)) =
+                        (declarator.id.get_binding_identifier(), &declarator.init)
+                    else {
+                        continue;
+                    };
+                    links.push(Link::Symbol(id.symbol_id()));
+                    self.chain(&mut links, init)
+                }
+                AstKind::AssignmentExpression(assign)
+                    if assign.operator == AssignmentOperator::Assign =>
+                {
+                    self.push_target(&mut links, &assign.left);
+                    self.chain(&mut links, &assign.right)
+                }
+                _ => continue,
+            };
+            self.record_wrapper(&links, value);
+        }
+    }
+
+    fn record_wrapper(&mut self, links: &[Link<'_>], value: &Expression<'_>) {
+        if let Some(read) = self.export_read(value) {
+            for link in links {
+                if let Link::Key(key) = link {
+                    self.key_exports
+                        .entry((*key).to_string())
+                        .or_default()
+                        .insert(read.to_string());
+                }
+            }
+        }
+        for link in links {
+            let Link::Symbol(symbol) = link else { continue };
+            for other in links {
+                if let Link::Key(key) = other {
+                    self.symbol_keys
+                        .entry(*symbol)
+                        .or_default()
+                        .insert((*key).to_string());
+                }
+            }
+        }
+    }
+
     fn collect_provided(&mut self) {
         let nodes = self.nodes();
         let mut bound: Vec<(String, Span, &'s ObjectExpression<'s>)> = Vec::new();
@@ -298,6 +435,9 @@ impl<'s> Glue<'s, '_> {
                     }
                     if let Some(object) = self.object_of(&property.value) {
                         bound.push((key.to_string(), object.span, object));
+                        if let Some(symbol) = self.symbol_of(&property.value) {
+                            self.import_objects.insert(symbol);
+                        }
                     }
                 }
                 AstKind::AssignmentExpression(assign) => self.assigned_import(assign, &mut bound),
@@ -405,7 +545,65 @@ impl<'s> Glue<'s, '_> {
         if let [holder] = self.holders.iter().copied().collect::<Vec<_>>()[..] {
             wanted.push((holder, EXPORTS_HOLDER.to_string()));
         }
+        wanted.extend(self.wrapper_names(summary));
+        wanted.extend(self.kind_names(summary, ExportKind::Memory, MEMORY_BINDING));
+        wanted.extend(self.kind_names(summary, ExportKind::Table, TABLE_BINDING));
+        if let [object] = self.import_objects.iter().copied().collect::<Vec<_>>()[..] {
+            wanted.push((object, IMPORTS_OBJECT.to_string()));
+        }
         wanted
+    }
+
+    fn wrapper_names(&self, summary: &WasmSummary) -> Vec<(SymbolId, String)> {
+        let mut named: Vec<(SymbolId, String)> = self
+            .symbol_keys
+            .iter()
+            .filter_map(|(symbol, keys)| {
+                let [key] = keys.iter().collect::<Vec<_>>()[..] else {
+                    return None;
+                };
+                let [read] = self.key_exports.get(key)?.iter().collect::<Vec<_>>()[..] else {
+                    return None;
+                };
+                let export = summary.export(read)?;
+                (export.kind == ExportKind::Function && is_name(key))
+                    .then(|| (*symbol, key.clone()))
+            })
+            .collect();
+        named.sort_by(|a, b| a.1.cmp(&b.1));
+        named
+    }
+
+    fn kind_names(
+        &self,
+        summary: &WasmSummary,
+        kind: ExportKind,
+        name: &str,
+    ) -> Option<(SymbolId, String)> {
+        let [_] = summary
+            .exports
+            .iter()
+            .filter(|export| export.kind == kind)
+            .collect::<Vec<_>>()[..]
+        else {
+            return None;
+        };
+        let mut bound: Vec<SymbolId> = self
+            .bindings
+            .iter()
+            .filter(|(_, read)| {
+                summary
+                    .export(read)
+                    .is_some_and(|export| export.kind == kind)
+            })
+            .map(|(symbol, _)| *symbol)
+            .collect();
+        bound.sort_unstable();
+        bound.dedup();
+        match bound[..] {
+            [only] => Some((only, name.to_string())),
+            _ => None,
+        }
     }
 
     fn naming(&self, summary: &WasmSummary, claimed: &mut Claimed) -> Naming {
@@ -443,13 +641,18 @@ pub(super) fn name_glue<'s>(
         semantic,
         modules: summary.import_modules().into_iter().collect(),
         holders: FxHashSet::default(),
+        exports_owners: FxHashSet::default(),
         provided: Vec::new(),
+        import_objects: FxHashSet::default(),
         reads: Vec::new(),
         bindings: Vec::new(),
+        key_exports: FxHashMap::default(),
+        symbol_keys: FxHashMap::default(),
     };
     glue.collect_holders();
     glue.collect_reads();
     glue.collect_bindings();
+    glue.collect_wrappers();
     glue.collect_provided();
     glue.naming(summary, claimed)
 }

@@ -10,9 +10,18 @@ pub struct WasmImport {
     pub function_name: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExportKind {
+    Function,
+    Memory,
+    Table,
+    Other,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WasmExport {
     pub name: String,
+    pub kind: ExportKind,
     pub function_name: Option<String>,
 }
 
@@ -48,7 +57,7 @@ impl WasmSummary {
 #[derive(Default)]
 struct Reading {
     imports: Vec<(WasmImport, Option<u32>)>,
-    exports: Vec<(String, Option<u32>)>,
+    exports: Vec<(String, ExportKind, Option<u32>)>,
     names: FxHashMap<u32, String>,
     imported_functions: u32,
 }
@@ -87,8 +96,14 @@ impl Reading {
     ) -> Result<(), PayloadRefusal> {
         for export in reader {
             let export = export.map_err(malformed)?;
-            let function = matches!(export.kind, ExternalKind::Func).then_some(export.index);
-            self.exports.push((export.name.to_string(), function));
+            let kind = match export.kind {
+                ExternalKind::Func | ExternalKind::FuncExact => ExportKind::Function,
+                ExternalKind::Memory => ExportKind::Memory,
+                ExternalKind::Table => ExportKind::Table,
+                _ => ExportKind::Other,
+            };
+            let function = (kind == ExportKind::Function).then_some(export.index);
+            self.exports.push((export.name.to_string(), kind, function));
         }
         Ok(())
     }
@@ -116,8 +131,9 @@ impl Reading {
         let exports = self
             .exports
             .into_iter()
-            .map(|(name, index)| WasmExport {
+            .map(|(name, kind, index)| WasmExport {
                 name,
+                kind,
                 function_name: name_of(index),
             })
             .collect();

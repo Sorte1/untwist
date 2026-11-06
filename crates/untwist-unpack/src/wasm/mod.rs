@@ -10,7 +10,7 @@ use oxc_semantic::{Semantic, SemanticBuilder};
 use untwist_core::parse::{has_error, parse_program};
 
 pub use graph::{GlueImport, ImportValue, ModuleFacts};
-pub use module::{summarize, WasmExport, WasmImport, WasmSummary};
+pub use module::{summarize, ExportKind, WasmExport, WasmImport, WasmSummary};
 pub use oxc_span::Span;
 pub use payload::{PayloadRefusal, MAX_WASM_BYTES};
 pub use sites::{url_name, PayloadSite, RemoteSite, Scan};
