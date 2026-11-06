@@ -143,11 +143,7 @@ impl<'a> Visit<'a> for Scan<'_> {
 
     fn visit_object_property(&mut self, prop: &ObjectProperty<'a>) {
         if let (false, PropertyKey::StringLiteral(key)) = (prop.computed, &prop.key) {
-            if key
-                .value
-                .as_str()
-                .is_some_and(|name| is_identifier_name(name))
-            {
+            if key.value.as_str().is_some_and(is_identifier_name) {
                 self.found.bump("quoted_keys");
             }
         }
@@ -156,11 +152,7 @@ impl<'a> Visit<'a> for Scan<'_> {
 
     fn visit_method_definition(&mut self, method: &MethodDefinition<'a>) {
         if let PropertyKey::StringLiteral(key) = &method.key {
-            if key
-                .value
-                .as_str()
-                .is_some_and(|name| is_identifier_name(name))
-            {
+            if key.value.as_str().is_some_and(is_identifier_name) {
                 self.found.bump("quoted_keys");
             }
         }
@@ -169,11 +161,7 @@ impl<'a> Visit<'a> for Scan<'_> {
 
     fn visit_property_definition(&mut self, prop: &PropertyDefinition<'a>) {
         if let PropertyKey::StringLiteral(key) = &prop.key {
-            if key
-                .value
-                .as_str()
-                .is_some_and(|name| is_identifier_name(name))
-            {
+            if key.value.as_str().is_some_and(is_identifier_name) {
                 self.found.bump("quoted_keys");
             }
         }
@@ -182,11 +170,7 @@ impl<'a> Visit<'a> for Scan<'_> {
 
     fn visit_computed_member_expression(&mut self, member: &ComputedMemberExpression<'a>) {
         if let Expression::StringLiteral(key) = &member.expression {
-            if key
-                .value
-                .as_str()
-                .is_some_and(|name| is_identifier_name(name))
-            {
+            if key.value.as_str().is_some_and(is_identifier_name) {
                 self.found.bump("computed_members");
             }
         }
