@@ -1,3 +1,4 @@
+mod alias_forms;
 pub mod array_rotator;
 pub mod bindings;
 pub mod bridge;

@@ -17,14 +17,21 @@ use untwist_core::ast_util::search::{expression_at, statement_at};
 use untwist_core::pass::{Cx, Interest, Pass};
 use untwist_core::semantic::{is_constant_binding, scope_hazard, write_reference_count};
 
+use crate::alias_forms::{
+    alias_source, decoders_ignore_this, deleted_span, literal_headed_identifier, member_reads,
+    single_property_source, ObjectAlias,
+};
 use crate::bindings::{reference_symbol, resolved_symbol};
 use crate::fused::{Fused, Member, Walk};
 use crate::init_order::{lend_order_with, note_overflow, sharing_mark, DeclarationSlot, LentOrder};
 use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
+use crate::proof::has_with_statement;
 use crate::stamp::{find_stamped_named, is_unedited};
 use crate::units::MachineryDepth;
 use crate::wrapper_calls::inline_function_wrappers;
+
+pub const ALIAS_FORM_CHECKS: &str = "inline-decoder-wrappers/alias-form-checks";
 
 #[derive(Hash)]
 pub struct AliasSite {
@@ -41,6 +48,14 @@ struct AliasSearch<'s> {
     units: MachineryDepth,
     machinery: FxHashSet<SymbolId>,
     found: Vec<AliasSite>,
+    forms: AliasForms,
+}
+
+#[derive(Default)]
+struct AliasForms {
+    objects: Vec<ObjectAlias>,
+    sequences: Vec<(Span, SymbolId)>,
+    deleted: FxHashSet<Span>,
 }
 
 impl AliasSearch<'_> {
@@ -68,20 +83,29 @@ impl<'s> AliasSearch<'s> {
             units: MachineryDepth::every_unit(),
             machinery: FxHashSet::default(),
             found: Vec::new(),
+            forms: AliasForms::default(),
         }
     }
 
     fn finish(self) -> Vec<AliasSite> {
+        self.finish_with_forms().0
+    }
+
+    fn finish_with_forms(self) -> (Vec<AliasSite>, AliasForms) {
         let Self {
             machinery,
             mut found,
             keeps_machinery,
+            mut forms,
             ..
         } = self;
         if !keeps_machinery {
             found.retain(|site| !machinery.contains(&site.symbol));
+            forms
+                .objects
+                .retain(|site| !machinery.contains(&site.symbol));
         }
-        found
+        (found, forms)
     }
 }
 
@@ -102,31 +126,65 @@ impl<'a> Member<'a> for AliasSearch<'_> {
     }
 
     #[inline(always)]
+    fn enter_expression(&mut self, it: &Expression<'a>) -> Option<(bool, Span)> {
+        if let Some(span) = deleted_span(it) {
+            self.forms.deleted.insert(span);
+        }
+        if let (Expression::SequenceExpression(sequence), Some(id)) =
+            (it, literal_headed_identifier(it))
+        {
+            if let Some(symbol) = id
+                .reference_id
+                .get()
+                .and_then(|id| self.scoping.get_reference(id).symbol_id())
+            {
+                self.forms.sequences.push((sequence.span, symbol));
+            }
+        }
+        Some((false, Span::default()))
+    }
+
+    #[inline(always)]
     fn binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
         self.claim(it.symbol_id.get());
     }
 
     #[inline(always)]
     fn identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        let symbol = it
+        let Some(reference) = it
             .reference_id
             .get()
-            .and_then(|id| self.scoping.get_reference(id).symbol_id());
-        self.claim(symbol);
+            .map(|id| self.scoping.get_reference(id))
+        else {
+            return;
+        };
+        if reference.is_write() {
+            self.claim(reference.symbol_id());
+        }
     }
 
     #[inline(always)]
     fn enter_variable_declarator(&mut self, it: &VariableDeclarator<'a>) -> (bool, Span) {
-        if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
-            if let (Some(symbol), Some(source)) = (id.symbol_id.get(), self.reference_symbol(init))
-            {
-                self.found.push(AliasSite {
-                    symbol,
-                    source,
-                    statement: self.statement,
-                    expression: None,
-                });
-            }
+        let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) else {
+            return (false, Span::default());
+        };
+        let Some(symbol) = id.symbol_id.get() else {
+            return (false, Span::default());
+        };
+        if let Some(source) = alias_source(init, self.scoping) {
+            self.found.push(AliasSite {
+                symbol,
+                source,
+                statement: self.statement,
+                expression: None,
+            });
+        } else if let Some((source, key)) = single_property_source(init, self.scoping) {
+            self.forms.objects.push(ObjectAlias {
+                symbol,
+                source,
+                statement: self.statement,
+                key,
+            });
         }
         (false, Span::default())
     }
@@ -213,9 +271,9 @@ fn alias_scans(
     program: &Program<'_>,
     cx: &mut Cx<'_, '_>,
     (shares, keeps_machinery): (bool, bool),
-) -> (Vec<AliasSite>, DeclarationSearch, LentOrder) {
+) -> (Vec<AliasSite>, AliasForms, DeclarationSearch, LentOrder) {
     let mark = sharing_mark(shares, program, cx);
-    let (order, sites, declarations) = {
+    let (order, (sites, forms), declarations) = {
         let scoping = cx.scoping();
         let search = AliasSearch {
             keeps_machinery,
@@ -224,10 +282,10 @@ fn alias_scans(
         let member = Fused::new(search, DeclarationSearch::default());
         let found = lend_order_with(mark, program, scoping, member);
         let member = found.member;
-        (found.order, member.first.finish(), member.second)
+        (found.order, member.first.finish_with_forms(), member.second)
     };
     note_overflow(&order, cx);
-    (sites, declarations, order)
+    (sites, forms, declarations, order)
 }
 
 fn is_bare_statement(program: &Program<'_>, statement: Span, expression: Span) -> bool {
@@ -246,6 +304,8 @@ struct VariablePlan<'a> {
     declarations: FxHashMap<SymbolId, Span>,
     rejected: Vec<(Span, &'static str)>,
     budget: Vec<(Span, SymbolId)>,
+    objects: Vec<(Span, Vec<Span>, Ident<'a>)>,
+    collapses: Vec<(Span, Ident<'a>)>,
 }
 
 fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {
@@ -522,7 +582,7 @@ fn variable_alias_plan<'a>(
         plan.decoders = targets.keys().copied().collect();
     }
 
-    let (mut sites, declarations, order) =
+    let (mut sites, forms, declarations, order) =
         alias_scans(program, cx, (shares && !keeps_machinery, keeps_machinery));
     if keeps_machinery {
         let scoping = cx.scoping();
@@ -553,8 +613,95 @@ fn variable_alias_plan<'a>(
     }
 
     collect_leftovers(&sites, &targets, &facts, cx.scoping(), &mut plan);
+    let checked = !cx.opts.rule_disabled(ALIAS_FORM_CHECKS);
+    if !keeps_machinery {
+        plan.objects = object_rewrites(program, &forms.objects, &targets, &facts, cx, &mut plan);
+    }
+    plan.collapses = sequence_collapses(&forms, &targets, &plan, cx.scoping(), checked);
     plan.declarations = facts.declarations.found;
     plan
+}
+
+fn known_target<'a>(
+    symbol: SymbolId,
+    targets: &FxHashMap<SymbolId, Ident<'a>>,
+    plan: &VariablePlan<'a>,
+) -> Option<Ident<'a>> {
+    targets
+        .get(&symbol)
+        .or_else(|| plan.aliases.get(&symbol))
+        .copied()
+}
+
+fn object_rewrites<'a>(
+    program: &Program<'_>,
+    objects: &[ObjectAlias],
+    targets: &FxHashMap<SymbolId, Ident<'a>>,
+    facts: &AliasFacts,
+    cx: &Cx<'a, '_>,
+    plan: &mut VariablePlan<'a>,
+) -> Vec<(Span, Vec<Span>, Ident<'a>)> {
+    let scoping = cx.scoping();
+    let checked = !cx.opts.rule_disabled(ALIAS_FORM_CHECKS);
+    let mut candidates = Vec::new();
+    for object in objects {
+        let Some(name) = known_target(object.source, targets, plan) else {
+            continue;
+        };
+        let site = AliasSite {
+            symbol: object.symbol,
+            source: object.source,
+            statement: object.statement,
+            expression: None,
+        };
+        match rejection(&site, facts, scoping).filter(|_| checked) {
+            Some(reason) => plan.rejected.push((object.statement, reason)),
+            None => candidates.push((object, name)),
+        }
+    }
+    if candidates.is_empty() {
+        return Vec::new();
+    }
+    if checked && !decoders_ignore_this(program, &plan.decoders) {
+        for (object, _) in &candidates {
+            plan.rejected
+                .push((object.statement, notes::WRAPPER_OBJECT_ALIAS_THIS));
+        }
+        return Vec::new();
+    }
+    let wanted: FxHashMap<SymbolId, &str> = candidates
+        .iter()
+        .map(|(object, _)| (object.symbol, object.key.as_str()))
+        .collect();
+    let reads = member_reads(program, scoping, &wanted, checked);
+    let mut rewrites = Vec::new();
+    for (object, name) in candidates {
+        match reads.get(&object.symbol) {
+            Some(members) => rewrites.push((object.statement, members.clone(), name)),
+            None => plan
+                .rejected
+                .push((object.statement, notes::WRAPPER_OBJECT_ALIAS_OTHER_USE)),
+        }
+    }
+    rewrites
+}
+
+fn sequence_collapses<'a>(
+    forms: &AliasForms,
+    targets: &FxHashMap<SymbolId, Ident<'a>>,
+    plan: &VariablePlan<'a>,
+    scoping: &Scoping,
+    checked: bool,
+) -> Vec<(Span, Ident<'a>)> {
+    if forms.sequences.is_empty() || (checked && has_with_statement(scoping)) {
+        return Vec::new();
+    }
+    forms
+        .sequences
+        .iter()
+        .filter(|(span, _)| !checked || !forms.deleted.contains(span))
+        .filter_map(|(span, symbol)| Some((*span, known_target(*symbol, targets, plan)?)))
+        .collect()
 }
 
 fn apply_alias_site<'a>(
@@ -638,7 +785,7 @@ fn inline_variable_aliases<'a>(
         cx.note(notes::init_order_budget(&name), Some(span));
     }
     note_kept_self_assignments(program, &plan, cx);
-    if plan.aliases.is_empty() {
+    if plan.aliases.is_empty() && plan.objects.is_empty() && plan.collapses.is_empty() {
         return 0;
     }
 
@@ -652,6 +799,15 @@ fn inline_variable_aliases<'a>(
     let mut edits = ExprEdits::new();
     for site in plan.chosen.iter().copied() {
         apply_alias_site(program, &plan, site, cx, &mut edits, &mut removals);
+    }
+    for (statement, members, name) in &plan.objects {
+        removals.remove(*statement);
+        for member in members {
+            edits.insert(*member, Expression::new_identifier(*member, *name, &*cx));
+        }
+    }
+    for (span, name) in plan.collapses.iter().copied() {
+        edits.insert(span, Expression::new_identifier(span, name, &*cx));
     }
     for (statement, expression) in plan.self_assignments.iter().copied() {
         if is_bare_statement(program, statement, expression) {

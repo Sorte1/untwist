@@ -45,6 +45,9 @@ All notable changes to this project are documented in this file. The format is b
   such as a whole program wrapped in an IIFE, now decodes in both lanes.
 - A rotator that calls the string array function by name once, as its first statement, and
   a rotator loop whose body is a bare `try` (both as terser prints them) are now trusted.
+- Decoder aliases read inside the rotator, held in a one-property object, returned by an
+  empty IIFE or wrapped in `(0, alias)` are inlined in both lanes, so their string arrays
+  decode instead of being kept whole.
 - The default lane decodes beside a fresh `new Map()` or `new WeakMap()` that is read and written only
   through its own `get` and `set`; those calls were taken for `Reflect.get` and `Reflect.set` and refused.
 - A decoder wrapper whose binding is written again, or a `var` wrapper called before its
