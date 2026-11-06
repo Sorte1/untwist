@@ -88,6 +88,13 @@ impl JsString {
         self.0.charge.as_ref().map_or(0, |charge| charge.bytes())
     }
 
+    pub(crate) fn is_charged_on(&self, ledger: &Rc<crate::heap::HeapLedger>) -> bool {
+        self.0
+            .charge
+            .as_ref()
+            .is_some_and(|charge| charge.is_on(ledger))
+    }
+
     pub fn units(&self) -> &[u16] {
         &self.0.units
     }

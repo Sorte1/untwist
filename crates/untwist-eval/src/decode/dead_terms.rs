@@ -52,6 +52,14 @@ thread_local! {
     static OUTCOMES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
+pub(crate) fn recipe_mode_tag() -> u8 {
+    match MODE.with(Cell::get) {
+        RecipeMode::Default => 0,
+        RecipeMode::Commit => 1,
+        RecipeMode::ProbeOnly => 2,
+    }
+}
+
 #[doc(hidden)]
 pub fn set_recipe_mode_for_tests(mode: RecipeMode) {
     MODE.with(|cell| cell.set(mode));

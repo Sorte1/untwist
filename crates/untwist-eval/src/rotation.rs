@@ -2,7 +2,7 @@ use oxc_ast::ast::Function;
 use oxc_span::{GetSpan, Span};
 use sha2::{Digest, Sha256};
 
-use crate::decode::DecoderProgram;
+use crate::decode::{DecoderProgram, KeptUnits};
 use crate::source::{compact_expression, compact_function};
 use crate::value::Value;
 
@@ -20,6 +20,7 @@ pub struct RotationMemo {
     entries: Vec<RotationEntry>,
     searches: usize,
     hits: usize,
+    pub(crate) units: KeptUnits,
 }
 
 impl RotationMemo {
@@ -29,6 +30,10 @@ impl RotationMemo {
 
     pub fn hits(&self) -> usize {
         self.hits
+    }
+
+    pub fn unit_hits(&self) -> usize {
+        self.units.hits()
     }
 
     pub fn stored(&self) -> usize {
@@ -77,12 +82,12 @@ fn hash_units(hasher: &mut Sha256, units: &[u16]) {
     }
 }
 
-fn hash_text(hasher: &mut Sha256, text: &str) {
+pub(crate) fn hash_text(hasher: &mut Sha256, text: &str) {
     hasher.update((text.len() as u64).to_le_bytes());
     hasher.update(text.as_bytes());
 }
 
-fn hash_span(hasher: &mut Sha256, span: Span) {
+pub(crate) fn hash_span(hasher: &mut Sha256, span: Span) {
     hasher.update(span.start.to_le_bytes());
     hasher.update(span.end.to_le_bytes());
 }
@@ -115,21 +120,26 @@ fn hash_source_span(hasher: &mut Sha256, source_text: &str, span: Span) {
     hash_text(hasher, text);
 }
 
-fn hash_function(hasher: &mut Sha256, source_text: &str, name: &str, function: &Function<'_>) {
+pub(crate) fn hash_function(
+    hasher: &mut Sha256,
+    source_text: &str,
+    name: &str,
+    function: &Function<'_>,
+) {
     hash_text(hasher, name);
     hash_span(hasher, function.span());
     hash_source_span(hasher, source_text, function.span());
     hash_text(hasher, &compact_function(function));
 }
 
-fn hash_decoders(hasher: &mut Sha256, program: &DecoderProgram<'_>) {
+pub(crate) fn hash_decoders(hasher: &mut Sha256, program: &DecoderProgram<'_>) {
     hasher.update((program.decoders.len() as u64).to_le_bytes());
     for decoder in &program.decoders {
         hash_function(hasher, program.source_text, decoder.name, decoder.function);
     }
 }
 
-fn hash_rotator(hasher: &mut Sha256, program: &DecoderProgram<'_>) {
+pub(crate) fn hash_rotator(hasher: &mut Sha256, program: &DecoderProgram<'_>) {
     let Some(rotator) = program.rotator else {
         hasher.update([0u8]);
         return;

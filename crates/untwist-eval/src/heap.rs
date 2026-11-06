@@ -123,6 +123,10 @@ impl Charge {
     pub fn bytes(&self) -> u64 {
         self.bytes.get()
     }
+
+    pub(crate) fn is_on(&self, ledger: &Rc<HeapLedger>) -> bool {
+        Rc::ptr_eq(&self.ledger, ledger)
+    }
 }
 
 impl Drop for Charge {

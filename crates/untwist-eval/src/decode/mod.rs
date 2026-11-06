@@ -1,6 +1,7 @@
 mod checksum;
 mod dead_terms;
 mod entries;
+mod kept;
 
 use std::rc::Rc;
 
@@ -30,11 +31,15 @@ use crate::value::{encode_with_lone_surrogates, FnCode, JsString, Value};
 
 pub use checksum::{checksum_from_rotator, Checksum};
 use checksum::{checksum_step, rotator_body_is_strict, NATIVE_ROTATE_STEP_COST};
+pub(crate) use dead_terms::recipe_mode_tag;
 pub use dead_terms::{
     memo_recipe_stats_for_tests, set_recipe_mode_for_tests, take_rotation_outcomes_for_tests,
     MemoRecipeStats, RecipeMode,
 };
 use entries::Prepared;
+pub(crate) use kept::KeptUnits;
+#[cfg(feature = "test-hooks")]
+pub(crate) use kept::{set_arguments_unkeyed, set_keep_from_steps, set_keeping};
 
 pub const DECODE_ERROR_MARKER: &str = "untwist:decode_error";
 pub const DEAD_TERM_THREW: &str =
@@ -603,17 +608,25 @@ impl InterpEvaluator {
         memo: &mut RotationMemo,
         escaped_decoders: &FxHashSet<usize>,
     ) -> EvalResult<Vec<Option<Decoded>>> {
+        let start = kept::Start::of(self);
+        let unit = (program, calls, escaped_decoders);
+        let early = memo.units.early_key(&start, unit);
+        if let Some(kept) = early.and_then(|key| memo.units.replay(&key, self)) {
+            return kept;
+        }
         #[cfg(feature = "test-hooks")]
         let mark = crate::test_hooks::UnitMark::decode(self, memo);
         let result = self.decode_unit(program, calls, memo, escaped_decoders);
         #[cfg(feature = "test-hooks")]
         mark.finish(self, memo, &result);
-        result.map(|values| {
+        let result = result.map(|values| {
             values
                 .into_iter()
                 .map(|value| value.map(Decoded::of))
                 .collect()
-        })
+        });
+        memo.units.keep((early, start), unit, self, &result);
+        result
     }
 
     fn decode_unit<'a>(

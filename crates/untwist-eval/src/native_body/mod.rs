@@ -30,6 +30,10 @@ thread_local! {
     static RUNS: Cell<u64> = const { Cell::new(0) };
 }
 
+pub(crate) fn enabled() -> bool {
+    ENABLED.with(Cell::get)
+}
+
 #[cfg(feature = "test-hooks")]
 pub(crate) fn set_enabled(enabled: bool) {
     ENABLED.with(|cell| cell.set(enabled));
