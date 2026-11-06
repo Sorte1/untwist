@@ -63,6 +63,8 @@ pub struct Output {
     pub refusal_sites: Vec<RefusalSite>,
     pub wasm: Vec<crate::wasm::WasmFile>,
     pub wasm_unresolved: Vec<crate::wasm::WasmReference>,
+    pub wasm_check: crate::wasm::WasmCheck,
+    pub wasm_unchecked: bool,
 }
 
 pub(crate) fn admits_reparse(text: &str) -> bool {
@@ -227,6 +229,8 @@ impl OutputParts {
             refusal_sites: self.refusal_sites,
             wasm: Vec::new(),
             wasm_unresolved: Vec::new(),
+            wasm_check: crate::wasm::WasmCheck::default(),
+            wasm_unchecked: false,
         }
     }
 }
@@ -273,7 +277,10 @@ impl Pipeline {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             parts.stats = inputs.merged(crate::stats::RunStats::taken());
-            parts.into_output(bundle, self.options.single_file)
+            Output {
+                wasm_check: self.options.wasm_check,
+                ..parts.into_output(bundle, self.options.single_file)
+            }
         })
     }
 

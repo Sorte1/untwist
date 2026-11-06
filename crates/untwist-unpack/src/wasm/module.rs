@@ -39,6 +39,10 @@ impl WasmSummary {
     pub fn export(&self, name: &str) -> Option<&WasmExport> {
         self.exports.iter().find(|export| export.name == name)
     }
+
+    pub fn is_inert(&self) -> bool {
+        self.imports.is_empty() && self.exports.is_empty()
+    }
 }
 
 #[derive(Default)]

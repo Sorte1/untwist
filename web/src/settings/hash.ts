@@ -1,6 +1,6 @@
 import { SHARED_KEYS } from '../share/link';
 import { offList } from './passes';
-import { DEFAULTS, RENAME_MODES, type Settings } from './settings';
+import { DEFAULTS, RENAME_MODES, WASM_CHECKS, type Settings } from './settings';
 
 export interface Parsed {
   readonly settings: Settings;
@@ -56,6 +56,7 @@ const CODECS: Readonly<Record<Key, Codec>> = {
   },
   single: flag,
   off: { read: offList, write: (value) => String(value) },
+  wasm: choice(WASM_CHECKS),
   view: choice(['output', 'diff', 'steps']),
   wrap: flag,
   theme: { read: (raw) => (raw === 'dark' || raw === 'light' ? raw : undefined), write: (value) => String(value) },

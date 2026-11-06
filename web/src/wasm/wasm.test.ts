@@ -5,8 +5,8 @@ const HEADER = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 
 describe('wasm helpers', () => {
   it('reads the wasm report and falls back to nothing on bad json', () => {
-    expect(parseWasmReport('')).toEqual({ files: [], unresolved: [] });
-    expect(parseWasmReport('{')).toEqual({ files: [], unresolved: [] });
+    expect(parseWasmReport('')).toEqual({ files: [], unresolved: [], unchecked: false });
+    expect(parseWasmReport('{')).toEqual({ files: [], unresolved: [], unchecked: false });
     expect(parseWasmReport('{"files":[],"unresolved":[{"name":"a.wasm","url":"x/a.wasm"}]}').unresolved[0]?.name).toBe('a.wasm');
   });
 

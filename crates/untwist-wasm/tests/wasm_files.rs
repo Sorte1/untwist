@@ -13,8 +13,9 @@ fn wasm_json(report: &untwist_wasm::report::RunReport) -> serde_json::Value {
 #[test]
 fn an_embedded_module_comes_back_as_a_downloadable_file() {
     let source = std::fs::read_to_string(fixture("bindgen.js")).unwrap();
-    let report = run_report_with_wasm(&source, "", false, "", &WasmFiles::new());
+    let report = run_report_with_wasm(&source, "--wasm-check auto", false, "", &WasmFiles::new());
     let json = wasm_json(&report);
+    assert_eq!(json["unchecked"], false);
     assert_eq!(json["files"][0]["path"], "wasm/deobfuscated.wasm");
     assert_eq!(json["files"][0]["renamed"], 3);
     assert_eq!(
@@ -45,4 +46,13 @@ fn a_dropped_module_is_matched_to_the_reference_by_name() {
     assert!(supplied
         .stdout()
         .contains("function __wbg_log_9a1b2c(e, t)"));
+}
+
+#[test]
+fn with_the_check_off_an_embedded_module_is_flagged_not_extracted() {
+    let source = std::fs::read_to_string(fixture("bindgen.js")).unwrap();
+    let report = run_report_with_wasm(&source, "", false, "", &WasmFiles::new());
+    let json = wasm_json(&report);
+    assert_eq!(json["unchecked"], true);
+    assert_eq!(json["files"].as_array().unwrap().len(), 0);
 }

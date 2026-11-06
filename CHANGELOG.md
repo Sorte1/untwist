@@ -8,6 +8,11 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- `--wasm-check off|on|auto` (and Wasm check in the playground settings) decides whether the
+  output is scanned for embedded wasm modules. The default is now `off`, which only notes when the
+  output may hold one; `auto` extracts modules that have imports or exports, so feature-detect
+  probes passed to `WebAssembly.validate` are left alone; `on` extracts every module it finds.
+  Supplied and fetched modules work in every mode.
 - wasm glue in a webpack bundle is named across modules: the functions an async or sync wasm
   module imports are renamed in the modules that export them, and the bindings that read its
   exports in the modules that import it, after the same check that every key and read exists in

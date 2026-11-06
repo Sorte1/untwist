@@ -100,7 +100,8 @@ Common flags:
 | `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx` | Skip a stage. |
 | `--split-hoisted` | Also split Rollup/Vite scope-hoisted bundles, when the split provably keeps behaviour. |
 | `--single-file` | Write every unpacked module into one file, with a banner per module. |
-| `--wasm-dir DIR`, `--wasm NAME=PATH` | Supply wasm modules the input loads from elsewhere, so their import and export names can name the glue. Embedded wasm is written to `wasm/` on its own. |
+| `--wasm-check off\|on\|auto` | Look for wasm modules embedded in the output. `off` (default) only prints a note when the output may hold one; `auto` extracts a byte array or base64 text that holds a whole module with imports or exports, writes it to `wasm/` and names its glue (feature-detect probes are left alone); `on` reparses every output to look, which can be slow on large files. |
+| `--wasm-dir DIR`, `--wasm NAME=PATH` | Supply wasm modules the input loads from elsewhere, so their import and export names can name the glue. This works with every `--wasm-check` mode. |
 | `--fetch-wasm`, `--wasm-base URL` | Download the wasm modules nobody supplied. Nothing is fetched without this flag. |
 | `--disable PASS` | Turn off individual passes; `--list-passes` prints them all. |
 | `--report text\|json` | Print what every stage and pass did. `-v` is short for `--report text`. |

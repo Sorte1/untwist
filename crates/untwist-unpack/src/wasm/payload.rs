@@ -81,6 +81,10 @@ fn sextet(byte: u8) -> Option<u32> {
     }
 }
 
+pub fn is_base64_byte(byte: u8) -> bool {
+    byte == b'=' || sextet(byte).is_some()
+}
+
 pub fn base64_holds_module(body: &str) -> bool {
     body.bytes()
         .take(MIN_MODULE_BASE64)

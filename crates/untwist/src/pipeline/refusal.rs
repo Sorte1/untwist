@@ -205,7 +205,10 @@ impl Pipeline {
             let scan = (FinalTextGuard::Scan, false);
             let bundle =
                 self.unpack_final_texts(final_texts, earlier, scan, stages, notes, panicked);
-            parts.into_output(bundle, self.options.single_file)
+            Output {
+                wasm_check: self.options.wasm_check,
+                ..parts.into_output(bundle, self.options.single_file)
+            }
         })
     }
 }

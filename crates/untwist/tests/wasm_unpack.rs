@@ -1,4 +1,4 @@
-use untwist::{NoteKind, Options, Output, Pipeline, WasmOrigin, WasmSupply};
+use untwist::{NoteKind, Options, Output, Pipeline, WasmCheck, WasmOrigin, WasmSupply};
 
 fn fixture_path(name: &str) -> String {
     format!("{}/tests/wasm/{name}", env!("CARGO_MANIFEST_DIR"))
@@ -12,8 +12,16 @@ fn wasm_bytes(name: &str) -> Vec<u8> {
     std::fs::read(fixture_path(name)).unwrap()
 }
 
+fn run_checked(source: &str, wasm_check: WasmCheck) -> Output {
+    Pipeline::new(Options {
+        wasm_check,
+        ..Options::default()
+    })
+    .run(source)
+}
+
 fn run(source: &str) -> Output {
-    Pipeline::new(Options::default()).run(source)
+    run_checked(source, WasmCheck::Auto)
 }
 
 fn settled(source: &str) -> Output {
@@ -330,4 +338,74 @@ fn a_feature_detect_beside_a_real_payload_stays_in_place() {
     assert_eq!(out.wasm.len(), 1);
     assert_eq!(out.wasm[0].bytes, wasm_bytes("bindgen.wasm"));
     assert!(out.code().contains("0, 97, 115, 109, 1, 0, 0, 0"));
+}
+
+#[test]
+fn with_the_check_off_an_embedded_module_is_only_flagged() {
+    let mut out = run_checked(&fixture("bindgen.js"), WasmCheck::Off);
+    let before = out.code().to_string();
+    out.settle_wasm(&WasmSupply::default(), true);
+    assert_eq!(out.code(), before);
+    assert!(out.wasm.is_empty());
+    assert!(out.wasm_unchecked);
+    assert!(wasm_notes(&out).is_empty());
+}
+
+#[test]
+fn with_the_check_off_text_without_a_module_is_not_flagged() {
+    let mut out = run_checked(
+        "WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));",
+        WasmCheck::Off,
+    );
+    out.settle_wasm(&WasmSupply::default(), true);
+    assert!(!out.wasm_unchecked);
+}
+
+#[test]
+fn with_the_check_off_a_supplied_module_still_names_its_glue() {
+    let supply = WasmSupply {
+        files: vec![untwist::SuppliedWasm {
+            name: "app_bg.wasm".to_string(),
+            bytes: wasm_bytes("bindgen.wasm"),
+            origin: WasmOrigin::Supplied,
+            url: None,
+        }],
+    };
+    let mut out = run_checked(&fixture("bindgen-remote.js"), WasmCheck::Off);
+    out.settle_wasm(&supply, true);
+    assert_eq!(out.wasm.len(), 1);
+    assert_eq!(out.wasm[0].origin, WasmOrigin::Supplied);
+    assert!(out.code().contains("function __wbg_log_9a1b2c(e, t)"));
+}
+
+#[test]
+fn with_the_check_on_a_module_the_text_trigger_misses_is_extracted() {
+    let bytes = wasm_bytes("webpack.wasm");
+    let hex: Vec<String> = bytes.iter().map(|byte| format!("0x{byte:x}")).collect();
+    let code = format!(
+        "WebAssembly.instantiate(new Uint8Array([{}]));",
+        hex.join(", ")
+    );
+    assert!(!untwist_unpack::wasm::may_hold_wasm(&code));
+    for (check, found) in [(WasmCheck::Auto, 0), (WasmCheck::On, 1)] {
+        let mut out = run_checked("", check);
+        out.codes = vec![code.clone()];
+        out.settle_wasm(&WasmSupply::default(), false);
+        assert_eq!(out.wasm.len(), found, "{check:?}");
+    }
+}
+
+#[test]
+fn auto_leaves_a_module_with_no_imports_or_exports_alone_and_on_extracts_it() {
+    let probe =
+        "WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0]));";
+    let source = format!("{probe}\n{}", fixture("bindgen.js"));
+    let auto = settled(&source);
+    assert_eq!(auto.wasm.len(), 1);
+    assert_eq!(auto.wasm[0].bytes, wasm_bytes("bindgen.wasm"));
+    assert!(auto.code().contains("0, 97, 115, 109, 1, 0, 0, 0, 1, 4"));
+    let mut on = run_checked(probe, WasmCheck::On);
+    on.settle_wasm(&WasmSupply::default(), true);
+    assert_eq!(on.wasm.len(), 1);
+    assert_eq!(on.wasm[0].byte_length, 14);
 }

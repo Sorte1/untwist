@@ -6,6 +6,7 @@ use untwist_rename::RenameMode;
 use untwist_unpack::Mapping;
 
 use crate::plugin::Plugins;
+use crate::wasm::WasmCheck;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Progress {
@@ -82,6 +83,7 @@ pub struct Options {
     pub stage_snapshots: Option<usize>,
     pub decoded_strings: bool,
     pub statement_spans: bool,
+    pub wasm_check: WasmCheck,
 }
 
 impl Default for Options {
@@ -111,6 +113,7 @@ impl Default for Options {
             stage_snapshots: None,
             decoded_strings: false,
             statement_spans: false,
+            wasm_check: WasmCheck::Off,
         }
     }
 }
