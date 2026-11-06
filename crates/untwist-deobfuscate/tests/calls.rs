@@ -75,7 +75,9 @@ fn a_ternary_argument_is_split_into_two_calls() {
 #[test]
 fn external_variables_are_inlined_into_the_call() {
     let out =
-        normalize("let x;\nconst y = 0xd3;\nx = 0xd6;\nconsole[__DECODE_0__(x)](__DECODE_0__(y));");
+        normalize(
+        "function t() {\nlet x;\nconst y = 0xd3;\nx = 0xd6;\nconsole[__DECODE_0__(x)](__DECODE_0__(y));\n}",
+    );
     assert!(out.contains("__DECODE_0__(214)"), "{out}");
     assert!(out.contains("__DECODE_0__(211)"), "{out}");
     assert!(!out.contains("x="), "{out}");
@@ -130,7 +132,7 @@ fn spread_and_empty_call_sites_are_not_collected_but_an_optional_decoder_call_is
 #[test]
 fn a_second_normalisation_pass_changes_nothing() {
     let (out, report) = normalize_to_fixpoint(
-        "let x;\nx = 0xd6;\n__DECODE_0__;\nconsole.log(__DECODE_0__(x), __DECODE_0__(q ? 0xc7 : 0xc8));",
+        "function t() {\nlet x;\nx = 0xd6;\n__DECODE_0__;\nconsole.log(__DECODE_0__(x), __DECODE_0__(q ? 0xc7 : 0xc8));\n}",
     );
     assert!(report.converged(), "{:?}", report.stop);
     assert_eq!(report.iterations, 2, "{out}");
@@ -150,7 +152,8 @@ fn a_declaration_with_several_declarators_is_not_removed() {
 
 #[test]
 fn an_assignment_sharing_a_statement_is_not_removed() {
-    let out = normalize("let x;\nx = 0xd6, side();\nconsole.log(__DECODE_0__(x));");
+    let out =
+        normalize("function t() {\nlet x;\nx = 0xd6, side();\nconsole.log(__DECODE_0__(x));\n}");
     assert!(out.contains("__DECODE_0__(214)"), "{out}");
     assert!(out.contains("side()"), "{out}");
 }
@@ -283,8 +286,18 @@ fn a_reference_inside_a_function_expression_is_left_alone() {
 }
 
 #[test]
+fn a_write_in_the_reading_statement_leaves_the_earlier_read_alone() {
+    let (out, _report) = normalize_to_fixpoint(
+        "function t() {\nvar k;\nk = 0;\nconsole.log(__DECODE_0__(k), k = 2, __DECODE_0__(k));\n}",
+    );
+    assert!(out.contains("__DECODE_0__(k),k=2,__DECODE_0__(2)"), "{out}");
+}
+
+#[test]
 fn the_well_ordered_assignment_is_still_normalised() {
-    let (out, _report) = normalize_to_fixpoint("var k;\nk = 0xd6;\nconsole.log(__DECODE_0__(k));");
+    let (out, _report) = normalize_to_fixpoint(
+        "function t() {\nvar k;\nk = 0xd6;\nconsole.log(__DECODE_0__(k));\n}",
+    );
     assert!(out.contains("__DECODE_0__(214)"), "{out}");
     assert!(!out.contains("var k"), "{out}");
 }

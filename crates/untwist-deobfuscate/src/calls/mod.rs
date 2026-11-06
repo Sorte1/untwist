@@ -1,5 +1,6 @@
 pub mod agnostic;
 mod normalize;
+mod sequenced;
 mod variables;
 
 use oxc_ast::ast::*;
