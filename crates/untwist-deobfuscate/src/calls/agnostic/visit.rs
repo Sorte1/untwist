@@ -71,7 +71,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         let Some(member) = callee.as_member_expression() else {
             return;
         };
-        let keys = self.member_keys(member);
+        let keys = self.call_keys(member);
         self.reach_call(call, member, &keys);
         self.note_construct(call, &keys);
         for (function, forward) in self

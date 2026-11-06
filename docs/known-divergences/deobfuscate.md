@@ -318,7 +318,14 @@
   is a call of that `Symbol` is a symbol key, which names no property of the global object. An
   object rest pattern reads unknown keys, unless its source is an object literal, or a binding to
   one that nothing writes or calls a method on and that is only read, spread or destructured: then
-  it reads exactly that literal's keys, its spreads included. `Function` and `eval` reached through any forwarder
+  it reads exactly that literal's keys, its spreads included.
+  A direct `m.get(…)` or `m.set(…)` call is the
+  native Map method, not `Reflect.get` or `Reflect.set`, when `m` is bound once to `new Map()` or
+  `new WeakMap()` with no arguments, through the unshadowed global. `m` must also be used only as
+  `m.get`, `m.set`, `m.has`, `m.delete`, `m.clear` or `m.size`, never written, and never let out
+  through the value of a `set` call. The program must neither assign `Map` or `WeakMap` nor
+  contain a write, on any base, whose key may be `Map`, `WeakMap`, `get` or `set` (premise 2).
+  `Function` and `eval` reached through any forwarder
   (`.call`, `.apply`, `Reflect.apply`) with non-literal text count as code runners. An identity
   write (`O.k = O.k` on the same unaliased prototype, directly or through a substituted helper)
   writes nothing. A chain consults its method keys, the implicit keys (`toString`, `valueOf`,

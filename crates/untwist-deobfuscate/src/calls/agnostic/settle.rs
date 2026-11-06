@@ -11,6 +11,7 @@ use super::assembled::{broken_tables, drop_tables};
 use super::bind::Bindings;
 use super::flow::Flow;
 use super::fresh::Fresh;
+use super::native_map;
 use super::sites::*;
 use super::{AKey, ASite, Agnostic};
 use crate::proof::ProtoRoot;
@@ -80,7 +81,7 @@ pub(super) fn run<'s, 'a>(
     bindings: &'s Bindings<'s, 'a>,
     (resolve, machinery, watch): Inputs<'s>,
     fresh_calls: bool,
-    symbol_safe: bool,
+    pristine: Pristine,
     flow: &'s Flow<'s, 'a>,
 ) -> (Agnostic<'a>, bool, bool) {
     let fresh = Fresh {
@@ -92,7 +93,7 @@ pub(super) fn run<'s, 'a>(
         fresh,
         (resolve, machinery, watch),
         fresh_calls,
-        symbol_safe,
+        pristine,
         flow,
     );
     sites.inline_budget = inline_budget(program);
@@ -110,9 +111,31 @@ fn inline_budget(program: &Program<'_>) -> usize {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct Pristine {
+    pub(super) symbol: bool,
+    pub(super) map: bool,
+}
+
+impl Pristine {
+    fn of(bindings: &Bindings<'_, '_>) -> Self {
+        Self {
+            symbol: bindings.symbol_safe(),
+            map: bindings.map_safe(),
+        }
+    }
+
+    fn after(self, written: &Written<'_>) -> Self {
+        Self {
+            symbol: self.symbol && !written.may_be("Symbol"),
+            map: self.map && !native_map::may_be_patched(written),
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct Judged {
     source: bool,
-    symbol_safe: bool,
+    pristine: Pristine,
 }
 
 pub(super) fn settle<'a>(
@@ -144,7 +167,7 @@ fn settle_ordered<'a>(
     let globals = script_globals(program, scoping);
     let mut judged = Judged {
         source: bindings.global_source(),
-        symbol_safe: bindings.symbol_safe(),
+        pristine: Pristine::of(&bindings),
     };
     if judged.source {
         bindings.hide_calls(&globals);
@@ -156,13 +179,13 @@ fn settle_ordered<'a>(
             scoping,
             &bindings,
             (resolve, machinery, watch),
-            judged.symbol_safe,
+            judged.pristine,
             &flow,
         );
         let written = Written::of(&out.sites, machinery);
         let next = Judged {
             source: judged.source || out.global_source,
-            symbol_safe: judged.symbol_safe && !written.may_be("Symbol"),
+            pristine: judged.pristine.after(&written),
         };
         if next.source && !judged.source {
             bindings.hide_calls(&globals);
@@ -194,17 +217,17 @@ pub(super) fn analyse<'s, 'a>(
     scoping: &'s Scoping,
     bindings: &'s Bindings<'s, 'a>,
     inputs: Inputs<'s>,
-    symbol_safe: bool,
+    pristine: Pristine,
     flow: &'s Flow<'s, 'a>,
 ) -> Agnostic<'a> {
     let (mut out, mut chains, natives) =
-        run(program, scoping, bindings, inputs, true, symbol_safe, flow);
+        run(program, scoping, bindings, inputs, true, pristine, flow);
     if !natives {
         let source = out.global_source;
         #[cfg(feature = "refusal-spans")]
         let source_at = out.source_at;
         drop(out);
-        let rerun = run(program, scoping, bindings, inputs, false, symbol_safe, flow);
+        let rerun = run(program, scoping, bindings, inputs, false, pristine, flow);
         out = rerun.0;
         out.global_source |= source;
         #[cfg(feature = "refusal-spans")]

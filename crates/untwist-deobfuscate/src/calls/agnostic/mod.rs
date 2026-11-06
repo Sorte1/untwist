@@ -11,6 +11,7 @@ mod hosts;
 mod judge;
 mod keys;
 mod live;
+mod native_map;
 mod observe;
 mod reach;
 mod reach_text;
