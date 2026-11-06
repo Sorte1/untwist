@@ -28,6 +28,12 @@ All notable changes to this project are documented in this file. The format is b
   be fetched after a prompt naming its URL (relative ones ask for a base first); an "Always
   fetch wasm" setting, off by default and kept in the browser only, skips the prompt.
 
+### Fixed
+
+- Decoder aliases read inside the rotator, held in a one-property object, returned by an
+  empty IIFE or wrapped in `(0, alias)` are inlined in both lanes, so their string arrays
+  decode instead of being kept whole.
+
 ### Changed
 
 - The default lane keeps the decoder machinery less often beside code that may hold the global

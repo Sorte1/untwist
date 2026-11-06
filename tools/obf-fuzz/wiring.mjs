@@ -130,9 +130,30 @@ function aliasDeclaration(kind, target, names) {
   }
 }
 
+function bindsName(ast, name, except) {
+  let found = false;
+  const mark = (pattern) => {
+    walk(pattern, (n) => {
+      if (n.type === "Identifier" && n.name === name) found = true;
+    });
+  };
+  walk(ast, (n) => {
+    if (n === except) return;
+    if ((n.type === "FunctionDeclaration" || n.type === "FunctionExpression" || n.type === "ArrowFunctionExpression") && n !== except) {
+      if (n.id && n.id.name === name) found = true;
+      n.params.forEach(mark);
+    }
+    if (n.type === "VariableDeclarator") mark(n.id);
+    if (n.type === "CatchClause" && n.param) mark(n.param);
+    if ((n.type === "ClassDeclaration" || n.type === "ClassExpression") && n.id && n.id.name === name) found = true;
+  });
+  return found;
+}
+
 function applyAlias(r, step, ast, found, edits, used) {
   const decoder = found.decoders[step.decoder % found.decoders.length];
   const name = decoder.id.name;
+  if (bindsName(ast, name, decoder)) return;
   const names = [freshName(r, used), freshName(r, used)];
   const { decl, use } = aliasDeclaration(step.alias, name, names);
   edits.push({ start: topInsertAt(ast), end: topInsertAt(ast), text: `${decl}\n` });

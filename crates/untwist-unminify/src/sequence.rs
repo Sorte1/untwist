@@ -61,7 +61,7 @@ fn hoist_head<'a>(expr: &mut Expression<'a>, out: &mut AVec<'a, Statement<'a>>, 
     let Some((leading, last)) = take_sequence_parts(expr, cx) else {
         return;
     };
-    for expression in leading {
+    for expression in leading.into_iter().filter(|e| !is_safe_literal(e)) {
         push_expression_statement(out, expression, cx);
     }
     *expr = last;

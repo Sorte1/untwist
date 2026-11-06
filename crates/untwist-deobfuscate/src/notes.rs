@@ -49,6 +49,12 @@ pub const WRAPPER_ALIAS_READ_BEFORE_THE_ALIAS: &str =
     "the alias may be read before its declaration runs, so it was left in place";
 pub const WRAPPER_ALIAS_SELF_ASSIGNMENT: &str =
     "a self-assignment of the decoder was left in place";
+pub const WRAPPER_OBJECT_ALIAS_THIS: &str =
+    "an object holds the decoder and a decoder reads this, so a call through the object may \
+     differ, and it was left in place";
+pub const WRAPPER_OBJECT_ALIAS_OTHER_USE: &str =
+    "an object holds the decoder and is used other than by reading that one property, so it was \
+     left in place";
 
 pub const WRAPPER_BODY_MISSING: &str = "the wrapper body was not found at its recorded span";
 pub const WRAPPER_SITE_KEPT: &str = "a wrapper call site was left alone";
@@ -515,6 +521,8 @@ catalogue!(
     WRAPPER_ALIAS_EXTRA_WRITES,
     WRAPPER_ALIAS_READ_BEFORE_THE_ALIAS,
     WRAPPER_ALIAS_SELF_ASSIGNMENT,
+    WRAPPER_OBJECT_ALIAS_THIS,
+    WRAPPER_OBJECT_ALIAS_OTHER_USE,
     WRAPPER_SITE_KEPT,
     WRAPPER_DEFERRED,
     WRAPPER_NESTED_FUNCTION,
