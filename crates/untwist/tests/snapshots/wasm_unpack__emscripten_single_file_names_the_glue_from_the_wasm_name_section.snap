@@ -12,7 +12,7 @@ function emscripten_memcpy_big(e, t, n) {
 function abort() {
   throw new Error("abort");
 }
-var Ya = {
+var wasmImports = {
   a: emscripten_memcpy_big,
   b: abort
 };
@@ -31,7 +31,7 @@ function Rb(e) {
   return n;
 }
 function Ib() {
-  const e = { a: Ya };
+  const e = { a: wasmImports };
   return WebAssembly.instantiate(Rb(wasmBinaryFile), e).then(function (t) {
     return Hb(t.instance);
   });

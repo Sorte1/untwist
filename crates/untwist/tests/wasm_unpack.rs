@@ -74,7 +74,7 @@ fn emscripten_single_file_names_the_glue_from_the_wasm_name_section() {
     let out = settled(&fixture("emscripten.js"));
     assert_eq!(out.wasm.len(), 1);
     assert_eq!(out.wasm[0].bytes, wasm_bytes("emscripten.wasm"));
-    assert_eq!(out.wasm[0].renamed, 5);
+    assert_eq!(out.wasm[0].renamed, 6);
     insta::assert_snapshot!(out.code());
 }
 
@@ -448,4 +448,86 @@ fn auto_leaves_a_module_with_no_imports_or_exports_alone_and_on_extracts_it() {
     on.settle_wasm(&WasmSupply::default(), true);
     assert_eq!(on.wasm.len(), 1);
     assert_eq!(on.wasm[0].byte_length, 14);
+}
+
+#[test]
+fn emscripten_glue_without_a_name_section_is_named_from_its_export_wrappers_and_kinds() {
+    let out = settled(&fixture("emscripten-nameless.js"));
+    assert_eq!(out.wasm.len(), 1);
+    assert_eq!(out.wasm[0].bytes, wasm_bytes("emscripten-nameless.wasm"));
+    assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
+    assert_eq!(out.wasm[0].renamed, 4);
+    insta::assert_snapshot!(out.code());
+}
+
+#[test]
+fn an_export_wrapper_whose_key_reads_a_missing_export_names_nothing() {
+    let source = fixture("emscripten-nameless.js").replace("Z.e)(e)", "Z.q)(e)");
+    let out = settled(&source);
+    assert_eq!(out.wasm[0].renamed, 0);
+    assert!(out.code().contains("Yb(4)"));
+    assert!(wasm_notes(&out)
+        .iter()
+        .any(|note| note.contains("export q")));
+}
+
+#[test]
+fn an_export_wrapper_key_on_a_memory_export_is_not_a_function_name() {
+    let source = fixture("emscripten-nameless.js").replace("Z.e)(e)", "Z.c)(e)");
+    let out = settled(&source);
+    let code = out.code();
+    assert!(!code.contains("_malloc(4)"), "{code}");
+    assert!(!code.contains("wasmMemory"), "{code}");
+}
+
+#[test]
+fn minified_emscripten_two_glue_from_a_published_package_is_named_without_a_name_section() {
+    let out = std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(|| settled(&fixture("real/argon2-bundled.min.js")))
+        .unwrap()
+        .join()
+        .unwrap();
+    assert_eq!(out.wasm.len(), 1);
+    assert!(out.wasm[0]
+        .summary
+        .exports
+        .iter()
+        .all(|export| export.function_name.is_none()));
+    assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
+    let code = out.code();
+    for named in [
+        "Q.asm = wasmExports;",
+        "U((wasmMemory = Q.asm.c).buffer);",
+        "wasmTable = Q.asm.k;",
+        "(_malloc = Q._malloc = Q.asm.f)",
+        "(stackAlloc = Q.stackAlloc = Q.asm.n)",
+        "var wasmImports = {",
+    ] {
+        assert!(code.contains(named), "{named} missing\n{code}");
+    }
+}
+
+#[test]
+fn emscripten_three_glue_from_a_published_package_matches_its_module_and_keeps_its_names() {
+    let mut out = run(&fixture("real/wasm-lz4.js"));
+    let before = out.code().to_string();
+    out.settle_wasm(&supplied("wasm-lz4.wasm", "real/wasm-lz4.wasm"), true);
+    assert_eq!(out.wasm.len(), 1);
+    assert!(out.wasm_unresolved.is_empty());
+    assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
+    assert_eq!(out.wasm[0].renamed, 0);
+    assert_eq!(out.code(), before);
+}
+
+#[test]
+fn emscripten_three_glue_given_another_module_reports_the_mismatch_and_names_nothing() {
+    let mut out = run(&fixture("real/wasm-lz4.js"));
+    let before = out.code().to_string();
+    out.settle_wasm(&supplied("wasm-lz4.wasm", "emscripten-nameless.wasm"), true);
+    assert_eq!(out.wasm[0].renamed, 0);
+    assert_eq!(out.code(), before);
+    assert!(wasm_notes(&out)
+        .iter()
+        .any(|note| note.contains("does not match the glue")));
 }
