@@ -8,6 +8,7 @@ use oxc_syntax::symbol::SymbolId;
 
 use super::assembled::{assembled_tables, AssembledTables};
 use super::bootstrap::{self, Resolve};
+use super::bound_this;
 pub(super) use super::defs::Defs;
 use super::defs::{
     Def, DefTable, CALLABLE, CONSTRUCTS_FRESH, ESCAPES, ESCAPING_REF, FIELDS_WRITTEN,
@@ -210,6 +211,7 @@ pub(super) struct Bindings<'s, 'a> {
     map_rebind: bool,
     pub(super) unsealed_maps: FxHashSet<SymbolId>,
     pub(super) sources: Sources,
+    bound_methods: FxHashSet<u32>,
     calls_of: Vec<(SymbolId, &'a CallExpression<'a>)>,
     pub(super) params: FxHashMap<SymbolId, (SymbolId, usize)>,
     returned: FxHashSet<SymbolId>,
@@ -243,6 +245,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             map_rebind: false,
             unsealed_maps: FxHashSet::default(),
             sources: Sources::new(program),
+            bound_methods: bound_this::bound_methods(program, scoping),
             calls_of: Vec::new(),
             params: FxHashMap::default(),
             returned: FxHashSet::default(),
@@ -602,7 +605,11 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
                 self.defs.set_func(symbol, func);
             }
         }
-        let saved = self.sources.enter_function(it);
+        let saved = if self.bound_methods.contains(&it.span.start) {
+            self.sources.enter_bound_method(it)
+        } else {
+            self.sources.enter_function(it)
+        };
         walk_js::walk_function(self, it, flags);
         self.sources.leave(saved);
     }

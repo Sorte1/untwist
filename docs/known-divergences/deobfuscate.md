@@ -344,7 +344,11 @@
   it, or a built-in, at any time. The check does not follow where the global object flows. It asks one flow-insensitive question, whether any code may hold the
   global object, and the answer is yes when the program contains any of these sources: `this` or
   `super` at the top level of a script or in a non-strict function (its parameter defaults
-  included), outside a class field or static block; a reference to an undeclared name that is not a
+  included), outside a class field or static block and outside a bound literal method (a method,
+  getter or setter of an object literal that is the only value of a `const` or `let` binding, where
+  every use of that binding, and of `this` in those bodies, is `o.k` with a static key, a method
+  key is only ever called as `o.k(…)`, and the body neither reads `arguments` nor is a named
+  function expression); a reference to an undeclared name that is not a
   standard ECMAScript global (`Array`, `Object`, `String`, `Number`, `Boolean`, `Symbol`, `BigInt`,
   `Math`, `JSON`, `Reflect`, `Proxy`, `Promise`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`,
   `WeakSet`, `WeakRef`, `FinalizationRegistry`, `Intl`, `Atomics`, `Iterator`, `DataView`, the
