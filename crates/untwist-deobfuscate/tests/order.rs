@@ -383,7 +383,10 @@ x = 0x1;"#;
 #[test]
 fn the_assignment_that_precedes_a_wrapped_reference_is_the_one_inlined() {
     let (code, report) = run_report(A_WRAPPED_REFERENCE_WITH_A_LATER_ASSIGNMENT);
-    assert_eq!(code.trim(), "console[\"log\"](\"hi\");");
+    assert_eq!(
+        code.trim(),
+        "var x;\nx = 0;\nconsole[\"log\"](\"hi\");\nx = 1;"
+    );
     assert!(report.converged(), "{:?}", report.stop);
 }
 
