@@ -5,6 +5,7 @@ use oxc_traverse::{traverse_mut, Traverse, TraverseCtx};
 
 use super::super::interest::Interest;
 use super::super::Cx;
+use super::nested::Cascading;
 use super::scope::{Edit, Steer};
 use super::{above, park, unpark, Dispatched, Mode, PassGroup};
 
@@ -52,8 +53,8 @@ macro_rules! listed {
 macro_rules! forward {
     ($($name:ident / $hook:ident($node_ty:ty) => $bit:ident;)*) => {
         $(
-            #[inline]
-            fn $name<const RECORD: bool>(
+            #[inline(always)]
+            pub(super) fn $name<const RECORD: bool>(
                 &mut self,
                 node: &mut $node_ty,
                 ctx: &mut TraverseCtx<'a, ()>,
@@ -67,8 +68,8 @@ macro_rules! forward {
 macro_rules! by_variant {
     ($($name:ident / $hook:ident($node_ty:ty) => $probe:ident, $bit:ident;)*) => {
         $(
-            #[inline]
-            fn $name<const RECORD: bool>(
+            #[inline(always)]
+            pub(super) fn $name<const RECORD: bool>(
                 &mut self,
                 node: &mut $node_ty,
                 ctx: &mut TraverseCtx<'a, ()>,
@@ -159,13 +160,21 @@ impl<'a> PassGroup<'a> {
     ) -> Scoping {
         let steering = self.scope.steers_next() && self.walks;
         self.scope.set_steering(steering);
-        if steering {
-            return traverse_mut(&mut Steering(self), alloc, program, scoping, ());
+        match (steering, self.cascades) {
+            (true, true) => traverse_mut(&mut Steering::<true>(self), alloc, program, scoping, ()),
+            (true, false) => {
+                traverse_mut(&mut Steering::<false>(self), alloc, program, scoping, ())
+            }
+            (false, true) => traverse_mut(&mut Cascading(self), alloc, program, scoping, ()),
+            (false, false) => traverse_mut(self, alloc, program, scoping, ()),
         }
-        traverse_mut(self, alloc, program, scoping, ())
     }
 
-    fn enter_group_program(&mut self, node: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
+    pub(super) fn enter_group_program(
+        &mut self,
+        node: &mut Program<'a>,
+        ctx: &mut TraverseCtx<'a, ()>,
+    ) {
         self.run_program_hook(
             Interest::ENTER_PROGRAM,
             |pass, node, cx| pass.enter_program(node, cx),
@@ -179,7 +188,11 @@ impl<'a> PassGroup<'a> {
         }
     }
 
-    fn exit_group_program(&mut self, node: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
+    pub(super) fn exit_group_program(
+        &mut self,
+        node: &mut Program<'a>,
+        ctx: &mut TraverseCtx<'a, ()>,
+    ) {
         unpark(node, &mut self.parked);
         let before = self.total_changes();
         self.run_program_hook(
@@ -268,7 +281,9 @@ fn group<'s, 'a>(group: &'s mut PassGroup<'a>) -> &'s mut PassGroup<'a> {
     group
 }
 
-fn steered<'s, 'a>(steering: &'s mut Steering<'_, 'a>) -> &'s mut PassGroup<'a> {
+fn steered<'s, 'a, const CASCADE: bool>(
+    steering: &'s mut Steering<'_, 'a, CASCADE>,
+) -> &'s mut PassGroup<'a> {
     steering.0
 }
 
@@ -351,7 +366,13 @@ macro_rules! node_hooks {
         ) {
             $group(self).dispatch_exit_assignment_target::<$record>(node, ctx)
         }
+    };
+}
 
+pub(super) use node_hooks;
+
+macro_rules! program_hooks {
+    ($group:ident) => {
         fn enter_program(&mut self, node: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
             $group(self).enter_group_program(node, ctx)
         }
@@ -362,8 +383,11 @@ macro_rules! node_hooks {
     };
 }
 
+pub(super) use program_hooks;
+
 impl<'a> Traverse<'a, ()> for PassGroup<'a> {
     node_hooks!(false, group);
+    program_hooks!(group);
 
     #[inline]
     fn enter_statements(
@@ -394,10 +418,11 @@ impl<'a> Traverse<'a, ()> for PassGroup<'a> {
     }
 }
 
-struct Steering<'g, 'a>(&'g mut PassGroup<'a>);
+struct Steering<'g, 'a, const CASCADE: bool>(&'g mut PassGroup<'a>);
 
-impl<'a> Traverse<'a, ()> for Steering<'_, 'a> {
+impl<'a, const CASCADE: bool> Traverse<'a, ()> for Steering<'_, 'a, CASCADE> {
     node_hooks!(true, steered);
+    program_hooks!(steered);
 
     #[inline]
     fn enter_statements(
@@ -440,7 +465,12 @@ impl<'a> Traverse<'a, ()> for Steering<'_, 'a> {
         if self.0.scope.engaged && self.0.scope.skip_exit() {
             return;
         }
-        self.0.dispatch_exit_statement::<true>(node, ctx);
+        if CASCADE {
+            self.0
+                .exit_statement_walking_replacements::<true>(node, ctx);
+        } else {
+            self.0.dispatch_exit_statement::<true>(node, ctx);
+        }
         if self.0.scope.engaged {
             self.0.scope.leave_statement(ctx.ancestors_depth());
         }

@@ -213,6 +213,10 @@ impl<'a> Pass<'a> for TernaryToIf {
         "ternary-to-if"
     }
 
+    fn cascades(&self) -> bool {
+        true
+    }
+
     fn locality(&self) -> Locality {
         Locality::Neutral
     }

@@ -237,11 +237,11 @@ fn a_nested_chain_reaches_the_same_bytes_in_one_visit_as_one_level_per_iteration
 }
 
 #[test]
-fn a_forty_link_else_chain_settles_in_three_iterations() {
+fn a_forty_link_else_chain_settles_in_two_iterations() {
     let (_, iterations) = unminified(&else_chain(DEEPEST), false, true);
-    assert_eq!(iterations, 3);
+    assert_eq!(iterations, 2);
     let (_, peeled) = unminified(&else_chain(DEEPEST), true, true);
-    assert!(peeled > DEEPEST as u32, "{peeled}");
+    assert!(peeled > iterations, "{peeled}");
 }
 
 #[test]

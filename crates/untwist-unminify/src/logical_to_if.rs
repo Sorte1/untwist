@@ -40,6 +40,10 @@ impl<'a> Pass<'a> for LogicalToIf {
         "logical-to-if"
     }
 
+    fn cascades(&self) -> bool {
+        true
+    }
+
     fn locality(&self) -> Locality {
         Locality::Neutral
     }

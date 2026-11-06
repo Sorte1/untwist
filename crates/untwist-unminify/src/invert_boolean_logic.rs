@@ -33,6 +33,16 @@ fn is_invertible_logical(expr: &Expression<'_>) -> bool {
 }
 
 fn negate<'a>(slot: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
+    if let Expression::BinaryExpression(binary) = slot {
+        if let Some(operator) = inverted_binary(binary.operator) {
+            binary.operator = operator;
+            return;
+        }
+    }
+    if is_invertible_logical(slot) {
+        invert_logical_spine(slot, cx);
+        return;
+    }
     let placeholder = Expression::new_null_literal(SPAN, &*cx);
     let inner = std::mem::replace(slot, placeholder);
     let span = inner.span();
