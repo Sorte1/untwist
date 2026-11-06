@@ -663,3 +663,42 @@ fn an_array_held_by_a_gate_and_read_through_a_number_key_is_refused() {
         "a stateful decoder keeps state that is not a proven memo or init gate",
     );
 }
+
+#[test]
+fn a_terser_compressed_decoder_indexing_the_array_call_decodes() {
+    assert_decodes(
+        "\
+function a() { var r = ['t0', 't1']; return (a = function () { return r; })(); }
+function b(r, t) { return r -= 415, a()[r]; }
+b(415); b(416);",
+        "a",
+        &["b"],
+        &["t0", "t1"],
+    );
+}
+
+#[test]
+fn a_decoder_reading_the_array_call_with_a_plain_body_decodes() {
+    assert_decodes(
+        "\
+function a() { var r = ['t0', 't1']; return (a = function () { return r; })(); }
+function b(r, t) { r -= 415; return a()[r]; }
+b(415); b(416);",
+        "a",
+        &["b"],
+        &["t0", "t1"],
+    );
+}
+
+#[test]
+fn a_plain_decoder_beside_a_template_array_function_decodes() {
+    assert_decodes(
+        "\
+function a() { var r = ['t0', 't1']; a = function () { return r; }; return a(); }
+function b(r, t) { r -= 415; return a()[r]; }
+b(415); b(416);",
+        "a",
+        &["b"],
+        &["t0", "t1"],
+    );
+}

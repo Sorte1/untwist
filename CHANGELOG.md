@@ -46,6 +46,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- javascript-obfuscator output passed through terser decodes: a decoder that indexes the array call
+  directly and a string array function that rewrites itself inside its return are now recognised.
+  Such samples kept their string array.
 - Empty or inert blocks and expression statements that run no code (`{}`, `void 0;`) before
   the rotator no longer stop a string array from decoding.
 - A string array whose array function, decoders and rotator all sit in one function body,

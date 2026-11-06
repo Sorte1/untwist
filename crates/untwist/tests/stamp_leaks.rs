@@ -145,13 +145,16 @@ fn a_redeclared_decoder_keeps_the_arrays_name() {
     check(&row(DECODER_REDECLARED, "s0\ns1\n"));
 }
 
-const ARRAY_READ_WITHOUT_A_DECODER: &str = r#"function a(){ var h=['s0','s1','s2']; a=function(){return h;}; return a(); }
+const DECODER_INDEXING_THE_ARRAY_CALL: &str = r#"function a(){ var h=['s0','s1','s2']; a=function(){return h;}; return a(); }
 function b(i){ return a()[i]; }
 console.log(b(0)); console.log(b(1));"#;
 
 #[test]
-fn an_array_no_decoder_reads_through_an_alias_keeps_its_name() {
-    check(&row(ARRAY_READ_WITHOUT_A_DECODER, "s0\ns1\n"));
+fn a_decoder_indexing_the_array_call_directly_decodes_without_a_stamp_left() {
+    check(&Row {
+        kept: &[],
+        ..row(DECODER_INDEXING_THE_ARRAY_CALL, "s0\ns1\n")
+    });
 }
 
 const SECOND_UNITS_DECODER_SPELLED: &str = r#"function a(){ var h=['s0','s1','s2']; a=function(){return h;}; return a(); }
