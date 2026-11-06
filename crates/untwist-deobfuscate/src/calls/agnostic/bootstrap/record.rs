@@ -4,6 +4,8 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::symbol::SymbolId;
+use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::{binding_symbol, key_name, names, symbol_of, Resolve, Shape, Table};
 
@@ -61,7 +63,10 @@ impl<'a> VisitJs<'a> for CacheUses<'_> {
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
         let stores = it.left.as_member_expression().is_some_and(|member| {
             names(self.scoping, member.object(), self.require)
-                && matches!(member.static_property_name(), Some("c"))
+                && matches!(
+                    member.static_property_name().and_then(|name| name.as_str()),
+                    Some("c")
+                )
         });
         if stores && names(self.scoping, &it.right, self.cache) {
             self.stored.push(it.right.span());
@@ -110,8 +115,8 @@ fn fresh_exports(object: &ObjectExpression<'_>) -> bool {
             return false;
         };
         let name = match &p.key {
-            PropertyKey::StaticIdentifier(id) if !p.computed => id.name.as_str(),
-            PropertyKey::StringLiteral(text) => text.value.as_str(),
+            PropertyKey::StaticIdentifier(id) if !p.computed => Cow::Borrowed(id.name.as_str()),
+            PropertyKey::StringLiteral(text) => js_text(text.value),
             PropertyKey::NumericLiteral(_) if !p.computed => continue,
             _ => return false,
         };
