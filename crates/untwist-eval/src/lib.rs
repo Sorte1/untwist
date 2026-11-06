@@ -16,6 +16,7 @@ pub mod inspect;
 pub mod interp;
 #[cfg(not(feature = "value-api"))]
 mod interp;
+pub mod mutants;
 pub mod names;
 mod native_body;
 pub mod object;
@@ -23,6 +24,7 @@ pub mod ops;
 mod release;
 pub mod rotation;
 mod semantics;
+mod shadow;
 pub mod source;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod stack;

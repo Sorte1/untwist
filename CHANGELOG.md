@@ -44,6 +44,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
+- Terser-minified stateful decoders (base64 and rc4) decode in the safe lane: `void 0 === D.k` (either
+  side, strict or loose) counts as the init gate's undefined test when `void` takes a literal, and the
+  reset and temporal dead zone checks resolve the decoder's locals by scope, so a helper reusing short
+  names such as `n`, `f` or `a` no longer refuses the unit.
 - Rounds that add or remove scopes and bindings patch the scope tables instead of rebuilding
   them, and references left on a removed binding resolve to the outer one: game.js runs about
   3 % fewer instructions with the same output.
