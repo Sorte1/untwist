@@ -115,8 +115,14 @@ fn a_type_node_past_the_scan_is_refused_after_the_parse() {
     assert_refused_alone(&output, source, TYPESCRIPT_IN_JAVASCRIPT);
 }
 
+fn assert_parse_failed(output: &Output) {
+    assert!(output.parse_errors > 0);
+    assert!(output.depth_refused.is_empty());
+    assert!(output.panicked.is_empty());
+}
+
 #[test]
-fn an_errorless_default_interface_is_refused_after_the_parse() {
+fn a_default_interface_in_javascript_fails_the_parse_without_the_scan() {
     let source = "export default interface I {}\nvar a = 1;\n";
     let output = Pipeline::new(Options {
         test_hooks: TestHooks {
@@ -126,13 +132,20 @@ fn an_errorless_default_interface_is_refused_after_the_parse() {
         ..Options::default()
     })
     .run(source);
-    assert_refused_alone(&output, source, TYPESCRIPT_IN_JAVASCRIPT);
+    assert_parse_failed(&output);
 }
 
 #[test]
-fn a_nested_errorless_default_interface_is_refused_after_the_parse() {
+fn a_default_interface_in_a_block_fails_the_parse() {
+    let source =
+        "export {}\n{ export default interface I { m(b = J); } }\nvar J = g();\nconsole.log(1);\n";
+    let output = Pipeline::new(Options::default()).run(source);
+    assert_parse_failed(&output);
+}
+
+#[test]
+fn a_default_interface_in_a_function_or_static_block_is_refused() {
     let sources = [
-        "export {}\n{ export default interface I { m(b = J); } }\nvar J = g();\nconsole.log(1);\n",
         "export {}\nfunction f() { return () => { { export default interface I {} } }; }\n",
         "export {}\nclass C { static { export default interface I extends J {} } }\n",
     ];

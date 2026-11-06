@@ -216,7 +216,7 @@ fn a_member_callee_yields_no_suffix_and_a_nested_call_recurses() {
 #[test]
 fn nested_pattern_bindings_keep_their_names() {
     assert_eq!(mangle("let [x = 1] = a;"), "let [x = 1] = a;");
-    assert_eq!(mangle("let [...x] = a;"), "let [ ...x] = a;");
+    assert_eq!(mangle("let [...x] = a;"), "let [...x] = a;");
 }
 
 #[test]
