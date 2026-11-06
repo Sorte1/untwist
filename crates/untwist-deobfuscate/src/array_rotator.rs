@@ -104,10 +104,10 @@ fn is_guarded_try(stmt: &Statement<'_>) -> bool {
 }
 
 fn is_guarded_rotator_loop(body: &Statement<'_>) -> bool {
-    let Statement::BlockStatement(block) = body else {
-        return false;
-    };
-    block.body.iter().any(is_guarded_try)
+    match body {
+        Statement::BlockStatement(block) => block.body.iter().any(is_guarded_try),
+        other => is_guarded_try(other),
+    }
 }
 
 fn has_rotator_loop(stmt: &Statement<'_>) -> bool {

@@ -7,6 +7,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::matcher::{is_literal_argument, statement_iife};
 
+use crate::mutants::direct_array_uses_trusted;
 use crate::stamp::string_array_unit;
 
 pub const ROTATOR_GLOBALS: &[&str] = &["parseInt", "undefined", "NaN", "Infinity"];
@@ -18,7 +19,7 @@ struct Sealed<'s> {
     fail: Option<Span>,
     array_param: Option<SymbolId>,
     array_param_uses: Vec<Span>,
-    array_use: Option<Span>,
+    array_uses: Vec<Span>,
 }
 
 impl Sealed<'_> {
@@ -57,7 +58,7 @@ impl Sealed<'_> {
             self.array_param_uses.push(it.span);
         }
         if self.is_array(it, symbol) {
-            self.array_use.get_or_insert(it.span);
+            self.array_uses.push(it.span);
         }
     }
 }
@@ -219,10 +220,13 @@ fn creates_the_array_first(body: &FunctionBody<'_>, callee: Span) -> bool {
 }
 
 fn array_runs_first(seal: &Sealed<'_>, function: &Function<'_>) -> Option<Span> {
-    if let Some(span) = seal.array_use {
-        return Some(span);
-    }
-    match seal.array_param_uses.as_slice() {
+    let uses = match (seal.array_param_uses.as_slice(), seal.array_uses.as_slice()) {
+        (uses, []) => uses,
+        ([], _) if direct_array_uses_trusted() => return None,
+        ([], uses) => uses,
+        (_, [first, ..]) => return Some(*first),
+    };
+    match uses {
         [] => None,
         [callee] => {
             let first = function
@@ -254,7 +258,7 @@ fn open_seal<'s>(
         fail: None,
         array_param,
         array_param_uses: Vec::new(),
-        array_use: None,
+        array_uses: Vec::new(),
     })
 }
 
@@ -279,7 +283,7 @@ pub(super) fn sealed(
         }
         seal.visit_expression(expr);
     }
-    seal.array_use = None;
+    seal.array_uses.clear();
     seal.visit_formal_parameters(&function.params);
     if let Some(body) = &function.body {
         seal.visit_function_body(body);

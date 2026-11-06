@@ -35,6 +35,8 @@ All notable changes to this project are documented in this file. The format is b
   the rotator no longer stop a string array from decoding.
 - A string array whose array function, decoders and rotator all sit in one function body,
   such as a whole program wrapped in an IIFE, now decodes in both lanes.
+- A rotator that calls the string array function by name once, as its first statement, and
+  a rotator loop whose body is a bare `try` (both as terser prints them) are now trusted.
 - The default lane decodes beside a fresh `new Map()` or `new WeakMap()` that is read and written only
   through its own `get` and `set`; those calls were taken for `Reflect.get` and `Reflect.set` and refused.
 - A decoder wrapper whose binding is written again, or a `var` wrapper called before its

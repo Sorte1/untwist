@@ -32,3 +32,14 @@ pub fn drop_inert_prefix_guards_for_tests(on: bool) {
 pub(crate) fn inert_prefix_dropped() -> bool {
     INERT_PREFIX_OFF.load(Ordering::Relaxed)
 }
+
+static DIRECT_ARRAY_USES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_direct_array_uses_for_tests(on: bool) {
+    DIRECT_ARRAY_USES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn direct_array_uses_trusted() -> bool {
+    DIRECT_ARRAY_USES_TRUSTED.load(Ordering::Relaxed)
+}
