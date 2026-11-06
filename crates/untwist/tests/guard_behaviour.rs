@@ -299,3 +299,24 @@ fn a_controller_with_injected_dead_code_and_proxy_tables_runs_like_its_input() {
     let wrong = mismatches(&node, &sources, &without_deobfuscation(), true);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+#[test]
+fn the_site_memo_reset_sample_loses_its_self_defending_check_in_the_default_lane() {
+    let path = format!(
+        "{}/../../fixtures/reference/deobfuscate/obfuscator.io-site-memo-reset.js",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let source = std::fs::read_to_string(path).unwrap();
+    let out = Pipeline::new(Options::default()).run(&source);
+    let code = out.code();
+    assert!(!code.contains("(((.+)+)+)+$"), "{code}");
+    assert!(code.contains("console.log(\"\")"), "{code}");
+    assert!(
+        !out.notes
+            .iter()
+            .any(|note| note.message.contains(GUARD_ON_ONE_LINE)
+                || note.message.contains(GUARD_KEPT_ACROSS_LINES)),
+        "{:?}",
+        out.notes
+    );
+}

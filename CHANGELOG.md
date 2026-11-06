@@ -26,6 +26,8 @@ All notable changes to this project are documented in this file. The format is b
   computed key, on an object created in the same unit; only what such a key can read is judged.
 - The default lane decodes a string array when a key or code text is built from decoded strings, such as
   `String[d(1)](...)` or `Function(d(1) + d(2))`; these were refused as a possible patch of a built-in.
+- A self-defending check is removed when a cleanup left bare `var x;` declarations inside its call
+  controller. It survived, and once the output was reformatted its `(((.+)+)+)+$` test hung.
 
 ## [0.2.1] - 2026-11-05
 
