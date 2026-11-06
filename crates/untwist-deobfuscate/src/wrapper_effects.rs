@@ -176,7 +176,7 @@ pub fn inline_keeping_effects<'p, 'a>(
     let mut inlined = inline_function_call(function, arguments, cx)?;
     Settled { cx }.visit_expression(&mut inlined);
     let allocator = cx.allocator();
-    let mut expressions = AVec::with_capacity_in(effects.len() + 1, &*cx);
+    let mut expressions = AVec::with_capacity_in(effects.len() + 1, cx);
     for part in effects.iter().flat_map(|effect| &effect.parts) {
         expressions.push(part.clone_in(allocator));
     }
