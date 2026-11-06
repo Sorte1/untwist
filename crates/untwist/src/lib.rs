@@ -28,7 +28,9 @@ pub use stats::{CollisionStats, DecodeStats, RunStats};
 pub use untwist_core::pass::{IterationTiming, Note, NoteKind, PassCtor, StopReason};
 pub use untwist_rename::RenameMode;
 pub use untwist_unpack::{Mapping, MappingMatcher};
-pub use wasm::{SuppliedWasm, WasmFile, WasmOrigin, WasmReference, WasmSupply, MAX_WASM_BYTES};
+pub use wasm::{
+    SuppliedWasm, WasmCheck, WasmFile, WasmOrigin, WasmReference, WasmSupply, MAX_WASM_BYTES,
+};
 pub use write::{
     clean, is_safe_relative, stale_paths, PlanRefusal, PlannedFile, WriteReport, BUNDLE_JSON,
     DEOBFUSCATED,

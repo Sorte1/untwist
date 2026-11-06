@@ -57,6 +57,15 @@
 <span class="hint" id="rename-hint">Keep identifiers exactly as in the input (the default).</span>
 </section>
 
+<section class="set-group">
+<h3 class="set-title" id="wasm-check-title">Wasm check</h3>
+<div role="group" aria-labelledby="wasm-check-title" class="seg seg-3" id="wasm-check-group">
+<button type="button" class="seg-btn" data-check="off" aria-pressed="true">Off</button><button type="button" class="seg-btn" data-check="on" aria-pressed="false" aria-describedby="wasm-on-note">On</button><button type="button" class="seg-btn" data-check="auto" aria-pressed="false">Auto</button>
+</div>
+<span class="hint" id="wasm-check-hint">Only say when the output may hold embedded WebAssembly (the default).</span>
+<span class="hint" id="wasm-on-note">On can be slow on large files.</span>
+</section>
+
 <section class="set-group" title="Evaluator steps the string-array decoder may spend per decode unit. The default is 50,000,000; Cancel still stops a long run.">
 <h3 class="set-title"><label for="fuel">Fuel limit</label></h3>
 <div class="fuel-row">

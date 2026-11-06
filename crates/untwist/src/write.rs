@@ -436,6 +436,8 @@ mod tests {
             refusal_sites: Vec::new(),
             wasm: Vec::new(),
             wasm_unresolved: Vec::new(),
+            wasm_check: crate::WasmCheck::default(),
+            wasm_unchecked: false,
         }
     }
 

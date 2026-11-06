@@ -21,6 +21,7 @@ export interface WasmReferenceInfo {
 export interface WasmReport {
   readonly files: readonly WasmFileInfo[];
   readonly unresolved: readonly WasmReferenceInfo[];
+  readonly unchecked: boolean;
 }
 
 export interface SuppliedWasm {
@@ -29,7 +30,7 @@ export interface SuppliedWasm {
   readonly url: string | null;
 }
 
-export const NO_WASM: WasmReport = { files: [], unresolved: [] };
+export const NO_WASM: WasmReport = { files: [], unresolved: [], unchecked: false };
 
 const WASM_MAGIC = [0x00, 0x61, 0x73, 0x6d];
 
@@ -39,11 +40,13 @@ export function parseWasmReport(json: string): WasmReport {
   }
   try {
     const parsed = JSON.parse(json) as Partial<WasmReport>;
-    return { files: parsed.files ?? [], unresolved: parsed.unresolved ?? [] };
+    return { files: parsed.files ?? [], unresolved: parsed.unresolved ?? [], unchecked: parsed.unchecked === true };
   } catch {
     return NO_WASM;
   }
 }
+
+export const UNCHECKED_WARNING = 'This file may contain embedded WebAssembly. Set Wasm check to Auto or On to extract it.';
 
 export function isWasmName(name: string): boolean {
   return name.toLowerCase().endsWith('.wasm');

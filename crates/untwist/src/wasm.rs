@@ -12,6 +12,34 @@ const WASM_DIR: &str = "wasm";
 const HASHED_SUFFIX: &str = ".module.wasm";
 const MAX_SUFFIX: usize = 1000;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WasmCheck {
+    #[default]
+    Off,
+    On,
+    Auto,
+}
+
+impl WasmCheck {
+    pub fn named(name: &str) -> Option<Self> {
+        match name {
+            "off" => Some(Self::Off),
+            "on" => Some(Self::On),
+            "auto" => Some(Self::Auto),
+            _ => None,
+        }
+    }
+
+    fn admits(self, text: &str) -> bool {
+        match self {
+            Self::Off => wasm::may_reference_wasm(text),
+            Self::On => true,
+            Self::Auto => wasm::may_hold_wasm(text),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WasmOrigin {
@@ -205,18 +233,18 @@ impl Output {
         }
     }
 
-    fn wasm_candidates(&self) -> Vec<(Host, String)> {
+    fn wasm_candidates(&self, check: WasmCheck) -> Vec<(Host, String)> {
         self.wasm_hosts()
             .into_iter()
             .filter(|(host, _)| {
                 let text = self.host_text(*host);
-                wasm::may_hold_wasm(text) && admits_reparse(text)
+                check.admits(text) && admits_reparse(text)
             })
             .collect()
     }
 
     fn scanned_texts(&self) -> Vec<Text> {
-        self.wasm_candidates()
+        self.wasm_candidates(WasmCheck::Off)
             .into_iter()
             .filter_map(|(host, path)| {
                 Some(Text::new(host, path, wasm::scan(self.host_text(host))?))
@@ -224,12 +252,20 @@ impl Output {
             .collect()
     }
 
+    fn may_embed_wasm(&self) -> bool {
+        self.wasm_hosts()
+            .into_iter()
+            .any(|(host, _)| wasm::may_embed_wasm(self.host_text(host)))
+    }
+
     pub fn wasm_references(&self) -> Vec<WasmReference> {
         references_of(&self.scanned_texts())
     }
 
     pub fn settle_wasm(&mut self, supply: &WasmSupply, extract: bool) {
-        let candidates = self.wasm_candidates();
+        let check = self.wasm_check;
+        self.wasm_unchecked = check == WasmCheck::Off && self.may_embed_wasm();
+        let candidates = self.wasm_candidates(check);
         if candidates.is_empty() {
             return;
         }
@@ -243,7 +279,11 @@ impl Output {
             .zip(sources.iter().zip(&allocs))
             .filter_map(|((host, path), (source, alloc))| {
                 let glue = Glue::parse(alloc, source)?;
-                Some((Text::new(host, path, glue.scan()), glue))
+                let mut scan = glue.scan();
+                if check == WasmCheck::Off {
+                    scan.payloads.clear();
+                }
+                Some((Text::new(host, path, scan), glue))
             })
             .unzip();
         let mut notes = Vec::new();
@@ -314,6 +354,9 @@ impl Output {
                     continue;
                 }
             };
+            if self.wasm_check == WasmCheck::Auto && summary.is_inert() {
+                continue;
+            }
             let wanted = format!("{}.wasm", safe_stem(file_stem(&text.path)));
             let index = self.add_file(&wanted, bytes, summary, (WasmOrigin::Embedded, None));
             text.files.push(index);

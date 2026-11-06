@@ -1,5 +1,5 @@
 use serde_json::Value;
-use untwist::RenameMode;
+use untwist::{RenameMode, WasmCheck};
 use untwist_wasm::options_from;
 
 const CASES: &str = include_str!("../../../web/src/settings/flags.json");
@@ -40,6 +40,14 @@ fn rename(settings: &Value) -> RenameMode {
     }
 }
 
+fn wasm_check(settings: &Value) -> WasmCheck {
+    settings
+        .get("wasm")
+        .and_then(Value::as_str)
+        .and_then(WasmCheck::named)
+        .unwrap_or_default()
+}
+
 #[test]
 fn every_flag_string_the_site_emits_parses_to_the_intended_options() {
     let cases: Vec<Value> = serde_json::from_str(CASES).expect("flags.json parses");
@@ -75,6 +83,7 @@ fn every_flag_string_the_site_emits_parses_to_the_intended_options() {
             flag(settings, "single", false),
             "{flags}"
         );
+        assert_eq!(options.wasm_check, wasm_check(settings), "{flags}");
     }
 }
 

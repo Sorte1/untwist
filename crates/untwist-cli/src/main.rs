@@ -106,6 +106,12 @@ fn report_wasm(err: &mut dyn Write, result: &Output) -> io::Result<()> {
             untwist::NoteKind::Progress => writeln!(err, "note: {}", note.message)?,
         }
     }
+    if result.wasm_unchecked {
+        writeln!(
+            err,
+            "note: the output may hold embedded WebAssembly; pass --wasm-check auto or on to extract it"
+        )?;
+    }
     for reference in &result.wasm_unresolved {
         writeln!(
             err,

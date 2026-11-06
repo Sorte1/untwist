@@ -17,7 +17,6 @@ pub use sites::{url_name, PayloadSite, RemoteSite, Scan};
 
 const URL_MARKER: &str = ".wasm";
 const BYTE_MAGICS: [&str; 2] = ["0, 97, 115, 109", "0,97,115,109"];
-const BYTES_AFTER_MAGIC: usize = payload::MIN_MODULE_BYTES - payload::WASM_MAGIC.len();
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Rewritten {
@@ -27,37 +26,71 @@ pub struct Rewritten {
 }
 
 pub fn may_hold_wasm(text: &str) -> bool {
-    text.contains(URL_MARKER) || holds_base64_module(text) || holds_byte_module(text)
+    may_reference_wasm(text) || may_embed_wasm(text)
+}
+
+pub fn may_reference_wasm(text: &str) -> bool {
+    text.contains(URL_MARKER)
+}
+
+pub fn may_embed_wasm(text: &str) -> bool {
+    holds_base64_module(text) || holds_byte_module(text)
 }
 
 fn holds_base64_module(text: &str) -> bool {
-    text.match_indices(payload::BASE64_MAGIC)
-        .any(|(at, _)| payload::base64_holds_module(&text[at..]))
+    text.match_indices(payload::BASE64_MAGIC).any(|(at, _)| {
+        let run = &text[at..];
+        let len = run
+            .bytes()
+            .take_while(|byte| payload::is_base64_byte(*byte))
+            .count();
+        let body = &run[..len];
+        payload::base64_holds_module(body)
+            && payload::decode_base64(body).map_or(true, |bytes| loadable(&bytes))
+    })
 }
 
 fn holds_byte_module(text: &str) -> bool {
     BYTE_MAGICS.iter().any(|magic| {
-        text.match_indices(magic)
-            .any(|(at, _)| has_byte_elements(&text[at + magic.len()..], BYTES_AFTER_MAGIC))
+        text.match_indices(magic).any(|(at, _)| {
+            listed_bytes(&text[at + magic.len()..]).is_some_and(|bytes| loadable(&bytes))
+        })
     })
 }
 
-fn has_byte_elements(mut rest: &str, wanted: usize) -> bool {
-    for _ in 0..wanted {
-        let Some(after) = rest.trim_start().strip_prefix(',') else {
-            return false;
-        };
-        let after = after.trim_start();
+fn listed_bytes(mut rest: &str) -> Option<Vec<u8>> {
+    let mut bytes = payload::WASM_MAGIC.to_vec();
+    loop {
+        let trimmed = rest.trim_start();
+        if trimmed.starts_with(']') {
+            return Some(bytes);
+        }
+        let after = trimmed.strip_prefix(',')?.trim_start();
         let len = after
             .bytes()
             .take_while(|byte| byte.is_ascii_alphanumeric() || *byte == b'.')
             .count();
-        if !after.starts_with(|ch: char| ch.is_ascii_digit()) {
-            return false;
+        bytes.push(byte_literal(&after[..len])?);
+        if bytes.len() > MAX_WASM_BYTES {
+            return Some(bytes);
         }
         rest = &after[len..];
     }
-    true
+}
+
+fn byte_literal(token: &str) -> Option<u8> {
+    match token
+        .strip_prefix("0x")
+        .or_else(|| token.strip_prefix("0X"))
+    {
+        Some(hex) => u8::from_str_radix(hex, 16).ok(),
+        None => token.parse().ok(),
+    }
+}
+
+fn loadable(bytes: &[u8]) -> bool {
+    bytes.len() >= payload::MIN_MODULE_BYTES
+        && summarize(bytes).map_or(true, |summary| !summary.is_inert())
 }
 
 pub struct Glue<'a> {
@@ -165,6 +198,24 @@ mod tests {
         assert!(!may_hold_wasm("new Uint8Array([0,97,115,109,1,0,0,0,1])"));
         assert!(!may_hold_wasm("atob(\"AGFzbQEAAAA=\")"));
         assert!(!may_hold_wasm("[0, 97, 115, 109, 1, 0, 0, 0, x, 1]"));
+    }
+
+    #[test]
+    fn a_module_with_no_imports_or_exports_does_not_trip_the_trigger() {
+        assert!(!may_hold_wasm(
+            "WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0]))"
+        ));
+        assert!(!may_hold_wasm("atob(\"AGFzbQEAAAABBAFgAAA=\")"));
+    }
+
+    #[test]
+    fn a_byte_list_with_an_element_that_is_not_a_literal_does_not_trip_the_trigger() {
+        assert!(!may_hold_wasm(
+            "[0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, x]"
+        ));
+        assert!(!may_hold_wasm(
+            "[0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0, ...rest]"
+        ));
     }
 
     #[test]

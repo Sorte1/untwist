@@ -29,7 +29,7 @@ async function countWasmRequests(page: Page): Promise<string[]> {
 }
 
 test('an embedded wasm module is listed and downloads as its own file', async ({ page }) => {
-  await openApp(page);
+  await openApp(page, '#wasm=auto');
   await paste(page, readRepo(`${FIXTURES}/bindgen.js`));
   await runAndWait(page);
   const save = page.locator('#wasm-bar [data-wasm-path="wasm/deobfuscated.wasm"]');
@@ -113,4 +113,37 @@ test('several dropped wasm files are matched to the references by name', async (
   ]);
   await expect(page.locator('#wasm-bar')).toContainText('supplied');
   await expect.poll(() => outputText(page)).toContain('function __wbg_log_9a1b2c(e, t)');
+});
+
+test('with the wasm check off an embedded module is flagged and one click extracts it', async ({ page }) => {
+  await openApp(page);
+  await paste(page, readRepo(`${FIXTURES}/bindgen.js`));
+  await runAndWait(page);
+  const warning = page.locator('#wasm-bar .wasm-unchecked');
+  await expect(warning).toContainText('This file may contain embedded WebAssembly. Set Wasm check to Auto or On to extract it.');
+  await expect(page.locator('#wasm-bar [data-wasm-path]')).toHaveCount(0);
+  await warning.getByRole('button', { name: 'Use Auto and rerun' }).click();
+  await expect(page.locator('#wasm-bar [data-wasm-path="wasm/deobfuscated.wasm"]')).toBeVisible();
+  await expect(warning).toHaveCount(0);
+  await openSettings(page);
+  await expect(page.locator('#wasm-check-group [data-check="auto"]')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('the wasm check is off by default, notes that on is slow and is kept in the link', async ({ page }) => {
+  await openApp(page);
+  await openSettings(page);
+  const group = page.locator('#wasm-check-group');
+  await expect(group.locator('[data-check="off"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#wasm-on-note')).toHaveText('On can be slow on large files.');
+  await group.locator('[data-check="on"]').click();
+  await expect(group.locator('[data-check="on"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page).toHaveURL(/wasm=on/);
+  await page.reload();
+  await expect(page.locator('#run')).toBeEnabled({ timeout: 30_000 });
+  await openSettings(page);
+  await expect(page.locator('#wasm-check-group [data-check="on"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Escape');
+  await paste(page, readRepo(`${FIXTURES}/bindgen.js`));
+  await runAndWait(page);
+  await expect(page.locator('#wasm-bar [data-wasm-path="wasm/deobfuscated.wasm"]')).toBeVisible();
 });

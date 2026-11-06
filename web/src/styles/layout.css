@@ -430,6 +430,10 @@ button, input {
   background: var(--code);
 }
 
+.seg-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .seg-4 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

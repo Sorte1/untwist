@@ -18,5 +18,6 @@ export function flagsFrom(settings: Settings): string {
   add(settings.iter !== null, '--max-iterations', String(settings.iter));
   add(settings.single, '--single-file');
   add(settings.off !== '', '--disable', settings.off);
+  add(settings.wasm !== 'off', '--wasm-check', settings.wasm);
   return words.join(' ');
 }

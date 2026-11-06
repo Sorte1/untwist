@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { flagsFrom } from './flags';
 import { parseHash, writeHash } from './hash';
-import { changedCount, CLI_DEFAULTS, DEFAULT_FUEL, DEFAULTS, RENAME_MODES, type Settings } from './settings';
+import { changedCount, CLI_DEFAULTS, DEFAULT_FUEL, DEFAULTS, RENAME_MODES, WASM_CHECKS, type Settings } from './settings';
 import cases from './flags.json';
 
 function pick<T>(values: readonly T[], seed: number): T {
@@ -22,6 +22,7 @@ function generated(seed: number): Settings {
     iter: pick([null, 1, 7, 4_294_967_295], seed >> 3),
     single: bit(7),
     off: pick(['', 'dead-code', 'layers'], seed >> 5),
+    wasm: pick(WASM_CHECKS, seed >> 6),
     view: bit(8) ? 'diff' : 'output',
     wrap: bit(10),
     theme: pick([null, 'dark', 'light'] as const, seed >> 4),

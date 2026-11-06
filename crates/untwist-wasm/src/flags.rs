@@ -1,9 +1,10 @@
 use std::str::SplitWhitespace;
 
-use untwist::{Options, RenameMode};
+use untwist::{Options, RenameMode, WasmCheck};
 
-const VALUE_FLAGS: [&str; 6] = [
+const VALUE_FLAGS: [&str; 7] = [
     "--rename",
+    "--wasm-check",
     "--max-iterations",
     "--fuel",
     "-j",
@@ -71,6 +72,10 @@ fn valued(mut options: Options, flag: &str, word: &str) -> Result<Options, Strin
         "--max-iterations" => options.max_iterations = Some(number(word, flag)?),
         "--fuel" => options.fuel = Some(fuel(word)?),
         "--disable" => return disable(options, word),
+        "--wasm-check" => {
+            options.wasm_check = WasmCheck::named(word)
+                .ok_or_else(|| format!("unknown wasm check {word} (off, on or auto)"))?;
+        }
         "-j" | "--jobs" => {
             number::<std::num::NonZeroUsize>(word, flag)?;
         }
@@ -146,6 +151,24 @@ mod tests {
         assert_eq!(
             options_from("--disable").err().as_deref(),
             Some("--disable needs a value")
+        );
+    }
+
+    #[test]
+    fn wasm_check_defaults_to_off_and_takes_on_or_auto() {
+        use untwist::WasmCheck;
+        assert_eq!(options_from("").unwrap().wasm_check, WasmCheck::Off);
+        assert_eq!(
+            options_from("--wasm-check auto").unwrap().wasm_check,
+            WasmCheck::Auto
+        );
+        assert_eq!(
+            options_from("--wasm-check on").unwrap().wasm_check,
+            WasmCheck::On
+        );
+        assert_eq!(
+            options_from("--wasm-check maybe").err().as_deref(),
+            Some("unknown wasm check maybe (off, on or auto)")
         );
     }
 

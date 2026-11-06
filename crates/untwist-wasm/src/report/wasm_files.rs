@@ -39,6 +39,7 @@ impl WasmFiles {
 struct WasmJson<'a> {
     files: &'a [WasmFile],
     unresolved: &'a [WasmReference],
+    unchecked: bool,
 }
 
 pub fn settle(result: &mut Output, files: &WasmFiles) -> (String, Vec<Vec<u8>>) {
@@ -46,6 +47,7 @@ pub fn settle(result: &mut Output, files: &WasmFiles) -> (String, Vec<Vec<u8>>) 
     let json = serde_json::to_string(&WasmJson {
         files: &result.wasm,
         unresolved: &result.wasm_unresolved,
+        unchecked: result.wasm_unchecked,
     })
     .unwrap_or_default();
     let bytes = result.wasm.iter().map(|file| file.bytes.clone()).collect();

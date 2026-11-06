@@ -145,6 +145,17 @@ pub struct Args {
     )]
     pub disable: Vec<&'static str>,
     #[arg(
+        long = "wasm-check",
+        value_enum,
+        value_name = "MODE",
+        default_value = "off",
+        help = "scan the output for embedded wasm modules: off (the default) only says when it \
+                may hold one, auto extracts a byte array or base64 text that holds a module \
+                with imports or exports, on reparses every output to look (slow on large files); \
+                --wasm, --wasm-dir and --fetch-wasm work in every mode"
+    )]
+    pub wasm_check: WasmCheckArg,
+    #[arg(
         long = "wasm-dir",
         value_name = "DIR",
         help = "take wasm modules the input loads from elsewhere out of DIR, matched by file name \
@@ -223,6 +234,23 @@ pub enum RenameArg {
     Unique,
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum WasmCheckArg {
+    Off,
+    On,
+    Auto,
+}
+
+impl WasmCheckArg {
+    fn check(self) -> untwist::WasmCheck {
+        match self {
+            WasmCheckArg::Off => untwist::WasmCheck::Off,
+            WasmCheckArg::On => untwist::WasmCheck::On,
+            WasmCheckArg::Auto => untwist::WasmCheck::Auto,
+        }
+    }
+}
+
 impl RenameArg {
     fn mode(self) -> untwist::RenameMode {
         match self {
@@ -261,6 +289,7 @@ impl Args {
             jobs: self.jobs,
             fuel: self.fuel,
             disabled_passes: self.disable.clone(),
+            wasm_check: self.wasm_check.check(),
             ..untwist::Options::default()
         }
     }

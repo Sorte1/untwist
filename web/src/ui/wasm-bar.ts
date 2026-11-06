@@ -10,6 +10,7 @@ import {
   resolvedUrl,
   setAlwaysFetchWasm,
   withSupplied,
+  UNCHECKED_WARNING,
   type SuppliedWasm,
   type WasmReferenceInfo,
 } from '../wasm/wasm';
@@ -96,6 +97,11 @@ export function mountWasmBar(store: Store<AppState>, rerun: () => void): WasmAdd
     }
   };
 
+  const useAuto = () => {
+    store.update((state) => ({ ...state, settings: { ...state.settings, wasm: 'auto' } }));
+    rerun();
+  };
+
   const fetchReference = async (reference: WasmReferenceInfo, asking: boolean) => {
     const url = consentedUrl(reference, asking);
     if (url === null) {
@@ -134,6 +140,9 @@ export function mountWasmBar(store: Store<AppState>, rerun: () => void): WasmAdd
       const fetchButton = button('Fetch…', `Fetch ${reference.url}`, () => void fetchReference(reference, !alwaysFetchWasm()));
       fetchButton.dataset.wasmUrl = reference.url;
       rows.push(row('wasm-row wasm-missing', text('wasm-name', reference.name), text('muted', `not supplied · loaded from ${reference.url} · drop it here or fetch it`), fetchButton));
+    }
+    if (report.unchecked) {
+      rows.push(row('wasm-row wasm-unchecked', text('wasm-note', UNCHECKED_WARNING), button('Use Auto and rerun', 'Set Wasm check to Auto and run again', useAuto)));
     }
     if (state.wasm.length > 0) {
       const names = state.wasm.map((file) => file.name).join(', ');

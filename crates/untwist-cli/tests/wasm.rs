@@ -13,7 +13,7 @@ fn an_embedded_wasm_payload_is_written_as_its_own_file_and_reported() {
     let dir = tempfile::tempdir().unwrap();
     let out_dir = dir.path().join("out");
     let out = bin()
-        .args(["--report", "json", "-o"])
+        .args(["--report", "json", "--wasm-check", "auto", "-o"])
         .arg(&out_dir)
         .arg(fixture("bindgen.js"))
         .output()
@@ -102,7 +102,7 @@ fn a_wasm_dir_file_matches_webpacks_hashed_module_name_exactly() {
     );
     let out_dir = dir.path().join("out");
     let out = bin()
-        .args(["--report", "json", "--wasm-dir"])
+        .args(["--report", "json", "--wasm-check", "auto", "--wasm-dir"])
         .arg(&wasm_dir)
         .arg("-o")
         .arg(&out_dir)
@@ -263,4 +263,23 @@ fn a_relative_url_is_fetched_against_the_wasm_base() {
     let _ = dir;
     assert_eq!(server.hits.load(std::sync::atomic::Ordering::SeqCst), 1);
     assert_eq!(json["wasm"][0]["url"], server.url.as_str());
+}
+
+#[test]
+fn with_the_default_check_an_embedded_module_gets_a_hint_and_no_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let out_dir = dir.path().join("out");
+    let out = bin()
+        .arg("-o")
+        .arg(&out_dir)
+        .arg(fixture("bindgen.js"))
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("may hold embedded WebAssembly; pass --wasm-check auto or on"),
+        "{stderr}"
+    );
+    assert!(!out_dir.join("wasm").exists());
 }
