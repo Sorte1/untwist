@@ -172,6 +172,35 @@ fn code_before_the_rotator_is_refused() {
 }
 
 #[test]
+fn inert_blocks_and_expression_statements_before_the_rotator_are_trusted() {
+    for prefix in [
+        "{}",
+        "void 0;",
+        "{ { var t = 1; } let u = 'a'; }",
+        "'note';",
+        "-1;",
+    ] {
+        assert_eq!(
+            refusal(&format!("{prefix}\n{NO_PARSE_INT}")),
+            None,
+            "{prefix}"
+        );
+    }
+    for prefix in [
+        "{ console.log(__DECODE_0__(0)); }",
+        "{ function g() {} }",
+        "f();",
+        "-{ valueOf: function () { return 0; } };",
+    ] {
+        assert_eq!(
+            refusal(&format!("{prefix}\n{NO_PARSE_INT}")),
+            Some(notes::CODE_BEFORE_ROTATOR),
+            "{prefix}"
+        );
+    }
+}
+
+#[test]
 fn only_an_allowlisted_expression_before_the_rotator_runs_no_code() {
     for prefix in [
         "var n = -{ valueOf: function () { return 0; } };",

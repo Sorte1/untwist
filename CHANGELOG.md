@@ -31,6 +31,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- Empty or inert blocks and expression statements that run no code (`{}`, `void 0;`) before
+  the rotator no longer stop a string array from decoding.
 - A string array whose array function, decoders and rotator all sit in one function body,
   such as a whole program wrapped in an IIFE, now decodes in both lanes.
 - The default lane decodes beside a fresh `new Map()` or `new WeakMap()` that is read and written only
