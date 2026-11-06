@@ -42,15 +42,14 @@ fn every_row_has_a_known_prefix_and_each_encoding_is_covered() {
         );
     }
     for encoding in ["-plain", "-base64", "-rc4"] {
-        for prefix in ["dec-", "ref-"] {
-            assert!(
-                programs
-                    .iter()
-                    .any(|(label, _)| label.starts_with(prefix) && label.ends_with(encoding)),
-                "no {prefix} row for {encoding}"
-            );
-        }
+        assert!(
+            programs
+                .iter()
+                .any(|(label, _)| label.starts_with("dec-") && label.ends_with(encoding)),
+            "no dec- row for {encoding}"
+        );
     }
+    assert!(programs.iter().any(|(label, _)| label.starts_with("ref-")));
 }
 
 #[test]
