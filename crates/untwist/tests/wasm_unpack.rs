@@ -246,3 +246,65 @@ fn a_supplied_name_matches_exactly_or_with_its_hash_segments_dropped() {
     assert_eq!(found("other.wasm"), None);
     assert_eq!(found("aaaaaa.module.wasm"), None);
 }
+
+fn supplied(name: &str, wasm: &str) -> WasmSupply {
+    WasmSupply {
+        files: vec![untwist::SuppliedWasm {
+            name: name.to_string(),
+            bytes: wasm_bytes(wasm),
+            origin: WasmOrigin::Supplied,
+            url: None,
+        }],
+    }
+}
+
+fn module_code<'o>(out: &'o Output, path: &str) -> &'o str {
+    out.bundle
+        .as_ref()
+        .expect("the bundle unpacks")
+        .modules
+        .iter()
+        .find(|module| module.path == path)
+        .map(|module| module.code.as_str())
+        .unwrap()
+}
+
+fn settled_with(source: &str, supply: &WasmSupply) -> Output {
+    let mut out = run(source);
+    out.settle_wasm(supply, true);
+    out
+}
+
+#[test]
+fn webpack_async_wasm_names_the_glue_in_the_modules_it_imports_from_and_exports_to() {
+    let supply = supplied("3f2a91c0d1e2b3a4.module.wasm", "webpack.wasm");
+    let out = settled_with(&fixture("webpack-async.js"), &supply);
+    assert!(out.wasm_unresolved.is_empty());
+    assert_eq!(out.wasm[0].renamed, 2);
+    let env = module_code(&out, "src/env.js");
+    assert!(env.contains("function log(e)"), "{env}");
+    assert!(env.contains("Z: () => log"), "{env}");
+    assert!(module_code(&out, "src/index.js").contains("const add = o.add;"));
+}
+
+#[test]
+fn webpack_sync_wasm_names_the_glue_through_the_runtime_import_objects() {
+    let supply = supplied("9c8b7a6f5e4d3c2b.module.wasm", "webpack.wasm");
+    let out = settled_with(&fixture("webpack-sync.js"), &supply);
+    assert!(out.wasm_unresolved.is_empty());
+    assert_eq!(out.wasm[0].renamed, 2);
+    assert!(module_code(&out, "src/env.js").contains("function log(e)"));
+    assert!(module_code(&out, "src/index.js").contains("const add = r.add;"));
+}
+
+#[test]
+fn a_bundle_module_that_does_not_cover_the_cross_module_glue_names_nothing() {
+    let supply = supplied("3f2a91c0d1e2b3a4.module.wasm", "bindgen.wasm");
+    let out = settled_with(&fixture("webpack-async.js"), &supply);
+    assert_eq!(out.wasm[0].renamed, 0);
+    assert!(module_code(&out, "src/env.js").contains("function o(e)"));
+    assert!(module_code(&out, "src/index.js").contains("const a = o.add;"));
+    assert!(wasm_notes(&out)
+        .iter()
+        .any(|note| note.contains("does not match the glue around src/add.wasm.js")));
+}

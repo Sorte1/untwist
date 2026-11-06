@@ -168,16 +168,12 @@ fn hashed_operands(binary: &oxc_ast::ast::BinaryExpression<'_>, hashes: &mut Vec
                 return;
             }
             Expression::ComputedMemberExpression(member) => {
-                if let Expression::ObjectExpression(map) = member.object.without_parentheses() {
-                    hashes.extend(map.properties.iter().filter_map(|property| {
-                        let property = property.as_property()?;
-                        match &property.value {
-                            Expression::StringLiteral(text) if is_hash(&text.value) => {
-                                Some(text.value.to_string())
-                            }
-                            _ => None,
-                        }
-                    }));
+                let mut object = member.object.without_parentheses();
+                while let Expression::ComputedMemberExpression(inner) = object {
+                    object = inner.object.without_parentheses();
+                }
+                if let Expression::ObjectExpression(map) = object {
+                    map_hashes(map, hashes);
                 }
                 return;
             }
@@ -187,6 +183,22 @@ fn hashed_operands(binary: &oxc_ast::ast::BinaryExpression<'_>, hashes: &mut Vec
         match rest {
             Some(rest) => left = rest.without_parentheses(),
             None => return,
+        }
+    }
+}
+
+fn map_hashes(map: &oxc_ast::ast::ObjectExpression<'_>, hashes: &mut Vec<String>) {
+    for property in map
+        .properties
+        .iter()
+        .filter_map(|property| property.as_property())
+    {
+        match property.value.without_parentheses() {
+            Expression::StringLiteral(text) if is_hash(&text.value) => {
+                hashes.push(text.value.to_string());
+            }
+            Expression::ObjectExpression(nested) => map_hashes(nested, hashes),
+            _ => {}
         }
     }
 }

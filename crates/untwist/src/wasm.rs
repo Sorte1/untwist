@@ -226,12 +226,16 @@ impl Output {
             self.take_payloads(text, extract, &mut notes);
         }
         let references = references_of(&texts);
+        let mut resolved = std::collections::HashMap::new();
         for reference in &references {
-            self.resolve_reference(reference, supply, &mut texts, &mut notes);
+            if let Some(index) = self.resolve_reference(reference, supply, &mut texts, &mut notes) {
+                resolved.insert(reference.name.clone(), index);
+            }
         }
         for text in &texts {
             self.rename_glue(text, &mut notes);
         }
+        self.name_bundle_glue(&resolved, &mut notes);
         self.notes.extend(notes);
     }
 
@@ -301,10 +305,10 @@ impl Output {
         supply: &WasmSupply,
         texts: &mut [Text],
         notes: &mut Vec<Note>,
-    ) {
+    ) -> Option<usize> {
         let Some(supplied) = supply.find(&reference.name) else {
             self.wasm_unresolved.push(reference.clone());
-            return;
+            return None;
         };
         let summary = match wasm::summarize(&supplied.bytes) {
             Ok(summary) => summary,
@@ -317,7 +321,7 @@ impl Output {
                     ),
                 ));
                 self.wasm_unresolved.push(reference.clone());
-                return;
+                return None;
             }
         };
         let origin = (supplied.origin, supplied.url.clone());
@@ -332,6 +336,7 @@ impl Output {
                 text.files.push(index);
             }
         }
+        Some(index)
     }
 
     fn rename_glue(&mut self, text: &Text, notes: &mut Vec<Note>) {
