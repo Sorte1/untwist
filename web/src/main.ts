@@ -1,6 +1,6 @@
 import './styles/tokens.css';
 import './styles/layout.css';
-import { Cancelled, Engine } from './engine/engine';
+import { Cancelled, Engine, REPORT_EXTRAS } from './engine/engine';
 import { initialState, runCancelled, runFailed, runFinished, runStarted, stageBegan, ticked, type AppState, type InputState } from './state';
 import { flagsFrom } from './settings/flags';
 import { registerServiceWorker } from './pwa/register';
@@ -36,6 +36,7 @@ import { mountStatusBar } from './ui/status-bar';
 import { mountDetailsToggle } from './ui/details/toggle';
 import { mountSummaryChip } from './ui/summary-chip';
 import { mountToolbar } from './ui/toolbar';
+import { mountWasmBar } from './ui/wasm-bar';
 
 const TICK_MS = 100;
 
@@ -67,7 +68,7 @@ function starter(store: Store<AppState>, engine: Engine): (input: InputState, fl
     store.update((current) => runStarted(current, performance.now(), flags, input));
     startClock(store);
     const staged = (name: string) => store.update((current) => stageBegan(current, name, performance.now()));
-    engine.run(input.text, flags, staged).then(
+    engine.run(input.text, flags, staged, REPORT_EXTRAS, store.get().wasm).then(
       (result) => store.update((current) => runFinished(current, result, performance.now())),
       (error: unknown) => {
         if (!(error instanceof Cancelled)) {
@@ -125,9 +126,10 @@ function main(): void {
   mountDiagnostics(store, inputView);
   mountFocusMode(store);
   const loader = mountLoader(store, run);
+  const addWasm = mountWasmBar(store, run);
   const pickExample = mountExamplesMenu(store, loader);
   mountRecentMenu(store, loader);
-  mountDropOverlay(store, loader);
+  mountDropOverlay(store, loader, addWasm);
   mountShareLink(store, loader);
   mountSummaryChip(store);
   mountOptions(store);

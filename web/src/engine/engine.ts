@@ -1,6 +1,7 @@
 import wasmUrl from './pkg/untwist_wasm_bg.wasm?url';
 import RunWorker from './run.worker.ts?worker';
 import type { RunResult, WorkerReply } from './types';
+import type { SuppliedWasm } from '../wasm/wasm';
 
 export const REPORT_EXTRAS = 'refusals strings links';
 
@@ -68,12 +69,12 @@ export class Engine {
     return this.#current !== null;
   }
 
-  async run(source: string, flags: string, onStage: (name: string) => void = () => undefined, extras = REPORT_EXTRAS): Promise<RunResult> {
-    const first = await this.#runOnce(source, flags, false, onStage, extras);
+  async run(source: string, flags: string, onStage: (name: string) => void = () => undefined, extras = REPORT_EXTRAS, wasm: readonly SuppliedWasm[] = []): Promise<RunResult> {
+    const first = await this.#runOnce(source, flags, false, onStage, extras, wasm);
     if (first.kind === 'done') {
       return { ...first.result, trap: null, workerMs: first.wallMs };
     }
-    const refused = await this.#runOnce(source, flags, true, onStage, extras);
+    const refused = await this.#runOnce(source, flags, true, onStage, extras, wasm);
     if (refused.kind !== 'done') {
       throw new Error(`the refused re-run trapped too: ${refused.message}`);
     }
@@ -107,7 +108,7 @@ export class Engine {
     return this.#warm;
   }
 
-  async #runOnce(source: string, flags: string, refused: boolean, onStage: (name: string) => void, extras: string): Promise<Finished> {
+  async #runOnce(source: string, flags: string, refused: boolean, onStage: (name: string) => void, extras: string, wasm: readonly SuppliedWasm[]): Promise<Finished> {
     const { worker, ready } = this.#prewarm();
     this.#warm = null;
     try {
@@ -130,7 +131,7 @@ export class Engine {
             }
           };
           worker.onerror = (event) => reject(new Error(event.message));
-          worker.postMessage({ kind: 'run', source, flags, refused, extras });
+          worker.postMessage({ kind: 'run', source, flags, refused, extras, wasm });
         };
         ready.then(start, reject);
       });

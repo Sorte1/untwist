@@ -19,6 +19,10 @@ All notable changes to this project are documented in this file. The format is b
   rest from absolute URLs, or relative ones against `--wasm-base URL`; without it nothing is
   fetched. A supplied or fetched module that does not cover the glue's imports and exports is
   reported and names nothing.
+- The playground lists extracted wasm modules with a download button each. Dropping `.wasm`
+  files on the page matches them to the modules the code loads by name. Each remote module can
+  be fetched after a prompt naming its URL (relative ones ask for a base first); an "Always
+  fetch wasm" setting, off by default and kept in the browser only, skips the prompt.
 
 ### Changed
 
