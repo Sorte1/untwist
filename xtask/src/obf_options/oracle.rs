@@ -133,6 +133,7 @@ pub fn run(
                 found,
                 behaviour: behaviour?,
                 notes,
+                spans: Vec::new(),
             },
         );
     }
@@ -243,6 +244,7 @@ mod tests {
             found: measure("console.log(1);"),
             behaviour: Behaviour::Skipped("residue-only: hostile".into()),
             notes: Vec::new(),
+            spans: Vec::new(),
         };
         let row = row_of(&run);
         assert!(row.perfect);

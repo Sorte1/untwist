@@ -278,6 +278,7 @@ pub fn run_lane(
         found: measure(&read_lossy(&output)),
         behaviour: Behaviour::Skipped(String::new()),
         notes: notes_of(&read_lossy(&work.join("err.txt"))),
+        spans: Vec::new(),
     };
     run.behaviour = behaviour(runner, spec, (&run, &output), expected)?;
     let cause = cause(lane, &run, shape_of(spec));
@@ -327,6 +328,7 @@ mod tests {
             found: measure(source),
             behaviour,
             notes: notes.iter().map(|n| n.to_string()).collect(),
+            spans: Vec::new(),
         }
     }
 

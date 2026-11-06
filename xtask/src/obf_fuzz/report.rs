@@ -192,6 +192,7 @@ mod tests {
                 found: measure(""),
                 behaviour: Behaviour::Same,
                 notes: note.map(|n| vec![n.to_string()]).unwrap_or_default(),
+                spans: Vec::new(),
             },
             verdict,
         }

@@ -28,6 +28,7 @@ pub struct LaneRun {
     pub found: Found,
     pub behaviour: Behaviour,
     pub notes: Vec<String>,
+    pub spans: Vec<String>,
 }
 
 impl LaneRun {
@@ -139,13 +140,16 @@ pub fn observe_untwist(
     let observed = runner.observe(input, cell, work, false)?;
     let output = work.join("out.js");
     let found = measure(&read_lossy(&output));
-    let notes = notes_of(&read_lossy(&work.join("err.txt")));
+    let stderr = read_lossy(&work.join("err.txt"));
+    let notes = notes_of(&stderr);
+    let spans = super::blockers::spans_of(&stderr);
     let behaviour = behaviour_of(runner, entry, &found, observed.exit, &output, expected)?;
     Ok(LaneRun {
         exit: observed.exit,
         found,
         behaviour,
         notes,
+        spans,
     })
 }
 
@@ -159,6 +163,7 @@ mod tests {
             found: measure(source),
             behaviour,
             notes: Vec::new(),
+            spans: Vec::new(),
         }
     }
 

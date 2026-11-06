@@ -1,3 +1,4 @@
+pub mod blockers;
 pub mod lanes;
 pub mod machinery;
 pub mod manifest;
@@ -45,6 +46,11 @@ pub struct Request {
         help = "write a whole suggested EXPECT, every failure classified by cause, keeping each cause's reason from the current EXPECT"
     )]
     pub suggest_expect: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "write one row per safe-lane refusal (cause, note, first span, global source) to this file; needs a test-hooks build"
+    )]
+    pub blockers: Option<PathBuf>,
     #[arg(long, help = "also print every expected failure")]
     pub verbose: bool,
 }
@@ -131,7 +137,10 @@ fn observe(
     expected: &BTreeMap<String, String>,
     work: &Path,
 ) -> Result<Vec<Outcome>> {
-    let runner = runner(root, request.untwist.as_ref(), true)?;
+    let mut runner = runner(root, request.untwist.as_ref(), true)?;
+    if request.blockers.is_some() {
+        runner.env.push((blockers::SPANS_HOOK, "1"));
+    }
     if runner.node.is_none() {
         bail!("obf-options needs node: it compares each output with the original program");
     }
@@ -260,6 +269,9 @@ fn write_outputs(
     }
     if let Some(path) = &request.suggest_expect {
         suggest::write(path, &root.join(EXPECT), rules, judged, outcomes)?;
+    }
+    if let Some(path) = &request.blockers {
+        blockers::write(root, path, judged, outcomes)?;
     }
     Ok(())
 }

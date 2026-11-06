@@ -101,6 +101,8 @@ pub struct Agnostic<'a> {
     pub bootstrap: Option<&'static str>,
     #[cfg(feature = "refusal-spans")]
     pub(super) trail: Vec<crate::refusal_spans::RefusalSpan>,
+    #[cfg(feature = "refusal-spans")]
+    pub(super) source_at: Option<(Span, &'static str)>,
 }
 
 pub fn agnostic<'a>(
@@ -132,6 +134,8 @@ pub struct GlobalReach {
     pub bootstrap: Option<&'static str>,
     #[cfg(feature = "refusal-spans")]
     pub trail: Vec<crate::refusal_spans::RefusalSpan>,
+    #[cfg(feature = "refusal-spans")]
+    pub source: Option<crate::refusal_spans::RefusalSpan>,
 }
 
 fn reach_watch<'k>(reach: ReachWatch<'k>) -> settle::Watch<'k> {
@@ -155,6 +159,13 @@ fn reach_of(found: &Agnostic<'_>) -> GlobalReach {
         bootstrap: found.bootstrap,
         #[cfg(feature = "refusal-spans")]
         trail: found.trail.clone(),
+        #[cfg(feature = "refusal-spans")]
+        source: found
+            .source_at
+            .map(|(span, what)| crate::refusal_spans::RefusalSpan {
+                what: format!("global source: {what}"),
+                span,
+            }),
     }
 }
 

@@ -474,6 +474,7 @@ mod tests {
             found: measure(""),
             behaviour: Behaviour::Same,
             notes: notes.iter().map(|note| note.to_string()).collect(),
+            spans: Vec::new(),
         };
         Outcome {
             entry: entry(file),
