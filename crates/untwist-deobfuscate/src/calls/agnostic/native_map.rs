@@ -6,10 +6,12 @@ use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 
+use super::bootstrap::Resolve;
 use super::keys::Keys;
 use super::settle::Written;
 use super::sites::Sites;
 use super::AKey;
+use crate::value_flow::{flow_rule_disabled, NATIVE_MAP_PENDING};
 
 const CONSTRUCTORS: [&str; 2] = ["Map", "WeakMap"];
 
@@ -41,12 +43,21 @@ fn native_method(key: &AKey<'_>) -> bool {
 }
 
 pub(super) fn may_be_patched(written: &Written<'_>) -> bool {
+    if flow_rule_disabled(NATIVE_MAP_PENDING) {
+        return PATCH_KEYS.iter().any(|key| written.may_be_spelled(key));
+    }
     PATCH_KEYS.iter().any(|key| written.may_be(key))
 }
 
-pub(super) fn unsealed_maps(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
+pub(super) fn unsealed_maps(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    resolve: Resolve<'_>,
+) -> FxHashSet<SymbolId> {
     let mut scan = MapUses {
         scoping,
+        resolve,
+        trust_decoded: flow_rule_disabled(NATIVE_MAP_PENDING),
         discarded: FxHashSet::default(),
         unsealed: FxHashSet::default(),
     };
@@ -54,8 +65,16 @@ pub(super) fn unsealed_maps(program: &Program<'_>, scoping: &Scoping) -> FxHashS
     scan.unsealed
 }
 
+enum MemberKey<'k> {
+    Spelled(&'k str),
+    Decoded(String),
+    Unknown,
+}
+
 struct MapUses<'s> {
     scoping: &'s Scoping,
+    resolve: Resolve<'s>,
+    trust_decoded: bool,
     discarded: FxHashSet<Span>,
     unsealed: FxHashSet<SymbolId>,
 }
@@ -92,6 +111,40 @@ impl MapUses<'_> {
         }
     }
 
+    fn key<'k>(&self, member: &'k MemberExpression<'_>) -> MemberKey<'k> {
+        if let Some(name) = member.static_property_name() {
+            return MemberKey::Spelled(name);
+        }
+        let MemberExpression::ComputedMemberExpression(computed) = member else {
+            return MemberKey::Unknown;
+        };
+        let Expression::CallExpression(call) = computed.expression.without_parentheses() else {
+            return MemberKey::Unknown;
+        };
+        self.resolve
+            .and_then(|map| map.get(&call.span))
+            .and_then(|text| text.as_string())
+            .map_or(MemberKey::Unknown, MemberKey::Decoded)
+    }
+
+    fn sealed(&self, member: &MemberExpression<'_>) -> bool {
+        match self.key(member) {
+            MemberKey::Spelled(name) => SEALED_MEMBERS.contains(&name),
+            MemberKey::Decoded(name) => {
+                self.trust_decoded || SEALED_MEMBERS.contains(&name.as_str())
+            }
+            MemberKey::Unknown => false,
+        }
+    }
+
+    fn is_set(&self, member: &MemberExpression<'_>) -> bool {
+        match self.key(member) {
+            MemberKey::Spelled(name) => name == "set",
+            MemberKey::Decoded(name) => !self.trust_decoded && name == "set",
+            MemberKey::Unknown => false,
+        }
+    }
+
     fn receiver(&self, member: &MemberExpression<'_>) -> Option<SymbolId> {
         let Expression::Identifier(id) = member.object().without_parentheses() else {
             return None;
@@ -114,7 +167,7 @@ impl<'a> VisitJs<'a> for MapUses<'_> {
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if let Some(member) = it.callee.without_parentheses().as_member_expression() {
-            let is_set = member.static_property_name() == Some("set");
+            let is_set = self.is_set(member);
             if let Some(symbol) = self.receiver(member).filter(|_| is_set) {
                 if !self.discarded.contains(&it.span) {
                     self.unsealed.insert(symbol);
@@ -126,10 +179,7 @@ impl<'a> VisitJs<'a> for MapUses<'_> {
 
     fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
         if let Some(symbol) = self.receiver(it) {
-            let sealed = it
-                .static_property_name()
-                .is_some_and(|name| SEALED_MEMBERS.contains(&name));
-            if !sealed {
+            if !self.sealed(it) {
                 self.unsealed.insert(symbol);
             }
         }

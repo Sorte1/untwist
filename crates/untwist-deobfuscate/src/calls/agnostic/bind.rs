@@ -259,7 +259,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
         bindings.defs.finish();
         bindings.symbol_rebind |= native_map::bare_global_written(scoping, "Symbol");
         bindings.map_rebind = native_map::constructor_rebound(scoping);
-        bindings.unsealed_maps = native_map::unsealed_maps(program, scoping);
+        bindings.unsealed_maps = native_map::unsealed_maps(program, scoping, resolve);
         let annex = std::mem::take(&mut bindings.annex);
         bindings.defs.each_present_mut(|symbol, def| {
             def.set_to(MUTATED, scoping.symbol_is_mutated(symbol));

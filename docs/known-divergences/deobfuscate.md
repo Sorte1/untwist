@@ -323,8 +323,12 @@
   native Map method, not `Reflect.get` or `Reflect.set`, when `m` is bound once to `new Map()` or
   `new WeakMap()` with no arguments, through the unshadowed global. `m` must also be used only as
   `m.get`, `m.set`, `m.has`, `m.delete`, `m.clear` or `m.size`, never written, and never let out
-  through the value of a `set` call. The program must neither assign `Map` or `WeakMap` nor
-  contain a write, on any base, whose key may be `Map`, `WeakMap`, `get` or `set` (premise 2).
+  through the value of a `set` call. A use through a decoder call key (`m[d(1)](k)`) is judged by
+  the string the call decodes to (the decoded-halves premise): one of those six names counts as
+  that use, any other string, or a call that does not decode, unseals `m`. The program must
+  neither assign `Map` or `WeakMap` nor contain a write, on any base, whose key may be `Map`,
+  `WeakMap`, `get` or `set`; a write by a decoder call key counts by its decoded string, and one
+  that does not decode may be any key (premise 2).
   `Function` and `eval` reached through any forwarder
   (`.call`, `.apply`, `Reflect.apply`) with non-literal text count as code runners. An identity
   write (`O.k = O.k` on the same unaliased prototype, directly or through a substituted helper)

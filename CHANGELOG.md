@@ -64,6 +64,8 @@ All notable changes to this project are documented in this file. The format is b
   itself (`var a = b[a]`) or a sealed method that calls itself in an `if` test; such inputs,
   seen in dead-code-injected obfuscator output, used to stop the worker and pass through
   unchanged.
+- The default lane reads `cache[d(1)](key)` on a fresh `new Map()` by the method name `d(1)` decodes to, so a
+  memoize cache whose method names were moved into the string array no longer refuses the unit.
 
 ## [0.2.1] - 2026-11-05
 

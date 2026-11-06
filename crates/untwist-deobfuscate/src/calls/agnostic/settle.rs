@@ -278,6 +278,7 @@ fn is_index_name(name: &str) -> bool {
 #[derive(Default)]
 pub(super) struct Written<'k> {
     named: Vec<&'k str>,
+    spelled: Vec<&'k str>,
     index: bool,
     any: bool,
 }
@@ -299,12 +300,16 @@ impl<'k> Written<'k> {
         }
         let mut named =
             Vec::with_capacity(keys().filter(|key| matches!(key, AKey::Named(_))).count());
+        let mut spelled = Vec::new();
         let mut index = false;
         for key in keys() {
             match key {
                 AKey::Named(name) => {
                     index |= is_index_name(name);
                     named.push(name.as_ref());
+                    if let Cow::Borrowed(name) = name {
+                        spelled.push(*name);
+                    }
                 }
                 AKey::Index => index = true,
                 AKey::Pending(_) | AKey::Unknown => {}
@@ -312,7 +317,18 @@ impl<'k> Written<'k> {
         }
         named.sort_unstable();
         named.dedup();
-        Self { named, index, any }
+        spelled.sort_unstable();
+        spelled.dedup();
+        Self {
+            named,
+            spelled,
+            index,
+            any,
+        }
+    }
+
+    pub(super) fn may_be_spelled(&self, name: &str) -> bool {
+        self.any || self.spelled.binary_search(&name).is_ok()
     }
 
     fn names(&self, name: &str) -> bool {
