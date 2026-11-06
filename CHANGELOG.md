@@ -26,6 +26,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
+- The default lane keeps the decoder machinery less often beside code that may hold the global
+  object: calls to `JSON.parse`, `Math`, `Number`, `parseInt`, `Promise.all` and other intrinsics
+  that neither print nor enumerate, and calls to `require` or to a required `path` or `url`, no
+  longer count as observing its names. The last rests on a stated premise, see the README.
 - Unminify rounds after the first skip unchanged statements: about 6 % faster on large inputs.
 - The playground worker keeps the decoded strings in one buffer while it runs, so the 10 MB sample peaks about 26 MiB lower (190 MiB instead of 216 MiB).
 

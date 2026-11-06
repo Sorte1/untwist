@@ -122,6 +122,16 @@ array or decoder before the rotator runs, no code that is built at run time from
 the proof fails, the call stays in place and the report says why. The output behaves like the
 input.
 
+The safe lane rests on a few stated premises about code it cannot see. Code from outside the file
+(`require` results, host functions, other scripts) writes no built-in. It also does not depend on
+the names the obfuscator picked for the string array and its decoders, because that code was
+written before those names existed. So when such code is handed a value that may hold the global
+object, the machinery can still be removed. Outside code that prints that value still counts as
+observing it (`require("util").inspect(globalThis)` keeps the machinery). A removal that relies
+on this premise says so in the report (`the machinery was dropped under the outside-code
+premise`). [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md)
+lists every premise.
+
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
 patched, even when the program visibly patches one, and a few passes that rest on heuristics are
 allowed to run. These are `dead-code` (deletes branches behind constant comparisons),

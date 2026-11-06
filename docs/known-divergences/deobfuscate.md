@@ -985,7 +985,22 @@
   ReferenceError before the call runs; `Object.prototype` members other than `hasOwnProperty(k)` and
   `propertyIsEnumerable(k)` (which observe only `k`) do not enumerate; and an argument passed to a
   visible, non-escaping function that only uses it as the receiver of `fn.apply(p, arguments)` or
-  `fn.call(p, …)` is not observed. Anything not proven counts as observation, and the machinery is
+  `fn.call(p, …)` is not observed. A call to an intrinsic that neither enumerates nor prints its
+  arguments (`JSON.parse`, `Math.max`, `parseInt`, `Number`, `String.fromCharCode`,
+  `Promise.all`, `Promise.resolve`, the URI functions and the rest of the closed list
+  `QUIET_INTRINSICS` in `calls/agnostic/quiet.rs`, each one a `pure` entry of node's realm walk) is
+  not observed while no write may rebind the built-in or its key (a `JSON.parse = …` or a write by
+  an unknown key makes it count again; `Promise.all` also waits on `then` and `resolve`). **The
+  outside-code premise (PN-outside)**: code from outside the file does not depend on the names of
+  the program's machinery, since the obfuscator picked them after that code was written. A call to
+  `require` itself, or to a member of a never-written binding of `require("path")` or
+  `require("url")` (with or without `node:`), modules that neither print nor enumerate their
+  arguments, is therefore not observed, again only while no write may rebind `require` or that
+  member; a removal that relied on it carries the progress note `the machinery was dropped under
+  the outside-code premise`. The premise does not cover outside code that prints the global object
+  (`require("util").inspect(globalThis)` observes, since `util` is not on the list) nor the
+  program's own code. Pinned by `crates/untwist/tests/observer_rows.rs` (node-checked; every `ref-`
+  row diverges when every callee is taken as quiet). Anything not proven counts as observation, and the machinery is
   kept with the note `remove-decoder-machinery: code may observe the names of the global object …`.
   The rule is the same in both modes. **Node-safe precision loss**: the self-defending code that
   survives the default mode in `fixtures/reference/deobfuscate/obfuscator.io-high.js` disables the

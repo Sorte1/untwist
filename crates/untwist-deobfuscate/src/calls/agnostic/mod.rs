@@ -13,6 +13,7 @@ mod keys;
 mod live;
 mod native_map;
 mod observe;
+mod quiet;
 mod reach;
 mod reach_text;
 mod roles;
@@ -35,6 +36,7 @@ use crate::proof::{PatchKey, ProtoRoot, ProtoWrite};
 use settle::settle;
 use untwist_eval::value::JsString;
 
+pub use quiet::{QUIET_INTRINSICS, QUIET_MODULES};
 #[cfg(feature = "test-hooks")]
 pub use reach_text::comparing_text_scopings;
 pub use roles::{key_roles, KeyRoles};
@@ -92,6 +94,7 @@ pub struct Agnostic<'a> {
     pub reach: Option<Span>,
     pub reach_code: Option<Span>,
     pub observed: Option<Span>,
+    pub(super) outside_premise: Option<Span>,
     pub(super) observe_keyed: Vec<(Span, Cow<'a, str>)>,
     pub(super) ambient: Vec<(Span, &'a str, bool)>,
     pub(super) saturated: bool,
@@ -132,6 +135,7 @@ pub struct ReachWatch<'k> {
 pub struct GlobalReach {
     pub reach: Option<Span>,
     pub observed: Option<Span>,
+    pub outside_premise: Option<Span>,
     pub bootstrap: Option<&'static str>,
     #[cfg(feature = "refusal-spans")]
     pub trail: Vec<crate::refusal_spans::RefusalSpan>,
@@ -157,6 +161,7 @@ fn reach_of(found: &Agnostic<'_>) -> GlobalReach {
     GlobalReach {
         reach: found.reach.or(found.reach_code),
         observed: found.observed,
+        outside_premise: found.outside_premise,
         bootstrap: found.bootstrap,
         #[cfg(feature = "refusal-spans")]
         trail: found.trail.clone(),

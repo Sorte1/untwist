@@ -2,8 +2,9 @@ use std::cell::RefCell;
 
 pub const VALUE_FLOW_SINKS: &str = "value-flow-sinks";
 pub const MACHINERY_SOURCE_BOUND: &str = "machinery-source-bound";
+pub const OBSERVER_LIST: &str = "observer-list";
 
-const FLOW_RULES: [&str; 2] = [VALUE_FLOW_SINKS, MACHINERY_SOURCE_BOUND];
+const FLOW_RULES: [&str; 3] = [VALUE_FLOW_SINKS, MACHINERY_SOURCE_BOUND, OBSERVER_LIST];
 
 thread_local! {
     static DISABLED: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
