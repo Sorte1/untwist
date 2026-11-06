@@ -4,10 +4,10 @@ use oxc_allocator::Allocator;
 use untwist::{Options, Output, Pipeline, StopReason};
 use untwist_core::parse::parse_program;
 use untwist_core::pass::{
-    full_rounds_for_tests, probe_variants_for_tests, run_to_fixpoint, run_to_fixpoint_noting_last,
-    skip_innermost_list_for_tests, stale_settled_for_tests, take_variant_violations_for_tests,
-    treat_as_neutral_for_tests, walk_every_group_for_tests, walk_every_list_for_tests, Cx,
-    Interest, Locality, Note, Pass, PassGroup, PassOptions,
+    cascade_off_for_tests, full_rounds_for_tests, probe_variants_for_tests, run_to_fixpoint,
+    run_to_fixpoint_noting_last, skip_innermost_list_for_tests, stale_settled_for_tests,
+    take_variant_violations_for_tests, treat_as_neutral_for_tests, walk_every_group_for_tests,
+    walk_every_list_for_tests, Cx, Interest, Locality, Note, Pass, PassGroup, PassOptions,
 };
 use untwist_core::print::{print, PrintStyle};
 use untwist_core::semantic::build_scoping;
@@ -184,11 +184,14 @@ fn game_js_and_the_high_preset_equal_forced_full_rounds() {
         assert_steered_equals_every_list(&label, &source);
     }
     if let Some(source) = real_world_fixture("game.js") {
+        cascade_off_for_tests(true);
         assert!(steered_away(&source, "unminify") > 0);
         skip_innermost_list_for_tests(true);
         let mutant = run(&source, MODES[0], false);
         skip_innermost_list_for_tests(false);
-        assert!(mutant != run(&source, MODES[0], true));
+        let full = run(&source, MODES[0], true);
+        cascade_off_for_tests(false);
+        assert!(mutant != full);
     }
 }
 

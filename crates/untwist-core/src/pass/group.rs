@@ -21,6 +21,7 @@ const MASK_WIDTH: usize = u64::BITS as usize;
 
 const RETIRABLE: u16 = !Interest::ENTER_PROGRAM.hook_bits();
 
+mod nested;
 #[cfg(feature = "test-hooks")]
 mod probe;
 mod scope;
@@ -31,6 +32,9 @@ pub(super) use scope::Scratch;
 
 #[cfg(feature = "test-hooks")]
 pub use scope::mutants::{skip_innermost_list_for_tests, treat_as_neutral_for_tests};
+
+#[cfg(feature = "test-hooks")]
+pub use nested::mutants::{cascade_off_for_tests, cascade_root_lists_for_tests};
 
 #[cfg(feature = "test-hooks")]
 pub use probe::{probe_variants_for_tests, take_variant_violations_for_tests};
@@ -66,6 +70,10 @@ pub struct PassGroup<'a> {
     declared: bool,
     retiring: bool,
     scope: Scope<'a>,
+    cascades: bool,
+    nesting: u8,
+    bodies: Vec<AVec<'a, Statement<'a>>>,
+    spare_scoping: Option<Scoping>,
 }
 
 fn filtered<'a>(
@@ -198,6 +206,7 @@ impl<'a> PassGroup<'a> {
         let walks = walks_nodes(&hooks);
         let mode = mode_for(&passes, declared);
         let tables = tables(&passes, &hooks, mode);
+        let cascades = passes.iter().any(|pass| pass.cascades());
         Self {
             passes,
             names,
@@ -214,6 +223,10 @@ impl<'a> PassGroup<'a> {
             declared,
             retiring: false,
             scope: Scope::default(),
+            cascades,
+            nesting: 0,
+            bodies: Vec::new(),
+            spare_scoping: None,
         }
     }
 

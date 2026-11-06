@@ -30,8 +30,9 @@ pub use group::PassGroup;
 use group::Scratch;
 #[cfg(feature = "test-hooks")]
 pub use group::{
-    probe_variants_for_tests, skip_innermost_list_for_tests, take_variant_violations_for_tests,
-    treat_as_neutral_for_tests, walk_every_group_for_tests,
+    cascade_off_for_tests, cascade_root_lists_for_tests, probe_variants_for_tests,
+    skip_innermost_list_for_tests, take_variant_violations_for_tests, treat_as_neutral_for_tests,
+    walk_every_group_for_tests,
 };
 pub use interest::{
     ExpressionKind, ExpressionVariants, Interest, StatementKind, StatementVariants,
@@ -352,6 +353,9 @@ pub trait Pass<'a> {
         Safety::Safe
     }
     fn requires_extended(&self) -> bool {
+        false
+    }
+    fn cascades(&self) -> bool {
         false
     }
     fn reset(&mut self) {}
