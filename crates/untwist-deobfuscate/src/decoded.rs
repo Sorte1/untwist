@@ -24,8 +24,8 @@ use crate::bridge::{
 use crate::calls::normalize_calls;
 use crate::notes;
 use crate::proof::{
-    build_escape_context, builtins_assumed_pristine, encode_names, names_machinery, scan_pending,
-    EscapeContext, PendingSite, PreScan, ProtoWrite,
+    build_escape_context, builtins_assumed_pristine, encode_names, names_machinery,
+    reachable_by_name, scan_pending, EscapeContext, PendingSite, PreScan, ProtoWrite,
 };
 use crate::stamp::{
     is_unedited, unstamp_block_note, unstamp_blocked, unstamp_names, RefusedByDecode,
@@ -214,6 +214,18 @@ fn apply_decoded_values<'a>(
         decoded.partial.push((returned, request.calls.len()));
     }
     inlined && returned == request.calls.len() && evaluated == returned
+}
+
+fn name_reach_left_to_spelling(
+    scoping: &Scoping,
+    run: &UnitRun<'_, '_>,
+    unsafe_lane: bool,
+) -> bool {
+    run.request
+        .guard
+        .symbols
+        .iter()
+        .any(|(symbol, _)| reachable_by_name(scoping, *symbol, unsafe_lane))
 }
 
 fn spelled_machinery(runs: &[UnitRun<'_, '_>]) -> Vec<bool> {
@@ -570,7 +582,11 @@ fn judge_runs<'p>(
     } else {
         (FxHashSet::default(), None, false)
     };
-    let spelled = spelled_machinery(&runs);
+    let spelled: Vec<bool> = spelled_machinery(&runs)
+        .into_iter()
+        .zip(&runs)
+        .map(|(spelled, run)| spelled && name_reach_left_to_spelling(scoping, run, unsafe_lane))
+        .collect();
     let (relying, independent): (Vec<_>, Vec<_>) = runs
         .into_iter()
         .zip(spelled)

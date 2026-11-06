@@ -4,6 +4,7 @@ use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const SABOTAGE: &[&str] = &[
+    "decoded-key-read.js",
     "global-key-read.js",
     "pattern-key.js",
     "this-static-read.js",

@@ -24,7 +24,7 @@ fn lane(unsafe_transforms: bool) -> impl Fn(&str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/spelled-name");
-    assert_eq!(fixtures.len(), 9);
+    assert_eq!(fixtures.len(), 10);
     fixtures
 }
 

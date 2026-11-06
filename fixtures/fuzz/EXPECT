@@ -16,5 +16,5 @@ safe	safe-decode-step-budget	decoding runs out of the evaluator's step budget (f
 safe	safe-domain-lock-reach	the domain lock's own for-in scan of the global object is a global reach (first seen in seed 2026 sample s2026-19)
 safe	safe-global-key-reach	the program may hold the global object and reaches keys the check cannot resolve (first seen in seed 2026 sample s2026-0)
 safe	safe-global-names	code may observe the global object's names (a non-strict this, require), so the machinery is kept; a sound refusal only where the program prints those names
-*	spelled-decoder-name	a string or property name in the program spells the string array function or decoder name (first seen in seed 2026 sample s2026-122)
+unsafe	spelled-decoder-name	a string or property name in the program spells a global string array function or decoder name, which the unsafe lane does not check by reach (first seen in seed 2026 sample s2026-122)
 *	unexplained-decode-miss	machinery is kept and no pass says why (a control-flow switch case binding collides; in the safe lane a terser-folded rotator has no checksum) (first seen in seed 2026 sample s2026-1021)
