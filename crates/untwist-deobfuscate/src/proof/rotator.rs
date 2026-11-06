@@ -5,6 +5,8 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
+use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 use untwist_core::semantic::with_observes;
 
 use super::foreign::ForeignUnits;
@@ -313,17 +315,17 @@ fn first_active<'s, 'a>(
 
 const CODELESS_BUILTINS: [&str; 2] = ["node:path", "node:url"];
 
-fn loaded_module<'s>(statement: &'s Statement<'_>) -> Option<(&'s str, bool)> {
+fn loaded_module<'s>(statement: &'s Statement<'_>) -> Option<(Cow<'s, str>, bool)> {
     match statement {
         Statement::ImportDeclaration(import) => Some((
-            import.source.value.as_str(),
+            js_text(import.source.value),
             import.with_clause.is_none() && import.phase.is_none(),
         )),
         Statement::ExportAllDeclaration(export) => {
-            Some((export.source.value.as_str(), export.with_clause.is_none()))
+            Some((js_text(export.source.value), export.with_clause.is_none()))
         }
         Statement::ExportFromDeclaration(export) => {
-            Some((export.source.value.as_str(), export.with_clause.is_none()))
+            Some((js_text(export.source.value), export.with_clause.is_none()))
         }
         _ => None,
     }
@@ -331,7 +333,7 @@ fn loaded_module<'s>(statement: &'s Statement<'_>) -> Option<(&'s str, bool)> {
 
 fn loads_a_codeless_builtin(statement: &Statement<'_>) -> bool {
     loaded_module(statement).is_some_and(|(source, plain)| {
-        plain && (builtin_imports_dropped() || CODELESS_BUILTINS.contains(&source))
+        plain && (builtin_imports_dropped() || CODELESS_BUILTINS.contains(&source.as_ref()))
     })
 }
 
