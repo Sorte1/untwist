@@ -76,3 +76,14 @@ pub fn drop_decoder_name_watch_for_tests(on: bool) {
 pub(crate) fn decoder_name_watch_dropped() -> bool {
     DECODER_NAME_WATCH_OFF.load(Ordering::Relaxed)
 }
+
+static EXTERNAL_WRITE_ORDER_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_external_write_order_for_tests(on: bool) {
+    EXTERNAL_WRITE_ORDER_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn external_write_order_trusted() -> bool {
+    EXTERNAL_WRITE_ORDER_TRUSTED.load(Ordering::Relaxed)
+}

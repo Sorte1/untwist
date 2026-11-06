@@ -6,7 +6,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_str::Ident;
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
 use untwist_core::ast_util::matcher::is_literal_argument;
 use untwist_core::ast_util::prop::identifier_name;
@@ -15,11 +15,13 @@ use untwist_core::pass::Cx;
 use untwist_core::semantic::{is_constant_binding, read_reference_count, write_reference_count};
 
 use crate::init_order::{scan_init_order, DeclarationSlot, InitOrder};
+use crate::mutants::external_write_order_trusted;
 use crate::notes;
 use crate::probe::{expression_contains, holds_own_scope};
 use crate::stamp::{decoder_index, decoder_name};
 use crate::units::MachineryDepth;
 
+use super::sequenced::ordered_values;
 use super::variables::{variable_facts, Assignment, VariableFacts};
 use super::{decoder_call, is_splittable_branch};
 
@@ -290,7 +292,6 @@ fn inline_constant_variable<'a>(
 struct AssignmentSlot {
     index: usize,
     value: Span,
-    expression: Span,
 }
 
 fn assignment_slots(
@@ -308,7 +309,6 @@ fn assignment_slots(
         slots.push(AssignmentSlot {
             index: slot.index(),
             value: assignment.value,
-            expression: assignment.expression,
         });
     }
     Some((anchor, slots))
@@ -321,35 +321,73 @@ fn nearest_slot(slots: &[AssignmentSlot], use_index: usize) -> Option<&Assignmen
         .max_by_key(|slot| slot.index)
 }
 
+fn statement_value(
+    facts: &VariableFacts<'_>,
+    (slots, global): (Option<&(DeclarationSlot, Vec<AssignmentSlot>)>, bool),
+    order: &InitOrder,
+    reference: Span,
+) -> Result<Span, (&'static str, Option<Span>)> {
+    if global && !external_write_order_trusted() {
+        return Err((notes::GLOBAL_EXTERNAL_BINDING, Some(reference)));
+    }
+    let Some((anchor, slots)) = slots else {
+        return Err((notes::REFERENCE_NOT_DOMINATED, refusal_span(facts)));
+    };
+    let Some(site) = order.slot_of_reference(*anchor, reference) else {
+        return Err((notes::REFERENCE_NOT_DOMINATED, Some(reference)));
+    };
+    if !external_write_order_trusted() && slots.iter().any(|slot| slot.index == site.index()) {
+        return Err((notes::WRITTEN_BESIDE_THE_READ, Some(reference)));
+    }
+    match nearest_slot(slots, site.index()) {
+        Some(nearest) => Ok(nearest.value),
+        None => Err((notes::NO_PRECEDING_ASSIGNMENT, Some(reference))),
+    }
+}
+
 fn inline_assigned_references<'a>(
     view: &Program<'a>,
-    facts: &VariableFacts<'_>,
-    assignments: &[Assignment],
+    (facts, symbol): (&VariableFacts<'_>, SymbolId),
+    (assignments, refusal): (&[Assignment], Option<&'static str>),
     order: &InitOrder,
     cx: &mut Cx<'a, '_>,
     edits: &mut ExprEdits<'a>,
 ) -> usize {
-    let Some((anchor, slots)) = assignment_slots(facts, assignments, order) else {
-        cx.note(notes::REFERENCE_NOT_DOMINATED, refusal_span(facts));
-        return 0;
-    };
+    let slots = refusal
+        .is_none()
+        .then(|| assignment_slots(facts, assignments, order))
+        .flatten();
+    let global = !view.body.iter().any(Statement::is_module_declaration)
+        && cx.scoping().symbol_scope_id(symbol) == cx.scoping().root_scope_id();
+    let mut sequenced: Option<FxHashMap<Span, Span>> = None;
     let mut rewritten = 0;
+    let mut refused = None;
     for reference in facts.references {
-        let Some(site) = order.slot_of_reference(anchor, reference.span) else {
-            cx.note(notes::REFERENCE_NOT_DOMINATED, Some(reference.span));
-            continue;
+        let found = statement_value(facts, (slots.as_ref(), global), order, reference.span)
+            .or_else(|err| {
+                let values =
+                    sequenced.get_or_insert_with(|| ordered_values(view, cx.scoping(), symbol));
+                values.get(&reference.span).copied().ok_or(err)
+            });
+        let value = match found {
+            Ok(value) => value,
+            Err(err) => {
+                refused.get_or_insert(err);
+                continue;
+            }
         };
-        let Some(nearest) = nearest_slot(&slots, site.index()) else {
+        let Some(value) = expression_at(view, value) else {
             cx.note(notes::NO_PRECEDING_ASSIGNMENT, Some(reference.span));
-            continue;
-        };
-        let Some(value) = expression_at(view, nearest.value) else {
-            cx.note(notes::NO_PRECEDING_ASSIGNMENT, Some(nearest.expression));
             continue;
         };
         if edits.insert(reference.span, value.clone_in(cx.allocator())) {
             rewritten += 1;
         }
+    }
+    match (refused, refusal) {
+        (Some(_), Some(reason)) => cx.note(reason, refusal_span(facts)),
+        (Some((reason, span)), None) => cx.note(reason, span),
+        (None, _) => {}
     }
     rewritten
 }
@@ -419,12 +457,17 @@ fn inline_assigned_variable<'a>(
     if assignments.is_empty() {
         return;
     }
-    if let Some(reason) = assigned_refusal(facts, &assignments, symbol, cx.scoping()) {
-        cx.note(reason, refusal_span(facts));
-        return;
-    }
-    let rewritten = inline_assigned_references(view, facts, &assignments, order, cx, edits);
-    if rewritten != facts.references.len()
+    let refusal = assigned_refusal(facts, &assignments, symbol, cx.scoping());
+    let rewritten = inline_assigned_references(
+        view,
+        (facts, symbol),
+        (&assignments, refusal),
+        order,
+        cx,
+        edits,
+    );
+    if refusal.is_some()
+        || rewritten != facts.references.len()
         || !can_remove_assigned(view, facts, &assignments, symbol, cx.scoping())
     {
         return;

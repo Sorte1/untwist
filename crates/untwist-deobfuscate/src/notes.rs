@@ -85,6 +85,12 @@ pub const TERNARY_HOLDS_A_SCOPE: &str =
      cannot carry, so the call site was left alone";
 pub const NO_LITERAL_INITIALISER: &str = "the external constant has no literal initialiser";
 pub const NO_PRECEDING_ASSIGNMENT: &str = "no literal assignment precedes this external reference";
+pub const GLOBAL_EXTERNAL_BINDING: &str =
+    "the external variable is a binding of the script's global scope, which another script or a \
+     write through the global object may change, so the call site was left alone";
+pub const WRITTEN_BESIDE_THE_READ: &str =
+    "the external variable is also written in the statement that reads it, so the call site was \
+     left alone";
 pub const ASSIGNMENT_NOT_BESIDE_THE_DECLARATION: &str =
     "the external variable's declaration and its literal assignment are not direct members of the \
      same statement list, so the call site was left alone";
@@ -535,6 +541,8 @@ catalogue!(
     TERNARY_HOLDS_A_SCOPE,
     NO_LITERAL_INITIALISER,
     NO_PRECEDING_ASSIGNMENT,
+    WRITTEN_BESIDE_THE_READ,
+    GLOBAL_EXTERNAL_BINDING,
     ASSIGNMENT_NOT_BESIDE_THE_DECLARATION,
     USE_BEFORE_INITIALISATION,
     NON_LITERAL_WRITE,
