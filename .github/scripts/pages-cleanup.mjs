@@ -1,6 +1,7 @@
 const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token, GITHUB_TOKEN: githubToken, GITHUB_REPOSITORY: repo } = process.env;
 const project = process.env.PAGES_PROJECT ?? 'untwist';
 const keepProduction = Number(process.env.KEEP_PRODUCTION ?? 5);
+const mainBuildBranch = 'main-latest';
 const [mode, branchArg] = process.argv.slice(2);
 
 if (!account || !token) {
@@ -77,8 +78,18 @@ async function sweep() {
     }
   }
   const branches = await liveBranches();
-  for (const deployment of await deployments('preview')) {
+  const previews = await deployments('preview');
+  const mainBuilds = previews
+    .filter((deployment) => branchOf(deployment) === mainBuildBranch)
+    .sort((a, b) => b.created_on.localeCompare(a.created_on));
+  for (const deployment of mainBuilds.slice(keepProduction)) {
+    await remove(deployment, `older than the newest ${keepProduction} builds of main`);
+  }
+  for (const deployment of previews) {
     const branch = branchOf(deployment);
+    if (branch === mainBuildBranch) {
+      continue;
+    }
     if (branch && !branches.has(branch)) {
       await remove(deployment, `branch ${branch} no longer exists`);
     } else if (branch && branch === details.production_branch) {

@@ -2,7 +2,6 @@ name: Deploy web
 
 on:
   push:
-    branches-ignore: [main]
     paths:
       - "web/**"
       - "crates/**"
@@ -55,7 +54,7 @@ jobs:
       - name: Check the branch name and that the deploy secrets exist
         id: gate
         env:
-          BRANCH: ${{ inputs.production && 'main' || github.ref_name }}
+          BRANCH: ${{ inputs.production && 'main' || (github.ref_name == 'main' && 'main-latest' || github.ref_name) }}
           PRODUCTION: ${{ inputs.production && 'true' || 'false' }}
           HAS_SECRETS: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
@@ -65,6 +64,10 @@ jobs:
           fi
           if [ "$PRODUCTION" != "true" ] && [ "$BRANCH" = "main" ]; then
             echo "::error::main deploys to production only through a release; run this with production set"
+            exit 1
+          fi
+          if [ "$PRODUCTION" != "true" ] && [ "$BRANCH" = "main-latest" ] && [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "::error::main-latest is reserved for the build of the main branch"
             exit 1
           fi
           if [ "$HAS_SECRETS" != "true" ] && [ "$PRODUCTION" = "true" ]; then
@@ -87,7 +90,7 @@ jobs:
           command: pages deploy web/dist --project-name=untwist --branch=${{ steps.gate.outputs.branch }}
 
       - name: Post the preview link on the branch's open pull request
-        if: steps.gate.outputs.deploy == 'true' && !inputs.production
+        if: steps.gate.outputs.deploy == 'true' && !inputs.production && github.ref_name != 'main'
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.ref_name }}
