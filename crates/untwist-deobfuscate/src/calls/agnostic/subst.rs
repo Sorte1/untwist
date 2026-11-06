@@ -51,7 +51,15 @@ impl<'s, 'a> Sites<'s, 'a> {
         &self,
         call: &'k CallExpression<'a>,
     ) -> Option<(&'a Function<'a>, &'a Expression<'a>)> {
-        let value = self.sealed_read(&call.callee)?;
+        self.proxy_at(call, super::roles::KEY_DEPTH)
+    }
+
+    fn proxy_at<'k>(
+        &self,
+        call: &'k CallExpression<'a>,
+        depth: u8,
+    ) -> Option<(&'a Function<'a>, &'a Expression<'a>)> {
+        let value = self.sealed_read_at(&call.callee, depth)?;
         let Expression::FunctionExpression(function) = value.without_parentheses() else {
             return None;
         };
@@ -225,7 +233,7 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     pub(super) fn proxy_key(&self, call: &CallExpression<'a>, depth: u8) -> Option<AKey<'a>> {
-        let (function, body) = self.proxy(self.alloc(call))?;
+        let (function, body) = self.proxy_at(self.alloc(call), depth)?;
         self.with_params(function, call, || self.key_class(body, depth))
     }
 

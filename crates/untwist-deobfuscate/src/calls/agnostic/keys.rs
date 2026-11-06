@@ -93,7 +93,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                 .watched_text(inner)
                 .map_or(AKey::Unknown, |text| AKey::Named(Cow::Borrowed(text))),
             Expression::StaticMemberExpression(_) | Expression::ComputedMemberExpression(_) => {
-                match self.sealed_read(inner) {
+                match self.sealed_read_at(inner, next) {
                     Some(value) => self.key_class(value, next),
                     None if self.symbol_member_unsafe(inner) => AKey::Unknown,
                     None => self.patch_key(key_of(inner)),
@@ -248,11 +248,16 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     pub(super) fn static_truth(&self, test: &Expression<'a>) -> Option<bool> {
+        self.static_truth_at(test, KEY_DEPTH)
+    }
+
+    fn static_truth_at(&self, test: &Expression<'a>, depth: u8) -> Option<bool> {
+        let next = depth.checked_sub(1)?;
         match test.without_parentheses() {
             Expression::BinaryExpression(binary) => {
                 let (Some(left), Some(right)) = (
-                    self.str_value(&binary.left, KEY_DEPTH),
-                    self.str_value(&binary.right, KEY_DEPTH),
+                    self.str_value(&binary.left, next),
+                    self.str_value(&binary.right, next),
                 ) else {
                     return None;
                 };
@@ -270,25 +275,29 @@ impl<'s, 'a> Sites<'s, 'a> {
             Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::LogicalNot => {
                 match unary.argument.without_parentheses() {
                     Expression::ArrayExpression(_) | Expression::ObjectExpression(_) => Some(false),
-                    other => self.static_truth(other).map(|truth| !truth),
+                    other => self.static_truth_at(other, next).map(|truth| !truth),
                 }
             }
             Expression::CallExpression(call) => {
                 let call: &'a CallExpression<'a> = self.alloc(call);
-                let (function, body) = self.proxy_str(call, KEY_DEPTH)?;
-                self.with_params(function, call, || self.static_truth(body))
+                let (function, body) = self.proxy_str(call, next)?;
+                self.with_params(function, call, || self.static_truth_at(body, next))
                     .flatten()
             }
             _ => None,
         }
     }
 
-    pub(super) fn sealed_read(&self, expr: &Expression<'a>) -> Option<&'a Expression<'a>> {
+    pub(super) fn sealed_read_at(
+        &self,
+        expr: &Expression<'a>,
+        depth: u8,
+    ) -> Option<&'a Expression<'a>> {
         let member = expr.without_parentheses().as_member_expression()?;
         let Expression::Identifier(id) = member.object().without_parentheses() else {
             return None;
         };
-        let keys = self.member_keys(member);
+        let keys = self.member_keys_at(member, depth);
         let [AKey::Named(name)] = keys.as_slice() else {
             return None;
         };
@@ -296,6 +305,10 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     pub(super) fn key_set(&self, expr: &Expression<'a>) -> Keys<'a> {
+        self.key_set_at(expr, KEY_DEPTH)
+    }
+
+    fn key_set_at(&self, expr: &Expression<'a>, depth: u8) -> Keys<'a> {
         let inner = expr.without_parentheses();
         let element_read = match inner {
             Expression::Identifier(id) => self.fresh.literal_init(id),
@@ -310,7 +323,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                         .map(|element| {
                             element
                                 .as_expression()
-                                .map_or(AKey::Unknown, |inner| self.key_class(inner, KEY_DEPTH))
+                                .map_or(AKey::Unknown, |inner| self.key_class(inner, depth))
                         })
                         .collect();
                     keys.push(AKey::Named(Cow::Borrowed("undefined")));
@@ -320,7 +333,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                 }
             }
         }
-        Keys::One(self.key_class(expr, KEY_DEPTH))
+        Keys::One(self.key_class(expr, depth))
     }
 
     pub(super) fn literal_array(
@@ -337,11 +350,15 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     pub(super) fn member_keys(&self, member: &MemberExpression<'a>) -> Keys<'a> {
+        self.member_keys_at(member, KEY_DEPTH)
+    }
+
+    fn member_keys_at(&self, member: &MemberExpression<'a>, depth: u8) -> Keys<'a> {
         match member {
             MemberExpression::StaticMemberExpression(m) => {
                 Keys::One(AKey::Named(Cow::Borrowed(m.property.name.as_str())))
             }
-            MemberExpression::ComputedMemberExpression(m) => self.key_set(&m.expression),
+            MemberExpression::ComputedMemberExpression(m) => self.key_set_at(&m.expression, depth),
             MemberExpression::PrivateFieldExpression(_) => Keys::Many(Vec::new()),
         }
     }
