@@ -9,6 +9,9 @@ use rustc_hash::FxHashSet;
 
 const MAX_RENAMED_LEN: usize = 3;
 
+type Edits = Vec<(Span, String)>;
+type Pairs = Vec<(String, String)>;
+
 pub(super) struct Renamer<'s> {
     semantic: &'s Semantic<'s>,
 }
@@ -113,7 +116,7 @@ impl<'s> Renamer<'s> {
         &self,
         wanted: Vec<(SymbolId, String)>,
         claimed: &mut Claimed,
-    ) -> (Vec<(Span, String)>, Vec<(String, String)>) {
+    ) -> (Edits, Pairs) {
         if self.has_hazard() {
             return (Vec::new(), Vec::new());
         }
@@ -137,10 +140,7 @@ impl<'s> Renamer<'s> {
         (edits, applied)
     }
 
-    pub(super) fn apply_by_name(
-        &self,
-        wanted: &[(String, String)],
-    ) -> (Vec<(Span, String)>, Vec<(String, String)>) {
+    pub(super) fn apply_by_name(&self, wanted: &[(String, String)]) -> (Edits, Pairs) {
         let scoping = self.scoping();
         let symbols = wanted
             .iter()
