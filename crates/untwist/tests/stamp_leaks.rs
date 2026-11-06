@@ -86,9 +86,9 @@ function c(i){ var e=a(); if (c.c===undefined){ c.c={}; } if (c.c[i]===undefined
 console.log(c(0)); console.log(c(1));"#;
 
 #[test]
-fn a_decoder_whose_memo_property_spells_its_name_keeps_the_arrays_name() {
+fn a_decoder_whose_memo_property_spells_its_name_decodes_without_a_stamp_left() {
     check(&Row {
-        kept: &["function a(", "function c("],
+        kept: &[],
         ..row(DECODER_MEMO_ON_A_SAME_NAMED_PROPERTY, "s0\ns1\n")
     });
 }
@@ -98,8 +98,23 @@ function b(i){ var e=a(); return e[i]; }
 console.log(b(0), 'b'); console.log(b(1));"#;
 
 #[test]
-fn a_decoder_spelled_by_a_string_keeps_the_arrays_name() {
-    check(&row(DECODER_NAME_SPELLED_BY_A_STRING, "s0 b\ns1\n"));
+fn a_decoder_spelled_by_a_string_decodes_without_a_stamp_left() {
+    check(&Row {
+        kept: &[],
+        ..row(DECODER_NAME_SPELLED_BY_A_STRING, "s0 b\ns1\n")
+    });
+}
+
+const DECODER_SPELLED_UNDER_A_DIRECT_EVAL: &str = r#"function a(){ var h=['s0','s1','s2']; a=function(){return h;}; return a(); }
+function b(i){ var e=a(); return e[i]; }
+console.log(b(0), eval('typeof b')); console.log(b(1));"#;
+
+#[test]
+fn a_decoder_spelled_under_a_direct_eval_keeps_the_arrays_name() {
+    check(&row(
+        DECODER_SPELLED_UNDER_A_DIRECT_EVAL,
+        "s0 function\ns1\n",
+    ));
 }
 
 const DECODER_NAME_SPELLED_BY_A_SHORTHAND: &str = r#"function a(){ var h=['s0','s1','s2']; a=function(){return h;}; return a(); }
@@ -121,8 +136,11 @@ var k=['b'];
 console.log(b(0), k[0]); console.log(b(1));"#;
 
 #[test]
-fn a_decoder_spelled_by_an_array_element_keeps_the_arrays_name() {
-    check(&row(DECODER_NAME_SPELLED_BY_AN_ARRAY_STRING, "s0 b\ns1\n"));
+fn a_decoder_spelled_by_an_array_element_decodes_without_a_stamp_left() {
+    check(&Row {
+        kept: &[],
+        ..row(DECODER_NAME_SPELLED_BY_AN_ARRAY_STRING, "s0 b\ns1\n")
+    });
 }
 
 const DECODER_WRITTEN_OUTSIDE: &str = r#"function a(){ var h=['s0','s1','s2']; a=function(){return h;}; return a(); }
@@ -164,9 +182,9 @@ function y(i){ var e=x(); return e[i]; }
 console.log(b(0), y(1), 'y'); console.log(b(2));"#;
 
 #[test]
-fn a_second_units_spelled_decoder_keeps_its_arrays_name_beside_a_decoded_unit() {
+fn a_second_units_spelled_decoder_decodes_beside_a_decoded_unit() {
     check(&Row {
-        kept: &["function x(", "function y("],
+        kept: &[],
         ..row(SECOND_UNITS_DECODER_SPELLED, "s0 t1 y\ns2\n")
     });
 }
@@ -202,11 +220,14 @@ function b(i){ var e=a(); return e[i]; }
 console.log(b(0), 'b', f()); console.log(b(1));"#;
 
 #[test]
-fn a_spelled_decoder_keeps_the_arrays_name_when_a_local_elsewhere_shares_it() {
-    check(&row(
-        SPELLED_DECODER_BESIDE_A_LOCAL_OF_THE_ARRAYS_NAME,
-        "s0 b 1\ns1\n",
-    ));
+fn a_spelled_decoder_decodes_when_a_local_elsewhere_shares_the_arrays_name() {
+    check(&Row {
+        kept: &[],
+        ..row(
+            SPELLED_DECODER_BESIDE_A_LOCAL_OF_THE_ARRAYS_NAME,
+            "s0 b 1\ns1\n",
+        )
+    });
 }
 
 const BAILED_UNIT_BESIDE_LOCALS_OF_ITS_NAMES: &str = r#"var G = 'g';

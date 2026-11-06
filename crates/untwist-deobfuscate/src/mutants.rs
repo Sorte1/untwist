@@ -65,3 +65,14 @@ pub fn accept_any_object_value_before_the_rotator_for_tests(on: bool) {
 pub(crate) fn object_values_unchecked() -> bool {
     OBJECT_VALUES_UNCHECKED.load(Ordering::Relaxed)
 }
+
+static DECODER_NAME_WATCH_OFF: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_decoder_name_watch_for_tests(on: bool) {
+    DECODER_NAME_WATCH_OFF.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn decoder_name_watch_dropped() -> bool {
+    DECODER_NAME_WATCH_OFF.load(Ordering::Relaxed)
+}

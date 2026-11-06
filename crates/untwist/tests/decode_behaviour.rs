@@ -283,26 +283,42 @@ console.log(qd(2 - 0));
 Function(s + ' = function (i) { return \"EVIL\" + i; }')();
 console.log(qd(3 - 0));";
 
-fn assert_documented_premise(source: &str, before: &str, after: &str, decoded: &str) {
+#[test]
+fn a_decoder_name_built_from_two_decoded_halves_is_watched_by_default_and_prints_like_node() {
     let Some(node) = node_or_skip() else {
         return;
     };
     let dir = tempfile::tempdir().unwrap();
-    assert_eq!(printed(&node, dir.path(), source).unwrap(), before);
-    for (mode, options) in modes() {
-        let code = Pipeline::new(options).run(source).code().to_string();
-        assert!(code.contains(decoded), "{mode}: {code}");
-        assert_eq!(printed(&node, dir.path(), &code).unwrap(), after, "{mode}");
-    }
+    let before = "u0 u1 x\nexit 0\n--\nEVIL0 EVIL1 x\nexit 0\n--\n";
+    assert_eq!(
+        printed(&node, dir.path(), SPLIT_NAME_OTHER_UNIT).unwrap(),
+        before
+    );
+    let code = Pipeline::new(Options::default())
+        .run(SPLIT_NAME_OTHER_UNIT)
+        .code()
+        .to_string();
+    assert!(code.contains("console.log(qd(0), qd(1), b(2))"), "{code}");
+    assert_eq!(printed(&node, dir.path(), &code).unwrap(), before);
 }
 
 #[test]
-fn a_decoder_name_built_from_two_decoded_halves_is_the_documented_premise() {
-    assert_documented_premise(
-        SPLIT_NAME_OTHER_UNIT,
-        "u0 u1 x\nexit 0\n--\nEVIL0 EVIL1 x\nexit 0\n--\n",
-        "u0 u1 x\nexit 0\n--\nu0 u1 x\nexit 0\n--\n",
-        "console.log(\"u0\", \"u1\", b(2))",
+fn a_decoder_name_built_from_two_decoded_halves_is_the_documented_premise_of_the_unsafe_lane() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let code = Pipeline::new(unsafe_lane())
+        .run(SPLIT_NAME_OTHER_UNIT)
+        .code()
+        .to_string();
+    assert!(
+        code.contains("console.log(\"u0\", \"u1\", \"x\")"),
+        "{code}"
+    );
+    assert_eq!(
+        printed(&node, dir.path(), &code).unwrap(),
+        "u0 u1 x\nexit 0\n--\nu0 u1 x\nexit 0\n--\n"
     );
 }
 

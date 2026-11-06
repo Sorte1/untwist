@@ -148,8 +148,8 @@ fn filler(count: usize) -> String {
 const DECODER: &str = "function b(c, d) { var e = __STRING_ARRAY__(); return e[c]; }\n";
 
 #[test]
-fn a_spelling_of_the_decoder_leaves_it_unstamped_however_far_away() {
-    let spelling = "o.b;\n";
+fn a_spelling_of_the_decoder_under_a_direct_eval_leaves_it_unstamped_however_far_away() {
+    let spelling = "eval(o.b);\n";
     let shapes = [
         format!("{ARRAY}{spelling}{DECODER}b(0);"),
         format!("{ARRAY}{DECODER}{spelling}b(0);"),
@@ -161,7 +161,10 @@ fn a_spelling_of_the_decoder_leaves_it_unstamped_however_far_away() {
         let code = stamped(shape);
         assert!(!code.contains("__DECODE_0__"), "{code}");
     }
-    let unspelled = stamped(&format!("{ARRAY}{}{DECODER}b(0);", filler(2000)));
+    let unspelled = stamped(&format!(
+        "{ARRAY}eval(o.q);\n{}{DECODER}b(0);",
+        filler(2000)
+    ));
     assert!(unspelled.contains("__DECODE_0__"), "{unspelled}");
 }
 

@@ -246,6 +246,7 @@ pub fn boxed_with<'a>(refused_by_decode: RefusedByDecode) -> Box<dyn Pass<'a> + 
 fn unstamped_arrays(
     program: &Program<'_>,
     scoping: &Scoping,
+    unsafe_lane: bool,
 ) -> (Vec<ArrayShape>, Vec<Option<Span>>) {
     let watching = top_level_arrays(program);
     let (found, watch) = if watching.is_empty() {
@@ -262,7 +263,7 @@ fn unstamped_arrays(
     }
     let reachable: Vec<bool> = unstamped
         .iter()
-        .map(|shape| reachable_by_name(scoping, shape.symbol))
+        .map(|shape| reachable_by_name(scoping, shape.symbol, unsafe_lane))
         .collect();
     let watched = watch.resolve(program, &names, &reachable);
     let mut paired: Vec<(ArrayShape, Option<Span>)> =
@@ -310,7 +311,7 @@ fn stamp_wrapped_array<'a>(
     cx: &mut Cx<'a, '_>,
     refused_by_decode: &RefusedByDecode,
 ) {
-    let (found, spelled) = unstamped_arrays(program, cx.scoping());
+    let (found, spelled) = unstamped_arrays(program, cx.scoping(), cx.opts.unsafe_transforms);
     if found.is_empty() {
         return;
     }
