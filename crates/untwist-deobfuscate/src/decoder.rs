@@ -45,6 +45,35 @@ fn array_alias<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k str> {
     Some(id.name.as_str())
 }
 
+fn indexes_through_alias(statements: &[Statement<'_>]) -> bool {
+    let Some(position) = statements
+        .iter()
+        .position(|statement| array_alias(statement).is_some())
+    else {
+        return false;
+    };
+    array_alias(&statements[position]).is_some_and(|alias| {
+        statements[position + 1..]
+            .iter()
+            .any(|statement| indexes_alias(statement, alias))
+    })
+}
+
+fn is_array_call(expr: &Expression<'_>) -> bool {
+    call_parts(expr).is_some_and(|(callee, arguments)| {
+        arguments.is_empty() && identifier_name(callee).and_then(string_array_unit).is_some()
+    })
+}
+
+fn indexes_array_call(stmt: &Statement<'_>) -> bool {
+    contains_expression(stmt, |expr| {
+        let Expression::ComputedMemberExpression(member) = expr else {
+            return false;
+        };
+        is_array_call(member.object.without_parentheses())
+    })
+}
+
 fn indexes_alias(stmt: &Statement<'_>, alias: &str) -> bool {
     contains_expression(stmt, |expr| {
         let Expression::ComputedMemberExpression(member) = expr else {
@@ -58,14 +87,7 @@ pub fn match_decoder(stmt: &Statement<'_>) -> Option<DecoderShape> {
     let declaration = var_function_or_declaration(stmt)?;
     let body = declaration.function.body.as_ref()?;
     let statements = body.statements.as_slice();
-    let position = statements
-        .iter()
-        .position(|statement| array_alias(statement).is_some())?;
-    let alias = array_alias(&statements[position])?;
-    if !statements[position + 1..]
-        .iter()
-        .any(|statement| indexes_alias(statement, alias))
-    {
+    if !indexes_through_alias(statements) && !statements.iter().any(indexes_array_call) {
         return None;
     }
     owning_unit(declaration.function)?;

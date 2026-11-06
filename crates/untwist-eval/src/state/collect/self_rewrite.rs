@@ -17,6 +17,7 @@ pub(in crate::state) fn template_rewrite(function: &Function<'_>, own_name: &str
                     .expressions
                     .first()
                     .and_then(|first| rewrite_span(first, own_name)),
+                Expression::CallExpression(call) => rewrite_span(&call.callee, own_name),
                 _ => None,
             },
             _ => None,
@@ -61,6 +62,7 @@ fn outer_is_template(function: &Function<'_>, own_name: &str) -> bool {
         }
         Some(Statement::ReturnStatement(ret)) => {
             is_forwarding_sequence(ret.argument.as_ref(), own_name, function)
+                || is_rewrite_and_call(ret.argument.as_ref(), own_name, function)
         }
         _ => false,
     };
@@ -94,6 +96,25 @@ fn is_forwarding_sequence(
     };
     is_self_rewrite_assignment(first, own_name)
         && is_forwarding_call(Some(second), own_name, function)
+}
+
+fn is_rewrite_and_call(
+    argument: Option<&Expression<'_>>,
+    own_name: &str,
+    function: &Function<'_>,
+) -> bool {
+    let Some(Expression::CallExpression(call)) = argument.map(Expression::without_parentheses)
+    else {
+        return false;
+    };
+    !call.optional
+        && is_self_rewrite_assignment(&call.callee, own_name)
+        && call.arguments.len() == function.params.items.len()
+        && call
+            .arguments
+            .iter()
+            .zip(function.params.items.iter())
+            .all(|(arg, param)| forwarded_argument_matches(arg, &param.pattern))
 }
 
 fn is_forwarding_call(
@@ -195,6 +216,9 @@ fn scan_expression_for_self_rewrite<'a, 'n>(
         }
         Expression::ParenthesizedExpression(node) => {
             scan_expression_for_self_rewrite(&node.expression, own_name, found);
+        }
+        Expression::CallExpression(node) => {
+            scan_expression_for_self_rewrite(&node.callee, own_name, found);
         }
         Expression::AssignmentExpression(node) => {
             if let AssignmentTarget::AssignmentTargetIdentifier(id) = &node.left {

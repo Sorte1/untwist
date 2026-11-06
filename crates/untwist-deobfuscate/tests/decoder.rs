@@ -125,6 +125,22 @@ fn a_function_that_never_indexes_the_array_is_not_a_decoder() {
     );
 }
 
+#[test]
+fn a_decoder_that_indexes_the_array_call_directly_is_stamped() {
+    let code = stamped(&format!(
+        "{ARRAY}function b(c, d) {{\n  c -= 415;\n  return __STRING_ARRAY__()[c];\n}}\nb(415);"
+    ));
+    assert!(code.contains("function __DECODE_0__(c, d)"), "{code}");
+}
+
+#[test]
+fn a_function_that_calls_the_array_without_indexing_it_is_not_a_decoder() {
+    let code = stamped(&format!(
+        "{ARRAY}function b(c) {{\n  return __STRING_ARRAY__().length + c;\n}}\nb(0);"
+    ));
+    assert!(!code.contains("__DECODE_"), "{code}");
+}
+
 fn filler(count: usize) -> String {
     (0..count).map(|index| format!("o.k{index};\n")).collect()
 }

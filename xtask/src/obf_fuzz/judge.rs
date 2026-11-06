@@ -12,6 +12,11 @@ use crate::obf_options::machinery::{measure, MACHINERY};
 use crate::obf_options::suggest::{cause_of, Failed, Shape};
 
 pub const WRONG_OUTPUT: &str = "wrong-output";
+const NON_CAUSES: [&str; 3] = [
+    "no checksum could be extracted from the rotator",
+    "a self-defending check that reads a function's own source survived",
+    "a call controller was found but a reference to it survives",
+];
 pub const UNSAFE_PREMISE: &str = "unsafe-premise-violated";
 pub const PANIC: &str = "untwist-panic";
 pub const TIMEOUT: &str = "untwist-timeout";
@@ -159,7 +164,7 @@ pub fn cause(lane: &str, run: &LaneRun, spec_shape: (Shape, bool)) -> Option<Str
     let note = run
         .notes
         .iter()
-        .find(|n| is_decode_note(&class_of(n)))
+        .find(|n| !is_non_cause(n) && is_decode_note(&class_of(n)))
         .map(String::as_str)
         .or(run.first_note())
         .unwrap_or("");
@@ -190,6 +195,10 @@ pub fn cause(lane: &str, run: &LaneRun, spec_shape: (Shape, bool)) -> Option<Str
     )
 }
 
+fn is_non_cause(note: &str) -> bool {
+    NON_CAUSES.iter().any(|other| note.contains(other))
+}
+
 fn is_decode_note(class: &str) -> bool {
     let pass = class.split_once(": ").map_or("", |(pass, _)| pass);
     DECODE_PASSES.contains(&pass) || DECODE_WORDS.iter().any(|w| pass.contains(w))
@@ -198,7 +207,7 @@ fn is_decode_note(class: &str) -> bool {
 pub fn blocker_key(notes: &[String], decode_only: bool) -> Option<String> {
     let classes: Vec<String> = notes
         .iter()
-        .filter(|n| !CONSEQUENCES.iter().any(|c| n.contains(c)))
+        .filter(|n| !CONSEQUENCES.iter().any(|c| n.contains(c)) && !is_non_cause(n))
         .map(|n| class_of(n))
         .collect();
     let class = classes
@@ -423,6 +432,21 @@ mod tests {
             blocker_key(&other, false).as_deref(),
             Some("inline-object-props/the-object-literal-defines-twice")
         );
+    }
+
+    #[test]
+    fn a_surviving_guard_or_a_rotator_fallback_is_not_the_blocker() {
+        let notes = vec![
+            "note: inline-decoded-strings: no checksum could be extracted from the rotator; interpreting it directly".to_string(),
+            "note: self-defending: a call controller was found but a reference to it survives outside the statements this pass removes".to_string(),
+            "note: pipeline: a self-defending check that reads a function's own source survived; the function it reads was printed on one line".to_string(),
+            "note: inline-decoded-strings: a decoder of the unit is used other than as the callee of a call, so".to_string(),
+        ];
+        assert_eq!(
+            blocker_key(&notes, true).as_deref(),
+            Some("inline-decoded-strings/a-decoder-of-the-unit-is-used-other")
+        );
+        assert_eq!(blocker_key(&notes[..3], true), None);
     }
 
     #[test]

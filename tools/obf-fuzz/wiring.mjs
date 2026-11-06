@@ -150,7 +150,7 @@ function applyRename(r, step, found, edits, used) {
     if (param.type !== "Identifier") continue;
     const fresh = `p${freshName(r, used).slice(3)}`;
     walk(decoder, (n, parent, key) => {
-      if (n.type === "Identifier" && n.name === param.name && !isBindingSite(n, parent, key)) {
+      if (n.type === "Identifier" && n.name === param.name && n !== decoder.id && !isBindingSite(n, parent, key)) {
         edits.push(replacement(n, parent, key, fresh));
       }
     });
