@@ -1,7 +1,8 @@
+use oxc_allocator::Allocator;
 use serde::Serialize;
 use untwist_core::pass::{Note, NoteKind};
 pub use untwist_unpack::wasm::MAX_WASM_BYTES;
-use untwist_unpack::wasm::{self, PayloadRefusal, Scan, Span, WasmSummary};
+use untwist_unpack::wasm::{self, Glue, PayloadRefusal, Scan, Span, WasmSummary};
 
 use crate::pipeline::{admits_reparse, Output};
 use crate::write::DEOBFUSCATED;
@@ -115,6 +116,18 @@ struct Text {
     replacements: Vec<(Span, String)>,
 }
 
+impl Text {
+    fn new(host: Host, path: String, scan: Scan) -> Self {
+        Self {
+            host,
+            path,
+            scan,
+            files: Vec::new(),
+            replacements: Vec::new(),
+        }
+    }
+}
+
 fn note(kind: NoteKind, message: String) -> Note {
     Note {
         pass: PASS,
@@ -192,22 +205,21 @@ impl Output {
         }
     }
 
-    fn scanned_texts(&self) -> Vec<Text> {
+    fn wasm_candidates(&self) -> Vec<(Host, String)> {
         self.wasm_hosts()
             .into_iter()
+            .filter(|(host, _)| {
+                let text = self.host_text(*host);
+                wasm::may_hold_wasm(text) && admits_reparse(text)
+            })
+            .collect()
+    }
+
+    fn scanned_texts(&self) -> Vec<Text> {
+        self.wasm_candidates()
+            .into_iter()
             .filter_map(|(host, path)| {
-                let text = self.host_text(host);
-                if !wasm::may_hold_wasm(text) || !admits_reparse(text) {
-                    return None;
-                }
-                let scan = wasm::scan(text)?;
-                Some(Text {
-                    host,
-                    path,
-                    scan,
-                    files: Vec::new(),
-                    replacements: Vec::new(),
-                })
+                Some(Text::new(host, path, wasm::scan(self.host_text(host))?))
             })
             .collect()
     }
@@ -217,10 +229,23 @@ impl Output {
     }
 
     pub fn settle_wasm(&mut self, supply: &WasmSupply, extract: bool) {
-        let mut texts = self.scanned_texts();
-        if texts.is_empty() {
+        let candidates = self.wasm_candidates();
+        if candidates.is_empty() {
             return;
         }
+        let sources: Vec<String> = candidates
+            .iter()
+            .map(|(host, _)| self.host_text(*host).to_string())
+            .collect();
+        let allocs: Vec<Allocator> = sources.iter().map(|_| Allocator::default()).collect();
+        let (mut texts, glues): (Vec<Text>, Vec<Glue<'_>>) = candidates
+            .into_iter()
+            .zip(sources.iter().zip(&allocs))
+            .filter_map(|((host, path), (source, alloc))| {
+                let glue = Glue::parse(alloc, source)?;
+                Some((Text::new(host, path, glue.scan()), glue))
+            })
+            .unzip();
         let mut notes = Vec::new();
         for text in &mut texts {
             self.take_payloads(text, extract, &mut notes);
@@ -232,8 +257,8 @@ impl Output {
                 resolved.insert(reference.name.clone(), index);
             }
         }
-        for text in &texts {
-            self.rename_glue(text, &mut notes);
+        for (text, glue) in texts.iter().zip(&glues) {
+            self.rename_glue(text, glue, &mut notes);
         }
         self.name_bundle_glue(&resolved, &mut notes);
         self.notes.extend(notes);
@@ -339,7 +364,7 @@ impl Output {
         Some(index)
     }
 
-    fn rename_glue(&mut self, text: &Text, notes: &mut Vec<Note>) {
+    fn rename_glue(&mut self, text: &Text, glue: &Glue<'_>, notes: &mut Vec<Note>) {
         let mut files = text.files.clone();
         files.sort_unstable();
         files.dedup();
@@ -362,10 +387,7 @@ impl Output {
             return;
         }
         let summary = module.map(|index| &self.wasm[index].summary);
-        let Some(rewritten) = wasm::rewrite(self.host_text(text.host), &text.replacements, summary)
-        else {
-            return;
-        };
+        let rewritten = glue.rewrite(&text.replacements, summary);
         if let (Some(index), Some(mismatch)) = (module, &rewritten.mismatch) {
             notes.push(note(
                 NoteKind::Refusal,

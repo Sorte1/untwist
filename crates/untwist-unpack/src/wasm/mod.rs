@@ -6,7 +6,7 @@ mod rename;
 pub mod sites;
 
 use oxc_allocator::Allocator;
-use oxc_semantic::SemanticBuilder;
+use oxc_semantic::{Semantic, SemanticBuilder};
 use untwist_core::parse::{has_error, parse_program};
 
 pub use graph::{GlueImport, ImportValue, ModuleFacts};
@@ -15,12 +15,9 @@ pub use oxc_span::Span;
 pub use payload::{PayloadRefusal, MAX_WASM_BYTES};
 pub use sites::{url_name, PayloadSite, RemoteSite, Scan};
 
-const MARKERS: &[&str] = &[
-    payload::BASE64_MAGIC,
-    ".wasm",
-    "0, 97, 115, 109",
-    "0,97,115,109",
-];
+const URL_MARKER: &str = ".wasm";
+const BYTE_MAGICS: [&str; 2] = ["0, 97, 115, 109", "0,97,115,109"];
+const BYTES_AFTER_MAGIC: usize = payload::MIN_MODULE_BYTES - payload::WASM_MAGIC.len();
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Rewritten {
@@ -30,7 +27,78 @@ pub struct Rewritten {
 }
 
 pub fn may_hold_wasm(text: &str) -> bool {
-    MARKERS.iter().any(|marker| text.contains(marker))
+    text.contains(URL_MARKER) || holds_base64_module(text) || holds_byte_module(text)
+}
+
+fn holds_base64_module(text: &str) -> bool {
+    text.match_indices(payload::BASE64_MAGIC)
+        .any(|(at, _)| payload::base64_holds_module(&text[at..]))
+}
+
+fn holds_byte_module(text: &str) -> bool {
+    BYTE_MAGICS.iter().any(|magic| {
+        text.match_indices(magic)
+            .any(|(at, _)| has_byte_elements(&text[at + magic.len()..], BYTES_AFTER_MAGIC))
+    })
+}
+
+fn has_byte_elements(mut rest: &str, wanted: usize) -> bool {
+    for _ in 0..wanted {
+        let Some(after) = rest.trim_start().strip_prefix(',') else {
+            return false;
+        };
+        let after = after.trim_start();
+        let len = after
+            .bytes()
+            .take_while(|byte| byte.is_ascii_alphanumeric() || *byte == b'.')
+            .count();
+        if !after.starts_with(|ch: char| ch.is_ascii_digit()) {
+            return false;
+        }
+        rest = &after[len..];
+    }
+    true
+}
+
+pub struct Glue<'a> {
+    text: &'a str,
+    semantic: Semantic<'a>,
+}
+
+impl<'a> Glue<'a> {
+    pub fn parse(alloc: &'a Allocator, text: &'a str) -> Option<Self> {
+        let parsed = parse_program(alloc, text);
+        if has_error(&parsed.diagnostics) {
+            return None;
+        }
+        let program = alloc.alloc(parsed.program);
+        let semantic = SemanticBuilder::new()
+            .with_build_nodes(true)
+            .build(program)
+            .semantic;
+        Some(Self { text, semantic })
+    }
+
+    pub fn scan(&self) -> Scan {
+        Scan::of(self.semantic.nodes())
+    }
+
+    pub fn rewrite(
+        &self,
+        replacements: &[(Span, String)],
+        module: Option<&WasmSummary>,
+    ) -> Rewritten {
+        let naming = module.map_or_else(glue::Naming::default, |summary| {
+            glue::name_glue(&self.semantic, summary)
+        });
+        let mut edits = replacements.to_vec();
+        edits.extend(naming.edits);
+        Rewritten {
+            text: splice(self.text, edits),
+            renamed: naming.renamed,
+            mismatch: naming.mismatch,
+        }
+    }
 }
 
 pub fn scan(text: &str) -> Option<Scan> {
@@ -38,44 +106,7 @@ pub fn scan(text: &str) -> Option<Scan> {
         return None;
     }
     let alloc = Allocator::default();
-    let parsed = parse_program(&alloc, text);
-    if has_error(&parsed.diagnostics) {
-        return None;
-    }
-    let semantic = SemanticBuilder::new()
-        .with_build_nodes(true)
-        .build(&parsed.program)
-        .semantic;
-    Some(Scan::of(semantic.nodes()))
-}
-
-pub fn rewrite(
-    text: &str,
-    replacements: &[(Span, String)],
-    module: Option<&WasmSummary>,
-) -> Option<Rewritten> {
-    let alloc = Allocator::default();
-    let parsed = parse_program(&alloc, text);
-    if has_error(&parsed.diagnostics) {
-        return None;
-    }
-    let naming = match module {
-        Some(summary) => {
-            let semantic = SemanticBuilder::new()
-                .with_build_nodes(true)
-                .build(&parsed.program)
-                .semantic;
-            glue::name_glue(&semantic, summary)
-        }
-        None => glue::Naming::default(),
-    };
-    let mut edits = replacements.to_vec();
-    edits.extend(naming.edits);
-    Some(Rewritten {
-        text: splice(text, edits),
-        renamed: naming.renamed,
-        mismatch: naming.mismatch,
-    })
+    Some(Glue::parse(&alloc, text)?.scan())
 }
 
 pub fn module_facts(text: &str) -> Option<ModuleFacts> {
@@ -120,4 +151,29 @@ fn splice(text: &str, mut edits: Vec<(Span, String)>) -> String {
     }
     out.push_str(&text[at..]);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_header_only_feature_detect_does_not_trip_the_trigger() {
+        assert!(!may_hold_wasm(
+            "new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])"
+        ));
+        assert!(!may_hold_wasm("new Uint8Array([0,97,115,109,1,0,0,0,1])"));
+        assert!(!may_hold_wasm("atob(\"AGFzbQEAAAA=\")"));
+        assert!(!may_hold_wasm("[0, 97, 115, 109, 1, 0, 0, 0, x, 1]"));
+    }
+
+    #[test]
+    fn a_header_with_a_section_trips_the_trigger() {
+        assert!(may_hold_wasm(
+            "new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 4])"
+        ));
+        assert!(may_hold_wasm("[0,97,115,109,1,0,0,0,0x1,7,9]"));
+        assert!(may_hold_wasm("\"AGFzbQEAAAABBw==\""));
+        assert!(may_hold_wasm("fetch(\"app.wasm\")"));
+    }
 }

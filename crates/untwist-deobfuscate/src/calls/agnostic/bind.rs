@@ -209,6 +209,7 @@ pub(super) struct Bindings<'s, 'a> {
     symbol_rebind: bool,
     map_rebind: bool,
     pub(super) unsealed_maps: FxHashSet<SymbolId>,
+    map_uses: native_map::MapUses,
     pub(super) sources: Sources,
     calls_of: Vec<(SymbolId, &'a CallExpression<'a>)>,
     pub(super) params: FxHashMap<SymbolId, (SymbolId, usize)>,
@@ -242,6 +243,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             symbol_rebind: false,
             map_rebind: false,
             unsealed_maps: FxHashSet::default(),
+            map_uses: native_map::MapUses::default(),
             sources: Sources::new(program),
             calls_of: Vec::new(),
             params: FxHashMap::default(),
@@ -259,7 +261,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
         bindings.defs.finish();
         bindings.symbol_rebind |= native_map::bare_global_written(scoping, "Symbol");
         bindings.map_rebind = native_map::constructor_rebound(scoping);
-        bindings.unsealed_maps = native_map::unsealed_maps(program, scoping, resolve);
+        bindings.unsealed_maps = std::mem::take(&mut bindings.map_uses).unsealed(resolve);
         let annex = std::mem::take(&mut bindings.annex);
         bindings.defs.each_present_mut(|symbol, def| {
             def.set_to(MUTATED, scoping.symbol_is_mutated(symbol));
@@ -540,6 +542,16 @@ impl<'s, 'a> Bindings<'s, 'a> {
 }
 
 impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
+    fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
+        self.map_uses.discard(&it.expression);
+        walk_js::walk_expression_statement(self, it);
+    }
+
+    fn visit_if_statement(&mut self, it: &IfStatement<'a>) {
+        self.map_uses.discard(&it.test);
+        walk_js::walk_if_statement(self, it);
+    }
+
     fn visit_object_expression(&mut self, it: &ObjectExpression<'a>) {
         for property in &it.properties {
             if let ObjectPropertyKind::SpreadProperty(spread) = property {
@@ -678,6 +690,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.map_uses.call(self.scoping, it);
         self.note_iife(it);
         if let Some(member) = it.callee.without_parentheses().as_member_expression() {
             if let Expression::Identifier(id) = member.object().without_parentheses() {
@@ -730,6 +743,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
     }
 
     fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
+        self.map_uses.member(self.scoping, it);
         self.scan_member(it);
         if let Expression::Identifier(id) = it.object().without_parentheses() {
             if let MemberExpression::ComputedMemberExpression(member) = it {

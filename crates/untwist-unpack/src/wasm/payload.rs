@@ -3,6 +3,8 @@ pub const WASM_MAGIC: [u8; 4] = *b"\0asm";
 pub const WASM_VERSION: [u8; 4] = [1, 0, 0, 0];
 pub const BASE64_MAGIC: &str = "AGFzbQ";
 const HEADER_LEN: usize = 8;
+pub const MIN_MODULE_BYTES: usize = HEADER_LEN + 2;
+const MIN_MODULE_BASE64: usize = (MIN_MODULE_BYTES * 4).div_ceil(3);
 const DATA_URI_TYPES: &[&str] = &["application/wasm", "application/octet-stream"];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,6 +81,14 @@ fn sextet(byte: u8) -> Option<u32> {
     }
 }
 
+pub fn base64_holds_module(body: &str) -> bool {
+    body.bytes()
+        .take(MIN_MODULE_BASE64)
+        .take_while(|byte| sextet(*byte).is_some())
+        .count()
+        == MIN_MODULE_BASE64
+}
+
 pub fn decode_base64(text: &str) -> Result<Vec<u8>, PayloadRefusal> {
     let body = text.trim_end_matches('=');
     if text.len() - body.len() > 2 || body.len() % 4 == 1 {
@@ -120,6 +130,13 @@ mod tests {
         assert_eq!(data_uri_base64(text), Some("AGFzbQEAAAA="));
         assert_eq!(data_uri_base64("data:text/plain;base64,AGFzbQ"), None);
         assert_eq!(data_uri_base64("data:application/wasm,AGFzbQ"), None);
+    }
+
+    #[test]
+    fn base64_holds_a_module_only_past_the_header() {
+        assert!(!base64_holds_module("AGFzbQEAAAA="));
+        assert!(!base64_holds_module("AGFzbQEAAAAB"));
+        assert!(base64_holds_module("AGFzbQEAAAABBw=="));
     }
 
     #[test]
