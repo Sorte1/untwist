@@ -508,6 +508,11 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Headed("var x;\nx = 0x0;\nglobalThis.x = 0x1;\nconsole.log(__DECODE_0__(x));"),
+        expects: notes::GLOBAL_BINDING_REACHED,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Headed("let x;\nif (c) x = 0xd6;\nconsole.log(__DECODE_0__(x));"),
         expects: notes::ASSIGNMENT_NOT_BESIDE_THE_DECLARATION,
         mode: Match::Contains,

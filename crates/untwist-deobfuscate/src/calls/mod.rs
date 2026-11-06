@@ -1,4 +1,5 @@
 pub mod agnostic;
+mod global_bindings;
 mod normalize;
 mod sequenced;
 mod variables;

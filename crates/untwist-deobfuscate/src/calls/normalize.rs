@@ -21,6 +21,7 @@ use crate::probe::{expression_contains, holds_own_scope};
 use crate::stamp::{decoder_index, decoder_name};
 use crate::units::MachineryDepth;
 
+use super::global_bindings::global_bindings;
 use super::sequenced::ordered_values;
 use super::variables::{variable_facts, Assignment, VariableFacts};
 use super::{decoder_call, is_splittable_branch};
@@ -493,12 +494,23 @@ fn plan_externals<'a>(
     removals: &mut StmtEdits<'a>,
 ) {
     let variables = variable_facts(program, cx.scoping(), symbols);
+    let globals = global_bindings(program, cx, symbols);
+    let mut kept = StmtEdits::new();
     for (index, symbol) in symbols.iter().copied().enumerate() {
         let Some(facts) = variables.facts(index) else {
             continue;
         };
         #[cfg(debug_assertions)]
         crate::fused::check::record("variable-facts", facts_digest(&facts, symbol));
+        if let Some(span) = globals.reached(symbol) {
+            cx.note(notes::GLOBAL_BINDING_REACHED, Some(span));
+            continue;
+        }
+        let removals = if globals.observed(symbol) {
+            &mut kept
+        } else {
+            &mut *removals
+        };
         if is_constant_binding(cx.scoping(), symbol) {
             inline_constant_variable(program, &facts, symbol, order, cx, edits, removals);
         } else {
