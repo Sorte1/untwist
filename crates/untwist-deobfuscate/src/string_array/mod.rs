@@ -27,7 +27,8 @@ use crate::init_order::{
 };
 use crate::notes;
 use crate::proof::{
-    declared_text, reachable_by_name, redeclared, refuse_annex_b_bindings, watch_texts, TextWatch,
+    declared_text, reachable_by_direct_eval, redeclared, refuse_annex_b_bindings, watch_texts,
+    TextWatch,
 };
 use crate::stamp::{
     apply_stamps, declaration_symbol, reached_outside_its_block, string_array_name,
@@ -262,7 +263,7 @@ fn unstamped_arrays(
     }
     let reachable: Vec<bool> = unstamped
         .iter()
-        .map(|shape| reachable_by_name(scoping, shape.symbol))
+        .map(|shape| reachable_by_direct_eval(scoping, shape.symbol))
         .collect();
     let watched = watch.resolve(program, &names, &reachable);
     let mut paired: Vec<(ArrayShape, Option<Span>)> =

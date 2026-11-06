@@ -41,7 +41,7 @@ pub use pending::{resolve_pending_sites, PendingSite, PreScan};
 pub use rotator::{rotator_refusal_at, LiteralBindings, RotatorSite};
 pub use seal::ROTATOR_GLOBALS;
 pub(crate) use watch::watch_texts;
-pub use watch::{declared_text, reachable_by_name, TextWatch, Watched};
+pub use watch::{declared_text, reachable_by_direct_eval, TextWatch, Watched};
 pub(crate) use writes::{key_of, object_operand_is_intrinsic};
 pub use writes::{
     key_relevant, patch_refusal, prototype_root_ref, record_definer_patch, record_identifier_patch,

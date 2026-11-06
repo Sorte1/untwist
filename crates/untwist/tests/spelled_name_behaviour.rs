@@ -2,7 +2,11 @@ use untwist::{Options, Pipeline};
 use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const DECODED: &[&str] = &["object-keys.js"];
+const DECODED: &[&str] = &[
+    "object-keys.js",
+    "string-argument.js",
+    "local-object-key.js",
+];
 
 fn lane(unsafe_transforms: bool) -> impl Fn(&str) -> String {
     move |source| {
@@ -18,7 +22,7 @@ fn lane(unsafe_transforms: bool) -> impl Fn(&str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/spelled-name");
-    assert_eq!(fixtures.len(), 4);
+    assert_eq!(fixtures.len(), 9);
     fixtures
 }
 
@@ -53,7 +57,7 @@ fn a_decoded_spelled_name_fixture_prints_what_node_prints_in_the_unsafe_lane() {
 }
 
 #[test]
-fn only_object_literal_keys_leave_the_unit_decodable() {
+fn only_spellings_that_cannot_reach_the_global_object_leave_the_unit_decodable() {
     for unsafe_transforms in [false, true] {
         for (label, source) in fixtures() {
             let code = lane(unsafe_transforms)(&source);
@@ -65,5 +69,25 @@ fn only_object_literal_keys_leave_the_unit_decodable() {
                 assert!(!decoded, "{label} [default]:\n{code}");
             }
         }
+    }
+}
+
+#[test]
+fn every_refused_spelled_name_fixture_diverges_from_node_once_the_reach_watch_is_off() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let refused: Vec<(String, String)> = fixtures()
+        .into_iter()
+        .filter(|(label, _)| !is_decoded(label))
+        .collect();
+    let unwatched = lane(true);
+    let runs: [Mode<'_>; 1] = [("unsafe", &unwatched)];
+    let wrong = node_rows::mismatches(&node, &refused, &runs);
+    for (label, _) in &refused {
+        assert!(
+            wrong.iter().any(|row| row.starts_with(label.as_str())),
+            "{label} did not diverge from node without the reach watch"
+        );
     }
 }

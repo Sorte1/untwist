@@ -17,7 +17,9 @@ use oxc_syntax::symbol::SymbolId;
 use crate::array_rotator::find_rotator;
 use crate::calls::agnostic::{global_reach, ReachWatch};
 use crate::notes;
-use crate::stamp::{find_stamped, find_stamped_named, is_unedited, string_array_name, Stamped};
+use crate::stamp::{
+    find_stamped, find_stamped_named, is_unedited, original_name, string_array_name, Stamped,
+};
 use crate::units::MachineryDepth;
 
 #[derive(Clone, Copy, Default)]
@@ -55,6 +57,10 @@ fn observed_names_of(
         if let Some(symbol) = entry.symbol {
             if scoping.symbol_scope_id(symbol) == root {
                 names.push(entry.name);
+                names.extend(
+                    original_name(program.source_text, scoping, symbol)
+                        .filter(|original| *original != entry.name),
+                );
                 fns.push(symbol);
             }
         }

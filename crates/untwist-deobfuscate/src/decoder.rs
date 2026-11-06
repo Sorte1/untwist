@@ -13,7 +13,8 @@ use crate::init_order::pass_done;
 use crate::notes;
 use crate::probe::contains_expression;
 use crate::proof::{
-    declared_text, reachable_by_name, redeclared, watch_texts, writes_outside, TextWatch, Watched,
+    declared_text, reachable_by_direct_eval, redeclared, watch_texts, writes_outside, TextWatch,
+    Watched,
 };
 use crate::stamp::{
     declaration_symbol, decoder_index, decoder_name, owning_unit, reached_outside_its_block,
@@ -166,7 +167,7 @@ fn unstamped_decoders(
         .unzip();
     let reachable: Vec<bool> = unstamped
         .iter()
-        .map(|shape| reachable_by_name(scoping, shape.symbol))
+        .map(|shape| reachable_by_direct_eval(scoping, shape.symbol))
         .collect();
     let watched = watch.resolve(program, &names, &reachable);
     (unstamped, watched, total)

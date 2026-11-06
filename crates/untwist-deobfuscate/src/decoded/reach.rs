@@ -27,11 +27,17 @@ fn watched_units<'p>(scoping: &Scoping, runs: &[UnitRun<'p, '_>]) -> Watched<'p>
         if run.request.calls.is_empty() || run.result.is_err() {
             continue;
         }
-        let Some((symbol, name)) = run.request.guard.symbols.first() else {
-            continue;
-        };
-        if scoping.symbol_scope_id(*symbol) == root {
+        let mut global = run
+            .request
+            .guard
+            .symbols
+            .iter()
+            .filter(|(symbol, _)| scoping.symbol_scope_id(*symbol) == root)
+            .peekable();
+        if global.peek().is_some() {
             watched.units.push(run.request.unit);
+        }
+        for (symbol, name) in global {
             watched.names.push(name);
             watched.fns.push(*symbol);
         }

@@ -50,6 +50,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- The default lane decodes a global string array whose function or decoder name is also spelled
+  by a string in the program, such as webpack 4's `'a'` getter key under mangled names; whether
+  code may reach the machinery by that name is now judged where the global object is reached,
+  instead of refusing on any spelling. A spelling under a direct eval still refuses.
 - A header-only WebAssembly feature-detect (`new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])`)
   is no longer taken for an embedded module, and output holding a real one is parsed once, not
   twice, to extract it and name its glue (game.js about 5 % faster).
