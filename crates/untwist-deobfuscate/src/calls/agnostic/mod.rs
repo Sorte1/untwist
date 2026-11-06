@@ -4,6 +4,7 @@ mod bootstrap;
 mod bound_this;
 mod consume;
 mod defs;
+mod filtered;
 mod flow;
 mod forward;
 mod fresh;
@@ -47,6 +48,7 @@ pub enum AKey<'a> {
     Named(Cow<'a, str>),
     Index,
     Pending(Span),
+    Filtered(Span),
     Unknown,
 }
 
@@ -260,7 +262,7 @@ fn written_key<'a>(key: AKey<'a>, extra: &mut Vec<(Span, String)>) -> PatchKey<'
         }
         AKey::Index => PatchKey::Named("@@index"),
         AKey::Pending(span) => PatchKey::Pending(span),
-        AKey::Unknown => PatchKey::Dynamic,
+        AKey::Filtered(_) | AKey::Unknown => PatchKey::Dynamic,
     }
 }
 
@@ -322,7 +324,12 @@ fn guard_trail(found: &Agnostic<'_>, machinery: &[Span]) -> Vec<crate::refusal_s
         .sites
         .iter()
         .filter(|site| !inside(machinery, site.span))
-        .filter(|site| matches!(site.key, AKey::Pending(_) | AKey::Unknown))
+        .filter(|site| {
+            matches!(
+                site.key,
+                AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown
+            )
+        })
         .map(|site| crate::refusal_spans::RefusalSpan {
             what: "write by an unknown key".to_string(),
             span: site.span,
@@ -388,7 +395,7 @@ pub fn fold_record(program: &Program<'_>, scoping: &Scoping) -> FoldRecord {
             };
             match &site.key {
                 AKey::Named(name) => Some((Some(name.to_string()), root)),
-                AKey::Pending(_) | AKey::Unknown => Some((None, root)),
+                AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => Some((None, root)),
                 AKey::Index => None,
             }
         })

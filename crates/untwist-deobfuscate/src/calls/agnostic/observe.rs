@@ -44,6 +44,7 @@ impl<'a> Sites<'_, 'a> {
         self.key_set(expr).iter().any(|key| match key {
             AKey::Named(name) => self.watch.has_prop(name),
             AKey::Index => false,
+            AKey::Filtered(filter) => self.filter_hits(*filter),
             AKey::Pending(_) | AKey::Unknown => true,
         })
     }
@@ -291,6 +292,9 @@ impl<'a> Sites<'_, 'a> {
         let observer = self.member_keys(member).iter().any(|key| match key {
             AKey::Named(name) => RECEIVER_OBSERVERS.contains(&name.as_ref()),
             AKey::Index => false,
+            AKey::Filtered(filter) => RECEIVER_OBSERVERS
+                .iter()
+                .any(|name| self.filter_accepts(*filter, name)),
             AKey::Pending(_) | AKey::Unknown => true,
         });
         let hits = observer

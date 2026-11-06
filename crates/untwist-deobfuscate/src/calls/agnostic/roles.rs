@@ -127,7 +127,7 @@ pub(super) fn origin_of(key: &AKey<'_>) -> Origin {
             }
         }
         AKey::Index => Origin::default(),
-        AKey::Pending(_) | AKey::Unknown => Origin {
+        AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => Origin {
             definer: true,
             runner: true,
             bind: true,

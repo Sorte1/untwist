@@ -14,6 +14,7 @@ use super::defs::{
     Def, DefTable, CALLABLE, CONSTRUCTS_FRESH, ESCAPES, ESCAPING_REF, FIELDS_WRITTEN,
     METHOD_CALLED, MUTATED, OPAQUE,
 };
+use super::filtered::{self, Candidate, Filters};
 use super::live::iife_returned;
 use super::native_map;
 use super::settle::Written;
@@ -223,6 +224,9 @@ pub(super) struct Bindings<'s, 'a> {
     read_through: FxHashSet<u32>,
     pub(super) bootstrap_refusal: Option<&'static str>,
     pub(super) assembled: AssembledTables<'a>,
+    enclosing: Option<filtered::Body<'a>>,
+    filter_candidates: Vec<Candidate<'a>>,
+    pub(super) filters: std::rc::Rc<Filters<'a>>,
 }
 
 impl<'s, 'a> Bindings<'s, 'a> {
@@ -257,6 +261,9 @@ impl<'s, 'a> Bindings<'s, 'a> {
             read_through: FxHashSet::default(),
             bootstrap_refusal: None,
             assembled: assembled_tables(program, scoping, resolve),
+            enclosing: None,
+            filter_candidates: Vec::new(),
+            filters: std::rc::Rc::default(),
         };
         bindings.visit_program(program);
         bindings.defs.finish();
@@ -272,6 +279,14 @@ impl<'s, 'a> Bindings<'s, 'a> {
         });
         bindings.annex = annex;
         bindings.inlinable = inlinable_of(&bindings.defs, scoping);
+        let candidates = std::mem::take(&mut bindings.filter_candidates);
+        bindings.filters = std::rc::Rc::new(Filters::new(
+            program.source_text,
+            scoping,
+            &bindings.defs,
+            resolve,
+            &candidates,
+        ));
         bindings.prove_bootstraps(program, resolve);
         if tracks_calls {
             bindings.collect_params();
@@ -575,6 +590,10 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
     }
 
     fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        let loop_ = self.alloc(it);
+        if let Some(found) = filtered::candidate(self.scoping, loop_, self.enclosing) {
+            self.filter_candidates.push(found);
+        }
         self.for_left = true;
         self.visit_for_statement_left(&it.left);
         self.for_left = false;
@@ -610,8 +629,18 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
         } else {
             self.sources.enter_function(it)
         };
+        let body = filtered::Body::of_function(self.alloc(it));
+        let outer = std::mem::replace(&mut self.enclosing, body);
         walk_js::walk_function(self, it, flags);
+        self.enclosing = outer;
         self.sources.leave(saved);
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        let body = filtered::Body::of_arrow(self.alloc(it));
+        let outer = std::mem::replace(&mut self.enclosing, body);
+        walk_js::walk_arrow_function_expression(self, it);
+        self.enclosing = outer;
     }
 
     fn visit_class(&mut self, it: &Class<'a>) {

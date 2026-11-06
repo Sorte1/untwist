@@ -56,7 +56,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                             || matches!(name.as_ref(), "call" | "apply" | "bind")
                     }
                     AKey::Index => false,
-                    AKey::Pending(_) | AKey::Unknown => true,
+                    AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
                 })
             }),
         }
@@ -387,7 +387,9 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
     }
 
     fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
-        self.reach_enumerated(&it.right, it.span);
+        if !self.fresh.bindings.filters.filters_loop(it.span) {
+            self.reach_enumerated(&it.right, it.span);
+        }
         walk_js::walk_for_in_statement(self, it);
     }
 
@@ -496,7 +498,7 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
             && parent_keys.iter().all(|key| match key {
                 AKey::Named(name) => !matches!(name.as_ref(), "call" | "apply" | "bind"),
                 AKey::Index => true,
-                AKey::Pending(_) | AKey::Unknown => false,
+                AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => false,
             });
         if transparent && expr_member(it.object()).is_some() {
             self.direct
@@ -505,12 +507,12 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         let start = span_key(it.span());
         let escaped = !self.direct.contains(&start) && !self.tests.contains(&start);
         if escaped
-            && parent_keys.iter().any(|key| origin_of(key).any())
+            && parent_keys.iter().any(|key| self.key_origin(key).any())
             && !self.holds_array(it.object())
         {
             let has_sink = self.flow.sink_of(it.span()).is_some();
             for key in parent_keys.iter() {
-                self.mark_origin_sink(origin_of(key), it.span(), "escaped read", has_sink);
+                self.mark_origin_sink(self.key_origin(key), it.span(), "escaped read", has_sink);
             }
         }
         walk_js::walk_member_expression(self, it);

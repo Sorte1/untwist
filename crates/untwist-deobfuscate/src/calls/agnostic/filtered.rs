@@ -1,0 +1,422 @@
+mod machine;
+mod shape;
+
+use std::cell::RefCell;
+
+use oxc_ast::ast::*;
+use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_semantic::Scoping;
+use oxc_span::Span;
+use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
+use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashMap;
+
+use super::bootstrap::Resolve;
+use super::defs::DefTable;
+use super::roles::{Origin, BATCH, CONSTRUCTS, DEFINE_KEYED, GETTERS, MUTATORS, READERS, RUNNERS};
+use super::AKey;
+use crate::value_flow::{flow_rule_disabled, FILTERED_ENUMERATION};
+use machine::{is_binary_compare, literal, Machine, V};
+pub(super) use shape::Body;
+use shape::{closed, Shape};
+
+#[derive(Clone, Copy)]
+pub(super) struct Candidate<'a> {
+    span: Span,
+    key: SymbolId,
+    found: SymbolId,
+    test: &'a CallExpression<'a>,
+    assignment: Span,
+    within: Body<'a>,
+}
+
+fn identifier_symbol(scoping: &Scoping, id: &IdentifierReference<'_>) -> Option<SymbolId> {
+    id.reference_id
+        .get()
+        .and_then(|reference| scoping.get_reference(reference).symbol_id())
+}
+
+fn single_if<'k, 'a>(body: &'k Statement<'a>) -> Option<&'k IfStatement<'a>> {
+    match body {
+        Statement::IfStatement(it) => Some(it),
+        Statement::BlockStatement(block) => match block.body.as_slice() {
+            [Statement::IfStatement(it)] => Some(it),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn found_assignment<'k, 'a>(consequent: &'k Statement<'a>) -> Option<&'k AssignmentExpression<'a>> {
+    let Statement::BlockStatement(block) = consequent else {
+        return None;
+    };
+    let [Statement::ExpressionStatement(store), Statement::BreakStatement(stop)] =
+        block.body.as_slice()
+    else {
+        return None;
+    };
+    let Expression::AssignmentExpression(assignment) = &store.expression else {
+        return None;
+    };
+    (stop.label.is_none() && assignment.operator == AssignmentOperator::Assign)
+        .then_some(assignment)
+}
+
+pub(super) fn candidate<'a>(
+    scoping: &Scoping,
+    it: &'a ForInStatement<'a>,
+    within: Option<Body<'a>>,
+) -> Option<Candidate<'a>> {
+    let within = within?;
+    let ForStatementLeft::VariableDeclaration(declaration) = &it.left else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    let (BindingPattern::BindingIdentifier(binding), None) = (&declarator.id, &declarator.init)
+    else {
+        return None;
+    };
+    let key = binding.symbol_id.get()?;
+    let test_if = single_if(&it.body)?;
+    if test_if.alternate.is_some() {
+        return None;
+    }
+    let Expression::CallExpression(test) = test_if.test.without_parentheses() else {
+        return None;
+    };
+    let assignment = found_assignment(&test_if.consequent)?;
+    let SimpleAssignmentTarget::AssignmentTargetIdentifier(target) =
+        assignment.left.as_simple_assignment_target()?
+    else {
+        return None;
+    };
+    let Expression::Identifier(value) = assignment.right.without_parentheses() else {
+        return None;
+    };
+    (identifier_symbol(scoping, value)? == key).then_some(())?;
+    let found = identifier_symbol(scoping, target)?;
+    Some(Candidate {
+        span: it.span,
+        key,
+        found,
+        test,
+        assignment: assignment.span,
+        within,
+    })
+}
+
+struct Pred<'a> {
+    func: Body<'a>,
+    args: Vec<Option<V>>,
+    callees: FxHashMap<SymbolId, Body<'a>>,
+    resolved: FxHashMap<Span, String>,
+}
+
+#[derive(Default)]
+pub(super) struct Filters<'a> {
+    keys: FxHashMap<SymbolId, Span>,
+    preds: FxHashMap<Span, Option<Pred<'a>>>,
+    accepted: RefCell<FxHashMap<(Span, String), bool>>,
+    source: &'a str,
+}
+
+impl<'a> Filters<'a> {
+    pub(super) fn new(
+        source: &'a str,
+        scoping: &Scoping,
+        defs: &DefTable<'a>,
+        resolve: Resolve<'_>,
+        candidates: &[Candidate<'a>],
+    ) -> Self {
+        let mut filters = Self {
+            source,
+            ..Self::default()
+        };
+        if candidates.is_empty() {
+            return filters;
+        }
+        let mutant = flow_rule_disabled(FILTERED_ENUMERATION);
+        let sealed = |symbol: SymbolId| {
+            let found = defs.get(symbol)?;
+            if !found.writes.is_empty() || found.opaque || found.mutated {
+                return None;
+            }
+            match (found.func, found.inits) {
+                (Some(func), [] | [Some(_)]) => Body::of_function(func),
+                (None, [Some(init)]) => Body::of_value(init),
+                _ => None,
+            }
+        };
+        for candidate in candidates {
+            let shared = candidates
+                .iter()
+                .filter(|other| {
+                    other.found == candidate.found
+                        || other.key == candidate.key
+                        || other.found == candidate.key
+                        || other.key == candidate.found
+                })
+                .count();
+            let valid = mutant
+                || (shared == 1
+                    && uses_are_keys(scoping, candidate)
+                    && found_declared(scoping, candidate));
+            if !valid {
+                continue;
+            }
+            let pred = if mutant {
+                None
+            } else {
+                match predicate(scoping, &sealed, resolve, candidate) {
+                    Some(pred) => Some(pred),
+                    None => continue,
+                }
+            };
+            filters.keys.insert(candidate.key, candidate.span);
+            filters.keys.insert(candidate.found, candidate.span);
+            filters.preds.insert(candidate.span, pred);
+        }
+        filters
+    }
+
+    pub(super) fn source(&self) -> &'a str {
+        self.source
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
+
+    pub(super) fn key(&self, symbol: SymbolId) -> Option<AKey<'static>> {
+        self.keys.get(&symbol).map(|span| AKey::Filtered(*span))
+    }
+
+    pub(super) fn filters_loop(&self, span: Span) -> bool {
+        self.preds.contains_key(&span)
+    }
+
+    pub(super) fn accepts(&self, scoping: &Scoping, filter: Span, name: &str) -> bool {
+        let Some(slot) = self.preds.get(&filter) else {
+            return true;
+        };
+        let Some(pred) = slot else {
+            return false;
+        };
+        if name == "undefined" {
+            return true;
+        }
+        let cached = (filter, name.to_string());
+        if let Some(known) = self.accepted.borrow().get(&cached) {
+            return *known;
+        }
+        let mut machine = Machine {
+            scoping,
+            callees: &pred.callees,
+            resolved: &pred.resolved,
+            steps: 0,
+            calls: 0,
+        };
+        let args = pred
+            .args
+            .iter()
+            .map(|arg| {
+                arg.clone()
+                    .unwrap_or_else(|| V::Prim(untwist_eval::fold::Const::Str(name.to_string())))
+            })
+            .collect();
+        let rejected = machine
+            .call(pred.func, args)
+            .and_then(|value| value.truthy())
+            == Some(false);
+        self.accepted.borrow_mut().insert(cached, !rejected);
+        !rejected
+    }
+
+    pub(super) fn origin(&self, scoping: &Scoping, filter: Span) -> Origin {
+        let any = |names: &[&str]| names.iter().any(|name| self.accepts(scoping, filter, name));
+        Origin {
+            definer: any(&DEFINE_KEYED)
+                || any(&BATCH)
+                || any(&GETTERS)
+                || any(&MUTATORS)
+                || any(&["set", "setPrototypeOf"])
+                || any(&READERS),
+            runner: any(&RUNNERS) || self.accepts(scoping, filter, "constructor"),
+            bind: self.accepts(scoping, filter, "bind"),
+            apply: any(&["apply", "call"]),
+            construct: any(&CONSTRUCTS),
+        }
+    }
+}
+
+fn predicate<'a>(
+    scoping: &Scoping,
+    sealed: &dyn Fn(SymbolId) -> Option<Body<'a>>,
+    resolve: Resolve<'_>,
+    candidate: &Candidate<'a>,
+) -> Option<Pred<'a>> {
+    let Expression::Identifier(callee) = candidate.test.callee.without_parentheses() else {
+        return None;
+    };
+    let symbol = identifier_symbol(scoping, callee)?;
+    let mut shape = Shape::new(scoping, sealed, resolve);
+    if !shape.callee(symbol) {
+        return None;
+    }
+    let func = *shape.callees.get(&symbol)?;
+    let mut keyed = 0;
+    let mut args = Vec::with_capacity(candidate.test.arguments.len());
+    for argument in &candidate.test.arguments {
+        let expr = argument.as_expression()?;
+        match expr.without_parentheses() {
+            Expression::Identifier(id) if identifier_symbol(scoping, id) == Some(candidate.key) => {
+                keyed += 1;
+                args.push(None);
+            }
+            other if closed(other) => args.push(Some(literal(other)?)),
+            _ => return None,
+        }
+    }
+    (keyed == 1).then_some(Pred {
+        func,
+        args,
+        callees: shape.callees,
+        resolved: shape.resolved,
+    })
+}
+
+fn found_declared(scoping: &Scoping, candidate: &Candidate<'_>) -> bool {
+    let scope = candidate.within.scope;
+    let declared = scoping.symbol_scope_id(candidate.found);
+    scoping
+        .scope_ancestors(declared)
+        .any(|ancestor| ancestor == scope)
+}
+
+fn uses_are_keys(scoping: &Scoping, candidate: &Candidate<'_>) -> bool {
+    let mut check = Uses {
+        scoping,
+        candidate,
+        bad: false,
+        declared: false,
+    };
+    match (candidate.within.block, candidate.within.value) {
+        (Some(block), _) => check.visit_function_body(block),
+        (None, Some(value)) => check.visit_expression(value),
+        (None, None) => return false,
+    }
+    let writes = scoping
+        .get_resolved_references(candidate.found)
+        .filter(|reference| reference.is_write())
+        .count();
+    let key_written = scoping
+        .get_resolved_references(candidate.key)
+        .any(|reference| reference.is_write());
+    !check.bad && check.declared && writes == 1 && !key_written
+}
+
+struct Uses<'c, 'a> {
+    scoping: &'c Scoping,
+    candidate: &'c Candidate<'a>,
+    bad: bool,
+    declared: bool,
+}
+
+impl<'a> Uses<'_, 'a> {
+    fn tracked(&self, expr: &Expression<'a>) -> bool {
+        match expr.without_parentheses() {
+            Expression::Identifier(id) => {
+                let symbol = identifier_symbol(self.scoping, id);
+                symbol == Some(self.candidate.found) || symbol == Some(self.candidate.key)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for Uses<'_, 'a> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let symbol = identifier_symbol(self.scoping, it);
+        if symbol == Some(self.candidate.found) || symbol == Some(self.candidate.key) {
+            self.bad = true;
+        }
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let BindingPattern::BindingIdentifier(id) = &it.id {
+            let symbol = id.symbol_id.get();
+            if symbol == Some(self.candidate.found) {
+                self.declared = true;
+                self.bad |= it.init.is_some();
+            }
+            if symbol == Some(self.candidate.key) {
+                self.bad |= it.init.is_some();
+            }
+        }
+        walk_js::walk_variable_declarator(self, it);
+    }
+
+    fn visit_formal_parameter(&mut self, it: &FormalParameter<'a>) {
+        if let BindingPattern::BindingIdentifier(id) = &it.pattern {
+            let symbol = id.symbol_id.get();
+            self.bad |= symbol == Some(self.candidate.found) || symbol == Some(self.candidate.key);
+        }
+        walk_js::walk_formal_parameter(self, it);
+    }
+
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if it.span == self.candidate.assignment {
+            return;
+        }
+        walk_js::walk_assignment_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if it.span != self.candidate.test.span {
+            return walk_js::walk_call_expression(self, it);
+        }
+        self.visit_expression(&it.callee);
+        for argument in &it.arguments {
+            match argument.as_expression() {
+                Some(expr) if self.tracked(expr) => {}
+                _ => self.visit_argument(argument),
+            }
+        }
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        self.visit_expression(&it.object);
+        if !self.tracked(&it.expression) {
+            self.visit_expression(&it.expression);
+        }
+    }
+
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        let harmless = matches!(
+            it.operator,
+            UnaryOperator::LogicalNot | UnaryOperator::Typeof
+        );
+        if !(harmless && self.tracked(&it.argument)) {
+            walk_js::walk_unary_expression(self, it);
+        }
+    }
+
+    fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
+        let compare = is_binary_compare(it.operator);
+        let literal_side = |side: &Expression<'a>| {
+            matches!(
+                side.without_parentheses(),
+                Expression::StringLiteral(_) | Expression::NumericLiteral(_)
+            )
+        };
+        let harmless = compare
+            && ((self.tracked(&it.left) && literal_side(&it.right))
+                || (self.tracked(&it.right) && literal_side(&it.left)));
+        if !harmless {
+            walk_js::walk_binary_expression(self, it);
+        }
+    }
+}

@@ -387,7 +387,21 @@
   every top-level binding read as written and, when the program may hold the global object, every
   top-level binding of the script, because unseen code may read it at any time. The decoder's
   machinery is the evaluator's to model, so its own writes do not count as overwrites, but its
-  sources count. A module's bindings are not global properties. **3. ECMAScript's intrinsics are a
+  sources count. A module's bindings are not global properties. **Filtered key enumeration**
+  (javascript-obfuscator's domain lock): in `for (k in o) { if (p(k, …)) { v = k; break; } }` the
+  keys `k` and `v` belong to a closed set instead of being unknown keys when `p` is a function that
+  is never reassigned, is declared inside a function, and whose body (and the body of every function
+  it calls) only reads its parameters and locals, compares, computes, and calls `charCodeAt`,
+  `charAt` or a decoder call the decode resolves; `k` is passed to `p` once, beside literal
+  arguments, and is otherwise only stored into `v`; `v` is declared without a value in the same
+  function, written only there, and read only as a computed key, under `!` or `typeof`, or compared
+  with a literal. The set is `undefined` and every string `p` does not return false for. For each
+  name a check asks about (the machinery's names, the realm roots, `Symbol`, the definer, reader and
+  runner names, `constructor`), `p` runs in a small evaluator with a step cap, and a bail counts as
+  accepted. The enumeration is then neither a reach nor a name observation, and `o[v]` or
+  `o[v][w] = x` reaches no name `p` rejects; removing the machinery cannot change which key the loop
+  finds, because every removed name fails `p`. Any other shape keeps the key unknown. Rows:
+  `crates/untwist/tests/filtered_enumeration_rows.rs`. **3. ECMAScript's intrinsics are a
   closed set:** `crates/untwist-deobfuscate/tests/intrinsic_walker.rs` walks every intrinsic
   function in node's realm (from the standard globals and the hidden intrinsics, through
   prototypes, statics and accessors) and fails on one that is not classified in

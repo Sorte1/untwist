@@ -190,6 +190,9 @@ impl<'s, 'a> Sites<'s, 'a> {
         let source = match &key {
             AKey::Named(name) => SOURCE_KEYS.contains(&name.as_ref()),
             AKey::Index => false,
+            AKey::Filtered(filter) => SOURCE_KEYS
+                .iter()
+                .any(|name| self.filter_accepts(*filter, name)),
             AKey::Pending(_) | AKey::Unknown => true,
         };
         if source {
@@ -198,7 +201,8 @@ impl<'s, 'a> Sites<'s, 'a> {
         let outside = !self.in_machinery(span);
         if outside {
             let open = matches!(key, AKey::Unknown)
-                || (self.resolve.is_none() && matches!(key, AKey::Pending(_)));
+                || (self.resolve.is_none() && matches!(key, AKey::Pending(_)))
+                || matches!(key, AKey::Filtered(filter) if self.filter_hits(filter));
             self.saturated |= open && root_folds(root);
         }
         self.record_site(ASite {

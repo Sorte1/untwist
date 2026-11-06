@@ -5,11 +5,14 @@ pub const MACHINERY_SOURCE_BOUND: &str = "machinery-source-bound";
 pub const OBSERVER_LIST: &str = "observer-list";
 pub const NATIVE_MAP_PENDING: &str = "native-map-pending";
 
-const FLOW_RULES: [&str; 4] = [
+pub const FILTERED_ENUMERATION: &str = "filtered-enumeration";
+
+const FLOW_RULES: [&str; 5] = [
     VALUE_FLOW_SINKS,
     MACHINERY_SOURCE_BOUND,
     OBSERVER_LIST,
     NATIVE_MAP_PENDING,
+    FILTERED_ENUMERATION,
 ];
 
 thread_local! {
