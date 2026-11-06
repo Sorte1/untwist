@@ -7,6 +7,7 @@ use rustc_hash::FxHashSet;
 use super::{decoded_strings, UnitRun};
 use crate::bridge::DecodePlan;
 use crate::calls::agnostic::{global_reach, ReachWatch};
+use crate::mutants::decoder_name_watch_dropped;
 
 pub(super) type Reached = (FxHashSet<usize>, Span, Option<&'static str>);
 
@@ -27,10 +28,12 @@ fn watched_units<'p>(scoping: &Scoping, runs: &[UnitRun<'p, '_>]) -> Watched<'p>
         if run.request.calls.is_empty() || run.result.is_err() {
             continue;
         }
-        let mut global = run
-            .request
-            .guard
-            .symbols
+        let watched_symbols = if decoder_name_watch_dropped() {
+            &run.request.guard.symbols[..run.request.guard.symbols.len().min(1)]
+        } else {
+            &run.request.guard.symbols[..]
+        };
+        let mut global = watched_symbols
             .iter()
             .filter(|(symbol, _)| scoping.symbol_scope_id(*symbol) == root)
             .peekable();

@@ -13,8 +13,7 @@ use crate::init_order::pass_done;
 use crate::notes;
 use crate::probe::contains_expression;
 use crate::proof::{
-    declared_text, reachable_by_direct_eval, redeclared, watch_texts, writes_outside, TextWatch,
-    Watched,
+    declared_text, reachable_by_name, redeclared, watch_texts, writes_outside, TextWatch, Watched,
 };
 use crate::stamp::{
     declaration_symbol, decoder_index, decoder_name, owning_unit, reached_outside_its_block,
@@ -153,6 +152,7 @@ fn top_level_decoders<'a>(program: &Program<'a>) -> Vec<&'a str> {
 fn unstamped_decoders(
     program: &Program<'_>,
     scoping: &Scoping,
+    unsafe_lane: bool,
 ) -> (Vec<DecoderShape>, Watched, usize) {
     let watching = top_level_decoders(program);
     let (found, watch) = if watching.is_empty() {
@@ -167,7 +167,7 @@ fn unstamped_decoders(
         .unzip();
     let reachable: Vec<bool> = unstamped
         .iter()
-        .map(|shape| reachable_by_direct_eval(scoping, shape.symbol))
+        .map(|shape| reachable_by_name(scoping, shape.symbol, unsafe_lane))
         .collect();
     let watched = watch.resolve(program, &names, &reachable);
     (unstamped, watched, total)
@@ -196,7 +196,8 @@ impl<'a> Pass<'a> for FindDecoders {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let (unstamped, watched, total) = unstamped_decoders(program, cx.scoping());
+        let (unstamped, watched, total) =
+            unstamped_decoders(program, cx.scoping(), cx.opts.unsafe_transforms);
         if unstamped.is_empty() {
             return;
         }

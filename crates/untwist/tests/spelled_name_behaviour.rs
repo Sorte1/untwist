@@ -7,6 +7,8 @@ const DECODED: &[&str] = &[
     "string-argument.js",
     "local-object-key.js",
 ];
+const DECODED_UNSAFE: &[&str] = &["object-keys.js"];
+const UNSAFE_DIVERGES: &[&str] = &["enumerated-keys.js", "object-keys-assigned.js"];
 
 fn lane(unsafe_transforms: bool) -> impl Fn(&str) -> String {
     move |source| {
@@ -26,8 +28,13 @@ fn fixtures() -> Vec<(String, String)> {
     fixtures
 }
 
-fn is_decoded(label: &str) -> bool {
-    DECODED.iter().any(|name| label.ends_with(name))
+fn is_decoded(label: &str, unsafe_transforms: bool) -> bool {
+    let decoded = if unsafe_transforms {
+        DECODED_UNSAFE
+    } else {
+        DECODED
+    };
+    decoded.iter().any(|name| label.ends_with(name))
 }
 
 #[test]
@@ -42,17 +49,18 @@ fn every_spelled_name_fixture_prints_what_node_prints_in_the_default_lane() {
 }
 
 #[test]
-fn a_decoded_spelled_name_fixture_prints_what_node_prints_in_the_unsafe_lane() {
+fn every_spelled_name_fixture_but_the_unwatched_writes_prints_what_node_prints_in_the_unsafe_lane()
+{
     let Some(node) = node_or_skip() else {
         return;
     };
-    let decoded: Vec<(String, String)> = fixtures()
+    let checked: Vec<(String, String)> = fixtures()
         .into_iter()
-        .filter(|(label, _)| is_decoded(label))
+        .filter(|(label, _)| !UNSAFE_DIVERGES.iter().any(|name| label.ends_with(name)))
         .collect();
     let unsafe_lane = lane(true);
     let runs: [Mode<'_>; 1] = [("unsafe", &unsafe_lane)];
-    let wrong = node_rows::mismatches(&node, &decoded, &runs);
+    let wrong = node_rows::mismatches(&node, &checked, &runs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -63,31 +71,14 @@ fn only_spellings_that_cannot_reach_the_global_object_leave_the_unit_decodable()
             let code = lane(unsafe_transforms)(&source);
             let decoded =
                 !code.contains("d(0x") && !code.contains("d(0)") && !code.contains("d(1)");
-            if is_decoded(&label) {
-                assert!(decoded, "{label} [unsafe {unsafe_transforms}]:\n{code}");
-            } else if !unsafe_transforms {
-                assert!(!decoded, "{label} [default]:\n{code}");
+            if UNSAFE_DIVERGES.iter().any(|name| label.ends_with(name)) && unsafe_transforms {
+                continue;
             }
+            let expected = is_decoded(&label, unsafe_transforms);
+            assert_eq!(
+                decoded, expected,
+                "{label} [unsafe {unsafe_transforms}]:\n{code}"
+            );
         }
-    }
-}
-
-#[test]
-fn every_refused_spelled_name_fixture_diverges_from_node_once_the_reach_watch_is_off() {
-    let Some(node) = node_or_skip() else {
-        return;
-    };
-    let refused: Vec<(String, String)> = fixtures()
-        .into_iter()
-        .filter(|(label, _)| !is_decoded(label))
-        .collect();
-    let unwatched = lane(true);
-    let runs: [Mode<'_>; 1] = [("unsafe", &unwatched)];
-    let wrong = node_rows::mismatches(&node, &refused, &runs);
-    for (label, _) in &refused {
-        assert!(
-            wrong.iter().any(|row| row.starts_with(label.as_str())),
-            "{label} did not diverge from node without the reach watch"
-        );
     }
 }

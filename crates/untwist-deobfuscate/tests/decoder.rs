@@ -169,12 +169,6 @@ fn a_spelling_of_the_decoder_under_a_direct_eval_leaves_it_unstamped_however_far
 }
 
 #[test]
-fn a_spelling_of_a_global_decoder_is_left_to_the_decode_time_reach_check() {
-    let code = stamped(&format!("{ARRAY}o.b;\n{DECODER}b(0);"));
-    assert!(code.contains("__DECODE_0__"), "{code}");
-}
-
-#[test]
 fn a_decoder_written_outside_its_statement_is_left_unstamped() {
     let written = stamped(&format!("{ARRAY}{DECODER}b(0);\nb = 1;"));
     assert!(!written.contains("__DECODE_0__"), "{written}");
