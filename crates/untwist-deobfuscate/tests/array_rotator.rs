@@ -271,6 +271,31 @@ fn a_rotator_that_may_create_the_array_twice_is_refused() {
 }
 
 #[test]
+fn a_rotator_that_creates_the_array_by_name_once_and_first_is_trusted() {
+    let direct = "!function () {\n  var k = __DECODE_0__, f = __STRING_ARRAY__();\n  for (;;) try {\n    if (k(0) === 'b') break;\n    f['push'](f['shift']());\n  } catch (h) { f['push'](f['shift']()); }\n}();";
+    assert!(found(direct));
+    assert_eq!(refusal(direct), None);
+    for (from, to) in [
+        (
+            "f = __STRING_ARRAY__();",
+            "g = __STRING_ARRAY__, f = __STRING_ARRAY__();",
+        ),
+        (
+            "var k = __DECODE_0__, f = __STRING_ARRAY__();",
+            "k = __DECODE_0__(1); var f = __STRING_ARRAY__();",
+        ),
+        (
+            "f['push'](f['shift']());\n  }",
+            "f['push'](f['shift']());\n  __STRING_ARRAY__();\n  }",
+        ),
+    ] {
+        let body = direct.replace(from, to);
+        assert_ne!(body, direct, "{to}");
+        assert_eq!(refusal(&body), Some(notes::ROTATOR_NOT_SEALED), "{to}");
+    }
+}
+
+#[test]
 fn a_rotator_whose_first_call_creates_the_array_is_trusted() {
     for (from, to) in [
         ("var f = c();", "var k = __DECODE_0__, n = 1, f = c();"),
