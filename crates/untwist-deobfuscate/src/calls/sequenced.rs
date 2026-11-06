@@ -15,6 +15,7 @@ struct Frame {
     id: u32,
     boundary: u32,
     current: usize,
+    writes: u32,
     assigned: Option<Span>,
 }
 
@@ -75,6 +76,7 @@ impl OrderScan<'_> {
             id,
             boundary,
             current: 0,
+            writes: 0,
             assigned: None,
         });
     }
@@ -82,20 +84,57 @@ impl OrderScan<'_> {
     fn mark_current(&mut self, index: usize) {
         if let Some(frame) = self.frames.last_mut() {
             frame.current = index;
+            frame.writes = 0;
+        }
+    }
+
+    fn unconditional_literal(&self, expr: &Expression<'_>) -> Option<Span> {
+        match expr.without_parentheses() {
+            Expression::AssignmentExpression(_) => self.assigned_literal(expr),
+            Expression::BinaryExpression(binary) => self
+                .unconditional_literal(&binary.right)
+                .or_else(|| self.unconditional_literal(&binary.left)),
+            Expression::UnaryExpression(unary) if unary.operator != UnaryOperator::Delete => {
+                self.unconditional_literal(&unary.argument)
+            }
+            Expression::SequenceExpression(sequence) => sequence
+                .expressions
+                .iter()
+                .rev()
+                .find_map(|inner| self.unconditional_literal(inner)),
+            Expression::LogicalExpression(logical) if external_write_order_trusted() => {
+                self.unconditional_literal(&logical.right)
+            }
+            _ => None,
         }
     }
 
     fn mark_assigned(&mut self, expr: &Expression<'_>) {
-        let Some(value) = self.assigned_literal(expr) else {
+        let Some(value) = self.unconditional_literal(expr) else {
             return;
         };
         if let Some(frame) = self.frames.last_mut() {
-            frame.assigned = Some(value);
+            if frame.writes == 1 || external_write_order_trusted() {
+                frame.assigned = Some(value);
+            }
         }
+    }
+
+    fn visit_ordered(&mut self, elements: &[&Expression<'_>], visit: impl Fn(&mut Self, usize)) {
+        self.push_frame();
+        for (index, element) in elements.iter().enumerate() {
+            self.mark_current(index);
+            visit(self, index);
+            self.mark_assigned(element);
+        }
+        self.frames.pop();
     }
 
     fn note_write(&mut self) {
         self.writers.push(self.boundary());
+        for frame in &mut self.frames {
+            frame.writes += 1;
+        }
         if external_write_order_trusted() {
             return;
         }
@@ -128,6 +167,27 @@ impl OrderScan<'_> {
         if let Some(candidate) = found {
             self.candidates.insert(span, candidate);
         }
+    }
+}
+
+impl<'a> OrderScan<'_> {
+    fn visit_arguments_after(&mut self, callee: &Expression<'a>, arguments: &[Argument<'a>]) {
+        let spread = arguments
+            .iter()
+            .any(|argument| argument.as_expression().is_none());
+        if spread {
+            self.visit_expression(callee);
+            for argument in arguments {
+                self.visit_argument(argument);
+            }
+            return;
+        }
+        let elements: Vec<&Expression<'a>> = std::iter::once(callee)
+            .chain(arguments.iter().filter_map(Argument::as_expression))
+            .collect();
+        self.visit_ordered(&elements, |scan, index| {
+            scan.visit_expression(elements[index])
+        });
     }
 }
 
@@ -170,13 +230,18 @@ impl<'a> VisitJs<'a> for OrderScan<'_> {
     }
 
     fn visit_sequence_expression(&mut self, it: &SequenceExpression<'a>) {
-        self.push_frame();
-        for (index, expression) in it.expressions.iter().enumerate() {
-            self.mark_current(index);
-            self.visit_expression(expression);
-            self.mark_assigned(expression);
-        }
-        self.frames.pop();
+        let elements: Vec<&Expression<'a>> = it.expressions.iter().collect();
+        self.visit_ordered(&elements, |scan, index| {
+            scan.visit_expression(elements[index])
+        });
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.visit_arguments_after(&it.callee, &it.arguments);
+    }
+
+    fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
+        self.visit_arguments_after(&it.callee, &it.arguments);
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {

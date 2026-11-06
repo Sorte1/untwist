@@ -501,6 +501,13 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Headed(
+            "let x;\nx = 0x0;\nconsole.log(__DECODE_0__(x), x = 0x1, __DECODE_0__(x));",
+        ),
+        expects: notes::WRITTEN_BESIDE_THE_READ,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Headed("let x;\nif (c) x = 0xd6;\nconsole.log(__DECODE_0__(x));"),
         expects: notes::ASSIGNMENT_NOT_BESIDE_THE_DECLARATION,
         mode: Match::Contains,

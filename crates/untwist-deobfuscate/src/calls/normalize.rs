@@ -323,13 +323,10 @@ fn nearest_slot(slots: &[AssignmentSlot], use_index: usize) -> Option<&Assignmen
 
 fn statement_value(
     facts: &VariableFacts<'_>,
-    (slots, global): (Option<&(DeclarationSlot, Vec<AssignmentSlot>)>, bool),
+    slots: Option<&(DeclarationSlot, Vec<AssignmentSlot>)>,
     order: &InitOrder,
     reference: Span,
 ) -> Result<Span, (&'static str, Option<Span>)> {
-    if global && !external_write_order_trusted() {
-        return Err((notes::GLOBAL_EXTERNAL_BINDING, Some(reference)));
-    }
     let Some((anchor, slots)) = slots else {
         return Err((notes::REFERENCE_NOT_DOMINATED, refusal_span(facts)));
     };
@@ -357,18 +354,15 @@ fn inline_assigned_references<'a>(
         .is_none()
         .then(|| assignment_slots(facts, assignments, order))
         .flatten();
-    let global = !view.body.iter().any(Statement::is_module_declaration)
-        && cx.scoping().symbol_scope_id(symbol) == cx.scoping().root_scope_id();
     let mut sequenced: Option<FxHashMap<Span, Span>> = None;
     let mut rewritten = 0;
     let mut refused = None;
     for reference in facts.references {
-        let found = statement_value(facts, (slots.as_ref(), global), order, reference.span)
-            .or_else(|err| {
-                let values =
-                    sequenced.get_or_insert_with(|| ordered_values(view, cx.scoping(), symbol));
-                values.get(&reference.span).copied().ok_or(err)
-            });
+        let found = statement_value(facts, slots.as_ref(), order, reference.span).or_else(|err| {
+            let values =
+                sequenced.get_or_insert_with(|| ordered_values(view, cx.scoping(), symbol));
+            values.get(&reference.span).copied().ok_or(err)
+        });
         let value = match found {
             Ok(value) => value,
             Err(err) => {
