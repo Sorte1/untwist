@@ -163,6 +163,25 @@ fn split_or_lexical_declarations_match_the_same_template() {
     }
 }
 
+const RC4_SEQUENCES: &str = "var r = function (str, key) {var s = [], j = 0x0, x, out = '';str = atobPoly(str);var i;for (i = 0x0; i < 0x100; i++) {s[i] = i;}for (i = 0x0; i < 0x100; i++) {j = (j + s[i] + key['charCodeAt'](i % key['length'])) % 0x100, x = s[i], s[i] = s[j], s[j] = x;}i = 0x0, j = 0x0;for (var y = 0x0; y < str['length']; y++) {i = (i + 0x1) % 0x100, j = (j + s[i]) % 0x100, x = s[i], s[i] = s[j], s[j] = x, out += String['fromCharCode'](str['charCodeAt'](y) ^ s[(s[i] + s[j]) % 0x100]);}return out;};";
+
+#[test]
+fn split_sequence_statements_match_the_sequences_template() {
+    assert_eq!(templates(RC4_SEQUENCES), ["rc4-sequences"]);
+    let split = RC4_SEQUENCES
+        .replace(
+            ", x = s[i], s[i] = s[j], s[j] = x",
+            "; x = s[i]; s[i] = s[j]; s[j] = x",
+        )
+        .replace("i = 0x0, j = 0x0;", "i = 0x0; j = 0x0;")
+        .replace("0x100, j = (j", "0x100; j = (j")
+        .replace(", out +=", "; out +=");
+    assert!(!split.contains("x = s[i],"));
+    assert_eq!(templates(&split), ["rc4-sequences"]);
+    let parenthesized = RC4_SEQUENCES.replace("i = 0x0, j = 0x0;", "(i = 0x0, j = 0x0);");
+    assert_eq!(templates(&parenthesized), ["rc4-sequences"]);
+}
+
 #[test]
 fn a_constant_that_the_body_writes_is_not_a_template() {
     let plain = first_base64();
