@@ -54,6 +54,8 @@ All notable changes to this project are documented in this file. The format is b
 - The default lane decodes an ES module whose imports load only `node:path` or `node:url`; such
   an import runs no program code and touches no built-in, so where it sits beside the rotator no
   longer matters. Any other import still keeps the string array.
+- An object literal before the rotator whose values are literals or hoisted functions
+  (`var o = { k: f }`) is read as running no code, as the debug protection's holder is.
 - Empty or inert blocks and expression statements that run no code (`{}`, `void 0;`) before
   the rotator no longer stop a string array from decoding.
 - A string array whose array function, decoders and rotator all sit in one function body,

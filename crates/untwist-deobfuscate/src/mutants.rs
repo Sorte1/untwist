@@ -54,3 +54,14 @@ pub fn drop_builtin_import_guards_for_tests(on: bool) {
 pub(crate) fn builtin_imports_dropped() -> bool {
     BUILTIN_IMPORTS_OFF.load(Ordering::Relaxed)
 }
+
+static OBJECT_VALUES_UNCHECKED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn accept_any_object_value_before_the_rotator_for_tests(on: bool) {
+    OBJECT_VALUES_UNCHECKED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn object_values_unchecked() -> bool {
+    OBJECT_VALUES_UNCHECKED.load(Ordering::Relaxed)
+}

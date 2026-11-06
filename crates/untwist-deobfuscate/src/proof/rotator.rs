@@ -10,7 +10,10 @@ use untwist_core::semantic::with_observes;
 use super::foreign::ForeignUnits;
 use super::seal::sealed;
 use super::Refusal;
-use crate::mutants::{builtin_imports_dropped, inert_prefix_dropped, rotator_placement_dropped};
+use crate::mutants::{
+    builtin_imports_dropped, inert_prefix_dropped, object_values_unchecked,
+    rotator_placement_dropped,
+};
 use crate::notes;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -228,7 +231,9 @@ impl LiteralBindings {
                 !property.computed
                     && !property.method
                     && property.kind == PropertyKind::Init
-                    && self.runs_no_code(scoping, &property.value)
+                    && (object_values_unchecked()
+                        || self.runs_no_code(scoping, &property.value)
+                        || hoisted_function(scoping, &property.value, self.scope))
             }),
             other => self.primitive(scoping, other),
         }
