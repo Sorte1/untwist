@@ -216,8 +216,10 @@ impl<'a> Sites<'_, 'a> {
             return;
         }
         if let Some(quiet) = self.quiet_callee(callee) {
-            self.judge_quiet(quiet, span, arguments);
-            return;
+            if self.hands_global(arguments) {
+                self.judge_quiet(quiet, span);
+                return;
+            }
         }
         let eff = self.effective_callee(callee);
         if self.evaluation_throws(eff, arguments, span) {

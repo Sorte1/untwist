@@ -138,7 +138,7 @@ impl<'a> Sites<'_, 'a> {
             .then_some(Quiet::Outside(Some(key)))
     }
 
-    pub(super) fn judge_quiet(&mut self, quiet: Quiet<'a>, span: Span, arguments: &[Argument<'a>]) {
+    pub(super) fn judge_quiet(&mut self, quiet: Quiet<'a>, span: Span) {
         match quiet {
             Quiet::Intrinsic(base, key) => {
                 self.out.ambient.push((span, base, true));
@@ -156,14 +156,12 @@ impl<'a> Sites<'_, 'a> {
                 if let Some(key) = key {
                     self.out.observe_keyed.push((span, Cow::Borrowed(key)));
                 }
-                if self.hands_global(arguments) {
-                    self.out.outside_premise.get_or_insert(span);
-                }
+                self.out.outside_premise.get_or_insert(span);
             }
         }
     }
 
-    fn hands_global(&self, arguments: &[Argument<'a>]) -> bool {
+    pub(super) fn hands_global(&self, arguments: &[Argument<'a>]) -> bool {
         arguments
             .iter()
             .any(|argument| match argument.as_expression() {
