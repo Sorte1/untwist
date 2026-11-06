@@ -69,6 +69,9 @@ All notable changes to this project are documented in this file. The format is b
   was taken for a hold on the global object through `this`.
 - The default lane decodes javascript-obfuscator's domain lock: its scan of the global object's
   keys is proven unable to pick a name of the decoder machinery.
+- The default lane reads the keys of an object built by keyed assignments and then aliased
+  (javascript-obfuscator's transformObjectKeys) in a rest or spread, as it does for an object literal;
+  such a rest was refused as one that may read any key.
 - The default lane decodes beside a fresh `new Map()` or `new WeakMap()` that is read and written only
   through its own `get` and `set`; those calls were taken for `Reflect.get` and `Reflect.set` and refused.
 - A decoder wrapper whose binding is written again, or a `var` wrapper called before its

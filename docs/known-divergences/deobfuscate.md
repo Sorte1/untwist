@@ -318,7 +318,13 @@
   is a call of that `Symbol` is a symbol key, which names no property of the global object. An
   object rest pattern reads unknown keys, unless its source is an object literal, or a binding to
   one that nothing writes or calls a method on and that is only read, spread or destructured: then
-  it reads exactly that literal's keys, its spreads included.
+  it reads exactly that literal's keys, its spreads included. The same holds through a binding
+  whose only value is another such binding, and for a literal built by keyed assignments
+  (`const t = {}; t[k] = v, …; const o = t;`, javascript-obfuscator's transformObjectKeys): the
+  assignments follow the declaration in the same statement list (function declarations between
+  them aside), each key is a static or decoded string other than an `Object.prototype` name, and
+  the assignments and the alias are the only references to `t`; `o` then reads the literal's keys
+  and the assigned ones. A pending key counts only after it decodes.
   A direct `m.get(…)` or `m.set(…)` call is the
   native Map method, not `Reflect.get` or `Reflect.set`, when `m` is bound once to `new Map()` or
   `new WeakMap()` with no arguments, through the unshadowed global. `m` must also be used only as

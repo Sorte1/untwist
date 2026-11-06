@@ -38,11 +38,18 @@ fn decoded(options: &Options, source: &str) -> bool {
     !transformed(options, source).contains("bL(")
 }
 
+fn labelled(prefix: &str) -> Vec<(String, String)> {
+    rows()
+        .into_iter()
+        .filter(|(label, _)| label.starts_with(prefix))
+        .collect()
+}
+
 #[test]
 fn every_row_has_a_known_prefix() {
     for (label, _) in rows() {
         assert!(
-            label.starts_with("ref-") || label.starts_with("dec-"),
+            label.starts_with("dec-") || label.starts_with("guard-"),
             "unexpected row label {label}"
         );
     }
@@ -63,68 +70,32 @@ fn each_rows_decode_decision_matches_its_label() {
 }
 
 #[test]
-fn the_sabotage_rows_decode_under_the_mutant() {
+fn each_guard_row_is_refused_by_the_built_literal_checks_alone() {
     let mutant = options(false, true);
-    for (label, source) in rows() {
-        if label.starts_with("ref-") {
-            assert!(
-                decoded(&mutant, &source),
-                "{label}:\n{}",
-                transformed(&mutant, &source)
-            );
-        }
-    }
-}
-
-#[test]
-fn every_row_prints_what_node_prints_in_both_lanes() {
-    let Some(node) = node_or_skip() else {
-        return;
-    };
-    let programs = rows();
-    let safe = options(false, false);
-    let run_safe = |source: &str| transformed(&safe, source);
-    let decoding: Vec<(String, String)> = programs
-        .iter()
-        .filter(|(label, _)| label.starts_with("dec-"))
-        .cloned()
-        .collect();
-    let aggressive = options(true, false);
-    let run_unsafe = |source: &str| transformed(&aggressive, source);
-    let both: [Mode<'_>; 2] = [("safe", &run_safe), ("unsafe", &run_unsafe)];
-    let wrong = node_rows::mismatches(&node, &decoding, &both);
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    let refusing: Vec<(String, String)> = programs
-        .iter()
-        .filter(|(label, _)| label.starts_with("ref-"))
-        .cloned()
-        .collect();
-    let safe_only: [Mode<'_>; 1] = [("safe", &run_safe)];
-    let wrong = node_rows::mismatches(&node, &refusing, &safe_only);
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-}
-
-#[test]
-fn the_sabotage_rows_diverge_from_node_under_the_built_literal_mutant() {
-    let Some(node) = node_or_skip() else {
-        return;
-    };
-    let sabotage: Vec<(String, String)> = rows()
+    let refused: Vec<String> = labelled("guard-")
         .into_iter()
-        .filter(|(label, _)| label.starts_with("ref-"))
+        .filter(|(_, source)| !decoded(&mutant, source))
+        .map(|(label, _)| label)
         .collect();
+    assert!(refused.is_empty(), "refused under the mutant: {refused:?}");
+}
+
+#[test]
+fn every_row_prints_what_node_prints() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let safe = options(false, false);
+    let aggressive = options(true, false);
     let mutant = options(false, true);
+    let run_safe = |source: &str| transformed(&safe, source);
+    let run_unsafe = |source: &str| transformed(&aggressive, source);
     let run_mutant = |source: &str| transformed(&mutant, source);
-    let modes: [Mode<'_>; 1] = [("mutant", &run_mutant)];
-    let diverged = node_rows::mismatches(&node, &sabotage, &modes);
-    let names: Vec<&str> = diverged
-        .iter()
-        .filter_map(|row| row.split(" (mutant):").next())
-        .collect();
-    for (label, _) in &sabotage {
-        assert!(
-            names.contains(&label.as_str()),
-            "{label} did not diverge from node under the mutant"
-        );
-    }
+    let modes: [Mode<'_>; 3] = [
+        ("safe", &run_safe),
+        ("unsafe", &run_unsafe),
+        ("mutant", &run_mutant),
+    ];
+    let wrong = node_rows::mismatches(&node, &rows(), &modes);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
