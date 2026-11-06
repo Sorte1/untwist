@@ -58,6 +58,10 @@ All notable changes to this project are documented in this file. The format is b
   by a string in the program, such as webpack 4's `'a'` getter key under mangled names; whether
   code may reach the machinery by that name is now judged where the global object is reached,
   instead of refusing on any spelling. A spelling under a direct eval still refuses.
+- The default lane no longer refuses an obfuscated webpack 4 or webpack 5 bundle because of its
+  bootstrap: a module's `exports` and `module` are proven to be objects the bootstrap created, and
+  an AMD factory that ignores `require` no longer leaves the bootstrap unproven. A setter on the
+  module cache or a read of `require.c` still refuses.
 - A header-only WebAssembly feature-detect (`new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])`)
   is no longer taken for an embedded module, and output holding a real one is parsed once, not
   twice, to extract it and name its glue (game.js about 5 % faster).

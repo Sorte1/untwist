@@ -129,8 +129,10 @@ written before those names existed. So when such code is handed a value that may
 object, the machinery can still be removed. Outside code that prints that value still counts as
 observing it (`require("util").inspect(globalThis)` keeps the machinery). A removal that relies
 on this premise says so in the report (`the machinery was dropped under the outside-code
-premise`). [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md)
-lists every premise.
+premise`). Nor does any code give `Object.prototype` an accessor for a key the obfuscator
+generated or for a webpack module id, so storing an object under such a key runs no code.
+[`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
+premise.
 
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
 patched, even when the program visibly patches one, and a few passes that rest on heuristics are
