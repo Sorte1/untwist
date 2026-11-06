@@ -6,6 +6,7 @@ use oxc_span::{GetSpan, Span};
 use super::roles::*;
 use super::sites::*;
 use super::AKey;
+use crate::value_flow::{flow_rule_disabled, STORAGE_PROXY};
 
 const FUNCTION_RUNNERS: [&str; 4] = ["Function", "constructor", "compileFunction", "_compile"];
 
@@ -239,6 +240,24 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 
+    pub(super) fn forwarded_runner_index(&self, call: &CallExpression<'a>) -> Option<usize> {
+        let (function, body) = self.proxy(self.alloc(call))?;
+        let Expression::CallExpression(inner) = body.without_parentheses() else {
+            return None;
+        };
+        let Expression::Identifier(callee) = inner.callee.without_parentheses() else {
+            return None;
+        };
+        let symbol = self.fresh.symbol(callee)?;
+        let index = function.params.items.iter().position(|param| {
+            matches!(&param.pattern, BindingPattern::BindingIdentifier(binding)
+                if binding.symbol_id.get() == Some(symbol))
+        })?;
+        let arg = call.arguments.get(index)?.as_expression()?;
+        self.runner_callee(arg)?;
+        Some(index)
+    }
+
     pub(super) fn proxied_runner(&mut self, call: &CallExpression<'a>) {
         let Some((function, body)) = self.proxy(self.alloc(call)) else {
             return;
@@ -263,7 +282,8 @@ impl<'s, 'a> Sites<'s, 'a> {
         let bound = self.with_params(function, call, || {
             flagged = self.text_unsafe(&inner.arguments, text_function);
         });
-        if bound.is_none() || flagged {
+        let judged = !flow_rule_disabled(STORAGE_PROXY);
+        if judged && (bound.is_none() || flagged) {
             self.mark_text_code(call.span);
         }
     }

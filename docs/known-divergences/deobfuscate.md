@@ -970,8 +970,14 @@
   `String[d(1)]`, `Function(d(1) + d(2) + ")")`, `globalThis[d(1) + "x"]`. Such a key or text is
   judged after the decode, as its spelled twin, with the strings the unit itself decoded. This
   holds when every call in it is one of the unit's own decoder calls. A key that decodes to
-  `constructor` or a code name still counts as code. Any other part, such as a parameter, a method
-  call or a proxy object's member, leaves the key unknown. Code inside a class body is strict, so
+  `constructor` or a code name still counts as code. A control-flow storage object counts too: an
+  object literal held by a binding that is only read through static or decoder call keys, never
+  written, deleted or passed on, outside any `with` or direct `eval`. Its member read is that
+  member's text, and a call of its `function (a, b) { return a + b; }` member is the concatenation
+  of the two arguments; a decoder call key is resolved first, and a key naming any other member
+  leaves the text unknown. A call of such an object's `function (a, b) { return a(b); }` member
+  with `Function` or `eval` first is judged as that runner called with the rest. Any other part,
+  such as a parameter or a method call, leaves the key unknown. Code inside a class body is strict, so
   its `this` is never taken for the global object.
   Pinned by `crates/untwist/tests/decode_behaviour.rs` (node-checked, both modes, as a module and
   as a script), `crates/untwist/tests/alias_resolver.rs`, `crates/untwist/tests/realm_shapes.rs`,
