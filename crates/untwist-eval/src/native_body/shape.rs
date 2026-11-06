@@ -151,11 +151,25 @@ impl<'a> Writer<'a> {
         for statement in statements {
             match statement {
                 Statement::VariableDeclaration(declaration) => self.split(declaration)?,
+                Statement::ExpressionStatement(node) => self.expressions(&node.expression)?,
                 other => {
                     self.statement(other)?;
                     self.push(";")?;
                 }
             }
+        }
+        Some(())
+    }
+
+    fn expressions(&mut self, expression: &'a Expression<'a>) -> Option<()> {
+        let items = match expression.without_parentheses() {
+            Expression::SequenceExpression(node) => node.expressions.iter().collect(),
+            _ => vec![expression],
+        };
+        for item in items {
+            self.push("e(")?;
+            self.expression(item)?;
+            self.push(");")?;
         }
         Some(())
     }

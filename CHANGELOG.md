@@ -47,6 +47,10 @@ All notable changes to this project are documented in this file. The format is b
   an earlier round reuses that round's decoded values instead of running again, so a high-preset
   unit that is decoded and then kept as written no longer decodes twice: about 30 % fewer decode
   steps on the high preset.
+- The native rc4 decoder loops also run when unminify's prepare passes have already split the
+  decoder's comma sequences into statements, which is how the pipeline sees them: the high
+  preset needs about 84 % fewer instructions (7.0 s to 1.2 s for its ten samples), with the
+  same output.
 
 ### Fixed
 

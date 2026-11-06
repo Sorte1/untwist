@@ -27,8 +27,11 @@ thread_local! {
 
 #[cfg(feature = "test-hooks")]
 thread_local! {
-    static RUNS: Cell<u64> = const { Cell::new(0) };
+    static RUNS: [Cell<u64>; KINDS.len()] = const { [const { Cell::new(0) }; KINDS.len()] };
 }
+
+#[cfg(feature = "test-hooks")]
+pub(crate) const KINDS: [&str; 5] = ["decode", "percent", "fill", "schedule", "stream"];
 
 pub(crate) fn enabled() -> bool {
     ENABLED.with(Cell::get)
@@ -41,7 +44,12 @@ pub(crate) fn set_enabled(enabled: bool) {
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn runs() -> u64 {
-    RUNS.with(Cell::get)
+    runs_by_kind().iter().sum()
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn runs_by_kind() -> [u64; KINDS.len()] {
+    RUNS.with(|runs| std::array::from_fn(|index| runs[index].get()))
 }
 
 pub(crate) struct Plan<'a> {
@@ -56,6 +64,19 @@ enum Kind<'a> {
     Fill(rc4::Fill),
     Schedule(rc4::Schedule),
     Stream(rc4::Stream<'a>),
+}
+
+#[cfg(feature = "test-hooks")]
+impl Kind<'_> {
+    fn index(&self) -> usize {
+        match self {
+            Self::Decode(_) => 0,
+            Self::Percent(_) => 1,
+            Self::Fill(_) => 2,
+            Self::Schedule(_) => 3,
+            Self::Stream(_) => 4,
+        }
+    }
 }
 
 struct Planning<'c, 'a> {
@@ -169,7 +190,8 @@ impl<'a> Interp<'a> {
         }?;
         #[cfg(feature = "test-hooks")]
         if native {
-            RUNS.with(|runs| runs.set(runs.get() + 1));
+            let index = step.0.index();
+            RUNS.with(|runs| runs[index].set(runs[index].get() + 1));
         }
         Ok(native)
     }

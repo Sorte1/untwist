@@ -35,6 +35,13 @@ pub fn native_body_runs() -> u64 {
     crate::native_body::runs()
 }
 
+pub fn native_body_runs_by_kind() -> Vec<(&'static str, u64)> {
+    crate::native_body::KINDS
+        .into_iter()
+        .zip(crate::native_body::runs_by_kind())
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnitKind {
     Decode,

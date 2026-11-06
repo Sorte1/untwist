@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use untwist::{Options, Pipeline};
-use untwist_eval::test_hooks::{native_body_runs, record_units, set_native_bodies, UnitRecord};
+use untwist_eval::test_hooks::{
+    native_body_runs, native_body_runs_by_kind, record_units, set_native_bodies, UnitRecord,
+};
 
 const GROUPS: [(&str, &[&str]); 5] = [
     (
@@ -154,4 +156,45 @@ fn native_and_interpreted_decoder_bodies_give_the_same_pipeline_output() {
         "{} inputs, {total} native loop runs, all equal: {cells:?}",
         paths.len()
     );
+}
+
+fn kind_runs(run: impl FnOnce()) -> Vec<(&'static str, u64)> {
+    let before = native_body_runs_by_kind();
+    run();
+    native_body_runs_by_kind()
+        .into_iter()
+        .zip(before)
+        .map(|((kind, after), (_, before))| (kind, after - before))
+        .collect()
+}
+
+#[test]
+fn every_native_decoder_loop_runs_on_the_high_preset() {
+    let dir = root().join("fixtures/obfuscator-io");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .expect("read the obfuscator.io fixtures")
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("preset-high--") && name.ends_with(".js"))
+        })
+        .collect();
+    paths.sort();
+    assert!(paths.len() >= 10, "{} high preset inputs", paths.len());
+    for path in &paths {
+        let source = std::fs::read_to_string(path).expect("read an input");
+        for (lane, options) in lanes() {
+            let runs = kind_runs(|| {
+                Pipeline::new(options.clone()).run(&source);
+            });
+            for (kind, count) in runs {
+                assert!(
+                    count > 0,
+                    "{} [{lane}]: no native {kind} loop ran",
+                    path.display()
+                );
+            }
+        }
+    }
 }
