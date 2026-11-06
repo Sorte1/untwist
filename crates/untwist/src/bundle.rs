@@ -19,7 +19,6 @@ pub struct ModuleOutput {
     pub is_entry: bool,
     #[serde(skip)]
     pub code: String,
-    #[cfg(feature = "module-spans")]
     #[serde(skip)]
     pub span: Option<(u32, u32)>,
 }
@@ -35,7 +34,6 @@ pub struct BundleOutput {
     pub modules: Vec<ModuleOutput>,
 }
 
-#[cfg(feature = "module-spans")]
 pub(crate) fn single_text_len<T: AsRef<str>>(codes: &[T]) -> Option<u32> {
     match codes {
         [only] => u32::try_from(only.as_ref().len()).ok(),
@@ -43,17 +41,13 @@ pub(crate) fn single_text_len<T: AsRef<str>>(codes: &[T]) -> Option<u32> {
     }
 }
 
-#[cfg(feature = "module-spans")]
 fn span_of(span: oxc_span::Span, text_len: Option<u32>) -> Option<(u32, u32)> {
     let limit = text_len?.min(untwist_core::ast_util::respan::SYNTHETIC_BASE);
     (span.start < span.end && span.end <= limit).then_some((span.start, span.end))
 }
 
 impl BundleOutput {
-    pub(crate) fn unreflowed(
-        bundle: &Bundle<'_>,
-        #[cfg(feature = "module-spans")] text_len: Option<u32>,
-    ) -> Self {
+    pub(crate) fn unreflowed(bundle: &Bundle<'_>, text_len: Option<u32>) -> Self {
         Self {
             kind: bundle.kind.as_str().to_string(),
             entry_id: bundle.entry_id.clone(),
@@ -66,7 +60,6 @@ impl BundleOutput {
                     path: module.path.as_str().to_string(),
                     is_entry: module.is_entry,
                     code: pretty_codegen(module.program()),
-                    #[cfg(feature = "module-spans")]
                     span: span_of(module.program().span, text_len),
                 })
                 .collect(),

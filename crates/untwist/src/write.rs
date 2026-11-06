@@ -454,7 +454,6 @@ mod tests {
                     path: (*path).to_string(),
                     is_entry: false,
                     code: format!("module {index}"),
-                    #[cfg(feature = "module-spans")]
                     span: None,
                 })
                 .collect(),
@@ -502,7 +501,6 @@ mod tests {
                 path: "deobfuscated.js".to_string(),
                 is_entry: false,
                 code: "module code".to_string(),
-                #[cfg(feature = "module-spans")]
                 span: None,
             }],
         };

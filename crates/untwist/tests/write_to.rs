@@ -54,7 +54,6 @@ fn write_to_refuses_a_traversing_module_path() {
         path: "../escape.js".to_string(),
         is_entry: false,
         code: "escaped();".to_string(),
-        #[cfg(feature = "module-spans")]
         span: None,
     });
     let report = out.write_to(&dir).expect("write");
@@ -224,7 +223,6 @@ fn a_module_colliding_with_the_deobfuscated_output_is_refused_not_overwritten() 
             path: untwist::DEOBFUSCATED.to_string(),
             is_entry: false,
             code: "module code".to_string(),
-            #[cfg(feature = "module-spans")]
             span: None,
         }],
     });

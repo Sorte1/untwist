@@ -23,6 +23,12 @@ pub struct Rewritten {
     pub text: String,
     pub renamed: usize,
     pub mismatch: Option<String>,
+    pub copies: Vec<Result<usize, String>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CopiedRenames {
+    pub functions: Vec<(Span, Vec<(String, String)>)>,
 }
 
 pub fn may_hold_wasm(text: &str) -> bool {
@@ -120,17 +126,42 @@ impl<'a> Glue<'a> {
         &self,
         replacements: &[(Span, String)],
         module: Option<&WasmSummary>,
+        copies: &[CopiedRenames],
     ) -> Rewritten {
+        let mut claimed = rename::Claimed::default();
         let naming = module.map_or_else(glue::Naming::default, |summary| {
-            glue::name_glue(&self.semantic, summary)
+            glue::name_glue(&self.semantic, summary, &mut claimed)
         });
         let mut edits = replacements.to_vec();
         edits.extend(naming.edits);
+        let copies = copies
+            .iter()
+            .map(|copy| self.copy_renames(copy, &mut claimed, &mut edits))
+            .collect();
         Rewritten {
             text: splice(self.text, edits),
             renamed: naming.renamed,
             mismatch: naming.mismatch,
+            copies,
         }
+    }
+
+    fn copy_renames(
+        &self,
+        copy: &CopiedRenames,
+        claimed: &mut rename::Claimed,
+        edits: &mut Vec<(Span, String)>,
+    ) -> Result<usize, String> {
+        let renamer = rename::Renamer::new(&self.semantic);
+        let planned = copy
+            .functions
+            .iter()
+            .map(|(body, pairs)| renamer.plan_within(*body, pairs, claimed))
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok(planned
+            .into_iter()
+            .map(|plan| renamer.commit_within(plan, claimed, edits))
+            .sum())
     }
 }
 
@@ -155,7 +186,10 @@ pub fn module_facts(text: &str) -> Option<ModuleFacts> {
     Some(graph::facts_of(&semantic))
 }
 
-pub fn rename_names(text: &str, wanted: &[(String, String)]) -> Option<(String, usize)> {
+pub fn rename_names(
+    text: &str,
+    wanted: &[(String, String)],
+) -> Option<(String, Vec<(String, String)>)> {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, text);
     if has_error(&parsed.diagnostics) {
@@ -165,8 +199,8 @@ pub fn rename_names(text: &str, wanted: &[(String, String)]) -> Option<(String, 
         .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
-    let (edits, renamed) = rename::Renamer::new(&semantic).apply_by_name(wanted);
-    Some((splice(text, edits), renamed))
+    let (edits, applied) = rename::Renamer::new(&semantic).apply_by_name(wanted);
+    Some((splice(text, edits), applied))
 }
 
 fn splice(text: &str, mut edits: Vec<(Span, String)>) -> String {

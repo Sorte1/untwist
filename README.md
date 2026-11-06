@@ -110,6 +110,16 @@ Common flags:
 
 `untwist --help` lists every flag.
 
+### WebAssembly
+
+untwist never runs or rewrites a wasm module; it reads only its import and export names (and its
+name section, when it has one) to name the JS glue around it. Each name is taken only after a
+check that every import key and export read in the glue exists in the module; a module that does
+not match gives a warning and names nothing. Embedded modules are found with `--wasm-check`, and
+modules loaded from elsewhere are supplied with `--wasm-dir`, `--wasm` or `--fetch-wasm`. In a
+webpack bundle the names reach the module files that import from or export to the wasm module,
+and the same names are applied to the combined `deobfuscated.js`.
+
 Exit codes: `0` success; `1` an error, a parse error (output is still produced) or a panic in a
 pass; `2` the output directory already holds output (use `-f`); `3` an input was too deep to
 process safely and was passed through unchanged.

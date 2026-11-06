@@ -2,7 +2,7 @@ use oxc_allocator::Allocator;
 use serde::Serialize;
 use untwist_core::pass::{Note, NoteKind};
 pub use untwist_unpack::wasm::MAX_WASM_BYTES;
-use untwist_unpack::wasm::{self, Glue, PayloadRefusal, Scan, Span, WasmSummary};
+use untwist_unpack::wasm::{self, CopiedRenames, Glue, PayloadRefusal, Scan, Span, WasmSummary};
 
 use crate::pipeline::{admits_reparse, Output};
 use crate::write::DEOBFUSCATED;
@@ -297,11 +297,36 @@ impl Output {
                 resolved.insert(reference.name.clone(), index);
             }
         }
-        for (text, glue) in texts.iter().zip(&glues) {
-            self.rename_glue(text, glue, &mut notes);
+        let in_module = |text: &Text| matches!(text.host, Host::Module(_));
+        for (text, glue) in texts.iter().zip(&glues).filter(|(text, _)| in_module(text)) {
+            self.rename_glue(text, glue, &[], &mut notes);
         }
-        self.name_bundle_glue(&resolved, &mut notes);
+        let mut copies = self.name_bundle_glue(&resolved, &mut notes);
+        for (text, glue) in texts
+            .iter()
+            .zip(&glues)
+            .filter(|(text, _)| !in_module(text))
+        {
+            let copied = match (text.host, self.codes.len()) {
+                (Host::Code(0), 1) => std::mem::take(&mut copies),
+                _ => Vec::new(),
+            };
+            self.rename_glue(text, glue, &copied, &mut notes);
+        }
+        for (file, _) in copies {
+            notes.push(self.uncopied(file, DEOBFUSCATED, "it was not parsed again"));
+        }
         self.notes.extend(notes);
+    }
+
+    fn uncopied(&self, file: usize, path: &str, reason: &str) -> Note {
+        note(
+            NoteKind::Refusal,
+            format!(
+                "the names {} gave the unpacked modules were not applied to {path}: {reason}; it keeps the original names",
+                self.wasm[file].path
+            ),
+        )
     }
 
     fn file_named(&self, wanted: &str) -> String {
@@ -407,7 +432,13 @@ impl Output {
         Some(index)
     }
 
-    fn rename_glue(&mut self, text: &Text, glue: &Glue<'_>, notes: &mut Vec<Note>) {
+    fn rename_glue(
+        &mut self,
+        text: &Text,
+        glue: &Glue<'_>,
+        copied: &[(usize, Option<CopiedRenames>)],
+        notes: &mut Vec<Note>,
+    ) {
         let mut files = text.files.clone();
         files.sort_unstable();
         files.dedup();
@@ -426,11 +457,27 @@ impl Output {
                 None
             }
         };
-        if module.is_none() && text.replacements.is_empty() {
+        let mut copies = Vec::with_capacity(copied.len());
+        let mut copied_files = Vec::with_capacity(copied.len());
+        for (file, copy) in copied {
+            match copy {
+                Some(copy) => {
+                    copies.push(copy.clone());
+                    copied_files.push(*file);
+                }
+                None => notes.push(self.uncopied(*file, &text.path, "a module has no place in it")),
+            }
+        }
+        if module.is_none() && text.replacements.is_empty() && copies.is_empty() {
             return;
         }
         let summary = module.map(|index| &self.wasm[index].summary);
-        let rewritten = glue.rewrite(&text.replacements, summary);
+        let rewritten = glue.rewrite(&text.replacements, summary, &copies);
+        for (file, outcome) in copied_files.into_iter().zip(&rewritten.copies) {
+            if let Err(reason) = outcome {
+                notes.push(self.uncopied(file, &text.path, reason));
+            }
+        }
         if let (Some(index), Some(mismatch)) = (module, &rewritten.mismatch) {
             notes.push(note(
                 NoteKind::Refusal,
