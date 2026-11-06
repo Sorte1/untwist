@@ -251,7 +251,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             unsealed_maps: FxHashSet::default(),
             map_uses: native_map::MapUses::default(),
             sources: Sources::new(program),
-            bound_methods: bound_this::bound_methods(program, scoping),
+            bound_methods: bound_this::bound_methods(program, scoping, resolve),
             calls_of: Vec::new(),
             params: FxHashMap::default(),
             returned: FxHashSet::default(),

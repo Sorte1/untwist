@@ -1,14 +1,26 @@
+use oxc_allocator::Vec as ArenaVec;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::borrow::Cow;
 
-pub(super) fn bound_methods(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<u32> {
+use super::bootstrap::Resolve;
+use crate::value_flow::{flow_rule_disabled, BUILT_LITERAL};
+
+pub(super) fn bound_methods(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    resolve: Resolve<'_>,
+) -> FxHashSet<u32> {
     let mut literals = Literals {
         scoping,
+        resolve,
         found: FxHashMap::default(),
+        tables: FxHashSet::default(),
     };
     literals.visit_program(program);
     if literals.found.is_empty() {
@@ -21,6 +33,7 @@ pub(super) fn bound_methods(program: &Program<'_>, scoping: &Scoping) -> FxHashS
         .collect();
     let mut uses = Uses {
         scoping,
+        resolve,
         literals: &literals.found,
         owners,
         own: Vec::new(),
@@ -44,10 +57,19 @@ struct Literal {
 
 struct Literals<'s> {
     scoping: &'s Scoping,
+    resolve: Resolve<'s>,
     found: FxHashMap<SymbolId, Literal>,
+    tables: FxHashSet<SymbolId>,
 }
 
 impl<'a> VisitJs<'a> for Literals<'_> {
+    fn visit_statements(&mut self, it: &ArenaVec<'a, Statement<'a>>) {
+        for index in 0..it.len() {
+            self.note_built(it, index);
+        }
+        walk_js::walk_statements(self, it);
+    }
+
     fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
         if it.kind.is_lexical() {
             for declarator in &it.declarations {
@@ -60,40 +82,161 @@ impl<'a> VisitJs<'a> for Literals<'_> {
 
 impl Literals<'_> {
     fn note(&mut self, declarator: &VariableDeclarator<'_>) {
-        let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+        let Some((symbol, object)) = object_declarator(declarator) else {
             return;
         };
-        let Some(Expression::ObjectExpression(object)) = declarator
-            .init
-            .as_ref()
-            .map(Expression::without_parentheses)
-        else {
-            return;
-        };
-        let Some(symbol) = id.symbol_id.get() else {
-            return;
-        };
-        if self.scoping.symbol_is_mutated(symbol) {
+        if self.tables.contains(&symbol) || self.scoping.symbol_is_mutated(symbol) {
             return;
         }
-        let mut literal = Literal::default();
-        for property in &object.properties {
-            let ObjectPropertyKind::ObjectProperty(property) = property else {
-                continue;
-            };
-            let Some(function) = own_function(&property.value) else {
-                continue;
-            };
-            let Some(key) = property.key.static_name() else {
-                return;
-            };
-            if property.kind == PropertyKind::Init {
-                literal.methods.insert(key.to_string());
-            }
-            literal.functions.push(function.span.start);
+        if let Some(literal) = literal_of(object) {
+            self.found.insert(symbol, literal);
         }
-        self.found.insert(symbol, literal);
     }
+
+    fn note_built(&mut self, statements: &[Statement<'_>], index: usize) -> Option<()> {
+        let Statement::VariableDeclaration(declaration) = statements.get(index)? else {
+            return None;
+        };
+        let [declarator] = declaration.declarations.as_slice() else {
+            return None;
+        };
+        if !declaration.kind.is_lexical() {
+            return None;
+        }
+        let (table, object) = object_declarator(declarator)?;
+        let mut literal = literal_of(object)?;
+        let mut writes = 0;
+        let mut next = index + 1;
+        while let Some(statement) = statements.get(next) {
+            if !matches!(statement, Statement::FunctionDeclaration(_)) {
+                let Some(assigned) = self.keyed_writes(statement, table) else {
+                    break;
+                };
+                for (key, value) in assigned {
+                    if let Some(function) = own_function(value) {
+                        literal.methods.insert(key);
+                        literal.functions.push(function.span.start);
+                    }
+                    writes += 1;
+                }
+            }
+            next += 1;
+        }
+        let alias = self.alias_of(statements.get(next)?, table)?;
+        let references = self.scoping.get_resolved_reference_ids(table).len();
+        let unchecked = flow_rule_disabled(BUILT_LITERAL);
+        let sole = references == writes + 1 && !self.scoping.symbol_is_mutated(table);
+        if writes == 0 || !(unchecked || sole) || self.scoping.symbol_is_mutated(alias) {
+            return None;
+        }
+        self.tables.insert(table);
+        self.found.insert(alias, literal);
+        Some(())
+    }
+
+    fn keyed_writes<'k, 'a>(
+        &self,
+        statement: &'k Statement<'a>,
+        table: SymbolId,
+    ) -> Option<Vec<(String, &'k Expression<'a>)>> {
+        let Statement::ExpressionStatement(statement) = statement else {
+            return None;
+        };
+        match &statement.expression {
+            Expression::SequenceExpression(sequence) => sequence
+                .expressions
+                .iter()
+                .map(|expression| self.keyed_write(expression, table))
+                .collect(),
+            expression => Some(vec![self.keyed_write(expression, table)?]),
+        }
+    }
+
+    fn keyed_write<'k, 'a>(
+        &self,
+        expression: &'k Expression<'a>,
+        table: SymbolId,
+    ) -> Option<(String, &'k Expression<'a>)> {
+        let Expression::AssignmentExpression(assignment) = expression else {
+            return None;
+        };
+        let member = assignment.left.as_member_expression()?;
+        if assignment.operator != AssignmentOperator::Assign
+            || symbol_of(self.scoping, member.object())? != table
+        {
+            return None;
+        }
+        let key = member_key(member, self.resolve)?;
+        let proto = key == "__proto__" && !flow_rule_disabled(BUILT_LITERAL);
+        (!proto).then(|| (key.into_owned(), &assignment.right))
+    }
+
+    fn alias_of(&self, statement: &Statement<'_>, table: SymbolId) -> Option<SymbolId> {
+        let Statement::VariableDeclaration(declaration) = statement else {
+            return None;
+        };
+        let declarator = declaration.declarations.first()?;
+        let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+            return None;
+        };
+        let init = declarator.init.as_ref()?;
+        (declaration.kind.is_lexical() && symbol_of(self.scoping, init)? == table)
+            .then_some(id.symbol_id.get()?)
+    }
+}
+
+fn object_declarator<'k, 'a>(
+    declarator: &'k VariableDeclarator<'a>,
+) -> Option<(SymbolId, &'k ObjectExpression<'a>)> {
+    let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+        return None;
+    };
+    let Some(Expression::ObjectExpression(object)) = declarator
+        .init
+        .as_ref()
+        .map(Expression::without_parentheses)
+    else {
+        return None;
+    };
+    Some((id.symbol_id.get()?, object))
+}
+
+fn literal_of(object: &ObjectExpression<'_>) -> Option<Literal> {
+    let mut literal = Literal::default();
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            continue;
+        };
+        let Some(function) = own_function(&property.value) else {
+            continue;
+        };
+        let key = property.key.static_name()?;
+        if property.kind == PropertyKind::Init {
+            literal.methods.insert(key.to_string());
+        }
+        literal.functions.push(function.span.start);
+    }
+    Some(literal)
+}
+
+fn symbol_of(scoping: &Scoping, expr: &Expression<'_>) -> Option<SymbolId> {
+    let Expression::Identifier(id) = expr.without_parentheses() else {
+        return None;
+    };
+    scoping.get_reference(id.reference_id.get()?).symbol_id()
+}
+
+fn member_key<'k>(member: &'k MemberExpression<'_>, resolve: Resolve<'_>) -> Option<Cow<'k, str>> {
+    if let Some(key) = member.static_property_name() {
+        return Some(Cow::Borrowed(key));
+    }
+    let MemberExpression::ComputedMemberExpression(computed) = member else {
+        return None;
+    };
+    let Expression::CallExpression(call) = computed.expression.without_parentheses() else {
+        return None;
+    };
+    resolve?.get(&call.span)?.as_string().map(Cow::Owned)
 }
 
 fn own_function<'k, 'a>(value: &'k Expression<'a>) -> Option<&'k Function<'a>> {
@@ -105,6 +248,7 @@ fn own_function<'k, 'a>(value: &'k Expression<'a>) -> Option<&'k Function<'a>> {
 
 struct Uses<'s, 'l> {
     scoping: &'s Scoping,
+    resolve: Resolve<'s>,
     literals: &'l FxHashMap<SymbolId, Literal>,
     owners: FxHashMap<u32, SymbolId>,
     own: Vec<Option<SymbolId>>,
@@ -128,9 +272,9 @@ impl Uses<'_, '_> {
         let Some(symbol) = self.literal_of(member.object()) else {
             return false;
         };
-        let key = member.static_property_name();
+        let key = member_key(member, self.resolve);
         let leaks = match key {
-            Some(key) => !called && self.literals[&symbol].methods.contains(key),
+            Some(key) => !called && self.literals[&symbol].methods.contains(key.as_ref()),
             None => true,
         };
         if leaks {

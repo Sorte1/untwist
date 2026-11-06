@@ -318,7 +318,13 @@
   is a call of that `Symbol` is a symbol key, which names no property of the global object. An
   object rest pattern reads unknown keys, unless its source is an object literal, or a binding to
   one that nothing writes or calls a method on and that is only read, spread or destructured: then
-  it reads exactly that literal's keys, its spreads included.
+  it reads exactly that literal's keys, its spreads included. The same holds through a binding
+  whose only value is another such binding, and for a literal built by keyed assignments
+  (`const t = {}; t[k] = v, …; const o = t;`, javascript-obfuscator's transformObjectKeys): the
+  assignments follow the declaration in the same statement list (function declarations between
+  them aside), each key is a static or decoded string other than an `Object.prototype` name, and
+  the assignments and the alias are the only references to `t`; `o` then reads the literal's keys
+  and the assigned ones. A pending key counts only after it decodes.
   A direct `m.get(…)` or `m.set(…)` call is the
   native Map method, not `Reflect.get` or `Reflect.set`, when `m` is bound once to `new Map()` or
   `new WeakMap()` with no arguments, through the unshadowed global. `m` must also be used only as
@@ -346,9 +352,11 @@
   `super` at the top level of a script or in a non-strict function (its parameter defaults
   included), outside a class field or static block and outside a bound literal method (a method,
   getter or setter of an object literal that is the only value of a `const` or `let` binding, where
-  every use of that binding, and of `this` in those bodies, is `o.k` with a static key, a method
-  key is only ever called as `o.k(…)`, and the body neither reads `arguments` nor is a named
-  function expression); a reference to an undeclared name that is not a
+  every use of that binding, and of `this` in those bodies, is `o.k` with a static or decoded key,
+  a method key is only ever called as `o.k(…)`, and the body neither reads `arguments` nor is a
+  named function expression; a `const` or `let` literal built by keyed assignments and then
+  aliased, as above, counts as the literal it builds through its alias, the functions it was
+  assigned included); a reference to an undeclared name that is not a
   standard ECMAScript global (`Array`, `Object`, `String`, `Number`, `Boolean`, `Symbol`, `BigInt`,
   `Math`, `JSON`, `Reflect`, `Proxy`, `Promise`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`,
   `WeakSet`, `WeakRef`, `FinalizationRegistry`, `Intl`, `Atomics`, `Iterator`, `DataView`, the
