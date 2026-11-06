@@ -47,7 +47,7 @@ fn compared(binary: &BinaryExpression<'_>) -> Option<bool> {
     if probe.operator != UnaryOperator::Typeof {
         return None;
     }
-    Some((typeof_of(&probe.argument)? == literal.value.as_str()?) == equal)
+    Some((literal.value == typeof_of(&probe.argument)?) == equal)
 }
 
 fn truth(expr: &Expression<'_>) -> Option<bool> {
