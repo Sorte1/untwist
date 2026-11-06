@@ -44,6 +44,7 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
+- `dead-code` now also removes branches whose condition is a literal constant: `if (false)`, `if (1)`, `while (null)`, and the `?:`, `&&` and `||` forms of the same. It keeps `var` declarations of the removed code (without initialisers), leaves a dead branch with a function declaration in sloppy mode, and never touches a labelled statement or folds a member reference out from under a call, `typeof` or `delete`.
 - Terser-minified stateful decoders (base64 and rc4) decode in the safe lane: `void 0 === D.k` (either
   side, strict or loose) counts as the init gate's undefined test when `void` takes a literal, and the
   reset and temporal dead zone checks resolve the decoder's locals by scope, so a helper reusing short

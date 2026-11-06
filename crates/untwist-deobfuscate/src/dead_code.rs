@@ -2,9 +2,9 @@ use oxc_allocator::{Box as ABox, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::Scoping;
-use oxc_span::{Span, SPAN};
+use oxc_span::{GetSpan, Span, SPAN};
 use oxc_str::Ident;
-use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
+use oxc_syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
 use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
@@ -16,6 +16,7 @@ use untwist_core::pass::{
 use untwist_core::semantic::{program_is_strict, scope_hazard};
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
+use crate::constant_test::literal_truthiness;
 use crate::notes;
 
 pub const PASS: &str = "dead-code";
@@ -279,6 +280,31 @@ fn has_with(scoping: &Scoping) -> bool {
         .any(|scope| scoping.scope_flags(scope).contains(ScopeFlags::With))
 }
 
+#[derive(Clone, Copy)]
+struct Decision {
+    value: bool,
+    literal: bool,
+}
+
+fn starts_with_string_statement(statement: &Statement<'_>) -> bool {
+    let first = match statement {
+        Statement::BlockStatement(block) => block.body.first(),
+        other => Some(other),
+    };
+    matches!(
+        first,
+        Some(Statement::ExpressionStatement(node))
+            if matches!(node.expression, Expression::StringLiteral(_))
+    )
+}
+
+fn is_string_statement(statement: &Statement<'_>) -> bool {
+    matches!(
+        statement,
+        Statement::ExpressionStatement(node) if matches!(node.expression, Expression::StringLiteral(_))
+    )
+}
+
 #[derive(Default)]
 pub struct DeadCode<'a> {
     moved: Moved,
@@ -288,6 +314,7 @@ pub struct DeadCode<'a> {
     with: Option<bool>,
     unsafe_lane: bool,
     armed: usize,
+    guarded: Vec<Span>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -295,6 +322,54 @@ pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
 }
 
 impl<'a> DeadCode<'a> {
+    fn decide(&mut self, expr: &Expression<'_>, cx: &Cx<'a, '_>) -> Option<Decision> {
+        let cached = std::cell::Cell::new(self.with);
+        let scoping = cx.scoping();
+        let is_global_undefined = |id: &IdentifierReference<'_>| {
+            let with = cached.get().unwrap_or_else(|| {
+                let found = has_with(scoping);
+                cached.set(Some(found));
+                found
+            });
+            !with
+                && id
+                    .reference_id
+                    .get()
+                    .is_some_and(|reference| scoping.get_reference(reference).symbol_id().is_none())
+        };
+        let literal = literal_truthiness(expr, &is_global_undefined);
+        self.with = cached.get();
+        match literal {
+            Some(value) => Some(Decision {
+                value,
+                literal: true,
+            }),
+            None => opaque_test(expr).map(|value| Decision {
+                value,
+                literal: false,
+            }),
+        }
+    }
+
+    fn fold_dead_loop(
+        &mut self,
+        node: ABox<'a, WhileStatement<'a>>,
+        stmts: &mut AVec<'a, Statement<'a>>,
+        cx: &mut Cx<'a, '_>,
+    ) -> bool {
+        let hoisted = hoisted_by(Some(&node.body));
+        if hoisted.function && !self.strict {
+            cx.note(notes::DEAD_CODE_DISCARDED_FUNCTION, Some(node.span));
+            stmts.push(Statement::WhileStatement(node));
+            return false;
+        }
+        let names = still_needed(hoisted.names, Some(&node.body), cx.scoping());
+        if !names.is_empty() {
+            stmts.push(var_statement(&names, cx));
+        }
+        true
+    }
+
     fn fold_soundly(
         &mut self,
         node: ABox<'a, IfStatement<'a>>,
@@ -444,17 +519,79 @@ impl<'a> DeadCode<'a> {
         }
     }
 
+    fn decision_of_statement(
+        &mut self,
+        statement: &Statement<'a>,
+        cx: &Cx<'a, '_>,
+    ) -> Option<Decision> {
+        match statement {
+            Statement::IfStatement(node) => self.decide(&node.test, cx),
+            Statement::WhileStatement(node) => self
+                .decide(&node.test, cx)
+                .filter(|decision| decision.literal && !decision.value),
+            _ => None,
+        }
+    }
+
+    fn is_unfoldable_result(
+        &mut self,
+        chosen: &Expression<'a>,
+        guarded: bool,
+        cx: &Cx<'a, '_>,
+    ) -> bool {
+        match chosen.without_parentheses() {
+            Expression::StaticMemberExpression(_)
+            | Expression::ComputedMemberExpression(_)
+            | Expression::PrivateFieldExpression(_)
+            | Expression::ChainExpression(_) => true,
+            Expression::Identifier(_) => {
+                guarded || *self.with.get_or_insert_with(|| has_with(cx.scoping()))
+            }
+            _ => false,
+        }
+    }
+
+    fn expression_choice(&mut self, expr: &Expression<'a>, cx: &Cx<'a, '_>) -> Option<bool> {
+        let guarded = match self.guarded.iter().rposition(|span| *span == expr.span()) {
+            Some(index) => {
+                self.guarded.remove(index);
+                true
+            }
+            None => false,
+        };
+        match expr {
+            Expression::ConditionalExpression(conditional) => {
+                let value = self.decide(&conditional.test, cx)?.value;
+                let chosen = if value {
+                    &conditional.consequent
+                } else {
+                    &conditional.alternate
+                };
+                (!self.is_unfoldable_result(chosen, guarded, cx)).then_some(value)
+            }
+            Expression::LogicalExpression(logical) => {
+                let decision = self.decide(&logical.left, cx).filter(|d| d.literal)?;
+                let left_wins = match logical.operator {
+                    LogicalOperator::And => !decision.value,
+                    LogicalOperator::Or => decision.value,
+                    LogicalOperator::Coalesce => return None,
+                };
+                (left_wins || !self.is_unfoldable_result(&logical.right, guarded, cx))
+                    .then_some(left_wins)
+            }
+            _ => None,
+        }
+    }
+
     fn rewrite_statements(
         &mut self,
         stmts: &mut AVec<'a, Statement<'a>>,
         cx: &mut Cx<'a, '_>,
     ) -> usize {
-        let hits = stmts
-            .iter()
-            .filter(|stmt| {
-                matches!(stmt, Statement::IfStatement(node) if opaque_test(&node.test).is_some())
-            })
-            .count();
+        let mut hits = 0usize;
+        for statement in stmts.iter() {
+            hits += usize::from(self.decision_of_statement(statement, cx).is_some());
+        }
         self.armed = self.armed.saturating_sub(hits);
         if hits == 0 {
             return 0;
@@ -463,19 +600,17 @@ impl<'a> DeadCode<'a> {
         let taken: Vec<Statement<'a>> = stmts.drain(..).collect();
         let mut changes = 0usize;
         for statement in taken {
-            let Statement::IfStatement(node) = statement else {
+            let Some(decision) = self.decision_of_statement(&statement, cx) else {
                 stmts.push(statement);
                 continue;
             };
-            let Some(value) = opaque_test(&node.test) else {
-                stmts.push(Statement::IfStatement(node));
-                continue;
-            };
-            let span = node.span;
-            let folded = if cx.opts.unsafe_transforms {
-                self.merge_branch(node.unbox(), span, value, outer, stmts, cx)
-            } else {
-                self.fold_soundly(node, value, outer, stmts, cx)
+            let folded = match statement {
+                Statement::WhileStatement(node) => self.fold_dead_loop(node, stmts, cx),
+                Statement::IfStatement(node) => self.fold_branch(node, decision, outer, stmts, cx),
+                other => {
+                    stmts.push(other);
+                    false
+                }
             };
             if folded {
                 changes += 1;
@@ -483,12 +618,43 @@ impl<'a> DeadCode<'a> {
         }
         changes
     }
+
+    fn fold_branch(
+        &mut self,
+        node: ABox<'a, IfStatement<'a>>,
+        decision: Decision,
+        outer: ScopeId,
+        stmts: &mut AVec<'a, Statement<'a>>,
+        cx: &mut Cx<'a, '_>,
+    ) -> bool {
+        let taken = if decision.value {
+            Some(&node.consequent)
+        } else {
+            node.alternate.as_ref()
+        };
+        let hazard = taken.is_some_and(starts_with_string_statement)
+            && stmts.iter().all(is_string_statement);
+        if hazard {
+            stmts.push(Statement::IfStatement(node));
+            return false;
+        }
+        let span = node.span;
+        if cx.opts.unsafe_transforms && !decision.literal {
+            self.merge_branch(node.unbox(), span, decision.value, outer, stmts, cx)
+        } else {
+            self.fold_soundly(node, decision.value, outer, stmts, cx)
+        }
+    }
 }
 
-const ACTED_ON_EXPRESSIONS: ExpressionVariants =
-    ExpressionVariants::of(&[ExpressionKind::ConditionalExpression]);
+const ACTED_ON_EXPRESSIONS: ExpressionVariants = ExpressionVariants::of(&[
+    ExpressionKind::ConditionalExpression,
+    ExpressionKind::LogicalExpression,
+    ExpressionKind::UnaryExpression,
+]);
 
-const ACTED_ON_STATEMENTS: StatementVariants = StatementVariants::of(&[StatementKind::IfStatement]);
+const ACTED_ON_STATEMENTS: StatementVariants =
+    StatementVariants::of(&[StatementKind::IfStatement, StatementKind::WhileStatement]);
 
 impl<'a> Pass<'a> for DeadCode<'a> {
     fn name(&self) -> &'static str {
@@ -497,6 +663,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
 
     fn interest(&self) -> Interest {
         (Interest::ENTER_PROGRAM
+            | Interest::ENTER_EXPRESSION
             | Interest::EXIT_STATEMENTS
             | Interest::EXIT_STATEMENT
             | Interest::EXIT_EXPRESSION
@@ -513,8 +680,8 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         }
     }
 
-    fn exit_statement(&mut self, stmt: &mut Statement<'a>, _cx: &mut Cx<'a, '_>) {
-        if matches!(stmt, Statement::IfStatement(node) if opaque_test(&node.test).is_some()) {
+    fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
+        if self.decision_of_statement(stmt, cx).is_some() {
             self.armed += 1;
         }
     }
@@ -527,25 +694,48 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         cx.changed_by(changes);
     }
 
-    fn exit_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
-        let Expression::ConditionalExpression(conditional) = &*expr else {
+    fn enter_expression(&mut self, expr: &mut Expression<'a>, _cx: &mut Cx<'a, '_>) {
+        let Expression::UnaryExpression(unary) = &*expr else {
             return;
         };
-        let Some(value) = opaque_test(&conditional.test) else {
+        if !matches!(
+            unary.operator,
+            UnaryOperator::Typeof | UnaryOperator::Delete
+        ) {
+            return;
+        }
+        let argument = unary.argument.without_parentheses();
+        if matches!(
+            argument,
+            Expression::ConditionalExpression(_) | Expression::LogicalExpression(_)
+        ) {
+            self.guarded.push(argument.span());
+        }
+    }
+
+    fn exit_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
+        let Some(keep_consequent) = self.expression_choice(expr, cx) else {
             return;
         };
         let placeholder = Expression::new_null_literal(SPAN, cx);
-        let conditional = match std::mem::replace(expr, placeholder) {
-            Expression::ConditionalExpression(conditional) => conditional.unbox(),
-            other => {
-                *expr = other;
-                return;
+        *expr = match std::mem::replace(expr, placeholder) {
+            Expression::ConditionalExpression(conditional) => {
+                let conditional = conditional.unbox();
+                if keep_consequent {
+                    conditional.consequent
+                } else {
+                    conditional.alternate
+                }
             }
-        };
-        *expr = if value {
-            conditional.consequent
-        } else {
-            conditional.alternate
+            Expression::LogicalExpression(logical) => {
+                let logical = logical.unbox();
+                if keep_consequent {
+                    logical.left
+                } else {
+                    logical.right
+                }
+            }
+            other => other,
         };
         cx.changed();
     }
@@ -555,6 +745,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         self.handed_out = FxHashSet::default();
         self.renames = Renames::new();
         self.with = None;
+        self.guarded = Vec::new();
     }
 
     fn enter_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {

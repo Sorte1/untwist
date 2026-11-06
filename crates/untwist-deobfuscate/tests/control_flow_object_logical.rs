@@ -172,7 +172,7 @@ fn a_read_of_a_later_parameter_inside_a_default_is_a_tdz_read_and_is_refused() {
 
 #[test]
 fn a_read_of_an_earlier_parameter_inside_a_default_still_folds() {
-    let source = "function f(b, a = { aokfw: function (x, y) {\n  return x || y;\n} }.aokfw(1, b)) {\n  return a;\n}";
+    let source = "function f(b, c, a = { aokfw: function (x, y) {\n  return x || y;\n} }.aokfw(c, b)) {\n  return a;\n}";
     let (code, _notes) = common::run_all_stages_extended(source);
-    assert!(code.contains("a = 1 || b"), "{code}");
+    assert!(code.contains("a = c || b"), "{code}");
 }

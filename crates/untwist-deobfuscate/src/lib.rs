@@ -3,6 +3,7 @@ pub mod array_rotator;
 pub mod bindings;
 pub mod bridge;
 pub mod calls;
+mod constant_test;
 pub mod control_flow_object;
 pub mod control_flow_switch;
 pub mod dead_assignment;
