@@ -10,6 +10,7 @@ mod forward;
 mod fresh;
 mod holds;
 mod hosts;
+mod instance;
 mod judge;
 mod keys;
 mod live;

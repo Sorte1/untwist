@@ -172,7 +172,10 @@ impl<'a> Sites<'_, 'a> {
             return false;
         }
         let inner = expr.without_parentheses();
-        if self.fresh.is_fresh(inner) || self.is_array_result(inner) {
+        if self.fresh.is_fresh(inner)
+            || self.is_array_result(inner)
+            || self.collection_primitive(inner)
+        {
             return true;
         }
         match inner {

@@ -12,7 +12,7 @@ use super::bound_this;
 pub(super) use super::defs::Defs;
 use super::defs::{
     Def, DefTable, CALLABLE, CONSTRUCTS_FRESH, ESCAPES, ESCAPING_REF, FIELDS_WRITTEN,
-    METHOD_CALLED, MUTATED, OPAQUE,
+    METHOD_CALLED, MUTATED, OPAQUE, SEALED_CLASS,
 };
 use super::filtered::{self, Candidate, Filters};
 use super::live::iife_returned;
@@ -660,9 +660,11 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
             if let Some(symbol) = id.symbol_id.get() {
                 self.handled.insert(id.span.start);
                 let fresh = class_constructs_fresh(it);
+                let sealed = super::instance::class_sealed(it);
                 let defs = self.entry(symbol);
                 defs.set(CALLABLE);
                 defs.set_to(CONSTRUCTS_FRESH, fresh);
+                defs.set_to(SEALED_CLASS, sealed);
             }
         }
         let saved = self.sources.enter_class(false);

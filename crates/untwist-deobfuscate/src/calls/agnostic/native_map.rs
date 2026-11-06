@@ -6,22 +6,20 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 
 use super::bootstrap::Resolve;
-use super::keys::Keys;
+use super::instance::COLLECTIONS;
 use super::settle::Written;
-use super::sites::Sites;
-use super::AKey;
 use crate::value_flow::{flow_rule_disabled, NATIVE_MAP_PENDING};
 
-const CONSTRUCTORS: [&str; 2] = ["Map", "WeakMap"];
+const PATCH_KEYS: [&str; 6] = ["Map", "WeakMap", "Set", "WeakSet", "get", "set"];
 
-const PATCH_KEYS: [&str; 4] = ["Map", "WeakMap", "get", "set"];
+pub(super) const NATIVE_METHODS: [&str; 2] = ["get", "set"];
 
-const NATIVE_METHODS: [&str; 2] = ["get", "set"];
+const SEALED_MEMBERS: [&str; 7] = ["get", "set", "has", "delete", "clear", "size", "add"];
 
-const SEALED_MEMBERS: [&str; 6] = ["get", "set", "has", "delete", "clear", "size"];
+const RETURNS_RECEIVER: [&str; 2] = ["set", "add"];
 
 pub(super) fn constructor_rebound(scoping: &Scoping) -> bool {
-    CONSTRUCTORS
+    COLLECTIONS
         .iter()
         .any(|name| bare_global_written(scoping, name))
 }
@@ -35,10 +33,6 @@ pub(super) fn bare_global_written(scoping: &Scoping, name: &str) -> bool {
                 .iter()
                 .any(|reference| scoping.get_reference(*reference).is_write())
         })
-}
-
-fn native_method(key: &AKey<'_>) -> bool {
-    matches!(key, AKey::Named(name) if NATIVE_METHODS.contains(&name.as_ref()))
 }
 
 pub(super) fn may_be_patched(written: &Written<'_>) -> bool {
@@ -110,7 +104,7 @@ impl MapUses {
             return;
         };
         match key(member) {
-            MemberKey::Spelled("set") => {
+            MemberKey::Spelled(name) if RETURNS_RECEIVER.contains(&name) => {
                 self.unsealed.insert(symbol);
             }
             MemberKey::Decoded(span) => self.decoded.push((symbol, span, DecodedUse::SetCall)),
@@ -143,7 +137,9 @@ impl MapUses {
                 (DecodedUse::Member, Some(name)) => {
                     !trust_decoded && !SEALED_MEMBERS.contains(&name.as_str())
                 }
-                (DecodedUse::SetCall, Some(name)) => !trust_decoded && name == "set",
+                (DecodedUse::SetCall, Some(name)) => {
+                    !trust_decoded && RETURNS_RECEIVER.contains(&name.as_str())
+                }
             };
             if unseals {
                 unsealed.insert(symbol);
@@ -172,52 +168,4 @@ fn receiver(scoping: &Scoping, member: &MemberExpression<'_>) -> Option<SymbolId
     };
     let reference = id.reference_id.get()?;
     scoping.get_reference(reference).symbol_id()
-}
-
-impl<'a> Sites<'_, 'a> {
-    pub(super) fn call_keys(&self, member: &MemberExpression<'a>) -> Keys<'a> {
-        let keys = self.member_keys(member);
-        if !self.native_map(member.object()) {
-            return keys;
-        }
-        Keys::Many(keys.into_iter().filter(|key| !native_method(key)).collect())
-    }
-
-    fn native_map(&self, expr: &Expression<'_>) -> bool {
-        if !self.map_safe {
-            return false;
-        }
-        let Expression::Identifier(id) = expr.without_parentheses() else {
-            return false;
-        };
-        let Some(symbol) = self.fresh.symbol(id) else {
-            return false;
-        };
-        let bindings = self.fresh.bindings;
-        if bindings.unsealed_maps.contains(&symbol) {
-            return false;
-        }
-        let Some(defs) = bindings.defs.get(symbol) else {
-            return false;
-        };
-        if defs.opaque || defs.mutated || defs.escapes || defs.fields_written || defs.callable {
-            return false;
-        }
-        let [Some(init)] = defs.inits else {
-            return false;
-        };
-        defs.writes.is_empty() && self.constructs_native_map(init)
-    }
-
-    fn constructs_native_map(&self, init: &Expression<'_>) -> bool {
-        let Expression::NewExpression(new) = init.without_parentheses() else {
-            return false;
-        };
-        let Expression::Identifier(callee) = new.callee.without_parentheses() else {
-            return false;
-        };
-        new.arguments.is_empty()
-            && CONSTRUCTORS.contains(&callee.name.as_str())
-            && self.fresh.symbol(callee).is_none()
-    }
 }

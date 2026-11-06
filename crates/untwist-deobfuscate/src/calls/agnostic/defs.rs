@@ -10,6 +10,7 @@ pub(super) const METHOD_CALLED: u16 = 1 << 5;
 pub(super) const MUTATED: u16 = 1 << 6;
 pub(super) const ESCAPING_REF: u16 = 1 << 7;
 const PRESENT: u16 = 1 << 8;
+pub(super) const SEALED_CLASS: u16 = 1 << 9;
 
 type Value<'a> = Option<&'a Expression<'a>>;
 
@@ -58,6 +59,7 @@ pub(super) struct Defs<'b, 'a> {
     pub(super) method_called: bool,
     pub(super) mutated: bool,
     pub(super) escaping_ref: bool,
+    pub(super) sealed_class: bool,
 }
 
 pub(super) struct DefTable<'a> {
@@ -185,6 +187,7 @@ impl<'a> DefTable<'a> {
             method_called: def.has(METHOD_CALLED),
             mutated: def.has(MUTATED),
             escaping_ref: def.has(ESCAPING_REF),
+            sealed_class: def.has(SEALED_CLASS),
         })
     }
 }

@@ -80,6 +80,12 @@ All notable changes to this project are documented in this file. The format is b
   (javascript-obfuscator's transformObjectKeys) in a rest or spread, as it does for an object literal;
   such a rest was refused as one that may read any key. Its getters and methods, including the
   functions assigned to it, count as bound to it like an object literal's.
+- The default lane decodes beside a `set` call on a local instance of a plain class (`v.set(x, y, z)` on
+  `const v = new Vector3()`), which was taken for `Reflect.set` and refused, and beside a key write on
+  `Object.assign({}, x)`, which was not taken for a fresh object.
+- The default lane removes the decoder machinery beside `set`, `get`, `has`, `delete` and `add` calls on a
+  fresh `Map`, `WeakMap`, `Set` or `WeakSet`, which were taken to observe the names of the global object
+  passed to them.
 - The default lane decodes beside a fresh `new Map()` or `new WeakMap()` that is read and written only
   through its own `get` and `set`; those calls were taken for `Reflect.get` and `Reflect.set` and refused.
 - A decoder wrapper whose binding is written again, or a `var` wrapper called before its

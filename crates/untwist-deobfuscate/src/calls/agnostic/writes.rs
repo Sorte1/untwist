@@ -5,6 +5,9 @@ use super::roles::*;
 use super::sites::*;
 use super::AKey;
 use crate::proof::prototype_root_ref;
+use crate::value_flow::{flow_rule_disabled, INSTANCE_RECEIVERS};
+
+const ASSIGN_DEPTH: u8 = 3;
 
 impl<'s, 'a> Sites<'s, 'a> {
     pub(super) fn target_fresh(&self, expr: &Expression<'a>, depth: u8) -> bool {
@@ -31,6 +34,10 @@ impl<'s, 'a> Sites<'s, 'a> {
             return false;
         };
         let keys = self.member_keys(member);
+        if self.assign_returns_fresh(call, member, &keys) {
+            self.assign_used.set(true);
+            return true;
+        }
         let fresh = !keys.is_empty()
             && keys.iter().all(
                 |key| matches!(key, AKey::Named(name) if FRESH_NATIVES.contains(&name.as_ref())),
@@ -39,6 +46,31 @@ impl<'s, 'a> Sites<'s, 'a> {
             self.fresh_used.set(true);
         }
         fresh
+    }
+
+    fn assign_returns_fresh(
+        &self,
+        call: &CallExpression<'a>,
+        member: &MemberExpression<'a>,
+        keys: &[AKey<'a>],
+    ) -> bool {
+        let [AKey::Named(name)] = keys else {
+            return false;
+        };
+        let native = flow_rule_disabled(INSTANCE_RECEIVERS)
+            || (!self.object_rebound && self.is_unbound(member.object(), "Object"));
+        name == "assign"
+            && native
+            && call
+                .arguments
+                .first()
+                .and_then(Argument::as_expression)
+                .is_some_and(|target| self.target_fresh(target, ASSIGN_DEPTH))
+    }
+
+    fn is_unbound(&self, expr: &Expression<'a>, name: &str) -> bool {
+        matches!(expr.without_parentheses(), Expression::Identifier(id)
+            if id.name == name && self.fresh.symbol(id).is_none())
     }
 
     pub(super) fn native_chain(&self, expr: &Expression<'a>) -> bool {

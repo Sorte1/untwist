@@ -326,15 +326,28 @@
   the assignments and the alias are the only references to `t`; `o` then reads the literal's keys
   and the assigned ones. A pending key counts only after it decodes.
   A direct `m.get(…)` or `m.set(…)` call is the
-  native Map method, not `Reflect.get` or `Reflect.set`, when `m` is bound once to `new Map()` or
-  `new WeakMap()` with no arguments, through the unshadowed global. `m` must also be used only as
-  `m.get`, `m.set`, `m.has`, `m.delete`, `m.clear` or `m.size`, never written, and never let out
-  through the value of a `set` call. A use through a decoder call key (`m[d(1)](k)`) is judged by
-  the string the call decodes to (the decoded-halves premise): one of those six names counts as
-  that use, any other string, or a call that does not decode, unseals `m`. The program must
-  neither assign `Map` or `WeakMap` nor contain a write, on any base, whose key may be `Map`,
-  `WeakMap`, `get` or `set`; a write by a decoder call key counts by its decoded string, and one
-  that does not decode may be any key (premise 2).
+  native method, not `Reflect.get` or `Reflect.set`, when `m` is bound once to `new Map()`,
+  `new WeakMap()`, `new Set()` or `new WeakSet()` with no arguments, through the unshadowed global.
+  `m` must also be used only as `m.get`, `m.set`, `m.has`, `m.delete`, `m.add`, `m.clear` or
+  `m.size`, never written, and never let out through the value of a `set` or `add` call. A use
+  through a decoder call key (`m[d(1)](k)`) is judged by the string the call decodes to (the
+  decoded-halves premise): one of those seven names counts as that use, any other string, or a
+  call that does not decode, unseals `m`. The program must neither assign `Map`, `WeakMap`, `Set`
+  or `WeakSet` nor contain a write, on any base, whose key may be one of those names, `get` or
+  `set`; a write by a decoder call key counts by its decoded string, and one that does not decode
+  may be any key (premise 2). On such a collection a `set`, `get`, `has`, `delete` or `add` call
+  observes no names of its arguments, and `m.size`, `m.has(…)` and `m.delete(…)` hold no value,
+  while no write may have that method's key. A binding bound once to `new C(…)`, where `C` is a
+  class never assigned, with no `extends`, no decorators, a constructor that returns no value, no
+  computed instance member and no instance field or accessor named `set`, `get`, `defineProperty`,
+  `deleteProperty`, `getOwnPropertyDescriptor`, `setPrototypeOf`, `defineProperties`, `assign`,
+  `has`, `delete`, `add` or `size`, and that is only read or called through `v.x`, never written or
+  passed on, has its calls of those first eight names judged as the class's own method (a user function, judged
+  where it is written) rather than as the `Reflect` or `Object` function of that name, while no
+  write may have that name's key or `__proto__`. `Object.assign(t, …)` through the unshadowed
+  `Object` returns `t`, so it is fresh when `t` is, while no write outside a fresh object may
+  have the key `assign` or `Object`. A receiver reached through a field (`this.handlers.set`,
+  `this.position.set`) is still judged by name: bounding it needs the flow of `this` and of fields.
   `Function` and `eval` reached through any forwarder
   (`.call`, `.apply`, `Reflect.apply`) with non-literal text count as code runners. An identity
   write (`O.k = O.k` on the same unaliased prototype, directly or through a substituted helper)
