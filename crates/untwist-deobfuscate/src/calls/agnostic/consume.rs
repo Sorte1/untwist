@@ -4,6 +4,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::fresh::Bound;
 use super::live::{iife_returned, opaque_branch};
@@ -54,7 +55,7 @@ impl ParamUse<'_> {
 
     fn resolved_key(&self, expr: &Expression<'_>) -> Option<String> {
         if let Expression::StringLiteral(text) = expr.without_parentheses() {
-            return Some(text.value.to_string());
+            return Some(js_text(text.value).into_owned());
         }
         self.resolve?
             .get(&expr.span())
@@ -200,7 +201,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             MemberExpression::StaticMemberExpression(m) => m.property.name.as_str(),
             MemberExpression::ComputedMemberExpression(m) => {
                 match m.expression.without_parentheses() {
-                    Expression::StringLiteral(text) => text.value.as_str(),
+                    Expression::StringLiteral(text) => text.value.as_str()?,
                     _ => return None,
                 }
             }

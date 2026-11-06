@@ -5,10 +5,10 @@ mod kept;
 
 use std::rc::Rc;
 
+use oxc_allocator::GetAllocator;
 use oxc_ast::ast::{Expression, Function};
 use oxc_ast::builder::GetAstBuilder;
 use oxc_span::Span;
-use oxc_str::Str;
 use oxc_syntax::number::NumberBase;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use rustc_hash::FxHashSet;
@@ -27,7 +27,7 @@ use crate::object::{
 };
 use crate::ops::{binary_op, strict_equals};
 use crate::rotation::{machinery_key, RotationKey, RotationMemo};
-use crate::value::{encode_with_lone_surrogates, FnCode, JsString, Value};
+use crate::value::{js_str_in, FnCode, JsString, Value};
 
 pub use checksum::{checksum_from_rotator, Checksum};
 use checksum::{checksum_step, rotator_body_is_strict, NATIVE_ROTATE_STEP_COST};
@@ -787,10 +787,6 @@ pub(crate) fn string_literal<'a>(
     span: Span,
     b: &impl GetAstBuilder<'a>,
 ) -> Expression<'a> {
-    let (rendered, lone) = encode_with_lone_surrogates(text.units());
-    let literal = Str::from_str_in(&rendered, b.builder());
-    if lone {
-        return Expression::new_string_literal_with_lone_surrogates(span, literal, None, true, b);
-    }
+    let literal = js_str_in(text.units(), b.builder().allocator());
     Expression::new_string_literal(span, literal, None, b)
 }

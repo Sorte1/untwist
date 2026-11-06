@@ -4,7 +4,9 @@ use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 use indexmap::{Equivalent, IndexMap};
+use oxc_allocator::Allocator;
 use oxc_ast::ast::{ArrowFunctionExpression, Function, StringLiteral};
+use oxc_str::{JSStr, JSStrBuilder};
 use rustc_hash::FxBuildHasher;
 
 use crate::bail::{Bail, EvalResult};
@@ -653,77 +655,26 @@ impl<'a> Value<'a> {
     }
 }
 
-pub fn encode_with_lone_surrogates(units: &[u16]) -> (String, bool) {
-    let mut out = String::with_capacity(units.len());
-    let mut lone = false;
-    let mut index = 0;
-    while index < units.len() {
-        if let Some((ch, width)) = surrogate_pair(units, index) {
-            out.push(ch);
-            index += width;
-            continue;
-        }
-        let unit = units[index];
-        index += 1;
-        if unit == 0xFFFD || (0xD800..0xE000).contains(&unit) {
-            out.push('\u{FFFD}');
-            out.push_str(&format!("{unit:04x}"));
-            lone = true;
-            continue;
-        }
-        match char::from_u32(u32::from(unit)) {
-            Some(ch) => out.push(ch),
-            None => out.push('\u{FFFD}'),
+pub fn js_str_in<'a>(units: &[u16], allocator: &'a Allocator) -> JSStr<'a> {
+    match String::from_utf16(units) {
+        Ok(text) => JSStr::from_str_in(&text, &allocator),
+        Err(_) => {
+            let mut builder = JSStrBuilder::with_capacity_in(units.len() * 3, &allocator);
+            builder.push_utf16(units);
+            builder.into_js_str()
         }
     }
-    (out, lone)
 }
 
-pub fn decode_lone_surrogate_escapes(text: &str) -> Vec<u16> {
-    let chars: Vec<char> = text.chars().collect();
-    let mut units = Vec::with_capacity(chars.len());
-    let mut index = 0;
-    while index < chars.len() {
-        if chars[index] != '\u{FFFD}' {
-            let mut buffer = [0u16; 2];
-            units.extend_from_slice(chars[index].encode_utf16(&mut buffer));
-            index += 1;
-            continue;
-        }
-        let hex: String = chars.iter().skip(index + 1).take(4).collect();
-        match u16::from_str_radix(&hex, 16) {
-            Ok(unit) if hex.len() == 4 => {
-                units.push(unit);
-                index += 5;
-            }
-            _ => {
-                units.push(0xFFFD);
-                index += 1;
-            }
-        }
+pub fn js_string_from_js_str(value: JSStr<'_>) -> JsString {
+    match value.as_str() {
+        Some(text) => JsString::from_str(text),
+        None => JsString::from_units(value.encode_utf16().collect()),
     }
-    units
 }
 
 pub fn js_string_from_literal(literal: &StringLiteral<'_>) -> JsString {
-    if literal.lone_surrogates {
-        JsString::from_units(decode_lone_surrogate_escapes(literal.value.as_str()))
-    } else {
-        JsString::from_str(literal.value.as_str())
-    }
-}
-
-fn surrogate_pair(units: &[u16], index: usize) -> Option<(char, usize)> {
-    let high = *units.get(index)?;
-    if !(0xD800..0xDC00).contains(&high) {
-        return None;
-    }
-    let low = *units.get(index + 1)?;
-    if !(0xDC00..0xE000).contains(&low) {
-        return None;
-    }
-    let code = 0x10000 + ((u32::from(high) - 0xD800) << 10) + (u32::from(low) - 0xDC00);
-    char::from_u32(code).map(|ch| (ch, 2))
+    js_string_from_js_str(literal.value)
 }
 
 #[cfg(test)]

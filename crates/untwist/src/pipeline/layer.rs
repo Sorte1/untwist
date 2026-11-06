@@ -328,7 +328,7 @@ fn stub_decode(table: &[(&str, &str)], probe: Probe<'_, '_>) -> Decoded {
     let [Argument::StringLiteral(literal)] = call.arguments.as_slice() else {
         return None;
     };
-    let key = literal.value.as_str();
+    let key = literal.value.as_str()?;
     let text = table
         .iter()
         .find(|(from, _)| *from == key)

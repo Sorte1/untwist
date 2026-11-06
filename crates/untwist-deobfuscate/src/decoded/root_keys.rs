@@ -39,7 +39,7 @@ impl<'a> VisitJs<'a> for RootReads<'_, 'a> {
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
         if let Some(root) = self.root_name(&it.object) {
             let key = match it.expression.without_parentheses() {
-                Expression::StringLiteral(key) => Some(key.value.as_str()),
+                Expression::StringLiteral(key) => key.value.as_str(),
                 _ => None,
             };
             self.keys.push((root, key));

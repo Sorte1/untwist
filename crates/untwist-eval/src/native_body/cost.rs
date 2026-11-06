@@ -230,7 +230,7 @@ impl<'a, 'p> Walk<'a, 'p> {
                 Expression::StringLiteral(literal) => {
                     let key = string_key(js_string_from_literal(literal));
                     self.add(1 + length_charge(key_length(&key)));
-                    Some(Some(literal.value.as_str()))
+                    Some(literal.value.as_str())
                 }
                 other => {
                     self.expression(other)?;

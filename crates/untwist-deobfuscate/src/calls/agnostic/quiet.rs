@@ -59,7 +59,7 @@ fn static_key<'a>(member: &MemberExpression<'a>) -> Option<&'a str> {
     match member {
         MemberExpression::StaticMemberExpression(m) => Some(m.property.name.as_str()),
         MemberExpression::ComputedMemberExpression(m) => match m.expression.without_parentheses() {
-            Expression::StringLiteral(text) => Some(text.value.as_str()),
+            Expression::StringLiteral(text) => text.value.as_str(),
             _ => None,
         },
         MemberExpression::PrivateFieldExpression(_) => None,
@@ -86,7 +86,7 @@ fn required_module<'a>(init: &'a Expression<'a>) -> Option<&'a str> {
         return None;
     }
     match call.arguments[0].as_expression()?.without_parentheses() {
-        Expression::StringLiteral(text) => Some(text.value.as_str()),
+        Expression::StringLiteral(text) => text.value.as_str(),
         _ => None,
     }
 }

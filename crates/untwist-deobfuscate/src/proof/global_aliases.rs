@@ -2,6 +2,8 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::{Scoping, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::GLOBAL_OBJECTS;
 
@@ -110,16 +112,16 @@ impl<'a> VisitJs<'a> for ThisReturningLiterals<'_, 'a> {
 
 fn extracted_method_name<'k, 'a>(
     expr: &'k Expression<'a>,
-) -> Option<(&'k Expression<'a>, &'a str)> {
+) -> Option<(&'k Expression<'a>, Cow<'a, str>)> {
     match expr.without_parentheses() {
         Expression::StaticMemberExpression(member) => {
-            Some((&member.object, member.property.name.as_str()))
+            Some((&member.object, Cow::Borrowed(member.property.name.as_str())))
         }
         Expression::ComputedMemberExpression(member) => match member
             .expression
             .without_parentheses()
         {
-            Expression::StringLiteral(literal) => Some((&member.object, literal.value.as_str())),
+            Expression::StringLiteral(literal) => Some((&member.object, js_text(literal.value))),
             _ => None,
         },
         _ => None,
@@ -143,7 +145,7 @@ impl<'a> VisitJs<'a> for BareCallGlobalScan<'_, 'a> {
                         .and_then(|r| self.scoping.get_reference(r).symbol_id());
                     let names_hold_key = owner
                         .and_then(|s| self.literals.get(&s))
-                        .is_some_and(|names| names.contains(key));
+                        .is_some_and(|names| names.contains(key.as_ref()));
                     let symbol = id.symbol_id.get();
                     let tracked = symbol.is_some_and(|s| never_written(self.scoping, s));
                     if names_hold_key {

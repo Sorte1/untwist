@@ -31,10 +31,8 @@ pub fn starts_with_define(top: &[Statement<'_>]) -> bool {
 
 fn text(expr: &Expression<'_>) -> Option<String> {
     match expr {
-        Expression::StringLiteral(literal)
-            if !literal.lone_surrogates && !literal.value.is_empty() =>
-        {
-            Some(literal.value.as_str().to_string())
+        Expression::StringLiteral(literal) if !literal.value.is_empty() => {
+            literal.value.as_str().map(str::to_string)
         }
         _ => None,
     }

@@ -63,9 +63,7 @@ fn address<T>(it: &T) -> usize {
 pub fn literal_id(argument: Option<&Argument<'_>>) -> Option<String> {
     match argument.and_then(argument_expression)? {
         Expression::NumericLiteral(literal) => Some(number_key(literal.value)),
-        Expression::StringLiteral(literal) if !literal.lone_surrogates => {
-            Some(literal.value.to_string())
-        }
+        Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
         _ => None,
     }
 }
@@ -111,7 +109,7 @@ fn read_object<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k Expression<'a>> {
             (&member.object, Some(member.property.name.as_str()))
         }
         Expression::ComputedMemberExpression(member) => match &member.expression {
-            Expression::StringLiteral(key) => (&member.object, Some(key.value.as_str())),
+            Expression::StringLiteral(key) => (&member.object, key.value.as_str()),
             Expression::NumericLiteral(_) => (&member.object, None),
             _ => return None,
         },

@@ -111,7 +111,7 @@ fn calls_are_collected_in_source_order_and_only_when_literal() {
     let Expression::StringLiteral(key) = calls[1].arguments[1] else {
         panic!("the second call's second argument should be a string literal");
     };
-    assert_eq!(key.value.as_str(), "k");
+    assert_eq!(key.value.as_str(), Some("k"));
 }
 
 #[test]

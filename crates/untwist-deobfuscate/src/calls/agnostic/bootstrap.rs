@@ -7,6 +7,7 @@ use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::bind::{function_uses_this, reads_arguments};
 use untwist_eval::value::JsString;
@@ -85,7 +86,7 @@ fn key_name<'a>(member: &MemberExpression<'a>, resolve: Resolve<'_>) -> Option<C
             Some(Cow::Borrowed(m.property.name.as_str()))
         }
         MemberExpression::ComputedMemberExpression(m) => match m.expression.without_parentheses() {
-            Expression::StringLiteral(text) => Some(Cow::Borrowed(text.value.as_str())),
+            Expression::StringLiteral(text) => Some(js_text(text.value)),
             Expression::CallExpression(call) => resolve
                 .and_then(|map| map.get(&call.span))
                 .and_then(|text| text.as_string())
@@ -171,7 +172,7 @@ fn table_of<'a>(scoping: &Scoping, table: &'a Expression<'a>) -> Option<Table<'a
                 };
                 let key = match &p.key {
                     PropertyKey::StaticIdentifier(id) if !p.computed => id.name.to_string(),
-                    PropertyKey::StringLiteral(text) => text.value.to_string(),
+                    PropertyKey::StringLiteral(text) => js_text(text.value).into_owned(),
                     PropertyKey::NumericLiteral(number) => index_key(number.value)?,
                     _ => return None,
                 };
@@ -386,7 +387,7 @@ impl<'a> Uses<'_, 'a> {
     fn table_key(&self, expr: &Expression<'_>) -> bool {
         let key = match expr.without_parentheses() {
             Expression::NumericLiteral(number) => index_key(number.value),
-            Expression::StringLiteral(text) => Some(text.value.to_string()),
+            Expression::StringLiteral(text) => Some(js_text(text.value).into_owned()),
             _ => None,
         };
         key.is_some_and(|key| self.keys.contains(&key))

@@ -120,7 +120,7 @@ impl<'p> VisitJs<'p> for Search<'_, 'p> {
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'p>) {
         if let Expression::StringLiteral(literal) = &it.expression {
-            if literal.value.as_str() == ARGUMENTS {
+            if literal.value == ARGUMENTS {
                 self.facts.aliases_arguments = true;
             }
         }

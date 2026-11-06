@@ -98,7 +98,7 @@ impl<'a> VisitJs<'a> for Initializers {
             if callee.property.name == INITIALIZER {
                 self.calls += 1;
                 if let Some(Argument::StringLiteral(graph)) = it.arguments.first() {
-                    self.graph = Some(graph.value.to_string());
+                    self.graph = graph.value.as_str().map(str::to_string);
                 }
             }
         }
@@ -153,11 +153,8 @@ fn loader<'k>(attempt: &'k TryStatement<'_>, param: &str) -> Option<Loader<'k>> 
         return None;
     };
     let (end, rest) = param_call(body.last()?, param)?;
-    (rest.is_empty() && begin != end && !id.lone_surrogates).then(|| Loader {
-        begin,
-        id: id.value.as_str(),
-        end,
-    })
+    let id = id.value.as_str()?;
+    (rest.is_empty() && begin != end).then_some(Loader { begin, id, end })
 }
 
 #[derive(Default)]

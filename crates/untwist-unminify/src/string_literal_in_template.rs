@@ -1,7 +1,7 @@
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::Span;
-use oxc_str::Str;
+use oxc_str::{JSStr, Str};
 use oxc_traverse::Ancestor;
 use untwist_core::pass::{Cx, Interest, Locality, Pass};
 
@@ -31,26 +31,33 @@ pub(crate) fn escape_template(text: &str) -> String {
     out
 }
 
-struct Pending {
+struct Pending<'a> {
     span: Span,
     raw: String,
     cooked: Option<String>,
     tail: bool,
-    lone_surrogates: bool,
+    lone: Option<JSStr<'a>>,
 }
 
-impl Pending {
-    fn start(element: &TemplateElement<'_>) -> Self {
+fn lone_cooked<'a>(element: &TemplateElement<'a>) -> Option<JSStr<'a>> {
+    element
+        .value
+        .cooked
+        .filter(|text| text.has_lone_surrogate())
+}
+
+impl<'a> Pending<'a> {
+    fn start(element: &TemplateElement<'a>) -> Self {
         Self {
             span: element.span,
             raw: element.value.raw.as_str().to_string(),
             cooked: element
                 .value
                 .cooked
-                .as_ref()
-                .map(|text| text.as_str().to_string()),
+                .and_then(|text| text.as_str())
+                .map(str::to_string),
             tail: element.tail,
-            lone_surrogates: element.lone_surrogates,
+            lone: lone_cooked(element),
         }
     }
 
@@ -61,33 +68,31 @@ impl Pending {
         }
     }
 
-    fn merge(&mut self, element: &TemplateElement<'_>) {
+    fn merge(&mut self, element: &TemplateElement<'a>) {
         self.raw.push_str(element.value.raw.as_str());
-        match &element.value.cooked {
+        match element.value.cooked.and_then(|text| text.as_str()) {
             Some(text) => {
                 if let Some(cooked) = &mut self.cooked {
-                    cooked.push_str(text.as_str());
+                    cooked.push_str(text);
                 }
             }
             None => self.cooked = None,
         }
         self.span = Span::new(self.span.start, element.span.end);
         self.tail = element.tail;
-        self.lone_surrogates = self.lone_surrogates || element.lone_surrogates;
+        self.lone = self.lone.or(lone_cooked(element));
     }
 
-    fn build<'a>(self, cx: &mut Cx<'a, '_>) -> TemplateElement<'a> {
+    fn build(self, cx: &mut Cx<'a, '_>) -> TemplateElement<'a> {
+        let cooked = match self.lone {
+            Some(text) => Some(text),
+            None => self.cooked.map(|text| Str::from_str_in(&text, cx).into()),
+        };
         let value = TemplateElementValue {
             raw: Str::from_str_in(&self.raw, cx),
-            cooked: self.cooked.map(|text| Str::from_str_in(&text, cx)),
+            cooked,
         };
-        TemplateElement::new_with_lone_surrogates(
-            self.span,
-            value,
-            self.tail,
-            self.lone_surrogates,
-            cx,
-        )
+        TemplateElement::new(self.span, value, self.tail, cx)
     }
 }
 
@@ -129,11 +134,11 @@ impl<'a> Pass<'a> for StringLiteralInTemplate {
         for (expr, next) in expressions.into_iter().zip(quasis) {
             match expr {
                 Expression::StringLiteral(literal)
-                    if !literal.lone_surrogates
-                        && !pending.lone_surrogates
-                        && !next.lone_surrogates =>
+                    if !literal.value.has_lone_surrogate()
+                        && pending.lone.is_none()
+                        && lone_cooked(&next).is_none() =>
                 {
-                    pending.append_literal(literal.value.as_str());
+                    pending.append_literal(literal.value.as_str().unwrap_or_default());
                     pending.merge(&next);
                     inlined += 1;
                 }

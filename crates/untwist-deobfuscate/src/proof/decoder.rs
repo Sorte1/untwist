@@ -237,7 +237,9 @@ impl<'a> VisitJs<'a> for UsedScan<'_, 'a> {
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
         if let Expression::StringLiteral(key) = it.expression.without_parentheses() {
-            self.used.note(key.value.as_str());
+            if let Some(key) = key.value.as_str() {
+                self.used.note(key);
+            }
         }
         walk_js::walk_computed_member_expression(self, it);
     }

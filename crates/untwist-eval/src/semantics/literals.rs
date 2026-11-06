@@ -11,11 +11,7 @@ pub(crate) fn template_chunk<'a>(quasi: &TemplateElement<'_>) -> Eval<'a, JsStri
     let Some(cooked) = &quasi.value.cooked else {
         return Err(Bail::Unsupported(&"template with an invalid escape").into());
     };
-    Ok(if quasi.lone_surrogates {
-        JsString::from_units(crate::value::decode_lone_surrogate_escapes(cooked.as_str()))
-    } else {
-        JsString::from_str(cooked.as_str())
-    })
+    Ok(crate::value::js_string_from_js_str(*cooked))
 }
 
 impl<'a> Interp<'a> {

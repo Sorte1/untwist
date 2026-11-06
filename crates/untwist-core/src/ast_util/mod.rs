@@ -2,6 +2,7 @@ pub mod edit;
 pub mod frame;
 pub mod global;
 pub mod inline;
+pub mod js_text;
 pub mod literal;
 pub mod matcher;
 pub mod pattern;

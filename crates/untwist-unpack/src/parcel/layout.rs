@@ -81,7 +81,7 @@ fn registry_arguments<'k, 'a>(frame: &Frame<'k, 'a>) -> Option<&'k [Argument<'a>
     }
     let named = matches!(
         argument_expression(&arguments[3]),
-        Some(Expression::StringLiteral(name)) if is_global_name(name.value.as_str())
+        Some(Expression::StringLiteral(name)) if name.value.as_str().is_some_and(is_global_name)
     );
     let modules = matches!(
         argument_expression(&arguments[0]),
@@ -131,7 +131,7 @@ pub fn probe(frame: &Frame<'_, '_>) -> bool {
 
 fn string(expr: &Expression<'_>) -> Option<String> {
     match expr {
-        Expression::StringLiteral(text) if !text.lone_surrogates => Some(text.value.to_string()),
+        Expression::StringLiteral(text) => text.value.as_str().map(str::to_string),
         _ => None,
     }
 }

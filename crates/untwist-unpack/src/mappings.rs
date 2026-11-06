@@ -30,7 +30,7 @@ impl MappingMatcher {
             Self::StringLiteral(value) => matches!(
                 expr,
                 Expression::StringLiteral(literal)
-                    if !literal.lone_surrogates && literal.value.as_str() == value
+                    if literal.value == value.as_str()
             ),
             Self::NumericLiteral(value) => {
                 matches!(expr, Expression::NumericLiteral(literal) if literal.value == *value)

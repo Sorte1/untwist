@@ -63,7 +63,7 @@ fn js_string_from_literal_round_trips_a_plain_string() {
         let Expression::StringLiteral(literal) = &stmt.expression else {
             panic!("expected a string literal");
         };
-        assert!(!literal.lone_surrogates);
+        assert!(!literal.value.has_lone_surrogate());
         let js = js_string_from_literal(literal);
         assert_eq!(js.to_lossy_string(), "hello");
     });
@@ -78,7 +78,7 @@ fn js_string_from_literal_decodes_lone_surrogates() {
         let Expression::StringLiteral(literal) = &stmt.expression else {
             panic!("expected a string literal");
         };
-        assert!(literal.lone_surrogates);
+        assert!(literal.value.has_lone_surrogate());
         let js = js_string_from_literal(literal);
         assert_eq!(js.len(), 1);
         assert_eq!(js.code_unit_at(0), Some(0xD800));

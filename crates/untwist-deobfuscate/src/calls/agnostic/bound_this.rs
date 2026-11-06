@@ -210,7 +210,10 @@ fn literal_of(object: &ObjectExpression<'_>) -> Option<Literal> {
         let Some(function) = own_function(&property.value) else {
             continue;
         };
-        let key = property.key.static_name()?;
+        let key = property
+            .key
+            .static_name()
+            .and_then(|name| name.into_cow_str())?;
         if property.kind == PropertyKind::Init {
             literal.methods.insert(key.to_string());
         }
@@ -227,7 +230,7 @@ fn symbol_of(scoping: &Scoping, expr: &Expression<'_>) -> Option<SymbolId> {
 }
 
 fn member_key<'k>(member: &'k MemberExpression<'_>, resolve: Resolve<'_>) -> Option<Cow<'k, str>> {
-    if let Some(key) = member.static_property_name() {
+    if let Some(key) = member.static_property_name().and_then(|name| name.as_str()) {
         return Some(Cow::Borrowed(key));
     }
     let MemberExpression::ComputedMemberExpression(computed) = member else {

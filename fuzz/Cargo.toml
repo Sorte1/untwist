@@ -16,7 +16,7 @@ untwist-core = { path = "../crates/untwist-core" }
 untwist-deobfuscate = { path = "../crates/untwist-deobfuscate" }
 untwist-unminify = { path = "../crates/untwist-unminify" }
 untwist-jsx = { path = "../crates/untwist-jsx" }
-oxc_allocator = "=0.148.0"
+oxc_allocator = "=0.157.0"
 
 [[bin]]
 name = "pipeline"

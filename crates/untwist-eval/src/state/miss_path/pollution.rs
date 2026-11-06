@@ -90,7 +90,7 @@ fn chain_root<'n, 'a>(member: &'n MemberExpression<'a>) -> (&'n Expression<'a>, 
     }
     (
         first.object().without_parentheses(),
-        first.static_property_name(),
+        first.static_property_name().and_then(|name| name.as_str()),
     )
 }
 
@@ -155,7 +155,7 @@ impl<'a> VisitJs<'a> for Guard<'_, 'a> {
     }
 
     fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
-        match it.static_property_name() {
+        match it.static_property_name().and_then(|name| name.as_str()) {
             Some("__proto__" | "constructor") => self.failed = true,
             Some("prototype") if !self.function_bound(it.object()) => self.failed = true,
             _ => {}
@@ -191,6 +191,7 @@ impl<'a> VisitJs<'a> for Guard<'_, 'a> {
             .callee
             .as_member_expression()
             .and_then(MemberExpression::static_property_name)
+            .and_then(|name| name.as_str())
             .is_some_and(|key| DEFINERS.contains(&key));
         if definer {
             self.failed = true;

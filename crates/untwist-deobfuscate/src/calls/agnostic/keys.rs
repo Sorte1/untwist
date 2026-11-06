@@ -3,6 +3,7 @@ use oxc_ast_visit::VisitJs;
 use oxc_span::Span;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::roles::*;
 use super::sites::*;
@@ -49,9 +50,7 @@ fn template_key<'a>(template: &TemplateLiteral<'a>) -> AKey<'a> {
         .quasis
         .first()
         .and_then(|quasi| quasi.value.cooked)
-        .map_or(AKey::Unknown, |cooked| {
-            AKey::Named(Cow::Borrowed(cooked.as_str()))
-        })
+        .map_or(AKey::Unknown, |cooked| AKey::Named(js_text(cooked)))
 }
 
 impl<'s, 'a> Sites<'s, 'a> {
@@ -236,13 +235,13 @@ impl<'s, 'a> Sites<'s, 'a> {
     pub(super) fn str_value(&self, expr: &Expression<'a>, depth: u8) -> Option<String> {
         let next = depth.checked_sub(1)?;
         match expr.without_parentheses() {
-            Expression::StringLiteral(text) => Some(text.value.to_string()),
+            Expression::StringLiteral(text) => Some(js_text(text.value).into_owned()),
             Expression::TemplateLiteral(t) if t.expressions.is_empty() => t
                 .quasis
                 .first()?
                 .value
                 .cooked
-                .map(|cooked| cooked.to_string()),
+                .map(|cooked| js_text(cooked).into_owned()),
             Expression::BinaryExpression(b) if b.operator == BinaryOperator::Addition => {
                 Some(format!(
                     "{}{}",

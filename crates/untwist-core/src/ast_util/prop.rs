@@ -13,9 +13,7 @@ pub fn number_key(value: f64) -> String {
 pub fn prop_name<'k>(key: &'k PropertyKey<'_>) -> Option<Cow<'k, str>> {
     match key {
         PropertyKey::StaticIdentifier(id) => Some(Cow::Borrowed(id.name.as_str())),
-        PropertyKey::StringLiteral(literal) if !literal.lone_surrogates => {
-            Some(Cow::Borrowed(literal.value.as_str()))
-        }
+        PropertyKey::StringLiteral(literal) => literal.value.as_str().map(Cow::Borrowed),
         PropertyKey::NumericLiteral(literal) => Some(Cow::Owned(number_key(literal.value))),
         _ => None,
     }
@@ -46,9 +44,7 @@ pub fn member_parts<'k, 'a>(
 #[inline(always)]
 pub fn literal_key<'k>(expr: &'k Expression<'_>) -> Option<Cow<'k, str>> {
     match expr {
-        Expression::StringLiteral(literal) if !literal.lone_surrogates => {
-            Some(Cow::Borrowed(literal.value.as_str()))
-        }
+        Expression::StringLiteral(literal) => literal.value.as_str().map(Cow::Borrowed),
         Expression::NumericLiteral(literal) => Some(Cow::Owned(number_key(literal.value))),
         _ => None,
     }

@@ -32,7 +32,7 @@ fn named(expr: &Expression<'_>, name: &str) -> bool {
 
 fn string_argument(call: &CallExpression<'_>) -> Option<String> {
     match call.arguments.as_slice() {
-        [Argument::StringLiteral(text)] if !text.lone_surrogates => Some(text.value.to_string()),
+        [Argument::StringLiteral(text)] => text.value.as_str().map(str::to_string),
         _ => None,
     }
 }

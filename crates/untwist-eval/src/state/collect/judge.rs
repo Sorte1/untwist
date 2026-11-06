@@ -73,7 +73,8 @@ pub(super) fn is_bare_arguments(expr: &Expression<'_>) -> bool {
 }
 
 pub(super) fn is_arguments_callee(member: &MemberExpression<'_>) -> bool {
-    is_bare_arguments(member.object()) && member.static_property_name() == Some("callee")
+    is_bare_arguments(member.object())
+        && member.static_property_name().and_then(|name| name.as_str()) == Some("callee")
 }
 
 pub(super) fn root_of<'a, 'n>(
@@ -87,7 +88,8 @@ pub(super) fn root_of<'a, 'n>(
     let Expression::Identifier(id) = unwrap_parens(inner.object()) else {
         return None;
     };
-    let is_prototype = inner.static_property_name() == Some("prototype");
+    let is_prototype =
+        inner.static_property_name().and_then(|name| name.as_str()) == Some("prototype");
     Some((
         id,
         if is_prototype {

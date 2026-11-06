@@ -2,6 +2,8 @@ use oxc_ast::ast::*;
 use oxc_span::Span;
 use oxc_syntax::operator::BinaryOperator;
 use rustc_hash::FxHashSet;
+use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::storage::Storage;
 
@@ -71,7 +73,7 @@ pub(super) fn text_template(
     storage: Option<&Storage<'_>>,
 ) -> Option<WrittenKey> {
     match expr.without_parentheses() {
-        Expression::StringLiteral(text) => named(text.value.as_str()),
+        Expression::StringLiteral(text) => named(&js_text(text.value)),
         Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
             Some(WrittenKey::Concat(vec![
                 text_template(&binary.left, storage)?,
@@ -81,7 +83,7 @@ pub(super) fn text_template(
         Expression::TemplateLiteral(template) => {
             let mut parts = Vec::with_capacity(template.quasis.len() + template.expressions.len());
             for (index, quasi) in template.quasis.iter().enumerate() {
-                parts.push(WrittenKey::Name(quasi.value.cooked.as_ref()?.to_string()));
+                parts.push(WrittenKey::Name(js_text(quasi.value.cooked?).into_owned()));
                 if let Some(expression) = template.expressions.get(index) {
                     parts.push(text_template(expression, storage)?);
                 }
@@ -129,7 +131,7 @@ pub(super) fn written_key(key: &Expression<'_>) -> Option<WrittenKey> {
             let mut parts = Vec::new();
             concatenated(key, &mut parts).then_some(WrittenKey::Concat(parts))
         }
-        Expression::StringLiteral(name) => named(name.value.as_str()),
+        Expression::StringLiteral(name) => named(&js_text(name.value)),
         Expression::TemplateLiteral(template) => template_key(template),
         Expression::ArrayExpression(array) => joined_key(&array.elements, ","),
         Expression::CallExpression(call) => {
@@ -142,7 +144,7 @@ pub(super) fn written_key(key: &Expression<'_>) -> Option<WrittenKey> {
 fn template_key(template: &TemplateLiteral<'_>) -> Option<WrittenKey> {
     let mut parts = Vec::with_capacity(template.quasis.len() + template.expressions.len());
     for (index, quasi) in template.quasis.iter().enumerate() {
-        parts.push(WrittenKey::Name(quasi.value.cooked.as_ref()?.to_string()));
+        parts.push(WrittenKey::Name(js_text(quasi.value.cooked?).into_owned()));
         if let Some(expression) = template.expressions.get(index) {
             parts.push(written_key(expression)?);
         }
@@ -164,7 +166,10 @@ fn joined_key(elements: &[ArrayExpressionElement<'_>], separator: &str) -> Optio
 fn spelled_call_key(call: &CallExpression<'_>) -> Option<WrittenKey> {
     let member = call.callee.without_parentheses().as_member_expression()?;
     let receiver = member.object().without_parentheses();
-    match member.static_property_name()? {
+    match member
+        .static_property_name()
+        .and_then(|name| name.as_str())?
+    {
         "concat" if !matches!(receiver, Expression::ArrayExpression(_)) => {
             let mut parts = vec![written_key(receiver)?];
             for argument in &call.arguments {
@@ -177,11 +182,11 @@ fn spelled_call_key(call: &CallExpression<'_>) -> Option<WrittenKey> {
                 return None;
             };
             let separator = match call.arguments.first().map(Argument::as_expression) {
-                None => ",",
-                Some(Some(Expression::StringLiteral(text))) => text.value.as_str(),
+                None => Cow::Borrowed(","),
+                Some(Some(Expression::StringLiteral(text))) => js_text(text.value),
                 Some(_) => return None,
             };
-            joined_key(&array.elements, separator)
+            joined_key(&array.elements, &separator)
         }
         _ => None,
     }
@@ -202,7 +207,7 @@ fn literal_keys(object: &ObjectExpression<'_>, out: &mut Vec<WrittenKey>) {
         };
         let key = match &property.key {
             PropertyKey::StaticIdentifier(name) => named(name.name.as_str()),
-            PropertyKey::StringLiteral(name) => named(name.value.as_str()),
+            PropertyKey::StringLiteral(name) => named(&js_text(name.value)),
             other => other.as_expression().and_then(written_key),
         };
         out.extend(key);

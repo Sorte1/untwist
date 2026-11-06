@@ -29,7 +29,7 @@ impl<'a> VisitJs<'a> for UnsafeBindingScan<'_> {
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
         let is_prototype_key = matches!(
             it.expression.without_parentheses(),
-            Expression::StringLiteral(literal) if literal.value.as_str() == "prototype"
+            Expression::StringLiteral(literal) if literal.value == "prototype"
         );
         let is_prototype_object = is_prototype_key
             && matches!(it.object.without_parentheses(), Expression::Identifier(_));

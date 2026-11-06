@@ -4,6 +4,7 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_syntax::operator::UnaryOperator;
+use untwist_core::ast_util::js_text::js_text;
 use untwist_core::semantic::program_is_strict;
 use untwist_eval::budget::STRING_LEN_CAP;
 use untwist_eval::fold::{fold_layer_text, LayerText};
@@ -103,7 +104,7 @@ impl<'a> Visit<'a> for FreeNames<'a> {
     }
 
     fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
-        let text = it.value.as_str();
+        let text = js_text(it.value);
         self.over_cap |= !self.observe
             && text.len() > STRING_LEN_CAP
             && text.encode_utf16().count() > STRING_LEN_CAP;

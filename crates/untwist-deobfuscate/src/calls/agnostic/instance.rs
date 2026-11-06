@@ -121,6 +121,7 @@ fn plain_key(key: &PropertyKey<'_>, computed: bool) -> bool {
     !computed
         && key
             .static_name()
+            .and_then(|name| name.into_cow_str())
             .is_some_and(|name| !NAMES.contains(&name.as_ref()))
 }
 

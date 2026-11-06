@@ -562,6 +562,7 @@ impl<'a> Sites<'_, 'a> {
                 } else {
                     p.key
                         .static_name()
+                        .and_then(|name| name.into_cow_str())
                         .is_none_or(|name| self.watched_name(&name))
                 }
             }
@@ -596,6 +597,7 @@ impl<'a> Sites<'_, 'a> {
         property
             .key
             .static_name()
+            .and_then(|name| name.into_cow_str())
             .is_some_and(|name| self.watched_name(&name))
     }
 
@@ -629,6 +631,7 @@ impl<'a> Sites<'_, 'a> {
             AssignmentTargetProperty::AssignmentTargetPropertyProperty(p) => p
                 .name
                 .static_name()
+                .and_then(|name| name.into_cow_str())
                 .is_some_and(|name| self.watched_name(&name)),
         }
     }

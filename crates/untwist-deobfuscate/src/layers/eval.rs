@@ -250,7 +250,7 @@ fn member_names<'a>(member: &MemberExpression<'a>) -> Option<(&'a str, &'a str)>
     let method = match member {
         MemberExpression::StaticMemberExpression(node) => node.property.name.as_str(),
         MemberExpression::ComputedMemberExpression(node) => match &node.expression {
-            Expression::StringLiteral(key) => key.value.as_str(),
+            Expression::StringLiteral(key) => key.value.as_str()?,
             _ => return None,
         },
         MemberExpression::PrivateFieldExpression(_) => return None,

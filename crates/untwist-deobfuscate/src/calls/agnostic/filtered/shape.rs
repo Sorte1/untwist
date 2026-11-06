@@ -5,6 +5,7 @@ use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::js_text::js_text;
 
 use super::super::bootstrap::Resolve;
 
@@ -323,7 +324,7 @@ impl<'f, 'a> Shape<'f, 'a> {
 
     pub(super) fn method_key(&mut self, key: &'a Expression<'a>) -> Option<&'static str> {
         let text = match key.without_parentheses() {
-            Expression::StringLiteral(text) => text.value.to_string(),
+            Expression::StringLiteral(text) => js_text(text.value).into_owned(),
             Expression::CallExpression(call) => {
                 self.call(call, 0).then_some(())?;
                 self.resolved.get(&call.span)?.clone()

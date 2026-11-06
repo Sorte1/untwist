@@ -40,7 +40,7 @@ pub fn unmodelled_literal_entry(entry: &ObjectProperty<'_>) -> Option<&'static &
     let sets_prototype = !entry.computed && !entry.shorthand && !entry.method;
     let proto_key = match &entry.key {
         PropertyKey::StaticIdentifier(id) => id.name.as_str() == PROTO_KEY,
-        PropertyKey::StringLiteral(literal) => literal.value.as_str() == PROTO_KEY,
+        PropertyKey::StringLiteral(literal) => literal.value == PROTO_KEY,
         _ => false,
     };
     if sets_prototype && proto_key {

@@ -226,7 +226,7 @@ fn entry_program<'a>(
         .comments
         .iter()
         .filter(|comment| !inside_any(&spans, comment.span))
-        .copied();
+        .cloned();
     let mut program = plain_program(alloc, source, source.span, body);
     program.comments = AVec::from_iter_in(comments, &alloc);
     program.hashbang = source.hashbang.clone_in(alloc);

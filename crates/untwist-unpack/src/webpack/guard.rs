@@ -90,9 +90,9 @@ pub fn dirname_suffix<'k>(assignment: &'k AssignmentExpression<'_>) -> Option<&'
     let dirname = matches!(&sum.left, Expression::Identifier(id) if id.name == DIRNAME);
     match &sum.right {
         Expression::StringLiteral(suffix)
-            if dirname && sum.operator == BinaryOperator::Addition && !suffix.lone_surrogates =>
+            if dirname && sum.operator == BinaryOperator::Addition =>
         {
-            Some(suffix.value.as_str())
+            suffix.value.as_str()
         }
         _ => None,
     }

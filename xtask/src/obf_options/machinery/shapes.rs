@@ -21,7 +21,7 @@ pub(super) fn member_name<'b, 'a>(
             Some((&member.object, member.property.name.as_str()))
         }
         Expression::ComputedMemberExpression(member) => match &member.expression {
-            Expression::StringLiteral(key) => Some((&member.object, key.value.as_str())),
+            Expression::StringLiteral(key) => Some((&member.object, key.value.as_str()?)),
             _ => None,
         },
         _ => None,
@@ -143,7 +143,7 @@ pub(super) fn is_proxy_function(expr: &Expression) -> bool {
 pub(super) fn property_key_text<'b>(key: &'b PropertyKey) -> Option<&'b str> {
     match key {
         PropertyKey::StaticIdentifier(id) => Some(id.name.as_str()),
-        PropertyKey::StringLiteral(s) => Some(s.value.as_str()),
+        PropertyKey::StringLiteral(s) => s.value.as_str(),
         _ => None,
     }
 }

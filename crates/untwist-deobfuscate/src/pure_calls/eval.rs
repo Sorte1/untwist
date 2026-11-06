@@ -23,10 +23,7 @@ fn bare_template(template: &TemplateLiteral<'_>) -> Option<String> {
     let [quasi] = template.quasis.as_slice() else {
         return None;
     };
-    if quasi.lone_surrogates {
-        return None;
-    }
-    Some(quasi.value.cooked?.as_str().to_string())
+    Some(quasi.value.cooked?.as_str()?.to_string())
 }
 
 pub(super) fn literal_argument(expr: &Expression<'_>) -> Option<Const> {
@@ -42,9 +39,7 @@ fn static_key<'k>(entry: &'k ObjectProperty<'_>) -> Option<Cow<'k, str>> {
     }
     let key = match &entry.key {
         PropertyKey::StaticIdentifier(id) => Cow::Borrowed(id.name.as_str()),
-        PropertyKey::StringLiteral(literal) if !literal.lone_surrogates => {
-            Cow::Borrowed(literal.value.as_str())
-        }
+        PropertyKey::StringLiteral(literal) => Cow::Borrowed(literal.value.as_str()?),
         PropertyKey::NumericLiteral(literal) => {
             Cow::Owned(property_key(&Const::Num(literal.value))?)
         }
@@ -139,14 +134,15 @@ impl Shape<'_> {
             Expression::Identifier(id) => self.identifier(id),
             Expression::ParenthesizedExpression(inner) => self.pure_at(&inner.expression, next),
             Expression::TemplateLiteral(template) => {
-                template
-                    .quasis
+                template.quasis.iter().all(|quasi| {
+                    quasi
+                        .value
+                        .cooked
+                        .is_some_and(|cooked| !cooked.has_lone_surrogate())
+                }) && template
+                    .expressions
                     .iter()
-                    .all(|quasi| !quasi.lone_surrogates && quasi.value.cooked.is_some())
-                    && template
-                        .expressions
-                        .iter()
-                        .all(|part| self.pure_at(part, next))
+                    .all(|part| self.pure_at(part, next))
             }
             Expression::UnaryExpression(unary) => {
                 unary.operator != UnaryOperator::Delete && self.pure_at(&unary.argument, next)
@@ -318,10 +314,7 @@ impl<'s, 'p> Machine<'s, 'p> {
     fn template(&mut self, template: &'p TemplateLiteral<'p>, depth: u32) -> Option<Out<'p>> {
         let mut text = Const::Str(String::new());
         for (index, quasi) in template.quasis.iter().enumerate() {
-            if quasi.lone_surrogates {
-                return None;
-            }
-            let cooked = Const::Str(quasi.value.cooked?.as_str().to_string());
+            let cooked = Const::Str(quasi.value.cooked?.as_str()?.to_string());
             text = fold_binary(BinaryOperator::Addition, &text, &cooked)?;
             if let Some(part) = template.expressions.get(index) {
                 let value = self.eval(part, depth)?;

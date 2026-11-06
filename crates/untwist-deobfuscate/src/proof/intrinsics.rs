@@ -113,9 +113,10 @@ fn static_key<'a>(expr: &Expression<'a>) -> PatchKey<'a> {
     let cooked = template
         .quasis
         .first()
-        .and_then(|quasi| quasi.value.cooked.as_ref());
+        .and_then(|quasi| quasi.value.cooked)
+        .and_then(|cooked| cooked.as_str());
     match (template.expressions.is_empty(), cooked) {
-        (true, Some(text)) => PatchKey::Named(text.as_str()),
+        (true, Some(text)) => PatchKey::Named(text),
         _ => PatchKey::Dynamic,
     }
 }

@@ -12,6 +12,9 @@ const PRODUCERS: &[&str] = &[
     "class A extends B<T> {}",
     "class A extends (B)<T> {}",
     "var c = class extends B<T> {};",
+];
+
+const JAVASCRIPT_OR_FATAL: &[&str] = &[
     "export default interface I {}",
     "export default interface I extends J { m() }",
     "export {}\n{ export default interface I { m(b = J); } }\nvar J = g();",
@@ -22,9 +25,6 @@ const PRODUCERS: &[&str] = &[
     "if (a) { switch (b) { case 1: { label: { export default interface I {} } } } }",
     "function f() { return function () { { export default interface I extends J {} } }; }",
     "if (a) {} else export default interface I {}",
-];
-
-const JAVASCRIPT_OR_FATAL: &[&str] = &[
     "var f = () => { export default interface I { [k]: number } };",
     "class A extends B {}",
     "class C { [k] = 1 }",

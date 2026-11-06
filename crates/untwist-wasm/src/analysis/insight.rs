@@ -101,12 +101,13 @@ fn string_value(value: &str, span: Span, text: &str) -> (Box<str>, bool) {
 fn literal_value(init: &Expression<'_>, text: &str) -> Option<(Box<str>, bool)> {
     let shown = |span: Span| (short(source(text, span), VALUE_CHARS), false);
     match init.without_parentheses() {
-        Expression::StringLiteral(string) if !string.lone_surrogates => {
-            Some(string_value(&string.value, string.span, text))
+        Expression::StringLiteral(string) if !string.value.has_lone_surrogate() => {
+            Some(string_value(string.value.as_str()?, string.span, text))
         }
         Expression::TemplateLiteral(template) => template
             .single_quasi()
-            .map(|cooked| string_value(&cooked, template.span, text)),
+            .and_then(|cooked| cooked.as_str())
+            .map(|cooked| string_value(cooked, template.span, text)),
         Expression::NumericLiteral(number) => Some(shown(number.span)),
         Expression::BigIntLiteral(big) => Some(shown(big.span)),
         Expression::RegExpLiteral(regexp) => Some(shown(regexp.span)),
@@ -164,9 +165,11 @@ pub fn object_keys<'b>(object: &'b ObjectExpression<'_>) -> impl Iterator<Item =
         .properties
         .iter()
         .filter_map(|property| match property {
-            ObjectPropertyKind::ObjectProperty(property) => {
-                property.key.static_name().map(|name| name.to_string())
-            }
+            ObjectPropertyKind::ObjectProperty(property) => property
+                .key
+                .static_name()
+                .and_then(|name| name.into_cow_str())
+                .map(|name| name.to_string()),
             ObjectPropertyKind::SpreadProperty(_) => None,
         })
 }

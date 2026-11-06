@@ -439,8 +439,12 @@ struct Strings {
 
 impl<'a> VisitJs<'a> for Strings {
     fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
-        if it.value.starts_with(ENTRY_ID) {
-            self.seen.insert(it.value.to_string());
+        if let Some(value) = it
+            .value
+            .as_str()
+            .filter(|value| value.starts_with(ENTRY_ID))
+        {
+            self.seen.insert(value.to_string());
         }
     }
 }

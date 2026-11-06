@@ -185,12 +185,10 @@ fn single_define_entry<'a>(
     name: &StringLiteral<'a>,
     value_expr: &Expression<'a>,
 ) -> Option<DefineEntry<'a>> {
-    if name.lone_surrogates {
-        return None;
-    }
+    let export_name = name.value.as_str()?.to_string();
     let value = zero_param_function_return(value_expr)?;
     Some(DefineEntry {
-        export_name: name.value.as_str().to_string(),
+        export_name,
         value: value.clone_in(alloc),
     })
 }

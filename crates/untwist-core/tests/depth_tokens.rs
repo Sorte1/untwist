@@ -190,7 +190,7 @@ fn statement_heads_after_for_await_export_and_update() {
     agree(&[
         ("async x=>{await<a b=\"\"></a>;for await(x of/x/)/\\//}", S),
         ("export default function(){}/)/", M),
-        ("export default async function(){}/)/;try{}finally{}", S),
+        ("export default async function(){}/)/;try{}finally{}", M),
         ("a\n++/)/[b]\n!``", M),
     ]);
 }

@@ -535,9 +535,11 @@ impl<'s, 'a> Bindings<'s, 'a> {
                 .any(|init| match init.without_parentheses() {
                     Expression::ObjectExpression(object) => {
                         object.properties.iter().any(|property| match property {
-                            ObjectPropertyKind::ObjectProperty(p) => {
-                                p.key.static_name().is_none_or(|name| written.may_be(&name))
-                            }
+                            ObjectPropertyKind::ObjectProperty(p) => p
+                                .key
+                                .static_name()
+                                .and_then(|name| name.into_cow_str())
+                                .is_none_or(|name| written.may_be(&name)),
                             ObjectPropertyKind::SpreadProperty(_) => true,
                         })
                     }

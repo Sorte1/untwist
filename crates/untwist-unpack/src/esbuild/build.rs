@@ -122,7 +122,7 @@ fn line_comments(source: &Program<'_>) -> FxHashMap<u32, Comment> {
         .comments
         .iter()
         .filter(|comment| comment.kind == CommentKind::Line)
-        .map(|comment| (comment.attached_to, *comment))
+        .map(|comment| (comment.attached_to, comment.clone()))
         .collect()
 }
 
@@ -277,7 +277,7 @@ fn entry_comments<'a>(
         let inside = region.start <= comment.span.start && comment.span.end <= region.end;
         inside && !starts.contains(&comment.attached_to) && !covered(&removed, comment.span)
     });
-    AVec::from_iter_in(kept.copied(), &alloc)
+    AVec::from_iter_in(kept.cloned(), &alloc)
 }
 
 fn entry_statements<'a>(

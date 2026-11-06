@@ -1,4 +1,6 @@
-use oxc_ast::ast::{ArrayExpression, ArrayExpressionElement, Expression, PropertyKey};
+use oxc_ast::ast::{
+    ArrayExpression, ArrayExpressionElement, Expression, PropertyKey, StringLiteral,
+};
 use oxc_ast::AstKind;
 use oxc_semantic::AstNodes;
 use oxc_span::{GetSpan, Span};
@@ -57,6 +59,10 @@ fn is_hash(value: &str) -> bool {
     value.len() >= MIN_HASH_LEN && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+fn hash_of<'a>(text: &StringLiteral<'a>) -> Option<&'a str> {
+    text.value.as_str().filter(|value| is_hash(value))
+}
+
 fn array_byte(element: &ArrayExpressionElement<'_>) -> Option<u8> {
     let ArrayExpressionElement::NumericLiteral(number) = element else {
         return None;
@@ -110,7 +116,10 @@ fn is_property_key(kind: AstKind<'_>, span: Span) -> bool {
 fn callee_name<'a>(callee: &'a Expression<'a>) -> Option<&'a str> {
     match callee.without_parentheses() {
         Expression::Identifier(id) => Some(id.name.as_str()),
-        expression => expression.as_member_expression()?.static_property_name(),
+        expression => expression
+            .as_member_expression()?
+            .static_property_name()
+            .and_then(|name| name.as_str()),
     }
 }
 
@@ -128,11 +137,14 @@ fn target_name<'a>(kind: AstKind<'a>) -> Option<&'a str> {
             oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(id) => {
                 Some(id.name.as_str())
             }
-            target => target.as_member_expression()?.static_property_name(),
+            target => target
+                .as_member_expression()?
+                .static_property_name()
+                .and_then(|name| name.as_str()),
         },
         AstKind::ObjectProperty(property) => match &property.key {
             PropertyKey::StaticIdentifier(id) => Some(id.name.as_str()),
-            PropertyKey::StringLiteral(text) => Some(text.value.as_str()),
+            PropertyKey::StringLiteral(text) => text.value.as_str(),
             _ => None,
         },
         _ => None,
@@ -166,8 +178,8 @@ fn hashed_operands(binary: &oxc_ast::ast::BinaryExpression<'_>, hashes: &mut Vec
             other => (other, None),
         };
         match operand {
-            Expression::StringLiteral(text) if is_hash(&text.value) => {
-                hashes.push(text.value.to_string());
+            Expression::StringLiteral(text) if hash_of(text).is_some() => {
+                hashes.extend(hash_of(text).map(str::to_string));
                 return;
             }
             Expression::ComputedMemberExpression(member) => {
@@ -197,8 +209,8 @@ fn map_hashes(map: &oxc_ast::ast::ObjectExpression<'_>, hashes: &mut Vec<String>
         .filter_map(|property| property.as_property())
     {
         match property.value.without_parentheses() {
-            Expression::StringLiteral(text) if is_hash(&text.value) => {
-                hashes.push(text.value.to_string());
+            Expression::StringLiteral(text) if hash_of(text).is_some() => {
+                hashes.extend(hash_of(text).map(str::to_string));
             }
             Expression::ObjectExpression(nested) => map_hashes(nested, hashes),
             _ => {}
@@ -253,12 +265,14 @@ impl Scan {
         let Some(member) = call.callee.without_parentheses().as_member_expression() else {
             return;
         };
-        if member.static_property_name() != Some("v") || call.arguments.len() < 3 {
+        if member.static_property_name().and_then(|name| name.as_str()) != Some("v")
+            || call.arguments.len() < 3
+        {
             return;
         }
         if let Some(Expression::StringLiteral(text)) = call.arguments[2].as_expression() {
-            if is_hash(&text.value) {
-                self.hashes.push(text.value.to_string());
+            if let Some(hash) = hash_of(text) {
+                self.hashes.push(hash.to_string());
             }
         }
     }
@@ -269,11 +283,13 @@ impl Scan {
         for node in nodes.iter() {
             match node.kind() {
                 AstKind::StringLiteral(literal) => {
-                    scan.string(nodes, node.id(), literal.span, &literal.value)
+                    if let Some(value) = literal.value.as_str() {
+                        scan.string(nodes, node.id(), literal.span, value);
+                    }
                 }
                 AstKind::TemplateLiteral(template) => {
-                    if let Some(cooked) = template.single_quasi() {
-                        scan.string(nodes, node.id(), template.span, &cooked);
+                    if let Some(cooked) = template.single_quasi().and_then(|text| text.as_str()) {
+                        scan.string(nodes, node.id(), template.span, cooked);
                     }
                 }
                 AstKind::ArrayExpression(array) => scan.array(nodes, node.id(), array),

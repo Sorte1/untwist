@@ -7,6 +7,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::bootstrap::Resolve;
 use super::{AKey, ASite, Agnostic};
@@ -50,11 +51,11 @@ pub(super) fn literal_fields<'a>(object: &'a ObjectExpression<'a>) -> Option<Vec
                 return None;
             }
             let name = match &p.key {
-                PropertyKey::StaticIdentifier(name) => name.name.as_str(),
-                PropertyKey::StringLiteral(text) => text.value.as_str(),
+                PropertyKey::StaticIdentifier(name) => Cow::Borrowed(name.name.as_str()),
+                PropertyKey::StringLiteral(text) => js_text(text.value),
                 _ => return None,
             };
-            (name != "__proto__").then_some((Cow::Borrowed(name), &p.value))
+            (name != "__proto__").then_some((name, &p.value))
         })
         .collect()
 }
@@ -208,9 +209,9 @@ impl<'a> Scan<'_, '_, 'a> {
 
     fn key_text(&self, expr: &'a Expression<'a>) -> Option<Cow<'a, str>> {
         match expr.without_parentheses() {
-            Expression::StringLiteral(text) => Some(Cow::Borrowed(text.value.as_str())),
+            Expression::StringLiteral(text) => Some(js_text(text.value)),
             Expression::TemplateLiteral(t) if t.expressions.is_empty() => {
-                Some(Cow::Borrowed(t.quasis.first()?.value.cooked?.as_str()))
+                Some(js_text(t.quasis.first()?.value.cooked?))
             }
             Expression::BinaryExpression(b) if b.operator == BinaryOperator::Addition => {
                 let left = self.key_text(&b.left)?;

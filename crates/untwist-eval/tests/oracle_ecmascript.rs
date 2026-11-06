@@ -4,7 +4,8 @@ use common::oracle_evaluate;
 use oxc_ast::ast::Statement;
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
-const AGREEMENT_CORPUS: [&str; 23] = [
+const AGREEMENT_CORPUS: [&str; 24] = [
+    "String.fromCharCode(0xD800).length",
     "1 + 2",
     "1 + '2'",
     "'a' + 'b'",
@@ -61,11 +62,6 @@ fn we_agree_with_oxc_ecmascript_on_primitive_expressions() {
 fn documented_differences_where_oxc_cannot_represent_the_value() {
     assert!(ours("[1, 2]").is_none());
     assert_eq!(oracle_evaluate("[1, 2]"), None);
-    assert_eq!(
-        ours("String.fromCharCode(0xD800).length"),
-        Some("number:1".to_string())
-    );
-    assert_eq!(oracle_evaluate("String.fromCharCode(0xD800).length"), None);
     assert_eq!(ours("-'0xa6'"), Some("number:-166".to_string()));
     assert_eq!(oracle_evaluate("-'0xa6'"), None);
 }

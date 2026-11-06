@@ -152,8 +152,12 @@ impl<'s> Printer<'s> {
     }
 
     fn text(&mut self, text: &str) {
-        self.word(text.len() as u64);
-        text.bytes().for_each(|byte| self.byte(byte));
+        self.bytes(text.as_bytes());
+    }
+
+    fn bytes(&mut self, bytes: &[u8]) {
+        self.word(bytes.len() as u64);
+        bytes.iter().for_each(|&byte| self.byte(byte));
     }
 
     fn flag(&mut self, flag: bool) {
@@ -241,7 +245,7 @@ impl<'s> Printer<'s> {
             AstKind::BindingIdentifier(it) => self.binding(it),
             AstKind::IdentifierName(it) => self.text(it.name.as_str()),
             AstKind::PrivateIdentifier(it) => self.text(it.name.as_str()),
-            AstKind::StringLiteral(it) => self.text(it.value.as_str()),
+            AstKind::StringLiteral(it) => self.bytes(it.value.as_bytes()),
             AstKind::NumericLiteral(it) => self.word(it.value.to_bits()),
             AstKind::BigIntLiteral(it) => self.text(it.value.as_str()),
             AstKind::BooleanLiteral(it) => self.flag(it.value),
@@ -250,7 +254,7 @@ impl<'s> Printer<'s> {
                 self.byte(it.regex.flags.bits());
             }
             AstKind::TemplateElement(it) => match it.value.cooked {
-                Some(cooked) => self.text(cooked.as_str()),
+                Some(cooked) => self.bytes(cooked.as_bytes()),
                 None => self.text(it.value.raw.as_str()),
             },
             _ => self.operator_details(kind),

@@ -262,7 +262,7 @@ impl<'a> Fresh<'_, 'a> {
             MemberExpression::StaticMemberExpression(m) => m.property.name.as_str(),
             MemberExpression::ComputedMemberExpression(m) => {
                 match m.expression.without_parentheses() {
-                    Expression::StringLiteral(text) => text.value.as_str(),
+                    Expression::StringLiteral(text) => text.value.as_str()?,
                     _ => return None,
                 }
             }

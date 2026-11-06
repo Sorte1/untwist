@@ -4,6 +4,8 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span, SPAN};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
+use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 use untwist_core::ast_util::respan::{fresh_spans, synthetic_spans_exhausted};
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{is_constant_binding, write_reference_count};
@@ -43,7 +45,7 @@ pub(super) fn plain_assignment<'k, 'a>(
 }
 
 pub(crate) enum MergedKey<'k, 'a> {
-    Named(&'k str),
+    Named(Cow<'k, str>),
     Numeric,
     Dynamic(&'k Expression<'a>),
 }
@@ -54,11 +56,11 @@ pub(super) fn property_target<'k, 'a>(
     match target {
         AssignmentTarget::StaticMemberExpression(member) if !member.optional => Some((
             &member.object,
-            MergedKey::Named(member.property.name.as_str()),
+            MergedKey::Named(Cow::Borrowed(member.property.name.as_str())),
         )),
         AssignmentTarget::ComputedMemberExpression(member) if !member.optional => {
             let key = match &member.expression {
-                Expression::StringLiteral(literal) => MergedKey::Named(literal.value.as_str()),
+                Expression::StringLiteral(literal) => MergedKey::Named(js_text(literal.value)),
                 Expression::NumericLiteral(_) => MergedKey::Numeric,
                 other => MergedKey::Dynamic(other),
             };

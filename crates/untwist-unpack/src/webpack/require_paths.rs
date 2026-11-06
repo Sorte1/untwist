@@ -15,9 +15,7 @@ use crate::webpack::shadow;
 fn literal_module_id(argument: Option<&Argument<'_>>) -> Option<String> {
     match argument_expression(argument?)? {
         Expression::NumericLiteral(literal) => Some(number_key(literal.value)),
-        Expression::StringLiteral(literal) if !literal.lone_surrogates => {
-            Some(literal.value.as_str().to_string())
-        }
+        Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
         _ => None,
     }
 }
@@ -311,8 +309,8 @@ impl<'a> VisitMut<'a> for Rewrite<'a, '_> {
     }
 
     fn visit_import_declaration(&mut self, it: &mut ImportDeclaration<'a>) {
-        if !it.source.lone_surrogates {
-            let specifier = self.specifier(it.source.value.as_str());
+        if let Some(source) = it.source.value.as_str() {
+            let specifier = self.specifier(source);
             let span = it.source.span;
             it.source = StringLiteral::new(
                 span,

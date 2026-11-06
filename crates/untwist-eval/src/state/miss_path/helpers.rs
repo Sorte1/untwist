@@ -42,7 +42,11 @@ impl<'a> Collector<'_, 'a> {
         };
         let on_decoder =
             matches!(member.object(), Expression::Identifier(id) if id.name == self.decoder);
-        let Some(key) = member.static_property_name().filter(|_| on_decoder) else {
+        let Some(key) = member
+            .static_property_name()
+            .and_then(|name| name.as_str())
+            .filter(|_| on_decoder)
+        else {
             return;
         };
         let value = match (&node.right, node.operator) {

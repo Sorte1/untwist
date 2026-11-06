@@ -70,7 +70,7 @@ pub(crate) fn is_react_member(
 }
 
 fn is_react_module(literal: &StringLiteral<'_>) -> bool {
-    !literal.lone_surrogates && literal.value == MODULE
+    literal.value == MODULE
 }
 
 fn is_react_module_expr(expr: &Expression<'_>) -> bool {

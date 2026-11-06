@@ -166,7 +166,7 @@ impl Sources {
 fn source_key(key: &PropertyKey<'_>) -> bool {
     match key {
         PropertyKey::StaticIdentifier(name) => SOURCE_KEYS.contains(&name.name.as_str()),
-        PropertyKey::StringLiteral(text) => SOURCE_KEYS.contains(&text.value.as_str()),
+        PropertyKey::StringLiteral(text) => SOURCE_KEYS.iter().any(|key| text.value == *key),
         _ => false,
     }
 }
@@ -192,7 +192,7 @@ impl<'a> Bindings<'_, 'a> {
             }
             MemberExpression::ComputedMemberExpression(m) => matches!(
                 m.expression.without_parentheses(),
-                Expression::StringLiteral(text) if SOURCE_KEYS.contains(&text.value.as_str())
+                Expression::StringLiteral(text) if SOURCE_KEYS.iter().any(|key| text.value == *key)
             ),
             MemberExpression::PrivateFieldExpression(_) => false,
         };

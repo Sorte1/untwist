@@ -3,6 +3,7 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_syntax::scope::ScopeFlags;
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
+use untwist_core::ast_util::js_text::js_text;
 
 use super::super::{Call, DecoderProgram};
 use super::{arguments_keyed, MachineryDigest, Start, UnitKey};
@@ -52,8 +53,8 @@ fn hash_argument(hasher: &mut Sha256, argument: &Expression<'_>) {
             hasher.update(number.value.to_bits().to_le_bytes());
         }
         Expression::StringLiteral(text) => {
-            hasher.update([1u8, u8::from(text.lone_surrogates)]);
-            hash_text(hasher, text.value.as_str());
+            hasher.update([1u8, u8::from(text.value.has_lone_surrogate())]);
+            hash_text(hasher, &js_text(text.value));
         }
         other => {
             hasher.update([2u8]);

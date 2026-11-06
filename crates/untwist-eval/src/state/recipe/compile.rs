@@ -618,9 +618,7 @@ fn static_name<'a>(member: &MemberExpression<'a>) -> Option<&'a str> {
     match member {
         MemberExpression::StaticMemberExpression(node) => Some(node.property.name.as_str()),
         MemberExpression::ComputedMemberExpression(node) => match &node.expression {
-            Expression::StringLiteral(literal) if !literal.lone_surrogates => {
-                Some(literal.value.as_str())
-            }
+            Expression::StringLiteral(literal) => literal.value.as_str(),
             _ => None,
         },
         MemberExpression::PrivateFieldExpression(_) => None,

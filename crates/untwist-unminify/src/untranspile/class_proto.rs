@@ -116,7 +116,7 @@ pub fn gather(program: &Program<'_>, scoping: &Scoping) -> Prototypes {
 
 fn string_key<'k>(expression: &'k Expression<'_>) -> Option<&'k str> {
     match expression.without_parentheses() {
-        Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+        Expression::StringLiteral(literal) => literal.value.as_str(),
         _ => None,
     }
 }
@@ -127,7 +127,7 @@ fn is_prototype_literal(expression: &Expression<'_>) -> bool {
 
 fn literal_key_other_than_prototype(expression: Option<&Expression<'_>>) -> bool {
     match expression.map(Expression::without_parentheses) {
-        Some(Expression::StringLiteral(literal)) => literal.value.as_str() != PROTOTYPE,
+        Some(Expression::StringLiteral(literal)) => literal.value != PROTOTYPE,
         Some(Expression::NumericLiteral(_)) => true,
         _ => false,
     }
@@ -139,7 +139,12 @@ fn descriptor_keyed(element: &ArrayExpressionElement<'_>) -> bool {
     };
     object.properties.iter().all(|property| match property {
         ObjectPropertyKind::ObjectProperty(property) => {
-            property.key.static_name().as_deref() != Some("key")
+            property
+                .key
+                .static_name()
+                .and_then(|name| name.into_cow_str())
+                .as_deref()
+                != Some("key")
                 || literal_key_other_than_prototype(Some(&property.value))
         }
         _ => false,
@@ -400,7 +405,13 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_object_property(&mut self, it: &ObjectProperty<'a>) {
-        if it.key.static_name().as_deref() == Some(PROTOTYPE) {
+        if it
+            .key
+            .static_name()
+            .and_then(|name| name.into_cow_str())
+            .as_deref()
+            == Some(PROTOTYPE)
+        {
             self.open_all();
         }
         walk_js::walk_object_property(self, it);

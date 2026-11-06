@@ -28,8 +28,8 @@ impl Id {
                     number: true,
                 })
             }
-            Expression::StringLiteral(literal) if !literal.lone_surrogates => Some(Self {
-                key: literal.value.to_string(),
+            Expression::StringLiteral(literal) => literal.value.as_str().map(|key| Self {
+                key: key.to_string(),
                 number: false,
             }),
             _ => None,

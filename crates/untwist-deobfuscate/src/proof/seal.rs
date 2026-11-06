@@ -121,8 +121,10 @@ impl<'a> VisitJs<'a> for Sealed<'_> {
         let ok = match it.callee.without_parentheses() {
             Expression::Identifier(_) => true,
             callee => callee.as_member_expression().is_some_and(|member| {
-                matches!(member.static_property_name(), Some("push" | "shift"))
-                    && self.local(member.object())
+                matches!(
+                    member.static_property_name().and_then(|name| name.as_str()),
+                    Some("push" | "shift")
+                ) && self.local(member.object())
             }),
         };
         if !ok {

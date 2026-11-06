@@ -150,7 +150,7 @@ impl MapUses {
 }
 
 fn key<'k>(member: &'k MemberExpression<'_>) -> MemberKey<'k> {
-    if let Some(name) = member.static_property_name() {
+    if let Some(name) = member.static_property_name().and_then(|name| name.as_str()) {
         return MemberKey::Spelled(name);
     }
     let MemberExpression::ComputedMemberExpression(computed) = member else {

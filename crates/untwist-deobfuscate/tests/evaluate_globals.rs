@@ -177,7 +177,7 @@ fn issue_157_a_non_ascii_result_round_trips_through_the_printer() {
         else {
             panic!("the decoded string was not substituted: {printed}");
         };
-        assert_eq!(literal.value.as_str(), expected, "{printed}");
+        assert_eq!(literal.value.as_str(), Some(expected), "{printed}");
     }
 }
 

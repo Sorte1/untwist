@@ -14,8 +14,12 @@ fn remap<'a>(
     literal: &mut StringLiteral<'a>,
     targets: &FxHashMap<String, String>,
 ) {
-    if let Some(path) = targets.get(literal.value.as_str()) {
-        literal.value = Str::from_str_in(path, builder);
+    let path = literal
+        .value
+        .as_str()
+        .and_then(|source| targets.get(source));
+    if let Some(path) = path {
+        literal.value = Str::from_str_in(path, builder).into();
         literal.raw = None;
     }
 }

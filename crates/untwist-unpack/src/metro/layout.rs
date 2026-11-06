@@ -61,9 +61,7 @@ pub fn module_id(expression: &Expression<'_>) -> Option<String> {
         {
             Some(number_key(literal.value))
         }
-        Expression::StringLiteral(literal) if !literal.lone_surrogates => {
-            Some(literal.value.as_str().to_string())
-        }
+        Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
         _ => None,
     }
 }

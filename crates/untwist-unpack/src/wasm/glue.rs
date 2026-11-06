@@ -53,7 +53,7 @@ struct Glue<'s, 'm> {
 fn static_key<'a>(key: &'a PropertyKey<'a>) -> Option<&'a str> {
     match key {
         PropertyKey::StaticIdentifier(id) => Some(id.name.as_str()),
-        PropertyKey::StringLiteral(text) => Some(text.value.as_str()),
+        PropertyKey::StringLiteral(text) => text.value.as_str(),
         _ => None,
     }
 }
@@ -76,14 +76,14 @@ fn is_instance_exports(expression: &Expression<'_>) -> bool {
     let Some(member) = expression.without_parentheses().as_member_expression() else {
         return false;
     };
-    if member.static_property_name() != Some("exports") {
+    if member.static_property_name().and_then(|name| name.as_str()) != Some("exports") {
         return false;
     }
     match member.object().without_parentheses() {
         Expression::Identifier(id) => id.name != "module" && id.name != "exports",
-        object => object
-            .as_member_expression()
-            .is_some_and(|inner| inner.static_property_name() == Some("instance")),
+        object => object.as_member_expression().is_some_and(|inner| {
+            inner.static_property_name().and_then(|name| name.as_str()) == Some("instance")
+        }),
     }
 }
 
@@ -197,7 +197,9 @@ impl<'s> Glue<'s, '_> {
 
     fn export_read<'e>(&self, expression: &'e Expression<'e>) -> Option<&'e str> {
         let member = expression.without_parentheses().as_member_expression()?;
-        let name = member.static_property_name()?;
+        let name = member
+            .static_property_name()
+            .and_then(|name| name.as_str())?;
         let object = member.object().without_parentheses();
         let from_holder = self
             .symbol_of(object)
@@ -224,7 +226,7 @@ impl<'s> Glue<'s, '_> {
                     member.span,
                     self.member_read(
                         &member.object,
-                        member.static_property_name().map(|name| name.as_str()),
+                        member.static_property_name().and_then(|name| name.as_str()),
                     ),
                 ),
                 _ => continue,
@@ -332,7 +334,7 @@ impl<'s> Glue<'s, '_> {
         let Some(target) = assign.left.as_member_expression() else {
             return;
         };
-        let Some(field) = target.static_property_name() else {
+        let Some(field) = target.static_property_name().and_then(|name| name.as_str()) else {
             return;
         };
         let glue_module =
@@ -347,7 +349,7 @@ impl<'s> Glue<'s, '_> {
             .object()
             .without_parentheses()
             .as_member_expression()
-            .and_then(|inner| inner.static_property_name())
+            .and_then(|inner| inner.static_property_name().and_then(|name| name.as_str()))
         else {
             return;
         };

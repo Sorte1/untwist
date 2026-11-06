@@ -3,6 +3,8 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::{Scoping, SymbolId};
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::written::{text_template, WrittenKey};
 use crate::value_flow::{flow_rule_disabled, STORAGE_PROXY};
@@ -21,10 +23,10 @@ pub(super) struct Storage<'s> {
     pub(super) objects: &'s StorageObjects,
 }
 
-fn literal_key<'e>(key: &PropertyKey<'e>) -> Option<&'e str> {
+fn literal_key<'e>(key: &PropertyKey<'e>) -> Option<Cow<'e, str>> {
     match key {
-        PropertyKey::StaticIdentifier(id) => Some(id.name.as_str()),
-        PropertyKey::StringLiteral(literal) => Some(literal.value.as_str()),
+        PropertyKey::StaticIdentifier(id) => Some(Cow::Borrowed(id.name.as_str())),
+        PropertyKey::StringLiteral(literal) => Some(js_text(literal.value)),
         _ => None,
     }
 }
@@ -104,7 +106,7 @@ fn members_of(
             return None;
         }
         let member = member_of(scoping, property, trusted);
-        if members.insert(key.to_string(), member).is_some() {
+        if members.insert(key.into_owned(), member).is_some() {
             return None;
         }
     }
@@ -261,7 +263,7 @@ impl Storage<'_> {
         members: &FxHashMap<String, StorageMember>,
         pick: impl Fn(&StorageMember) -> Option<WrittenKey>,
     ) -> Option<WrittenKey> {
-        if let Some(name) = member.static_property_name() {
+        if let Some(name) = member.static_property_name().and_then(|name| name.as_str()) {
             return members.get(name).and_then(pick);
         }
         let MemberExpression::ComputedMemberExpression(computed) = member else {

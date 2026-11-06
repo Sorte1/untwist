@@ -52,8 +52,8 @@ pub fn export_call<'k, 'a>(call: &'k CallExpression<'a>) -> Option<Call<'k, 'a>>
         return None;
     }
     match call.arguments.as_slice() {
-        [Argument::StringLiteral(name), value] if !name.lone_surrogates => {
-            let name = name.value.as_str();
+        [Argument::StringLiteral(name), value] => {
+            let name = name.value.as_str()?;
             let value = value.as_expression()?;
             is_export_name(name).then_some(Call::Single(name, value))
         }
@@ -103,10 +103,8 @@ pub fn context_import<'a>(
         return None;
     }
     let specifier = match (call.arguments.as_slice(), call.optional || member.optional) {
-        ([Argument::StringLiteral(literal)], false)
-            if member.property.name == "import" && !literal.lone_surrogates =>
-        {
-            Some(literal.value.as_str())
+        ([Argument::StringLiteral(literal)], false) if member.property.name == "import" => {
+            literal.value.as_str()
         }
         _ => None,
     };
