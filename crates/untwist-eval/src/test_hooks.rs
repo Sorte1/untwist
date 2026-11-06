@@ -11,6 +11,14 @@ use crate::value::{Eval, FnCode, ObjKind, Value};
 
 pub use crate::frozen::{frozen, frozen_key, FREEZE_DIR};
 
+pub fn set_native_bodies(enabled: bool) {
+    crate::native_body::set_enabled(enabled);
+}
+
+pub fn native_body_runs() -> u64 {
+    crate::native_body::runs()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnitKind {
     Decode,

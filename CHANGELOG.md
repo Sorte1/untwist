@@ -34,6 +34,8 @@ All notable changes to this project are documented in this file. The format is b
   object: calls to `JSON.parse`, `Math`, `Number`, `parseInt`, `Promise.all` and other intrinsics
   that neither print nor enumerate, and calls to `require` or to a required `path` or `url`, no
   longer count as observing its names. The last rests on a stated premise, see the README.
+- The evaluator runs the obfuscator.io base64 and rc4 string-decoder loops natively, with the same step
+  accounting and the same output; decoding costs less memory and time on inputs that use them.
 - Unminify rounds after the first skip unchanged statements: about 6 % faster on large inputs.
 - Unminify finishes the body an `if` rewrite builds in the same round, and `!` inverts nested
   comparisons at once: game.js needs 3 unminify rounds instead of 9, about 8 % fewer instructions.

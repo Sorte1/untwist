@@ -36,6 +36,7 @@ pub(crate) struct CompiledFn<'a> {
     strict: bool,
     uses_arguments: bool,
     arguments_first: bool,
+    native: Option<Box<crate::native_body::Plan<'a>>>,
 }
 
 struct Signature<'a> {
@@ -62,6 +63,24 @@ fn signature<'a>(closure: &Closure<'a>) -> Signature<'a> {
                 _ => None,
             },
         },
+    }
+}
+
+impl<'a> CompiledFn<'a> {
+    fn plain_statements(&self) -> Option<&[Lazy<'a>]> {
+        let plain = !self.rest
+            && !self.uses_arguments
+            && !self.arguments_first
+            && self.named.is_none()
+            && self.hoisted.refused.is_none()
+            && self
+                .params
+                .iter()
+                .all(|param| param.slot.is_some() && param.default.is_none());
+        match &self.body {
+            Body::Statements(statements) if plain => Some(statements),
+            _ => None,
+        }
     }
 }
 
@@ -112,7 +131,7 @@ impl<'a> Interp<'a> {
         for (_, function) in shape.hoisted.functions.iter() {
             self.functions.register(FnCode::Function(function), &head);
         }
-        Some(CompiledFn {
+        let compiled = CompiledFn {
             layout: shape.layout,
             named,
             rest: signature.params.rest.is_some(),
@@ -123,7 +142,21 @@ impl<'a> Interp<'a> {
             strict: closure.strict,
             uses_arguments,
             arguments_first: arguments_slot.is_some() && has_defaults,
-        })
+            native: None,
+        };
+        Some(self.with_native_plan(compiled, closure.code))
+    }
+
+    fn with_native_plan(
+        &mut self,
+        mut compiled: CompiledFn<'a>,
+        code: FnCode<'a>,
+    ) -> CompiledFn<'a> {
+        let native = compiled
+            .plain_statements()
+            .and_then(|lazies| self.plan_native_body(code, lazies));
+        compiled.native = native;
+        compiled
     }
 
     fn compiled_params(
@@ -319,6 +352,32 @@ impl<'a> Interp<'a> {
         }
     }
 
+    #[inline(never)]
+    fn run_native_body(
+        &mut self,
+        statements: &[Lazy<'a>],
+        plan: &crate::native_body::Plan<'a>,
+        (env, reach): (&FrameRef<'a>, Reach),
+    ) -> Eval<'a, Value<'a>> {
+        for (index, statement) in statements.iter().enumerate() {
+            let native = match plan.step(index) {
+                Some(step) => self.run_native_step(step, (env, reach))?,
+                None => false,
+            };
+            if native {
+                continue;
+            }
+            match statement.run(self, env, reach)? {
+                Completion::Normal => {}
+                Completion::Return(value) => return Ok(value),
+                Completion::Break(_) | Completion::Continue(_) => {
+                    return Err(Bail::Unsupported(&"break or continue outside a loop").into())
+                }
+            }
+        }
+        Ok(Value::Undefined)
+    }
+
     fn run_compiled_body(
         &mut self,
         compiled: &CompiledFn<'a>,
@@ -333,6 +392,9 @@ impl<'a> Interp<'a> {
             return Err(bail.clone().into());
         }
         self.hoist_compiled(&compiled.hoisted, env);
+        if let Some(plan) = &compiled.native {
+            return self.run_native_body(statements, plan, (env, reach));
+        }
         for statement in statements.iter() {
             match statement.run(self, env, reach)? {
                 Completion::Normal => {}

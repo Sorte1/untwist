@@ -17,6 +17,7 @@ pub mod interp;
 #[cfg(not(feature = "value-api"))]
 mod interp;
 pub mod names;
+mod native_body;
 pub mod object;
 pub mod ops;
 mod release;
