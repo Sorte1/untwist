@@ -22,8 +22,11 @@ use crate::notes;
 use crate::probe::{expression_contains, holds_own_scope};
 use crate::stamp::{declaration_symbol, decoder_index, is_machinery_name};
 use crate::units::MachineryDepth;
+use crate::wrapper_effects::inline_keeping_effects;
 
 pub const WRAPPER_ROUND_CAP: usize = 16;
+
+pub const WRAPPER_EFFECT_CHECKS: &str = "inline-decoder-wrappers/effect-checks";
 
 struct WrapperShape {
     statement: Span,
@@ -454,6 +457,13 @@ fn rewrite_sites<'p, 'a>(
             if sites.holds_another_site(id) {
                 counts.deferred += 1;
                 plan.keep(site.span, notes::WRAPPER_SITE_KEPT);
+                continue;
+            }
+            let checked = !cx.opts.rule_disabled(WRAPPER_EFFECT_CHECKS);
+            let inlined = inline_keeping_effects(function, site.arguments, site.span, checked, cx);
+            if inlined.is_some_and(|inlined| plan.edits.insert(site.span, inlined)) {
+                plan.claim(id, site);
+                counts.rewritten += 1;
             } else {
                 plan.keep(site.span, &notes::wrapper_site_impure_argument());
             }

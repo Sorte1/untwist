@@ -37,6 +37,7 @@ pub mod unstamp;
 pub mod value_flow;
 pub mod var_transformation;
 pub mod wrapper_calls;
+mod wrapper_effects;
 pub mod wrappers;
 
 pub use driver::{
