@@ -409,6 +409,20 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Whole(
+            "var A = { k: b }; function a() { const j = ['1', '3', 'hi', 'there', 'x']; a = function () { return j; }; return a(); } function b(c, e) { const f = a(); return b = function (g, h) { g = g - 0x0; let i = f[g]; return i; }, b(c, e) + (this && this.k ? '!' : ''); } (function (c, e) { const f = b, g = c(); while (!![]) { try { const h = parseInt(f(0x0)); if (h === e) break; else g['push'](g['shift']()); } catch (i) { g['push'](g['shift']()); } } }(a, 0x3)); console.log(A.k(0x2), b(0x3));",
+        ),
+        expects: notes::WRAPPER_OBJECT_ALIAS_THIS,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(
+            "var A = { k: b }; function a() { const j = ['1', '3', 'hi', 'there', 'x']; a = function () { return j; }; return a(); } function b(c, e) { const f = a(); return b = function (g, h) { g = g - 0x0; let i = f[g]; return i; }, b(c, e); } (function (c, e) { const f = A.k, g = c(); while (!![]) { try { const h = parseInt(f(0x0)); if (h === e) break; else g['push'](g['shift']()); } catch (i) { g['push'](g['shift']()); } } }(a, 0x3)); console.log(Object.keys(A).length, A.k(0x2));",
+        ),
+        expects: notes::WRAPPER_OBJECT_ALIAS_OTHER_USE,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Headed(
             "function alias(a, b) { return __DECODE_0__(a - 1, b); }\nf(alias(alias(g(), 3), 4));",
         ),
