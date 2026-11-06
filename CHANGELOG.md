@@ -29,6 +29,10 @@ All notable changes to this project are documented in this file. The format is b
 
 - The default lane decodes beside a fresh `new Map()` or `new WeakMap()` that is read and written only
   through its own `get` and `set`; those calls were taken for `Reflect.get` and `Reflect.set` and refused.
+- A decoder wrapper whose binding is written again, or a `var` wrapper called before its
+  declaration runs, is no longer inlined; both printed the wrong value in the default lane.
+- An alias of a decoder wrapper (`var k = wrapper`), and wrapper calls inside the rotator,
+  are resolved, so string arrays reached only through such wrappers decode in both lanes.
 - The default lane no longer refuses a decode because of an object rest or spread, or a Symbol-valued
   computed key, on an object created in the same unit; only what such a key can read is judged.
 - The default lane decodes a string array when a key or code text is built from decoded strings, such as

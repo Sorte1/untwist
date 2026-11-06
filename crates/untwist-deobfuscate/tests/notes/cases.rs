@@ -417,6 +417,20 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Headed(
+            "function w(a, b) { return __DECODE_0__(a, b); }\nw = function () { return 1; };\nw(1, 2);",
+        ),
+        expects: notes::WRAPPER_BINDING_UNSTABLE,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Headed(
+            "f(w(1, 2));\nvar w = function (a, b) { return __DECODE_0__(a, b); };\nw(3, 4);",
+        ),
+        expects: notes::WRAPPER_READ_BEFORE_DECLARATION,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Headed("function w(a, b) { return __DECODE_0__(a, class {}); }\nw(1, 2);"),
         expects: notes::WRAPPER_NESTED_FUNCTION,
         mode: Match::Contains,
@@ -444,7 +458,7 @@ pub const CASES: &[Case] = &[
     },
     Case {
         source: Source::Headed(
-            "function alias(a, b) { return __DECODE_0__(b - 938, a); }\nvar x = alias;\nalias(4, 5);",
+            "function alias(a, b) { return __DECODE_0__(b - 938, a); }\nf(alias);\nalias(4, 5);",
         ),
         expects: notes::WRAPPER_PARTIAL,
         mode: Match::Contains,

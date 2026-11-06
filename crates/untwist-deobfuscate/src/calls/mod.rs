@@ -35,6 +35,15 @@ fn decoder_call<'k, 'a>(expr: &'k Expression<'a>) -> Option<(usize, &'k CallExpr
     Some((index, call))
 }
 
+fn is_decode_argument(expr: &Expression<'_>) -> bool {
+    match expr {
+        Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::Void => {
+            matches!(unary.argument, Expression::NumericLiteral(_))
+        }
+        other => is_literal_argument(other),
+    }
+}
+
 fn is_splittable_branch(expr: &Expression<'_>) -> bool {
     match expr.without_parentheses() {
         Expression::ConditionalExpression(conditional) => {
@@ -86,7 +95,7 @@ impl<'p> Collector<'p> {
             && call
                 .arguments
                 .iter()
-                .all(|a| a.as_expression().is_some_and(is_literal_argument));
+                .all(|a| a.as_expression().is_some_and(is_decode_argument));
         if !literal {
             self.dynamic_calls.push((index, call.span));
             for argument in &call.arguments {
