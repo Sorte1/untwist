@@ -31,7 +31,7 @@ fn is_json_parse_callee(callee: &Expression<'_>) -> bool {
         Expression::ComputedMemberExpression(member) => {
             !member.optional
                 && matches!(&member.expression, Expression::StringLiteral(literal)
-                    if literal.value.as_str() == "parse")
+                    if literal.value == "parse")
                 && is_json_object(&member.object)
         }
         _ => false,
@@ -51,7 +51,7 @@ fn has_proto_key(expr: &Expression<'_>) -> bool {
                 return true;
             };
             let proto = matches!(&entry.key, PropertyKey::StringLiteral(key)
-                if key.value.as_str() == "__proto__");
+                if key.value == "__proto__");
             proto || has_proto_key(&entry.value)
         }),
         Expression::ArrayExpression(array) => array
@@ -92,7 +92,10 @@ impl<'a> Pass<'a> for JsonParse {
             let Some(Argument::StringLiteral(literal)) = call.arguments.first() else {
                 return;
             };
-            literal.value.as_str()
+            let Some(text) = literal.value.as_str() else {
+                return;
+            };
+            text
         };
         replace_with_literal(expr, text, cx);
     }

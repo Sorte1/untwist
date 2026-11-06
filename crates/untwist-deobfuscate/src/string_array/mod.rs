@@ -57,10 +57,7 @@ pub fn bare_template_text<'a>(expr: &Expression<'a>) -> Option<&'a str> {
         return None;
     }
     let element = template.quasis.first()?;
-    if element.lone_surrogates {
-        return None;
-    }
-    Some(element.value.cooked?.as_str())
+    element.value.cooked?.as_str()
 }
 
 fn array_literal<'k, 'a>(expr: &'k Expression<'a>) -> Option<usize> {

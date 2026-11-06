@@ -43,13 +43,11 @@ fn sequence_declaration<'k, 'a>(
     let Some(Expression::StringLiteral(separator)) = arguments.first()?.as_expression() else {
         return None;
     };
-    if separator.value.as_str() != "|" || !is_digit_sequence(text.value.as_str()) {
+    let text = text.value.as_str()?;
+    if separator.value != "|" || !is_digit_sequence(text) {
         return None;
     }
-    Some((
-        id,
-        text.value.as_str().split('|').map(str::to_string).collect(),
-    ))
+    Some((id, text.split('|').map(str::to_string).collect()))
 }
 
 fn iterator_declaration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k BindingIdentifier<'a>> {
@@ -130,7 +128,7 @@ fn case_label(case: &SwitchCase<'_>) -> Option<String> {
     let Some(Expression::StringLiteral(literal)) = case.test.as_ref() else {
         return None;
     };
-    let text = literal.value.as_str();
+    let text = literal.value.as_str()?;
     if text.is_empty() || !text.chars().all(|ch| ch.is_ascii_digit()) {
         return None;
     }

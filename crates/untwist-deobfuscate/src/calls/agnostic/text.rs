@@ -2,6 +2,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
+use untwist_core::ast_util::js_text::js_text;
 
 use super::roles::*;
 use super::sites::*;
@@ -22,7 +23,7 @@ pub(super) fn closed_runner_read<'a>(
     };
     let name = literal
         .value
-        .as_str()
+        .as_str()?
         .trim()
         .trim_end_matches(';')
         .trim_end();
@@ -87,7 +88,8 @@ impl<'s, 'a> Sites<'s, 'a> {
             .quasis
             .first()
             .and_then(|element| element.value.cooked)
-            .filter(|_| quasi.expressions.is_empty());
+            .filter(|_| quasi.expressions.is_empty())
+            .map(js_text);
         self.reach_template_text(span, text.as_deref());
         if text.is_none_or(|text| self.text_writes(&text, function)) {
             self.text_judged = true;

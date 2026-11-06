@@ -95,10 +95,14 @@ pub(super) fn destructures_a_definer(scoping: &Scoping, it: &VariableDeclarator<
     };
     is_owner(scoping, init)
         && (pattern.rest.is_some()
-            || pattern
-                .properties
-                .iter()
-                .any(|property| takes_a_definer(property.key.static_name())))
+            || pattern.properties.iter().any(|property| {
+                takes_a_definer(
+                    property
+                        .key
+                        .static_name()
+                        .and_then(|name| name.into_cow_str()),
+                )
+            }))
 }
 
 fn assigned_property_takes_a_definer(property: &AssignmentTargetProperty<'_>) -> bool {
@@ -106,9 +110,12 @@ fn assigned_property_takes_a_definer(property: &AssignmentTargetProperty<'_>) ->
         AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(id) => {
             is_definer_name(id.binding.name.as_str())
         }
-        AssignmentTargetProperty::AssignmentTargetPropertyProperty(property) => {
-            takes_a_definer(property.name.static_name())
-        }
+        AssignmentTargetProperty::AssignmentTargetPropertyProperty(property) => takes_a_definer(
+            property
+                .name
+                .static_name()
+                .and_then(|name| name.into_cow_str()),
+        ),
     }
 }
 

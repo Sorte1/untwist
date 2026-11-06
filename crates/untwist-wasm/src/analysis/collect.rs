@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::cell::Cell;
+use untwist_core::ast_util::js_text::js_text;
 
 use oxc_ast::ast::{
     Argument, AssignmentExpression, AssignmentTarget, AssignmentTargetPropertyIdentifier,
@@ -62,7 +64,7 @@ fn kind_of(flags: SymbolFlags) -> Kind {
     }
 }
 
-fn require_source<'b>(init: Option<&'b Expression<'_>>) -> Option<&'b str> {
+fn require_source<'b>(init: Option<&'b Expression<'_>>) -> Option<Cow<'b, str>> {
     let Some(Expression::CallExpression(call)) = init else {
         return None;
     };
@@ -71,7 +73,7 @@ fn require_source<'b>(init: Option<&'b Expression<'_>>) -> Option<&'b str> {
     };
     match call.arguments.as_slice() {
         [Argument::StringLiteral(source)] if callee.name == "require" => {
-            Some(source.value.as_str())
+            Some(js_text(source.value))
         }
         _ => None,
     }
@@ -397,7 +399,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
             };
             self.link(
                 local.symbol_id.get(),
-                it.source.value.as_str(),
+                &js_text(it.source.value),
                 name.as_str(),
             );
         }
@@ -457,7 +459,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
         if let Expression::StringLiteral(property) = &it.expression {
-            self.property_seen(&it.object, &property.value);
+            self.property_seen(&it.object, &js_text(property.value));
         }
         walk_js::walk_computed_member_expression(self, it);
     }
@@ -466,7 +468,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
         if let (BindingPattern::BindingIdentifier(id), Some(source)) =
             (&it.id, require_source(it.init.as_ref()))
         {
-            self.link(id.symbol_id.get(), source, "*");
+            self.link(id.symbol_id.get(), &source, "*");
         }
         if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
             self.record_init(id, init);

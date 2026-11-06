@@ -165,7 +165,7 @@ fn as_identifier<'a>(expr: &Expression<'a>) -> Option<&'a str> {
 pub(super) fn member_peel_from<'a>(
     member: &oxc_ast::ast::MemberExpression<'a>,
 ) -> Option<MemberPeel<'a>> {
-    let final_key = match member.static_property_name() {
+    let final_key = match member.static_property_name().and_then(|name| name.as_str()) {
         Some(text) => FinalKey::Static(text),
         None => match member {
             oxc_ast::ast::MemberExpression::ComputedMemberExpression(inner) => {
@@ -184,7 +184,9 @@ pub(super) fn member_peel_from<'a>(
         other => {
             let inner = other.as_member_expression()?;
             let root = as_identifier(inner.object())?;
-            let segment = inner.static_property_name()?;
+            let segment = inner
+                .static_property_name()
+                .and_then(|name| name.as_str())?;
             Some(MemberPeel {
                 root,
                 segment: Some(segment),

@@ -85,7 +85,9 @@ fn bare_specifier(arguments: &[Argument<'_>]) -> bool {
     let [Argument::StringLiteral(literal)] = arguments else {
         return false;
     };
-    let value = literal.value.as_str();
+    let Some(value) = literal.value.as_str() else {
+        return false;
+    };
     !value.is_empty() && !value.starts_with('.') && !value.starts_with('/')
 }
 

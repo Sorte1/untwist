@@ -48,8 +48,8 @@ fn jsonp_global_target<'k>(
         }
         AssignmentTarget::ComputedMemberExpression(member) if !member.optional => {
             match &member.expression {
-                Expression::StringLiteral(literal) if !literal.lone_surrogates => {
-                    (&member.object, Cow::Borrowed(literal.value.as_str()))
+                Expression::StringLiteral(literal) if !literal.value.has_lone_surrogate() => {
+                    (&member.object, Cow::Borrowed(literal.value.as_str()?))
                 }
                 Expression::NumericLiteral(literal) => {
                     (&member.object, Cow::Owned(number_key(literal.value)))

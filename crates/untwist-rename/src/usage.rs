@@ -120,12 +120,12 @@ fn is_true(expr: &Expression<'_>) -> bool {
 
 fn string_value<'e>(expr: &'e Expression<'_>) -> Option<&'e str> {
     match expr.without_parentheses() {
-        Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+        Expression::StringLiteral(literal) => literal.value.as_str(),
         Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
             .quasis
             .first()
-            .and_then(|quasi| quasi.value.cooked.as_ref())
-            .map(|cooked| cooked.as_str()),
+            .and_then(|quasi| quasi.value.cooked)
+            .and_then(|cooked| cooked.as_str()),
         _ => None,
     }
 }
@@ -273,7 +273,7 @@ impl<const CLASS_HINTS: bool> UsageWalker<'_, CLASS_HINTS> {
         let Some(member) = it.left.as_member_expression() else {
             return;
         };
-        let Some(property) = member.static_property_name() else {
+        let Some(property) = member.static_property_name().and_then(|name| name.as_str()) else {
             return;
         };
         let Some((symbol, target)) = self.hinted_target(member.object()) else {

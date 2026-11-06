@@ -2,6 +2,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::UnaryOperator;
+use untwist_core::ast_util::js_text::js_text;
 
 const WRITER_KEYS: &[&str] = &[
     "__proto__",
@@ -21,7 +22,7 @@ const WRITER_KEYS: &[&str] = &[
 
 fn writer_key(key: &Expression<'_>) -> bool {
     match key.without_parentheses() {
-        Expression::StringLiteral(name) => WRITER_KEYS.contains(&name.value.as_str()),
+        Expression::StringLiteral(name) => WRITER_KEYS.iter().any(|key| name.value == *key),
         Expression::NumericLiteral(_) => false,
         _ => true,
     }
@@ -95,8 +96,8 @@ fn reach_key(key: &PropertyKey<'_>) -> bool {
             .as_expression()
             .is_none_or(|expr| match expr.without_parentheses() {
                 Expression::StringLiteral(name) => {
-                    WRITER_KEYS.contains(&name.value.as_str())
-                        || TEXT_RUNNERS.contains(&name.value.as_str())
+                    WRITER_KEYS.iter().any(|key| name.value == *key)
+                        || TEXT_RUNNERS.iter().any(|key| name.value == *key)
                 }
                 Expression::NumericLiteral(_) => false,
                 _ => true,
@@ -111,7 +112,9 @@ fn runner_member(it: &MemberExpression<'_>) -> bool {
         }
         MemberExpression::ComputedMemberExpression(member) => {
             match member.expression.without_parentheses() {
-                Expression::StringLiteral(name) => TEXT_RUNNERS.contains(&name.value.as_str()),
+                Expression::StringLiteral(name) => {
+                    TEXT_RUNNERS.iter().any(|key| name.value == *key)
+                }
                 _ => false,
             }
         }
@@ -144,13 +147,13 @@ impl TextRuns {
                 .map(Expression::without_parentheses)
             {
                 Some(Expression::StringLiteral(text)) => {
-                    super::escape_scan::literal_text_reaches_in(&text.value)
+                    super::escape_scan::literal_text_reaches_in(&js_text(text.value))
                 }
                 Some(Expression::TemplateLiteral(t)) if t.expressions.is_empty() => t
                     .quasis
                     .first()
                     .and_then(|quasi| quasi.value.cooked)
-                    .is_none_or(|text| super::escape_scan::literal_text_reaches_in(&text)),
+                    .is_none_or(|text| super::escape_scan::literal_text_reaches_in(&js_text(text))),
                 Some(Expression::NumericLiteral(_) | Expression::BooleanLiteral(_)) => false,
                 _ => true,
             };
@@ -186,7 +189,7 @@ impl<'a> VisitJs<'a> for TextRuns {
                 MemberExpression::ComputedMemberExpression(member) => {
                     match member.expression.without_parentheses() {
                         Expression::StringLiteral(name) => {
-                            TEXT_RUNNERS.contains(&name.value.as_str())
+                            TEXT_RUNNERS.iter().any(|key| name.value == *key)
                         }
                         _ => false,
                     }

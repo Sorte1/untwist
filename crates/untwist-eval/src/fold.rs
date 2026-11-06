@@ -24,7 +24,8 @@ use crate::object::{lookup_property, set_property, string_property};
 use crate::ops::{binary_op, string_key, to_boolean, to_js_string, to_property_key, unary_op};
 use crate::stack;
 use crate::value::{
-    js_string_from_literal, Abrupt, Eval, JsString, NativeId, ObjKind, ObjRef, PropKey, Value,
+    js_string_from_js_str, js_string_from_literal, Abrupt, Eval, JsString, NativeId, ObjKind,
+    ObjRef, PropKey, Value,
 };
 
 mod budget_host;
@@ -283,13 +284,7 @@ pub fn fold_unary(op: UnaryOperator, value: &Const) -> Option<Const> {
 pub fn const_from_literal(expr: &Expression<'_>) -> Option<Const> {
     match expr.without_parentheses() {
         Expression::NumericLiteral(n) => Some(Const::Num(n.value)),
-        Expression::StringLiteral(s) => {
-            if s.lone_surrogates {
-                None
-            } else {
-                Some(Const::Str(s.value.as_str().to_string()))
-            }
-        }
+        Expression::StringLiteral(s) => Some(Const::Str(s.value.as_str()?.to_string())),
         Expression::BooleanLiteral(b) => Some(Const::Bool(b.value)),
         Expression::NullLiteral(_) => Some(Const::Null),
         Expression::UnaryExpression(u) if u.operator == UnaryOperator::UnaryNegation => {
@@ -587,7 +582,7 @@ fn fold_template(
     let mut out = JsString::empty();
     for (index, quasi) in node.quasis.iter().enumerate() {
         let cooked = quasi.value.cooked?;
-        let chunk = JsString::from_str(cooked.as_str());
+        let chunk = js_string_from_js_str(cooked);
         charge_for_length(host, out.len() + chunk.len()).ok()?;
         out = out.concat(&chunk).ok()?;
         if let Some(part) = node.expressions.get(index) {

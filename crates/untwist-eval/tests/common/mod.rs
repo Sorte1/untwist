@@ -234,7 +234,7 @@ pub fn oracle_evaluate(source: &str) -> Option<String> {
     let value = stmt.expression.evaluate_value(&ctx)?;
     Some(match value {
         ConstantValue::Number(n) => format!("number:{}", untwist_eval::coerce::number_to_string(n)),
-        ConstantValue::String(text) => format!("string:{text}"),
+        ConstantValue::String(text) => format!("string:{}", text.display()),
         ConstantValue::Boolean(b) => format!("boolean:{b}"),
         ConstantValue::Undefined => "undefined".to_string(),
         ConstantValue::Null => "null".to_string(),

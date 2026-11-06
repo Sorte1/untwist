@@ -27,7 +27,7 @@ fn is_typeof(expr: &Expression<'_>) -> bool {
 fn is_u_literal(expr: &Expression<'_>) -> bool {
     matches!(
         expr.without_parentheses(),
-        Expression::StringLiteral(literal) if literal.value.as_str() == "u"
+        Expression::StringLiteral(literal) if literal.value == "u"
     )
 }
 

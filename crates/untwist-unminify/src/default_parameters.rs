@@ -261,7 +261,7 @@ fn is_arguments_length(expr: &Expression<'_>) -> bool {
                 && is_arguments(&member.object)
                 && matches!(
                     &member.expression,
-                    Expression::StringLiteral(text) if text.value.as_str() == "length"
+                    Expression::StringLiteral(text) if text.value == "length"
                 )
         }
         _ => false,

@@ -16,14 +16,17 @@ fn identifier_name<'a>(expr: &Expression<'a>) -> Option<&'a str> {
     let Expression::StringLiteral(literal) = expr else {
         return None;
     };
-    Some(literal.value.as_str()).filter(|name| is_identifier_name(name))
+    literal
+        .value
+        .as_str()
+        .filter(|name| is_identifier_name(name))
 }
 
 fn string_key<'a>(key: &PropertyKey<'a>) -> Option<&'a str> {
     let PropertyKey::StringLiteral(literal) = key else {
         return None;
     };
-    Some(literal.value.as_str())
+    literal.value.as_str()
 }
 
 fn key_identifier_name<'a>(key: &PropertyKey<'a>) -> Option<&'a str> {

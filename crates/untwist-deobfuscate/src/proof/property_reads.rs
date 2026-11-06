@@ -161,7 +161,10 @@ pub(super) fn property_key_read<'k, 'a>(
     match key {
         PropertyKey::StaticIdentifier(id) => KeyRead::Static(Cow::Borrowed(id.name.as_str())),
         PropertyKey::PrivateIdentifier(_) => KeyRead::Private,
-        match_expression!(PropertyKey) => match (computed, key.static_name()) {
+        match_expression!(PropertyKey) => match (
+            computed,
+            key.static_name().and_then(|name| name.into_cow_str()),
+        ) {
             (true, _) => KeyRead::Computed(key.to_expression()),
             (false, Some(name)) => KeyRead::Static(name),
             (false, None) => KeyRead::Unmodelled,
@@ -221,6 +224,7 @@ fn sets_prototype(property: &ObjectProperty<'_>) -> bool {
         && property
             .key
             .static_name()
+            .and_then(|name| name.into_cow_str())
             .is_some_and(|name| name == "__proto__")
 }
 

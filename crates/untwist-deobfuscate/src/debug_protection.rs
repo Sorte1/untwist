@@ -28,7 +28,7 @@ fn is_constructed_debugger(expr: &Expression<'_>) -> bool {
         && arguments.len() == 1
         && matches!(
             arguments[0].as_expression(),
-            Some(Expression::StringLiteral(literal)) if literal.value.as_str() == "debugger"
+            Some(Expression::StringLiteral(literal)) if literal.value == "debugger"
         )
 }
 

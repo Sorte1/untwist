@@ -587,7 +587,7 @@ fn is_a_symbol(init: &Expression<'_>, scoping: &Scoping) -> bool {
 fn is_a_safe_literal_key(init: &Expression<'_>) -> bool {
     match init {
         Expression::NumericLiteral(_) => true,
-        Expression::StringLiteral(literal) => literal.value.as_str() != PROTO_KEY,
+        Expression::StringLiteral(literal) => literal.value != PROTO_KEY,
         other => bare_template_text(other).is_some_and(|text| text != PROTO_KEY),
     }
 }

@@ -99,8 +99,12 @@ impl<'a> Rewrite<'a, '_, '_> {
         let Expression::StringLiteral(literal) = &mut it.source else {
             return;
         };
-        if let Some(path) = self.targets.get(literal.value.as_str()) {
-            literal.value = Str::from_str_in(path, &self.builder);
+        let path = literal
+            .value
+            .as_str()
+            .and_then(|source| self.targets.get(source));
+        if let Some(path) = path {
+            literal.value = Str::from_str_in(path, &self.builder).into();
             literal.raw = None;
         }
     }
@@ -145,7 +149,7 @@ impl<'a> Rewrite<'a, '_, '_> {
         let span = call.span;
         match call.arguments.as_mut_slice() {
             [Argument::StringLiteral(name), argument] => {
-                let name = name.value.as_str();
+                let name = name.value.as_str()?;
                 let expression = argument.take_in(&self.builder).into_expression();
                 Some(self.single(name, expression))
             }
@@ -155,7 +159,11 @@ impl<'a> Rewrite<'a, '_, '_> {
                     let ObjectPropertyKind::ObjectProperty(property) = property else {
                         return None;
                     };
-                    let name = property.key.static_name()?.to_string();
+                    let name = property
+                        .key
+                        .static_name()
+                        .and_then(|name| name.into_cow_str())?
+                        .to_string();
                     let expression = property.value.take_in(&self.builder);
                     values.push(self.single(&name, expression));
                 }

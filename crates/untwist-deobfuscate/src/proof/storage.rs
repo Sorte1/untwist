@@ -261,7 +261,7 @@ impl Storage<'_> {
         members: &FxHashMap<String, StorageMember>,
         pick: impl Fn(&StorageMember) -> Option<WrittenKey>,
     ) -> Option<WrittenKey> {
-        if let Some(name) = member.static_property_name() {
+        if let Some(name) = member.static_property_name().and_then(|name| name.as_str()) {
             return members.get(name).and_then(pick);
         }
         let MemberExpression::ComputedMemberExpression(computed) = member else {

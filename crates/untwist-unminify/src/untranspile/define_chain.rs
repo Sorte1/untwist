@@ -452,7 +452,7 @@ const MAX_SAFE_INDEX: f64 = 9_007_199_254_740_991.0;
 
 fn literal_name(key: &Expression<'_>) -> Option<String> {
     match key.without_parentheses() {
-        Expression::StringLiteral(literal) => Some(literal.value.to_string()),
+        Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
         Expression::NumericLiteral(literal)
             if literal.value.fract() == 0.0 && (0.0..=MAX_SAFE_INDEX).contains(&literal.value) =>
         {

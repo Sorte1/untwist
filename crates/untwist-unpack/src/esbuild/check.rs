@@ -36,7 +36,7 @@ fn contains(outer: Span, inner: Span) -> bool {
 pub fn bare_specifier(call: &CallExpression<'_>) -> bool {
     match &call.arguments[..] {
         [Argument::StringLiteral(text)] => {
-            !text.lone_surrogates
+            !text.value.has_lone_surrogate()
                 && !text.value.is_empty()
                 && !text.value.starts_with('.')
                 && !text.value.starts_with('/')

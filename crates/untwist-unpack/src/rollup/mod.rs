@@ -120,8 +120,13 @@ fn relink<'a>(
     declaration: &mut ImportDeclaration<'a>,
     targets: &FxHashMap<String, String>,
 ) {
-    if let Some(path) = targets.get(declaration.source.value.as_str()) {
-        declaration.source.value = Str::from_str_in(path, builder);
+    let path = declaration
+        .source
+        .value
+        .as_str()
+        .and_then(|source| targets.get(source));
+    if let Some(path) = path {
+        declaration.source.value = Str::from_str_in(path, builder).into();
         declaration.source.raw = None;
     }
 }

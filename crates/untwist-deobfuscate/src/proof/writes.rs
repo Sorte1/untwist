@@ -4,6 +4,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::BinaryOperator;
 use oxc_syntax::reference::ReferenceId;
 use rustc_hash::FxHashSet;
+use untwist_core::ast_util::js_text::js_text;
 use untwist_core::ast_util::matcher::is_literal_argument;
 
 use super::definer_calls::{applied_definer_patch, bound_definer_patch};
@@ -162,12 +163,19 @@ pub(crate) fn literal_array_index_key<'a>(expr: &Expression<'a>) -> Option<Patch
     let Expression::StringLiteral(text) = element.as_expression()? else {
         return None;
     };
-    Some(PatchKey::Named(text.value.as_str()))
+    Some(
+        text.value
+            .as_str()
+            .map_or(PatchKey::Dynamic, PatchKey::Named),
+    )
 }
 
 pub(crate) fn key_of<'a>(expr: &Expression<'a>) -> PatchKey<'a> {
     match expr.without_parentheses() {
-        Expression::StringLiteral(key) => PatchKey::Named(key.value.as_str()),
+        Expression::StringLiteral(key) => key
+            .value
+            .as_str()
+            .map_or(PatchKey::Dynamic, PatchKey::Named),
         Expression::CallExpression(call) if is_pending_key(call) => PatchKey::Pending(call.span),
         other => well_known_symbol_key(other)
             .or_else(|| literal_array_index_key(other))
@@ -311,7 +319,9 @@ pub fn record_definer_patch<'a>(call: &CallExpression<'a>) -> Option<PatchSite<'
     let Some(member) = callee.as_member_expression() else {
         return bound_definer_patch(callee, call);
     };
-    let method = member.static_property_name()?;
+    let method = member
+        .static_property_name()
+        .and_then(|name| name.as_str())?;
     if matches!(method, "call" | "apply") {
         return applied_definer_patch(member, method, call);
     }
@@ -472,17 +482,10 @@ pub(crate) fn object_operand_is_intrinsic(record: &[PatchSite<'_>]) -> bool {
 
 fn concat_string(expr: &Expression<'_>) -> Option<String> {
     match expr.without_parentheses() {
-        Expression::StringLiteral(name) => Some(name.value.as_str().to_string()),
-        Expression::TemplateLiteral(template) if template.expressions.is_empty() => Some(
-            template
-                .quasis
-                .first()?
-                .value
-                .cooked
-                .as_ref()?
-                .as_str()
-                .to_string(),
-        ),
+        Expression::StringLiteral(name) => Some(js_text(name.value).into_owned()),
+        Expression::TemplateLiteral(template) if template.expressions.is_empty() => {
+            Some(js_text(template.quasis.first()?.value.cooked?).into_owned())
+        }
         Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
             Some(concat_string(&binary.left)? + &concat_string(&binary.right)?)
         }

@@ -114,7 +114,7 @@ pub fn bare(spec: &str) -> bool {
 
 pub fn single_string<'k>(call: &'k CallExpression<'_>) -> Option<&'k str> {
     match call.arguments.as_slice() {
-        [Argument::StringLiteral(text)] if !text.lone_surrogates => Some(text.value.as_str()),
+        [Argument::StringLiteral(text)] => text.value.as_str(),
         _ => None,
     }
 }

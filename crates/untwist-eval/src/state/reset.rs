@@ -109,7 +109,9 @@ fn candidate<'n, 'a>(index: usize, statement: &'n Statement<'a>) -> Option<Candi
 
 fn own_key<'a>(member: &MemberExpression<'a>, decoder: &str) -> Option<&'a str> {
     match member.object().without_parentheses() {
-        Expression::Identifier(id) if id.name.as_str() == decoder => member.static_property_name(),
+        Expression::Identifier(id) if id.name.as_str() == decoder => {
+            member.static_property_name().and_then(|name| name.as_str())
+        }
         _ => None,
     }
 }

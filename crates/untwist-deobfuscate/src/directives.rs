@@ -53,7 +53,7 @@ fn directive_text<'a>(statement: &Statement<'a>) -> Option<&'a str> {
     let Expression::StringLiteral(literal) = &statement.expression else {
         return None;
     };
-    if literal.lone_surrogates {
+    if literal.value.has_lone_surrogate() {
         return None;
     }
     let raw = literal.raw.as_ref()?.as_str();

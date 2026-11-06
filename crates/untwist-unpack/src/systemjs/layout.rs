@@ -103,9 +103,7 @@ pub fn probe(frame: &Frame<'_, '_>) -> bool {
 
 fn plain_string<'a>(expression: &Expression<'a>) -> Option<&'a str> {
     match expression {
-        Expression::StringLiteral(literal) if !literal.lone_surrogates => {
-            Some(literal.value.as_str())
-        }
+        Expression::StringLiteral(literal) => literal.value.as_str(),
         _ => None,
     }
 }
@@ -320,7 +318,7 @@ fn property_key<'k, 'a>(property: &'k ObjectProperty<'a>) -> Option<(&'a str, &'
     }
     let name = match &property.key {
         PropertyKey::StaticIdentifier(id) => id.name.as_str(),
-        PropertyKey::StringLiteral(literal) if !literal.lone_surrogates => literal.value.as_str(),
+        PropertyKey::StringLiteral(literal) => literal.value.as_str()?,
         _ => return None,
     };
     Some((name, &property.value))

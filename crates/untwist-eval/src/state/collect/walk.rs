@@ -26,6 +26,7 @@ use crate::stack;
 fn may_replace_prototype(member: &MemberExpression<'_>) -> bool {
     member
         .static_property_name()
+        .and_then(|name| name.as_str())
         .is_none_or(|name| name == "prototype")
 }
 

@@ -3,11 +3,13 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::{Scoping, SymbolId};
 use oxc_syntax::operator::UnaryOperator;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
-fn property_key_str<'e>(key: &PropertyKey<'e>) -> Option<&'e str> {
+fn property_key_str<'e>(key: &PropertyKey<'e>) -> Option<Cow<'e, str>> {
     match key {
-        PropertyKey::StaticIdentifier(id) => Some(id.name.as_str()),
-        PropertyKey::StringLiteral(literal) => Some(literal.value.as_str()),
+        PropertyKey::StaticIdentifier(id) => Some(Cow::Borrowed(id.name.as_str())),
+        PropertyKey::StringLiteral(literal) => Some(js_text(literal.value)),
         _ => None,
     }
 }

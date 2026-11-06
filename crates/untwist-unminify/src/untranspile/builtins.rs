@@ -98,7 +98,7 @@ const PROMISE: &str = "Promise";
 
 fn literal_key<'k>(expression: &'k Expression<'_>) -> Option<&'k str> {
     match expression.without_parentheses() {
-        Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+        Expression::StringLiteral(literal) => literal.value.as_str(),
         _ => None,
     }
 }

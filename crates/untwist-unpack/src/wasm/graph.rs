@@ -40,14 +40,14 @@ pub struct ModuleFacts {
 fn key_name<'a>(key: &'a PropertyKey<'a>) -> Option<&'a str> {
     match key {
         PropertyKey::StaticIdentifier(id) => Some(id.name.as_str()),
-        PropertyKey::StringLiteral(text) => Some(text.value.as_str()),
+        PropertyKey::StringLiteral(text) => text.value.as_str(),
         _ => None,
     }
 }
 
 fn string_of<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     match expression.without_parentheses() {
-        Expression::StringLiteral(text) => Some(text.value.as_str()),
+        Expression::StringLiteral(text) => text.value.as_str(),
         _ => None,
     }
 }
@@ -69,7 +69,9 @@ fn member_of<'a>(expression: &'a Expression<'a>) -> Option<(&'a Expression<'a>, 
     let member = expression.without_parentheses().as_member_expression()?;
     Some((
         member.object().without_parentheses(),
-        member.static_property_name()?,
+        member
+            .static_property_name()
+            .and_then(|name| name.as_str())?,
     ))
 }
 
@@ -120,7 +122,7 @@ fn cache_id<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     let Expression::ComputedMemberExpression(entry) = object else {
         return None;
     };
-    entry.static_property_name().map(|id| id.as_str())
+    entry.static_property_name().and_then(|name| name.as_str())
 }
 
 struct Collector<'s> {
@@ -282,9 +284,11 @@ impl<'s> Collector<'s> {
                     property.value.without_parentheses(),
                 ) {
                     (Some(id), Expression::StringLiteral(hash)) => {
-                        self.facts
-                            .id_hashes
-                            .push((id.to_string(), hash.value.to_string()));
+                        if let Some(hash) = hash.value.as_str() {
+                            self.facts
+                                .id_hashes
+                                .push((id.to_string(), hash.to_string()));
+                        }
                     }
                     (_, Expression::ObjectExpression(nested)) => pending.push(nested),
                     _ => {}
@@ -344,7 +348,7 @@ impl<'s> Collector<'s> {
                 AstKind::ComputedMemberExpression(member) => {
                     if let (Some(holder), Some(key)) = (
                         identifier_name(&member.object),
-                        member.static_property_name(),
+                        member.static_property_name().and_then(|name| name.as_str()),
                     ) {
                         if !self.is_write_target(node.id(), member.span) {
                             self.facts.reads.push((holder.to_string(), key.to_string()));

@@ -217,7 +217,7 @@ fn comments_of(source: &Program<'_>, items: &[Statement<'_>]) -> Vec<Comment> {
             source.comments[from..]
                 .iter()
                 .take_while(|c| c.span.end <= span.end)
-                .copied(),
+                .cloned(),
         );
     }
     comments

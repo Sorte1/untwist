@@ -75,7 +75,10 @@ fn is_array_predicate_call(call: &CallExpression<'_>) -> bool {
                 return false;
             };
             matches!(member.object, Expression::ArrayExpression(_))
-                && ARRAY_METHODS.contains(&property.value.as_str())
+                && property
+                    .value
+                    .as_str()
+                    .is_some_and(|name| ARRAY_METHODS.contains(&name))
         }
         _ => false,
     }

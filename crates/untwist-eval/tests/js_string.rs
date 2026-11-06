@@ -1,5 +1,6 @@
+use oxc_allocator::Allocator;
 use untwist_eval::bail::Bail;
-use untwist_eval::value::{decode_lone_surrogate_escapes, encode_with_lone_surrogates, JsString};
+use untwist_eval::value::{js_str_in, js_string_from_js_str, JsString};
 
 #[test]
 fn round_trips_plain_text() {
@@ -45,28 +46,23 @@ fn concat_respects_the_string_cap() {
 }
 
 #[test]
-fn lone_surrogate_escape_scheme_matches_oxc() {
-    let (text, lone) = encode_with_lone_surrogates(&[0xD800, 0x61]);
-    assert!(lone);
-    assert_eq!(text, "\u{FFFD}d800a");
-    assert_eq!(decode_lone_surrogate_escapes(&text), vec![0xD800, 0x61]);
+fn lone_surrogates_round_trip_through_js_str() {
+    let allocator = Allocator::default();
+    let lone = js_str_in(&[0xD800, 0x61], &allocator);
+    assert!(lone.has_lone_surrogate());
+    assert_eq!(lone.encode_utf16().collect::<Vec<_>>(), vec![0xD800, 0x61]);
+    assert_eq!(js_string_from_js_str(lone).units(), &[0xD800, 0x61]);
 
-    let (plain, no_lone) = encode_with_lone_surrogates(&[0x61, 0x62]);
-    assert!(!no_lone);
-    assert_eq!(plain, "ab");
+    let plain = js_str_in(&[0x61, 0x62], &allocator);
+    assert_eq!(plain.as_str(), Some("ab"));
 
-    let (replacement, lone_marker) = encode_with_lone_surrogates(&[0xFFFD, 0x61]);
-    assert!(lone_marker);
-    assert_eq!(replacement, "\u{FFFD}fffda");
-    assert_eq!(
-        decode_lone_surrogate_escapes(&replacement),
-        vec![0xFFFD, 0x61]
-    );
+    let replacement = js_str_in(&[0xFFFD, 0x61], &allocator);
+    assert_eq!(replacement.as_str(), Some("\u{FFFD}a"));
 }
 
 #[test]
-fn surrogate_pairs_are_not_escaped() {
-    let (text, lone) = encode_with_lone_surrogates(&[0xD83D, 0xDE00]);
-    assert!(!lone);
-    assert_eq!(text, "\u{1F600}");
+fn surrogate_pairs_are_not_lone() {
+    let allocator = Allocator::default();
+    let pair = js_str_in(&[0xD83D, 0xDE00], &allocator);
+    assert_eq!(pair.as_str(), Some("\u{1F600}"));
 }

@@ -6,6 +6,7 @@ use oxc_syntax::node::NodeId;
 use oxc_syntax::operator::BinaryOperator;
 use oxc_syntax::scope::ScopeFlags;
 use std::cell::Cell;
+use untwist_core::ast_util::js_text::js_text;
 
 use untwist_core::semantic::{observers, Observers};
 
@@ -150,6 +151,7 @@ fn plain_object(object: &ObjectExpression<'_>) -> bool {
             !p.computed
                 && p.key
                     .static_name()
+                    .and_then(|name| name.into_cow_str())
                     .is_some_and(|name| !CONVERSION_KEYS.contains(&name.as_ref()))
         }
         ObjectPropertyKind::SpreadProperty(_) => false,
@@ -299,12 +301,12 @@ impl<'a> VisitJs<'a> for Named<'_> {
     }
 
     fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
-        self.check(&it.value);
+        self.check(&js_text(it.value));
     }
 
     fn visit_template_element(&mut self, it: &TemplateElement<'a>) {
-        if let Some(cooked) = &it.value.cooked {
-            self.check(cooked);
+        if let Some(cooked) = it.value.cooked {
+            self.check(&js_text(cooked));
         }
         walk_js::walk_template_element(self, it);
     }

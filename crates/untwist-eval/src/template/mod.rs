@@ -37,7 +37,9 @@ fn member_call<'a>(expr: &'a Expression<'a>) -> Option<MemberCall<'a>> {
     }
     Some((
         member.object(),
-        member.static_property_name()?,
+        member
+            .static_property_name()
+            .and_then(|name| name.as_str())?,
         call.arguments.as_slice(),
     ))
 }

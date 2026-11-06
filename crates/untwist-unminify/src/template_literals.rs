@@ -45,10 +45,13 @@ impl<'a> Pass<'a> for TemplateLiterals {
 
 fn expression_has_lone_surrogates(expr: &Expression<'_>) -> bool {
     match expr {
-        Expression::StringLiteral(literal) => literal.lone_surrogates,
-        Expression::TemplateLiteral(template) => {
-            template.quasis.iter().any(|quasi| quasi.lone_surrogates)
-        }
+        Expression::StringLiteral(literal) => literal.value.has_lone_surrogate(),
+        Expression::TemplateLiteral(template) => template.quasis.iter().any(|quasi| {
+            quasi
+                .value
+                .cooked
+                .is_some_and(|cooked| cooked.has_lone_surrogate())
+        }),
         _ => false,
     }
 }
@@ -89,11 +92,11 @@ fn normalize_tails(template: &mut TemplateLiteral<'_>) {
 }
 
 fn push<'a>(template: &mut TemplateLiteral<'a>, value: Expression<'a>, cx: &mut Cx<'a, '_>) {
+    if let Some(text) = plain_string(&value) {
+        append_raw(template, &escape_template(text), cx);
+        return;
+    }
     match value {
-        Expression::StringLiteral(literal) => {
-            let text = escape_template(literal.value.as_str());
-            append_raw(template, &text, cx);
-        }
         Expression::TemplateLiteral(other) => {
             let other = other.unbox();
             let mut quasis = other.quasis.into_iter();
@@ -112,18 +115,21 @@ fn push<'a>(template: &mut TemplateLiteral<'a>, value: Expression<'a>, cx: &mut 
     }
 }
 
-fn unshift<'a>(template: &mut TemplateLiteral<'a>, value: Expression<'a>, cx: &mut Cx<'a, '_>) {
+fn plain_string<'a>(value: &Expression<'a>) -> Option<&'a str> {
     match value {
-        Expression::StringLiteral(literal) => {
-            let text = escape_template(literal.value.as_str());
-            prepend_raw(template, &text, cx);
-        }
-        other => {
-            template.expressions.insert(0, other);
-            let element = empty_element(cx);
-            template.quasis.insert(0, element);
-        }
+        Expression::StringLiteral(literal) => literal.value.as_str(),
+        _ => None,
     }
+}
+
+fn unshift<'a>(template: &mut TemplateLiteral<'a>, value: Expression<'a>, cx: &mut Cx<'a, '_>) {
+    if let Some(text) = plain_string(&value) {
+        prepend_raw(template, &escape_template(text), cx);
+        return;
+    }
+    template.expressions.insert(0, value);
+    let element = empty_element(cx);
+    template.quasis.insert(0, element);
 }
 
 fn take_binary<'a>(node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> Option<BinaryExpression<'a>> {
@@ -220,7 +226,7 @@ fn concat_receiver<'k, 'a>(callee: &'k Expression<'a>) -> Option<&'k Expression<
         Expression::ComputedMemberExpression(member) if !member.optional => {
             let named = matches!(
                 member.expression.without_parentheses(),
-                Expression::StringLiteral(key) if key.value.as_str() == "concat"
+                Expression::StringLiteral(key) if key.value == "concat"
             );
             (&member.object, named)
         }

@@ -48,9 +48,7 @@ pub fn argument_expression<'k, 'a>(argument: &'k Argument<'a>) -> Option<&'k Exp
 pub fn literal_id(expr: &Expression<'_>) -> Option<String> {
     match expr {
         Expression::NumericLiteral(literal) => Some(number_key(literal.value)),
-        Expression::StringLiteral(literal) if !literal.lone_surrogates => {
-            Some(literal.value.as_str().to_string())
-        }
+        Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
         _ => None,
     }
 }

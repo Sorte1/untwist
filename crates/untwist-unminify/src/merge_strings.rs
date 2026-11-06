@@ -15,9 +15,7 @@ struct Chain {
 
 fn mergeable<'e>(expr: &'e Expression<'_>) -> Option<&'e str> {
     match expr {
-        Expression::StringLiteral(literal) if !literal.lone_surrogates => {
-            Some(literal.value.as_str())
-        }
+        Expression::StringLiteral(literal) => literal.value.as_str(),
         _ => None,
     }
 }

@@ -47,7 +47,7 @@ fn compared(binary: &BinaryExpression<'_>) -> Option<bool> {
     if probe.operator != UnaryOperator::Typeof {
         return None;
     }
-    Some((typeof_of(&probe.argument)? == literal.value.as_str()) == equal)
+    Some((typeof_of(&probe.argument)? == literal.value.as_str()?) == equal)
 }
 
 fn truth(expr: &Expression<'_>) -> Option<bool> {
@@ -155,10 +155,9 @@ fn dependency_of(arg: &Expression<'_>) -> Option<String> {
             let [Argument::StringLiteral(literal)] = call.arguments.as_slice() else {
                 return None;
             };
-            let specifier = literal.value.as_str();
+            let specifier = literal.value.as_str()?;
             let usable = callee.name == "require"
                 && !call.optional
-                && !literal.lone_surrogates
                 && !specifier.is_empty()
                 && !is_relative(specifier)
                 && !specifier.starts_with('/');

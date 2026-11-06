@@ -43,7 +43,7 @@ fn comments_of<'a>(source: &Program<'a>, spans: &[Span]) -> Vec<Comment> {
             source.comments[from..]
                 .iter()
                 .take_while(|comment| comment.span.end <= span.end)
-                .copied(),
+                .cloned(),
         );
     }
     comments

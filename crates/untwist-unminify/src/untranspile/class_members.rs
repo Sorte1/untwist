@@ -31,7 +31,7 @@ fn slot_of(property: &ObjectProperty<'_>) -> Option<Slot> {
     }
     let name = match &property.key {
         PropertyKey::StaticIdentifier(id) => id.name.as_str(),
-        PropertyKey::StringLiteral(literal) => literal.value.as_str(),
+        PropertyKey::StringLiteral(literal) => literal.value.as_str()?,
         _ => return None,
     };
     match name {
@@ -45,7 +45,7 @@ fn slot_of(property: &ObjectProperty<'_>) -> Option<Slot> {
 
 pub fn static_key_name<'k>(key: &'k Expression<'_>) -> Option<&'k str> {
     match key.without_parentheses() {
-        Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+        Expression::StringLiteral(literal) => literal.value.as_str(),
         _ => None,
     }
 }
@@ -197,17 +197,25 @@ pub fn admissible(
 }
 
 pub fn property_key<'a>(key: Expression<'a>, cx: &Cx<'a, '_>) -> (PropertyKey<'a>, bool) {
-    match into_inner(key) {
-        Expression::StringLiteral(literal) if is_identifier_name(literal.value.as_str()) => {
-            let name = literal.value.as_str();
+    let key = into_inner(key);
+    if let Expression::StringLiteral(literal) = &key {
+        if let Some(name) = identifier_text(literal) {
             let key = PropertyKey::new_static_identifier(literal.span, Ident::from(name), cx);
-            (key, false)
+            return (key, false);
         }
-        key @ (Expression::StringLiteral(_) | Expression::NumericLiteral(_)) => {
-            (PropertyKey::from(key), false)
-        }
-        key => (PropertyKey::from(key), true),
     }
+    let computed = !matches!(
+        key,
+        Expression::StringLiteral(_) | Expression::NumericLiteral(_)
+    );
+    (PropertyKey::from(key), computed)
+}
+
+fn identifier_text<'a>(literal: &StringLiteral<'a>) -> Option<&'a str> {
+    literal
+        .value
+        .as_str()
+        .filter(|name| is_identifier_name(name))
 }
 
 fn function_of(value: Expression<'_>) -> Option<ABox<'_, Function<'_>>> {

@@ -19,7 +19,7 @@ const ALIAS_DEPTH: u8 = 4;
 
 fn element_string<'a>(array: &'a ArrayExpression<'a>, index: f64) -> Option<&'a str> {
     match array_element(array, index)?.without_parentheses() {
-        Expression::StringLiteral(text) => Some(text.value.as_str()),
+        Expression::StringLiteral(text) => text.value.as_str(),
         _ => None,
     }
 }

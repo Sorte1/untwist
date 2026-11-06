@@ -1,5 +1,7 @@
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
+use untwist_core::ast_util::js_text::js_text;
 
 use oxc_ast::ast::Expression;
 use oxc_span::GetSpan;
@@ -50,14 +52,14 @@ impl UnitFuel {
 #[derive(PartialEq, Eq, Hash)]
 enum ArgumentKey<'a> {
     Number(u64),
-    Text(&'a str),
+    Text(Cow<'a, str>),
     Site(u32, u32),
 }
 
 fn argument_key<'a>(argument: &'a Expression<'a>) -> ArgumentKey<'a> {
     match argument {
         Expression::NumericLiteral(number) => ArgumentKey::Number(number.value.to_bits()),
-        Expression::StringLiteral(text) => ArgumentKey::Text(text.value.as_str()),
+        Expression::StringLiteral(text) => ArgumentKey::Text(js_text(text.value)),
         other => {
             let span = other.span();
             ArgumentKey::Site(span.start, span.end)

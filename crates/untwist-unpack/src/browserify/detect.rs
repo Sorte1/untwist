@@ -61,9 +61,7 @@ fn dependency_list(object: &ObjectExpression<'_>) -> Option<Vec<(String, String)
         }
         let request = match &property.key {
             PropertyKey::StaticIdentifier(id) => id.name.as_str().to_string(),
-            PropertyKey::StringLiteral(literal) if !literal.lone_surrogates => {
-                literal.value.as_str().to_string()
-            }
+            PropertyKey::StringLiteral(literal) => literal.value.as_str()?.to_string(),
             _ => return None,
         };
         if matches!(&property.value, Expression::Identifier(id) if id.name == "undefined") {

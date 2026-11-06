@@ -107,7 +107,7 @@ fn member_name<'a>(expr: &'a Expression<'a>) -> Option<(&'a Expression<'a>, &'a 
             Some((&member.object, member.property.name.as_str()))
         }
         Expression::ComputedMemberExpression(member) => match &member.expression {
-            Expression::StringLiteral(key) => Some((&member.object, key.value.as_str())),
+            Expression::StringLiteral(key) => Some((&member.object, key.value.as_str()?)),
             _ => None,
         },
         _ => None,
@@ -341,7 +341,7 @@ fn is_descriptor_define(call: &CallExpression) -> bool {
     let has_key = |wanted: &str| {
         descriptor.properties.iter().any(|prop| {
             matches!(prop, ObjectPropertyKind::ObjectProperty(p)
-                if p.key.static_name().is_some_and(|key| key == wanted))
+                if p.key.static_name().and_then(|name| name.into_cow_str()).is_some_and(|key| key == wanted))
         })
     };
     is_define && has_key("writable") && has_key("value")

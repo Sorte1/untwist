@@ -72,10 +72,7 @@ pub fn closed_eval_names(call: &CallExpression<'_>) -> Option<Vec<String>> {
     let [Argument::StringLiteral(literal)] = call.arguments.as_slice() else {
         return None;
     };
-    if literal.lone_surrogates {
-        return None;
-    }
-    payload_names(literal.value.as_str())
+    payload_names(literal.value.as_str()?)
 }
 
 fn payload_names(text: &str) -> Option<Vec<String>> {

@@ -297,7 +297,7 @@ fn creates_require(list: &[Statement<'_>], callee: &str) -> bool {
         let Statement::ImportDeclaration(import) = statement else {
             return false;
         };
-        let from_module = matches!(import.source.value.as_str(), "module" | "node:module");
+        let from_module = matches!(import.source.value.as_str(), Some("module" | "node:module"));
         from_module
             && import.specifiers.iter().flatten().any(|specifier| {
                 matches!(specifier, ImportDeclarationSpecifier::ImportSpecifier(named)

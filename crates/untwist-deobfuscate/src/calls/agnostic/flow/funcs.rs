@@ -5,6 +5,7 @@ use oxc_span::Span;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::js_text::js_text;
 
 use crate::calls::agnostic::text::closed_runner_read;
 
@@ -201,7 +202,7 @@ impl<'s> Prescan<'s> {
             MemberExpression::StaticMemberExpression(m) => Some(m.property.name.to_string()),
             MemberExpression::ComputedMemberExpression(m) => {
                 match m.expression.without_parentheses() {
-                    Expression::StringLiteral(text) => Some(text.value.to_string()),
+                    Expression::StringLiteral(text) => Some(js_text(text.value).into_owned()),
                     Expression::NumericLiteral(num) => Some(num.value.to_string()),
                     _ => None,
                 }
@@ -307,7 +308,7 @@ impl<'a> VisitJs<'a> for Prescan<'_> {
 
     fn visit_object_property(&mut self, it: &ObjectProperty<'a>) {
         if matches!(it.kind, PropertyKind::Get | PropertyKind::Set) {
-            if let Some(name) = it.key.static_name() {
+            if let Some(name) = it.key.static_name().and_then(|name| name.into_cow_str()) {
                 self.accessor_names.insert(name.into_owned());
             }
         }
@@ -319,7 +320,7 @@ impl<'a> VisitJs<'a> for Prescan<'_> {
             it.kind,
             MethodDefinitionKind::Get | MethodDefinitionKind::Set
         ) {
-            if let Some(name) = it.key.static_name() {
+            if let Some(name) = it.key.static_name().and_then(|name| name.into_cow_str()) {
                 self.accessor_names.insert(name.into_owned());
             }
         }

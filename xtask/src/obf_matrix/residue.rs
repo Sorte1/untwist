@@ -100,7 +100,7 @@ fn member_name<'a>(expr: &'a Expression<'a>) -> Option<(&'a Expression<'a>, &'a 
             Some((&member.object, member.property.name.as_str()))
         }
         Expression::ComputedMemberExpression(member) => match &member.expression {
-            Expression::StringLiteral(key) => Some((&member.object, key.value.as_str())),
+            Expression::StringLiteral(key) => Some((&member.object, key.value.as_str()?)),
             _ => None,
         },
         _ => None,

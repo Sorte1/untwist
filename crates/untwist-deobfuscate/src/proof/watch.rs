@@ -124,7 +124,8 @@ macro_rules! watch_texts {
     () => {
         fn visit_string_literal(&mut self, it: &oxc_ast::ast::StringLiteral<'a>) {
             if WATCHING {
-                self.watch.text(it.value.as_str(), it.span);
+                self.watch
+                    .text(&untwist_core::ast_util::js_text::js_text(it.value), it.span);
             }
         }
 

@@ -64,7 +64,10 @@ fn member_segments(expr: &Expression<'_>, into: &mut Vec<String>) -> bool {
 
 pub fn name_plan(expr: &Expression<'_>) -> Option<NamePlan> {
     if let Expression::StringLiteral(literal) = expr {
-        return (!literal.lone_surrogates).then(|| NamePlan::Tag(literal.value.to_string()));
+        return literal
+            .value
+            .as_str()
+            .map(|name| NamePlan::Tag(name.to_string()));
     }
     if let Some(name) = identifier_name(expr) {
         return Some(NamePlan::Tag(name.to_string()));
@@ -125,9 +128,9 @@ pub fn component_looking_string<'e>(
     let Expression::StringLiteral(literal) = expr else {
         return None;
     };
-    let value = literal.value.as_str();
+    let value = literal.value.as_str()?;
     let intrinsic = value.starts_with(|ch: char| ch.is_ascii_lowercase());
-    (!literal.lone_surrogates && !intrinsic).then_some(value)
+    (!intrinsic).then_some(value)
 }
 
 pub fn element_name<'a>(plan: &NamePlan, b: &impl GetAstBuilder<'a>) -> JSXElementName<'a> {
@@ -146,9 +149,7 @@ pub fn element_name<'a>(plan: &NamePlan, b: &impl GetAstBuilder<'a>) -> JSXEleme
 fn key_name<'a>(key: &PropertyKey<'a>) -> Option<&'a str> {
     match key {
         PropertyKey::StaticIdentifier(id) => Some(id.name.as_str()),
-        PropertyKey::StringLiteral(literal) if !literal.lone_surrogates => {
-            Some(literal.value.as_str())
-        }
+        PropertyKey::StringLiteral(literal) => literal.value.as_str(),
         _ => None,
     }
 }
@@ -197,14 +198,12 @@ pub fn attribute_value<'a>(
     b: &impl GetAstBuilder<'a>,
 ) -> JSXAttributeValue<'a> {
     if let Expression::StringLiteral(literal) = &expr {
-        let plain = !literal.lone_surrogates && !literal.value.as_str().contains(CONTAINER_CHARS);
-        if plain {
-            return JSXAttributeValue::new_string_literal(
-                Span::default(),
-                literal.value.as_str(),
-                None,
-                b,
-            );
+        if let Some(text) = literal
+            .value
+            .as_str()
+            .filter(|text| !text.contains(CONTAINER_CHARS))
+        {
+            return JSXAttributeValue::new_string_literal(Span::default(), text, None, b);
         }
     }
     JSXAttributeValue::new_expression_container(Span::default(), JSXExpression::from(expr), b)
@@ -310,10 +309,14 @@ pub fn child_of<'a>(
     match &expr {
         Expression::JSXElement(_) => {}
         Expression::JSXFragment(_) if !conservative => {}
-        Expression::StringLiteral(literal)
-            if !literal.lone_surrogates && !literal.value.as_str().contains(TEXT_BREAKERS) =>
-        {
-            return JSXChild::new_text(Span::default(), literal.value.as_str(), None, b);
+        Expression::StringLiteral(literal) => {
+            let text = literal
+                .value
+                .as_str()
+                .filter(|text| !text.contains(TEXT_BREAKERS));
+            if let Some(text) = text {
+                return JSXChild::new_text(Span::default(), text, None, b);
+            }
         }
         _ => {
             return JSXChild::new_expression_container(

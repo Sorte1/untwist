@@ -24,6 +24,7 @@ fn is_require(callee: &Expression<'_>, scoping: &Scoping) -> bool {
         other => other
             .as_member_expression()
             .and_then(MemberExpression::static_property_name)
+            .and_then(|name| name.as_str())
             .is_some_and(|name| name == "require"),
     }
 }
@@ -33,7 +34,7 @@ pub(super) fn loads_code_module(call: &CallExpression<'_>, scoping: &Scoping) ->
         return false;
     }
     match call.arguments.first().and_then(Argument::as_expression) {
-        Some(Expression::StringLiteral(name)) => CODE_MODULES.contains(&name.value.as_str()),
+        Some(Expression::StringLiteral(name)) => CODE_MODULES.iter().any(|m| name.value == *m),
         _ => true,
     }
 }

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
@@ -5,6 +7,7 @@ use oxc_span::Span;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::js_text::js_text;
 use untwist_core::ast_util::prop::member_parts;
 use untwist_core::semantic::{eval_payload_names, scope_hazard, Strictness};
 use untwist_eval::coerce::number_to_string;
@@ -117,11 +120,11 @@ pub fn reference_symbol(id: &IdentifierReference<'_>, scoping: &Scoping) -> Opti
         .and_then(|reference_id| scoping.get_reference(reference_id).symbol_id())
 }
 
-pub fn module_export_name<'n>(name: &'n ModuleExportName<'_>) -> &'n str {
+pub fn module_export_name<'n>(name: &'n ModuleExportName<'_>) -> Cow<'n, str> {
     match name {
-        ModuleExportName::IdentifierName(id) => id.name.as_str(),
-        ModuleExportName::IdentifierReference(id) => id.name.as_str(),
-        ModuleExportName::StringLiteral(literal) => literal.value.as_str(),
+        ModuleExportName::IdentifierName(id) => Cow::Borrowed(id.name.as_str()),
+        ModuleExportName::IdentifierReference(id) => Cow::Borrowed(id.name.as_str()),
+        ModuleExportName::StringLiteral(literal) => js_text(literal.value),
     }
 }
 
@@ -511,7 +514,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
     }
 
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
-        let source = it.source.value.as_str().to_string();
+        let source = js_text(it.source.value).into_owned();
         let Some(specifiers) = &it.specifiers else {
             return;
         };
@@ -620,7 +623,7 @@ fn shape_of(expr: &Expression<'_>, scoping: &Scoping) -> InitShape {
             InitShape::named(InitKind::Number, number_to_string(literal.value))
         }
         Expression::StringLiteral(literal) => {
-            InitShape::named(InitKind::String, literal.value.as_str())
+            InitShape::named(InitKind::String, js_text(literal.value))
         }
         Expression::BooleanLiteral(_) => InitShape::of(InitKind::Boolean),
         Expression::ObjectExpression(_) => InitShape::of(InitKind::Object),
@@ -700,5 +703,5 @@ fn require_source(call: &CallExpression<'_>) -> Option<String> {
     let Argument::StringLiteral(literal) = &call.arguments[0] else {
         return None;
     };
-    Some(literal.value.as_str().to_string())
+    Some(js_text(literal.value).into_owned())
 }

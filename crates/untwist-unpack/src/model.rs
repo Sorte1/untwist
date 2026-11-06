@@ -223,7 +223,7 @@ fn comments_within(comments: &[Comment], span: Span) -> impl Iterator<Item = Com
     comments[first..]
         .iter()
         .take_while(move |comment| comment.span.end <= span.end)
-        .copied()
+        .cloned()
 }
 
 pub fn module_from_body<'a>(

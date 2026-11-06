@@ -42,7 +42,7 @@ fn bulk_entries<'k, 'a>(
         }
         let key = match &property.key {
             PropertyKey::StaticIdentifier(key) => key.name.to_string(),
-            PropertyKey::StringLiteral(key) if !key.lone_surrogates => key.value.to_string(),
+            PropertyKey::StringLiteral(key) => key.value.as_str()?.to_string(),
             _ => return None,
         };
         entries.push((key, zero_param_arrow_body(&property.value)?));
@@ -56,9 +56,9 @@ fn define<'k, 'a>(statement: &'k Statement<'a>) -> Option<Option<Define<'k, 'a>>
         let target = identifier_name(argument_expression(arguments.first()?)?)?;
         let entries = match (arguments.len(), argument_expression(arguments.get(1)?)?) {
             (2, Expression::ObjectExpression(object)) => bulk_entries(object)?,
-            (3, Expression::StringLiteral(name)) if !name.lone_surrogates => {
+            (3, Expression::StringLiteral(name)) if !name.value.has_lone_surrogate() => {
                 let value = zero_param_function_return(argument_expression(arguments.get(2)?)?)?;
-                vec![(name.value.to_string(), value)]
+                vec![(name.value.as_str()?.to_string(), value)]
             }
             _ => return None,
         };

@@ -106,7 +106,7 @@ impl<'s, 'a> Scanner<'s, 'a> {
             (Memo::Captured(root), Expression::Identifier(id)) => id.name == root,
             (Memo::Named(segment), other) => other.as_member_expression().is_some_and(|inner| {
                 matches!(inner.object(), Expression::Identifier(id) if id.name == self.rules.decoder)
-                    && inner.static_property_name() == Some(segment)
+                    && inner.static_property_name().and_then(|name| name.as_str()) == Some(segment)
             }),
             _ => false,
         };
@@ -150,6 +150,7 @@ impl<'s, 'a> Scanner<'s, 'a> {
         }
         let flag = member
             .static_property_name()
+            .and_then(|name| name.as_str())
             .is_some_and(|key| self.rules.flags.contains(key));
         if self.mode != Mode::Tail || name != self.rules.decoder || !flag || self.writing {
             self.failed = true;
@@ -163,7 +164,11 @@ impl<'s, 'a> Scanner<'s, 'a> {
         };
         let on_decoder =
             matches!(member.object(), Expression::Identifier(id) if id.name == self.rules.decoder);
-        let Some(key) = member.static_property_name().filter(|_| on_decoder) else {
+        let Some(key) = member
+            .static_property_name()
+            .and_then(|name| name.as_str())
+            .filter(|_| on_decoder)
+        else {
             return false;
         };
         match self.rules.helpers.installed.get(key) {
@@ -222,6 +227,7 @@ impl<'a> VisitJs<'a> for Scanner<'_, 'a> {
     fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
         if it
             .static_property_name()
+            .and_then(|name| name.as_str())
             .is_some_and(|key| FORBIDDEN_KEYS.contains(&key))
         {
             self.failed = true;

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
@@ -222,7 +223,7 @@ impl<'s> Collector<'s> {
 
     fn key_of_expr<'a>(&self, expr: &Expression<'a>) -> Key<'a> {
         match expr.without_parentheses() {
-            Expression::StringLiteral(text) => named(Cow::Borrowed(text.value.as_str())),
+            Expression::StringLiteral(text) => named(js_text(text.value)),
             Expression::NumericLiteral(_) => Key::Index,
             other => self
                 .resolve

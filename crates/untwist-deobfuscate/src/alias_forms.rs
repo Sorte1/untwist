@@ -109,7 +109,10 @@ pub fn single_property_source(
     if property.kind != PropertyKind::Init || property.method || property.computed {
         return None;
     }
-    let key = property.key.static_name()?;
+    let key = property
+        .key
+        .static_name()
+        .and_then(|name| name.into_cow_str())?;
     if key == "__proto__" {
         return None;
     }

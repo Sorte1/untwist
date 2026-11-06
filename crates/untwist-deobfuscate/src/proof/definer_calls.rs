@@ -8,7 +8,9 @@ fn is_named(expr: &Expression<'_>, names: &[&str]) -> bool {
 
 fn definer_value<'a>(expr: &Expression<'a>) -> Option<&'a str> {
     let member = expr.without_parentheses().as_member_expression()?;
-    let method = member.static_property_name()?;
+    let method = member
+        .static_property_name()
+        .and_then(|name| name.as_str())?;
     let owned = is_owned_definer(method) && is_named(member.object(), &["Object", "Reflect"]);
     (owned || is_getter_definer(method)).then_some(method)
 }
@@ -71,7 +73,11 @@ pub(super) fn bound_definer_patch<'a>(
         return None;
     };
     let member = bind.callee.without_parentheses().as_member_expression()?;
-    if member.static_property_name()? != "bind" {
+    if member
+        .static_property_name()
+        .and_then(|name| name.as_str())?
+        != "bind"
+    {
         return None;
     }
     let method = definer_value(member.object())?;

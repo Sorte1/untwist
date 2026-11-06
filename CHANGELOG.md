@@ -59,6 +59,8 @@ All notable changes to this project are documented in this file. The format is b
   decoder's comma sequences into statements, which is how the pipeline sees them: the high
   preset needs about 84 % fewer instructions (7.0 s to 1.2 s for its ten samples), with the
   same output.
+- oxc 0.157: output is unchanged; parsing and printing take about 12 % fewer instructions, and
+  game.js about 3 % fewer overall.
 
 ### Fixed
 

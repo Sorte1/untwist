@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
@@ -112,7 +113,7 @@ impl Spelled<'_> {
 
 impl<'a> VisitJs<'a> for Spelled<'_> {
     fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
-        self.check(it.value.as_str(), it.span);
+        self.check(&js_text(it.value), it.span);
     }
 
     fn visit_template_element(&mut self, it: &TemplateElement<'a>) {

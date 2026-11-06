@@ -464,7 +464,7 @@ impl<'s> Escape<'s> {
             return None;
         }
         match member.expression.without_parentheses() {
-            Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+            Expression::StringLiteral(literal) => literal.value.as_str(),
             _ => None,
         }
     }
@@ -682,11 +682,11 @@ impl<'a> VisitJs<'a> for Escape<'_> {
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
         let key = match it.expression.without_parentheses() {
-            Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+            Expression::StringLiteral(literal) => literal.value.as_str(),
             _ => None,
         };
-        if let Some(key) = it.static_property_name() {
-            self.note_definer_read(&it.object, key.as_str(), it.span);
+        if let Some(key) = it.static_property_name().and_then(|name| name.as_str()) {
+            self.note_definer_read(&it.object, key, it.span);
         }
         if key.is_none() && (self.on_decoded_global_key(it) || self.on_decoded_root_key(it)) {
             self.visit_expression(&it.expression);
