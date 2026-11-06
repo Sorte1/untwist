@@ -74,6 +74,7 @@
 <label class="check" title="Skip the unminify stage that restores readable statements and expressions"><input type="checkbox" data-key="unmin" data-inverted="1">No unminify</label>
 <label class="check" title="In simple and unique, leave identifiers that already look human-written alone"><input type="checkbox" data-key="human">Keep human names</label>
 <label class="check" title="Write every unpacked module into one file, with a banner per module"><input type="checkbox" data-key="single">Single file</label>
+<label class="check" title="Fetch the wasm modules a run lists as not supplied without asking first. Off by default; kept in this browser only, never in a shared link"><input type="checkbox" id="always-fetch-wasm">Always fetch wasm</label>
 <div class="fuel-row" title="Stop a stage after N passes over the program (default: run until nothing changes)">
 <label for="max-iterations">Max iterations</label>
 <input id="max-iterations" type="number" class="num-input num-short" min="1" placeholder="∞">
@@ -146,6 +147,7 @@
 <button type="button" class="btn btn-small" id="refusal-why" aria-expanded="false" aria-controls="refusal-why-panel">Why?</button>
 <button type="button" class="btn btn-small" id="run-unsafe">Run in Unsafe</button>
 </div>
+<div class="wasm-bar" id="wasm-bar" role="region" aria-label="WebAssembly modules" hidden></div>
 <div class="refusal-why" id="refusal-why-panel" role="region" aria-label="Why the decoder calls were left in place" hidden></div>
 <div class="steps-bar" id="steps-bar" role="region" aria-label="Steps" hidden></div>
 <div class="pane-body">

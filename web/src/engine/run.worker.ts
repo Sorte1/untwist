@@ -1,4 +1,5 @@
-import { initSync, run_report_staged } from './pkg/untwist_wasm.js';
+import { initSync, run_report_with_wasm, WasmFiles } from './pkg/untwist_wasm.js';
+import type { SuppliedWasm } from '../wasm/wasm';
 import type { TrapKind, WorkerReply, WorkerRequest } from './types';
 
 let memory: WebAssembly.Memory | null = null;
@@ -46,10 +47,32 @@ function snapshotsOf(output: { snapshot_count(): number; snapshot_code(index: nu
   return codes;
 }
 
-function run(source: string, flags: string, refused: boolean, extras: string): void {
+function wasmBytesOf(output: { wasm_bytes(index: number): Uint8Array | undefined }, count: number): Uint8Array<ArrayBuffer>[] {
+  const bytes: Uint8Array<ArrayBuffer>[] = [];
+  for (let index = 0; index < count; index += 1) {
+    bytes.push(new Uint8Array(output.wasm_bytes(index) ?? []));
+  }
+  return bytes;
+}
+
+function wasmCount(json: string): number {
+  try {
+    return (JSON.parse(json) as { files?: unknown[] }).files?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function run(source: string, flags: string, refused: boolean, extras: string, wasm: readonly SuppliedWasm[]): void {
   const started = performance.now();
   try {
-    const output = run_report_staged(source, flags, refused, extras);
+    const files = new WasmFiles();
+    for (const file of wasm) {
+      files.add(file.name, file.bytes, file.url ?? undefined);
+    }
+    const output = run_report_with_wasm(source, flags, refused, extras, files);
+    files.free();
+    const wasmJson = output.wasm_json();
     const result = {
       stdout: output.stdout,
       stderr: output.stderr,
@@ -62,6 +85,8 @@ function run(source: string, flags: string, refused: boolean, extras: string): v
       decodedStrings: output.decoded_strings_json(),
       decodedCount: output.decoded_count(),
       links: output.links_json(),
+      wasm: wasmJson,
+      wasmBytes: wasmBytesOf(output, wasmCount(wasmJson)),
       engineMs: performance.now() - started,
       memoryBytes: memory?.buffer.byteLength ?? 0,
     };
@@ -82,6 +107,6 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   if (request.kind === 'init') {
     init(request.module);
   } else {
-    run(request.source, request.flags, request.refused, request.extras);
+    run(request.source, request.flags, request.refused, request.extras, request.wasm ?? []);
   }
 };

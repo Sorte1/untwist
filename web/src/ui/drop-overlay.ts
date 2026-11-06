@@ -2,6 +2,11 @@ import { byId, sizeLabel } from '../dom';
 import type { AppState } from '../state';
 import type { Store } from '../store';
 import type { Loader } from './load-input';
+import { isWasmName } from '../wasm/wasm';
+
+export type WasmAdder = (files: readonly File[]) => void;
+
+const NO_WASM_ADDER: WasmAdder = () => undefined;
 
 const ICON =
   '<svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6z"></path><path d="M9 2v4h4"></path><path d="M8 12V8.5M6.5 10 8 8.5 9.5 10"></path></svg>';
@@ -20,15 +25,20 @@ export function extraNote(count: number, name: string): string | undefined {
 
 export const EMPTY_DROP_NOTE = 'The browser passed no file to the page. Use Open file, or paste the code.';
 
-export async function loadDropped(files: readonly File[], loader: Loader): Promise<void> {
+export async function loadDropped(files: readonly File[], loader: Loader, addWasm: WasmAdder = NO_WASM_ADDER): Promise<void> {
   if (files.length === 0) {
     loader.note(EMPTY_DROP_NOTE);
     return;
   }
-  await loadFiles(files, loader);
+  await loadFiles(files, loader, addWasm);
 }
 
-export async function loadFiles(files: readonly File[], loader: Loader): Promise<void> {
+export async function loadFiles(all: readonly File[], loader: Loader, addWasm: WasmAdder = NO_WASM_ADDER): Promise<void> {
+  const wasm = all.filter((file) => isWasmName(file.name));
+  const files = all.filter((file) => !isWasmName(file.name));
+  if (wasm.length > 0) {
+    addWasm(wasm);
+  }
   const [file] = files;
   if (file === undefined) {
     return;
@@ -71,17 +81,17 @@ function carriesFiles(event: DragEvent): boolean {
   return event.dataTransfer !== null && mayCarryFiles([...event.dataTransfer.types]);
 }
 
-function wireOpenFile(loader: Loader): void {
+function wireOpenFile(loader: Loader, addWasm: WasmAdder): void {
   const input = byId<HTMLInputElement>('open-file-input');
   byId('open-file').addEventListener('click', () => input.click());
   input.addEventListener('change', () => {
     const files = [...(input.files ?? [])];
     input.value = '';
-    void loadFiles(files, loader);
+    void loadFiles(files, loader, addWasm);
   });
 }
 
-export function mountDropOverlay(store: Store<AppState>, loader: Loader): void {
+export function mountDropOverlay(store: Store<AppState>, loader: Loader, addWasm: WasmAdder = NO_WASM_ADDER): void {
   const overlay = overlayElement();
   let depth = 0;
   const hide = () => {
@@ -121,7 +131,7 @@ export function mountDropOverlay(store: Store<AppState>, loader: Loader): void {
     event.preventDefault();
     event.stopPropagation();
     hide();
-    void loadDropped([...(event.dataTransfer?.files ?? [])], loader);
+    void loadDropped([...(event.dataTransfer?.files ?? [])], loader, addWasm);
   }, true);
-  wireOpenFile(loader);
+  wireOpenFile(loader, addWasm);
 }

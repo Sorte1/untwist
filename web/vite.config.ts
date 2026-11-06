@@ -5,7 +5,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval'",
   "worker-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self' https:",
   "img-src 'self' data:",
   "style-src 'self'",
   "font-src 'self'",

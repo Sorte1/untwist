@@ -1,3 +1,5 @@
+import type { SuppliedWasm } from '../wasm/wasm';
+
 export type TrapKind = 'stack' | 'other';
 
 export interface RunFields {
@@ -19,11 +21,13 @@ export interface RunResult extends RunFields {
   readonly decodedStrings?: string;
   readonly decodedCount?: number;
   readonly links?: string;
+  readonly wasm?: string;
+  readonly wasmBytes?: readonly Uint8Array<ArrayBuffer>[];
 }
 
 export type WorkerRequest =
   | { readonly kind: 'init'; readonly module: WebAssembly.Module }
-  | { readonly kind: 'run'; readonly source: string; readonly flags: string; readonly refused: boolean; readonly extras: string };
+  | { readonly kind: 'run'; readonly source: string; readonly flags: string; readonly refused: boolean; readonly extras: string; readonly wasm: readonly SuppliedWasm[] };
 
 export type WorkerReply =
   | { readonly kind: 'ready' }

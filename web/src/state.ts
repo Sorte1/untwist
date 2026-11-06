@@ -3,6 +3,7 @@ import { explainedLine, firedLimits, PARTIAL_LIMITS, type ExplainedLimit } from 
 import type { StageMark } from './progress';
 import { DEFAULTS, type Settings } from './settings/settings';
 import { NO_STEPS, type StepsState } from './steps';
+import type { SuppliedWasm } from './wasm/wasm';
 
 export type Theme = 'dark' | 'light';
 export type EngineStatus = 'loading' | 'ready' | 'failed';
@@ -58,6 +59,7 @@ export interface AppState {
   readonly selectedModule: number | null;
   readonly compare: CompareState;
   readonly steps: StepsState;
+  readonly wasm: readonly SuppliedWasm[];
 }
 
 export function utf8Bytes(text: string): number {
@@ -109,6 +111,7 @@ export function initialState(theme: Theme, settings: Settings = DEFAULTS, settin
     run: { status: 'idle', startedAt: 0, elapsedMs: 0, result: null, error: null, ranFlags: null, outputFlags: null, ranInput: null, outputInput: null, stages: [] },
     compare: NO_COMPARE,
     steps: NO_STEPS,
+    wasm: [],
   };
 }
 

@@ -8,6 +8,7 @@ use super::links::links_json;
 use super::schema::{bare_json, report_json, RunFacts};
 use super::stages;
 use super::strings::decoded_json;
+use super::wasm_files::{settle, WasmFiles};
 use crate::limits::{self, limits_of};
 use crate::{exit_code, isolation, options_from, stderr_of, stdout_of, USAGE_ERROR};
 
@@ -24,10 +25,21 @@ pub struct RunReport {
     decoded: String,
     decoded_count: u32,
     links: String,
+    wasm: String,
+    wasm_bytes: Vec<Vec<u8>>,
 }
 
 #[wasm_bindgen]
 impl RunReport {
+    pub fn wasm_json(&self) -> String {
+        self.wasm.clone()
+    }
+
+    pub fn wasm_bytes(&self, index: u32) -> Option<Vec<u8>> {
+        let index = usize::try_from(index).ok()?;
+        self.wasm_bytes.get(index).cloned()
+    }
+
     #[wasm_bindgen(getter)]
     pub fn stdout(&self) -> String {
         self.stdout.clone()
@@ -92,7 +104,7 @@ pub fn engine_info() -> String {
     serde_json::to_string(&super::schema::engine()).unwrap_or_default()
 }
 
-fn report_with(source: &str, options: Options) -> RunReport {
+fn report_with(source: &str, options: Options, wasm: &WasmFiles) -> RunReport {
     clock::register();
     let fuel = options
         .fuel
@@ -101,6 +113,9 @@ fn report_with(source: &str, options: Options) -> RunReport {
     let before = limits::fired();
     let mut result = Pipeline::new(options).run(source);
     let fired = limits::fired().since(before);
+    let unsettled = result.codes.clone();
+    let (wasm, wasm_bytes) = settle(&mut result, wasm);
+    let settled_unchanged = unsettled == result.codes;
     let stdout = stdout_of(&result);
     let stderr = stderr_of(&result);
     let code = exit_code(&result);
@@ -132,7 +147,7 @@ fn report_with(source: &str, options: Options) -> RunReport {
     let links = result
         .statement_spans
         .as_deref()
-        .filter(|_| !result.single_file && result.codes.len() == 1)
+        .filter(|_| settled_unchanged && !result.single_file && result.codes.len() == 1)
         .map(|spans| links_json(source, &stdout, spans))
         .unwrap_or_default();
     let decoded = decoded_json(&result.decoded_strings, source);
@@ -156,6 +171,8 @@ fn report_with(source: &str, options: Options) -> RunReport {
         decoded,
         decoded_count,
         links,
+        wasm,
+        wasm_bytes,
     }
 }
 
@@ -166,12 +183,24 @@ pub fn run_report(source: &str, flags: &str, refused: bool) -> RunReport {
 
 #[wasm_bindgen]
 pub fn run_report_staged(source: &str, flags: &str, refused: bool, extras: &str) -> RunReport {
-    report_for(
+    run_report_with_wasm(source, flags, refused, extras, &WasmFiles::default())
+}
+
+#[wasm_bindgen]
+pub fn run_report_with_wasm(
+    source: &str,
+    flags: &str,
+    refused: bool,
+    extras: &str,
+    files: &WasmFiles,
+) -> RunReport {
+    report_for_with(
         source,
         flags,
         refused,
         Some(stages::sink()),
         Extras::from_words(extras),
+        files,
     )
 }
 
@@ -181,6 +210,24 @@ fn report_for(
     refused: bool,
     progress: Option<ProgressSink>,
     extras: Extras,
+) -> RunReport {
+    report_for_with(
+        source,
+        flags,
+        refused,
+        progress,
+        extras,
+        &WasmFiles::default(),
+    )
+}
+
+fn report_for_with(
+    source: &str,
+    flags: &str,
+    refused: bool,
+    progress: Option<ProgressSink>,
+    extras: Extras,
+    wasm: &WasmFiles,
 ) -> RunReport {
     match options_from(flags) {
         Ok(options) => report_with(
@@ -196,6 +243,7 @@ fn report_for(
                 statement_spans: extras.links,
                 ..options
             },
+            wasm,
         ),
         Err(message) => RunReport {
             stdout: String::new(),
@@ -209,6 +257,8 @@ fn report_for(
             decoded: String::new(),
             decoded_count: 0,
             links: String::new(),
+            wasm: String::new(),
+            wasm_bytes: Vec::new(),
         },
     }
 }
