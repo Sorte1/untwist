@@ -14,6 +14,11 @@ All notable changes to this project are documented in this file. The format is b
   limit, decoded statically and never run; its import and export names name the JS glue when
   they match it. Remote wasm (`fetch`, `new URL`, `locateFile`, webpack's hashed
   `.module.wasm`) is listed in the report with the name to supply it under; nothing is fetched.
+- `--wasm-dir DIR` supplies wasm modules the input loads from elsewhere, matched by file name
+  (hashed names included), and `--wasm NAME=PATH` overrides one. `--fetch-wasm` downloads the
+  rest from absolute URLs, or relative ones against `--wasm-base URL`; without it nothing is
+  fetched. A supplied or fetched module that does not cover the glue's imports and exports is
+  reported and names nothing.
 
 ### Changed
 

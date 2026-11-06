@@ -44,6 +44,7 @@ similar = "3"
 stacker = "=0.1.25"
 psm = "=0.1.32"
 sha2 = "0.10"
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 wasmparser = { version = "=0.244.0", default-features = false, features = ["std"] }
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 

@@ -1,5 +1,6 @@
 use serde::Serialize;
 use untwist_core::pass::{Note, NoteKind};
+pub use untwist_unpack::wasm::MAX_WASM_BYTES;
 use untwist_unpack::wasm::{self, PayloadRefusal, Scan, Span, WasmSummary};
 
 use crate::pipeline::{admits_reparse, Output};
@@ -64,9 +65,39 @@ pub struct WasmSupply {
     pub files: Vec<SuppliedWasm>,
 }
 
+const MIN_HASH_SEGMENT: usize = 6;
+
+fn unhashed(name: &str) -> String {
+    name.split('.')
+        .filter(|segment| {
+            segment.len() < MIN_HASH_SEGMENT
+                || !segment.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+fn names_a_module(unhashed: &str) -> bool {
+    unhashed.ends_with(".wasm")
+        && unhashed
+            .split('.')
+            .any(|segment| !matches!(segment, "" | "wasm" | "module"))
+}
+
 impl WasmSupply {
     pub fn find(&self, name: &str) -> Option<&SuppliedWasm> {
-        self.files.iter().find(|file| file.name == name)
+        if let Some(exact) = self.files.iter().find(|file| file.name == name) {
+            return Some(exact);
+        }
+        let wanted = unhashed(name);
+        let mut alike = self
+            .files
+            .iter()
+            .filter(|file| unhashed(&file.name) == wanted);
+        match (alike.next(), alike.next()) {
+            (Some(only), None) if names_a_module(&wanted) => Some(only),
+            _ => None,
+        }
     }
 }
 

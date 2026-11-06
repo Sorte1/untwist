@@ -145,6 +145,35 @@ pub struct Args {
     )]
     pub disable: Vec<&'static str>,
     #[arg(
+        long = "wasm-dir",
+        value_name = "DIR",
+        help = "take wasm modules the input loads from elsewhere out of DIR, matched by file name \
+                (hashed names such as 3f2a91.module.wasm included); their imports and exports \
+                name the glue when they match it"
+    )]
+    pub wasm_dir: Option<PathBuf>,
+    #[arg(
+        long = "wasm",
+        value_name = "NAME=PATH",
+        help = "use the wasm file at PATH for the module the report lists as NAME, over any \
+                --wasm-dir match (repeatable)"
+    )]
+    pub wasm: Vec<String>,
+    #[arg(
+        long = "fetch-wasm",
+        help = "download wasm modules the input loads from an absolute URL and that no --wasm or \
+                --wasm-dir file supplies; without it nothing is ever fetched"
+    )]
+    pub fetch_wasm: bool,
+    #[arg(
+        long = "wasm-base",
+        value_name = "URL",
+        requires = "fetch_wasm",
+        help = "with --fetch-wasm, resolve relative wasm URLs against URL (the page or script \
+                the input came from)"
+    )]
+    pub wasm_base: Option<String>,
+    #[arg(
         long = "list-passes",
         help = "print every pass the engine can run, with its stage, and exit"
     )]
