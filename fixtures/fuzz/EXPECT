@@ -7,7 +7,7 @@ unsafe	deobfuscate/direct-eval-may-reach-the-decoder-by-a	a direct eval may reac
 *	inline-decoded-strings/the-stamped-machinery-is-incomplete	the stamped machinery is incomplete (seen after inline-object-props refuses an object literal that defines a key twice) (first seen in seed 2026 sample s2026-30)
 *	inline-decoded-strings/the-string-array-is-reachable-from-code-outside	the string array is reachable from code outside its declaration (first seen in seed 2026 sample s2026-1926)
 *	inline-decoder-wrappers/the-alias-is-not-declared-exactly-once-by	the decoder alias is not declared exactly once by a single-declarator declaration (first seen in seed 2026 sample s2026-1763)
-*	inline-decoder-wrappers/the-alias-may-be-read-before-its-declaration	the alias may be read before its declaration runs (first seen in seed 2026 sample s2026-1)
+safe	inline-decoder-wrappers/the-alias-may-be-read-before-its-declaration	the alias may be read before its declaration runs (first seen in seed 2026 sample s2026-1)
 safe	object-keys-computed-key	transformObjectKeys' built literal is not merged back when a key is computed (first seen in seed 2026 sample s2026-1218)
 safe	safe-debug-protection-kept	a reference to the debug protection function survives outside the statements the pass removes (first seen in seed 2026 sample s2026-299)
 safe	safe-decode-step-budget	decoding runs out of the evaluator's step budget (first seen in seed 2026 sample s2026-14)
