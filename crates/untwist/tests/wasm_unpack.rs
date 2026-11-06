@@ -121,7 +121,7 @@ fn a_malformed_payload_is_refused_and_its_literal_kept() {
 
 #[test]
 fn a_payload_with_the_wrong_version_is_refused() {
-    let payload = base64(b"\0asm\x02\0\0\0");
+    let payload = base64(b"\0asm\x02\0\0\0\x01\0");
     let out = settled(&format!("WebAssembly.instantiate(\"{payload}\");"));
     assert!(out.wasm.is_empty());
     assert!(wasm_notes(&out)[0].contains("version"));
@@ -307,4 +307,27 @@ fn a_bundle_module_that_does_not_cover_the_cross_module_glue_names_nothing() {
     assert!(wasm_notes(&out)
         .iter()
         .any(|note| note.contains("does not match the glue around src/add.wasm.js")));
+}
+
+#[test]
+fn a_header_only_feature_detect_is_not_a_payload() {
+    let source = "const a = WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));\nconst b = WebAssembly.validate(Uint8Array.from(atob(\"AGFzbQEAAAA=\")));\nconsole.log(a, b);";
+    assert!(!untwist_unpack::wasm::may_hold_wasm(source));
+    let mut out = run(source);
+    let before = out.code().to_string();
+    out.settle_wasm(&WasmSupply::default(), true);
+    assert_eq!(out.code(), before);
+    assert!(out.wasm.is_empty() && out.wasm_unresolved.is_empty());
+    assert!(wasm_notes(&out).is_empty());
+}
+
+#[test]
+fn a_feature_detect_beside_a_real_payload_stays_in_place() {
+    let glue = fixture("bindgen.js");
+    let source =
+        format!("WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));\n{glue}");
+    let out = settled(&source);
+    assert_eq!(out.wasm.len(), 1);
+    assert_eq!(out.wasm[0].bytes, wasm_bytes("bindgen.wasm"));
+    assert!(out.code().contains("0, 97, 115, 109, 1, 0, 0, 0"));
 }

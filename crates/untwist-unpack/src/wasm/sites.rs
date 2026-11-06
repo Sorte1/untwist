@@ -5,7 +5,10 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::node::NodeId;
 use oxc_syntax::operator::BinaryOperator;
 
-use super::payload::{check_header, check_size, decode_text, PayloadRefusal, WASM_MAGIC};
+use super::payload::{
+    base64_holds_module, check_header, check_size, decode_text, wasm_base64, PayloadRefusal,
+    MIN_MODULE_BYTES, WASM_MAGIC,
+};
 
 const HASHED_SUFFIX: &str = ".module.wasm";
 const MIN_HASH_LEN: usize = 8;
@@ -216,6 +219,9 @@ impl Scan {
         if is_property_key(nodes.parent_kind(id), span) {
             return;
         }
+        if wasm_base64(value).is_some_and(|body| !base64_holds_module(body)) {
+            return;
+        }
         if let Some(bytes) = decode_text(value) {
             self.payloads.push(PayloadSite { span, bytes });
             return;
@@ -233,7 +239,7 @@ impl Scan {
     }
 
     fn array(&mut self, nodes: &AstNodes<'_>, id: NodeId, array: &ArrayExpression<'_>) {
-        if !starts_with_magic(array) {
+        if array.elements.len() < MIN_MODULE_BYTES || !starts_with_magic(array) {
             return;
         }
         let span = is_typed_array_wrapper(nodes.parent_kind(id), array.span).unwrap_or(array.span);

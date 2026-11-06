@@ -1,5 +1,4 @@
 use oxc_ast::ast::*;
-use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::operator::UnaryOperator;
@@ -49,38 +48,27 @@ pub(super) fn may_be_patched(written: &Written<'_>) -> bool {
     PATCH_KEYS.iter().any(|key| written.may_be(key))
 }
 
-pub(super) fn unsealed_maps(
-    program: &Program<'_>,
-    scoping: &Scoping,
-    resolve: Resolve<'_>,
-) -> FxHashSet<SymbolId> {
-    let mut scan = MapUses {
-        scoping,
-        resolve,
-        trust_decoded: flow_rule_disabled(NATIVE_MAP_PENDING),
-        discarded: FxHashSet::default(),
-        unsealed: FxHashSet::default(),
-    };
-    scan.visit_program(program);
-    scan.unsealed
-}
-
 enum MemberKey<'k> {
     Spelled(&'k str),
-    Decoded(String),
+    Decoded(Span),
     Unknown,
 }
 
-struct MapUses<'s> {
-    scoping: &'s Scoping,
-    resolve: Resolve<'s>,
-    trust_decoded: bool,
-    discarded: FxHashSet<Span>,
-    unsealed: FxHashSet<SymbolId>,
+#[derive(Clone, Copy)]
+enum DecodedUse {
+    Member,
+    SetCall,
 }
 
-impl MapUses<'_> {
-    fn discard(&mut self, expr: &Expression<'_>) {
+#[derive(Default)]
+pub(super) struct MapUses {
+    discarded: FxHashSet<Span>,
+    unsealed: FxHashSet<SymbolId>,
+    decoded: Vec<(SymbolId, Span, DecodedUse)>,
+}
+
+impl MapUses {
+    pub(super) fn discard(&mut self, expr: &Expression<'_>) {
         match expr.without_parentheses() {
             Expression::CallExpression(call) => {
                 self.discarded.insert(call.span);
@@ -111,80 +99,79 @@ impl MapUses<'_> {
         }
     }
 
-    fn key<'k>(&self, member: &'k MemberExpression<'_>) -> MemberKey<'k> {
-        if let Some(name) = member.static_property_name() {
-            return MemberKey::Spelled(name);
+    pub(super) fn call(&mut self, scoping: &Scoping, it: &CallExpression<'_>) {
+        let Some(member) = it.callee.without_parentheses().as_member_expression() else {
+            return;
+        };
+        if self.discarded.contains(&it.span) {
+            return;
         }
-        let MemberExpression::ComputedMemberExpression(computed) = member else {
-            return MemberKey::Unknown;
+        let Some(symbol) = receiver(scoping, member) else {
+            return;
         };
-        let Expression::CallExpression(call) = computed.expression.without_parentheses() else {
-            return MemberKey::Unknown;
-        };
-        self.resolve
-            .and_then(|map| map.get(&call.span))
-            .and_then(|text| text.as_string())
-            .map_or(MemberKey::Unknown, MemberKey::Decoded)
-    }
-
-    fn sealed(&self, member: &MemberExpression<'_>) -> bool {
-        match self.key(member) {
-            MemberKey::Spelled(name) => SEALED_MEMBERS.contains(&name),
-            MemberKey::Decoded(name) => {
-                self.trust_decoded || SEALED_MEMBERS.contains(&name.as_str())
+        match key(member) {
+            MemberKey::Spelled("set") => {
+                self.unsealed.insert(symbol);
             }
-            MemberKey::Unknown => false,
+            MemberKey::Decoded(span) => self.decoded.push((symbol, span, DecodedUse::SetCall)),
+            MemberKey::Spelled(_) | MemberKey::Unknown => {}
         }
     }
 
-    fn is_set(&self, member: &MemberExpression<'_>) -> bool {
-        match self.key(member) {
-            MemberKey::Spelled(name) => name == "set",
-            MemberKey::Decoded(name) => !self.trust_decoded && name == "set",
-            MemberKey::Unknown => false,
-        }
-    }
-
-    fn receiver(&self, member: &MemberExpression<'_>) -> Option<SymbolId> {
-        let Expression::Identifier(id) = member.object().without_parentheses() else {
-            return None;
+    pub(super) fn member(&mut self, scoping: &Scoping, it: &MemberExpression<'_>) {
+        let Some(symbol) = receiver(scoping, it) else {
+            return;
         };
-        let reference = id.reference_id.get()?;
-        self.scoping.get_reference(reference).symbol_id()
-    }
-}
-
-impl<'a> VisitJs<'a> for MapUses<'_> {
-    fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
-        self.discard(&it.expression);
-        walk_js::walk_expression_statement(self, it);
-    }
-
-    fn visit_if_statement(&mut self, it: &IfStatement<'a>) {
-        self.discard(&it.test);
-        walk_js::walk_if_statement(self, it);
-    }
-
-    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if let Some(member) = it.callee.without_parentheses().as_member_expression() {
-            let is_set = self.is_set(member);
-            if let Some(symbol) = self.receiver(member).filter(|_| is_set) {
-                if !self.discarded.contains(&it.span) {
-                    self.unsealed.insert(symbol);
-                }
-            }
-        }
-        walk_js::walk_call_expression(self, it);
-    }
-
-    fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
-        if let Some(symbol) = self.receiver(it) {
-            if !self.sealed(it) {
+        match key(it) {
+            MemberKey::Spelled(name) if SEALED_MEMBERS.contains(&name) => {}
+            MemberKey::Decoded(span) => self.decoded.push((symbol, span, DecodedUse::Member)),
+            MemberKey::Spelled(_) | MemberKey::Unknown => {
                 self.unsealed.insert(symbol);
             }
         }
-        walk_js::walk_member_expression(self, it);
     }
+
+    pub(super) fn unsealed(self, resolve: Resolve<'_>) -> FxHashSet<SymbolId> {
+        let trust_decoded = flow_rule_disabled(NATIVE_MAP_PENDING);
+        let mut unsealed = self.unsealed;
+        for (symbol, span, used) in self.decoded {
+            let name = resolve
+                .and_then(|map| map.get(&span))
+                .and_then(|text| text.as_string());
+            let unseals = match (used, name) {
+                (_, None) => matches!(used, DecodedUse::Member),
+                (DecodedUse::Member, Some(name)) => {
+                    !trust_decoded && !SEALED_MEMBERS.contains(&name.as_str())
+                }
+                (DecodedUse::SetCall, Some(name)) => !trust_decoded && name == "set",
+            };
+            if unseals {
+                unsealed.insert(symbol);
+            }
+        }
+        unsealed
+    }
+}
+
+fn key<'k>(member: &'k MemberExpression<'_>) -> MemberKey<'k> {
+    if let Some(name) = member.static_property_name() {
+        return MemberKey::Spelled(name);
+    }
+    let MemberExpression::ComputedMemberExpression(computed) = member else {
+        return MemberKey::Unknown;
+    };
+    match computed.expression.without_parentheses() {
+        Expression::CallExpression(call) => MemberKey::Decoded(call.span),
+        _ => MemberKey::Unknown,
+    }
+}
+
+fn receiver(scoping: &Scoping, member: &MemberExpression<'_>) -> Option<SymbolId> {
+    let Expression::Identifier(id) = member.object().without_parentheses() else {
+        return None;
+    };
+    let reference = id.reference_id.get()?;
+    scoping.get_reference(reference).symbol_id()
 }
 
 impl<'a> Sites<'_, 'a> {
