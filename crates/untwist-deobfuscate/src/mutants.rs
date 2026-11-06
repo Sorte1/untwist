@@ -87,3 +87,14 @@ pub fn trust_external_write_order_for_tests(on: bool) {
 pub(crate) fn external_write_order_trusted() -> bool {
     EXTERNAL_WRITE_ORDER_TRUSTED.load(Ordering::Relaxed)
 }
+
+static INERT_STATEMENTS_UNCHECKED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn read_every_statement_as_unable_to_call_for_tests(on: bool) {
+    INERT_STATEMENTS_UNCHECKED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn inert_statements_unchecked() -> bool {
+    INERT_STATEMENTS_UNCHECKED.load(Ordering::Relaxed)
+}

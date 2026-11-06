@@ -10,6 +10,7 @@ use super::tables::{at, id, some, Sites, SpanSlots, SymbolSet, NONE};
 use super::{capacity_hint, record_lengths, with_slack, ScanLengths};
 use super::{Frame, FunctionValue, InitOrder, StatementList, ValueOwner};
 use crate::fused::{Fused, Member, Walk};
+use crate::mutants::inert_statements_unchecked;
 
 pub(super) struct Scan<'s> {
     scoping: &'s Scoping,
@@ -380,9 +381,19 @@ impl<'a> Member<'a> for Scan<'_> {
 
 fn statement_cannot_call(stmt: &Statement<'_>) -> bool {
     match stmt {
-        Statement::FunctionDeclaration(_) => true,
+        Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_) => true,
         Statement::VariableDeclaration(declaration) => {
             declaration.declarations.iter().all(declarator_cannot_call)
+        }
+        Statement::ExpressionStatement(statement) => {
+            inert_statements_unchecked() || expression_cannot_call(&statement.expression)
+        }
+        Statement::BlockStatement(block) => {
+            inert_statements_unchecked()
+                || block.body.iter().all(|inner| {
+                    !matches!(inner, Statement::FunctionDeclaration(_))
+                        && statement_cannot_call(inner)
+                })
         }
         _ => false,
     }
@@ -406,6 +417,10 @@ fn expression_cannot_call(expr: &Expression<'_>) -> bool {
         | Expression::FunctionExpression(_)
         | Expression::ArrowFunctionExpression(_) => true,
         Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+        Expression::UnaryExpression(unary) => {
+            unary.operator != UnaryOperator::Delete && expression_cannot_call(&unary.argument)
+        }
+        Expression::ParenthesizedExpression(inner) => expression_cannot_call(&inner.expression),
         Expression::ArrayExpression(array) => array.elements.iter().all(element_cannot_call),
         Expression::ObjectExpression(object) => object.properties.iter().all(property_cannot_call),
         _ => false,
