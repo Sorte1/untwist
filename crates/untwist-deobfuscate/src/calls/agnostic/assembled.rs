@@ -12,6 +12,7 @@ use super::bootstrap::Resolve;
 use super::{AKey, ASite, Agnostic};
 use crate::control_flow_object::single_declarator;
 use crate::proof::ProtoRoot;
+use crate::value_flow::{flow_rule_disabled, BUILT_LITERAL};
 
 type Field<'a> = (Cow<'a, str>, &'a Expression<'a>);
 
@@ -138,33 +139,55 @@ impl<'a> Scan<'_, '_, 'a> {
         }
         let mut fields = literal_fields(object)?;
         let mut writes = Vec::new();
-        while let Some((span, field)) = statements
-            .get(index + 1 + writes.len())
-            .and_then(|statement| self.key_assignment(statement, table))
-        {
-            fields.push(field);
-            writes.push(span);
+        let mut next = index + 1;
+        while let Some(statement) = statements.get(next) {
+            if !matches!(statement, Statement::FunctionDeclaration(_)) {
+                let Some(assigned) = self.key_assignments(statement, table) else {
+                    break;
+                };
+                for (span, field) in assigned {
+                    fields.push(field);
+                    writes.push(span);
+                }
+            }
+            next += 1;
         }
         if writes.is_empty() {
             return None;
         }
-        let alias = self.alias_of(statements.get(index + 1 + writes.len())?, table)?;
+        let alias = self.alias_of(statements.get(next)?, table)?;
         let references = self.scoping.get_resolved_reference_ids(table).len();
-        if references != writes.len() + 1 || self.scoping.symbol_is_mutated(table) {
+        let unchecked = flow_rule_disabled(BUILT_LITERAL);
+        if !unchecked && (references != writes.len() + 1 || self.scoping.symbol_is_mutated(table)) {
             return None;
         }
         Some((alias, Assembled { fields, writes }))
     }
 
-    fn key_assignment(
+    fn key_assignments(
         &self,
         statement: &'a Statement<'a>,
         table: SymbolId,
-    ) -> Option<(Span, Field<'a>)> {
+    ) -> Option<Vec<(Span, Field<'a>)>> {
         let Statement::ExpressionStatement(statement) = statement else {
             return None;
         };
-        let Expression::AssignmentExpression(assignment) = &statement.expression else {
+        match &statement.expression {
+            Expression::SequenceExpression(sequence) => sequence
+                .expressions
+                .iter()
+                .map(|expression| self.key_assignment(expression, table))
+                .collect(),
+            expression => Some(vec![self.key_assignment(expression, table)?]),
+        }
+    }
+
+    fn key_assignment(
+        &self,
+        expression: &'a Expression<'a>,
+        table: SymbolId,
+    ) -> Option<(Span, Field<'a>)> {
+        let Expression::AssignmentExpression(assignment) = expression else {
             return None;
         };
         if assignment.operator != AssignmentOperator::Assign {
@@ -179,7 +202,7 @@ impl<'a> Scan<'_, '_, 'a> {
             MemberExpression::ComputedMemberExpression(m) => self.key_text(&m.expression)?,
             MemberExpression::PrivateFieldExpression(_) => return None,
         };
-        (!OBJECT_PROTOTYPE_KEYS.contains(&key.as_ref()))
+        (flow_rule_disabled(BUILT_LITERAL) || !OBJECT_PROTOTYPE_KEYS.contains(&key.as_ref()))
             .then_some((member.span(), (key, &assignment.right)))
     }
 
@@ -202,8 +225,14 @@ impl<'a> Scan<'_, '_, 'a> {
     }
 
     fn alias_of(&self, statement: &Statement<'a>, table: SymbolId) -> Option<SymbolId> {
-        let (id, init) = single_declarator(statement)?;
-        (self.symbol_of(init?)? == table).then_some(id.symbol_id.get()?)
+        let Statement::VariableDeclaration(declaration) = statement else {
+            return None;
+        };
+        let declarator = declaration.declarations.first()?;
+        let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+            return None;
+        };
+        (self.symbol_of(declarator.init.as_ref()?)? == table).then_some(id.symbol_id.get()?)
     }
 
     fn symbol_of(&self, expr: &Expression<'_>) -> Option<SymbolId> {

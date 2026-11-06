@@ -1,0 +1,8 @@
+dec-built-literal-rest|const t = {}; t[bL(0)] = 12, t[bL(1)] = 7, t.plums = 30; const o = t; const e = { cherries: 99, ...o }; const x = e; const { apples, ...rest } = x; console.log(apples, Object.keys(rest).join());
+dec-built-literal-spread|const t = { depth: 2 }; t[bL(3)] = 'inner'; function show(v) { return v; } t[bL(2)] = 1; const o = t; console.log(Object.keys({ ...o }).join(), show(1));
+dec-built-literal-statements|var t = {}; t[bL(0)] = 1; t[bL(1)] = 2; var o = t; var { apples, ...rest } = o; console.log(apples, rest.pears);
+ref-built-literal-escapes|function f(x) { x.d = Object.defineProperty; } const t = {}; t[bL(0)] = 1; f(t); t[bL(1)] = 2; const o = t; const { apples, ...r } = o; r.d(String.prototype, bL(9), { value: function () { return 'X'; } });
+ref-built-literal-assign|const t = {}; t[bL(0)] = 1; Object.assign(t, { d: Object.defineProperty }); const o = t; const { apples, ...r } = o; r.d(String.prototype, bL(9), { value: function () { return 'X'; } });
+ref-built-literal-hoisted|var t = {}; t[bL(0)] = 1; g(); var o = t; var { apples, ...r } = o; r.d(String.prototype, bL(9), { value: function () { return 'X'; } }); function g() { t.d = Object.defineProperty; }
+ref-built-literal-after|const t = {}; t[bL(0)] = 1; const o = t; t.d = Object.defineProperty; const { apples, ...r } = o; r.d(String.prototype, bL(9), { value: function () { return 'X'; } });
+ref-built-literal-proto-key|const t = {}; t[bL(0)] = 1; t[bL(11)] = { d: Object.defineProperty }; const o = t; const { apples, ...r } = o; o.d(String.prototype, bL(9), { value: function () { return 'X'; } });

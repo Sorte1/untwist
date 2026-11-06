@@ -4,6 +4,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use std::borrow::Cow;
 
+use super::fresh::KeyedSource;
 use super::keys::Keys;
 use super::roles::*;
 use super::sites::*;
@@ -173,12 +174,29 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     fn own_keys(&self, expr: &Expression<'a>, depth: u8) -> Option<Vec<AKey<'a>>> {
+        match expr.without_parentheses() {
+            Expression::ObjectExpression(object) => self.literal_keys(object, depth),
+            Expression::Identifier(id) => self.source_keys(id, false, depth),
+            _ => None,
+        }
+    }
+
+    fn source_keys(
+        &self,
+        id: &IdentifierReference<'a>,
+        aliased: bool,
+        depth: u8,
+    ) -> Option<Vec<AKey<'a>>> {
         let next = depth.checked_sub(1)?;
-        let object = match expr.without_parentheses() {
-            Expression::ObjectExpression(object) => &**object,
-            Expression::Identifier(id) => self.fresh.keyed_literal(id)?,
-            _ => return None,
-        };
+        match self.fresh.keyed_source(id, aliased)? {
+            KeyedSource::Literal(object) => self.literal_keys(object, depth),
+            KeyedSource::Built(names) => Some(names.into_iter().map(AKey::Named).collect()),
+            KeyedSource::Alias(source) => self.source_keys(source, true, next),
+        }
+    }
+
+    fn literal_keys(&self, object: &ObjectExpression<'a>, depth: u8) -> Option<Vec<AKey<'a>>> {
+        let next = depth.checked_sub(1)?;
         let mut keys = Vec::new();
         for property in &object.properties {
             match property {

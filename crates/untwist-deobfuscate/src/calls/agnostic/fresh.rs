@@ -271,15 +271,16 @@ impl<'a> Fresh<'_, 'a> {
         self.sealed_field(obj, key)
     }
 
-    pub(super) fn keyed_literal(
+    pub(super) fn keyed_source(
         &self,
         id: &IdentifierReference<'_>,
-    ) -> Option<&'a ObjectExpression<'a>> {
+        aliased: bool,
+    ) -> Option<KeyedSource<'a>> {
         let defs = self.defs(id)?;
         if defs.fields_written
             || defs.method_called
             || defs.callable
-            || defs.refs != defs.read_through
+            || defs.refs != defs.read_through + u32::from(aliased)
         {
             return None;
         }
@@ -288,9 +289,18 @@ impl<'a> Fresh<'_, 'a> {
         };
         let init: &'a Expression<'a> = init;
         match init.without_parentheses() {
-            Expression::ObjectExpression(object) => Some(&**object),
+            Expression::ObjectExpression(object) => Some(KeyedSource::Literal(object)),
+            Expression::Identifier(source) => match self.built_fields(id) {
+                Some(fields) => Some(KeyedSource::Built(fields)),
+                None => Some(KeyedSource::Alias(source)),
+            },
             _ => None,
         }
+    }
+
+    fn built_fields(&self, alias: &IdentifierReference<'_>) -> Option<Vec<Cow<'a, str>>> {
+        let table = self.bindings.assembled.get(&self.symbol(alias)?)?;
+        Some(table.fields.iter().map(|(name, _)| name.clone()).collect())
     }
 
     pub(super) fn literal_init(&self, id: &IdentifierReference<'_>) -> Option<&'a Expression<'a>> {
@@ -463,6 +473,12 @@ impl Assumed<'_> {
         }
         false
     }
+}
+
+pub(super) enum KeyedSource<'a> {
+    Literal(&'a ObjectExpression<'a>),
+    Built(Vec<Cow<'a, str>>),
+    Alias(&'a IdentifierReference<'a>),
 }
 
 pub(super) enum Bound<'a> {
