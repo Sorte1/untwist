@@ -15,6 +15,22 @@ pub fn set_native_bodies(enabled: bool) {
     crate::native_body::set_enabled(enabled);
 }
 
+pub fn keep_unit_outcomes(on: bool) {
+    crate::decode::set_keeping(on);
+}
+
+pub fn keep_units_from_steps(steps: Option<u64>) {
+    crate::decode::set_keep_from_steps(steps);
+}
+
+pub fn leave_unit_arguments_unkeyed(on: bool) {
+    crate::decode::set_arguments_unkeyed(on);
+}
+
+pub(crate) fn recording_units() -> bool {
+    recording()
+}
+
 pub fn native_body_runs() -> u64 {
     crate::native_body::runs()
 }

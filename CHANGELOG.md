@@ -43,6 +43,10 @@ All notable changes to this project are documented in this file. The format is b
 - The default lane's decode step budget grows with the distinct decoder calls a unit decodes
   (50 M plus 500 k a call, at most the 1 B `--unsafe` uses), so the high preset's rc4 strings
   no longer run out of steps.
+- A decode unit whose string array, decoders, rotator and call arguments are unchanged since
+  an earlier round reuses that round's decoded values instead of running again, so a high-preset
+  unit that is decoded and then kept as written no longer decodes twice: about 30 % fewer decode
+  steps on the high preset.
 
 ### Fixed
 
