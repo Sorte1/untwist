@@ -85,7 +85,7 @@ pair-wrap+self	10	8/10	10/10	10/10	0	safe-global-names (2)
 pair-wrap+split	10	8/10	10/10	10/10	0	safe-global-names (2)
 pair-wrap+unicode	10	8/10	10/10	10/10	0	safe-global-names (2)
 preset-default	10	8/10	10/10	10/10	0	safe-global-names (2)
-preset-high	10	0/10	10/10	10/10	0	safe-decode-step-budget (10)
+preset-high	10	2/10	10/10	10/10	0	builtin-replaced-decoded-key (1), safe-global-key-reach (4), safe-global-names (3)
 preset-low	10	8/10	10/10	10/10	0	safe-global-names (2)
 preset-medium	10	2/10	10/10	10/10	0	builtin-replaced-decoded-key (2), safe-global-key-reach (3), safe-global-names (3)
 rename-globals	10	8/10	10/10	10/10	0	safe-global-names (2)
@@ -114,9 +114,8 @@ wrappers-function	10	8/10	10/10	10/10	0	safe-global-names (2)
 wrappers-function-params-5	10	8/10	10/10	10/10	0	safe-global-names (2)
 wrappers-unchained	10	8/10	10/10	10/10	0	safe-global-names (2)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
-safe-global-names	95	174	174	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
-builtin-replaced-decoded-key	13	15	15	0	the global-object getter's code text (Function("return (function() " + ...)) is built through a proxy object whose keys are themselves decoder calls, so the text cannot be resolved before the decode and a stateful base64 or rc4 unit is refused as a possible built-in patch
-safe-global-key-reach	13	15	15	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve (an object spread or rest enumerates values, a Symbol-valued computed key), so the unit's call sites are left alone
+safe-global-names	96	177	177	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
+safe-global-key-reach	14	19	19	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve (an object spread or rest enumerates values, a Symbol-valued computed key), so the unit's call sites are left alone
+builtin-replaced-decoded-key	14	16	16	0	the global-object getter's code text (Function("return (function() " + ...)) is built through a proxy object whose keys are themselves decoder calls, so the text cannot be resolved before the decode and a stateful base64 or rc4 unit is refused as a possible built-in patch
 safe-debug-protection-kept	10	20	20	0	safe lane: after control-flow flattening or dead-code injection a reference to the debug protection function survives outside the statements the pass removes, so it stays and its Function global getter then blocks the unit
 safe-domain-lock-reach	2	20	20	0	safe lane: the domain lock's own for-in scan of the global object is a global reach, so the unit is refused before the lock is removed
-safe-decode-step-budget	1	10	10	0	safe lane: decoding the high preset's rc4 unit runs out of the evaluator's step budget

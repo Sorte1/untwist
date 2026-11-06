@@ -70,6 +70,14 @@ early exit.
 `tests/fixtures_reference.rs` runs the high-preset rotation on `Budget::default()`, so the suite
 proves the default budget suffices.
 
+That is the rotation alone. The default lane gives each decode unit `STEP_BUDGET` plus
+`SAFE_STEPS_PER_DISTINCT_CALL` (5·10⁵) per distinct call it decodes, capped at the `--unsafe`
+budget of 10⁹: the budget bounds work, not what a decode may prove. The option matrix's
+high-preset units need 68 M to 229 M steps for 477 to 631 distinct calls (at most 376 k a call),
+so the scaled budget leaves them a third or more spare. A decoder that never returns spends the
+whole scaled budget and is left alone, as before; with 1,900 or more distinct calls that is the
+same 10⁹ steps `--unsafe` already spends (about 6.5 s per decode attempt, release build).
+
 ## Covered shapes
 
 | Shape | Covered by | Needs |

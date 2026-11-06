@@ -13,7 +13,6 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::ExprEdits;
 use untwist_core::pass::{CodeTextSeen, Cx, Interest, Pass};
 use untwist_eval::bail::{Bail, EvalResult};
-use untwist_eval::budget::default_fuel;
 use untwist_eval::decode::{is_decoded_string, Decoded as DecodedValue, InterpEvaluator};
 use untwist_eval::object::PROTOTYPE_LINKS;
 use untwist_eval::rotation::RotationMemo;
@@ -38,6 +37,7 @@ mod reach;
 mod root_keys;
 mod values;
 
+use budget::UnitFuel;
 pub(crate) use budget::{InputHeap, SharedHeap};
 use conflict::{describe_write, prototype_conflict};
 use values::{decoded_strings, judge_resolved_roots, value_map_for};
@@ -392,7 +392,7 @@ fn reached_code_runner(runs: &[UnitRun<'_, '_>]) -> bool {
 
 fn run_decode_units<'a, 'r>(
     plan: &'r DecodePlan<'a>,
-    fuel: u64,
+    fuel: UnitFuel,
     memo: &mut RotationMemo,
     defer_all: bool,
     heap: &mut InputHeap,
@@ -407,7 +407,7 @@ fn run_decode_units<'a, 'r>(
             deferred = true;
             continue;
         }
-        let mut evaluator = heap.evaluator(fuel);
+        let mut evaluator = heap.evaluator(fuel.for_unit(request));
         let result = if heap.is_spent() {
             Err(Bail::Budget)
         } else {
@@ -442,7 +442,7 @@ fn plan_notes(plan: &DecodePlan<'_>, decoded: &mut Decoded) {
 }
 
 struct DecodeLimits<'d> {
-    fuel: u64,
+    fuel: UnitFuel,
     defer_budget: &'d Cell<u32>,
     defer_disabled: bool,
     nested_root: bool,
@@ -733,10 +733,7 @@ impl<'a> Pass<'a> for InlineDecodedStrings {
         let unedited = is_unedited(cx);
 
         let limits = DecodeLimits {
-            fuel: cx
-                .opts
-                .fuel
-                .unwrap_or_else(|| default_fuel(cx.opts.unsafe_transforms)),
+            fuel: UnitFuel::of(cx.opts.fuel, cx.opts.unsafe_transforms),
             defer_budget: &self.defer_budget,
             defer_disabled: cx.defer_disabled(),
             nested_root: cx.opts.nested_root,

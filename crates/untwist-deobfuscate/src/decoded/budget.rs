@@ -1,11 +1,17 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use oxc_ast::ast::Expression;
+use oxc_span::GetSpan;
+
+use rustc_hash::FxHashSet;
 use untwist_core::pass::InputRoom;
 use untwist_eval::bail::{Bail, EvalResult};
-use untwist_eval::budget::{heap_budget, Budget};
+use untwist_eval::budget::{heap_budget, safe_unit_fuel, Budget, UNSAFE_STEP_BUDGET};
 use untwist_eval::decode::{Decoded, InterpEvaluator};
 use untwist_eval::heap::HeapLedger;
+
+use crate::bridge::DecodeRequest;
 
 pub(crate) type SharedHeap = Rc<RefCell<InputHeap>>;
 
@@ -17,6 +23,63 @@ const SCAN_CHUNK: usize = 1024;
 const ESCAPE_EXTRA: u16 = 5;
 
 const SPENT: u64 = 1 << 63;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum UnitFuel {
+    Fixed(u64),
+    PerDistinctCall,
+}
+
+impl UnitFuel {
+    pub(crate) fn of(forced: Option<u64>, unsafe_transforms: bool) -> Self {
+        match (forced, unsafe_transforms) {
+            (Some(fuel), _) => Self::Fixed(fuel),
+            (None, true) => Self::Fixed(UNSAFE_STEP_BUDGET),
+            (None, false) => Self::PerDistinctCall,
+        }
+    }
+
+    pub(crate) fn for_unit(self, request: &DecodeRequest<'_>) -> u64 {
+        match self {
+            Self::Fixed(fuel) => fuel,
+            Self::PerDistinctCall => safe_unit_fuel(distinct_calls(request)),
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+enum ArgumentKey<'a> {
+    Number(u64),
+    Text(&'a str),
+    Site(u32, u32),
+}
+
+fn argument_key<'a>(argument: &'a Expression<'a>) -> ArgumentKey<'a> {
+    match argument {
+        Expression::NumericLiteral(number) => ArgumentKey::Number(number.value.to_bits()),
+        Expression::StringLiteral(text) => ArgumentKey::Text(text.value.as_str()),
+        other => {
+            let span = other.span();
+            ArgumentKey::Site(span.start, span.end)
+        }
+    }
+}
+
+fn distinct_calls(request: &DecodeRequest<'_>) -> usize {
+    request
+        .calls
+        .iter()
+        .map(|call| {
+            let arguments: Vec<ArgumentKey<'_>> = call
+                .arguments
+                .iter()
+                .map(|argument| argument_key(argument))
+                .collect();
+            (call.decoder, arguments)
+        })
+        .collect::<FxHashSet<_>>()
+        .len()
+}
 
 #[derive(Default)]
 pub(crate) struct InputHeap {

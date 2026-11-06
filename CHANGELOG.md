@@ -38,6 +38,9 @@ All notable changes to this project are documented in this file. The format is b
 - Unminify finishes the body an `if` rewrite builds in the same round, and `!` inverts nested
   comparisons at once: game.js needs 3 unminify rounds instead of 9, about 8 % fewer instructions.
 - The playground worker keeps the decoded strings in one buffer while it runs, so the 10 MB sample peaks about 26 MiB lower (190 MiB instead of 216 MiB).
+- The default lane's decode step budget grows with the distinct decoder calls a unit decodes
+  (50 M plus 500 k a call, at most the 1 B `--unsafe` uses), so the high preset's rc4 strings
+  no longer run out of steps.
 
 ### Fixed
 
