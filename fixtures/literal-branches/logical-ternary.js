@@ -1,0 +1,24 @@
+const trap = new Proxy({}, { get(_, key) { throw new Error(String(key)); } });
+const o = { name: "o", f() { return this === o; } };
+function g() { return this === undefined || this === globalThis; }
+const results = [];
+results.push(false && trap.dead1());
+results.push(0 && trap.dead2());
+results.push("" && trap.dead3());
+results.push(true && "right");
+results.push(1 || trap.dead4());
+results.push("x" || trap.dead5());
+results.push(0 || "right");
+results.push(null || "right");
+results.push(true ? "a" : trap.dead6());
+results.push(0 ? trap.dead7() : "b");
+results.push(!0 ? "c" : trap.dead8());
+results.push((true ? o.f : g)());
+results.push((1 && o.f)());
+results.push((0 || o.f)());
+results.push((false ? g : o.f)());
+results.push(typeof (true ? notDefinedAnywhere : 1));
+results.push(delete (true ? o.name : 1), o.name);
+false && trap.dead9();
+true ? results.push("stmt") : trap.dead10();
+console.log(results.join("|"));

@@ -80,7 +80,7 @@ fn a_non_string_comparison_is_left_alone() {
 }
 
 #[test]
-fn a_side_effecting_or_bare_literal_test_is_left_alone() {
+fn a_side_effecting_or_non_literal_test_is_left_alone() {
     assert_transform!(
         "if (++counter) {\n  a();\n}",
         [untwist_deobfuscate::dead_code::boxed],
@@ -91,10 +91,10 @@ fn a_side_effecting_or_bare_literal_test_is_left_alone() {
     "#
     );
     assert_transform!(
-        "if (0) {\n  a();\n}",
+        "if (typeof x) {\n  a();\n}",
         [untwist_deobfuscate::dead_code::boxed],
         @r#"
-    if (0) {
+    if (typeof x) {
       a();
     }
     "#
@@ -496,5 +496,78 @@ fn the_default_lane_braces_a_bodiless_function_it_keeps() {
     assert_eq!(
         default_lane("if (\"a\" === \"a\") function f() {}"),
         "{\n  function f() {}\n}"
+    );
+}
+
+#[test]
+fn a_false_literal_if_is_removed() {
+    assert_transform!(
+        "if (false) {\n  while (true) {}\n}\nrun();",
+        [untwist_deobfuscate::dead_code::boxed],
+        @"run();"
+    );
+}
+
+#[test]
+fn a_truthy_literal_keeps_the_consequent() {
+    assert_transform!(
+        "if (1) {\n  a();\n} else {\n  b();\n}",
+        [untwist_deobfuscate::dead_code::boxed],
+        @"a();"
+    );
+}
+
+#[test]
+fn a_dead_while_loop_is_removed() {
+    assert_transform!(
+        "while (null) {\n  a();\n}\nrun();",
+        [untwist_deobfuscate::dead_code::boxed],
+        @"run();"
+    );
+}
+
+#[test]
+fn a_hoisted_var_in_a_dead_branch_is_kept_without_its_initialiser() {
+    assert_transform!(
+        "if (0) {\n  var x = 1;\n}\nrun();",
+        [untwist_deobfuscate::dead_code::boxed],
+        @r#"
+    var x;
+    run();
+    "#
+    );
+}
+
+#[test]
+fn a_literal_and_picks_its_left_operand() {
+    assert_transform!(
+        "var a = 0 && f();\nvar b = 1 && g();\nvar c = \"x\" || h();",
+        [untwist_deobfuscate::dead_code::boxed],
+        @r#"
+    var a = 0;
+    var b = g();
+    var c = "x";
+    "#
+    );
+}
+
+#[test]
+fn a_reference_picked_from_a_literal_ternary_is_kept_wrapped() {
+    assert_transform!(
+        "(true ? a.b : c)();",
+        [untwist_deobfuscate::dead_code::boxed],
+        @"(true ? a.b : c)();"
+    );
+}
+
+#[test]
+fn an_identifier_picked_from_a_literal_ternary_is_folded_except_under_typeof() {
+    assert_transform!(
+        "var a = true ? b : c;\nvar d = typeof (true ? e : f);",
+        [untwist_deobfuscate::dead_code::boxed],
+        @r#"
+    var a = b;
+    var d = typeof (true ? e : f);
+    "#
     );
 }
