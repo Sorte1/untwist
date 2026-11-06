@@ -56,11 +56,11 @@ impl GuardRecord {
         self.counts.get_or_insert_with(Box::default)
     }
 
-    fn note_compacted(&mut self, key: GuardKey) {
+    pub(super) fn note_compacted(&mut self, key: GuardKey) {
         add(&mut self.counts_mut().compacted, key, 1);
     }
 
-    fn note_kept(&mut self, key: GuardKey) {
+    pub(super) fn note_kept(&mut self, key: GuardKey) {
         add(&mut self.counts_mut().kept, key, 1);
     }
 
@@ -99,7 +99,7 @@ impl GuardRecord {
     }
 }
 
-fn holds_a_line_terminator(text: &str) -> bool {
+pub(super) fn holds_a_line_terminator(text: &str) -> bool {
     text.contains(LINE_TERMINATORS)
 }
 
@@ -119,21 +119,27 @@ fn reprints_the_same(target: &Function<'_>, compact: &str) -> bool {
     function_text(reparsed, true) == function_text(target, true)
 }
 
-fn fixed_point_text(target: &Function<'_>, compact: &str, cascade: bool) -> Option<String> {
+pub(super) fn fixed_point_text(
+    target: &Function<'_>,
+    compact: &str,
+    cascade: bool,
+) -> Option<String> {
     let settled = settle(format!("({compact})"), cascade);
     let inner = settled.strip_prefix('(')?.strip_suffix(')')?;
     let sound = !holds_a_line_terminator(inner) && reprints_the_same(target, inner);
     sound.then(|| inner.to_string())
 }
 
-fn may_hold_a_guard(init: Option<&Expression<'_>>) -> bool {
+pub(super) fn may_hold_a_guard(init: Option<&Expression<'_>>) -> bool {
     matches!(
         init,
         Some(Expression::FunctionExpression(_) | Expression::CallExpression(_))
     )
 }
 
-fn assigned_guard<'k, 'a>(statement: &'k ExpressionStatement<'a>) -> Option<&'k Expression<'a>> {
+pub(super) fn assigned_guard<'k, 'a>(
+    statement: &'k ExpressionStatement<'a>,
+) -> Option<&'k Expression<'a>> {
     let Expression::AssignmentExpression(assign) = &statement.expression else {
         return None;
     };
@@ -142,7 +148,7 @@ fn assigned_guard<'k, 'a>(statement: &'k ExpressionStatement<'a>) -> Option<&'k 
     (plain && may_hold_a_guard(Some(&assign.right))).then_some(&assign.right)
 }
 
-fn guard_candidate<'k, 'a>(init: &'k Expression<'a>) -> Option<&'k Function<'a>> {
+pub(super) fn guard_candidate<'k, 'a>(init: &'k Expression<'a>) -> Option<&'k Function<'a>> {
     match init {
         Expression::FunctionExpression(function) => Some(function),
         Expression::CallExpression(call) => match call.callee.without_parentheses() {
