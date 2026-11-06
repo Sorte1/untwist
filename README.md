@@ -118,7 +118,10 @@ check that every import key and export read in the glue exists in the module; a 
 not match gives a warning and names nothing. Embedded modules are found with `--wasm-check`, and
 modules loaded from elsewhere are supplied with `--wasm-dir`, `--wasm` or `--fetch-wasm`. In a
 webpack bundle the names reach the module files that import from or export to the wasm module,
-and the same names are applied to the combined `deobfuscated.js`.
+and the same names are applied to the combined `deobfuscated.js`. For Emscripten glue whose
+module has no name section, exports are named from `Module._name` wrappers and the export kind
+(`wasmMemory`, `wasmTable`); imports keep their names unless the module's import names are real
+words, since minified names like `a.a` say nothing about the function behind them.
 
 Exit codes: `0` success; `1` an error, a parse error (output is still produced) or a panic in a
 pass; `2` the output directory already holds output (use `-f`); `3` an input was too deep to

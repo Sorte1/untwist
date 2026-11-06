@@ -13,6 +13,12 @@ All notable changes to this project are documented in this file. The format is b
   output may hold one; `auto` extracts modules that have imports or exports, so feature-detect
   probes passed to `WebAssembly.validate` are left alone; `on` extracts every module it finds.
   Supplied and fetched modules work in every mode.
+- Emscripten glue is named when its wasm module has no name section: an export wrapper
+  (`_malloc = Module._malloc = exports.f`) takes the public key's name when the export is a
+  function, the binding of the memory and table exports becomes `wasmMemory` and `wasmTable`,
+  `Module.asm` counts as the exports holder, and the object handed to the instance as imports
+  becomes `wasmImports`. Import functions whose minified names the module does not confirm stay
+  unnamed.
 - The names wasm glue gets in a webpack bundle's unpacked modules are also applied to the
   combined `deobfuscated.js`, each inside its own module function. If that copy does not hold the
   same bindings, a warning says so and it keeps the original names.
