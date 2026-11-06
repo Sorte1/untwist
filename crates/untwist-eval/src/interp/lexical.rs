@@ -1,12 +1,15 @@
 use oxc_ast::ast::{
-    AssignmentTarget, BindingIdentifier, BindingPattern, BlockStatement, Expression,
-    ForInStatement, ForOfStatement, ForStatement, ForStatementInit, ForStatementLeft, Function,
-    FunctionBody, IdentifierReference, Statement, SwitchStatement, VariableDeclaration,
-    VariableDeclarationKind,
+    ArrowFunctionExpression, AssignmentTarget, BindingIdentifier, BindingPattern, BlockStatement,
+    CatchClause, Expression, ForInStatement, ForOfStatement, ForStatement, ForStatementInit,
+    ForStatementLeft, Function, FunctionBody, IdentifierReference, Statement, SwitchStatement,
+    VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_syntax::scope::ScopeFlags;
 
 use crate::bail::{Bail, EvalResult};
+use crate::mutants::dead_zone_names_loose;
+use crate::shadow::{self, Scoped, Shadows};
 use crate::stack;
 
 const TEMPORAL_DEAD_ZONE: &str =
@@ -51,8 +54,31 @@ fn lexical_names<'a>(statements: &'a [Statement<'a>]) -> Vec<Lexical<'a>> {
 
 struct EarlyReference<'n, 'a> {
     names: &'n [Lexical<'a>],
+    shadows: Shadows<'a>,
     hoisted: bool,
     found: bool,
+}
+
+impl<'n, 'a> EarlyReference<'n, 'a> {
+    fn new(names: &'n [Lexical<'a>], hoisted: bool) -> Self {
+        let targets = names.iter().map(|lexical| lexical.name).collect();
+        Self {
+            names,
+            shadows: Shadows::new(targets, dead_zone_names_loose()),
+            hoisted,
+            found: false,
+        }
+    }
+
+    fn found(&self) -> bool {
+        self.found || self.shadows.unresolved
+    }
+}
+
+impl<'a> Scoped<'a> for EarlyReference<'_, 'a> {
+    fn shadows(&mut self) -> &mut Shadows<'a> {
+        &mut self.shadows
+    }
 }
 
 impl<'a> VisitJs<'a> for EarlyReference<'_, 'a> {
@@ -72,9 +98,45 @@ impl<'a> VisitJs<'a> for EarlyReference<'_, 'a> {
         stack::maybe_grow_dyn(&mut || walk_js::walk_assignment_target(self, it));
     }
 
+    fn visit_function(&mut self, it: &Function<'a>, _flags: ScopeFlags) {
+        shadow::function(self, it);
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        shadow::arrow(self, it);
+    }
+
+    fn visit_block_statement(&mut self, it: &BlockStatement<'a>) {
+        shadow::block(self, it);
+    }
+
+    fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
+        shadow::for_statement(self, it);
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        shadow::for_in(self, it);
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        shadow::for_of(self, it);
+    }
+
+    fn visit_switch_statement(&mut self, it: &SwitchStatement<'a>) {
+        shadow::switch(self, it);
+    }
+
+    fn visit_catch_clause(&mut self, it: &CatchClause<'a>) {
+        shadow::catch(self, it);
+    }
+
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let name = it.name.as_str();
+        if !self.shadows.reaches(name) {
+            return;
+        }
         let early = |lexical: &Lexical<'a>| {
-            lexical.name == it.name.as_str() && (self.hoisted || it.span.start < lexical.end)
+            lexical.name == name && (self.hoisted || it.span.start < lexical.end)
         };
         if self.names.iter().any(early) {
             self.found = true;
@@ -87,16 +149,13 @@ fn has_early_reference(statements: &[Statement<'_>]) -> bool {
     if names.is_empty() {
         return false;
     }
-    let mut visitor = EarlyReference {
-        names: &names,
-        hoisted: false,
-        found: false,
-    };
+    let mut visitor = EarlyReference::new(&names, false);
+    visitor.shadows.note_top_functions(statements);
     for statement in statements {
         visitor.hoisted = matches!(statement, Statement::FunctionDeclaration(_));
         visitor.visit_statement(statement);
     }
-    visitor.found
+    visitor.found()
 }
 
 fn declares_lexically(statements: &[Statement<'_>]) -> bool {
@@ -122,13 +181,9 @@ fn early_for_head(declaration: &VariableDeclaration<'_>) -> bool {
             _ => None,
         })
         .collect();
-    let mut visitor = EarlyReference {
-        names: &names,
-        hoisted: false,
-        found: false,
-    };
+    let mut visitor = EarlyReference::new(&names, false);
     visitor.visit_variable_declaration(declaration);
-    visitor.found
+    visitor.found()
 }
 
 #[derive(Default)]
@@ -170,13 +225,9 @@ fn head_reads_its_bindings<'a>(left: &ForStatementLeft<'a>, right: &Expression<'
     }
     let mut bound = BoundNames::default();
     bound.visit_variable_declaration(declaration);
-    let mut visitor = EarlyReference {
-        names: &bound.names,
-        hoisted: true,
-        found: false,
-    };
+    let mut visitor = EarlyReference::new(&bound.names, true);
     visitor.visit_expression(right);
-    visitor.found
+    visitor.found()
 }
 
 #[derive(Default)]

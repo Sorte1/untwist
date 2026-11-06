@@ -10,6 +10,7 @@ use oxc_ast::ast::{Expression, Function};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::UnaryOperator;
 
+use crate::mutants::void_operands_unchecked;
 use judge::Walker;
 use scope::FrameKind;
 pub(super) use self_rewrite::{self_rewrite_target, template_rewrite};
@@ -228,5 +229,25 @@ pub(super) fn gate_guard<'a>(test: &Expression<'a>) -> Option<MemberPeel<'a>> {
 }
 
 fn is_undefined(expr: &Expression<'_>) -> bool {
-    matches!(unwrap_parens(expr), Expression::Identifier(id) if id.name.as_str() == "undefined")
+    match unwrap_parens(expr) {
+        Expression::Identifier(id) => id.name.as_str() == "undefined",
+        Expression::UnaryExpression(node) if node.operator == UnaryOperator::Void => {
+            void_operands_unchecked() || runs_no_code(&node.argument)
+        }
+        _ => false,
+    }
+}
+
+fn runs_no_code(expr: &Expression<'_>) -> bool {
+    match unwrap_parens(expr) {
+        Expression::NumericLiteral(_)
+        | Expression::StringLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::BigIntLiteral(_) => true,
+        Expression::UnaryExpression(node) if node.operator == UnaryOperator::Void => {
+            runs_no_code(&node.argument)
+        }
+        _ => false,
+    }
 }

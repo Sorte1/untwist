@@ -1,17 +1,16 @@
+mod uses;
+
 use oxc_ast::ast::{
-    AssignmentExpression, AssignmentOperator, AssignmentTarget, AssignmentTargetPattern,
-    BindingIdentifier, BindingPattern, Expression, Function, IdentifierReference, LogicalOperator,
-    MemberExpression, SimpleAssignmentTarget, Statement,
+    AssignmentExpression, AssignmentOperator, AssignmentTarget, BindingPattern, Expression,
+    Function, LogicalOperator, MemberExpression, Statement,
 };
-use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::BinaryOperator;
-use oxc_syntax::scope::ScopeFlags;
 
 use super::collect::{Collected, FinalKey, MemberPeel, TriggerKind};
 use super::recipe::{fold_constant, Prim};
 use super::{span_contains, Owner};
-use crate::stack;
+use uses::uses_are_exact;
 
 pub(super) struct ResetGate<'a> {
     pub(super) owner: usize,
@@ -220,109 +219,8 @@ fn keys_of<'a>(
     })
 }
 
-struct Uses<'s, 'a> {
-    keys: &'s Keys<'a>,
-    value_bindings: u32,
-    array_bindings: u32,
-    value_refs: u32,
-    array_writes: u32,
-    state_accesses: u32,
-    memo_reads: u32,
-    opaque: bool,
-}
-
-impl<'a> Uses<'_, 'a> {
-    fn proven(&self) -> bool {
-        self.value_bindings == 1
-            && self.array_bindings == 1
-            && self.value_refs == 2
-            && self.array_writes == 0
-            && self.state_accesses == 2
-            && self.memo_reads == 0
-            && !self.opaque
-    }
-
-    fn is_own_memo(&self, expr: &Expression<'a>) -> bool {
-        expr.without_parentheses()
-            .as_member_expression()
-            .and_then(|member| own_key(member, self.keys.decoder))
-            == Some(self.keys.memo)
-    }
-}
-
-impl<'a> VisitJs<'a> for Uses<'_, 'a> {
-    fn visit_expression(&mut self, it: &Expression<'a>) {
-        stack::maybe_grow_dyn(&mut || walk_js::walk_expression(self, it));
-    }
-
-    fn visit_statement(&mut self, it: &Statement<'a>) {
-        stack::maybe_grow_dyn(&mut || walk_js::walk_statement(self, it));
-    }
-
-    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
-        let name = it.name.as_str();
-        self.value_bindings += u32::from(name == self.keys.value);
-        self.array_bindings += u32::from(name == self.keys.array);
-    }
-
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        let name = it.name.as_str();
-        self.value_refs += u32::from(name == self.keys.value);
-        self.opaque |= name == "eval";
-    }
-
-    fn visit_simple_assignment_target(&mut self, it: &SimpleAssignmentTarget<'a>) {
-        if let SimpleAssignmentTarget::AssignmentTargetIdentifier(id) = it {
-            self.array_writes += u32::from(id.name.as_str() == self.keys.array);
-        }
-        walk_js::walk_simple_assignment_target(self, it);
-    }
-
-    fn visit_assignment_target_pattern(&mut self, _it: &AssignmentTargetPattern<'a>) {
-        self.opaque = true;
-    }
-
-    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
-        let written = target_key_of(&it.left, self.keys.decoder);
-        if written == Some(self.keys.state) || written == Some(self.keys.memo) {
-            self.state_accesses += u32::from(written == Some(self.keys.state));
-            self.visit_expression(&it.right);
-            return;
-        }
-        walk_js::walk_assignment_expression(self, it);
-    }
-
-    fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
-        if let MemberExpression::ComputedMemberExpression(computed) = it {
-            if self.is_own_memo(&computed.object) {
-                self.visit_expression(&computed.expression);
-                return;
-            }
-        }
-        let key = own_key(it, self.keys.decoder);
-        self.state_accesses += u32::from(key == Some(self.keys.state));
-        self.memo_reads += u32::from(key == Some(self.keys.memo));
-        walk_js::walk_member_expression(self, it);
-    }
-}
-
 fn target_key_of<'a>(target: &AssignmentTarget<'a>, decoder: &str) -> Option<&'a str> {
     own_key(target.as_member_expression()?, decoder)
-}
-
-fn uses_are_exact(function: &Function<'_>, keys: &Keys<'_>) -> bool {
-    let mut uses = Uses {
-        keys,
-        value_bindings: 0,
-        array_bindings: 0,
-        value_refs: 0,
-        array_writes: 0,
-        state_accesses: 0,
-        memo_reads: 0,
-        opaque: false,
-    };
-    uses.visit_function(function, ScopeFlags::Function);
-    uses.proven()
 }
 
 fn touches(peel: &MemberPeel<'_>, keys: &Keys<'_>) -> bool {
