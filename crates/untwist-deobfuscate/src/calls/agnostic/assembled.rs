@@ -94,7 +94,7 @@ fn key_may_be(key: &AKey<'_>, name: &str) -> bool {
     match key {
         AKey::Named(written) => written == name,
         AKey::Index => !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit()),
-        AKey::Pending(_) | AKey::Unknown => true,
+        AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
     }
 }
 

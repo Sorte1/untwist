@@ -152,6 +152,9 @@ impl<'s, 'a> Sites<'s, 'a> {
         if let Some(arg) = self.substituted(id) {
             return self.key_class(arg, depth);
         }
+        if let Some(key) = self.filtered_key(id) {
+            return key;
+        }
         if id.name == "undefined" && self.fresh.symbol(id).is_none() {
             return AKey::Named(Cow::Borrowed("undefined"));
         }
@@ -159,6 +162,52 @@ impl<'s, 'a> Sites<'s, 'a> {
             Some(init) => self.key_class(init, depth),
             None => AKey::Unknown,
         }
+    }
+
+    fn filtered_key(&self, id: &IdentifierReference<'a>) -> Option<AKey<'a>> {
+        let filters = &self.fresh.bindings.filters;
+        if filters.is_empty() {
+            return None;
+        }
+        filters.key(self.fresh.symbol(id)?)
+    }
+
+    pub(super) fn key_origin(&self, key: &AKey<'a>) -> Origin {
+        match key {
+            AKey::Filtered(filter) => self
+                .fresh
+                .bindings
+                .filters
+                .origin(self.fresh.scoping, *filter),
+            other => origin_of(other),
+        }
+    }
+
+    pub(super) fn filter_hits(&self, filter: Span) -> bool {
+        let scoping = self.fresh.scoping;
+        let watched = self
+            .watch
+            .props
+            .iter()
+            .chain(self.watch.names)
+            .any(|name| self.filter_accepts(filter, name));
+        let source = self.fresh.bindings.filters.source();
+        watched
+            || scoping
+                .iter_bindings_in(scoping.root_scope_id())
+                .filter(|symbol| self.in_machinery(scoping.symbol_span(*symbol)))
+                .any(|symbol| {
+                    self.filter_accepts(filter, scoping.symbol_name(symbol))
+                        || crate::stamp::original_name(source, scoping, symbol)
+                            .is_none_or(|name| self.filter_accepts(filter, name))
+                })
+    }
+
+    pub(super) fn filter_accepts(&self, filter: Span, name: &str) -> bool {
+        self.fresh
+            .bindings
+            .filters
+            .accepts(self.fresh.scoping, filter, name)
     }
 
     fn call_key(&self, call: &CallExpression<'a>, expr: &Expression<'a>, depth: u8) -> AKey<'a> {

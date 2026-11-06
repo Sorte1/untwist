@@ -71,7 +71,7 @@ fn keyed_argument<'k, 'a>(call: &'k CallExpression<'a>, at: usize) -> KeyedArgum
 }
 
 fn open(key: &AKey<'_>) -> bool {
-    matches!(key, AKey::Pending(_) | AKey::Unknown) && dynamic_paths()
+    matches!(key, AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown) && dynamic_paths()
 }
 
 fn dynamic_paths() -> bool {
@@ -106,6 +106,7 @@ impl<'a> Sites<'_, 'a> {
         match key {
             AKey::Named(name) => self.watched_name(name),
             AKey::Index => false,
+            AKey::Filtered(filter) => self.filter_hits(*filter),
             AKey::Pending(_) | AKey::Unknown => dynamic_paths(),
         }
     }

@@ -9,6 +9,7 @@ use std::cell::RefCell;
 
 use super::assembled::{broken_tables, drop_tables};
 use super::bind::Bindings;
+use super::filtered::Filters;
 use super::flow::Flow;
 use super::fresh::Fresh;
 use super::native_map;
@@ -164,6 +165,7 @@ fn settle_ordered<'a>(
 ) -> (Agnostic<'a>, Vec<SymbolId>) {
     let mut bindings = Bindings::collect(program, scoping, !watch.names.is_empty(), resolve);
     let flow = Flow::new(program, scoping, resolve);
+    let filters = std::rc::Rc::clone(&bindings.filters);
     let globals = script_globals(program, scoping);
     let mut judged = Judged {
         source: bindings.global_source(),
@@ -182,7 +184,7 @@ fn settle_ordered<'a>(
             judged.pristine,
             &flow,
         );
-        let written = Written::of(&out.sites, machinery);
+        let written = Written::of(&out.sites, machinery, (&filters, scoping));
         let next = Judged {
             source: judged.source || out.global_source,
             pristine: judged.pristine.after(&written),
@@ -195,7 +197,7 @@ fn settle_ordered<'a>(
         drop_tables(&mut bindings.assembled, &broken);
         if rebound.is_empty() && broken.is_empty() && next == judged {
             let (reach, observed) = rebound_ambient(&out, scoping, &written);
-            out.realm_rebound |= roots_rebound(scoping, &out.sites, machinery);
+            out.realm_rebound |= roots_rebound(scoping, &out.sites, machinery, &filters);
             out.global_source = judged.source;
             #[cfg(feature = "refusal-spans")]
             {
@@ -281,10 +283,16 @@ pub(super) struct Written<'k> {
     spelled: Vec<&'k str>,
     index: bool,
     any: bool,
+    filtered: Vec<Span>,
+    filters: Option<(&'k Filters<'k>, &'k Scoping)>,
 }
 
 impl<'k> Written<'k> {
-    fn of(sites: &'k [ASite<'_>], machinery: &[Span]) -> Self {
+    fn of(
+        sites: &'k [ASite<'_>],
+        machinery: &[Span],
+        filters: (&'k Filters<'k>, &'k Scoping),
+    ) -> Self {
         let outside = |site: &&ASite<'_>| {
             !machinery
                 .iter()
@@ -302,6 +310,7 @@ impl<'k> Written<'k> {
             Vec::with_capacity(keys().filter(|key| matches!(key, AKey::Named(_))).count());
         let mut spelled = Vec::new();
         let mut index = false;
+        let mut filtered = Vec::new();
         for key in keys() {
             match key {
                 AKey::Named(name) => {
@@ -312,6 +321,7 @@ impl<'k> Written<'k> {
                     }
                 }
                 AKey::Index => index = true,
+                AKey::Filtered(filter) => filtered.push(*filter),
                 AKey::Pending(_) | AKey::Unknown => {}
             }
         }
@@ -319,16 +329,28 @@ impl<'k> Written<'k> {
         named.dedup();
         spelled.sort_unstable();
         spelled.dedup();
+        filtered.sort_unstable();
+        filtered.dedup();
         Self {
             named,
             spelled,
             index,
             any,
+            filters: (!filtered.is_empty()).then_some(filters),
+            filtered,
         }
     }
 
+    fn filter_accepts(&self, name: &str) -> bool {
+        self.filters.is_some_and(|(filters, scoping)| {
+            self.filtered
+                .iter()
+                .any(|filter| filters.accepts(scoping, *filter, name))
+        })
+    }
+
     pub(super) fn may_be_spelled(&self, name: &str) -> bool {
-        self.any || self.spelled.binary_search(&name).is_ok()
+        self.any || self.spelled.binary_search(&name).is_ok() || self.filter_accepts(name)
     }
 
     fn names(&self, name: &str) -> bool {
@@ -336,11 +358,14 @@ impl<'k> Written<'k> {
     }
 
     pub(super) fn may_be(&self, name: &str) -> bool {
-        self.any || self.names(name) || (self.index && is_index_name(name))
+        self.any
+            || self.names(name)
+            || (self.index && is_index_name(name))
+            || self.filter_accepts(name)
     }
 
     pub(super) fn may_be_element(&self) -> bool {
-        self.any || self.index || self.names("length")
+        self.any || self.index || self.names("length") || !self.filtered.is_empty()
     }
 }
 
@@ -409,7 +434,12 @@ pub(super) const PRECISE_ROOTS: [&str; 7] = [
     "String", "Array", "Object", "Function", "Number", "RegExp", "Symbol",
 ];
 
-pub(super) fn roots_rebound(scoping: &Scoping, sites: &[ASite<'_>], machinery: &[Span]) -> bool {
+pub(super) fn roots_rebound(
+    scoping: &Scoping,
+    sites: &[ASite<'_>],
+    machinery: &[Span],
+    filters: &Filters<'_>,
+) -> bool {
     let unresolved = scoping.root_unresolved_references();
     let rewritten = PRECISE_ROOTS.iter().any(|name| {
         unresolved.get(*name).is_some_and(|references| {
@@ -430,6 +460,9 @@ pub(super) fn roots_rebound(scoping: &Scoping, sites: &[ASite<'_>], machinery: &
                 && match &site.key {
                     AKey::Named(name) => PRECISE_ROOTS.contains(&name.as_ref()),
                     AKey::Index => false,
+                    AKey::Filtered(filter) => PRECISE_ROOTS
+                        .iter()
+                        .any(|name| filters.accepts(scoping, *filter, name)),
                     AKey::Pending(_) | AKey::Unknown => true,
                 }
         })

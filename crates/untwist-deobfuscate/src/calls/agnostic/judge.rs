@@ -328,7 +328,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                 match key {
                     AKey::Named(name) => self.named_kind(call.span, &name, receiver, &rest),
                     AKey::Index => {}
-                    AKey::Pending(_) | AKey::Unknown => self.generic(call),
+                    AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => self.generic(call),
                 }
             }
         }
@@ -376,7 +376,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                     self.named_kind(call.span, &name, Some(Elem::Value(member.object())), &args);
                 }
                 AKey::Index => {}
-                AKey::Pending(_) | AKey::Unknown => self.generic(call),
+                AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => self.generic(call),
             }
         }
     }
@@ -429,14 +429,14 @@ impl<'s, 'a> Sites<'s, 'a> {
         let chains = !self.out.sites.iter().any(|site| match &site.key {
             AKey::Named(name) => assumed.contains(name),
             AKey::Index => false,
-            AKey::Pending(_) | AKey::Unknown => !assumed.is_empty(),
+            AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => !assumed.is_empty(),
         });
         let natives = !self.fresh_used.get()
             || !self.refute_fresh
                 && !self.defined_keys().any(|key| match key {
                     AKey::Named(name) => FRESH_REFUTERS.contains(&name.as_ref()),
                     AKey::Index => false,
-                    AKey::Pending(_) | AKey::Unknown => true,
+                    AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
                 });
         (chains, natives)
     }
@@ -455,7 +455,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             self.defined_keys().any(|key| match key {
                 AKey::Named(_) => key == created,
                 AKey::Index => false,
-                AKey::Pending(_) | AKey::Unknown => true,
+                AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
             })
         })
     }
