@@ -80,10 +80,7 @@ impl Pipeline {
         };
         let mut bundle = self.unpack_stage(&alloc, &mut programs, stages, notes)?;
         self.after_unpack(&alloc, &mut bundle, stages, notes);
-        #[cfg(feature = "module-spans")]
         let unreflowed = BundleOutput::unreflowed(&bundle, crate::bundle::single_text_len(codes));
-        #[cfg(not(feature = "module-spans"))]
-        let unreflowed = BundleOutput::unreflowed(&bundle);
         Some(unreflowed)
     }
 

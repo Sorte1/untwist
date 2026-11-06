@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use untwist_core::pass::{Note, NoteKind};
 use untwist_unpack::wasm::glue::chosen_name;
-use untwist_unpack::wasm::{self, GlueImport, ImportValue, ModuleFacts, WasmSummary};
+use untwist_unpack::wasm::{
+    self, CopiedRenames, GlueImport, ImportValue, ModuleFacts, Span, WasmSummary,
+};
 
 use crate::pipeline::{admits_reparse, Output};
 
@@ -169,14 +171,16 @@ impl Output {
         &mut self,
         resolved: &HashMap<String, usize>,
         notes: &mut Vec<Note>,
-    ) {
-        let Some(bundle) = &self.bundle else { return };
+    ) -> Vec<(usize, Option<CopiedRenames>)> {
+        let Some(bundle) = &self.bundle else {
+            return Vec::new();
+        };
         let hashed = |code: &String| code.contains(HASHED_SUFFIX);
         if resolved.is_empty()
             || !(bundle.modules.iter().any(|module| hashed(&module.code))
                 || self.codes.iter().any(hashed))
         {
-            return;
+            return Vec::new();
         }
         let graph = Graph {
             paths: bundle
@@ -219,27 +223,47 @@ impl Output {
                 )),
             }
         }
-        self.apply_bundle_renames(all);
+        self.apply_bundle_renames(all)
     }
 
-    fn apply_bundle_renames(&mut self, all: Vec<(usize, Renames)>) {
+    fn apply_bundle_renames(
+        &mut self,
+        all: Vec<(usize, Renames)>,
+    ) -> Vec<(usize, Option<CopiedRenames>)> {
+        let mut copies = Vec::with_capacity(all.len());
         for (file, renames) in all {
             let mut targets: Vec<(usize, Vec<(String, String)>)> = renames.into_iter().collect();
             targets.sort_by_key(|(module, _)| *module);
+            let mut copy = Some(CopiedRenames::default());
             for (module, wanted) in targets {
                 let Some(bundle) = self.bundle.as_mut() else {
-                    return;
+                    break;
                 };
-                let code = &mut bundle.modules[module].code;
-                if !admits_reparse(code) {
+                let module = &mut bundle.modules[module];
+                if !admits_reparse(&module.code) {
                     continue;
                 }
-                if let Some((renamed, count)) = wasm::rename_names(code, &wanted) {
-                    *code = renamed;
-                    self.wasm[file].renamed += count;
+                let Some((renamed, applied)) = wasm::rename_names(&module.code, &wanted) else {
+                    continue;
+                };
+                module.code = renamed;
+                self.wasm[file].renamed += applied.len();
+                if applied.is_empty() {
+                    continue;
                 }
+                copy = match (copy, module.span) {
+                    (Some(mut copy), Some((start, end))) => {
+                        copy.functions.push((Span::new(start, end), applied));
+                        Some(copy)
+                    }
+                    _ => None,
+                };
+            }
+            if copy.as_ref().is_none_or(|copy| !copy.functions.is_empty()) {
+                copies.push((file, copy));
             }
         }
+        copies
     }
 }
 

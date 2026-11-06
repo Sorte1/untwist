@@ -1,3 +1,4 @@
+use oxc_ast::ast::ArrowFunctionBody;
 use oxc_ast::AstKind;
 use oxc_semantic::{AstNodes, Scoping, Semantic};
 use oxc_span::{GetSpan, Span};
@@ -7,6 +8,9 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 
 const MAX_RENAMED_LEN: usize = 3;
+
+type Edits = Vec<(Span, String)>;
+type Pairs = Vec<(String, String)>;
 
 pub(super) struct Renamer<'s> {
     semantic: &'s Semantic<'s>,
@@ -108,34 +112,35 @@ impl<'s> Renamer<'s> {
         }
     }
 
-    pub(super) fn apply(&self, wanted: Vec<(SymbolId, String)>) -> (Vec<(Span, String)>, usize) {
+    pub(super) fn apply(
+        &self,
+        wanted: Vec<(SymbolId, String)>,
+        claimed: &mut Claimed,
+    ) -> (Edits, Pairs) {
         if self.has_hazard() {
-            return (Vec::new(), 0);
+            return (Vec::new(), Vec::new());
         }
         let mut taken = self.taken();
-        let mut done = FxHashSet::default();
+        taken.extend(claimed.names.iter().map(|(_, name)| name.clone()));
         let mut edits = Vec::new();
-        let mut renamed = 0;
+        let mut applied = Vec::new();
         for (symbol, name) in wanted {
-            if done.contains(&symbol)
+            if claimed.symbols.contains(&symbol)
                 || taken.contains(&name)
                 || self.scoping().symbol_name(symbol) == name
                 || !self.renamable(symbol)
             {
                 continue;
             }
-            done.insert(symbol);
             self.rename_edits(symbol, &name, &mut edits);
+            applied.push((self.scoping().symbol_name(symbol).to_string(), name.clone()));
+            claimed.claim(symbol, None, &name);
             taken.insert(name);
-            renamed += 1;
         }
-        (edits, renamed)
+        (edits, applied)
     }
 
-    pub(super) fn apply_by_name(
-        &self,
-        wanted: &[(String, String)],
-    ) -> (Vec<(Span, String)>, usize) {
+    pub(super) fn apply_by_name(&self, wanted: &[(String, String)]) -> (Edits, Pairs) {
         let scoping = self.scoping();
         let symbols = wanted
             .iter()
@@ -149,6 +154,151 @@ impl<'s> Renamer<'s> {
                 }
             })
             .collect();
-        self.apply(symbols)
+        self.apply(symbols, &mut Claimed::default())
+    }
+
+    fn function_with_body(&self, body: Span) -> Option<Span> {
+        self.nodes().iter().find_map(|node| match node.kind() {
+            AstKind::Function(function) => function
+                .body
+                .as_ref()
+                .is_some_and(|own| own.span == body)
+                .then_some(function.span),
+            AstKind::ArrowFunctionExpression(arrow) => match &arrow.body {
+                ArrowFunctionBody::FunctionBody(own) => (own.span == body).then_some(arrow.span),
+                _ => None,
+            },
+            _ => None,
+        })
+    }
+
+    fn has_hazard_within(&self, within: Span) -> bool {
+        let scoping = self.scoping();
+        scoping.scope_descendants_from_root().any(|scope| {
+            scoping
+                .scope_flags(scope)
+                .intersects(ScopeFlags::DirectEval | ScopeFlags::With)
+                && contains(within, self.nodes().kind(scoping.get_node_id(scope)).span())
+        })
+    }
+
+    fn taken_within(&self, within: Span, declared: &[SymbolId]) -> FxHashSet<String> {
+        let scoping = self.scoping();
+        let mut taken: FxHashSet<String> = declared
+            .iter()
+            .map(|symbol| scoping.symbol_name(*symbol).to_string())
+            .chain(
+                scoping
+                    .root_unresolved_references()
+                    .keys()
+                    .map(|name| name.to_string()),
+            )
+            .collect();
+        for node in self.nodes().iter() {
+            let AstKind::IdentifierReference(reference) = node.kind() else {
+                continue;
+            };
+            if !contains(within, reference.span) {
+                continue;
+            }
+            let outside = scoping
+                .get_reference(reference.reference_id())
+                .symbol_id()
+                .is_none_or(|symbol| !contains(within, scoping.symbol_span(symbol)));
+            if outside {
+                taken.insert(reference.name.to_string());
+            }
+        }
+        taken
+    }
+
+    pub(super) fn plan_within(
+        &self,
+        body: Span,
+        pairs: &[(String, String)],
+        claimed: &Claimed,
+    ) -> Result<Planned, String> {
+        let within = self
+            .function_with_body(body)
+            .ok_or_else(|| "its module function was not found".to_string())?;
+        if self.has_hazard_within(within) {
+            return Err("its module function holds a direct eval or with".to_string());
+        }
+        let scoping = self.scoping();
+        let declared: Vec<SymbolId> = scoping
+            .symbol_ids()
+            .filter(|symbol| contains(within, scoping.symbol_span(*symbol)))
+            .collect();
+        let mut taken = self.taken_within(within, &declared);
+        let mut plan = Vec::with_capacity(pairs.len());
+        for (old, new) in pairs {
+            let mut matching = declared
+                .iter()
+                .copied()
+                .filter(|symbol| scoping.symbol_name(*symbol) == old);
+            let symbol = match (matching.next(), matching.next()) {
+                (Some(only), None) => only,
+                _ => return Err(format!("{old} is not declared once in its module function")),
+            };
+            if claimed.symbols.contains(&symbol)
+                || taken.contains(new)
+                || claimed.conflicts(within, new)
+                || !self.renamable(symbol)
+            {
+                return Err(format!("{old} cannot become {new} there"));
+            }
+            taken.insert(new.clone());
+            plan.push((symbol, new.clone()));
+        }
+        Ok(Planned {
+            within,
+            renames: plan,
+        })
+    }
+
+    pub(super) fn commit_within(
+        &self,
+        planned: Planned,
+        claimed: &mut Claimed,
+        edits: &mut Vec<(Span, String)>,
+    ) -> usize {
+        let count = planned.renames.len();
+        for (symbol, name) in planned.renames {
+            self.rename_edits(symbol, &name, edits);
+            claimed.claim(symbol, Some(planned.within), &name);
+        }
+        count
+    }
+}
+
+fn contains(outer: Span, inner: Span) -> bool {
+    outer.start <= inner.start && inner.end <= outer.end
+}
+
+fn overlaps(a: Span, b: Span) -> bool {
+    a.start < b.end && b.start < a.end
+}
+
+pub(super) struct Planned {
+    within: Span,
+    renames: Vec<(SymbolId, String)>,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct Claimed {
+    symbols: FxHashSet<SymbolId>,
+    names: Vec<(Option<Span>, String)>,
+}
+
+impl Claimed {
+    fn claim(&mut self, symbol: SymbolId, within: Option<Span>, name: &str) {
+        self.symbols.insert(symbol);
+        self.names.push((within, name.to_string()));
+    }
+
+    fn conflicts(&self, within: Span, name: &str) -> bool {
+        self.names.iter().any(|(scope, claimed)| {
+            claimed == name && scope.is_none_or(|scope| overlaps(scope, within))
+        })
     }
 }

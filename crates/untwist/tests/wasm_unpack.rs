@@ -293,6 +293,9 @@ fn webpack_async_wasm_names_the_glue_in_the_modules_it_imports_from_and_exports_
     assert!(env.contains("function log(e)"), "{env}");
     assert!(env.contains("Z: () => log"), "{env}");
     assert!(module_code(&out, "src/index.js").contains("const add = o.add;"));
+    assert!(out.code().contains("function log(e)"), "{}", out.code());
+    assert!(out.code().contains("Z: () => log"));
+    assert!(out.code().contains("const add = o.add;"));
 }
 
 #[test]
@@ -303,6 +306,43 @@ fn webpack_sync_wasm_names_the_glue_through_the_runtime_import_objects() {
     assert_eq!(out.wasm[0].renamed, 2);
     assert!(module_code(&out, "src/env.js").contains("function log(e)"));
     assert!(module_code(&out, "src/index.js").contains("const add = r.add;"));
+    assert!(out.code().contains("function log(e)"), "{}", out.code());
+    assert!(out.code().contains("const add = r.add;"));
+    assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
+}
+
+#[test]
+fn the_combined_output_keeps_its_names_when_its_copy_of_a_module_differs() {
+    let supply = supplied("9c8b7a6f5e4d3c2b.module.wasm", "webpack.wasm");
+    let mut out = run(&fixture("webpack-sync.js"));
+    let combined = out.codes[0]
+        .replace("function o(e)", "function q(e)")
+        .replace("() => o", "() => q");
+    out.codes[0] = combined.clone();
+    out.settle_wasm(&supply, true);
+    assert!(module_code(&out, "src/env.js").contains("function log(e)"));
+    assert_eq!(out.code(), combined);
+    assert!(wasm_notes(&out)
+        .iter()
+        .any(|note| note.contains("were not applied to deobfuscated.js: o is not declared once")));
+}
+
+#[test]
+fn a_module_rename_in_the_combined_output_stays_inside_its_module_function() {
+    let supply = supplied("9c8b7a6f5e4d3c2b.module.wasm", "webpack.wasm");
+    let source = fixture("webpack-sync.js").replace(
+        "      function o(e) {",
+        "      const c = 5;\n      console.log(c);\n      function o(e) {",
+    );
+    let out = settled_with(&source, &supply);
+    let code = out.code();
+    assert!(code.contains("const add = r.add;"), "{code}");
+    assert!(code.contains("console.log(add(1, 2)"), "{code}");
+    assert!(
+        code.contains("const c = 5;\n      console.log(c);"),
+        "{code}"
+    );
+    assert!(code.contains("function log(e)"), "{code}");
 }
 
 #[test]

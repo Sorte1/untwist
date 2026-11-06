@@ -11,7 +11,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::module::WasmSummary;
-use super::rename::Renamer;
+use super::rename::{Claimed, Renamer};
 
 const MIN_GLUE_MODULE_LEN: usize = 3;
 const MIN_NAME_LEN: usize = 3;
@@ -408,7 +408,7 @@ impl<'s> Glue<'s, '_> {
         wanted
     }
 
-    fn naming(&self, summary: &WasmSummary) -> Naming {
+    fn naming(&self, summary: &WasmSummary, claimed: &mut Claimed) -> Naming {
         let missing = self.missing(summary);
         if !missing.is_empty() {
             let shown: Vec<&str> = missing
@@ -425,16 +425,20 @@ impl<'s> Glue<'s, '_> {
                 ..Naming::default()
             };
         }
-        let (edits, renamed) = Renamer::new(self.semantic).apply(self.wanted(summary));
+        let (edits, applied) = Renamer::new(self.semantic).apply(self.wanted(summary), claimed);
         Naming {
             edits,
-            renamed,
+            renamed: applied.len(),
             mismatch: None,
         }
     }
 }
 
-pub fn name_glue<'s>(semantic: &'s Semantic<'s>, summary: &WasmSummary) -> Naming {
+pub(super) fn name_glue<'s>(
+    semantic: &'s Semantic<'s>,
+    summary: &WasmSummary,
+    claimed: &mut Claimed,
+) -> Naming {
     let mut glue = Glue {
         semantic,
         modules: summary.import_modules().into_iter().collect(),
@@ -447,5 +451,5 @@ pub fn name_glue<'s>(semantic: &'s Semantic<'s>, summary: &WasmSummary) -> Namin
     glue.collect_reads();
     glue.collect_bindings();
     glue.collect_provided();
-    glue.naming(summary)
+    glue.naming(summary, claimed)
 }

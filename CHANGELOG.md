@@ -13,6 +13,9 @@ All notable changes to this project are documented in this file. The format is b
   output may hold one; `auto` extracts modules that have imports or exports, so feature-detect
   probes passed to `WebAssembly.validate` are left alone; `on` extracts every module it finds.
   Supplied and fetched modules work in every mode.
+- The names wasm glue gets in a webpack bundle's unpacked modules are also applied to the
+  combined `deobfuscated.js`, each inside its own module function. If that copy does not hold the
+  same bindings, a warning says so and it keeps the original names.
 - wasm glue in a webpack bundle is named across modules: the functions an async or sync wasm
   module imports are renamed in the modules that export them, and the bindings that read its
   exports in the modules that import it, after the same check that every key and read exists in
