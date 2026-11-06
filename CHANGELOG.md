@@ -46,6 +46,10 @@ All notable changes to this project are documented in this file. The format is b
   `String[d(1)](...)` or `Function(d(1) + d(2))`; these were refused as a possible patch of a built-in.
 - A self-defending check is removed when a cleanup left bare `var x;` declarations inside its call
   controller. It survived, and once the output was reformatted its `(((.+)+)+)+$` test hung.
+- The default lane no longer overflows its stack on a variable initialised from a read of
+  itself (`var a = b[a]`) or a sealed method that calls itself in an `if` test; such inputs,
+  seen in dead-code-injected obfuscator output, used to stop the worker and pass through
+  unchanged.
 
 ## [0.2.1] - 2026-11-05
 

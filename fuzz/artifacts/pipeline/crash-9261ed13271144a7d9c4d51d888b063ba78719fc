@@ -1,0 +1,4 @@
+for (let Q = 0; Q < 1; Q++) {
+  var A = Q[A];
+  console.log(A["x"]);
+}
