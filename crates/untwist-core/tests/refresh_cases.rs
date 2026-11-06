@@ -197,6 +197,18 @@ fn a_reference_moved_under_a_shadowing_binding_is_resolved_again() {
 }
 
 #[test]
+fn a_reference_to_a_removed_binding_resolves_to_the_outer_binding() {
+    let _serial = serial();
+    let source = "var x = 1;\nfunction f() {\n  var x = 2;\n  g(x);\n}\nh(x);\n";
+    let (outcome, code) = refresh(source, |program, _| {
+        let body = function_body(program, 1).body.as_mut().expect("a body");
+        body.statements.remove(0);
+    });
+    assert_eq!(outcome, Outcome::Patched);
+    assert!(code.contains("g(x)"), "{code}");
+}
+
+#[test]
 fn a_changed_operator_patches_the_target_flags() {
     let _serial = serial();
     let (outcome, code) = refresh("var x = 1;\nx = 2;\n", |program, _| {
@@ -268,13 +280,13 @@ fn a_renamed_binding_rebuilds() {
 }
 
 #[test]
-fn a_new_direct_eval_rebuilds() {
+fn a_new_direct_eval_is_patched() {
     let _serial = serial();
     let (outcome, _) = refresh("function f() {\n  g(0);\n}\n", |program, cx| {
         let call = inner_call(function_body(program, 0), 0);
         call.callee = Expression::new_identifier(SPAN, "eval", cx);
     });
-    assert_eq!(outcome, Outcome::Rebuilt);
+    assert_eq!(outcome, Outcome::Patched);
 }
 
 #[test]

@@ -126,9 +126,9 @@ fn plan_merge<'a>(
     };
     let scope_id = block.scope_id.get()?;
     let mut introduced = Vec::new();
-    for (name, symbol) in cx.scoping().get_bindings(scope_id).iter() {
-        let final_name = relocate(name.as_ref(), *symbol, outer, moved, handed_out, staged, cx)?;
-        introduced.push((*symbol, final_name));
+    for (symbol, name) in declared_in(scope_id, cx.scoping()) {
+        let final_name = relocate(&name, symbol, outer, moved, handed_out, staged, cx)?;
+        introduced.push((symbol, final_name));
     }
     if let Some(relocated) = moved.get(&scope_id) {
         for (symbol, name) in relocated.clone() {
@@ -137,6 +137,17 @@ fn plan_merge<'a>(
         }
     }
     Some(introduced)
+}
+
+fn declared_in(scope: ScopeId, scoping: &Scoping) -> Vec<(SymbolId, String)> {
+    let mut declared: Vec<(SymbolId, String)> = scoping
+        .get_bindings(scope)
+        .iter()
+        .map(|(name, symbol)| (*symbol, name.as_str().to_string()))
+        .collect();
+    declared
+        .sort_by_cached_key(|(symbol, name)| (scoping.symbol_span(*symbol).start, name.clone()));
+    declared
 }
 
 fn commit_merge<'a>(statement: Statement<'a>, cx: &Cx<'a, '_>) -> AVec<'a, Statement<'a>> {

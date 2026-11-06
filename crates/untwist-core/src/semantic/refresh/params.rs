@@ -59,6 +59,7 @@ impl Walk<'_, '_> {
         match self.frames.last_mut() {
             Some(frame) if frame.region == region && !frame.in_params => {
                 frame.in_params = true;
+                self.params_open += 1;
                 true
             }
             _ => {
@@ -69,8 +70,9 @@ impl Walk<'_, '_> {
     }
 
     pub(super) fn leave_params(&mut self) {
-        if let Some(frame) = self.frames.last_mut() {
+        if let Some(frame) = self.frames.last_mut().filter(|frame| frame.in_params) {
             frame.in_params = false;
+            self.params_open = self.params_open.saturating_sub(1);
         }
     }
 }

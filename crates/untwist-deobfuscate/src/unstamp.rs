@@ -66,6 +66,12 @@ fn survivors<'s>(source_text: &'s str, scoping: &Scoping) -> (Vec<Survivor<'s>>,
             None => {}
         }
     }
+    found.sort_by_key(|survivor| {
+        (
+            scoping.symbol_span(survivor.symbol).start,
+            scoping.symbol_name(survivor.symbol),
+        )
+    });
     (found, unreadable)
 }
 

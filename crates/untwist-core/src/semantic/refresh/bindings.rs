@@ -26,8 +26,7 @@ impl Walk<'_, '_> {
         let Some(expected) = self.expected(context) else {
             return self.fail();
         };
-        let same = if symbol.index() == self.next_symbol {
-            self.next_symbol += 1;
+        let same = if self.symbols.claim(symbol.index()) {
             self.first_declaration(symbol, it, &expected)
         } else {
             self.redeclaration(symbol, it, &expected)
@@ -60,10 +59,15 @@ impl Walk<'_, '_> {
                 declaration,
                 includes,
             } => self.function_name(declaration, includes),
-            Context::ClassName { declaration: true } => Some(at(current.scope, SymbolFlags::Class)),
-            Context::ClassName { declaration: false } => {
-                Some(at(ScopeId::new(self.next_scope), SymbolFlags::Class))
-            }
+            Context::ClassName {
+                declaration: true, ..
+            } => Some(at(current.scope, SymbolFlags::Class)),
+            Context::ClassName {
+                declaration: false,
+                scope,
+            } => scope
+                .filter(|scope| scope.index() < self.scoping.scopes_len())
+                .map(|scope| at(scope, SymbolFlags::Class)),
             Context::CatchParam(includes) => {
                 (current.region == Region::Catch).then_some(Expected {
                     includes,

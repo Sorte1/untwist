@@ -2,22 +2,38 @@ use oxc_semantic::Scoping;
 use oxc_str::Ident;
 use oxc_syntax::node::NodeId;
 use oxc_syntax::reference::{Reference, ReferenceId};
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 
+use super::dead::Relink;
 use super::{Fresh, Semantics, Slot, Walked, LISTED, REPLACED, SEEN};
 
-type Placed = (u32, ReferenceId);
+pub(super) type Placed = (u32, ReferenceId);
 
-fn kept(state: u32) -> bool {
+pub(super) fn kept(state: u32) -> bool {
     state & (SEEN | REPLACED) == SEEN
 }
 
 pub(super) fn apply(mut scoping: Scoping, mut walked: Walked<'_>) -> Option<Semantics> {
+    for &(scope, parent) in &walked.parent_fixes {
+        scoping.set_scope_parent_id(scope, Some(parent));
+    }
+    for &(scope, flags) in &walked.scope_flag_fixes {
+        *scoping.scope_flags_mut(scope) = flags;
+    }
+    walked.dead.unlink(&mut scoping);
     for (id, flags) in &walked.flag_fixes {
         *scoping.get_reference_mut(*id).flags_mut() = *flags;
     }
-    let (resolved, unresolved) = create_fresh(&mut scoping, &walked)?;
+    let relinked = relink(&mut scoping, &mut walked);
+    let (mut resolved, mut unresolved) = create_fresh(&mut scoping, &walked)?;
+    for (target, name, placed) in relinked {
+        match target {
+            Some(symbol) => resolved.entry(symbol).or_default().push(placed),
+            None => unresolved.entry(name).or_default().push(placed),
+        }
+    }
     relist_resolved(&mut scoping, &mut walked, resolved)?;
     relist_unresolved(&mut scoping, &mut walked, unresolved)?;
     let every_kept_listed = walked
@@ -28,7 +44,55 @@ pub(super) fn apply(mut scoping: Scoping, mut walked: Walked<'_>) -> Option<Sema
         scoping,
         stats: walked.stats,
         patched: true,
+        canonical: walked.canonical,
     })
+}
+
+type Relinked = (Option<SymbolId>, String, Placed);
+
+fn resolve_after(scoping: &Scoping, scope: ScopeId, name: &str) -> Option<SymbolId> {
+    let name = Ident::from(name);
+    scoping.scope_ancestors(scope).find_map(|scope| {
+        scoping
+            .get_binding(scope, name)
+            .filter(|&symbol| scoping.symbol_flags(symbol).can_be_referenced_by_value())
+    })
+}
+
+fn relink(scoping: &mut Scoping, walked: &mut Walked<'_>) -> Vec<Relinked> {
+    let mut relinked = Vec::new();
+    for relink in std::mem::take(&mut walked.dead.relinks) {
+        match relink {
+            Relink::Held {
+                id,
+                at,
+                scope,
+                name,
+            } => {
+                let target = resolve_after(scoping, scope, &name);
+                let reference = scoping.get_reference(id);
+                let (node, flags) = (reference.node_id(), reference.flags());
+                *scoping.get_reference_mut(id) = match target {
+                    Some(symbol) => Reference::new_with_symbol_id(node, symbol, scope, flags),
+                    None => Reference::new(node, scope, flags),
+                };
+                if let Some(slot) = walked.slots.get_mut(id.index()) {
+                    slot.state |= REPLACED;
+                }
+                relinked.push((target, name, (at, id)));
+            }
+            Relink::Fresh(index) => {
+                let target = walked
+                    .fresh
+                    .get(index)
+                    .and_then(|fresh| resolve_after(scoping, fresh.scope, fresh.name.as_str()));
+                if let Some(fresh) = walked.fresh.get_mut(index) {
+                    fresh.symbol = target;
+                }
+            }
+        }
+    }
+    relinked
 }
 
 type FreshResolved = FxHashMap<SymbolId, Vec<Placed>>;
@@ -57,7 +121,7 @@ fn create_fresh(
     Some((resolved, unresolved))
 }
 
-fn reference_of(fresh: &Fresh<'_>) -> Reference {
+pub(super) fn reference_of(fresh: &Fresh<'_>) -> Reference {
     match fresh.symbol {
         Some(symbol) => {
             Reference::new_with_symbol_id(NodeId::DUMMY, symbol, fresh.scope, fresh.flags)
@@ -66,7 +130,7 @@ fn reference_of(fresh: &Fresh<'_>) -> Reference {
     }
 }
 
-fn mark_listed(slots: &mut [Slot], id: ReferenceId) -> Option<Option<u32>> {
+pub(super) fn mark_listed(slots: &mut [Slot], id: ReferenceId) -> Option<Option<u32>> {
     let slot = slots.get_mut(id.index())?;
     if !kept(slot.state) {
         return Some(None);
@@ -151,13 +215,13 @@ fn relist_resolved(
     Some(())
 }
 
-fn front_first(all: &[ReferenceId]) -> impl Iterator<Item = ReferenceId> + '_ {
+pub(super) fn front_first(all: &[ReferenceId]) -> impl Iterator<Item = ReferenceId> + '_ {
     all.split_first()
         .into_iter()
         .flat_map(|(&first, rest)| std::iter::once(first).chain(rest.iter().rev().copied()))
 }
 
-fn merged(mut live: Vec<Placed>, added: Vec<Placed>) -> Vec<Placed> {
+pub(super) fn merged(mut live: Vec<Placed>, added: Vec<Placed>) -> Vec<Placed> {
     live.extend(added);
     live.sort_by_key(|placed| placed.0);
     live

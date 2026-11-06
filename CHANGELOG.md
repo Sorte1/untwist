@@ -30,6 +30,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
+- Rounds that add or remove scopes and bindings patch the scope tables instead of rebuilding
+  them, and references left on a removed binding resolve to the outer one: game.js runs about
+  3 % fewer instructions with the same output.
 - The default lane keeps the decoder machinery less often beside code that may hold the global
   object: calls to `JSON.parse`, `Math`, `Number`, `parseInt`, `Promise.all` and other intrinsics
   that neither print nor enumerate, and calls to `require` or to a required `path` or `url`, no

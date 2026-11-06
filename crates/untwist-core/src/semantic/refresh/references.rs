@@ -4,7 +4,7 @@ use oxc_syntax::reference::{ReferenceFlags, ReferenceId};
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 
-use super::{name_bit, Frame, Fresh, Walk, NO_KEY, REPLACED, SEEN};
+use super::{name_bit, Frame, Fresh, Walk, NO_KEY, PARAMS, REPLACED, SEEN};
 
 impl<'a> Walk<'_, 'a> {
     pub(super) fn refer(&mut self, it: &IdentifierReference<'a>) {
@@ -36,9 +36,10 @@ impl<'a> Walk<'_, 'a> {
     }
 
     fn claim(&mut self, id: ReferenceId, at: u32) -> bool {
+        let params = if self.params_open > 0 { PARAMS } else { 0 };
         match self.slots.get_mut(id.index()) {
             Some(slot) if slot.state & SEEN == 0 => {
-                slot.state |= SEEN;
+                slot.state |= SEEN | params;
                 slot.at = at;
                 true
             }
@@ -101,6 +102,7 @@ impl<'a> Walk<'_, 'a> {
             symbol,
             scope,
             flags,
+            params: self.params_open > 0,
         });
     }
 
@@ -161,17 +163,35 @@ impl<'a> Walk<'_, 'a> {
         false
     }
 
+    fn frame_binds(&self, above: usize, name: Ident<'_>, bit: u64) -> bool {
+        (above + 1..self.frames.len()).any(|index| {
+            let frame = &self.frames[index];
+            frame.names & bit != 0
+                && self
+                    .found_in(frame, self.early_of(index), name, bit)
+                    .is_some()
+        })
+    }
+
+    fn shadowed(&self, above: usize, name: Ident<'_>, bit: u64) -> bool {
+        if self.frames.last().is_some_and(|frame| frame.moved) {
+            self.frame_binds(above, name, bit)
+        } else {
+            self.function_binds(above, name, bit)
+        }
+    }
+
     fn still_resolves(&self, name: Ident<'_>, held: Option<SymbolId>) -> bool {
         let bit = name_bit(name);
         let Some(symbol) = held else {
-            return !self.function_binds(0, name, bit);
+            return !self.shadowed(0, name, bit);
         };
         let home = self.scoping.symbol_scope_id(symbol);
         let slot = self.frame_of.get(home.index()).copied().unwrap_or(0);
         let Some(index) = (slot as usize).checked_sub(1) else {
             return false;
         };
-        if self.function_binds(index, name, bit) {
+        if self.shadowed(index, name, bit) {
             return false;
         }
         let frame = &self.frames[index];

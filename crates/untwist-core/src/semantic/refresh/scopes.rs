@@ -2,6 +2,8 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 
 use super::{name_bit, Frame, Region, Walk};
 
+const FIXABLE: ScopeFlags = ScopeFlags::StrictMode.union(ScopeFlags::DirectEval);
+
 fn region_of(flags: ScopeFlags) -> Region {
     if flags.is_function() {
         Region::Function
@@ -19,9 +21,11 @@ impl Walk<'_, '_> {
             frame.expected & ScopeFlags::StrictMode
         });
         let parent_scope = parent.map(|frame| frame.scope);
+        let parent_moved = parent.is_some_and(|frame| frame.moved);
         let catch_body =
             parent.is_some_and(|frame| frame.region == Region::Catch && !frame.in_params);
-        let scope = self.canonical_scope(cell, parent_scope);
+        let claimed = self.claim_scope(cell, parent_scope);
+        let scope = claimed.map(|(scope, _)| scope);
         let names = scope.map_or(0, |scope| self.names_of(scope));
         let index = self.frames.len();
         if let Some(slot) = scope.and_then(|scope| self.frame_of.get_mut(scope.index())) {
@@ -40,6 +44,7 @@ impl Walk<'_, '_> {
             names,
             early: self.early.len(),
             outer,
+            moved: parent_moved || claimed.is_some_and(|(_, fixed)| fixed),
         });
         match scope {
             Some(scope) if catch_body => self.settle_catch_params(scope),
@@ -55,16 +60,25 @@ impl Walk<'_, '_> {
             .fold(0, |names, name| names | name_bit(*name))
     }
 
-    fn canonical_scope(
+    fn claim_scope(
         &mut self,
         cell: Option<ScopeId>,
         parent: Option<ScopeId>,
-    ) -> Option<ScopeId> {
-        let scope = cell.filter(|scope| {
-            scope.index() == self.next_scope && scope.index() < self.scoping.scopes_len()
-        })?;
-        self.next_scope += 1;
-        (self.scoping.scope_parent_id(scope) == parent).then_some(scope)
+    ) -> Option<(ScopeId, bool)> {
+        let scope = cell.filter(|scope| scope.index() < self.scoping.scopes_len())?;
+        if !self.scopes.claim(scope.index()) {
+            return None;
+        }
+        let held = self.scoping.scope_parent_id(scope);
+        if held == parent {
+            return Some((scope, false));
+        }
+        let parent = held.and(parent)?;
+        if mutants::misplaced() {
+            return Some((scope, true));
+        }
+        self.parent_fixes.push((scope, parent));
+        Some((scope, true))
     }
 
     pub(super) fn leave(&mut self) {
@@ -86,8 +100,12 @@ impl Walk<'_, '_> {
         } else {
             frame.expected
         };
-        if self.scoping.scope_flags(frame.scope) != actual {
-            return self.fail();
+        let held = self.scoping.scope_flags(frame.scope);
+        if held != actual {
+            if !FIXABLE.contains(held.symmetric_difference(actual)) {
+                return self.fail();
+            }
+            self.scope_flag_fixes.push((frame.scope, actual));
         }
         if let (true, Some(parent)) = (frame.direct_eval, self.frames.last_mut()) {
             parent.direct_eval = true;
@@ -123,5 +141,27 @@ impl Walk<'_, '_> {
         if !settled {
             self.fail();
         }
+    }
+}
+
+#[cfg(not(feature = "test-hooks"))]
+mod mutants {
+    pub(super) fn misplaced() -> bool {
+        false
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+pub(super) mod mutants {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static MISPLACE_ONE: AtomicBool = AtomicBool::new(false);
+
+    pub fn misplace_one_scope_for_tests(on: bool) {
+        MISPLACE_ONE.store(on, Ordering::SeqCst);
+    }
+
+    pub(super) fn misplaced() -> bool {
+        MISPLACE_ONE.swap(false, Ordering::SeqCst)
     }
 }

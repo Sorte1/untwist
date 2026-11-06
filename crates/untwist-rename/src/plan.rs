@@ -109,7 +109,7 @@ pub fn run_mode_once<'a, F>(
     *done = true;
     let rebuilt = (!cx.is_program_unchanged_this_traversal()).then(|| build_scoping(program));
     if rebuilt.is_none() {
-        cx.compact_patched_scoping();
+        cx.compact_patched_scoping(program);
     }
     let scoping = rebuilt.as_ref().map_or(cx.scoping(), |sem| &sem.scoping);
     #[cfg(feature = "test-hooks")]

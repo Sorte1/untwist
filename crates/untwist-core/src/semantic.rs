@@ -15,6 +15,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 pub mod compare;
 mod observers;
 mod refresh;
+mod renamed;
 mod strictness;
 
 pub use observers::{
@@ -23,10 +24,13 @@ pub use observers::{
 };
 #[cfg(feature = "test-hooks")]
 pub use refresh::{
-    check_patches_for_tests, last_stale_for_tests, refresh_counts_for_tests,
-    skip_one_deletion_for_tests, RefreshCounts, STALE_PATCH,
+    check_patches_for_tests, force_rebuilds_for_tests, keep_one_dead_binding_for_tests,
+    last_stale_for_tests, misplace_one_scope_for_tests, refresh_counts_for_tests,
+    skip_one_deletion_for_tests, trust_id_order_for_tests, RefreshCounts, STALE_PATCH,
 };
 pub use refresh::{forget_failures, refresh_scoping, Round, Shape};
+pub(crate) use renamed::forget_program as forget_renames;
+pub(crate) use renamed::note_renames;
 pub use strictness::Strictness;
 
 pub fn has_module_syntax(program: &Program<'_>) -> bool {
@@ -38,25 +42,26 @@ pub fn program_is_strict(program: &Program<'_>) -> bool {
 }
 
 pub fn scope_hazard(scoping: &Scoping) -> Option<&'static str> {
+    let mut with = false;
     for scope in scoping.scope_descendants_from_root() {
         let flags = scoping.scope_flags(scope);
         if flags.contains(ScopeFlags::DirectEval) {
             return Some("direct eval");
         }
-        if flags.contains(ScopeFlags::With) && with_observes() {
-            return Some("with statement");
-        }
+        with |= flags.contains(ScopeFlags::With);
     }
-    None
+    (with && with_observes()).then_some("with statement")
 }
 
 pub struct Semantics {
     pub scoping: Scoping,
     pub stats: Stats,
     pub patched: bool,
+    pub canonical: bool,
 }
 
 pub fn build_scoping(program: &Program<'_>) -> Semantics {
+    refresh::count_build();
     settled(program, finish(SemanticBuilder::new().build(program)))
 }
 
@@ -78,6 +83,7 @@ fn finish(ret: oxc_semantic::SemanticBuilderReturn<'_>) -> Semantics {
         scoping: ret.semantic.into_scoping(),
         stats,
         patched: false,
+        canonical: true,
     }
 }
 
