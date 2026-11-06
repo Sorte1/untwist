@@ -31,6 +31,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- A string array whose array function, decoders and rotator all sit in one function body,
+  such as a whole program wrapped in an IIFE, now decodes in both lanes.
 - The default lane decodes beside a fresh `new Map()` or `new WeakMap()` that is read and written only
   through its own `get` and `set`; those calls were taken for `Reflect.get` and `Reflect.set` and refused.
 - A decoder wrapper whose binding is written again, or a `var` wrapper called before its

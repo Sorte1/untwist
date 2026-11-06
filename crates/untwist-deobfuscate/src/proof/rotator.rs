@@ -1,6 +1,8 @@
 use oxc_ast::ast::*;
+use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::semantic::with_observes;
@@ -8,6 +10,7 @@ use untwist_core::semantic::with_observes;
 use super::foreign::ForeignUnits;
 use super::seal::sealed;
 use super::Refusal;
+use crate::mutants::rotator_placement_dropped;
 use crate::notes;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,21 +34,107 @@ impl RotatorSite {
         std::ptr::eq(&statement.expression, rotator)
     }
 
-    pub(super) fn statement<'s, 'a>(&self, program: &'s Program<'a>) -> Option<&'s Statement<'a>> {
-        self.top_level_index(program)
-            .and_then(|index| program.body.get(index))
+    pub(super) fn statement<'s, 'p>(&self, program: &'s Program<'p>) -> Option<&'s Statement<'p>> {
+        self.locate(program)
+            .and_then(|list| list.statements.get(list.index))
     }
 
-    fn top_level_index(&self, program: &Program<'_>) -> Option<usize> {
-        program
-            .body
+    fn position(&self, statements: &[Statement<'_>]) -> Option<usize> {
+        statements
             .iter()
             .position(|statement| std::ptr::from_ref(statement) as usize == self.address)
+    }
+
+    fn locate<'s, 'p>(&self, program: &'s Program<'p>) -> Option<SiteList<'s, 'p>> {
+        if let Some(index) = self.position(&program.body) {
+            return Some(SiteList {
+                statements: &program.body,
+                index,
+                scope: None,
+            });
+        }
+        let mut search = BodySearch {
+            site: *self,
+            found: None,
+        };
+        search.visit_program(program);
+        search.found
+    }
+}
+
+struct SiteList<'s, 'p> {
+    statements: &'s [Statement<'p>],
+    index: usize,
+    scope: Option<ScopeId>,
+}
+
+impl SiteList<'_, '_> {
+    fn same_list(&self, other: &SiteList<'_, '_>) -> bool {
+        std::ptr::eq(
+            self.statements.as_ptr().cast::<u8>(),
+            other.statements.as_ptr().cast(),
+        )
+    }
+
+    fn binds_all(&self, scoping: &Scoping, allowed: &FxHashSet<SymbolId>) -> bool {
+        self.scope.is_none_or(|scope| {
+            allowed
+                .iter()
+                .all(|symbol| scoping.symbol_scope_id(*symbol) == scope)
+        })
+    }
+}
+
+struct BodySearch<'s, 'p> {
+    site: RotatorSite,
+    found: Option<SiteList<'s, 'p>>,
+}
+
+impl<'s, 'p: 's> BodySearch<'s, 'p> {
+    fn holds(&mut self, body: &'p FunctionBody<'p>, scope: Option<ScopeId>) -> bool {
+        let (Some(index), Some(scope)) = (self.site.position(&body.statements), scope) else {
+            return false;
+        };
+        self.found = Some(SiteList {
+            statements: &body.statements,
+            index,
+            scope: Some(scope),
+        });
+        true
+    }
+}
+
+impl<'s, 'p: 's> VisitJs<'p> for BodySearch<'s, 'p> {
+    fn visit_function(&mut self, it: &Function<'p>, flags: ScopeFlags) {
+        if self.found.is_some() {
+            return;
+        }
+        let function: &'p Function<'p> = self.alloc(it);
+        if let Some(body) = &function.body {
+            if self.holds(body, function.scope_id.get()) {
+                return;
+            }
+        }
+        walk_js::walk_function(self, it, flags);
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'p>) {
+        if self.found.is_some() {
+            return;
+        }
+        let arrow: &'p ArrowFunctionExpression<'p> = self.alloc(it);
+        if let ArrowFunctionBody::FunctionBody(body) = &arrow.body {
+            if self.holds(body, arrow.scope_id.get()) {
+                return;
+            }
+        }
+        walk_js::walk_arrow_function_expression(self, it);
     }
 }
 
 pub struct LiteralBindings {
     symbols: FxHashSet<SymbolId>,
+    scope: Option<ScopeId>,
 }
 
 fn is_primitive_literal(expr: &Expression<'_>) -> bool {
@@ -75,8 +164,11 @@ fn literal_binding(declarator: &VariableDeclarator<'_>, scoping: &Scoping) -> Op
 
 impl LiteralBindings {
     pub fn new(program: &Program<'_>, scoping: &Scoping) -> Self {
-        let symbols = program
-            .body
+        Self::of(&program.body, scoping, None)
+    }
+
+    fn of(statements: &[Statement<'_>], scoping: &Scoping, scope: Option<ScopeId>) -> Self {
+        let symbols = statements
             .iter()
             .filter_map(|statement| match statement {
                 Statement::VariableDeclaration(declaration) => Some(&declaration.declarations),
@@ -85,7 +177,7 @@ impl LiteralBindings {
             .flatten()
             .filter_map(|declarator| literal_binding(declarator, scoping))
             .collect();
-        Self { symbols }
+        Self { symbols, scope }
     }
 
     fn primitive_identifier(&self, scoping: &Scoping, id: &IdentifierReference<'_>) -> bool {
@@ -150,7 +242,8 @@ impl LiteralBindings {
                     && declaration.declarations.iter().all(|d| {
                         matches!(d.id, BindingPattern::BindingIdentifier(_))
                             && d.init.as_ref().is_none_or(|init| {
-                                self.runs_no_code(scoping, init) || hoisted_function(scoping, init)
+                                self.runs_no_code(scoping, init)
+                                    || hoisted_function(scoping, init, self.scope)
                             })
                     })
             }
@@ -159,7 +252,7 @@ impl LiteralBindings {
     }
 }
 
-fn hoisted_function(scoping: &Scoping, expr: &Expression<'_>) -> bool {
+fn hoisted_function(scoping: &Scoping, expr: &Expression<'_>, scope: Option<ScopeId>) -> bool {
     let Expression::Identifier(id) = expr.without_parentheses() else {
         return false;
     };
@@ -168,7 +261,7 @@ fn hoisted_function(scoping: &Scoping, expr: &Expression<'_>) -> bool {
         .and_then(|reference| scoping.get_reference(reference).symbol_id())
         .is_some_and(|symbol| {
             scoping.symbol_flags(symbol).is_function()
-                && scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
+                && scoping.symbol_scope_id(symbol) == scope.unwrap_or(scoping.root_scope_id())
         })
 }
 
@@ -182,13 +275,16 @@ fn trivially_inert(stmt: &Statement<'_>) -> bool {
 fn first_active<'s, 'a>(
     program: &Program<'a>,
     scoping: &Scoping,
-    prefix: &'s [Statement<'a>],
+    (prefix, scope): (&'s [Statement<'a>], Option<ScopeId>),
     foreign: Option<(&ForeignUnits<'_, 'a>, usize)>,
 ) -> Option<&'s Statement<'a>> {
     if prefix.iter().all(trivially_inert) {
         return None;
     }
-    let literals = LiteralBindings::new(program, scoping);
+    let literals = match scope {
+        None => LiteralBindings::new(program, scoping),
+        Some(_) => LiteralBindings::of(prefix, scoping, scope),
+    };
     prefix.iter().find(|statement| {
         !literals.inert_statement(scoping, statement)
             && !foreign.is_some_and(|(units, judged)| {
@@ -221,27 +317,38 @@ pub fn rotator_refusal_at<'a>(
     allowed: &FxHashSet<SymbolId>,
     foreign: Option<(&ForeignUnits<'_, 'a>, usize)>,
 ) -> Option<Refusal> {
-    let mut first = None;
+    let mut first: Option<SiteList<'_, 'a>> = None;
     for site in sites {
-        match site.top_level_index(program) {
-            Some(index) => {
-                first.get_or_insert(index);
-            }
-            None => return Some(Refusal::at(notes::ROTATOR_NOT_TOP_LEVEL, site.span)),
+        let Some(list) = site.locate(program) else {
+            return Some(Refusal::at(notes::ROTATOR_NOT_TOP_LEVEL, site.span));
+        };
+        let placed = rotator_placement_dropped()
+            || (list.binds_all(scoping, allowed)
+                && first.as_ref().is_none_or(|first| first.same_list(&list)));
+        if !placed {
+            return Some(Refusal::at(notes::ROTATOR_NOT_TOP_LEVEL, site.span));
         }
+        first.get_or_insert(list);
     }
-    let index = first?;
-    let prefix = program.body.get(..index)?;
-    if let Some(statement) = first_active(program, scoping, prefix, foreign) {
+    let list = first?;
+    let prefix = list.statements.get(..list.index)?;
+    if let Some(statement) = first_active(program, scoping, (prefix, list.scope), foreign) {
         return Some(Refusal::at(notes::CODE_BEFORE_ROTATOR, statement.span()));
     }
-    let later = program.body.get(index..)?;
+    let later = program.body.get(index_in_program(program, &list)..)?;
     if let Some(statement) = later.iter().find(|s| with_observes() && imports(s)) {
         return Some(Refusal::at(notes::CODE_BEFORE_ROTATOR, statement.span()));
     }
     if let Some(span) = uninitialised(scoping, allowed) {
         return Some(Refusal::at(notes::MACHINERY_NOT_INITIALISED, span));
     }
-    let statement = program.body.get(index)?;
+    let statement = list.statements.get(list.index)?;
     sealed(statement, scoping, allowed).map(|span| Refusal::at(notes::ROTATOR_NOT_SEALED, span))
+}
+
+fn index_in_program(program: &Program<'_>, list: &SiteList<'_, '_>) -> usize {
+    match list.scope {
+        None => list.index,
+        Some(_) => program.body.len(),
+    }
 }

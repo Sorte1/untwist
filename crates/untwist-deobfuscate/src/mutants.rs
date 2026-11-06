@@ -10,3 +10,14 @@ pub fn drop_wrapper_guards_for_tests(on: bool) {
 pub(crate) fn wrapper_guards_dropped() -> bool {
     WRAPPER_GUARDS_OFF.load(Ordering::Relaxed)
 }
+
+static ROTATOR_PLACEMENT_OFF: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_rotator_placement_guards_for_tests(on: bool) {
+    ROTATOR_PLACEMENT_OFF.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn rotator_placement_dropped() -> bool {
+    ROTATOR_PLACEMENT_OFF.load(Ordering::Relaxed)
+}

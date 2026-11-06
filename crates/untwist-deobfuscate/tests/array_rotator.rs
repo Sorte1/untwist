@@ -145,6 +145,23 @@ fn a_rotator_that_is_not_a_program_statement_is_refused() {
 }
 
 #[test]
+fn a_rotator_beside_its_machinery_in_one_function_body_is_trusted() {
+    let body = format!("(function () {{\n{HEADER}{NO_PARSE_INT}\n}})();");
+    assert_eq!(refusal_without_header(&body), None);
+    let before =
+        format!("(function () {{\n{HEADER}console.log(__DECODE_0__(0));\n{NO_PARSE_INT}\n}})();");
+    assert_eq!(
+        refusal_without_header(&before),
+        Some(notes::CODE_BEFORE_ROTATOR)
+    );
+    let deeper = format!("(function () {{\n{HEADER}function spin() {{\n{NO_PARSE_INT}\n}}\n}})();");
+    assert_eq!(
+        refusal_without_header(&deeper),
+        Some(notes::ROTATOR_NOT_TOP_LEVEL)
+    );
+}
+
+#[test]
 fn code_before_the_rotator_is_refused() {
     let before = format!("console.log(__DECODE_0__(0));\n{NO_PARSE_INT}");
     assert_eq!(refusal(&before), Some(notes::CODE_BEFORE_ROTATOR));
