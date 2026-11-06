@@ -10,7 +10,7 @@ use untwist_core::semantic::with_observes;
 use super::foreign::ForeignUnits;
 use super::seal::sealed;
 use super::Refusal;
-use crate::mutants::{inert_prefix_dropped, rotator_placement_dropped};
+use crate::mutants::{builtin_imports_dropped, inert_prefix_dropped, rotator_placement_dropped};
 use crate::notes;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -237,6 +237,9 @@ impl LiteralBindings {
     pub fn inert_statement(&self, scoping: &Scoping, stmt: &Statement<'_>) -> bool {
         match stmt {
             Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_) => true,
+            Statement::ImportDeclaration(_)
+            | Statement::ExportAllDeclaration(_)
+            | Statement::ExportFromDeclaration(_) => loads_a_codeless_builtin(stmt),
             Statement::ExpressionStatement(expression) => {
                 inert_prefix_dropped() || self.runs_no_code(scoping, &expression.expression)
             }
@@ -303,13 +306,32 @@ fn first_active<'s, 'a>(
     })
 }
 
+const CODELESS_BUILTINS: [&str; 2] = ["node:path", "node:url"];
+
+fn loaded_module<'s>(statement: &'s Statement<'_>) -> Option<(&'s str, bool)> {
+    match statement {
+        Statement::ImportDeclaration(import) => Some((
+            import.source.value.as_str(),
+            import.with_clause.is_none() && import.phase.is_none(),
+        )),
+        Statement::ExportAllDeclaration(export) => {
+            Some((export.source.value.as_str(), export.with_clause.is_none()))
+        }
+        Statement::ExportFromDeclaration(export) => {
+            Some((export.source.value.as_str(), export.with_clause.is_none()))
+        }
+        _ => None,
+    }
+}
+
+fn loads_a_codeless_builtin(statement: &Statement<'_>) -> bool {
+    loaded_module(statement).is_some_and(|(source, plain)| {
+        plain && (builtin_imports_dropped() || CODELESS_BUILTINS.contains(&source))
+    })
+}
+
 fn imports(statement: &Statement<'_>) -> bool {
-    matches!(
-        statement,
-        Statement::ImportDeclaration(_)
-            | Statement::ExportAllDeclaration(_)
-            | Statement::ExportFromDeclaration(_)
-    )
+    loaded_module(statement).is_some() && !loads_a_codeless_builtin(statement)
 }
 
 pub(super) fn uninitialised(scoping: &Scoping, allowed: &FxHashSet<SymbolId>) -> Option<Span> {

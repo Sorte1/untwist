@@ -43,3 +43,14 @@ pub fn trust_direct_array_uses_for_tests(on: bool) {
 pub(crate) fn direct_array_uses_trusted() -> bool {
     DIRECT_ARRAY_USES_TRUSTED.load(Ordering::Relaxed)
 }
+
+static BUILTIN_IMPORTS_OFF: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_builtin_import_guards_for_tests(on: bool) {
+    BUILTIN_IMPORTS_OFF.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn builtin_imports_dropped() -> bool {
+    BUILTIN_IMPORTS_OFF.load(Ordering::Relaxed)
+}
