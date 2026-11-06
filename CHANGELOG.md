@@ -58,6 +58,8 @@ All notable changes to this project are documented in this file. The format is b
 - Decoder aliases read inside the rotator, held in a one-property object, returned by an
   empty IIFE or wrapped in `(0, alias)` are inlined in both lanes, so their string arrays
   decode instead of being kept whole.
+- The default lane decodes beside a getter or method of an object literal that only its own calls reach, which
+  was taken for a hold on the global object through `this`.
 - The default lane decodes beside a fresh `new Map()` or `new WeakMap()` that is read and written only
   through its own `get` and `set`; those calls were taken for `Reflect.get` and `Reflect.set` and refused.
 - A decoder wrapper whose binding is written again, or a `var` wrapper called before its
