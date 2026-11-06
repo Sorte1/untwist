@@ -67,6 +67,8 @@ pub(super) const FRESH_NATIVES: [&str; 2] = ["bind", "create"];
 
 pub(super) const FRESH_REFUTERS: [&str; 3] = ["bind", "create", "get"];
 
+pub(super) const ASSIGN_REFUTERS: [&str; 2] = ["assign", "Object"];
+
 pub(super) fn is_definer_key(key: &str) -> bool {
     DEFINE_KEYED.contains(&key)
         || BATCH.contains(&key)

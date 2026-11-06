@@ -213,7 +213,7 @@ impl<'a> Sites<'_, 'a> {
             self.out.observe_keyed.push((span, Cow::Borrowed(key)));
             return;
         }
-        if flow_rule_disabled(OBSERVER_LIST) {
+        if flow_rule_disabled(OBSERVER_LIST) || self.quiet_collection_call(callee) {
             return;
         }
         if let Some(quiet) = self.quiet_callee(callee) {

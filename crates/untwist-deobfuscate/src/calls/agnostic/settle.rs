@@ -12,6 +12,7 @@ use super::bind::Bindings;
 use super::filtered::Filters;
 use super::flow::Flow;
 use super::fresh::Fresh;
+use super::instance::Unwritten;
 use super::native_map;
 use super::sites::*;
 use super::{AKey, ASite, Agnostic};
@@ -115,6 +116,7 @@ fn inline_budget(program: &Program<'_>) -> usize {
 pub(super) struct Pristine {
     pub(super) symbol: bool,
     pub(super) map: bool,
+    pub(super) unwritten: Unwritten,
 }
 
 impl Pristine {
@@ -122,6 +124,7 @@ impl Pristine {
         Self {
             symbol: bindings.symbol_safe(),
             map: bindings.map_safe(),
+            unwritten: Unwritten::all(),
         }
     }
 
@@ -129,6 +132,7 @@ impl Pristine {
         Self {
             symbol: self.symbol && !written.may_be("Symbol"),
             map: self.map && !native_map::may_be_patched(written),
+            unwritten: self.unwritten.after(written),
         }
     }
 }

@@ -431,13 +431,25 @@ impl<'s, 'a> Sites<'s, 'a> {
             AKey::Index => false,
             AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => !assumed.is_empty(),
         });
-        let natives = !self.fresh_used.get()
-            || !self.refute_fresh
-                && !self.defined_keys().any(|key| match key {
-                    AKey::Named(name) => FRESH_REFUTERS.contains(&name.as_ref()),
+        let assigns = !self.assign_used.get()
+            || !self
+                .out
+                .sites
+                .iter()
+                .filter(|site| site.outside)
+                .any(|site| match &site.key {
+                    AKey::Named(name) => ASSIGN_REFUTERS.contains(&name.as_ref()),
                     AKey::Index => false,
                     AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
                 });
+        let natives = assigns
+            && (!self.fresh_used.get()
+                || !self.refute_fresh
+                    && !self.defined_keys().any(|key| match key {
+                        AKey::Named(name) => FRESH_REFUTERS.contains(&name.as_ref()),
+                        AKey::Index => false,
+                        AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
+                    }));
         (chains, natives)
     }
 

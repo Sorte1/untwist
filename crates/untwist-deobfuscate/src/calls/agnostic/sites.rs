@@ -108,6 +108,8 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) defined: Vec<AKey<'a>>,
     pub(super) fresh_calls: bool,
     pub(super) fresh_used: Cell<bool>,
+    pub(super) assign_used: Cell<bool>,
+    pub(super) object_rebound: bool,
     pub(super) bind_unbounded: bool,
     pub(super) apply_unbounded: bool,
     pub(super) subst: RefCell<Vec<(oxc_syntax::symbol::SymbolId, &'a Expression<'a>)>>,
@@ -120,6 +122,7 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) inline_budget: usize,
     pub(super) symbol_safe: bool,
     pub(super) map_safe: bool,
+    pub(super) unwritten: super::instance::Unwritten,
     pub(super) param_values: RefCell<FxHashMap<oxc_syntax::symbol::SymbolId, bool>>,
     pub(super) param_keys: RefCell<FxHashMap<oxc_syntax::symbol::SymbolId, bool>>,
     pub(super) text_judged: bool,
@@ -137,6 +140,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         pristine: super::settle::Pristine,
         flow: &'s Flow<'s, 'a>,
     ) -> Self {
+        let object_rebound = super::native_map::bare_global_written(fresh.scoping, "Object");
         Self {
             fresh,
             resolve,
@@ -154,6 +158,8 @@ impl<'s, 'a> Sites<'s, 'a> {
             defined: Vec::new(),
             fresh_calls,
             fresh_used: Cell::new(false),
+            assign_used: Cell::new(false),
+            object_rebound,
             bind_unbounded: false,
             apply_unbounded: false,
             subst: RefCell::default(),
@@ -166,6 +172,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             inline_budget: 0,
             symbol_safe: pristine.symbol,
             map_safe: pristine.map,
+            unwritten: pristine.unwritten,
             param_values: RefCell::default(),
             param_keys: RefCell::default(),
             text_judged: false,
