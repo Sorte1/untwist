@@ -61,6 +61,11 @@ All notable changes to this project are documented in this file. The format is b
 - A header-only WebAssembly feature-detect (`new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])`)
   is no longer taken for an embedded module, and output holding a real one is parsed once, not
   twice, to extract it and name its glue (game.js about 5 % faster).
+- The default lane no longer inlines a variable passed to a decoder from an assignment that a write
+  in the same statement, or a write through the global object, has replaced: `f(d(k), (k = 2), d(k))`
+  and a top-level `var` of a script printed the wrong string. A literal assigned earlier in the same
+  sequence or block (`(k = 2, d(k))`, as terser prints call arguments) is now inlined where no
+  other write can run between.
 - javascript-obfuscator output passed through terser decodes: a decoder that indexes the array call
   directly and a string array function that rewrites itself inside its return are now recognised.
   Such samples kept their string array.

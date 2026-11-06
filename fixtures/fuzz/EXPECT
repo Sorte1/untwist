@@ -3,8 +3,6 @@
 safe	builtin-replaced-decoded-key	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch (first seen in seed 2026 sample s2026-206)
 unsafe	deobfuscate/direct-eval-may-reach-the-decoder-by-a	a direct eval may reach the decoder by a name a later stage renames or removes (first seen in seed 2026 sample s2026-6)
 *	inline-decoded-strings/decoding-bailed	decoding bailed (first seen in seed 2026 sample s2026-128)
-*	inline-decoded-strings/no-literal-assignment-precedes-this-external-reference	no literal assignment precedes an external reference the decoder reads (first seen in seed 2026 sample s2026-197)
-*	inline-decoded-strings/the-external-variables-declaration-and-its-literal-assignment	inline-decoded-strings: the external variable's declaration and its literal assignment are not direct members of the (first seen in seed 2026 sample s2026-338)
 *	inline-decoded-strings/the-rotator-reads-or-writes-something-other-than	the rotator reads or writes something other than its own bindings, seen once a duplicate-key object literal keeps a decoder call (first seen in seed 2026 sample s2026-1426)
 *	inline-decoded-strings/the-stamped-machinery-is-incomplete	the stamped machinery is incomplete (seen after inline-object-props refuses an object literal that defines a key twice) (first seen in seed 2026 sample s2026-30)
 *	inline-decoded-strings/the-string-array-is-reachable-from-code-outside	the string array is reachable from code outside its declaration (first seen in seed 2026 sample s2026-1926)
