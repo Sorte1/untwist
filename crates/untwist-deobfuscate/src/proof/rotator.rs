@@ -10,7 +10,7 @@ use untwist_core::semantic::with_observes;
 use super::foreign::ForeignUnits;
 use super::seal::sealed;
 use super::Refusal;
-use crate::mutants::rotator_placement_dropped;
+use crate::mutants::{inert_prefix_dropped, rotator_placement_dropped};
 use crate::notes;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -237,6 +237,16 @@ impl LiteralBindings {
     pub fn inert_statement(&self, scoping: &Scoping, stmt: &Statement<'_>) -> bool {
         match stmt {
             Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_) => true,
+            Statement::ExpressionStatement(expression) => {
+                inert_prefix_dropped() || self.runs_no_code(scoping, &expression.expression)
+            }
+            Statement::BlockStatement(block) => {
+                inert_prefix_dropped()
+                    || block.body.iter().all(|inner| {
+                        !matches!(inner, Statement::FunctionDeclaration(_))
+                            && self.inert_statement(scoping, inner)
+                    })
+            }
             Statement::VariableDeclaration(declaration) => {
                 !declaration.kind.is_using()
                     && declaration.declarations.iter().all(|d| {
