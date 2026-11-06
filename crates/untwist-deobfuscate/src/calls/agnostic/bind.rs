@@ -220,6 +220,9 @@ pub(super) struct Bindings<'s, 'a> {
     tracks_calls: bool,
     candidates: Vec<&'a CallExpression<'a>>,
     owners: FxHashSet<SymbolId>,
+    dispatched: FxHashSet<SymbolId>,
+    pub(super) scoped_lookup: bool,
+    getter_reads: FxHashSet<u64>,
     tables: Vec<SymbolId>,
     uncalled: Vec<u32>,
     read_through: FxHashSet<u32>,
@@ -258,6 +261,9 @@ impl<'s, 'a> Bindings<'s, 'a> {
             tracks_calls,
             candidates: Vec::new(),
             owners: FxHashSet::default(),
+            dispatched: FxHashSet::default(),
+            scoped_lookup: false,
+            getter_reads: FxHashSet::default(),
             tables: Vec::new(),
             uncalled: Vec::new(),
             read_through: FxHashSet::default(),
@@ -339,6 +345,9 @@ impl<'s, 'a> Bindings<'s, 'a> {
                         self.params.extend(proven.params);
                         self.calls_of.extend(proven.calls);
                         self.owners.extend(proven.owners);
+                        self.dispatched.extend(proven.objects);
+                        self.getter_reads
+                            .extend(proven.getter_reads.into_iter().map(super::sites::span_key));
                     }
                 }
                 Err(bootstrap::NOT_A_BOOTSTRAP) => {}
@@ -347,6 +356,14 @@ impl<'s, 'a> Bindings<'s, 'a> {
                 }
             }
         }
+    }
+
+    pub(super) fn reads_a_proven_getter(&self, span: oxc_span::Span) -> bool {
+        self.getter_reads.contains(&super::sites::span_key(span))
+    }
+
+    pub(super) fn holds_dispatched_object(&self, symbol: SymbolId) -> bool {
+        self.dispatched.contains(&symbol) && self.never_reassigned(symbol)
     }
 
     pub(super) fn is_table(&self, symbol: SymbolId) -> bool {
@@ -367,13 +384,13 @@ impl<'s, 'a> Bindings<'s, 'a> {
         if call.optional {
             return;
         }
-        let Expression::FunctionExpression(func) = call.callee.without_parentheses() else {
-            return;
-        };
-        if bootstrap::table_candidate(call) {
+        if bootstrap::table_candidate(call) || bootstrap::declared_candidate(call) {
             let call = self.alloc(call);
             self.candidates.push(call);
         }
+        let Expression::FunctionExpression(func) = call.callee.without_parentheses() else {
+            return;
+        };
         if !self.tracks_calls {
             return;
         }
@@ -845,6 +862,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
     }
 
     fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.scoped_lookup = true;
         self.sources.note(it.span, "a with statement");
         walk_js::walk_with_statement(self, it);
     }

@@ -69,6 +69,14 @@ const MODULE_ZERO: &str = "  function (e, t, i) {
     console.log(lib.text, bQ(0) === lib.text, i.n(lib).a === lib, i.c[1].l);
   }";
 
+const MODULE_ZERO_UNCACHED: &str = "  function (e, t, i) {
+    'use strict';
+    i.r(t);
+    var lib = i(1);
+    i.d(t, 'shown', lib.text);
+    console.log(lib.text, bQ(0) === lib.text, i.n(lib).a === lib);
+  }";
+
 const MODULE_ONE: &str = "  function (e, t, i) {
     i.r(t);
     i.d(t, 'text', bQ(1));
@@ -104,12 +112,298 @@ fn module_one_with(body: &str) -> String {
     format!("  function (e, t, i) {{\n    i.r(t);\n    {body}\n    i.d(t, 'text', bQ(1));\n  }}")
 }
 
+fn webpack4(record: &str, dispatch: &str) -> String {
+    format!(
+        "!(function (e) {{
+  var r = {{}};
+  function n(t) {{
+    if (r[t]) return r[t].exports;
+    {record}
+    return {dispatch}, (m.l = true), m.exports;
+  }}
+  return (
+    (n.m = e),
+    (n.c = r),
+    (n.d = function (t, k, g) {{ n.o(t, k) || Object.defineProperty(t, k, {{ enumerable: true, get: g }}); }}),
+    (n.r = function (t) {{
+      typeof Symbol !== 'undefined' && Symbol.toStringTag && Object.defineProperty(t, Symbol.toStringTag, {{ value: 'Module' }});
+      Object.defineProperty(t, '__esModule', {{ value: true }});
+    }}),
+    (n.t = function (v, mode) {{
+      if (mode & 1) v = n(v);
+      if (mode & 8) return v;
+      if (mode & 4 && typeof v === 'object' && v && v.__esModule) return v;
+      var ns = Object.create(null);
+      n.r(ns);
+      Object.defineProperty(ns, 'default', {{ enumerable: true, value: v }});
+      if (mode & 2 && typeof v != 'string') for (var key in v) n.d(ns, key, function (k) {{ return v[k]; }}.bind(null, key));
+      return ns;
+    }}),
+    (n.n = function (t) {{ var g = t && t.__esModule ? function () {{ return t.default; }} : function () {{ return t; }}; return n.d(g, 'a', g), g; }}),
+    (n.o = function (t, k) {{ return Object.prototype.hasOwnProperty.call(t, k); }}),
+    (n.p = ''),
+    n((n.s = 0))
+  );
+}})([
+  function (e, t, i) {{
+    'use strict';
+    i.r(t);
+    var lib = i(1);
+    i.d(t, 'shown', function () {{ return lib.text; }});
+    console.log(lib.text, bQ(0) === lib.text, i.n(lib).a === lib, t[Symbol.toStringTag]);
+  }},
+  function (e, t, i) {{
+    i.r(t);
+    i.d(t, 'text', function () {{ return bQ(1); }});
+  }}
+]);"
+    )
+}
+
+const RECORD: &str = "var m = (r[t] = { i: t, l: false, exports: {} });";
+
+const DISPATCH: &str = "e[t].call(m.exports, m, m.exports, n)";
+
+fn webpack4_proven() -> String {
+    patched_after_named_rotator("Q", "true", &webpack4(RECORD, DISPATCH))
+}
+
+fn define_on_exports() -> String {
+    format!("i.d(t, String.fromCharCode(98, 81), {PATCH});")
+}
+
+fn exports_mutant(record: &str, dispatch: &str) -> String {
+    exports_mutant_from(MODULE_ZERO_UNCACHED, record, dispatch)
+}
+
+fn exports_mutant_from(module_zero: &str, record: &str, dispatch: &str) -> String {
+    with_modules(
+        "",
+        &[module_zero, &module_one_with(&define_on_exports())],
+        "(n.s = 0)",
+    )
+    .replacen(RECORD, record, 1)
+    .replacen(
+        &format!("return {DISPATCH},"),
+        &format!("return {dispatch},"),
+        1,
+    )
+}
+
+fn exports_defined_by_computed_key() -> String {
+    exports_mutant(RECORD, DISPATCH)
+}
+
+fn amd_define(factory: &str) -> String {
+    format!("var r; !((r = {factory}.call(t, i, t, e)), r !== undefined && (e.exports = r));")
+}
+
+fn amd_factory_ignores_require() -> String {
+    with_modules(
+        "",
+        &[MODULE_ZERO, &module_one_with(&amd_define("function () {}"))],
+        "(n.s = 0)",
+    )
+}
+
+fn dispatched_mutants() -> Vec<(&'static str, String)> {
+    let (record, dispatch) = (RECORD, DISPATCH);
+    let creation_patched = before_bootstrap(
+        &format!("Object.create = {};", "function () { return globalThis; }"),
+        with_modules(
+            "",
+            &[
+                &MODULE_ZERO.replacen("var lib = i(1);", "var lib = i(1); i.t(1, 1);", 1),
+                &module_one_with(&define_on_exports()),
+            ],
+            "(n.s = 0)",
+        ),
+    );
+    vec![
+        (
+            "require hands a module the global object between the record and the dispatch",
+            exports_mutant(&format!("{record} m.exports = globalThis;"), dispatch),
+        ),
+        (
+            "the dispatch passes the global object as exports",
+            exports_mutant(record, "e[t].call(m.exports, m, globalThis, n)"),
+        ),
+        (
+            "a dispatch argument runs code before exports is read",
+            exports_mutant(
+                record,
+                "e[t].call(m.exports, ((m.exports = globalThis), m), m.exports, n)",
+            ),
+        ),
+        (
+            "the module record defines exports through a getter",
+            exports_mutant(
+                "var m = (r[t] = { i: t, l: false, get exports() { return globalThis; } });",
+                dispatch,
+            ),
+        ),
+        (
+            "the module record defines exports twice",
+            exports_mutant(
+                "var m = (r[t] = { i: t, l: false, exports: {}, exports: globalThis });",
+                dispatch,
+            ),
+        ),
+        (
+            "a module reassigns its exports parameter",
+            with_modules(
+                "",
+                &[
+                    MODULE_ZERO,
+                    &module_one_with(&format!("t = globalThis; {}", define_on_exports())),
+                ],
+                "(n.s = 0)",
+            ),
+        ),
+        (
+            "Object.create is replaced before the bootstrap",
+            creation_patched,
+        ),
+        (
+            "a module installs a setter on the module cache",
+            exports_mutant_from(
+                &MODULE_ZERO_UNCACHED.replacen(
+                    "var lib = i(1);",
+                    "Object.defineProperty(i.c, 1, { configurable: true, set: function (v) { v.exports = globalThis; } }); var lib = i(1);",
+                    1,
+                ),
+                record,
+                dispatch,
+            ),
+        ),
+        (
+            "an AMD factory takes require as a parameter",
+            with_modules(
+                "",
+                &[
+                    MODULE_ZERO,
+                    &module_one_with(&amd_define(&format!(
+                        "function (q) {{ {} }}",
+                        define_on_global("q")
+                    ))),
+                ],
+                "(n.s = 0)",
+            ),
+        ),
+        (
+            "an AMD factory reads require through arguments",
+            with_modules(
+                "",
+                &[
+                    MODULE_ZERO,
+                    &module_one_with(&amd_define(&format!(
+                        "function () {{ {} }}",
+                        define_on_global("arguments[0]")
+                    ))),
+                ],
+                "(n.s = 0)",
+            ),
+        ),
+    ]
+}
+
+const W5_RECORD: &str = "var m = (c[id] = { exports: {} });";
+
+const W5_DISPATCH: &str = "e[id](m, m.exports, n);";
+
+const W5_PATCH: &str = "t[String.fromCharCode(98, 81)] = function () { return 'patched'; };";
+
+fn webpack5(record: &str, dispatch: &str, module_one: &str) -> String {
+    patched_after_named_rotator(
+        "Q",
+        "true",
+        &format!(
+            "(() => {{
+  var e = {{
+    0: (m, t, i) => {{
+      i.r(t);
+      var lib = i(1);
+      console.log(lib.text, bQ(0) === lib.text, typeof lib.shown, t[Symbol.toStringTag]);
+    }},
+    1: (m, t, i) => {{
+      i.r(t);
+      i.d(t, {{ text: () => bQ(1), shown: () => 'x' }});
+      {module_one}
+    }},
+  }};
+  var c = {{}};
+  function n(id) {{
+    var cached = c[id];
+    if (cached !== undefined) return cached.exports;
+    {record}
+    {dispatch}
+    return m.exports;
+  }}
+  n.d = (exports, definition) => {{
+    for (var key in definition)
+      if (n.o(definition, key) && !n.o(exports, key))
+        Object.defineProperty(exports, key, {{ enumerable: true, get: definition[key] }});
+  }};
+  n.o = (o, p) => Object.prototype.hasOwnProperty.call(o, p);
+  n.r = (exports) => {{
+    typeof Symbol !== 'undefined' && Symbol.toStringTag && Object.defineProperty(exports, Symbol.toStringTag, {{ value: 'Module' }});
+    Object.defineProperty(exports, '__esModule', {{ value: true }});
+  }};
+  n(0);
+}})();"
+        ),
+    )
+}
+
+fn webpack5_proven() -> String {
+    webpack5(W5_RECORD, W5_DISPATCH, W5_PATCH)
+}
+
+fn webpack5_mutants() -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "webpack 5 require hands a module the global object",
+            webpack5(
+                &format!("{W5_RECORD} m.exports = globalThis;"),
+                W5_DISPATCH,
+                W5_PATCH,
+            ),
+        ),
+        (
+            "the webpack 5 dispatch passes the global object as exports",
+            webpack5(W5_RECORD, "e[id](m, globalThis, n);", W5_PATCH),
+        ),
+        (
+            "a webpack 5 definition holds a bound definer as a getter",
+            webpack5(W5_RECORD, W5_DISPATCH, "")
+                .replacen(
+                    "i.d(t, { text: () => bQ(1), shown: () => 'x' });",
+                    "i.d(t, { text: () => bQ(1), shown: Object.defineProperty.bind(null, globalThis, String.fromCharCode(98, 81), { value: function () { return 'patched'; } }) });",
+                    1,
+                ),
+        ),
+        (
+            "a webpack 5 module reassigns its exports parameter",
+            webpack5(
+                W5_RECORD,
+                W5_DISPATCH,
+                &format!("t = globalThis; {W5_PATCH}"),
+            ),
+        ),
+    ]
+}
+
 fn mutants() -> Vec<(&'static str, &'static str, String)> {
     let planted = format!(
         "function (e, t, q) {{ {} q.d(t, 'text', bQ(1)); }}",
         define_on_global("q")
     );
-    vec![
+    let mut out: Vec<(&'static str, &'static str, String)> = dispatched_mutants()
+        .into_iter()
+        .chain(webpack5_mutants())
+        .map(|(label, source)| (label, "", source))
+        .collect();
+    out.extend(vec![
         (
             "require.d is called on the global object",
             "",
@@ -215,7 +509,8 @@ fn mutants() -> Vec<(&'static str, &'static str, String)> {
                     .replacen("var lib = i(1);", "i(5); var lib = i(1);", 1),
             ),
         ),
-    ]
+    ]);
+    out
 }
 
 #[test]
@@ -225,6 +520,47 @@ fn every_lane_decodes_a_proven_webpack_bootstrap() {
         let out = run(&source, lane);
         let messages: Vec<&str> = out.notes.iter().map(|n| n.message.as_str()).collect();
         assert!(decoded(&source, lane), "{lane:?}: {messages:#?}");
+    }
+}
+
+#[test]
+fn every_lane_decodes_the_webpack4_runtime_with_proven_module_objects() {
+    for source in [
+        webpack4_proven(),
+        exports_defined_by_computed_key(),
+        amd_factory_ignores_require(),
+        webpack5_proven(),
+    ] {
+        for lane in LANES {
+            let out = run(&source, lane);
+            let messages: Vec<&str> = out.notes.iter().map(|n| n.message.as_str()).collect();
+            assert!(decoded(&source, lane), "{lane:?}: {messages:#?}");
+        }
+    }
+}
+
+fn premise_rows() -> Vec<(String, String)> {
+    include_str!("data/webpack_bootstrap_premise_rows.txt")
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter_map(|line| line.split_once('|'))
+        .map(|(label, prefix)| {
+            (
+                label.to_string(),
+                before_bootstrap(prefix, exports_mutant(RECORD, DISPATCH)),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn the_safe_lane_decodes_the_documented_premise_rows() {
+    let rows = premise_rows();
+    assert!(!rows.is_empty());
+    for (label, source) in rows {
+        let out = run(&source, Lane::Safe);
+        let messages: Vec<&str> = out.notes.iter().map(|n| n.message.as_str()).collect();
+        assert!(decoded(&source, Lane::Safe), "{label}: {messages:#?}");
     }
 }
 
@@ -263,7 +599,19 @@ fn node_agrees_in_the_safe_and_conservative_lanes_and_every_mutant_diverges_when
     let Some(node) = node_or_skip() else {
         return;
     };
-    let mut programs = vec![("a proven bootstrap".to_string(), proven())];
+    let mut programs = vec![
+        ("a proven bootstrap".to_string(), proven()),
+        ("the webpack4 runtime".to_string(), webpack4_proven()),
+        (
+            "a module defines a computed key on its exports".to_string(),
+            exports_defined_by_computed_key(),
+        ),
+        (
+            "an AMD factory ignores require".to_string(),
+            amd_factory_ignores_require(),
+        ),
+        ("the webpack 5 runtime".to_string(), webpack5_proven()),
+    ];
     programs.extend(
         mutants()
             .into_iter()
@@ -276,14 +624,14 @@ fn node_agrees_in_the_safe_and_conservative_lanes_and_every_mutant_diverges_when
     assert!(wrong.is_empty(), "{wrong:#?}");
     let unsafe_lane = lane_runner(Lane::Unsafe);
     let modes: [Mode<'_>; 1] = [("unsafe", &unsafe_lane)];
-    assert!(mismatches(&node, &programs[..1], &modes).is_empty());
+    assert!(mismatches(&node, &programs[..5], &modes).is_empty());
     let decoded_modes: [Mode<'_>; 1] = [("decoded", &decoded_anyway)];
-    let mut diverged: Vec<String> = mismatches(&node, &programs[1..], &decoded_modes)
+    let mut diverged: Vec<String> = mismatches(&node, &programs[5..], &decoded_modes)
         .into_iter()
         .filter_map(|row| row.split(" (decoded)").next().map(str::to_string))
         .collect();
     diverged.sort();
-    let mut want: Vec<String> = programs[1..]
+    let mut want: Vec<String> = programs[5..]
         .iter()
         .map(|(label, _)| label.clone())
         .collect();

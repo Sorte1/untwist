@@ -169,6 +169,9 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     pub(super) fn generic(&mut self, call: &'a CallExpression<'a>) {
+        if self.table_dispatch(&call.callee) {
+            return;
+        }
         let receiver = expr_member(&call.callee).map(MemberExpression::object);
         let args = arg_elems(&call.arguments);
         let binds = self.may_bind(call);
@@ -232,9 +235,14 @@ impl<'s, 'a> Sites<'s, 'a> {
             Elem::Value(expr) => self.target_root(expr),
             Elem::Hidden => ProtoRoot::Either,
         };
+        self.site_target = match target {
+            Elem::Value(expr) => Some(self.alloc_expr(expr)),
+            Elem::Hidden => None,
+        };
         for key in keys {
             self.push_rooted(span, key, kind, root);
         }
+        self.site_target = None;
     }
 
     pub(super) fn batch(
@@ -259,9 +267,14 @@ impl<'s, 'a> Sites<'s, 'a> {
             }
             return;
         }
+        self.site_target = match target {
+            Elem::Value(expr) => Some(self.alloc_expr(expr)),
+            Elem::Hidden => None,
+        };
         for key in keys {
             self.push(span, key, "batch");
         }
+        self.site_target = None;
     }
 
     pub(super) fn named_kind(
@@ -355,6 +368,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         if runner
             && self.runner_callee(&call.callee).is_none()
             && !self.creation_only.contains(&span_key(call.span))
+            && !self.table_dispatch(&call.callee)
         {
             self.reach_text(call.span, &call.arguments);
             self.check_text(call.span, &call.arguments, true);
@@ -382,6 +396,7 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     fn into_saturated(mut self) -> (Agnostic<'a>, bool, bool) {
+        self.creations_native();
         self.out.saturated = true;
         self.out.pending_texts = self.pending_texts.take();
         (self.out, true, true)
@@ -414,6 +429,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             return self.into_saturated();
         }
         let (chains, natives) = self.assumptions_hold();
+        self.creations_native();
         if !self.creations_hold() {
             let first = self.creation_only.iter().min();
             if let Some(span) = first.map(|key| Span::new((key >> 32) as u32, *key as u32)) {
@@ -460,6 +476,34 @@ impl<'s, 'a> Sites<'s, 'a> {
             .filter(|site| site.outside)
             .map(|site| &site.key)
             .chain(&self.defined)
+    }
+
+    fn creations_native(&mut self) {
+        let created = self.created.take();
+        let Some(first) = created.first().copied() else {
+            return;
+        };
+        let sites = std::mem::take(&mut self.create_sites);
+        let assigned = self
+            .fresh
+            .scoping
+            .root_unresolved_references()
+            .get("Object")
+            .is_some_and(|references| {
+                references
+                    .iter()
+                    .any(|reference| self.fresh.scoping.get_reference(*reference).is_write())
+            });
+        let patched = assigned
+            || self.fresh.bindings.scoped_lookup
+            || self.out.code_text.is_some()
+            || self.out.reach_code.is_some()
+            || sites
+                .iter()
+                .any(|(_, target)| target.is_none_or(|expr| !self.proven_non_global(expr)));
+        if patched {
+            self.hit(first);
+        }
     }
 
     pub(super) fn creations_hold(&self) -> bool {

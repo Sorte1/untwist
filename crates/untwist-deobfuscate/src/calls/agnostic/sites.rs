@@ -105,6 +105,9 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) tagged: Vec<&'a TaggedTemplateExpression<'a>>,
     pub(super) identity: Option<u64>,
     pub(super) assumed: RefCell<Vec<Cow<'a, str>>>,
+    pub(super) created: RefCell<Vec<Span>>,
+    pub(super) create_sites: Vec<(Span, Option<&'a Expression<'a>>)>,
+    pub(super) site_target: Option<&'a Expression<'a>>,
     pub(super) defined: Vec<AKey<'a>>,
     pub(super) fresh_calls: bool,
     pub(super) fresh_used: Cell<bool>,
@@ -123,7 +126,8 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) symbol_safe: bool,
     pub(super) map_safe: bool,
     pub(super) unwritten: super::instance::Unwritten,
-    pub(super) param_values: RefCell<FxHashMap<oxc_syntax::symbol::SymbolId, bool>>,
+    pub(super) param_values: RefCell<FxHashMap<(oxc_syntax::symbol::SymbolId, bool), bool>>,
+    pub(super) extended: Cell<bool>,
     pub(super) param_keys: RefCell<FxHashMap<oxc_syntax::symbol::SymbolId, bool>>,
     pub(super) text_judged: bool,
     pub(super) forward_calls: FxHashSet<Span>,
@@ -155,6 +159,9 @@ impl<'s, 'a> Sites<'s, 'a> {
             tagged: Vec::new(),
             identity: None,
             assumed: RefCell::default(),
+            created: RefCell::default(),
+            create_sites: Vec::new(),
+            site_target: None,
             defined: Vec::new(),
             fresh_calls,
             fresh_used: Cell::new(false),
@@ -174,6 +181,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             map_safe: pristine.map,
             unwritten: pristine.unwritten,
             param_values: RefCell::default(),
+            extended: Cell::new(false),
             param_keys: RefCell::default(),
             text_judged: false,
             forward_calls: FxHashSet::default(),
@@ -206,6 +214,14 @@ impl<'s, 'a> Sites<'s, 'a> {
             self.mark_source(span, "a write by a key that may be prepareStackTrace");
         }
         let outside = !self.in_machinery(span);
+        let may_create = match &key {
+            AKey::Named(name) => name == "create" || name == "Object",
+            AKey::Index => false,
+            AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
+        };
+        if outside && may_create {
+            self.create_sites.push((span, self.site_target));
+        }
         if outside {
             let open = matches!(key, AKey::Unknown)
                 || (self.resolve.is_none() && matches!(key, AKey::Pending(_)))

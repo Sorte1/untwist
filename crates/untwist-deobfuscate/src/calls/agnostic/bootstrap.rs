@@ -11,6 +11,14 @@ use std::borrow::Cow;
 use super::bind::{function_uses_this, reads_arguments};
 use untwist_eval::value::JsString;
 
+mod getter;
+mod outer;
+mod record;
+
+pub(super) use outer::declared_candidate;
+use outer::outers;
+use record::{dispatched_objects, module_record};
+
 pub(super) type Resolve<'k> = Option<&'k FxHashMap<Span, &'k JsString>>;
 
 pub(super) const NOT_A_BOOTSTRAP: &str = "";
@@ -34,6 +42,8 @@ pub(super) struct Proven<'a> {
     pub(super) calls: Vec<(SymbolId, &'a CallExpression<'a>)>,
     pub(super) owners: Vec<SymbolId>,
     pub(super) uncalled: Vec<u32>,
+    pub(super) objects: Vec<SymbolId>,
+    pub(super) getter_reads: Vec<Span>,
 }
 
 fn is_function(expr: &Expression<'_>) -> bool {
@@ -181,7 +191,8 @@ struct DispatchScan<'s, 'a> {
     scoping: &'s Scoping,
     resolve: Resolve<'s>,
     table: SymbolId,
-    found: Vec<&'a CallExpression<'a>>,
+    direct: bool,
+    found: Vec<(&'a CallExpression<'a>, usize)>,
     near: usize,
 }
 
@@ -211,8 +222,14 @@ impl<'a> VisitJs<'a> for DispatchScan<'_, 'a> {
     fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {}
     fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if dispatch_callee(self.scoping, self.resolve, &it.callee, self.table) {
-            self.found.push(self.alloc(it));
+        if let Some(offset) = dispatch_callee(
+            self.scoping,
+            self.resolve,
+            &it.callee,
+            self.table,
+            self.direct,
+        ) {
+            self.found.push((self.alloc(it), offset));
         } else if let Some(member) = it.callee.without_parentheses().as_member_expression() {
             if key_name(member, self.resolve).as_deref() == Some("call")
                 && mentions(self.scoping, member.object(), self.table)
@@ -229,31 +246,39 @@ fn dispatch_callee(
     resolve: Resolve<'_>,
     callee: &Expression<'_>,
     table: SymbolId,
-) -> bool {
-    let Some(member) = callee.without_parentheses().as_member_expression() else {
-        return false;
-    };
+    direct: bool,
+) -> Option<usize> {
+    let member = callee.without_parentheses().as_member_expression()?;
+    if direct {
+        if let MemberExpression::ComputedMemberExpression(element) = member {
+            if names(scoping, &element.object, table) {
+                return Some(0);
+            }
+        }
+    }
     let Expression::ComputedMemberExpression(element) = member.object().without_parentheses()
     else {
-        return false;
+        return None;
     };
-    names(scoping, &element.object, table) && key_name(member, resolve).as_deref() == Some("call")
+    (names(scoping, &element.object, table) && key_name(member, resolve).as_deref() == Some("call"))
+        .then_some(1)
 }
 
 struct Shape<'a> {
     table: SymbolId,
     require: SymbolId,
     dispatch: &'a CallExpression<'a>,
+    offset: usize,
     aliases: Vec<usize>,
+    body: &'a FunctionBody<'a>,
 }
 
 fn shape<'a>(
     scoping: &Scoping,
     resolve: Resolve<'_>,
-    outer: &'a Function<'a>,
-    table: SymbolId,
+    body: &'a FunctionBody<'a>,
+    (table, direct): (SymbolId, bool),
 ) -> Result<Shape<'a>, &'static str> {
-    let body = outer.body.as_ref().ok_or(DISPATCH_SHAPE)?;
     let mut found = None;
     let mut count = 0;
     let mut near = 0;
@@ -265,6 +290,7 @@ fn shape<'a>(
             scoping,
             resolve,
             table,
+            direct,
             found: Vec::new(),
             near: 0,
         };
@@ -277,7 +303,7 @@ fn shape<'a>(
             found = Some((&**require, *call));
         }
     }
-    let (Some((require, dispatch)), 1) = (found, count) else {
+    let (Some((require, (dispatch, offset))), 1) = (found, count) else {
         return Err(if count + near == 0 {
             NOT_A_BOOTSTRAP
         } else {
@@ -296,15 +322,17 @@ fn shape<'a>(
     let mut aliases = Vec::new();
     for (index, argument) in dispatch.arguments.iter().enumerate() {
         let expr = argument.as_expression().ok_or(DISPATCH_SHAPE)?;
-        if names(scoping, expr, require_symbol) && index > 0 {
-            aliases.push(index - 1);
+        if names(scoping, expr, require_symbol) && index >= offset {
+            aliases.push(index - offset);
         }
     }
     Ok(Shape {
         table,
         require: require_symbol,
         dispatch,
+        offset,
         aliases,
+        body: require.body.as_ref().ok_or(DISPATCH_SHAPE)?,
     })
 }
 
@@ -324,6 +352,7 @@ struct Uses<'s, 'a> {
     table_stored: bool,
     cache_stored: bool,
     definer: bool,
+    definer_fn: Option<&'a Expression<'a>>,
     helpers: Vec<(Cow<'a, str>, &'a FormalParameters<'a>, Option<u32>)>,
     helper_calls: Vec<(Cow<'a, str>, &'a CallExpression<'a>)>,
     helper_reads: Vec<Cow<'a, str>>,
@@ -424,6 +453,34 @@ impl<'a> Uses<'_, 'a> {
         })
     }
 
+    fn kept_arguments(&self, call: &CallExpression<'a>) -> Option<usize> {
+        if call.optional {
+            return None;
+        }
+        let (callee, offset) = match call.callee.without_parentheses() {
+            Expression::FunctionExpression(func) => (func, 0),
+            Expression::StaticMemberExpression(_) | Expression::ComputedMemberExpression(_) => {
+                let member = call.callee.without_parentheses().as_member_expression()?;
+                if member.optional() || key_name(member, self.resolve).as_deref() != Some("call") {
+                    return None;
+                }
+                match member.object().without_parentheses() {
+                    Expression::FunctionExpression(func) => (func, 1),
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        };
+        let plain = !callee.generator
+            && callee.params.rest.is_none()
+            && !reads_arguments(callee)
+            && call
+                .arguments
+                .iter()
+                .all(|argument| argument.as_expression().is_some());
+        plain.then(|| offset + callee.params.items.len())
+    }
+
     fn visit_member_key(&mut self, member: &MemberExpression<'a>) {
         if let MemberExpression::ComputedMemberExpression(m) = member {
             self.visit_expression(&m.expression);
@@ -454,6 +511,7 @@ impl<'a> Uses<'_, 'a> {
             }
             "d" if !self.definer && is_function(&assign.right) => {
                 self.definer = true;
+                self.definer_fn = Some(self.alloc(&assign.right));
                 match plain_params(self.scoping, self.alloc(&assign.right)) {
                     Some(params) => {
                         let start = function_start(&assign.right);
@@ -472,6 +530,19 @@ impl<'a> Uses<'_, 'a> {
 impl<'a> VisitJs<'a> for Uses<'_, 'a> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if it.span == self.shape.dispatch.span {
+            return;
+        }
+        if let Some(kept) = self.kept_arguments(it) {
+            self.visit_expression(&it.callee);
+            for (index, argument) in it.arguments.iter().enumerate() {
+                let dropped = index >= kept
+                    && argument
+                        .as_expression()
+                        .is_some_and(|expr| matches!(self.role(expr), Some(Role::Require(_))));
+                if !dropped {
+                    self.visit_argument(argument);
+                }
+            }
             return;
         }
         if matches!(self.role(&it.callee), Some(Role::Require(_))) {
@@ -579,37 +650,28 @@ fn register<'a>(
     proven.owners.push(owner);
 }
 
-fn outer_plain(call: &CallExpression<'_>, outer: &Function<'_>) -> bool {
-    !call.optional
-        && !outer.generator
-        && !outer.r#async
-        && outer.params.rest.is_none()
-        && !reads_arguments(outer)
-}
-
 pub(super) fn prove<'a>(
     program: &'a Program<'a>,
     scoping: &Scoping,
     resolve: Resolve<'_>,
     call: &'a CallExpression<'a>,
 ) -> Result<Proven<'a>, &'static str> {
-    let Expression::FunctionExpression(outer) = call.callee.without_parentheses() else {
-        return Err(NOT_A_BOOTSTRAP);
-    };
-    let table_symbol = outer
-        .params
-        .items
-        .first()
-        .and_then(binding_symbol)
-        .ok_or(NOT_A_BOOTSTRAP)?;
-    let shape = shape(scoping, resolve, outer, table_symbol)?;
-    let table = call
-        .arguments
-        .first()
-        .and_then(Argument::as_expression)
-        .and_then(|table| table_of(scoping, table))
-        .ok_or(TABLE_NOT_LITERAL)?;
-    if scoping.symbol_is_mutated(table_symbol) || !outer_plain(call, outer) {
+    let mut found = Err(NOT_A_BOOTSTRAP);
+    for outer in outers(scoping, call) {
+        match shape(scoping, resolve, outer.body, (outer.table, outer.direct)) {
+            Ok(shape) if !outer.direct || module_record(scoping, &shape).is_some() => {
+                found = Ok((outer, shape));
+                break;
+            }
+            Ok(_) | Err(NOT_A_BOOTSTRAP) => {}
+            Err(_) if outer.direct => {}
+            Err(reason) => found = Err(reason),
+        }
+    }
+    let (outer, shape) = found?;
+    let table_symbol = outer.table;
+    let table = table_of(scoping, outer.elements).ok_or(TABLE_NOT_LITERAL)?;
+    if scoping.symbol_is_mutated(table_symbol) || !outer.plain {
         return Err(TABLE_ESCAPES);
     }
     let mut aliases = Vec::new();
@@ -633,6 +695,7 @@ pub(super) fn prove<'a>(
         table_stored: false,
         cache_stored: false,
         definer: false,
+        definer_fn: None,
         helpers: Vec::new(),
         helper_calls: Vec::new(),
         helper_reads: Vec::new(),
@@ -647,6 +710,11 @@ pub(super) fn prove<'a>(
     }
     let mut proven = Proven {
         table: Some(shape.table),
+        objects: dispatched_objects(
+            (program, scoping, resolve),
+            (&shape, uses.helper_reads.iter().any(|read| read == "c")),
+            &table,
+        ),
         ..Proven::default()
     };
     for (name, params, start) in &uses.helpers {
@@ -675,6 +743,13 @@ pub(super) fn prove<'a>(
         }
         if calls.is_empty() && stored_once {
             proven.uncalled.extend(*start);
+        }
+        if name == "d" && stored_once {
+            if let Some(definer) = uses.definer_fn {
+                proven
+                    .getter_reads
+                    .extend(getter::getter_read(scoping, definer, &calls));
+            }
         }
         register(&mut proven, params, &calls);
     }
