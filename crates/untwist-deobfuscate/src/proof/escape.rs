@@ -16,6 +16,7 @@ use super::escape_scan::scan_decoded_text;
 use super::global_aliases::{scan_bare_call_globals, scan_global_aliases};
 use super::pending::{PendingSite, PreScan};
 use super::proxy_objects::scan_proxy_functions;
+use super::storage::{scan_storage_objects, Storage, StorageObjects};
 use super::text_writes::writes_in_text;
 use super::unsafe_bindings::scan_unsafe_bindings;
 use super::written::{definer_written_keys, member_written_key, text_template, WrittenKey};
@@ -32,10 +33,6 @@ pub const SINK_ROOT_NAMES: [&str; 6] = [
 pub(super) const MAX_SINK_DEPTH: u32 = 4;
 
 const GLOBAL_KEYS: [&str; 5] = ["__proto__", "top", "parent", "opener", "content"];
-
-fn pending_template(expr: &Expression<'_>) -> Option<WrittenKey> {
-    text_template(expr).filter(WrittenKey::is_pending)
-}
 
 pub(super) fn is_code_key(key: &str) -> bool {
     key == "constructor"
@@ -342,7 +339,7 @@ impl<'s> Escape<'s> {
     }
 
     fn on_decoded_global_key(&mut self, member: &ComputedMemberExpression<'_>) -> bool {
-        let Some(key) = pending_template(&member.expression) else {
+        let Some(key) = self.pending_template(&member.expression) else {
             return false;
         };
         if !self.is_global_object(&member.object) {
@@ -374,7 +371,7 @@ impl<'s> Escape<'s> {
         else {
             return false;
         };
-        let Some(key) = pending_template(&member.expression) else {
+        let Some(key) = self.pending_template(&member.expression) else {
             return false;
         };
         if let Some(resolved) = self.resolve_template(&key) {
@@ -409,7 +406,26 @@ impl<'s> Escape<'s> {
                 .expressions
                 .iter()
                 .any(|part| self.template_forcing(part)),
-            other => self.pending_call_span(other).is_some(),
+            other => match self.storage_call(other) {
+                Some(call) => {
+                    call.arguments
+                        .iter()
+                        .filter_map(Argument::as_expression)
+                        .any(|argument| self.template_forcing(argument))
+                        || call
+                            .callee
+                            .without_parentheses()
+                            .as_member_expression()
+                            .and_then(|member| match member {
+                                MemberExpression::ComputedMemberExpression(computed) => {
+                                    Some(self.template_forcing(&computed.expression))
+                                }
+                                _ => None,
+                            })
+                            .unwrap_or(false)
+                }
+                None => self.pending_call_span(other).is_some(),
+            },
         }
     }
 
@@ -507,7 +523,30 @@ impl<'s> Escape<'s> {
     }
 
     fn resolve_string_expr(&self, expr: &Expression<'_>) -> Option<String> {
-        self.resolve_template(&text_template(expr)?)
+        self.resolve_template(&self.text_template(expr)?)
+    }
+
+    fn text_template(&self, expr: &Expression<'_>) -> Option<WrittenKey> {
+        let storage = Storage {
+            scoping: self.scoping,
+            objects: &self.context.storage,
+        };
+        text_template(expr, Some(&storage))
+    }
+
+    fn pending_template(&self, expr: &Expression<'_>) -> Option<WrittenKey> {
+        self.text_template(expr).filter(WrittenKey::is_pending)
+    }
+
+    fn storage_call<'e, 'x>(&self, expr: &'e Expression<'x>) -> Option<&'e CallExpression<'x>> {
+        let Expression::CallExpression(call) = expr.without_parentheses() else {
+            return None;
+        };
+        let storage = Storage {
+            scoping: self.scoping,
+            objects: &self.context.storage,
+        };
+        storage.is_storage_call(call).then_some(call)
     }
 
     fn walk_call<'a>(&mut self, it: &CallExpression<'a>)
@@ -541,7 +580,7 @@ impl<'s> Escape<'s> {
 
     fn check_sink_pending_fallback(&mut self, first: &Expression<'_>, span: Span) -> bool {
         if self.pending_exempt.is_some() {
-            if let Some(text) = pending_template(first) {
+            if let Some(text) = self.pending_template(first) {
                 let forcing = self.template_forcing(first);
                 self.pending.push(PendingSite::Sink {
                     outer_span: span,
@@ -775,6 +814,7 @@ pub struct EscapeScan {
 pub struct EscapeContext {
     unsafe_bindings: FxHashSet<SymbolId>,
     pub(super) proxy_functions: FxHashMap<SymbolId, FxHashSet<String>>,
+    storage: StorageObjects,
     global_aliases: FxHashSet<SymbolId>,
     bare_call_globals: FxHashSet<SymbolId>,
 }
@@ -783,6 +823,7 @@ pub fn build_escape_context(program: &Program<'_>, scoping: &Scoping) -> EscapeC
     EscapeContext {
         unsafe_bindings: scan_unsafe_bindings(program, scoping),
         proxy_functions: scan_proxy_functions(program, scoping),
+        storage: scan_storage_objects(program, scoping),
         global_aliases: scan_global_aliases(program, scoping),
         bare_call_globals: scan_bare_call_globals(program, scoping),
     }

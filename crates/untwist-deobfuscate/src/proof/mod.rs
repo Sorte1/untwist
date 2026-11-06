@@ -16,6 +16,7 @@ mod property_reads;
 mod proxy_objects;
 mod rotator;
 mod seal;
+mod storage;
 mod text_writes;
 mod unsafe_bindings;
 mod watch;

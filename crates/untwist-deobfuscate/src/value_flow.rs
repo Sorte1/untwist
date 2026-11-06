@@ -7,8 +7,9 @@ pub const NATIVE_MAP_PENDING: &str = "native-map-pending";
 pub const BUILT_LITERAL: &str = "built-literal";
 pub const INSTANCE_RECEIVERS: &str = "instance-receivers";
 pub const FILTERED_ENUMERATION: &str = "filtered-enumeration";
+pub const STORAGE_PROXY: &str = "storage-proxy";
 
-const FLOW_RULES: [&str; 7] = [
+const FLOW_RULES: [&str; 8] = [
     VALUE_FLOW_SINKS,
     MACHINERY_SOURCE_BOUND,
     OBSERVER_LIST,
@@ -16,6 +17,7 @@ const FLOW_RULES: [&str; 7] = [
     BUILT_LITERAL,
     FILTERED_ENUMERATION,
     INSTANCE_RECEIVERS,
+    STORAGE_PROXY,
 ];
 
 thread_local! {

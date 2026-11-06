@@ -3,11 +3,17 @@ use oxc_span::Span;
 use oxc_syntax::operator::BinaryOperator;
 use rustc_hash::FxHashSet;
 
+use super::storage::Storage;
+
 #[derive(Clone, Debug)]
 pub enum WrittenKey {
     Name(String),
     Pending(Span),
     Concat(Vec<WrittenKey>),
+    Choice {
+        key: Span,
+        options: Vec<(String, WrittenKey)>,
+    },
 }
 
 impl WrittenKey {
@@ -20,6 +26,13 @@ impl WrittenKey {
                 .map(|part| part.resolved(resolve))
                 .collect::<Option<Vec<String>>>()
                 .map(|parts| parts.concat()),
+            WrittenKey::Choice { key, options } => {
+                let key = resolve(*key)?;
+                options
+                    .iter()
+                    .find(|(name, _)| *name == key)
+                    .and_then(|(_, chosen)| chosen.resolved(resolve))
+            }
         }
     }
 
@@ -34,6 +47,12 @@ impl WrittenKey {
                     part.pending_spans(spans);
                 }
             }
+            WrittenKey::Choice { key, options } => {
+                spans.insert(*key);
+                for (_, option) in options {
+                    option.pending_spans(spans);
+                }
+            }
         }
     }
 
@@ -42,17 +61,21 @@ impl WrittenKey {
             WrittenKey::Name(_) => false,
             WrittenKey::Pending(_) => true,
             WrittenKey::Concat(parts) => parts.iter().any(WrittenKey::is_pending),
+            WrittenKey::Choice { .. } => true,
         }
     }
 }
 
-pub(super) fn text_template(expr: &Expression<'_>) -> Option<WrittenKey> {
+pub(super) fn text_template(
+    expr: &Expression<'_>,
+    storage: Option<&Storage<'_>>,
+) -> Option<WrittenKey> {
     match expr.without_parentheses() {
         Expression::StringLiteral(text) => named(text.value.as_str()),
         Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
             Some(WrittenKey::Concat(vec![
-                text_template(&binary.left)?,
-                text_template(&binary.right)?,
+                text_template(&binary.left, storage)?,
+                text_template(&binary.right, storage)?,
             ]))
         }
         Expression::TemplateLiteral(template) => {
@@ -60,12 +83,19 @@ pub(super) fn text_template(expr: &Expression<'_>) -> Option<WrittenKey> {
             for (index, quasi) in template.quasis.iter().enumerate() {
                 parts.push(WrittenKey::Name(quasi.value.cooked.as_ref()?.to_string()));
                 if let Some(expression) = template.expressions.get(index) {
-                    parts.push(text_template(expression)?);
+                    parts.push(text_template(expression, storage)?);
                 }
             }
             Some(WrittenKey::Concat(parts))
         }
-        Expression::CallExpression(call) => Some(WrittenKey::Pending(call.span)),
+        Expression::CallExpression(call) => Some(
+            storage
+                .and_then(|storage| storage.call_template(call))
+                .unwrap_or(WrittenKey::Pending(call.span)),
+        ),
+        Expression::StaticMemberExpression(_) | Expression::ComputedMemberExpression(_) => {
+            storage.and_then(|storage| storage.read_template(expr))
+        }
         _ => None,
     }
 }

@@ -444,9 +444,10 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
             return;
         }
         if self.fresh.is_user_function(&it.callee) {
-            for argument in &it.arguments {
+            let forwarded = self.forwarded_runner_index(it);
+            for (index, argument) in it.arguments.iter().enumerate() {
                 if let Some(expr) = argument.as_expression() {
-                    if self.is_intrinsic_value(expr) {
+                    if self.is_intrinsic_value(expr) && forwarded != Some(index) {
                         #[cfg(feature = "refusal-spans")]
                         self.trail(it.span, || {
                             "an intrinsic passed to a user function".to_string()
