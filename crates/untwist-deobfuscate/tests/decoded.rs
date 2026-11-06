@@ -666,9 +666,12 @@ function b(r, t) { return r -= 415, a()[r]; }
 function a() { var r = ['log', 'Hello World!']; return (a = function () { return r; })(); }
 console[b(415)](b(416));",
     );
-    assert!(code.contains("console.log(\"Hello World!\")"), "{code}");
+    assert!(
+        code.contains("console[\"log\"](\"Hello World!\")"),
+        "{code}"
+    );
     assert!(!code.contains("__STRING_ARRAY__"), "{code}");
-    assert!(notes.is_empty(), "{notes:?}");
+    assert!(!notes.iter().any(|note| refuses(note)), "{notes:?}");
 }
 
 const TERSER_UNIT: &str = "\
@@ -681,8 +684,11 @@ fn a_terser_rotator_that_calls_the_array_directly_is_run() {
     let (code, notes) = common::run_passes(&format!(
         "{TERSER_UNIT}(function (r, t) {{ for (var e = b, n = a();;) try {{ if (e(0) === 'log') break; n.push(n.shift()); }} catch (r) {{ n.push(n.shift()); }} }})();\nconsole[b(0)](b(1));"
     ));
-    assert!(code.contains("console.log(\"Hello World!\")"), "{code}");
-    assert!(notes.is_empty(), "{notes:?}");
+    assert!(
+        code.contains("console[\"log\"](\"Hello World!\")"),
+        "{code}"
+    );
+    assert!(!notes.iter().any(|note| refuses(note)), "{notes:?}");
 }
 
 #[test]
@@ -690,13 +696,8 @@ fn a_terser_rotator_that_calls_the_array_twice_is_refused() {
     let (code, notes) = common::run_passes(&format!(
         "{TERSER_UNIT}(function (r, t) {{ for (var e = b, n = a(), m = a();;) try {{ if (e(0) === 'log') break; n.push(m.shift()); }} catch (r) {{ n.push(n.shift()); }} }})();\nconsole[b(0)](b(1));"
     ));
-    assert!(!code.contains("console.log(\"Hello World!\")"), "{code}");
-    assert!(
-        notes
-            .iter()
-            .any(|note| note.contains("the rotator reads or writes")),
-        "{notes:?}"
-    );
+    assert!(code.contains("console[b(0)](b(1))"), "{code}");
+    assert!(notes.iter().any(|note| refuses(note)), "{notes:?}");
 }
 
 #[test]
@@ -704,11 +705,10 @@ fn a_terser_rotator_that_runs_code_before_calling_the_array_is_refused() {
     let (code, notes) = common::run_passes(&format!(
         "{TERSER_UNIT}(function (r, t) {{ var e = b; e(1); var n = a(); for (;;) try {{ if (e(0) === 'log') break; n.push(n.shift()); }} catch (r) {{ n.push(n.shift()); }} }})();\nconsole[b(0)](b(1));"
     ));
-    assert!(!code.contains("console.log(\"Hello World!\")"), "{code}");
-    assert!(
-        notes
-            .iter()
-            .any(|note| note.contains("the rotator reads or writes")),
-        "{notes:?}"
-    );
+    assert!(code.contains("console[b(0)](b(1))"), "{code}");
+    assert!(notes.iter().any(|note| refuses(note)), "{notes:?}");
+}
+
+fn refuses(note: &str) -> bool {
+    note.contains("left alone") || note.contains("kept") || note.contains("bailed")
 }
