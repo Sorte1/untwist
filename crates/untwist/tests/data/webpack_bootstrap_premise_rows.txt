@@ -1,0 +1,4 @@
+# Premise rows: the default lane assumes that Object.prototype inherits no accessor for a module id,
+# the same premise it makes for folded key assignments. Each row decodes, and node differs by design.
+# label|statement placed before the bootstrap
+Object.prototype holds a setter for a module id|Object.defineProperty(Object.prototype, 1, { configurable: true, set: function (v) { v.exports = globalThis; } });

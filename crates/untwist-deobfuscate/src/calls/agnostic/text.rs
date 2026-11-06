@@ -211,6 +211,23 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 
+    pub(super) fn table_dispatch(&self, callee: &Expression<'a>) -> bool {
+        let Some(member) = callee.without_parentheses().as_member_expression() else {
+            return false;
+        };
+        if self.table_element(member) {
+            return true;
+        }
+        let forwards =
+            matches!(self.member_keys(member).as_slice(), [AKey::Named(name)] if name == "call");
+        forwards
+            && member
+                .object()
+                .without_parentheses()
+                .as_member_expression()
+                .is_some_and(|element| self.table_element(element))
+    }
+
     fn table_element(&self, member: &MemberExpression<'a>) -> bool {
         let MemberExpression::ComputedMemberExpression(element) = member else {
             return false;

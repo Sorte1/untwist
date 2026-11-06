@@ -150,8 +150,10 @@ impl<'s, 'a> Sites<'s, 'a> {
             return;
         }
         let root = self.target_root(member.object());
+        self.site_target = Some(self.alloc_expr(member.object()));
         for key in keys {
             self.push_rooted(member.span(), key, kind, root);
         }
+        self.site_target = None;
     }
 }

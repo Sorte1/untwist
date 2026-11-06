@@ -348,6 +348,24 @@
   `Object` returns `t`, so it is fresh when `t` is, while no write outside a fresh object may
   have the key `assign` or `Object`. A receiver reached through a field (`this.handlers.set`,
   `this.position.set`) is still judged by name: bounding it needs the flow of `this` and of fields.
+  A webpack 4 or 5 bootstrap counts as proven when its module table is an array or object
+  literal of plain functions that only its one require function dispatches, once, as
+  `table[id](…)` or `table[id].call(…)` with every module id a literal key of the table, and the
+  require function and its `d`, `m` and `c` properties stay inside the bootstrap (an AMD factory
+  that declares no parameter for require may receive it). Then a module function's `module` and
+  `exports` parameters hold objects, never the global object, when the require function creates
+  the module record as an object literal with one plain `exports: {}` in the statement right before
+  the dispatch, the dispatch runs first in its statement, every argument before them is a plain read,
+  and the module never assigns the parameter. When the record is stored into the module cache on
+  the way (`var m = (cache[id] = {…})`), the cache must not be reachable outside the require
+  function except through its `c` store and `c` must never be read, since a setter on the cache
+  could swap `exports` before the dispatch reads it. An accessor that `Object.prototype` inherits
+  for a module id is not looked for: this is the premise of folding key assignments below. A webpack 5 `d(exports, definition)` that only copies `definition`'s keys
+  as getters onto `exports`, guarded by `o(definition, key)`, reads only the functions of the
+  object literals its calls pass, never a reflective value. `Object.create(…)` through the unshadowed `Object`
+  also creates an object, as long as no write may have the key `create` and `Object` is not
+  rebound. A proven dispatch is not read as a possible call of an unknown function on its
+  arguments. A bootstrap that fails one of these shapes is judged as unknown code and noted.
   `Function` and `eval` reached through any forwarder
   (`.call`, `.apply`, `Reflect.apply`) with non-literal text count as code runners. An identity
   write (`O.k = O.k` on the same unaliased prototype, directly or through a substituted helper)
@@ -498,7 +516,8 @@
   no gate could rule it out in any case — that no prototype accessor exists anywhere in the
   program is not a question static analysis can answer. The reference deobfuscator makes the identical assumption
   here and in `inline-object-props`, so this matches the reference deobfuscator; the exposure is hostile hand-written input
-  alone.
+  alone. The default lane makes the same assumption for a webpack module id when it stores a
+  module record into the module cache (`crates/untwist/tests/data/webpack_bootstrap_premise_rows.txt`).
 - **In the conservative comparison mode a string literal that a removed protection helper had demoted becomes a
   directive.** When the protections stage removes a helper from the head of a statement list,
   the reference deobfuscator prints the string-literal statements that now lead it as a directive prologue, and

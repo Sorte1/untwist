@@ -114,7 +114,7 @@ impl<'a> Sites<'_, 'a> {
     fn reach_base(&mut self, base: &Expression<'a>, span: Span) {
         if let Some(name) = self.ambient_base(base) {
             self.out.ambient.push((span, name, false));
-        } else if !self.non_global(base, VALUE_DEPTH) && !self.watched_element(base) {
+        } else if !self.proven_non_global(base) && !self.watched_element(base) {
             self.hit(span);
         }
     }
@@ -155,6 +155,34 @@ impl<'a> Sites<'_, 'a> {
                 && self.fresh.bindings.is_array_function(symbol))
     }
 
+    fn ambient_creation(&self, expr: &Expression<'a>) -> bool {
+        if !self.extended.get() {
+            return false;
+        }
+        let Expression::CallExpression(call) = expr.without_parentheses() else {
+            return false;
+        };
+        let Some(member) = call.callee.without_parentheses().as_member_expression() else {
+            return false;
+        };
+        let Expression::Identifier(root) = member.object().without_parentheses() else {
+            return false;
+        };
+        if call.optional
+            || member.optional()
+            || root.name != "Object"
+            || self.fresh.symbol(root).is_some()
+        {
+            return false;
+        }
+        let created =
+            matches!(self.member_keys(member).as_slice(), [AKey::Named(name)] if name == "create");
+        if created {
+            self.created.borrow_mut().push(call.span);
+        }
+        created
+    }
+
     fn resolvable_param(
         &self,
         id: &IdentifierReference<'a>,
@@ -167,6 +195,20 @@ impl<'a> Sites<'_, 'a> {
             .then_some((symbol, of, index))
     }
 
+    pub(super) fn proven_non_global(&self, expr: &Expression<'a>) -> bool {
+        self.either_pass(|| self.non_global(expr, VALUE_DEPTH))
+    }
+
+    pub(super) fn either_pass(&self, judge: impl Fn() -> bool) -> bool {
+        if self.extended.get() || judge() {
+            return true;
+        }
+        self.extended.set(true);
+        let found = judge();
+        self.extended.set(false);
+        found
+    }
+
     pub(super) fn non_global(&self, expr: &Expression<'a>, depth: u8) -> bool {
         if depth == 0 {
             return false;
@@ -175,6 +217,7 @@ impl<'a> Sites<'_, 'a> {
         if self.fresh.is_fresh(inner)
             || self.is_array_result(inner)
             || self.collection_primitive(inner)
+            || self.ambient_creation(inner)
         {
             return true;
         }
@@ -234,20 +277,32 @@ impl<'a> Sites<'_, 'a> {
     }
 
     fn identifier_non_global(&self, id: &IdentifierReference<'a>, depth: u8) -> bool {
+        if self.identifier_shown_non_global(id, depth) {
+            return true;
+        }
+        self.extended.get()
+            && self
+                .fresh
+                .symbol(id)
+                .is_some_and(|symbol| self.fresh.bindings.holds_dispatched_object(symbol))
+    }
+
+    fn identifier_shown_non_global(&self, id: &IdentifierReference<'a>, depth: u8) -> bool {
         if self
             .fresh
             .literal_init(id)
-            .is_some_and(|init| self.is_array_result(init))
+            .is_some_and(|init| self.is_array_result(init) || self.ambient_creation(init))
         {
             return true;
         }
         let Some((symbol, func, index)) = self.resolvable_param(id) else {
             return false;
         };
-        if let Some(known) = self.param_values.borrow().get(&symbol) {
+        let memo = (symbol, self.extended.get());
+        if let Some(known) = self.param_values.borrow().get(&memo) {
             return *known;
         }
-        self.param_values.borrow_mut().insert(symbol, false);
+        self.param_values.borrow_mut().insert(memo, false);
         let known =
             self.fresh
                 .bindings
@@ -258,7 +313,7 @@ impl<'a> Sites<'_, 'a> {
                         .as_expression()
                         .is_some_and(|value| self.site_non_global(value, depth - 1)),
                 });
-        self.param_values.borrow_mut().insert(symbol, known);
+        self.param_values.borrow_mut().insert(memo, known);
         known
     }
 
@@ -267,7 +322,8 @@ impl<'a> Sites<'_, 'a> {
             return false;
         }
         let inner = expr.without_parentheses();
-        if self.fresh.is_fresh(inner) || self.is_array_result(inner) {
+        if self.fresh.is_fresh(inner) || self.is_array_result(inner) || self.ambient_creation(inner)
+        {
             return true;
         }
         match inner {
@@ -389,7 +445,7 @@ impl<'a> Sites<'_, 'a> {
         member: &MemberExpression<'a>,
         keys: &[AKey<'a>],
     ) {
-        if !self.watching(call.span) {
+        if !self.watching(call.span) || self.table_dispatch(&call.callee) {
             return;
         }
         let unknown = keys.iter().any(open);
@@ -472,9 +528,9 @@ impl<'a> Sites<'_, 'a> {
                     || match value(base_at) {
                         None => true,
                         Some(None) => false,
-                        Some(Some(expr)) => {
+                        Some(Some(expr)) => self.either_pass(|| {
                             self.site_non_global(expr, VALUE_DEPTH) || self.target_fresh(expr, 4)
-                        }
+                        }),
                     }
             })
     }

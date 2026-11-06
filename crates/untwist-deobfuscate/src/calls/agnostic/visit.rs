@@ -528,6 +528,7 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         if escaped
             && parent_keys.iter().any(|key| self.key_origin(key).any())
             && !self.holds_array(it.object())
+            && !self.fresh.bindings.reads_a_proven_getter(it.span())
         {
             let has_sink = self.flow.sink_of(it.span()).is_some();
             for key in parent_keys.iter() {
