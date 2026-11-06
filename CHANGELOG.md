@@ -35,6 +35,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- javascript-obfuscator output passed through terser decodes: a decoder that indexes the array call
+  directly and a string array function that rewrites itself inside its return are now recognised.
+  Such samples kept their string array.
 - Empty or inert blocks and expression statements that run no code (`{}`, `void 0;`) before
   the rotator no longer stop a string array from decoding.
 - A string array whose array function, decoders and rotator all sit in one function body,
@@ -65,9 +68,6 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
-- javascript-obfuscator output passed through terser decodes: a decoder that indexes the array call
-  directly, a string array function that rewrites itself inside its return, and a rotator that calls
-  the array function itself are now recognised. Such samples kept their string array.
 - `--unsafe` decodes a string array beside code that may hold the global object, such as
   core-js's global lookup or Babel's spread and construct helpers, as webcrack does. Such
   bundles were left fully encoded; the default lane still refuses them.
