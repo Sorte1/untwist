@@ -64,6 +64,12 @@ pub const WRAPPER_SITE_IMPURE_ARGUMENT: &str =
 pub const WRAPPER_BODY_NOT_SELF_CONTAINED: &str =
     "the wrapper body reads something other than its own parameters and the stamped machinery, so \
      the clone would resolve it in the call site's scope and it was left in place";
+pub const WRAPPER_BINDING_UNSTABLE: &str =
+    "the wrapper's binding is written again, or it is declared in a block whose name code outside \
+     the block may reach, so a call may reach another function and it was left in place";
+pub const WRAPPER_READ_BEFORE_DECLARATION: &str =
+    "the wrapper is a var bound to a function expression that may be read before its declaration \
+     runs, where it is still undefined, so it was left in place";
 pub const WRAPPER_PARTIAL: &str = "wrapper kept,";
 pub const WRAPPER_ROUNDS: &str = "decoder wrappers did not settle after";
 
@@ -511,6 +517,8 @@ catalogue!(
     WRAPPER_SITE_SCOPED_ARGUMENT,
     WRAPPER_SITE_IMPURE_ARGUMENT,
     WRAPPER_BODY_NOT_SELF_CONTAINED,
+    WRAPPER_BINDING_UNSTABLE,
+    WRAPPER_READ_BEFORE_DECLARATION,
     WRAPPER_PARTIAL,
     TERNARY_HOLDS_A_SCOPE,
     NO_LITERAL_INITIALISER,

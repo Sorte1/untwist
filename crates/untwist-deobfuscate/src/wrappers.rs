@@ -6,6 +6,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_str::Ident;
 use oxc_syntax::operator::AssignmentOperator;
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
@@ -14,11 +15,12 @@ use untwist_core::ast_util::rename::Renames;
 use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::ast_util::search::{expression_at, statement_at};
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::{is_constant_binding, write_reference_count};
+use untwist_core::semantic::{is_constant_binding, scope_hazard, write_reference_count};
 
 use crate::bindings::{reference_symbol, resolved_symbol};
 use crate::fused::{Fused, Member, Walk};
 use crate::init_order::{lend_order_with, note_overflow, sharing_mark, DeclarationSlot, LentOrder};
+use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
 use crate::stamp::{find_stamped_named, is_unedited};
 use crate::units::MachineryDepth;
@@ -34,6 +36,7 @@ pub struct AliasSite {
 
 struct AliasSearch<'s> {
     scoping: &'s Scoping,
+    keeps_machinery: bool,
     statement: Span,
     units: MachineryDepth,
     machinery: FxHashSet<SymbolId>,
@@ -60,6 +63,7 @@ impl<'s> AliasSearch<'s> {
     fn new(scoping: &'s Scoping) -> Self {
         Self {
             scoping,
+            keeps_machinery: false,
             statement: Span::empty(0),
             units: MachineryDepth::every_unit(),
             machinery: FxHashSet::default(),
@@ -71,9 +75,12 @@ impl<'s> AliasSearch<'s> {
         let Self {
             machinery,
             mut found,
+            keeps_machinery,
             ..
         } = self;
-        found.retain(|site| !machinery.contains(&site.symbol));
+        if !keeps_machinery {
+            found.retain(|site| !machinery.contains(&site.symbol));
+        }
         found
     }
 }
@@ -205,12 +212,16 @@ impl<'a> Member<'a> for DeclarationSearch {
 fn alias_scans(
     program: &Program<'_>,
     cx: &mut Cx<'_, '_>,
-    shares: bool,
+    (shares, keeps_machinery): (bool, bool),
 ) -> (Vec<AliasSite>, DeclarationSearch, LentOrder) {
     let mark = sharing_mark(shares, program, cx);
     let (order, sites, declarations) = {
         let scoping = cx.scoping();
-        let member = Fused::new(AliasSearch::new(scoping), DeclarationSearch::default());
+        let search = AliasSearch {
+            keeps_machinery,
+            ..AliasSearch::new(scoping)
+        };
+        let member = Fused::new(search, DeclarationSearch::default());
         let found = lend_order_with(mark, program, scoping, member);
         let member = found.member;
         (found.order, member.first.finish(), member.second)
@@ -437,19 +448,86 @@ fn collect_leftovers<'a>(
     }
 }
 
+fn wrapper_targets<'a>(cx: &Cx<'a, '_>, kept: &[SymbolId]) -> FxHashMap<SymbolId, Ident<'a>> {
+    let scoping = cx.scoping();
+    let guarded = !wrapper_guards_dropped();
+    if guarded && scope_hazard(scoping).is_some() {
+        return FxHashMap::default();
+    }
+    kept.iter()
+        .copied()
+        .filter(|symbol| !guarded || bound_once_in_a_var_scope(scoping, *symbol))
+        .map(|symbol| (symbol, Ident::from_str_in(scoping.symbol_name(symbol), cx)))
+        .collect()
+}
+
+fn bound_once_in_a_var_scope(scoping: &Scoping, symbol: SymbolId) -> bool {
+    is_constant_binding(scoping, symbol)
+        && scoping
+            .scope_flags(scoping.symbol_scope_id(symbol))
+            .is_var()
+}
+
+fn name_reaches(scoping: &Scoping, from: ScopeId, target: SymbolId) -> bool {
+    let home = scoping.symbol_scope_id(target);
+    let name = scoping.symbol_ident(target);
+    for scope in scoping.scope_ancestors(from) {
+        if scope == home {
+            return true;
+        }
+        if scoping.get_binding(scope, name).is_some() {
+            return false;
+        }
+    }
+    false
+}
+
+fn in_target_scope(
+    scoping: &Scoping,
+    site: &AliasSite,
+    targets: &FxHashMap<SymbolId, Ident<'_>>,
+) -> bool {
+    if wrapper_guards_dropped() || !targets.contains_key(&site.source) {
+        return true;
+    }
+    scoping
+        .get_resolved_reference_ids(site.symbol)
+        .iter()
+        .all(|reference| {
+            let from = scoping.get_reference(*reference).scope_id();
+            name_reaches(scoping, from, site.source)
+        })
+}
+
+enum AliasTargets<'k> {
+    Decoders,
+    Wrappers(&'k [SymbolId]),
+}
+
 fn variable_alias_plan<'a>(
     program: &Program<'_>,
     cx: &mut Cx<'a, '_>,
     shares: bool,
+    wanted: AliasTargets<'_>,
 ) -> VariablePlan<'a> {
     let mut plan = VariablePlan::default();
-    let targets = decoder_targets(program, cx);
+    let (targets, keeps_machinery) = match wanted {
+        AliasTargets::Decoders => (decoder_targets(program, cx), false),
+        AliasTargets::Wrappers(kept) => (wrapper_targets(cx, kept), true),
+    };
     if targets.is_empty() {
         return plan;
     }
-    plan.decoders = targets.keys().copied().collect();
+    if !keeps_machinery {
+        plan.decoders = targets.keys().copied().collect();
+    }
 
-    let (sites, declarations, order) = alias_scans(program, cx, shares);
+    let (mut sites, declarations, order) =
+        alias_scans(program, cx, (shares && !keeps_machinery, keeps_machinery));
+    if keeps_machinery {
+        let scoping = cx.scoping();
+        sites.retain(|site| in_target_scope(scoping, site, &targets));
+    }
     let facts = AliasFacts {
         declarations,
         self_writes: self_write_counts(program, &sites),
@@ -529,9 +607,19 @@ impl<'a> Pass<'a> for InlineDecoderWrappers {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         let shares = cx.opts.shares_init_order;
-        let variable_changes = inline_variable_aliases(program, cx, shares);
-        let function_changes = inline_function_wrappers(program, cx);
-        cx.changed_by(variable_changes + function_changes);
+        let variable_changes = inline_variable_aliases(program, cx, shares, AliasTargets::Decoders);
+        let mut rounds = inline_function_wrappers(program, cx);
+        let mut changes = variable_changes + rounds.changes;
+        if !rounds.kept.is_empty() {
+            let kept = std::mem::take(&mut rounds.kept);
+            let renamed =
+                inline_variable_aliases(program, cx, false, AliasTargets::Wrappers(&kept));
+            changes += renamed;
+            if renamed > 0 {
+                changes += inline_function_wrappers(program, cx).changes;
+            }
+        }
+        cx.changed_by(changes);
     }
 }
 
@@ -539,8 +627,9 @@ fn inline_variable_aliases<'a>(
     program: &mut Program<'a>,
     cx: &mut Cx<'a, '_>,
     shares: bool,
+    wanted: AliasTargets<'_>,
 ) -> usize {
-    let plan = variable_alias_plan(program, cx, shares);
+    let plan = variable_alias_plan(program, cx, shares, wanted);
     for (span, reason) in plan.rejected.iter().copied() {
         cx.note(reason, Some(span));
     }

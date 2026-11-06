@@ -14,7 +14,6 @@ unsafe	deobfuscate/direct-eval-may-reach-the-decoder-by-a	a direct eval may reac
 *	inline-decoded-strings/the-string-arrays-rotator-is-not-a-statement	the rotator is not a statement of the program body (the whole program is wrapped in a function) (first seen in seed 2026 sample s2026-85)
 *	inline-decoder-wrappers/a-wrapper-call-site-was-left-alone	a wrapper call site was left alone (first seen in seed 2026 sample s2026-181)
 *	inline-decoder-wrappers/the-alias-may-be-read-before-its-declaration	the alias may be read before its declaration runs (first seen in seed 2026 sample s2026-1)
-*	inline-decoder-wrappers/wrapper-kept	a wrapper around the decoder is kept (first seen in seed 2026 sample s2026-4)
 safe	object-keys-computed-key	transformObjectKeys' built literal is not merged back when a key is computed (first seen in seed 2026 sample s2026-1218)
 *	pipeline/a-self-defending-check-that-reads-a-functions-own	a self-defending check that reads a function's own text keeps the machinery (first seen in seed 2026 sample s2026-10)
 safe	safe-debug-protection-kept	a reference to the debug protection function survives outside the statements the pass removes (first seen in seed 2026 sample s2026-299)

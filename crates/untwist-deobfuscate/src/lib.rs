@@ -18,6 +18,7 @@ pub mod fused;
 pub mod init_order;
 pub mod layers;
 pub mod merge_object_assignments;
+pub mod mutants;
 mod note_set;
 pub mod notes;
 pub mod object_props;

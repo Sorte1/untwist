@@ -119,12 +119,20 @@ fn issue_230_shape_4_the_rotated_index_wrapper_is_flattened() {
 }
 
 #[test]
-fn a_wrapper_that_is_also_referenced_without_a_call_is_kept() {
-    let source = format!("{HEAD}{W}var x = alias;\nalias(4, 5);");
+fn a_constant_alias_of_a_wrapper_is_resolved_and_the_wrapper_inlined() {
+    let code = transform_source(&format!("{HEAD}{W}var x = alias;\nf(x(4, 5));"));
+    assert!(code.contains("f(__DECODE_0__(5 - 938, 4))"), "{code}");
+    assert!(!code.contains("alias"), "{code}");
+    assert!(!code.contains("var x"), "{code}");
+}
+
+#[test]
+fn a_wrapper_that_is_also_passed_as_a_value_is_kept() {
+    let source = format!("{HEAD}{W}f(alias);\nalias(4, 5);");
     let code = transform_source(&source);
     assert!(code.contains("__DECODE_0__(5 - 938, 4)"), "{code}");
     assert!(code.contains("function alias(a, b)"), "{code}");
-    assert!(code.contains("var x = alias;"), "{code}");
+    assert!(code.contains("f(alias);"), "{code}");
     let messages = notes(&source);
     assert!(
         messages
