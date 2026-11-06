@@ -352,9 +352,11 @@
   `super` at the top level of a script or in a non-strict function (its parameter defaults
   included), outside a class field or static block and outside a bound literal method (a method,
   getter or setter of an object literal that is the only value of a `const` or `let` binding, where
-  every use of that binding, and of `this` in those bodies, is `o.k` with a static key, a method
-  key is only ever called as `o.k(…)`, and the body neither reads `arguments` nor is a named
-  function expression); a reference to an undeclared name that is not a
+  every use of that binding, and of `this` in those bodies, is `o.k` with a static or decoded key,
+  a method key is only ever called as `o.k(…)`, and the body neither reads `arguments` nor is a
+  named function expression; a `const` or `let` literal built by keyed assignments and then
+  aliased, as above, counts as the literal it builds through its alias, the functions it was
+  assigned included); a reference to an undeclared name that is not a
   standard ECMAScript global (`Array`, `Object`, `String`, `Number`, `Boolean`, `Symbol`, `BigInt`,
   `Math`, `JSON`, `Reflect`, `Proxy`, `Promise`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`,
   `WeakSet`, `WeakRef`, `FinalizationRegistry`, `Intl`, `Atomics`, `Iterator`, `DataView`, the

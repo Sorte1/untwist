@@ -71,7 +71,8 @@ All notable changes to this project are documented in this file. The format is b
   keys is proven unable to pick a name of the decoder machinery.
 - The default lane reads the keys of an object built by keyed assignments and then aliased
   (javascript-obfuscator's transformObjectKeys) in a rest or spread, as it does for an object literal;
-  such a rest was refused as one that may read any key.
+  such a rest was refused as one that may read any key. Its getters and methods, including the
+  functions assigned to it, count as bound to it like an object literal's.
 - The default lane decodes beside a fresh `new Map()` or `new WeakMap()` that is read and written only
   through its own `get` and `set`; those calls were taken for `Reflect.get` and `Reflect.set` and refused.
 - A decoder wrapper whose binding is written again, or a `var` wrapper called before its
