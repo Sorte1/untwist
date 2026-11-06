@@ -111,6 +111,9 @@ All notable changes to this project are documented in this file. The format is b
   unchanged.
 - The default lane reads `cache[d(1)](key)` on a fresh `new Map()` by the method name `d(1)` decodes to, so a
   memoize cache whose method names were moved into the string array no longer refuses the unit.
+- The default lane reads a control-flow storage object's members as the text they build, so the global-object
+  getter `Function(s.Ncuch(s.IvYXD, d(1)))` and the forwarded `s.PwbRa(Function, text)` that control-flow
+  flattening leaves are judged by their text instead of refusing a stateful unit.
 
 ## [0.2.1] - 2026-11-05
 
