@@ -8,6 +8,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- wasm glue in a webpack bundle is named across modules: the functions an async or sync wasm
+  module imports are renamed in the modules that export them, and the bindings that read its
+  exports in the modules that import it, after the same check that every key and read exists in
+  the supplied module. Webpack 5 bundles using `syncWebAssembly` now unpack.
 - Unpack writes wasm modules embedded as base64, data URIs or byte arrays (wasm-bindgen,
   Emscripten `SINGLE_FILE`, webpack inline assets) to `wasm/*.wasm` beside the output and
   points the literal at that file. Each payload is checked for the `\0asm` header and a size

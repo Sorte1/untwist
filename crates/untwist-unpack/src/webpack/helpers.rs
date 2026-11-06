@@ -236,6 +236,10 @@ fn is_literal(expr: &Expression<'_>) -> bool {
     )
 }
 
+fn is_empty_object(expr: &Expression<'_>) -> bool {
+    matches!(expr.without_parentheses(), Expression::ObjectExpression(object) if object.properties.is_empty())
+}
+
 fn is_closed_call(expr: &Expression<'_>) -> bool {
     let Expression::CallExpression(call) = expr.without_parentheses() else {
         return false;
@@ -269,7 +273,10 @@ fn helper_parts<'k, 'a>(
             ArrowFunctionBody::FunctionBody(body) => (Some(&**body), true),
             _ => (None, true),
         },
-        right => (None, is_literal(right) || is_closed_call(right)),
+        right => (
+            None,
+            is_literal(right) || is_empty_object(right) || is_closed_call(right),
+        ),
     };
     Some((member.property.name.as_str(), body, plain))
 }

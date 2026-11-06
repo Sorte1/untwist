@@ -1,12 +1,15 @@
 pub mod glue;
+pub mod graph;
 pub mod module;
 pub mod payload;
+mod rename;
 pub mod sites;
 
 use oxc_allocator::Allocator;
 use oxc_semantic::SemanticBuilder;
 use untwist_core::parse::{has_error, parse_program};
 
+pub use graph::{GlueImport, ImportValue, ModuleFacts};
 pub use module::{summarize, WasmExport, WasmImport, WasmSummary};
 pub use oxc_span::Span;
 pub use payload::{PayloadRefusal, MAX_WASM_BYTES};
@@ -73,6 +76,33 @@ pub fn rewrite(
         renamed: naming.renamed,
         mismatch: naming.mismatch,
     })
+}
+
+pub fn module_facts(text: &str) -> Option<ModuleFacts> {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, text);
+    if has_error(&parsed.diagnostics) {
+        return None;
+    }
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(&parsed.program)
+        .semantic;
+    Some(graph::facts_of(&semantic))
+}
+
+pub fn rename_names(text: &str, wanted: &[(String, String)]) -> Option<(String, usize)> {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, text);
+    if has_error(&parsed.diagnostics) {
+        return None;
+    }
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(&parsed.program)
+        .semantic;
+    let (edits, renamed) = rename::Renamer::new(&semantic).apply_by_name(wanted);
+    Some((splice(text, edits), renamed))
 }
 
 fn splice(text: &str, mut edits: Vec<(Span, String)>) -> String {

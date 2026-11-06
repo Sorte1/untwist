@@ -7,6 +7,7 @@ mod plugin;
 mod report;
 mod stats;
 mod wasm;
+mod wasm_graph;
 mod write;
 
 pub use bundle::{BundleOutput, FileOutput, ModuleOutput};

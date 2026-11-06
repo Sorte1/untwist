@@ -7,16 +7,15 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::identifier::is_identifier_name;
 use oxc_syntax::keyword::is_reserved_keyword_or_global_object;
 use oxc_syntax::node::NodeId;
-use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::module::WasmSummary;
+use super::rename::Renamer;
 
 const MIN_GLUE_MODULE_LEN: usize = 3;
 const MIN_NAME_LEN: usize = 3;
 const MAX_NAME_LEN: usize = 64;
-const MAX_RENAMED_LEN: usize = 3;
 const EXPORTS_HOLDER: &str = "wasmExports";
 const MISSING_SHOWN: usize = 3;
 const NOT_NAMES: &[&str] = &[
@@ -112,7 +111,7 @@ fn sanitized(name: &str) -> Option<String> {
     is_name(&out).then_some(out)
 }
 
-fn chosen_name(wasm_name: &str, function_name: Option<&String>) -> Option<String> {
+pub fn chosen_name(wasm_name: &str, function_name: Option<&String>) -> Option<String> {
     if is_name(wasm_name) {
         return Some(wasm_name.to_string());
     }
@@ -407,87 +406,6 @@ impl<'s> Glue<'s, '_> {
         wanted
     }
 
-    fn is_exported(&self, id: NodeId) -> bool {
-        self.nodes().ancestor_kinds(id).any(|kind| {
-            matches!(
-                kind,
-                AstKind::ExportNamedDeclaration(_)
-                    | AstKind::ExportDefaultDeclaration(_)
-                    | AstKind::ExportDeclaration(_)
-            )
-        })
-    }
-
-    fn renamable(&self, symbol: SymbolId) -> bool {
-        let scoping = self.scoping();
-        let nodes = self.nodes();
-        if scoping.symbol_name(symbol).len() > MAX_RENAMED_LEN
-            || !scoping.symbol_redeclarations(symbol).is_empty()
-        {
-            return false;
-        }
-        let declaration = scoping.symbol_declaration(symbol);
-        let plain = match nodes.kind(declaration) {
-            AstKind::VariableDeclarator(declarator) => {
-                declarator.id.get_binding_identifier().is_some()
-            }
-            AstKind::Function(function) => function.is_declaration(),
-            _ => false,
-        };
-        if !plain || self.is_exported(declaration) {
-            return false;
-        }
-        scoping.get_resolved_references(symbol).all(|reference| {
-            !matches!(
-                nodes.parent_kind(reference.node_id()),
-                AstKind::ExportSpecifier(_) | AstKind::ExportDefaultDeclaration(_)
-            )
-        })
-    }
-
-    fn has_hazard(&self) -> bool {
-        let scoping = self.scoping();
-        scoping.scope_descendants_from_root().any(|scope| {
-            scoping
-                .scope_flags(scope)
-                .intersects(ScopeFlags::DirectEval | ScopeFlags::With)
-        })
-    }
-
-    fn taken(&self) -> FxHashSet<String> {
-        let scoping = self.scoping();
-        scoping
-            .symbol_names()
-            .map(str::to_string)
-            .chain(
-                scoping
-                    .root_unresolved_references()
-                    .keys()
-                    .map(|name| name.to_string()),
-            )
-            .collect()
-    }
-
-    fn rename_edits(&self, symbol: SymbolId, name: &str, edits: &mut Vec<(Span, String)>) {
-        let scoping = self.scoping();
-        let nodes = self.nodes();
-        let old = scoping.symbol_name(symbol);
-        edits.push((scoping.symbol_span(symbol), name.to_string()));
-        for reference in scoping.get_resolved_references(symbol) {
-            let span = nodes.kind(reference.node_id()).span();
-            let shorthand = match nodes.parent_kind(reference.node_id()) {
-                AstKind::ObjectProperty(property) => property.shorthand,
-                AstKind::AssignmentTargetPropertyIdentifier(_) => true,
-                _ => false,
-            };
-            let text = match shorthand {
-                true => format!("{old}: {name}"),
-                false => name.to_string(),
-            };
-            edits.push((span, text));
-        }
-    }
-
     fn naming(&self, summary: &WasmSummary) -> Naming {
         let missing = self.missing(summary);
         if !missing.is_empty() {
@@ -505,26 +423,12 @@ impl<'s> Glue<'s, '_> {
                 ..Naming::default()
             };
         }
-        if self.has_hazard() {
-            return Naming::default();
+        let (edits, renamed) = Renamer::new(self.semantic).apply(self.wanted(summary));
+        Naming {
+            edits,
+            renamed,
+            mismatch: None,
         }
-        let mut taken = self.taken();
-        let mut done = FxHashSet::default();
-        let mut naming = Naming::default();
-        for (symbol, name) in self.wanted(summary) {
-            if done.contains(&symbol)
-                || taken.contains(&name)
-                || self.scoping().symbol_name(symbol) == name
-                || !self.renamable(symbol)
-            {
-                continue;
-            }
-            done.insert(symbol);
-            self.rename_edits(symbol, &name, &mut naming.edits);
-            taken.insert(name);
-            naming.renamed += 1;
-        }
-        naming
     }
 }
 
