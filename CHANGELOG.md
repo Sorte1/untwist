@@ -9,6 +9,7 @@ All notable changes to this project are documented in this file. The format is b
 ### Changed
 
 - Unminify rounds after the first skip unchanged statements: about 6 % faster on large inputs.
+- The playground worker keeps the decoded strings in one buffer while it runs, so the 10 MB sample peaks about 26 MiB lower (190 MiB instead of 216 MiB).
 
 ### Fixed
 
