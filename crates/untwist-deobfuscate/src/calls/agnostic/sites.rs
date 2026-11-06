@@ -124,6 +124,7 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) forward_calls: FxHashSet<Span>,
     pub(super) pending_texts: RefCell<Vec<String>>,
     pub(super) flow: &'s Flow<'s, 'a>,
+    pub(super) known_rests: FxHashMap<Span, Vec<AKey<'a>>>,
 }
 
 impl<'s, 'a> Sites<'s, 'a> {
@@ -168,6 +169,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             forward_calls: FxHashSet::default(),
             pending_texts: RefCell::default(),
             flow,
+            known_rests: FxHashMap::default(),
         }
     }
 

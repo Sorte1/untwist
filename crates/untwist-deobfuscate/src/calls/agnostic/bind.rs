@@ -226,6 +226,7 @@ pub(super) struct Bindings<'s, 'a> {
     owners: FxHashSet<SymbolId>,
     tables: Vec<SymbolId>,
     uncalled: Vec<u32>,
+    read_through: FxHashSet<u32>,
     pub(super) bootstrap_refusal: Option<&'static str>,
     pub(super) assembled: AssembledTables<'a>,
 }
@@ -256,6 +257,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             owners: FxHashSet::default(),
             tables: Vec::new(),
             uncalled: Vec::new(),
+            read_through: FxHashSet::default(),
             bootstrap_refusal: None,
             assembled: assembled_tables(program, scoping, resolve),
         };
@@ -519,6 +521,12 @@ impl<'s, 'a> Bindings<'s, 'a> {
         }
     }
 
+    fn note_read_through(&mut self, expr: &Expression<'_>) {
+        if let Expression::Identifier(id) = expr.without_parentheses() {
+            self.read_through.insert(id.span.start);
+        }
+    }
+
     pub(super) fn reference_symbol(&self, id: &IdentifierReference<'_>) -> Option<SymbolId> {
         id.reference_id
             .get()
@@ -527,7 +535,19 @@ impl<'s, 'a> Bindings<'s, 'a> {
 }
 
 impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
+    fn visit_object_expression(&mut self, it: &ObjectExpression<'a>) {
+        for property in &it.properties {
+            if let ObjectPropertyKind::SpreadProperty(spread) = property {
+                self.note_read_through(&spread.argument);
+            }
+        }
+        walk_js::walk_object_expression(self, it);
+    }
+
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let (BindingPattern::ObjectPattern(_), Some(init)) = (&it.id, &it.init) {
+            self.note_read_through(init);
+        }
         if let (BindingPattern::BindingIdentifier(id), false) = (&it.id, self.for_left) {
             if let Some(symbol) = id.symbol_id.get() {
                 self.handled.insert(id.span.start);
@@ -598,6 +618,9 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
     }
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if matches!(it.left, AssignmentTarget::ObjectAssignmentTarget(_)) {
+            self.note_read_through(&it.right);
+        }
         if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
             if let Some(symbol) = self.reference_symbol(id) {
                 self.plain_targets.insert(id.span.start);
@@ -717,10 +740,12 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         self.scan_identifier(it);
+        let read_through = self.read_through.contains(&it.span.start);
         if let Some(symbol) = self.reference_symbol(it) {
             let defs = self.entry(symbol);
             defs.set(ESCAPES);
             defs.refs += 1;
+            defs.read_through += u32::from(read_through);
         }
     }
 

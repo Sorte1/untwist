@@ -168,7 +168,20 @@ impl<'s, 'a> Sites<'s, 'a> {
         if let Some(key) = self.proxy_key(call, depth) {
             return key;
         }
+        if self.creates_symbol(call) {
+            return AKey::Index;
+        }
         self.patch_key(key_of(expr))
+    }
+
+    fn creates_symbol(&self, call: &CallExpression<'a>) -> bool {
+        if call.optional || !self.symbol_safe {
+            return false;
+        }
+        let Expression::Identifier(root) = call.callee.without_parentheses() else {
+            return false;
+        };
+        root.name == "Symbol" && self.fresh.symbol(root).is_none()
     }
 
     pub(super) fn str_value(&self, expr: &Expression<'a>, depth: u8) -> Option<String> {

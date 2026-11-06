@@ -271,6 +271,28 @@ impl<'a> Fresh<'_, 'a> {
         self.sealed_field(obj, key)
     }
 
+    pub(super) fn keyed_literal(
+        &self,
+        id: &IdentifierReference<'_>,
+    ) -> Option<&'a ObjectExpression<'a>> {
+        let defs = self.defs(id)?;
+        if defs.fields_written
+            || defs.method_called
+            || defs.callable
+            || defs.refs != defs.read_through
+        {
+            return None;
+        }
+        let [Some(init)] = defs.inits else {
+            return None;
+        };
+        let init: &'a Expression<'a> = init;
+        match init.without_parentheses() {
+            Expression::ObjectExpression(object) => Some(&**object),
+            _ => None,
+        }
+    }
+
     pub(super) fn literal_init(&self, id: &IdentifierReference<'_>) -> Option<&'a Expression<'a>> {
         let defs = self.defs(id)?;
         match defs.inits {
