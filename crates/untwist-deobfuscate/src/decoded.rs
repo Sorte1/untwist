@@ -216,16 +216,19 @@ fn apply_decoded_values<'a>(
     inlined && returned == request.calls.len() && evaluated == returned
 }
 
-fn name_reach_left_to_spelling(
+fn reach_watch_covers(
+    program: &Program<'_>,
     scoping: &Scoping,
     run: &UnitRun<'_, '_>,
-    unsafe_lane: bool,
+    (nested_root, unsafe_lane): (bool, bool),
 ) -> bool {
-    run.request
-        .guard
-        .symbols
-        .iter()
-        .any(|(symbol, _)| reachable_by_name(scoping, *symbol, unsafe_lane))
+    let root = scoping.root_scope_id();
+    !unsafe_lane
+        && !nested_root
+        && !untwist_core::semantic::has_module_syntax(program)
+        && run.request.guard.symbols.iter().all(|(symbol, _)| {
+            scoping.symbol_scope_id(*symbol) == root && !reachable_by_name(scoping, *symbol, false)
+        })
 }
 
 fn spelled_machinery(runs: &[UnitRun<'_, '_>]) -> Vec<bool> {
@@ -585,7 +588,9 @@ fn judge_runs<'p>(
     let spelled: Vec<bool> = spelled_machinery(&runs)
         .into_iter()
         .zip(&runs)
-        .map(|(spelled, run)| spelled && name_reach_left_to_spelling(scoping, run, unsafe_lane))
+        .map(|(spelled, run)| {
+            spelled && !reach_watch_covers(program, scoping, run, (nested_root, unsafe_lane))
+        })
         .collect();
     let (relying, independent): (Vec<_>, Vec<_>) = runs
         .into_iter()
