@@ -2,7 +2,6 @@
 # Open gaps the obfuscation fuzzer has already found; cargo xtask obf-fuzz fails on any other cause. Remove a line when its cause is fixed.
 safe	builtin-replaced-decoded-key	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch (first seen in seed 2026 sample s2026-206)
 unsafe	deobfuscate/direct-eval-may-reach-the-decoder-by-a	a direct eval may reach the decoder by a name a later stage renames or removes (first seen in seed 2026 sample s2026-6)
-safe	inline-decoded-strings/a-statement-that-may-run-code-precedes-the	a statement that may run code precedes the rotator (an import in a module, or a terser-merged statement) (first seen in seed 2026 sample s2026-7)
 *	inline-decoded-strings/decoding-bailed	decoding bailed (first seen in seed 2026 sample s2026-128)
 *	inline-decoded-strings/no-literal-assignment-precedes-this-external-reference	no literal assignment precedes an external reference the decoder reads (first seen in seed 2026 sample s2026-197)
 *	inline-decoded-strings/the-external-variables-declaration-and-its-literal-assignment	inline-decoded-strings: the external variable's declaration and its literal assignment are not direct members of the (first seen in seed 2026 sample s2026-338)
