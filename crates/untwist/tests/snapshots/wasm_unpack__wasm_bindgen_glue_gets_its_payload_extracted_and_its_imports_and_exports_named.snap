@@ -1,0 +1,59 @@
+---
+source: crates/untwist/tests/wasm_unpack.rs
+expression: out.code()
+---
+let wasmExports;
+const T = new TextDecoder("utf-8", {
+  ignoreBOM: true,
+  fatal: true
+});
+let C = null;
+function M() {
+  if (C === null || C.byteLength === 0) {
+    C = new Uint8Array(wasmExports.memory.buffer);
+  }
+  return C;
+}
+function S(e, t) {
+  return T.decode(M().subarray(e, e + t));
+}
+function __wbg_log_9a1b2c(e, t) {
+  console.log(S(e, t));
+}
+function __wbindgen_throw(e, t) {
+  throw new Error(S(e, t));
+}
+function L() {
+  const e = { wbg: {} };
+  e.wbg.__wbg_log_9a1b2c = __wbg_log_9a1b2c;
+  e.wbg.__wbindgen_throw = __wbindgen_throw;
+  return e;
+}
+function F(e, t) {
+  wasmExports = e.exports;
+  C = null;
+  return wasmExports;
+}
+function initSync(e) {
+  const t = L();
+  if (!(e instanceof WebAssembly.Module)) {
+    e = new WebAssembly.Module(e);
+  }
+  const n = new WebAssembly.Instance(e, t);
+  return F(n, e);
+}
+function B(e) {
+  const t = atob(e);
+  const n = new Uint8Array(t.length);
+  for (let r = 0; r < t.length; r++) {
+    n[r] = t.charCodeAt(r);
+  }
+  return n;
+}
+export function greet(e, t) {
+  wasmExports.greet(e, t);
+}
+export function alloc(e) {
+  return wasmExports.__wbindgen_malloc(e, 1);
+}
+initSync(B("./wasm/deobfuscated.wasm"));

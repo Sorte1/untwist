@@ -238,7 +238,7 @@ fn a_module_colliding_with_the_deobfuscated_output_is_refused_not_overwritten() 
         "{refused:?}"
     );
     assert!(
-        planned.iter().all(|file| file.contents != "module code"),
+        planned.iter().all(|file| file.contents != b"module code"),
         "the module overwrote the deobfuscated output"
     );
 }

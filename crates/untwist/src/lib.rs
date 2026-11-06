@@ -6,6 +6,7 @@ mod pipeline;
 mod plugin;
 mod report;
 mod stats;
+mod wasm;
 mod write;
 
 pub use bundle::{BundleOutput, FileOutput, ModuleOutput};
@@ -23,9 +24,10 @@ pub use pipeline::{RefusalSite, SiteAt};
 pub use plugin::{PluginCtor, Plugins, Stage};
 pub use report::{stage_rows, StageReport, StageRow};
 pub use stats::{CollisionStats, DecodeStats, RunStats};
-pub use untwist_core::pass::{IterationTiming, Note, PassCtor, StopReason};
+pub use untwist_core::pass::{IterationTiming, Note, NoteKind, PassCtor, StopReason};
 pub use untwist_rename::RenameMode;
 pub use untwist_unpack::{Mapping, MappingMatcher};
+pub use wasm::{SuppliedWasm, WasmFile, WasmOrigin, WasmReference, WasmSupply};
 pub use write::{
     clean, is_safe_relative, stale_paths, PlanRefusal, PlannedFile, WriteReport, BUNDLE_JSON,
     DEOBFUSCATED,

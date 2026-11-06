@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Unpack writes wasm modules embedded as base64, data URIs or byte arrays (wasm-bindgen,
+  Emscripten `SINGLE_FILE`, webpack inline assets) to `wasm/*.wasm` beside the output and
+  points the literal at that file. Each payload is checked for the `\0asm` header and a size
+  limit, decoded statically and never run; its import and export names name the JS glue when
+  they match it. Remote wasm (`fetch`, `new URL`, `locateFile`, webpack's hashed
+  `.module.wasm`) is listed in the report with the name to supply it under; nothing is fetched.
+
 ### Changed
 
 - Unminify rounds after the first skip unchanged statements: about 6 % faster on large inputs.
