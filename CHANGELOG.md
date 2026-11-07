@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Added
 
 - `--wasm-check off|on|auto` (and Wasm check in the playground settings) decides whether the

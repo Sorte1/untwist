@@ -13,7 +13,7 @@ categories = ["development-tools", "parser-implementations"]
 description = "Rebuild JSX from React.createElement and the automatic jsx/jsxs runtime"
 
 [dependencies]
-untwist-core = { path = "../untwist-core", version = "0.2.1" }
+untwist-core = { path = "../untwist-core", version = "0.3.0" }
 oxc_allocator.workspace = true
 oxc_ast.workspace = true
 oxc_ast_visit.workspace = true
