@@ -45,6 +45,7 @@ pub struct ArrayShape {
 }
 
 mod aliases;
+mod checksum;
 mod cookie;
 mod for_init;
 pub(crate) mod legacy;

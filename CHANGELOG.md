@@ -45,6 +45,13 @@ All notable changes to this project are documented in this file. The format is b
   before its declaration runs, or a `const` that code assigns to, is left undecoded, since both
   throw.
 
+- Plain string arrays rotated by the parseInt checksum rotator (javascript-obfuscator 2.10 to
+  2.18) are decoded: the array is lifted into the array-function form the later releases use, a
+  self-reassigning decoder reads it through a local alias as they do, and the rotator itself is
+  still proven and run. A decoder or array bound by `var`, `let` or `const` to a function
+  expression before the rotator now counts as set when the rotator runs. A function decoder of a
+  plain array is left alone when code runs before the array's declaration.
+
 - String arrays from old javascript-obfuscator builds (a plain `var a = [...]` with a counting
   rotator and a `var b = function (t, x) { ... a[t -= 0] ... }` decoder) were not found, and the
   run said `no string array found`. They are now decoded when the array is only read by its

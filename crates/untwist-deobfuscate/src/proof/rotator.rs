@@ -13,8 +13,8 @@ use super::foreign::ForeignUnits;
 use super::seal::sealed;
 use super::Refusal;
 use crate::mutants::{
-    builtin_imports_dropped, inert_prefix_dropped, object_values_unchecked,
-    rotator_placement_dropped,
+    builtin_imports_dropped, declared_machinery_trusted, inert_prefix_dropped,
+    object_values_unchecked, rotator_placement_dropped,
 };
 use crate::notes;
 
@@ -264,12 +264,39 @@ impl LiteralBindings {
                             && d.init.as_ref().is_none_or(|init| {
                                 self.runs_no_code(scoping, init)
                                     || hoisted_function(scoping, init, self.scope)
+                                    || creates_a_function(init)
                             })
                     })
             }
             _ => false,
         }
     }
+}
+
+fn creates_a_function(init: &Expression<'_>) -> bool {
+    declared_machinery_trusted()
+        || matches!(
+            init.without_parentheses(),
+            Expression::FunctionExpression(_)
+        )
+}
+
+fn declared_before(prefix: &[Statement<'_>]) -> FxHashSet<SymbolId> {
+    prefix
+        .iter()
+        .filter_map(|statement| match statement {
+            Statement::VariableDeclaration(declaration) if !declaration.kind.is_using() => {
+                Some(&declaration.declarations)
+            }
+            _ => None,
+        })
+        .flatten()
+        .filter(|declarator| declarator.init.as_ref().is_some_and(creates_a_function))
+        .filter_map(|declarator| match &declarator.id {
+            BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
+            _ => None,
+        })
+        .collect()
 }
 
 fn hoisted_function(scoping: &Scoping, expr: &Expression<'_>, scope: Option<ScopeId>) -> bool {
@@ -341,10 +368,15 @@ fn imports(statement: &Statement<'_>) -> bool {
     loaded_module(statement).is_some() && !loads_a_codeless_builtin(statement)
 }
 
-pub(super) fn uninitialised(scoping: &Scoping, allowed: &FxHashSet<SymbolId>) -> Option<Span> {
+pub(super) fn uninitialised(
+    scoping: &Scoping,
+    allowed: &FxHashSet<SymbolId>,
+    initialised: &FxHashSet<SymbolId>,
+) -> Option<Span> {
     allowed
         .iter()
         .filter(|symbol| !scoping.symbol_flags(**symbol).is_function())
+        .filter(|symbol| !declared_machinery_trusted() && !initialised.contains(*symbol))
         .map(|symbol| scoping.symbol_span(*symbol))
         .min_by_key(|span| span.start)
 }
@@ -378,7 +410,7 @@ pub fn rotator_refusal_at<'a>(
     if let Some(statement) = later.iter().find(|s| with_observes() && imports(s)) {
         return Some(Refusal::at(notes::CODE_BEFORE_ROTATOR, statement.span()));
     }
-    if let Some(span) = uninitialised(scoping, allowed) {
+    if let Some(span) = uninitialised(scoping, allowed, &declared_before(prefix)) {
         return Some(Refusal::at(notes::MACHINERY_NOT_INITIALISED, span));
     }
     let statement = list.statements.get(list.index)?;

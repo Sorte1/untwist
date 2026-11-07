@@ -17,6 +17,9 @@ use untwist_core::parse::{has_error, parse_with, SourceType};
 use untwist_core::pass::Cx;
 
 use super::array_declaration;
+use super::checksum::{
+    call_the_array_first, checksum_rotator, edit_statement, hoist_array_call, reassigns_itself,
+};
 use super::cookie::cookie_rotation;
 use super::for_init::{declare_assigned_forwarders, hoist_for_init_forwarders};
 use super::prologue::strip_atob_prologues;
@@ -33,9 +36,12 @@ struct Legacy {
     statement: Span,
     code_before: bool,
     rotator: Option<(Span, usize)>,
+    checksum: Option<Span>,
     symbol: SymbolId,
     name_span: Span,
     decoder: Span,
+    hoisted: bool,
+    reassigning: bool,
     reads: Vec<Span>,
 }
 
@@ -63,7 +69,7 @@ fn only_parameter<'a>(function: &'a Function<'a>) -> Option<&'a str> {
     }
 }
 
-fn parameters<'a>(function: &'a Function<'a>) -> Option<(&'a str, &'a str)> {
+pub(super) fn parameters<'a>(function: &'a Function<'a>) -> Option<(&'a str, &'a str)> {
     let [first, second] = function.params.items.as_slice() else {
         return None;
     };
@@ -272,18 +278,29 @@ impl<'a> VisitJs<'a> for ReadScan<'_> {
     }
 }
 
+fn decoder_function<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Function<'a>> {
+    match stmt {
+        Statement::FunctionDeclaration(function)
+            if function.id.is_some() && !function.generator && !function.r#async =>
+        {
+            Some(function)
+        }
+        Statement::VariableDeclaration(declaration) if is_plain_declaration(declaration.kind) => {
+            let [declarator] = declaration.declarations.as_slice() else {
+                return None;
+            };
+            match declarator.init.as_ref() {
+                Some(Expression::FunctionExpression(function)) => Some(function),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 fn decoder_reads(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> Option<Vec<Span>> {
-    let Statement::VariableDeclaration(declaration) = stmt else {
-        return None;
-    };
-    let [declarator] = declaration.declarations.as_slice() else {
-        return None;
-    };
-    let Some(Expression::FunctionExpression(function)) = declarator.init.as_ref() else {
-        return None;
-    };
-    if !is_plain_declaration(declaration.kind) || !indexes_by_first_param(function, scoping, symbol)
-    {
+    let function = decoder_function(stmt)?;
+    if !indexes_by_first_param(function, scoping, symbol) && !reassigns_itself(stmt) {
         return None;
     }
     let mut scan = ReadScan {
@@ -429,12 +446,23 @@ fn legacy_at(
             .map(|count| (next.span(), count))
     });
     let after = index + 1 + usize::from(rotator.is_some());
+    let checksum = rotator
+        .is_none()
+        .then(|| {
+            body.get(after..)?
+                .iter()
+                .find_map(|next| checksum_rotator(next, name, scoping, symbol))
+        })
+        .flatten();
     let references = scoping.get_resolved_reference_ids(symbol).len();
-    let expected = references.checked_sub(usize::from(rotator.is_some()))?;
-    let (decoder, reads) = body
-        .get(after..)?
-        .iter()
-        .find_map(|stmt| decoder_reads(stmt, scoping, symbol).map(|reads| (stmt.span(), reads)))?;
+    let expected =
+        references.checked_sub(usize::from(rotator.is_some()) + usize::from(checksum.is_some()))?;
+    let (decoder, hoisted, reassigning, reads) = body.get(after..)?.iter().find_map(|stmt| {
+        decoder_reads(stmt, scoping, symbol).map(|reads| {
+            let hoisted = matches!(stmt, Statement::FunctionDeclaration(_));
+            (stmt.span(), hoisted, reassigns_itself(stmt), reads)
+        })
+    })?;
     if reads.len() != expected {
         return None;
     }
@@ -442,9 +470,12 @@ fn legacy_at(
         statement: stmt.span(),
         code_before: !top_level || runs_code_before(body, index),
         rotator,
+        checksum,
         symbol,
         name_span: array_name_span(stmt)?,
         decoder,
+        hoisted,
+        reassigning,
         reads,
     })
 }
@@ -508,6 +539,7 @@ fn reached_by_name(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> O
     let names = [scoping.symbol_name(legacy.symbol)];
     let machinery: Vec<Span> = std::iter::once(legacy.statement)
         .chain(legacy.rotator.map(|(span, _)| span))
+        .chain(legacy.checksum)
         .chain(std::iter::once(legacy.decoder))
         .collect();
     if cx.opts.unsafe_transforms {
@@ -538,6 +570,9 @@ fn refusal(
     }
     if let Some(span) = reached_by_name(program, cx, legacy) {
         return Some((notes::LEGACY_ARRAY_REACHED, span));
+    }
+    if legacy.hoisted && legacy.code_before {
+        return Some((notes::LEGACY_DECODER_BEFORE_ARRAY, statement));
     }
     let rotated = legacy.rotator.is_some_and(|(_, count)| count > 0);
     if rotated && !cx.opts.unsafe_transforms && legacy.code_before {
@@ -686,15 +721,38 @@ fn rewrite<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>, legacy: Legacy) -
     if let Some((rotator, _)) = legacy.rotator {
         planned &= statements.remove(rotator);
     }
+    let alias = if legacy.reassigning {
+        let mut alias = None;
+        edit_statement(program, legacy.decoder, |decoder| {
+            alias = hoist_array_call(decoder, &name, &*cx);
+        });
+        let Some(alias) = alias else {
+            return false;
+        };
+        Some(alias)
+    } else {
+        None
+    };
     let mut reads = ExprEdits::new();
     for read in &legacy.reads {
-        planned &= reads.insert(*read, array_call(*read, &name, &*cx));
+        let replacement = match &alias {
+            Some(alias) => Expression::new_identifier(*read, Ident::from_str_in(alias, &*cx), &*cx),
+            None => array_call(*read, &name, &*cx),
+        };
+        planned &= reads.insert(*read, replacement);
     }
     if !planned {
         return false;
     }
-    let wanted = statements.len() + reads.len();
-    let applied = reads.apply(program, cx.allocator(), cx.scoping_mut())
+    let mut checksum = 0;
+    if let Some(span) = legacy.checksum {
+        edit_statement(program, span, |rotator| {
+            checksum = usize::from(call_the_array_first(rotator, &*cx));
+        });
+    }
+    let wanted = statements.len() + reads.len() + usize::from(legacy.checksum.is_some());
+    let applied = checksum
+        + reads.apply(program, cx.allocator(), cx.scoping_mut())
         + statements.apply(program, cx.allocator(), cx.scoping_mut());
     let mut restore = RestoreName {
         name: &name,
