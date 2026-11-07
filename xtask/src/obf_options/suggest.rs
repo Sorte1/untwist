@@ -166,6 +166,9 @@ fn machinery_cause(
     if safe && shape.key_shaped && note.contains(REACH_NOTE) {
         return Some(KEY_REACH);
     }
+    if let Some(cause) = refused_without_array(shape, note, notes) {
+        return Some(cause);
+    }
     if let Some(cause) = by_note(note) {
         return Some(cause);
     }
@@ -190,6 +193,13 @@ fn machinery_cause(
         return None;
     }
     last_resort(lane, detail, note, notes)
+}
+
+fn refused_without_array(shape: Shape, note: &str, notes: &[String]) -> Option<&'static str> {
+    if !shape.version_matrix || !note.contains(super::lanes::NO_ARRAY) {
+        return None;
+    }
+    notes.iter().find_map(|later| refusals::refusal_of(later))
 }
 
 fn last_resort(lane: &str, detail: &str, note: &str, notes: &[String]) -> Option<&'static str> {
@@ -643,5 +653,37 @@ mod tests {
             },
         )]);
         assert_eq!(cause_of(Shape::default(), "unsafe", &checks, &[]), None);
+    }
+
+    #[test]
+    fn a_named_refusal_behind_no_string_array_is_a_refusal_in_the_version_matrix() {
+        let missed = format!("note: deobfuscate: {}", crate::obf_options::lanes::NO_ARRAY);
+        let notes = [
+            missed.clone(),
+            "note: find-string-array: this plain string array may be reached by name through the global object, a with statement or a direct eval".to_string(),
+        ];
+        let checks = BTreeMap::from([(
+            "machinery",
+            Failed {
+                detail: "string_arrays=1",
+                note: &missed,
+            },
+        )]);
+        let matrix = Shape {
+            version_matrix: true,
+            ..Shape::default()
+        };
+        assert_eq!(
+            cause_of(matrix, "safe", &checks, &notes),
+            Some("legacy-array-reached")
+        );
+        assert_eq!(
+            cause_of(Shape::default(), "safe", &checks, &notes),
+            Some(NO_ARRAY)
+        );
+        assert_eq!(
+            cause_of(matrix, "safe", &checks, &notes[..1]),
+            Some(NO_ARRAY)
+        );
     }
 }

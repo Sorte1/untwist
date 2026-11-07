@@ -1,6 +1,6 @@
 pub const INTERPRETED: &str = "no checksum could be extracted from the rotator";
 
-pub const REFUSALS: [(&str, &str, &str); 9] = [
+pub const REFUSALS: [(&str, &str, &str); 10] = [
     (
         "reads a binding outside itself",
         "decoder-reads-outer-binding",
@@ -45,6 +45,11 @@ pub const REFUSALS: [(&str, &str, &str); 9] = [
         "the wrapper body reads something other than its own parameters",
         "wrapper-reads-outside",
         "a decoder wrapper body reads something other than its own parameters and the stamped machinery, so it is not inlined",
+    ),
+    (
+        "this plain string array may be reached by name through the global object",
+        "legacy-array-reached",
+        "safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded",
     ),
 ];
 
