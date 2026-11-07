@@ -483,6 +483,10 @@ impl<'s, 'a> Bindings<'s, 'a> {
         self.defs.entry(symbol)
     }
 
+    pub(super) fn tracks_calls(&self) -> bool {
+        self.tracks_calls
+    }
+
     pub(super) fn symbol_safe(&self) -> bool {
         !self.symbol_rebind
     }

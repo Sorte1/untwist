@@ -105,7 +105,10 @@ impl<'a> Sites<'_, 'a> {
             return Hold::Yes;
         };
         let inner = expr.without_parentheses();
-        if primitive_result(inner) || self.collection_primitive(inner) {
+        if primitive_result(inner)
+            || self.collection_primitive(inner)
+            || self.awaited_array_primitive(inner)
+        {
             return Hold::No;
         }
         match inner {

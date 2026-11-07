@@ -97,6 +97,7 @@ pub(super) fn run<'s, 'a>(
         fresh_calls,
         pristine,
         flow,
+        !untwist_core::semantic::has_module_syntax(program),
     );
     sites.inline_budget = inline_budget(program);
     sites.visit_program(program);
