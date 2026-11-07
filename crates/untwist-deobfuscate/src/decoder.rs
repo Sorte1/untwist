@@ -22,6 +22,8 @@ use crate::stamp::{
 
 const SHORT_DECODER_BODY: usize = 4;
 
+const LEADING_INDEX_STATEMENTS: usize = 2;
+
 pub struct DecoderShape {
     pub statement: Span,
     pub symbol: SymbolId,
@@ -95,11 +97,33 @@ fn indexes_alias(stmt: &Statement<'_>, alias: &str) -> bool {
     })
 }
 
+fn declares_an_array_index(statements: &[Statement<'_>]) -> bool {
+    statements
+        .iter()
+        .take(LEADING_INDEX_STATEMENTS)
+        .any(|statement| {
+            let Statement::VariableDeclaration(declaration) = statement else {
+                return false;
+            };
+            let [declarator] = declaration.declarations.as_slice() else {
+                return false;
+            };
+            matches!(
+                declarator.init.as_ref().map(Expression::without_parentheses),
+                Some(Expression::ComputedMemberExpression(member))
+                    if is_array_call(member.object.without_parentheses())
+            )
+        })
+}
+
 pub fn match_decoder(stmt: &Statement<'_>) -> Option<DecoderShape> {
     let declaration = var_function_or_declaration(stmt)?;
     let body = declaration.function.body.as_ref()?;
     let statements = body.statements.as_slice();
-    if !indexes_through_alias(statements) && !returns_an_array_index(statements) {
+    if !indexes_through_alias(statements)
+        && !returns_an_array_index(statements)
+        && !declares_an_array_index(statements)
+    {
         return None;
     }
     owning_unit(declaration.function)?;

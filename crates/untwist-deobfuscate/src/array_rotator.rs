@@ -18,7 +18,7 @@ fn is_parse_int_call(expr: &Expression<'_>) -> bool {
     identifier_name(callee) == Some("parseInt")
 }
 
-fn push_shift_target<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k str> {
+pub(crate) fn push_shift_target<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k str> {
     let (callee, arguments) = call_parts(expr)?;
     let (object, name) = member_parts(callee)?;
     if name != "push" || arguments.len() != 1 {

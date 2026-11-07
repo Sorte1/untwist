@@ -152,6 +152,12 @@ pub const STRING_ARRAY_DECLARED_UNDEFINED: &str =
     "an entry of the string array reads `undefined`, which a scope here declares or a with \
      statement or direct eval may supply, so the entry may hold that binding's value rather than \
      undefined, and the string array was left undecoded";
+pub const LEGACY_ARRAY_REACHED: &str =
+    "this plain string array may be reached by name through the global object, a with statement \
+     or a direct eval, so it was not turned into a string-array function and was left undecoded";
+pub const LEGACY_ROTATOR_AFTER_CODE: &str =
+    "code runs before this plain string array's rotator and may replace the array methods it \
+     uses, so the rotation was not applied ahead of time and the array was left undecoded";
 pub const SIMPLE_ARRAY_READ_NOT_A_VALUE: &str =
     "a read of this array is called, used as a base, iterated or destructured rather than used as \
      a value, so the array was not inlined";
@@ -566,6 +572,8 @@ catalogue!(
     DECODER_WRITTEN_OUTSIDE,
     MACHINERY_REDECLARED,
     STRING_ARRAY_DECLARED_UNDEFINED,
+    LEGACY_ARRAY_REACHED,
+    LEGACY_ROTATOR_AFTER_CODE,
     SIMPLE_ARRAY_UNDEFINED_NOT_GLOBAL,
     SIMPLE_ARRAY_READ_NOT_A_VALUE,
     SIMPLE_ARRAY_DIRECT_EVAL,
