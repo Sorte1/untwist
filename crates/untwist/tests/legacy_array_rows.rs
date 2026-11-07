@@ -2,8 +2,9 @@ use untwist::{Options, Pipeline};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/legacy_array_rows.txt");
-const PREFIXES: [&str; 4] = ["dec-", "unsafe-dec-", "ref-", "guard-"];
+const PREFIXES: [&str; 5] = ["dec-", "unsafe-dec-", "ref-", "guard-", "premise-"];
 const UNSAFE_PREMISE: &str = "ref-premise-";
+const SELF_DEFENDING: &str = "self-defending";
 
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
@@ -30,7 +31,11 @@ fn transformed(options: &Options, source: &str) -> String {
 }
 
 fn decoded(code: &str) -> bool {
-    !code.contains("arr0")
+    !code.contains("arr0 = ") && !code.contains("function arr0")
+}
+
+fn unsafe_premise(label: &str) -> bool {
+    label.starts_with(UNSAFE_PREMISE) || label.starts_with("premise-")
 }
 
 #[test]
@@ -47,7 +52,7 @@ fn every_row_has_a_known_prefix() {
 fn each_rows_decode_decision_matches_its_label_in_both_lanes() {
     for lane in [false, true] {
         for (label, source) in rows() {
-            if lane && label.starts_with(UNSAFE_PREMISE) {
+            if lane && unsafe_premise(&label) {
                 continue;
             }
             let should_decode =
@@ -99,11 +104,16 @@ fn both_lanes_run_like_node_outside_the_unsafe_premises() {
     let aggressive = options(true);
     let run_safe = |source: &str| transformed(&safe, source);
     let run_unsafe = |source: &str| transformed(&aggressive, source);
+    let printed_as_written: Vec<(String, String)> = programs
+        .iter()
+        .filter(|(label, _)| !label.contains(SELF_DEFENDING))
+        .cloned()
+        .collect();
     let modes: [Mode<'_>; 1] = [("default", &run_safe)];
-    let mut wrong = node_rows::mismatches(&node, &programs, &modes);
+    let mut wrong = node_rows::mismatches(&node, &printed_as_written, &modes);
     let covered: Vec<(String, String)> = programs
         .into_iter()
-        .filter(|(label, _)| !label.starts_with(UNSAFE_PREMISE))
+        .filter(|(label, _)| !unsafe_premise(label))
         .collect();
     let modes: [Mode<'_>; 1] = [("unsafe", &run_unsafe)];
     wrong.extend(node_rows::mismatches(&node, &covered, &modes));

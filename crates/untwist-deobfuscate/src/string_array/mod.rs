@@ -45,7 +45,9 @@ pub struct ArrayShape {
 }
 
 mod aliases;
-mod legacy;
+mod cookie;
+mod for_init;
+pub(crate) mod legacy;
 mod positions;
 mod prologue;
 mod reach;
@@ -231,13 +233,16 @@ fn top_level_arrays<'a>(program: &Program<'a>) -> Vec<&'a str> {
 pub struct FindStringArray {
     simple_arrays_seen: Option<FxHashSet<Span>>,
     refused_by_decode: RefusedByDecode,
+    legacy_searched: bool,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
+    legacy::forget_lifts();
     Box::new(FindStringArray::default())
 }
 
 pub fn boxed_with<'a>(refused_by_decode: RefusedByDecode) -> Box<dyn Pass<'a> + 'a> {
+    legacy::forget_lifts();
     Box::new(FindStringArray {
         refused_by_decode,
         ..FindStringArray::default()
@@ -725,8 +730,11 @@ impl<'a> Pass<'a> for FindStringArray {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        if legacy::lift_legacy_array(program, cx) {
-            return;
+        if !self.legacy_searched {
+            if legacy::lift_legacy_array(program, cx) {
+                return;
+            }
+            self.legacy_searched = true;
         }
         stamp_wrapped_array(program, cx, &self.refused_by_decode);
         let (sites, simple) = search_aliases(program, cx.scoping());

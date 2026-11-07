@@ -40,6 +40,9 @@ All notable changes to this project are documented in this file. The format is b
   the program spells its name; it refuses only when the name is reached through the global object
   or literal code text. Old builds with one-letter machinery names (`a`, `b`) now decode there,
   including the lazy `atob` set-up their base64 decoders install.
+- Old-builder string arrays inside a webpack module or function, with a self-defending cookie
+  rotator, rc4 decoders and wrappers in `for` heads or called in place, were not found. They
+  now decode under `--unsafe`; the default lane decodes them when no rotation has to be applied.
 
 ## [0.3.0] - 2026-11-07
 

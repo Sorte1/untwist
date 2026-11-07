@@ -29,7 +29,7 @@ use crate::notes;
 use crate::proof::has_with_statement;
 use crate::stamp::{find_stamped_named, is_unedited};
 use crate::units::MachineryDepth;
-use crate::wrapper_calls::inline_function_wrappers;
+use crate::wrapper_calls::{inline_function_wrappers, inline_immediate_wrappers};
 
 pub const ALIAS_FORM_CHECKS: &str = "inline-decoder-wrappers/alias-form-checks";
 
@@ -754,6 +754,15 @@ impl<'a> Pass<'a> for InlineDecoderWrappers {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         let shares = cx.opts.shares_init_order;
+        let immediate = if crate::string_array::legacy::lifted_any() {
+            inline_immediate_wrappers(program, cx)
+        } else {
+            0
+        };
+        if immediate > 0 {
+            cx.changed_by(immediate);
+            return;
+        }
         let variable_changes = inline_variable_aliases(program, cx, shares, AliasTargets::Decoders);
         let mut rounds = inline_function_wrappers(program, cx);
         let mut changes = variable_changes + rounds.changes;

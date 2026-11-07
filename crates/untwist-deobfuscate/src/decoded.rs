@@ -29,7 +29,7 @@ use crate::proof::{
     reachable_by_name, scan_pending, EscapeContext, PendingSite, PreScan, ProtoWrite,
 };
 use crate::stamp::{
-    is_unedited, unstamp_block_note, unstamp_blocked, unstamp_names, RefusedByDecode,
+    is_unedited, unstamp_block_note, unstamp_blocked, unstamp_names, DynamicScopes, RefusedByDecode,
 };
 
 mod budget;
@@ -226,11 +226,12 @@ fn reach_watch_covers(
     nested_root: bool,
 ) -> bool {
     let root = scoping.root_scope_id();
-    !nested_root
-        && !untwist_core::semantic::has_module_syntax(program)
-        && run.request.guard.symbols.iter().all(|(symbol, _)| {
-            scoping.symbol_scope_id(*symbol) == root && !reachable_by_name(scoping, *symbol)
-        })
+    let global = !nested_root && !untwist_core::semantic::has_module_syntax(program);
+    let dynamic = DynamicScopes::of(scoping);
+    run.request.guard.symbols.iter().all(|(symbol, _)| {
+        let local = !global || scoping.symbol_scope_id(*symbol) != root;
+        !reachable_by_name(scoping, *symbol) && !(local && dynamic.sees_with(scoping, *symbol))
+    })
 }
 
 fn spelled_machinery(runs: &[UnitRun<'_, '_>]) -> Vec<bool> {

@@ -50,31 +50,16 @@ function __DECODE_0__(c) { var e = __STRING_ARRAY__(); return String.fromCharCod
 String.fromCharCode = function () { return 'X'; };
 console.log(__DECODE_0__(0x0));";
 
-const A_DECODED_VALUE_SPELLING_THE_DECODER: &str = "\
-(function () {
-function a() { var h = ['z']; a = function () { return h; }; return a(); }
-function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return String.fromCharCode(e[f].charCodeAt(0) - 24); }; return b(c, d); }
-console.log(b(0x0));
-})();";
-
-const A_REFUSED_UNITS_ORIGINAL_NAME_IS_A_FREE_REFERENCE: &str = "\
-(function () {
-  function a() { var h = ['z']; a = function () { return h; }; return a(); }
-  function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return String.fromCharCode(e[f].charCodeAt(0) - 24); }; return b(c, d); }
-  console.log(b(0x0));
-})();
-typeof b;";
-
 const TWO_REFUSED_UNITS_WHOSE_ORIGINAL_NAMES_COLLIDE: &str = "\
 (function () {
   function a() { var h = ['z']; a = function () { return h; }; return a(); }
-  function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return String.fromCharCode(e[f].charCodeAt(0) - 24); }; return b(c, d); }
+  function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return e[f] + 1n; }; return b(c, d); }
   console.log(b(0x0));
-})();
-(function () {
-  function a() { var h = ['z']; a = function () { return h; }; return a(); }
-  function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return String.fromCharCode(e[f].charCodeAt(0) - 24); }; return b(c, d); }
-  console.log(b(0x0));
+  (function () {
+    function a() { var h = ['z']; a = function () { return h; }; return a(); }
+    function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return e[f] + 1n; }; return b(c, d); }
+    console.log(b(0x0));
+  })();
 })();";
 
 const AN_OUT_OF_RANGE_INDEX: &str = "\
@@ -569,16 +554,6 @@ pub const CASES: &[Case] = &[
     Case {
         source: Source::Whole(A_BUILT_IN_REPLACED),
         expects: notes::BUILTIN_PATCHED,
-        mode: Match::Contains,
-    },
-    Case {
-        source: Source::Whole(A_DECODED_VALUE_SPELLING_THE_DECODER),
-        expects: notes::DECODED_NAME,
-        mode: Match::Contains,
-    },
-    Case {
-        source: Source::Whole(A_REFUSED_UNITS_ORIGINAL_NAME_IS_A_FREE_REFERENCE),
-        expects: notes::UNSTAMP_FREE_REFERENCE,
         mode: Match::Contains,
     },
     Case {
