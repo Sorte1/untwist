@@ -20,6 +20,10 @@ All notable changes to this project are documented in this file. The format is b
   terser after obfuscation. Its `EXPECT` records today's results, most of them misses on releases
   before 2.19.
 
+- The version matrix files a cell whose plain string array is refused because code may reach it
+  by name through the global object as that refusal (`legacy-array-reached`), not as a missed
+  string array.
+
 ### Fixed
 
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
