@@ -44,6 +44,7 @@ pub struct ArrayShape {
 }
 
 mod aliases;
+mod legacy;
 mod positions;
 mod reach;
 
@@ -712,6 +713,9 @@ impl<'a> Pass<'a> for FindStringArray {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        if legacy::lift_legacy_array(program, cx) {
+            return;
+        }
         stamp_wrapped_array(program, cx, &self.refused_by_decode);
         let (sites, simple) = search_aliases(program, cx.scoping());
         let unchanged = *cx.changes;

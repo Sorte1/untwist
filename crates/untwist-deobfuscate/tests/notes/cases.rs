@@ -197,6 +197,10 @@ const AN_ARRAY_NAME_DECLARED_IN_A_BLOCK: &str =
 
 const AN_ARRAY_READING_A_DECLARED_UNDEFINED: &str = "(function(undefined){\nfunction qa(){ var h=['s0',undefined,'s2']; qa=function(){return h;}; return qa(); }\nfunction qb(i){ var e=qa(); return e[i] + '|'; }\nconsole.log(qb(0)); console.log(qb(1));\n})('X');";
 
+const A_PLAIN_ARRAY_READ_THROUGH_THE_GLOBAL_OBJECT: &str = "var qa = ['s0', 's1'];\nvar qb = function (i) { var e = qa[i -= 0]; return e; };\nconsole.log(qb('0x0'), globalThis[['q', 'a'].join('')]);";
+
+const A_PLAIN_ARRAY_ROTATED_AFTER_CODE: &str = "console.log(1);\nvar qa = ['s0', 's1'];\n!function (p, q) { !function (r) { for (; --r;) p.push(p.shift()); }(++q); }(qa, 1);\nvar qb = function (i) { var e = qa[i -= 0]; return e; };\nconsole.log(qb('0x0'));";
+
 const REACHABILITY_BUDGET: usize = 4096;
 
 fn a_reachability_chain_past_the_budget() -> String {
@@ -669,6 +673,16 @@ pub const CASES: &[Case] = &[
     Case {
         source: Source::Whole(AN_ARRAY_NAME_DECLARED_IN_A_BLOCK),
         expects: notes::MACHINERY_REDECLARED,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::DefaultLane(A_PLAIN_ARRAY_READ_THROUGH_THE_GLOBAL_OBJECT),
+        expects: notes::LEGACY_ARRAY_REACHED,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::DefaultLane(A_PLAIN_ARRAY_ROTATED_AFTER_CODE),
+        expects: notes::LEGACY_ROTATOR_AFTER_CODE,
         mode: Match::Contains,
     },
     Case {

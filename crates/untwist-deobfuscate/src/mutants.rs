@@ -120,3 +120,14 @@ pub fn drop_straight_line_guards_for_tests(on: bool) {
 pub(crate) fn straight_line_guards_dropped() -> bool {
     STRAIGHT_LINE_GUARDS_OFF.load(Ordering::Relaxed)
 }
+
+static LEGACY_ARRAY_GUARDS_OFF: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_legacy_array_guards_for_tests(on: bool) {
+    LEGACY_ARRAY_GUARDS_OFF.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn legacy_array_guards_dropped() -> bool {
+    LEGACY_ARRAY_GUARDS_OFF.load(Ordering::Relaxed)
+}

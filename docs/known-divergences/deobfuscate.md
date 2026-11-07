@@ -153,6 +153,25 @@
   `fixtures/deobfuscate-gaps/two-string-array-units.js` pins the end-to-end outcome that both units
   decode, in `report.iterations == 2` (one working round, then the round that confirms it).
 
+- **A plain top-level string array from an old javascript-obfuscator build is decoded**. Builds
+  before the self-reassigning array function emit `var a = [...]`, then a rotator that counts down
+  a literal (`!function (b, t) { !function (t) { for (; --t;) b.push(b.shift()); }(++t); }(a, 293)`,
+  or the same loop in a `var f = function (t) { while (--t) { ... } }; f(++t)`), then a
+  `var b = function (t, x) { ... a[t -= 0] ... }` decoder. `find-string-array` rewrites that
+  array into the array-function form the rest of the stage proves: the rotation is applied to the
+  literal, the rotator is removed and every `a[...]` becomes `a()[...]`. It does this only when
+  the array is a `var` of string entries in the program body, read nowhere but as `a[...]` inside
+  one `var` decoder that follows it (plus the rotator's argument), never written, deleted,
+  redeclared or reached through a `with` statement or direct eval. In the default lane it also
+  needs the global reach check the decode uses for a top-level array function to find no read or
+  write of the name through the global object, and, when the rotation is not zero, no code before
+  the array other than function declarations, so nothing in the program can replace `push` or
+  `shift` before the rotator runs. In the unsafe lane those two checks follow that lane's
+  premises (built-ins pristine, no global reach), and a name a string or property name spells is
+  refused as it is for an array function. A refused array is left as written, with a note.
+  Pinned by `crates/untwist/tests/legacy_array_rows.rs` (node-checked in both lanes; the refused
+  rows print something else once the checks are switched off).
+
 - **A decoder wrapper is inlined only when its body reads nothing but its own parameters**. The reference deobfuscator's `inlineFunctionCall` (`ast-utils/inline.ts:128-163`) clones the
   wrapper's returned expression to the call site and substitutes parameters by name, so any other
   identifier in that body re-resolves in the call site's scope, and `this`, `arguments`,
