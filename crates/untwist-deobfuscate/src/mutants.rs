@@ -142,3 +142,14 @@ pub fn trust_unsafe_machinery_names_for_tests(on: bool) {
 pub(crate) fn unsafe_names_trusted() -> bool {
     UNSAFE_NAMES_TRUSTED.load(Ordering::Relaxed)
 }
+
+static EARLY_READ_GUARDS_OFF: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_early_read_guards_for_tests(on: bool) {
+    EARLY_READ_GUARDS_OFF.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn early_read_guards_dropped() -> bool {
+    EARLY_READ_GUARDS_OFF.load(Ordering::Relaxed)
+}
