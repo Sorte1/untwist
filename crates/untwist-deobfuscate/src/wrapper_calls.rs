@@ -634,3 +634,63 @@ pub fn inline_function_wrappers<'a>(
     }
     rounds
 }
+
+fn immediate_wrapper<'k, 'p>(
+    expr: &'k Expression<'p>,
+    scoping: &Scoping,
+) -> Option<(&'k Function<'p>, &'k AVec<'p, Argument<'p>>)> {
+    let call = called_expression(expr)?;
+    let Expression::FunctionExpression(function) = call.callee.without_parentheses() else {
+        return None;
+    };
+    let names = param_names(function)?;
+    let returned = returned_expression(function)?;
+    let (callee, arguments) = call_parts(returned)?;
+    let wraps = function.id.is_none()
+        && !function.r#async
+        && !function.generator
+        && names.len() >= 2
+        && arguments.len() >= 2
+        && identifier_name(callee).and_then(decoder_index).is_some()
+        && uses_any_param(arguments, &names)
+        && body_is_self_contained(function, scoping)
+        && arguments_are_substitutable(&call.arguments)
+        && !arguments_hold_a_scope(&call.arguments);
+    wraps.then_some((&**function, &call.arguments))
+}
+
+struct ImmediateSearch<'s, 'c, 'a, 'x> {
+    scoping: &'s Scoping,
+    cx: &'c Cx<'a, 'x>,
+    edits: ExprEdits<'a>,
+}
+
+impl<'p> VisitJs<'p> for ImmediateSearch<'_, '_, '_, '_> {
+    fn visit_expression(&mut self, it: &Expression<'p>) {
+        if let Some((function, arguments)) = immediate_wrapper(it, self.scoping) {
+            if let Some(inlined) = inline_function_call(function, arguments, self.cx) {
+                if self.edits.insert(it.span(), inlined) {
+                    return;
+                }
+            }
+        }
+        walk_js::walk_expression(self, it);
+    }
+}
+
+pub fn inline_immediate_wrappers<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) -> usize {
+    let edits = {
+        let view: &Program<'_> = program;
+        let mut search = ImmediateSearch {
+            scoping: cx.scoping(),
+            cx: &*cx,
+            edits: ExprEdits::new(),
+        };
+        search.visit_program(view);
+        search.edits
+    };
+    if edits.is_empty() {
+        return 0;
+    }
+    edits.apply(program, cx.allocator(), cx.scoping_mut())
+}

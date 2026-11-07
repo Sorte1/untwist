@@ -161,7 +161,7 @@
   array into the array-function form the rest of the stage proves: the rotation is applied to the
   literal, the rotator is removed and every `a[...]` becomes `a()[...]`. It does this only when
   the array is a `var` of string entries in the program body, read nowhere but as `a[...]` inside
-  one `var` decoder that follows it (plus the rotator's argument), never written, deleted,
+  one `var` decoder that follows it and reads it first by its own first parameter, as the old templates do (`a[t -= 0]`, `t = t - 0; var e = a[t]`, `a[t = +t]`), plus the rotator's argument, never written, deleted,
   redeclared or reached through a `with` statement or direct eval. In the default lane it also
   needs the global reach check the decode uses for a top-level array function to find no read or
   write of the name through the global object, and, when the rotation is not zero, no code before
@@ -177,6 +177,18 @@
   `legacy_array_sabotage.rs` (the refused rows print something else once the checks are off).
   A webpack bootstrap whose keys are decoder calls is refused in the default lane, because those
   keys are not known before the decode.
+  The same shape is found at the top of a function body too (a webpack module or an IIFE). There
+  the default lane applies a rotation only when it is zero, since code outside the function may
+  have run first; the unsafe lane applies it under its pristine built-ins. A self-defending
+  rotator (an object with `setCookie`, `removeCookie`, `getCookie`, where `getCookie` runs the
+  countdown with a literal count only when a regular expression accepts `removeCookie`'s own
+  source text) is applied when that text, read from the input, passes the check; when it fails,
+  the original loops until it runs out of memory, so the array is left as written. Once an
+  array is lifted, decoder wrappers the minifier moved into a `for (var ...)` head, or declared
+  with a bare `var w;` and assigned once in the same function, are turned back into `var`
+  statements, and a wrapper called in place (`function (a, b) { return d(a - 1, b); }(2, k)`)
+  is inlined like a named one. A decoded string that spells a machinery name only refuses a
+  unit when the name is a global property or a direct eval or `with` can see it.
 
 - **A decoder wrapper is inlined only when its body reads nothing but its own parameters**. The reference deobfuscator's `inlineFunctionCall` (`ast-utils/inline.ts:128-163`) clones the
   wrapper's returned expression to the call site and substitutes parameters by name, so any other

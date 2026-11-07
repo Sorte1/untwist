@@ -1,10 +1,15 @@
 pub const INTERPRETED: &str = "no checksum could be extracted from the rotator";
 
-pub const REFUSALS: [(&str, &str, &str); 10] = [
+pub const REFUSALS: [(&str, &str, &str); 11] = [
     (
         "reads a binding outside itself",
         "decoder-reads-outer-binding",
         "a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone",
+    ),
+    (
+        "a decoder of the unit is used other than as the callee of a call",
+        "decoder-used-as-value",
+        "a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's calls are left alone",
     ),
     (
         "the string array is reachable from code outside its declaration",
