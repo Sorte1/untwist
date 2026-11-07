@@ -13,11 +13,12 @@ use untwist_core::parse::{has_error, parse_with, SourceType};
 use untwist_core::pass::Cx;
 
 use super::array_declaration;
+use super::prologue::strip_atob_prologues;
 use crate::array_rotator::push_shift_target;
 use crate::calls::agnostic::{global_reach, ReachWatch};
+use crate::decoded::syntactic_global_reach;
 use crate::mutants::legacy_array_guards_dropped;
 use crate::notes;
-use crate::proof::{reachable_by_name, scan_names};
 use crate::stamp::{declaration_symbol, string_array_unit, DynamicScopes};
 
 const INNER_NAMES: [&str; 2] = ["a", "b"];
@@ -343,10 +344,7 @@ fn runs_code_before(body: &[Statement<'_>], index: usize) -> bool {
 fn reached_by_name(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> Option<Span> {
     let scoping = cx.scoping();
     let script = !cx.opts.nested_root && !untwist_core::semantic::has_module_syntax(program);
-    if cx.opts.unsafe_transforms
-        || !script
-        || scoping.symbol_scope_id(legacy.symbol) != scoping.root_scope_id()
-    {
+    if !script || scoping.symbol_scope_id(legacy.symbol) != scoping.root_scope_id() {
         return None;
     }
     let names = [scoping.symbol_name(legacy.symbol)];
@@ -354,6 +352,10 @@ fn reached_by_name(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> O
         .chain(legacy.rotator.map(|(span, _)| span))
         .chain(std::iter::once(legacy.decoder))
         .collect();
+    if cx.opts.unsafe_transforms {
+        let strings = rustc_hash::FxHashMap::default();
+        return syntactic_global_reach((program, scoping), &strings, &names, &machinery);
+    }
     let watch = ReachWatch {
         names: &names,
         props: &names,
@@ -361,18 +363,6 @@ fn reached_by_name(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> O
         observe: false,
     };
     global_reach(program, scoping, (None, &machinery), watch).reach
-}
-
-fn spelled(program: &Program<'_>, cx: &Cx<'_, '_>, symbol: SymbolId) -> Option<Span> {
-    let scoping = cx.scoping();
-    if !reachable_by_name(scoping, symbol, cx.opts.unsafe_transforms) {
-        return None;
-    }
-    scan_names(program, &[scoping.symbol_name(symbol)])
-        .spelled
-        .into_iter()
-        .next()
-        .flatten()
 }
 
 fn refusal(
@@ -387,9 +377,6 @@ fn refusal(
     let statement = program.body[legacy.array].span();
     if let Some(note) = DynamicScopes::of(scoping).refusal(scoping, legacy.symbol) {
         return Some((note, statement));
-    }
-    if let Some(span) = spelled(program, cx, legacy.symbol) {
-        return Some((notes::MACHINERY_NAME_SPELLED, span));
     }
     if let Some(span) = reached_by_name(program, cx, legacy) {
         return Some((notes::LEGACY_ARRAY_REACHED, span));
@@ -490,7 +477,16 @@ fn rewrite<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>, legacy: Legacy) -
     let applied = reads.apply(program, cx.allocator(), cx.scoping_mut())
         + statements.apply(program, cx.allocator(), cx.scoping_mut());
     let restored = restore_name(program, legacy.array, legacy.name_span);
-    cx.changed_by(applied);
+    let stripped = if cx.opts.unsafe_transforms {
+        program
+            .body
+            .iter_mut()
+            .find(|stmt| stmt.span() == legacy.decoder)
+            .map_or(0, strip_atob_prologues)
+    } else {
+        0
+    };
+    cx.changed_by(applied + stripped);
     if applied != wanted || !restored {
         cx.note(
             notes::planned_and_applied_edits(super::PASS, wanted, applied),

@@ -89,3 +89,42 @@ impl<'p> Watched<'p> {
         Some(self.reached_at(span, found.bootstrap))
     }
 }
+
+impl<'p> Watched<'p> {
+    pub(super) fn syntactically_reached(
+        self,
+        (program, scoping): (&'p Program<'p>, &Scoping),
+        plan: &DecodePlan<'p>,
+        runs: &[UnitRun<'p, '_>],
+    ) -> Option<Reached> {
+        let strings = decoded_strings(runs);
+        let machinery = plan.machinery_spans();
+        let root = scoping.root_scope_id();
+        let mut units = FxHashSet::default();
+        let mut first: Option<Span> = None;
+        for run in runs {
+            if !self.units.contains(&run.request.unit) {
+                continue;
+            }
+            let names: Vec<&str> = run
+                .request
+                .guard
+                .symbols
+                .iter()
+                .filter(|(symbol, _)| scoping.symbol_scope_id(*symbol) == root)
+                .map(|(_, name)| *name)
+                .collect();
+            let reached = super::syntactic_reach::syntactic_global_reach(
+                (program, scoping),
+                &strings,
+                &names,
+                &machinery,
+            );
+            if let Some(span) = reached {
+                units.insert(run.request.unit);
+                first.get_or_insert(span);
+            }
+        }
+        Some((units, first?, None))
+    }
+}

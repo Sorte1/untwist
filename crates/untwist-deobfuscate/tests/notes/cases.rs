@@ -51,9 +51,11 @@ String.fromCharCode = function () { return 'X'; };
 console.log(__DECODE_0__(0x0));";
 
 const A_DECODED_VALUE_SPELLING_THE_DECODER: &str = "\
+(function () {
 function a() { var h = ['z']; a = function () { return h; }; return a(); }
 function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return String.fromCharCode(e[f].charCodeAt(0) - 24); }; return b(c, d); }
-console.log(b(0x0));";
+console.log(b(0x0));
+})();";
 
 const A_REFUSED_UNITS_ORIGINAL_NAME_IS_A_FREE_REFERENCE: &str = "\
 (function () {

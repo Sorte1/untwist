@@ -34,10 +34,9 @@ pub fn declared_text<'a>(stmt: &Statement<'a>) -> &'a str {
     id.map_or("", |id| id.name.as_str())
 }
 
-pub fn reachable_by_name(scoping: &Scoping, symbol: SymbolId, unsafe_lane: bool) -> bool {
+pub fn reachable_by_name(scoping: &Scoping, symbol: SymbolId) -> bool {
     let scope = scoping.symbol_scope_id(symbol);
-    (unsafe_lane && scope == scoping.root_scope_id())
-        || scoping.scope_flags(scope).contains(ScopeFlags::DirectEval)
+    scoping.scope_flags(scope).contains(ScopeFlags::DirectEval)
 }
 
 fn slot_of(names: &[&str], name: &str) -> Option<usize> {

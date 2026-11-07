@@ -22,6 +22,7 @@ use crate::bridge::{
     build_requests_named, decoded_expression, primitive_value, DecodePlan, DecodeRequest,
 };
 use crate::calls::normalize_calls;
+use crate::mutants::unsafe_names_trusted;
 use crate::notes;
 use crate::proof::{
     build_escape_context, builtins_assumed_pristine, encode_names, names_machinery,
@@ -35,6 +36,8 @@ mod budget;
 mod conflict;
 mod reach;
 mod root_keys;
+mod syntactic_reach;
+pub(crate) use syntactic_reach::syntactic_global_reach;
 mod values;
 
 use budget::UnitFuel;
@@ -220,14 +223,13 @@ fn reach_watch_covers(
     program: &Program<'_>,
     scoping: &Scoping,
     run: &UnitRun<'_, '_>,
-    (nested_root, unsafe_lane): (bool, bool),
+    nested_root: bool,
 ) -> bool {
     let root = scoping.root_scope_id();
-    !unsafe_lane
-        && !nested_root
+    !nested_root
         && !untwist_core::semantic::has_module_syntax(program)
         && run.request.guard.symbols.iter().all(|(symbol, _)| {
-            scoping.symbol_scope_id(*symbol) == root && !reachable_by_name(scoping, *symbol, false)
+            scoping.symbol_scope_id(*symbol) == root && !reachable_by_name(scoping, *symbol)
         })
 }
 
@@ -566,6 +568,17 @@ fn guard_and_reach<'p>(
     (reached, Some(found.writes))
 }
 
+fn unsafe_reach<'p>(
+    runs: &[UnitRun<'p, '_>],
+    plan: &DecodePlan<'p>,
+    (program, scoping, nested_root): (&'p Program<'p>, &Scoping, bool),
+) -> Option<reach::Reached> {
+    if nested_root || unsafe_names_trusted() {
+        return None;
+    }
+    reach::watched(program, scoping, runs)?.syntactically_reached((program, scoping), plan, runs)
+}
+
 fn judge_runs<'p>(
     decoded: &mut Decoded,
     runs: Vec<UnitRun<'p, '_>>,
@@ -578,7 +591,11 @@ fn judge_runs<'p>(
         value_map_for(&runs, plan, program, scoping, cache);
     let (reached, late_writes) =
         guard_and_reach(&runs, plan, (program, scoping, nested_root), &mut value_map);
-    let reached = reached.filter(|_| !unsafe_lane);
+    let reached = if unsafe_lane {
+        unsafe_reach(&runs, plan, (program, scoping, nested_root))
+    } else {
+        reached
+    };
     let late = late_writes.as_deref();
     let (resolved_roots, resolved_span, code_text) = if any_builtin_roots_touched {
         judge_resolved_roots(cache, (program, scoping), (plan, late), &runs, &value_map)
@@ -588,9 +605,7 @@ fn judge_runs<'p>(
     let spelled: Vec<bool> = spelled_machinery(&runs)
         .into_iter()
         .zip(&runs)
-        .map(|(spelled, run)| {
-            spelled && !reach_watch_covers(program, scoping, run, (nested_root, unsafe_lane))
-        })
+        .map(|(spelled, run)| spelled && !reach_watch_covers(program, scoping, run, nested_root))
         .collect();
     let (relying, independent): (Vec<_>, Vec<_>) = runs
         .into_iter()

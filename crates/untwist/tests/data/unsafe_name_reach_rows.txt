@@ -1,0 +1,14 @@
+dec-param-static-read|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} function f(r){return r.a}console[b(0)](b(1),f({a:2}));
+dec-object-key-string|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} var o={};Object.defineProperty(o,"a",{value:3});console[b(0)](b(1),o.a,"a b");
+dec-method-this|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} var o={a:4,g:function(){return this.a}};console[b(0)](b(1),o.g());
+dec-timer-function|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} setTimeout(function(){console[b(0)](b(1))},0);
+dec-code-text-without-the-names|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} console[b(0)](b(1),Function("return 1+1")());
+dec-decoded-key-on-a-local|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} var o={a:5};console[b(0)](b(1),o[b(2)]);
+ref-global-static-read|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} console[b(0)](b(1),typeof globalThis.a);
+ref-top-level-this|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} console[b(0)](b(1),typeof this.b);
+ref-global-alias|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} var g=globalThis;console[b(0)](b(1),typeof g.a);
+premise-unknown-global-key|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} var k=String.fromCharCode(97);console[b(0)](b(1),typeof globalThis[k]);
+ref-decoded-global-key|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} console[b(0)](b(1),typeof globalThis[b(2)]);
+ref-code-text|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} console[b(0)](b(1),Function("return typeof a")());
+ref-indirect-eval|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} console[b(0)](b(1),(0,eval)("typeof b"));
+ref-global-pattern|function a(){var h=['log','hello','a'];a=function(){return h};return a()}function b(i){i=i-0;var e=a();return e[i]} var {a:got}=globalThis;console[b(0)](b(1),typeof got);
