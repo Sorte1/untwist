@@ -109,3 +109,14 @@ pub fn trust_global_binding_writes_for_tests(on: bool) {
 pub(crate) fn global_binding_writes_trusted() -> bool {
     GLOBAL_BINDING_WRITES_TRUSTED.load(Ordering::Relaxed)
 }
+
+static STRAIGHT_LINE_GUARDS_OFF: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_straight_line_guards_for_tests(on: bool) {
+    STRAIGHT_LINE_GUARDS_OFF.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn straight_line_guards_dropped() -> bool {
+    STRAIGHT_LINE_GUARDS_OFF.load(Ordering::Relaxed)
+}

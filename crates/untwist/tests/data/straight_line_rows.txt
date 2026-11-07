@@ -1,0 +1,27 @@
+dec-the-reported-sample|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; if (false) { while (true) {} } ; console[test(2)](test(0), test(1), counter);
+dec-reads-before-and-after|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; console.log(counter); console.log(test(1), counter); console.log(counter, test(2), counter);
+dec-the-member-key-runs-before-the-arguments|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; console[test(2)](counter, test(1), counter);
+dec-a-function-declaration-and-a-var|var n = 1; function test(k) { n = n * k; n++; return n; } console.log(test(2), test(3), n);
+dec-a-statement-call-without-a-return|let total = 0; function test(v) { total += v; } test(4); test(5); console.log(total);
+dec-two-states-and-a-reader|let a = 0; let b = ""; let test = (x) => { a++; b += x; return a; }; let size = () => b.length; console.log(test("x"), test("yz"), size(), a, b);
+dec-an-if-test-reads-the-state|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; test(2); if (counter > 1) { console.log("big"); } else { console.log("small"); }
+dec-an-arrow-expression-body|let c = 0; let test = () => (c += 2, c * 10); console.log(test(), test(), c);
+dec-a-thrown-error-between-is-caught|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; console.log(test(1)); try { null.x; } catch (e) { console.log("caught"); } console.log(test(2), counter);
+dec-an-unknown-call-between-cannot-reach-the-state|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; console.log(test(0)); [1, 2].forEach((x) => console.log(x)); console.log(test(1), counter);
+dec-a-block-and-a-declaration|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; { const first = test(1); console.log(first, counter); } let second = test(2); console.log(second, counter);
+ref-a-closure-escapes|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; let later = () => test(2); console.log(test(1), counter); later(); console.log(counter);
+ref-an-unknown-call-between|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; function bump() { test(2); } console.log(test(0)); [1].forEach(bump); console.log(test(1), counter);
+dec-a-reader-function-folds-too|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; let show = () => counter; console.log(show(), test(1), show());
+ref-an-exception-path|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; console.log(test(0)); try { console.log(test(1)); null.f(); } catch (e) { console.log(test(2), counter); }
+ref-a-getter-on-an-argument|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; let o = { get k() { return test(2); } }; console.log(test(1), o.k, counter);
+ref-the-global-object-writes-a-var|var counter = 0; var test = val => { counter += val; return ["hello", "world", "log"][val]; }; console.log(test(1)); globalThis.counter = 5; console.log(test(1), counter);
+ref-the-function-is-passed-as-a-value|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; console.log([0, 1].map(test), test(2), counter);
+ref-text-reads-the-state|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; console.log(test(1)); console.log((0, eval)("counter"), test(2));
+ref-a-closure-reads-before-and-after|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; let show = () => console.log(counter); show(); console.log(test(1)); show();
+guard-a-non-literal-argument|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; let i = 1; console.log(test(i), counter);
+guard-an-object-argument-with-value-of|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; let o = { valueOf() { counter = 10; return 1; } }; console.log(test(o), counter);
+guard-a-site-in-a-loop|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; for (let i = 0; i < 2; i++) console.log(test(i)); console.log(counter);
+guard-a-site-after-a-logical|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; console.log(counter > 5 || test(1), counter);
+guard-a-write-outside-the-function|let counter = 0; let test = val => { counter += val; return ["hello", "world", "log"][val]; }; counter = 2; console.log(test(1), counter);
+guard-the-function-throws|let counter = 0; let test = val => { counter += val; return ["a"][val].length; }; console.log(test(0)); console.log(test(3), counter);
+guard-a-call-before-the-declaration|let counter = 0; console.log(test(1)); let test = val => { counter += val; return ["hello", "world", "log"][val]; };

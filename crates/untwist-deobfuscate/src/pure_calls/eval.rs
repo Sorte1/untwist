@@ -11,7 +11,7 @@ use crate::bindings::resolved_symbol;
 
 const MAX_DEPTH: u32 = 128;
 const MAX_STEPS: u32 = 10_000;
-const MAX_STRING: usize = 1 << 16;
+pub(super) const MAX_STRING: usize = 1 << 16;
 const MAX_INDEX: u64 = u32::MAX as u64 - 1;
 const GLOBAL_VALUES: [&str; 3] = ["undefined", "NaN", "Infinity"];
 const PROTO_KEY: &str = "__proto__";
@@ -229,6 +229,21 @@ impl<'s, 'p> Machine<'s, 'p> {
             constants,
             steps: 0,
         }
+    }
+
+    pub(super) fn value(&mut self, expr: &'p Expression<'p>) -> Option<Const> {
+        match self.eval(expr, 0)? {
+            Out::Prim(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub(super) fn assign(&mut self, symbol: SymbolId, value: Const) {
+        self.args.insert(symbol, value);
+    }
+
+    pub(super) fn current(&self, symbol: SymbolId) -> Option<&Const> {
+        self.args.get(&symbol)
     }
 
     pub(super) fn result(&mut self, body: &'p Expression<'p>) -> Option<Const> {

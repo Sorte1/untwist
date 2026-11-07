@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Top-level calls to a small local function that updates top-level state are folded in the
+  default lane when every argument is a literal: `console[test(2)](test(0), test(1), counter)`
+  becomes `console.log("hello", "world", 3)`, and the function and its state are removed. The
+  calls are run in evaluation order, and the fold is refused when anything else can see the
+  function or the state (another function, a value use, the global object, code text).
+
 ## [0.3.0] - 2026-11-07
 
 ### Added

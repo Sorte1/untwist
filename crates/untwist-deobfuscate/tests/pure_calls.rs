@@ -154,8 +154,14 @@ fn a_redeclared_function_is_left_alone() {
 
 #[test]
 fn a_body_that_mutates_is_left_alone() {
-    kept_in_both("let n = 0;\nconst dec = (a) => (n++, [\"x\"][a]);\nconsole.log(dec(0));");
+    kept_in_both("let n = 0;\nconst dec = (a) => (n++, [\"x\"][a]);\nconsole.log(dec(0));\nsetTimeout(() => console.log(n));");
     kept_in_both("const t = [\"x\"];\nconst dec = (a) => (t[0] = \"z\");\nconsole.log(dec(0));");
+}
+
+#[test]
+fn a_body_that_only_writes_unobserved_top_level_state_folds_with_the_state() {
+    let source = "let n = 0;\nconst dec = (a) => (n++, [\"x\"][a]);\nconsole.log(dec(0), n);";
+    assert_eq!(both(source), "console.log(\"x\", 1);");
 }
 
 #[test]

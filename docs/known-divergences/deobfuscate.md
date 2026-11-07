@@ -697,6 +697,23 @@
   global-reach check, like every other one in that lane, takes a key the program cannot resolve to
   name nothing; `fixtures/pure-calls/kept-global-rebind.js` is a program where that assumption is
   wrong.
+- **`fold-pure-calls` also runs a top-level helper that writes top-level state.** When no pure
+  helper folds, the pass looks at the program's own statement list for a function declaration or
+  single-declarator binding of an arrow or function expression whose body is a list of
+  assignments and updates of top-level `let` or `var` bindings with a literal (or no)
+  initialiser, plain expressions of the pure shape above, and one final `return`. The program's
+  statements are then walked in evaluation order (a member callee before the arguments, left to
+  right, into blocks, declarations and `if` tests); each call with literal arguments runs the
+  body against the state's value at that point, and each read of the state becomes that value.
+  The fold is all or nothing. It is refused when any reference to the helper or the state is not
+  one the walk accounts for (another function, a closure, a getter, a value use, a write outside
+  the helper, a call or read under `&&`, `||`, `??`, `?:`, optional chaining, a loop or `try`),
+  when a call runs before a declaration it needs, when a body would throw or yield a value it
+  cannot print, and, for a classic script, when the global-reach question above finds a write or
+  an observation of one of the names. A call whose value is unused is removed with its
+  statement. The helper and the state are removed afterwards, so the state's last value is never
+  observable. Pinned by `crates/untwist/tests/straight_line_rows.rs` (node rows, both lanes) and
+  `straight_line_sabotage.rs` (mutant `drop_straight_line_guards_for_tests`).
 - **A binding that is declared twice is never constant.** `is_constant_binding` requires the
   symbol to have no redeclarations as well as no writes, because `var x = 1; var x = 2;` is two
   initialisations and a consumer that read the binding as constant would fold the first value into
