@@ -8,7 +8,7 @@ use oxc_syntax::scope::ScopeFlags;
 
 use super::super::guard_key::guard_key;
 use super::super::guards::{
-    assigned_guard, fixed_point_text, guard_candidate, holds_a_line_terminator, may_hold_a_guard,
+    fixed_point_text, guard_candidate, holds_a_line_terminator, may_hold_a_guard, statement_guard,
     GuardRecord,
 };
 use crate::guard_shape::{may_be_a_guard, read_target};
@@ -249,7 +249,7 @@ impl<'a> VisitJsMut<'a> for Placer<'a> {
     }
 
     fn visit_expression_statement(&mut self, it: &mut ExpressionStatement<'a>) {
-        if let Some(init) = assigned_guard(it) {
+        if let Some(init) = statement_guard(it) {
             self.settle(init);
         }
         walk_js_mut::walk_expression_statement(self, it);

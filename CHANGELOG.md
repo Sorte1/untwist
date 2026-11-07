@@ -160,6 +160,12 @@ All notable changes to this project are documented in this file. The format is b
 - A decoder wrapper with a single parameter (`function w(x) { return b(x); }`) is inlined like
   other wrappers.
 
+- Output that keeps javascript-obfuscator's self-defending code (for example Krunker 3.2.x in the
+  default lane, where the string array stays undecoded) no longer hangs when it runs. The cookie
+  rotator's `removeCookie` function, a call controller built and called in one expression or inside
+  a comma sequence, and a guarded function that opens with a wrapper variable are printed on one
+  line, so the checks that read their source pass as they did on the input.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called

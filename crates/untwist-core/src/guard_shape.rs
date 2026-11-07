@@ -1,17 +1,31 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use oxc_ast::ast::*;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 
 mod controller;
+mod cookie;
 mod helper;
 mod state;
 
 const FOLD_DEPTH: u32 = 16;
 const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=";
 
+static NARROWED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn narrow_guard_shapes_for_tests(on: bool) {
+    NARROWED.store(on, Ordering::SeqCst);
+}
+
+fn narrowed() -> bool {
+    NARROWED.load(Ordering::Relaxed)
+}
+
 #[inline]
 pub fn may_be_a_guard(function: &Function<'_>) -> bool {
     let params = function.params.items.len();
-    if params > 1 {
+    if params > 2 {
         return false;
     }
     let Some(body) = &function.body else {
@@ -20,6 +34,14 @@ pub fn may_be_a_guard(function: &Function<'_>) -> bool {
     match (params, body.statements.as_slice()) {
         (0, [.., Statement::VariableDeclaration(_), Statement::ReturnStatement(handoff)]) => {
             matches!(handoff.argument, Some(Expression::FunctionExpression(_)))
+        }
+        (0, statements) if cookie::opens_like_a_cookie(statements) => {
+            !narrowed() && cookie::cookie_target(statements).is_some()
+        }
+        (2, statements) => {
+            !narrowed()
+                && controller::opens_with_a_choice(statements)
+                && controller::handed_out_target(function).is_some()
         }
         (1, [Statement::ExpressionStatement(only)]) => {
             matches!(only.expression, Expression::SequenceExpression(_))
@@ -43,9 +65,11 @@ pub fn read_target<'k, 'a>(function: &'k Function<'a>) -> Option<&'k Function<'a
         return None;
     }
     match (function.params.items.len(), statements.len()) {
-        (0, 2..) => controller::controller_target(statements),
+        (0, 2..) => controller::controller_target(statements)
+            .or_else(|| cookie::cookie_target(statements).filter(|_| !narrowed())),
         (1, _) => state::state_target(function, statements)
             .or_else(|| helper::helper_target(function, statements)),
+        (2, _) if !narrowed() => controller::handed_out_target(function),
         _ => None,
     }
 }

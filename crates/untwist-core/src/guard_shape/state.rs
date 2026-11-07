@@ -4,8 +4,8 @@ use oxc_syntax::operator::AssignmentOperator;
 use super::{has_no_params, is_named, is_number, is_string, param_name, returned};
 
 const STATE_WORD: &str = "newState";
-const STATE_HEAD: &str = r"\w+ *\(\) *{\w+ *";
-const STATE_TAIL: &str = r#"['|"].+['|"];? *}"#;
+pub(super) const STATE_HEAD: &str = r"\w+ *\(\) *{\w+ *";
+pub(super) const STATE_TAIL: &str = r#"['|"].+['|"];? *}"#;
 const STATE_SLOTS: usize = 5;
 const STATE_COUNTERS: [f64; 3] = [1.0, 0.0, 0.0];
 

@@ -4,7 +4,7 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{GetSpan, Span};
-use oxc_syntax::operator::AssignmentOperator;
+use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 
 use super::guard_key::{guard_key, GuardKey};
 use super::{settle, Edit, Scan};
@@ -137,9 +137,7 @@ pub(super) fn may_hold_a_guard(init: Option<&Expression<'_>>) -> bool {
     )
 }
 
-pub(super) fn assigned_guard<'k, 'a>(
-    statement: &'k ExpressionStatement<'a>,
-) -> Option<&'k Expression<'a>> {
+fn assigned_guard<'k, 'a>(statement: &'k ExpressionStatement<'a>) -> Option<&'k Expression<'a>> {
     let Expression::AssignmentExpression(assign) = &statement.expression else {
         return None;
     };
@@ -148,11 +146,49 @@ pub(super) fn assigned_guard<'k, 'a>(
     (plain && may_hold_a_guard(Some(&assign.right))).then_some(&assign.right)
 }
 
+pub(super) fn statement_guard<'k, 'a>(
+    statement: &'k ExpressionStatement<'a>,
+) -> Option<&'k Expression<'a>> {
+    assigned_guard(statement).or_else(|| called_guard(&statement.expression))
+}
+
+fn called_guard<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k Expression<'a>> {
+    match expr.without_parentheses() {
+        call @ Expression::CallExpression(inner)
+            if matches!(
+                inner.callee.without_parentheses(),
+                Expression::FunctionExpression(_)
+            ) =>
+        {
+            Some(call)
+        }
+        Expression::UnaryExpression(not) if not.operator == UnaryOperator::LogicalNot => {
+            match not.argument.without_parentheses() {
+                call @ Expression::CallExpression(_) => called_guard(call),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 pub(super) fn guard_candidate<'k, 'a>(init: &'k Expression<'a>) -> Option<&'k Function<'a>> {
     match init {
         Expression::FunctionExpression(function) => Some(function),
-        Expression::CallExpression(call) => match call.callee.without_parentheses() {
+        Expression::CallExpression(call) => called_function(&call.callee),
+        _ => None,
+    }
+}
+
+fn called_function<'k, 'a>(callee: &'k Expression<'a>) -> Option<&'k Function<'a>> {
+    match callee.without_parentheses() {
+        Expression::FunctionExpression(function) => Some(function),
+        Expression::CallExpression(inner) => match inner.callee.without_parentheses() {
             Expression::FunctionExpression(function) => Some(function),
+            _ => None,
+        },
+        Expression::SequenceExpression(sequence) => match sequence.expressions.last() {
+            Some(Expression::FunctionExpression(function)) => Some(function),
             _ => None,
         },
         _ => None,
@@ -194,7 +230,7 @@ impl<'a, const GUARDS: bool> VisitJs<'a> for Slots<'_, '_, GUARDS> {
     }
 
     fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
-        if let Some(init) = assigned_guard(it) {
+        if let Some(init) = statement_guard(it) {
             self.scan.settle_guard(it.span.start, init);
         }
         walk_js::walk_expression_statement(self, it);
