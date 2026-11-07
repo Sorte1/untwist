@@ -206,7 +206,9 @@ impl<'a> Sites<'_, 'a> {
                 return;
             }
         }
-        if self.fresh.is_user_function(callee) {
+        if self.fresh.is_user_function(callee)
+            || self.holds.calls_only_user_functions(callee, arguments)
+        {
             return;
         }
         if let Some(key) = self.applies_user_function(callee) {
