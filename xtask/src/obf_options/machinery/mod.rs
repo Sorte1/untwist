@@ -106,7 +106,10 @@ pub fn measure(source: &str) -> Found {
     };
     scan.visit_program(&parsed.program);
     let mut found = scan.found;
-    found.add("string_arrays", names.array_fns.len());
+    found.add(
+        "string_arrays",
+        names.array_fns.len() + names.legacy_arrays().len(),
+    );
     found.add("decoders", names.decoders().len());
     found.add(
         "dead_declarations",

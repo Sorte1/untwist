@@ -188,6 +188,14 @@ high-impact ones and the four presets through both lanes and a pinned webcrack, 
 output to keep no obfuscator machinery and to print what the original program prints.
 `--suggest-expect <file>` writes a whole replacement for its `EXPECT`. Each failure is named by its
 cause, and each cause keeps the reason it already has in `EXPECT`.
+`cargo xtask obf-options --dir fixtures/obfuscator-versions` runs the same checks on the version
+matrix that `tools/obfuscated/versions.mjs` generates: twenty javascript-obfuscator releases from
+0.10.2 to 5.9.1, each with its own string array options (encoding, rotate, shuffle, index shift,
+wrappers, calls transform, threshold) and one extra transform, placed at the top level, in an IIFE,
+in a webpack 4 module or around a whole webpack 4 bundle, then left as is or minified with
+uglify-js or terser. The cells cover every version × encoding × container × minifier and every
+pair of the other choices. Its `EXPECT` says for each cell whether the run is refused with a named
+reason or `MISSED` (no string array found, or calls left with no note).
 `cargo xtask obf-fuzz --seed <n> --count <n>` draws random programs from a grammar of those
 features, obfuscates them with random option sets and rewires the decoder (aliases, wrappers, inert
 statements, strict mode, a wrapping function), then judges both lanes the same way. A failure is

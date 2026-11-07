@@ -14,6 +14,7 @@ pub const UNTWIST_LANES: [&str; 2] = [SAFE, UNSAFE];
 pub const CHECKS: [&str; 4] = ["runs", "machinery", "simplified", "node"];
 const NOTE_CHARS: usize = 240;
 const MACHINERY_LEFT: &str = "obfuscator machinery is left in the output, so it is not run";
+pub const NO_ARRAY: &str = "find-string-array: no string array found";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Behaviour {
@@ -141,7 +142,10 @@ pub fn observe_untwist(
     let output = work.join("out.js");
     let found = measure(&read_lossy(&output));
     let stderr = read_lossy(&work.join("err.txt"));
-    let notes = notes_of(&stderr);
+    let mut notes = notes_of(&stderr);
+    if stderr.contains(NO_ARRAY) && !found.present(&MACHINERY).is_empty() {
+        notes.insert(0, format!("note: {NO_ARRAY}"));
+    }
     let spans = super::blockers::spans_of(&stderr);
     let behaviour = behaviour_of(runner, entry, &found, observed.exit, &output, expected)?;
     Ok(LaneRun {

@@ -82,3 +82,40 @@ fn escapes_skip_escaped_backslashes_and_non_ascii() {
     assert_eq!(printable_escapes("'\\x41\\u0042\\u{43}'"), 3);
     assert_eq!(printable_escapes("'\\u00e9\\x0a'"), 0);
 }
+
+#[test]
+fn a_plain_string_array_and_its_shifting_decoder_are_counted() {
+    for source in [
+        "var _0x5ef4=['log','hi'];(function(a,b){var c=function(d){while(--d){a['push'](a['shift']());}};c(++b);}(_0x5ef4,0xd4));\
+         var _0x36e8=function(e,f){e=e-0x0;var g=_0x5ef4[e];return g;};var _0x46=_0x36e8;console[_0x36e8('0x0')](_0x46('0x1'));",
+        "var a=['log','hi'];!function(b,t){!function(t){for(;--t;)b.push(b.shift())}(++t)}(a,212);\
+         var b=function(t,x){var e=a[t-=0];return e};console[b('0x0')](b('0x1'));",
+    ] {
+        let found = measure(source);
+        assert_eq!(found.get("string_arrays"), 1, "{source}");
+        assert_eq!(found.get("decoders"), 1, "{source}");
+        assert_eq!(found.get("rotators"), 1, "{source}");
+        assert!(found.get("decoder_calls") >= 2, "{source}");
+    }
+}
+
+#[test]
+fn a_user_function_indexing_a_string_array_is_not_a_decoder() {
+    let found = measure(
+        "var names=['ada','grace'];function pick(i){return names[i];}console.log(pick(1));",
+    );
+    assert_eq!(found.get("string_arrays"), 0);
+    assert_eq!(found.get("decoders"), 0);
+}
+
+#[test]
+fn decoders_that_shift_in_a_nested_function_or_by_unary_plus_are_counted() {
+    for source in [
+        "var a=['log','hi'];var b=function(e,x){return a[e=+e]};console[b('0x0')](b('0x1'));",
+        "var a=['log','hi'];function b(c,d){return b=function(e,f){e=e-0x0;var g=a[e];return g;},b(c,d);}console[b(0x0)](b(0x1));",
+    ] {
+        let found = measure(source);
+        assert_eq!(found.get("string_arrays"), 1, "{source}");
+        assert_eq!(found.get("decoders"), 1, "{source}");
+    }
+}
