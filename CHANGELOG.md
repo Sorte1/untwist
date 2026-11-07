@@ -26,6 +26,10 @@ All notable changes to this project are documented in this file. The format is b
   rotator and a `var b = function (t, x) { ... a[t -= 0] ... }` decoder) were not found, and the
   run said `no string array found`. They are now decoded when the array is only read by its
   decoder; the default lane also needs the usual global-reach and patched-built-in checks to pass.
+- `--unsafe` no longer refuses a top-level string array or decoder just because some string in
+  the program spells its name; it refuses only when the name is reached through the global object
+  or literal code text. Old builds with one-letter machinery names (`a`, `b`) now decode there,
+  including the lazy `atob` set-up their base64 decoders install.
 
 ## [0.3.0] - 2026-11-07
 

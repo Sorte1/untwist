@@ -176,7 +176,6 @@ fn top_level_decoders<'a>(program: &Program<'a>) -> Vec<&'a str> {
 fn unstamped_decoders(
     program: &Program<'_>,
     scoping: &Scoping,
-    unsafe_lane: bool,
 ) -> (Vec<DecoderShape>, Watched, usize) {
     let watching = top_level_decoders(program);
     let (found, watch) = if watching.is_empty() {
@@ -191,7 +190,7 @@ fn unstamped_decoders(
         .unzip();
     let reachable: Vec<bool> = unstamped
         .iter()
-        .map(|shape| reachable_by_name(scoping, shape.symbol, unsafe_lane))
+        .map(|shape| reachable_by_name(scoping, shape.symbol))
         .collect();
     let watched = watch.resolve(program, &names, &reachable);
     (unstamped, watched, total)
@@ -220,8 +219,7 @@ impl<'a> Pass<'a> for FindDecoders {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let (unstamped, watched, total) =
-            unstamped_decoders(program, cx.scoping(), cx.opts.unsafe_transforms);
+        let (unstamped, watched, total) = unstamped_decoders(program, cx.scoping());
         if unstamped.is_empty() {
             return;
         }

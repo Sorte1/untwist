@@ -7,7 +7,11 @@ const DECODED: &[&str] = &[
     "string-argument.js",
     "local-object-key.js",
 ];
-const DECODED_UNSAFE: &[&str] = &["object-keys.js"];
+const DECODED_UNSAFE: &[&str] = &[
+    "object-keys.js",
+    "string-argument.js",
+    "local-object-key.js",
+];
 const UNSAFE_DIVERGES: &[&str] = &["enumerated-keys.js", "object-keys-assigned.js"];
 
 fn lane(unsafe_transforms: bool) -> impl Fn(&str) -> String {
