@@ -1,9 +1,8 @@
 use untwist::{Options, Pipeline};
-use untwist_deobfuscate::mutants::drop_legacy_array_guards_for_tests;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/legacy_array_rows.txt");
-const PREFIXES: [&str; 3] = ["dec-", "ref-", "guard-"];
+const PREFIXES: [&str; 4] = ["dec-", "unsafe-dec-", "ref-", "guard-"];
 const UNSAFE_PREMISE: &str = "ref-premise-";
 
 fn rows() -> Vec<(String, String)> {
@@ -51,7 +50,8 @@ fn each_rows_decode_decision_matches_its_label_in_both_lanes() {
             if lane && label.starts_with(UNSAFE_PREMISE) {
                 continue;
             }
-            let should_decode = label.starts_with("dec-");
+            let should_decode =
+                label.starts_with("dec-") || (lane && label.starts_with("unsafe-dec-"));
             let code = transformed(&options(lane), &source);
             assert_eq!(
                 decoded(&code),
@@ -108,35 +108,4 @@ fn both_lanes_run_like_node_outside_the_unsafe_premises() {
     let modes: [Mode<'_>; 1] = [("unsafe", &run_unsafe)];
     wrong.extend(node_rows::mismatches(&node, &covered, &modes));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-}
-
-#[test]
-fn every_refused_row_diverges_from_node_once_the_guards_are_dropped() {
-    let Some(node) = node_or_skip() else {
-        return;
-    };
-    let sabotage: Vec<(String, String)> = rows()
-        .into_iter()
-        .filter(|(label, _)| label.starts_with("ref-"))
-        .collect();
-    assert!(sabotage.len() >= 4, "found {} rows", sabotage.len());
-    let safe = options(false);
-    let run = |source: &str| transformed(&safe, source);
-    drop_legacy_array_guards_for_tests(true);
-    let modes: [Mode<'_>; 1] = [("mutant", &run)];
-    let diverged = node_rows::mismatches(&node, &sabotage, &modes);
-    drop_legacy_array_guards_for_tests(false);
-    let names: Vec<&str> = diverged
-        .iter()
-        .filter_map(|row| row.split(" (mutant):").next())
-        .collect();
-    let missing: Vec<&str> = sabotage
-        .iter()
-        .map(|(label, _)| label.as_str())
-        .filter(|label| !names.contains(label))
-        .collect();
-    assert!(
-        missing.is_empty(),
-        "did not diverge from node under the mutant: {missing:?}"
-    );
 }

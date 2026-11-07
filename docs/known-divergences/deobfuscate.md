@@ -169,8 +169,10 @@
   `shift` before the rotator runs. In the unsafe lane those two checks follow that lane's
   premises (built-ins pristine, no global reach), and a name a string or property name spells is
   refused as it is for an array function. A refused array is left as written, with a note.
-  Pinned by `crates/untwist/tests/legacy_array_rows.rs` (node-checked in both lanes; the refused
-  rows print something else once the checks are switched off).
+  Pinned by `crates/untwist/tests/legacy_array_rows.rs` (node-checked in both lanes) and
+  `legacy_array_sabotage.rs` (the refused rows print something else once the checks are off).
+  A webpack bootstrap whose keys are decoder calls is refused in the default lane, because those
+  keys are not known before the decode.
 
 - **A decoder wrapper is inlined only when its body reads nothing but its own parameters**. The reference deobfuscator's `inlineFunctionCall` (`ast-utils/inline.ts:128-163`) clones the
   wrapper's returned expression to the call site and substitutes parameters by name, so any other
