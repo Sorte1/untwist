@@ -90,6 +90,7 @@ pub struct Failed<'j> {
 pub struct Shape {
     pub domain_lock: bool,
     pub key_shaped: bool,
+    pub version_matrix: bool,
 }
 
 impl Shape {
@@ -97,6 +98,7 @@ impl Shape {
         Shape {
             domain_lock: entry.cell.starts_with("domain-lock"),
             key_shaped: entry.source.ends_with("objects.js") || entry.source.ends_with("mixed.js"),
+            version_matrix: entry.dir != super::manifest::DIR,
         }
     }
 }
@@ -183,6 +185,9 @@ fn machinery_cause(
     }
     if safe && only_class(detail, "dead_declarations") {
         return Some(DEAD_VARS);
+    }
+    if !shape.version_matrix {
+        return None;
     }
     last_resort(lane, detail, note, notes)
 }
@@ -610,7 +615,11 @@ mod tests {
     fn version_matrix_misses_and_refusals_get_their_own_causes() {
         let cause = |detail: &str, note: &str| {
             let checks = BTreeMap::from([("machinery", Failed { detail, note })]);
-            cause_of(Shape::default(), "unsafe", &checks, &[note.to_string()])
+            let shape = Shape {
+                version_matrix: true,
+                ..Shape::default()
+            };
+            cause_of(shape, "unsafe", &checks, &[note.to_string()])
         };
         let missed = format!("note: {}", crate::obf_options::lanes::NO_ARRAY);
         assert_eq!(cause("string_arrays=1", &missed), Some(NO_ARRAY));
@@ -626,5 +635,13 @@ mod tests {
             Some("missed-opaque-predicate")
         );
         assert_eq!(cause("opaque_predicates=1,decoders=1", ""), None);
+        let checks = BTreeMap::from([(
+            "machinery",
+            Failed {
+                detail: "opaque_predicates=1",
+                note: "",
+            },
+        )]);
+        assert_eq!(cause_of(Shape::default(), "unsafe", &checks, &[]), None);
     }
 }
