@@ -8,6 +8,7 @@ const HELLO: &str = "console.log(\"hello\", \"worold\");";
 
 const FOLDED: &[(&str, &str)] = &[
     ("arrow-block.js", HELLO),
+    ("state-written.js", r#"console.log("a", "b", 2);"#),
     ("arrow-expression.js", HELLO),
     ("function-declaration.js", HELLO),
     ("hoisted-const-array.js", HELLO),
@@ -22,7 +23,6 @@ const FOLDED: &[(&str, &str)] = &[
 
 const KEPT: &[(&str, &[&str], &[&str])] = &[
     ("kept-reassigned.js", &["dec(0)"], &["dec(0)"]),
-    ("kept-mutates.js", &["dec(0)"], &["dec(0)"]),
     ("kept-reads-global.js", &["dec(0)"], &["dec(0)"]),
     (
         "kept-non-literal-arg.js",

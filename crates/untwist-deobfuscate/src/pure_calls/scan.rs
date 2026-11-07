@@ -50,7 +50,7 @@ pub(super) fn declared<'p>(program: &'p Program<'p>, scoping: &Scoping) -> Decla
     scan.found
 }
 
-fn simple_params(params: &FormalParameters<'_>) -> Option<Vec<SymbolId>> {
+pub(super) fn simple_params(params: &FormalParameters<'_>) -> Option<Vec<SymbolId>> {
     if params.rest.is_some() {
         return None;
     }
