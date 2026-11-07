@@ -131,3 +131,14 @@ pub fn drop_legacy_array_guards_for_tests(on: bool) {
 pub(crate) fn legacy_array_guards_dropped() -> bool {
     LEGACY_ARRAY_GUARDS_OFF.load(Ordering::Relaxed)
 }
+
+static UNSAFE_NAMES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_unsafe_machinery_names_for_tests(on: bool) {
+    UNSAFE_NAMES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn unsafe_names_trusted() -> bool {
+    UNSAFE_NAMES_TRUSTED.load(Ordering::Relaxed)
+}

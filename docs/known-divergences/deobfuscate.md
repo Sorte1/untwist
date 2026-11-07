@@ -167,8 +167,12 @@
   write of the name through the global object, and, when the rotation is not zero, no code before
   the array other than function declarations, so nothing in the program can replace `push` or
   `shift` before the rotator runs. In the unsafe lane those two checks follow that lane's
-  premises (built-ins pristine, no global reach), and a name a string or property name spells is
-  refused as it is for an array function. A refused array is left as written, with a note.
+  premises (built-ins pristine, and the syntactic name check below). A refused array is left as
+  written, with a note. Under `--unsafe` the decoder's lazy `atob` set-up is also dropped: an
+  IIFE that grabs the global object with `Function('return (function() {}.constructor("return
+  this")( ));')()` (or `window` when that throws) and then runs `g.atob || (g.atob = ...)` does
+  nothing when `atob` is the standard built-in, which that lane assumes. The default lane keeps
+  it, and the decoder's `window` read refuses the unit there.
   Pinned by `crates/untwist/tests/legacy_array_rows.rs` (node-checked in both lanes) and
   `legacy_array_sabotage.rs` (the refused rows print something else once the checks are off).
   A webpack bootstrap whose keys are decoder calls is refused in the default lane, because those
@@ -1054,6 +1058,20 @@
   so the default lane keeps its string array. Pinned by `crates/untwist/tests/unsafe_parity.rs`,
   and by the patched rows of `fail_closed_rows.rs`, `key_judged_rows.rs` and `realm_shapes.rs`,
   which print node's output by default and the pristine decode under `--unsafe`.
+
+- **Under `--unsafe` a top-level machinery name is judged by how the program can reach it, not
+  by every string that spells it.** That lane drops the global reach check, so it used to refuse
+  any top-level string array or decoder whose name a string or property name spelled anywhere.
+  Short names (`a`, `b`) from minified builds are spelled by almost every program, so those
+  units were never decoded. The lane now refuses a unit only when its name is reached through
+  the global object as written: a static or literal key, a key held in a never-reassigned
+  string binding, a key a decoder call decodes to, a destructuring pattern, or an unknown key
+  whose own strings spell the name, read off `globalThis`, `window`, `self`, `global`, `frames`,
+  top-level `this` or a never-reassigned alias of one; or by code text (`eval`, `Function`,
+  string timers) whose literal or decoded pieces spell the name. A key built at run time from
+  other text, and code text built from pieces that do not spell the name, stay under the lane's
+  premise, as before. Pinned by `crates/untwist/tests/unsafe_name_reach_rows.rs` and
+  `unsafe_name_reach_sabotage.rs`.
 
 - **Replacing a decoder through a name built from another unit's decoded halves is the stated
   premise and is not refused**. A program
