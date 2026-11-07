@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::hash::BuildHasher;
 
+use super::flow::holds::Holds;
 use super::flow::Flow;
 use super::fresh::Fresh;
 use super::roles::*;
@@ -133,6 +134,7 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) forward_calls: FxHashSet<Span>,
     pub(super) pending_texts: RefCell<Vec<String>>,
     pub(super) flow: &'s Flow<'s, 'a>,
+    pub(super) holds: Holds<'s, 'a>,
     pub(super) known_rests: FxHashMap<Span, Vec<AKey<'a>>>,
 }
 
@@ -143,8 +145,10 @@ impl<'s, 'a> Sites<'s, 'a> {
         fresh_calls: bool,
         pristine: super::settle::Pristine,
         flow: &'s Flow<'s, 'a>,
+        script: bool,
     ) -> Self {
         let object_rebound = super::native_map::bare_global_written(fresh.scoping, "Object");
+        let holds = Holds::new(fresh.scoping, fresh.bindings, script);
         Self {
             fresh,
             resolve,
@@ -187,6 +191,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             forward_calls: FxHashSet::default(),
             pending_texts: RefCell::default(),
             flow,
+            holds,
             known_rests: FxHashMap::default(),
         }
     }
