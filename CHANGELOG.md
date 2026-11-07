@@ -78,6 +78,11 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- The default lane no longer replaces a decoder argument that reads a top-level script `var`,
+  function or `let` by its literal when code that may hold the global object (`globalThis.k`,
+  `window.k`, top-level `this.k`, `Reflect.set`, `Object.assign`, computed keys) or code from text
+  may write that name; `var k; k = 1; globalThis.k = 2; d(k)` decoded with `1`. When such code may
+  only observe the name, the declaration is kept. Modules and function-local bindings still decode.
 - The default lane decodes a global string array whose function or decoder name is also spelled
   by a string in the program, such as webpack 4's `'a'` getter key under mangled names; whether
   code may reach the machinery by that name is now judged where the global object is reached,

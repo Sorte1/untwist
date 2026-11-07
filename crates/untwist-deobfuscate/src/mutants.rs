@@ -98,3 +98,14 @@ pub fn read_every_statement_as_unable_to_call_for_tests(on: bool) {
 pub(crate) fn inert_statements_unchecked() -> bool {
     INERT_STATEMENTS_UNCHECKED.load(Ordering::Relaxed)
 }
+
+static GLOBAL_BINDING_WRITES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_global_binding_writes_for_tests(on: bool) {
+    GLOBAL_BINDING_WRITES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn global_binding_writes_trusted() -> bool {
+    GLOBAL_BINDING_WRITES_TRUSTED.load(Ordering::Relaxed)
+}
