@@ -152,6 +152,13 @@ pub const STRING_ARRAY_DECLARED_UNDEFINED: &str =
     "an entry of the string array reads `undefined`, which a scope here declares or a with \
      statement or direct eval may supply, so the entry may hold that binding's value rather than \
      undefined, and the string array was left undecoded";
+pub const MACHINERY_READ_BEFORE_DECLARATION: &str =
+    "the string array or a decoder is bound to a function expression by var, let or const and may \
+     be called before its declaration runs, where the call throws, so it was left unstamped and its \
+     call sites undecoded";
+pub const MACHINERY_CONSTANT_WRITTEN: &str =
+    "the string array or a decoder is a const that code assigns to, and that assignment throws, so \
+     it was left unstamped and its call sites undecoded";
 pub const LEGACY_ARRAY_REACHED: &str =
     "this plain string array may be reached by name through the global object, a with statement \
      or a direct eval, so it was not turned into a string-array function and was left undecoded";
@@ -572,6 +579,8 @@ catalogue!(
     DECODER_WRITTEN_OUTSIDE,
     MACHINERY_REDECLARED,
     STRING_ARRAY_DECLARED_UNDEFINED,
+    MACHINERY_READ_BEFORE_DECLARATION,
+    MACHINERY_CONSTANT_WRITTEN,
     LEGACY_ARRAY_REACHED,
     LEGACY_ROTATOR_AFTER_CODE,
     SIMPLE_ARRAY_UNDEFINED_NOT_GLOBAL,

@@ -24,7 +24,20 @@ fn var_function_and_declaration_are_the_same_shape() {
             Some("b")
         );
     });
-    with("var c = 1;\nlet d = function () {};", |body| {
+    with(
+        "let d = function () {};\nconst e = function () {};",
+        |body| {
+            assert_eq!(
+                var_function_or_declaration(&body[0]).map(|d| d.name),
+                Some("d")
+            );
+            assert_eq!(
+                var_function_or_declaration(&body[1]).map(|d| d.name),
+                Some("e")
+            );
+        },
+    );
+    with("var c = 1;\nlet f = 2, g = function () {};", |body| {
         assert!(var_function_or_declaration(&body[0]).is_none());
         assert!(var_function_or_declaration(&body[1]).is_none());
     });

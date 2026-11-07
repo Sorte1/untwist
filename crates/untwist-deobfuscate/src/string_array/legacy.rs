@@ -7,7 +7,7 @@ use oxc_str::Ident;
 use oxc_syntax::operator::{UnaryOperator, UpdateOperator};
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
-use untwist_core::ast_util::matcher::{call_parts, iife, statement_iife};
+use untwist_core::ast_util::matcher::{call_parts, iife, is_plain_declaration, statement_iife};
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::parse::{has_error, parse_with, SourceType};
 use untwist_core::pass::Cx;
@@ -36,7 +36,7 @@ fn is_var_array<'k>(stmt: &'k Statement<'_>) -> Option<(&'k str, usize)> {
     let Statement::VariableDeclaration(declaration) = stmt else {
         return None;
     };
-    if declaration.kind != VariableDeclarationKind::Var {
+    if !is_plain_declaration(declaration.kind) {
         return None;
     }
     array_declaration(stmt)
@@ -272,7 +272,7 @@ fn decoder_reads(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> O
     let [declarator] = declaration.declarations.as_slice() else {
         return None;
     };
-    if declaration.kind != VariableDeclarationKind::Var
+    if !is_plain_declaration(declaration.kind)
         || !matches!(declarator.init, Some(Expression::FunctionExpression(_)))
     {
         return None;
@@ -388,11 +388,21 @@ fn refusal(
     None
 }
 
+fn declared_function<'k, 'a>(stmt: &'k mut Statement<'a>) -> Option<&'k mut Function<'a>> {
+    match stmt {
+        Statement::FunctionDeclaration(function) => Some(function),
+        Statement::VariableDeclaration(declaration) => {
+            match declaration.declarations.first_mut()?.init.as_mut()? {
+                Expression::FunctionExpression(function) => Some(function),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 fn array_expression<'k, 'a>(stmt: &'k mut Statement<'a>) -> Option<&'k mut ArrayExpression<'a>> {
-    let Statement::FunctionDeclaration(function) = stmt else {
-        return None;
-    };
-    let body = function.body.as_mut()?;
+    let body = declared_function(stmt)?.body.as_mut()?;
     let Statement::VariableDeclaration(declaration) = body.statements.first_mut()? else {
         return None;
     };
@@ -402,16 +412,28 @@ fn array_expression<'k, 'a>(stmt: &'k mut Statement<'a>) -> Option<&'k mut Array
     }
 }
 
+fn array_function_text(name: &str, inner: &str, kind: VariableDeclarationKind) -> String {
+    let body = format!(
+        "{{ var {inner} = []; {name} = function () {{ return {inner}; }}; return {name}(); }}"
+    );
+    if kind == VariableDeclarationKind::Var {
+        format!("function {name}() {body}")
+    } else {
+        format!("let {name} = function () {body};")
+    }
+}
+
 fn array_function<'a>(
     original: &Statement<'a>,
     name: &str,
     count: usize,
     cx: &Cx<'a, '_>,
 ) -> Option<Statement<'a>> {
+    let Statement::VariableDeclaration(declaration) = original else {
+        return None;
+    };
     let inner = INNER_NAMES.into_iter().find(|inner| *inner != name)?;
-    let text = format!(
-        "function {name}() {{ var {inner} = []; {name} = function () {{ return {inner}; }}; return {name}(); }}"
-    );
+    let text = array_function_text(name, inner, declaration.kind);
     let source = cx.allocator().alloc_str(&text);
     let parsed = parse_with(cx.allocator(), source, SourceType::cjs());
     if has_error(&parsed.diagnostics) {
@@ -419,9 +441,6 @@ fn array_function<'a>(
     }
     let mut program = parsed.program;
     let mut statement = program.body.pop()?;
-    let Statement::VariableDeclaration(declaration) = original else {
-        return None;
-    };
     let Some(Expression::ArrayExpression(elements)) =
         declaration.declarations.first()?.init.as_ref()
     else {
@@ -437,10 +456,18 @@ fn array_function<'a>(
 }
 
 fn restore_name(program: &mut Program<'_>, index: usize, name_span: Span) -> bool {
-    let Some(Statement::FunctionDeclaration(function)) = program.body.get_mut(index) else {
-        return false;
+    let id = match program.body.get_mut(index) {
+        Some(Statement::FunctionDeclaration(function)) => function.id.as_mut(),
+        Some(Statement::VariableDeclaration(declaration)) => declaration
+            .declarations
+            .first_mut()
+            .and_then(|declarator| match &mut declarator.id {
+                BindingPattern::BindingIdentifier(id) => Some(&mut **id),
+                _ => None,
+            }),
+        _ => None,
     };
-    let Some(id) = function.id.as_mut() else {
+    let Some(id) = id else {
         return false;
     };
     id.span = name_span;

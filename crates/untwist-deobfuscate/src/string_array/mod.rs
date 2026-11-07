@@ -22,8 +22,8 @@ use untwist_core::pass::{Cx, Interest, NoteKind, Pass, RepeatedSites};
 use untwist_core::semantic::is_constant_binding;
 
 use crate::init_order::{
-    lend_order, pass_done, reads_are_initialised, refuse_read_before_declaration, InitOrder,
-    LentOrder,
+    early_or_written, lend_order, pass_done, read_before_declaration, reads_are_initialised,
+    refuse_read_before_declaration, InitOrder, LentOrder,
 };
 use crate::notes;
 use crate::proof::{
@@ -41,6 +41,7 @@ pub struct ArrayShape {
     pub symbol: SymbolId,
     pub length: usize,
     pub undefined_read: Option<(Span, Option<ReferenceId>)>,
+    pub bound: bool,
 }
 
 mod aliases;
@@ -184,6 +185,7 @@ pub fn match_string_array(stmt: &Statement<'_>) -> Option<ArrayShape> {
         symbol: declaration_symbol(stmt)?,
         length,
         undefined_read: first_undefined_read(first),
+        bound: matches!(stmt, Statement::VariableDeclaration(_)),
     })
 }
 
@@ -314,12 +316,22 @@ fn stamp_wrapped_array<'a>(
         return;
     }
     let refused = refused_by_decode.borrow();
+    let bound: Vec<(Span, SymbolId)> = found
+        .iter()
+        .filter(|shape| shape.bound && !refused.contains(&shape.statement))
+        .map(|shape| (shape.statement, shape.symbol))
+        .collect();
+    let early = read_before_declaration(program, cx.scoping(), &bound);
     let dynamic = DynamicScopes::of(cx.scoping());
     let mut indices = IndexAllocator::string_arrays(cx.scoping());
     let mut renames = Renames::new();
     let mut stamped_now = Vec::new();
     for (shape, spelled) in found.iter().zip(spelled) {
         if refused.contains(&shape.statement) {
+            continue;
+        }
+        if let Some(note) = early_or_written(cx.scoping(), &early, shape.symbol) {
+            cx.note(note, Some(shape.statement));
             continue;
         }
         if let Some((note, span)) = array_refusal(cx.scoping(), &dynamic, shape, spelled) {

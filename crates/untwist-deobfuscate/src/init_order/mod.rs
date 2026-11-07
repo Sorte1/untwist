@@ -15,6 +15,7 @@ use untwist_core::semantic::with_observes;
 
 use crate::fused::Member;
 
+use crate::mutants::early_read_guards_dropped;
 use crate::notes;
 use tables::{at, id, some, Site, Sites, SpanSlots};
 
@@ -506,6 +507,48 @@ pub fn refuse_read_before_declaration(
     }
     let name = cx.scoping().symbol_name(binding).to_string();
     cx.note(notes::init_order_budget(&name), Some(span));
+}
+
+fn constant_written(scoping: &Scoping, symbol: SymbolId) -> bool {
+    scoping.symbol_flags(symbol).is_const_variable()
+        && scoping
+            .get_resolved_references(symbol)
+            .any(|reference| reference.is_write())
+}
+
+pub(crate) fn early_or_written(
+    scoping: &Scoping,
+    early: &FxHashSet<SymbolId>,
+    symbol: SymbolId,
+) -> Option<&'static str> {
+    if early.contains(&symbol) {
+        return Some(notes::MACHINERY_READ_BEFORE_DECLARATION);
+    }
+    (!early_read_guards_dropped() && constant_written(scoping, symbol))
+        .then_some(notes::MACHINERY_CONSTANT_WRITTEN)
+}
+
+pub(crate) fn read_before_declaration(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    bound: &[(Span, SymbolId)],
+) -> FxHashSet<SymbolId> {
+    if bound.is_empty() || early_read_guards_dropped() {
+        return FxHashSet::default();
+    }
+    let order = try_scan_init_order(program, scoping);
+    let ignored = FxHashSet::default();
+    bound
+        .iter()
+        .filter(|(statement, symbol)| {
+            !order.as_ref().is_some_and(|order| {
+                order.declaration_slot(*statement).is_some_and(|slot| {
+                    order.symbol_is_initialised_before_use(slot, *symbol, &ignored)
+                })
+            })
+        })
+        .map(|(_, symbol)| *symbol)
+        .collect()
 }
 
 pub fn try_scan_init_order(program: &Program<'_>, scoping: &Scoping) -> Option<InitOrder> {

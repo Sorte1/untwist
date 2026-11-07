@@ -9,6 +9,15 @@ pub struct FnDecl<'k, 'a> {
     pub function: &'k Function<'a>,
 }
 
+pub fn is_plain_declaration(kind: VariableDeclarationKind) -> bool {
+    matches!(
+        kind,
+        VariableDeclarationKind::Var
+            | VariableDeclarationKind::Let
+            | VariableDeclarationKind::Const
+    )
+}
+
 pub fn var_function_or_declaration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<FnDecl<'k, 'a>> {
     match stmt {
         Statement::FunctionDeclaration(function) => {
@@ -19,7 +28,7 @@ pub fn var_function_or_declaration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<Fn
             })
         }
         Statement::VariableDeclaration(declaration) => {
-            if declaration.kind != VariableDeclarationKind::Var {
+            if !is_plain_declaration(declaration.kind) {
                 return None;
             }
             if declaration.declarations.len() != 1 {

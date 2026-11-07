@@ -182,6 +182,10 @@ const A_CALL_BEFORE_THE_ROTATOR: &str =
 const A_DECODER_BOUND_AFTER_THE_ROTATOR: &str =
     include_str!("../../../../fixtures/behaviour/var-decoder-declared-after-rotator.js");
 
+const A_SECOND_DECODER_BOUND_AFTER_THE_ROTATOR: &str = "function a() { var h = ['p', 'q', 'log']; a = function () { return h; }; return a(); }\nfunction b(c, d) { var e = a(); c = c - 0; return e[c]; }\n(function (c, d) { var e = c(); var t = 0; while (!![]) { try { if (b(0) === 'log') break; else e['push'](e['shift']()); } catch (h) { e['push'](e['shift']()); } if (t++ > 5) break; } })(a, 0);\nvar g = function (c, d) { var e = a(); c = c - 0; return e[c]; };\nconsole.log(b(0), g(1), g(2));";
+
+const A_REASSIGNED_CONST_DECODER: &str = "function a() { var h = ['p', 'q']; a = function () { return h; }; return a(); }\nconst b = function (c, d) { var e = a(); b = function (f) { return e[f - 0]; }; return b(c, d); };\nconsole.log(b(0), b(1));";
+
 const A_ROTATOR_THAT_DEFINES_A_GLOBAL: &str =
     include_str!("../../../../fixtures/behaviour/13-rotator-defines-global.js");
 
@@ -629,7 +633,17 @@ pub const CASES: &[Case] = &[
     },
     Case {
         source: Source::Whole(A_DECODER_BOUND_AFTER_THE_ROTATOR),
+        expects: notes::MACHINERY_READ_BEFORE_DECLARATION,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(A_SECOND_DECODER_BOUND_AFTER_THE_ROTATOR),
         expects: notes::MACHINERY_NOT_INITIALISED,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(A_REASSIGNED_CONST_DECODER),
+        expects: notes::MACHINERY_CONSTANT_WRITTEN,
         mode: Match::Contains,
     },
     Case {

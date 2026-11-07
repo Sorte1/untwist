@@ -9,7 +9,7 @@ use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::ast_util::rename::Renames;
 use untwist_core::pass::{Cx, Interest, Pass};
 
-use crate::init_order::pass_done;
+use crate::init_order::{early_or_written, pass_done, read_before_declaration};
 use crate::notes;
 use crate::probe::contains_expression;
 use crate::proof::{
@@ -28,6 +28,7 @@ pub struct DecoderShape {
     pub statement: Span,
     pub symbol: SymbolId,
     pub already_stamped: Option<usize>,
+    pub bound: bool,
 }
 
 fn array_alias<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k str> {
@@ -131,6 +132,7 @@ pub fn match_decoder(stmt: &Statement<'_>) -> Option<DecoderShape> {
         statement: stmt.span(),
         symbol: declaration_symbol(stmt)?,
         already_stamped: decoder_index(declaration.name),
+        bound: matches!(stmt, Statement::VariableDeclaration(_)),
     })
 }
 
@@ -224,10 +226,20 @@ impl<'a> Pass<'a> for FindDecoders {
             return;
         }
         let refused = self.refused_by_decode.borrow();
+        let bound: Vec<(Span, SymbolId)> = unstamped
+            .iter()
+            .filter(|shape| shape.bound && !refused.contains(&shape.statement))
+            .map(|shape| (shape.statement, shape.symbol))
+            .collect();
+        let early = read_before_declaration(program, cx.scoping(), &bound);
         let mut indices = IndexAllocator::decoders(cx.scoping());
         let mut renames = Renames::new();
         for (index, shape) in unstamped.iter().enumerate() {
             if refused.contains(&shape.statement) {
+                continue;
+            }
+            if let Some(note) = early_or_written(cx.scoping(), &early, shape.symbol) {
+                cx.note(note, Some(shape.statement));
                 continue;
             }
             if let Some((note, span)) = decoder_refusal(cx.scoping(), shape, index, &watched) {
