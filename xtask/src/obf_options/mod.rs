@@ -3,6 +3,7 @@ pub mod lanes;
 pub mod machinery;
 pub mod manifest;
 pub mod oracle;
+pub mod refusals;
 pub mod report;
 pub mod suggest;
 
@@ -20,9 +21,17 @@ use machinery::{measure, MACHINERY, OUTPUT_ONLY, SIMPLIFY};
 use manifest::{Entry, DIR};
 
 pub const EXPECT: &str = "fixtures/obfuscator-io/EXPECT";
+pub const VERSIONS_DIR: &str = "fixtures/obfuscator-versions";
+const UNMEASURED: &str = "residue-only:input-unmeasured";
 
 #[derive(clap::Args)]
 pub struct Request {
+    #[arg(
+        long,
+        default_value = DIR,
+        help = "the generated fixture dir: fixtures/obfuscator-io or fixtures/obfuscator-versions"
+    )]
+    pub dir: String,
     #[arg(long)]
     pub untwist: Option<PathBuf>,
     #[arg(long, default_value_t = 8)]
@@ -101,6 +110,11 @@ fn verify(root: &Path, entries: &[Entry]) -> Result<Vec<String>> {
         }
     }
     Ok(problems)
+}
+
+fn unmeasured(root: &Path, entry: &Entry) -> bool {
+    let text = std::fs::read_to_string(entry.path(root)).unwrap_or_default();
+    measure(&text).present(&MACHINERY).is_empty()
 }
 
 fn blind_detectors(root: &Path, entries: &[Entry]) -> Vec<&'static str> {
@@ -204,8 +218,12 @@ fn judge_all(rules: &[expect::Rule], outcomes: &[Outcome]) -> Vec<Judged> {
     out
 }
 
+fn expect_path(root: &Path, request: &Request) -> PathBuf {
+    root.join(&request.dir).join("EXPECT")
+}
+
 fn selected(root: &Path, request: &Request) -> Result<Vec<Entry>> {
-    let entries: Vec<Entry> = manifest::load(root)?
+    let entries: Vec<Entry> = manifest::load_dir(root, &request.dir)?
         .into_iter()
         .filter(|e| {
             request
@@ -215,22 +233,32 @@ fn selected(root: &Path, request: &Request) -> Result<Vec<Entry>> {
         })
         .collect();
     if entries.is_empty() {
-        bail!("no fixture under {DIR} matches");
+        bail!("no fixture under {} matches", request.dir);
     }
-    if request.webcrack && request.only.is_some() {
-        bail!("--webcrack rewrites ORACLE for every fixture, so it does not take --only");
+    if request.webcrack && (request.only.is_some() || request.dir != DIR) {
+        bail!("--webcrack rewrites {DIR}/ORACLE for every fixture, so it takes neither --only nor --dir");
     }
     Ok(entries)
 }
 
-fn harness_problems(root: &Path, request: &Request, entries: &[Entry]) -> Result<Vec<String>> {
+fn harness_problems(root: &Path, request: &Request, entries: &mut [Entry]) -> Result<Vec<String>> {
     let mut problems = verify(root, entries)?;
-    if request.only.is_none() {
-        for class in blind_detectors(root, entries) {
-            problems.push(format!(
-                "no fixture input shows {class}, so its detector is untested"
-            ));
+    if request.dir == DIR {
+        if request.only.is_none() {
+            for class in blind_detectors(root, entries) {
+                problems.push(format!(
+                    "no fixture input shows {class}, so its detector is untested"
+                ));
+            }
         }
+        return Ok(problems);
+    }
+    for entry in entries.iter_mut().filter(|e| unmeasured(root, e)) {
+        problems.push(format!(
+            "{} shows no obfuscator machinery to the meter, so its output is not run",
+            entry.file
+        ));
+        entry.behaviour = UNMEASURED.to_string();
     }
     Ok(problems)
 }
@@ -241,6 +269,9 @@ fn oracle_rows(
     outcomes: &[Outcome],
 ) -> Result<BTreeMap<String, oracle::Row>> {
     if !request.webcrack {
+        if request.dir != DIR {
+            return Ok(BTreeMap::new());
+        }
         return oracle::load(root);
     }
     let rows: BTreeMap<String, oracle::Row> = outcomes
@@ -268,7 +299,7 @@ fn write_outputs(
         report::write_draft(path, judged, outcomes)?;
     }
     if let Some(path) = &request.suggest_expect {
-        suggest::write(path, &root.join(EXPECT), rules, judged, outcomes)?;
+        suggest::write(path, &expect_path(root, request), rules, judged, outcomes)?;
     }
     if let Some(path) = &request.blockers {
         blockers::write(root, path, judged, outcomes)?;
@@ -278,9 +309,9 @@ fn write_outputs(
 
 pub fn run(root: &Path, request: &Request) -> Result<()> {
     let started = Instant::now();
-    let rules = expect::load(&root.join(EXPECT))?;
-    let entries = selected(root, request)?;
-    let problems = harness_problems(root, request, &entries)?;
+    let rules = expect::load(&expect_path(root, request))?;
+    let mut entries = selected(root, request)?;
+    let problems = harness_problems(root, request, &mut entries)?;
     let expected = expected_stdouts(root, &entries)?;
     std::fs::create_dir_all(root.join("target"))?;
     let work = tempfile::Builder::new()

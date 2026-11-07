@@ -1,0 +1,1 @@
+(()=>{for(var e=["length","log","done with "," guests","hello, ","ada","grace"],o=e,x=187;--x;)o.push(o.shift());function n(o,x){return e[o=+o]}for(var l=[n("0x1"),n("0x2"),"linus"],r=0;r<l[n("0x3")];r++)console[n("0x4")](n("0x0")+l[r]);console[n("0x4")](n("0x5")+l[n("0x3")]+n("0x6"))})();

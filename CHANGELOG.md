@@ -14,6 +14,12 @@ All notable changes to this project are documented in this file. The format is b
   calls are run in evaluation order, and the fold is refused when anything else can see the
   function or the state (another function, a value use, the global object, code text).
 
+- A javascript-obfuscator version matrix (`fixtures/obfuscator-versions`, run with
+  `cargo xtask obf-options --dir fixtures/obfuscator-versions`): 723 cells over twenty releases
+  from 0.10.2 to 5.9.1, string array options, top-level/IIFE/webpack 4 containers and uglify-js or
+  terser after obfuscation. Its `EXPECT` records today's results, most of them misses on releases
+  before 2.19.
+
 ### Fixed
 
 - String arrays from old javascript-obfuscator builds (a plain `var a = [...]` with a counting

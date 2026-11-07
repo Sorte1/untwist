@@ -5,8 +5,8 @@ use std::sync::Mutex;
 use untwist::{Options, Pipeline};
 use xtask::obf_matrix::expect::{judge, load, Rule};
 use xtask::obf_options::machinery::{measure, MACHINERY, SIMPLIFY};
-use xtask::obf_options::manifest::{self, Entry};
-use xtask::obf_options::EXPECT;
+use xtask::obf_options::manifest::{self, Entry, DIR};
+use xtask::obf_options::VERSIONS_DIR;
 
 const PROGRAMS: [&str; 8] = [
     "empty-log",
@@ -77,12 +77,8 @@ fn drift(root: &Path, rules: &[Rule], entry: &Entry, lane: &str) -> Vec<String> 
         .collect()
 }
 
-#[test]
-fn a_sample_of_the_option_matrix_matches_expect_without_node() {
-    let root = root();
-    let rules = load(&root.join(EXPECT)).expect("EXPECT");
-    let entries = sample(manifest::load(&root).expect("MANIFEST"));
-    assert!(entries.len() >= 100, "{} sampled fixtures", entries.len());
+fn problems_in(root: &Path, dir: &str, entries: &[Entry]) -> Vec<String> {
+    let rules = load(&root.join(dir).join("EXPECT")).expect("EXPECT");
     let jobs: Mutex<Vec<(&Entry, &str)>> = Mutex::new(
         entries
             .iter()
@@ -99,7 +95,7 @@ fn a_sample_of_the_option_matrix_matches_expect_without_node() {
                     let Some((entry, lane)) = jobs.lock().expect("jobs").pop() else {
                         break;
                     };
-                    let found = drift(&root, &rules, entry, lane);
+                    let found = drift(root, &rules, entry, lane);
                     problems.lock().expect("problems").extend(found);
                 })
                 .expect("spawn");
@@ -107,9 +103,31 @@ fn a_sample_of_the_option_matrix_matches_expect_without_node() {
     });
     let mut problems = problems.into_inner().expect("problems");
     problems.sort();
+    problems
+}
+
+#[test]
+fn a_sample_of_the_option_matrix_matches_expect_without_node() {
+    let root = root();
+    let entries = sample(manifest::load(&root).expect("MANIFEST"));
+    assert!(entries.len() >= 100, "{} sampled fixtures", entries.len());
+    let problems = problems_in(&root, DIR, &entries);
     assert!(
         problems.is_empty(),
-        "fixtures/obfuscator-io drifted from EXPECT; run cargo xtask obf-options:\n{}",
+        "{DIR} drifted from EXPECT; run cargo xtask obf-options:\n{}",
+        problems.join("\n")
+    );
+}
+
+#[test]
+fn the_version_matrix_matches_expect_without_node() {
+    let root = root();
+    let entries = manifest::load_dir(&root, VERSIONS_DIR).expect("MANIFEST");
+    assert!(entries.len() >= 500, "{} fixtures", entries.len());
+    let problems = problems_in(&root, VERSIONS_DIR, &entries);
+    assert!(
+        problems.is_empty(),
+        "{VERSIONS_DIR} drifted from EXPECT; run cargo xtask obf-options --dir {VERSIONS_DIR}:\n{}",
         problems.join("\n")
     );
 }

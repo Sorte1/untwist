@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::manifest::Entry;
+use super::refusals;
 use super::report::cause_key;
 use super::{Judged, Outcome};
 use crate::obf_matrix::expect::{glob, Mark, Rule, Verdict};
@@ -22,18 +23,23 @@ const DEBUG_KEPT: &str = "safe-debug-protection-kept";
 const DEAD_VARS: &str = "safe-dead-code-vars";
 const OBJECT_KEYS: &str = "object-keys-computed-key";
 const DECODE_MISS: &str = "unexplained-decode-miss";
+const NO_ARRAY: &str = "missed-no-string-array";
 
 const REACH_NOTE: &str = "may reach the string array's function by a key";
 const NAMES_NOTE: &str = "may observe the names of the global object";
 
-const DEFAULT_REASONS: [(&str, &str); 11] = [
+const DEFAULT_REASONS: [(&str, &str); 12] = [
+    (
+        NO_ARRAY,
+        "MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why",
+    ),
     (
         BUILTIN_REPLACED,
         "a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused",
     ),
     (
         DECODE_MISS,
-        "the unit keeps every reference undecoded and no pass says why",
+        "MISSED: the unit keeps every reference undecoded and no pass says why",
     ),
     (
         STEP_BUDGET,
@@ -84,6 +90,7 @@ pub struct Failed<'j> {
 pub struct Shape {
     pub domain_lock: bool,
     pub key_shaped: bool,
+    pub version_matrix: bool,
 }
 
 impl Shape {
@@ -91,6 +98,7 @@ impl Shape {
         Shape {
             domain_lock: entry.cell.starts_with("domain-lock"),
             key_shaped: entry.source.ends_with("objects.js") || entry.source.ends_with("mixed.js"),
+            version_matrix: entry.dir != super::manifest::DIR,
         }
     }
 }
@@ -103,6 +111,9 @@ pub struct Suggestion {
 }
 
 fn by_note(note: &str) -> Option<&'static str> {
+    if note.contains(super::lanes::NO_ARRAY) {
+        return Some(NO_ARRAY);
+    }
     if note.contains("spells this function's name") {
         return Some(SPELLED);
     }
@@ -110,6 +121,13 @@ fn by_note(note: &str) -> Option<&'static str> {
         return Some(BUILTIN_REPLACED);
     }
     None
+}
+
+fn only_class(detail: &str, class: &str) -> bool {
+    detail
+        .strip_prefix(class)
+        .and_then(|rest| rest.strip_prefix('='))
+        .is_some_and(|count| !count.is_empty() && count.bytes().all(|b| b.is_ascii_digit()))
 }
 
 fn later_cause(lane: &str, notes: &[String]) -> &'static str {
@@ -129,12 +147,6 @@ fn later_cause(lane: &str, notes: &[String]) -> &'static str {
         }
     }
     DECODE_MISS
-}
-
-fn is_dead_declarations(detail: &str) -> bool {
-    detail
-        .strip_prefix("dead_declarations=")
-        .is_some_and(|count| !count.is_empty() && count.bytes().all(|b| b.is_ascii_digit()))
 }
 
 fn machinery_cause(
@@ -171,10 +183,23 @@ fn machinery_cause(
     if safe && note.contains(NAMES_NOTE) {
         return Some(NAMES);
     }
-    if safe && is_dead_declarations(detail) {
+    if safe && only_class(detail, "dead_declarations") {
         return Some(DEAD_VARS);
     }
-    None
+    if !shape.version_matrix {
+        return None;
+    }
+    last_resort(lane, detail, note, notes)
+}
+
+fn last_resort(lane: &str, detail: &str, note: &str, notes: &[String]) -> Option<&'static str> {
+    if note.contains(refusals::INTERPRETED) {
+        return Some(later_cause(lane, notes));
+    }
+    if note.is_empty() {
+        return refusals::residue_of(detail);
+    }
+    refusals::refusal_of(note)
 }
 
 pub fn cause_of(
@@ -329,6 +354,8 @@ impl Builder<'_> {
 fn reasons_of(rules: &[Rule]) -> BTreeMap<String, String> {
     let mut reasons: BTreeMap<String, String> = DEFAULT_REASONS
         .iter()
+        .copied()
+        .chain(refusals::reasons())
         .map(|(key, reason)| (key.to_string(), reason.to_string()))
         .collect();
     let mut kept = BTreeSet::new();
@@ -454,6 +481,7 @@ mod tests {
 
     fn entry(file: &str) -> Entry {
         Entry {
+            dir: crate::obf_options::manifest::DIR.to_string(),
             file: file.to_string(),
             cell: file
                 .split_once("--")
@@ -581,5 +609,39 @@ mod tests {
             "# one\n# two\nx--*\t*\tnode\tallow\twhy\nold\tsafe\truns\txfail\tgone: no longer\n";
         let suggestion = suggest(current, &[], &[], &[]);
         assert_eq!(suggestion.text, "# one\n# two\nx--*\t*\tnode\tallow\twhy\n");
+    }
+
+    #[test]
+    fn version_matrix_misses_and_refusals_get_their_own_causes() {
+        let cause = |detail: &str, note: &str| {
+            let checks = BTreeMap::from([("machinery", Failed { detail, note })]);
+            let shape = Shape {
+                version_matrix: true,
+                ..Shape::default()
+            };
+            cause_of(shape, "unsafe", &checks, &[note.to_string()])
+        };
+        let missed = format!("note: {}", crate::obf_options::lanes::NO_ARRAY);
+        assert_eq!(cause("string_arrays=1", &missed), Some(NO_ARRAY));
+        assert_eq!(
+            cause(
+                "string_arrays=1",
+                "note: inline-decoded-strings: a decoder of the unit reads a binding outside itself other than a standard global"
+            ),
+            Some("decoder-reads-outer-binding")
+        );
+        assert_eq!(
+            cause("opaque_predicates=1", ""),
+            Some("missed-opaque-predicate")
+        );
+        assert_eq!(cause("opaque_predicates=1,decoders=1", ""), None);
+        let checks = BTreeMap::from([(
+            "machinery",
+            Failed {
+                detail: "opaque_predicates=1",
+                note: "",
+            },
+        )]);
+        assert_eq!(cause_of(Shape::default(), "unsafe", &checks, &[]), None);
     }
 }

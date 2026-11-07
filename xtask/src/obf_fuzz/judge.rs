@@ -253,6 +253,7 @@ pub fn shape_of(spec: &Spec) -> (Shape, bool) {
         Shape {
             domain_lock: spec.domain_lock(),
             key_shaped: spec.key_shaped(),
+            version_matrix: false,
         },
         spec.has_hazard(),
     )

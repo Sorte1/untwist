@@ -1,0 +1,1 @@
+(()=>{for(var n,x=["length","linus","ada","hello, ","done with ","grace"," guests","log"],o=[l("0x2"),l("0x5"),l("0x1")],e=0;e<o[l("0x0")];e++)console[l("0x7")]((n=o[e],l("0x3")+n));function l(n,o){return(l=function(n,o){return x[n=+n]})(n,o)}console[l("0x7")](l("0x4")+o[l("0x0")]+l("0x6"))})();
