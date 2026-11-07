@@ -20,6 +20,19 @@ All notable changes to this project are documented in this file. The format is b
   terser after obfuscation. Its `EXPECT` records today's results, most of them misses on releases
   before 2.19.
 
+### Changed
+
+- The safe lane knows which of the program's own functions a call target may hold, through
+  bindings, the arguments of known call sites and returned functions. A call such as
+  `memo(fn)`'s `fn(key)` no longer counts as handing `key` to outside code when every value of
+  `fn` is a function of the program. A parameter of a top-level function in a classic script still
+  counts as outside, since another script may call that function, unless the call passes only
+  values the same outside caller supplied.
+- `join` on the result of `await Promise.all(…)` or `await Promise.allSettled(…)` counts as a
+  string, so printing it does not keep the decoder machinery. This holds while `Promise` is the
+  built-in and no write may have the key `Promise`, `all`, `allSettled`, `then`, `constructor`
+  or `join`.
+
 ### Fixed
 
 - String arrays from old javascript-obfuscator builds (a plain `var a = [...]` with a counting

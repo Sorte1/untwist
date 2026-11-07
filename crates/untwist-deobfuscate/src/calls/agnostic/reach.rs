@@ -217,6 +217,7 @@ impl<'a> Sites<'_, 'a> {
         if self.fresh.is_fresh(inner)
             || self.is_array_result(inner)
             || self.collection_primitive(inner)
+            || self.awaited_array_primitive(inner)
             || self.ambient_creation(inner)
         {
             return true;

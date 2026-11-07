@@ -1,4 +1,5 @@
 mod assembled;
+mod awaited;
 mod bind;
 mod bootstrap;
 mod bound_this;

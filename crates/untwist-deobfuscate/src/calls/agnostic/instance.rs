@@ -42,12 +42,23 @@ const NAMES: [&str; 12] = [
     "size",
 ];
 
-const PROTO_BIT: u16 = 1 << NAMES.len();
+const PROTO_BIT: u32 = 1 << NAMES.len();
 
-const ALL_BITS: u16 = (PROTO_BIT << 1) - 1;
+const AWAITED_NAMES: [&str; 6] = [
+    "Promise",
+    "all",
+    "allSettled",
+    "then",
+    "constructor",
+    "join",
+];
+
+const AWAITED_BITS: u32 = ((1 << AWAITED_NAMES.len()) - 1) << (NAMES.len() + 1);
+
+const ALL_BITS: u32 = ((PROTO_BIT << 1) - 1) | AWAITED_BITS;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) struct Unwritten(u16);
+pub(super) struct Unwritten(u32);
 
 impl Unwritten {
     pub(super) fn all() -> Self {
@@ -64,6 +75,9 @@ impl Unwritten {
         if written.may_be("__proto__") {
             bits &= !PROTO_BIT;
         }
+        if AWAITED_NAMES.iter().any(|name| written.may_be(name)) {
+            bits &= !AWAITED_BITS;
+        }
         Self(bits)
     }
 
@@ -76,6 +90,10 @@ impl Unwritten {
 
     fn proto(self) -> bool {
         self.0 & PROTO_BIT != 0
+    }
+
+    pub(super) fn awaited(self) -> bool {
+        self.0 & AWAITED_BITS == AWAITED_BITS
     }
 }
 
@@ -226,7 +244,7 @@ impl<'a> Sites<'_, 'a> {
         }
     }
 
-    fn sole_init(&self, symbol: SymbolId) -> Option<&'a Expression<'a>> {
+    pub(super) fn sole_init(&self, symbol: SymbolId) -> Option<&'a Expression<'a>> {
         let defs = self.fresh.bindings.defs.get(symbol)?;
         if defs.opaque || defs.mutated || defs.escapes || defs.fields_written || defs.callable {
             return None;
