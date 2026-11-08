@@ -600,10 +600,7 @@ fn refusal(
         return Some((notes::LEGACY_DECODER_BEFORE_ARRAY, statement));
     }
     let rotator = legacy.rotator.filter(|(_, count)| *count > 0);
-    let Some((rotator, _)) = rotator.filter(|_| !cx.opts.unsafe_transforms && legacy.code_before)
-    else {
-        return None;
-    };
+    let (rotator, _) = rotator.filter(|_| !cx.opts.unsafe_transforms && legacy.code_before)?;
     if legacy.body_code_before {
         return Some((notes::LEGACY_ROTATOR_AFTER_CODE, statement));
     }
