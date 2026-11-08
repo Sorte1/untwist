@@ -74,6 +74,11 @@ All notable changes to this project are documented in this file. The format is b
 - A function declaration that decodes a plain array is also found when it comes before the array,
   as uglify-js hoists it; it is used only when nothing runs before the array in that body.
 
+- uglify-js also inlines the checksum rotator of javascript-obfuscator 2.10 and later into a bare
+  `for (;;) { try { ... } catch (e) { ... } }` loop after aliases of the array and the decoder.
+  The loop and the aliases only it uses are wrapped back into the rotator function. A checksum
+  rotator whose parameter reuses the array's name is accepted too.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called
