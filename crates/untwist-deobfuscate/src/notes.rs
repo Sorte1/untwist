@@ -227,7 +227,8 @@ pub const BUILTIN_PATCHED: &str =
 pub const BUILTIN_ALIAS_PATCHED: &str =
     "the program may replace a standard built-in that the unit's decoders or rotator use through \
      a variable, parameter, `this` or computed object that can hold it, so decoding with the \
-     standard one is not proven, and the unit's call sites were left alone";
+     standard one is not proven, and the unit's call sites were left alone (`--unsafe` assumes the \
+     built-ins are untouched and decodes it)";
 
 pub const DECODED_NAME: &str =
     "a decoded string spells the name of this string array or one of its decoders, so code built \

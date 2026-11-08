@@ -557,6 +557,7 @@ impl<'s> BuiltinAliases<'s> {
             span: member.span(),
             key: self.site_key(key, expr),
             functions_only,
+            position: None,
         })
     }
 
@@ -578,8 +579,12 @@ impl<'s> BuiltinAliases<'s> {
             match member_name(member) {
                 Some(name) if is_getter_definer(name) => sites.push((object, key_at(0))),
                 Some(name) if is_owned_definer(name) => {
-                    let keyed = matches!(name, "defineProperty" | "set" | "deleteProperty");
-                    let key = if keyed { key_at(1) } else { AliasKey::Unknown };
+                    let key = match name {
+                        "defineProperty" | "set" | "deleteProperty" => key_at(1),
+                        "assign" => literal_keys(arguments.get(1..).unwrap_or_default()),
+                        "defineProperties" => literal_keys(arguments.get(1..2).unwrap_or_default()),
+                        _ => AliasKey::Unknown,
+                    };
                     sites.push((value_at(0), key));
                 }
                 Some("call") if object & DEFINER != 0 => {
@@ -617,6 +622,7 @@ impl<'s> BuiltinAliases<'s> {
                     span: call.span,
                     key,
                     functions_only: self.functions_only(target)?,
+                    position: None,
                 })
             })
             .collect()
@@ -630,6 +636,37 @@ impl<'s> BuiltinAliases<'s> {
     }
 }
 
+fn literal_key(key: &PropertyKey<'_>) -> Option<String> {
+    match key {
+        PropertyKey::StaticIdentifier(id) => Some(id.name.to_string()),
+        PropertyKey::StringLiteral(text) => text.value.as_str().map(str::to_string),
+        PropertyKey::NumericLiteral(number) => Some(number.value.to_string()),
+        _ => None,
+    }
+}
+
+fn object_keys(expr: &Expression<'_>) -> Option<Vec<String>> {
+    let Expression::ObjectExpression(object) = expr.without_parentheses() else {
+        return None;
+    };
+    object
+        .properties
+        .iter()
+        .map(|property| match property {
+            ObjectPropertyKind::ObjectProperty(property) => literal_key(&property.key),
+            ObjectPropertyKind::SpreadProperty(_) => None,
+        })
+        .collect()
+}
+
+fn literal_keys(sources: &[&Expression<'_>]) -> AliasKey {
+    let keys: Option<Vec<Vec<String>>> = sources.iter().map(|source| object_keys(source)).collect();
+    match keys {
+        Some(keys) if !sources.is_empty() => AliasKey::Names(keys.concat()),
+        _ => AliasKey::Unknown,
+    }
+}
+
 enum AliasKey {
     Names(Vec<String>),
     Unknown,
@@ -639,6 +676,14 @@ pub struct AliasSite {
     span: Span,
     key: AliasKey,
     functions_only: bool,
+    position: Option<(usize, usize)>,
+}
+
+fn position_of(source: &str, span: Span) -> Option<(usize, usize)> {
+    let before = source.get(..span.start as usize)?;
+    let line = before.matches('\n').count() + 1;
+    let column = before.len() - before.rfind('\n').map_or(0, |at| at + 1) + 1;
+    Some((line, column))
 }
 
 impl AliasSite {
@@ -709,19 +754,22 @@ pub fn alias_sites(
         sites: Vec::new(),
     };
     scan.visit_program(program);
-    scan.sites
+    let mut sites = scan.sites;
+    for site in &mut sites {
+        site.position = position_of(program.source_text, site.span);
+    }
+    sites
 }
 
 pub fn alias_refusal(sites: &[AliasSite], used: &UsedNames<'_>) -> Option<Refusal> {
     let site = sites.iter().find(|site| site.refuses(used))?;
-    let detail = match &site.key {
-        AliasKey::Names(names) => {
-            format!(
-                "a built-in reached through an alias, key {}",
-                names.join(" or ")
-            )
-        }
-        AliasKey::Unknown => "a built-in reached through an alias, computed key".to_string(),
+    let key = match &site.key {
+        AliasKey::Names(names) => format!("key {}", names.join(" or ")),
+        AliasKey::Unknown => "computed key".to_string(),
+    };
+    let detail = match site.position {
+        Some((line, column)) => format!("the write at line {line}:{column}, {key}"),
+        None => format!("a write in code untwist built, {key}"),
     };
     Some(Refusal::naming(
         notes::BUILTIN_ALIAS_PATCHED,

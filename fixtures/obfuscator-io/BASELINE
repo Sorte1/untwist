@@ -13,8 +13,8 @@ dead-code-1	10	9/10	10/10	10/10	0	safe-global-names (1)
 debug-protection	10	9/10	10/10	10/10	0	safe-debug-protection-kept (1)
 debug-protection-interval	10	9/10	10/10	10/10	0	safe-debug-protection-kept (1)
 disable-console	10	9/10	10/10	10/10	0	safe-global-names (1)
-domain-lock	10	5/10	10/10	10/10	0	safe-domain-lock-reach (5)
-domain-lock-redirect	10	5/10	10/10	10/10	0	safe-domain-lock-reach (5)
+domain-lock	10	0/10	10/10	10/10	0	safe-domain-lock-reach (10)
+domain-lock-redirect	10	0/10	10/10	10/10	0	safe-domain-lock-reach (10)
 encoding-base64	10	9/10	10/10	10/10	0	builtin-replaced-decoded-key (1)
 encoding-mixed	10	9/10	10/10	10/10	0	builtin-replaced-decoded-key (1)
 encoding-rc4	10	9/10	10/10	10/10	0	safe-global-names (1)
@@ -37,7 +37,7 @@ pair-calls+split	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-calls+unicode	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-cff+calls	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-cff+dead	10	9/10	10/10	10/10	0	safe-global-names (1)
-pair-cff+debug	10	9/10	10/10	10/10	0	safe-debug-protection-kept (1)
+pair-cff+debug	10	9/10	10/10	10/10	0	builtin-alias-patched (1)
 pair-cff+keys	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-cff+num	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-cff+rc4	10	9/10	10/10	10/10	0	builtin-replaced-decoded-key (1)
@@ -85,9 +85,9 @@ pair-wrap+self	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-wrap+split	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-wrap+unicode	10	9/10	10/10	10/10	0	safe-global-names (1)
 preset-default	10	9/10	10/10	10/10	0	safe-global-names (1)
-preset-high	10	2/10	10/10	10/10	0	builtin-replaced-decoded-key (1), safe-global-key-reach (4), safe-global-names (3)
+preset-high	10	0/10	10/10	10/10	0	builtin-alias-patched (6), safe-global-key-reach (4)
 preset-low	10	9/10	10/10	10/10	0	safe-global-names (1)
-preset-medium	10	4/10	10/10	10/10	0	safe-global-key-reach (2), safe-global-names (4)
+preset-medium	10	0/10	10/10	10/10	0	builtin-alias-patched (8), safe-global-key-reach (2)
 rename-globals	10	9/10	10/10	10/10	0	safe-global-names (1)
 rename-properties-safe	10	9/10	10/10	10/10	0	safe-global-names (1)
 rename-properties-unsafe	10	9/10	10/10	10/10	0	safe-global-names (1)
@@ -114,9 +114,10 @@ wrappers-function	10	9/10	10/10	10/10	0	safe-global-names (1)
 wrappers-function-params-5	10	9/10	10/10	10/10	0	safe-global-names (1)
 wrappers-unchained	10	9/10	10/10	10/10	0	safe-global-names (1)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
-safe-global-names	86	94	94	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
-builtin-replaced-decoded-key	13	14	14	0	the global-object getter's code text (Function("return (function() " + ...)) is built through a proxy object whose keys are themselves decoder calls, so the text cannot be resolved before the decode and a stateful base64 or rc4 unit is refused as a possible built-in patch
-safe-debug-protection-kept	10	10	10	0	safe lane: after control-flow flattening or dead-code injection a reference to the debug protection function survives outside the statements the pass removes, so it stays and its Function global getter then blocks the unit
+safe-global-names	84	87	87	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
+builtin-replaced-decoded-key	12	13	13	0	the global-object getter's code text (Function("return (function() " + ...)) is built through a proxy object whose keys are themselves decoder calls, so the text cannot be resolved before the decode and a stateful base64 or rc4 unit is refused as a possible built-in patch
+safe-debug-protection-kept	9	9	9	0	safe lane: after control-flow flattening or dead-code injection a reference to the debug protection function survives outside the statements the pass removes, so it stays and its Function global getter then blocks the unit
+builtin-alias-patched	3	15	15	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
 safe-global-key-reach	3	7	7	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve (an object spread or rest enumerates values, a Symbol-valued computed key), so the unit's call sites are left alone
-safe-domain-lock-reach	2	10	10	0	safe lane: the lock reuses the found key's var for another value later in the same function, so its for-in scan of the global object stays a global reach
+safe-domain-lock-reach	2	20	20	0	safe lane: the lock reuses the found key's var for another value later in the same function, so its for-in scan of the global object stays a global reach
 object-keys-computed-key	1	1	1	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)
