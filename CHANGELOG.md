@@ -127,6 +127,10 @@ All notable changes to this project are documented in this file. The format is b
   The loop and the aliases only it uses are wrapped back into the rotator function. A checksum
   rotator whose parameter reuses the array's name is accepted too.
 
+- uglify-js folds a plain string array into the head of the next `for (var ...)` loop
+  (`for (var e = ["..."], x = [o("0x1")], l = 0; ...)`). When a function beside the loop reads
+  the array, the leading array declarations are moved in front of the loop, so the array is found.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called

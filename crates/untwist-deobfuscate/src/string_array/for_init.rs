@@ -9,6 +9,8 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 
+use super::array_literal;
+
 fn forwards_a_call(function: &Function<'_>) -> bool {
     let Some(body) = function.body.as_ref() else {
         return false;
@@ -39,7 +41,16 @@ fn is_bare(declarator: &VariableDeclarator<'_>) -> bool {
     matches!(declarator.id, BindingPattern::BindingIdentifier(_)) && declarator.init.is_none()
 }
 
-fn leading_forwarders(stmt: &Statement<'_>) -> usize {
+fn is_string_array(declarator: &VariableDeclarator<'_>) -> bool {
+    matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+        && declarator
+            .init
+            .as_ref()
+            .and_then(array_literal)
+            .is_some_and(|length| length > 0)
+}
+
+fn leading_declarators(stmt: &Statement<'_>, wanted: fn(&VariableDeclarator<'_>) -> bool) -> usize {
     let Statement::ForStatement(node) = stmt else {
         return 0;
     };
@@ -52,18 +63,160 @@ fn leading_forwarders(stmt: &Statement<'_>) -> usize {
     let leading = declaration
         .declarations
         .iter()
-        .take_while(|declarator| is_forwarder(declarator) || is_bare(declarator))
+        .take_while(|declarator| wanted(declarator) || is_bare(declarator))
         .count();
-    let forwards = declaration
+    let found = declaration
         .declarations
         .iter()
         .take(leading)
-        .any(|declarator| is_forwarder(declarator));
-    if forwards {
+        .any(|declarator| wanted(declarator));
+    if found {
         leading
     } else {
         0
     }
+}
+
+fn leading_forwarders(stmt: &Statement<'_>) -> usize {
+    leading_declarators(stmt, is_forwarder)
+}
+
+fn leading_arrays(stmt: &Statement<'_>) -> usize {
+    leading_declarators(stmt, is_string_array)
+}
+
+fn hoisted_symbols(stmt: &Statement<'_>, count: usize) -> FxHashSet<SymbolId> {
+    let Statement::ForStatement(node) = stmt else {
+        return FxHashSet::default();
+    };
+    let Some(ForStatementInit::VariableDeclaration(declaration)) = node.init.as_ref() else {
+        return FxHashSet::default();
+    };
+    declaration
+        .declarations
+        .iter()
+        .take(count)
+        .filter(|declarator| is_string_array(declarator))
+        .filter_map(|declarator| match &declarator.id {
+            BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
+            _ => None,
+        })
+        .collect()
+}
+
+struct ReadInFunction<'s> {
+    scoping: &'s Scoping,
+    symbols: &'s FxHashSet<SymbolId>,
+    depth: usize,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for ReadInFunction<'_> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.depth += 1;
+        walk_js::walk_function(self, it, flags);
+        self.depth -= 1;
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.depth += 1;
+        walk_js::walk_arrow_function_expression(self, it);
+        self.depth -= 1;
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if self.depth == 0 || self.found {
+            return;
+        }
+        let symbol = it
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        self.found = symbol.is_some_and(|symbol| self.symbols.contains(&symbol));
+    }
+}
+
+fn read_by_a_sibling_function(
+    list: &[Statement<'_>],
+    index: usize,
+    count: usize,
+    scoping: &Scoping,
+) -> bool {
+    let symbols = hoisted_symbols(&list[index], count);
+    let mut read = ReadInFunction {
+        scoping,
+        symbols: &symbols,
+        depth: 0,
+        found: false,
+    };
+    for (at, stmt) in list.iter().enumerate() {
+        if at != index {
+            read.visit_statement(stmt);
+        }
+    }
+    read.found
+}
+
+fn decoded_arrays(list: &[Statement<'_>], scoping: &Scoping) -> Vec<usize> {
+    list.iter()
+        .enumerate()
+        .map(|(index, stmt)| {
+            let count = leading_arrays(stmt);
+            if count > 0 && read_by_a_sibling_function(list, index, count, scoping) {
+                count
+            } else {
+                0
+            }
+        })
+        .collect()
+}
+
+fn split<'a>(stmt: &mut Statement<'a>, count: usize, out: &mut AVec<'a, Statement<'a>>, cx: &Cx<'a, '_>) {
+    let Statement::ForStatement(node) = stmt else {
+        return;
+    };
+    let Some(ForStatementInit::VariableDeclaration(declaration)) = node.init.as_mut() else {
+        return;
+    };
+    let all = declaration.declarations.take_in(cx);
+    for (index, declarator) in all.into_iter().enumerate() {
+        if index >= count {
+            declaration.declarations.push(declarator);
+            continue;
+        }
+        let span = declarator.span();
+        let declarations = AVec::from_iter_in([declarator], cx);
+        out.push(Statement::new_variable_declaration(
+            span,
+            VariableDeclarationKind::Var,
+            declarations,
+            false,
+            cx,
+        ));
+    }
+    if declaration.declarations.is_empty() {
+        node.init = None;
+    }
+}
+
+fn split_all<'a>(it: &mut AVec<'a, Statement<'a>>, counts: Vec<usize>, cx: &Cx<'a, '_>) -> usize {
+    let moved = counts.iter().sum();
+    if moved == 0 {
+        return 0;
+    }
+    let taken = it.take_in(cx);
+    for (mut stmt, count) in taken.into_iter().zip(counts) {
+        if count > 0 {
+            split(&mut stmt, count, it, cx);
+        }
+        it.push(stmt);
+    }
+    moved
+}
+
+pub(super) fn hoist_decoded_arrays<'a>(it: &mut AVec<'a, Statement<'a>>, cx: &Cx<'a, '_>) -> usize {
+    let counts = decoded_arrays(it, cx.scoping());
+    split_all(it, counts, cx)
 }
 
 struct Hoist<'c, 'a, 'x> {
@@ -71,49 +224,10 @@ struct Hoist<'c, 'a, 'x> {
     moved: usize,
 }
 
-impl<'a> Hoist<'_, 'a, '_> {
-    fn split(&mut self, stmt: &mut Statement<'a>, count: usize, out: &mut AVec<'a, Statement<'a>>) {
-        let Statement::ForStatement(node) = stmt else {
-            return;
-        };
-        let Some(ForStatementInit::VariableDeclaration(declaration)) = node.init.as_mut() else {
-            return;
-        };
-        let all = declaration.declarations.take_in(self.cx);
-        for (index, declarator) in all.into_iter().enumerate() {
-            if index >= count {
-                declaration.declarations.push(declarator);
-                continue;
-            }
-            let span = declarator.span();
-            let declarations = AVec::from_iter_in([declarator], self.cx);
-            out.push(Statement::new_variable_declaration(
-                span,
-                VariableDeclarationKind::Var,
-                declarations,
-                false,
-                self.cx,
-            ));
-            self.moved += 1;
-        }
-        if declaration.declarations.is_empty() {
-            node.init = None;
-        }
-    }
-}
-
 impl<'a> VisitMut<'a> for Hoist<'_, 'a, '_> {
     fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
-        if it.iter().any(|stmt| leading_forwarders(stmt) > 0) {
-            let taken = it.take_in(self.cx);
-            for mut stmt in taken {
-                let count = leading_forwarders(&stmt);
-                if count > 0 {
-                    self.split(&mut stmt, count, it);
-                }
-                it.push(stmt);
-            }
-        }
+        let counts = it.iter().map(leading_forwarders).collect();
+        self.moved += split_all(it, counts, self.cx);
         walk_mut::walk_statements(self, it);
     }
 }
