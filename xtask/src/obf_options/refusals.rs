@@ -3,7 +3,7 @@ pub const INTERPRETED: &str = "no checksum could be extracted from the rotator";
 pub const GUARD_ON_ONE_LINE: &str =
     "a self-defending check that reads a function's own source survived; the function it reads was printed on one line";
 
-pub const REFUSALS: [(&str, &str, &str); 13] = [
+pub const REFUSALS: [(&str, &str, &str); 14] = [
     (
         "reads a binding outside itself",
         "decoder-reads-outer-binding",
@@ -63,6 +63,11 @@ pub const REFUSALS: [(&str, &str, &str); 13] = [
         "a lexical binding that may be read before its declaration runs",
         "decoder-reads-tdz-binding",
         "decoding bails: a decoder wrapper reads a const of the rotator that the evaluator cannot prove is initialised when the wrapper runs",
+    ),
+    (
+        "the program may replace a standard built-in that the unit's decoders or rotator use through",
+        "builtin-alias-patched",
+        "safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded",
     ),
     (
         "this plain string array may be reached by name through the global object",

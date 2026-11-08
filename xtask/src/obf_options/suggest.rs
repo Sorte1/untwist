@@ -15,6 +15,7 @@ const UNKNOWN_REASON: &str = "TODO: name the cause";
 
 const SPELLED: &str = "spelled-decoder-name";
 const BUILTIN_REPLACED: &str = "builtin-replaced-decoded-key";
+const BUILTIN_ALIAS: &str = "builtin-alias-patched";
 const KEY_REACH: &str = "safe-global-key-reach";
 const NAMES: &str = "safe-global-names";
 const STEP_BUDGET: &str = "safe-decode-step-budget";
@@ -126,7 +127,7 @@ fn by_note(note: &str) -> Option<&'static str> {
     if note.contains("replaces a standard built-in") {
         return Some(BUILTIN_REPLACED);
     }
-    None
+    refusals::refusal_of(note).filter(|cause| *cause == BUILTIN_ALIAS)
 }
 
 fn only_class(detail: &str, class: &str) -> bool {

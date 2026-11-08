@@ -24,6 +24,7 @@ use super::cookie::cookie_rotation;
 use super::cookie_minified::minified_cookie_rotation;
 use super::for_init::{declare_assigned_forwarders, hoist_for_init_forwarders};
 use super::patched::rotator_builtins_patched;
+use super::plain_keys::plain_decoded_keys;
 use super::prologue::strip_atob_prologues;
 use crate::array_rotator::push_shift_target;
 use crate::calls::agnostic::{global_reach, ReachWatch};
@@ -364,7 +365,7 @@ impl<'a> VisitJs<'a> for ReadScan<'_> {
     }
 }
 
-fn decoder_function<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Function<'a>> {
+pub(super) fn decoder_function<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Function<'a>> {
     match stmt {
         Statement::FunctionDeclaration(function)
             if function.id.is_some() && !function.generator && !function.r#async =>
@@ -697,7 +698,12 @@ fn refusal(
     if legacy.body_code_before {
         return Some((notes::LEGACY_ROTATOR_AFTER_CODE, statement));
     }
-    rotator_builtins_patched(program, scoping, rotator).map(|span| (notes::BUILTIN_PATCHED, span))
+    let count = legacy.rotator.map_or(0, |(_, count)| count);
+    let keys = plain_decoded_keys(program, scoping, (statement, count, legacy.decoder));
+    rotator_builtins_patched(program, scoping, (rotator, keys)).map(|(note, span)| {
+        let original = span.start < SYNTHETIC_BASE;
+        (note, if original { span } else { statement })
+    })
 }
 
 fn declared_function<'k, 'a>(stmt: &'k mut Statement<'a>) -> Option<&'k mut Function<'a>> {

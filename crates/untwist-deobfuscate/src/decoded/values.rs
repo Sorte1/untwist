@@ -8,7 +8,9 @@ use untwist_eval::value::JsString;
 
 use super::{all_root_names_set, prescan_for, root_keys, ScanCache, UnitRun};
 use crate::bridge::{DecodePlan, DecodeRequest};
-use crate::proof::{resolve_pending_sites, PatchKey, PendingSite, PreScan, ProtoWrite};
+use crate::proof::{
+    pending_member_keys, resolve_pending_sites, PatchKey, PendingSite, PreScan, ProtoWrite,
+};
 
 fn record_decoded_values<'a>(
     request: &DecodeRequest<'a>,
@@ -75,7 +77,7 @@ fn queried_spans(
     any_builtin_roots_touched: bool,
     cache: &mut ScanCache,
 ) -> FxHashSet<Span> {
-    let mut spans = FxHashSet::default();
+    let mut spans: FxHashSet<Span> = pending_member_keys(program).into_iter().collect();
     write_key_pending_spans(plan, &mut spans);
     if any_builtin_roots_touched {
         let (_, scan) = prescan_for(cache, program, scoping, plan);

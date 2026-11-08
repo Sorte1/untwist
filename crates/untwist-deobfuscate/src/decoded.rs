@@ -25,8 +25,9 @@ use crate::calls::normalize_calls;
 use crate::mutants::unsafe_names_trusted;
 use crate::notes;
 use crate::proof::{
-    build_escape_context, builtins_assumed_pristine, encode_names, names_machinery,
-    reachable_by_name, scan_pending, EscapeContext, PendingSite, PreScan, ProtoWrite,
+    alias_refusal, alias_sites, build_escape_context, builtin_aliases, builtins_assumed_pristine,
+    encode_names, names_machinery, reachable_by_name, scan_pending, AliasSite, EscapeContext,
+    PendingSite, PreScan, ProtoWrite,
 };
 use crate::stamp::{
     is_unedited, unstamp_block_note, unstamp_blocked, unstamp_names, DynamicScopes, RefusedByDecode,
@@ -503,10 +504,19 @@ fn decode_program(
     if runs.is_empty() && decoded.notes.is_empty() {
         return (Outcome::Nothing, deferred);
     }
+    let aliased = (!limits.unsafe_lane).then(|| aliased_writes((program, scoping), &runs));
+    let aliased_refusal = aliased.as_deref().is_some_and(|sites| {
+        runs.iter()
+            .any(|run| alias_refusal(sites, &run.request.guard.used).is_some())
+    });
+    if aliased_refusal && !limits.defer_disabled && limits.defer_budget.get() > 0 {
+        limits.defer_budget.set(limits.defer_budget.get() - 1);
+        return (Outcome::Nothing, true);
+    }
 
     let code_text = judge_runs(
         &mut decoded,
-        runs,
+        (runs, aliased.as_deref()),
         &plan,
         (program, scoping, limits.nested_root),
         (&mut cache, heap),
@@ -581,9 +591,29 @@ fn unsafe_reach<'p>(
     reach::watched(program, scoping, runs)?.syntactically_reached((program, scoping), plan, runs)
 }
 
+fn aliased_writes(
+    (program, scoping): (&Program<'_>, &Scoping),
+    runs: &[UnitRun<'_, '_>],
+) -> Vec<AliasSite> {
+    let mut decoded = FxHashMap::default();
+    for run in runs.iter().filter(|run| run.request.reliance.is_none()) {
+        let Ok(values) = &run.result else {
+            continue;
+        };
+        for (call, value) in run.request.calls.iter().zip(values) {
+            if let Some(DecodedValue::Str(text)) = value {
+                if let Some(text) = text.as_string() {
+                    decoded.insert(call.span, text);
+                }
+            }
+        }
+    }
+    alias_sites(program, &builtin_aliases(program, scoping, decoded), &[])
+}
+
 fn judge_runs<'p>(
     decoded: &mut Decoded,
-    runs: Vec<UnitRun<'p, '_>>,
+    (runs, aliased): (Vec<UnitRun<'p, '_>>, Option<&[AliasSite]>),
     plan: &DecodePlan<'p>,
     (program, scoping, nested_root): (&'p Program<'p>, &Scoping, bool),
     (cache, heap): (&mut ScanCache, &mut InputHeap),
@@ -631,6 +661,12 @@ fn judge_runs<'p>(
                     Some(span),
                 ));
             }
+            continue;
+        }
+        let aliased_refusal =
+            aliased.and_then(|sites| alias_refusal(sites, &run.request.guard.used));
+        if let Some(refusal) = aliased_refusal {
+            decoded.notes.push((refusal.message(), Some(refusal.span)));
             continue;
         }
         let judged = (&value_map, &mut *heap, late.unwrap_or_default());

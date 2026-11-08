@@ -54,6 +54,7 @@ mod inlined;
 pub(crate) mod legacy;
 mod minified;
 mod patched;
+mod plain_keys;
 mod positions;
 mod prologue;
 mod prologue_inline;

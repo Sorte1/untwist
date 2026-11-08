@@ -307,3 +307,14 @@ pub fn move_inert_statements_into_rotators_for_tests(on: bool) {
 pub(crate) fn inert_statements_moved() -> bool {
     INERT_STATEMENTS_MOVED.load(Ordering::Relaxed)
 }
+
+static BUILTIN_ALIASES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_builtin_aliases_for_tests(on: bool) {
+    BUILTIN_ALIASES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn builtin_aliases_trusted() -> bool {
+    BUILTIN_ALIASES_TRUSTED.load(Ordering::Relaxed)
+}
