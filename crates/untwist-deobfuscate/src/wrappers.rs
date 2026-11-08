@@ -737,10 +737,12 @@ fn apply_alias_site<'a>(
 }
 
 #[derive(Default)]
-pub struct InlineDecoderWrappers;
+pub struct InlineDecoderWrappers {
+    immediate_tried: bool,
+}
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
-    Box::new(InlineDecoderWrappers)
+    Box::new(InlineDecoderWrappers::default())
 }
 
 impl<'a> Pass<'a> for InlineDecoderWrappers {
@@ -754,14 +756,13 @@ impl<'a> Pass<'a> for InlineDecoderWrappers {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         let shares = cx.opts.shares_init_order;
-        let immediate = if crate::string_array::legacy::lifted_any() {
-            inline_immediate_wrappers(program, cx)
-        } else {
-            0
-        };
-        if immediate > 0 {
-            cx.changed_by(immediate);
-            return;
+        let lifted = crate::string_array::legacy::lifted_any();
+        if lifted {
+            let immediate = inline_immediate_wrappers(program, cx);
+            if immediate > 0 {
+                cx.changed_by(immediate);
+                return;
+            }
         }
         let variable_changes = inline_variable_aliases(program, cx, shares, AliasTargets::Decoders);
         let mut rounds = inline_function_wrappers(program, cx);
@@ -774,6 +775,11 @@ impl<'a> Pass<'a> for InlineDecoderWrappers {
             if renamed > 0 {
                 changes += inline_function_wrappers(program, cx).changes;
             }
+        }
+        if changes == 0 && !lifted && !self.immediate_tried && crate::calls::take_dynamic_seen() {
+            let immediate = inline_immediate_wrappers(program, cx);
+            self.immediate_tried = immediate == 0;
+            changes += immediate;
         }
         cx.changed_by(changes);
     }

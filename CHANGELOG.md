@@ -53,6 +53,12 @@ All notable changes to this project are documented in this file. The format is b
   when they inline a decoder wrapper), together with the local's empty declaration, so the proxy
   object around them can be inlined. A `let` assigned before its declaration runs is left alone.
 
+- Decoder wrappers that pass the decoder a single argument (terser drops the unused second one:
+  `function l(n, t, e, o, r) { return i(t - -494) }`) are inlined like two-argument ones, and a
+  wrapper called where it is written (`function (n, t) { return i(t - 1) }(0, 2)`) is inlined
+  whenever decoding saw a decoder call with non-literal arguments, not only after a plain array
+  was lifted.
+
 - A plain string array inside a function or webpack module whose decoder is a function
   declaration is decoded when nothing runs before the array in that function body; only code
   in the same body can call the hoisted decoder before the array exists.
