@@ -467,7 +467,10 @@ struct DecodeLimits<'d> {
     defer_disabled: bool,
     nested_root: bool,
     unsafe_lane: bool,
+    alias_checks: bool,
 }
+
+pub const BUILTIN_ALIAS_CHECKS: &str = "inline-decoded-strings/builtin-alias-checks";
 
 fn reads_prototypes(runs: &[UnitRun<'_, '_>]) -> bool {
     runs.iter().any(|run| !run.evaluator.proto_reads.is_empty())
@@ -504,7 +507,7 @@ fn decode_program(
     if runs.is_empty() && decoded.notes.is_empty() {
         return (Outcome::Nothing, deferred);
     }
-    let alias_refused = if limits.unsafe_lane {
+    let alias_refused = if limits.unsafe_lane || !limits.alias_checks {
         FxHashMap::default()
     } else {
         alias_refusals((program, scoping), &runs)
@@ -851,6 +854,7 @@ impl<'a> Pass<'a> for InlineDecodedStrings {
             defer_disabled: cx.defer_disabled(),
             nested_root: cx.opts.nested_root,
             unsafe_lane: cx.opts.unsafe_transforms,
+            alias_checks: !cx.opts.rule_disabled(BUILTIN_ALIAS_CHECKS),
         };
         let mut heap = self.heap.borrow_mut();
         heap.start(

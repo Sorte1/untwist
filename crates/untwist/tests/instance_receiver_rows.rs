@@ -17,7 +17,10 @@ fn options(unsafe_transforms: bool, mutant: bool) -> Options {
         unpack: false,
         jsx: false,
         disabled_passes: if mutant {
-            vec!["instance-receivers"]
+            vec![
+                "instance-receivers",
+                untwist_deobfuscate::decoded::BUILTIN_ALIAS_CHECKS,
+            ]
         } else {
             vec![]
         },

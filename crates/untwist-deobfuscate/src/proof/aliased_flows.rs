@@ -78,6 +78,7 @@ struct Flows<'p> {
     function: Vec<Span>,
     function_methods_written: bool,
     prototypes_written: bool,
+    plain_classes: FxHashSet<SymbolId>,
     function_method_values: Vec<&'p Expression<'p>>,
 }
 
@@ -290,6 +291,12 @@ impl<'s, 'p> VisitJs<'p> for FlowScan<'s, 'p> {
     }
 
     fn visit_class(&mut self, it: &Class<'p>) {
+        let plain = it.r#type == ClassType::ClassDeclaration && plain_class(it);
+        if let Some(symbol) = it.id.as_ref().and_then(|id| id.symbol_id.get()) {
+            if plain && !written_after_init(self.scoping, symbol) {
+                self.flows.plain_classes.insert(symbol);
+            }
+        }
         self.flows.strict.push(true);
         walk_js::walk_class(self, it);
         self.flows.strict.pop();
@@ -341,6 +348,11 @@ impl<'s, 'p> VisitJs<'p> for FlowScan<'s, 'p> {
                     ) {
                         let init: &'p Expression<'p> = self.alloc(init);
                         self.flows.array_inits.push((symbol, init));
+                    }
+                    let class = matches!(init.without_parentheses(),
+                        Expression::ClassExpression(class) if plain_class(class));
+                    if class && !written_after_init(self.scoping, symbol) {
+                        self.flows.plain_classes.insert(symbol);
                     }
                     if let Some(span) = function_value(init).or_else(|| returned_function(init)) {
                         self.flows.functions.insert(symbol, span);
@@ -558,6 +570,42 @@ impl<'s, 'p> VisitJs<'p> for FlowScan<'s, 'p> {
     }
 }
 
+#[derive(Default)]
+struct ReturnsValue {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for ReturnsValue {
+    fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {}
+
+    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
+
+    fn visit_return_statement(&mut self, it: &ReturnStatement<'a>) {
+        self.found |= it.argument.is_some();
+    }
+}
+
+fn plain_class(class: &Class<'_>) -> bool {
+    class.heritage.is_none() && !constructor_returns(class)
+}
+
+fn constructor_returns(class: &Class<'_>) -> bool {
+    class.body.body.iter().any(|element| match element {
+        ClassElement::MethodDefinition(method)
+            if method.kind == MethodDefinitionKind::Constructor =>
+        {
+            let mut returns = ReturnsValue::default();
+            if let Some(body) = &method.value.body {
+                for stmt in &body.statements {
+                    returns.visit_statement(stmt);
+                }
+            }
+            returns.found
+        }
+        _ => false,
+    })
+}
+
 fn reaches_a_prototype(expr: &Expression<'_>) -> bool {
     let Some(member) = expr.without_parentheses().as_member_expression() else {
         return false;
@@ -695,6 +743,7 @@ pub fn builtin_aliases<'s>(
             function: Vec::new(),
             function_methods_written: false,
             prototypes_written: false,
+            plain_classes: FxHashSet::default(),
             function_method_values: Vec::new(),
         },
     };
@@ -712,6 +761,7 @@ pub fn builtin_aliases<'s>(
         object_functions,
         function_methods_written,
         prototypes_written,
+        plain_classes,
         function_method_values,
         ..
     } = scan.flows;
@@ -732,6 +782,7 @@ pub fn builtin_aliases<'s>(
         object_functions,
         function_methods_written,
         prototypes_written,
+        plain_classes,
         strings: FxHashMap::default(),
         unknown_strings: FxHashSet::default(),
         string_arrays: FxHashMap::default(),

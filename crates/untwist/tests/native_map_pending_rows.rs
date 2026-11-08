@@ -17,7 +17,10 @@ fn options(unsafe_transforms: bool, mutant: bool) -> Options {
         unpack: false,
         jsx: false,
         disabled_passes: if mutant {
-            vec!["native-map-pending"]
+            vec![
+                "native-map-pending",
+                untwist_deobfuscate::decoded::BUILTIN_ALIAS_CHECKS,
+            ]
         } else {
             vec![]
         },

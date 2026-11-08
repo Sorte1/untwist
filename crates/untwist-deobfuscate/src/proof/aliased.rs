@@ -204,6 +204,7 @@ pub struct BuiltinAliases<'s> {
     pub(super) object_functions: FxHashMap<SymbolId, FxHashMap<String, Span>>,
     pub(super) function_methods_written: bool,
     pub(super) prototypes_written: bool,
+    pub(super) plain_classes: FxHashSet<SymbolId>,
     pub(super) strings: FxHashMap<SymbolId, Vec<String>>,
     pub(super) unknown_strings: FxHashSet<SymbolId>,
     pub(super) string_arrays: FxHashMap<SymbolId, Vec<String>>,
@@ -372,7 +373,13 @@ impl<'s> BuiltinAliases<'s> {
             .reference_id
             .get()
             .is_some_and(|reference| self.scoping.get_reference(reference).symbol_id().is_none());
-        unresolved && !self.prototypes_written && FRESH_NATIVES.contains(&id.name.as_str())
+        if self.prototypes_written {
+            return false;
+        }
+        let plain_class = self
+            .symbol_of(id)
+            .is_some_and(|symbol| self.plain_classes.contains(&symbol));
+        plain_class || (unresolved && FRESH_NATIVES.contains(&id.name.as_str()))
     }
 
     fn calls_own_method(&self, object: u16) -> bool {
