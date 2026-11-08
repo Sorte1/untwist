@@ -99,7 +99,8 @@ impl<'a> VisitJs<'a> for ParamUsage<'a> {
             return;
         }
         let name = it.name.as_str();
-        if self.shadowed.iter().flatten().any(|shadow| *shadow == name) {
+        let nested_skipped = crate::mutants::nested_names_rebound() && !self.shadowed.is_empty();
+        if nested_skipped || self.shadowed.iter().flatten().any(|shadow| *shadow == name) {
             return;
         }
         if let Some(index) = self.names.iter().position(|slot| *slot == Some(name)) {

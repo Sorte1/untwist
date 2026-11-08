@@ -2,7 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/terser_state_rows.txt");
-const PREFIXES: [&str; 4] = ["dec-", "ref-void-", "ref-zone-", "guard-"];
+const PREFIXES: [&str; 5] = ["dec-", "ref-void-", "ref-zone-", "ref-param-", "guard-"];
 
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()

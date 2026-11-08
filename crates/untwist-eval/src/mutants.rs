@@ -32,3 +32,14 @@ pub fn resolve_dead_zone_names_loosely_for_tests(on: bool) {
 pub(crate) fn dead_zone_names_loose() -> bool {
     DEAD_ZONE_NAMES_LOOSE.load(Ordering::Relaxed)
 }
+
+static NESTED_NAMES_REBOUND: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn read_nested_names_as_rebound_for_tests(on: bool) {
+    NESTED_NAMES_REBOUND.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn nested_names_rebound() -> bool {
+    NESTED_NAMES_REBOUND.load(Ordering::Relaxed)
+}
