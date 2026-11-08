@@ -380,7 +380,7 @@
 2.13.0--plain-norot-shuf-noshift-inum-w2u-t1-cff--wp4-module--uglify	1	0/1	0/1	-	0	wrapper-alias-read-early (2)
 2.13.0--plain-rot-noshuf-noshift-istr-w1-t1--iife--none	1	1/1	1/1	-	0	-
 2.13.0--plain-rot-noshuf-shift-inum-w3f-t75--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.13.0--plain-rot-noshuf-shift-istr-w2u-t1-self--iife--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+2.13.0--plain-rot-noshuf-shift-istr-w2u-t1-self--iife--uglify	1	1/1	1/1	-	0	-
 2.13.0--plain-rot-shuf-noshift-istr-w3f-t1-mangled--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.13.0--plain-rot-shuf-shift-inum-w2f5-t1-mangled--wp4-module--terser	1	1/1	1/1	-	0	-
 2.13.0--plain-rot-shuf-shift-istr-w0-t1-unicode--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -406,10 +406,10 @@
 2.14.0--b64-norot-shuf-shift-inum-w2u-t75-keys--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--b64-rot-noshuf-noshift-inum-w1-t75-unicode--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--b64-rot-noshuf-shift-inum-w2u-t1-split--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-2.14.0--b64-rot-noshuf-shift-istr-w0-t75--iife--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+2.14.0--b64-rot-noshuf-shift-istr-w0-t75--iife--uglify	1	1/1	1/1	-	0	-
 2.14.0--b64-rot-noshuf-shift-istr-w2f5-t75-unicode--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.14.0--b64-rot-noshuf-shift-istr-w2u-t1-dead--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.14.0--b64-rot-shuf-shift-inum-w3f-t75-numbers--wp4-module--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+2.14.0--b64-rot-shuf-shift-inum-w3f-t75-numbers--wp4-module--uglify	1	0/1	0/1	-	0	stateful-decoder-state (2)
 2.14.0--plain-norot-noshuf-noshift-inum-w2f5-t1-self--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--plain-norot-noshuf-noshift-istr-w2f5-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--plain-norot-noshuf-shift-inum-w3f-t75-cff--wp4-module--terser	1	1/1	1/1	-	0	-
@@ -493,7 +493,7 @@
 2.18.1--plain-rot-noshuf-noshift-inum-w0-t1-keys--iife--none	1	1/1	1/1	-	0	-
 2.18.1--plain-rot-noshuf-noshift-inum-w3f-t75-mangled--wp4-module--none	1	1/1	1/1	-	0	-
 2.18.1--plain-rot-noshuf-shift-inum-w2f5-t75-split--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.18.1--plain-rot-noshuf-shift-istr-w1-t1-numbers--iife--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+2.18.1--plain-rot-noshuf-shift-istr-w1-t1-numbers--iife--uglify	1	1/1	1/1	-	0	-
 2.18.1--plain-rot-shuf-noshift-istr-w2u-t75-cff--iife--terser	1	1/1	1/1	-	0	-
 2.18.1--rc4-norot-noshuf-shift-inum-w1-t75-keys--top--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), stateful-decoder-state (1)
 2.18.1--rc4-norot-noshuf-shift-inum-w3f-t1--wp4-bundle--terser	1	0/1	0/1	-	0	legacy-array-reached (1), stateful-decoder-state (1)
@@ -727,12 +727,11 @@
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
 legacy-array-reached	270	270	270	0	safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded
 decoder-reads-outer-binding	79	79	87	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
-stateful-decoder-state	74	74	120	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
+stateful-decoder-state	75	75	122	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
 builtin-replaced-decoded-key	70	70	70	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
 array-reached-outside	26	26	52	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
 safe-global-key-reach	9	9	9	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 decoder-does-more	5	5	10	0	a decoder does more than read from the string array, so its calls may change or expose the array and are left alone
-missed-no-string-array	5	5	10	0	MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why
 safe-global-names	5	5	5	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
 object-keys-computed-key	4	4	4	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)
 missed-self-defending	3	3	6	0	MISSED: the unit decodes, but self-defending code is left and no pass says why
@@ -741,6 +740,7 @@ wrapper-alias-read-early	3	3	5	0	a decoder alias may be read before its declarat
 wrapper-alias-redeclared	3	3	6	0	a decoder alias is not declared exactly once by a single-declarator declaration in a statement list, so it is left in place
 decoder-used-as-value	2	2	4	0	a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's calls are left alone
 missed-proxy-object	2	2	2	0	MISSED: the unit decodes, but a control-flow proxy object is left and no pass says why
+missed-no-string-array	1	1	2	0	MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why
 stateful-decoder-escape	1	1	2	0	a stateful base64 or rc4 decoder is also reached through calls whose arguments are not proven (wrappers reading locals of an enclosing function, or the decoder handed on as a value), so decoding the collected calls ahead of those could change its state, and the unit's calls are left alone
 wrapper-binding-unstable	1	1	2	0	a decoder wrapper is declared in a block (uglify-js inlines the rotator into one) or its binding is written again, so a call may reach another function and the wrapper is left in place
 wrapper-reads-outside	1	1	2	0	a decoder wrapper body reads something other than its own parameters and the stamped machinery, so it is not inlined

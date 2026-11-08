@@ -1,4 +1,5 @@
 use super::*;
+use oxc_syntax::symbol::SymbolFlags;
 
 pub struct ArrayAlias {
     pub symbol: SymbolId,
@@ -130,6 +131,41 @@ fn name_is_unique(scoping: &Scoping, name: &str) -> bool {
         == 1
 }
 
+fn root_name_reaches(scoping: &Scoping, alias: SymbolId, root: SymbolId) -> bool {
+    if crate::mutants::alias_root_names_trusted() {
+        return true;
+    }
+    let name = scoping.symbol_name(root);
+    let home = scoping.symbol_scope_id(root);
+    let block_function_alike = scoping.symbol_ids().any(|symbol| {
+        symbol != root
+            && scoping.symbol_name(symbol) == name
+            && scoping.symbol_flags(symbol).contains(SymbolFlags::Function)
+            && !scoping
+                .scope_flags(scoping.symbol_scope_id(symbol))
+                .is_var()
+    });
+    if block_function_alike {
+        return false;
+    }
+    scoping.get_resolved_references(alias).all(|reference| {
+        let mut seen_home = false;
+        let shadowed = scoping
+            .scope_ancestors(reference.scope_id())
+            .take_while(|scope| {
+                let more = !seen_home;
+                seen_home |= *scope == home;
+                more
+            })
+            .any(|scope| {
+                scoping
+                    .get_binding(scope, name.into())
+                    .is_some_and(|symbol| symbol != root)
+            });
+        seen_home && !shadowed
+    })
+}
+
 fn binding_is_never_rewritten(program: &Program<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
     scoping.symbol_redeclarations(symbol).is_empty()
         && is_constant_binding(scoping, symbol)
@@ -223,13 +259,14 @@ fn resolved_root(
     stable.then_some(root)
 }
 
+const ROTATION_METHODS: [&str; 2] = ["push", "shift"];
+
 fn alias_never_escapes(uses: &ObjectUses) -> bool {
     uses.writes == 0
         && uses.opaque == 0
-        && uses
-            .reads
-            .iter()
-            .all(|read| read.name.parse::<usize>().is_ok())
+        && uses.reads.iter().all(|read| {
+            read.name.parse::<usize>().is_ok() || ROTATION_METHODS.contains(&read.name.as_str())
+        })
 }
 
 struct AliasPlan<'k> {
@@ -260,14 +297,20 @@ fn check_one_alias<'k>(
         return None;
     }
     let name = cx.scoping().symbol_name(root).to_string();
-    if !name_is_unique(cx.scoping(), &name) {
+    if !name_is_unique(cx.scoping(), &name) && !root_name_reaches(cx.scoping(), alias.symbol, root)
+    {
         cx.note(
             notes::array_alias_name_not_unique(&name),
             Some(alias.statement),
         );
         return None;
     }
-    let reads = uses.reads.iter().map(|read| read.member_span).collect();
+    let reads = uses
+        .reads
+        .iter()
+        .filter(|read| !ROTATION_METHODS.contains(&read.name.as_str()))
+        .map(|read| read.member_span)
+        .collect();
     Some(AliasPlan { alias, root, reads })
 }
 
