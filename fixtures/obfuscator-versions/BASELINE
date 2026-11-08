@@ -10,7 +10,7 @@
 0.10.2--b64-norot-t75-dead--wp4-bundle--terser	1	0/1	0/1	-	0	legacy-array-reached (1), missed-opaque-predicate (1)
 0.10.2--b64-norot-t75-self--iife--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--b64-rot-t1--wp4-module--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
-0.10.2--b64-rot-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+0.10.2--b64-rot-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), legacy-array-reached (1)
 0.10.2--b64-rot-t75-unicode--iife--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
 0.10.2--b64-rot-t75-unicode--top--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), legacy-array-reached (1)
 0.10.2--plain-norot-t1--iife--uglify	1	1/1	1/1	-	0	-
@@ -24,7 +24,7 @@
 0.10.2--plain-rot-t75--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--plain-rot-t75-cff--top--uglify	1	1/1	1/1	-	0	-
 0.10.2--plain-rot-t75-dead--iife--none	1	1/1	1/1	-	0	-
-0.10.2--plain-rot-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+0.10.2--plain-rot-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), missed-self-defending (1)
 0.10.2--rc4-norot-t1-cff--iife--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--rc4-norot-t1-cff--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--rc4-norot-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -34,7 +34,7 @@
 0.10.2--rc4-rot-t1-cff--iife--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--rc4-rot-t1-cff--wp4-bundle--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), legacy-array-reached (1)
 0.10.2--rc4-rot-t1-dead--wp4-module--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
-0.10.2--rc4-rot-t1-self--top--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+0.10.2--rc4-rot-t1-self--top--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), legacy-array-reached (1)
 0.10.2--rc4-rot-t75--wp4-module--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--rc4-rot-t75-dead--iife--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
 0.16.0--b64-norot-t1-mangled--iife--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
@@ -167,7 +167,7 @@
 0.23.2--plain-rot-noshuf-t75-self--iife--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
 0.23.2--plain-rot-noshuf-t75-unicode--wp4-module--terser	1	1/1	1/1	-	0	-
 0.23.2--plain-rot-shuf-t1-keys--wp4-module--none	1	1/1	1/1	-	0	-
-0.23.2--plain-rot-shuf-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+0.23.2--plain-rot-shuf-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), missed-self-defending (1)
 0.23.2--plain-rot-shuf-t75-split--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.23.2--rc4-norot-noshuf-t1-cff--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.23.2--rc4-norot-noshuf-t1-mangled--iife--terser	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
@@ -180,7 +180,7 @@
 0.23.2--rc4-rot-noshuf-t1-mangled--iife--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.23.2--rc4-rot-shuf-t75-cff--top--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), legacy-array-reached (1)
 0.23.2--rc4-rot-shuf-t75-cff--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
-0.23.2--rc4-rot-shuf-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+0.23.2--rc4-rot-shuf-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), legacy-array-reached (1)
 0.28.5--b64-norot-noshuf-t1--iife--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.28.5--b64-norot-noshuf-t1--wp4-bundle--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), legacy-array-reached (1)
 0.28.5--b64-norot-noshuf-t1-cff--wp4-module--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
@@ -201,7 +201,7 @@
 0.28.5--plain-rot-noshuf-t1-dead--iife--none	1	1/1	1/1	-	0	-
 0.28.5--plain-rot-noshuf-t1-split--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.28.5--plain-rot-noshuf-t75-keys--iife--uglify	1	1/1	1/1	-	0	-
-0.28.5--plain-rot-noshuf-t75-self--top--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+0.28.5--plain-rot-noshuf-t75-self--top--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), missed-self-defending (1)
 0.28.5--plain-rot-shuf-t1--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.28.5--plain-rot-shuf-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.28.5--plain-rot-shuf-t75-split--wp4-module--uglify	1	1/1	1/1	-	0	-
@@ -224,7 +224,7 @@
 1.12.1--b64-norot-shuf-t1-dead--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.12.1--b64-norot-shuf-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), stateful-decoder-state (1)
 1.12.1--b64-rot-noshuf-t1--iife--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-1.12.1--b64-rot-noshuf-t1-self--top--terser	1	0/1	0/1	-	0	missed-no-string-array (2)
+1.12.1--b64-rot-noshuf-t1-self--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.12.1--b64-rot-noshuf-t1-unicode--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.12.1--b64-rot-noshuf-t75-unicode--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.12.1--b64-rot-shuf-t1--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -287,7 +287,7 @@
 1.4.0--rc4-rot-shuf-t1-dead--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.4.0--rc4-rot-shuf-t1-dead--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.4.0--rc4-rot-shuf-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
-1.4.0--rc4-rot-shuf-t1-self--wp4-bundle--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
+1.4.0--rc4-rot-shuf-t1-self--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), stateful-decoder-state (1)
 1.4.0--rc4-rot-shuf-t1-unicode--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.6.0--b64-norot-noshuf-t75-numbers--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.6.0--b64-norot-noshuf-t75-unicode--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -725,13 +725,14 @@
 5.9.1--rc4-rot-shuf-shift-inum-w0-calls-t75-cff--iife--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 5.9.1--rc4-rot-shuf-shift-istr-w2u-nocalls-t1-keys--top--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
-legacy-array-reached	262	262	262	0	safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded
-decoder-reads-outer-binding	104	104	134	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
+legacy-array-reached	270	270	270	0	safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded
+decoder-reads-outer-binding	107	107	137	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
 builtin-replaced-decoded-key	69	69	69	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
-stateful-decoder-state	53	53	90	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
-missed-no-string-array	42	42	84	0	MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why
+stateful-decoder-state	54	54	91	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
+missed-no-string-array	34	34	68	0	MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why
 unexplained-decode-miss	28	28	44	0	MISSED: the unit keeps every reference undecoded and no pass says why
 array-reached-outside	26	26	52	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
+missed-self-defending	11	11	14	0	MISSED: the unit decodes, but self-defending code is left and no pass says why
 safe-global-key-reach	11	11	11	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 decoder-does-more	5	5	10	0	a decoder does more than read from the string array, so its calls may change or expose the array and are left alone
 missed-opaque-predicate	4	4	4	0	MISSED: the unit decodes, but a dead-code-injection test between two different string literals is left and no pass says why
