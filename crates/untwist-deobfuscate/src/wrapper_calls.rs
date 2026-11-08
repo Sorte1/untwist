@@ -56,7 +56,7 @@ fn is_wrapper(stmt: &Statement<'_>) -> Option<WrapperShape> {
     }
     let returned = returned_expression(declaration.function)?;
     let (callee, arguments) = call_parts(returned)?;
-    if arguments.len() < 2 {
+    if arguments.is_empty() {
         return None;
     }
     decoder_index(identifier_name(callee)?)?;
@@ -639,7 +639,13 @@ fn immediate_wrapper<'k, 'p>(
     expr: &'k Expression<'p>,
     scoping: &Scoping,
 ) -> Option<(&'k Function<'p>, &'k AVec<'p, Argument<'p>>)> {
-    let call = called_expression(expr)?;
+    immediate_call(called_expression(expr)?, scoping)
+}
+
+fn immediate_call<'k, 'p>(
+    call: &'k CallExpression<'p>,
+    scoping: &Scoping,
+) -> Option<(&'k Function<'p>, &'k AVec<'p, Argument<'p>>)> {
     let Expression::FunctionExpression(function) = call.callee.without_parentheses() else {
         return None;
     };
@@ -650,7 +656,7 @@ fn immediate_wrapper<'k, 'p>(
         && !function.r#async
         && !function.generator
         && names.len() >= 2
-        && arguments.len() >= 2
+        && !arguments.is_empty()
         && identifier_name(callee).and_then(decoder_index).is_some()
         && uses_any_param(arguments, &names)
         && body_is_self_contained(function, scoping)
