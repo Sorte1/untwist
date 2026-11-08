@@ -135,10 +135,14 @@ fn shifted_param<'a>(statement: &Statement<'a>) -> Option<&'a str> {
     let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
         return None;
     };
+    let name = target.name.as_str();
+    if assignment.operator == AssignmentOperator::Subtraction {
+        let by_a_number = matches!(fold_constant(&assignment.right, &[]), Some(Prim::Num(_)));
+        return by_a_number.then_some(name);
+    }
     let Expression::BinaryExpression(shift) = assignment.right.without_parentheses() else {
         return None;
     };
-    let name = target.name.as_str();
     let reads_itself = matches!(shift.left.without_parentheses(),
         Expression::Identifier(id) if id.name.as_str() == name);
     let by_a_number = matches!(fold_constant(&shift.right, &[]), Some(Prim::Num(_)));
