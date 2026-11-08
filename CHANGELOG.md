@@ -47,6 +47,12 @@ All notable changes to this project are documented in this file. The format is b
   index shift written as `t -= 0`, and a base64 helper's own locals no longer count as reads of the
   decoder's second parameter when they share its name.
 
+- A decoder argument whose local is assigned from never-written literal bindings (terser's
+  `o = -E, W = U, dec(o - -331, W)` with `const E = 362` and `var U = ...` at the top of the
+  bundle) decodes: those bindings are inlined first, under the same initialisation-order proof as
+  a constant read directly by a decoder call. uglify-js's `n = (n = -1048) - -688` is read as the
+  literal arithmetic it is.
+
 - A decoder argument read from a local is no longer replaced by an earlier literal assignment when
   the local is written again by its own declaration's initialiser, a later `var` with an
   initialiser, a destructuring declaration, a `for (var ... in/of)` head or a sloppy-mode block

@@ -1,4 +1,4 @@
-use oxc_allocator::Vec as AVec;
+use oxc_allocator::{Allocator, TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
@@ -32,14 +32,42 @@ pub(super) fn block_function_rebinds(
 }
 
 pub(super) fn chained_literal(expr: &Expression<'_>) -> Option<Span> {
+    literal_with_writes(expr).then(|| expr.span())
+}
+
+fn literal_with_writes(expr: &Expression<'_>) -> bool {
     match expr.without_parentheses() {
-        Expression::AssignmentExpression(inner)
-            if inner.operator == AssignmentOperator::Assign
-                && matches!(inner.left, AssignmentTarget::AssignmentTargetIdentifier(_)) =>
-        {
-            chained_literal(&inner.right)
+        Expression::AssignmentExpression(inner) => {
+            inner.operator == AssignmentOperator::Assign
+                && matches!(inner.left, AssignmentTarget::AssignmentTargetIdentifier(_))
+                && literal_with_writes(&inner.right)
         }
-        value => is_literal_argument(value).then(|| value.span()),
+        Expression::UnaryExpression(unary) => {
+            unary.operator == UnaryOperator::UnaryNegation && literal_with_writes(&unary.argument)
+        }
+        Expression::BinaryExpression(binary) => {
+            literal_with_writes(&binary.left) && literal_with_writes(&binary.right)
+        }
+        value => is_literal_argument(value),
+    }
+}
+
+pub(super) fn strip_writes<'a>(expr: &mut Expression<'a>, allocator: &'a Allocator) {
+    match expr {
+        Expression::AssignmentExpression(assignment) => {
+            let right = assignment.right.take_in(&allocator);
+            *expr = right;
+            strip_writes(expr, allocator);
+        }
+        Expression::ParenthesizedExpression(inner) => {
+            strip_writes(&mut inner.expression, allocator)
+        }
+        Expression::UnaryExpression(unary) => strip_writes(&mut unary.argument, allocator),
+        Expression::BinaryExpression(binary) => {
+            strip_writes(&mut binary.left, allocator);
+            strip_writes(&mut binary.right, allocator);
+        }
+        _ => {}
     }
 }
 
@@ -106,6 +134,22 @@ impl OrderScan<'_> {
         chained_literal(&assignment.right)
     }
 
+    fn assigns_itself(&self, expr: &Expression<'_>) -> bool {
+        let Expression::AssignmentExpression(assignment) = expr.without_parentheses() else {
+            return false;
+        };
+        let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
+            return false;
+        };
+        assignment.operator == AssignmentOperator::Assign
+            && target
+                .reference_id
+                .get()
+                .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                == Some(self.symbol)
+            && literal_with_writes(&assignment.right)
+    }
+
     fn push_frame(&mut self) {
         let id = self.fresh_id();
         let boundary = self.boundary();
@@ -150,8 +194,9 @@ impl OrderScan<'_> {
         let Some(value) = self.unconditional_literal(expr) else {
             return;
         };
+        let whole = self.assigns_itself(expr);
         if let Some(frame) = self.frames.last_mut() {
-            if frame.writes == 1 || external_write_order_trusted() {
+            if frame.writes == 1 || whole || external_write_order_trusted() {
                 frame.assigned = Some(value);
             }
         }

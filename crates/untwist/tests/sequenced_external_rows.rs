@@ -39,7 +39,8 @@ fn every_row_has_a_known_prefix() {
             label.starts_with("dec-")
                 || label.starts_with("guard-")
                 || label.starts_with("kept-")
-                || label.starts_with("ref-init-"),
+                || label.starts_with("ref-init-")
+                || label.starts_with("ref-nested-"),
             "unexpected row label {label}"
         );
     }
@@ -48,7 +49,7 @@ fn every_row_has_a_known_prefix() {
 #[test]
 fn each_rows_decode_decision_matches_its_label_in_both_lanes() {
     for (label, source) in rows() {
-        let should_decode = label.starts_with("dec-");
+        let should_decode = label.starts_with("dec-") || label.starts_with("ref-nested-");
         for lane in [false, true] {
             let code = transformed(&options(lane), &source);
             assert_eq!(
