@@ -1,7 +1,7 @@
 use untwist::{Options, Pipeline};
 use untwist_eval::mutants::{
-    read_every_void_as_undefined_for_tests, resolve_dead_zone_names_loosely_for_tests,
-    resolve_reset_names_loosely_for_tests,
+    read_every_void_as_undefined_for_tests, read_nested_names_as_rebound_for_tests,
+    resolve_dead_zone_names_loosely_for_tests, resolve_reset_names_loosely_for_tests,
 };
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
@@ -9,15 +9,17 @@ const ROWS: &str = include_str!("data/terser_state_rows.txt");
 
 type Switch = fn(bool);
 
-const MUTANTS: [(&str, Switch); 2] = [
+const MUTANTS: [(&str, Switch); 3] = [
     ("ref-void-", read_every_void_as_undefined_for_tests),
     ("ref-zone-", resolve_dead_zone_names_loosely_for_tests),
+    ("ref-param-", read_nested_names_as_rebound_for_tests),
 ];
 
-const SWITCHES: [Switch; 3] = [
+const SWITCHES: [Switch; 4] = [
     read_every_void_as_undefined_for_tests,
     resolve_reset_names_loosely_for_tests,
     resolve_dead_zone_names_loosely_for_tests,
+    read_nested_names_as_rebound_for_tests,
 ];
 
 fn rows_with(prefix: &str) -> Vec<(String, String)> {
