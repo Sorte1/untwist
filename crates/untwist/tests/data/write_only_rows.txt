@@ -1,0 +1,4 @@
+drop-locals-set-in-a-decoded-key|(function(){var arr0=['M','x'];var dec0=function(t,x){return arr0[t-=0]};function g(n){let e,t;const r={M:function(a,b){return a+b}};return r[(e=1,t=2,dec0(e+t-3))]('x',n)}console.log(g('y'));})();
+drop-vars-set-in-a-decoded-value|(function(){var arr0=['parsed','x'];var dec0=function(t,x){return arr0[t-=0]};function g(){const c={k:(e=-620,W='p1',dec0(e+620))};var e;var W;return c.k}console.log(g());})();
+keep-a-let-set-before-its-declaration|(function(){var arr0=['M','x'];var dec0=function(t,x){return arr0[t-=0]};function g(n){const r={M:function(a,b){return a+b}};try{if(n){return r[(e=1,dec0(e-1))]('x',n)}}catch(x){return x.constructor.name}let e;return 'none'}console.log(g('y'),g(''));})();
+drop-a-local-whose-later-read-is-inlined|(function(){var arr0=['M','x'];var dec0=function(t,x){return arr0[t-=0]};function g(n){let e;const r={M:function(a,b){return a+b}};var v=r[(e=1,dec0(e-1))]('x',n);return v+e}console.log(g('y'));})();

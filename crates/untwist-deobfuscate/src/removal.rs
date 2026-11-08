@@ -371,6 +371,11 @@ impl<'a> Pass<'a> for RemoveDecoderMachinery {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        let removed = crate::write_only::sweep(program, &*cx);
+        if removed > 0 {
+            cx.changed_by(removed);
+            return;
+        }
         let spans = self.removable(program, cx);
         if spans.is_empty() {
             return;
