@@ -8,7 +8,7 @@
 0.10.2--b64-norot-t75-cff--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--b64-norot-t75-cff--wp4-bundle--none	1	0/1	0/1	-	0	legacy-array-reached (1)
 0.10.2--b64-norot-t75-dead--wp4-bundle--terser	1	0/1	0/1	-	0	legacy-array-reached (1), missed-opaque-predicate (1)
-0.10.2--b64-norot-t75-self--iife--terser	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), missed-self-defending (1)
+0.10.2--b64-norot-t75-self--iife--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--b64-rot-t1--wp4-module--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--b64-rot-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
 0.10.2--b64-rot-t75-unicode--iife--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
@@ -18,7 +18,7 @@
 0.10.2--plain-norot-t1-self--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--plain-norot-t1-unicode--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--plain-norot-t75--wp4-module--none	1	0/1	0/1	-	0	-
-0.10.2--plain-norot-t75-self--iife--terser	1	0/1	0/1	-	0	missed-self-defending (2)
+0.10.2--plain-norot-t75-self--iife--terser	1	1/1	1/1	-	0	-
 0.10.2--plain-rot-t1-dead--wp4-module--uglify	1	1/1	1/1	-	0	-
 0.10.2--plain-rot-t1-unicode--top--terser	1	0/1	0/1	-	0	legacy-array-reached (1)
 0.10.2--plain-rot-t75--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -63,7 +63,7 @@
 0.16.0--plain-rot-t75-keys--iife--terser	1	0/1	0/1	-	0	missed-no-string-array (2)
 0.16.0--rc4-norot-t1-cff--wp4-module--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
 0.16.0--rc4-norot-t1-dead--wp4-bundle--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), legacy-array-reached (1)
-0.16.0--rc4-norot-t1-self--wp4-module--terser	1	0/1	0/1	-	0	decoder-reads-outer-binding (1), missed-self-defending (1)
+0.16.0--rc4-norot-t1-self--wp4-module--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.16.0--rc4-norot-t75--iife--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
 0.16.0--rc4-norot-t75--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.16.0--rc4-norot-t75-keys--wp4-module--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
@@ -196,7 +196,7 @@
 0.28.5--plain-norot-noshuf-t1--iife--terser	1	1/1	1/1	-	0	-
 0.28.5--plain-norot-shuf-t1-cff--wp4-module--none	1	1/1	1/1	-	0	-
 0.28.5--plain-norot-shuf-t1-mangled--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
-0.28.5--plain-norot-shuf-t1-self--wp4-module--terser	1	0/1	0/1	-	0	missed-self-defending (2)
+0.28.5--plain-norot-shuf-t1-self--wp4-module--terser	1	1/1	1/1	-	0	-
 0.28.5--plain-norot-shuf-t75-unicode--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.28.5--plain-rot-noshuf-t1-dead--iife--none	1	1/1	1/1	-	0	-
 0.28.5--plain-rot-noshuf-t1-split--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -231,7 +231,7 @@
 1.12.1--b64-rot-shuf-t75-cff--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.12.1--plain-norot-noshuf-t75-numbers--wp4-module--terser	1	1/1	1/1	-	0	-
 1.12.1--plain-norot-shuf-t1--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
-1.12.1--plain-norot-shuf-t1-self--top--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), missed-self-defending (1)
+1.12.1--plain-norot-shuf-t1-self--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.12.1--plain-norot-shuf-t75-numbers--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.12.1--plain-norot-shuf-t75-split--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.12.1--plain-norot-shuf-t75-unicode--wp4-module--none	1	1/1	1/1	-	0	-
@@ -304,7 +304,7 @@
 1.6.0--plain-norot-noshuf-t1--iife--uglify	1	1/1	1/1	-	0	-
 1.6.0--plain-norot-noshuf-t1-numbers--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.6.0--plain-norot-noshuf-t1-numbers--wp4-module--none	1	1/1	1/1	-	0	-
-1.6.0--plain-norot-noshuf-t1-self--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), missed-self-defending (1)
+1.6.0--plain-norot-noshuf-t1-self--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.6.0--plain-norot-noshuf-t75-dead--iife--terser	1	1/1	1/1	-	0	-
 1.6.0--plain-norot-noshuf-t75-numbers--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.6.0--plain-norot-noshuf-t75-split--wp4-module--uglify	1	1/1	1/1	-	0	-
@@ -704,7 +704,7 @@
 5.9.1--plain-norot-noshuf-noshift-istr-w2f5-calls-t75-mangled--wp4-bundle--uglify	1	0/1	0/1	-	0	wrapper-reads-outside (2)
 5.9.1--plain-norot-noshuf-shift-inum-w0-nocalls-t75-unicode--top--terser	1	1/1	1/1	-	0	-
 5.9.1--plain-norot-noshuf-shift-inum-w2f5-nocalls-t1-mangled--iife--terser	1	0/1	0/1	-	0	unexplained-decode-miss (2)
-5.9.1--plain-norot-shuf-noshift-inum-w0-calls-t1-self--wp4-bundle--terser	1	0/1	0/1	-	0	missed-self-defending (1), safe-global-names (1)
+5.9.1--plain-norot-shuf-noshift-inum-w0-calls-t1-self--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
 5.9.1--plain-norot-shuf-noshift-istr-w1-nocalls-t1-dead--wp4-module--none	1	1/1	1/1	-	0	-
 5.9.1--plain-norot-shuf-shift-istr-w2u-calls-t75-split--iife--uglify	1	1/1	1/1	-	0	-
 5.9.1--plain-rot-noshuf-noshift-inum-w0-nocalls-t75-numbers--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-key-reach (1)
@@ -733,7 +733,6 @@ missed-no-string-array	42	42	84	0	MISSED: find-string-array finds no string arra
 unexplained-decode-miss	28	28	44	0	MISSED: the unit keeps every reference undecoded and no pass says why
 array-reached-outside	26	26	52	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
 safe-global-key-reach	11	11	11	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
-missed-self-defending	8	8	11	0	MISSED: the unit decodes, but self-defending code is left and no pass says why
 decoder-does-more	5	5	10	0	a decoder does more than read from the string array, so its calls may change or expose the array and are left alone
 missed-opaque-predicate	4	4	4	0	MISSED: the unit decodes, but a dead-code-injection test between two different string literals is left and no pass says why
 object-keys-computed-key	4	4	4	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)
@@ -743,4 +742,5 @@ rotator-reads-outside	3	3	6	0	the rotator reads or writes something other than i
 wrapper-alias-redeclared	3	3	6	0	a decoder alias is not declared exactly once by a single-declarator declaration in a statement list, so it is left in place
 decoder-used-as-value	2	2	4	0	a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's calls are left alone
 wrapper-alias-read-early	2	2	4	0	a decoder alias may be read before its declaration runs, so it is left in place
+missed-self-defending	1	1	2	0	MISSED: the unit decodes, but self-defending code is left and no pass says why
 wrapper-reads-outside	1	1	2	0	a decoder wrapper body reads something other than its own parameters and the stamped machinery, so it is not inlined
