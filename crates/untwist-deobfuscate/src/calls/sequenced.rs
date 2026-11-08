@@ -33,6 +33,7 @@ struct OrderScan<'s> {
     frames: Vec<Frame>,
     declared: Option<u32>,
     under_with: bool,
+    aliased: bool,
     writers: Vec<u32>,
     candidates: FxHashMap<Span, Candidate>,
 }
@@ -191,15 +192,52 @@ impl<'a> OrderScan<'_> {
     }
 }
 
+#[derive(Default)]
+struct ArgumentsRead {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for ArgumentsRead {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= it.name == "arguments";
+    }
+}
+
+impl OrderScan<'_> {
+    fn binds(&self, params: &FormalParameters<'_>) -> bool {
+        params
+            .items
+            .iter()
+            .any(|param| binding_symbol(&param.pattern) == Some(self.symbol))
+    }
+
+    fn note_parameter(&mut self, params: &FormalParameters<'_>, aliased: bool) {
+        if !self.binds(params) {
+            return;
+        }
+        if aliased && !external_write_order_trusted() {
+            self.aliased = true;
+            return;
+        }
+        self.declared = Some(self.boundary());
+    }
+}
+
 impl<'a> VisitJs<'a> for OrderScan<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         self.enter_boundary();
+        let mut reads = ArgumentsRead::default();
+        if self.binds(&it.params) {
+            reads.visit_function(it, flags);
+        }
+        self.note_parameter(&it.params, reads.found);
         walk_js::walk_function(self, it, flags);
         self.boundaries.pop();
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
         self.enter_boundary();
+        self.note_parameter(&it.params, false);
         walk_js::walk_arrow_function_expression(self, it);
         self.boundaries.pop();
     }
@@ -308,11 +346,12 @@ pub(super) fn ordered_values(
         frames: Vec::new(),
         declared: None,
         under_with: false,
+        aliased: false,
         writers: Vec::new(),
         candidates: FxHashMap::default(),
     };
     scan.visit_program(program);
-    let Some(declared) = scan.declared.filter(|_| !scan.under_with) else {
+    let Some(declared) = scan.declared.filter(|_| !scan.under_with && !scan.aliased) else {
         return FxHashMap::default();
     };
     let closed =
