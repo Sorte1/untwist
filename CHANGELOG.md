@@ -150,8 +150,8 @@ All notable changes to this project are documented in this file. The format is b
   right after the array. terser's reader that keeps the cookie lookup in a new variable is read
   too.
 
-- Decoder wrappers that forward only one argument (`function t(e, n, t, r, o) { return u(e - -255); }`,
-  as uglify-js drops a key the decoder does not read) are inlined like other wrappers.
+- A decoder wrapper with a single parameter (`function w(x) { return b(x); }`) is inlined like
+  other wrappers.
 
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
