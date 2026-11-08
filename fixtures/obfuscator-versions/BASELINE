@@ -592,7 +592,7 @@
 2.9.6--b64-rot-shuf-shift-inum-w1-t1--iife--uglify	1	1/1	1/1	-	0	-
 2.9.6--b64-rot-shuf-shift-istr-w2f5-t1-split--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.9.6--plain-norot-noshuf-shift-inum-w0-t1-keys--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.9.6--plain-norot-noshuf-shift-istr-w3f-t75-dead--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), missed-opaque-predicate (1)
+2.9.6--plain-norot-noshuf-shift-istr-w3f-t75-dead--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.9.6--plain-norot-shuf-noshift-inum-w1-t75-numbers--iife--terser	1	1/1	1/1	-	0	-
 2.9.6--plain-norot-shuf-noshift-inum-w2f5-t75-numbers--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.9.6--plain-norot-shuf-noshift-inum-w2u-t75-split--wp4-module--terser	1	1/1	1/1	-	0	-
@@ -741,6 +741,5 @@ wrapper-alias-redeclared	3	3	6	0	a decoder alias is not declared exactly once by
 decoder-used-as-value	2	2	4	0	a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's calls are left alone
 missed-proxy-object	2	2	2	0	MISSED: the unit decodes, but a control-flow proxy object is left and no pass says why
 wrapper-alias-read-early	2	2	4	0	a decoder alias may be read before its declaration runs, so it is left in place
-missed-opaque-predicate	1	1	1	0	MISSED: the unit decodes, but a dead-code-injection test between two different string literals is left and no pass says why
 missed-self-defending	1	1	2	0	MISSED: the unit decodes, but self-defending code is left and no pass says why
 wrapper-reads-outside	1	1	2	0	a decoder wrapper body reads something other than its own parameters and the stamped machinery, so it is not inlined

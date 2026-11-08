@@ -59,6 +59,12 @@ All notable changes to this project are documented in this file. The format is b
   function: `var t = a[(t = -937, d(t))](0); f(t)` replaced the later `t` with `-937` in both lanes.
   Chained literal writes such as `e = t = -937` now count as literal assignments of both locals.
 
+- The dead-code pass folds a string-literal comparison on the left of `&&` or `||`
+  (`"mVBnO" === "mVBnO" && !f.o(x, e) && ...`, as uglify-js writes injected dead code), as it
+  already did for `if` and `?:`, and drops one that cannot change the result from the middle or
+  the end of a chain (`a && "SedNn" === "SedNn" && b`, `if (a && "x" === "x")`). A member read
+  it would hand to a call is still kept.
+
 - The dead-code pass now also folds a constant-test conditional whose chosen branch is a member
   read (`"ab" === "cd" ? module.x : d[x]`), as dead-code injection leaves them inside functions;
   it still keeps the conditional when it is called or used as a template tag, where folding would
