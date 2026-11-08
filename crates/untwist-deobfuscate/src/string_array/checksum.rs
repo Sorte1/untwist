@@ -81,8 +81,8 @@ pub(super) fn checksum_rotator(
         return None;
     }
     let (function, arguments) = statement_iife(stmt)?;
-    let (target, _) = parameters(function)?;
-    if function.id.is_some() || target == name || sees_its_parameters(function) {
+    parameters(function)?;
+    if function.id.is_some() || sees_its_parameters(function) {
         return None;
     }
     let [first, second] = arguments.as_slice() else {

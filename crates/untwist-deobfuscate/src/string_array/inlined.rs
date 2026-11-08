@@ -13,6 +13,7 @@ use untwist_core::pass::Cx;
 use super::checksum::parsed_statement;
 use super::legacy::{incremented, is_countdown, literal_arithmetic, predecrements, pushes_shifted};
 use super::{array_declaration, array_literal};
+use crate::array_rotator::is_infinite_rotator_loop;
 use crate::mutants::inlined_rotator_vars_trusted;
 use crate::stamp::DynamicScopes;
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -20,11 +21,13 @@ enum Kind {
     Assigned,
     Loop,
     LoopWithArray,
+    Checksum,
 }
 
 struct Plan {
     first: usize,
     kind: Kind,
+    moved: Vec<usize>,
     array_name: String,
     target: String,
     counter: String,
@@ -116,7 +119,11 @@ impl<'a> VisitJs<'a> for Counted<'_> {
     }
 }
 
-fn only_used_within(scoping: &Scoping, symbol: SymbolId, statements: &[Statement<'_>]) -> bool {
+fn used_only_in<'s, 'a: 's>(
+    scoping: &Scoping,
+    symbol: SymbolId,
+    statements: impl Iterator<Item = &'s Statement<'a>>,
+) -> bool {
     let mut counted = Counted {
         scoping,
         symbol,
@@ -133,6 +140,10 @@ fn only_used_within(scoping: &Scoping, symbol: SymbolId, statements: &[Statement
         && DynamicScopes::of(scoping)
             .refusal(scoping, symbol)
             .is_none()
+}
+
+fn only_used_within(scoping: &Scoping, symbol: SymbolId, statements: &[Statement<'_>]) -> bool {
+    used_only_in(scoping, symbol, statements.iter())
 }
 
 fn bare(stmt: &Statement<'_>) -> bool {
@@ -163,6 +174,7 @@ fn assigned_plan(body: &[Statement<'_>], index: usize, scoping: &Scoping) -> Opt
     (sealed && original).then(|| Plan {
         first,
         kind: Kind::Assigned,
+        moved: Vec::new(),
         array_name: array.to_string(),
         target,
         counter,
@@ -230,6 +242,7 @@ fn loop_plan(body: &[Statement<'_>], index: usize, scoping: &Scoping) -> Option<
     sealed.then(|| Plan {
         first: at,
         kind,
+        moved: Vec::new(),
         array_name: array.to_string(),
         target: target.to_string(),
         counter: count_name.to_string(),
@@ -237,9 +250,180 @@ fn loop_plan(body: &[Statement<'_>], index: usize, scoping: &Scoping) -> Option<
     })
 }
 
+fn alias_of<'k>(stmt: &'k Statement<'_>) -> Option<(&'k str, Option<&'k str>)> {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+        return None;
+    };
+    if declaration.kind != VariableDeclarationKind::Var {
+        return None;
+    }
+    match declarator.init.as_ref()?.without_parentheses() {
+        Expression::Identifier(source) => Some((id.name.as_str(), Some(source.name.as_str()))),
+        Expression::FunctionExpression(_) => Some((id.name.as_str(), None)),
+        _ => None,
+    }
+}
+
+fn loop_alias<'k>(stmt: &'k Statement<'_>) -> Option<Option<(&'k str, &'k str)>> {
+    let Statement::ForStatement(node) = stmt else {
+        return Some(None);
+    };
+    match node.init.as_ref() {
+        None => Some(None),
+        Some(ForStatementInit::VariableDeclaration(declaration))
+            if declaration.kind == VariableDeclarationKind::Var =>
+        {
+            let [declarator] = declaration.declarations.as_slice() else {
+                return None;
+            };
+            let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+                return None;
+            };
+            let source = declarator.init.as_ref().and_then(identifier_name)?;
+            Some(Some((id.name.as_str(), source)))
+        }
+        _ => None,
+    }
+}
+
+fn declared_names<'k>(statements: &'k [Statement<'_>]) -> Vec<(&'k str, SymbolId)> {
+    let mut names = Vec::new();
+    for stmt in statements {
+        let declarations = match stmt {
+            Statement::VariableDeclaration(declaration) => Some(&**declaration),
+            Statement::ForStatement(node) => match node.init.as_ref() {
+                Some(ForStatementInit::VariableDeclaration(declaration)) => Some(&**declaration),
+                _ => None,
+            },
+            _ => None,
+        };
+        for declarator in declarations.into_iter().flat_map(|d| d.declarations.iter()) {
+            if let Some(found) = binding(declarator) {
+                names.push(found);
+            }
+        }
+    }
+    names
+}
+
+fn owned(stmt: &Statement<'_>, moved: &[usize], body: &[Statement<'_>], scoping: &Scoping) -> bool {
+    declared_names(std::slice::from_ref(stmt))
+        .iter()
+        .all(|(_, symbol)| used_only_in(scoping, *symbol, moved.iter().map(|i| &body[*i])))
+}
+
+fn checksum_plan(body: &[Statement<'_>], index: usize, scoping: &Scoping) -> Option<Plan> {
+    let (array, length) = array_declaration(&body[index])?;
+    let movers = body
+        .get(index + 1..)?
+        .iter()
+        .take_while(|stmt| alias_of(stmt).is_some())
+        .count();
+    let at = index + 1 + movers;
+    let rotator = body.get(at)?;
+    if length == 0 || !is_infinite_rotator_loop(rotator) {
+        return None;
+    }
+    let looped = loop_alias(rotator)?;
+    let region = &body[index + 1..=at];
+    let mut moved: Vec<usize> = (index + 1..=at).collect();
+    loop {
+        let kept: Vec<usize> = moved
+            .iter()
+            .copied()
+            .filter(|i| owned(&body[*i], &moved, body, scoping))
+            .collect();
+        if kept.len() == moved.len() {
+            break;
+        }
+        moved = kept;
+    }
+    if moved.last() != Some(&at) {
+        return None;
+    }
+    let parameter = match looped {
+        Some((name, source)) if source == array => name.to_string(),
+        Some(_) => return None,
+        None => moved
+            .iter()
+            .filter_map(|i| alias_of(&body[*i]))
+            .find_map(|(name, source)| (source == Some(array)).then_some(name))
+            .unwrap_or(array)
+            .to_string(),
+    };
+    let original = region.iter().all(|stmt| stmt.span().start < SYNTHETIC_BASE);
+    original.then(|| Plan {
+        first: index + 1,
+        kind: Kind::Checksum,
+        moved,
+        array_name: array.to_string(),
+        target: parameter,
+        counter: String::new(),
+        count: 0,
+    })
+}
+
+fn rewrite_checksum<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'a, '_>) -> bool {
+    let text = format!("!function ({}) {{ 0; }}({});", plan.target, plan.array_name);
+    let Some(mut wrapped) = parsed_statement(&text, cx) else {
+        return false;
+    };
+    let Some(body) = function_body(&mut wrapped) else {
+        return false;
+    };
+    body.clear();
+    let Some(&at) = plan.moved.last() else {
+        return false;
+    };
+    for &index in &plan.moved {
+        let mut stmt = it[index].take_in(cx);
+        if index == at {
+            if let Statement::ForStatement(node) = &mut stmt {
+                node.init = None;
+            }
+        } else if alias_of(&stmt).is_some_and(|(name, source)| {
+            name == plan.target && source == Some(plan.array_name.as_str())
+        }) {
+            continue;
+        }
+        body.push(stmt);
+    }
+    it[at] = wrapped;
+    for &index in plan.moved.iter().rev().skip(1) {
+        it.remove(index);
+    }
+    true
+}
+
+fn function_body<'k, 'a>(
+    statement: &'k mut Statement<'a>,
+) -> Option<&'k mut AVec<'a, Statement<'a>>> {
+    let Statement::ExpressionStatement(outer) = statement else {
+        return None;
+    };
+    let Expression::UnaryExpression(unary) = &mut outer.expression else {
+        return None;
+    };
+    let Expression::CallExpression(call) = unary.argument.without_parentheses_mut() else {
+        return None;
+    };
+    let Expression::FunctionExpression(function) = call.callee.without_parentheses_mut() else {
+        return None;
+    };
+    Some(&mut function.body.as_mut()?.statements)
+}
+
 fn plan(body: &[Statement<'_>], scoping: &Scoping) -> Option<Plan> {
     (0..body.len()).find_map(|index| {
-        assigned_plan(body, index, scoping).or_else(|| loop_plan(body, index, scoping))
+        assigned_plan(body, index, scoping)
+            .or_else(|| loop_plan(body, index, scoping))
+            .or_else(|| checksum_plan(body, index, scoping))
     })
 }
 
@@ -352,6 +536,7 @@ impl<'a> VisitMut<'a> for Inline<'_, 'a, '_> {
                 let rewritten = match plan.kind {
                     Kind::Assigned => rewrite(it, &plan, self.cx),
                     Kind::Loop | Kind::LoopWithArray => rewrite_loop(it, &plan, self.cx),
+                    Kind::Checksum => rewrite_checksum(it, &plan, self.cx),
                 };
                 self.changed += usize::from(rewritten);
             }

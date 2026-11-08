@@ -110,6 +110,11 @@ fn is_guarded_rotator_loop(body: &Statement<'_>) -> bool {
     }
 }
 
+pub(crate) fn is_infinite_rotator_loop(stmt: &Statement<'_>) -> bool {
+    infinite_loop_body(stmt)
+        .is_some_and(|body| is_rotator_loop(body) || is_guarded_rotator_loop(body))
+}
+
 fn has_rotator_loop(stmt: &Statement<'_>) -> bool {
     let Some((function, _)) = statement_iife(stmt) else {
         return false;
