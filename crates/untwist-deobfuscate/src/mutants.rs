@@ -252,3 +252,14 @@ pub fn trust_nested_literal_writes_for_tests(on: bool) {
 pub(crate) fn nested_literal_writes_trusted() -> bool {
     NESTED_LITERAL_WRITES_TRUSTED.load(Ordering::Relaxed)
 }
+
+static SETTLED_RIGHTS_DROPPED_ANYWHERE: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_any_settled_right_of_if_tests_for_tests(on: bool) {
+    SETTLED_RIGHTS_DROPPED_ANYWHERE.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn settled_rights_dropped_anywhere() -> bool {
+    SETTLED_RIGHTS_DROPPED_ANYWHERE.load(Ordering::Relaxed)
+}

@@ -5,3 +5,6 @@ keep-a-member-tag-chosen-by-a-string-test|var o={n:'o',m:function(s){return this
 fold-a-string-test-guarding-a-call|function h(x){console.log(x)}function k(x){'ab'==='ab'&&h(x);'ab'!=='ab'||h(x+1)}k(1);
 fold-a-string-test-in-a-longer-chain|var o={k:'v'};function g(x){return 'ab'==='ab'&&!x&&o.k}console.log(g(0),g(1));
 keep-a-member-callee-guarded-by-a-string-test|var o={n:'o',m:function(){return this&&this.n}};var n='g';console.log(('ab'==='ab'&&o.m)());
+fold-a-string-test-closing-an-if-test|function h(x){console.log(x)}function k(x){if(x>0&&'ab'==='ab')h(x);if(x>5||'ab'!=='ab')h(x+1)}k(1);k(9);
+fold-a-string-test-inside-a-logical-chain|function h(x){console.log(x)}function k(x){x>0&&'ab'==='ab'&&h(x);x>0||'ab'!=='ab'||h(-x);console.log(x>0&&'ab'==='ab'&&x)}k(1);k(-2);
+guard-a-false-string-test-closing-an-if-test|function h(x){console.log(x)}function k(x){if(x>0&&'ab'==='cd')h(x)}k(1);

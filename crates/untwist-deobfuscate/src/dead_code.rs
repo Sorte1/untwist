@@ -1,4 +1,4 @@
-use oxc_allocator::{Box as ABox, Vec as AVec};
+use oxc_allocator::{Box as ABox, TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::Scoping;
@@ -630,6 +630,26 @@ impl<'a> DeadCode<'a> {
         changes
     }
 
+    fn drop_settled_right(&mut self, test: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let Expression::LogicalExpression(logical) = test else {
+            return false;
+        };
+        let neutral = match logical.operator {
+            LogicalOperator::And => true,
+            LogicalOperator::Or => false,
+            LogicalOperator::Coalesce => return false,
+        };
+        let settled = self.decide(&logical.right, cx).is_some_and(|decision| {
+            decision.value == neutral || crate::mutants::settled_rights_dropped_anywhere()
+        });
+        if !settled {
+            return false;
+        }
+        let left = logical.left.take_in(cx);
+        *test = left;
+        true
+    }
+
     fn fold_branch(
         &mut self,
         node: ABox<'a, IfStatement<'a>>,
@@ -694,12 +714,26 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
+        if let Statement::IfStatement(node) = stmt {
+            while self.drop_settled_right(&mut node.test, cx) {
+                cx.changed();
+            }
+        }
         if self.decision_of_statement(stmt, cx).is_some() {
             self.armed += 1;
         }
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        if self.unsafe_lane {
+            for stmt in stmts.iter_mut() {
+                if let Statement::IfStatement(node) = stmt {
+                    while self.drop_settled_right(&mut node.test, cx) {
+                        cx.changed();
+                    }
+                }
+            }
+        }
         if !self.unsafe_lane && self.armed == 0 {
             return;
         }
@@ -741,6 +775,12 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
+        if let Expression::LogicalExpression(outer) = expr {
+            let same = matches!(&outer.left, Expression::LogicalExpression(inner) if inner.operator == outer.operator);
+            if same && self.drop_settled_right(&mut outer.left, cx) {
+                cx.changed();
+            }
+        }
         let Some(keep_consequent) = self.expression_choice(expr, cx) else {
             return;
         };
