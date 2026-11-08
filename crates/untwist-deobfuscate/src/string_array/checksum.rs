@@ -155,7 +155,7 @@ fn unused_name(function: &Function<'_>, base: &str) -> Option<String> {
         .find(|candidate| !names.seen.contains(candidate))
 }
 
-fn parsed_statement<'a>(text: &str, cx: &Cx<'a, '_>) -> Option<Statement<'a>> {
+pub(super) fn parsed_statement<'a>(text: &str, cx: &Cx<'a, '_>) -> Option<Statement<'a>> {
     let source = cx.allocator().alloc_str(text);
     let parsed = parse_with(cx.allocator(), source, SourceType::cjs());
     if has_error(&parsed.diagnostics) {

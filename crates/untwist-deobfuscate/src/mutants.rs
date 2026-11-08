@@ -186,3 +186,14 @@ pub fn trust_legacy_rotation_patches_for_tests(on: bool) {
 pub(crate) fn legacy_rotation_patches_trusted() -> bool {
     LEGACY_ROTATION_PATCHES_TRUSTED.load(Ordering::Relaxed)
 }
+
+static INLINED_ROTATOR_VARS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_inlined_rotator_vars_for_tests(on: bool) {
+    INLINED_ROTATOR_VARS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn inlined_rotator_vars_trusted() -> bool {
+    INLINED_ROTATOR_VARS_TRUSTED.load(Ordering::Relaxed)
+}

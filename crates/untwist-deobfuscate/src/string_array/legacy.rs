@@ -98,14 +98,14 @@ fn single_statement<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Statement<'a>
     }
 }
 
-fn pushes_shifted(stmt: &Statement<'_>, array: &str) -> bool {
+pub(super) fn pushes_shifted(stmt: &Statement<'_>, array: &str) -> bool {
     let Some(Statement::ExpressionStatement(stmt)) = single_statement(stmt) else {
         return false;
     };
     push_shift_target(stmt.expression.without_parentheses()) == Some(array)
 }
 
-fn predecrements(expr: &Expression<'_>, counter: &str) -> bool {
+pub(super) fn predecrements(expr: &Expression<'_>, counter: &str) -> bool {
     let Expression::UpdateExpression(update) = expr.without_parentheses() else {
         return false;
     };
@@ -147,7 +147,7 @@ pub(super) fn is_countdown(function: &Function<'_>, array: &str) -> bool {
         && matches!(body.statements.as_slice(), [stmt] if is_countdown_loop(stmt, counter, array))
 }
 
-fn incremented(arguments: &[Argument<'_>], count: &str) -> bool {
+pub(super) fn incremented(arguments: &[Argument<'_>], count: &str) -> bool {
     let [argument] = arguments else {
         return false;
     };
@@ -481,7 +481,14 @@ fn legacy_at(
     let references = scoping.get_resolved_reference_ids(symbol).len();
     let expected =
         references.checked_sub(usize::from(rotator.is_some()) + usize::from(checksum.is_some()))?;
-    let (decoder, hoisted, reassigning, reads) = body.get(after..)?.iter().find_map(|stmt| {
+    let declared_before = body[..index]
+        .iter()
+        .filter(|stmt| matches!(stmt, Statement::FunctionDeclaration(_)));
+    let (decoder, hoisted, reassigning, reads) = body
+        .get(after..)?
+        .iter()
+        .chain(declared_before)
+        .find_map(|stmt| {
         decoder_reads(stmt, scoping, symbol).map(|reads| {
             let hoisted = matches!(stmt, Statement::FunctionDeclaration(_));
             (stmt.span(), hoisted, reassigns_itself(stmt), reads)
@@ -546,12 +553,22 @@ fn find_legacy(program: &Program<'_>, scoping: &Scoping) -> Option<Legacy> {
     finder.found
 }
 
+fn bare_var(stmt: &Statement<'_>) -> bool {
+    matches!(stmt, Statement::VariableDeclaration(declaration)
+    if declaration.kind == VariableDeclarationKind::Var
+        && declaration.declarations.iter().all(|declarator| {
+            declarator.init.is_none()
+                && matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+        }))
+}
+
 fn runs_code_before(body: &[Statement<'_>], index: usize) -> bool {
     body[..index].iter().any(|stmt| {
-        !matches!(
-            stmt,
-            Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_)
-        )
+        !bare_var(stmt)
+            && !matches!(
+                stmt,
+                Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_)
+            )
     })
 }
 

@@ -48,6 +48,7 @@ mod aliases;
 mod checksum;
 mod cookie;
 mod for_init;
+mod inlined;
 pub(crate) mod legacy;
 mod patched;
 mod positions;
@@ -733,6 +734,11 @@ impl<'a> Pass<'a> for FindStringArray {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         if !self.legacy_searched {
+            let inlined = inlined::inline_assigned_rotators(program, cx);
+            if inlined > 0 {
+                cx.changed_by(inlined);
+                return;
+            }
             if legacy::lift_legacy_array(program, cx) {
                 return;
             }

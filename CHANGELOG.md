@@ -60,6 +60,20 @@ All notable changes to this project are documented in this file. The format is b
   parameter) is recognised like the compact one: the rotation is applied only when the guard's
   format check passes on the text of `removeCookie`.
 
+- Inside a function, terser folds the old counting rotator into its caller as
+  `e = arr, n = 107, function (n) { for (; --n;) e.push(e.shift()); }(++n)`. That form is
+  recognised when the two variables are declared with `var` in the same body and used nowhere
+  else, and their now unused declarations are removed. A bare `var x;` before an array no longer
+  counts as code running before it.
+
+- uglify-js turns the same rotator into a loop, `for (var x = arr, n = 107; --n;) x.push(x.shift())`,
+  sometimes declaring the array in the loop head. That loop is recognised under the same
+  conditions, and a few bare `var` statements between the array and an assigned rotator are
+  skipped.
+
+- A function declaration that decodes a plain array is also found when it comes before the array,
+  as uglify-js hoists it; it is used only when nothing runs before the array in that body.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called
