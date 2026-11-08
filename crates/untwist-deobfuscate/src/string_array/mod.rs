@@ -55,6 +55,7 @@ mod minified;
 mod patched;
 mod positions;
 mod prologue;
+mod prologue_inline;
 mod reach;
 
 use aliases::{resolve_array_aliases, search_aliases};

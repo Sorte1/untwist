@@ -123,6 +123,11 @@ All notable changes to this project are documented in this file. The format is b
   or by terser (an unused literal declaration, a `var` after the reader's return) are read like
   the unminified ones: the rotation is applied only when the removal text passes the format check.
 
+- `--unsafe` also drops the lazy `atob` set-up of old base64 and rc4 decoders when a minifier
+  inlined it into the decoder (`try { var n = Function(...)() } catch (t) { n = window }
+  n.atob || (...)`, or `(r = (() => {...})()).atob || (...)`), when the variable that holds the
+  global object is overwritten before anything reads it again.
+
 - String arrays from old javascript-obfuscator builds (a plain `var a = [...]` with a counting
   rotator and a `var b = function (t, x) { ... a[t -= 0] ... }` decoder) were not found, and the
   run said `no string array found`. They are now decoded when the array is only read by its

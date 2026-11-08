@@ -799,15 +799,16 @@ impl<'a> VisitMut<'a> for RestoreName<'_> {
     }
 }
 
-struct StripDecoder {
+struct StripDecoder<'c, 'a, 'x> {
+    cx: &'c Cx<'a, 'x>,
     decoder: Span,
     stripped: usize,
 }
 
-impl<'a> VisitMut<'a> for StripDecoder {
+impl<'a> VisitMut<'a> for StripDecoder<'_, 'a, '_> {
     fn visit_statement(&mut self, it: &mut Statement<'a>) {
         if it.span() == self.decoder {
-            self.stripped += strip_atob_prologues(it);
+            self.stripped += strip_atob_prologues(it, self.cx);
             return;
         }
         walk_mut::walk_statement(self, it);
@@ -882,6 +883,7 @@ fn rewrite<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>, legacy: Legacy) -
     let restored = restore.restored;
     let stripped = if cx.opts.unsafe_transforms {
         let mut strip = StripDecoder {
+            cx: &*cx,
             decoder: legacy.decoder,
             stripped: 0,
         };
