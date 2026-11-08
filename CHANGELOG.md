@@ -43,6 +43,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- javascript-obfuscator 5.x decoders minified by terser decode: the memo proof now accepts the
+  index shift written as `t -= 0`, and a base64 helper's own locals no longer count as reads of the
+  decoder's second parameter when they share its name.
+
 - The dead-code pass now also folds a constant-test conditional whose chosen branch is a member
   read (`"ab" === "cd" ? module.x : d[x]`), as dead-code injection leaves them inside functions;
   it still keeps the conditional when it is called or used as a template tag, where folding would
