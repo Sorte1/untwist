@@ -187,12 +187,13 @@ pub(crate) fn plan(program: &Program<'_>, scoping: &Scoping) -> Option<Plan> {
         functions: Vec::new(),
     };
     declarations.visit_program(program);
+    let found = declarations.found;
     let mut plan = Plan {
         dropped: FxHashSet::default(),
         declarations: FxHashSet::default(),
     };
-    for symbol in wanted.iter().copied() {
-        let Some((declared, function, lexical)) = declarations.found.get(&symbol).copied() else {
+    for symbol in wanted {
+        let Some((declared, function, lexical)) = found.get(&symbol).copied() else {
             continue;
         };
         let spans = &writes.in_sequences[&symbol];
