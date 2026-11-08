@@ -24,7 +24,7 @@
 0.10.2--plain-rot-t75--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--plain-rot-t75-cff--top--uglify	1	1/1	1/1	-	0	-
 0.10.2--plain-rot-t75-dead--iife--none	1	1/1	1/1	-	0	-
-0.10.2--plain-rot-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), missed-self-defending (1)
+0.10.2--plain-rot-t75-self--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--rc4-norot-t1-cff--iife--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--rc4-norot-t1-cff--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--rc4-norot-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -167,7 +167,7 @@
 0.23.2--plain-rot-noshuf-t75-self--iife--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
 0.23.2--plain-rot-noshuf-t75-unicode--wp4-module--terser	1	1/1	1/1	-	0	-
 0.23.2--plain-rot-shuf-t1-keys--wp4-module--none	1	1/1	1/1	-	0	-
-0.23.2--plain-rot-shuf-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), missed-self-defending (1)
+0.23.2--plain-rot-shuf-t75-self--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.23.2--plain-rot-shuf-t75-split--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.23.2--rc4-norot-noshuf-t1-cff--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.23.2--rc4-norot-noshuf-t1-mangled--iife--terser	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
@@ -201,7 +201,7 @@
 0.28.5--plain-rot-noshuf-t1-dead--iife--none	1	1/1	1/1	-	0	-
 0.28.5--plain-rot-noshuf-t1-split--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.28.5--plain-rot-noshuf-t75-keys--iife--uglify	1	1/1	1/1	-	0	-
-0.28.5--plain-rot-noshuf-t75-self--top--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), missed-self-defending (1)
+0.28.5--plain-rot-noshuf-t75-self--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.28.5--plain-rot-shuf-t1--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.28.5--plain-rot-shuf-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.28.5--plain-rot-shuf-t75-split--wp4-module--uglify	1	1/1	1/1	-	0	-
@@ -732,7 +732,6 @@ stateful-decoder-state	54	54	91	0	decoding bails: a stateful decoder keeps state
 missed-no-string-array	34	34	68	0	MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why
 unexplained-decode-miss	28	28	44	0	MISSED: the unit keeps every reference undecoded and no pass says why
 array-reached-outside	26	26	52	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
-missed-self-defending	11	11	14	0	MISSED: the unit decodes, but self-defending code is left and no pass says why
 safe-global-key-reach	11	11	11	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 decoder-does-more	5	5	10	0	a decoder does more than read from the string array, so its calls may change or expose the array and are left alone
 missed-opaque-predicate	4	4	4	0	MISSED: the unit decodes, but a dead-code-injection test between two different string literals is left and no pass says why
