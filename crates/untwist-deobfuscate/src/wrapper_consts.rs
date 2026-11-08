@@ -63,7 +63,6 @@ struct Search<'s, 'p> {
     constants: FxHashMap<SymbolId, Constant<'p>>,
     wrappers: Vec<Wrapper>,
     functions: Vec<Span>,
-    references: FxHashMap<SymbolId, Vec<(Span, Option<Span>)>>,
     call_reads: Vec<CallRead>,
     functions_of: FxHashMap<SymbolId, Option<Span>>,
 }
@@ -183,41 +182,35 @@ impl<'s, 'p> VisitJs<'p> for Search<'s, 'p> {
         walk_js::walk_sequence_expression(self, it);
     }
 
-    fn visit_call_expression(&mut self, it: &CallExpression<'p>) {
-        if let Expression::Identifier(callee) = it.callee.without_parentheses() {
-            let decoder = decoder_index(callee.name.as_str()).is_some();
-            let callee_symbol = callee
-                .reference_id
-                .get()
-                .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
-            let mut reads = Reads {
-                scoping: self.scoping,
-                params: Vec::new(),
-                found: Vec::new(),
-            };
-            for argument in &it.arguments {
-                reads.visit_argument(argument);
-            }
-            for (span, symbol) in reads.found {
-                self.call_reads.push(CallRead {
-                    callee: callee_symbol,
-                    decoder,
-                    span,
-                    symbol,
-                    function: self.functions.last().copied(),
-                });
-            }
-        }
-        walk_js::walk_call_expression(self, it);
+}
+
+struct Uses<'s> {
+    scoping: &'s Scoping,
+    wanted: Vec<SymbolId>,
+    functions: Vec<Span>,
+    found: FxHashMap<SymbolId, Vec<(Span, Option<Span>)>>,
+}
+
+impl<'a> VisitJs<'a> for Uses<'_> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.functions.push(it.span);
+        walk_js::walk_function(self, it, flags);
+        self.functions.pop();
     }
 
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'p>) {
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.functions.push(it.span);
+        walk_js::walk_arrow_function_expression(self, it);
+        self.functions.pop();
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         let symbol = it
             .reference_id
             .get()
             .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
-        if let Some(symbol) = symbol {
-            self.references
+        if let Some(symbol) = symbol.filter(|symbol| self.wanted.contains(symbol)) {
+            self.found
                 .entry(symbol)
                 .or_default()
                 .push((it.span, self.functions.last().copied()));
@@ -234,12 +227,15 @@ fn settled(scoping: &Scoping, symbol: SymbolId) -> bool {
             .all(|reference| !reference.is_write())
 }
 
-fn runs_after(search: &Search<'_, '_>, wrapper: &Wrapper, declared: Span) -> bool {
+fn runs_after(
+    references: &FxHashMap<SymbolId, Vec<(Span, Option<Span>)>>,
+    wrapper: &Wrapper,
+    declared: Span,
+) -> bool {
     if wrapper_constants_trusted() {
         return true;
     }
-    search
-        .references
+    references
         .get(&wrapper.symbol)
         .is_some_and(|references| {
             references
@@ -259,11 +255,33 @@ pub(crate) fn inline_wrapper_constants<'a>(
             constants: FxHashMap::default(),
             wrappers: Vec::new(),
             functions: Vec::new(),
-            references: FxHashMap::default(),
             call_reads: Vec::new(),
             functions_of: FxHashMap::default(),
         };
         search.visit_program(view);
+        let candidates: Vec<SymbolId> = search
+            .wrappers
+            .iter()
+            .filter(|wrapper| {
+                wrapper
+                    .reads
+                    .iter()
+                    .all(|(_, symbol)| search.constants.contains_key(symbol))
+            })
+            .map(|wrapper| wrapper.symbol)
+            .collect();
+        let references = if candidates.is_empty() {
+            FxHashMap::default()
+        } else {
+            let mut uses = Uses {
+                scoping: cx.scoping(),
+                wanted: candidates,
+                functions: Vec::new(),
+                found: FxHashMap::default(),
+            };
+            uses.visit_program(view);
+            uses.found
+        };
         let mut edits = ExprEdits::new();
         for wrapper in &search.wrappers {
             let scope = cx.scoping().symbol_scope_id(wrapper.symbol);
@@ -275,7 +293,7 @@ pub(crate) fn inline_wrapper_constants<'a>(
                     let same_scope = cx.scoping().symbol_scope_id(*symbol) == scope;
                     (same_scope
                         && settled(cx.scoping(), *symbol)
-                        && runs_after(&search, wrapper, constant.declared))
+                        && runs_after(&references, wrapper, constant.declared))
                     .then_some((*span, constant))
                 })
                 .collect();
