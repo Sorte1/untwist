@@ -7,6 +7,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 
 use super::{Refusal, STANDARD_GLOBALS};
+use crate::mutants::nested_rotator_builtins_trusted;
 use crate::notes;
 use crate::stamp::StampedFn;
 
@@ -255,13 +256,20 @@ impl<'a> VisitJs<'a> for UsedScan<'_, 'a> {
     }
 }
 
-pub fn used_names<'a>(scoping: &Scoping, decoders: &[&StampedFn<'a>]) -> UsedNames<'a> {
+pub fn used_names<'a>(
+    scoping: &Scoping,
+    decoders: &[&StampedFn<'a>],
+    nested_rotator: Option<&Expression<'a>>,
+) -> UsedNames<'a> {
     let mut scan = UsedScan {
         scoping,
         used: UsedNames::default(),
     };
     for decoder in decoders {
         scan.visit_function(decoder.function, ScopeFlags::Function);
+    }
+    if let Some(rotator) = nested_rotator.filter(|_| !nested_rotator_builtins_trusted()) {
+        scan.visit_expression(rotator);
     }
     scan.used.names.shrink_to_fit();
     scan.used

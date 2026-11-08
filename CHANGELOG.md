@@ -43,6 +43,10 @@ All notable changes to this project are documented in this file. The format is b
   declaration is decoded when nothing runs before the array in that function body; only code
   in the same body can call the hoisted decoder before the array exists.
 
+- A string array rotator inside a function is no longer run with the standard `push`, `shift`
+  or `parseInt` when the program replaces one of them: code before the function call may have
+  done so, so the default lane now judges the rotator's built-ins like the decoders' ones.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called

@@ -301,6 +301,15 @@ fn own_pending_spans(patches: &[PatchSite<'_>], calls: &[Call<'_>]) -> FxHashSet
         .collect()
 }
 
+fn nested_rotator<'p>(inputs: &UnitInputs<'_, 'p>) -> Option<&'p Expression<'p>> {
+    let rotator = inputs.rotator?;
+    let top_level = inputs.program.body.iter().any(|statement| {
+        matches!(statement, Statement::ExpressionStatement(statement)
+            if std::ptr::eq(&statement.expression, rotator))
+    });
+    (!top_level).then_some(rotator)
+}
+
 fn guard_unit<'p>(
     inputs: &UnitInputs<'_, 'p>,
     patches: &[PatchSite<'p>],
@@ -313,7 +322,7 @@ fn guard_unit<'p>(
             return Err(refusal);
         }
     }
-    let used = used_names(inputs.scoping, &inputs.decoders);
+    let used = used_names(inputs.scoping, &inputs.decoders, nested_rotator(inputs));
     let own = own_pending_spans(patches, calls);
     let verdict = patch_refusal(patches, inputs.scoping, &used, &own);
     if let Some(refusal) = verdict.refusal {
