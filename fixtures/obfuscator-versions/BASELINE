@@ -410,7 +410,7 @@
 2.14.0--b64-rot-noshuf-shift-istr-w2f5-t75-unicode--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.14.0--b64-rot-noshuf-shift-istr-w2u-t1-dead--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--b64-rot-shuf-shift-inum-w3f-t75-numbers--wp4-module--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
-2.14.0--plain-norot-noshuf-noshift-inum-w2f5-t1-self--top--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), unexplained-decode-miss (1)
+2.14.0--plain-norot-noshuf-noshift-inum-w2f5-t1-self--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--plain-norot-noshuf-noshift-istr-w2f5-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--plain-norot-noshuf-shift-inum-w3f-t75-cff--wp4-module--terser	1	1/1	1/1	-	0	-
 2.14.0--plain-norot-shuf-noshift-inum-w1-t75-numbers--wp4-module--uglify	1	1/1	1/1	-	0	-
@@ -731,7 +731,7 @@ builtin-replaced-decoded-key	70	70	70	0	a call or write on a built-in whose key 
 stateful-decoder-state	70	70	114	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
 array-reached-outside	26	26	52	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
 missed-no-string-array	20	20	40	0	MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why
-unexplained-decode-miss	12	12	20	0	MISSED: the unit keeps every reference undecoded and no pass says why
+unexplained-decode-miss	11	11	19	0	MISSED: the unit keeps every reference undecoded and no pass says why
 safe-global-key-reach	9	9	9	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 decoder-does-more	5	5	10	0	a decoder does more than read from the string array, so its calls may change or expose the array and are left alone
 object-keys-computed-key	4	4	4	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)
