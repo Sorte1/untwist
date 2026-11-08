@@ -755,6 +755,11 @@ impl<'a> Pass<'a> for InlineDecoderWrappers {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        let constants = crate::wrapper_consts::inline_wrapper_constants(program, cx);
+        if constants > 0 {
+            cx.changed_by(constants);
+            return;
+        }
         let shares = cx.opts.shares_init_order;
         let lifted = crate::string_array::legacy::lifted_any();
         if lifted {

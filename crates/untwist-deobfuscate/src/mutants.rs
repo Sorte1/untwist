@@ -263,3 +263,14 @@ pub fn drop_any_settled_right_of_if_tests_for_tests(on: bool) {
 pub(crate) fn settled_rights_dropped_anywhere() -> bool {
     SETTLED_RIGHTS_DROPPED_ANYWHERE.load(Ordering::Relaxed)
 }
+
+static WRAPPER_CONSTANTS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_wrapper_constants_for_tests(on: bool) {
+    WRAPPER_CONSTANTS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn wrapper_constants_trusted() -> bool {
+    WRAPPER_CONSTANTS_TRUSTED.load(Ordering::Relaxed)
+}
