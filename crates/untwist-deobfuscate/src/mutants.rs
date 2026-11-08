@@ -230,3 +230,14 @@ pub fn trust_write_only_order_for_tests(on: bool) {
 pub(crate) fn write_only_order_trusted() -> bool {
     WRITE_ONLY_ORDER_TRUSTED.load(Ordering::Relaxed)
 }
+
+static DECLARATOR_WRITES_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn ignore_declarator_writes_for_tests(on: bool) {
+    DECLARATOR_WRITES_IGNORED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn declarator_writes_ignored() -> bool {
+    DECLARATOR_WRITES_IGNORED.load(Ordering::Relaxed)
+}

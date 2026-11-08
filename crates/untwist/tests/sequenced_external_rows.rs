@@ -36,7 +36,10 @@ fn decoded(code: &str) -> bool {
 fn every_row_has_a_known_prefix() {
     for (label, _) in rows() {
         assert!(
-            label.starts_with("dec-") || label.starts_with("guard-") || label.starts_with("kept-"),
+            label.starts_with("dec-")
+                || label.starts_with("guard-")
+                || label.starts_with("kept-")
+                || label.starts_with("ref-init-"),
             "unexpected row label {label}"
         );
     }
