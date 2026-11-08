@@ -492,7 +492,7 @@
 2.18.1--plain-rot-noshuf-noshift-inum-w0-t1-cff--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.18.1--plain-rot-noshuf-noshift-inum-w0-t1-keys--iife--none	1	1/1	1/1	-	0	-
 2.18.1--plain-rot-noshuf-noshift-inum-w3f-t75-mangled--wp4-module--none	1	1/1	1/1	-	0	-
-2.18.1--plain-rot-noshuf-shift-inum-w2f5-t75-split--top--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), unexplained-decode-miss (1)
+2.18.1--plain-rot-noshuf-shift-inum-w2f5-t75-split--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.18.1--plain-rot-noshuf-shift-istr-w1-t1-numbers--iife--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
 2.18.1--plain-rot-shuf-noshift-istr-w2u-t75-cff--iife--terser	1	0/1	0/1	-	0	missed-no-string-array (2)
 2.18.1--rc4-norot-noshuf-shift-inum-w1-t75-keys--top--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), stateful-decoder-state (1)
@@ -730,7 +730,7 @@ decoder-reads-outer-binding	104	104	134	0	a decoder reads a binding outside itse
 builtin-replaced-decoded-key	69	69	69	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
 stateful-decoder-state	53	53	90	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
 missed-no-string-array	42	42	84	0	MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why
-unexplained-decode-miss	29	29	45	0	MISSED: the unit keeps every reference undecoded and no pass says why
+unexplained-decode-miss	28	28	44	0	MISSED: the unit keeps every reference undecoded and no pass says why
 array-reached-outside	26	26	52	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
 safe-global-key-reach	11	11	11	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 missed-self-defending	8	8	11	0	MISSED: the unit decodes, but self-defending code is left and no pass says why

@@ -95,6 +95,10 @@ All notable changes to this project are documented in this file. The format is b
   into the form the unminified builds use before the array is lifted. A refused plain array now
   keeps its reason note when other passes changed the program in the same run.
 
+- A decoder call whose argument is a function parameter set to a literal just before the call
+  (`(e = 1197, dec(363, e))`, as uglify-js leaves inlined wrappers) is decoded like one on a
+  local variable; a parameter the function's `arguments` object can alias is left alone.
+
 - String arrays from old javascript-obfuscator builds (a plain `var a = [...]` with a counting
   rotator and a `var b = function (t, x) { ... a[t -= 0] ... }` decoder) were not found, and the
   run said `no string array found`. They are now decoded when the array is only read by its
