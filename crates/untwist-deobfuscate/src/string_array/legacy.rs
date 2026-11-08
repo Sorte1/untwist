@@ -35,6 +35,7 @@ const INNER_NAMES: [&str; 2] = ["a", "b"];
 struct Legacy {
     statement: Span,
     code_before: bool,
+    body_code_before: bool,
     rotator: Option<(Span, usize)>,
     checksum: Option<Span>,
     symbol: SymbolId,
@@ -469,6 +470,7 @@ fn legacy_at(
     Some(Legacy {
         statement: stmt.span(),
         code_before: !top_level || runs_code_before(body, index),
+        body_code_before: runs_code_before(body, index),
         rotator,
         checksum,
         symbol,
@@ -571,7 +573,7 @@ fn refusal(
     if let Some(span) = reached_by_name(program, cx, legacy) {
         return Some((notes::LEGACY_ARRAY_REACHED, span));
     }
-    if legacy.hoisted && legacy.code_before {
+    if legacy.hoisted && legacy.body_code_before {
         return Some((notes::LEGACY_DECODER_BEFORE_ARRAY, statement));
     }
     let rotated = legacy.rotator.is_some_and(|(_, count)| count > 0);

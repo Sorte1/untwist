@@ -39,6 +39,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- A plain string array inside a function or webpack module whose decoder is a function
+  declaration is decoded when nothing runs before the array in that function body; only code
+  in the same body can call the hoisted decoder before the array exists.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called
