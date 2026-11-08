@@ -344,7 +344,7 @@ pub const CASES: &[Case] = &[
     },
     Case {
         source: Source::Whole(
-            "var a = ['log'];\nvar b = a;\nconsole[b[0]]();\nfunction f() {\n  var a = 1;\n  return a;\n}",
+            "var a = ['log'];\nvar b = a;\nconsole[b[0]]();\nfunction f() {\n  var a = 1;\n  return b[0] + a;\n}",
         ),
         expects: notes::ARRAY_ALIAS_NAME_NOT_UNIQUE,
         mode: Match::Contains,

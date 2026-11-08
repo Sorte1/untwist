@@ -47,6 +47,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- A string array inside a function decodes when uglify-js left its checksum loop behind the
+  hoisted decoder and its aliases (`let t = [...], n = r; function r(e) {...} for (var x = t, e = r;;)
+  try {...}`): the loop is wrapped back into a rotator and the declarations around it stay where
+  they are. An array alias that the rotator only uses for `push` and `shift` is resolved, and an
+  alias is resolved when the array's name means the array at every read of the alias, instead of
+  only when the name is unique in the program (a block function sharing the name still refuses).
+
 - javascript-obfuscator 5.x decoders minified by terser decode: the memo proof now accepts the
   index shift written as `t -= 0`, and a base64 helper's own locals no longer count as reads of the
   decoder's second parameter when they share its name.

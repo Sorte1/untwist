@@ -99,7 +99,7 @@ fn a_redeclared_alias_is_left_alone() {
 #[test]
 fn an_alias_of_a_shadowed_array_name_is_left_alone() {
     assert_transform!(
-        "var a = ['log'];\nvar b = a;\nconsole[b[0]]();\nfunction f() {\n  var a = 1;\n  return a;\n}",
+        "var a = ['log'];\nvar b = a;\nconsole[b[0]]();\nfunction f() {\n  var a = 1;\n  return b[0] + a;\n}",
         [untwist_deobfuscate::string_array::boxed],
         @r#"
     var a = ["log"];
@@ -107,7 +107,7 @@ fn an_alias_of_a_shadowed_array_name_is_left_alone() {
     console[b[0]]();
     function f() {
       var a = 1;
-      return a;
+      return b[0] + a;
     }
     "#
     );
