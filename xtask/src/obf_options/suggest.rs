@@ -181,8 +181,7 @@ fn machinery_cause(
     if let Some(cause) = by_note(note) {
         return Some(cause);
     }
-    if note.contains(ESCAPE_NOTE) || note.contains("decoder machinery kept")
-    {
+    if note.contains(ESCAPE_NOTE) || note.contains("decoder machinery kept") {
         return Some(later_cause(lane, notes));
     }
     if safe && detail.contains("debug_protection") {
@@ -217,7 +216,10 @@ fn last_resort(lane: &str, detail: &str, note: &str, notes: &[String]) -> Option
     if note.is_empty() {
         return refusals::residue_of(detail);
     }
-    refusals::refusal_of(note)
+    refusals::refusal_of(note).or_else(|| {
+        let later = later_cause(lane, notes);
+        (later != DECODE_MISS).then_some(later)
+    })
 }
 
 pub fn cause_of(
@@ -716,6 +718,30 @@ mod tests {
         assert_eq!(
             cause_of(Shape::default(), "unsafe", &checks, &notes[..1]),
             Some(DECODE_MISS)
+        );
+    }
+
+    #[test]
+    fn an_unnamed_first_note_takes_a_named_refusal_after_it() {
+        let alias = "note: inline-decoder-wrappers: the alias declaration has an initialiser, so the assignment to it was left in place".to_string();
+        let notes = [
+            alias.clone(),
+            "note: inline-decoded-strings: a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's call sites were left alone".to_string(),
+        ];
+        let checks = BTreeMap::from([(
+            "machinery",
+            Failed {
+                detail: "string_arrays=1,decoders=1,decoder_calls=2",
+                note: &alias,
+            },
+        )]);
+        let shape = Shape {
+            version_matrix: true,
+            ..Shape::default()
+        };
+        assert_eq!(
+            cause_of(shape, "unsafe", &checks, &notes),
+            Some("decoder-used-as-value")
         );
     }
 
