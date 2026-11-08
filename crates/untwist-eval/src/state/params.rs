@@ -1,6 +1,6 @@
 use oxc_ast::ast::{
-    AssignmentOperator, AssignmentTarget, BindingPattern, ComputedMemberExpression, Expression,
-    Function,
+    ArrowFunctionExpression, AssignmentOperator, AssignmentTarget, BindingPattern,
+    ComputedMemberExpression, Declaration, Expression, FormalParameters, Function, FunctionBody,
 };
 use oxc_ast::ast::{IdentifierReference, Statement};
 use oxc_ast_visit::{walk_js, VisitJs};
@@ -13,9 +13,70 @@ use crate::stack;
 struct ParamUsage<'a> {
     names: Vec<Option<&'a str>>,
     used: Vec<bool>,
+    shadowed: Vec<Vec<&'a str>>,
+}
+
+fn declared_names<'a>(statements: &'a [Statement<'a>]) -> Vec<&'a str> {
+    let mut names = Vec::new();
+    for statement in statements {
+        let Some(declaration) = statement.as_declaration() else {
+            continue;
+        };
+        match declaration {
+            Declaration::VariableDeclaration(declaration) => names.extend(
+                declaration
+                    .declarations
+                    .iter()
+                    .filter_map(|declarator| param_name(&declarator.id)),
+            ),
+            Declaration::FunctionDeclaration(function) => {
+                names.extend(function.id.as_ref().map(|id| id.name.as_str()));
+            }
+            Declaration::ClassDeclaration(class) => {
+                names.extend(class.id.as_ref().map(|id| id.name.as_str()));
+            }
+            _ => {}
+        }
+    }
+    names
 }
 
 impl<'a> VisitJs<'a> for ParamUsage<'a> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        let own_name = it
+            .id
+            .as_ref()
+            .filter(|_| it.is_expression())
+            .map(|id| id.name.as_str());
+        self.shadowed.push(own_name.into_iter().collect());
+        walk_js::walk_function(self, it, flags);
+        self.shadowed.pop();
+        self.shadowed.pop();
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        walk_js::walk_arrow_function_expression(self, it);
+        self.shadowed.pop();
+    }
+
+    fn visit_formal_parameters(&mut self, it: &FormalParameters<'a>) {
+        let params: &'a FormalParameters<'a> = self.alloc(it);
+        let names = params
+            .items
+            .iter()
+            .filter_map(|param| param_name(&param.pattern))
+            .collect();
+        self.shadowed.push(names);
+        walk_js::walk_formal_parameters(self, it);
+    }
+
+    fn visit_function_body(&mut self, it: &FunctionBody<'a>) {
+        let body: &'a FunctionBody<'a> = self.alloc(it);
+        self.shadowed.push(declared_names(&body.statements));
+        walk_js::walk_function_body(self, it);
+        self.shadowed.pop();
+    }
+
     fn visit_assignment_target(&mut self, it: &AssignmentTarget<'a>) {
         stack::maybe_grow_dyn(&mut || walk_js::walk_assignment_target(self, it));
     }
@@ -38,6 +99,9 @@ impl<'a> VisitJs<'a> for ParamUsage<'a> {
             return;
         }
         let name = it.name.as_str();
+        if self.shadowed.iter().flatten().any(|shadow| *shadow == name) {
+            return;
+        }
         if let Some(index) = self.names.iter().position(|slot| *slot == Some(name)) {
             self.used[index] = true;
         }
@@ -94,6 +158,7 @@ pub(super) fn used_params(function: &Function<'_>) -> Vec<bool> {
     let mut usage = ParamUsage {
         used: vec![false; names.len()],
         names,
+        shadowed: Vec::new(),
     };
     if let Some(body) = &function.body {
         visit_body(&mut usage, &body.statements);
