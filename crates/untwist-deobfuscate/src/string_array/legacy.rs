@@ -195,6 +195,31 @@ fn named_countdown(statements: &[Statement<'_>], array: &str, count: &str) -> bo
         && incremented(arguments, count)
 }
 
+pub(super) fn literal_arithmetic(expr: &Expression<'_>) -> Option<f64> {
+    match expr.without_parentheses() {
+        Expression::NumericLiteral(number) => Some(number.value),
+        Expression::UnaryExpression(unary) => {
+            let value = literal_arithmetic(&unary.argument)?;
+            match unary.operator {
+                UnaryOperator::UnaryNegation => Some(-value),
+                UnaryOperator::UnaryPlus => Some(value),
+                _ => None,
+            }
+        }
+        Expression::BinaryExpression(binary) => {
+            let left = literal_arithmetic(&binary.left)?;
+            let right = literal_arithmetic(&binary.right)?;
+            match binary.operator {
+                BinaryOperator::Addition => Some(left + right),
+                BinaryOperator::Subtraction => Some(left - right),
+                BinaryOperator::Multiplication => Some(left * right),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 fn rotation_count(arguments: &[Argument<'_>], array: &str) -> Option<usize> {
     let [first, second] = arguments else {
         return None;
@@ -202,10 +227,7 @@ fn rotation_count(arguments: &[Argument<'_>], array: &str) -> Option<usize> {
     if first.as_expression().and_then(identifier_name) != Some(array) {
         return None;
     }
-    let Some(Expression::NumericLiteral(count)) = second.as_expression() else {
-        return None;
-    };
-    let value = count.value;
+    let value = literal_arithmetic(second.as_expression()?)?;
     let whole = value.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&value);
     whole.then_some(value as usize)
 }
