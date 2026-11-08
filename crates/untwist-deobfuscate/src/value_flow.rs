@@ -8,8 +8,10 @@ pub const BUILT_LITERAL: &str = "built-literal";
 pub const INSTANCE_RECEIVERS: &str = "instance-receivers";
 pub const FILTERED_ENUMERATION: &str = "filtered-enumeration";
 pub const STORAGE_PROXY: &str = "storage-proxy";
+pub const FUNCTION_VALUES: &str = "function-values";
+pub const AWAITED_ARRAYS: &str = "awaited-arrays";
 
-const FLOW_RULES: [&str; 8] = [
+const FLOW_RULES: [&str; 10] = [
     VALUE_FLOW_SINKS,
     MACHINERY_SOURCE_BOUND,
     OBSERVER_LIST,
@@ -18,6 +20,8 @@ const FLOW_RULES: [&str; 8] = [
     FILTERED_ENUMERATION,
     INSTANCE_RECEIVERS,
     STORAGE_PROXY,
+    FUNCTION_VALUES,
+    AWAITED_ARRAYS,
 ];
 
 thread_local! {
