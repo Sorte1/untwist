@@ -16,8 +16,10 @@ const OUTPUT = '#output-editor .cm-content';
 const STATUS = '#output-edit-meta span:last-child';
 
 async function outputText(page: Page): Promise<string> {
-  await page.locator('#copy-output').click();
-  await expect(page.locator('#copy-label')).toHaveText('Copied');
+  await expect(async () => {
+    await page.locator('#copy-output').click();
+    await expect(page.locator('#copy-label')).toHaveText('Copied', { timeout: 1000 });
+  }).toPass({ timeout: 10_000 });
   return page.evaluate(() => navigator.clipboard.readText());
 }
 
