@@ -1,0 +1,4 @@
+fold-a-member-read-chosen-by-a-string-test|var o={k:'v'};function g(d,x){return 'ab'==='cd'?module.missing:d[x]}console.log(g(o,'k'));
+fold-a-static-member-chosen-by-a-negated-test|var o={k:'v'};console.log(!('ab'!=='cd')?o.k:o.k.length);
+keep-a-member-callee-chosen-by-a-string-test|var o={n:'o',m:function(){return this&&this.n}};var n='g';console.log(('ab'==='cd'?null:o.m)());
+keep-a-member-tag-chosen-by-a-string-test|var o={n:'o',m:function(s){return this&&this.n}};console.log(('ab'!=='cd'?o.m:null)`x`);

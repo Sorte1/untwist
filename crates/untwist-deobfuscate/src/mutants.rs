@@ -208,3 +208,14 @@ pub fn trust_inlined_rotator_vars_for_tests(on: bool) {
 pub(crate) fn inlined_rotator_vars_trusted() -> bool {
     INLINED_ROTATOR_VARS_TRUSTED.load(Ordering::Relaxed)
 }
+
+static DEAD_MEMBER_RESULTS_FOLDED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn fold_dead_member_results_in_callees_for_tests(on: bool) {
+    DEAD_MEMBER_RESULTS_FOLDED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn dead_member_callees_folded() -> bool {
+    DEAD_MEMBER_RESULTS_FOLDED.load(Ordering::Relaxed)
+}

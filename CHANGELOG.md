@@ -43,6 +43,11 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- The dead-code pass now also folds a constant-test conditional whose chosen branch is a member
+  read (`"ab" === "cd" ? module.x : d[x]`), as dead-code injection leaves them inside functions;
+  it still keeps the conditional when it is called or used as a template tag, where folding would
+  change `this`.
+
 - A plain string array inside a function or webpack module whose decoder is a function
   declaration is decoded when nothing runs before the array in that function body; only code
   in the same body can call the hoisted decoder before the array exists.
