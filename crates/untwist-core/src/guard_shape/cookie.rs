@@ -120,3 +120,46 @@ fn read_function<'k, 'a>(object: &'k ObjectExpression<'a>) -> Option<&'k Functio
     (has_no_params(read) && returns_text && plain && !read.r#async && !read.generator)
         .then_some(&**read)
 }
+
+fn checks_a_holder(check: &Function<'_>) -> bool {
+    let Some([only]) = statements_of(check) else {
+        return false;
+    };
+    let Some(Expression::CallExpression(test)) = returned(only) else {
+        return false;
+    };
+    let Some((regex, method)) = member_parts(&test.callee) else {
+        return false;
+    };
+    let [Argument::CallExpression(source)] = test.arguments.as_slice() else {
+        return false;
+    };
+    let reads = source.arguments.is_empty()
+        && member_parts(&source.callee).is_some_and(|(read, name)| {
+            name == "toString"
+                && member_parts(read).is_some_and(|(holder, key)| {
+                    key == READ_KEY && matches!(holder, Expression::Identifier(_))
+                })
+        });
+    reads && method == "test" && is_cookie_regex(regex)
+}
+
+pub(super) fn holder_target<'k, 'a>(object: &'k ObjectExpression<'a>) -> Option<&'k Function<'a>> {
+    let check = object
+        .properties
+        .iter()
+        .find_map(|property| match property {
+            ObjectPropertyKind::ObjectProperty(property)
+                if !property.computed && prop_name(&property.key).as_deref() == Some(CHECK_KEY) =>
+            {
+                match &property.value {
+                    Expression::FunctionExpression(check) => Some(&**check),
+                    _ => None,
+                }
+            }
+            _ => None,
+        })?;
+    (has_no_params(check) && checks_a_holder(check))
+        .then(|| read_function(object))
+        .flatten()
+}

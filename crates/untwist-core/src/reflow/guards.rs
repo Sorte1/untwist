@@ -8,7 +8,7 @@ use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 
 use super::guard_key::{guard_key, GuardKey};
 use super::{settle, Edit, Scan};
-use crate::guard_shape::{may_be_a_guard, read_target};
+use crate::guard_shape::{holder_read_target, may_be_a_guard, read_target};
 use crate::parse::{has_error, parse_program};
 use crate::print::{compact_function_text, function_text};
 
@@ -235,6 +235,13 @@ impl<'a, const GUARDS: bool> VisitJs<'a> for Slots<'_, '_, GUARDS> {
         }
         walk_js::walk_expression_statement(self, it);
     }
+
+    fn visit_object_expression(&mut self, it: &ObjectExpression<'a>) {
+        if let Some(target) = holder_read_target(it) {
+            self.scan.settle_holder(target);
+        }
+        walk_js::walk_object_expression(self, it);
+    }
 }
 
 impl<const GUARDS: bool> Scan<'_, GUARDS> {
@@ -264,6 +271,14 @@ impl<const GUARDS: bool> Scan<'_, GUARDS> {
             self.searched_until = target.span.end;
             self.compacts(target);
         }
+    }
+
+    fn settle_holder(&mut self, target: &Function<'_>) {
+        if target.span.start < self.searched_until {
+            return;
+        }
+        self.searched_until = target.span.end;
+        self.compacts(target);
     }
 
     fn compacts(&mut self, target: &Function<'_>) {

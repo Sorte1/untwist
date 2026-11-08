@@ -47,6 +47,11 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- A kept cookie self-defending guard in the minified forms uglify-js and terser leave (the holder
+  object carries `updateCookie` itself: block holder, `(h = {...}).updateCookie()` or
+  `(o = (h = {...}).updateCookie())`) has its `removeCookie` printed on one line, so a refused
+  program no longer fails its own check and runs out of memory after reformatting.
+
 - A string array inside a function decodes when uglify-js left its checksum loop behind the
   hoisted decoder and its aliases (`let t = [...], n = r; function r(e) {...} for (var x = t, e = r;;)
   try {...}`): the loop is wrapped back into a rotator and the declarations around it stay where
