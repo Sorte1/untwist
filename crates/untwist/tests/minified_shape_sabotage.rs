@@ -22,6 +22,11 @@ fn transformed(unsafe_transforms: bool, source: &str) -> String {
 }
 
 #[test]
+fn the_rotator_checks_hold_up_the_refused_rows() {
+    refused_cookie_rows_are_lifted_once_the_rotator_checks_are_dropped();
+    every_refused_row_diverges_from_node_once_the_rotator_checks_are_dropped();
+}
+
 fn every_refused_row_diverges_from_node_once_the_rotator_checks_are_dropped() {
     let Some(node) = node_or_skip() else {
         return;
@@ -51,8 +56,7 @@ fn every_refused_row_diverges_from_node_once_the_rotator_checks_are_dropped() {
     );
 }
 
-#[test]
-fn every_refused_cookie_row_is_lifted_once_the_rotator_checks_are_dropped() {
+fn refused_cookie_rows_are_lifted_once_the_rotator_checks_are_dropped() {
     let cookie: Vec<(String, String)> = rows()
         .into_iter()
         .filter(|(label, _)| label.starts_with("ref-self-defending-cookie"))
