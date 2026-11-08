@@ -98,14 +98,14 @@ fn single_statement<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Statement<'a>
     }
 }
 
-fn pushes_shifted(stmt: &Statement<'_>, array: &str) -> bool {
+pub(super) fn pushes_shifted(stmt: &Statement<'_>, array: &str) -> bool {
     let Some(Statement::ExpressionStatement(stmt)) = single_statement(stmt) else {
         return false;
     };
     push_shift_target(stmt.expression.without_parentheses()) == Some(array)
 }
 
-fn predecrements(expr: &Expression<'_>, counter: &str) -> bool {
+pub(super) fn predecrements(expr: &Expression<'_>, counter: &str) -> bool {
     let Expression::UpdateExpression(update) = expr.without_parentheses() else {
         return false;
     };
