@@ -756,7 +756,7 @@ impl<'a> Pass<'a> for InlineDecoderWrappers {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        if !self.constants_tried {
+        if !self.constants_tried && crate::calls::take_constant_retry() {
             let constants = crate::wrapper_consts::inline_wrapper_constants(program, cx);
             self.constants_tried = constants == 0;
             if constants > 0 {

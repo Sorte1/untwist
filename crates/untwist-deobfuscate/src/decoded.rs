@@ -278,6 +278,7 @@ fn judge_unit(
         Err(bail) => {
             decoded.notes.extend(drained(&mut evaluator));
             decoded.notes.push((notes::decode_bailed(bail), None));
+            crate::calls::request_constant_retry();
             return false;
         }
     };
