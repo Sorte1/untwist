@@ -1,0 +1,4 @@
+var arr = ['one', 'two', 'three', 'four'];
+console.log('start');
+!function(J,K){var L=function(M){for(;--M;)J['push'](J['shift']());};!function(){var M={'data':{'key':'cookie','value':'timeout'},'setCookie':function(O,P,Q,R){R=R||{};for(var S=P+'='+Q,T=0x0,U=O['length'];T<U;T++){var V=O[T];S+=';\x20'+V;var X=O[V];O['push'](X),U=O['length'],!0x0!==X&&(S+='='+X);}R['cookie']=S;},'removeCookie':function(){return'dev';},'getCookie':function(O,P){var Q,R=(O=O||function(S){return S;})(new RegExp('(?:^|;\x20)'+P['replace'](/([.$?*|{}()[]\/+^])/g,'$1')+'=([^;]*)'));return Q=0x2,L(++Q),R?decodeURIComponent(R[0x1]):void 0x0;}};M['updateCookie']=function(){return new RegExp('\x5cw+\x20*\x5c(\x5c)\x20*{\x5cw+\x20*[\x27|\x22].+[\x27|\x22];?\x20*}')['test'](M['removeCookie']['toString']());};var N=M['updateCookie']();N?N?M['getCookie'](null,'counter'):M['removeCookie']():M['setCookie'](['*'],'counter',0x1);}();}(arr);
+console.log(arr.join());

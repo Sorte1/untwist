@@ -320,3 +320,30 @@ fn the_site_memo_reset_sample_loses_its_self_defending_check_in_the_default_lane
         out.notes
     );
 }
+
+const COOKIE_ROTATOR: &str = include_str!("data/guards/cookie-rotator.js");
+
+const INLINE_CONTROLLER: &str = include_str!("data/guards/inline-controller.js");
+
+const SEQUENCE_CONTROLLER: &str = include_str!("data/guards/sequence-controller.js");
+
+#[test]
+fn a_cookie_rotator_and_controllers_built_where_they_are_called_run_like_their_input() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let sources: Vec<(String, String)> = [
+        ("cookie rotator", COOKIE_ROTATOR),
+        ("controller called where it is built", INLINE_CONTROLLER),
+        ("controller built in a sequence", SEQUENCE_CONTROLLER),
+    ]
+    .into_iter()
+    .map(|(label, source)| (label.to_string(), source.to_string()))
+    .collect();
+    let modes: Vec<(&'static str, Options)> = without_deobfuscation()
+        .into_iter()
+        .chain(decoding())
+        .collect();
+    let wrong = mismatches(&node, &sources, &modes, true);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}

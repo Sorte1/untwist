@@ -1,5 +1,8 @@
 pub const INTERPRETED: &str = "no checksum could be extracted from the rotator";
 
+pub const GUARD_ON_ONE_LINE: &str =
+    "a self-defending check that reads a function's own source survived; the function it reads was printed on one line";
+
 pub const REFUSALS: [(&str, &str, &str); 13] = [
     (
         "reads a binding outside itself",
