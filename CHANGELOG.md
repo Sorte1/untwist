@@ -47,6 +47,11 @@ All notable changes to this project are documented in this file. The format is b
   or `parseInt` when the program replaces one of them: code before the function call may have
   done so, so the default lane now judges the rotator's built-ins like the decoders' ones.
 
+- The default lane also rotates a plain string array inside a function or webpack module ahead
+  of time when nothing runs before it in that function body and no write in the program can
+  replace a built-in its rotator uses (`push`, `shift`, and for the cookie rotator its regular
+  expression and `toString` calls); otherwise the array is left undecoded with a note.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called

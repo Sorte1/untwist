@@ -72,6 +72,10 @@ fn the_unsafe_lane_decodes_the_rows_its_premises_cover() {
     let covered = [
         "ref-premise-global-key-read",
         "ref-premise-push-patched-first",
+        "ref-premise-shift-patched-before-a-rotated-function",
+        "ref-premise-shift-defined-before-a-rotated-function",
+        "ref-premise-push-patched-by-a-called-function",
+        "ref-premise-rotated-after-a-patch-in-its-function",
     ];
     for (label, source) in rows() {
         if !covered.contains(&label.as_str()) {

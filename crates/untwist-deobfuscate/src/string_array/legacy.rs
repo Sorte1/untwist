@@ -22,6 +22,7 @@ use super::checksum::{
 };
 use super::cookie::cookie_rotation;
 use super::for_init::{declare_assigned_forwarders, hoist_for_init_forwarders};
+use super::patched::rotator_builtins_patched;
 use super::prologue::strip_atob_prologues;
 use crate::array_rotator::push_shift_target;
 use crate::calls::agnostic::{global_reach, ReachWatch};
@@ -576,11 +577,15 @@ fn refusal(
     if legacy.hoisted && legacy.body_code_before {
         return Some((notes::LEGACY_DECODER_BEFORE_ARRAY, statement));
     }
-    let rotated = legacy.rotator.is_some_and(|(_, count)| count > 0);
-    if rotated && !cx.opts.unsafe_transforms && legacy.code_before {
+    let rotator = legacy.rotator.filter(|(_, count)| *count > 0);
+    let Some((rotator, _)) = rotator.filter(|_| !cx.opts.unsafe_transforms && legacy.code_before)
+    else {
+        return None;
+    };
+    if legacy.body_code_before {
         return Some((notes::LEGACY_ROTATOR_AFTER_CODE, statement));
     }
-    None
+    rotator_builtins_patched(program, scoping, rotator).map(|span| (notes::BUILTIN_PATCHED, span))
 }
 
 fn declared_function<'k, 'a>(stmt: &'k mut Statement<'a>) -> Option<&'k mut Function<'a>> {

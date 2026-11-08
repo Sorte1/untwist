@@ -49,6 +49,7 @@ mod checksum;
 mod cookie;
 mod for_init;
 pub(crate) mod legacy;
+mod patched;
 mod positions;
 mod prologue;
 mod reach;

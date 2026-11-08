@@ -175,3 +175,14 @@ pub fn trust_nested_rotator_builtins_for_tests(on: bool) {
 pub(crate) fn nested_rotator_builtins_trusted() -> bool {
     NESTED_ROTATOR_BUILTINS_TRUSTED.load(Ordering::Relaxed)
 }
+
+static LEGACY_ROTATION_PATCHES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_legacy_rotation_patches_for_tests(on: bool) {
+    LEGACY_ROTATION_PATCHES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn legacy_rotation_patches_trusted() -> bool {
+    LEGACY_ROTATION_PATCHES_TRUSTED.load(Ordering::Relaxed)
+}
