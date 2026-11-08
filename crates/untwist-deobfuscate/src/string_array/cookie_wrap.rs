@@ -61,7 +61,8 @@ fn inert(stmt: &Statement<'_>) -> bool {
 fn alias_of(stmt: &Statement<'_>, scoping: &Scoping, array: SymbolId) -> Option<SymbolId> {
     match stmt {
         Statement::ExpressionStatement(stmt) => {
-            let Expression::AssignmentExpression(assignment) = stmt.expression.without_parentheses()
+            let Expression::AssignmentExpression(assignment) =
+                stmt.expression.without_parentheses()
             else {
                 return None;
             };
@@ -79,8 +80,10 @@ fn alias_of(stmt: &Statement<'_>, scoping: &Scoping, array: SymbolId) -> Option<
             let [declarator] = declaration.declarations.as_slice() else {
                 return None;
             };
-            let Some(Expression::Identifier(source)) =
-                declarator.init.as_ref().map(Expression::without_parentheses)
+            let Some(Expression::Identifier(source)) = declarator
+                .init
+                .as_ref()
+                .map(Expression::without_parentheses)
             else {
                 return None;
             };
@@ -95,7 +98,10 @@ fn alias_of(stmt: &Statement<'_>, scoping: &Scoping, array: SymbolId) -> Option<
     }
 }
 
-fn assigned_countdown<'k>(stmt: &'k Statement<'_>, alias: &str) -> Option<&'k IdentifierReference<'k>> {
+fn assigned_countdown<'k>(
+    stmt: &'k Statement<'_>,
+    alias: &str,
+) -> Option<&'k IdentifierReference<'k>> {
     let Statement::ExpressionStatement(stmt) = stmt else {
         return None;
     };
@@ -125,7 +131,10 @@ fn holder_test<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k IdentifierReferen
     let shaped = name == "updateCookie"
         && call.arguments.is_empty()
         && assignment.operator == AssignmentOperator::Assign
-        && matches!(assignment.right.without_parentheses(), Expression::ObjectExpression(_));
+        && matches!(
+            assignment.right.without_parentheses(),
+            Expression::ObjectExpression(_)
+        );
     shaped.then_some(&**holder)
 }
 
@@ -287,11 +296,21 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
     if length == 0 || scoping.symbol_scope_id(array_symbol) == scoping.root_scope_id() {
         return None;
     }
-    let alias = array + 1 + body.get(array + 1..)?.iter().take_while(|stmt| inert(stmt)).count();
+    let alias = array
+        + 1
+        + body
+            .get(array + 1..)?
+            .iter()
+            .take_while(|stmt| inert(stmt))
+            .count();
     let alias_symbol = alias_of(body.get(alias)?, scoping, array_symbol)?;
     let alias_name = scoping.symbol_name(alias_symbol);
     let rotator = rotator_of(body, (array, alias), alias_name, scoping)?;
-    let cookie = if rotator.at == alias + 1 { alias + 2 } else { alias + 1 };
+    let cookie = if rotator.at == alias + 1 {
+        alias + 2
+    } else {
+        alias + 1
+    };
     let (form, holders) = cookie_form(body.get(cookie)?)?;
     let holder_symbols: Vec<SymbolId> = holders
         .iter()
@@ -344,7 +363,11 @@ fn plan(body: &[Statement<'_>], scoping: &Scoping) -> Option<Plan> {
     (0..body.len()).find_map(|index| plan_at(body, index, scoping))
 }
 
-fn declared_rotator<'a>(stmt: Statement<'a>, plan: &Plan, cx: &Cx<'a, '_>) -> Option<Statement<'a>> {
+fn declared_rotator<'a>(
+    stmt: Statement<'a>,
+    plan: &Plan,
+    cx: &Cx<'a, '_>,
+) -> Option<Statement<'a>> {
     if !plan.assigned {
         return Some(stmt);
     }
@@ -372,7 +395,8 @@ fn simplified<'a>(stmt: &mut Statement<'a>, cx: &Cx<'a, '_>) -> Option<()> {
     let Statement::ExpressionStatement(stmt) = stmt else {
         return None;
     };
-    let Expression::ConditionalExpression(choice) = stmt.expression.without_parentheses_mut() else {
+    let Expression::ConditionalExpression(choice) = stmt.expression.without_parentheses_mut()
+    else {
         return None;
     };
     let Expression::AssignmentExpression(assignment) = choice.test.without_parentheses_mut() else {
@@ -398,7 +422,9 @@ fn without_bare<'a>(it: &mut AVec<'a, Statement<'a>>, dropped: &[SymbolId]) {
     for stmt in it.iter_mut() {
         if let Statement::VariableDeclaration(declaration) = stmt {
             if declaration.kind == VariableDeclarationKind::Var {
-                declaration.declarations.retain(|declarator| !gone(declarator));
+                declaration
+                    .declarations
+                    .retain(|declarator| !gone(declarator));
             }
         }
     }
@@ -408,7 +434,9 @@ fn without_bare<'a>(it: &mut AVec<'a, Statement<'a>>, dropped: &[SymbolId]) {
     });
 }
 
-fn wrapper_body<'k, 'a>(statement: &'k mut Statement<'a>) -> Option<&'k mut AVec<'a, Statement<'a>>> {
+fn wrapper_body<'k, 'a>(
+    statement: &'k mut Statement<'a>,
+) -> Option<&'k mut AVec<'a, Statement<'a>>> {
     let Statement::ExpressionStatement(outer) = statement else {
         return None;
     };
@@ -425,7 +453,10 @@ fn wrapper_body<'k, 'a>(statement: &'k mut Statement<'a>) -> Option<&'k mut AVec
 }
 
 fn rewrite<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'a, '_>) -> bool {
-    let text = format!("!function ({}) {{ 0; }}({});", plan.alias_name, plan.array_name);
+    let text = format!(
+        "!function ({}) {{ 0; }}({});",
+        plan.alias_name, plan.array_name
+    );
     let holder = match (&plan.holder, plan.form) {
         (Some(holder), Form::Assigned | Form::Flagged) => {
             parsed_statement(&format!("var {holder};"), cx).map(Some)

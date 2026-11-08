@@ -91,7 +91,11 @@ fn parameter_symbols(function: &Function<'_>) -> Option<Vec<SymbolId>> {
         .collect()
 }
 
-fn inline_decoder(function: &Function<'_>, scoping: &Scoping, arrays: &[SymbolId]) -> Option<SymbolId> {
+fn inline_decoder(
+    function: &Function<'_>,
+    scoping: &Scoping,
+    arrays: &[SymbolId],
+) -> Option<SymbolId> {
     if function.id.is_some() || function.r#async || function.generator {
         return None;
     }
@@ -115,7 +119,8 @@ fn sequence_decoder(
     let Expression::SequenceExpression(sequence) = expr.without_parentheses() else {
         return None;
     };
-    let [Expression::AssignmentExpression(assignment), read] = sequence.expressions.as_slice() else {
+    let [Expression::AssignmentExpression(assignment), read] = sequence.expressions.as_slice()
+    else {
         return None;
     };
     if assignment.operator != AssignmentOperator::Assign {
@@ -244,7 +249,10 @@ fn plan(statements: &[Statement<'_>], scoping: &Scoping) -> Option<Plan> {
     let sites = sites_of(statements, scoping, &arrays);
     arrays.iter().find_map(|array| {
         let site = only_site(&sites, *array)?;
-        if DynamicScopes::of(scoping).refusal(scoping, *array).is_some() {
+        if DynamicScopes::of(scoping)
+            .refusal(scoping, *array)
+            .is_some()
+        {
             return None;
         }
         if let Site::Sequenced(_, index) = site {
@@ -291,8 +299,11 @@ fn parameter_inside(statement: &mut Statement<'_>) {
         return;
     };
     let start = function.span.start;
-    if let Some(BindingPattern::BindingIdentifier(id)) =
-        function.params.items.first_mut().map(|param| &mut param.pattern)
+    if let Some(BindingPattern::BindingIdentifier(id)) = function
+        .params
+        .items
+        .first_mut()
+        .map(|param| &mut param.pattern)
     {
         id.span = Span::new(start, start + 1);
     }
@@ -311,10 +322,14 @@ impl<'a> Replace<'_, 'a, '_> {
         if !matches!(target, Expression::FunctionExpression(_)) {
             return;
         }
-        let (Some(Statement::ExpressionStatement(mut name)), Some(Statement::FunctionDeclaration(mut declared))) = (
+        let (
+            Some(Statement::ExpressionStatement(mut name)),
+            Some(Statement::FunctionDeclaration(mut declared)),
+        ) = (
             parsed_statement(&format!("{};", self.plan.name), self.cx),
             parsed_statement(&format!("function {}() {{}}", self.plan.name), self.cx),
-        ) else {
+        )
+        else {
             return;
         };
         let Expression::FunctionExpression(mut function) =
@@ -335,7 +350,10 @@ impl<'a> Replace<'_, 'a, '_> {
         let parameter = scoping.symbol_name(index).to_string();
         let name = &self.plan.name;
         let (Some(mut declaration), Some(mut call)) = (
-            parsed_statement(&format!("function {name}({parameter}) {{ return 0; }}"), self.cx),
+            parsed_statement(
+                &format!("function {name}({parameter}) {{ return 0; }}"),
+                self.cx,
+            ),
             parsed_statement(&format!("{name}(0);"), self.cx),
         ) else {
             return;
@@ -352,7 +370,8 @@ impl<'a> Replace<'_, 'a, '_> {
         };
         let read = sequence.expressions.pop();
         let assignment = sequence.expressions.pop();
-        let (Some(read), Some(Expression::AssignmentExpression(mut assignment))) = (read, assignment)
+        let (Some(read), Some(Expression::AssignmentExpression(mut assignment))) =
+            (read, assignment)
         else {
             return;
         };
@@ -429,7 +448,9 @@ fn drop_bare_declarator(statements: &mut AVec<'_, Statement<'_>>, index: SymbolI
     for stmt in statements.iter_mut() {
         if let Statement::VariableDeclaration(declaration) = stmt {
             if declaration.kind == VariableDeclarationKind::Var {
-                declaration.declarations.retain(|declarator| !bare(declarator));
+                declaration
+                    .declarations
+                    .retain(|declarator| !bare(declarator));
             }
         }
     }

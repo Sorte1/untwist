@@ -171,7 +171,12 @@ fn decoded_arrays(list: &[Statement<'_>], scoping: &Scoping) -> Vec<usize> {
         .collect()
 }
 
-fn split<'a>(stmt: &mut Statement<'a>, count: usize, out: &mut AVec<'a, Statement<'a>>, cx: &Cx<'a, '_>) {
+fn split<'a>(
+    stmt: &mut Statement<'a>,
+    count: usize,
+    out: &mut AVec<'a, Statement<'a>>,
+    cx: &Cx<'a, '_>,
+) {
     let Statement::ForStatement(node) = stmt else {
         return;
     };
