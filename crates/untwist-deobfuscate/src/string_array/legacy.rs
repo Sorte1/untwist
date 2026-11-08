@@ -21,6 +21,7 @@ use super::checksum::{
     call_the_array_first, checksum_rotator, edit_statement, hoist_array_call, reassigns_itself,
 };
 use super::cookie::cookie_rotation;
+use super::cookie_minified::minified_cookie_rotation;
 use super::for_init::{declare_assigned_forwarders, hoist_for_init_forwarders};
 use super::patched::rotator_builtins_patched;
 use super::prologue::strip_atob_prologues;
@@ -115,7 +116,7 @@ pub(super) fn predecrements(expr: &Expression<'_>, counter: &str) -> bool {
     update.prefix && update.operator == UpdateOperator::Decrement && target.name == counter
 }
 
-fn is_countdown_loop(stmt: &Statement<'_>, counter: &str, array: &str) -> bool {
+pub(super) fn is_countdown_loop(stmt: &Statement<'_>, counter: &str, array: &str) -> bool {
     match single_statement(stmt) {
         Some(Statement::ForStatement(node)) => {
             node.init.is_none()
@@ -541,6 +542,7 @@ fn legacy_at(
     let rotator = body.get(index + 1).and_then(|next| {
         legacy_rotation(next, name)
             .or_else(|| cookie_rotation(next, name, (scoping, source)))
+            .or_else(|| minified_cookie_rotation(next, name, (scoping, source)))
             .map(|count| (next.span(), count))
     });
     let after = index + 1 + usize::from(rotator.is_some());

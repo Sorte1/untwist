@@ -47,6 +47,7 @@ pub struct ArrayShape {
 mod aliases;
 mod checksum;
 mod cookie;
+mod cookie_minified;
 mod for_init;
 mod inlined;
 pub(crate) mod legacy;
