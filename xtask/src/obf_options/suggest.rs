@@ -23,12 +23,14 @@ const DEBUG_KEPT: &str = "safe-debug-protection-kept";
 const DEAD_VARS: &str = "safe-dead-code-vars";
 const OBJECT_KEYS: &str = "object-keys-computed-key";
 const DECODE_MISS: &str = "unexplained-decode-miss";
+const STATEFUL_ESCAPE: &str = "stateful-decoder-escape";
+const ESCAPE_NOTE: &str = "a stateful decoder is referenced outside the calls untwist proves";
 const NO_ARRAY: &str = "missed-no-string-array";
 
 const REACH_NOTE: &str = "may reach the string array's function by a key";
 const NAMES_NOTE: &str = "may observe the names of the global object";
 
-const DEFAULT_REASONS: [(&str, &str); 12] = [
+const DEFAULT_REASONS: [(&str, &str); 13] = [
     (
         NO_ARRAY,
         "MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why",
@@ -40,6 +42,10 @@ const DEFAULT_REASONS: [(&str, &str); 12] = [
     (
         DECODE_MISS,
         "MISSED: the unit keeps every reference undecoded and no pass says why",
+    ),
+    (
+        STATEFUL_ESCAPE,
+        "a stateful base64 or rc4 decoder is also reached through calls whose arguments are not proven (wrappers reading locals of an enclosing function, or the decoder handed on as a value), so decoding the collected calls ahead of those could change its state, and the unit's calls are left alone",
     ),
     (
         STEP_BUDGET,
@@ -146,6 +152,9 @@ fn later_cause(lane: &str, notes: &[String]) -> &'static str {
             return NAMES;
         }
     }
+    if notes.iter().any(|note| note.contains(ESCAPE_NOTE)) {
+        return STATEFUL_ESCAPE;
+    }
     DECODE_MISS
 }
 
@@ -172,8 +181,7 @@ fn machinery_cause(
     if let Some(cause) = by_note(note) {
         return Some(cause);
     }
-    if note.contains("stateful decoder is referenced outside")
-        || note.contains("decoder machinery kept")
+    if note.contains(ESCAPE_NOTE) || note.contains("decoder machinery kept")
     {
         return Some(later_cause(lane, notes));
     }
@@ -708,6 +716,26 @@ mod tests {
         assert_eq!(
             cause_of(Shape::default(), "unsafe", &checks, &notes[..1]),
             Some(DECODE_MISS)
+        );
+    }
+
+    #[test]
+    fn an_escaping_stateful_decoder_with_no_later_refusal_is_named() {
+        let kept = "note: remove-decoder-machinery: decoder machinery kept: 2 reference(s) to the string array or its decoders did not decode".to_string();
+        let notes = [
+            "note: inline-decoded-strings: decoding bailed: unsupported construct: a stateful decoder is referenced outside the calls untwist proves".to_string(),
+            kept.clone(),
+        ];
+        let checks = BTreeMap::from([(
+            "machinery",
+            Failed {
+                detail: "string_arrays=1,decoders=1,decoder_calls=2",
+                note: &kept,
+            },
+        )]);
+        assert_eq!(
+            cause_of(Shape::default(), "unsafe", &checks, &notes),
+            Some(STATEFUL_ESCAPE)
         );
     }
 }
