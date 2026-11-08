@@ -274,3 +274,14 @@ pub fn trust_wrapper_constants_for_tests(on: bool) {
 pub(crate) fn wrapper_constants_trusted() -> bool {
     WRAPPER_CONSTANTS_TRUSTED.load(Ordering::Relaxed)
 }
+
+static SINGLE_USE_INDEX_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_single_use_index_for_tests(on: bool) {
+    SINGLE_USE_INDEX_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn single_use_index_trusted() -> bool {
+    SINGLE_USE_INDEX_TRUSTED.load(Ordering::Relaxed)
+}

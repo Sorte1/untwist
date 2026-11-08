@@ -12,6 +12,7 @@ use untwist_core::pass::Cx;
 
 use super::checksum::parsed_statement;
 use super::for_init::hoist_decoded_arrays;
+use super::single_use::declare_single_use_decoder;
 use super::legacy::{incremented, is_countdown, literal_arithmetic, predecrements, pushes_shifted};
 use super::{array_declaration, array_literal};
 use crate::array_rotator::is_infinite_rotator_loop;
@@ -531,6 +532,13 @@ struct Inline<'c, 'a, 'x> {
 }
 
 impl<'a> VisitMut<'a> for Inline<'_, 'a, '_> {
+    fn visit_function_body(&mut self, it: &mut FunctionBody<'a>) {
+        if self.changed == 0 {
+            self.changed += declare_single_use_decoder(&mut it.statements, self.cx);
+        }
+        walk_mut::walk_function_body(self, it);
+    }
+
     fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
         if self.changed == 0 {
             if let Some(plan) = plan(it, self.cx.scoping()) {

@@ -131,6 +131,12 @@ All notable changes to this project are documented in this file. The format is b
   (`for (var e = ["..."], x = [o("0x1")], l = 0; ...)`). When a function beside the loop reads
   the array, the leading array declarations are moved in front of the loop, so the array is found.
 
+- terser inlines a decoder that is called once into its call site, either as a function called in
+  place (`console[function (n) { return f[n -= 0]; }("0x0")]`) or as a sequence through a variable
+  (`var c; console[(c = "0x0", f[c -= 0])]`). Inside a function, such a site is turned back into a
+  decoder declared beside the array; the sequence form only when the variable is a `var` of that
+  function used nowhere else.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called

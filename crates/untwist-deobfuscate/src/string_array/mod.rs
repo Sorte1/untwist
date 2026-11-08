@@ -57,6 +57,7 @@ mod positions;
 mod prologue;
 mod prologue_inline;
 mod reach;
+mod single_use;
 
 use aliases::{resolve_array_aliases, search_aliases};
 
