@@ -48,6 +48,11 @@ All notable changes to this project are documented in this file. The format is b
   it still keeps the conditional when it is called or used as a template tag, where folding would
   change `this`.
 
+- After decoding, assignments of literals to a local that nothing reads any more are dropped from
+  the comma sequences that held them (uglify-js and terser leave `obj[e = 353, t = 356, dec(...)]`
+  when they inline a decoder wrapper), together with the local's empty declaration, so the proxy
+  object around them can be inlined. A `let` assigned before its declaration runs is left alone.
+
 - A plain string array inside a function or webpack module whose decoder is a function
   declaration is decoded when nothing runs before the array in that function body; only code
   in the same body can call the hoisted decoder before the array exists.

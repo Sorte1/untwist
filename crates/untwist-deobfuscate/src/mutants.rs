@@ -219,3 +219,14 @@ pub fn fold_dead_member_results_in_callees_for_tests(on: bool) {
 pub(crate) fn dead_member_callees_folded() -> bool {
     DEAD_MEMBER_RESULTS_FOLDED.load(Ordering::Relaxed)
 }
+
+static WRITE_ONLY_ORDER_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_write_only_order_for_tests(on: bool) {
+    WRITE_ONLY_ORDER_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn write_only_order_trusted() -> bool {
+    WRITE_ONLY_ORDER_TRUSTED.load(Ordering::Relaxed)
+}

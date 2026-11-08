@@ -326,7 +326,7 @@
 1.6.0--rc4-rot-shuf-t75--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.6.0--rc4-rot-shuf-t75-keys--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.11.1--b64-norot-noshuf-noshift-inum-w3f-t1-mangled--top--uglify	1	1/1	1/1	-	0	-
-2.11.1--b64-norot-noshuf-shift-istr-w2f5-t1-dead--iife--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
+2.11.1--b64-norot-noshuf-shift-istr-w2f5-t1-dead--iife--terser	1	1/1	1/1	-	0	-
 2.11.1--b64-norot-shuf-noshift-inum-w0-t1-dead--iife--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
 2.11.1--b64-norot-shuf-noshift-inum-w1-t1-self--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.11.1--b64-norot-shuf-noshift-istr-w1-t75-split--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -356,7 +356,7 @@
 2.11.1--rc4-norot-shuf-shift-inum-w0-t1-dead--top--uglify	1	1/1	1/1	-	0	-
 2.11.1--rc4-norot-shuf-shift-inum-w2f5-t75-split--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.11.1--rc4-rot-noshuf-noshift-inum-w0-t1-mangled--iife--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-2.11.1--rc4-rot-noshuf-shift-inum-w3f-t1-self--iife--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
+2.11.1--rc4-rot-noshuf-shift-inum-w3f-t1-self--iife--terser	1	1/1	1/1	-	0	-
 2.11.1--rc4-rot-noshuf-shift-istr-w2u-t75-split--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.11.1--rc4-rot-shuf-noshift-inum-w1-t75-dead--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.11.1--rc4-rot-shuf-noshift-istr-w2f5-t1-mangled--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
@@ -412,7 +412,7 @@
 2.14.0--b64-rot-shuf-shift-inum-w3f-t75-numbers--wp4-module--uglify	1	0/1	0/1	-	0	missed-no-string-array (2)
 2.14.0--plain-norot-noshuf-noshift-inum-w2f5-t1-self--top--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), unexplained-decode-miss (1)
 2.14.0--plain-norot-noshuf-noshift-istr-w2f5-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.14.0--plain-norot-noshuf-shift-inum-w3f-t75-cff--wp4-module--terser	1	0/1	0/1	-	0	missed-proxy-object (2)
+2.14.0--plain-norot-noshuf-shift-inum-w3f-t75-cff--wp4-module--terser	1	1/1	1/1	-	0	-
 2.14.0--plain-norot-shuf-noshift-inum-w1-t75-numbers--wp4-module--uglify	1	1/1	1/1	-	0	-
 2.14.0--plain-norot-shuf-shift-inum-w2u-t1-numbers--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--plain-norot-shuf-shift-istr-w0-t75-split--iife--terser	1	1/1	1/1	-	0	-
@@ -511,7 +511,7 @@
 2.19.1--b64-norot-noshuf-shift-inum-w1-t75--top--uglify	1	1/1	1/1	-	0	-
 2.19.1--b64-norot-shuf-noshift-istr-w2f5-t75-cff--top--terser	1	0/1	0/1	-	0	stateful-decoder-state (2)
 2.19.1--b64-norot-shuf-shift-inum-w0-t1-mangled--iife--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-2.19.1--b64-norot-shuf-shift-inum-w3f-t75-mangled--iife--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
+2.19.1--b64-norot-shuf-shift-inum-w3f-t75-mangled--iife--terser	1	1/1	1/1	-	0	-
 2.19.1--b64-rot-noshuf-noshift-istr-w0-t75-self--wp4-bundle--terser	1	0/1	0/1	-	0	rotator-reads-outside (2)
 2.19.1--b64-rot-noshuf-shift-istr-w0-t75-cff--top--none	1	1/1	1/1	-	0	-
 2.19.1--b64-rot-noshuf-shift-istr-w1-t75-cff--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
@@ -569,7 +569,7 @@
 2.4.3--plain-rot-shuf-w3f-t75-dead--top--terser	1	0/1	0/1	-	0	legacy-array-reached (1), unexplained-decode-miss (1)
 2.4.3--rc4-norot-noshuf-w2u-t75-cff--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.4.3--rc4-norot-noshuf-w2u-t75-dead--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.4.3--rc4-norot-noshuf-w3f-t75-cff--iife--terser	1	0/1	0/1	-	0	missed-proxy-object (2)
+2.4.3--rc4-norot-noshuf-w3f-t75-cff--iife--terser	1	1/1	1/1	-	0	-
 2.4.3--rc4-norot-shuf-w0-t75--iife--uglify	1	1/1	1/1	-	0	-
 2.4.3--rc4-norot-shuf-w1-t75-cff--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.4.3--rc4-norot-shuf-w2u-t75-numbers--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
@@ -628,7 +628,7 @@
 3.2.7--b64-rot-noshuf-shift-inum-w2f5-nocalls-t1-numbers--iife--terser	1	0/1	0/1	-	0	stateful-decoder-state (2)
 3.2.7--b64-rot-shuf-noshift-istr-w3f-nocalls-t75-self--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 3.2.7--b64-rot-shuf-shift-istr-w0-nocalls-t1-split--wp4-module--terser	1	0/1	0/1	-	0	rotator-reads-outside (2)
-3.2.7--plain-norot-noshuf-noshift-inum-w3f-nocalls-t75-cff--top--terser	1	0/1	0/1	-	0	missed-proxy-object (1), safe-global-key-reach (1)
+3.2.7--plain-norot-noshuf-noshift-inum-w3f-nocalls-t75-cff--top--terser	1	1/1	1/1	-	0	-
 3.2.7--plain-norot-noshuf-noshift-istr-w0-nocalls-t75-dead--wp4-module--terser	1	1/1	1/1	-	0	-
 3.2.7--plain-norot-noshuf-shift-istr-w2f5-nocalls-t75-self--iife--none	1	1/1	1/1	-	0	-
 3.2.7--plain-norot-shuf-noshift-inum-w2u-calls-t1-keys--top--uglify	1	1/1	1/1	-	0	-
@@ -721,25 +721,25 @@
 5.9.1--rc4-rot-noshuf-noshift-inum-w1-nocalls-t1-unicode--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 5.9.1--rc4-rot-noshuf-noshift-inum-w2f5-nocalls-t75-self--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 5.9.1--rc4-rot-noshuf-noshift-istr-w2u-calls-t1-self--wp4-bundle--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
-5.9.1--rc4-rot-shuf-noshift-inum-w3f-nocalls-t75-self--top--terser	1	0/1	0/1	-	0	safe-global-key-reach (1), unexplained-decode-miss (1)
+5.9.1--rc4-rot-shuf-noshift-inum-w3f-nocalls-t75-self--top--terser	1	1/1	1/1	-	0	-
 5.9.1--rc4-rot-shuf-shift-inum-w0-calls-t75-cff--iife--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 5.9.1--rc4-rot-shuf-shift-istr-w2u-nocalls-t1-keys--top--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
 legacy-array-reached	270	270	270	0	safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded
 decoder-reads-outer-binding	77	77	85	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
 stateful-decoder-state	73	73	119	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
-builtin-replaced-decoded-key	72	72	72	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
+builtin-replaced-decoded-key	69	69	69	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
 array-reached-outside	26	26	52	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
 missed-no-string-array	20	20	40	0	MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why
-unexplained-decode-miss	20	20	34	0	MISSED: the unit keeps every reference undecoded and no pass says why
-safe-global-key-reach	11	11	11	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
+unexplained-decode-miss	19	19	33	0	MISSED: the unit keeps every reference undecoded and no pass says why
+safe-global-key-reach	9	9	9	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 decoder-does-more	5	5	10	0	a decoder does more than read from the string array, so its calls may change or expose the array and are left alone
-missed-proxy-object	5	5	7	0	MISSED: the unit decodes, but a control-flow proxy object is left and no pass says why
 object-keys-computed-key	4	4	4	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)
 safe-global-names	4	4	4	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
 rotator-reads-outside	3	3	6	0	the rotator reads or writes something other than its own bindings, the string array and its decoders, so its effect is not proven
 wrapper-alias-redeclared	3	3	6	0	a decoder alias is not declared exactly once by a single-declarator declaration in a statement list, so it is left in place
 decoder-used-as-value	2	2	4	0	a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's calls are left alone
+missed-proxy-object	2	2	2	0	MISSED: the unit decodes, but a control-flow proxy object is left and no pass says why
 wrapper-alias-read-early	2	2	4	0	a decoder alias may be read before its declaration runs, so it is left in place
 missed-opaque-predicate	1	1	1	0	MISSED: the unit decodes, but a dead-code-injection test between two different string literals is left and no pass says why
 missed-self-defending	1	1	2	0	MISSED: the unit decodes, but self-defending code is left and no pass says why

@@ -40,6 +40,7 @@ pub mod var_transformation;
 pub mod wrapper_calls;
 mod wrapper_effects;
 pub mod wrappers;
+mod write_only;
 
 pub use driver::{
     cleanup_ctors, cleanup_fixpoint_ctors, deobfuscate_ctors, drop_cleared_observation,
