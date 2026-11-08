@@ -50,3 +50,20 @@ fn every_refused_row_diverges_from_node_once_the_rotator_checks_are_dropped() {
         "did not diverge from node under the mutant: {missing:?}"
     );
 }
+
+#[test]
+fn every_refused_cookie_row_is_lifted_once_the_rotator_checks_are_dropped() {
+    let cookie: Vec<(String, String)> = rows()
+        .into_iter()
+        .filter(|(label, _)| label.starts_with("ref-self-defending-cookie"))
+        .collect();
+    assert!(!cookie.is_empty(), "found no cookie rows");
+    trust_minified_rotators_for_tests(true);
+    let kept: Vec<String> = cookie
+        .iter()
+        .filter(|(_, source)| transformed(false, source).contains("arr0 = "))
+        .map(|(label, _)| label.clone())
+        .collect();
+    trust_minified_rotators_for_tests(false);
+    assert!(kept.is_empty(), "not lifted under the mutant: {kept:?}");
+}

@@ -7,7 +7,6 @@ use untwist_core::ast_util::matcher::{call_parts, iife, statement_iife};
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 
 use super::legacy::{is_countdown, literal_arithmetic};
-use crate::mutants::minified_rotators_trusted;
 
 const FORMAT_CHECK: &str = "\\w+ *\\(\\) *{\\w+ *['|\"].+['|\"];? *}";
 
@@ -399,9 +398,7 @@ fn guarded_rotation(inner: &Function<'_>, rotate: &str, source: &str) -> Option<
     let body = inner.body.as_ref()?;
     let (object, update, check, chosen) = match body.statements.as_slice() {
         [object, update, check, chosen] => (object, update, check, chosen),
-        [object, update, inert, check, chosen]
-            if literal_declaration(inert) || minified_rotators_trusted() =>
-        {
+        [object, update, inert, check, chosen] if literal_declaration(inert) => {
             (object, update, check, chosen)
         }
         _ => return None,
