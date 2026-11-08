@@ -672,8 +672,8 @@
 4.2.2--plain-norot-shuf-shift-istr-w1-nocalls-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-key-reach (1)
 4.2.2--plain-rot-noshuf-noshift-inum-w1-calls-t1-unicode--iife--none	1	1/1	1/1	-	0	-
 4.2.2--plain-rot-noshuf-noshift-inum-w1-nocalls-t1-mangled--wp4-bundle--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
-4.2.2--plain-rot-noshuf-noshift-istr-w2f5-calls-t1-self--iife--terser	1	0/1	0/1	-	0	unexplained-decode-miss (2)
-4.2.2--plain-rot-noshuf-shift-istr-w3f-calls-t75--wp4-module--uglify	1	0/1	0/1	-	0	unexplained-decode-miss (2)
+4.2.2--plain-rot-noshuf-noshift-istr-w2f5-calls-t1-self--iife--terser	1	1/1	1/1	-	0	-
+4.2.2--plain-rot-noshuf-shift-istr-w3f-calls-t75--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 4.2.2--plain-rot-shuf-noshift-inum-w2u-nocalls-t1-split--iife--uglify	1	0/1	0/1	-	0	wrapper-alias-redeclared (2)
 4.2.2--plain-rot-shuf-shift-istr-w0-nocalls-t75-numbers--top--terser	1	1/1	1/1	-	0	-
 4.2.2--rc4-norot-noshuf-shift-istr-w0-calls-t75-keys--wp4-bundle--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
@@ -694,7 +694,7 @@
 5.9.1--b64-norot-shuf-shift-inum-w0-calls-t75-unicode--wp4-bundle--uglify	1	0/1	0/1	-	0	decoder-does-more (2)
 5.9.1--b64-norot-shuf-shift-inum-w2f5-nocalls-t75-self--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 5.9.1--b64-norot-shuf-shift-istr-w1-calls-t75-split--iife--none	1	1/1	1/1	-	0	-
-5.9.1--b64-rot-noshuf-noshift-istr-w2f5-calls-t75-unicode--top--terser	1	0/1	0/1	-	0	unexplained-decode-miss (2)
+5.9.1--b64-rot-noshuf-noshift-istr-w2f5-calls-t75-unicode--top--terser	1	1/1	1/1	-	0	-
 5.9.1--b64-rot-noshuf-shift-istr-w1-calls-t1-self--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 5.9.1--b64-rot-shuf-noshift-inum-w0-nocalls-t75-split--top--none	1	1/1	1/1	-	0	-
 5.9.1--b64-rot-shuf-noshift-inum-w2f5-calls-t1--wp4-bundle--terser	1	0/1	0/1	-	0	stateful-decoder-state (2)
@@ -729,17 +729,17 @@ legacy-array-reached	270	270	270	0	safe lane: code may reach the plain string ar
 decoder-reads-outer-binding	77	77	85	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
 stateful-decoder-state	72	72	117	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
 builtin-replaced-decoded-key	70	70	70	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
-array-reached-outside	26	26	52	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
+array-reached-outside	27	27	54	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
 missed-no-string-array	20	20	40	0	MISSED: find-string-array finds no string array although the input has one, so every decoder call is left and no pass says why
 safe-global-key-reach	9	9	9	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 decoder-does-more	5	5	10	0	a decoder does more than read from the string array, so its calls may change or expose the array and are left alone
 safe-global-names	5	5	5	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
-unexplained-decode-miss	5	5	9	0	MISSED: the unit keeps every reference undecoded and no pass says why
 object-keys-computed-key	4	4	4	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)
 rotator-reads-outside	3	3	6	0	the rotator reads or writes something other than its own bindings, the string array and its decoders, so its effect is not proven
 wrapper-alias-redeclared	3	3	6	0	a decoder alias is not declared exactly once by a single-declarator declaration in a statement list, so it is left in place
 decoder-used-as-value	2	2	4	0	a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's calls are left alone
 missed-proxy-object	2	2	2	0	MISSED: the unit decodes, but a control-flow proxy object is left and no pass says why
+unexplained-decode-miss	2	2	3	0	MISSED: the unit keeps every reference undecoded and no pass says why
 wrapper-alias-read-early	2	2	4	0	a decoder alias may be read before its declaration runs, so it is left in place
 missed-self-defending	1	1	2	0	MISSED: the unit decodes, but self-defending code is left and no pass says why
 wrapper-reads-outside	1	1	2	0	a decoder wrapper body reads something other than its own parameters and the stamped machinery, so it is not inlined
