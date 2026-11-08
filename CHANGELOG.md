@@ -12,6 +12,10 @@ All notable changes to this project are documented in this file. The format is b
   note names one, also behind "no string array found" in the option matrix and behind kept
   machinery, instead of calling it an unexplained miss.
 
+- The matrices also name a decoder wrapper left in place because it is declared in a block
+  (`wrapper-binding-unstable`) and a decode that bails on a const the evaluator cannot prove is
+  initialised (`decoder-reads-tdz-binding`).
+
 - Top-level calls to a small local function that updates top-level state are folded in the
   default lane when every argument is a literal: `console[test(2)](test(0), test(1), counter)`
   becomes `console.log("hello", "world", 3)`, and the function and its state are removed. The
