@@ -738,11 +738,8 @@ fn apply_alias_site<'a>(
 
 #[derive(Default)]
 pub struct InlineDecoderWrappers {
-<<<<<<< HEAD
     immediate_tried: bool,
-=======
     constants_tried: bool,
->>>>>>> 3220ec1 (perf: walk for wrapper uses only when a wrapper reads constants)
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
