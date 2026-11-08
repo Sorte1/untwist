@@ -391,6 +391,8 @@ impl<'a> VisitJs<'a> for Controllers {
                 self.found.insert(symbol);
             }
             self.inline |= inline_controller_call(stmt);
+            let owned: Vec<String> = flags.iter().map(|flag| flag.to_string()).collect();
+            self.inline |= is_inline_returner_call(stmt, &owned);
         }
         walk_js::walk_statements(self, it);
     }
@@ -401,6 +403,24 @@ struct Removals<'k> {
     scoping: &'k Scoping,
     spans: Vec<Span>,
     variables: FxHashSet<SymbolId>,
+    flags: Vec<String>,
+}
+
+fn is_inline_returner_call(stmt: &Statement<'_>, flags: &[String]) -> bool {
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return false;
+    };
+    let Some((outer, arguments)) = call_parts(&stmt.expression) else {
+        return false;
+    };
+    let Some((inner, inner_arguments)) = call_parts(outer.without_parentheses()) else {
+        return false;
+    };
+    let flags: Vec<&str> = flags.iter().map(String::as_str).collect();
+    arguments.is_empty()
+        && inner_arguments.len() == 2
+        && (returner(inner.without_parentheses(), &flags)
+            || crate::mutants::inline_returners_trusted())
 }
 
 impl Removals<'_> {
@@ -420,7 +440,9 @@ impl Removals<'_> {
             self.spans.push(stmt.span());
             return true;
         }
-        if is_immediate_controller_call(stmt, self.controllers, self.scoping) {
+        if is_immediate_controller_call(stmt, self.controllers, self.scoping)
+            || is_inline_returner_call(stmt, &self.flags)
+        {
             self.spans.push(stmt.span());
             return true;
         }
@@ -435,11 +457,16 @@ impl Removals<'_> {
 
 impl<'a> VisitJs<'a> for Removals<'_> {
     fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
+        let outer = std::mem::replace(
+            &mut self.flags,
+            it.iter().filter_map(set_flag).map(str::to_string).collect(),
+        );
         for stmt in it {
             if !self.record(stmt) {
                 walk_js::walk_statement(self, stmt);
             }
         }
+        self.flags = outer;
     }
 }
 
@@ -477,6 +504,7 @@ fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
         scoping,
         spans: Vec::new(),
         variables: FxHashSet::default(),
+        flags: Vec::new(),
     };
     removals.visit_program(program);
     let Removals {

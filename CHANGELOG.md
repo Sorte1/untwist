@@ -52,6 +52,15 @@ All notable changes to this project are documented in this file. The format is b
   `(o = (h = {...}).updateCookie())`) has its `removeCookie` printed on one line, so a refused
   program no longer fails its own check and runs out of memory after reformatting.
 
+- Self-defending code inlined into a function as `(function (e, o) {...})(this, () => {...})()`
+  after a hoisted `t = true` flag is removed like the declared controller form.
+- A proxy object assigned before its `var` (`u = {Kmtil: function (r, n) { return r(n) }}; var u;`,
+  as uglify-js leaves it in webpack modules) is declared where it is assigned, so the proxy calls
+  inline.
+- A cookie rotator in a block that rotates the array itself (no alias), and whose block `var` is
+  shared with a later `var` of the same function, is wrapped back into a rotator when the later
+  code overwrites that `var` before reading it.
+
 - A string array inside a function decodes when uglify-js left its checksum loop behind the
   hoisted decoder and its aliases (`let t = [...], n = r; function r(e) {...} for (var x = t, e = r;;)
   try {...}`): the loop is wrapped back into a rotator and the declarations around it stay where

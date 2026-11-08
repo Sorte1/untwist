@@ -24,6 +24,7 @@ use crate::wrapper_calls::arguments_are_substitutable;
 
 mod dead;
 mod declared;
+mod hoisted;
 mod keys;
 
 pub use declared::DeclaredObject;
@@ -531,6 +532,8 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
         let folded = fold_key_assignments(stmts, cx);
         cx.changed_by(folded);
+        let declared = hoisted::declare_assigned_objects(stmts, cx);
+        cx.changed_by(declared);
     }
 
     fn enter_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
