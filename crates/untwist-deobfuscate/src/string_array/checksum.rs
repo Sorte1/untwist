@@ -14,7 +14,7 @@ use untwist_core::ast_util::respan::fresh_spans_statement;
 use untwist_core::parse::{has_error, parse_with, SourceType};
 use untwist_core::pass::Cx;
 
-use super::legacy::parameters;
+use super::legacy::{literal_arithmetic, parameters};
 use crate::array_rotator::is_rotator_statement;
 
 fn assigns_a_function(expr: &Expression<'_>, name: &str) -> bool {
@@ -87,7 +87,10 @@ pub(super) fn checksum_rotator(
     if scoping.get_reference(reference).symbol_id() != Some(symbol) {
         return None;
     }
-    matches!(second.as_expression(), Some(Expression::NumericLiteral(_))).then_some(stmt.span())
+    second
+        .as_expression()
+        .and_then(literal_arithmetic)
+        .map(|_| stmt.span())
 }
 
 #[derive(Default)]

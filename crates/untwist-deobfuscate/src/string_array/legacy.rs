@@ -22,6 +22,7 @@ use super::checksum::{
 };
 use super::cookie::cookie_rotation;
 use super::for_init::{declare_assigned_forwarders, hoist_for_init_forwarders};
+use super::patched::rotator_builtins_patched;
 use super::prologue::strip_atob_prologues;
 use crate::array_rotator::push_shift_target;
 use crate::calls::agnostic::{global_reach, ReachWatch};
@@ -194,6 +195,31 @@ fn named_countdown(statements: &[Statement<'_>], array: &str, count: &str) -> bo
         && incremented(arguments, count)
 }
 
+pub(super) fn literal_arithmetic(expr: &Expression<'_>) -> Option<f64> {
+    match expr.without_parentheses() {
+        Expression::NumericLiteral(number) => Some(number.value),
+        Expression::UnaryExpression(unary) => {
+            let value = literal_arithmetic(&unary.argument)?;
+            match unary.operator {
+                UnaryOperator::UnaryNegation => Some(-value),
+                UnaryOperator::UnaryPlus => Some(value),
+                _ => None,
+            }
+        }
+        Expression::BinaryExpression(binary) => {
+            let left = literal_arithmetic(&binary.left)?;
+            let right = literal_arithmetic(&binary.right)?;
+            match binary.operator {
+                BinaryOperator::Addition => Some(left + right),
+                BinaryOperator::Subtraction => Some(left - right),
+                BinaryOperator::Multiplication => Some(left * right),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 fn rotation_count(arguments: &[Argument<'_>], array: &str) -> Option<usize> {
     let [first, second] = arguments else {
         return None;
@@ -201,10 +227,7 @@ fn rotation_count(arguments: &[Argument<'_>], array: &str) -> Option<usize> {
     if first.as_expression().and_then(identifier_name) != Some(array) {
         return None;
     }
-    let Some(Expression::NumericLiteral(count)) = second.as_expression() else {
-        return None;
-    };
-    let value = count.value;
+    let value = literal_arithmetic(second.as_expression()?)?;
     let whole = value.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&value);
     whole.then_some(value as usize)
 }
@@ -576,11 +599,12 @@ fn refusal(
     if legacy.hoisted && legacy.body_code_before {
         return Some((notes::LEGACY_DECODER_BEFORE_ARRAY, statement));
     }
-    let rotated = legacy.rotator.is_some_and(|(_, count)| count > 0);
-    if rotated && !cx.opts.unsafe_transforms && legacy.code_before {
+    let rotator = legacy.rotator.filter(|(_, count)| *count > 0);
+    let (rotator, _) = rotator.filter(|_| !cx.opts.unsafe_transforms && legacy.code_before)?;
+    if legacy.body_code_before {
         return Some((notes::LEGACY_ROTATOR_AFTER_CODE, statement));
     }
-    None
+    rotator_builtins_patched(program, scoping, rotator).map(|span| (notes::BUILTIN_PATCHED, span))
 }
 
 fn declared_function<'k, 'a>(stmt: &'k mut Statement<'a>) -> Option<&'k mut Function<'a>> {

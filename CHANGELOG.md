@@ -47,6 +47,19 @@ All notable changes to this project are documented in this file. The format is b
   or `parseInt` when the program replaces one of them: code before the function call may have
   done so, so the default lane now judges the rotator's built-ins like the decoders' ones.
 
+- The default lane also rotates a plain string array inside a function or webpack module ahead
+  of time when nothing runs before it in that function body and no write in the program can
+  replace a built-in its rotator uses (`push`, `shift`, and for the cookie rotator its regular
+  expression and `toString` calls); otherwise the array is left undecoded with a note.
+
+- Old javascript-obfuscator rotators whose count or checksum target is written as literal
+  arithmetic (the `numbersToExpressions` option, e.g. `0xdd7*-0x1+-0x542*-0x2+0x1`) are recognised.
+
+- The readable self-defending cookie rotator of javascript-obfuscator 0.16 to 2.9 (a named guard
+  function, `if (!check) ... else if (check) ...`, and a count passed through the rotator's
+  parameter) is recognised like the compact one: the rotation is applied only when the guard's
+  format check passes on the text of `removeCookie`.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called

@@ -72,6 +72,10 @@ fn the_unsafe_lane_decodes_the_rows_its_premises_cover() {
     let covered = [
         "ref-premise-global-key-read",
         "ref-premise-push-patched-first",
+        "ref-premise-shift-patched-before-a-rotated-function",
+        "ref-premise-shift-defined-before-a-rotated-function",
+        "ref-premise-push-patched-by-a-called-function",
+        "ref-premise-rotated-after-a-patch-in-its-function",
     ];
     for (label, source) in rows() {
         if !covered.contains(&label.as_str()) {
@@ -118,4 +122,13 @@ fn both_lanes_run_like_node_outside_the_unsafe_premises() {
     let modes: [Mode<'_>; 1] = [("unsafe", &run_unsafe)];
     wrong.extend(node_rows::mismatches(&node, &covered, &modes));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn a_readable_cookie_rotator_whose_guard_runs_twice_is_left_alone() {
+    let source = "var arr0=['one','two','three'];(function(J,K){var L=function(M){while(--M){J['push'](J['shift']());}};var G=function(){var M={'data':{'key':'cookie','value':'timeout'},'setCookie':function(O,P,Q,R){R=R||{};var S=P+'='+Q;var T=0x0;for(var T=0x0,U=O['length'];T<U;T++){var V=O[T];S+=';\\x20'+V;var X=O[V];O['push'](X);U=O['length'];if(X!==!![]){S+='='+X;}}R['cookie']=S;},'removeCookie':function(){return'dev';},'getCookie':function(O,P){O=O||function(S){return S;};var Q=O(new RegExp('(?:^|;\\x20)'+P['replace'](/([.$?*|{}()[]\\/+^])/g,'$1')+'=([^;]*)'));var W=function(Y,Z){Y(++Z);};W(L,K);return Q?decodeURIComponent(Q[0x1]):undefined;}};var C=function(){var E=new RegExp('\\x5cw+\\x20*\\x5c(\\x5c)\\x20*{\\x5cw+\\x20*[\\x27|\\x22].+[\\x27|\\x22];?\\x20*}');return E['test'](M['removeCookie']['toString']());};M['updateCookie']=C;var K0='';var N=M['updateCookie']();if(!N){M['setCookie'](['*'],'counter',0x1);}else if(N){K0=M['getCookie'](null,'counter');}else{M['removeCookie']();}};G();G();}(arr0,0x1));var dec0=function(t,x){var e=arr0[t-=0];return e};console.log(dec0('0x0'),dec0('0x1'),dec0('0x2'));";
+    for lane in [false, true] {
+        let code = transformed(&options(lane), source);
+        assert!(!decoded(&code), "unsafe={lane}:\n{code}");
+    }
 }

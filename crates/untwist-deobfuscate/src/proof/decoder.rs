@@ -274,3 +274,12 @@ pub fn used_names<'a>(
     scan.used.names.shrink_to_fit();
     scan.used
 }
+
+pub fn statement_used_names<'a>(scoping: &Scoping, statement: &Statement<'a>) -> UsedNames<'a> {
+    let mut scan = UsedScan {
+        scoping,
+        used: UsedNames::default(),
+    };
+    scan.visit_statement(statement);
+    scan.used
+}
