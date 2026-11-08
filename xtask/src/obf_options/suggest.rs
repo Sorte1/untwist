@@ -133,7 +133,7 @@ fn only_class(detail: &str, class: &str) -> bool {
 fn later_cause(lane: &str, notes: &[String]) -> &'static str {
     let safe = lane == "safe";
     for note in notes {
-        if let Some(cause) = by_note(note) {
+        if let Some(cause) = by_note(note).or_else(|| refusals::refusal_of(note)) {
             return cause;
         }
         if safe && note.contains("step budget exhausted") {
@@ -166,7 +166,7 @@ fn machinery_cause(
     if safe && shape.key_shaped && note.contains(REACH_NOTE) {
         return Some(KEY_REACH);
     }
-    if let Some(cause) = refused_without_array(shape, note, notes) {
+    if let Some(cause) = refused_without_array(note, notes) {
         return Some(cause);
     }
     if let Some(cause) = by_note(note) {
@@ -195,8 +195,8 @@ fn machinery_cause(
     last_resort(lane, detail, note, notes)
 }
 
-fn refused_without_array(shape: Shape, note: &str, notes: &[String]) -> Option<&'static str> {
-    if !shape.version_matrix || !note.contains(super::lanes::NO_ARRAY) {
+fn refused_without_array(note: &str, notes: &[String]) -> Option<&'static str> {
+    if !note.contains(super::lanes::NO_ARRAY) {
         return None;
     }
     notes.iter().find_map(|later| refusals::refusal_of(later))
@@ -656,7 +656,7 @@ mod tests {
     }
 
     #[test]
-    fn a_named_refusal_behind_no_string_array_is_a_refusal_in_the_version_matrix() {
+    fn a_named_refusal_behind_no_string_array_is_a_refusal_in_both_matrices() {
         let missed = format!("note: deobfuscate: {}", crate::obf_options::lanes::NO_ARRAY);
         let notes = [
             missed.clone(),
@@ -679,11 +679,35 @@ mod tests {
         );
         assert_eq!(
             cause_of(Shape::default(), "safe", &checks, &notes),
-            Some(NO_ARRAY)
+            Some("legacy-array-reached")
         );
         assert_eq!(
             cause_of(matrix, "safe", &checks, &notes[..1]),
             Some(NO_ARRAY)
+        );
+    }
+
+    #[test]
+    fn a_named_refusal_after_kept_machinery_is_that_refusal() {
+        let kept = "note: remove-decoder-machinery: decoder machinery kept: 2 reference(s) to the string array or its decoders did not decode".to_string();
+        let notes = [
+            kept.clone(),
+            "note: inline-decoded-strings: decoding bailed: unsupported construct: a stateful decoder keeps state that is not a proven memo or init gate".to_string(),
+        ];
+        let checks = BTreeMap::from([(
+            "machinery",
+            Failed {
+                detail: "string_arrays=1,decoders=1,decoder_calls=2",
+                note: &kept,
+            },
+        )]);
+        assert_eq!(
+            cause_of(Shape::default(), "unsafe", &checks, &notes),
+            Some("stateful-decoder-state")
+        );
+        assert_eq!(
+            cause_of(Shape::default(), "unsafe", &checks, &notes[..1]),
+            Some(DECODE_MISS)
         );
     }
 }
