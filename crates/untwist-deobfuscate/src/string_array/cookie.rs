@@ -4,7 +4,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator, Up
 use untwist_core::ast_util::matcher::{call_parts, iife, statement_iife};
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 
-use super::legacy::is_countdown;
+use super::legacy::{is_countdown, literal_arithmetic};
 
 const FORMAT_CHECK: &str = "\\w+ *\\(\\) *{\\w+ *['|\"].+['|\"];? *}";
 
@@ -104,12 +104,32 @@ fn method_call<'k, 'a>(
     (identifier_name(object) == Some(holder) && key == name).then_some(arguments.as_slice())
 }
 
+fn format_pattern<'k, 'a>(
+    pattern: &'k Expression<'a>,
+    named: Option<(&str, &'k Expression<'a>)>,
+) -> Option<&'k NewExpression<'a>> {
+    let pattern = match (identifier_name(pattern), named) {
+        (Some(name), Some((bound, init))) if name == bound => init,
+        (Some(_), _) => return None,
+        _ => pattern,
+    };
+    match pattern.without_parentheses() {
+        Expression::NewExpression(regexp) => Some(regexp),
+        _ => None,
+    }
+}
+
 fn tests_removal_text(function: &Function<'_>, holder: &str) -> bool {
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    let [Statement::ReturnStatement(ret)] = body.statements.as_slice() else {
-        return false;
+    let (named, ret) = match body.statements.as_slice() {
+        [Statement::ReturnStatement(ret)] => (None, ret),
+        [declaration, Statement::ReturnStatement(ret)] => match declared(declaration) {
+            Some(named) => (Some(named), ret),
+            None => return false,
+        },
+        _ => return false,
     };
     let Some(argument) = ret.argument.as_ref() else {
         return false;
@@ -120,7 +140,7 @@ fn tests_removal_text(function: &Function<'_>, holder: &str) -> bool {
     let Some((pattern, key)) = member_parts(callee.without_parentheses()) else {
         return false;
     };
-    let Expression::NewExpression(regexp) = pattern.without_parentheses() else {
+    let Some(regexp) = format_pattern(pattern, named) else {
         return false;
     };
     let [source] = regexp.arguments.as_slice() else {
@@ -377,10 +397,275 @@ fn guarded_rotation(inner: &Function<'_>, rotate: &str, source: &str) -> Option<
     passes_format_check(text).then_some(count)
 }
 
+fn is_defaulted(stmt: &Statement<'_>, matcher: &str) -> bool {
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return false;
+    };
+    let Expression::AssignmentExpression(assigned) = stmt.expression.without_parentheses() else {
+        return false;
+    };
+    let Expression::LogicalExpression(fallback) = assigned.right.without_parentheses() else {
+        return false;
+    };
+    let target = match &assigned.left {
+        AssignmentTarget::AssignmentTargetIdentifier(id) => id.name == matcher,
+        _ => false,
+    };
+    target
+        && assigned.operator == AssignmentOperator::Assign
+        && identifier_name(&fallback.left) == Some(matcher)
+        && identity(&fallback.right)
+}
+
+fn matched_lookup(stmt: &Statement<'_>, (matcher, key): (&str, &str)) -> bool {
+    let Some((_, init)) = declared(stmt) else {
+        return false;
+    };
+    let Some((callee, arguments)) = call_parts(init.without_parentheses()) else {
+        return false;
+    };
+    let Some(Expression::NewExpression(regexp)) =
+        arguments.first().and_then(Argument::as_expression)
+    else {
+        return false;
+    };
+    identifier_name(callee) == Some(matcher)
+        && arguments.len() == 1
+        && identifier_name(&regexp.callee) == Some("RegExp")
+        && matches!(regexp.arguments.as_slice(), [source]
+            if source.as_expression().is_some_and(|source| pattern_text(source, key)))
+}
+
+fn bumping_caller<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
+    let (name, Expression::FunctionExpression(function)) = declared(stmt)? else {
+        return None;
+    };
+    let BindingPattern::BindingIdentifier(callee) = &function.params.items.first()?.pattern else {
+        return None;
+    };
+    let BindingPattern::BindingIdentifier(count) = &function.params.items.get(1)?.pattern else {
+        return None;
+    };
+    let [Statement::ExpressionStatement(call)] = function.body.as_ref()?.statements.as_slice()
+    else {
+        return None;
+    };
+    let Expression::CallExpression(call) = call.expression.without_parentheses() else {
+        return None;
+    };
+    let [argument] = call.arguments.as_slice() else {
+        return None;
+    };
+    let Some(Expression::UpdateExpression(update)) = argument.as_expression() else {
+        return None;
+    };
+    let bumped = matches!(&update.argument,
+        SimpleAssignmentTarget::AssignmentTargetIdentifier(id) if id.name == count.name);
+    let shaped = function.params.items.len() == 2
+        && callee.name != count.name
+        && identifier_name(&call.callee) == Some(callee.name.as_str())
+        && update.prefix
+        && update.operator == UpdateOperator::Increment
+        && bumped;
+    shaped.then_some(name)
+}
+
+fn calls_with(stmt: &Statement<'_>, callee: &str, (rotate, count): (&str, &str)) -> bool {
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return false;
+    };
+    let Some((called, arguments)) = call_parts(stmt.expression.without_parentheses()) else {
+        return false;
+    };
+    let names: Vec<Option<&str>> = arguments
+        .iter()
+        .map(|argument| argument.as_expression().and_then(identifier_name))
+        .collect();
+    identifier_name(called) == Some(callee) && names == [Some(rotate), Some(count)]
+}
+
+fn readable_reader(function: &Function<'_>, (rotate, count): (&str, &str)) -> bool {
+    let names: Vec<&str> = function
+        .params
+        .items
+        .iter()
+        .filter_map(|param| match &param.pattern {
+            BindingPattern::BindingIdentifier(id) => Some(id.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    let [matcher, key] = names.as_slice() else {
+        return false;
+    };
+    let Some(body) = function.body.as_ref() else {
+        return false;
+    };
+    let [defaulted, lookup, caller, call, Statement::ReturnStatement(_)] =
+        body.statements.as_slice()
+    else {
+        return false;
+    };
+    let Some(caller) = bumping_caller(caller) else {
+        return false;
+    };
+    is_defaulted(defaulted, matcher)
+        && matched_lookup(lookup, (matcher, key))
+        && calls_with(call, caller, (rotate, count))
+}
+
+fn single_call<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Expression<'a>> {
+    let stmt = match stmt {
+        Statement::BlockStatement(block) => match block.body.as_slice() {
+            [inner] => inner,
+            _ => return None,
+        },
+        other => other,
+    };
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return None;
+    };
+    Some(&stmt.expression)
+}
+
+fn reads_counter(expr: &Expression<'_>, holder: &str, kept: &str) -> bool {
+    let Expression::AssignmentExpression(assigned) = expr.without_parentheses() else {
+        return false;
+    };
+    let target = matches!(&assigned.left,
+        AssignmentTarget::AssignmentTargetIdentifier(id) if id.name == kept);
+    let reads = method_call(&assigned.right, holder, "getCookie").is_some_and(|arguments| {
+        matches!(arguments, [first, second]
+            if matches!(first.as_expression(), Some(Expression::NullLiteral(_)))
+            && matches!(second.as_expression(), Some(Expression::StringLiteral(_))))
+    });
+    target && assigned.operator == AssignmentOperator::Assign && reads
+}
+
+fn chosen_when_set(alternate: &Statement<'_>, (flag, holder, kept): (&str, &str, &str)) -> bool {
+    let removes = |stmt: &Statement<'_>| {
+        single_call(stmt).is_some_and(|call| method_call(call, holder, "removeCookie").is_some())
+    };
+    if let Statement::IfStatement(inner) = alternate {
+        return identifier_name(&inner.test) == Some(flag)
+            && single_call(&inner.consequent)
+                .is_some_and(|call| reads_counter(call, holder, kept))
+            && inner.alternate.as_ref().is_some_and(removes);
+    }
+    let Some(Expression::ConditionalExpression(choice)) =
+        single_call(alternate).map(Expression::without_parentheses)
+    else {
+        return false;
+    };
+    identifier_name(&choice.test) == Some(flag)
+        && reads_counter(&choice.consequent, holder, kept)
+        && method_call(&choice.alternate, holder, "removeCookie").is_some()
+}
+
+fn chosen_by_branch(stmt: &Statement<'_>, (flag, holder, kept): (&str, &str, &str)) -> bool {
+    let Statement::IfStatement(branch) = stmt else {
+        return false;
+    };
+    let Expression::UnaryExpression(negated) = branch.test.without_parentheses() else {
+        return false;
+    };
+    let sets = single_call(&branch.consequent)
+        .is_some_and(|call| method_call(call, holder, "setCookie").is_some());
+    negated.operator == UnaryOperator::LogicalNot
+        && identifier_name(&negated.argument) == Some(flag)
+        && sets
+        && branch
+            .alternate
+            .as_ref()
+            .is_some_and(|alternate| chosen_when_set(alternate, (flag, holder, kept)))
+}
+
+fn assigns_check(stmt: &Statement<'_>, holder: &str, check: &str) -> bool {
+    let Statement::ExpressionStatement(update) = stmt else {
+        return false;
+    };
+    let Expression::AssignmentExpression(assigned) = update.expression.without_parentheses() else {
+        return false;
+    };
+    let Some(target) = assigned
+        .left
+        .as_simple_assignment_target()
+        .and_then(SimpleAssignmentTarget::as_member_expression)
+    else {
+        return false;
+    };
+    identifier_name(target.object()) == Some(holder)
+        && target.static_property_name().and_then(|name| name.as_str()) == Some("updateCookie")
+        && identifier_name(&assigned.right) == Some(check)
+}
+
+fn readable_rotation(
+    inner: &Function<'_>,
+    (rotate, count): (&str, (&str, usize)),
+    (scoping, source): (&Scoping, &str),
+) -> Option<usize> {
+    let body = inner.body.as_ref()?;
+    let [object, format, update, kept, check, chosen] = body.statements.as_slice() else {
+        return None;
+    };
+    let (holder, Expression::ObjectExpression(cookie)) = declared(object)? else {
+        return None;
+    };
+    let (check_name, Expression::FunctionExpression(format_check)) = declared(format)? else {
+        return None;
+    };
+    let (kept, Expression::StringLiteral(_)) = declared(kept)? else {
+        return None;
+    };
+    let (flag, init) = declared(check)?;
+    let shaped = assigns_check(update, holder, check_name)
+        && method_call(init, holder, "updateCookie").is_some_and(<[_]>::is_empty)
+        && tests_removal_text(format_check, holder)
+        && chosen_by_branch(chosen, (flag, holder, kept))
+        && references(scoping, inner, check_name) == Some(1);
+    if !shaped {
+        return None;
+    }
+    let removal = property(cookie, "removeCookie")?;
+    let reader = property(cookie, "getCookie")?;
+    if !readable_reader(reader, (rotate, count.0)) {
+        return None;
+    }
+    let text = source.get(removal.span.start as usize..removal.span.end as usize)?;
+    passes_format_check(text).then_some(count.1)
+}
+
 fn references(scoping: &Scoping, function: &Function<'_>, name: &str) -> Option<usize> {
     let scope = function.scope_id.get()?;
     let symbol = scoping.find_binding(scope, name.into())?;
     Some(scoping.get_resolved_reference_ids(symbol).len())
+}
+
+fn named_guard<'k, 'a>(
+    declaration: &'k Statement<'a>,
+    call: &Statement<'_>,
+    (scoping, function): (&Scoping, &Function<'_>),
+) -> Option<&'k Function<'a>> {
+    let (name, Expression::FunctionExpression(guard)) = declared(declaration)? else {
+        return None;
+    };
+    let Statement::ExpressionStatement(call) = call else {
+        return None;
+    };
+    let (callee, arguments) = call_parts(call.expression.without_parentheses())?;
+    let called = identifier_name(callee) == Some(name) && arguments.is_empty();
+    (called && references(scoping, function, name) == Some(1)).then_some(guard)
+}
+
+fn count_parameter<'k>(
+    function: &'k Function<'_>,
+    arguments: &[Argument<'_>],
+) -> Option<(&'k str, usize)> {
+    let BindingPattern::BindingIdentifier(count) = &function.params.items.get(1)?.pattern else {
+        return None;
+    };
+    let value = literal_arithmetic(arguments.get(1)?.as_expression()?)?;
+    let whole = value.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&value);
+    whole.then_some((count.name.as_str(), value as usize))
 }
 
 pub(super) fn cookie_rotation(
@@ -409,23 +694,40 @@ pub(super) fn cookie_rotation(
         return None;
     }
     let body = function.body.as_ref()?;
-    let [rotator, guard] = body.statements.as_slice() else {
-        return None;
+    let (rotator, inner, named) = match body.statements.as_slice() {
+        [rotator, guard] => {
+            let (inner, inner_arguments) = statement_iife(guard)?;
+            if !inner_arguments.is_empty() {
+                return None;
+            }
+            (rotator, inner, false)
+        }
+        [rotator, guard, call] => (
+            rotator,
+            named_guard(guard, call, (scoping, function))?,
+            true,
+        ),
+        _ => return None,
     };
     let (rotate, Expression::FunctionExpression(countdown)) = declared(rotator)? else {
         return None;
     };
-    let (inner, inner_arguments) = statement_iife(guard)?;
     let target = target.name.as_str();
     let sealed = is_countdown(countdown, target)
-        && inner_arguments.is_empty()
         && inner.params.items.is_empty()
         && references(scoping, function, rotate) == Some(1)
         && references(scoping, function, target) == Some(2);
     if !sealed {
         return None;
     }
-    guarded_rotation(inner, rotate, source)
+    if !named {
+        return guarded_rotation(inner, rotate, source);
+    }
+    let count = count_parameter(function, arguments)?;
+    if references(scoping, function, count.0) != Some(1) {
+        return None;
+    }
+    readable_rotation(inner, (rotate, count), (scoping, source))
 }
 
 #[cfg(test)]
