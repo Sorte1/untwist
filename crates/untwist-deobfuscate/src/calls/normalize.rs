@@ -378,7 +378,11 @@ fn inline_assigned_references<'a>(
         let found = statement_value(facts, slots.as_ref(), order, reference.span).or_else(|err| {
             let values =
                 sequenced.get_or_insert_with(|| ordered_values(view, cx.scoping(), symbol));
-            values.get(&reference.span).copied().ok_or(err)
+            let value = values.get(&reference.span).copied();
+            if value.is_some() {
+                crate::write_only::note_sequenced_value();
+            }
+            value.ok_or(err)
         });
         let value = match found {
             Ok(value) => value,

@@ -498,6 +498,7 @@ fn object_declaration<'k>(
 pub struct ControlFlowObject<'a> {
     edits: ExprEdits<'a>,
     logical_refusals: RepeatedSites,
+    callee_objects: bool,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -533,7 +534,7 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
         let folded = fold_key_assignments(stmts, cx);
         cx.changed_by(folded);
         let mut declared = hoisted::declare_assigned_objects(stmts, cx);
-        if declared == 0 {
+        if declared == 0 && self.callee_objects {
             declared = hoisted::declare_callee_objects(stmts, cx);
         }
         cx.changed_by(declared);
@@ -546,6 +547,16 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
         let Some((object, name)) = member_parts(callee) else {
             return;
         };
+        if !self.callee_objects
+            && matches!(
+                object.without_parentheses(),
+                Expression::AssignmentExpression(_)
+            )
+        {
+            if let Expression::CallExpression(call) = &*expr {
+                self.callee_objects = hoisted::assigns_its_callee_object(call);
+            }
+        }
         let Some(props) = cff_props(object, cx.opts.extended) else {
             return;
         };

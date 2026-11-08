@@ -32,8 +32,12 @@ fn object_assignment(stmt: &Statement<'_>, cx: &Cx<'_, '_>) -> Option<SymbolId> 
     let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
         return None;
     };
+    let Expression::ObjectExpression(object) = &assignment.right else {
+        return None;
+    };
     if assignment.operator != AssignmentOperator::Assign
-        || !matches!(assignment.right, Expression::ObjectExpression(_))
+        || object.properties.is_empty()
+        || !pure_object(object)
     {
         return None;
     }
@@ -51,18 +55,36 @@ pub(super) fn declare_assigned_objects<'a>(
     stmts: &mut AVec<'a, Statement<'a>>,
     cx: &mut Cx<'a, '_>,
 ) -> usize {
-    let mut pairs = Vec::new();
+    let mut empties: Vec<(usize, SymbolId)> = Vec::new();
+    let mut assigned: Vec<usize> = Vec::new();
     for (at, stmt) in stmts.iter().enumerate() {
-        let Some(symbol) = object_assignment(stmt, cx) else {
+        match stmt {
+            Statement::VariableDeclaration(_) => {
+                if let Some(symbol) = empty_var(stmt) {
+                    empties.push((at, symbol));
+                }
+            }
+            Statement::ExpressionStatement(node)
+                if matches!(&node.expression, Expression::AssignmentExpression(assignment)
+                    if matches!(assignment.right, Expression::ObjectExpression(_))) =>
+            {
+                assigned.push(at);
+            }
+            _ => {}
+        }
+    }
+    if empties.is_empty() || assigned.is_empty() {
+        return 0;
+    }
+    let mut pairs = Vec::new();
+    for at in assigned {
+        let Some(symbol) = object_assignment(&stmts[at], cx) else {
             continue;
         };
         if !sole_declaration(symbol, cx) {
             continue;
         }
-        let declared = stmts
-            .iter()
-            .position(|other| empty_var(other) == Some(symbol));
-        if let Some(declared) = declared {
+        if let Some(&(declared, _)) = empties.iter().find(|(_, empty)| *empty == symbol) {
             pairs.push((at, declared));
         }
     }
@@ -128,13 +150,18 @@ fn assigned_callee<'k, 'a>(
     (assignment.operator == AssignmentOperator::Assign).then_some((target, object))
 }
 
+pub(super) fn assigns_its_callee_object(call: &CallExpression<'_>) -> bool {
+    assigned_callee(call).is_some_and(|(_, object)| pure_object(object))
+}
+
 struct Finder<'s> {
     scoping: &'s oxc_semantic::Scoping,
-    symbol: SymbolId,
+    symbol: Option<SymbolId>,
     nested: usize,
     call: Option<oxc_span::Span>,
     arguments: Vec<oxc_span::Span>,
     reads: Vec<oxc_span::Span>,
+    candidates: Vec<SymbolId>,
 }
 
 impl<'a> oxc_ast_visit::VisitJs<'a> for Finder<'_> {
@@ -144,17 +171,16 @@ impl<'a> oxc_ast_visit::VisitJs<'a> for Finder<'_> {
                 .reference_id
                 .get()
                 .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
-            if symbol == Some(self.symbol)
-                && pure_object(object)
-                && self.call.is_none()
-                && self.nested == 0
-            {
-                self.call = Some(it.span);
-                self.arguments = it
-                    .arguments
-                    .iter()
-                    .map(|argument| argument.span())
-                    .collect();
+            if let Some(found) = symbol.filter(|_| self.nested == 0 && pure_object(object)) {
+                self.candidates.push(found);
+                if Some(found) == self.symbol && self.call.is_none() {
+                    self.call = Some(it.span);
+                    self.arguments = it
+                        .arguments
+                        .iter()
+                        .map(|argument| argument.span())
+                        .collect();
+                }
             }
         }
         oxc_ast_visit::walk_js::walk_call_expression(self, it);
@@ -165,21 +191,17 @@ impl<'a> oxc_ast_visit::VisitJs<'a> for Finder<'_> {
             .reference_id
             .get()
             .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
-        if symbol == Some(self.symbol) {
+        if symbol.is_some() && symbol == self.symbol {
             self.reads.push(it.span);
         }
     }
 
-    fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
-        self.nested += 1;
-        oxc_ast_visit::walk_js::walk_function(self, it, flags);
-        self.nested -= 1;
+    fn visit_function(&mut self, it: &Function<'a>, _flags: oxc_syntax::scope::ScopeFlags) {
+        let _ = it;
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
-        self.nested += 1;
-        oxc_ast_visit::walk_js::walk_arrow_function_expression(self, it);
-        self.nested -= 1;
+        let _ = it;
     }
 
     fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
@@ -243,13 +265,45 @@ impl<'a> oxc_ast_visit::VisitMut<'a> for Hoist<'_, 'a, '_> {
     }
 }
 
+fn finder<'s>(scoping: &'s oxc_semantic::Scoping, symbol: Option<SymbolId>) -> Finder<'s> {
+    Finder {
+        scoping,
+        symbol,
+        nested: 0,
+        call: None,
+        arguments: Vec::new(),
+        reads: Vec::new(),
+        candidates: Vec::new(),
+    }
+}
+
 pub(super) fn declare_callee_objects<'a>(
     stmts: &mut AVec<'a, Statement<'a>>,
     cx: &mut Cx<'a, '_>,
 ) -> usize {
+    let has_declaration = stmts
+        .iter()
+        .any(|stmt| empty_lexical_or_var(stmt).is_some());
+    if !has_declaration {
+        return 0;
+    }
+    let mut candidates: Vec<(usize, SymbolId)> = Vec::new();
+    for (at, stmt) in stmts.iter().enumerate() {
+        if !matches!(stmt, Statement::ExpressionStatement(_)) {
+            continue;
+        }
+        let mut search = finder(cx.scoping(), None);
+        oxc_ast_visit::VisitJs::visit_statement(&mut search, stmt);
+        candidates.extend(search.candidates.into_iter().map(|symbol| (at, symbol)));
+    }
+    if candidates.is_empty() {
+        return 0;
+    }
     let mut changed = 0;
-    for declared in 0..stmts.len() {
-        let Some(symbol) = empty_lexical_or_var(&stmts[declared]) else {
+    for (at, symbol) in candidates {
+        let Some(declared) =
+            (0..at).find(|index| empty_lexical_or_var(&stmts[*index]) == Some(symbol))
+        else {
             continue;
         };
         if write_reference_count(cx.scoping(), symbol) != 1
@@ -258,30 +312,20 @@ pub(super) fn declare_callee_objects<'a>(
             continue;
         }
         let total = cx.scoping().get_resolved_reference_ids(symbol).len();
-        let found = (declared + 1..stmts.len()).find_map(|at| {
-            let mut finder = Finder {
-                scoping: cx.scoping(),
-                symbol,
-                nested: 0,
-                call: None,
-                arguments: Vec::new(),
-                reads: Vec::new(),
-            };
-            oxc_ast_visit::VisitJs::visit_statement(&mut finder, &stmts[at]);
-            finder.call.map(|call| (at, call, finder))
-        });
-        let Some((at, call, finder)) = found else {
+        let mut search = finder(cx.scoping(), Some(symbol));
+        oxc_ast_visit::VisitJs::visit_statement(&mut search, &stmts[at]);
+        let Some(call) = search.call else {
             continue;
         };
         let inside = |span: &oxc_span::Span| {
-            finder
+            search
                 .arguments
                 .iter()
                 .any(|argument| argument.start <= span.start && span.end <= argument.end)
         };
-        let reads: Vec<_> = finder.reads.iter().filter(|span| !inside(span)).collect();
-        let sealed = finder.reads.len() == total
-            && (reads.len() == 1 || crate::mutants::callee_objects_trusted());
+        let outside = search.reads.iter().filter(|span| !inside(span)).count();
+        let sealed = search.reads.len() == total
+            && (outside == 1 || crate::mutants::callee_objects_trusted());
         if !sealed {
             continue;
         }
@@ -300,6 +344,7 @@ pub(super) fn declare_callee_objects<'a>(
                 changed += 1;
             }
         }
+        return changed;
     }
     changed
 }

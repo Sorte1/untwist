@@ -273,6 +273,18 @@ thread_local! {
     static SWEEP_PENDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+thread_local! {
+    static SEQUENCED_VALUE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub(crate) fn note_sequenced_value() {
+    SEQUENCED_VALUE.with(|seen| seen.set(true));
+}
+
+pub(crate) fn take_sequenced_value() -> bool {
+    SEQUENCED_VALUE.with(|seen| seen.replace(false))
+}
+
 pub(crate) fn request_sweep() {
     SWEEP_PENDING.with(|pending| pending.set(true));
 }
