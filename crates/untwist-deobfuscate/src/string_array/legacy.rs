@@ -481,7 +481,14 @@ fn legacy_at(
     let references = scoping.get_resolved_reference_ids(symbol).len();
     let expected =
         references.checked_sub(usize::from(rotator.is_some()) + usize::from(checksum.is_some()))?;
-    let (decoder, hoisted, reassigning, reads) = body.get(after..)?.iter().find_map(|stmt| {
+    let declared_before = body[..index]
+        .iter()
+        .filter(|stmt| matches!(stmt, Statement::FunctionDeclaration(_)));
+    let (decoder, hoisted, reassigning, reads) = body
+        .get(after..)?
+        .iter()
+        .chain(declared_before)
+        .find_map(|stmt| {
         decoder_reads(stmt, scoping, symbol).map(|reads| {
             let hoisted = matches!(stmt, Statement::FunctionDeclaration(_));
             (stmt.span(), hoisted, reassigns_itself(stmt), reads)

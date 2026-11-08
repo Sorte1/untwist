@@ -71,6 +71,9 @@ All notable changes to this project are documented in this file. The format is b
   conditions, and a few bare `var` statements between the array and an assigned rotator are
   skipped.
 
+- A function declaration that decodes a plain array is also found when it comes before the array,
+  as uglify-js hoists it; it is used only when nothing runs before the array in that body.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called
