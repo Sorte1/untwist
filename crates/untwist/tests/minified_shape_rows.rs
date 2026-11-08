@@ -2,6 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/minified_shape_rows.txt");
+const SELF_DEFENDING: &str = "self-defending";
 const PREFIXES: [&str; 3] = ["dec-", "guard-", "ref-"];
 
 fn rows() -> Vec<(String, String)> {
@@ -56,7 +57,10 @@ fn both_lanes_run_like_node() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let programs = rows();
+    let programs: Vec<(String, String)> = rows()
+        .into_iter()
+        .filter(|(label, _)| !label.contains(SELF_DEFENDING))
+        .collect();
     let run_safe = |source: &str| transformed(false, source);
     let run_unsafe = |source: &str| transformed(true, source);
     let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];

@@ -1,6 +1,8 @@
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
-use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator, UpdateOperator};
+use oxc_syntax::operator::{
+    AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator, UpdateOperator,
+};
 use untwist_core::ast_util::matcher::{call_parts, iife, statement_iife};
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 
@@ -65,7 +67,10 @@ pub(super) fn passes_format_check(source: &str) -> bool {
     (0..text.len()).any(|start| format_check_at(&text, start))
 }
 
-fn property<'k, 'a>(object: &'k ObjectExpression<'a>, name: &str) -> Option<&'k Function<'a>> {
+pub(super) fn property<'k, 'a>(
+    object: &'k ObjectExpression<'a>,
+    name: &str,
+) -> Option<&'k Function<'a>> {
     object.properties.iter().find_map(|property| {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
             return None;
@@ -81,7 +86,7 @@ fn property<'k, 'a>(object: &'k ObjectExpression<'a>, name: &str) -> Option<&'k 
     })
 }
 
-fn declared<'k, 'a>(stmt: &'k Statement<'a>) -> Option<(&'k str, &'k Expression<'a>)> {
+pub(super) fn declared<'k, 'a>(stmt: &'k Statement<'a>) -> Option<(&'k str, &'k Expression<'a>)> {
     let Statement::VariableDeclaration(declaration) = stmt else {
         return None;
     };
@@ -94,7 +99,7 @@ fn declared<'k, 'a>(stmt: &'k Statement<'a>) -> Option<(&'k str, &'k Expression<
     Some((id.name.as_str(), declarator.init.as_ref()?))
 }
 
-fn method_call<'k, 'a>(
+pub(super) fn method_call<'k, 'a>(
     expr: &'k Expression<'a>,
     holder: &str,
     name: &str,
@@ -119,7 +124,7 @@ fn format_pattern<'k, 'a>(
     }
 }
 
-fn tests_removal_text(function: &Function<'_>, holder: &str) -> bool {
+pub(super) fn tests_removal_text(function: &Function<'_>, holder: &str) -> bool {
     let Some(body) = function.body.as_ref() else {
         return false;
     };
@@ -170,7 +175,11 @@ fn tests_removal_text(function: &Function<'_>, holder: &str) -> bool {
         && reads_removal
 }
 
-fn counted_call(set: &Expression<'_>, call: &Expression<'_>, rotate: &str) -> Option<usize> {
+pub(super) fn counted_call(
+    set: &Expression<'_>,
+    call: &Expression<'_>,
+    rotate: &str,
+) -> Option<usize> {
     let Expression::AssignmentExpression(set) = set.without_parentheses() else {
         return None;
     };
@@ -202,7 +211,9 @@ fn counted_call(set: &Expression<'_>, call: &Expression<'_>, rotate: &str) -> Op
     shaped.then_some(count.value as usize)
 }
 
-fn tail_expressions<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<Vec<&'k Expression<'a>>> {
+pub(super) fn tail_expressions<'k, 'a>(
+    statements: &'k [Statement<'a>],
+) -> Option<Vec<&'k Expression<'a>>> {
     let (Statement::ReturnStatement(ret), before) = statements.split_last()? else {
         return None;
     };
@@ -220,7 +231,7 @@ fn tail_expressions<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<Vec<&'k E
     Some(tail)
 }
 
-fn pattern_text(expr: &Expression<'_>, key: &str) -> bool {
+pub(super) fn pattern_text(expr: &Expression<'_>, key: &str) -> bool {
     match expr.without_parentheses() {
         Expression::StringLiteral(_) => true,
         Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
@@ -237,7 +248,7 @@ fn pattern_text(expr: &Expression<'_>, key: &str) -> bool {
     }
 }
 
-fn identity(expr: &Expression<'_>) -> bool {
+pub(super) fn identity(expr: &Expression<'_>) -> bool {
     let Expression::FunctionExpression(function) = expr.without_parentheses() else {
         return false;
     };
@@ -272,6 +283,10 @@ fn safe_lookup(stmt: &Statement<'_>, (matcher, key): (&str, &str)) -> bool {
     let [init] = init.as_slice() else {
         return false;
     };
+    lookup_call(init, (matcher, key))
+}
+
+pub(super) fn lookup_call(init: &Expression<'_>, (matcher, key): (&str, &str)) -> bool {
     let Some((callee, arguments)) = call_parts(init.without_parentheses()) else {
         return false;
     };
@@ -291,6 +306,7 @@ fn safe_lookup(stmt: &Statement<'_>, (matcher, key): (&str, &str)) -> bool {
         return false;
     };
     target == Some(matcher)
+        && fallback.operator == LogicalOperator::Or
         && identifier_name(&fallback.left) == Some(matcher)
         && identity(&fallback.right)
         && arguments.len() == 1
@@ -330,11 +346,30 @@ fn rotation_in_reader(function: &Function<'_>, rotate: &str) -> Option<usize> {
     }) {
         return None;
     }
-    let tail = tail_expressions(rest)?;
+    let kept = rest.len() - rest.iter().rev().take_while(|stmt| is_bare(stmt)).count();
+    let tail = tail_expressions(&rest[..kept])?;
     let [set, call, _] = tail.as_slice() else {
         return None;
     };
     counted_call(set, call, rotate)
+}
+
+fn is_bare(stmt: &Statement<'_>) -> bool {
+    matches!(stmt, Statement::VariableDeclaration(declaration)
+        if declaration.declarations.iter().all(|declarator| declarator.init.is_none()))
+}
+
+fn literal_declaration(stmt: &Statement<'_>) -> bool {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return false;
+    };
+    declaration.declarations.iter().all(|declarator| {
+        matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+            && matches!(
+                declarator.init.as_ref(),
+                None | Some(Expression::StringLiteral(_) | Expression::NumericLiteral(_))
+            )
+    })
 }
 
 fn chosen_by_check<'k, 'a>(stmt: &'k Statement<'a>, check: &str, holder: &str) -> bool {
@@ -361,8 +396,12 @@ fn chosen_by_check<'k, 'a>(stmt: &'k Statement<'a>, check: &str, holder: &str) -
 
 fn guarded_rotation(inner: &Function<'_>, rotate: &str, source: &str) -> Option<usize> {
     let body = inner.body.as_ref()?;
-    let [object, update, check, chosen] = body.statements.as_slice() else {
-        return None;
+    let (object, update, check, chosen) = match body.statements.as_slice() {
+        [object, update, check, chosen] => (object, update, check, chosen),
+        [object, update, inert, check, chosen] if literal_declaration(inert) => {
+            (object, update, check, chosen)
+        }
+        _ => return None,
     };
     let (holder, Expression::ObjectExpression(cookie)) = declared(object)? else {
         return None;

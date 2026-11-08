@@ -104,6 +104,11 @@ All notable changes to this project are documented in this file. The format is b
   inlined into its caller with its flag set beside it (`o = !0; var o, r = (n, t) => {...}`), and a
   guarded function that declares its result before assigning it.
 
+- Self-defending cookie rotators minified by uglify-js (the counting function declared inside the
+  rotator, the holder assigned in the test or built in a block, the count set through an alias)
+  or by terser (an unused literal declaration, a `var` after the reader's return) are read like
+  the unminified ones: the rotation is applied only when the removal text passes the format check.
+
 - String arrays from old javascript-obfuscator builds (a plain `var a = [...]` with a counting
   rotator and a `var b = function (t, x) { ... a[t -= 0] ... }` decoder) were not found, and the
   run said `no string array found`. They are now decoded when the array is only read by its
