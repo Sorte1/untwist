@@ -11,6 +11,7 @@ use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 use untwist_core::pass::Cx;
 
 use super::checksum::parsed_statement;
+use super::cookie_wrap::wrap_inlined_cookie;
 use super::for_init::hoist_decoded_arrays;
 use super::single_use::declare_single_use_decoder;
 use super::legacy::{incremented, is_countdown, literal_arithmetic, predecrements, pushes_shifted};
@@ -121,7 +122,7 @@ impl<'a> VisitJs<'a> for Counted<'_> {
     }
 }
 
-fn used_only_in<'s, 'a: 's>(
+pub(super) fn used_only_in<'s, 'a: 's>(
     scoping: &Scoping,
     symbol: SymbolId,
     statements: impl Iterator<Item = &'s Statement<'a>>,
@@ -548,6 +549,8 @@ impl<'a> VisitMut<'a> for Inline<'_, 'a, '_> {
                     Kind::Checksum => rewrite_checksum(it, &plan, self.cx),
                 };
                 self.changed += usize::from(rewritten);
+            } else if wrap_inlined_cookie(it, self.cx) {
+                self.changed += 1;
             } else {
                 self.changed += hoist_decoded_arrays(it, self.cx);
             }

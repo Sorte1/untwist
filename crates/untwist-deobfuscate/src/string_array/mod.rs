@@ -48,6 +48,7 @@ mod aliases;
 mod checksum;
 mod cookie;
 mod cookie_minified;
+mod cookie_wrap;
 mod for_init;
 mod inlined;
 pub(crate) mod legacy;
