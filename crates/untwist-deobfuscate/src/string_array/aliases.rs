@@ -1,4 +1,5 @@
 use super::*;
+use oxc_syntax::symbol::SymbolFlags;
 
 pub struct ArrayAlias {
     pub symbol: SymbolId,
@@ -136,6 +137,17 @@ fn root_name_reaches(scoping: &Scoping, alias: SymbolId, root: SymbolId) -> bool
     }
     let name = scoping.symbol_name(root);
     let home = scoping.symbol_scope_id(root);
+    let block_function_alike = scoping.symbol_ids().any(|symbol| {
+        symbol != root
+            && scoping.symbol_name(symbol) == name
+            && scoping.symbol_flags(symbol).contains(SymbolFlags::Function)
+            && !scoping
+                .scope_flags(scoping.symbol_scope_id(symbol))
+                .is_var()
+    });
+    if block_function_alike {
+        return false;
+    }
     scoping.get_resolved_references(alias).all(|reference| {
         let mut seen_home = false;
         let shadowed = scoping
