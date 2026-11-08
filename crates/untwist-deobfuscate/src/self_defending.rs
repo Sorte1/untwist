@@ -76,11 +76,67 @@ fn applies_the_guarded_function(init: &Expression<'_>, context: &str, fn_name: &
         && arguments[1].as_expression().and_then(identifier_name) == Some("arguments")
 }
 
+fn bare_name<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    if declarator.init.is_some() {
+        return None;
+    }
+    binding_name(&declarator.id)
+}
+
+fn guarded_if<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Option<&'k str>, &'k IfStatement<'a>)> {
+    match body {
+        [Statement::IfStatement(statement)] => Some((None, statement)),
+        [declared, Statement::IfStatement(statement)] => {
+            Some((Some(bare_name(declared)?), statement))
+        }
+        _ => None,
+    }
+}
+
+fn applied_result<'k, 'a>(
+    live: &[&'k Statement<'a>],
+    declared: &[&str],
+) -> Option<(
+    &'k str,
+    &'k Expression<'a>,
+    &'k ExpressionStatement<'a>,
+    &'k ReturnStatement<'a>,
+)> {
+    match live {
+        [Statement::VariableDeclaration(declaration), Statement::ExpressionStatement(reset), Statement::ReturnStatement(ret)] =>
+        {
+            let declarator = declaration.declarations.first()?;
+            let result = binding_name(&declarator.id)?;
+            Some((result, declarator.init.as_ref()?, reset, ret))
+        }
+        [declared_here, Statement::ExpressionStatement(applied), Statement::ExpressionStatement(reset), Statement::ReturnStatement(ret)] =>
+        {
+            let result = bare_name(declared_here)?;
+            Some((result, assigned_value(applied, result)?, reset, ret))
+        }
+        [Statement::ExpressionStatement(applied), Statement::ExpressionStatement(reset), Statement::ReturnStatement(ret)] =>
+        {
+            let result = ret.argument.as_ref().and_then(identifier_name)?;
+            if !declared.contains(&result) {
+                return None;
+            }
+            Some((result, assigned_value(applied, result)?, reset, ret))
+        }
+        _ => None,
+    }
+}
+
 fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) -> bool {
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    let [Statement::IfStatement(statement)] = body.statements.as_slice() else {
+    let Some((hoisted, statement)) = guarded_if(&body.statements) else {
         return false;
     };
     if identifier_name(&statement.test) != Some(fn_name) || statement.alternate.is_some() {
@@ -89,23 +145,17 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
     let Statement::BlockStatement(block) = &statement.consequent else {
         return false;
     };
+    let mut declared: Vec<&str> = block.body.iter().filter_map(bare_name).collect();
+    declared.extend(hoisted);
     let live = live_statements(&block.body, &[context, fn_name, "arguments"]);
-    let [Statement::VariableDeclaration(declaration), Statement::ExpressionStatement(reset), Statement::ReturnStatement(ret)] =
-        live.as_slice()
-    else {
-        return false;
-    };
-    let Some(declarator) = declaration.declarations.first() else {
-        return false;
-    };
-    let (Some(result), Some(init)) = (binding_name(&declarator.id), declarator.init.as_ref())
-    else {
+    let Some((result, init, reset, ret)) = applied_result(&live, &declared) else {
         return false;
     };
     applies_the_guarded_function(init, context, fn_name)
         && assigned_value(reset, fn_name)
             .is_some_and(|value| matches!(value, Expression::NullLiteral(_)))
         && ret.argument.as_ref().and_then(identifier_name) == Some(result)
+        && ![context, fn_name].contains(&result)
 }
 
 fn is_empty_function(function: &Function<'_>) -> bool {
@@ -135,7 +185,15 @@ fn chooses_the_guarded_function(init: &Expression<'_>, flag: &str, names: (&str,
 }
 
 fn inner_matches(inner: &Function<'_>, flag: &str) -> bool {
-    let [context, guarded] = inner.params.items.as_slice() else {
+    returner_matches(&inner.params, inner.body.as_deref(), flag)
+}
+
+fn returner_matches(
+    params: &FormalParameters<'_>,
+    body: Option<&FunctionBody<'_>>,
+    flag: &str,
+) -> bool {
+    let [context, guarded] = params.items.as_slice() else {
         return false;
     };
     let (Some(context), Some(fn_name)) = (
@@ -144,7 +202,7 @@ fn inner_matches(inner: &Function<'_>, flag: &str) -> bool {
     ) else {
         return false;
     };
-    let Some(body) = inner.body.as_ref() else {
+    let Some(body) = body else {
         return false;
     };
     let live = live_statements(&body.statements, &[flag]);
@@ -164,14 +222,29 @@ fn inner_matches(inner: &Function<'_>, flag: &str) -> bool {
         && ret.argument.as_ref().and_then(identifier_name) == Some(rfn)
 }
 
-pub fn is_call_controller(expr: &Expression<'_>) -> bool {
-    let Some((outer, arguments)) = iife(expr) else {
-        return false;
-    };
-    if !arguments.is_empty() || !outer.params.items.is_empty() {
-        return false;
+fn controller_body<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k FunctionBody<'a>> {
+    if let Some((outer, arguments)) = iife(expr) {
+        if !arguments.is_empty() || !outer.params.items.is_empty() {
+            return None;
+        }
+        return outer.body.as_deref();
     }
-    let Some(body) = outer.body.as_ref() else {
+    let (callee, arguments) = call_parts(expr)?;
+    let Expression::ArrowFunctionExpression(arrow) = callee.without_parentheses() else {
+        return None;
+    };
+    let ArrowFunctionBody::FunctionBody(body) = &arrow.body else {
+        return None;
+    };
+    let plain = arguments.is_empty()
+        && arrow.params.items.is_empty()
+        && arrow.params.rest.is_none()
+        && !arrow.r#async;
+    plain.then_some(&**body)
+}
+
+pub fn is_call_controller(expr: &Expression<'_>) -> bool {
+    let Some(body) = controller_body(expr) else {
         return false;
     };
     let live = live_statements(&body.statements, &[]);
@@ -227,6 +300,9 @@ fn controller_variable(
 ) -> Option<SymbolId> {
     let (id, init) = single_declarator(stmt)?;
     let (callee, _) = call_parts(init?)?;
+    if is_call_controller(callee.without_parentheses()) {
+        return id.symbol_id.get();
+    }
     let controller = reference_symbol(callee, scoping)?;
     if !controllers.contains(&controller) {
         return None;
@@ -256,17 +332,65 @@ fn shell_statements<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k AVec<'a, Stat
     Some(&function.body.as_ref()?.statements)
 }
 
+fn set_flag<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return None;
+    };
+    let Expression::AssignmentExpression(assignment) = &stmt.expression else {
+        return None;
+    };
+    let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
+        return None;
+    };
+    (assignment.operator == AssignmentOperator::Assign && is_true_literal(&assignment.right))
+        .then_some(target.name.as_str())
+}
+
+fn returner(expr: &Expression<'_>, flags: &[&str]) -> bool {
+    let (params, body) = match expr.without_parentheses() {
+        Expression::FunctionExpression(function) if function.id.is_none() => {
+            (&function.params, function.body.as_deref())
+        }
+        Expression::ArrowFunctionExpression(arrow) if !arrow.r#async => match &arrow.body {
+            ArrowFunctionBody::FunctionBody(body) => (&arrow.params, Some(&**body)),
+            _ => return false,
+        },
+        _ => return false,
+    };
+    flags
+        .iter()
+        .any(|flag| returner_matches(params, body, flag))
+}
+
+fn flag_controller(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
+    let (id, init) = single_declarator(stmt)?;
+    returner(init?, flags).then(|| id.symbol_id.get()).flatten()
+}
+
 #[derive(Default)]
 struct Controllers {
     found: FxHashSet<SymbolId>,
+    inline: bool,
+}
+
+fn inline_controller_call(stmt: &Statement<'_>) -> bool {
+    let Some((_, Some(init))) = single_declarator(stmt) else {
+        return false;
+    };
+    call_parts(init).is_some_and(|(callee, _)| is_call_controller(callee.without_parentheses()))
 }
 
 impl<'a> VisitJs<'a> for Controllers {
     fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
+        let flags: Vec<&str> = it.iter().filter_map(set_flag).collect();
         for stmt in it {
             if let Some(symbol) = controller_declaration(stmt) {
                 self.found.insert(symbol);
             }
+            if let Some(symbol) = flag_controller(stmt, &flags) {
+                self.found.insert(symbol);
+            }
+            self.inline |= inline_controller_call(stmt);
         }
         walk_js::walk_statements(self, it);
     }
@@ -289,7 +413,10 @@ impl Removals<'_> {
     }
 
     fn record(&mut self, stmt: &Statement<'_>) -> bool {
-        if self.is_shell(stmt) || controller_declaration(stmt).is_some() {
+        let declared = single_declarator(stmt)
+            .and_then(|(id, _)| id.symbol_id.get())
+            .is_some_and(|symbol| self.controllers.contains(&symbol));
+        if self.is_shell(stmt) || controller_declaration(stmt).is_some() || declared {
             self.spans.push(stmt.span());
             return true;
         }
@@ -342,7 +469,7 @@ enum Plan {
 fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
     let mut controllers = Controllers::default();
     controllers.visit_program(program);
-    if controllers.found.is_empty() {
+    if controllers.found.is_empty() && !controllers.inline {
         return Plan::Nothing;
     }
     let mut removals = Removals {
