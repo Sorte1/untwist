@@ -615,4 +615,3 @@
 2.13.0--b64-rot-noshuf-shift-inum-w1-t1-keys--wp4-bundle--uglify--*	unsafe	machinery	xfail	unexplained-decode-miss: MISSED: the unit keeps every reference undecoded and no pass says why
 2.13.0--b64-rot-noshuf-shift-inum-w1-t1-keys--wp4-bundle--uglify--*	unsafe	simplified	xfail	unexplained-decode-miss: MISSED: the unit keeps every reference undecoded and no pass says why
 2.14.0--b64-norot-shuf-shift-inum-w2f5-t1-cff--wp4-bundle--uglify--*	unsafe	machinery	xfail	unexplained-decode-miss: MISSED: the unit keeps every reference undecoded and no pass says why
-2.14.0--plain-norot-noshuf-noshift-inum-w2f5-t1-self--top--uglify--*	unsafe	machinery	xfail	unexplained-decode-miss: MISSED: the unit keeps every reference undecoded and no pass says why
