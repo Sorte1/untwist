@@ -1,5 +1,6 @@
 # lane (safe|unsafe|*)	cause-key	reason
 # Open gaps the obfuscation fuzzer has already found; cargo xtask obf-fuzz fails on any other cause. Remove a line when its cause is fixed.
+safe	builtin-alias-patched	a write through a variable, parameter, this or computed object that may hold a standard built-in could replace one the unit uses, so the default lane refuses; --unsafe assumes the built-ins are untouched (first seen in seed 2026 sample s2026-85)
 safe	builtin-replaced-decoded-key	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch (first seen in seed 2026 sample s2026-206)
 unsafe	debug-protection/a-debug-protection-function-was-found-but-a	a stateful decoder referenced outside the calls untwist proves keeps a reference to the debug protection function (first seen in seed 2026 sample s2026-1963)
 unsafe	deobfuscate/direct-eval-may-reach-the-decoder-by-a	a direct eval may reach the decoder by a name a later stage renames or removes (first seen in seed 2026 sample s2026-6)
