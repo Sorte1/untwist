@@ -25,11 +25,7 @@ pub(super) fn block_function_rebinds(
     let Some(home) = var_scope(scoping, scoping.symbol_scope_id(symbol)) else {
         return false;
     };
-    let Some(container) = id
-        .symbol_id
-        .get()
-        .map(|own| scoping.symbol_scope_id(own))
-    else {
+    let Some(container) = id.symbol_id.get().map(|own| scoping.symbol_scope_id(own)) else {
         return true;
     };
     container != home && var_scope(scoping, container) == Some(home)
@@ -272,17 +268,24 @@ impl OrderScan<'_> {
             self.aliased = true;
             return;
         }
-        self.plain_bindings.extend(params.items.iter().filter_map(|param| match &param.pattern {
-            BindingPattern::BindingIdentifier(id) => Some(id.span),
-            _ => None,
-        }));
+        self.plain_bindings.extend(
+            params
+                .items
+                .iter()
+                .filter_map(|param| match &param.pattern {
+                    BindingPattern::BindingIdentifier(id) => Some(id.span),
+                    _ => None,
+                }),
+        );
         self.declared = Some(self.boundary());
     }
 }
 
 impl<'a> VisitJs<'a> for OrderScan<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        if block_function_rebinds(self.scoping, it, self.symbol) && !crate::mutants::declarator_writes_ignored() {
+        if block_function_rebinds(self.scoping, it, self.symbol)
+            && !crate::mutants::declarator_writes_ignored()
+        {
             self.aliased = true;
         }
         self.enter_boundary();

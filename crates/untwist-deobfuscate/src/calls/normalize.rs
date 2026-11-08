@@ -313,7 +313,8 @@ fn assignment_slots(
             value: assignment.value,
         });
     }
-    let initialised = !facts.initialised_in.is_empty() && !crate::mutants::declarator_writes_ignored();
+    let initialised =
+        !facts.initialised_in.is_empty() && !crate::mutants::declarator_writes_ignored();
     if initialised && slots.iter().any(|slot| slot.index <= anchor.index()) {
         return None;
     }
