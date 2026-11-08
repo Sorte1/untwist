@@ -15,5 +15,6 @@ safe	safe-decode-step-budget	decoding runs out of the evaluator's step budget (f
 safe	safe-domain-lock-reach	the domain lock's own for-in scan of the global object is a global reach (first seen in seed 2026 sample s2026-19)
 safe	safe-global-key-reach	the program may hold the global object and reaches keys the check cannot resolve (first seen in seed 2026 sample s2026-0)
 safe	safe-global-names	code may observe the global object's names (a non-strict this, require), so the machinery is kept; a sound refusal only where the program prints those names
+*	stateful-decoder-escape	a stateful base64 or rc4 decoder is also reached through calls whose arguments are not proven (wrappers reading locals of an enclosing function), so the unit is refused (first seen in seed 2026 sample s2026-967)
 *	stateful-decoder-state	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate (first seen in seed 2026 sample s2026-245)
 *	unexplained-decode-miss	machinery is kept and no pass says why (a control-flow switch case binding collides; in the safe lane a terser-folded rotator has no checksum) (first seen in seed 2026 sample s2026-1021)
