@@ -4,6 +4,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, 
 use oxc_syntax::scope::ScopeFlags;
 use untwist_core::ast_util::matcher::{call_parts, iife};
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
+use untwist_core::pass::Cx;
 
 const GRAB_TEXTS: [&str; 2] = [
     "return (function() {}.constructor(\"return this\")( ));",
@@ -102,7 +103,7 @@ fn grabbing_try(attempt: &TryStatement<'_>, name: &str) -> bool {
     attempt.finalizer.is_none() && caught && grabs_in_block(&attempt.block, name)
 }
 
-fn single<'k, 'a>(block: &'k BlockStatement<'a>) -> Option<&'k Statement<'a>> {
+pub(super) fn single<'k, 'a>(block: &'k BlockStatement<'a>) -> Option<&'k Statement<'a>> {
     match block.body.as_slice() {
         [stmt] => Some(stmt),
         _ => None,
@@ -117,8 +118,22 @@ fn is_grab_function(function: &Function<'_>) -> bool {
     let Some(body) = function.body.as_ref() else {
         return false;
     };
+    is_grab_body(&body.statements)
+}
+
+fn is_grab_arrow(arrow: &ArrowFunctionExpression<'_>) -> bool {
+    let ArrowFunctionBody::FunctionBody(body) = &arrow.body else {
+        return false;
+    };
+    !arrow.r#async
+        && arrow.params.items.is_empty()
+        && arrow.params.rest.is_none()
+        && is_grab_body(&body.statements)
+}
+
+fn is_grab_body(statements: &[Statement<'_>]) -> bool {
     let [Statement::VariableDeclaration(declaration), Statement::TryStatement(attempt), Statement::ReturnStatement(ret)] =
-        body.statements.as_slice()
+        statements
     else {
         return false;
     };
@@ -138,18 +153,30 @@ fn grab_call(expr: &Expression<'_>, grabs: &[&str]) -> bool {
     if let Some((function, arguments)) = iife(expr.without_parentheses()) {
         return arguments.is_empty() && is_grab_function(function);
     }
+    if let Some((callee, arguments)) = call_parts(expr.without_parentheses()) {
+        if let Expression::ArrowFunctionExpression(arrow) = callee.without_parentheses() {
+            return arguments.is_empty() && is_grab_arrow(arrow);
+        }
+    }
     call_parts(expr.without_parentheses()).is_some_and(|(callee, arguments)| {
         arguments.is_empty() && identifier_name(callee).is_some_and(|name| grabs.contains(&name))
     })
 }
 
-fn polyfills(stmt: &Statement<'_>, holders: &[&str]) -> bool {
+pub(super) fn polyfills(stmt: &Statement<'_>, holders: &[&str]) -> bool {
     let Statement::ExpressionStatement(stmt) = stmt else {
         return false;
     };
     let Expression::LogicalExpression(logical) = stmt.expression.without_parentheses() else {
         return false;
     };
+    let Some((holder, _)) = member_parts(logical.left.without_parentheses()) else {
+        return false;
+    };
+    identifier_name(holder).is_some_and(|name| holders.contains(&name)) && polyfill_of(logical)
+}
+
+fn polyfill_of(logical: &LogicalExpression<'_>) -> bool {
     let Some((holder, key)) = member_parts(logical.left.without_parentheses()) else {
         return false;
     };
@@ -175,12 +202,18 @@ fn polyfills(stmt: &Statement<'_>, holders: &[&str]) -> bool {
     let Some((written_holder, same_key)) = written else {
         return false;
     };
-    let holder = identifier_name(holder);
+    let holder = match holder.without_parentheses() {
+        Expression::AssignmentExpression(assigned) => match &assigned.left {
+            AssignmentTarget::AssignmentTargetIdentifier(id) => Some(id.name.as_str()),
+            _ => None,
+        },
+        other => identifier_name(other),
+    };
     logical.operator == LogicalOperator::Or
         && key == POLYFILLED
         && same_key
         && assignment.operator == AssignmentOperator::Assign
-        && holder.is_some_and(|name| holders.contains(&name))
+        && holder.is_some()
         && identifier_name(written_holder) == holder
         && matches!(assignment.right, Expression::FunctionExpression(_))
 }
@@ -250,15 +283,77 @@ pub(super) fn is_atob_prologue(expr: &Expression<'_>) -> bool {
         && is_prologue_body(&body.statements)
 }
 
-struct Strip {
+pub(super) fn assigned_grab<'k, 'a>(logical: &'k LogicalExpression<'a>) -> bool {
+    let Some((holder, _)) = member_parts(logical.left.without_parentheses()) else {
+        return false;
+    };
+    let Expression::AssignmentExpression(assigned) = holder.without_parentheses() else {
+        return false;
+    };
+    assigned.operator == AssignmentOperator::Assign
+        && matches!(
+            assigned.left,
+            AssignmentTarget::AssignmentTargetIdentifier(_)
+        )
+        && grab_call(&assigned.right, &[])
+        && polyfill_of(logical)
+}
+
+fn declared_grab<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+        return None;
+    };
+    (declaration.kind == VariableDeclarationKind::Var
+        && declarator.init.as_ref().is_some_and(calls_code_text))
+    .then_some(id.name.as_str())
+}
+
+pub(super) fn inline_grab<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
+    let Statement::TryStatement(attempt) = stmt else {
+        return None;
+    };
+    let handler = attempt.handler.as_ref()?;
+    let inner = single(&attempt.block)?;
+    let name = declared_grab(inner).or_else(|| match inner {
+        Statement::ExpressionStatement(node) => match &node.expression {
+            Expression::AssignmentExpression(assigned) => match &assigned.left {
+                AssignmentTarget::AssignmentTargetIdentifier(id)
+                    if calls_code_text(&assigned.right) =>
+                {
+                    Some(id.name.as_str())
+                }
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    })?;
+    let caught = single(&handler.body)
+        .and_then(|stmt| assigns(stmt, name))
+        .and_then(identifier_name)
+        == Some("window");
+    (attempt.finalizer.is_none() && caught).then_some(name)
+}
+
+struct Strip<'c, 'a, 'x> {
+    cx: &'c Cx<'a, 'x>,
     depth: usize,
     removed: usize,
 }
 
-impl<'a> VisitMut<'a> for Strip {
+impl<'a> VisitMut<'a> for Strip<'_, 'a, '_> {
     fn visit_function(&mut self, it: &mut Function<'a>, flags: ScopeFlags) {
         self.depth += 1;
         if self.depth == 1 {
+            if let Some(body) = it.body.as_mut() {
+                self.removed += super::prologue_inline::strip_inline_prologues(body, self.cx);
+            }
             walk_mut::walk_function(self, it, flags);
         }
         self.depth -= 1;
@@ -283,8 +378,9 @@ impl<'a> VisitMut<'a> for Strip {
     }
 }
 
-pub(super) fn strip_atob_prologues(decoder: &mut Statement<'_>) -> usize {
+pub(super) fn strip_atob_prologues<'a>(decoder: &mut Statement<'a>, cx: &Cx<'a, '_>) -> usize {
     let mut strip = Strip {
+        cx,
         depth: 0,
         removed: 0,
     };
