@@ -181,7 +181,6 @@ impl<'s, 'p> VisitJs<'p> for Search<'s, 'p> {
         }
         walk_js::walk_sequence_expression(self, it);
     }
-
 }
 
 struct Uses<'s> {
@@ -235,13 +234,11 @@ fn runs_after(
     if wrapper_constants_trusted() {
         return true;
     }
-    references
-        .get(&wrapper.symbol)
-        .is_some_and(|references| {
-            references
-                .iter()
-                .all(|(span, function)| span.start > declared.end && *function == wrapper.function)
-        })
+    references.get(&wrapper.symbol).is_some_and(|references| {
+        references
+            .iter()
+            .all(|(span, function)| span.start > declared.end && *function == wrapper.function)
+    })
 }
 
 pub(crate) fn inline_wrapper_constants<'a>(
