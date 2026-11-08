@@ -213,7 +213,7 @@ fn last_resort(lane: &str, detail: &str, note: &str, notes: &[String]) -> Option
     if note.contains(refusals::INTERPRETED) {
         return Some(later_cause(lane, notes));
     }
-    if note.is_empty() {
+    if note.is_empty() || note.contains(refusals::GUARD_ON_ONE_LINE) {
         return refusals::residue_of(detail);
     }
     refusals::refusal_of(note).or_else(|| {
@@ -589,6 +589,15 @@ mod tests {
                 .contains(&format!("{NAMES}: the reason as worded now")),
             "{}",
             suggestion.text
+        );
+    }
+
+    #[test]
+    fn a_guard_printed_on_one_line_leaves_the_self_defending_residue_as_the_cause() {
+        let note = format!("note: pipeline: {} 1", untwist::GUARD_ON_ONE_LINE);
+        assert_eq!(
+            last_resort("safe", "call_controllers=4", &note, &[]),
+            Some("missed-self-defending")
         );
     }
 
