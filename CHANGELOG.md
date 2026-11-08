@@ -47,6 +47,12 @@ All notable changes to this project are documented in this file. The format is b
   index shift written as `t -= 0`, and a base64 helper's own locals no longer count as reads of the
   decoder's second parameter when they share its name.
 
+- A decoder argument read from a local is no longer replaced by an earlier literal assignment when
+  the local is written again by its own declaration's initialiser, a later `var` with an
+  initialiser, a destructuring declaration, a `for (var ... in/of)` head or a sloppy-mode block
+  function: `var t = a[(t = -937, d(t))](0); f(t)` replaced the later `t` with `-937` in both lanes.
+  Chained literal writes such as `e = t = -937` now count as literal assignments of both locals.
+
 - The dead-code pass now also folds a constant-test conditional whose chosen branch is a member
   read (`"ab" === "cd" ? module.x : d[x]`), as dead-code injection leaves them inside functions;
   it still keeps the conditional when it is called or used as a template tag, where folding would
