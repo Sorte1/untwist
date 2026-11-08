@@ -23,7 +23,7 @@ use crate::units::MachineryDepth;
 
 use super::global_bindings::global_bindings;
 use super::sequenced::{chained_literal, ordered_values};
-use super::variables::{variable_facts, Assignment, VariableFacts};
+use super::variables::{variable_facts, Assignment, VariableFacts, Variables};
 use super::{decoder_call, is_splittable_branch};
 
 #[derive(Default, Hash)]
@@ -548,6 +548,59 @@ fn plan_externals<'a>(
         } else {
             inline_assigned_variable(program, &facts, symbol, order, cx, edits, removals);
         }
+    }
+    let sources = constant_sources(program, &variables, symbols, cx.scoping());
+    if !sources.is_empty() {
+        plan_externals(program, &sources, order, cx, edits, removals);
+    }
+}
+
+fn constant_sources(
+    program: &Program<'_>,
+    variables: &Variables,
+    symbols: &[SymbolId],
+    scoping: &Scoping,
+) -> Vec<SymbolId> {
+    let mut found = Vec::new();
+    for (index, symbol) in symbols.iter().enumerate() {
+        if is_constant_binding(scoping, *symbol) {
+            continue;
+        }
+        let Some(facts) = variables.facts(index) else {
+            continue;
+        };
+        for assignment in facts.assignments {
+            let Some(value) = expression_at(program, assignment.value) else {
+                continue;
+            };
+            if !is_literal_argument(value) && literal_shape(value) {
+                collect_symbols(value, scoping, &mut found);
+            }
+        }
+    }
+    let mut seen = FxHashSet::default();
+    found
+        .into_iter()
+        .filter(|symbol| is_constant_binding(scoping, *symbol) && !symbols.contains(symbol))
+        .filter(|symbol| seen.insert(*symbol))
+        .collect()
+}
+
+fn literal_shape(expr: &Expression<'_>) -> bool {
+    match expr.without_parentheses() {
+        Expression::NumericLiteral(_)
+        | Expression::StringLiteral(_)
+        | Expression::Identifier(_) => true,
+        Expression::UnaryExpression(unary) => {
+            matches!(
+                unary.operator,
+                UnaryOperator::UnaryNegation | UnaryOperator::UnaryPlus
+            ) && literal_shape(&unary.argument)
+        }
+        Expression::BinaryExpression(binary) => {
+            literal_shape(&binary.left) && literal_shape(&binary.right)
+        }
+        _ => false,
     }
 }
 
