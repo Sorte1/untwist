@@ -301,13 +301,25 @@ fn a_controller_with_injected_dead_code_and_proxy_tables_runs_like_its_input() {
 }
 
 #[test]
-fn the_site_memo_reset_sample_loses_its_self_defending_check_in_the_default_lane() {
+fn the_site_memo_reset_sample_loses_its_self_defending_check_under_unsafe() {
     let path = format!(
         "{}/../../fixtures/reference/deobfuscate/obfuscator.io-site-memo-reset.js",
         env!("CARGO_MANIFEST_DIR")
     );
     let source = std::fs::read_to_string(path).unwrap();
-    let out = Pipeline::new(Options::default()).run(&source);
+    let default = Pipeline::new(Options::default()).run(&source);
+    assert!(
+        default.notes.iter().any(|note| note
+            .message
+            .starts_with(untwist_deobfuscate::notes::BUILTIN_ALIAS_PATCHED)),
+        "{:?}",
+        default.notes
+    );
+    let out = Pipeline::new(Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    })
+    .run(&source);
     let code = out.code();
     assert!(!code.contains("(((.+)+)+)+$"), "{code}");
     assert!(code.contains("console.log(\"\")"), "{code}");

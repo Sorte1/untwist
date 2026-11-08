@@ -25,8 +25,9 @@ use crate::calls::normalize_calls;
 use crate::mutants::unsafe_names_trusted;
 use crate::notes;
 use crate::proof::{
-    build_escape_context, builtins_assumed_pristine, encode_names, names_machinery,
-    reachable_by_name, scan_pending, EscapeContext, PendingSite, PreScan, ProtoWrite,
+    alias_refusal, alias_sites, build_escape_context, builtin_aliases, builtins_assumed_pristine,
+    encode_names, names_machinery, reachable_by_name, scan_pending, AliasSite, EscapeContext,
+    PendingSite, PreScan, ProtoWrite,
 };
 use crate::stamp::{
     is_unedited, unstamp_block_note, unstamp_blocked, unstamp_names, DynamicScopes, RefusedByDecode,
@@ -466,7 +467,10 @@ struct DecodeLimits<'d> {
     defer_disabled: bool,
     nested_root: bool,
     unsafe_lane: bool,
+    alias_checks: bool,
 }
+
+pub const BUILTIN_ALIAS_CHECKS: &str = "inline-decoded-strings/builtin-alias-checks";
 
 fn reads_prototypes(runs: &[UnitRun<'_, '_>]) -> bool {
     runs.iter().any(|run| !run.evaluator.proto_reads.is_empty())
@@ -503,10 +507,20 @@ fn decode_program(
     if runs.is_empty() && decoded.notes.is_empty() {
         return (Outcome::Nothing, deferred);
     }
+    let alias_refused = if limits.unsafe_lane || !limits.alias_checks {
+        FxHashMap::default()
+    } else {
+        alias_refusals((program, scoping), &runs)
+    };
+    let aliased_refusal = !alias_refused.is_empty();
+    if aliased_refusal && !limits.defer_disabled && limits.defer_budget.get() > 0 {
+        limits.defer_budget.set(limits.defer_budget.get() - 1);
+        return (Outcome::Nothing, true);
+    }
 
     let code_text = judge_runs(
         &mut decoded,
-        runs,
+        (runs, &alias_refused),
         &plan,
         (program, scoping, limits.nested_root),
         (&mut cache, heap),
@@ -581,9 +595,69 @@ fn unsafe_reach<'p>(
     reach::watched(program, scoping, runs)?.syntactically_reached((program, scoping), plan, runs)
 }
 
+fn aliased_writes(
+    (program, scoping): (&Program<'_>, &Scoping),
+    runs: &[UnitRun<'_, '_>],
+) -> Vec<AliasSite> {
+    let mut decoded = FxHashMap::default();
+    for run in runs.iter().filter(|run| run.request.reliance.is_none()) {
+        let Ok(values) = &run.result else {
+            continue;
+        };
+        for (call, value) in run.request.calls.iter().zip(values) {
+            if let Some(DecodedValue::Str(text)) = value {
+                if let Some(text) = text.as_string() {
+                    decoded.insert(call.span, text);
+                }
+            }
+        }
+    }
+    alias_sites(program, &builtin_aliases(program, scoping, decoded), &[])
+}
+
+thread_local! {
+    static ALIAS_REFUSED: std::cell::RefCell<FxHashMap<usize, (String, Span)>> =
+        std::cell::RefCell::new(FxHashMap::default());
+}
+
+pub(crate) fn forget_alias_refusals() {
+    ALIAS_REFUSED.with(|refused| refused.borrow_mut().clear());
+}
+
+fn alias_refusals(
+    (program, scoping): (&Program<'_>, &Scoping),
+    runs: &[UnitRun<'_, '_>],
+) -> FxHashMap<usize, (String, Span)> {
+    ALIAS_REFUSED.with(|cell| {
+        let mut cached = cell.borrow_mut();
+        let known = runs
+            .iter()
+            .all(|run| cached.contains_key(&run.request.unit));
+        if !known {
+            let sites = aliased_writes((program, scoping), runs);
+            for run in runs {
+                if cached.contains_key(&run.request.unit) {
+                    continue;
+                }
+                if let Some(refusal) =
+                    alias_refusal(&sites, &run.request.guard.used, program.source_text)
+                {
+                    cached.insert(run.request.unit, (refusal.message(), refusal.span));
+                }
+            }
+        }
+        runs.iter()
+            .filter_map(|run| {
+                let unit = run.request.unit;
+                cached.get(&unit).map(|found| (unit, found.clone()))
+            })
+            .collect()
+    })
+}
+
 fn judge_runs<'p>(
     decoded: &mut Decoded,
-    runs: Vec<UnitRun<'p, '_>>,
+    (runs, alias_refused): (Vec<UnitRun<'p, '_>>, &FxHashMap<usize, (String, Span)>),
     plan: &DecodePlan<'p>,
     (program, scoping, nested_root): (&'p Program<'p>, &Scoping, bool),
     (cache, heap): (&mut ScanCache, &mut InputHeap),
@@ -631,6 +705,10 @@ fn judge_runs<'p>(
                     Some(span),
                 ));
             }
+            continue;
+        }
+        if let Some((message, span)) = alias_refused.get(&run.request.unit) {
+            decoded.notes.push((message.clone(), Some(*span)));
             continue;
         }
         let judged = (&value_map, &mut *heap, late.unwrap_or_default());
@@ -776,6 +854,7 @@ impl<'a> Pass<'a> for InlineDecodedStrings {
             defer_disabled: cx.defer_disabled(),
             nested_root: cx.opts.nested_root,
             unsafe_lane: cx.opts.unsafe_transforms,
+            alias_checks: !cx.opts.rule_disabled(BUILTIN_ALIAS_CHECKS),
         };
         let mut heap = self.heap.borrow_mut();
         heap.start(

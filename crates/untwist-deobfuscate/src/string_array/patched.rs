@@ -3,13 +3,15 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::operator::UnaryOperator;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::search::statements_at;
 
 use crate::mutants::legacy_rotation_patches_trusted;
+use crate::notes;
 use crate::proof::{
-    patch_refusal, record_definer_patch, record_identifier_patch, record_member_patch,
-    statement_used_names, PatchKey, PatchSite, UsedNames,
+    alias_refusal, alias_sites, builtin_aliases, patch_refusal, record_definer_patch,
+    record_identifier_patch, record_member_patch, statement_used_names, PatchKey, PatchSite,
+    UsedNames,
 };
 
 #[derive(Default)]
@@ -56,27 +58,36 @@ fn unused_key(key: PatchKey<'_>, used: &UsedNames<'_>) -> bool {
 pub(super) fn rotator_builtins_patched(
     program: &Program<'_>,
     scoping: &Scoping,
-    rotator: Span,
-) -> Option<Span> {
+    (rotator, keys): (Span, FxHashMap<Span, String>),
+) -> Option<(String, Span)> {
     if legacy_rotation_patches_trusted() {
         return None;
     }
     let Some(Some(statement)) = statements_at(program, &[rotator]).into_iter().next() else {
-        return Some(rotator);
+        return Some((notes::BUILTIN_PATCHED.to_string(), rotator));
     };
     let used = statement_used_names(scoping, statement);
     let mut scan = PatchScan::default();
     scan.visit_program(program);
     let verdict = patch_refusal(&scan.sites, scoping, &used, &FxHashSet::default());
     if let Some(refusal) = verdict.refusal {
-        return Some(refusal.span);
+        return Some((refusal.message(), refusal.span));
     }
     if let Some(pending) = verdict.pending_prototypes.first() {
-        return Some(pending.root_key);
+        return Some((notes::BUILTIN_PATCHED.to_string(), pending.root_key));
     }
-    verdict
+    if let Some(write) = verdict
         .proto_writes
         .iter()
         .find(|write| !unused_key(write.key, &used))
-        .map(|write| write.span)
+    {
+        return Some((notes::BUILTIN_PATCHED.to_string(), write.span));
+    }
+    let aliases = builtin_aliases(program, scoping, keys);
+    alias_refusal(
+        &alias_sites(program, &aliases, &[rotator]),
+        &used,
+        program.source_text,
+    )
+    .map(|refusal| (refusal.message(), refusal.span))
 }

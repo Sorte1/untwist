@@ -224,6 +224,12 @@ pub const BUILTIN_PATCHED: &str =
     "the program replaces a standard built-in that the unit's decoders or rotator use, so \
      decoding with the standard one is not proven, and the unit's call sites were left alone";
 
+pub const BUILTIN_ALIAS_PATCHED: &str =
+    "the program may replace a standard built-in that the unit's decoders or rotator use through \
+     a variable, parameter, `this` or computed object that can hold it, so decoding with the \
+     standard one is not proven, and the unit's call sites were left alone (`--unsafe` assumes the \
+     built-ins are untouched and decodes it)";
+
 pub const DECODED_NAME: &str =
     "a decoded string spells the name of this string array or one of its decoders, so code built \
      from it may reach the machinery; the unit was left undecoded under its original names";
@@ -605,6 +611,7 @@ catalogue!(
     DECODER_NOT_READ_ONLY,
     DECODER_READS_OUTER_BINDING,
     BUILTIN_PATCHED,
+    BUILTIN_ALIAS_PATCHED,
     UNSTAMP_BLOCKED,
     MACHINERY_REFERENCES_KEPT,
     MACHINERY_NOT_A_LIST_MEMBER,

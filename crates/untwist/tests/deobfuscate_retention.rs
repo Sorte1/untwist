@@ -74,6 +74,13 @@ fn assert_high_decodes_fully(label: &str, source: &str, observed: bool) {
     for (mode, options) in modes() {
         let output = Pipeline::new(options).run(source);
         let label_mode = format!("{label} ({mode})");
+        if mode == "default" {
+            let aliased = decode_notes(&output)
+                .iter()
+                .any(|note| note.starts_with(untwist_deobfuscate::notes::BUILTIN_ALIAS_PATCHED));
+            assert!(aliased, "{label_mode}: {:?}", decode_notes(&output));
+            continue;
+        }
         if observed {
             assert_machinery_kept_under_name_observation(&label_mode, &output);
         } else {
@@ -89,12 +96,12 @@ fn assert_high_decodes_fully(label: &str, source: &str, observed: bool) {
 }
 
 #[test]
-fn the_high_preset_decodes_fully_in_both_modes() {
+fn the_high_preset_decodes_fully_under_unsafe_and_names_its_alias_write_by_default() {
     assert_high_decodes_fully("high", HIGH, false);
 }
 
 #[test]
-fn the_high_preset_beside_a_core_js_style_polyfill_decodes_fully_in_both_modes() {
+fn the_high_preset_beside_a_core_js_style_polyfill_decodes_fully_under_unsafe() {
     let source = format!("{HIGH}\n{CORE_JS_STYLE_POLYFILL}");
     assert_high_decodes_fully("high + polyfill", &source, true);
 }

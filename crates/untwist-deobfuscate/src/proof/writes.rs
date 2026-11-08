@@ -103,7 +103,7 @@ pub struct PatchVerdict<'a> {
     pub proto_writes: Vec<ProtoWrite<'a>>,
 }
 
-fn is_pending_key(call: &CallExpression<'_>) -> bool {
+pub(crate) fn is_pending_key(call: &CallExpression<'_>) -> bool {
     let decoder = matches!(&call.callee, Expression::Identifier(id)
         if decoder_index(id.name.as_str()).is_some());
     decoder
@@ -396,6 +396,10 @@ enum Decision<'a> {
     Protected(ProtoWrite<'a>),
 }
 
+fn key_named_used(key: PatchKey<'_>, used: &UsedNames<'_>) -> bool {
+    matches!(key, PatchKey::Named(name) if used.uses(name))
+}
+
 fn decide<'a>(
     site: &PatchSite<'a>,
     used: &UsedNames<'_>,
@@ -403,6 +407,7 @@ fn decide<'a>(
 ) -> Decision<'a> {
     let protected = protected_root(site);
     match (site.prototype, protected) {
+        (Prototype::ProtoChain, _) if key_named_used(site.key, used) => return Decision::Refuse,
         (Prototype::ProtoChain, _) => return protected_write(site, ProtoRoot::Either, None),
         (Prototype::No, Some(root)) if site.key == PatchKey::Named(SPECIES) => {
             return protected_write(site, root, None)
