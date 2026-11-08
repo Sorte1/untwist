@@ -52,7 +52,7 @@ const NEAR_MISSES: &[(&str, &[&str])] = &[
     ),
     (
         "function a() { var h = ['x']; a = function () { return h; }; return a(); }\nfunction b(c, d) { var e = a(); return e[c] + d.charAt(0); }\nfunction w(x) { return b(x); }\nw(0);",
-        &["function b(c, d)", "function w("],
+        &["function b(c, d)", "b(0);"],
     ),
 ];
 

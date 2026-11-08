@@ -48,6 +48,7 @@ mod aliases;
 mod checksum;
 mod cookie;
 mod cookie_minified;
+mod cookie_wrap;
 mod for_init;
 mod inlined;
 pub(crate) mod legacy;
@@ -57,6 +58,7 @@ mod positions;
 mod prologue;
 mod prologue_inline;
 mod reach;
+mod single_use;
 
 use aliases::{resolve_array_aliases, search_aliases};
 

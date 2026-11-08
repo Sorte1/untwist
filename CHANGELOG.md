@@ -12,6 +12,10 @@ All notable changes to this project are documented in this file. The format is b
   note names one, also behind "no string array found" in the option matrix and behind kept
   machinery, instead of calling it an unexplained miss.
 
+- The matrices also name a decoder wrapper left in place because it is declared in a block
+  (`wrapper-binding-unstable`) and a decode that bails on a const the evaluator cannot prove is
+  initialised (`decoder-reads-tdz-binding`).
+
 - Top-level calls to a small local function that updates top-level state are folded in the
   default lane when every argument is a literal: `console[test(2)](test(0), test(1), counter)`
   becomes `console.log("hello", "world", 3)`, and the function and its state are removed. The
@@ -126,6 +130,28 @@ All notable changes to this project are documented in this file. The format is b
   `for (;;) { try { ... } catch (e) { ... } }` loop after aliases of the array and the decoder.
   The loop and the aliases only it uses are wrapped back into the rotator function. A checksum
   rotator whose parameter reuses the array's name is accepted too.
+
+- uglify-js folds a plain string array into the head of the next `for (var ...)` loop
+  (`for (var e = ["..."], x = [o("0x1")], l = 0; ...)`). When a function beside the loop reads
+  the array, the leading array declarations are moved in front of the loop, so the array is found.
+
+- terser inlines a decoder that is called once into its call site, either as a function called in
+  place (`console[function (n) { return f[n -= 0]; }("0x0")]`) or as a sequence through a variable
+  (`var c; console[(c = "0x0", f[c -= 0])]`). Inside a function, such a site is turned back into a
+  decoder declared beside the array; the sequence form only when the variable is a `var` of that
+  function used nowhere else.
+
+- uglify-js and terser also inline the cookie rotator of old javascript-obfuscator releases into a
+  function body: the array alias `n = arr`, the countdown function (hoisted, or assigned as
+  `i = function (e) {...}`) and the `(h = {...}).updateCookie() ? ...` choice, terser's
+  `(o = (h = {...}).updateCookie()) ? o ? ... : ... : ...` form, or uglify's block holder. When
+  only code that does not run sits between the array and the alias, and the alias, the countdown
+  function and the holder are used nowhere else, they are wrapped back into the rotator function
+  right after the array. terser's reader that keeps the cookie lookup in a new variable is read
+  too.
+
+- A decoder wrapper with a single parameter (`function w(x) { return b(x); }`) is inlined like
+  other wrappers.
 
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps

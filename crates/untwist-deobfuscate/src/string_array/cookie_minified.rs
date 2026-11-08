@@ -32,8 +32,7 @@ fn is_lookup(stmt: &Statement<'_>, names: (&str, &str)) -> Option<bool> {
                 let Some(init) = declarator.init.as_ref() else {
                     continue;
                 };
-                let bound = matches!(&declarator.id,
-                    BindingPattern::BindingIdentifier(id) if id.name == names.0);
+                let bound = matches!(&declarator.id, BindingPattern::BindingIdentifier(_));
                 if !bound || !lookup_call(init, names) {
                     return None;
                 }
@@ -113,7 +112,7 @@ fn reader_count(function: &Function<'_>, rotate: &str) -> Option<usize> {
     }
 }
 
-fn countdown_declaration<'k>(stmt: &'k Statement<'_>, target: &str) -> Option<&'k str> {
+pub(super) fn countdown_declaration<'k>(stmt: &'k Statement<'_>, target: &str) -> Option<&'k str> {
     let Statement::FunctionDeclaration(function) = stmt else {
         return None;
     };

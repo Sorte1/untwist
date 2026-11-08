@@ -11,7 +11,10 @@ use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 use untwist_core::pass::Cx;
 
 use super::checksum::parsed_statement;
+use super::cookie_wrap::wrap_inlined_cookie;
+use super::for_init::hoist_decoded_arrays;
 use super::legacy::{incremented, is_countdown, literal_arithmetic, predecrements, pushes_shifted};
+use super::single_use::declare_single_use_decoder;
 use super::{array_declaration, array_literal};
 use crate::array_rotator::is_infinite_rotator_loop;
 use crate::mutants::inlined_rotator_vars_trusted;
@@ -119,7 +122,7 @@ impl<'a> VisitJs<'a> for Counted<'_> {
     }
 }
 
-fn used_only_in<'s, 'a: 's>(
+pub(super) fn used_only_in<'s, 'a: 's>(
     scoping: &Scoping,
     symbol: SymbolId,
     statements: impl Iterator<Item = &'s Statement<'a>>,
@@ -530,6 +533,13 @@ struct Inline<'c, 'a, 'x> {
 }
 
 impl<'a> VisitMut<'a> for Inline<'_, 'a, '_> {
+    fn visit_function_body(&mut self, it: &mut FunctionBody<'a>) {
+        if self.changed == 0 {
+            self.changed += declare_single_use_decoder(&mut it.statements, self.cx);
+        }
+        walk_mut::walk_function_body(self, it);
+    }
+
     fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
         if self.changed == 0 {
             if let Some(plan) = plan(it, self.cx.scoping()) {
@@ -539,6 +549,10 @@ impl<'a> VisitMut<'a> for Inline<'_, 'a, '_> {
                     Kind::Checksum => rewrite_checksum(it, &plan, self.cx),
                 };
                 self.changed += usize::from(rewritten);
+            } else if wrap_inlined_cookie(it, self.cx) {
+                self.changed += 1;
+            } else {
+                self.changed += hoist_decoded_arrays(it, self.cx);
             }
         }
         walk_mut::walk_statements(self, it);

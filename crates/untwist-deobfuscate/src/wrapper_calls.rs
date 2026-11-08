@@ -51,7 +51,7 @@ fn is_wrapper(stmt: &Statement<'_>) -> Option<WrapperShape> {
         return None;
     }
     let names = param_names(declaration.function)?;
-    if names.len() < 2 {
+    if names.is_empty() {
         return None;
     }
     let returned = returned_expression(declaration.function)?;

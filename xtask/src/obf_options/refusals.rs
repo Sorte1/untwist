@@ -1,6 +1,6 @@
 pub const INTERPRETED: &str = "no checksum could be extracted from the rotator";
 
-pub const REFUSALS: [(&str, &str, &str); 11] = [
+pub const REFUSALS: [(&str, &str, &str); 13] = [
     (
         "reads a binding outside itself",
         "decoder-reads-outer-binding",
@@ -50,6 +50,16 @@ pub const REFUSALS: [(&str, &str, &str); 11] = [
         "the wrapper body reads something other than its own parameters",
         "wrapper-reads-outside",
         "a decoder wrapper body reads something other than its own parameters and the stamped machinery, so it is not inlined",
+    ),
+    (
+        "the wrapper's binding is written again, or it is declared in a block",
+        "wrapper-binding-unstable",
+        "a decoder wrapper is declared in a block (uglify-js inlines the rotator into one) or its binding is written again, so a call may reach another function and the wrapper is left in place",
+    ),
+    (
+        "a lexical binding that may be read before its declaration runs",
+        "decoder-reads-tdz-binding",
+        "decoding bails: a decoder wrapper reads a const of the rotator that the evaluator cannot prove is initialised when the wrapper runs",
     ),
     (
         "this plain string array may be reached by name through the global object",

@@ -1,0 +1,10 @@
+dec-index-assigned-in-a-sequence|(function(){var o,n,arr0=['one','two','three'];o=arr0,n=4,function(n){for(;--n;)o.push(o.shift())}(++n);var c;console.log((c='0x1',arr0[c-=0])+'!');})();
+dec-decoder-called-in-place|(function(){var arr0=['one','two'];console.log(function(n){return arr0[n-=0]}('0x1'));})();
+dec-numeric-index-in-a-sequence|(function(){var arr0=['one','two'];var c;console.log((c=1,arr0[c-=0]));})();
+guard-two-sites|(function(){var arr0=['one','two'];var c,d;console.log((c='0x1',arr0[c-=0]),(d='0x0',arr0[d-=0]));})();
+guard-index-reads-this|(function(){var arr0=['one','two'];console.log(function(n){return arr0[n-=this.k|0]}('0x1'));})();
+guard-at-top-level|var arr0=['one','two'];var c;console.log((c='0x1',arr0[c-=0]));
+ref-index-read-later|(function(){var arr0=['one','two'];var c;console.log((c='0x1',arr0[c-=0]),typeof c);})();
+premise-index-read-by-eval|(function(){var arr0=['one','two'];var c;console.log((c='0x1',arr0[c-=0]));console.log(eval('c'));})();
+ref-index-written-later|(function(){var arr0=['one','two'];var c;console.log((c='0x1',arr0[c-=0]));console.log(c);})();
+ref-lexical-index|(function(){var arr0=['one','two'];try{console.log((c='0x1',arr0[c-=0]))}catch(e){console.log(e.name)}let c;})();

@@ -72,9 +72,10 @@ fn a_wrapper_with_no_call_sites_is_still_removed() {
 }
 
 #[test]
-fn a_single_parameter_helper_is_not_a_wrapper() {
+fn a_single_parameter_wrapper_is_inlined() {
     let out = run("function one(a) { return __DECODE_0__(a, 1); }\none(2);");
-    assert!(out.contains("function one(a)"), "{out}");
+    assert!(!out.contains("function one(a)"), "{out}");
+    assert!(out.contains("__DECODE_0__(2, 1)"), "{out}");
 }
 
 #[test]
