@@ -164,3 +164,14 @@ pub fn drop_early_read_guards_for_tests(on: bool) {
 pub(crate) fn early_read_guards_dropped() -> bool {
     EARLY_READ_GUARDS_OFF.load(Ordering::Relaxed)
 }
+
+static NESTED_ROTATOR_BUILTINS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_nested_rotator_builtins_for_tests(on: bool) {
+    NESTED_ROTATOR_BUILTINS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn nested_rotator_builtins_trusted() -> bool {
+    NESTED_ROTATOR_BUILTINS_TRUSTED.load(Ordering::Relaxed)
+}
