@@ -243,7 +243,7 @@ pub struct FindStringArray {
     simple_arrays_seen: Option<FxHashSet<Span>>,
     refused_by_decode: RefusedByDecode,
     legacy_searched: bool,
-    legacy_refused: Option<(&'static str, Span)>,
+    legacy_refused: Option<(String, Span)>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -755,8 +755,8 @@ impl<'a> Pass<'a> for FindStringArray {
                 return;
             }
             self.legacy_searched = true;
-        } else if let Some((note, span)) = self.legacy_refused {
-            cx.note(note, Some(span));
+        } else if let Some((note, span)) = &self.legacy_refused {
+            cx.note(note.clone(), Some(*span));
         }
         stamp_wrapped_array(program, cx, &self.refused_by_decode);
         let (sites, simple) = search_aliases(program, cx.scoping());

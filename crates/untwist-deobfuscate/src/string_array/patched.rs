@@ -59,31 +59,31 @@ pub(super) fn rotator_builtins_patched(
     program: &Program<'_>,
     scoping: &Scoping,
     (rotator, keys): (Span, FxHashMap<Span, String>),
-) -> Option<(&'static str, Span)> {
+) -> Option<(String, Span)> {
     if legacy_rotation_patches_trusted() {
         return None;
     }
     let Some(Some(statement)) = statements_at(program, &[rotator]).into_iter().next() else {
-        return Some((notes::BUILTIN_PATCHED, rotator));
+        return Some((notes::BUILTIN_PATCHED.to_string(), rotator));
     };
     let used = statement_used_names(scoping, statement);
     let mut scan = PatchScan::default();
     scan.visit_program(program);
     let verdict = patch_refusal(&scan.sites, scoping, &used, &FxHashSet::default());
     if let Some(refusal) = verdict.refusal {
-        return Some((refusal.note, refusal.span));
+        return Some((refusal.message(), refusal.span));
     }
     if let Some(pending) = verdict.pending_prototypes.first() {
-        return Some((notes::BUILTIN_PATCHED, pending.root_key));
+        return Some((notes::BUILTIN_PATCHED.to_string(), pending.root_key));
     }
     if let Some(write) = verdict
         .proto_writes
         .iter()
         .find(|write| !unused_key(write.key, &used))
     {
-        return Some((notes::BUILTIN_PATCHED, write.span));
+        return Some((notes::BUILTIN_PATCHED.to_string(), write.span));
     }
     let aliases = builtin_aliases(program, scoping, keys);
     alias_refusal(&alias_sites(program, &aliases, &[rotator]), &used)
-        .map(|refusal| (refusal.note, refusal.span))
+        .map(|refusal| (refusal.message(), refusal.span))
 }

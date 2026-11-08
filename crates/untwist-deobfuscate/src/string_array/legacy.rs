@@ -678,25 +678,25 @@ fn refusal(
     program: &Program<'_>,
     cx: &Cx<'_, '_>,
     legacy: &Legacy,
-) -> Option<(&'static str, Span)> {
+) -> Option<(String, Span)> {
     if legacy_array_guards_dropped() {
         return None;
     }
     let scoping = cx.scoping();
     let statement = legacy.statement;
     if let Some(note) = DynamicScopes::of(scoping).refusal(scoping, legacy.symbol) {
-        return Some((note, statement));
+        return Some((note.to_string(), statement));
     }
     if let Some(span) = reached_by_name(program, cx, legacy) {
-        return Some((notes::LEGACY_ARRAY_REACHED, span));
+        return Some((notes::LEGACY_ARRAY_REACHED.to_string(), span));
     }
     if legacy.hoisted && legacy.body_code_before {
-        return Some((notes::LEGACY_DECODER_BEFORE_ARRAY, statement));
+        return Some((notes::LEGACY_DECODER_BEFORE_ARRAY.to_string(), statement));
     }
     let rotator = legacy.rotator.filter(|(_, count)| *count > 0);
     let (rotator, _) = rotator.filter(|_| !cx.opts.unsafe_transforms && legacy.code_before)?;
     if legacy.body_code_before {
-        return Some((notes::LEGACY_ROTATOR_AFTER_CODE, statement));
+        return Some((notes::LEGACY_ROTATOR_AFTER_CODE.to_string(), statement));
     }
     let count = legacy.rotator.map_or(0, |(_, count)| count);
     let keys = plain_decoded_keys(program, scoping, (statement, count, legacy.decoder));
@@ -911,13 +911,13 @@ fn rewrite<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>, legacy: Legacy) -
 pub(super) fn lift_legacy_array<'a>(
     program: &mut Program<'a>,
     cx: &mut Cx<'a, '_>,
-    refused: &mut Option<(&'static str, Span)>,
+    refused: &mut Option<(String, Span)>,
 ) -> bool {
     let Some(legacy) = find_legacy(program, cx.scoping()) else {
         return false;
     };
     if let Some((note, span)) = refusal(program, cx, &legacy) {
-        cx.note(note, Some(span));
+        cx.note(note.clone(), Some(span));
         *refused = Some((note, span));
         return false;
     }

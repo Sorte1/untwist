@@ -82,6 +82,13 @@ All notable changes to this project are documented in this file. The format is b
   never written are replaced, and only when every use of the wrapper comes after the const's
   declaration in the same function.
 
+- The default lane no longer decodes when the program may replace a built-in the unit's decoders
+  or rotator use through a variable, parameter, `this` or computed object that can hold it
+  (`var P = Array.prototype; P.shift = f`, `Object.defineProperty(P, "shift", ...)`, an aliased
+  `Array`, `[].__proto__`). Before, such programs printed wrong strings. The refusal names the
+  write's line and column; `--unsafe` assumes the built-ins are untouched and still decodes. A
+  definer call whose keys are all literal and none of them used does not refuse.
+
 - The dead-code pass now also folds a constant-test conditional whose chosen branch is a member
   read (`"ab" === "cd" ? module.x : d[x]`), as dead-code injection leaves them inside functions;
   it still keeps the conditional when it is called or used as a template tag, where folding would
