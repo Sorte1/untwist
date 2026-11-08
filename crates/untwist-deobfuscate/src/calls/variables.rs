@@ -12,6 +12,7 @@ use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::ast_util::search::{expressions_at, statements_at};
 use untwist_core::semantic::is_constant_binding;
 
+use super::sequenced::block_function_rebinds;
 use crate::init_order::{capacity_hint, with_slack};
 
 #[derive(Clone, Copy, Hash)]
@@ -118,6 +119,7 @@ struct VariableScan<'s> {
     found: Vec<Found>,
     loop_head: bool,
     names: Vec<(&'s str, usize)>,
+    symbols: Vec<SymbolId>,
     plain: FxHashSet<Span>,
     top_list: bool,
     top_functions: FxHashSet<Span>,
@@ -159,10 +161,16 @@ impl<'a> VisitJs<'a> for VariableScan<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         if self.uses && it.is_declaration() && !self.top_functions.contains(&it.span) {
             let name = it.id.as_ref().map(|id| id.name.as_str());
+            let scoping = self.scoping;
             let slots: Vec<usize> = self
                 .names
                 .iter()
                 .filter(|(target, _)| Some(*target) == name)
+                .filter(|(_, slot)| {
+                    self.symbols
+                        .get(*slot)
+                        .is_some_and(|symbol| block_function_rebinds(scoping, it, *symbol))
+                })
                 .map(|(_, slot)| *slot)
                 .collect();
             for slot in slots {
@@ -308,6 +316,7 @@ fn scan(program: &Program<'_>, scoping: &Scoping, targets: Targets, uses: bool) 
             .enumerate()
             .map(|(slot, symbol)| (scoping.symbol_name(*symbol), slot))
             .collect(),
+        symbols: targets.unique.clone(),
         plain: FxHashSet::default(),
         top_list: false,
         top_functions: FxHashSet::default(),

@@ -11,6 +11,30 @@ use untwist_core::ast_util::scope::binding_symbol;
 
 use crate::mutants::external_write_order_trusted;
 
+pub(super) fn block_function_rebinds(
+    scoping: &Scoping,
+    function: &Function<'_>,
+    symbol: SymbolId,
+) -> bool {
+    let Some(id) = function.id.as_ref().filter(|_| function.is_declaration()) else {
+        return false;
+    };
+    if id.symbol_id.get() == Some(symbol) || id.name.as_str() != scoping.symbol_name(symbol) {
+        return false;
+    }
+    let Some(home) = var_scope(scoping, scoping.symbol_scope_id(symbol)) else {
+        return false;
+    };
+    let Some(container) = id
+        .symbol_id
+        .get()
+        .map(|own| scoping.symbol_scope_id(own))
+    else {
+        return true;
+    };
+    container != home && var_scope(scoping, container) == Some(home)
+}
+
 pub(super) fn chained_literal(expr: &Expression<'_>) -> Option<Span> {
     match expr.without_parentheses() {
         Expression::AssignmentExpression(inner)
@@ -258,12 +282,7 @@ impl OrderScan<'_> {
 
 impl<'a> VisitJs<'a> for OrderScan<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        let named_alike = it.is_declaration()
-            && it.id.as_ref().is_some_and(|id| {
-                id.symbol_id.get() != Some(self.symbol)
-                    && id.name.as_str() == self.scoping.symbol_name(self.symbol)
-            });
-        if named_alike && !crate::mutants::declarator_writes_ignored() {
+        if block_function_rebinds(self.scoping, it, self.symbol) && !crate::mutants::declarator_writes_ignored() {
             self.aliased = true;
         }
         self.enter_boundary();
