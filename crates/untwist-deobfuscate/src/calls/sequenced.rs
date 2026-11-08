@@ -11,6 +11,38 @@ use untwist_core::ast_util::scope::binding_symbol;
 
 use crate::mutants::external_write_order_trusted;
 
+pub(super) fn block_function_rebinds(
+    scoping: &Scoping,
+    function: &Function<'_>,
+    symbol: SymbolId,
+) -> bool {
+    let Some(id) = function.id.as_ref().filter(|_| function.is_declaration()) else {
+        return false;
+    };
+    if id.symbol_id.get() == Some(symbol) || id.name.as_str() != scoping.symbol_name(symbol) {
+        return false;
+    }
+    let Some(home) = var_scope(scoping, scoping.symbol_scope_id(symbol)) else {
+        return false;
+    };
+    let Some(container) = id.symbol_id.get().map(|own| scoping.symbol_scope_id(own)) else {
+        return true;
+    };
+    container != home && var_scope(scoping, container) == Some(home)
+}
+
+pub(super) fn chained_literal(expr: &Expression<'_>) -> Option<Span> {
+    match expr.without_parentheses() {
+        Expression::AssignmentExpression(inner)
+            if inner.operator == AssignmentOperator::Assign
+                && matches!(inner.left, AssignmentTarget::AssignmentTargetIdentifier(_)) =>
+        {
+            chained_literal(&inner.right)
+        }
+        value => is_literal_argument(value).then(|| value.span()),
+    }
+}
+
 struct Frame {
     id: u32,
     boundary: u32,
@@ -36,6 +68,7 @@ struct OrderScan<'s> {
     aliased: bool,
     writers: Vec<u32>,
     candidates: FxHashMap<Span, Candidate>,
+    plain_bindings: Vec<Span>,
 }
 
 impl OrderScan<'_> {
@@ -60,14 +93,17 @@ impl OrderScan<'_> {
         let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
             return None;
         };
+        if assignment.operator != AssignmentOperator::Assign {
+            return None;
+        }
         let resolved = target
             .reference_id
             .get()
             .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
-        (assignment.operator == AssignmentOperator::Assign
-            && resolved == Some(self.symbol)
-            && is_literal_argument(&assignment.right))
-        .then(|| assignment.right.span())
+        if resolved != Some(self.symbol) {
+            return self.assigned_literal(&assignment.right);
+        }
+        chained_literal(&assignment.right)
     }
 
     fn push_frame(&mut self) {
@@ -172,6 +208,19 @@ impl OrderScan<'_> {
 }
 
 impl<'a> OrderScan<'_> {
+    fn note_loop_head(&mut self, left: &ForStatementLeft<'a>) {
+        let ForStatementLeft::VariableDeclaration(declaration) = left else {
+            return;
+        };
+        let binds = declaration
+            .declarations
+            .iter()
+            .any(|declarator| binding_symbol(&declarator.id) == Some(self.symbol));
+        if binds && !crate::mutants::declarator_writes_ignored() {
+            self.aliased = true;
+        }
+    }
+
     fn visit_arguments_after(&mut self, callee: &Expression<'a>, arguments: &[Argument<'a>]) {
         let spread = arguments
             .iter()
@@ -219,12 +268,26 @@ impl OrderScan<'_> {
             self.aliased = true;
             return;
         }
+        self.plain_bindings.extend(
+            params
+                .items
+                .iter()
+                .filter_map(|param| match &param.pattern {
+                    BindingPattern::BindingIdentifier(id) => Some(id.span),
+                    _ => None,
+                }),
+        );
         self.declared = Some(self.boundary());
     }
 }
 
 impl<'a> VisitJs<'a> for OrderScan<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        if block_function_rebinds(self.scoping, it, self.symbol)
+            && !crate::mutants::declarator_writes_ignored()
+        {
+            self.aliased = true;
+        }
         self.enter_boundary();
         let mut reads = ArgumentsRead::default();
         if self.binds(&it.params) {
@@ -249,10 +312,34 @@ impl<'a> VisitJs<'a> for OrderScan<'_> {
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
-        if binding_symbol(&it.id) == Some(self.symbol) {
+        let binds = binding_symbol(&it.id) == Some(self.symbol);
+        if binds {
             self.declared = Some(self.boundary());
+            self.plain_bindings.push(it.id.span());
         }
         walk_js::walk_variable_declarator(self, it);
+        if binds && it.init.is_some() && !crate::mutants::declarator_writes_ignored() {
+            self.note_write();
+        }
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        let rebinds = it.symbol_id.get() == Some(self.symbol)
+            && !self.plain_bindings.contains(&it.span)
+            && !crate::mutants::declarator_writes_ignored();
+        if rebinds {
+            self.aliased = true;
+        }
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        self.note_loop_head(&it.left);
+        walk_js::walk_for_in_statement(self, it);
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.note_loop_head(&it.left);
+        walk_js::walk_for_of_statement(self, it);
     }
 
     fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
@@ -349,6 +436,7 @@ pub(super) fn ordered_values(
         aliased: false,
         writers: Vec::new(),
         candidates: FxHashMap::default(),
+        plain_bindings: Vec::new(),
     };
     scan.visit_program(program);
     let Some(declared) = scan.declared.filter(|_| !scan.under_with && !scan.aliased) else {

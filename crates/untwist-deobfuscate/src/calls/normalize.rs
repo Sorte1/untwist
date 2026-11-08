@@ -22,7 +22,7 @@ use crate::stamp::{decoder_index, decoder_name};
 use crate::units::MachineryDepth;
 
 use super::global_bindings::global_bindings;
-use super::sequenced::ordered_values;
+use super::sequenced::{chained_literal, ordered_values};
 use super::variables::{variable_facts, Assignment, VariableFacts};
 use super::{decoder_call, is_splittable_branch};
 
@@ -213,7 +213,8 @@ fn is_sole_assignment(
     let Expression::AssignmentExpression(assignment) = &stmt.expression else {
         return false;
     };
-    if assignment.operator != AssignmentOperator::Assign {
+    if assignment.operator != AssignmentOperator::Assign || !is_literal_argument(&assignment.right)
+    {
         return false;
     }
     let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
@@ -312,6 +313,11 @@ fn assignment_slots(
             value: assignment.value,
         });
     }
+    let initialised =
+        !facts.initialised_in.is_empty() && !crate::mutants::declarator_writes_ignored();
+    if initialised && slots.iter().any(|slot| slot.index <= anchor.index()) {
+        return None;
+    }
     Some((anchor, slots))
 }
 
@@ -391,8 +397,13 @@ fn literal_assignments(view: &Program<'_>, facts: &VariableFacts<'_>) -> Vec<Ass
     facts
         .assignments
         .iter()
-        .filter(|assignment| expression_at(view, assignment.value).is_some_and(is_literal_argument))
-        .copied()
+        .filter_map(|assignment| {
+            let value = chained_literal(expression_at(view, assignment.value)?)?;
+            Some(Assignment {
+                value,
+                ..*assignment
+            })
+        })
         .collect()
 }
 
@@ -424,10 +435,31 @@ fn assigned_refusal(
     if !shares_the_declaration_list(facts, assignments) {
         return Some(notes::ASSIGNMENT_NOT_BESIDE_THE_DECLARATION);
     }
-    if assignments.len() != write_reference_count(scoping, symbol) {
+    if assignments.len() != write_reference_count(scoping, symbol)
+        || initialised_beside_an_assignment(facts, assignments)
+    {
         return Some(notes::NON_LITERAL_WRITE);
     }
     None
+}
+
+fn initialised_beside_an_assignment(facts: &VariableFacts<'_>, assignments: &[Assignment]) -> bool {
+    if crate::mutants::declarator_writes_ignored() {
+        return false;
+    }
+    if facts.rebound {
+        return true;
+    }
+    match facts.initialised_in {
+        [] => false,
+        [statement] => {
+            facts.statement != Some(*statement)
+                || assignments
+                    .iter()
+                    .any(|assignment| assignment.statement == *statement)
+        }
+        _ => true,
+    }
 }
 
 fn shares_the_declaration_list(facts: &VariableFacts<'_>, assignments: &[Assignment]) -> bool {

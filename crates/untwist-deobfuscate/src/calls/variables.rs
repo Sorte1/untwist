@@ -5,12 +5,14 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::reference::ReferenceId;
+use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::ast_util::search::{expressions_at, statements_at};
 use untwist_core::semantic::is_constant_binding;
 
+use super::sequenced::block_function_rebinds;
 use crate::init_order::{capacity_hint, with_slack};
 
 #[derive(Clone, Copy, Hash)]
@@ -29,6 +31,8 @@ pub(super) struct Assignment {
 struct Found {
     declaration: Option<Span>,
     init: Option<Span>,
+    initialised_in: Vec<Span>,
+    rebound: bool,
     assignments: Vec<Assignment>,
     references: Vec<Reference>,
 }
@@ -37,6 +41,8 @@ pub(super) struct VariableFacts<'v> {
     pub(super) statement: Option<Span>,
     pub(super) declaration: Option<Span>,
     pub(super) init: Option<Span>,
+    pub(super) initialised_in: &'v [Span],
+    pub(super) rebound: bool,
     pub(super) assignments: &'v [Assignment],
     pub(super) references: &'v [Reference],
     pub(super) members: &'v FxHashMap<Span, usize>,
@@ -57,6 +63,8 @@ impl Variables {
             statement: found.declaration,
             declaration: found.declaration.filter(|_| sole),
             init: found.init,
+            initialised_in: &found.initialised_in,
+            rebound: found.rebound,
             assignments: &found.assignments,
             references: &found.references,
             members: &self.members,
@@ -109,6 +117,12 @@ struct VariableScan<'s> {
     written: FxHashSet<Span>,
     members: FxHashMap<Span, usize>,
     found: Vec<Found>,
+    loop_head: bool,
+    names: Vec<(&'s str, usize)>,
+    symbols: Vec<SymbolId>,
+    plain: FxHashSet<Span>,
+    top_list: bool,
+    top_functions: FxHashSet<Span>,
 }
 
 impl VariableScan<'_> {
@@ -123,7 +137,72 @@ impl VariableScan<'_> {
 }
 
 impl<'a> VisitJs<'a> for VariableScan<'_> {
+    fn visit_program(&mut self, it: &Program<'a>) {
+        self.top_list = true;
+        walk_js::walk_program(self, it);
+    }
+
+    fn visit_function_body(&mut self, it: &FunctionBody<'a>) {
+        self.top_list = true;
+        walk_js::walk_function_body(self, it);
+    }
+
+    fn visit_formal_parameters(&mut self, it: &FormalParameters<'a>) {
+        if self.uses {
+            self.plain
+                .extend(it.items.iter().filter_map(|param| match &param.pattern {
+                    BindingPattern::BindingIdentifier(id) => Some(id.span),
+                    _ => None,
+                }));
+        }
+        walk_js::walk_formal_parameters(self, it);
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        if self.uses && it.is_declaration() && !self.top_functions.contains(&it.span) {
+            let name = it.id.as_ref().map(|id| id.name.as_str());
+            let scoping = self.scoping;
+            let slots: Vec<usize> = self
+                .names
+                .iter()
+                .filter(|(target, _)| Some(*target) == name)
+                .filter(|(_, slot)| {
+                    self.symbols
+                        .get(*slot)
+                        .is_some_and(|symbol| block_function_rebinds(scoping, it, *symbol))
+                })
+                .map(|(_, slot)| *slot)
+                .collect();
+            for slot in slots {
+                if let Some(found) = self.found.get_mut(slot) {
+                    found.rebound = true;
+                }
+            }
+        }
+        walk_js::walk_function(self, it, flags);
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        if !self.uses || self.plain.contains(&it.span) {
+            return;
+        }
+        let slot = it
+            .symbol_id
+            .get()
+            .and_then(|symbol| self.targets.get(&symbol).copied());
+        if let Some(found) = self.found_at(slot) {
+            found.rebound = true;
+        }
+    }
+
     fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
+        if std::mem::take(&mut self.top_list) && self.uses {
+            self.top_functions
+                .extend(it.iter().filter_map(|statement| match statement {
+                    Statement::FunctionDeclaration(function) => Some(function.span),
+                    _ => None,
+                }));
+        }
         if self.uses {
             self.lists += 1;
             let list = self.lists;
@@ -144,11 +223,38 @@ impl<'a> VisitJs<'a> for VariableScan<'_> {
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
         let slot = binding_symbol(&it.id).and_then(|symbol| self.targets.get(&symbol).copied());
         let statement = self.statement;
+        let loop_head = self.loop_head;
+        if let (BindingPattern::BindingIdentifier(id), false) = (&it.id, loop_head) {
+            if self.uses {
+                self.plain.insert(id.span);
+            }
+        }
         if let Some(found) = self.found_at(slot) {
             found.declaration = Some(statement);
             found.init = it.init.as_ref().map(GetSpan::span);
+            if it.init.is_some() || loop_head {
+                found.initialised_in.push(statement);
+            }
         }
+        self.loop_head = false;
         walk_js::walk_variable_declarator(self, it);
+        self.loop_head = loop_head;
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        self.loop_head = true;
+        self.visit_for_statement_left(&it.left);
+        self.loop_head = false;
+        self.visit_expression(&it.right);
+        self.visit_statement(&it.body);
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.loop_head = true;
+        self.visit_for_statement_left(&it.left);
+        self.loop_head = false;
+        self.visit_expression(&it.right);
+        self.visit_statement(&it.body);
     }
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
@@ -203,6 +309,17 @@ fn scan(program: &Program<'_>, scoping: &Scoping, targets: Targets, uses: bool) 
         written: FxHashSet::default(),
         members: FxHashMap::with_capacity_and_hasher(capacity, FxBuildHasher),
         found: vec![Found::default(); targets.unique.len()],
+        loop_head: false,
+        names: targets
+            .unique
+            .iter()
+            .enumerate()
+            .map(|(slot, symbol)| (scoping.symbol_name(*symbol), slot))
+            .collect(),
+        symbols: targets.unique.clone(),
+        plain: FxHashSet::default(),
+        top_list: false,
+        top_functions: FxHashSet::default(),
     };
     scan.visit_program(program);
     let VariableScan {
