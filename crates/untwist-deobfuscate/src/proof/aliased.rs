@@ -107,6 +107,8 @@ const PROTOTYPE_GETTERS: &[&str] = &[
     "__lookupSetter__",
 ];
 
+const FRESH_NATIVES: &[&str] = &["Map", "WeakMap", "Set", "WeakSet", "Date", "Error"];
+
 const FUNCTION_OWN_KEYS: &[&str] = &["call", "apply", "bind", "toString"];
 
 pub(super) fn member_name<'k>(member: &'k MemberExpression<'_>) -> Option<&'k str> {
@@ -201,6 +203,7 @@ pub struct BuiltinAliases<'s> {
     pub(super) decoded: FxHashMap<Span, String>,
     pub(super) object_functions: FxHashMap<SymbolId, FxHashMap<String, Span>>,
     pub(super) function_methods_written: bool,
+    pub(super) prototypes_written: bool,
     pub(super) strings: FxHashMap<SymbolId, Vec<String>>,
     pub(super) unknown_strings: FxHashSet<SymbolId>,
     pub(super) string_arrays: FxHashMap<SymbolId, Vec<String>>,
@@ -361,6 +364,17 @@ impl<'s> BuiltinAliases<'s> {
         })
     }
 
+    fn fresh_native(&self, callee: &Expression<'_>) -> bool {
+        let Expression::Identifier(id) = callee.without_parentheses() else {
+            return false;
+        };
+        let unresolved = id
+            .reference_id
+            .get()
+            .is_some_and(|reference| self.scoping.get_reference(reference).symbol_id().is_none());
+        unresolved && !self.prototypes_written && FRESH_NATIVES.contains(&id.name.as_str())
+    }
+
     fn calls_own_method(&self, object: u16) -> bool {
         (function_method_writes_ignored() || !self.function_methods_written)
             && object & (DEFINER | GETTER_DEFINER | LOST) == 0
@@ -512,6 +526,7 @@ impl<'s> BuiltinAliases<'s> {
                 sloppy | self.this_bits
             }
             Expression::CallExpression(call) => self.call(call),
+            Expression::NewExpression(new) if self.fresh_native(&new.callee) => 0,
             Expression::NewExpression(new) => match self.function_span(&new.callee) {
                 Some(function) => self.returned(function),
                 None if self.value(&new.callee) & FUNCTION_CONSTRUCTOR != 0 => {
@@ -601,7 +616,9 @@ impl<'s> BuiltinAliases<'s> {
             }
             match name {
                 Some(name) if is_getter_definer(name) => sites.push((object, key_at(0))),
-                Some(name) if is_owned_definer(name) => {
+                Some(name)
+                    if is_owned_definer(name) && object & (OBJECT_CONSTRUCTOR | GLOBAL) != 0 =>
+                {
                     let key = match name {
                         "defineProperty" | "set" | "deleteProperty" => key_at(1),
                         "assign" => literal_keys(arguments.get(1..).unwrap_or_default()),

@@ -77,6 +77,7 @@ struct Flows<'p> {
     strict: Vec<bool>,
     function: Vec<Span>,
     function_methods_written: bool,
+    prototypes_written: bool,
     function_method_values: Vec<&'p Expression<'p>>,
 }
 
@@ -450,8 +451,20 @@ impl<'s, 'p> VisitJs<'p> for FlowScan<'s, 'p> {
             .is_some_and(is_definer);
         if defines {
             if let Some(first) = it.arguments.first().and_then(Argument::as_expression) {
+                if reaches_a_prototype(first) {
+                    self.flows.prototypes_written = true;
+                }
                 self.install(first, None);
             }
+        }
+        let reprotos = it
+            .callee
+            .without_parentheses()
+            .as_member_expression()
+            .and_then(member_name)
+            .is_some_and(|name| name == "setPrototypeOf");
+        if reprotos {
+            self.flows.prototypes_written = true;
         }
         self.flows
             .callees
@@ -545,8 +558,20 @@ impl<'s, 'p> VisitJs<'p> for FlowScan<'s, 'p> {
     }
 }
 
+fn reaches_a_prototype(expr: &Expression<'_>) -> bool {
+    let Some(member) = expr.without_parentheses().as_member_expression() else {
+        return false;
+    };
+    let named = !matches!(member, MemberExpression::StaticMemberExpression(_))
+        || matches!(member_name(member), Some("prototype" | "__proto__"));
+    named || reaches_a_prototype(member.object())
+}
+
 impl FlowScan<'_, '_> {
     fn written_object(&mut self, member: Option<&MemberExpression<'_>>) {
+        if member.is_some_and(|member| reaches_a_prototype(member.object())) {
+            self.flows.prototypes_written = true;
+        }
         let Some(Expression::Identifier(id)) = member.map(MemberExpression::object) else {
             return;
         };
@@ -669,6 +694,7 @@ pub fn builtin_aliases<'s>(
             strict: Vec::new(),
             function: Vec::new(),
             function_methods_written: false,
+            prototypes_written: false,
             function_method_values: Vec::new(),
         },
     };
@@ -685,6 +711,7 @@ pub fn builtin_aliases<'s>(
         sloppy_this,
         object_functions,
         function_methods_written,
+        prototypes_written,
         function_method_values,
         ..
     } = scan.flows;
@@ -704,6 +731,7 @@ pub fn builtin_aliases<'s>(
         decoded,
         object_functions,
         function_methods_written,
+        prototypes_written,
         strings: FxHashMap::default(),
         unknown_strings: FxHashSet::default(),
         string_arrays: FxHashMap::default(),
