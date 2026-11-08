@@ -137,6 +137,18 @@ All notable changes to this project are documented in this file. The format is b
   decoder declared beside the array; the sequence form only when the variable is a `var` of that
   function used nowhere else.
 
+- uglify-js and terser also inline the cookie rotator of old javascript-obfuscator releases into a
+  function body: the array alias `n = arr`, the countdown function (hoisted, or assigned as
+  `i = function (e) {...}`) and the `(h = {...}).updateCookie() ? ...` choice, terser's
+  `(o = (h = {...}).updateCookie()) ? o ? ... : ... : ...` form, or uglify's block holder. When
+  only code that does not run sits between the array and the alias, and the alias, the countdown
+  function and the holder are used nowhere else, they are wrapped back into the rotator function
+  right after the array. terser's reader that keeps the cookie lookup in a new variable is read
+  too.
+
+- Decoder wrappers that forward only one argument (`function t(e, n, t, r, o) { return u(e - -255); }`,
+  as uglify-js drops a key the decoder does not read) are inlined like other wrappers.
+
 - String arrays, decoders and wrappers declared with `let` or `const` (javascript-obfuscator 0.22
   and later reuse the program's declaration kind) are found like `var` ones; a lexical array keeps
   a lexical binding when it is lifted. Machinery bound by `var`, `let` or `const` that may be called
