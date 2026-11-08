@@ -679,11 +679,20 @@ pub struct AliasSite {
     position: Option<(usize, usize)>,
 }
 
-fn position_of(source: &str, span: Span) -> Option<(usize, usize)> {
-    let before = source.get(..span.start as usize)?;
-    let line = before.matches('\n').count() + 1;
-    let column = before.len() - before.rfind('\n').map_or(0, |at| at + 1) + 1;
-    Some((line, column))
+fn line_starts(source: &str) -> Vec<usize> {
+    std::iter::once(0)
+        .chain(source.match_indices('\n').map(|(at, _)| at + 1))
+        .collect()
+}
+
+fn position_of(starts: &[usize], length: usize, span: Span) -> Option<(usize, usize)> {
+    let offset = span.start as usize;
+    if offset > length {
+        return None;
+    }
+    let line = starts.partition_point(|start| *start <= offset);
+    let start = starts.get(line.checked_sub(1)?)?;
+    Some((line, offset - start + 1))
 }
 
 impl AliasSite {
@@ -755,8 +764,13 @@ pub fn alias_sites(
     };
     scan.visit_program(program);
     let mut sites = scan.sites;
+    if sites.is_empty() {
+        return sites;
+    }
+    let starts = line_starts(program.source_text);
+    let length = program.source_text.len();
     for site in &mut sites {
-        site.position = position_of(program.source_text, site.span);
+        site.position = position_of(&starts, length, site.span);
     }
     sites
 }
