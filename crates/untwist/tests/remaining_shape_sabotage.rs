@@ -1,6 +1,7 @@
 use untwist::{Options, Pipeline};
 use untwist_deobfuscate::mutants::{
-    trust_cookie_block_vars_for_tests, trust_inline_returners_for_tests,
+    trust_callee_objects_for_tests, trust_cookie_block_vars_for_tests,
+    trust_inline_returners_for_tests,
 };
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
@@ -16,14 +17,25 @@ fn transformed(source: &str) -> String {
     Pipeline::new(options).run(source).code().to_string()
 }
 
-fn keep_rows() -> Vec<(String, String)> {
+type Switch = fn(bool);
+
+const KEPT: [(&str, Switch); 2] = [
+    (
+        "keep-a-returner-call-that-is-not-self-defending",
+        trust_inline_returners_for_tests,
+    ),
+    (
+        "keep-a-callee-object-read-before-its-assignment",
+        trust_callee_objects_for_tests,
+    ),
+];
+
+fn row(label: &str) -> Vec<(String, String)> {
     ROWS.lines()
         .filter_map(|line| {
-            let (label, rest) = line.split_once('|')?;
+            let (name, rest) = line.split_once('|')?;
             let (_, program) = rest.split_once('|')?;
-            label
-                .starts_with("keep-")
-                .then(|| (label.to_string(), program.to_string()))
+            (name == label).then(|| (name.to_string(), program.to_string()))
         })
         .collect()
 }
@@ -39,11 +51,17 @@ fn the_checks_hold_up_the_kept_and_guarded_rows() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let kept = keep_rows();
-    assert!(!kept.is_empty());
-    trust_inline_returners_for_tests(true);
-    let modes: [Mode<'_>; 1] = [("mutant", &transformed)];
-    let diverged = node_rows::mismatches(&node, &kept, &modes);
-    trust_inline_returners_for_tests(false);
-    assert_eq!(diverged.len(), kept.len(), "{diverged:?}");
+    for (label, switch) in KEPT {
+        let kept = row(label);
+        assert_eq!(kept.len(), 1, "{label}");
+        switch(true);
+        let modes: [Mode<'_>; 1] = [("mutant", &transformed)];
+        let diverged = node_rows::mismatches(&node, &kept, &modes);
+        switch(false);
+        assert_eq!(
+            diverged.len(),
+            1,
+            "{label} prints like node under its mutant"
+        );
+    }
 }

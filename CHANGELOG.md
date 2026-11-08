@@ -55,7 +55,9 @@ All notable changes to this project are documented in this file. The format is b
 - Self-defending code inlined into a function as `(function (e, o) {...})(this, () => {...})()`
   after a hoisted `t = true` flag is removed like the declared controller form.
 - A proxy object assigned before its `var` (`u = {Kmtil: function (r, n) { return r(n) }}; var u;`,
-  as uglify-js leaves it in webpack modules) is declared where it is assigned, so the proxy calls
+  as uglify-js leaves it in webpack modules) is declared where it is assigned, and terser's
+  `let p; ... (p = {TCjgg: function (t, r) { return t + r }}).TCjgg(p.TCjgg(a, b), c)` is declared
+  with its object when every other read of `p` is in that call's arguments, so the proxy calls
   inline.
 - A cookie rotator in a block that rotates the array itself (no alias), and whose block `var` is
   shared with a later `var` of the same function, is wrapped back into a rotator when the later

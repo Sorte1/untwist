@@ -1,5 +1,7 @@
 use oxc_allocator::{TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
+use oxc_span::GetSpan;
+use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::write_reference_count;
@@ -90,4 +92,214 @@ pub(super) fn declare_assigned_objects<'a>(
         stmts.remove(index);
     }
     pairs.len()
+}
+
+fn pure_object(object: &ObjectExpression<'_>) -> bool {
+    object.properties.iter().all(|property| {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return false;
+        };
+        property.kind == PropertyKind::Init
+            && !property.computed
+            && !property.method
+            && matches!(
+                property.value,
+                Expression::FunctionExpression(_)
+                    | Expression::ArrowFunctionExpression(_)
+                    | Expression::StringLiteral(_)
+                    | Expression::NumericLiteral(_)
+            )
+    })
+}
+
+fn assigned_callee<'k, 'a>(
+    call: &'k CallExpression<'a>,
+) -> Option<(&'k IdentifierReference<'a>, &'k ObjectExpression<'a>)> {
+    let callee = call.callee.as_member_expression()?;
+    let Expression::AssignmentExpression(assignment) = callee.object().without_parentheses() else {
+        return None;
+    };
+    let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
+        return None;
+    };
+    let Expression::ObjectExpression(object) = &assignment.right else {
+        return None;
+    };
+    (assignment.operator == AssignmentOperator::Assign).then_some((target, object))
+}
+
+struct Finder<'s> {
+    scoping: &'s oxc_semantic::Scoping,
+    symbol: SymbolId,
+    nested: usize,
+    call: Option<oxc_span::Span>,
+    arguments: Vec<oxc_span::Span>,
+    reads: Vec<oxc_span::Span>,
+}
+
+impl<'a> oxc_ast_visit::VisitJs<'a> for Finder<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if let Some((target, object)) = assigned_callee(it) {
+            let symbol = target
+                .reference_id
+                .get()
+                .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+            if symbol == Some(self.symbol)
+                && pure_object(object)
+                && self.call.is_none()
+                && self.nested == 0
+            {
+                self.call = Some(it.span);
+                self.arguments = it
+                    .arguments
+                    .iter()
+                    .map(|argument| argument.span())
+                    .collect();
+            }
+        }
+        oxc_ast_visit::walk_js::walk_call_expression(self, it);
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let symbol = it
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        if symbol == Some(self.symbol) {
+            self.reads.push(it.span);
+        }
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+        self.nested += 1;
+        oxc_ast_visit::walk_js::walk_function(self, it, flags);
+        self.nested -= 1;
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.nested += 1;
+        oxc_ast_visit::walk_js::walk_arrow_function_expression(self, it);
+        self.nested -= 1;
+    }
+
+    fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
+        self.nested += 1;
+        oxc_ast_visit::walk_js::walk_for_statement(self, it);
+        self.nested -= 1;
+    }
+
+    fn visit_while_statement(&mut self, it: &WhileStatement<'a>) {
+        self.nested += 1;
+        oxc_ast_visit::walk_js::walk_while_statement(self, it);
+        self.nested -= 1;
+    }
+
+    fn visit_do_while_statement(&mut self, it: &DoWhileStatement<'a>) {
+        self.nested += 1;
+        oxc_ast_visit::walk_js::walk_do_while_statement(self, it);
+        self.nested -= 1;
+    }
+}
+
+fn empty_lexical_or_var(stmt: &Statement<'_>) -> Option<SymbolId> {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    if declaration.kind == VariableDeclarationKind::Const || declarator.init.is_some() {
+        return None;
+    }
+    let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+        return None;
+    };
+    id.symbol_id.get()
+}
+
+struct Hoist<'c, 'a, 'b> {
+    call: oxc_span::Span,
+    object: Option<Expression<'a>>,
+    cx: &'c Cx<'a, 'b>,
+}
+
+impl<'a> oxc_ast_visit::VisitMut<'a> for Hoist<'_, 'a, '_> {
+    fn visit_call_expression(&mut self, it: &mut CallExpression<'a>) {
+        if it.span == self.call && self.object.is_none() {
+            if let Some(member) = it.callee.as_member_expression_mut() {
+                if let Expression::AssignmentExpression(assignment) =
+                    member.object_mut().without_parentheses_mut()
+                {
+                    if let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left {
+                        let name = target.name;
+                        let span = target.span;
+                        self.object = Some(assignment.right.take_in(self.cx));
+                        *member.object_mut() = Expression::new_identifier(span, name, self.cx);
+                    }
+                }
+            }
+        }
+        oxc_ast_visit::walk_mut::walk_call_expression(self, it);
+    }
+}
+
+pub(super) fn declare_callee_objects<'a>(
+    stmts: &mut AVec<'a, Statement<'a>>,
+    cx: &mut Cx<'a, '_>,
+) -> usize {
+    let mut changed = 0;
+    for declared in 0..stmts.len() {
+        let Some(symbol) = empty_lexical_or_var(&stmts[declared]) else {
+            continue;
+        };
+        if write_reference_count(cx.scoping(), symbol) != 1
+            || !cx.scoping().symbol_redeclarations(symbol).is_empty()
+        {
+            continue;
+        }
+        let total = cx.scoping().get_resolved_reference_ids(symbol).len();
+        let found = (declared + 1..stmts.len()).find_map(|at| {
+            let mut finder = Finder {
+                scoping: cx.scoping(),
+                symbol,
+                nested: 0,
+                call: None,
+                arguments: Vec::new(),
+                reads: Vec::new(),
+            };
+            oxc_ast_visit::VisitJs::visit_statement(&mut finder, &stmts[at]);
+            finder.call.map(|call| (at, call, finder))
+        });
+        let Some((at, call, finder)) = found else {
+            continue;
+        };
+        let inside = |span: &oxc_span::Span| {
+            finder
+                .arguments
+                .iter()
+                .any(|argument| argument.start <= span.start && span.end <= argument.end)
+        };
+        let reads: Vec<_> = finder.reads.iter().filter(|span| !inside(span)).collect();
+        let sealed = finder.reads.len() == total
+            && (reads.len() == 1 || crate::mutants::callee_objects_trusted());
+        if !sealed {
+            continue;
+        }
+        let mut hoist = Hoist {
+            call,
+            object: None,
+            cx: &*cx,
+        };
+        oxc_ast_visit::VisitMut::visit_statement(&mut hoist, &mut stmts[at]);
+        let Some(object) = hoist.object else {
+            continue;
+        };
+        if let Statement::VariableDeclaration(declaration) = &mut stmts[declared] {
+            if let Some(declarator) = declaration.declarations.first_mut() {
+                declarator.init = Some(object);
+                changed += 1;
+            }
+        }
+    }
+    changed
 }

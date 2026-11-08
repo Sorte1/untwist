@@ -532,7 +532,10 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
         let folded = fold_key_assignments(stmts, cx);
         cx.changed_by(folded);
-        let declared = hoisted::declare_assigned_objects(stmts, cx);
+        let mut declared = hoisted::declare_assigned_objects(stmts, cx);
+        if declared == 0 {
+            declared = hoisted::declare_callee_objects(stmts, cx);
+        }
         cx.changed_by(declared);
     }
 

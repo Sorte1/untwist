@@ -351,3 +351,14 @@ pub fn trust_cookie_block_vars_for_tests(on: bool) {
 pub(crate) fn cookie_block_vars_trusted() -> bool {
     COOKIE_BLOCK_VARS_TRUSTED.load(Ordering::Relaxed)
 }
+
+static CALLEE_OBJECTS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_callee_objects_for_tests(on: bool) {
+    CALLEE_OBJECTS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn callee_objects_trusted() -> bool {
+    CALLEE_OBJECTS_TRUSTED.load(Ordering::Relaxed)
+}
