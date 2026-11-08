@@ -2,3 +2,6 @@ fold-a-member-read-chosen-by-a-string-test|var o={k:'v'};function g(d,x){return 
 fold-a-static-member-chosen-by-a-negated-test|var o={k:'v'};console.log(!('ab'!=='cd')?o.k:o.k.length);
 keep-a-member-callee-chosen-by-a-string-test|var o={n:'o',m:function(){return this&&this.n}};var n='g';console.log(('ab'==='cd'?null:o.m)());
 keep-a-member-tag-chosen-by-a-string-test|var o={n:'o',m:function(s){return this&&this.n}};console.log(('ab'!=='cd'?o.m:null)`x`);
+fold-a-string-test-guarding-a-call|function h(x){console.log(x)}function k(x){'ab'==='ab'&&h(x);'ab'!=='ab'||h(x+1)}k(1);
+fold-a-string-test-in-a-longer-chain|var o={k:'v'};function g(x){return 'ab'==='ab'&&!x&&o.k}console.log(g(0),g(1));
+keep-a-member-callee-guarded-by-a-string-test|var o={n:'o',m:function(){return this&&this.n}};var n='g';console.log(('ab'==='ab'&&o.m)());

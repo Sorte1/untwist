@@ -581,7 +581,7 @@ impl<'a> DeadCode<'a> {
                 (!self.is_unfoldable_result(chosen, guarded, cx)).then_some(value)
             }
             Expression::LogicalExpression(logical) => {
-                let decision = self.decide(&logical.left, cx).filter(|d| d.literal)?;
+                let decision = self.decide(&logical.left, cx)?;
                 let left_wins = match logical.operator {
                     LogicalOperator::And => !decision.value,
                     LogicalOperator::Or => decision.value,
