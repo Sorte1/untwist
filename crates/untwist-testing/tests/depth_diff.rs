@@ -5,8 +5,6 @@ use untwist_testing::depth_diff::{
     EDGE_SEED, MIX_SEED, SOUP_SEED,
 };
 
-const BUDGET: Duration = Duration::from_secs(60);
-
 struct Counts {
     soup: usize,
     mix: u64,
@@ -25,6 +23,12 @@ const COUNTS: Counts = if cfg!(debug_assertions) {
         mix: 10_000,
         edges: 200_000,
     }
+};
+
+const BUDGET: Duration = if cfg!(debug_assertions) {
+    Duration::from_secs(180)
+} else {
+    Duration::from_secs(60)
 };
 
 fn threads() -> usize {
