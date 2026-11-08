@@ -64,7 +64,7 @@ impl<'r, 'p> ForeignUnit<'r, 'p> {
 
     fn touches_only_itself(&self, program: &Program<'p>, scoping: &Scoping) -> bool {
         let allowed = self.allowed();
-        if uninitialised(scoping, &allowed).is_some() {
+        if uninitialised(scoping, &allowed, &FxHashSet::default()).is_some() {
             return false;
         }
         let read_only = self

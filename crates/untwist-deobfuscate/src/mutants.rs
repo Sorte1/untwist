@@ -132,6 +132,17 @@ pub(crate) fn legacy_array_guards_dropped() -> bool {
     LEGACY_ARRAY_GUARDS_OFF.load(Ordering::Relaxed)
 }
 
+static DECLARED_MACHINERY_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_declared_machinery_for_tests(on: bool) {
+    DECLARED_MACHINERY_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn declared_machinery_trusted() -> bool {
+    DECLARED_MACHINERY_TRUSTED.load(Ordering::Relaxed)
+}
+
 static UNSAFE_NAMES_TRUSTED: AtomicBool = AtomicBool::new(false);
 
 #[doc(hidden)]

@@ -209,7 +209,6 @@ fn only_an_allowlisted_expression_before_the_rotator_runs_no_code() {
         "var o = { f() {} };",
         "var o = { ['k']: 1 };",
         "var a = [...[1]];",
-        "var f = function () {};",
         "var k = 1; k = 2; var t = -k;",
         "var w = window;",
         "var t = typeof x;",
@@ -221,6 +220,18 @@ fn only_an_allowlisted_expression_before_the_rotator_runs_no_code() {
             Some(notes::CODE_BEFORE_ROTATOR),
             "{prefix}"
         );
+    }
+}
+
+#[test]
+fn a_function_expression_bound_before_the_rotator_runs_no_code() {
+    for prefix in [
+        "var f = function () {};",
+        "let f = function () {};",
+        "const f = function () {}, g = function () {};",
+    ] {
+        let source = format!("{prefix}\n{NO_PARSE_INT}");
+        assert_eq!(refusal(&source), None, "{prefix}");
     }
 }
 
