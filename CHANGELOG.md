@@ -65,6 +65,12 @@ All notable changes to this project are documented in this file. The format is b
   the end of a chain (`a && "SedNn" === "SedNn" && b`, `if (a && "x" === "x")`). A member read
   it would hand to a call is still kept.
 
+- A decoder wrapper that reads a literal `const` of its own function (terser keeps
+  `const C = "0x396"; function g(n, x, e) { return dec(e - -C, n) }` beside the rotator) gets the
+  literal, so the rotator and the calls through the wrapper decode. Only reads of a const that is
+  never written are replaced, and only when every use of the wrapper comes after the const's
+  declaration in the same function.
+
 - The dead-code pass now also folds a constant-test conditional whose chosen branch is a member
   read (`"ab" === "cd" ? module.x : d[x]`), as dead-code injection leaves them inside functions;
   it still keeps the conditional when it is called or used as a template tag, where folding would

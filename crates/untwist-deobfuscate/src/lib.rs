@@ -38,6 +38,7 @@ pub mod unstamp;
 pub mod value_flow;
 pub mod var_transformation;
 pub mod wrapper_calls;
+mod wrapper_consts;
 mod wrapper_effects;
 pub mod wrappers;
 mod write_only;

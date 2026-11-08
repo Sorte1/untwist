@@ -1,5 +1,7 @@
 use untwist::{Options, Pipeline};
-use untwist_deobfuscate::mutants::trust_minified_rotators_for_tests;
+use untwist_deobfuscate::mutants::{
+    trust_minified_rotators_for_tests, trust_wrapper_constants_for_tests,
+};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/minified_shape_rows.txt");
@@ -38,9 +40,11 @@ fn every_refused_row_diverges_from_node_once_the_rotator_checks_are_dropped() {
     assert!(sabotage.len() >= 2, "found {} rows", sabotage.len());
     let run = |source: &str| transformed(false, source);
     trust_minified_rotators_for_tests(true);
+    trust_wrapper_constants_for_tests(true);
     let modes: [Mode<'_>; 1] = [("mutant", &run)];
     let diverged = node_rows::mismatches(&node, &sabotage, &modes);
     trust_minified_rotators_for_tests(false);
+    trust_wrapper_constants_for_tests(false);
     let names: Vec<&str> = diverged
         .iter()
         .filter_map(|row| row.split(" (mutant):").next())
@@ -63,11 +67,13 @@ fn refused_cookie_rows_are_lifted_once_the_rotator_checks_are_dropped() {
         .collect();
     assert!(!cookie.is_empty(), "found no cookie rows");
     trust_minified_rotators_for_tests(true);
+    trust_wrapper_constants_for_tests(true);
     let kept: Vec<String> = cookie
         .iter()
         .filter(|(_, source)| transformed(false, source).contains("arr0 = "))
         .map(|(label, _)| label.clone())
         .collect();
     trust_minified_rotators_for_tests(false);
+    trust_wrapper_constants_for_tests(false);
     assert!(kept.is_empty(), "not lifted under the mutant: {kept:?}");
 }

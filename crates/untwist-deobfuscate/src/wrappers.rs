@@ -739,6 +739,7 @@ fn apply_alias_site<'a>(
 #[derive(Default)]
 pub struct InlineDecoderWrappers {
     immediate_tried: bool,
+    constants_tried: bool,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -755,6 +756,14 @@ impl<'a> Pass<'a> for InlineDecoderWrappers {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        if !self.constants_tried {
+            let constants = crate::wrapper_consts::inline_wrapper_constants(program, cx);
+            self.constants_tried = constants == 0;
+            if constants > 0 {
+                cx.changed_by(constants);
+                return;
+            }
+        }
         let shares = cx.opts.shares_init_order;
         let lifted = crate::string_array::legacy::lifted_any();
         if lifted {
