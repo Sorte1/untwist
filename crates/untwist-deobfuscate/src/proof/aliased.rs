@@ -6,14 +6,14 @@ use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::aliased_flows::is_machinery;
+use super::aliased_flows::{is_function_method, is_machinery};
 use super::writes::{
     is_getter_definer, is_owned_definer, is_pending_key, key_of, record_definer_patch,
     record_member_patch, PatchKey,
 };
 use super::{Refusal, UsedNames, GLOBAL_OBJECTS};
 use crate::array_rotator::rotator_unit;
-use crate::mutants::builtin_aliases_trusted;
+use crate::mutants::{builtin_aliases_trusted, function_method_writes_ignored};
 use crate::notes;
 
 pub(super) const DANGER: u16 = 1;
@@ -200,6 +200,7 @@ pub struct BuiltinAliases<'s> {
     pub(super) lost: u16,
     pub(super) decoded: FxHashMap<Span, String>,
     pub(super) object_functions: FxHashMap<SymbolId, FxHashMap<String, Span>>,
+    pub(super) function_methods_written: bool,
     pub(super) strings: FxHashMap<SymbolId, Vec<String>>,
     pub(super) unknown_strings: FxHashSet<SymbolId>,
     pub(super) string_arrays: FxHashMap<SymbolId, Vec<String>>,
@@ -360,6 +361,11 @@ impl<'s> BuiltinAliases<'s> {
         })
     }
 
+    fn calls_own_method(&self, object: u16) -> bool {
+        (function_method_writes_ignored() || !self.function_methods_written)
+            && object & (DEFINER | GETTER_DEFINER | LOST) == 0
+    }
+
     fn single_key(&self, member: &MemberExpression<'_>) -> Option<String> {
         let MemberExpression::ComputedMemberExpression(computed) = member else {
             return None;
@@ -458,6 +464,9 @@ impl<'s> BuiltinAliases<'s> {
     }
 
     fn call(&self, call: &CallExpression<'_>) -> u16 {
+        if self.decoded.contains_key(&call.span) {
+            return 0;
+        }
         let callee = call.callee.without_parentheses();
         if let Some(member) = callee.as_member_expression() {
             let name = member_name(member);
@@ -586,7 +595,11 @@ impl<'s> BuiltinAliases<'s> {
         if let Some(member) = callee.as_member_expression() {
             let object = self.value(member.object());
             let resolved = self.single_key(member);
-            match member_name(member).or(resolved.as_deref()) {
+            let name = member_name(member).or(resolved.as_deref());
+            if name.is_some_and(is_function_method) && self.calls_own_method(object) {
+                return Vec::new();
+            }
+            match name {
                 Some(name) if is_getter_definer(name) => sites.push((object, key_at(0))),
                 Some(name) if is_owned_definer(name) => {
                     let key = match name {

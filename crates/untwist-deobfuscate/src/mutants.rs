@@ -318,3 +318,14 @@ pub fn trust_builtin_aliases_for_tests(on: bool) {
 pub(crate) fn builtin_aliases_trusted() -> bool {
     BUILTIN_ALIASES_TRUSTED.load(Ordering::Relaxed)
 }
+
+static FUNCTION_METHOD_WRITES_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn ignore_function_method_writes_for_tests(on: bool) {
+    FUNCTION_METHOD_WRITES_IGNORED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn function_method_writes_ignored() -> bool {
+    FUNCTION_METHOD_WRITES_IGNORED.load(Ordering::Relaxed)
+}

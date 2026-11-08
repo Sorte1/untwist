@@ -87,7 +87,10 @@ All notable changes to this project are documented in this file. The format is b
   (`var P = Array.prototype; P.shift = f`, `Object.defineProperty(P, "shift", ...)`, an aliased
   `Array`, `[].__proto__`). Before, such programs printed wrong strings. The refusal names the
   write's line and column; `--unsafe` assumes the built-ins are untouched and still decodes. A
-  definer call whose keys are all literal and none of them used does not refuse.
+  definer call whose keys are all literal and none of them used does not refuse. A function an IIFE returns
+  binds its parameters at the calls of the variable it is stored in, a call whose decoder argument
+  decodes is a string, and `fn.apply(...)` / `fn.call(...)` on a parameter that only holds program
+  functions is not a definer call unless the program stores a definer under such a key.
 
 - The dead-code pass now also folds a constant-test conditional whose chosen branch is a member
   read (`"ab" === "cd" ? module.x : d[x]`), as dead-code injection leaves them inside functions;

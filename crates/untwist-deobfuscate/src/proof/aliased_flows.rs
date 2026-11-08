@@ -7,7 +7,8 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::aliased::{
-    is_definer, member_name, BuiltinAliases, ANY, DANGER, GLOBAL, LOST, OBJECT_CONSTRUCTOR,
+    is_definer, member_name, BuiltinAliases, ANY, DANGER, DEFINER, GETTER_DEFINER, GLOBAL, LOST,
+    OBJECT_CONSTRUCTOR,
 };
 use crate::stamp::{decoder_index, string_array_unit};
 
@@ -75,6 +76,8 @@ struct Flows<'p> {
     sloppy_this: FxHashSet<Span>,
     strict: Vec<bool>,
     function: Vec<Span>,
+    function_methods_written: bool,
+    function_method_values: Vec<&'p Expression<'p>>,
 }
 
 impl<'p> Flows<'p> {
@@ -338,7 +341,7 @@ impl<'s, 'p> VisitJs<'p> for FlowScan<'s, 'p> {
                         let init: &'p Expression<'p> = self.alloc(init);
                         self.flows.array_inits.push((symbol, init));
                     }
-                    if let Some(span) = function_value(init) {
+                    if let Some(span) = function_value(init).or_else(|| returned_function(init)) {
                         self.flows.functions.insert(symbol, span);
                     }
                     self.record_object_functions(symbol, init);
@@ -408,6 +411,20 @@ impl<'s, 'p> VisitJs<'p> for FlowScan<'s, 'p> {
         }
         if let Some(member) = it.left.as_member_expression() {
             self.written_object(Some(member));
+            let key = member_key(member, self.decoded);
+            let computed = matches!(member, MemberExpression::ComputedMemberExpression(_));
+            let may_name = match key.as_deref() {
+                Some(name) => is_function_method(name),
+                None => computed,
+            };
+            if may_name {
+                if it.operator == oxc_syntax::operator::AssignmentOperator::Assign {
+                    let value: &'p Expression<'p> = self.alloc(&it.right);
+                    self.flows.function_method_values.push(value);
+                } else {
+                    self.flows.function_methods_written = true;
+                }
+            }
         }
         self.assign(&it.left, &it.right);
         walk_js::walk_assignment_expression(self, it);
@@ -559,6 +576,63 @@ impl FlowScan<'_, '_> {
     }
 }
 
+#[derive(Default)]
+struct TopReturns<'k, 'a> {
+    found: Vec<Option<&'k Expression<'a>>>,
+}
+
+impl<'k, 'a> TopReturns<'k, 'a> {
+    fn scan(&mut self, statements: &'k [Statement<'a>]) {
+        for stmt in statements {
+            self.statement(stmt);
+        }
+    }
+
+    fn statement(&mut self, stmt: &'k Statement<'a>) {
+        match stmt {
+            Statement::ReturnStatement(ret) => self.found.push(ret.argument.as_ref()),
+            Statement::BlockStatement(block) => self.scan(&block.body),
+            Statement::IfStatement(node) => {
+                self.statement(&node.consequent);
+                if let Some(alternate) = &node.alternate {
+                    self.statement(alternate);
+                }
+            }
+            Statement::FunctionDeclaration(_)
+            | Statement::ExpressionStatement(_)
+            | Statement::VariableDeclaration(_)
+            | Statement::EmptyStatement(_) => {}
+            _ => self.found.push(None),
+        }
+    }
+}
+
+fn unnamed_function(expr: &Expression<'_>) -> Option<Span> {
+    match expr.without_parentheses() {
+        Expression::FunctionExpression(function) if function.id.is_none() => Some(function.span),
+        Expression::ArrowFunctionExpression(arrow) => Some(arrow.span),
+        _ => None,
+    }
+}
+
+fn returned_function(init: &Expression<'_>) -> Option<Span> {
+    let Expression::CallExpression(call) = init.without_parentheses() else {
+        return None;
+    };
+    let Expression::FunctionExpression(outer) = call.callee.without_parentheses() else {
+        return None;
+    };
+    if outer.r#async || outer.generator || !call.arguments.is_empty() {
+        return None;
+    }
+    let mut returns = TopReturns::default();
+    returns.scan(&outer.body.as_ref()?.statements);
+    match returns.found.as_slice() {
+        [Some(value)] => unnamed_function(value),
+        _ => None,
+    }
+}
+
 fn function_value(expr: &Expression<'_>) -> Option<Span> {
     match expr.without_parentheses() {
         Expression::FunctionExpression(function) => Some(function.span),
@@ -594,6 +668,8 @@ pub fn builtin_aliases<'s>(
             sloppy_this: FxHashSet::default(),
             strict: Vec::new(),
             function: Vec::new(),
+            function_methods_written: false,
+            function_method_values: Vec::new(),
         },
     };
     scan.visit_program(program);
@@ -608,6 +684,8 @@ pub fn builtin_aliases<'s>(
         functions,
         sloppy_this,
         object_functions,
+        function_methods_written,
+        function_method_values,
         ..
     } = scan.flows;
     flows.extend(bound.flows);
@@ -625,6 +703,7 @@ pub fn builtin_aliases<'s>(
         lost: 0,
         decoded,
         object_functions,
+        function_methods_written,
         strings: FxHashMap::default(),
         unknown_strings: FxHashSet::default(),
         string_arrays: FxHashMap::default(),
@@ -677,6 +756,10 @@ pub fn builtin_aliases<'s>(
             break;
         }
     }
+    let definer_bits = DEFINER | GETTER_DEFINER | LOST;
+    aliases.function_methods_written |= function_method_values
+        .iter()
+        .any(|value| aliases.value(value) & definer_bits != 0);
     aliases
 }
 
@@ -800,6 +883,10 @@ fn solve_strings(
 struct Bound<'p> {
     flows: Vec<(Target, &'p Expression<'p>)>,
     parameters: FxHashSet<SymbolId>,
+}
+
+pub(super) fn is_function_method(name: &str) -> bool {
+    matches!(name, "apply" | "call" | "bind")
 }
 
 fn member_key(member: &MemberExpression<'_>, decoded: &FxHashMap<Span, String>) -> Option<String> {

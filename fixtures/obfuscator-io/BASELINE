@@ -68,7 +68,7 @@ pair-rc4+num	10	9/10	10/10	10/10	0	builtin-replaced-decoded-key (1)
 pair-rc4+self	10	4/10	10/10	10/10	0	builtin-replaced-decoded-key (2), safe-global-names (4)
 pair-rc4+split	10	9/10	10/10	10/10	0	builtin-replaced-decoded-key (1)
 pair-rc4+unicode	10	9/10	10/10	10/10	0	builtin-replaced-decoded-key (1)
-pair-rc4+wrap	10	9/10	10/10	10/10	0	builtin-replaced-decoded-key (1)
+pair-rc4+wrap	10	9/10	10/10	10/10	0	builtin-alias-patched (1)
 pair-self+debug	10	9/10	10/10	10/10	0	safe-debug-protection-kept (1)
 pair-split+debug	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-split+keys	10	9/10	10/10	10/10	0	safe-global-names (1)
@@ -85,7 +85,7 @@ pair-wrap+self	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-wrap+split	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-wrap+unicode	10	9/10	10/10	10/10	0	safe-global-names (1)
 preset-default	10	9/10	10/10	10/10	0	safe-global-names (1)
-preset-high	10	1/10	10/10	10/10	0	builtin-alias-patched (4), builtin-replaced-decoded-key (1), safe-global-key-reach (4)
+preset-high	10	0/10	10/10	10/10	0	builtin-alias-patched (6), safe-global-key-reach (4)
 preset-low	10	9/10	10/10	10/10	0	safe-global-names (1)
 preset-medium	10	0/10	10/10	10/10	0	builtin-alias-patched (8), safe-global-key-reach (2)
 rename-globals	10	9/10	10/10	10/10	0	safe-global-names (1)
@@ -115,9 +115,9 @@ wrappers-function-params-5	10	9/10	10/10	10/10	0	safe-global-names (1)
 wrappers-unchained	10	9/10	10/10	10/10	0	safe-global-names (1)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
 safe-global-names	84	87	87	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
-builtin-replaced-decoded-key	13	14	14	0	the global-object getter's code text (Function("return (function() " + ...)) is built through a proxy object whose keys are themselves decoder calls, so the text cannot be resolved before the decode and a stateful base64 or rc4 unit is refused as a possible built-in patch
+builtin-replaced-decoded-key	11	12	12	0	the global-object getter's code text (Function("return (function() " + ...)) is built through a proxy object whose keys are themselves decoder calls, so the text cannot be resolved before the decode and a stateful base64 or rc4 unit is refused as a possible built-in patch
 safe-debug-protection-kept	10	10	10	0	safe lane: after control-flow flattening or dead-code injection a reference to the debug protection function survives outside the statements the pass removes, so it stays and its Function global getter then blocks the unit
+builtin-alias-patched	3	15	15	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
 safe-global-key-reach	3	7	7	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve (an object spread or rest enumerates values, a Symbol-valued computed key), so the unit's call sites are left alone
 safe-domain-lock-reach	2	20	20	0	safe lane: the lock reuses the found key's var for another value later in the same function, so its for-in scan of the global object stays a global reach
-builtin-alias-patched	2	12	12	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
 object-keys-computed-key	1	1	1	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)
