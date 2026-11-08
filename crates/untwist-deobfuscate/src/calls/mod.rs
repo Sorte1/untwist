@@ -183,6 +183,15 @@ impl<'p> VisitJs<'p> for Collector<'p> {
 
 thread_local! {
     static DYNAMIC_SEEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static CONSTANT_RETRY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub(crate) fn request_constant_retry() {
+    CONSTANT_RETRY.with(|retry| retry.set(true));
+}
+
+pub(crate) fn take_constant_retry() -> bool {
+    CONSTANT_RETRY.with(|retry| retry.replace(false))
 }
 
 pub(crate) fn take_dynamic_seen() -> bool {
@@ -213,6 +222,7 @@ pub fn collect_base<'p>(
     collector.visit_program(program);
     if !collector.dynamic_calls.is_empty() {
         DYNAMIC_SEEN.with(|seen| seen.set(true));
+        request_constant_retry();
     }
     let mut patches = std::mem::take(&mut collector.patches);
     patches.shrink_to_fit();
