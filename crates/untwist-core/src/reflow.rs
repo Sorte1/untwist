@@ -11,7 +11,7 @@ mod placed;
 #[cfg(debug_assertions)]
 mod rounds;
 
-use crate::guard_shape::may_be_a_guard;
+use crate::guard_shape::{holder_read_target, may_be_a_guard};
 use guards::{splice_guards, Guard};
 pub use guards::{GuardRecord, GuardTally};
 #[cfg(feature = "test-hooks")]
@@ -301,6 +301,13 @@ impl<'a, const GUARDS: bool> VisitJs<'a> for Scan<'_, GUARDS> {
             self.note_candidate(it);
         }
         walk_js::walk_function(self, it, flags);
+    }
+
+    fn visit_object_expression(&mut self, it: &ObjectExpression<'a>) {
+        if GUARDS && holder_read_target(it).is_some() {
+            self.candidates.push(it.span.start);
+        }
+        walk_js::walk_object_expression(self, it);
     }
 
     fn visit_array_expression(&mut self, it: &ArrayExpression<'a>) {

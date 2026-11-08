@@ -11,7 +11,7 @@ use super::super::guards::{
     fixed_point_text, guard_candidate, holds_a_line_terminator, may_hold_a_guard, statement_guard,
     GuardRecord,
 };
-use crate::guard_shape::{may_be_a_guard, read_target};
+use crate::guard_shape::{holder_read_target, may_be_a_guard, read_target};
 use crate::print::{function_text, pretty_function_text};
 
 pub(super) const MARKER: &str = "\u{E000}";
@@ -253,6 +253,23 @@ impl<'a> VisitJsMut<'a> for Placer<'a> {
             self.settle(init);
         }
         walk_js_mut::walk_expression_statement(self, it);
+    }
+
+    fn visit_object_expression(&mut self, it: &mut ObjectExpression<'a>) {
+        if self.pending.is_none() {
+            if let Some(target) = holder_read_target(it) {
+                if !self.candidate {
+                    self.candidate = true;
+                    self.events.push(Event::Candidate);
+                }
+                let compacted = self.compacts(target);
+                self.pending = Some(Pending {
+                    target: std::ptr::from_ref(target),
+                    compacted,
+                });
+            }
+        }
+        walk_js_mut::walk_object_expression(self, it);
     }
 }
 

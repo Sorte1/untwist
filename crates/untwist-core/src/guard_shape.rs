@@ -74,6 +74,13 @@ pub fn read_target<'k, 'a>(function: &'k Function<'a>) -> Option<&'k Function<'a
     }
 }
 
+pub fn holder_read_target<'k, 'a>(object: &'k ObjectExpression<'a>) -> Option<&'k Function<'a>> {
+    if narrowed() || object.properties.len() < 2 {
+        return None;
+    }
+    cookie::holder_target(object)
+}
+
 fn binding_name<'k>(pattern: &'k BindingPattern<'_>) -> Option<&'k str> {
     match pattern {
         BindingPattern::BindingIdentifier(id) => Some(id.name.as_str()),
