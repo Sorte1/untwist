@@ -36,10 +36,10 @@ fn issue_113_no_variant_panics_and_the_good_site_still_decodes() {
     );
 
     let (code, _notes) = common::run_passes(SHORT_WRAPPER);
-    assert!(code.contains("function w(x)"), "{code}");
+    assert!(!code.contains("function w(x)"), "{code}");
     assert!(!code.contains("__DECODE_0__"), "{code}");
     assert!(code.contains("function b(c, d)"), "{code}");
-    assert!(code.contains("w(0)"), "{code}");
+    assert!(code.contains("console.log(b(0))"), "{code}");
 }
 
 #[test]
