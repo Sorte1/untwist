@@ -22,7 +22,7 @@ use crate::stamp::{decoder_index, decoder_name};
 use crate::units::MachineryDepth;
 
 use super::global_bindings::global_bindings;
-use super::sequenced::{chained_literal, ordered_values};
+use super::sequenced::{chained_literal, ordered_values, strip_writes};
 use super::variables::{variable_facts, Assignment, VariableFacts, Variables};
 use super::{decoder_call, is_splittable_branch};
 
@@ -313,6 +313,16 @@ fn assignment_slots(
             value: assignment.value,
         });
     }
+    let nested = assignments.iter().any(|outer| {
+        assignments.iter().any(|inner| {
+            inner.expression != outer.expression
+                && outer.expression.start <= inner.expression.start
+                && inner.expression.end <= outer.expression.end
+        })
+    });
+    if nested && !crate::mutants::nested_literal_writes_trusted() {
+        return None;
+    }
     let initialised =
         !facts.initialised_in.is_empty() && !crate::mutants::declarator_writes_ignored();
     if initialised && slots.iter().any(|slot| slot.index <= anchor.index()) {
@@ -381,7 +391,9 @@ fn inline_assigned_references<'a>(
             cx.note(notes::NO_PRECEDING_ASSIGNMENT, Some(reference.span));
             continue;
         };
-        if edits.insert(reference.span, value.clone_in(cx.allocator())) {
+        let mut value = value.clone_in(cx.allocator());
+        strip_writes(&mut value, cx.allocator());
+        if edits.insert(reference.span, value) {
             rewritten += 1;
         }
     }

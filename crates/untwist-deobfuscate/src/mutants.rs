@@ -241,3 +241,14 @@ pub fn ignore_declarator_writes_for_tests(on: bool) {
 pub(crate) fn declarator_writes_ignored() -> bool {
     DECLARATOR_WRITES_IGNORED.load(Ordering::Relaxed)
 }
+
+static NESTED_LITERAL_WRITES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_nested_literal_writes_for_tests(on: bool) {
+    NESTED_LITERAL_WRITES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn nested_literal_writes_trusted() -> bool {
+    NESTED_LITERAL_WRITES_TRUSTED.load(Ordering::Relaxed)
+}
