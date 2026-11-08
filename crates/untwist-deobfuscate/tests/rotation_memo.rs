@@ -235,7 +235,7 @@ function __DECODE_0__(i, k) {
   }), __DECODE_0__(i, k);
 }
 function dyn(x) { return __DECODE_0__(0, x); }
-dyn(\"-dyn\");
+dyn([\"-dyn\"].join(\"\"));
 console.log(__DECODE_0__(0, \"-lit\"));";
 
 #[test]
