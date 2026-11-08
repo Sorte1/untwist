@@ -285,3 +285,25 @@ pub fn trust_single_use_index_for_tests(on: bool) {
 pub(crate) fn single_use_index_trusted() -> bool {
     SINGLE_USE_INDEX_TRUSTED.load(Ordering::Relaxed)
 }
+
+static ALIAS_ROOT_NAMES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_alias_root_names_for_tests(on: bool) {
+    ALIAS_ROOT_NAMES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn alias_root_names_trusted() -> bool {
+    ALIAS_ROOT_NAMES_TRUSTED.load(Ordering::Relaxed)
+}
+
+static INERT_STATEMENTS_MOVED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn move_inert_statements_into_rotators_for_tests(on: bool) {
+    INERT_STATEMENTS_MOVED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn inert_statements_moved() -> bool {
+    INERT_STATEMENTS_MOVED.load(Ordering::Relaxed)
+}

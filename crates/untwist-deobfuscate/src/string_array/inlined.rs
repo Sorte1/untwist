@@ -273,7 +273,7 @@ fn alias_of<'k>(stmt: &'k Statement<'_>) -> Option<(&'k str, Option<&'k str>)> {
     }
 }
 
-fn loop_alias<'k>(stmt: &'k Statement<'_>) -> Option<Option<(&'k str, &'k str)>> {
+fn loop_alias<'k>(stmt: &'k Statement<'_>, array: &str) -> Option<Option<(&'k str, &'k str)>> {
     let Statement::ForStatement(node) = stmt else {
         return Some(None);
     };
@@ -282,16 +282,36 @@ fn loop_alias<'k>(stmt: &'k Statement<'_>) -> Option<Option<(&'k str, &'k str)>>
         Some(ForStatementInit::VariableDeclaration(declaration))
             if declaration.kind == VariableDeclarationKind::Var =>
         {
-            let [declarator] = declaration.declarations.as_slice() else {
-                return None;
-            };
-            let BindingPattern::BindingIdentifier(id) = &declarator.id else {
-                return None;
-            };
-            let source = declarator.init.as_ref().and_then(identifier_name)?;
-            Some(Some((id.name.as_str(), source)))
+            let mut aliases = Vec::new();
+            for declarator in &declaration.declarations {
+                let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+                    return None;
+                };
+                let source = declarator.init.as_ref().and_then(identifier_name)?;
+                aliases.push((id.name.as_str(), source));
+            }
+            let mut of_array = aliases.iter().filter(|(_, source)| *source == array);
+            match (of_array.next(), of_array.next()) {
+                (Some(found), None) => Some(Some(*found)),
+                _ => aliases.first().map(|first| Some(*first)),
+            }
         }
         _ => None,
+    }
+}
+
+fn inert_between(stmt: &Statement<'_>) -> bool {
+    match stmt {
+        Statement::FunctionDeclaration(_) => true,
+        Statement::VariableDeclaration(declaration) => {
+            declaration.declarations.iter().all(|declarator| {
+                matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+                    && declarator.init.as_ref().is_some_and(|init| {
+                        matches!(init.without_parentheses(), Expression::Identifier(_))
+                    })
+            })
+        }
+        _ => false,
     }
 }
 
@@ -326,16 +346,20 @@ fn checksum_plan(body: &[Statement<'_>], index: usize, scoping: &Scoping) -> Opt
     let movers = body
         .get(index + 1..)?
         .iter()
-        .take_while(|stmt| alias_of(stmt).is_some())
+        .take_while(|stmt| alias_of(stmt).is_some() || inert_between(stmt))
         .count();
     let at = index + 1 + movers;
     let rotator = body.get(at)?;
     if length == 0 || !is_infinite_rotator_loop(rotator) {
         return None;
     }
-    let looped = loop_alias(rotator)?;
+    let looped = loop_alias(rotator, array)?;
     let region = &body[index + 1..=at];
-    let mut moved: Vec<usize> = (index + 1..=at).collect();
+    let mut moved: Vec<usize> = (index + 1..=at)
+        .filter(|i| {
+            *i == at || alias_of(&body[*i]).is_some() || crate::mutants::inert_statements_moved()
+        })
+        .collect();
     loop {
         let kept: Vec<usize> = moved
             .iter()
@@ -388,7 +412,7 @@ fn rewrite_checksum<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'
         let mut stmt = it[index].take_in(cx);
         if index == at {
             if let Statement::ForStatement(node) = &mut stmt {
-                node.init = None;
+                drop_array_alias(node, plan);
             }
         } else if alias_of(&stmt).is_some_and(|(name, source)| {
             name == plan.target && source == Some(plan.array_name.as_str())
@@ -402,6 +426,21 @@ fn rewrite_checksum<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'
         it.remove(index);
     }
     true
+}
+
+fn drop_array_alias(node: &mut ForStatement<'_>, plan: &Plan) {
+    let Some(ForStatementInit::VariableDeclaration(declaration)) = node.init.as_mut() else {
+        node.init = None;
+        return;
+    };
+    declaration.declarations.retain(|declarator| {
+        let is_alias = matches!(&declarator.id, BindingPattern::BindingIdentifier(id) if id.name == plan.target.as_str())
+            && declarator.init.as_ref().and_then(identifier_name) == Some(plan.array_name.as_str());
+        !is_alias
+    });
+    if declaration.declarations.is_empty() {
+        node.init = None;
+    }
 }
 
 fn function_body<'k, 'a>(
