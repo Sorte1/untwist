@@ -264,3 +264,47 @@ fn a_bare_var_that_shadows_the_guarded_function_keeps_it() {
     let out = run(&alloc, &source);
     assert!(out.contains("sd()"), "{out}");
 }
+
+const ARROW_CONTROLLER: &str = "(() => {\n  let n = true;\n  return function (t, o) {\n    const e = n ? function () {\n      let e;\n      if (o) {\n        e = o.apply(t, arguments);\n        o = null;\n        return e;\n      }\n    } : function () {};\n    n = false;\n    return e;\n  };\n})()";
+
+const FLAGGED_RETURNER: &str = "var r = (n, t) => {\n    const e = o ? function () {\n      let e;\n      if (t) {\n        e = t.apply(n, arguments);\n        t = null;\n        return e;\n      }\n    } : function () {};\n    o = false;\n    return e;\n  };\n";
+
+#[test]
+fn an_arrow_controller_called_where_it_is_built_is_removed_with_its_call() {
+    let alloc = Allocator::default();
+    let source = format!(
+        "function hi() {{\n  const t = {ARROW_CONTROLLER}(this, () => 1);\n  t();\n  console.log('x');\n}}"
+    );
+    let out = run(&alloc, &source);
+    assert_eq!(out.trim(), "function hi() {\n  console.log(\"x\");\n}");
+}
+
+#[test]
+fn a_returner_whose_flag_is_set_beside_it_is_removed_with_its_calls() {
+    let alloc = Allocator::default();
+    let source = format!(
+        "function hi() {{\n  o = true;\n  var o;\n  {FLAGGED_RETURNER}  var s = r(this, () => 1);\n  s();\n  console.log('x');\n}}"
+    );
+    let out = run(&alloc, &source);
+    assert!(!out.contains("apply"), "{out}");
+    assert!(!out.contains("s()"), "{out}");
+    assert!(out.contains("console.log(\"x\")"), "{out}");
+}
+
+#[test]
+fn a_returner_whose_flag_is_never_set_is_kept() {
+    let alloc = Allocator::default();
+    let source = format!(
+        "function hi() {{\n  var o;\n  {FLAGGED_RETURNER}  var s = r(this, () => 1);\n  s();\n  console.log('x');\n}}"
+    );
+    let out = run(&alloc, &source);
+    assert!(out.contains("apply"), "{out}");
+}
+
+#[test]
+fn a_guarded_function_whose_result_is_not_declared_is_kept() {
+    let alloc = Allocator::default();
+    let source = "function hi() {\n  const t = (() => {\n    let n = true;\n    return function (t, o) {\n      const e = n ? function () {\n        if (o) {\n          e = o.apply(t, arguments);\n          o = null;\n          return e;\n        }\n      } : function () {};\n      n = false;\n      return e;\n    };\n  })()(this, () => 1);\n  t();\n  console.log('x');\n}";
+    let out = run(&alloc, source);
+    assert!(out.contains("apply"), "{out}");
+}

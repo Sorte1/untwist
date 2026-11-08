@@ -99,6 +99,11 @@ All notable changes to this project are documented in this file. The format is b
   (`(e = 1197, dec(363, e))`, as uglify-js leaves inlined wrappers) is decoded like one on a
   local variable; a parameter the function's `arguments` object can alias is left alone.
 
+- Self-defending call controllers minified by uglify-js or terser are removed like the unminified
+  ones: an arrow controller called where it is built (`(() => {...})()(this, cb)`), a controller
+  inlined into its caller with its flag set beside it (`o = !0; var o, r = (n, t) => {...}`), and a
+  guarded function that declares its result before assigning it.
+
 - String arrays from old javascript-obfuscator builds (a plain `var a = [...]` with a counting
   rotator and a `var b = function (t, x) { ... a[t -= 0] ... }` decoder) were not found, and the
   run said `no string array found`. They are now decoded when the array is only read by its
