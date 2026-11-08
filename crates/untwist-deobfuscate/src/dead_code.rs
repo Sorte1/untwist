@@ -315,6 +315,7 @@ pub struct DeadCode<'a> {
     unsafe_lane: bool,
     armed: usize,
     guarded: Vec<Span>,
+    callees: Vec<Span>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -536,14 +537,16 @@ impl<'a> DeadCode<'a> {
     fn is_unfoldable_result(
         &mut self,
         chosen: &Expression<'a>,
-        guarded: bool,
+        (guarded, callee): (bool, bool),
         cx: &Cx<'a, '_>,
     ) -> bool {
         match chosen.without_parentheses() {
             Expression::StaticMemberExpression(_)
             | Expression::ComputedMemberExpression(_)
             | Expression::PrivateFieldExpression(_)
-            | Expression::ChainExpression(_) => true,
+            | Expression::ChainExpression(_) => {
+                guarded || (callee && !crate::mutants::dead_member_callees_folded())
+            }
             Expression::Identifier(_) => {
                 guarded || *self.with.get_or_insert_with(|| has_with(cx.scoping()))
             }
@@ -559,6 +562,14 @@ impl<'a> DeadCode<'a> {
             }
             None => false,
         };
+        let callee = match self.callees.iter().rposition(|span| *span == expr.span()) {
+            Some(index) => {
+                self.callees.remove(index);
+                true
+            }
+            None => false,
+        };
+        let guarded = (guarded, callee);
         match expr {
             Expression::ConditionalExpression(conditional) => {
                 let value = self.decide(&conditional.test, cx)?.value;
@@ -651,6 +662,8 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants = ExpressionVariants::of(&[
     ExpressionKind::ConditionalExpression,
     ExpressionKind::LogicalExpression,
     ExpressionKind::UnaryExpression,
+    ExpressionKind::CallExpression,
+    ExpressionKind::TaggedTemplateExpression,
 ]);
 
 const ACTED_ON_STATEMENTS: StatementVariants =
@@ -695,6 +708,20 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn enter_expression(&mut self, expr: &mut Expression<'a>, _cx: &mut Cx<'a, '_>) {
+        let called = match &*expr {
+            Expression::CallExpression(call) => Some(&call.callee),
+            Expression::TaggedTemplateExpression(tagged) => Some(&tagged.tag),
+            _ => None,
+        };
+        if let Some(callee) = called.map(Expression::without_parentheses) {
+            if matches!(
+                callee,
+                Expression::ConditionalExpression(_) | Expression::LogicalExpression(_)
+            ) {
+                self.callees.push(callee.span());
+            }
+            return;
+        }
         let Expression::UnaryExpression(unary) = &*expr else {
             return;
         };
@@ -746,6 +773,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         self.renames = Renames::new();
         self.with = None;
         self.guarded = Vec::new();
+        self.callees = Vec::new();
     }
 
     fn enter_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
