@@ -147,7 +147,7 @@ pub(super) fn is_countdown(function: &Function<'_>, array: &str) -> bool {
         && matches!(body.statements.as_slice(), [stmt] if is_countdown_loop(stmt, counter, array))
 }
 
-fn incremented(arguments: &[Argument<'_>], count: &str) -> bool {
+pub(super) fn incremented(arguments: &[Argument<'_>], count: &str) -> bool {
     let [argument] = arguments else {
         return false;
     };
@@ -546,12 +546,22 @@ fn find_legacy(program: &Program<'_>, scoping: &Scoping) -> Option<Legacy> {
     finder.found
 }
 
+fn bare_var(stmt: &Statement<'_>) -> bool {
+    matches!(stmt, Statement::VariableDeclaration(declaration)
+    if declaration.kind == VariableDeclarationKind::Var
+        && declaration.declarations.iter().all(|declarator| {
+            declarator.init.is_none()
+                && matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+        }))
+}
+
 fn runs_code_before(body: &[Statement<'_>], index: usize) -> bool {
     body[..index].iter().any(|stmt| {
-        !matches!(
-            stmt,
-            Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_)
-        )
+        !bare_var(stmt)
+            && !matches!(
+                stmt,
+                Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_)
+            )
     })
 }
 
