@@ -37,6 +37,13 @@ fn calls(expr: &Expression<'_>, name: &str) -> bool {
         .is_some_and(|(callee, _)| identifier_name(callee) == Some(name))
 }
 
+fn calls_assigned(expr: Option<&Expression<'_>>, name: &str) -> bool {
+    let Some(Expression::CallExpression(call)) = expr.map(Expression::without_parentheses) else {
+        return false;
+    };
+    assigns_a_function(&call.callee, name)
+}
+
 pub(super) fn reassigns_itself(stmt: &Statement<'_>) -> bool {
     let Statement::FunctionDeclaration(function) = stmt else {
         return false;
@@ -46,6 +53,7 @@ pub(super) fn reassigns_itself(stmt: &Statement<'_>) -> bool {
     };
     let name = id.name.as_str();
     match body.statements.as_slice() {
+        [Statement::ReturnStatement(ret)] if calls_assigned(ret.argument.as_ref(), name) => true,
         [Statement::ReturnStatement(ret)] => {
             let Some(Expression::SequenceExpression(sequence)) =
                 ret.argument.as_ref().map(Expression::without_parentheses)
@@ -139,7 +147,7 @@ fn rotator_function<'k, 'a>(stmt: &'k mut Statement<'a>) -> Option<&'k mut Funct
     }
 }
 
-fn sees_its_parameters(function: &Function<'_>) -> bool {
+pub(super) fn sees_its_parameters(function: &Function<'_>) -> bool {
     let mut names = Names::default();
     names.visit_function(function, ScopeFlags::Function);
     ["arguments", "eval"]
@@ -147,7 +155,7 @@ fn sees_its_parameters(function: &Function<'_>) -> bool {
         .any(|name| names.seen.contains(*name))
 }
 
-fn unused_name(function: &Function<'_>, base: &str) -> Option<String> {
+pub(super) fn unused_name(function: &Function<'_>, base: &str) -> Option<String> {
     let mut names = Names::default();
     names.visit_function(function, ScopeFlags::Function);
     (0..64)

@@ -232,6 +232,64 @@ fn rotation_count(arguments: &[Argument<'_>], array: &str) -> Option<usize> {
     whole.then_some(value as usize)
 }
 
+fn declared_count(init: Option<&ForStatementInit<'_>>, counter: &str) -> Option<usize> {
+    let Some(ForStatementInit::VariableDeclaration(declaration)) = init else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+        return None;
+    };
+    let Some(Expression::NumericLiteral(count)) = declarator.init.as_ref() else {
+        return None;
+    };
+    let value = count.value;
+    let whole = value.fract() == 0.0 && (1.0..=f64::from(u32::MAX)).contains(&value);
+    (id.name == counter && declaration.kind == VariableDeclarationKind::Var && whole)
+        .then(|| value as usize - 1)
+}
+
+fn inline_countdown(
+    function: &Function<'_>,
+    arguments: &[Argument<'_>],
+    array: &str,
+) -> Option<usize> {
+    let target = only_parameter(function)?;
+    let [argument] = arguments else {
+        return None;
+    };
+    if argument.as_expression().and_then(identifier_name) != Some(array) {
+        return None;
+    }
+    let body = function.body.as_ref()?;
+    if function.id.is_some() || !body.directives.is_empty() {
+        return None;
+    }
+    let [Statement::ForStatement(node)] = body.statements.as_slice() else {
+        return None;
+    };
+    let Some(Expression::UpdateExpression(update)) = node.test.as_ref() else {
+        return None;
+    };
+    let SimpleAssignmentTarget::AssignmentTargetIdentifier(counter) = &update.argument else {
+        return None;
+    };
+    let counter = counter.name.as_str();
+    let shaped = counter != target
+        && node.update.is_none()
+        && node
+            .test
+            .as_ref()
+            .is_some_and(|test| predecrements(test, counter))
+        && pushes_shifted(&node.body, target);
+    if !shaped {
+        return None;
+    }
+    declared_count(node.init.as_ref(), counter)
+}
+
 fn legacy_rotation(stmt: &Statement<'_>, array: &str) -> Option<usize> {
     let Statement::ExpressionStatement(outer) = stmt else {
         return None;
@@ -243,6 +301,9 @@ fn legacy_rotation(stmt: &Statement<'_>, array: &str) -> Option<usize> {
         other => other,
     };
     let (function, arguments) = iife(call)?;
+    if let Some(count) = inline_countdown(function, arguments, array) {
+        return Some(count);
+    }
     let (target, count) = parameters(function)?;
     let body = function.body.as_ref()?;
     if function.id.is_some() || !body.directives.is_empty() {
@@ -365,7 +426,11 @@ fn shift_statement(stmt: &Statement<'_>, param: &str) -> bool {
     let Statement::ExpressionStatement(stmt) = stmt else {
         return false;
     };
-    let Expression::AssignmentExpression(assignment) = stmt.expression.without_parentheses() else {
+    shift_expression(&stmt.expression, param)
+}
+
+fn shift_expression(expr: &Expression<'_>, param: &str) -> bool {
+    let Expression::AssignmentExpression(assignment) = expr.without_parentheses() else {
         return false;
     };
     if assignment.operator == AssignmentOperator::Subtraction {
@@ -397,9 +462,18 @@ fn read_expression<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Expression<'a>
 }
 
 fn reads_array_at(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId, param: &str) -> bool {
-    let Some(Expression::ComputedMemberExpression(member)) =
-        read_expression(stmt).map(Expression::without_parentheses)
-    else {
+    read_expression(stmt).is_some_and(|read| reads_array_in(read, scoping, symbol, param))
+}
+
+fn reads_array_in(expr: &Expression<'_>, scoping: &Scoping, symbol: SymbolId, param: &str) -> bool {
+    let read = match expr.without_parentheses() {
+        Expression::SequenceExpression(sequence) => match sequence.expressions.as_slice() {
+            [shift, read] if shift_expression(shift, param) => read.without_parentheses(),
+            _ => return false,
+        },
+        other => other,
+    };
+    let Expression::ComputedMemberExpression(member) = read else {
         return false;
     };
     let reads = Reads {
@@ -824,12 +898,17 @@ fn rewrite<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>, legacy: Legacy) -
     applied > 0
 }
 
-pub(super) fn lift_legacy_array<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) -> bool {
+pub(super) fn lift_legacy_array<'a>(
+    program: &mut Program<'a>,
+    cx: &mut Cx<'a, '_>,
+    refused: &mut Option<(&'static str, Span)>,
+) -> bool {
     let Some(legacy) = find_legacy(program, cx.scoping()) else {
         return false;
     };
     if let Some((note, span)) = refusal(program, cx, &legacy) {
         cx.note(note, Some(span));
+        *refused = Some((note, span));
         return false;
     }
     if !rewrite(program, cx, legacy) {

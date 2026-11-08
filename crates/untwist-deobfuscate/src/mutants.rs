@@ -132,6 +132,17 @@ pub(crate) fn legacy_array_guards_dropped() -> bool {
     LEGACY_ARRAY_GUARDS_OFF.load(Ordering::Relaxed)
 }
 
+static MINIFIED_ROTATORS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_minified_rotators_for_tests(on: bool) {
+    MINIFIED_ROTATORS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn minified_rotators_trusted() -> bool {
+    MINIFIED_ROTATORS_TRUSTED.load(Ordering::Relaxed)
+}
+
 static DECLARED_MACHINERY_TRUSTED: AtomicBool = AtomicBool::new(false);
 
 #[doc(hidden)]

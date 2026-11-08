@@ -50,6 +50,7 @@ mod cookie;
 mod for_init;
 mod inlined;
 pub(crate) mod legacy;
+mod minified;
 mod patched;
 mod positions;
 mod prologue;
@@ -237,6 +238,7 @@ pub struct FindStringArray {
     simple_arrays_seen: Option<FxHashSet<Span>>,
     refused_by_decode: RefusedByDecode,
     legacy_searched: bool,
+    legacy_refused: Option<(&'static str, Span)>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -734,15 +736,22 @@ impl<'a> Pass<'a> for FindStringArray {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         if !self.legacy_searched {
+            let normalised = minified::normalise_minified(program, cx);
+            if normalised > 0 {
+                cx.changed_by(normalised);
+                return;
+            }
             let inlined = inlined::inline_assigned_rotators(program, cx);
             if inlined > 0 {
                 cx.changed_by(inlined);
                 return;
             }
-            if legacy::lift_legacy_array(program, cx) {
+            if legacy::lift_legacy_array(program, cx, &mut self.legacy_refused) {
                 return;
             }
             self.legacy_searched = true;
+        } else if let Some((note, span)) = self.legacy_refused {
+            cx.note(note, Some(span));
         }
         stamp_wrapped_array(program, cx, &self.refused_by_decode);
         let (sites, simple) = search_aliases(program, cx.scoping());

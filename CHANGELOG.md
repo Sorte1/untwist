@@ -87,6 +87,14 @@ All notable changes to this project are documented in this file. The format is b
   expression before the rotator now counts as set when the rotator runs. A function decoder of a
   plain array is left alone when code runs before the array's declaration.
 
+- Plain string arrays whose machinery was minified by uglify-js or terser after obfuscation were
+  not found: rotators written as arrow functions, the counting loop inlined into the rotator
+  (`for (var r = N; --r;)`), the checksum inlined into a one-parameter rotator, the rotator
+  joined to the decoder's declaration with a comma, and decoders of the form
+  `return (d = function (...) {...})(a, b)` or `return a = +a, arr[a]`. These are now put back
+  into the form the unminified builds use before the array is lifted. A refused plain array now
+  keeps its reason note when other passes changed the program in the same run.
+
 - String arrays from old javascript-obfuscator builds (a plain `var a = [...]` with a counting
   rotator and a `var b = function (t, x) { ... a[t -= 0] ... }` decoder) were not found, and the
   run said `no string array found`. They are now decoded when the array is only read by its
