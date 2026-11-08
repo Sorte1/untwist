@@ -248,11 +248,13 @@ pub struct FindStringArray {
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
     legacy::forget_lifts();
+    crate::decoded::forget_alias_refusals();
     Box::new(FindStringArray::default())
 }
 
 pub fn boxed_with<'a>(refused_by_decode: RefusedByDecode) -> Box<dyn Pass<'a> + 'a> {
     legacy::forget_lifts();
+    crate::decoded::forget_alias_refusals();
     Box::new(FindStringArray {
         refused_by_decode,
         ..FindStringArray::default()

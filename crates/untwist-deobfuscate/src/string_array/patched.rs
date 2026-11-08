@@ -84,6 +84,10 @@ pub(super) fn rotator_builtins_patched(
         return Some((notes::BUILTIN_PATCHED.to_string(), write.span));
     }
     let aliases = builtin_aliases(program, scoping, keys);
-    alias_refusal(&alias_sites(program, &aliases, &[rotator]), &used)
-        .map(|refusal| (refusal.message(), refusal.span))
+    alias_refusal(
+        &alias_sites(program, &aliases, &[rotator]),
+        &used,
+        program.source_text,
+    )
+    .map(|refusal| (refusal.message(), refusal.span))
 }

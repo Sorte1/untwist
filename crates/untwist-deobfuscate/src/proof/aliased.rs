@@ -360,6 +360,16 @@ impl<'s> BuiltinAliases<'s> {
         })
     }
 
+    fn single_key(&self, member: &MemberExpression<'_>) -> Option<String> {
+        let MemberExpression::ComputedMemberExpression(computed) = member else {
+            return None;
+        };
+        match self.key_set(&computed.expression)?.as_slice() {
+            [name] => Some(name.clone()),
+            _ => None,
+        }
+    }
+
     fn decoded_key_read(&self, member: &MemberExpression<'_>, object: u16) -> Option<u16> {
         let MemberExpression::ComputedMemberExpression(computed) = member else {
             return None;
@@ -557,7 +567,6 @@ impl<'s> BuiltinAliases<'s> {
             span: member.span(),
             key: self.site_key(key, expr),
             functions_only,
-            position: None,
         })
     }
 
@@ -576,7 +585,8 @@ impl<'s> BuiltinAliases<'s> {
         let mut sites: Vec<(u16, AliasKey)> = Vec::new();
         if let Some(member) = callee.as_member_expression() {
             let object = self.value(member.object());
-            match member_name(member) {
+            let resolved = self.single_key(member);
+            match member_name(member).or(resolved.as_deref()) {
                 Some(name) if is_getter_definer(name) => sites.push((object, key_at(0))),
                 Some(name) if is_owned_definer(name) => {
                     let key = match name {
@@ -622,7 +632,6 @@ impl<'s> BuiltinAliases<'s> {
                     span: call.span,
                     key,
                     functions_only: self.functions_only(target)?,
-                    position: None,
                 })
             })
             .collect()
@@ -676,23 +685,13 @@ pub struct AliasSite {
     span: Span,
     key: AliasKey,
     functions_only: bool,
-    position: Option<(usize, usize)>,
 }
 
-fn line_starts(source: &str) -> Vec<usize> {
-    std::iter::once(0)
-        .chain(source.match_indices('\n').map(|(at, _)| at + 1))
-        .collect()
-}
-
-fn position_of(starts: &[usize], length: usize, span: Span) -> Option<(usize, usize)> {
-    let offset = span.start as usize;
-    if offset > length {
-        return None;
-    }
-    let line = starts.partition_point(|start| *start <= offset);
-    let start = starts.get(line.checked_sub(1)?)?;
-    Some((line, offset - start + 1))
+fn position_of(source: &str, span: Span) -> Option<(usize, usize)> {
+    let before = source.get(..span.start as usize)?;
+    let line_start = before.rfind('\n').map_or(0, |at| at + 1);
+    let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;
+    Some((line, before[line_start..].chars().count() + 1))
 }
 
 impl AliasSite {
@@ -763,25 +762,16 @@ pub fn alias_sites(
         sites: Vec::new(),
     };
     scan.visit_program(program);
-    let mut sites = scan.sites;
-    if sites.is_empty() {
-        return sites;
-    }
-    let starts = line_starts(program.source_text);
-    let length = program.source_text.len();
-    for site in &mut sites {
-        site.position = position_of(&starts, length, site.span);
-    }
-    sites
+    scan.sites
 }
 
-pub fn alias_refusal(sites: &[AliasSite], used: &UsedNames<'_>) -> Option<Refusal> {
+pub fn alias_refusal(sites: &[AliasSite], used: &UsedNames<'_>, source: &str) -> Option<Refusal> {
     let site = sites.iter().find(|site| site.refuses(used))?;
     let key = match &site.key {
         AliasKey::Names(names) => format!("key {}", names.join(" or ")),
         AliasKey::Unknown => "computed key".to_string(),
     };
-    let detail = match site.position {
+    let detail = match position_of(source, site.span) {
         Some((line, column)) => format!("the write at line {line}:{column}, {key}"),
         None => format!("a write in code untwist built, {key}"),
     };

@@ -674,11 +674,7 @@ fn reached_by_name(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> O
     global_reach(program, scoping, (None, &machinery), watch).reach
 }
 
-fn refusal(
-    program: &Program<'_>,
-    cx: &Cx<'_, '_>,
-    legacy: &Legacy,
-) -> Option<(String, Span)> {
+fn refusal(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> Option<(String, Span)> {
     if legacy_array_guards_dropped() {
         return None;
     }
