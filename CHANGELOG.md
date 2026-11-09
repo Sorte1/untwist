@@ -53,6 +53,11 @@ All notable changes to this project are documented in this file. The format is b
   `var o = {}; o.k = v;` run in a statement list is folded in one pass, and the rotator searches
   for several string arrays share a walk.
 
+- An RC4 string decoder whose base64 step is an inline function (javascript-obfuscator 0.x after
+  uglify, as in Krunker) runs its key schedule and keystream loops natively, with the same steps
+  charged and the same output: a 6 MB Krunker build spends 54 % fewer instructions under
+  `--unsafe`.
+
 ### Fixed
 
 - Wasm glue names found in a bundle module now also apply to that module's function in the

@@ -5,17 +5,18 @@ use oxc_syntax::scope::ScopeFlags;
 use untwist_core::parse::parse_program;
 
 use super::base64::{FLAGGED, PLAIN, SELF_TEXT};
-use super::rc4::{SEQUENCES, STATEMENTS};
+use super::rc4::{INLINED_ATOB, SEQUENCES, STATEMENTS};
 use super::shape::function_shape;
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures");
 
-const TEMPLATES: [(&str, &str); 5] = [
+const TEMPLATES: [(&str, &str); 6] = [
     ("plain", PLAIN),
     ("self-text", SELF_TEXT),
     ("flagged", FLAGGED),
     ("rc4", STATEMENTS),
     ("rc4-sequences", SEQUENCES),
+    ("rc4-inlined", INLINED_ATOB),
 ];
 
 #[derive(Default)]
@@ -208,5 +209,21 @@ fn an_extra_statement_or_parameter_is_not_a_template() {
         assert!(plain.contains(from), "{from}");
         let changed = plain.replacen(from, to, 1);
         assert!(!templates(&changed).contains(&"plain"), "{from} -> {to}");
+    }
+}
+
+const RC4_INLINED: &str = "var rc4 = function (O, P) {for (var Q, R, S = [], T = 0x0, U = '', V = '', X = 0x0, Y = (O = function (a0) {for (var a1, a2, a3 = String(a0)['replace'](/=+$/, ''), a4 = '', a5 = 0x0, a6 = 0x0; a2 = a3['charAt'](a6++); ~a2 && (a1 = a5 % 0x4 ? 0x40 * a1 + a2 : a2, a5++ % 0x4) ? a4 += String['fromCharCode'](0xff & a1 >> (-0x2 * a5 & 0x6)) : 0x0) {a2 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/='['indexOf'](a2);}return a4;}(O))['length']; X < Y; X++) {V += '%' + ('00' + O['charCodeAt'](X)['toString'](0x10))['slice'](-0x2);}O = decodeURIComponent(V);R = 0x0;for (; R < 0x100; R++) {S[R] = R;}for (R = 0x0; R < 0x100; R++) {T = (T + S[R] + P['charCodeAt'](R % P['length'])) % 0x100;Q = S[R];S[R] = S[T];S[T] = Q;}R = 0x0;T = 0x0;for (var Z = 0x0; Z < O['length']; Z++) {T = (T + S[R = (R + 0x1) % 0x100]) % 0x100;Q = S[R];S[R] = S[T];S[T] = Q;U += String['fromCharCode'](O['charCodeAt'](Z) ^ S[(S[R] + S[T]) % 0x100]);}return U;};";
+
+#[test]
+fn the_inlined_atob_rc4_matches_its_template_and_a_changed_regex_does_not() {
+    assert_eq!(templates(RC4_INLINED), ["rc4-inlined"]);
+    for (from, to) in [
+        ("/=+$/", "/=*$/"),
+        ("/=+$/", "/=+$/g"),
+        ("% 0x100;Q", "% 0xff;Q"),
+    ] {
+        assert!(RC4_INLINED.contains(from), "{from}");
+        let changed = RC4_INLINED.replacen(from, to, 1);
+        assert!(templates(&changed).is_empty(), "{from} -> {to}");
     }
 }

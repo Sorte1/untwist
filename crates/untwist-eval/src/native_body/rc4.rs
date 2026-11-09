@@ -12,6 +12,7 @@ use crate::value::{Eval, JsString, ObjKind, ObjRef, PropKey, Value};
 
 pub(super) const STATEMENTS: &str = r"F(v0,v1,){var(v2=[],);var(v3=#0,);var(v4,);var(v5='',);e(a=(v0,call(v6,v0)));for(var(v7=#0,);b<(v7,#256);post++(v7)){e(a=(i(v2,v7),v7));};for(a=(v7,#0);b<(v7,#256);post++(v7)){e(a=(v3,b%(b+(b+(v3,i(v2,v7)),call(m(v1).'charCodeAt',b%(v7,m(v1).'length'))),#256)));e(a=(v4,i(v2,v7)));e(a=(i(v2,v7),i(v2,v3)));e(a=(i(v2,v3),v4));};e(a=(v7,#0));e(a=(v3,#0));for(var(v8=#0,);b<(v8,m(v0).'length');post++(v8)){e(a=(v7,b%(b+(v7,#1),#256)));e(a=(v3,b%(b+(v3,i(v2,v7)),#256)));e(a=(v4,i(v2,v7)));e(a=(i(v2,v7),i(v2,v3)));e(a=(i(v2,v3),v4));e(a+=(v5,call(m(v9).'fromCharCode',b^(call(m(v0).'charCodeAt',v8),i(v2,b%(b+(i(v2,v7),i(v2,v3)),#256))))));};ret(v5);}";
 pub(super) const SEQUENCES: &str = r"F(v0,v1,){var(v2=[],);var(v3=#0,);var(v4,);var(v5='',);e(a=(v0,call(v6,v0)));var(v7,);for(a=(v7,#0);b<(v7,#256);post++(v7)){e(a=(i(v2,v7),v7));};for(a=(v7,#0);b<(v7,#256);post++(v7)){e(a=(v3,b%(b+(b+(v3,i(v2,v7)),call(m(v1).'charCodeAt',b%(v7,m(v1).'length'))),#256)));e(a=(v4,i(v2,v7)));e(a=(i(v2,v7),i(v2,v3)));e(a=(i(v2,v3),v4));};e(a=(v7,#0));e(a=(v3,#0));for(var(v8=#0,);b<(v8,m(v0).'length');post++(v8)){e(a=(v7,b%(b+(v7,#1),#256)));e(a=(v3,b%(b+(v3,i(v2,v7)),#256)));e(a=(v4,i(v2,v7)));e(a=(i(v2,v7),i(v2,v3)));e(a=(i(v2,v3),v4));e(a+=(v5,call(m(v9).'fromCharCode',b^(call(m(v0).'charCodeAt',v8),i(v2,b%(b+(i(v2,v7),i(v2,v3)),#256))))));};ret(v5);}";
+pub(super) const INLINED_ATOB: &str = r"F(v0,v1,){for(var(v2,v3,v4=[],v5=#0,v6='',v7='',v8=#0,v9=m(a=(v0,call(F(v10,){for(var(v11,v12,v13=call(m(call(v14,v10)).'replace',re(=+$/),''),v15='',v16=#0,v17=#0,);a=(v12,call(m(v13).'charAt',post++(v17)));c(l&&(u~(v12),s(a=(v11,c(b%(v16,#4),b+(b*(#64,v11),v12),v12)),b%(post++(v16),#4),)),a+=(v15,call(m(v14).'fromCharCode',b&(#255,b>>(v11,b&(b*(#-2,v16),#6))))),#0)){e(a=(v12,call(m('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=').'indexOf',v12)));};ret(v15);},v0))).'length',);b<(v8,v9);post++(v8)){e(a+=(v7,b+('%',call(m(b+('00',call(m(call(m(v0).'charCodeAt',v8)).'toString',#16))).'slice',#-2))));};e(a=(v0,call(v18,v7)));e(a=(v3,#0));for(;b<(v3,#256);post++(v3)){e(a=(i(v4,v3),v3));};for(a=(v3,#0);b<(v3,#256);post++(v3)){e(a=(v5,b%(b+(b+(v5,i(v4,v3)),call(m(v1).'charCodeAt',b%(v3,m(v1).'length'))),#256)));e(a=(v2,i(v4,v3)));e(a=(i(v4,v3),i(v4,v5)));e(a=(i(v4,v5),v2));};e(a=(v3,#0));e(a=(v5,#0));for(var(v19=#0,);b<(v19,m(v0).'length');post++(v19)){e(a=(v5,b%(b+(v5,i(v4,a=(v3,b%(b+(v3,#1),#256)))),#256)));e(a=(v2,i(v4,v3)));e(a=(i(v4,v3),i(v4,v5)));e(a=(i(v4,v5),v2));e(a+=(v6,call(m(v14).'fromCharCode',b^(call(m(v0).'charCodeAt',v19),i(v4,b%(b+(i(v4,v3),i(v4,v5)),#256))))));};ret(v6);}";
 
 const STATE_LEN: usize = 256;
 const FILL_BYTES: u64 = 16 << 10;
@@ -19,14 +20,39 @@ const FILL_BYTES: u64 = 16 << 10;
 const CHAR_CODE_AT: Native = ("String.prototype", "charCodeAt");
 const FROM_CHAR_CODE: Native = ("String", "fromCharCode");
 
-const TEXT: usize = 0;
-const KEY: usize = 1;
-const STATE: usize = 2;
-const MIXER: usize = 3;
-const SWAP: usize = 4;
-const OUTPUT: usize = 5;
-const INDEX: usize = 7;
-const STRING: usize = 9;
+#[derive(Clone, Copy)]
+struct Roles {
+    text: usize,
+    key: usize,
+    state: usize,
+    mixer: usize,
+    swap: usize,
+    output: usize,
+    index: usize,
+    string: usize,
+}
+
+const SPLIT: Roles = Roles {
+    text: 0,
+    key: 1,
+    state: 2,
+    mixer: 3,
+    swap: 4,
+    output: 5,
+    index: 7,
+    string: 9,
+};
+
+const INLINED: Roles = Roles {
+    text: 0,
+    key: 1,
+    swap: 2,
+    index: 3,
+    state: 4,
+    mixer: 5,
+    output: 6,
+    string: 14,
+};
 
 #[derive(Clone, Copy)]
 struct Costs {
@@ -86,43 +112,43 @@ fn costs<'a>(
     Some((costs, body))
 }
 
-fn plan_fill<'a>(cx: &mut Planning<'_, 'a>, at: usize) -> Option<Fill> {
+fn plan_fill<'a>(cx: &mut Planning<'_, 'a>, at: usize, roles: Roles) -> Option<Fill> {
     let (costs, body) = costs(cx.for_statement(at)?, 0)?;
     (body.count(Event::Concat) == 0).then_some(())?;
     Some(Fill {
-        state: cx.slot(at, STATE)?,
-        index: cx.slot(at, INDEX)?,
+        state: cx.slot(at, roles.state)?,
+        index: cx.slot(at, roles.index)?,
         costs,
     })
 }
 
-fn plan_schedule<'a>(cx: &mut Planning<'_, 'a>, at: usize) -> Option<Schedule> {
+fn plan_schedule<'a>(cx: &mut Planning<'_, 'a>, at: usize, roles: Roles) -> Option<Schedule> {
     let (costs, body) = costs(cx.for_statement(at)?, 1)?;
     (body.count(Event::Concat) == 0).then_some(())?;
     Some(Schedule {
-        state: cx.slot(at, STATE)?,
-        mixer: cx.slot(at, MIXER)?,
-        swap: cx.slot(at, SWAP)?,
-        key: cx.slot(at, KEY)?,
-        index: cx.slot(at, INDEX)?,
+        state: cx.slot(at, roles.state)?,
+        mixer: cx.slot(at, roles.mixer)?,
+        swap: cx.slot(at, roles.swap)?,
+        key: cx.slot(at, roles.key)?,
+        index: cx.slot(at, roles.index)?,
         costs,
         get: body.at(Event::Get("charCodeAt"))?,
         call: body.first(Event::Call)?,
     })
 }
 
-fn plan_stream<'a>(cx: &mut Planning<'_, 'a>, at: usize) -> Option<Stream<'a>> {
+fn plan_stream<'a>(cx: &mut Planning<'_, 'a>, at: usize, roles: Roles) -> Option<Stream<'a>> {
     let (costs, body) = costs(cx.for_statement(at)?, 2)?;
-    let string = *cx.shape.names.get(STRING)?;
+    let string = *cx.shape.names.get(roles.string)?;
     (body.count(Event::Concat) == 1).then_some(())?;
     Some(Stream {
-        text: cx.slot(at, TEXT)?,
-        state: cx.slot(at, STATE)?,
-        index: cx.slot(at, INDEX)?,
-        mixer: cx.slot(at, MIXER)?,
-        swap: cx.slot(at, SWAP)?,
-        output: cx.slot(at, OUTPUT)?,
-        string: cx.read(at, STRING)?,
+        text: cx.slot(at, roles.text)?,
+        state: cx.slot(at, roles.state)?,
+        index: cx.slot(at, roles.index)?,
+        mixer: cx.slot(at, roles.mixer)?,
+        swap: cx.slot(at, roles.swap)?,
+        output: cx.slot(at, roles.output)?,
+        string: cx.read(at, roles.string)?,
         costs,
         marks: [
             body.at(Event::Read(string))?,
@@ -134,7 +160,11 @@ fn plan_stream<'a>(cx: &mut Planning<'_, 'a>, at: usize) -> Option<Stream<'a>> {
 }
 
 pub(super) fn plan<'a>(cx: &mut Planning<'_, 'a>) -> Option<Box<[Option<Step<'a>>]>> {
-    if cx.shape.text != STATEMENTS && cx.shape.text != SEQUENCES {
+    let text = cx.shape.text.as_str();
+    if text == INLINED_ATOB {
+        return plan_inlined(cx);
+    }
+    if text != STATEMENTS && text != SEQUENCES {
         return None;
     }
     let loops = cx.loops();
@@ -142,9 +172,21 @@ pub(super) fn plan<'a>(cx: &mut Planning<'_, 'a>) -> Option<Box<[Option<Step<'a>
         return None;
     };
     let mut steps = cx.no_steps();
-    steps[*fill] = Some(Step(Kind::Fill(plan_fill(cx, *fill)?)));
-    steps[*schedule] = Some(Step(Kind::Schedule(plan_schedule(cx, *schedule)?)));
-    steps[*stream] = Some(Step(Kind::Stream(plan_stream(cx, *stream)?)));
+    steps[*fill] = Some(Step(Kind::Fill(plan_fill(cx, *fill, SPLIT)?)));
+    steps[*schedule] = Some(Step(Kind::Schedule(plan_schedule(cx, *schedule, SPLIT)?)));
+    steps[*stream] = Some(Step(Kind::Stream(plan_stream(cx, *stream, SPLIT)?)));
+    Some(steps)
+}
+
+fn plan_inlined<'a>(cx: &mut Planning<'_, 'a>) -> Option<Box<[Option<Step<'a>>]>> {
+    let loops = cx.loops();
+    let [_, fill, schedule, stream] = loops.as_slice() else {
+        return None;
+    };
+    let mut steps = cx.no_steps();
+    steps[*fill] = Some(Step(Kind::Fill(plan_fill(cx, *fill, INLINED)?)));
+    steps[*schedule] = Some(Step(Kind::Schedule(plan_schedule(cx, *schedule, INLINED)?)));
+    steps[*stream] = Some(Step(Kind::Stream(plan_stream(cx, *stream, INLINED)?)));
     Some(steps)
 }
 

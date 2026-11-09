@@ -73,6 +73,40 @@ return output;
 };
 ";
 
+const RC4_INLINED: &str = r"
+var rc4 = function (O, P) {
+for (var Q, R, S = [], T = 0x0, U = '', V = '', X = 0x0, Y = (O = function (a0) {
+for (var a1, a2, a3 = String(a0)['replace'](/=+$/, ''), a4 = '', a5 = 0x0, a6 = 0x0; a2 = a3['charAt'](a6++); ~a2 && (a1 = a5 % 0x4 ? 0x40 * a1 + a2 : a2, a5++ % 0x4) ? a4 += String['fromCharCode'](0xff & a1 >> (-0x2 * a5 & 0x6)) : 0x0) {
+a2 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/='['indexOf'](a2);
+}
+return a4;
+}(O))['length']; X < Y; X++) {
+V += '%' + ('00' + O['charCodeAt'](X)['toString'](0x10))['slice'](-0x2);
+}
+O = decodeURIComponent(V);
+R = 0x0;
+for (; R < 0x100; R++) {
+S[R] = R;
+}
+for (R = 0x0; R < 0x100; R++) {
+T = (T + S[R] + P['charCodeAt'](R % P['length'])) % 0x100;
+Q = S[R];
+S[R] = S[T];
+S[T] = Q;
+}
+R = 0x0;
+T = 0x0;
+for (var Z = 0x0; Z < O['length']; Z++) {
+T = (T + S[R = (R + 0x1) % 0x100]) % 0x100;
+Q = S[R];
+S[R] = S[T];
+S[T] = Q;
+U += String['fromCharCode'](O['charCodeAt'](Z) ^ S[(S[R] + S[T]) % 0x100]);
+}
+return U;
+};
+";
+
 const SELF_TEXT: &str = "var d = function (s) {var t = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';var o = '', p = '', q = o + d;for (var a = 0x0, b, c, e = 0x0; c = s['charAt'](e++); ~c && (b = a % 0x4 ? b * 0x40 + c : c, a++ % 0x4) ? o += q['charCodeAt'](e + 0xa) - 0xa !== 0x0 ? String['fromCharCode'](0xff & b >> (-0x2 * a & 0x6)) : a : 0x0) {c = t['indexOf'](c);}for (var f = 0x0, g = o['length']; f < g; f++) {p += '%' + ('00' + o['charCodeAt'](f)['toString'](0x10))['slice'](-0x2);}return decodeURIComponent(p);};";
 
 const FLAGGED: &str = "var d = function (s) {var t = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';var o = '', p = '', q = o + d;var r = ('' + function () { return 0x0; })['indexOf']('\\n') !== -0x1;for (var a = 0x0, b, c, e = 0x0; c = s['charAt'](e++); ~c && (b = a % 0x4 ? b * 0x40 + c : c, a++ % 0x4) ? o += r || q['charCodeAt'](e + 0xa) - 0xa !== 0x0 ? String['fromCharCode'](0xff & b >> (-0x2 * a & 0x6)) : a : 0x0) {c = t['indexOf'](c);}for (var f = 0x0, g = o['length']; f < g; f++) {p += '%' + ('00' + o['charCodeAt'](f)['toString'](0x10))['slice'](-0x2);}return decodeURIComponent(p);};";
@@ -397,4 +431,82 @@ fn the_native_body_spends_exactly_the_interpreted_steps() {
     let (rendered, runs) = same(&source);
     assert_eq!(rendered, Ok("number:640".to_string()));
     assert_eq!(runs, 40 * 5);
+}
+
+fn inlined_calls(keys: &[&str]) -> String {
+    let calls: Vec<String> = texts()
+        .iter()
+        .enumerate()
+        .map(|(index, text)| {
+            let key = serde_json::to_string(keys[index % keys.len()]).expect("json");
+            format!("rc4({}, {key})", serde_json::to_string(text).expect("json"))
+        })
+        .collect();
+    format!(
+        "{RC4_INLINED} [{}].map(function (v) {{ return escape(v); }}).join('|')",
+        calls.join(",")
+    )
+}
+
+#[test]
+fn the_inlined_rc4_form_returns_what_the_interpreter_returns() {
+    let (rendered, runs) = same(&inlined_calls(&[
+        "DiKO",
+        "k",
+        "a longer key with ümlauts",
+        "\u{1f600}",
+    ]));
+    assert!(rendered.is_ok());
+    assert_eq!(runs, 3 * texts().len() as u64);
+}
+
+#[test]
+fn messy_input_to_the_inlined_rc4_form_runs_exactly_as_interpreted() {
+    for input in messy() {
+        let quoted = serde_json::to_string(&input).expect("json");
+        let _ = same(&format!("{RC4_INLINED} escape(rc4({quoted}, 'key'))"));
+    }
+}
+
+#[test]
+fn a_patched_inlined_rc4_step_runs_exactly_as_interpreted() {
+    let input = serde_json::to_string(&encode(b"patched", false)).expect("json");
+    for patch in [
+        "decodeURIComponent = function (s) { calls++; return 7; };",
+        "decodeURIComponent = function (s) { calls++; return s; };",
+        "String.prototype.charCodeAt = function () { calls++; return 7; };",
+        "String.fromCharCode = function (c) { calls++; return 'x'; };",
+        "String.prototype.replace = function () { calls++; return 'YWJj'; };",
+        "Array.prototype[3] = 9;",
+    ] {
+        let source = format!(
+            "var calls = 0; {RC4_INLINED} {patch} escape(rc4({input}, 'key')) + ':' + calls"
+        );
+        let _ = same(&source);
+    }
+    for key in ["''", "5", "null", "'\u{1f600}'"] {
+        let _ = same(&format!("{RC4_INLINED} escape(rc4({input}, {key}))"));
+    }
+}
+
+#[test]
+fn every_seventh_step_budget_of_an_inlined_rc4_decode_matches() {
+    let input = serde_json::to_string(&encode(b"a", false)).expect("json");
+    let source = format!("{RC4_INLINED} escape(rc4({input}, 'k'))");
+    let (_, records, _) = run(&source, BUDGET, false);
+    let total: u64 = records.iter().map(|record| record.steps_used).sum();
+    assert_eq!(same(&source).1, 3, "{source}");
+    for budget in (0..=total).step_by(7) {
+        let _ = same_at(&source, budget);
+    }
+}
+
+#[test]
+fn the_inlined_rc4_body_spends_exactly_the_interpreted_steps() {
+    let long = serde_json::to_string(&encode("decoded strings ".repeat(40).as_bytes(), false))
+        .expect("json");
+    let source = format!("{RC4_INLINED} var out = ''; for (var n = 0; n < 40; n++) out = rc4({long}, 'key' + n); out.length");
+    let (rendered, runs) = same(&source);
+    assert_eq!(rendered, Ok("number:640".to_string()));
+    assert_eq!(runs, 40 * 3);
 }
