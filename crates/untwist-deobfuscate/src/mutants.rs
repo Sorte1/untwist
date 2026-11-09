@@ -362,3 +362,14 @@ pub fn trust_callee_objects_for_tests(on: bool) {
 pub(crate) fn callee_objects_trusted() -> bool {
     CALLEE_OBJECTS_TRUSTED.load(Ordering::Relaxed)
 }
+
+static NESTED_WRITES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_nested_write_targets_for_tests(on: bool) {
+    NESTED_WRITES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn nested_writes_trusted() -> bool {
+    NESTED_WRITES_TRUSTED.load(Ordering::Relaxed)
+}

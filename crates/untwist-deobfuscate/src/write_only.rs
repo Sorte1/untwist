@@ -3,7 +3,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
-use oxc_syntax::operator::AssignmentOperator;
+use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -11,20 +11,20 @@ use untwist_core::ast_util::literal::is_safe_literal;
 use untwist_core::pass::Cx;
 use untwist_eval::fold::{fold_to_const, FoldOptions};
 
-use crate::mutants::write_only_order_trusted;
+use crate::mutants::{nested_writes_trusted, write_only_order_trusted};
 
 fn is_constant_value(expr: &Expression<'_>) -> bool {
     fold_to_const(expr, &FoldOptions::default()).is_some() || is_safe_literal(expr)
 }
 
-fn written_symbol(expr: &Expression<'_>, scoping: &Scoping) -> Option<SymbolId> {
+fn target_symbol(expr: &Expression<'_>, scoping: &Scoping) -> Option<SymbolId> {
     let Expression::AssignmentExpression(assignment) = expr.without_parentheses() else {
         return None;
     };
     let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
         return None;
     };
-    if assignment.operator != AssignmentOperator::Assign || !is_constant_value(&assignment.right) {
+    if assignment.operator != AssignmentOperator::Assign {
         return None;
     }
     scoping
@@ -32,9 +32,79 @@ fn written_symbol(expr: &Expression<'_>, scoping: &Scoping) -> Option<SymbolId> 
         .symbol_id()
 }
 
+fn written_symbol(expr: &Expression<'_>, scoping: &Scoping) -> Option<(SymbolId, usize)> {
+    let symbol = target_symbol(expr, scoping)?;
+    Some((symbol, self_writes(expr, symbol, scoping)?))
+}
+
+fn self_writes(expr: &Expression<'_>, symbol: SymbolId, scoping: &Scoping) -> Option<usize> {
+    let Expression::AssignmentExpression(assignment) = expr.without_parentheses() else {
+        return None;
+    };
+    if target_symbol(expr, scoping)? != symbol {
+        return nested_writes_trusted().then_some(0);
+    }
+    if is_constant_value(&assignment.right) {
+        return Some(1);
+    }
+    let nested = match assignment.right.without_parentheses() {
+        Expression::AssignmentExpression(_) => self_writes(&assignment.right, symbol, scoping)?,
+        _ => numeric_writes(&assignment.right, symbol, scoping)?,
+    };
+    Some(1 + nested)
+}
+
+fn numeric_writes(expr: &Expression<'_>, symbol: SymbolId, scoping: &Scoping) -> Option<usize> {
+    match expr.without_parentheses() {
+        Expression::NumericLiteral(_) => Some(0),
+        Expression::UnaryExpression(unary) => {
+            let numeric_operator = matches!(
+                unary.operator,
+                UnaryOperator::UnaryNegation | UnaryOperator::UnaryPlus | UnaryOperator::BitwiseNot
+            );
+            let operand = matches!(
+                unary.argument.without_parentheses(),
+                Expression::NumericLiteral(_)
+            );
+            (numeric_operator && operand).then_some(0)
+        }
+        Expression::BinaryExpression(binary) if is_numeric_operator(binary.operator) => {
+            let left = numeric_writes(&binary.left, symbol, scoping)?;
+            Some(left + numeric_writes(&binary.right, symbol, scoping)?)
+        }
+        Expression::AssignmentExpression(assignment) => {
+            let value = numeric_writes(&assignment.right, symbol, scoping)?;
+            if target_symbol(expr, scoping)? == symbol {
+                Some(1 + value)
+            } else {
+                nested_writes_trusted().then_some(value)
+            }
+        }
+        _ => None,
+    }
+}
+
+fn is_numeric_operator(operator: BinaryOperator) -> bool {
+    matches!(
+        operator,
+        BinaryOperator::Addition
+            | BinaryOperator::Subtraction
+            | BinaryOperator::Multiplication
+            | BinaryOperator::Division
+            | BinaryOperator::Remainder
+            | BinaryOperator::BitwiseAnd
+            | BinaryOperator::BitwiseOR
+            | BinaryOperator::BitwiseXOR
+            | BinaryOperator::ShiftLeft
+            | BinaryOperator::ShiftRight
+            | BinaryOperator::ShiftRightZeroFill
+    )
+}
+
 #[derive(Default)]
 struct Writes {
     in_sequences: FxHashMap<SymbolId, Vec<Span>>,
+    counts: FxHashMap<SymbolId, usize>,
     functions: Vec<Span>,
     owner: FxHashMap<Span, Span>,
 }
@@ -48,8 +118,9 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     fn visit_sequence_expression(&mut self, it: &SequenceExpression<'a>) {
         if let Some((_, leading)) = it.expressions.split_last() {
             for expr in leading {
-                if let Some(symbol) = written_symbol(expr, self.scoping) {
+                if let Some((symbol, count)) = written_symbol(expr, self.scoping) {
                     let span = expr.without_parentheses().span();
+                    *self.writes.counts.entry(symbol).or_default() += count;
                     self.writes
                         .in_sequences
                         .entry(symbol)
@@ -175,7 +246,7 @@ pub(crate) fn plan(program: &Program<'_>, scoping: &Scoping) -> Option<Plan> {
     let wanted: FxHashSet<SymbolId> = writes
         .in_sequences
         .iter()
-        .filter(|(symbol, spans)| write_only(scoping, **symbol, spans.len()))
+        .filter(|(symbol, _)| write_only(scoping, **symbol, writes.counts[*symbol]))
         .map(|(symbol, _)| *symbol)
         .collect();
     if wanted.is_empty() {

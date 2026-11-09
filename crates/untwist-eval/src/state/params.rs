@@ -2,7 +2,10 @@ use oxc_ast::ast::{
     ArrowFunctionExpression, AssignmentOperator, AssignmentTarget, BindingPattern,
     ComputedMemberExpression, Declaration, Expression, FormalParameters, Function, FunctionBody,
 };
-use oxc_ast::ast::{IdentifierReference, Statement, VariableDeclaration, VariableDeclarationKind};
+use oxc_ast::ast::{
+    BlockStatement, CatchClause, ForInStatement, ForOfStatement, ForStatement, ForStatementInit,
+    ForStatementLeft, IdentifierReference, Statement, VariableDeclaration, VariableDeclarationKind,
+};
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::Span;
 use oxc_syntax::operator::BinaryOperator;
@@ -57,6 +60,31 @@ fn hoisted_vars<'a>(statements: &'a [Statement<'a>]) -> Vec<&'a str> {
     hoisted.names
 }
 
+fn lexical_names<'a>(declaration: &'a VariableDeclaration<'a>) -> Vec<&'a str> {
+    if !matches!(
+        declaration.kind,
+        VariableDeclarationKind::Let | VariableDeclarationKind::Const
+    ) {
+        return Vec::new();
+    }
+    declaration
+        .declarations
+        .iter()
+        .filter_map(|declarator| param_name(&declarator.id))
+        .collect()
+}
+
+fn block_lexicals<'a>(statements: &'a [Statement<'a>]) -> Vec<&'a str> {
+    statements
+        .iter()
+        .filter_map(|statement| match statement {
+            Statement::VariableDeclaration(declaration) => Some(lexical_names(declaration)),
+            _ => None,
+        })
+        .flatten()
+        .collect()
+}
+
 fn declared_names<'a>(statements: &'a [Statement<'a>]) -> Vec<&'a str> {
     let mut names = hoisted_vars(statements);
     for statement in statements {
@@ -80,6 +108,26 @@ fn declared_names<'a>(statements: &'a [Statement<'a>]) -> Vec<&'a str> {
         }
     }
     names
+}
+
+impl<'a> ParamUsage<'a> {
+    fn enter_lexicals(&mut self, names: Vec<&'a str>) -> bool {
+        if !crate::mutants::block_shadows_leak() {
+            self.shadowed.push(names);
+            return true;
+        }
+        match self.shadowed.last_mut() {
+            Some(top) => top.extend(names),
+            None => self.shadowed.push(names),
+        }
+        false
+    }
+
+    fn leave_lexicals(&mut self, entered: bool) {
+        if entered {
+            self.shadowed.pop();
+        }
+    }
 }
 
 impl<'a> VisitJs<'a> for ParamUsage<'a> {
@@ -120,6 +168,51 @@ impl<'a> VisitJs<'a> for ParamUsage<'a> {
 
     fn visit_assignment_target(&mut self, it: &AssignmentTarget<'a>) {
         stack::maybe_grow_dyn(&mut || walk_js::walk_assignment_target(self, it));
+    }
+
+    fn visit_block_statement(&mut self, it: &BlockStatement<'a>) {
+        let block: &'a BlockStatement<'a> = self.alloc(it);
+        let entered = self.enter_lexicals(block_lexicals(&block.body));
+        walk_js::walk_block_statement(self, it);
+        self.leave_lexicals(entered);
+    }
+
+    fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
+        let node: &'a ForStatement<'a> = self.alloc(it);
+        let names = match &node.init {
+            Some(ForStatementInit::VariableDeclaration(declaration)) => lexical_names(declaration),
+            _ => Vec::new(),
+        };
+        let entered = self.enter_lexicals(names);
+        walk_js::walk_for_statement(self, it);
+        self.leave_lexicals(entered);
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        let node: &'a ForInStatement<'a> = self.alloc(it);
+        let entered = self.enter_lexicals(loop_head_lexicals(&node.left));
+        walk_js::walk_for_in_statement(self, it);
+        self.leave_lexicals(entered);
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        let node: &'a ForOfStatement<'a> = self.alloc(it);
+        let entered = self.enter_lexicals(loop_head_lexicals(&node.left));
+        walk_js::walk_for_of_statement(self, it);
+        self.leave_lexicals(entered);
+    }
+
+    fn visit_catch_clause(&mut self, it: &CatchClause<'a>) {
+        let node: &'a CatchClause<'a> = self.alloc(it);
+        let names = node
+            .param
+            .as_ref()
+            .and_then(|param| param_name(&param.pattern))
+            .into_iter()
+            .collect();
+        let entered = self.enter_lexicals(names);
+        walk_js::walk_catch_clause(self, it);
+        self.leave_lexicals(entered);
     }
 
     fn visit_binding_pattern(&mut self, it: &BindingPattern<'a>) {
@@ -165,6 +258,13 @@ impl<'a> VisitJs<'a> for ParamUsage<'a> {
             return;
         }
         walk_js::walk_computed_member_expression(self, it);
+    }
+}
+
+fn loop_head_lexicals<'a>(left: &'a ForStatementLeft<'a>) -> Vec<&'a str> {
+    match left {
+        ForStatementLeft::VariableDeclaration(declaration) => lexical_names(declaration),
+        _ => Vec::new(),
     }
 }
 
