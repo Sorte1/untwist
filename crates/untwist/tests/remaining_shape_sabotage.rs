@@ -1,7 +1,7 @@
 use untwist::{Options, Pipeline};
 use untwist_deobfuscate::mutants::{
     trust_callee_objects_for_tests, trust_cookie_block_vars_for_tests,
-    trust_inline_returners_for_tests,
+    trust_inline_returners_for_tests, trust_sequence_object_reads_for_tests,
 };
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
@@ -19,7 +19,7 @@ fn transformed(source: &str) -> String {
 
 type Switch = fn(bool);
 
-const KEPT: [(&str, Switch); 2] = [
+const KEPT: [(&str, Switch); 3] = [
     (
         "keep-a-returner-call-that-is-not-self-defending",
         trust_inline_returners_for_tests,
@@ -27,6 +27,10 @@ const KEPT: [(&str, Switch); 2] = [
     (
         "keep-a-callee-object-read-before-its-assignment",
         trust_callee_objects_for_tests,
+    ),
+    (
+        "keep-a-sequence-object-read-before-its-assignment",
+        trust_sequence_object_reads_for_tests,
     ),
 ];
 

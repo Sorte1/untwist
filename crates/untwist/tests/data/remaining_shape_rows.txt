@@ -3,3 +3,5 @@ keep-a-returner-call-that-is-not-self-defending|-|(()=>{function r(n){var t;t=tr
 dec-a-proxy-object-assigned-before-its-var|Kmtil|(()=>{let arr0=['a','b'];function f(x){t=r=>r+arr0[1];u={Kmtil:function(r,n){return r(n)}};var t;var u;let i=function(r){return u.Kmtil(t,r)};return i(x)}console.log(f(arr0[0]))})();
 dec-a-proxy-object-assigned-in-its-own-callee|TCjgg|(()=>{let arr0=['a','b'];let s,p;console.log((s={label:arr0[0],depth:2},(p={TCjgg:function(t,r){return t+r},TvFuT:" at depth "}).TCjgg(p.TCjgg(s.label,p.TvFuT),s.depth)))})();
 keep-a-callee-object-read-before-its-assignment|-|(()=>{let arr0=['a','b'];let p;console.log(typeof p,(p={TCjgg:function(t,r){return t+r}}).TCjgg(arr0[0],arr0[1]))})();
+dec-a-proxy-object-assigned-in-a-call-argument-sequence|TgeoF|(()=>{let arr0=['a','b'];var x;var d;console.log((x=13,d={TgeoF:function(n,e){return n<e},gmooT:function(n,e){return n+e}},[96,98].map(n=>d.TgeoF(n,97)?d.gmooT(n,x):arr0[1]).join()))})();
+keep-a-sequence-object-read-before-its-assignment|-|(()=>{let arr0=['a','b'];var x;var d;console.log((x=typeof d,d={TgeoF:function(n,e){return n<e}},d.TgeoF(1,2)),x,arr0[0])})();

@@ -48,6 +48,13 @@ All notable changes to this project are documented in this file. The format is b
   combined `deobfuscated.js`. Before, the combined file was checked against the module on its own
   and kept the minified names when another module held an object like `{ a: { z: 1 } }`, or when
   two modules each loaded a wasm module.
+- Under `--unsafe`, the minified atob set-up of old decoders
+  (`try { var t = Function(...)() } catch (e) { t = window }`) is dropped when the decoder later
+  reuses `t` only after overwriting it, as in `return void 0 === (t = memo[k]) ? ... : t`. A
+  write on one branch of a conditional or one side of `&&`/`||` does not count. A control-flow
+  proxy object assigned inside a sequence (`f((x = 13, d = { ... }, g(d.k(a, b))))`) moves to its
+  empty `var d;` declaration when every other use of `d` comes later in that sequence. The version
+  matrix decodes 5 more cells under `--unsafe`.
 
 - A function string array's rotator loop that uglify-js left inline in a function body
   (`for (var u = arr(); ;) try { ... } catch (e) { ... }` beside the module code) is wrapped back

@@ -395,3 +395,25 @@ pub fn trust_rotator_loop_bindings_for_tests(on: bool) {
 pub(crate) fn rotator_loop_bindings_trusted() -> bool {
     ROTATOR_LOOP_BINDINGS_TRUSTED.load(Ordering::Relaxed)
 }
+
+static WRITTEN_FIRST_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_holders_written_first_for_tests(on: bool) {
+    WRITTEN_FIRST_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn written_first_trusted() -> bool {
+    WRITTEN_FIRST_TRUSTED.load(Ordering::Relaxed)
+}
+
+static SEQUENCE_OBJECT_READS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_sequence_object_reads_for_tests(on: bool) {
+    SEQUENCE_OBJECT_READS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn sequence_object_reads_trusted() -> bool {
+    SEQUENCE_OBJECT_READS_TRUSTED.load(Ordering::Relaxed)
+}
