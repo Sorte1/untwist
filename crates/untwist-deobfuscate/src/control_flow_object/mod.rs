@@ -27,6 +27,7 @@ mod declared;
 mod hoisted;
 mod keys;
 mod nested;
+mod sequenced;
 
 pub use declared::DeclaredObject;
 
@@ -546,6 +547,9 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
         let mut declared = hoisted::declare_assigned_objects(stmts, cx);
         if declared == 0 && self.callee_objects {
             declared = hoisted::declare_callee_objects(stmts, cx);
+        }
+        if declared == 0 {
+            declared = sequenced::declare_sequenced_objects(stmts, cx);
         }
         cx.changed_by(declared);
     }

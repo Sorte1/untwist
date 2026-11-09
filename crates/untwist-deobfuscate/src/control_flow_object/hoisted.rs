@@ -116,7 +116,7 @@ pub(super) fn declare_assigned_objects<'a>(
     pairs.len()
 }
 
-fn pure_object(object: &ObjectExpression<'_>) -> bool {
+pub(super) fn pure_object(object: &ObjectExpression<'_>) -> bool {
     object.properties.iter().all(|property| {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
             return false;
@@ -223,7 +223,7 @@ impl<'a> oxc_ast_visit::VisitJs<'a> for Finder<'_> {
     }
 }
 
-fn empty_lexical_or_var(stmt: &Statement<'_>) -> Option<SymbolId> {
+pub(super) fn empty_lexical_or_var(stmt: &Statement<'_>) -> Option<SymbolId> {
     let Statement::VariableDeclaration(declaration) = stmt else {
         return None;
     };

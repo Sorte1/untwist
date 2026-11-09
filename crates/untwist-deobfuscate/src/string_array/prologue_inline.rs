@@ -8,6 +8,7 @@ use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::Cx;
 
 use super::prologue::{assigned_grab, inline_grab, polyfills, single};
+use crate::mutants::written_first_trusted;
 
 struct Reference {
     span: Span,
@@ -55,7 +56,105 @@ fn references(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> Vec<
     scan.found
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum First {
+    Nothing,
+    Write,
+    Other,
+}
+
+fn mentions(expr: &Expression<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
+    let mut scan = References {
+        scoping,
+        symbol,
+        depth: 0,
+        found: Vec::new(),
+    };
+    scan.visit_expression(expr);
+    !scan.found.is_empty()
+}
+
+fn first_of(exprs: &[&Expression<'_>], scoping: &Scoping, symbol: SymbolId) -> First {
+    for expr in exprs {
+        match first_use(expr, scoping, symbol) {
+            First::Nothing => {}
+            found => return found,
+        }
+    }
+    First::Nothing
+}
+
+fn written_identifier(target: &AssignmentTarget<'_>, scoping: &Scoping) -> Option<SymbolId> {
+    let AssignmentTarget::AssignmentTargetIdentifier(id) = target else {
+        return None;
+    };
+    scoping.get_reference(id.reference_id.get()?).symbol_id()
+}
+
+fn first_use(expr: &Expression<'_>, scoping: &Scoping, symbol: SymbolId) -> First {
+    let conditional = |part: &Expression<'_>| {
+        if mentions(part, scoping, symbol) {
+            First::Other
+        } else {
+            First::Nothing
+        }
+    };
+    match expr {
+        Expression::ParenthesizedExpression(inner) => first_use(&inner.expression, scoping, symbol),
+        Expression::AssignmentExpression(assigned)
+            if assigned.operator == AssignmentOperator::Assign
+                && written_identifier(&assigned.left, scoping) == Some(symbol) =>
+        {
+            if mentions(&assigned.right, scoping, symbol) {
+                First::Other
+            } else {
+                First::Write
+            }
+        }
+        Expression::ConditionalExpression(node) => match first_use(&node.test, scoping, symbol) {
+            First::Nothing => {
+                let found = first_of(&[&node.consequent, &node.alternate], scoping, symbol);
+                if written_first_trusted() {
+                    found
+                } else {
+                    found.max_with(First::Other)
+                }
+            }
+            found => found,
+        },
+        Expression::LogicalExpression(node) => match first_use(&node.left, scoping, symbol) {
+            First::Nothing if written_first_trusted() => first_use(&node.right, scoping, symbol),
+            First::Nothing => conditional(&node.right),
+            found => found,
+        },
+        Expression::BinaryExpression(node) => first_of(&[&node.left, &node.right], scoping, symbol),
+        Expression::UnaryExpression(node) => first_use(&node.argument, scoping, symbol),
+        Expression::SequenceExpression(node) => {
+            let parts: Vec<&Expression<'_>> = node.expressions.iter().collect();
+            first_of(&parts, scoping, symbol)
+        }
+        other => conditional(other),
+    }
+}
+
+impl First {
+    fn max_with(self, other: First) -> First {
+        match self {
+            First::Nothing => First::Nothing,
+            _ => other,
+        }
+    }
+}
+
 fn overwrites_first(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
+    let nested = match stmt {
+        Statement::ReturnStatement(node) => node.argument.as_ref(),
+        Statement::ExpressionStatement(node) => Some(&node.expression),
+        _ => None,
+    };
+    if nested.is_some_and(|expr| first_use(expr, scoping, symbol) == First::Write) {
+        return true;
+    }
     let (init, bound) = match stmt {
         Statement::VariableDeclaration(declaration) => {
             let [declarator] = declaration.declarations.as_slice() else {

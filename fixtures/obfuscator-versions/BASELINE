@@ -11,7 +11,7 @@
 0.10.2--b64-norot-t75-self--iife--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--b64-rot-t1--wp4-module--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 0.10.2--b64-rot-t75-self--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), stateful-decoder-state (1)
-0.10.2--b64-rot-t75-unicode--iife--uglify	1	0/1	0/1	-	0	builtin-alias-patched (1), decoder-reads-outer-binding (1)
+0.10.2--b64-rot-t75-unicode--iife--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
 0.10.2--b64-rot-t75-unicode--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--plain-norot-t1--iife--uglify	1	1/1	1/1	-	0	-
 0.10.2--plain-norot-t1-cff--wp4-module--terser	1	1/1	1/1	-	0	-
@@ -33,10 +33,10 @@
 0.10.2--rc4-norot-t75--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--rc4-rot-t1-cff--iife--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--rc4-rot-t1-cff--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
-0.10.2--rc4-rot-t1-dead--wp4-module--uglify	1	0/1	0/1	-	0	builtin-alias-patched (1), decoder-reads-outer-binding (1)
+0.10.2--rc4-rot-t1-dead--wp4-module--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
 0.10.2--rc4-rot-t1-self--top--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), stateful-decoder-state (1)
 0.10.2--rc4-rot-t75--wp4-module--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
-0.10.2--rc4-rot-t75-dead--iife--uglify	1	0/1	0/1	-	0	builtin-alias-patched (1), decoder-reads-outer-binding (1)
+0.10.2--rc4-rot-t75-dead--iife--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
 0.16.0--b64-norot-t1-mangled--iife--uglify	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.16.0--b64-norot-t75-cff--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.16.0--b64-norot-t75-keys--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -64,7 +64,7 @@
 0.16.0--rc4-norot-t1-cff--wp4-module--uglify	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.16.0--rc4-norot-t1-dead--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.16.0--rc4-norot-t1-self--wp4-module--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
-0.16.0--rc4-norot-t75--iife--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
+0.16.0--rc4-norot-t75--iife--uglify	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.16.0--rc4-norot-t75--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.16.0--rc4-norot-t75-keys--wp4-module--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.16.0--rc4-norot-t75-mangled--top--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
@@ -75,7 +75,7 @@
 0.16.0--rc4-rot-t75-self--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.18.8--b64-norot-t1--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.18.8--b64-norot-t75--iife--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
-0.18.8--b64-norot-t75-cff--wp4-module--uglify	1	0/1	0/1	-	0	decoder-reads-outer-binding (2)
+0.18.8--b64-norot-t75-cff--wp4-module--uglify	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.18.8--b64-norot-t75-mangled--iife--uglify	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.18.8--b64-norot-t75-mangled--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.18.8--b64-rot-t1-cff--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -727,7 +727,7 @@
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
 legacy-array-reached	270	270	270	0	safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded
 builtin-replaced-decoded-key	76	76	76	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
-decoder-reads-outer-binding	63	63	67	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
+decoder-reads-outer-binding	60	60	62	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
 builtin-alias-patched	52	52	52	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
 stateful-decoder-state	20	20	24	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
 safe-global-key-reach	16	16	16	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
