@@ -157,7 +157,9 @@ impl Pipeline {
         reservation: Reservation<'_>,
         (room, reserved): (Option<InputRoom>, u64),
     ) -> InputResult {
+        let rerunnable = untwist_deobfuscate::legacy_reach::Rerunnable::enter();
         let first = self.run_admitted(source, reservation, (room.clone(), reserved));
+        drop(rerunnable);
         if !untwist_deobfuscate::legacy_reach::unverified() {
             return first;
         }

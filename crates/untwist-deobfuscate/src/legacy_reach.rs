@@ -4,6 +4,7 @@ use crate::mutants::deferred_legacy_reach_trusted;
 
 #[derive(Default)]
 struct Deferral {
+    rerunnable: bool,
     forbidden: bool,
     open: bool,
     pending: Vec<String>,
@@ -22,7 +23,7 @@ pub(crate) struct Stage {
 pub(crate) fn open_stage(on: bool) -> Stage {
     DEFERRAL.with(|deferral| {
         let mut deferral = deferral.borrow_mut();
-        let open = on && !deferral.forbidden;
+        let open = on && deferral.rerunnable && !deferral.forbidden;
         Stage {
             open: std::mem::replace(&mut deferral.open, open),
             pending: std::mem::take(&mut deferral.pending),
@@ -86,5 +87,22 @@ impl Forbidden {
 impl Drop for Forbidden {
     fn drop(&mut self) {
         DEFERRAL.with(|deferral| deferral.borrow_mut().forbidden = self.0);
+    }
+}
+
+pub struct Rerunnable(bool);
+
+impl Rerunnable {
+    pub fn enter() -> Self {
+        Self(
+            DEFERRAL
+                .with(|deferral| std::mem::replace(&mut deferral.borrow_mut().rerunnable, true)),
+        )
+    }
+}
+
+impl Drop for Rerunnable {
+    fn drop(&mut self) {
+        DEFERRAL.with(|deferral| deferral.borrow_mut().rerunnable = self.0);
     }
 }
