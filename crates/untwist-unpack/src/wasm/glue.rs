@@ -23,6 +23,7 @@ const MEMORY_BINDING: &str = "wasmMemory";
 const TABLE_BINDING: &str = "wasmTable";
 const EXPORTS_PROPERTY: &str = "asm";
 const MISSING_SHOWN: usize = 3;
+const BINDGEN_INTERNAL_PREFIX: &str = "__wbindgen_";
 const NOT_NAMES: &[&str] = &[
     "arguments",
     "eval",
@@ -57,6 +58,7 @@ struct Glue<'s, 'm> {
     bindings: Vec<(SymbolId, String)>,
     key_exports: FxHashMap<String, FxHashSet<String>>,
     symbol_keys: FxHashMap<SymbolId, FxHashSet<String>>,
+    callers: Vec<(SymbolId, String)>,
 }
 
 enum Link<'e> {
@@ -422,6 +424,69 @@ impl<'s> Glue<'s, '_> {
         }
     }
 
+    fn enclosing_function(&self, id: NodeId) -> Option<SymbolId> {
+        let nodes = self.nodes();
+        let function = nodes.ancestor_ids(id).find(|ancestor| {
+            matches!(
+                nodes.kind(*ancestor),
+                AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
+            )
+        })?;
+        if let AstKind::Function(function) = nodes.kind(function) {
+            if let Some(id) = &function.id {
+                return Some(id.symbol_id());
+            }
+        }
+        match nodes.parent_kind(function) {
+            AstKind::VariableDeclarator(declarator) => declarator
+                .id
+                .get_binding_identifier()
+                .map(|id| id.symbol_id()),
+            _ => None,
+        }
+    }
+
+    fn collect_callers(&mut self) {
+        let nodes = self.nodes();
+        for node in nodes.iter() {
+            let AstKind::CallExpression(call) = node.kind() else {
+                continue;
+            };
+            let Some(read) = self.export_read(&call.callee) else {
+                continue;
+            };
+            if read.starts_with(BINDGEN_INTERNAL_PREFIX) {
+                continue;
+            }
+            if let Some(function) = self.enclosing_function(node.id()) {
+                self.callers.push((function, read.to_string()));
+            }
+        }
+        self.callers.sort_unstable();
+        self.callers.dedup();
+    }
+
+    fn forwarder_names(&self, summary: &WasmSummary) -> Vec<(SymbolId, String)> {
+        let mut calls_of: FxHashMap<SymbolId, usize> = FxHashMap::default();
+        let mut callers_of: FxHashMap<&str, usize> = FxHashMap::default();
+        for (function, read) in &self.callers {
+            *calls_of.entry(*function).or_default() += 1;
+            *callers_of.entry(read.as_str()).or_default() += 1;
+        }
+        self.callers
+            .iter()
+            .filter(|(function, read)| {
+                calls_of[function] == 1
+                    && callers_of[read.as_str()] == 1
+                    && is_name(read)
+                    && summary
+                        .export(read)
+                        .is_some_and(|export| export.kind == ExportKind::Function)
+            })
+            .cloned()
+            .collect()
+    }
+
     fn collect_provided(&mut self) {
         let nodes = self.nodes();
         let mut bound: Vec<(String, Span, &'s ObjectExpression<'s>)> = Vec::new();
@@ -642,6 +707,7 @@ impl<'s> Glue<'s, '_> {
             wanted.push((holder, EXPORTS_HOLDER.to_string()));
         }
         wanted.extend(self.wrapper_names(summary));
+        wanted.extend(self.forwarder_names(summary));
         wanted.extend(self.kind_names(summary, ExportKind::Memory, MEMORY_BINDING));
         wanted.extend(self.kind_names(summary, ExportKind::Table, TABLE_BINDING));
         if let [object] = self.import_objects.iter().copied().collect::<Vec<_>>()[..] {
@@ -735,11 +801,13 @@ pub(super) fn name_glue<'s>(
         bindings: Vec::new(),
         key_exports: FxHashMap::default(),
         symbol_keys: FxHashMap::default(),
+        callers: Vec::new(),
     };
     glue.collect_holders();
     glue.collect_reads();
     glue.collect_bindings();
     glue.collect_wrappers();
+    glue.collect_callers();
     glue.collect_provided();
     glue.naming(summary, claimed)
 }
