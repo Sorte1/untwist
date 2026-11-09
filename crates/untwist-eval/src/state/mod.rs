@@ -346,7 +346,7 @@ fn classify_member_triggers<'a>(
             }
         }
     }
-    let used_params = params_for_memo_owners(program, &memos_out, params::used_params);
+    let used_params = used_params_of_memo_owners(program, owned, &memos_out);
     let numeric_params = params_for_memo_owners(program, &memos_out, params::numeric_params);
     let captured_memo = owned.iter().any(|(_, collected)| {
         collected
@@ -391,6 +391,47 @@ fn template_rewrites(owned: &[(Owner, Collected<'_>)]) -> Vec<(Span, usize)> {
             _ => None,
         })
         .collect()
+}
+
+fn used_params_of_memo_owners(
+    program: &DecoderProgram<'_>,
+    owned: &[(Owner, Collected<'_>)],
+    memos: &[MemoShape],
+) -> Vec<Vec<bool>> {
+    program
+        .decoders
+        .iter()
+        .enumerate()
+        .map(|(index, decoder)| {
+            if memos.iter().any(|memo| memo.owner == index) {
+                return params::used_params(decoder.function);
+            }
+            captured_memo_params(decoder, owned, index).unwrap_or_default()
+        })
+        .collect()
+}
+
+fn captured_memo_params(
+    decoder: &crate::decode::FnRef<'_>,
+    owned: &[(Owner, Collected<'_>)],
+    index: usize,
+) -> Option<Vec<bool>> {
+    let (_, collected) = owned
+        .iter()
+        .find(|(owner, _)| *owner == Owner::Decoder(index))?;
+    let captured = collected
+        .triggers
+        .iter()
+        .any(|trigger| matches!(trigger.kind, TriggerKind::CapturedMemo(..)));
+    if !captured {
+        return None;
+    }
+    let body = decoder.function.body.as_ref()?;
+    let inner = collect::self_rewrite_target(&body.statements, Some(decoder.name))?;
+    Some(params::used_params_beside_captures(
+        inner,
+        &collected.captures,
+    ))
 }
 
 fn params_for_memo_owners(

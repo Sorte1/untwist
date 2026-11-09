@@ -21,6 +21,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- The same `arguments`-memo decoders also decode when their wrappers pass a varying second
+  argument the decoder never reads: the memo proof judged every argument as read because the
+  decoder captures `arguments`, and it counted a helper's own `for (var r ...)` as a read of the
+  decoder's parameter `r`. The version matrix decodes 12 more cells with `--unsafe` and 3 more in
+  the default lane.
+
 - Minified javascript-obfuscator 2.x and 3.x decoders that keep their memo in the `arguments`
   object (`n = arguments` ... `n[key] = value`) decode again when a helper inside the decoder has a
   parameter or local of the same name (`function (n) { ... n.charAt(i) ... }`). The check for other

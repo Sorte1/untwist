@@ -76,3 +76,14 @@ pub fn ignore_static_uses_of_captured_memos_for_tests(on: bool) {
 pub(crate) fn captured_static_uses_ignored() -> bool {
     CAPTURED_STATIC_USES_IGNORED.load(Ordering::Relaxed)
 }
+
+static BLOCK_LEXICALS_HOISTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn hoist_block_lexicals_for_tests(on: bool) {
+    BLOCK_LEXICALS_HOISTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn block_lexicals_hoisted() -> bool {
+    BLOCK_LEXICALS_HOISTED.load(Ordering::Relaxed)
+}
