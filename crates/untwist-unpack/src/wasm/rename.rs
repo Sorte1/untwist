@@ -107,6 +107,12 @@ impl<'s> Renamer<'s> {
         edits.push((scoping.symbol_span(symbol), name.to_string()));
         for reference in scoping.get_resolved_references(symbol) {
             let id = reference.node_id();
+            if let AstKind::ExportSpecifier(specifier) = self.nodes().parent_kind(id) {
+                if specifier.exported.name() == name {
+                    edits.push((specifier.span, name.to_string()));
+                    continue;
+                }
+            }
             let span = self.nodes().kind(id).span();
             edits.push((span, self.reference_text(id, old, name)));
         }

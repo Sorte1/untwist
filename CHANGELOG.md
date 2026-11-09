@@ -16,6 +16,9 @@ All notable changes to this project are documented in this file. The format is b
   gives a warning that says what differs.
 - A wasm file loaded through an ES module `import`, `import()` or `export ... from`, as in the
   wasm-bindgen bundler target, is listed among the wasm modules to supply.
+- A minified wasm-bindgen wrapper such as `function x(e,t){K.greet(e,t)}` takes the name of the
+  wasm export it calls, when it calls only that export and no other function calls it.
+  Calls to `__wbindgen_*` helpers do not count.
 
 ### Fixed
 

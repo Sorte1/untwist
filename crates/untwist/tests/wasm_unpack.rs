@@ -56,6 +56,51 @@ fn wasm_bindgen_glue_gets_its_payload_extracted_and_its_imports_and_exports_name
     insta::assert_snapshot!(out.code());
 }
 
+const BINDGEN_EXPORTS: &str =
+    "export function greet(e,t){K.greet(e,t)}export function alloc(e){return K.__wbindgen_malloc(e,1)}";
+
+fn bindgen_with_wrappers(wrappers: &str) -> String {
+    let source = fixture("bindgen.js");
+    assert!(source.contains(BINDGEN_EXPORTS));
+    source.replace(BINDGEN_EXPORTS, wrappers)
+}
+
+#[test]
+fn a_minified_wasm_bindgen_wrapper_is_named_after_the_export_it_calls() {
+    let source = bindgen_with_wrappers(
+        "function x(e,t){K.greet(e,t)}function y(e){return K.__wbindgen_malloc(e,1)}export{x as greet,y as alloc};",
+    );
+    let out = settled(&source);
+    let code = out.code();
+    assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
+    assert_eq!(out.wasm[0].renamed, 4, "{code}");
+    assert!(code.contains("function greet(e, t)"), "{code}");
+    assert!(code.contains("function y(e)"), "{code}");
+    assert!(code.contains("export { greet, y as alloc }"), "{code}");
+}
+
+#[test]
+fn two_wrappers_calling_the_same_export_keep_their_names() {
+    let source = bindgen_with_wrappers(
+        "function x(e,t){K.greet(e,t)}function z(e){K.greet(e,0)}export{x as greet,z as greetOne};",
+    );
+    let out = settled(&source);
+    let code = out.code();
+    assert_eq!(out.wasm[0].renamed, 3, "{code}");
+    assert!(code.contains("function x(e, t)"), "{code}");
+    assert!(code.contains("function z(e)"), "{code}");
+}
+
+#[test]
+fn a_call_in_a_nested_function_does_not_name_the_outer_one() {
+    let source =
+        bindgen_with_wrappers("function x(e,t){return()=>K.greet(e,t)}export{x as greet};");
+    let out = settled(&source);
+    let code = out.code();
+    assert_eq!(out.wasm[0].renamed, 3, "{code}");
+    assert!(code.contains("function x(e, t)"), "{code}");
+}
+
 #[test]
 fn emscripten_single_file_names_the_glue_from_the_wasm_name_section() {
     let out = settled(&fixture("emscripten.js"));
