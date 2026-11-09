@@ -2,7 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_deobfuscate::proof::BUILTIN_ALIAS_BITS;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const REFUSED_SHELL_GLOBALS: &str = "string_array_shell_rows/sh-decoder ";
+const SHELL_ROW_FILES: [&str; 2] = ["string_array_shell_rows/", "shell_binding_rows/"];
 
 const DATA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data");
 
@@ -82,7 +82,7 @@ fn rows_the_points_to_judgement_changes_still_run_like_node() {
             "longer"
         };
         eprintln!("  {label}: points-to output {side}");
-        if label.starts_with("string_array_shell_rows/") {
+        if SHELL_ROW_FILES.iter().any(|file| label.starts_with(file)) {
             shells.push((label, format!("{source}()")));
         } else {
             changed.push((label, source));
@@ -101,9 +101,6 @@ fn rows_the_points_to_judgement_changes_still_run_like_node() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     let unwrapped = |called: &str| transformed(true, called.strip_suffix("()").unwrap_or(called));
     let shell_modes: [Mode<'_>; 1] = [("points-to", &unwrapped)];
-    let wrong_shells: Vec<String> = node_rows::mismatches(&node, &shells, &shell_modes)
-        .into_iter()
-        .filter(|row| !row.starts_with(REFUSED_SHELL_GLOBALS))
-        .collect();
+    let wrong_shells = node_rows::mismatches(&node, &shells, &shell_modes);
     assert!(wrong_shells.is_empty(), "{}", wrong_shells.join("\n"));
 }
