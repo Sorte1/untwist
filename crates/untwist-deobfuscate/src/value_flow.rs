@@ -15,8 +15,9 @@ pub const INERT_NAME_KEYS: &str = "inert-name-keys";
 pub const OPAQUE_BRANCHES: &str = "opaque-branches";
 pub const STORAGE_CALLS: &str = "storage-calls";
 pub const TRUSTED_STORAGE: &str = "trusted-storage";
+pub const FORWARD_ORDER: &str = "forward-order";
 
-const FLOW_RULES: [&str; 15] = [
+const FLOW_RULES: [&str; 16] = [
     VALUE_FLOW_SINKS,
     MACHINERY_SOURCE_BOUND,
     OBSERVER_LIST,
@@ -32,6 +33,7 @@ const FLOW_RULES: [&str; 15] = [
     OPAQUE_BRANCHES,
     STORAGE_CALLS,
     TRUSTED_STORAGE,
+    FORWARD_ORDER,
 ];
 
 thread_local! {

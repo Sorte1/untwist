@@ -81,27 +81,44 @@ fn every_decoding_row_refuses_without_storage_calls() {
     );
 }
 
-#[test]
-fn the_sabotage_rows_diverge_from_node_when_storage_is_trusted() {
-    let Some(node) = node_or_skip() else {
-        return;
-    };
-    let sabotage = labelled("ref-trust-");
+fn quiet_under(prefix: &str, mutant: &'static str) -> Option<Vec<String>> {
+    let node = node_or_skip()?;
+    let sabotage = labelled(prefix);
     assert!(!sabotage.is_empty());
-    let mutated = |source: &str| transformed(false, Some("trusted-storage"), source);
+    let mutated = |source: &str| transformed(false, Some(mutant), source);
     let modes: [Mode<'_>; 1] = [("mutant", &mutated)];
     let diverged = mismatches(&node, &sabotage, &modes);
-    let quiet: Vec<&str> = sabotage
-        .iter()
-        .map(|(label, _)| label.as_str())
-        .filter(|label| {
-            !diverged
-                .iter()
-                .any(|row| row.split(" (mutant):").next() == Some(*label))
-        })
-        .collect();
+    Some(
+        sabotage
+            .into_iter()
+            .map(|(label, _)| label)
+            .filter(|label| {
+                !diverged
+                    .iter()
+                    .any(|row| row.split(" (mutant):").next() == Some(label.as_str()))
+            })
+            .collect(),
+    )
+}
+
+#[test]
+fn the_sabotage_rows_diverge_from_node_when_storage_is_trusted() {
+    let Some(quiet) = quiet_under("ref-trust-", "trusted-storage") else {
+        return;
+    };
     assert!(
         quiet.is_empty(),
         "did not diverge from node under the trusted-storage mutant: {quiet:?}"
+    );
+}
+
+#[test]
+fn the_sabotage_rows_diverge_from_node_when_forward_order_is_ignored() {
+    let Some(quiet) = quiet_under("ref-order-", "forward-order") else {
+        return;
+    };
+    assert!(
+        quiet.is_empty(),
+        "did not diverge from node under the forward-order mutant: {quiet:?}"
     );
 }

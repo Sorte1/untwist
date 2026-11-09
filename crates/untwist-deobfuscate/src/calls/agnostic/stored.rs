@@ -5,10 +5,12 @@ use oxc_syntax::symbol::SymbolId;
 use untwist_core::ast_util::js_text::js_text;
 
 use super::bootstrap::Resolve;
+use crate::value_flow::{flow_rule_disabled, FORWARD_ORDER};
 
 pub(super) type Objects<'f, 'a> = &'f dyn Fn(SymbolId) -> Option<&'a ObjectExpression<'a>>;
 
 const MAX_TEXT: usize = 16;
+const MAX_FORWARDS: usize = 8;
 
 #[derive(Clone, Copy)]
 pub(super) struct Facts<'f, 'a> {
@@ -187,6 +189,13 @@ impl<'a> Facts<'_, 'a> {
     }
 
     pub(super) fn forwards(&self, call: &CallExpression<'_>) -> bool {
+        self.forwards_within(call, 0)
+    }
+
+    fn forwards_within(&self, call: &CallExpression<'_>, depth: usize) -> bool {
+        if depth > MAX_FORWARDS {
+            return false;
+        }
         let Some(value) = self.function(call) else {
             return false;
         };
@@ -209,13 +218,19 @@ impl<'a> Facts<'_, 'a> {
             Expression::Identifier(id) => self.symbol(id) == Some(param),
             _ => false,
         };
-        !inner.optional
-            && inner.arguments.len() + 1 == symbols.len()
-            && names(&inner.callee, symbols[0])
-            && inner
-                .arguments
-                .iter()
-                .zip(&symbols[1..])
-                .all(|(argument, param)| argument.as_expression().is_some_and(|e| names(e, *param)))
+        let passes = |arguments: &[Argument<'_>], params: &[SymbolId]| {
+            arguments.len() == params.len()
+                && arguments.iter().zip(params).all(|(argument, param)| {
+                    argument.as_expression().is_some_and(|e| names(e, *param))
+                })
+        };
+        if inner.optional {
+            return false;
+        }
+        if names(&inner.callee, symbols[0]) {
+            return passes(&inner.arguments, &symbols[1..]);
+        }
+        let unchecked = flow_rule_disabled(FORWARD_ORDER) && inner.arguments.len() == symbols.len();
+        (unchecked || passes(&inner.arguments, &symbols)) && self.forwards_within(inner, depth + 1)
     }
 }
