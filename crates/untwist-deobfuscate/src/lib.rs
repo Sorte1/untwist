@@ -51,3 +51,11 @@ pub use driver::{
     INLINE_DECODED, NO_STRING_ARRAY_NOTE, OBJECT_PROPS, PROTECTIONS_ORDER,
     STRING_ARRAY_MAX_ITERATIONS,
 };
+
+pub fn reset_run_state() {
+    calls::forget_call_flags();
+    write_only::forget_write_only_flags();
+    decoded::forget_alias_refusals();
+    string_array::legacy::forget_lifts();
+    init_order::clear_kept_order();
+}

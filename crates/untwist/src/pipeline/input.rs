@@ -119,6 +119,7 @@ impl Pipeline {
             self.options.progress(Progress::InputBegins(index));
         }
         reset_synthetic_spans();
+        untwist_deobfuscate::reset_run_state();
         let _ = crate::stats::RunStats::taken();
         untwist_deobfuscate::init_order::reset_capacity_hint();
         forget_failures();

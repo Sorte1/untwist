@@ -47,6 +47,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- A run no longer depends on what ran before it on the same thread. Flags set while decoding one
+  program (a decoder call with non-literal arguments seen, a constant retry requested, a pending
+  write-only sweep, a lifted plain array, the per-unit alias refusals, the kept init order) are
+  cleared at the start of every input, so the library and the matrix tests give the same result
+  as a fresh process; before, a 4.2.2 cell decoded in the default lane only after some other
+  programs had run.
+
 - A kept cookie self-defending guard in the minified forms uglify-js and terser leave (the holder
   object carries `updateCookie` itself: block holder, `(h = {...}).updateCookie()` or
   `(o = (h = {...}).updateCookie())`) has its `removeCookie` printed on one line, so a refused
