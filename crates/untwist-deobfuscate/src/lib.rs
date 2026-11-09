@@ -19,6 +19,7 @@ pub mod fold_chains;
 pub mod fused;
 pub mod init_order;
 pub mod layers;
+pub mod legacy_reach;
 pub mod merge_object_assignments;
 pub mod mutants;
 mod note_set;
@@ -58,5 +59,6 @@ pub fn reset_run_state() {
     write_only::forget_write_only_flags();
     decoded::forget_alias_refusals();
     string_array::legacy::forget_lifts();
+    legacy_reach::forget();
     init_order::clear_kept_order();
 }

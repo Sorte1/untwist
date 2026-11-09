@@ -730,6 +730,7 @@ fn deobfuscate_with<'a>(
     opts: &PassOptions,
     memo: &Rc<RefCell<RotationMemo>>,
 ) -> (Semantics, RunReport) {
+    let _deferral = crate::legacy_reach::open_stage(!opts.unsafe_transforms && !opts.nested_root);
     let mut aggregate = Aggregate::new();
     let sem = prepare(alloc, program, prepared, opts, &mut aggregate);
     preflight(&sem, &mut aggregate);

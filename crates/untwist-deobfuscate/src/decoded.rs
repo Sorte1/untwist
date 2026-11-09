@@ -694,8 +694,10 @@ fn judge_runs<'p>(
         .zip(spelled)
         .partition(|(run, _)| run.request.reliance.is_some());
     let mut decoding = Vec::new();
+    let watched = !unsafe_lane && !nested_root;
     for (run, spelled) in independent.into_iter().chain(relying) {
         let unit = run.request.unit;
+        let deferred = root_array_name(scoping, &run).filter(|_| watched && !spelled);
         let reached = reached.as_ref().filter(|_| !spelled);
         if let Some((note, span)) = refused_before_judging(&run, reached, &decoding) {
             #[cfg(feature = "refusal-spans")]
@@ -727,9 +729,17 @@ fn judge_runs<'p>(
             judged,
         ) {
             decoding.push(unit);
+            if let Some(name) = deferred {
+                crate::legacy_reach::verify(name);
+            }
         }
     }
     code_text
+}
+
+fn root_array_name<'p>(scoping: &Scoping, run: &UnitRun<'p, '_>) -> Option<&'p str> {
+    let (symbol, name) = run.request.guard.symbols.first()?;
+    (scoping.symbol_scope_id(*symbol) == scoping.root_scope_id()).then_some(*name)
 }
 
 pub struct InlineDecodedStrings {
