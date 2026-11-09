@@ -2,8 +2,9 @@ use oxc_ast::ast::{
     ArrowFunctionExpression, AssignmentOperator, AssignmentTarget, BindingPattern,
     ComputedMemberExpression, Declaration, Expression, FormalParameters, Function, FunctionBody,
 };
-use oxc_ast::ast::{IdentifierReference, Statement};
+use oxc_ast::ast::{IdentifierReference, Statement, VariableDeclaration, VariableDeclarationKind};
 use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_span::Span;
 use oxc_syntax::operator::BinaryOperator;
 use oxc_syntax::scope::ScopeFlags;
 
@@ -14,10 +15,50 @@ struct ParamUsage<'a> {
     names: Vec<Option<&'a str>>,
     used: Vec<bool>,
     shadowed: Vec<Vec<&'a str>>,
+    captures: &'a [Span],
+}
+
+struct HoistedVars<'a> {
+    names: Vec<&'a str>,
+}
+
+impl<'a> VisitJs<'a> for HoistedVars<'a> {
+    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
+        if it.kind == VariableDeclarationKind::Var || crate::mutants::block_lexicals_hoisted() {
+            let declaration: &'a VariableDeclaration<'a> = self.alloc(it);
+            self.names.extend(
+                declaration
+                    .declarations
+                    .iter()
+                    .filter_map(|declarator| param_name(&declarator.id)),
+            );
+        }
+        walk_js::walk_variable_declaration(self, it);
+    }
+
+    fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {}
+
+    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
+
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        stack::maybe_grow_dyn(&mut || walk_js::walk_expression(self, it));
+    }
+
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        stack::maybe_grow_dyn(&mut || walk_js::walk_statement(self, it));
+    }
+}
+
+fn hoisted_vars<'a>(statements: &'a [Statement<'a>]) -> Vec<&'a str> {
+    let mut hoisted = HoistedVars { names: Vec::new() };
+    for statement in statements {
+        hoisted.visit_statement(statement);
+    }
+    hoisted.names
 }
 
 fn declared_names<'a>(statements: &'a [Statement<'a>]) -> Vec<&'a str> {
-    let mut names = Vec::new();
+    let mut names = hoisted_vars(statements);
     for statement in statements {
         let Some(declaration) = statement.as_declaration() else {
             continue;
@@ -95,7 +136,13 @@ impl<'a> VisitJs<'a> for ParamUsage<'a> {
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         if it.name.as_str() == "arguments" {
-            self.used.iter_mut().for_each(|used| *used = true);
+            let captured = self
+                .captures
+                .iter()
+                .any(|span| span.start <= it.span.start && it.span.end <= span.end);
+            if !captured {
+                self.used.iter_mut().for_each(|used| *used = true);
+            }
             return;
         }
         let name = it.name.as_str();
@@ -150,6 +197,10 @@ fn visit_body<'a>(usage: &mut ParamUsage<'a>, statements: &'a [Statement<'a>]) {
 }
 
 pub(super) fn used_params(function: &Function<'_>) -> Vec<bool> {
+    used_params_beside_captures(function, &[])
+}
+
+pub(super) fn used_params_beside_captures(function: &Function<'_>, captures: &[Span]) -> Vec<bool> {
     let names: Vec<Option<&str>> = function
         .params
         .items
@@ -160,6 +211,7 @@ pub(super) fn used_params(function: &Function<'_>) -> Vec<bool> {
         used: vec![false; names.len()],
         names,
         shadowed: Vec::new(),
+        captures,
     };
     if let Some(body) = &function.body {
         visit_body(&mut usage, &body.statements);
