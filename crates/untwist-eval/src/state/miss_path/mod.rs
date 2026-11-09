@@ -27,8 +27,10 @@ fn memo_of<'a>(collected: &Collected<'a>) -> Result<Option<Memo<'a>>, ()> {
                 (Some(segment), FinalKey::Computed(_)) => Memo::Named(segment),
                 _ => continue,
             },
-            TriggerKind::CapturedMemo(peel) if peel.segment.is_none() => Memo::Captured(peel.root),
-            TriggerKind::CapturedMemo(_) => return Err(()),
+            TriggerKind::CapturedMemo(peel, _) if peel.segment.is_none() => {
+                Memo::Captured(peel.root)
+            }
+            TriggerKind::CapturedMemo(..) => return Err(()),
             _ => continue,
         };
         if found.is_some_and(|seen| seen != memo) {

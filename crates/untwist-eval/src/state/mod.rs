@@ -11,9 +11,10 @@ mod reset;
 
 pub use monitor::{
     address_of, class_of, enter_gate, enter_invocation, leave_gate, leave_invocation, note_capture,
-    note_delete, note_inherited_link, note_key_observation, note_object_drop, note_prototype,
-    note_read, note_rebind, note_rotation_step, note_write, register_machinery_self,
-    set_state_tracing, state_tracing, take_violation, ObjClass, StateTracingGuard,
+    note_delete, note_inherited_link, note_key_observation, note_miss, note_object_drop,
+    note_prototype, note_read, note_rebind, note_rotation_step, note_write,
+    register_machinery_self, set_state_tracing, state_tracing, take_violation, ObjClass,
+    StateTracingGuard,
 };
 pub(crate) use monitor::{invocation_quiet, machinery_owner, violation_pending};
 pub(crate) use probe::{
@@ -28,8 +29,8 @@ use crate::decode::DecoderProgram;
 use crate::value::{JsString, PropKey};
 
 use collect::{
-    collect_for_function, collect_for_rotator, rotator_function, Collected, FinalKey, MemberPeel,
-    TriggerKind,
+    collect_for_function, collect_for_rotator, rotator_function, Collected, FinalKey, MemberAccess,
+    MemberPeel, TriggerKind,
 };
 
 const UNPROVEN_GENERIC: &str =
@@ -246,7 +247,8 @@ fn refuse_on_non_member_triggers(
                 TriggerKind::This => return Some(&UNPROVEN_THIS),
                 TriggerKind::Identifier => return Some(&UNPROVEN_CLOSURE),
                 TriggerKind::Unrecognized => return Some(&UNPROVEN_GENERIC),
-                TriggerKind::Member(_) | TriggerKind::CapturedMemo(_) | TriggerKind::Monitored => {}
+                TriggerKind::Member(_) | TriggerKind::CapturedMemo(..) | TriggerKind::Monitored => {
+                }
             }
         }
     }
@@ -318,7 +320,8 @@ fn classify_member_triggers<'a>(
 ) -> Result<Shape, &'static &'static str> {
     let mut gates_out = Vec::new();
     let mut memos_out = Vec::new();
-    for (owner, collected) in owned {
+    for entry in owned {
+        let (owner, collected) = entry;
         for trigger in &collected.triggers {
             match &trigger.kind {
                 TriggerKind::Member(peel) => {
@@ -328,16 +331,16 @@ fn classify_member_triggers<'a>(
                     }
                     classify_one_member(
                         program,
-                        *owner,
-                        collected,
+                        owned,
+                        entry,
                         trigger.span,
                         peel,
                         &mut gates_out,
                         &mut memos_out,
                     )?
                 }
-                TriggerKind::CapturedMemo(peel) => {
-                    check_captured_memo(program, *owner, collected, peel)?
+                TriggerKind::CapturedMemo(peel, binding) => {
+                    check_captured_memo(program, *owner, collected, peel, *binding)?
                 }
                 _ => {}
             }
@@ -349,7 +352,7 @@ fn classify_member_triggers<'a>(
         collected
             .triggers
             .iter()
-            .any(|trigger| matches!(trigger.kind, TriggerKind::CapturedMemo(_)))
+            .any(|trigger| matches!(trigger.kind, TriggerKind::CapturedMemo(..)))
     });
     let memoised = captured_memo || !memos_out.is_empty();
     Ok(Shape {
@@ -411,8 +414,8 @@ fn params_for_memo_owners(
 
 fn classify_one_member(
     program: &DecoderProgram<'_>,
-    owner: Owner,
-    collected: &Collected<'_>,
+    owned: &[(Owner, Collected<'_>)],
+    (owner, collected): &(Owner, Collected<'_>),
     span: Span,
     peel: &MemberPeel<'_>,
     gates_out: &mut Vec<GateShape>,
@@ -421,7 +424,7 @@ fn classify_one_member(
     let Some(container_owner) = owner_of_name(program, peel.root) else {
         return Err(&UNPROVEN_GENERIC);
     };
-    if container_owner != owner {
+    if container_owner != *owner {
         return Err(&UNPROVEN_CROSS);
     }
     if let Some(region) = matching_gate_region(collected, peel, span) {
@@ -435,11 +438,19 @@ fn classify_one_member(
         return Ok(());
     }
     let key = matched_memo_key(program, collected, peel)?;
+    if !reads_share_the_key(
+        owned,
+        peel,
+        span_text(key, program.source_text),
+        program.source_text,
+    ) {
+        return Err(&UNPROVEN_GENERIC);
+    }
     let Some(segment) = peel.segment else {
         return Err(&UNPROVEN_GENERIC);
     };
     let owner_index = match owner {
-        Owner::Decoder(index) => index,
+        Owner::Decoder(index) => *index,
         _ => usize::MAX,
     };
     memos_out.push(MemoShape {
@@ -471,9 +482,40 @@ fn check_captured_memo(
     owner: Owner,
     collected: &Collected<'_>,
     peel: &MemberPeel<'_>,
+    binding: usize,
 ) -> Result<(), &'static &'static str> {
     let Owner::Decoder(_) = owner else {
         return Err(&UNPROVEN_GENERIC);
     };
-    matched_memo_key(program, collected, peel).map(|_| ())
+    let key = matched_memo_key(program, collected, peel)?;
+    let key_text = span_text(key, program.source_text);
+    let mut reads = collected
+        .accesses
+        .iter()
+        .filter(|access| !access.is_write && access.binding == Some(binding));
+    if reads.all(|access| same_computed_key(access, key_text, program.source_text)) {
+        Ok(())
+    } else {
+        Err(&UNPROVEN_GENERIC)
+    }
+}
+
+fn same_computed_key(access: &MemberAccess<'_>, key_text: &str, source_text: &str) -> bool {
+    crate::mutants::memo_key_reads_trusted()
+        || matches!(access.peel.final_key, FinalKey::Computed(span) if span_text(span, source_text) == key_text)
+}
+
+fn reads_share_the_key(
+    owned: &[(Owner, Collected<'_>)],
+    peel: &MemberPeel<'_>,
+    key_text: &str,
+    source_text: &str,
+) -> bool {
+    owned
+        .iter()
+        .flat_map(|(_, collected)| collected.accesses.iter())
+        .filter(|access| {
+            !access.is_write && !access.local && access.peel.container_key() == peel.container_key()
+        })
+        .all(|access| same_computed_key(access, key_text, source_text))
 }

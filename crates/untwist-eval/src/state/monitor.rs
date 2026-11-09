@@ -56,6 +56,8 @@ struct Frame {
     read_args: Vec<Canon>,
     epoch: u64,
     last_read: Option<Canon>,
+    first_reads: Vec<(usize, PropKey)>,
+    missed: Vec<(usize, PropKey)>,
 }
 
 #[derive(Clone)]
@@ -273,6 +275,8 @@ fn push_frame(decoder: usize, args: &[Value<'_>], awaiting_forward: bool) {
             read_args,
             epoch,
             last_read: None,
+            first_reads: Vec::new(),
+            missed: Vec::new(),
         })
     });
 }
@@ -282,10 +286,13 @@ fn pop_frame(result: Option<&Value<'_>>) {
     let Some(frame) = popped else {
         return;
     };
-    let Some(read) = frame.last_read else {
+    let Some(result) = result else {
         return;
     };
-    let Some(result) = result else {
+    if !frame.missed.is_empty() {
+        breach();
+    }
+    let Some(read) = frame.last_read else {
         return;
     };
     if read != canon(result) {
@@ -380,6 +387,7 @@ fn record_new_entry(owner: usize, addr: usize, key: PropKey, value: &Value<'_>) 
         breach();
         return;
     }
+    settle_miss(owner, addr, &key);
     TABLE.with(|table| {
         table.borrow_mut().insert(
             (addr, key),
@@ -662,7 +670,67 @@ fn note_read_watched(container: &ObjRef<'_>, tag: u8, key: &PropKey, value: &Val
         breach();
         return;
     }
+    note_frame_read(owner, addr, key, false);
     check_and_record(owner, addr, key.clone(), value, true);
+}
+
+#[inline(always)]
+pub fn note_miss(container: &ObjRef<'_>, tag: u8, is_arguments: bool, key: &PropKey) {
+    if tag & MONITOR_MARK == 0 && !is_arguments {
+        return;
+    }
+    note_miss_watched(container, tag, key);
+}
+
+#[inline(never)]
+fn note_miss_watched(container: &ObjRef<'_>, tag: u8, key: &PropKey) {
+    if !state_tracing() || (tag & MONITOR_MARK == 0 && !ARGUMENTS_SUB.with(Cell::get)) {
+        return;
+    }
+    if super::probe::probing() || crate::mutants::memo_misses_ignored() {
+        return;
+    }
+    let addr = address_of(container);
+    let Some(owner) = sub_owner(addr) else {
+        return;
+    };
+    match note_frame_read(owner, addr, key, true) {
+        Some(true) => {}
+        _ => breach(),
+    }
+}
+
+fn note_frame_read(owner: usize, addr: usize, key: &PropKey, missed: bool) -> Option<bool> {
+    FRAME_STACK.with(|stack| {
+        let mut stack = stack.borrow_mut();
+        let frame = stack
+            .iter_mut()
+            .rev()
+            .find(|frame| frame.decoder == owner)?;
+        let first = match frame.first_reads.iter().find(|(read, _)| *read == addr) {
+            Some((_, first)) => first == key,
+            None => {
+                frame.first_reads.push((addr, key.clone()));
+                true
+            }
+        };
+        let entry = (addr, key.clone());
+        if missed && first && !frame.missed.contains(&entry) {
+            frame.missed.push(entry);
+        }
+        Some(first)
+    })
+}
+
+fn settle_miss(owner: usize, addr: usize, key: &PropKey) {
+    FRAME_STACK.with(|stack| {
+        let mut stack = stack.borrow_mut();
+        if let Some(frame) = stack.iter_mut().rev().find(|frame| frame.decoder == owner) {
+            frame
+                .missed
+                .retain(|(missed, missed_key)| *missed != addr || missed_key != key);
+        }
+    });
 }
 
 #[inline(always)]
