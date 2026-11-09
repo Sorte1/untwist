@@ -9,7 +9,7 @@ use rustc_hash::FxHashMap;
 use untwist_eval::coerce::{number_to_string, to_integer_or_infinity};
 use untwist_eval::fold::{const_from_literal, fold_binary, fold_unary, Const};
 
-use super::shape::{Body, STRING_METHODS};
+use super::shape::{Body, Target, STRING_METHODS};
 
 const MAX_STEPS: u32 = 200_000;
 const MAX_CALLS: u32 = 32;
@@ -51,6 +51,7 @@ type Env = FxHashMap<SymbolId, V>;
 pub(super) struct Machine<'m, 'a> {
     pub(super) scoping: &'m Scoping,
     pub(super) callees: &'m FxHashMap<SymbolId, Body<'a>>,
+    pub(super) storage: &'m FxHashMap<Span, Target<'a>>,
     pub(super) resolved: &'m FxHashMap<Span, String>,
     pub(super) steps: u32,
     pub(super) calls: u32,
@@ -162,7 +163,7 @@ impl<'a> Machine<'_, 'a> {
         self.tick()?;
         match statement {
             Statement::BlockStatement(block) => self.block(&block.body, env),
-            Statement::EmptyStatement(_) => Some(Done::Normal),
+            Statement::EmptyStatement(_) | Statement::FunctionDeclaration(_) => Some(Done::Normal),
             Statement::VariableDeclaration(declaration) => {
                 self.declare(declaration, env)?;
                 Some(Done::Normal)
@@ -309,6 +310,20 @@ impl<'a> Machine<'_, 'a> {
             }
             Expression::AssignmentExpression(it) => self.assign(it, env),
             Expression::UpdateExpression(it) => self.update(it, env),
+            Expression::StaticMemberExpression(member)
+                if self.resolved.contains_key(&member.span) =>
+            {
+                Some(V::Prim(Const::Str(
+                    self.resolved.get(&member.span)?.clone(),
+                )))
+            }
+            Expression::ComputedMemberExpression(member)
+                if self.resolved.contains_key(&member.span) =>
+            {
+                Some(V::Prim(Const::Str(
+                    self.resolved.get(&member.span)?.clone(),
+                )))
+            }
             Expression::StaticMemberExpression(member) => {
                 let object = self.expr(&member.object, env)?;
                 get(&object, member.property.name.as_str())
@@ -375,9 +390,20 @@ impl<'a> Machine<'_, 'a> {
         if let Some(text) = self.resolved.get(&call.span) {
             return Some(V::Prim(Const::Str(text.clone())));
         }
-        let mut args = Vec::with_capacity(call.arguments.len());
-        for argument in &call.arguments {
+        let target = self.storage.get(&call.span).copied();
+        let (callee, passed) = match target {
+            Some(Target::Forward(symbol)) => {
+                (Some(*self.callees.get(&symbol)?), call.arguments.get(1..)?)
+            }
+            Some(Target::Body(func)) => (Some(func), &call.arguments[..]),
+            None => (None, &call.arguments[..]),
+        };
+        let mut args = Vec::with_capacity(passed.len());
+        for argument in passed {
             args.push(self.expr(argument.as_expression()?, env)?);
+        }
+        if let Some(func) = callee {
+            return self.call(func, args);
         }
         match call.callee.without_parentheses() {
             Expression::Identifier(id) => {

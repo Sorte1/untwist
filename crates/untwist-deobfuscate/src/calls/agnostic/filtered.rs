@@ -16,12 +16,16 @@ use rustc_hash::FxHashMap;
 use super::bootstrap::Resolve;
 use super::defs::DefTable;
 use super::roles::{Origin, BATCH, CONSTRUCTS, DEFINE_KEYED, GETTERS, MUTATORS, READERS, RUNNERS};
+use super::stored::Facts;
 use super::AKey;
-use crate::value_flow::{flow_rule_disabled, FILTERED_ENUMERATION, FILTERED_REWRITE_ORDER};
+use crate::value_flow::{
+    flow_rule_disabled, FILTERED_ENUMERATION, FILTERED_REWRITE_ORDER, STORAGE_CALLS,
+    TRUSTED_STORAGE,
+};
 use machine::{is_binary_compare, literal, Machine, V};
 use rewrite::{check_loop, is_rewrite_loop, rewrite_loop, Rewrite};
 pub(super) use shape::Body;
-use shape::{closed, Shape};
+use shape::{closed, Sealed, Shape, Target};
 
 #[derive(Clone, Copy)]
 pub(super) struct Candidate<'a> {
@@ -71,7 +75,7 @@ pub(super) type Loop<'a> = (&'a ForInStatement<'a>, Option<Body<'a>>);
 fn candidate<'a>(
     scoping: &Scoping,
     (it, within): Loop<'a>,
-    resolve: Resolve<'_>,
+    facts: Facts<'_, 'a>,
 ) -> Option<Candidate<'a>> {
     let within = within?;
     let ForStatementLeft::VariableDeclaration(declaration) = &it.left else {
@@ -85,14 +89,14 @@ fn candidate<'a>(
         return None;
     };
     let key = binding.symbol_id.get()?;
-    let test_if = single_if(super::opaque::live(&it.body, resolve)?)?;
+    let test_if = single_if(super::opaque::live(&it.body, facts)?)?;
     if test_if.alternate.is_some() {
         return None;
     }
     let Expression::CallExpression(test) = test_if.test.without_parentheses() else {
         return None;
     };
-    let assignment = found_assignment(super::opaque::live(&test_if.consequent, resolve)?)?;
+    let assignment = found_assignment(super::opaque::live(&test_if.consequent, facts)?)?;
     let SimpleAssignmentTarget::AssignmentTargetIdentifier(target) =
         assignment.left.as_simple_assignment_target()?
     else {
@@ -117,6 +121,7 @@ struct Pred<'a> {
     func: Body<'a>,
     args: Vec<Option<V>>,
     callees: FxHashMap<SymbolId, Body<'a>>,
+    storage: FxHashMap<Span, Target<'a>>,
     resolved: FxHashMap<Span, String>,
 }
 
@@ -141,9 +146,30 @@ impl<'a> Filters<'a> {
             source,
             ..Self::default()
         };
+        let objects = |symbol: SymbolId| {
+            if flow_rule_disabled(STORAGE_CALLS) {
+                return None;
+            }
+            let found = defs.get(symbol)?;
+            let untouched = flow_rule_disabled(TRUSTED_STORAGE)
+                || (found.writes.is_empty()
+                    && !found.opaque
+                    && !found.mutated
+                    && !found.fields_written
+                    && !found.escapes);
+            match (untouched, found.inits) {
+                (true, [Some(Expression::ObjectExpression(object))]) => Some(&**object),
+                _ => None,
+            }
+        };
+        let facts = Facts {
+            scoping,
+            resolve,
+            objects: &objects,
+        };
         let candidates: Vec<Candidate<'a>> = loops
             .iter()
-            .filter_map(|found| candidate(scoping, *found, resolve))
+            .filter_map(|found| candidate(scoping, *found, facts))
             .collect();
         if candidates.is_empty() {
             return filters;
@@ -174,7 +200,7 @@ impl<'a> Filters<'a> {
             let rewrite = rewrite_loop(candidate, ordered);
             let valid = mutant
                 || (shared == 1
-                    && uses_are_keys(scoping, candidate, (rewrite, resolve))
+                    && uses_are_keys(candidate, (rewrite, facts))
                     && found_declared(scoping, candidate));
             if !valid {
                 continue;
@@ -182,7 +208,7 @@ impl<'a> Filters<'a> {
             let pred = if mutant {
                 None
             } else {
-                match predicate(scoping, &sealed, resolve, candidate) {
+                match predicate(scoping, &sealed, facts, candidate) {
                     Some(pred) => Some(pred),
                     None => continue,
                 }
@@ -237,6 +263,7 @@ impl<'a> Filters<'a> {
         let mut machine = Machine {
             scoping,
             callees: &pred.callees,
+            storage: &pred.storage,
             resolved: &pred.resolved,
             steps: 0,
             calls: 0,
@@ -276,22 +303,31 @@ impl<'a> Filters<'a> {
 
 fn predicate<'a>(
     scoping: &Scoping,
-    sealed: &dyn Fn(SymbolId) -> Option<Body<'a>>,
-    resolve: Resolve<'_>,
+    sealed: Sealed<'_, 'a>,
+    facts: Facts<'_, 'a>,
     candidate: &Candidate<'a>,
 ) -> Option<Pred<'a>> {
-    let Expression::Identifier(callee) = candidate.test.callee.without_parentheses() else {
-        return None;
+    let mut shape = Shape::new(scoping, sealed, facts);
+    let (callee, arguments) = match candidate.test.callee.without_parentheses() {
+        Expression::Identifier(callee) => (&**callee, &candidate.test.arguments[..]),
+        _ if facts.forwards(candidate.test) => {
+            let (first, rest) = candidate.test.arguments.split_first()?;
+            let Expression::Identifier(callee) = first.as_expression()?.without_parentheses()
+            else {
+                return None;
+            };
+            (&**callee, rest)
+        }
+        _ => return None,
     };
     let symbol = identifier_symbol(scoping, callee)?;
-    let mut shape = Shape::new(scoping, sealed, resolve);
     if !shape.callee(symbol) {
         return None;
     }
     let func = *shape.callees.get(&symbol)?;
     let mut keyed = 0;
-    let mut args = Vec::with_capacity(candidate.test.arguments.len());
-    for argument in &candidate.test.arguments {
+    let mut args = Vec::with_capacity(arguments.len());
+    for argument in arguments {
         let expr = argument.as_expression()?;
         match expr.without_parentheses() {
             Expression::Identifier(id) if identifier_symbol(scoping, id) == Some(candidate.key) => {
@@ -306,6 +342,7 @@ fn predicate<'a>(
         func,
         args,
         callees: shape.callees,
+        storage: shape.storage,
         resolved: shape.resolved,
     })
 }
@@ -318,13 +355,13 @@ fn found_declared(scoping: &Scoping, candidate: &Candidate<'_>) -> bool {
         .any(|ancestor| ancestor == scope)
 }
 
-fn uses_are_keys(
-    scoping: &Scoping,
-    candidate: &Candidate<'_>,
-    (rewrite, resolve): (Option<Rewrite>, Resolve<'_>),
+fn uses_are_keys<'a>(
+    candidate: &Candidate<'a>,
+    (rewrite, facts): (Option<Rewrite>, Facts<'_, 'a>),
 ) -> bool {
+    let scoping = facts.scoping;
     let mut check = Uses {
-        resolve,
+        facts,
         scoping,
         candidate,
         bad: false,
@@ -349,7 +386,7 @@ fn uses_are_keys(
 }
 
 struct Uses<'c, 'a> {
-    resolve: Resolve<'c>,
+    facts: Facts<'c, 'a>,
     scoping: &'c Scoping,
     candidate: &'c Candidate<'a>,
     bad: bool,
@@ -377,9 +414,31 @@ impl<'a> Uses<'_, 'a> {
     }
 }
 
+impl<'a> Uses<'_, 'a> {
+    fn stored_compare(&self, call: &CallExpression<'a>) -> bool {
+        if self.facts.compare(call).is_none() {
+            return false;
+        }
+        let [left, right] = call.arguments.as_slice() else {
+            return false;
+        };
+        let (Some(left), Some(right)) = (left.as_expression(), right.as_expression()) else {
+            return false;
+        };
+        (self.tracked(left) && literal_side(right)) || (self.tracked(right) && literal_side(left))
+    }
+}
+
+fn literal_side(side: &Expression<'_>) -> bool {
+    matches!(
+        side.without_parentheses(),
+        Expression::StringLiteral(_) | Expression::NumericLiteral(_)
+    )
+}
+
 impl<'a> VisitJs<'a> for Uses<'_, 'a> {
     fn visit_if_statement(&mut self, it: &IfStatement<'a>) {
-        let Some(taken) = super::opaque::choice(&it.test, self.resolve) else {
+        let Some(taken) = super::opaque::choice(&it.test, self.facts) else {
             return walk_js::walk_if_statement(self, it);
         };
         self.visit_expression(&it.test);
@@ -394,7 +453,7 @@ impl<'a> VisitJs<'a> for Uses<'_, 'a> {
     }
 
     fn visit_conditional_expression(&mut self, it: &ConditionalExpression<'a>) {
-        match super::opaque::choice(&it.test, self.resolve) {
+        match super::opaque::choice(&it.test, self.facts) {
             Some(taken) => {
                 self.visit_expression(&it.test);
                 self.visit_expression(if taken { &it.consequent } else { &it.alternate });
@@ -461,6 +520,9 @@ impl<'a> VisitJs<'a> for Uses<'_, 'a> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.stored_compare(it) {
+            return self.visit_expression(&it.callee);
+        }
         if it.span != self.candidate.test.span {
             return walk_js::walk_call_expression(self, it);
         }
@@ -492,12 +554,6 @@ impl<'a> VisitJs<'a> for Uses<'_, 'a> {
 
     fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
         let compare = is_binary_compare(it.operator);
-        let literal_side = |side: &Expression<'a>| {
-            matches!(
-                side.without_parentheses(),
-                Expression::StringLiteral(_) | Expression::NumericLiteral(_)
-            )
-        };
         let harmless = compare
             && ((self.tracked(&it.left) && literal_side(&it.right))
                 || (self.tracked(&it.right) && literal_side(&it.left)));
