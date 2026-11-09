@@ -14,6 +14,11 @@ All notable changes to this project are documented in this file. The format is b
   names. A key that is concatenated, stored, passed on or used as a property key still refuses.
 - A domain lock whose predicate reads `s["len" + "gth"]` from split decoded strings, or whose
   arguments are folded number expressions (`0x2 * 0x2`), is recognised like the plain lock.
+- A domain lock that dead-code injection has wrapped in opaque tests between two decoded strings
+  (`if (dec(1) !== dec(2)) { ... } else { ... }`) in its loops and predicate is recognised: the
+  branch the decoded strings pick is the one checked, the other never runs.
+- The obfuscator fuzz files a domain-lock sample that also patches a built-in by a computed key
+  under that sound key-reach refusal.
 
 ### Changed
 
