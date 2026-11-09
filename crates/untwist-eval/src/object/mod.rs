@@ -388,6 +388,10 @@ fn set_array_index<'a>(
     if arguments || (tracing && index_usize > len) {
         return Err(Bail::Unsupported(growth_refusal(tracing)));
     }
+    if index_usize == len {
+        items.push(value);
+        return Ok(1);
+    }
     items.resize(index_usize + 1, Value::Undefined);
     items[index_usize] = value;
     Ok(index_usize + 1 - len)
