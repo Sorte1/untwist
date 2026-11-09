@@ -1,13 +1,13 @@
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
-use oxc_span::Span;
+use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::js_text::js_text;
 
-use super::super::bootstrap::Resolve;
+use super::super::stored::Facts;
 
 pub(super) const STRING_METHODS: [&str; 2] = ["charCodeAt", "charAt"];
 
@@ -15,6 +15,12 @@ const MAX_NESTING: usize = 8;
 const MAX_DEPTH: u32 = 64;
 
 pub(super) type Sealed<'f, 'a> = &'f dyn Fn(SymbolId) -> Option<Body<'a>>;
+
+#[derive(Clone, Copy)]
+pub(super) enum Target<'a> {
+    Body(Body<'a>),
+    Forward(SymbolId),
+}
 
 #[derive(Clone, Copy)]
 pub(in crate::calls::agnostic) struct Body<'a> {
@@ -67,23 +73,27 @@ impl<'a> Body<'a> {
 pub(super) struct Shape<'f, 'a> {
     scoping: &'f Scoping,
     sealed: Sealed<'f, 'a>,
-    resolve: Resolve<'f>,
+    facts: Facts<'f, 'a>,
     pub(super) callees: FxHashMap<SymbolId, Body<'a>>,
+    pub(super) storage: FxHashMap<Span, Target<'a>>,
     pub(super) resolved: FxHashMap<Span, String>,
     checking: Vec<SymbolId>,
+    storage_depth: usize,
     aliases: FxHashSet<SymbolId>,
     scope: Option<ScopeId>,
 }
 
 impl<'f, 'a> Shape<'f, 'a> {
-    pub(super) fn new(scoping: &'f Scoping, sealed: Sealed<'f, 'a>, resolve: Resolve<'f>) -> Self {
+    pub(super) fn new(scoping: &'f Scoping, sealed: Sealed<'f, 'a>, facts: Facts<'f, 'a>) -> Self {
         Self {
             scoping,
             sealed,
-            resolve,
+            facts,
             callees: FxHashMap::default(),
+            storage: FxHashMap::default(),
             resolved: FxHashMap::default(),
             checking: Vec::new(),
+            storage_depth: 0,
             aliases: FxHashSet::default(),
             scope: None,
         }
@@ -138,7 +148,7 @@ impl<'f, 'a> Shape<'f, 'a> {
     fn statement(&mut self, statement: &'a Statement<'a>) -> bool {
         match statement {
             Statement::BlockStatement(block) => self.statements(&block.body),
-            Statement::EmptyStatement(_) => true,
+            Statement::EmptyStatement(_) | Statement::FunctionDeclaration(_) => true,
             Statement::VariableDeclaration(declaration) => self.declaration(declaration),
             Statement::ExpressionStatement(it) => self.expr(&it.expression, 0),
             Statement::IfStatement(it) => {
@@ -150,7 +160,7 @@ impl<'f, 'a> Shape<'f, 'a> {
                         .as_ref()
                         .is_none_or(|other| shape.statement(other))
                 };
-                match super::super::opaque::choice(&it.test, self.resolve) {
+                match super::super::opaque::choice(&it.test, self.facts) {
                     Some(true) => self.statement(&it.consequent),
                     Some(false) => alternate(self),
                     None => self.statement(&it.consequent) && alternate(self),
@@ -241,6 +251,11 @@ impl<'f, 'a> Shape<'f, 'a> {
             | Expression::BooleanLiteral(_)
             | Expression::NullLiteral(_) => true,
             Expression::Identifier(id) => self.value(id),
+            Expression::StaticMemberExpression(_) | Expression::ComputedMemberExpression(_)
+                if self.stored_text(expr) =>
+            {
+                true
+            }
             Expression::ParenthesizedExpression(inner) => self.expr(&inner.expression, next),
             Expression::ArrayExpression(array) => array.elements.iter().all(|element| {
                 element
@@ -262,7 +277,7 @@ impl<'f, 'a> Shape<'f, 'a> {
             }
             Expression::ConditionalExpression(it) => {
                 self.expr(&it.test, next)
-                    && match super::super::opaque::choice(&it.test, self.resolve) {
+                    && match super::super::opaque::choice(&it.test, self.facts) {
                         Some(true) => self.expr(&it.consequent, next),
                         Some(false) => self.expr(&it.alternate, next),
                         None => self.expr(&it.consequent, next) && self.expr(&it.alternate, next),
@@ -297,7 +312,7 @@ impl<'f, 'a> Shape<'f, 'a> {
     }
 
     fn call(&mut self, call: &'a CallExpression<'a>, depth: u32) -> bool {
-        if let Some(text) = self.resolve.and_then(|map| map.get(&call.span)) {
+        if let Some(text) = self.facts.resolve.and_then(|map| map.get(&call.span)) {
             return match text.as_string() {
                 Some(text) => {
                     self.resolved.insert(call.span, text);
@@ -308,6 +323,9 @@ impl<'f, 'a> Shape<'f, 'a> {
         }
         if call.optional || call.arguments.iter().any(Argument::is_spread) {
             return false;
+        }
+        if let Some(pure) = self.storage_call(call, depth) {
+            return pure;
         }
         let arguments = call.arguments.iter().all(|argument| {
             argument
@@ -330,6 +348,67 @@ impl<'f, 'a> Shape<'f, 'a> {
             }
             _ => false,
         }
+    }
+
+    fn stored_text(&mut self, expr: &'a Expression<'a>) -> bool {
+        let Some(member) = expr.as_member_expression() else {
+            return false;
+        };
+        let Some(text) = self
+            .facts
+            .field(member, 0)
+            .and_then(|value| self.facts.text(value, 0))
+        else {
+            return false;
+        };
+        self.resolved.insert(member.span(), text);
+        true
+    }
+
+    fn storage_call(&mut self, call: &'a CallExpression<'a>, depth: u32) -> Option<bool> {
+        let value = self.facts.function(call)?;
+        if self.facts.forwards(call) {
+            let (first, rest) = call.arguments.split_first()?;
+            let pure = match first.as_expression().map(Expression::without_parentheses) {
+                Some(Expression::Identifier(id)) => match self.resolved_symbol(id) {
+                    Some(symbol) => {
+                        self.callee(symbol)
+                            && rest.iter().all(|argument| {
+                                argument
+                                    .as_expression()
+                                    .is_some_and(|expr| self.expr(expr, depth))
+                            })
+                            && {
+                                self.storage.insert(call.span, Target::Forward(symbol));
+                                true
+                            }
+                    }
+                    None => false,
+                },
+                _ => false,
+            };
+            return Some(pure);
+        }
+        let arguments = call.arguments.iter().all(|argument| {
+            argument
+                .as_expression()
+                .is_some_and(|expr| self.expr(expr, depth))
+        });
+        let Some(func) = Body::of_value(value) else {
+            return Some(false);
+        };
+        if !arguments || self.checking.len() + self.storage_depth >= MAX_NESTING {
+            return Some(false);
+        }
+        let outer = self.scope.take();
+        self.storage_depth += 1;
+        let pure = self.function(func);
+        self.storage_depth -= 1;
+        self.scope = outer;
+        if pure {
+            self.storage.insert(call.span, Target::Body(func));
+        }
+        Some(pure)
     }
 
     pub(super) fn method_key(&mut self, key: &'a Expression<'a>) -> Option<&'static str> {

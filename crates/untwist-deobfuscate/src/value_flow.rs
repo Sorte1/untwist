@@ -13,8 +13,10 @@ pub const AWAITED_ARRAYS: &str = "awaited-arrays";
 pub const FILTERED_REWRITE_ORDER: &str = "filtered-rewrite-order";
 pub const INERT_NAME_KEYS: &str = "inert-name-keys";
 pub const OPAQUE_BRANCHES: &str = "opaque-branches";
+pub const STORAGE_CALLS: &str = "storage-calls";
+pub const TRUSTED_STORAGE: &str = "trusted-storage";
 
-const FLOW_RULES: [&str; 13] = [
+const FLOW_RULES: [&str; 15] = [
     VALUE_FLOW_SINKS,
     MACHINERY_SOURCE_BOUND,
     OBSERVER_LIST,
@@ -28,6 +30,8 @@ const FLOW_RULES: [&str; 13] = [
     FILTERED_REWRITE_ORDER,
     INERT_NAME_KEYS,
     OPAQUE_BRANCHES,
+    STORAGE_CALLS,
+    TRUSTED_STORAGE,
 ];
 
 thread_local! {

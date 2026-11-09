@@ -125,7 +125,23 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 
+    fn numeric_operand(&self, expr: &Expression<'a>, depth: u8) -> bool {
+        if depth == 0 {
+            return false;
+        }
+        match expr.without_parentheses() {
+            Expression::Identifier(id) => match self.substituted(id) {
+                Some(arg) => self.numeric_operand(arg, depth - 1),
+                None => self.fresh.is_numeric(expr),
+            },
+            other => self.fresh.is_numeric(other),
+        }
+    }
+
     fn concat_key(&self, binary: &BinaryExpression<'a>, depth: u8) -> AKey<'a> {
+        if self.numeric_operand(&binary.left, depth) && self.numeric_operand(&binary.right, depth) {
+            return AKey::Index;
+        }
         match (
             self.key_class(&binary.left, depth),
             self.key_class(&binary.right, depth),

@@ -26,6 +26,7 @@ mod roles;
 mod settle;
 mod sites;
 mod source;
+mod stored;
 mod subst;
 mod text;
 mod visit;
