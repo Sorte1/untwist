@@ -12,6 +12,15 @@ All notable changes to this project are documented in this file. The format is b
   dead `if (false)` block is removed. An empty statement that keeps a string out of a function's
   directive prologue stays.
 
+### Fixed
+
+- The safe lane follows a domain lock that reuses the variable holding a found key for the domain
+  list in a later loop (`var x = list[i]` as the loop body's first statement): reads inside that
+  loop see the list entry, not the found key, so the lock's scan of the global object is bounded
+  again. A read after the loop, before the rewrite or in a closure still keeps the unit refused.
+  The obfuscator option matrix now files those cells, and the debug-protection cells whose only failure is the global-names refusal, under the refusal that
+  actually blocks them.
+
 ## [0.3.1] - 2026-11-09
 
 ### Added

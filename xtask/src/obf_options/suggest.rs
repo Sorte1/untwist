@@ -170,7 +170,11 @@ fn machinery_cause(
     if by_note(note) == Some(SPELLED) {
         return Some(SPELLED);
     }
-    if safe && shape.domain_lock {
+    let aliased = notes
+        .iter()
+        .any(|note| by_note(note) == Some(BUILTIN_ALIAS));
+    let reach = notes.iter().any(|note| note.contains(REACH_NOTE));
+    if safe && shape.domain_lock && reach && !aliased {
         return Some(DOMAIN_LOCK);
     }
     if safe && shape.key_shaped && note.contains(REACH_NOTE) {
@@ -185,7 +189,7 @@ fn machinery_cause(
     if note.contains(ESCAPE_NOTE) || note.contains("decoder machinery kept") {
         return Some(later_cause(lane, notes));
     }
-    if safe && detail.contains("debug_protection") {
+    if safe && detail.contains("debug_protection") && !note.contains(NAMES_NOTE) {
         return Some(DEBUG_KEPT);
     }
     if safe && note.contains(REACH_NOTE) {
@@ -574,6 +578,66 @@ mod tests {
         );
         assert_eq!(suggestion.text, format!("# header\n{rule}\n"));
         assert_eq!((suggestion.rules, suggestion.uncovered), (1, 0));
+    }
+
+    #[test]
+    fn a_domain_lock_cell_refused_as_a_built_in_patch_is_not_labelled_a_lock_reach() {
+        let note = "note: inline-decoded-strings: the program may replace a standard built-in that the unit's decoders or rotator use through a variable, parameter, `this` or computed object that can hold it";
+        let (judged, outcomes) = safe_lane_fails(&["domain-lock--a-1.js"], note);
+        let suggestion = suggest("", &[], &judged, &outcomes);
+        assert!(
+            suggestion.text.contains(&format!("\t{BUILTIN_ALIAS}: ")),
+            "{}",
+            suggestion.text
+        );
+        assert!(
+            !suggestion.text.contains(DOMAIN_LOCK),
+            "{}",
+            suggestion.text
+        );
+    }
+
+    #[test]
+    fn a_domain_lock_cell_without_a_key_reach_is_not_a_lock_reach() {
+        let (judged, outcomes) = safe_lane_fails(&["domain-lock--a-1.js"], "note: something else");
+        let suggestion = suggest("", &[], &judged, &outcomes);
+        assert_eq!(
+            suggestion.unclassified,
+            vec!["domain-lock--a-1.js safe machinery".to_string()]
+        );
+        assert!(
+            !suggestion.text.contains(DOMAIN_LOCK),
+            "{}",
+            suggestion.text
+        );
+    }
+
+    #[test]
+    fn a_domain_lock_cell_with_a_key_reach_is_a_lock_reach() {
+        let note = format!("note: inline-decoded-strings: code that may hold the global object {REACH_NOTE} that may be its name");
+        let (judged, outcomes) = safe_lane_fails(&["domain-lock--a-1.js"], &note);
+        let suggestion = suggest("", &[], &judged, &outcomes);
+        assert!(
+            suggestion.text.contains(&format!("\t{DOMAIN_LOCK}: ")),
+            "{}",
+            suggestion.text
+        );
+    }
+
+    #[test]
+    fn debug_strings_left_in_a_kept_string_array_count_as_the_global_names_refusal() {
+        let (mut judged, outcomes) = safe_lane_fails(&["debug--a-1.js"], NAMES_FAILURE);
+        for failed in judged.iter_mut().filter(|j| j.lane == "safe") {
+            failed.verdict = Verdict::Fail("debug_protection=2".to_string());
+            failed.detail = Some("debug_protection=2".to_string());
+        }
+        let suggestion = suggest("", &[], &judged, &outcomes);
+        assert!(
+            suggestion.text.contains(&format!("\t{NAMES}: ")),
+            "{}",
+            suggestion.text
+        );
+        assert!(!suggestion.text.contains(DEBUG_KEPT), "{}", suggestion.text);
     }
 
     #[test]

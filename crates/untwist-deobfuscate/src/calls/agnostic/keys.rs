@@ -168,7 +168,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         if filters.is_empty() {
             return None;
         }
-        filters.key(self.fresh.symbol(id)?)
+        filters.key(self.fresh.symbol(id)?, id.span)
     }
 
     pub(super) fn key_origin(&self, key: &AKey<'a>) -> Origin {
