@@ -159,6 +159,10 @@ fn in_url_context(nodes: &AstNodes<'_>, id: NodeId) -> bool {
             AstKind::CallExpression(call) => {
                 return callee_name(&call.callee).is_some_and(|name| URL_CALLEES.contains(&name))
             }
+            AstKind::ImportDeclaration(_)
+            | AstKind::ImportExpression(_)
+            | AstKind::ExportAllDeclaration(_)
+            | AstKind::ExportNamedDeclaration(_) => return true,
             AstKind::NewExpression(new) => {
                 return matches!(new.callee.without_parentheses(), Expression::Identifier(id) if id.name == "URL")
             }
