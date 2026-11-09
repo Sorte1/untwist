@@ -1,3 +1,6 @@
+mod common;
+
+use common::cpu_or_wall;
 use oxc_allocator::Allocator;
 use untwist_core::parse::parse_program;
 use untwist_core::print::pretty_codegen;
@@ -634,22 +637,6 @@ fn hostile_bundle(modules: usize) -> String {
         source.push_str(&format!("// tail {index}\n"));
     }
     source
-}
-
-fn thread_cpu() -> Option<std::time::Duration> {
-    let stat = std::fs::read_to_string("/proc/thread-self/schedstat").ok()?;
-    let nanos = stat.split_whitespace().next()?.parse().ok()?;
-    Some(std::time::Duration::from_nanos(nanos))
-}
-
-fn cpu_or_wall<T>(work: impl FnOnce() -> T) -> (T, std::time::Duration) {
-    let (cpu, wall) = (thread_cpu(), std::time::Instant::now());
-    let done = work();
-    let spent = match (cpu, thread_cpu()) {
-        (Some(before), Some(after)) => after.saturating_sub(before),
-        _ => wall.elapsed(),
-    };
-    (done, spent)
 }
 
 #[test]

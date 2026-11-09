@@ -5,6 +5,7 @@ use oxc_span::Span;
 
 use crate::matcher::{call_parts, const_member};
 use crate::model::Module;
+use crate::webpack::injection_proof::proven_wrapper;
 
 struct Injection<'a> {
     span: Span,
@@ -164,4 +165,17 @@ pub fn inline_var_injections<'a>(alloc: &'a Allocator, module: &mut Module<'a>) 
         }
     }
     inlined
+}
+
+pub fn inline_proven_injection<'a>(alloc: &'a Allocator, module: &mut Module<'a>) -> usize {
+    let program = module.program_mut();
+    if !program.body.last().is_some_and(is_injection) || !proven_wrapper(&program.body) {
+        return 0;
+    }
+    let builder = AstBuilder::new(alloc);
+    let Some(injection) = program.body.pop().and_then(take_injection) else {
+        return 0;
+    };
+    push_injection(&mut program.body, injection, &builder);
+    1
 }

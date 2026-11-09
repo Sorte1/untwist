@@ -102,3 +102,19 @@ pub fn bundle_from<'a>(alloc: &'a Allocator, source: &'a str) -> Option<Bundle<'
     let program = prepared(alloc, source);
     untwist_unpack::detect::unpack_program(alloc, &program)
 }
+
+fn thread_cpu() -> Option<std::time::Duration> {
+    let stat = std::fs::read_to_string("/proc/thread-self/schedstat").ok()?;
+    let nanos = stat.split_whitespace().next()?.parse().ok()?;
+    Some(std::time::Duration::from_nanos(nanos))
+}
+
+pub fn cpu_or_wall<T>(work: impl FnOnce() -> T) -> (T, std::time::Duration) {
+    let (cpu, wall) = (thread_cpu(), std::time::Instant::now());
+    let done = work();
+    let spent = match (cpu, thread_cpu()) {
+        (Some(before), Some(after)) => after.saturating_sub(before),
+        _ => wall.elapsed(),
+    };
+    (done, spent)
+}

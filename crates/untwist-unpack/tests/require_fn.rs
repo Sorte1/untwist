@@ -4,7 +4,7 @@ use common::parse;
 use oxc_allocator::Allocator;
 use untwist_testing::read_unpack_gap_fixture;
 use untwist_unpack::webpack::require_fn::{
-    find_assigned_entry_id, find_required_entry_id, require_function,
+    find_assigned_entry_id, find_required_entry_id, require_function, Dispatchers,
 };
 
 const WEBPACK4: &str = "function n(t) {\n  if (a[t]) { return a[t].exports; }\n  var r = a[t] = {};\n  e[t].call(r.exports, r, r.exports, n);\n  return r.exports;\n}\n";
@@ -190,4 +190,28 @@ fn a_sparse_module_table_yields_only_its_real_modules() {
         "{:?}",
         bundle.modules.keys().collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn the_first_dispatcher_after_a_container_is_its_require_function() {
+    let alloc = Allocator::default();
+    let source = "function early(i) { c[i](); }\nvar c = [function () {}];\nfunction first(i) { c[i].call(0); c[i](); }\nfunction second(i) { c[i](); d[i](); }\n";
+    let program = parse(&alloc, source);
+    let dispatchers = Dispatchers::of(&program.body);
+    assert!(!dispatchers.is_empty());
+    assert_eq!(dispatchers.first_after("c", 1), Some("first"));
+    assert_eq!(dispatchers.first_after("c", 2), Some("second"));
+    assert_eq!(dispatchers.first_after("c", 3), None);
+    assert_eq!(dispatchers.first_after("d", 0), Some("second"));
+    assert_eq!(dispatchers.first_after("e", 0), None);
+}
+
+#[test]
+fn a_statement_list_without_a_dispatcher_has_no_require_function() {
+    let alloc = Allocator::default();
+    let program = parse(
+        &alloc,
+        "var c = [function () {}];\nfunction n(t) { var q = c[t]; }\n",
+    );
+    assert!(Dispatchers::of(&program.body).is_empty());
 }

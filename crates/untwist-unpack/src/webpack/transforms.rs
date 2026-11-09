@@ -14,7 +14,7 @@ use crate::webpack::interop::convert_interop;
 use crate::webpack::require_paths::{replace_require_paths_with, rewritten, Converted, Routing};
 use crate::webpack::runtime_module::{needed, prepend, runtime_module};
 use crate::webpack::shield::{restore, shield, Shield};
-use crate::webpack::var_injection::inline_var_injections;
+use crate::webpack::var_injection::{inline_proven_injection, inline_var_injections};
 use rustc_hash::FxHashSet;
 use untwist_core::semantic::build_scoping;
 
@@ -279,7 +279,11 @@ pub fn apply_transforms_with<'a>(
     }
     let shields = shield_all(alloc, bundle, conservative);
     for module in bundle.modules.values_mut() {
-        inline_var_injections(alloc, module);
+        if conservative {
+            inline_var_injections(alloc, module);
+        } else {
+            inline_proven_injection(alloc, module);
+        }
     }
     convert_modules(alloc, bundle, conservative);
     let tracked: Vec<bool> = shields.iter().map(Option::is_some).collect();

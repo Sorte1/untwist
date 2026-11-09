@@ -11,6 +11,7 @@ pub mod extract;
 pub mod gate;
 mod guard;
 pub mod helpers;
+mod injection_proof;
 pub mod interop;
 mod locals;
 pub mod require_fn;

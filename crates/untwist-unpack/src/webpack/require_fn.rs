@@ -1,6 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_syntax::operator::AssignmentOperator;
+use rustc_hash::FxHashMap;
 use untwist_core::ast_util::prop::identifier_name;
 
 use crate::matcher::{
@@ -13,10 +14,7 @@ pub struct RequireFunction<'k, 'a> {
     pub body: &'k FunctionBody<'a>,
 }
 
-pub fn require_function<'k, 'a>(
-    stmt: &'k Statement<'a>,
-    container: &str,
-) -> Option<RequireFunction<'k, 'a>> {
+fn dispatcher<'k, 'a>(stmt: &'k Statement<'a>) -> Option<RequireFunction<'k, 'a>> {
     let Statement::FunctionDeclaration(function) = stmt else {
         return None;
     };
@@ -26,35 +24,72 @@ pub fn require_function<'k, 'a>(
     let name = function.id.as_ref()?.name.as_str();
     single_param_name(&function.params)?;
     let body = function.body.as_deref()?;
-    let dispatches = body
-        .statements
-        .iter()
-        .filter_map(expression_statement)
-        .any(|expr| is_factory_dispatch(expr, container));
-    if !dispatches {
-        return None;
-    }
     Some(RequireFunction { name, body })
 }
 
-fn is_factory_dispatch(expr: &Expression<'_>, container: &str) -> bool {
-    let Some((callee, _)) = call_parts(expr) else {
-        return false;
-    };
-    if is_container_index(callee, container) {
-        return true;
-    }
-    const_member(callee, "call").is_some_and(|object| is_container_index(object, container))
+fn dispatched<'k, 'a>(body: &'k FunctionBody<'a>) -> impl Iterator<Item = &'k str> + use<'k, 'a> {
+    body.statements
+        .iter()
+        .filter_map(expression_statement)
+        .filter_map(dispatched_container)
 }
 
-fn is_container_index(expr: &Expression<'_>, container: &str) -> bool {
+fn dispatched_container<'k>(expr: &'k Expression<'_>) -> Option<&'k str> {
+    let (callee, _) = call_parts(expr)?;
+    container_index(callee).or_else(|| const_member(callee, "call").and_then(container_index))
+}
+
+fn container_index<'k>(expr: &'k Expression<'_>) -> Option<&'k str> {
     let Expression::ComputedMemberExpression(member) = expr else {
-        return false;
+        return None;
     };
     if member.optional || !matches!(member.expression, Expression::Identifier(_)) {
-        return false;
+        return None;
     }
-    identifier_name(&member.object) == Some(container)
+    identifier_name(&member.object)
+}
+
+pub fn require_function<'k, 'a>(
+    stmt: &'k Statement<'a>,
+    container: &str,
+) -> Option<RequireFunction<'k, 'a>> {
+    let function = dispatcher(stmt)?;
+    dispatched(function.body)
+        .any(|name| name == container)
+        .then_some(function)
+}
+
+pub struct Dispatchers<'k> {
+    by_container: FxHashMap<&'k str, Vec<(usize, &'k str)>>,
+}
+
+impl<'k> Dispatchers<'k> {
+    pub fn of(body: &'k [Statement<'_>]) -> Self {
+        let mut by_container: FxHashMap<&'k str, Vec<(usize, &'k str)>> = FxHashMap::default();
+        for (index, stmt) in body.iter().enumerate() {
+            let Some(function) = dispatcher(stmt) else {
+                continue;
+            };
+            for container in dispatched(function.body) {
+                let found = by_container.entry(container).or_default();
+                if found.last().map(|(at, _)| *at) != Some(index) {
+                    found.push((index, function.name));
+                }
+            }
+        }
+        Self { by_container }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.by_container.is_empty()
+    }
+
+    pub fn first_after(&self, container: &str, index: usize) -> Option<&'k str> {
+        let found = self.by_container.get(container)?;
+        found
+            .get(found.partition_point(|(at, _)| *at <= index))
+            .map(|(_, name)| *name)
+    }
 }
 
 struct EntryScan<'s> {

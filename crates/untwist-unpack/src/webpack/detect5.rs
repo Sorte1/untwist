@@ -7,7 +7,7 @@ use crate::webpack::entry::{attach, site};
 use crate::webpack::extract::extract_modules_with;
 use crate::webpack::gate::{routable, Prelude};
 use crate::webpack::helpers::prelude_runtime_skipping;
-use crate::webpack::require_fn::{find_assigned_entry_id, require_function};
+use crate::webpack::require_fn::{find_assigned_entry_id, Dispatchers};
 use crate::webpack::runtime_module::member_names_in;
 use crate::UnpackOptions;
 
@@ -40,12 +40,13 @@ fn container_candidate<'k, 'a>(index: usize, stmt: &'k Statement<'a>) -> Option<
 }
 
 fn webpack5<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Candidate<'k, 'a>, &'k str)> {
+    let dispatchers = Dispatchers::of(body);
+    if dispatchers.is_empty() {
+        return None;
+    }
     body.iter().enumerate().find_map(|(index, stmt)| {
         let candidate = container_candidate(index, stmt)?;
-        let require_name = body[index + 1..]
-            .iter()
-            .find_map(|stmt| require_function(stmt, candidate.name))?
-            .name;
+        let require_name = dispatchers.first_after(candidate.name, index)?;
         Some((candidate, require_name))
     })
 }
