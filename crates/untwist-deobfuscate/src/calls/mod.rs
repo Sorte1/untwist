@@ -203,6 +203,24 @@ pub(crate) fn take_dynamic_seen() -> bool {
     DYNAMIC_SEEN.with(|seen| seen.replace(false))
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct CallFlags {
+    dynamic_seen: bool,
+    constant_retry: bool,
+}
+
+pub(crate) fn call_flags() -> CallFlags {
+    CallFlags {
+        dynamic_seen: DYNAMIC_SEEN.with(std::cell::Cell::get),
+        constant_retry: CONSTANT_RETRY.with(std::cell::Cell::get),
+    }
+}
+
+pub(crate) fn restore_call_flags(flags: CallFlags) {
+    DYNAMIC_SEEN.with(|seen| seen.set(flags.dynamic_seen));
+    CONSTANT_RETRY.with(|retry| retry.set(flags.constant_retry));
+}
+
 pub struct Collected<'p> {
     pub calls: Vec<Call<'p>>,
     pub escapes: Vec<(usize, Span)>,

@@ -81,6 +81,10 @@ All notable changes to this project are documented in this file. The format is b
   sorts its reference sites by value: a 6 MB Krunker build spends 2 % fewer instructions under
   `--unsafe`, with the same output.
 
+- When decoder wrappers of a lifted string array unwrap one layer per round, the rounds in
+  between run only the wrapper and decode passes, the stages that had nothing to do are skipped:
+  a 6 MB Krunker build spends 10 % fewer instructions under `--unsafe`, with the same output.
+
 ### Fixed
 
 - Wasm glue names found in a bundle module now also apply to that module's function in the
