@@ -11,8 +11,9 @@ pub const STORAGE_PROXY: &str = "storage-proxy";
 pub const FUNCTION_VALUES: &str = "function-values";
 pub const AWAITED_ARRAYS: &str = "awaited-arrays";
 pub const FILTERED_REWRITE_ORDER: &str = "filtered-rewrite-order";
+pub const INERT_NAME_KEYS: &str = "inert-name-keys";
 
-const FLOW_RULES: [&str; 11] = [
+const FLOW_RULES: [&str; 12] = [
     VALUE_FLOW_SINKS,
     MACHINERY_SOURCE_BOUND,
     OBSERVER_LIST,
@@ -24,6 +25,7 @@ const FLOW_RULES: [&str; 11] = [
     FUNCTION_VALUES,
     AWAITED_ARRAYS,
     FILTERED_REWRITE_ORDER,
+    INERT_NAME_KEYS,
 ];
 
 thread_local! {

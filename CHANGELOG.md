@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- The safe lane decodes a program whose `for (const key in globalThis)` loop only reads the
+  names (comparisons, `typeof`, `.length`, a string method call in a test), instead of refusing
+  the unit as a global reach; the machinery is kept, since the program observes the global
+  names. A key that is concatenated, stored, passed on or used as a property key still refuses.
+- A domain lock whose predicate reads `s["len" + "gth"]` from split decoded strings, or whose
+  arguments are folded number expressions (`0x2 * 0x2`), is recognised like the plain lock.
+
 ### Changed
 
 - Unminify drops empty statements (`;`) from statement lists, such as the one left behind once a

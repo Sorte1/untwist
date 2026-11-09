@@ -15,6 +15,7 @@ mod instance;
 mod judge;
 mod keys;
 mod live;
+mod name_keys;
 mod native_map;
 mod observe;
 mod quiet;
