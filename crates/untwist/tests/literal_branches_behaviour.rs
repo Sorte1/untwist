@@ -2,7 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const FIXTURE_COUNT: usize = 12;
+const FIXTURE_COUNT: usize = 13;
 
 fn default_lane(source: &str) -> String {
     Pipeline::new(Options::default())
@@ -67,4 +67,13 @@ fn a_reference_picked_by_a_constant_test_stays_wrapped() {
     let code = default_lane("(true ? o.f : g)();\n(0 || o.f)();\n");
     assert!(code.contains("true ? o.f : g"), "{code}");
     assert!(code.contains("0 || o.f"), "{code}");
+}
+
+#[test]
+fn the_counter_sample_keeps_no_empty_statement() {
+    let source = "let counter = 0;\nlet test = val => {\n  counter += val;\n  return [\"hello\", \"world\", \"log\"][val];\n};\nif (false) {\n  while (true) {}\n}\n;\nconsole[test(2)](test(0), test(1), counter);\n";
+    assert_eq!(
+        default_lane(source),
+        "console.log(\"hello\", \"world\", 3);"
+    );
 }

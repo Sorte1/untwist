@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Changed
+
+- Unminify drops empty statements (`;`) from statement lists, such as the one left behind once a
+  dead `if (false)` block is removed. An empty statement that keeps a string out of a function's
+  directive prologue stays.
+
 ## [0.3.1] - 2026-11-09
 
 ### Added
