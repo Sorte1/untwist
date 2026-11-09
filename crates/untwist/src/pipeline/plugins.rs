@@ -66,9 +66,17 @@ impl Pipeline {
             max_iterations: self.options.max_iterations,
             fuel: self.options.fuel,
             heap_budget: self.options.hooks().heap_budget,
-            disabled_rules: self.options.disabled_passes.clone(),
+            disabled_rules: self.disabled_rules(),
             ..PassOptions::default()
         }
+    }
+
+    fn disabled_rules(&self) -> Vec<&'static str> {
+        let mut rules = self.options.disabled_passes.clone();
+        if self.options.hooks().points_to {
+            rules.push(untwist_deobfuscate::proof::BUILTIN_ALIAS_BITS);
+        }
+        rules
     }
 
     pub(super) fn plugin_stage<'a>(

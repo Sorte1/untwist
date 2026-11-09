@@ -55,6 +55,7 @@ pub struct TestHooks {
     pub admit_panic: Option<usize>,
     pub layer_stub: Option<&'static [(&'static str, &'static str)]>,
     pub refusal_spans: bool,
+    pub points_to: bool,
 }
 
 #[derive(Clone, Debug)]

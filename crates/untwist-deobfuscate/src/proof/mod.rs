@@ -14,6 +14,7 @@ mod intrinsics;
 mod names;
 mod numeric_keys;
 mod pending;
+mod points_to;
 mod property_reads;
 mod proxy_objects;
 mod rotator;
@@ -43,6 +44,7 @@ pub use names::{
     written_outside, NameScan, Write,
 };
 pub use pending::{resolve_pending_sites, PendingSite, PreScan};
+pub use points_to::{points_to_dump, points_to_sites, BUILTIN_ALIAS_BITS};
 pub use rotator::{rotator_refusal_at, rotator_sealed, LiteralBindings, RotatorSite};
 pub use seal::ROTATOR_GLOBALS;
 pub(crate) use watch::watch_texts;

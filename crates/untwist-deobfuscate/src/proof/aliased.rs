@@ -713,15 +713,30 @@ fn literal_keys(sources: &[&Expression<'_>]) -> AliasKey {
     }
 }
 
-enum AliasKey {
+pub(super) enum AliasKey {
     Names(Vec<String>),
     Unknown,
+    Fallback(&'static str),
 }
 
 pub struct AliasSite {
     span: Span,
     key: AliasKey,
     functions_only: bool,
+}
+
+impl AliasSite {
+    pub(super) fn new(span: Span, key: AliasKey, functions_only: bool) -> Self {
+        Self {
+            span,
+            key,
+            functions_only,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        self.span
+    }
 }
 
 fn position_of(source: &str, span: Span) -> Option<(usize, usize)> {
@@ -738,7 +753,7 @@ impl AliasSite {
             AliasKey::Unknown if self.functions_only => {
                 FUNCTION_OWN_KEYS.iter().any(|key| used.uses(key))
             }
-            AliasKey::Unknown => true,
+            AliasKey::Unknown | AliasKey::Fallback(_) => true,
         }
     }
 }
@@ -807,6 +822,13 @@ pub fn alias_refusal(sites: &[AliasSite], used: &UsedNames<'_>, source: &str) ->
     let key = match &site.key {
         AliasKey::Names(names) => format!("key {}", names.join(" or ")),
         AliasKey::Unknown => "computed key".to_string(),
+        AliasKey::Fallback(reason) => {
+            return Some(Refusal::naming(
+                notes::BUILTIN_ALIAS_PATCHED,
+                site.span,
+                format!("the points-to analysis gave up ({reason})"),
+            ));
+        }
     };
     let detail = match position_of(source, site.span) {
         Some((line, column)) => format!("the write at line {line}:{column}, {key}"),

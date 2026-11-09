@@ -26,8 +26,8 @@ use crate::mutants::unsafe_names_trusted;
 use crate::notes;
 use crate::proof::{
     alias_refusal, alias_sites, build_escape_context, builtin_aliases, builtins_assumed_pristine,
-    encode_names, names_machinery, reachable_by_name, scan_pending, AliasSite, EscapeContext,
-    PendingSite, PreScan, ProtoWrite,
+    encode_names, names_machinery, points_to_sites, reachable_by_name, scan_pending, AliasSite,
+    EscapeContext, PendingSite, PreScan, ProtoWrite, BUILTIN_ALIAS_BITS,
 };
 use crate::stamp::{
     is_unedited, unstamp_block_note, unstamp_blocked, unstamp_names, DynamicScopes, RefusedByDecode,
@@ -468,6 +468,7 @@ struct DecodeLimits<'d> {
     nested_root: bool,
     unsafe_lane: bool,
     alias_checks: bool,
+    points_to: bool,
 }
 
 pub const BUILTIN_ALIAS_CHECKS: &str = "inline-decoded-strings/builtin-alias-checks";
@@ -510,7 +511,7 @@ fn decode_program(
     let alias_refused = if limits.unsafe_lane || !limits.alias_checks {
         FxHashMap::default()
     } else {
-        alias_refusals((program, scoping), &runs)
+        alias_refusals((program, scoping), &runs, limits.points_to)
     };
     let aliased_refusal = !alias_refused.is_empty();
     if aliased_refusal && !limits.defer_disabled && limits.defer_budget.get() > 0 {
@@ -598,6 +599,7 @@ fn unsafe_reach<'p>(
 fn aliased_writes(
     (program, scoping): (&Program<'_>, &Scoping),
     runs: &[UnitRun<'_, '_>],
+    points_to: bool,
 ) -> Vec<AliasSite> {
     let mut decoded = FxHashMap::default();
     for run in runs.iter().filter(|run| run.request.reliance.is_none()) {
@@ -611,6 +613,9 @@ fn aliased_writes(
                 }
             }
         }
+    }
+    if points_to {
+        return points_to_sites(program, scoping, &decoded, &[]);
     }
     alias_sites(program, &builtin_aliases(program, scoping, decoded), &[])
 }
@@ -627,6 +632,7 @@ pub(crate) fn forget_alias_refusals() {
 fn alias_refusals(
     (program, scoping): (&Program<'_>, &Scoping),
     runs: &[UnitRun<'_, '_>],
+    points_to: bool,
 ) -> FxHashMap<usize, (String, Span)> {
     ALIAS_REFUSED.with(|cell| {
         let mut cached = cell.borrow_mut();
@@ -634,7 +640,7 @@ fn alias_refusals(
             .iter()
             .all(|run| cached.contains_key(&run.request.unit));
         if !known {
-            let sites = aliased_writes((program, scoping), runs);
+            let sites = aliased_writes((program, scoping), runs, points_to);
             for run in runs {
                 if cached.contains_key(&run.request.unit) {
                     continue;
@@ -855,6 +861,7 @@ impl<'a> Pass<'a> for InlineDecodedStrings {
             nested_root: cx.opts.nested_root,
             unsafe_lane: cx.opts.unsafe_transforms,
             alias_checks: !cx.opts.rule_disabled(BUILTIN_ALIAS_CHECKS),
+            points_to: cx.opts.rule_disabled(BUILTIN_ALIAS_BITS),
         };
         let mut heap = self.heap.borrow_mut();
         heap.start(
