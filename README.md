@@ -118,7 +118,11 @@ check that every import key and export read in the glue exists in the module; a 
 not match gives a warning and names nothing. Embedded modules are found with `--wasm-check`, and
 modules loaded from elsewhere are supplied with `--wasm-dir`, `--wasm` or `--fetch-wasm`. In a
 webpack bundle the names reach the module files that import from or export to the wasm module,
-and the same names are applied to the combined `deobfuscated.js`. For Emscripten glue whose
+and the same names are applied to the combined `deobfuscated.js`. That includes wasm-bindgen
+glue (bundler target) in webpack 4 and 5 bundles that reaches the module through
+`import * as wasm`, directly or handed over with `__wbg_set_wasm`: a wrapper that calls one
+export, which no other function calls, takes that export's name. Glue and module given as
+separate input files are not linked. For Emscripten glue whose
 module has no name section, exports are named from `Module._name` wrappers and the export kind
 (`wasmMemory`, `wasmTable`). Minified import names like `a.a` say nothing about the function
 behind them, so an import is named only when its function has the shape of an Emscripten library

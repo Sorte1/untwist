@@ -19,6 +19,11 @@ All notable changes to this project are documented in this file. The format is b
 - A minified wasm-bindgen wrapper such as `function x(e,t){K.greet(e,t)}` takes the name of the
   wasm export it calls, when it calls only that export and no other function calls it.
   Calls to `__wbindgen_*` helpers do not count.
+- wasm-bindgen glue in a webpack 4 or 5 bundle that reaches its wasm module through
+  `import * as wasm` is named from the module: wrappers after the export they call, the
+  `__wbg_set_wasm` setter and the binding it fills, when the namespace is the only value the
+  setter is ever given. Every export the glue reads through the namespace must be in the module,
+  or nothing is named. Webpack bundles with numeric module ids are linked too.
 
 ### Fixed
 

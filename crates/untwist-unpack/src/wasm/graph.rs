@@ -7,8 +7,11 @@ use oxc_semantic::{AstNodes, Semantic};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::BinaryOperator;
 
+use super::holders::holders_of;
+
 const REQUIRE_NAMES: &[&str] = &["require", "__webpack_require__"];
 const HASHED_SUFFIX: &str = ".module.wasm";
+const MAX_NUMERIC_ID: f64 = 9_007_199_254_740_992.0;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImportValue {
@@ -35,12 +38,21 @@ pub struct ModuleFacts {
     pub sync_wrapper: bool,
     pub import_objects: Vec<(String, Vec<GlueImport>)>,
     pub id_hashes: Vec<(String, String)>,
+    pub setters: Vec<(String, String)>,
+    pub handoffs: Vec<(String, String, String)>,
+    pub loose: Vec<(String, String)>,
+    pub calls: Vec<(String, String, String)>,
 }
 
-fn key_name<'a>(key: &'a PropertyKey<'a>) -> Option<&'a str> {
+fn numeric_name(value: f64) -> Option<String> {
+    (value.fract() == 0.0 && (0.0..MAX_NUMERIC_ID).contains(&value)).then(|| format!("{value}"))
+}
+
+fn key_name(key: &PropertyKey<'_>) -> Option<String> {
     match key {
-        PropertyKey::StaticIdentifier(id) => Some(id.name.as_str()),
-        PropertyKey::StringLiteral(text) => text.value.as_str(),
+        PropertyKey::StaticIdentifier(id) => Some(id.name.to_string()),
+        PropertyKey::StringLiteral(text) => text.value.as_str().map(str::to_string),
+        PropertyKey::NumericLiteral(number) => numeric_name(number.value),
         _ => None,
     }
 }
@@ -52,7 +64,7 @@ fn string_of<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     }
 }
 
-fn required_spec<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
+pub(super) fn required_spec<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     let Expression::CallExpression(call) = expression.without_parentheses() else {
         return None;
     };
@@ -82,7 +94,7 @@ fn identifier_name<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     }
 }
 
-fn unchained<'a>(mut expression: &'a Expression<'a>) -> &'a Expression<'a> {
+pub(super) fn unchained<'a>(mut expression: &'a Expression<'a>) -> &'a Expression<'a> {
     while let Expression::AssignmentExpression(assign) = expression.without_parentheses() {
         expression = &assign.right;
     }
@@ -114,7 +126,7 @@ fn returned_object<'a>(function: &'a Function<'a>) -> Option<&'a ObjectExpressio
     }
 }
 
-fn cache_id<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
+fn cache_id(expression: &Expression<'_>) -> Option<String> {
     let (object, property) = member_of(expression)?;
     if property != "exports" {
         return None;
@@ -122,7 +134,13 @@ fn cache_id<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     let Expression::ComputedMemberExpression(entry) = object else {
         return None;
     };
-    entry.static_property_name().and_then(|name| name.as_str())
+    match entry.expression.without_parentheses() {
+        Expression::NumericLiteral(number) => numeric_name(number.value),
+        _ => entry
+            .static_property_name()
+            .and_then(|name| name.as_str())
+            .map(str::to_string),
+    }
 }
 
 struct Collector<'s> {
@@ -142,7 +160,7 @@ impl<'s> Collector<'s> {
     }
 
     fn cached_call(&self, function: Span) -> ImportValue {
-        let mut aliases: Vec<(&str, &str)> = Vec::new();
+        let mut aliases: Vec<(&str, String)> = Vec::new();
         for kind in self.within(function) {
             if let AstKind::AssignmentExpression(assign) = kind {
                 let target = match &assign.left {
@@ -168,11 +186,11 @@ impl<'s> Collector<'s> {
                 aliases
                     .iter()
                     .find(|(alias, _)| *alias == name)
-                    .map(|(_, id)| *id)
+                    .map(|(_, id)| id.clone())
             });
             if let Some(id) = id {
                 return ImportValue::Cached {
-                    id: id.to_string(),
+                    id,
                     export: export.to_string(),
                 };
             }
@@ -213,8 +231,8 @@ impl<'s> Collector<'s> {
                     continue;
                 };
                 imports.push(GlueImport {
-                    module: module.to_string(),
-                    field: name.to_string(),
+                    module: module.clone(),
+                    field: name,
                     value: self.import_value(&field.value),
                 });
             }
@@ -245,9 +263,7 @@ impl<'s> Collector<'s> {
                         key_name(&property.key),
                         returned_identifier(&property.value),
                     ) {
-                        self.facts
-                            .exports
-                            .push((export.to_string(), local.to_string()));
+                        self.facts.exports.push((export, local.to_string()));
                     }
                 }
             }
@@ -285,9 +301,7 @@ impl<'s> Collector<'s> {
                 ) {
                     (Some(id), Expression::StringLiteral(hash)) => {
                         if let Some(hash) = hash.value.as_str() {
-                            self.facts
-                                .id_hashes
-                                .push((id.to_string(), hash.to_string()));
+                            self.facts.id_hashes.push((id, hash.to_string()));
                         }
                     }
                     (_, Expression::ObjectExpression(nested)) => pending.push(nested),
@@ -295,10 +309,6 @@ impl<'s> Collector<'s> {
                 }
             }
         }
-    }
-
-    fn is_write_target(&self, id: oxc_syntax::node::NodeId, span: Span) -> bool {
-        matches!(self.nodes.parent_kind(id), AstKind::AssignmentExpression(assign) if assign.left.span() == span)
     }
 
     fn visit(&mut self) {
@@ -315,14 +325,6 @@ impl<'s> Collector<'s> {
                         self.facts
                             .requires
                             .push((id.name.to_string(), spec.to_string()));
-                    } else if let Some((object, key)) = member_of(unchained(init)) {
-                        if let Some(holder) = identifier_name(object) {
-                            self.facts.bindings.push((
-                                id.name.to_string(),
-                                holder.to_string(),
-                                key.to_string(),
-                            ));
-                        }
                     }
                 }
                 AstKind::AssignmentExpression(assign) => {
@@ -336,24 +338,7 @@ impl<'s> Collector<'s> {
                             .push((id.name.to_string(), spec.to_string()));
                     }
                 }
-                AstKind::StaticMemberExpression(member) => {
-                    if let Some(holder) = identifier_name(&member.object) {
-                        if !self.is_write_target(node.id(), member.span) {
-                            self.facts
-                                .reads
-                                .push((holder.to_string(), member.property.name.to_string()));
-                        }
-                    }
-                }
                 AstKind::ComputedMemberExpression(member) => {
-                    if let (Some(holder), Some(key)) = (
-                        identifier_name(&member.object),
-                        member.static_property_name().and_then(|name| name.as_str()),
-                    ) {
-                        if !self.is_write_target(node.id(), member.span) {
-                            self.facts.reads.push((holder.to_string(), key.to_string()));
-                        }
-                    }
                     let instance = member_of(&member.expression)
                         .and_then(|(object, key)| identifier_name(object).map(|name| (name, key)));
                     if matches!(member_of(&member.object), Some((_, "w")))
@@ -373,7 +358,7 @@ impl<'s> Collector<'s> {
                     if let Some(object) = returned_object(function) {
                         let imports = self.glue_imports(object);
                         if !imports.is_empty() {
-                            self.facts.import_objects.push((id.to_string(), imports));
+                            self.facts.import_objects.push((id, imports));
                         }
                     }
                 }
@@ -392,21 +377,6 @@ impl<'s> Collector<'s> {
                 _ => {}
             }
         }
-        let holders: Vec<&str> = self
-            .facts
-            .requires
-            .iter()
-            .map(|(local, _)| local.as_str())
-            .collect();
-        let holders: Vec<String> = holders.into_iter().map(str::to_string).collect();
-        self.facts
-            .reads
-            .retain(|(holder, _)| holders.contains(holder));
-        self.facts
-            .bindings
-            .retain(|(_, holder, _)| holders.contains(holder));
-        self.facts.reads.sort();
-        self.facts.reads.dedup();
     }
 }
 
@@ -416,5 +386,14 @@ pub fn facts_of(semantic: &Semantic<'_>) -> ModuleFacts {
         facts: ModuleFacts::default(),
     };
     collector.visit();
-    collector.facts
+    let held = holders_of(semantic);
+    ModuleFacts {
+        reads: held.reads,
+        bindings: held.bindings,
+        setters: held.setters,
+        handoffs: held.handoffs,
+        loose: held.loose,
+        calls: held.calls,
+        ..collector.facts
+    }
 }
