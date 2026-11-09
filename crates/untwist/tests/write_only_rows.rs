@@ -6,6 +6,8 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/write_only_rows.txt");
 
+type Switch = fn(bool);
+
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
         .filter_map(|line| line.split_once('|'))
@@ -52,7 +54,7 @@ fn the_rows_hold_up_against_node_and_the_kept_ones_need_their_checks() {
     let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    let checks: [(&str, fn(bool)); 2] = [
+    let checks: [(&str, Switch); 2] = [
         ("keep-a-let-set-before", trust_write_only_order_for_tests),
         ("keep-a-nested-write", trust_nested_write_targets_for_tests),
     ];
