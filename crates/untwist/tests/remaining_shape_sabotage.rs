@@ -19,7 +19,7 @@ fn transformed(source: &str) -> String {
 
 type Switch = fn(bool);
 
-const KEPT: [(&str, Switch); 3] = [
+const KEPT: [(&str, Switch); 4] = [
     (
         "keep-a-returner-call-that-is-not-self-defending",
         trust_inline_returners_for_tests,
@@ -27,6 +27,10 @@ const KEPT: [(&str, Switch); 3] = [
     (
         "keep-a-callee-object-read-before-its-assignment",
         trust_callee_objects_for_tests,
+    ),
+    (
+        "keep-a-returner-variable-that-is-not-self-defending",
+        trust_inline_returners_for_tests,
     ),
     (
         "keep-a-sequence-object-read-before-its-assignment",

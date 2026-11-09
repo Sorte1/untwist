@@ -60,6 +60,7 @@ mod prologue;
 mod prologue_inline;
 mod reach;
 mod single_use;
+mod states_class;
 
 use aliases::{resolve_array_aliases, search_aliases};
 
@@ -743,6 +744,13 @@ impl<'a> Pass<'a> for FindStringArray {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         if !self.legacy_searched {
+            if cx.opts.unsafe_transforms {
+                let dropped = states_class::drop_states_classes(program, cx);
+                if dropped > 0 {
+                    cx.changed_by(dropped);
+                    return;
+                }
+            }
             let normalised = minified::normalise_minified(program, cx);
             if normalised > 0 {
                 cx.changed_by(normalised);
