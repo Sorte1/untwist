@@ -28,6 +28,11 @@ All notable changes to this project are documented in this file. The format is b
   branch the decoded strings pick is the one checked, the other never runs.
 - The obfuscator fuzz files a domain-lock sample that also patches a built-in by a computed key
   under that sound key-reach refusal.
+- A domain lock that control-flow flattening has routed through a local storage object
+  (`st.aBcDe(pred, key, 4, [...])`, `st.nEqQx(s.length, n)`, `st.sAmEx(st.kQx, st.kQy)`) is
+  recognised: calls into an untouched object literal run the stored function, and stored string
+  fields and comparisons settle the opaque tests. A storage object that is written, reassigned or
+  passed on still refuses.
 
 ### Changed
 
