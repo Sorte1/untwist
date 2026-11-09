@@ -166,3 +166,10 @@ fn code_built_at_run_time_reaches_every_built_in() {
         },
     );
 }
+
+#[test]
+fn joining_arrays_of_arrays_settles_within_the_budget() {
+    let source = "var a = [[1], [[2]]]; var s = '' + a; for (var i = 0; i < a.length; i++) { console.log(a[i] + s); }";
+    let out = dump(source, None);
+    assert!(!out.contains("exhausted"), "{out}");
+}

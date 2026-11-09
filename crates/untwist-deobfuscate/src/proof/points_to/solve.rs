@@ -54,6 +54,14 @@ pub(super) struct Call {
 }
 
 #[derive(Clone)]
+pub(super) struct SimpleSite {
+    pub(super) callee: Node,
+    pub(super) this: Node,
+    pub(super) args: Vec<Node>,
+    pub(super) result: Node,
+}
+
+#[derive(Clone)]
 pub(super) enum PatchKey {
     Node(Node),
     Fields(Vec<Node>),
@@ -93,6 +101,7 @@ enum Watch {
     Assign(u32),
     Define(u32),
     ProtoSet(u32),
+    EscapeSites,
 }
 
 #[derive(Clone, Copy)]
@@ -168,6 +177,10 @@ pub(super) struct Graph {
     patch_seen: FxHashSet<(u32, Method)>,
     pub(super) skip_definers: FxHashSet<Span>,
     pub(super) global_declared: FxHashSet<Field>,
+    loaded: FxHashMap<(Node, Field), Node>,
+    derived: FxHashMap<(u8, Vec<Node>, Span), Node>,
+    simple_sites: FxHashMap<(Span, usize), SimpleSite>,
+    sink: Option<Node>,
     budget: Budget,
     exhausted: bool,
 }
@@ -220,6 +233,10 @@ impl Graph {
             patch_seen: FxHashSet::default(),
             skip_definers: FxHashSet::default(),
             global_declared: FxHashSet::default(),
+            loaded: FxHashMap::default(),
+            derived: FxHashMap::default(),
+            simple_sites: FxHashMap::default(),
+            sink: None,
             budget: Budget {
                 steps_cap: bytes.saturating_mul(48).clamp(4_000_000, 400_000_000),
                 elements_cap: bytes.saturating_mul(4).clamp(4_000_000, 24_000_000),
@@ -367,6 +384,51 @@ impl Graph {
         }
     }
 
+    pub(super) fn loaded(&mut self, base: Node, field: Field) -> Node {
+        if let Some(node) = self.loaded.get(&(base, field)) {
+            return *node;
+        }
+        let node = self.node();
+        self.loaded.insert((base, field), node);
+        self.load(base, Key::Static(field), node);
+        node
+    }
+
+    pub(super) fn derived(&mut self, tag: u8, inputs: Vec<Node>, span: Span) -> (Node, bool) {
+        if let Some(node) = self.derived.get(&(tag, inputs.clone(), span)) {
+            return (*node, false);
+        }
+        let node = self.node();
+        self.derived.insert((tag, inputs, span), node);
+        (node, true)
+    }
+
+    pub(super) fn simple_site(&mut self, span: Span, arity: usize) -> SimpleSite {
+        if let Some(site) = self.simple_sites.get(&(span, arity)) {
+            return site.clone();
+        }
+        let site = SimpleSite {
+            callee: self.node(),
+            this: self.node(),
+            args: (0..arity).map(|_| self.node()).collect(),
+            result: self.node(),
+        };
+        self.simple_sites.insert((span, arity), site.clone());
+        let live = self.live;
+        self.live = true;
+        self.call(Call {
+            callee: site.callee,
+            this: Some(site.this),
+            args: site.args.clone(),
+            spread: None,
+            result: Some(site.result),
+            construct: false,
+            span,
+        });
+        self.live = live;
+        site
+    }
+
     pub(super) fn load_named(&mut self, base: Node, name: &str, to: Node) {
         let field = self.name(name);
         self.load(base, Key::Static(field), to);
@@ -511,10 +573,13 @@ impl Graph {
             }
         }
         if self.escaped.contains(&object) {
-            let esc = self.esc;
-            self.copy(node, esc);
+            self.escape_sites(node);
         }
         node
+    }
+
+    fn escape_sites(&mut self, node: Node) {
+        self.watch(node, Watch::EscapeSites);
     }
 
     pub(super) fn new_site(&mut self, span: Span, kind: SiteKind, proto: &[Builtin]) -> ObjectId {
@@ -563,12 +628,8 @@ impl Graph {
     }
 
     pub(super) fn define_one(&mut self, target: Node, key: Key, descriptor: Node, span: Span) {
-        let value = self.node();
-        self.load_named(descriptor, "value", value);
-        let getter = self.node();
-        self.load_named(descriptor, "get", getter);
-        let setter = self.node();
-        self.load_named(descriptor, "set", setter);
+        let names = [self.name("value"), self.name("get"), self.name("set")];
+        let [value, getter, setter] = names.map(|name| self.loaded(descriptor, name));
         let world = self.world;
         self.call(Call {
             callee: getter,
@@ -676,6 +737,14 @@ impl Graph {
                 let (_, target) = self.defines[index as usize];
                 for object in delta {
                     self.fields_into(*object, Sub::DefineInto(target), target);
+                }
+            }
+            Watch::EscapeSites => {
+                let esc = self.esc;
+                for object in delta {
+                    if self.objects.is_site(*object) {
+                        self.insert(esc, *object);
+                    }
                 }
             }
             Watch::ProtoSet(index) => {
@@ -883,7 +952,7 @@ impl Graph {
                 }
                 self.field_node(object, Field::UNKNOWN);
                 let proto = self.proto_node(object);
-                self.copy(proto, esc);
+                self.escape_sites(proto);
                 if let Some(info) = self.functions.get(&object).cloned() {
                     let world = self.world;
                     for param in info.params.iter().chain(info.rest.iter()) {
@@ -932,6 +1001,19 @@ impl Graph {
         for object in self.esc_builtins.clone() {
             self.world_apply(index, object);
         }
+    }
+
+    pub(super) fn is_live(&self) -> bool {
+        self.live
+    }
+
+    pub(super) fn implicit_sink(&mut self) -> Node {
+        if let Some(sink) = self.sink {
+            return sink;
+        }
+        let sink = self.node();
+        self.sink = Some(sink);
+        sink
     }
 
     pub(super) fn first_implicit(&mut self, value: Node) -> bool {
