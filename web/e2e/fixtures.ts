@@ -70,6 +70,11 @@ export async function runAndWait(page: Page): Promise<void> {
 }
 
 const ABORTED_WORKER_LOAD = /\/assets\/lang\.worker-[\w-]+\.js due to access control checks/;
+const ABORTED_DRIVER_WORKER = /NS_BINDING_ABORTED: .*chrome:\/\/juggler\/content\/content\/WorkerMain\.js/;
+
+function isAbortedWorkerLoad(text: string): boolean {
+  return ABORTED_WORKER_LOAD.test(text) || ABORTED_DRIVER_WORKER.test(text);
+}
 
 type Fixtures = { pageErrors: string[] };
 
@@ -78,12 +83,12 @@ export const test = base.extend<Fixtures>({
     async ({ page }, use) => {
       const errors: string[] = [];
       page.on('pageerror', (error) => {
-        if (!ABORTED_WORKER_LOAD.test(error.message)) {
+        if (!isAbortedWorkerLoad(error.message)) {
           errors.push(error.message);
         }
       });
       page.on('console', (message) => {
-        if (message.type() === 'error' && !ABORTED_WORKER_LOAD.test(message.text())) {
+        if (message.type() === 'error' && !isAbortedWorkerLoad(message.text())) {
           errors.push(message.text());
         }
       });
