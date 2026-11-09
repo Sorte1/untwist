@@ -21,6 +21,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- Minified javascript-obfuscator 2.x and 3.x decoders that keep their memo in the `arguments`
+  object (`n = arguments` ... `n[key] = value`) decode again when a helper inside the decoder has a
+  parameter or local of the same name (`function (n) { ... n.charAt(i) ... }`). The check for other
+  uses of the memo matched by name, so the helper's own `n` counted as a use of the memo. The
+  version matrix decodes 33 more cells with `--unsafe` and 12 more in the default lane.
+
 - The safe lane follows a domain lock that reuses the variable holding a found key for the domain
   list in a later loop (`var x = list[i]` as the loop body's first statement): reads inside that
   loop see the list entry, not the found key, so the lock's scan of the global object is bounded
