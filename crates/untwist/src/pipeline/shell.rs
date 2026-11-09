@@ -3,18 +3,48 @@ use oxc_ast::ast::Program;
 use untwist_core::clock::StageInstant as Instant;
 use untwist_core::pass::{Note, NoteKind, StopReason};
 use untwist_deobfuscate::directives::{strip_anonymous_shell, ShellStrip};
+use untwist_deobfuscate::shell_scope::keep_body_scoped;
 
-use super::notes::{ANONYMOUS_SHELL_KEPT, ANONYMOUS_SHELL_STRIPPED};
+use super::notes::{ANONYMOUS_SHELL_KEPT, ANONYMOUS_SHELL_SCOPED, ANONYMOUS_SHELL_STRIPPED};
 use super::stages::round_of;
 use crate::report::StageReport;
 
 const STRIP_SHELL: &str = "strip-shell";
 
-fn hoisted_parameters_detail(names: &[String]) -> String {
-    match names.len() {
-        0 => "; it had no parameters".to_string(),
-        1 => format!("; 1 parameter hoisted as var: {}", names[0]),
-        count => format!("; {count} parameters hoisted as var: {}", names.join(", ")),
+fn listed(count: usize, what: &str, names: &[String]) -> String {
+    match count {
+        1 => format!("1 parameter {what}: {}", names[0]),
+        count => format!("{count} parameters {what}: {}", names.join(", ")),
+    }
+}
+
+fn parameters_detail(hoisted: &[String], dropped: &[String]) -> String {
+    let parts: Vec<String> = [
+        (hoisted, "hoisted as var"),
+        (dropped, "never read, dropped"),
+    ]
+    .into_iter()
+    .filter(|(names, _)| !names.is_empty())
+    .map(|(names, what)| listed(names.len(), what, names))
+    .collect();
+    match parts.is_empty() {
+        true => "; it had no parameters".to_string(),
+        false => format!("; {}", parts.join("; ")),
+    }
+}
+
+pub(super) fn scope_shell_body<'a>(
+    (alloc, program): (&'a Allocator, &mut Program<'a>),
+    always: bool,
+    notes: &mut Vec<Note>,
+) {
+    if keep_body_scoped(program, always, alloc) {
+        notes.push(Note {
+            pass: STRIP_SHELL,
+            kind: NoteKind::Progress,
+            message: ANONYMOUS_SHELL_SCOPED.to_string(),
+            span: None,
+        });
     }
 }
 
@@ -24,7 +54,7 @@ pub(super) fn strip_shell<'a>(
     notes: &mut Vec<Note>,
 ) -> bool {
     let started = Instant::now();
-    let names = match strip_anonymous_shell(program, alloc) {
+    let (hoisted, dropped) = match strip_anonymous_shell(program, alloc) {
         ShellStrip::Absent => return false,
         ShellStrip::Kept { span, reason } => {
             notes.push(Note {
@@ -35,7 +65,7 @@ pub(super) fn strip_shell<'a>(
             });
             return false;
         }
-        ShellStrip::Stripped { hoisted } => hoisted,
+        ShellStrip::Stripped { hoisted, dropped } => (hoisted, dropped),
     };
     let elapsed = started.elapsed();
     stages.push(StageReport {
@@ -58,7 +88,7 @@ pub(super) fn strip_shell<'a>(
         kind: NoteKind::Progress,
         message: format!(
             "{ANONYMOUS_SHELL_STRIPPED}{}",
-            hoisted_parameters_detail(&names)
+            parameters_detail(&hoisted, &dropped)
         ),
         span: None,
     });

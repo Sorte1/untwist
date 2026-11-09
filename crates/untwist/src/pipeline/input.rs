@@ -22,7 +22,7 @@ use untwist_unpack::holds_a_bundle_with;
 use super::boundary::Boundary;
 use super::layer::{Counters, Layering, Peeled, RoomSeed};
 use super::notes::{consolidate_reach, dedupe_spanned, guard_notes};
-use super::shell::strip_shell;
+use super::shell::{scope_shell_body, strip_shell};
 use super::snapshots::Snapshots;
 use super::stages::StageCx;
 use super::{summarize_diagnostics, Pipeline, Reservation, PANICKED, TYPESCRIPT_IN_JAVASCRIPT};
@@ -221,17 +221,24 @@ impl Pipeline {
         let mut current: Cow<'_, str> = Cow::Borrowed(source);
         let mut room = room;
         let mut form = None;
+        let mut scoped = false;
         let mut fallback: Option<Fallback<'_>> = None;
         loop {
             let marks = Marks::of(result, &layering, room.as_ref());
-            let layer = (reservation, room.take(), form);
+            let layer = (reservation, room.take(), form, scoped);
             match self.process_layer(&current, layer, &mut layering, &mut fallback, result) {
                 Step::Done(code) => return code,
                 Step::Peel(peeled) => {
                     room = Some(peeled.room.room());
                     let text = std::mem::replace(&mut current, Cow::Owned(peeled.text));
-                    fallback = Some(Fallback { text, marks, form });
+                    fallback = Some(Fallback {
+                        text,
+                        marks,
+                        form,
+                        scoped,
+                    });
                     form = Some(peeled.form);
+                    scoped = peeled.scoped;
                 }
                 Step::Kept(reason) => {
                     let back = fallback.take()?;
@@ -239,6 +246,7 @@ impl Pipeline {
                     layering.keep(&current, reason);
                     room = back.marks.room.map(RoomSeed::room);
                     form = back.form;
+                    scoped = back.scoped;
                     current = back.text;
                 }
             }
@@ -261,7 +269,12 @@ impl Pipeline {
     fn process_layer(
         &self,
         text: &str,
-        (reservation, room, form): (Reservation<'_>, Option<InputRoom>, Option<LayerForm>),
+        (reservation, room, form, scoped): (
+            Reservation<'_>,
+            Option<InputRoom>,
+            Option<LayerForm>,
+            bool,
+        ),
         layering: &mut Layering,
         fallback: &mut Option<Fallback<'_>>,
         result: &mut InputResult,
@@ -303,7 +316,7 @@ impl Pipeline {
         let staged = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let tree = (&alloc, &mut parsed.program);
             let checked = first && errors == 0;
-            self.stage_layer(tree, (reservation, room, checked), layering, result)
+            self.stage_layer(tree, (reservation, room, checked, scoped), layering, result)
         }));
         #[cfg(feature = "refusal-spans")]
         if let Some((layer, recorder)) = recorder {
@@ -333,11 +346,12 @@ impl Pipeline {
     fn stage_layer<'a>(
         &self,
         (alloc, program): (&'a Allocator, &mut Program<'a>),
-        (reservation, room, checked): (Reservation<'_>, Option<InputRoom>, bool),
+        (reservation, room, checked, scoped): (Reservation<'_>, Option<InputRoom>, bool, bool),
         layering: &mut Layering,
         result: &mut InputResult,
     ) -> Staged {
-        let nested_root = strip_shell((alloc, program), &mut result.stages, &mut result.notes);
+        let stripped = strip_shell((alloc, program), &mut result.stages, &mut result.notes);
+        let nested_root = stripped || scoped;
         let pass_opts = PassOptions {
             room,
             nested_root,
@@ -356,7 +370,11 @@ impl Pipeline {
         if checked && declares_an_interface(&sem.scoping) {
             return Staged::TypeScript;
         }
-        self.run_layer_stages(&mut site, sem, reservation, layering)
+        let staged = self.run_layer_stages(&mut site, sem, reservation, layering);
+        if nested_root && matches!(staged, Staged::Done) {
+            scope_shell_body((alloc, program), scoped, &mut result.notes);
+        }
+        staged
     }
 
     fn run_layer_stages(
@@ -445,6 +463,7 @@ struct Fallback<'s> {
     text: Cow<'s, str>,
     marks: Marks,
     form: Option<LayerForm>,
+    scoped: bool,
 }
 
 fn fresh_tree_state(room: Option<&InputRoom>) {

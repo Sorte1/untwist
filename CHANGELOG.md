@@ -17,6 +17,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
+  globals. When the body still declares a `var`, function, class, `let` or `const` at its own
+  level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that
+  reads the global object (such as `globalThis[name]`) sees what the called shell saw. Before,
+  a decoder the deobfuscator kept (or every function with `--no-deobfuscate`) became reachable
+  as a global. Shell parameters the body never reads are dropped instead of hoisted as `var`.
 - The safe lane decodes a program whose `for (const key in globalThis)` loop only reads the
   names (comparisons, `typeof`, `.length`, a string method call in a test), instead of refusing
   the unit as a global reach; the machinery is kept, since the program observes the global

@@ -69,10 +69,10 @@ fn a_called_anonymous_function_is_left_alone() {
 }
 
 #[test]
-fn a_shell_whose_parameters_are_read_is_stripped_and_its_parameters_hoisted() {
+fn a_shell_whose_parameter_is_read_keeps_it_as_a_var_inside_a_called_function() {
     let out = run("(function anonymous(a, b) {\n  use(a);\n})");
     assert!(!out.code().contains("function anonymous"), "{}", out.code());
-    assert_eq!(out.code(), "var a;\nvar b;\nuse(a);");
+    assert_eq!(out.code(), "(function () {\n  var a;\n  use(a);\n})();");
     assert_eq!(out.parse_errors, 0, "{:?}", out.parse_diagnostics);
 }
 
@@ -80,7 +80,12 @@ fn a_shell_whose_parameters_are_read_is_stripped_and_its_parameters_hoisted() {
 fn a_shell_whose_parameter_is_read_inside_a_nested_function_is_stripped_too() {
     let out = run("(function anonymous(a, b) {\n  function inner() {\n    use(a);\n  }\n})");
     assert!(!out.code().contains("function anonymous"), "{}", out.code());
-    assert!(out.code().starts_with("var a;\nvar b;\n"), "{}", out.code());
+    assert!(
+        out.code()
+            .starts_with("(function () {\n  var a;\n  function inner"),
+        "{}",
+        out.code()
+    );
     assert!(out.code().contains("use(a)"), "{}", out.code());
 }
 
@@ -105,7 +110,10 @@ fn a_shell_whose_parameter_name_is_declared_at_the_body_top_level_is_left_alone(
 fn a_body_level_var_of_a_parameter_name_does_not_block_the_strip() {
     let out = run("(function anonymous(a) {\n  var a = 1;\n  use(a);\n})");
     assert!(!out.code().contains("function anonymous"), "{}", out.code());
-    assert_eq!(out.code(), "var a;\nvar a = 1;\nuse(a);");
+    assert_eq!(
+        out.code(),
+        "(function () {\n  var a;\n  var a = 1;\n  use(a);\n})();"
+    );
     assert_eq!(out.parse_errors, 0, "{:?}", out.parse_diagnostics);
 }
 
@@ -175,7 +183,7 @@ fn the_strip_says_it_happened_and_reports_its_own_stage() {
             note.pass == "strip-shell"
                 && note.message.starts_with(untwist::ANONYMOUS_SHELL_STRIPPED)
                 && note.message.ends_with(
-                    "2 parameters hoisted as var: b475796ed633d5fd0485, f9e2c8d63a4b7128b031",
+                    "2 parameters never read, dropped: b475796ed633d5fd0485, f9e2c8d63a4b7128b031",
                 )
         }),
         "{:?}",
@@ -287,7 +295,7 @@ fn a_shell_with_no_parameters_is_stripped_without_a_var_line() {
 #[test]
 fn a_shell_with_one_parameter_is_reported_in_the_singular() {
     let out = run("(function anonymous(a) {\n  use(a);\n})");
-    assert_eq!(out.code(), "var a;\nuse(a);");
+    assert_eq!(out.code(), "(function () {\n  var a;\n  use(a);\n})();");
     assert!(
         out.notes.iter().any(|note| note.pass == "strip-shell"
             && note.message.ends_with("; 1 parameter hoisted as var: a")),
@@ -305,7 +313,7 @@ fn the_raw_to_string_declaration_form_is_stripped_in_both_modes() {
         assert!(!out.code().contains("function anonymous"), "{}", out.code());
         assert_eq!(
             out.code(),
-            "var b475796ed633d5fd0485;\nvar f9e2c8d63a4b7128b031;\n(function () {\n  \"use strict\";\n  console.log(1);\n})();"
+            "(function () {\n  \"use strict\";\n  console.log(1);\n})();"
         );
         assert_eq!(
             out.stages.first().map(|stage| stage.stage),
@@ -327,4 +335,26 @@ fn a_differently_named_function_declaration_is_left_alone() {
     let out = run("function main(a, b) {\n  y();\n}");
     assert!(out.code().contains("function main"), "{}", out.code());
     assert_not_a_shell(&out);
+}
+
+#[test]
+fn read_and_unread_parameters_are_both_reported() {
+    let out = run("(function anonymous(a, b) {\n  use(a);\n})");
+    assert!(
+        out.notes.iter().any(|note| note.pass == "strip-shell"
+            && note
+                .message
+                .ends_with("; 1 parameter hoisted as var: a; 1 parameter never read, dropped: b")),
+        "{:?}",
+        out.notes
+    );
+}
+
+#[test]
+fn a_shell_that_names_eval_keeps_every_parameter() {
+    let out = run("(function anonymous(a, b) {\n  eval(x);\n})");
+    assert_eq!(
+        out.code(),
+        "(function () {\n  var a;\n  var b;\n  eval(x);\n})();"
+    );
 }
