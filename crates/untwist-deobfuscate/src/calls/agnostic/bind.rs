@@ -14,7 +14,7 @@ use super::defs::{
     Def, DefTable, CALLABLE, CONSTRUCTS_FRESH, ESCAPES, ESCAPING_REF, FIELDS_WRITTEN,
     METHOD_CALLED, MUTATED, OPAQUE, SEALED_CLASS,
 };
-use super::filtered::{self, Candidate, Filters};
+use super::filtered::{self, Filters, Loop};
 use super::live::iife_returned;
 use super::native_map;
 use super::settle::Written;
@@ -229,7 +229,7 @@ pub(super) struct Bindings<'s, 'a> {
     pub(super) bootstrap_refusal: Option<&'static str>,
     pub(super) assembled: AssembledTables<'a>,
     enclosing: Option<filtered::Body<'a>>,
-    filter_candidates: Vec<Candidate<'a>>,
+    filter_candidates: Vec<Loop<'a>>,
     pub(super) name_keys: FxHashSet<SymbolId>,
     pub(super) filters: std::rc::Rc<Filters<'a>>,
 }
@@ -628,8 +628,8 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
 
     fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
         let loop_ = self.alloc(it);
-        if let Some(found) = filtered::candidate(self.scoping, loop_, self.enclosing) {
-            self.filter_candidates.push(found);
+        if self.enclosing.is_some() {
+            self.filter_candidates.push((loop_, self.enclosing));
         }
         if let Some(key) = super::name_keys::loop_key(self.scoping, &it.left) {
             self.name_keys.insert(key);

@@ -12,8 +12,9 @@ pub const FUNCTION_VALUES: &str = "function-values";
 pub const AWAITED_ARRAYS: &str = "awaited-arrays";
 pub const FILTERED_REWRITE_ORDER: &str = "filtered-rewrite-order";
 pub const INERT_NAME_KEYS: &str = "inert-name-keys";
+pub const OPAQUE_BRANCHES: &str = "opaque-branches";
 
-const FLOW_RULES: [&str; 12] = [
+const FLOW_RULES: [&str; 13] = [
     VALUE_FLOW_SINKS,
     MACHINERY_SOURCE_BOUND,
     OBSERVER_LIST,
@@ -26,6 +27,7 @@ const FLOW_RULES: [&str; 12] = [
     AWAITED_ARRAYS,
     FILTERED_REWRITE_ORDER,
     INERT_NAME_KEYS,
+    OPAQUE_BRANCHES,
 ];
 
 thread_local! {

@@ -10,7 +10,12 @@ pub const HAZARDS: [&str; 4] = [
     "text-from-data",
     "top-fn-prints-param",
 ];
-const KEY_SHAPED: [&str; 3] = ["object-spread", "object-rest", "symbol-key"];
+const KEY_SHAPED: [&str; 4] = [
+    "object-spread",
+    "object-rest",
+    "symbol-key",
+    "patches-builtin",
+];
 
 #[derive(Clone, Debug)]
 pub struct Spec {

@@ -174,11 +174,11 @@ fn machinery_cause(
         .iter()
         .any(|note| by_note(note) == Some(BUILTIN_ALIAS));
     let reach = notes.iter().any(|note| note.contains(REACH_NOTE));
-    if safe && shape.domain_lock && reach && !aliased {
-        return Some(DOMAIN_LOCK);
-    }
     if safe && shape.key_shaped && note.contains(REACH_NOTE) {
         return Some(KEY_REACH);
+    }
+    if safe && shape.domain_lock && reach && !aliased {
+        return Some(DOMAIN_LOCK);
     }
     if let Some(cause) = refused_without_array(note, notes) {
         return Some(cause);
@@ -622,6 +622,22 @@ mod tests {
             "{}",
             suggestion.text
         );
+    }
+
+    #[test]
+    fn a_domain_lock_sample_that_patches_a_built_in_by_key_is_the_key_reach_refusal() {
+        let note = format!("note: inline-decoded-strings: code that may hold the global object {REACH_NOTE} that may be its name");
+        let (judged, outcomes) = safe_lane_fails(&["domain-lock--a-1.js"], &note);
+        let mut shape = Shape::of(&outcomes[0].entry);
+        shape.key_shaped = true;
+        let failing = failing_of(
+            &judged
+                .iter()
+                .filter(|j| j.lane == "safe")
+                .collect::<Vec<_>>(),
+        );
+        let notes = vec![note.clone()];
+        assert_eq!(cause_of(shape, "safe", &failing, &notes), Some(KEY_REACH));
     }
 
     #[test]

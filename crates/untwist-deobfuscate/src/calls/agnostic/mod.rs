@@ -18,6 +18,7 @@ mod live;
 mod name_keys;
 mod native_map;
 mod observe;
+mod opaque;
 mod quiet;
 mod reach;
 mod reach_text;

@@ -142,12 +142,19 @@ impl<'f, 'a> Shape<'f, 'a> {
             Statement::VariableDeclaration(declaration) => self.declaration(declaration),
             Statement::ExpressionStatement(it) => self.expr(&it.expression, 0),
             Statement::IfStatement(it) => {
-                self.expr(&it.test, 0)
-                    && self.statement(&it.consequent)
-                    && it
-                        .alternate
+                if !self.expr(&it.test, 0) {
+                    return false;
+                }
+                let alternate = |shape: &mut Self| {
+                    it.alternate
                         .as_ref()
-                        .is_none_or(|other| self.statement(other))
+                        .is_none_or(|other| shape.statement(other))
+                };
+                match super::super::opaque::choice(&it.test, self.resolve) {
+                    Some(true) => self.statement(&it.consequent),
+                    Some(false) => alternate(self),
+                    None => self.statement(&it.consequent) && alternate(self),
+                }
             }
             Statement::ForStatement(it) => {
                 let init = match &it.init {
@@ -255,8 +262,11 @@ impl<'f, 'a> Shape<'f, 'a> {
             }
             Expression::ConditionalExpression(it) => {
                 self.expr(&it.test, next)
-                    && self.expr(&it.consequent, next)
-                    && self.expr(&it.alternate, next)
+                    && match super::super::opaque::choice(&it.test, self.resolve) {
+                        Some(true) => self.expr(&it.consequent, next),
+                        Some(false) => self.expr(&it.alternate, next),
+                        None => self.expr(&it.consequent, next) && self.expr(&it.alternate, next),
+                    }
             }
             Expression::SequenceExpression(sequence) => sequence
                 .expressions
