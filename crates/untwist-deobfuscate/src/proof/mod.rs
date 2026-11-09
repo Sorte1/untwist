@@ -14,6 +14,7 @@ mod intrinsics;
 mod names;
 mod numeric_keys;
 mod pending;
+mod points_to;
 mod property_reads;
 mod proxy_objects;
 mod rotator;
