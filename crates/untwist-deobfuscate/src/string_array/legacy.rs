@@ -29,6 +29,7 @@ use super::prologue::strip_atob_prologues;
 use crate::array_rotator::push_shift_target;
 use crate::calls::agnostic::{global_reach, ReachWatch};
 use crate::decoded::syntactic_global_reach;
+use crate::legacy_reach;
 use crate::mutants::legacy_array_guards_dropped;
 use crate::notes;
 use crate::stamp::{declaration_symbol, string_array_unit, DynamicScopes};
@@ -674,7 +675,12 @@ fn reached_by_name(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> O
     global_reach(program, scoping, (None, &machinery), watch).reach
 }
 
-fn refusal(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> Option<(String, Span)> {
+fn refusal(
+    program: &Program<'_>,
+    cx: &Cx<'_, '_>,
+    legacy: &Legacy,
+    deferred: &mut bool,
+) -> Option<(String, Span)> {
     if legacy_array_guards_dropped() {
         return None;
     }
@@ -684,7 +690,10 @@ fn refusal(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> Option<(S
         return Some((note.to_string(), statement));
     }
     if let Some(span) = reached_by_name(program, cx, legacy) {
-        return Some((notes::LEGACY_ARRAY_REACHED.to_string(), span));
+        if cx.opts.unsafe_transforms || !legacy_reach::defers() {
+            return Some((notes::LEGACY_ARRAY_REACHED.to_string(), span));
+        }
+        *deferred = true;
     }
     if legacy.hoisted && legacy.body_code_before {
         return Some((notes::LEGACY_DECODER_BEFORE_ARRAY.to_string(), statement));
@@ -913,13 +922,18 @@ pub(super) fn lift_legacy_array<'a>(
     let Some(legacy) = find_legacy(program, cx.scoping()) else {
         return false;
     };
-    if let Some((note, span)) = refusal(program, cx, &legacy) {
+    let mut deferred = false;
+    if let Some((note, span)) = refusal(program, cx, &legacy, &mut deferred) {
         cx.note(note.clone(), Some(span));
         *refused = Some((note, span));
         return false;
     }
+    let name = cx.scoping().symbol_name(legacy.symbol).to_string();
     if !rewrite(program, cx, legacy) {
         return false;
+    }
+    if deferred {
+        legacy_reach::defer(name);
     }
     LIFTED.with(|lifted| lifted.set(true));
     let moved = hoist_for_init_forwarders(program, cx) + declare_assigned_forwarders(program, cx);

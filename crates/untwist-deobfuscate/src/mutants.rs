@@ -439,3 +439,14 @@ pub fn trust_reused_array_aliases_for_tests(on: bool) {
 pub(crate) fn reused_array_aliases_trusted() -> bool {
     REUSED_ARRAY_ALIASES_TRUSTED.load(Ordering::Relaxed)
 }
+
+static DEFERRED_LEGACY_REACH_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_deferred_legacy_reach_for_tests(on: bool) {
+    DEFERRED_LEGACY_REACH_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn deferred_legacy_reach_trusted() -> bool {
+    DEFERRED_LEGACY_REACH_TRUSTED.load(Ordering::Relaxed)
+}

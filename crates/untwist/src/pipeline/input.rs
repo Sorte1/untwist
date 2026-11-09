@@ -135,7 +135,7 @@ impl Pipeline {
             Ok((stack, room)) => {
                 #[cfg(target_arch = "wasm32")]
                 let _nesting = WasmInputNesting::enter(room.as_ref());
-                self.run_admitted(&source, reservation, (room, stack.bytes()))
+                self.run_verified(&source, reservation, (room, stack.bytes()))
             }
             Err(note) => InputResult::refused(&source, note),
         };
@@ -149,6 +149,26 @@ impl Pipeline {
             self.options.progress(Progress::InputFinished(index));
         }
         result
+    }
+
+    fn run_verified(
+        &self,
+        source: &str,
+        reservation: Reservation<'_>,
+        (room, reserved): (Option<InputRoom>, u64),
+    ) -> InputResult {
+        let first = self.run_admitted(source, reservation, (room.clone(), reserved));
+        if !untwist_deobfuscate::legacy_reach::unverified() {
+            return first;
+        }
+        drop(first);
+        reset_synthetic_spans();
+        untwist_deobfuscate::reset_run_state();
+        let _ = crate::stats::RunStats::taken();
+        untwist_deobfuscate::init_order::reset_capacity_hint();
+        forget_failures();
+        let _forbidden = untwist_deobfuscate::legacy_reach::Forbidden::enter();
+        self.run_admitted(source, reservation, (room, reserved))
     }
 
     fn run_admitted(

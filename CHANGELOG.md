@@ -102,6 +102,13 @@ All notable changes to this project are documented in this file. The format is b
   remove-decoder-machinery now keeps a unit whose rotator reads or writes anything other than its
   own bindings, the string array and its decoders.
 
+- Plain string arrays of javascript-obfuscator 0.x to 2.18 (`var _0x1234 = [...]` at the top of a
+  script) decode in the default lane when code such as `words[_0x5678('0x8')](' ')` only looks
+  like it may reach the array by name through the global object. The check now runs again with the
+  decoded keys once the unit is decoded; when it still finds a reach, or the unit does not decode,
+  the input is processed again with the array left as written. The version matrix decodes 74 more
+  cells in the default lane.
+
 - uglify-js output of javascript-obfuscator 2.19 and later decodes when the rotator of a function
   string array is an arrow IIFE that uglify moved into a declaration
   (`let a = dec, b = ((() => { for (var e = dec, a = arr();;) ... })(), {})`) or to the head of a
