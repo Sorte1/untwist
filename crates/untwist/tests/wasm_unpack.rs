@@ -518,3 +518,79 @@ fn emscripten_three_glue_given_another_module_reports_the_mismatch_and_names_not
         .iter()
         .any(|note| note.contains("does not match the glue")));
 }
+
+fn webpack_bundle(modules: &[(&str, &str)]) -> String {
+    let table: Vec<String> = modules
+        .iter()
+        .map(|(path, code)| format!("\"./src/{path}\":(e,t,n)=>{{{code}}}"))
+        .collect();
+    let requires: String = modules
+        .iter()
+        .map(|(path, _)| format!("n(\"./src/{path}\");"))
+        .collect();
+    format!(
+        "(()=>{{var e={{{}}},t={{}};function n(r){{var o=t[r];if(void 0!==o)return o.exports;var s=t[r]={{id:r,exports:{{}}}};return e[r](s,s.exports,n),s.exports}}{requires}}})();",
+        table.join(",")
+    )
+}
+
+const OTHER_MODULE: (&str, &str) = ("other.js", "var o={a:{z:1}};console.log(o)");
+
+#[test]
+fn glue_names_found_in_a_bundle_module_also_apply_in_the_combined_output() {
+    let source = webpack_bundle(&[("em.js", &fixture("emscripten-nameless.js")), OTHER_MODULE]);
+    let out = settled(&source);
+    assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
+    assert_eq!(out.wasm.len(), 1);
+    assert_eq!(out.wasm[0].renamed, 4);
+    let module = module_code(&out, "src/em.js");
+    let code = out.code();
+    for named in [
+        "wasmMemory = wasmExports.c;",
+        "var wasmImports = {",
+        "const e = { a: wasmImports };",
+        "_malloc(4);",
+    ] {
+        assert!(module.contains(named), "{named} missing\n{module}");
+        assert!(code.contains(named), "{named} missing\n{code}");
+    }
+    assert!(code.contains("console.log({ a: { z: 1 } });"), "{code}");
+}
+
+#[test]
+fn two_bundle_modules_with_their_own_wasm_name_their_glue_in_the_combined_output() {
+    let source = webpack_bundle(&[
+        ("em.js", &fixture("emscripten-nameless.js")),
+        ("named.js", &fixture("emscripten.js")),
+    ]);
+    let out = settled(&source);
+    assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
+    assert_eq!(out.wasm.len(), 2);
+    let code = out.code();
+    for named in [
+        "wasmMemory = wasmExports.c;",
+        "_malloc(4);",
+        "function emscripten_memcpy_big(e, t, n)",
+        "Module._main = wasmExports.d;",
+    ] {
+        assert!(code.contains(named), "{named} missing\n{code}");
+    }
+    assert_eq!(code.matches("var wasmImports = {").count(), 2, "{code}");
+}
+
+#[test]
+fn a_bundle_module_whose_wasm_does_not_cover_its_glue_names_nothing_in_the_combined_output() {
+    let glue = fixture("emscripten-nameless.js").replace("Z.e)(e)", "Z.q)(e)");
+    let source = webpack_bundle(&[("em.js", &glue), OTHER_MODULE]);
+    let out = settled(&source);
+    assert_eq!(out.wasm[0].renamed, 0);
+    let code = out.code();
+    assert!(code.contains("Yb(4);"), "{code}");
+    assert!(!code.contains("wasmExports"), "{code}");
+    let notes = wasm_notes(&out);
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(
+        notes[0].contains("does not match the glue in src/em.js"),
+        "{notes:?}"
+    );
+}

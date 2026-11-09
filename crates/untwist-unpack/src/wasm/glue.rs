@@ -36,7 +36,7 @@ const NOT_NAMES: &[&str] = &[
 #[derive(Debug, Default)]
 pub struct Naming {
     pub edits: Vec<(Span, String)>,
-    pub renamed: usize,
+    pub applied: Vec<(String, String)>,
     pub mismatch: Option<String>,
 }
 
@@ -713,7 +713,7 @@ impl<'s> Glue<'s, '_> {
         let (edits, applied) = Renamer::new(self.semantic).apply(self.wanted(summary), claimed);
         Naming {
             edits,
-            renamed: applied.len(),
+            applied,
             mismatch: None,
         }
     }
