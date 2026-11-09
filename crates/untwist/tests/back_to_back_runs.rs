@@ -17,8 +17,13 @@ fn fixture(name: &str) -> String {
 }
 
 fn run(source: &str, unsafe_transforms: bool) -> String {
+    run_with(source, unsafe_transforms, Vec::new())
+}
+
+fn run_with(source: &str, unsafe_transforms: bool, disabled_passes: Vec<&'static str>) -> String {
     Pipeline::new(Options {
         unsafe_transforms,
+        disabled_passes,
         ..Options::default()
     })
     .run(source)
@@ -40,5 +45,22 @@ fn a_program_runs_the_same_after_another_program_on_the_same_thread() {
                 "{TARGET} changed after {before} (unsafe={lane}) ran on the same thread"
             );
         }
+    }
+}
+
+#[test]
+fn the_points_to_judgement_runs_the_same_after_other_programs_on_the_same_thread() {
+    let points_to = || vec![untwist_deobfuscate::proof::BUILTIN_ALIAS_BITS];
+    let target = fixture(TARGET);
+    let alone = run_with(&target, false, points_to());
+    for before in BEFORE {
+        let source = fixture(before);
+        let _ = run_with(&source, false, points_to());
+        let _ = run(&source, false);
+        assert_eq!(
+            run_with(&target, false, points_to()),
+            alone,
+            "{TARGET} changed under points-to after {before} ran on the same thread"
+        );
     }
 }

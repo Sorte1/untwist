@@ -696,7 +696,8 @@ fn refusal(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> Option<(S
     }
     let count = legacy.rotator.map_or(0, |(_, count)| count);
     let keys = plain_decoded_keys(program, scoping, (statement, count, legacy.decoder));
-    rotator_builtins_patched(program, scoping, (rotator, keys)).map(|(note, span)| {
+    let points_to = cx.opts.rule_disabled(crate::proof::BUILTIN_ALIAS_BITS);
+    rotator_builtins_patched(program, scoping, (rotator, keys), points_to).map(|(note, span)| {
         let original = span.start < SYNTHETIC_BASE;
         (note, if original { span } else { statement })
     })

@@ -9,9 +9,9 @@ use untwist_core::ast_util::search::statements_at;
 use crate::mutants::legacy_rotation_patches_trusted;
 use crate::notes;
 use crate::proof::{
-    alias_refusal, alias_sites, builtin_aliases, patch_refusal, record_definer_patch,
-    record_identifier_patch, record_member_patch, statement_used_names, PatchKey, PatchSite,
-    UsedNames,
+    alias_refusal, alias_sites, builtin_aliases, patch_refusal, points_to_sites,
+    record_definer_patch, record_identifier_patch, record_member_patch, statement_used_names,
+    PatchKey, PatchSite, UsedNames,
 };
 
 #[derive(Default)]
@@ -59,6 +59,7 @@ pub(super) fn rotator_builtins_patched(
     program: &Program<'_>,
     scoping: &Scoping,
     (rotator, keys): (Span, FxHashMap<Span, String>),
+    points_to: bool,
 ) -> Option<(String, Span)> {
     if legacy_rotation_patches_trusted() {
         return None;
@@ -83,11 +84,15 @@ pub(super) fn rotator_builtins_patched(
     {
         return Some((notes::BUILTIN_PATCHED.to_string(), write.span));
     }
-    let aliases = builtin_aliases(program, scoping, keys);
-    alias_refusal(
-        &alias_sites(program, &aliases, &[rotator]),
-        &used,
-        program.source_text,
-    )
-    .map(|refusal| (refusal.message(), refusal.span))
+    let sites = if points_to {
+        points_to_sites(program, scoping, &keys, &[rotator])
+    } else {
+        alias_sites(
+            program,
+            &builtin_aliases(program, scoping, keys),
+            &[rotator],
+        )
+    };
+    alias_refusal(&sites, &used, program.source_text)
+        .map(|refusal| (refusal.message(), refusal.span))
 }
