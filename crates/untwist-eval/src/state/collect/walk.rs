@@ -85,6 +85,7 @@ impl<'a> Walker<'a, '_> {
                         peel,
                         is_write: true,
                         local: false,
+                        binding: None,
                         at: self.access_at(peel.container_span),
                     });
                     self.push_trigger(span, TriggerKind::Member(peel));
@@ -125,6 +126,7 @@ impl<'a> Walker<'a, '_> {
                 peel,
                 is_write: true,
                 local: true,
+                binding: Some(binding),
                 at: self.access_at(peel.container_span),
             });
         }
@@ -469,11 +471,12 @@ impl<'a> VisitJs<'a> for Walker<'a, '_> {
     fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
         self.note_index_read(it);
         if let Some(peel) = member_peel_from(it) {
-            let local = self.resolve(peel.root).is_some();
+            let binding = self.resolve(peel.root);
             self.out.accesses.push(MemberAccess {
                 peel,
                 is_write: false,
-                local,
+                local: binding.is_some(),
+                binding,
                 at: self.access_at(peel.container_span),
             });
         }

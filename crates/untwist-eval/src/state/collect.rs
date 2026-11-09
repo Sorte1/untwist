@@ -25,7 +25,7 @@ pub(super) enum TriggerKind<'a> {
     Identifier,
     Unrecognized,
     Member(MemberPeel<'a>),
-    CapturedMemo(MemberPeel<'a>),
+    CapturedMemo(MemberPeel<'a>, usize),
     Monitored,
 }
 
@@ -121,6 +121,7 @@ pub(super) struct MemberAccess<'a> {
     pub(super) peel: MemberPeel<'a>,
     pub(super) is_write: bool,
     pub(super) local: bool,
+    pub(super) binding: Option<usize>,
     pub(super) at: u32,
 }
 

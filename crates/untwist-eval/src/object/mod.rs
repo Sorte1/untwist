@@ -271,9 +271,10 @@ fn chain_lookup<'a>(
         }
         first = false;
         let hit = own_property_of(&borrowed, key);
-        if let Some(value) = &hit {
-            let is_arguments = borrowed.kind.is_arguments();
-            crate::state::note_read(link, tag, is_arguments, key, value);
+        let is_arguments = borrowed.kind.is_arguments();
+        match &hit {
+            Some(value) => crate::state::note_read(link, tag, is_arguments, key, value),
+            None => crate::state::note_miss(link, tag, is_arguments, key),
         }
         hit
     })

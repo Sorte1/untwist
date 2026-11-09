@@ -43,3 +43,25 @@ pub fn read_nested_names_as_rebound_for_tests(on: bool) {
 pub(crate) fn nested_names_rebound() -> bool {
     NESTED_NAMES_REBOUND.load(Ordering::Relaxed)
 }
+
+static MEMO_KEY_READS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_memo_key_reads_for_tests(on: bool) {
+    MEMO_KEY_READS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn memo_key_reads_trusted() -> bool {
+    MEMO_KEY_READS_TRUSTED.load(Ordering::Relaxed)
+}
+
+static MEMO_MISSES_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn ignore_memo_misses_for_tests(on: bool) {
+    MEMO_MISSES_IGNORED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn memo_misses_ignored() -> bool {
+    MEMO_MISSES_IGNORED.load(Ordering::Relaxed)
+}

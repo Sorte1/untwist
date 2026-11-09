@@ -347,7 +347,7 @@ impl<'a, 'm> Walker<'a, 'm> {
                 span,
                 peel,
             } => match peel.filter(|_| self.is_valid_capture(binding)) {
-                Some(peel) => self.push_trigger(span, TriggerKind::CapturedMemo(peel)),
+                Some(peel) => self.push_trigger(span, TriggerKind::CapturedMemo(peel, binding)),
                 None => self.push_trigger(span, TriggerKind::Unrecognized),
             },
         }

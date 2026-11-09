@@ -21,6 +21,12 @@ All notable changes to this project are documented in this file. The format is b
   The obfuscator option matrix now files those cells, and the debug-protection cells whose only
   failure is the global-names refusal, under the refusal that actually blocks them.
 
+- A memoising string decoder that reads a memo entry other than its own call's key (`m[t - 1]`,
+  `memo[1 + arr[0]]`) is no longer decoded, in both lanes. Its result depends on which calls ran
+  before it, and untwist does not evaluate the calls in run order, so the decoded strings could
+  differ from what the program prints. The memo monitor now also records missed reads, and every
+  read of the memo must use the key the decoder writes.
+
 ## [0.3.1] - 2026-11-09
 
 ### Added
