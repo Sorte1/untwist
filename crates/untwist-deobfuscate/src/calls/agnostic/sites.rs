@@ -281,6 +281,19 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 
+    pub(super) fn read_objects(&mut self, object: &Expression<'a>) {
+        match object.without_parentheses() {
+            Expression::LogicalExpression(logical) => {
+                self.read_objects(&logical.left);
+                self.read_objects(&logical.right);
+            }
+            inner if inner.as_member_expression().is_some() => {
+                self.direct.insert(span_key(inner.span()));
+            }
+            _ => {}
+        }
+    }
+
     pub(super) fn in_machinery(&self, span: Span) -> bool {
         self.machinery
             .iter()

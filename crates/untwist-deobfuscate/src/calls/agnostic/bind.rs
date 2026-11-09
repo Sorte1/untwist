@@ -390,31 +390,21 @@ impl<'s, 'a> Bindings<'s, 'a> {
             let call = self.alloc(call);
             self.candidates.push(call);
         }
-        let Expression::FunctionExpression(func) = call.callee.without_parentheses() else {
-            return;
-        };
         if !self.tracks_calls {
             return;
         }
-        let recursive = func.id.as_ref().is_some_and(|id| {
-            id.symbol_id
-                .get()
-                .is_none_or(|symbol| !self.scoping.get_resolved_reference_ids(symbol).is_empty())
-        });
+        let Some(params) = self.iife_params(call.callee.without_parentheses()) else {
+            return;
+        };
         let spread = call
             .arguments
             .iter()
             .any(|argument| argument.as_expression().is_none());
-        if func.params.items.is_empty()
-            || recursive
-            || spread
-            || func.params.rest.is_some()
-            || reads_arguments(func)
-        {
+        if params.items.is_empty() || spread || params.rest.is_some() {
             return;
         }
         let mut owner = None;
-        for (index, param) in func.params.items.iter().enumerate() {
+        for (index, param) in params.items.iter().enumerate() {
             let BindingPattern::BindingIdentifier(id) = &param.pattern else {
                 continue;
             };
@@ -427,6 +417,21 @@ impl<'s, 'a> Bindings<'s, 'a> {
         if let Some(owner) = owner {
             let call = self.alloc(call);
             self.calls_of.push((owner, call));
+        }
+    }
+
+    fn iife_params<'c>(&self, callee: &'c Expression<'a>) -> Option<&'c FormalParameters<'a>> {
+        match callee {
+            Expression::FunctionExpression(func) => {
+                let recursive = func.id.as_ref().is_some_and(|id| {
+                    id.symbol_id.get().is_none_or(|symbol| {
+                        !self.scoping.get_resolved_reference_ids(symbol).is_empty()
+                    })
+                });
+                (!recursive && !reads_arguments(func)).then_some(&*func.params)
+            }
+            Expression::ArrowFunctionExpression(arrow) => Some(&*arrow.params),
+            _ => None,
         }
     }
 

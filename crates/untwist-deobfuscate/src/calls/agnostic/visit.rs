@@ -526,9 +526,8 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
                 AKey::Index => true,
                 AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => false,
             });
-        if transparent && expr_member(it.object()).is_some() {
-            self.direct
-                .insert(span_key(it.object().without_parentheses().span()));
+        if transparent {
+            self.read_objects(it.object());
         }
         let start = span_key(it.span());
         let escaped = !self.direct.contains(&start) && !self.tests.contains(&start);
