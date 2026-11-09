@@ -1,12 +1,15 @@
 use untwist::{Options, Pipeline};
-use untwist_eval::mutants::hoist_block_lexicals_for_tests;
+use untwist_eval::mutants::{hoist_block_lexicals_for_tests, leak_block_shadows_for_tests};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/captured_memo_param_rows.txt");
 
 type Switch = fn(bool);
 
-const MUTANTS: [(&str, &[Switch]); 1] = [("ref-block-", &[hoist_block_lexicals_for_tests])];
+const MUTANTS: [(&str, &[Switch]); 2] = [
+    ("ref-block-", &[hoist_block_lexicals_for_tests]),
+    ("ref-scope-", &[leak_block_shadows_for_tests]),
+];
 
 fn rows_with(prefix: &str) -> Vec<(String, String)> {
     ROWS.lines()

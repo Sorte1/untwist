@@ -1,8 +1,12 @@
 use untwist::{Options, Pipeline};
-use untwist_deobfuscate::mutants::trust_write_only_order_for_tests;
+use untwist_deobfuscate::mutants::{
+    trust_nested_write_targets_for_tests, trust_write_only_order_for_tests,
+};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/write_only_rows.txt");
+
+type Switch = fn(bool);
 
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
@@ -50,13 +54,21 @@ fn the_rows_hold_up_against_node_and_the_kept_ones_need_their_checks() {
     let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    let ordered: Vec<(String, String)> = programs
-        .into_iter()
-        .filter(|(label, _)| label.starts_with("keep-a-let-set-before"))
-        .collect();
-    trust_write_only_order_for_tests(true);
-    let modes: [Mode<'_>; 1] = [("mutant", &run_safe)];
-    let diverged = node_rows::mismatches(&node, &ordered, &modes);
-    trust_write_only_order_for_tests(false);
-    assert_eq!(diverged.len(), ordered.len(), "{}", diverged.join("\n"));
+    let checks: [(&str, Switch); 2] = [
+        ("keep-a-let-set-before", trust_write_only_order_for_tests),
+        ("keep-a-nested-write", trust_nested_write_targets_for_tests),
+    ];
+    for (prefix, switch) in checks {
+        let guarded: Vec<(String, String)> = programs
+            .iter()
+            .filter(|(label, _)| label.starts_with(prefix))
+            .cloned()
+            .collect();
+        assert!(!guarded.is_empty(), "no {prefix} rows");
+        switch(true);
+        let modes: [Mode<'_>; 1] = [("mutant", &run_safe)];
+        let diverged = node_rows::mismatches(&node, &guarded, &modes);
+        switch(false);
+        assert_eq!(diverged.len(), guarded.len(), "{}", diverged.join("\n"));
+    }
 }

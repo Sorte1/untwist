@@ -87,3 +87,14 @@ pub fn hoist_block_lexicals_for_tests(on: bool) {
 pub(crate) fn block_lexicals_hoisted() -> bool {
     BLOCK_LEXICALS_HOISTED.load(Ordering::Relaxed)
 }
+
+static BLOCK_SHADOWS_LEAK: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn leak_block_shadows_for_tests(on: bool) {
+    BLOCK_SHADOWS_LEAK.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn block_shadows_leak() -> bool {
+    BLOCK_SHADOWS_LEAK.load(Ordering::Relaxed)
+}

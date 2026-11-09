@@ -21,6 +21,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- The memo proof now sees `let`/`const` in blocks and loop heads and `catch` parameters as their
+  own bindings (`for (let e = 0, n, t, r = 0; ...)` in a minified base64 helper no longer counts as
+  a read of the decoder's parameters), and the write-only local sweep also drops nested literal
+  writes such as `n = (n = -1048) - -688` and `t = t = -1013` left in webpack's
+  `__webpack_require__.n` once its proxy key is decoded. The version matrix decodes 10 more cells
+  with `--unsafe` and 3 more in the default lane.
+
 - The same `arguments`-memo decoders also decode when their wrappers pass a varying second
   argument the decoder never reads: the memo proof judged every argument as read because the
   decoder captures `arguments`, and it counted a helper's own `for (var r ...)` as a read of the
