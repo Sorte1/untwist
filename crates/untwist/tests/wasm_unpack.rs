@@ -185,6 +185,31 @@ fn remote_wasm_is_reported_only_where_it_is_loaded_and_never_fetched() {
 }
 
 #[test]
+fn an_esm_import_of_a_wasm_file_is_reported_as_unresolved() {
+    let source = r#"
+        import * as wasm from "./pkg_bg.wasm";
+        export * from "./pkg/other_bg.wasm?init";
+        import("./lazy_bg.wasm").then((lazy) => lazy.start());
+        import "./style.css";
+        wasm.__wbindgen_start();
+    "#;
+    let out = settled(source);
+    let names: Vec<(&str, &str)> = out
+        .wasm_unresolved
+        .iter()
+        .map(|reference| (reference.name.as_str(), reference.url.as_str()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            ("pkg_bg.wasm", "./pkg_bg.wasm"),
+            ("other_bg.wasm", "./pkg/other_bg.wasm?init"),
+            ("lazy_bg.wasm", "./lazy_bg.wasm"),
+        ]
+    );
+}
+
+#[test]
 fn without_extraction_the_glue_is_named_and_the_literal_kept() {
     let mut out = run(&fixture("bindgen.js"));
     out.settle_wasm(&WasmSupply::default(), false);

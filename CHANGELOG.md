@@ -14,6 +14,8 @@ All notable changes to this project are documented in this file. The format is b
   `_emscripten_get_now` and `_emscripten_get_heap_max`. Such a module must match the glue's import
   object both ways, and a library function whose import has another signature names nothing; each
   gives a warning that says what differs.
+- A wasm file loaded through an ES module `import`, `import()` or `export ... from`, as in the
+  wasm-bindgen bundler target, is listed among the wasm modules to supply.
 
 ### Fixed
 
