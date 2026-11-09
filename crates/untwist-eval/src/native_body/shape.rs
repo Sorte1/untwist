@@ -286,6 +286,10 @@ impl<'a> Writer<'a> {
                 self.push(if node.value { "true" } else { "false" })
             }
             Expression::NullLiteral(_) => self.push("null"),
+            Expression::RegExpLiteral(node) => self.push(&format!(
+                "re({}/{})",
+                node.regex.pattern.text, node.regex.flags
+            )),
             Expression::ParenthesizedExpression(node) => self.expression(&node.expression),
             Expression::ArrayExpression(node) => self.array(node),
             Expression::UnaryExpression(node) => {

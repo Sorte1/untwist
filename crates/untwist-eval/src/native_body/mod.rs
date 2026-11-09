@@ -19,7 +19,7 @@ use crate::value::{Eval, FnCode};
 const MAX_PARAMS: usize = 2;
 const MAX_STATEMENTS: usize = 16;
 const MAX_SPAN_BYTES: u32 = 4096;
-const LOOPS: [usize; 2] = [2, 3];
+const LOOPS: [usize; 3] = [2, 3, 4];
 
 thread_local! {
     static ENABLED: Cell<bool> = const { Cell::new(true) };
