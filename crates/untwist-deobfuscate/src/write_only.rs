@@ -277,6 +277,11 @@ thread_local! {
     static SEQUENCED_VALUE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+pub(crate) fn forget_write_only_flags() {
+    SEQUENCED_VALUE.with(|seen| seen.set(false));
+    SWEEP_PENDING.with(|pending| pending.set(false));
+}
+
 pub(crate) fn note_sequenced_value() {
     SEQUENCED_VALUE.with(|seen| seen.set(true));
 }

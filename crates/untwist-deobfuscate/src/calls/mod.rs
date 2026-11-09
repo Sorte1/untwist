@@ -194,6 +194,11 @@ pub(crate) fn take_constant_retry() -> bool {
     CONSTANT_RETRY.with(|retry| retry.replace(false))
 }
 
+pub(crate) fn forget_call_flags() {
+    DYNAMIC_SEEN.with(|seen| seen.set(false));
+    CONSTANT_RETRY.with(|retry| retry.set(false));
+}
+
 pub(crate) fn take_dynamic_seen() -> bool {
     DYNAMIC_SEEN.with(|seen| seen.replace(false))
 }
