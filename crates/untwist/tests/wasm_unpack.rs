@@ -542,10 +542,11 @@ fn glue_names_found_in_a_bundle_module_also_apply_in_the_combined_output() {
     let out = settled(&source);
     assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
     assert_eq!(out.wasm.len(), 1);
-    assert_eq!(out.wasm[0].renamed, 4);
+    assert_eq!(out.wasm[0].renamed, 5);
     let module = module_code(&out, "src/em.js");
     let code = out.code();
     for named in [
+        "function _emscripten_memcpy_big(e, t, n)",
         "wasmMemory = wasmExports.c;",
         "var wasmImports = {",
         "const e = { a: wasmImports };",
