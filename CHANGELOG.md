@@ -21,6 +21,14 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- uglify-js output of javascript-obfuscator 2.19 and later decodes when the rotator of a function
+  string array is an arrow IIFE that uglify moved into a declaration
+  (`let a = dec, b = ((() => { for (var e = dec, a = arr();;) ... })(), {})`) or to the head of a
+  comma sequence: the declaration is split at the rotator and the arrow becomes a function when it
+  uses no `this`, `arguments`, `super` or `new.target`. The version matrix decodes 7 more cells
+  with `--unsafe` and 1 more in the default lane; 12 more cells now name the refusal that really
+  blocks them instead of "array reached outside".
+
 - The memo proof now sees `let`/`const` in blocks and loop heads and `catch` parameters as their
   own bindings (`for (let e = 0, n, t, r = 0; ...)` in a minified base64 helper no longer counts as
   a read of the decoder's parameters), and the write-only local sweep also drops nested literal

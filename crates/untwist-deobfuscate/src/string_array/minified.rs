@@ -8,10 +8,13 @@ use untwist_core::ast_util::matcher::{infinite_loop_body, is_plain_declaration};
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
 
-use super::array_literal;
 use super::checksum::{sees_its_parameters, unused_name};
+use super::{array_literal, match_string_array};
+use crate::array_rotator::is_infinite_rotator_loop;
 use crate::mutants::minified_rotators_trusted;
+use crate::probe::contains_expression;
 use crate::stamp::string_array_unit;
+use untwist_core::ast_util::matcher::var_function_or_declaration;
 
 fn minified_array_name<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
     let Statement::VariableDeclaration(declaration) = stmt else {
@@ -27,6 +30,69 @@ fn minified_array_name<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
     let length = array_literal(declarator.init.as_ref()?)?;
     let name = id.name.as_str();
     (length > 0 && string_array_unit(name).is_none()).then_some(name)
+}
+
+fn function_array_name<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
+    match_string_array(stmt)?;
+    let name = var_function_or_declaration(stmt)?.name;
+    string_array_unit(name).is_none().then_some(name)
+}
+
+fn iife_body<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k [Statement<'a>]> {
+    let called = match expr.without_parentheses() {
+        Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::LogicalNot => {
+            unary.argument.without_parentheses()
+        }
+        other => other,
+    };
+    let Expression::CallExpression(call) = called else {
+        return None;
+    };
+    match call.callee.without_parentheses() {
+        Expression::ArrowFunctionExpression(arrow) => match &arrow.body {
+            ArrowFunctionBody::FunctionBody(body) => Some(body.statements.as_slice()),
+            _ => None,
+        },
+        Expression::FunctionExpression(function) => function
+            .body
+            .as_ref()
+            .map(|body| body.statements.as_slice()),
+        _ => None,
+    }
+}
+
+fn is_function_array_rotator(expr: &Expression<'_>, array: &str) -> bool {
+    let Some(body) = iife_body(expr) else {
+        return false;
+    };
+    body.iter().any(is_infinite_rotator_loop)
+        && body
+            .iter()
+            .any(|stmt| contains_expression(stmt, |found| identifier_name(found) == Some(array)))
+}
+
+fn sequence_head<'k, 'a>(expr: Option<&'k Expression<'a>>) -> Option<&'k Expression<'a>> {
+    match expr.map(Expression::without_parentheses) {
+        Some(Expression::SequenceExpression(sequence)) => sequence.expressions.first(),
+        _ => None,
+    }
+}
+
+fn declaration_led_by_rotator(stmt: &Statement<'_>, array: &str) -> bool {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return false;
+    };
+    declaration.declarations.iter().any(|declarator| {
+        sequence_head(declarator.init.as_ref())
+            .is_some_and(|head| is_function_array_rotator(head, array))
+    })
+}
+
+fn statement_led_by_rotator(stmt: &Statement<'_>, array: &str) -> bool {
+    let Statement::ExpressionStatement(node) = stmt else {
+        return false;
+    };
+    sequence_head(Some(&node.expression)).is_some_and(|head| is_function_array_rotator(head, array))
 }
 
 fn is_sequence(expr: Option<&Expression<'_>>) -> bool {
@@ -378,6 +444,47 @@ impl<'a> Normalise<'_, 'a, '_> {
         self.changed += 1;
     }
 
+    fn place_function_array(
+        &mut self,
+        stmt: Statement<'a>,
+        array: &str,
+        out: &mut AVec<'a, Statement<'a>>,
+    ) {
+        if declaration_led_by_rotator(&stmt, array) {
+            self.split_declaration(stmt, out);
+            return;
+        }
+        if statement_led_by_rotator(&stmt, array) {
+            self.split_sequence(stmt, out);
+            return;
+        }
+        out.push(stmt);
+    }
+
+    fn function_array_rotator(&mut self, expr: &mut Expression<'a>, array: &str) {
+        if !is_function_array_rotator(expr, array) {
+            return;
+        }
+        let Some(call) = called_mut(expr) else {
+            return;
+        };
+        if arrow_as_function(&mut call.callee, self.cx) {
+            self.changed += 1;
+        }
+    }
+
+    fn function_array_statements(&mut self, it: &mut AVec<'a, Statement<'a>>, array: &str) {
+        let taken = it.take_in(self.cx);
+        for stmt in taken {
+            self.place_function_array(stmt, array, it);
+        }
+        for stmt in it.iter_mut() {
+            if let Statement::ExpressionStatement(node) = stmt {
+                self.function_array_rotator(&mut node.expression, array);
+            }
+        }
+    }
+
     fn place(&mut self, stmt: Statement<'a>, array: &str, out: &mut AVec<'a, Statement<'a>>) {
         if joined_declaration(&stmt, array) {
             self.split_declaration(stmt, out);
@@ -405,6 +512,8 @@ impl<'a> VisitMut<'a> for Normalise<'_, 'a, '_> {
                 }
                 it.push(stmt);
             }
+        } else if let Some(array) = it.iter().find_map(function_array_name).map(str::to_string) {
+            self.function_array_statements(it, &array);
         }
         walk_mut::walk_statements(self, it);
     }
