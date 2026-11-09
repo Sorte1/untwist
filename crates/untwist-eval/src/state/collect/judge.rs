@@ -369,12 +369,13 @@ impl<'a, 'm> Walker<'a, 'm> {
 
     fn is_valid_capture(&self, binding: usize) -> bool {
         let entry = &self.bindings[binding];
-        let name = self.binding_names.get(binding).copied();
-        let static_use = self.out.accesses.iter().any(|access| {
-            Some(access.peel.root) == name
-                && (access.peel.segment.is_some()
-                    || matches!(access.peel.final_key, FinalKey::Static(_)))
-        });
+        let ignored = crate::mutants::captured_static_uses_ignored();
+        let static_use = !ignored
+            && self.out.accesses.iter().any(|access| {
+                access.binding == Some(binding)
+                    && (access.peel.segment.is_some()
+                        || matches!(access.peel.final_key, FinalKey::Static(_)))
+            });
         self.captured.contains(&binding) && entry.writes == 1 && entry.bare_uses == 0 && !static_use
     }
 

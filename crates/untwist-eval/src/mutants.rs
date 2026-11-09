@@ -65,3 +65,14 @@ pub fn ignore_memo_misses_for_tests(on: bool) {
 pub(crate) fn memo_misses_ignored() -> bool {
     MEMO_MISSES_IGNORED.load(Ordering::Relaxed)
 }
+
+static CAPTURED_STATIC_USES_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn ignore_static_uses_of_captured_memos_for_tests(on: bool) {
+    CAPTURED_STATIC_USES_IGNORED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn captured_static_uses_ignored() -> bool {
+    CAPTURED_STATIC_USES_IGNORED.load(Ordering::Relaxed)
+}
