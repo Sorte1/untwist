@@ -173,3 +173,10 @@ fn joining_arrays_of_arrays_settles_within_the_budget() {
     let out = dump(source, None);
     assert!(!out.contains("exhausted"), "{out}");
 }
+
+#[test]
+fn a_prototype_chain_that_loops_settles_within_the_budget() {
+    let source = "function mk(p) { return Object.create(p); } var o = mk(mk({ a: 1 })); for (var k in o) { o[k]; } var c = Object.assign({}, o); Object.keys(o);";
+    let out = dump(source, None);
+    assert!(!out.contains("exhausted"), "{out}");
+}

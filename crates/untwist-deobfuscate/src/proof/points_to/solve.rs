@@ -104,7 +104,7 @@ enum Watch {
     EscapeSites,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Sub {
     CopyTo(Node),
     KeysTo(Node),
@@ -155,6 +155,8 @@ pub(super) struct Graph {
     fields: FxHashMap<(ObjectId, Field), Node>,
     field_list: FxHashMap<ObjectId, Vec<(Field, Node)>>,
     subs: FxHashMap<ObjectId, Vec<Sub>>,
+    subscribed: FxHashSet<(ObjectId, Sub)>,
+    keyed: FxHashSet<(ObjectId, Node)>,
     protos: FxHashMap<ObjectId, Node>,
     singletons: FxHashMap<ObjectId, Node>,
     escaped: FxHashSet<ObjectId>,
@@ -211,6 +213,8 @@ impl Graph {
             fields: FxHashMap::default(),
             field_list: FxHashMap::default(),
             subs: FxHashMap::default(),
+            subscribed: FxHashSet::default(),
+            keyed: FxHashSet::default(),
             protos: FxHashMap::default(),
             singletons: FxHashMap::default(),
             escaped: FxHashSet::default(),
@@ -595,6 +599,9 @@ impl Graph {
     }
 
     fn subscribe(&mut self, object: ObjectId, sub: Sub) {
+        if !self.subscribed.insert((object, sub)) {
+            return;
+        }
         self.subs.entry(object).or_default().push(sub);
         let fields = self.field_list.get(&object).cloned().unwrap_or_default();
         for (field, node) in fields {
@@ -777,6 +784,9 @@ impl Graph {
     }
 
     fn keys_into(&mut self, object: ObjectId, to: Node) {
+        if !self.keyed.insert((object, to)) {
+            return;
+        }
         match self.objects.get(object) {
             Obj::Site(..) => {
                 if self.escaped.contains(&object) {
