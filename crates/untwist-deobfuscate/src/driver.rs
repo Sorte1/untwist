@@ -364,8 +364,7 @@ impl Aggregate {
 }
 
 fn note_rotators(program: &Program<'_>, names: Vec<&str>, aggregate: &mut Aggregate) {
-    for name in names {
-        let (message, kind, span) = array_rotator::rotator_note(program, name);
+    for (message, kind, span) in array_rotator::rotator_notes(program, &names) {
         aggregate.push_note(Note {
             pass: "find-array-rotator",
             kind,

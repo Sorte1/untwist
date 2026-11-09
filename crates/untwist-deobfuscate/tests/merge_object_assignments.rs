@@ -620,3 +620,18 @@ fn a_proto_shorthand_is_not_inlined_in_either_mode() {
         untwist_testing::node::assert_node_agrees(PROTO_SHORTHAND, &code);
     }
 }
+
+#[test]
+fn every_assignment_run_in_a_statement_list_folds_in_one_iteration() {
+    let alloc = Allocator::default();
+    let source = "function f() {\n  var a = {};\n  a.x = 1;\n  a.y = 2;\n  var b = {};\n  b.z = 3;\n  log(b, b);\n  var c = {};\n  c.w = 4;\n  return [a, a, c, c];\n}";
+    let (code, report) = common::run_ctors_report(
+        &alloc,
+        source,
+        &[untwist_deobfuscate::merge_object_assignments::boxed],
+    );
+    assert!(!code.contains(".x ="), "{code}");
+    assert!(!code.contains(".z ="), "{code}");
+    assert!(!code.contains(".w ="), "{code}");
+    assert_eq!(report.iterations, 2, "{code}\n{:?}", report.per_pass);
+}

@@ -380,16 +380,39 @@ fn collect_sites<'p>(view: &Program<'p>, scoping: &Scoping, shapes: &[WrapperSha
     }
 }
 
-struct FunctionAt<'p> {
-    span: Span,
-    found: Option<&'p Function<'p>>,
+struct FunctionsAt<'p> {
+    wanted: FxHashMap<Span, Option<&'p Function<'p>>>,
+    missing: usize,
 }
 
-impl<'p> VisitJs<'p> for FunctionAt<'p> {
+impl<'p> FunctionsAt<'p> {
+    fn search(view: &Program<'p>, shapes: &[WrapperShape]) -> Self {
+        let wanted: FxHashMap<Span, Option<&'p Function<'p>>> =
+            shapes.iter().map(|shape| (shape.function, None)).collect();
+        let mut search = FunctionsAt {
+            missing: wanted.len(),
+            wanted,
+        };
+        if search.missing > 0 {
+            search.visit_program(view);
+        }
+        search
+    }
+
+    fn get(&self, span: Span) -> Option<&'p Function<'p>> {
+        self.wanted.get(&span).copied().flatten()
+    }
+}
+
+impl<'p> VisitJs<'p> for FunctionsAt<'p> {
     fn visit_function(&mut self, it: &Function<'p>, flags: ScopeFlags) {
-        if it.span == self.span {
-            self.found = Some(self.alloc(it));
+        if self.missing == 0 {
             return;
+        }
+        if matches!(self.wanted.get(&it.span), Some(None)) {
+            let found: &'p Function<'p> = self.alloc(it);
+            self.wanted.insert(it.span, Some(found));
+            self.missing -= 1;
         }
         walk_js::walk_function(self, it, flags);
     }
@@ -484,19 +507,14 @@ fn rewrite_sites<'p, 'a>(
 }
 
 fn rewrite_wrapper<'p, 'a>(
-    view: &Program<'p>,
+    functions: &FunctionsAt<'p>,
     shape: &WrapperShape,
     sites: &Sites<'p>,
     cx: &Cx<'a, '_>,
     plan: &mut RoundPlan<'a>,
     poisoned: &mut FxHashSet<SymbolId>,
 ) {
-    let mut function_at = FunctionAt {
-        span: shape.function,
-        found: None,
-    };
-    function_at.visit_program(view);
-    let Some(function) = function_at.found else {
+    let Some(function) = functions.get(shape.function) else {
         plan.notes.push((
             notes::WRAPPER_BODY_MISSING.to_string(),
             Some(shape.function),
@@ -587,8 +605,9 @@ fn plan_round<'p, 'a>(
             .collect(),
         ..RoundPlan::default()
     };
+    let functions = FunctionsAt::search(program, &search.found);
     for shape in &search.found {
-        rewrite_wrapper(program, shape, &sites, cx, &mut plan, poisoned);
+        rewrite_wrapper(&functions, shape, &sites, cx, &mut plan, poisoned);
     }
     Some(plan)
 }

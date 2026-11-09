@@ -14,12 +14,13 @@ use untwist_core::semantic::{observers, Observers};
 use oxc_semantic::Scoping;
 use oxc_syntax::symbol::SymbolId;
 
-use crate::array_rotator::find_rotator;
+use crate::array_rotator::find_rotators;
 use crate::calls::agnostic::{global_reach, ReachWatch};
 use crate::mutants::decoder_name_watch_dropped;
 use crate::notes;
 use crate::stamp::{
     find_stamped, find_stamped_named, is_unedited, original_name, string_array_name, Stamped,
+    StampedFn,
 };
 use crate::units::MachineryDepth;
 
@@ -119,11 +120,15 @@ pub fn machinery_units(program: &Program<'_>) -> Vec<Machinery> {
 
 fn units_of(program: &Program<'_>, stamped: &Stamped<'_>) -> Vec<Machinery> {
     let owners = stamped.owners();
+    let arrays: Vec<(usize, &StampedFn<'_>)> = stamped
+        .units()
+        .into_iter()
+        .filter_map(|unit| Some((unit, stamped.array(unit)?)))
+        .collect();
+    let names: Vec<&str> = arrays.iter().map(|(_, array)| array.name).collect();
+    let rotators = find_rotators(program, &names);
     let mut units = Vec::new();
-    for unit in stamped.units() {
-        let Some(array) = stamped.array(unit) else {
-            continue;
-        };
+    for ((unit, array), rotator) in arrays.into_iter().zip(rotators) {
         units.push(Machinery {
             unit,
             array: Some(array.statement),
@@ -134,7 +139,7 @@ fn units_of(program: &Program<'_>, stamped: &Stamped<'_>) -> Vec<Machinery> {
                 .filter(|(_, owner)| **owner == Some(unit))
                 .map(|(entry, _)| entry.statement)
                 .collect(),
-            rotator: find_rotator(program, array.name).map(|(span, _)| span),
+            rotator: rotator.map(|(span, _)| span),
         });
     }
     units
@@ -161,8 +166,8 @@ fn names_of(stamped: &Stamped<'_>, unit: usize) -> FxHashSet<String> {
 }
 
 struct References<'w> {
-    units: MachineryDepth,
-    found: Vec<Span>,
+    units: Vec<MachineryDepth>,
+    found: Vec<Vec<Span>>,
     listing: Option<&'w FxHashSet<Span>>,
     listed: FxHashSet<Span>,
 }
@@ -188,14 +193,27 @@ impl<'a> VisitJs<'a> for References<'_> {
     }
 
     fn visit_statement(&mut self, it: &Statement<'a>) {
-        let entered = self.units.enter(it);
+        if let [units] = self.units.as_mut_slice() {
+            let entered = units.enter(it);
+            walk_js::walk_statement(self, it);
+            if let Some(units) = self.units.first_mut() {
+                units.leave(entered);
+            }
+            return;
+        }
+        let entered: Vec<bool> = self.units.iter_mut().map(|units| units.enter(it)).collect();
         walk_js::walk_statement(self, it);
-        self.units.leave(entered);
+        for (units, entered) in self.units.iter_mut().zip(entered) {
+            units.leave(entered);
+        }
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if !self.units.inside() && self.units.covers(it.name.as_str()) {
-            self.found.push(it.span);
+        let name = it.name.as_str();
+        for (units, found) in self.units.iter().zip(self.found.iter_mut()) {
+            if !units.inside() && units.covers(name) {
+                found.push(it.span);
+            }
         }
         walk_js::walk_identifier_reference(self, it);
     }
@@ -203,12 +221,12 @@ impl<'a> VisitJs<'a> for References<'_> {
 
 fn references_listing(
     program: &Program<'_>,
-    units: MachineryDepth,
+    units: Vec<MachineryDepth>,
     listing: Option<&FxHashSet<Span>>,
-) -> (Vec<Span>, FxHashSet<Span>) {
+) -> (Vec<Vec<Span>>, FxHashSet<Span>) {
     let mut references = References {
+        found: vec![Vec::new(); units.len()],
         units,
-        found: Vec::new(),
         listing,
         listed: FxHashSet::default(),
     };
@@ -217,7 +235,11 @@ fn references_listing(
 }
 
 fn references(program: &Program<'_>, units: MachineryDepth) -> Vec<Span> {
-    references_listing(program, units, None).0
+    references_listing(program, vec![units], None)
+        .0
+        .into_iter()
+        .next()
+        .unwrap_or_default()
 }
 
 pub fn outstanding_references(program: &Program<'_>) -> Vec<Span> {
@@ -262,14 +284,16 @@ fn plan(program: &Program<'_>, (stamped, units): (&Stamped<'_>, &[Machinery])) -
         .iter()
         .flat_map(|machinery| machinery.statements())
         .collect();
-    let mut members: Option<FxHashSet<Span>> = None;
-    for machinery in decoding {
-        let names = names_of(stamped, machinery.unit);
-        let listing = members.is_none().then_some(&wanted);
-        let (outstanding, listed) =
-            references_listing(program, MachineryDepth::one_unit(names), listing);
-        let members = members.get_or_insert(listed);
-        plan.judge(machinery, &outstanding, members);
+    if decoding.is_empty() {
+        return plan;
+    }
+    let depths: Vec<MachineryDepth> = decoding
+        .iter()
+        .map(|machinery| MachineryDepth::one_unit(names_of(stamped, machinery.unit)))
+        .collect();
+    let (outstanding, members) = references_listing(program, depths, Some(&wanted));
+    for (machinery, outstanding) in decoding.into_iter().zip(outstanding) {
+        plan.judge(machinery, &outstanding, &members);
     }
     plan
 }

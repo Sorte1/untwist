@@ -245,8 +245,13 @@ fn plan_at(
     (constant || every_write_follows_an_inert_run(stmts, &fold, scoping)).then_some(fold)
 }
 
-fn plan_fold(stmts: &[Statement<'_>], scoping: &Scoping, rule: &KeyRule<'_>) -> Option<Fold> {
-    (0..stmts.len()).find_map(|index| plan_at(stmts, index, scoping, rule))
+fn plan_fold(
+    stmts: &[Statement<'_>],
+    from: usize,
+    scoping: &Scoping,
+    rule: &KeyRule<'_>,
+) -> Option<Fold> {
+    (from..stmts.len()).find_map(|index| plan_at(stmts, index, scoping, rule))
 }
 
 fn merged_key<'a>(
@@ -387,20 +392,35 @@ pub(super) fn fold_assignments<'a>(
         conservative: !cx.opts.extended,
         resolved,
     };
-    let Some(plan) = plan_fold(stmts, cx.scoping(), &rule) else {
-        return 0;
-    };
+    let mut from = 0usize;
+    let mut total = 0usize;
+    while let Some(plan) = plan_fold(stmts, from, cx.scoping(), &rule) {
+        let Some(count) = fold_one(stmts, &plan, folded, cx) else {
+            break;
+        };
+        total += count;
+        from = plan.index + 1;
+    }
+    total
+}
+
+fn fold_one<'a>(
+    stmts: &mut AVec<'a, Statement<'a>>,
+    plan: &Fold,
+    folded: &mut FxHashSet<Span>,
+    cx: &mut Cx<'a, '_>,
+) -> Option<usize> {
     let statement = stmts.get(plan.index).map(GetSpan::span);
     if synthetic_spans_exhausted() {
         cx.note(notes::MERGE_SPANS_EXHAUSTED, statement);
-        return 0;
+        return None;
     }
-    if !commit_fold(stmts, &plan, &*cx) {
+    if !commit_fold(stmts, plan, &*cx) {
         cx.note(
             notes::planned_and_applied_edits(super::PASS, plan.count, 0),
             None,
         );
-        return 0;
+        return None;
     }
     if plan.adopted {
         cx.progress(notes::MERGE_ADOPTED_DYNAMIC_KEY, statement);
@@ -408,7 +428,7 @@ pub(super) fn fold_assignments<'a>(
     if let Some(statement) = statement {
         folded.insert(statement);
     }
-    plan.count
+    Some(plan.count)
 }
 
 #[cfg(test)]

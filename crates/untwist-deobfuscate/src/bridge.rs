@@ -6,7 +6,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_eval::decode::{decoded_to_expression, Call, Decoded, DecoderProgram, FnRef};
 
-use crate::array_rotator::find_rotator;
+use crate::array_rotator::find_rotators;
 use crate::calls::{collect_base, Collected};
 use crate::notes;
 use crate::proof::{
@@ -376,7 +376,7 @@ fn unit_inputs<'r, 'p>(
 
 #[allow(clippy::too_many_arguments)]
 fn plan_unit<'p>(
-    program: &'p Program<'p>,
+    (program, located): (&'p Program<'p>, Option<(Span, &'p Expression<'p>)>),
     scoping: &Scoping,
     stamped: &Stamped<'p>,
     unit: usize,
@@ -387,7 +387,6 @@ fn plan_unit<'p>(
     patches: &[PatchSite<'p>],
     escaped_decoders: FxHashSet<usize>,
 ) -> PlanOutcome<'p> {
-    let located = find_rotator(program, array.name);
     let rotator = located.map(|(_, expr)| expr);
     let program_data = unit_program(program, stamped, array, positions, located);
     let inputs = unit_inputs(program, scoping, stamped, array, positions, rotator);
@@ -500,12 +499,16 @@ pub fn build_requests_named<'p>(
         ..DecodePlan::default()
     };
     let mut calls = group_calls(std::mem::take(&mut collected.calls), &sites);
-    for unit in stamped.units() {
-        let (Some(array), Some(positions)) = (stamped.array(unit), members.get(&unit)) else {
-            continue;
-        };
+    let planned: Vec<(usize, &StampedFn<'p>, &Vec<usize>)> = stamped
+        .units()
+        .into_iter()
+        .filter_map(|unit| Some((unit, stamped.array(unit)?, members.get(&unit)?)))
+        .collect();
+    let names: Vec<&str> = planned.iter().map(|(_, array, _)| array.name).collect();
+    let rotators = find_rotators(program, &names);
+    for ((unit, array, positions), located) in planned.into_iter().zip(rotators) {
         let outcome = plan_unit(
-            program,
+            (program, located),
             scoping,
             &stamped,
             unit,

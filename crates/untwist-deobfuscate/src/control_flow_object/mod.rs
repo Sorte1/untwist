@@ -26,6 +26,7 @@ mod dead;
 mod declared;
 mod hoisted;
 mod keys;
+mod nested;
 
 pub use declared::DeclaredObject;
 
@@ -86,6 +87,15 @@ fn binary_operator_pair_in_order(function: &Function<'_>, names: &[&str]) -> boo
     }
     binary_operands(function, names)
         .is_some_and(|(left, right)| left == names[0] && right == names[1])
+}
+
+fn forwards_a_binary_pair(function: &Function<'_>) -> bool {
+    if function.params.rest.is_some() {
+        return false;
+    }
+    param_names(function).is_some_and(|names| {
+        names_are_distinct(&names) && binary_operator_pair_in_order(function, &names)
+    })
 }
 
 fn dispatch_call(function: &Function<'_>, names: &[&str]) -> bool {
