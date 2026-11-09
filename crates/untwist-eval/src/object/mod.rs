@@ -397,6 +397,22 @@ fn set_array_index<'a>(
     Ok(index_usize + 1 - len)
 }
 
+pub(crate) fn is_empty_array(obj: &ObjRef<'_>) -> bool {
+    matches!(&obj.borrow().kind, ObjKind::Array(items) if items.is_empty())
+}
+
+pub(crate) fn append_counting<'a>(obj: &ObjRef<'a>, count: u32) -> EvalResult<()> {
+    let watch = {
+        let borrowed = obj.borrow();
+        (borrowed.trace_tag(), crate::state::class_of(&borrowed.kind))
+    };
+    let tracing = decoding();
+    for index in 0..count {
+        set_array_index(obj, tracing, watch, index, Value::Number(f64::from(index)))?;
+    }
+    Ok(())
+}
+
 const ARGUMENTS_GROWTH: &str =
     "an arguments index write past its length, which the evaluator does not model";
 

@@ -4,6 +4,7 @@ use super::base64::walked;
 use super::cost::{concat_charge, Event};
 use super::exec::{commit, number_slot, read_slot, text_slot, writable, Native, Run};
 use super::{Kind, Planning, Step};
+use crate::builtins::args::grow_array;
 use crate::coerce::to_int32;
 use crate::compile::{LazyExpr, Reach};
 use crate::frame::FrameRef;
@@ -241,6 +242,9 @@ impl<'a> Interp<'a> {
         if !writable(env, &[plan.index]) || !self.has_room(STATE_LEN, FILL_BYTES) {
             return Ok(false);
         }
+        if self.fill_at_once(plan, &state)? {
+            return store_numbers(env, &[(plan.index, STATE_LEN as f64)]);
+        }
         let mut run = self.begin();
         run.owe(plan.costs.head);
         for index in 0..STATE_LEN {
@@ -257,6 +261,23 @@ impl<'a> Interp<'a> {
         run.owe(plan.costs.test);
         self.settle(&mut run)?;
         store_numbers(env, &[(plan.index, STATE_LEN as f64)])
+    }
+
+    fn fill_at_once(&mut self, plan: &Fill, state: &ObjRef<'a>) -> Eval<'a, bool> {
+        let costs = &plan.costs;
+        let per_index = costs.test + costs.body + costs.update;
+        let steps = costs.head + per_index * STATE_LEN as u64 + costs.test;
+        let first = PropKey::Index(0);
+        if self.budget.steps_left() < steps
+            || !crate::object::is_empty_array(state)
+            || self.realm.refused_write_target(state, &first).is_some()
+        {
+            return Ok(false);
+        }
+        self.budget.spend(steps)?;
+        grow_array(self, state, STATE_LEN)?;
+        crate::object::append_counting(state, STATE_LEN as u32)?;
+        Ok(true)
     }
 
     pub(super) fn run_schedule(&mut self, plan: &Schedule, env: &FrameRef<'a>) -> Eval<'a, bool> {

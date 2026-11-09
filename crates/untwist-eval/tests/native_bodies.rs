@@ -340,6 +340,28 @@ fn a_patched_rc4_step_runs_exactly_as_interpreted() {
 }
 
 #[test]
+fn an_rc4_state_fill_over_patched_prototypes_runs_exactly_as_interpreted() {
+    let input = serde_json::to_string(&encode(b"patched", false)).expect("json");
+    for patch in [
+        "Object.defineProperty(Array.prototype, 3, { set: function (v) { calls++; }, configurable: true });",
+        "Object.defineProperty(Array.prototype, 3, { get: function () { calls++; return 7; }, configurable: true });",
+        "Object.defineProperty(Object.prototype, 200, { set: function (v) { calls++; }, configurable: true });",
+        "Object.defineProperty(Array.prototype, 5, { value: 1, writable: false });",
+        "Object.freeze(Array.prototype);",
+        "Object.preventExtensions(Array.prototype); Array.prototype[9] = 4;",
+        "Object.setPrototypeOf(Array.prototype, new Proxy({}, { get: function () { calls++; return 1; } }));",
+        "Object.setPrototypeOf(Array.prototype, new Proxy({}, { set: function () { calls++; return true; } }));",
+    ] {
+        for (prefix, rc4) in [(ATOB, RC4), (ATOB, RC4_SEQUENCES), ("", RC4_INLINED)] {
+            let source = format!(
+                "var calls = 0; {prefix}{rc4} {patch} escape(rc4({input}, 'key')) + ':' + calls"
+            );
+            let _ = same(&source);
+        }
+    }
+}
+
+#[test]
 fn a_shadowed_global_is_read_as_the_interpreter_reads_it() {
     let input = serde_json::to_string(&encode(b"shadow", false)).expect("json");
     let wrapped = format!(
