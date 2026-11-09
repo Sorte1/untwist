@@ -44,6 +44,10 @@ All notable changes to this project are documented in this file. The format is b
   recognised: calls into an untouched object literal run the stored function, and stored string
   fields and comparisons settle the opaque tests. A storage object that is written, reassigned or
   passed on still refuses.
+- The same holds when the storage function forwards to another storage forwarder
+  (`sub.vW = function (f, a, b, c) { return st.aBcDe(f, a, b, c); }`), as control-flow flattening
+  emits inside a nested callback. Each step must pass every parameter on in order; one that
+  reorders or drops them still refuses.
 
 ### Changed
 

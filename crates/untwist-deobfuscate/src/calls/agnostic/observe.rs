@@ -4,7 +4,7 @@ use oxc_ast::ast::*;
 use oxc_span::Span;
 use oxc_syntax::operator::BinaryOperator;
 
-use super::forward::forwarding_call;
+use super::forward::{forwarding_call, passing_call};
 use super::fresh::array_element;
 use super::holds::Hold;
 use super::hosts::is_host_global;
@@ -16,6 +16,7 @@ use super::AKey;
 use crate::value_flow::{flow_rule_disabled, OBSERVER_LIST};
 
 const ALIAS_DEPTH: u8 = 4;
+const FORWARD_DEPTH: u8 = 8;
 
 fn element_string<'a>(array: &'a ArrayExpression<'a>, index: f64) -> Option<&'a str> {
     match array_element(array, index)?.without_parentheses() {
@@ -207,7 +208,7 @@ impl<'a> Sites<'_, 'a> {
             return;
         }
         if let Some(func) = self.fresh.sealed_function(callee) {
-            if forwarding_call(self.fresh.scoping, func).is_some() {
+            if self.forwarder_call(func, FORWARD_DEPTH).is_some() {
                 self.observe_forwarded(span, arguments);
                 return;
             }
@@ -272,11 +273,23 @@ impl<'a> Sites<'_, 'a> {
                 continue;
             };
             if let Expression::FunctionExpression(func) = p.value.without_parentheses() {
-                if let Some(call) = forwarding_call(self.fresh.scoping, func) {
+                if let Some(call) = self.forwarder_call(func, FORWARD_DEPTH) {
                     self.forward_calls.insert(call);
                 }
             }
         }
+    }
+
+    fn forwarder_call(&self, func: &Function<'a>, depth: u8) -> Option<Span> {
+        if let Some(call) = forwarding_call(self.fresh.scoping, func) {
+            return Some(call);
+        }
+        if depth == 0 {
+            return None;
+        }
+        let call = passing_call(self.fresh.scoping, func)?;
+        let inner = self.fresh.sealed_function(&call.callee)?;
+        self.forwarder_call(inner, depth - 1).map(|_| call.span)
     }
 
     fn observe_forwarded(&mut self, span: Span, arguments: &[Argument<'a>]) {
