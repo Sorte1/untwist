@@ -277,3 +277,39 @@ fn more_than_three_uncalled_reads_collapse_into_one_summary() {
         vec![&untwist_deobfuscate::notes::control_flow_uncalled_function_properties(5)]
     );
 }
+
+const A_NESTED_FORWARDER_CHAIN: &str = "function hi(a, b, c, d) {\n  var obj = { aokfw: function (x, y) { return x + y; }, rLxJs: \"!\" };\n  log(obj.aokfw(obj.aokfw(obj.aokfw(obj.aokfw(a, b), c), d), obj.rLxJs));\n}";
+
+#[test]
+fn a_chain_of_nested_binary_forwarders_is_inlined_in_one_iteration() {
+    let alloc = Allocator::default();
+    let (code, report) = common::run_ctors_report(
+        &alloc,
+        A_NESTED_FORWARDER_CHAIN,
+        &[untwist_deobfuscate::control_flow_object::boxed],
+    );
+    insta::assert_snapshot!(code, @r#"
+    function hi(a, b, c, d) {
+      log(a + b + c + d + "!");
+    }
+    "#);
+    assert_eq!(report.iterations, 2, "{:?}", report.per_pass);
+}
+
+const A_DISPATCH_AROUND_A_REFUSED_LOGICAL: &str = "function hi(jB, jC) {\n  var jK = {\n    aaaaa: function (a, b) { return a + b; },\n    bbbbb: function (a, b) { return a || b; },\n    eeeee: function (a, b, c, d) { return a(b, c, d); },\n    ccccc: \"unknown\",\n    ddddd: \": x\"\n  };\n  jK.eeeee(iE, jK.aaaaa(jK.aaaaa(bu.fixStr(jK.bbbbb(jB, jK.ccccc)), jK.ddddd), jC), iy, ix);\n}";
+
+#[test]
+fn a_logical_forwarder_refused_until_its_argument_is_substituted_is_still_inlined() {
+    for extended in [false, true] {
+        let alloc = Allocator::default();
+        let ctors: [untwist_core::pass::PassCtor<'_>; 1] =
+            [untwist_deobfuscate::control_flow_object::boxed];
+        let code = if extended {
+            common::run_ctors_extended(&alloc, A_DISPATCH_AROUND_A_REFUSED_LOGICAL, &ctors)
+        } else {
+            common::run_ctors_report(&alloc, A_DISPATCH_AROUND_A_REFUSED_LOGICAL, &ctors).0
+        };
+        assert!(code.contains("jB || \"unknown\""), "{code}");
+        assert!(!code.contains("jK"), "{code}");
+    }
+}

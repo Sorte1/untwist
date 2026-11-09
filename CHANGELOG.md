@@ -12,6 +12,13 @@ All notable changes to this project are documented in this file. The format is b
   dead `if (false)` block is removed. An empty statement that keeps a string out of a function's
   directive prologue stays.
 
+- Large string-array bundles deobfuscate about five times faster under `--unsafe` (a 6 MB
+  Krunker build: 98 s to 20 s) with the same output. Decoder wrappers find their function bodies
+  in one walk instead of one walk per wrapper, nested control-flow forwarder calls such as
+  `o.add(o.add(a, b), c)` are inlined in one pass instead of one level per pass, every
+  `var o = {}; o.k = v;` run in a statement list is folded in one pass, and the rotator searches
+  for several string arrays share a walk.
+
 ### Fixed
 
 - The safe lane follows a domain lock that reuses the variable holding a found key for the domain

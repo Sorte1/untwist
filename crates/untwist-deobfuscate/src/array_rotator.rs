@@ -157,20 +157,30 @@ pub fn rotator_unit(stmt: &Statement<'_>) -> Option<usize> {
     units.next().is_none().then_some(unit)
 }
 
-struct Search<'p> {
-    array_name: String,
-    found: Option<(Span, &'p Expression<'p>)>,
+type Located<'p> = Option<(Span, &'p Expression<'p>)>;
+
+struct Search<'p, 'n> {
+    names: &'n [&'n str],
+    found: Vec<Located<'p>>,
+    pending: usize,
 }
 
-impl<'p> VisitJs<'p> for Search<'p> {
+impl<'p> VisitJs<'p> for Search<'p, '_> {
     fn visit_statement(&mut self, it: &Statement<'p>) {
-        if self.found.is_some() {
+        if self.pending == 0 {
             return;
         }
-        if is_rotator_statement(it, &self.array_name) {
+        if let Statement::ExpressionStatement(_) = it {
             let statement: &'p Statement<'p> = self.alloc(it);
             if let Statement::ExpressionStatement(expression) = statement {
-                self.found = Some((statement.span(), &expression.expression));
+                for (slot, name) in self.found.iter_mut().zip(self.names) {
+                    if slot.is_none() && is_rotator_statement(statement, name) {
+                        *slot = Some((statement.span(), &expression.expression));
+                        self.pending -= 1;
+                    }
+                }
+            }
+            if self.pending == 0 {
                 return;
             }
         }
@@ -178,25 +188,38 @@ impl<'p> VisitJs<'p> for Search<'p> {
     }
 }
 
-pub fn find_rotator<'p>(
-    program: &'p Program<'p>,
-    array_name: &str,
-) -> Option<(Span, &'p Expression<'p>)> {
+pub fn find_rotators<'p>(program: &'p Program<'p>, names: &[&str]) -> Vec<Located<'p>> {
     let mut search = Search {
-        array_name: array_name.to_string(),
-        found: None,
+        names,
+        found: vec![None; names.len()],
+        pending: names.len(),
     };
-    search.visit_program(program);
+    if search.pending > 0 {
+        search.visit_program(program);
+    }
     search.found
 }
 
-pub fn rotator_note(program: &Program<'_>, array_name: &str) -> (String, NoteKind, Option<Span>) {
-    match find_rotator(program, array_name) {
-        Some((span, _)) => (
-            notes::ROTATOR_FOUND.to_string(),
-            NoteKind::Progress,
-            Some(span),
-        ),
-        None => (notes::ROTATOR_NONE.to_string(), NoteKind::Progress, None),
-    }
+pub fn find_rotator<'p>(program: &'p Program<'p>, array_name: &str) -> Located<'p> {
+    find_rotators(program, &[array_name])
+        .into_iter()
+        .next()
+        .flatten()
+}
+
+pub fn rotator_notes(
+    program: &Program<'_>,
+    array_names: &[&str],
+) -> Vec<(String, NoteKind, Option<Span>)> {
+    find_rotators(program, array_names)
+        .into_iter()
+        .map(|located| match located {
+            Some((span, _)) => (
+                notes::ROTATOR_FOUND.to_string(),
+                NoteKind::Progress,
+                Some(span),
+            ),
+            None => (notes::ROTATOR_NONE.to_string(), NoteKind::Progress, None),
+        })
+        .collect()
 }

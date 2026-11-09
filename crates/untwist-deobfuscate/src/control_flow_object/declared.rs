@@ -8,7 +8,7 @@ use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
 use untwist_core::ast_util::readonly::{
     is_readonly_object_outside, scan_symbol_uses, ObjectUses, PropRead,
 };
-use untwist_core::ast_util::search::expression_at;
+use untwist_core::ast_util::search::expressions_at;
 use untwist_core::pass::{Cx, NoteKind, RepeatedSites};
 use untwist_core::semantic::is_constant_binding;
 
@@ -19,6 +19,7 @@ use crate::init_order::{
 use crate::notes;
 
 use super::dead::{dead_branch_spans, dead_write_statements};
+use super::nested::{insert_nested, PlannedEdit, Recipe};
 use super::{
     call_site_is_safe, cff_props, emit_logical_refusals, inline_site, object_declaration, CffValue,
     Refusal, SiteSafety, PASS,
@@ -67,6 +68,27 @@ fn collect_candidates(program: &Program<'_>, extended: bool) -> Vec<DeclaredObje
 
 type CallArgs<'p> = (Span, &'p AVec<'p, Argument<'p>>);
 
+type ObjectsAt<'p> = FxHashMap<Span, &'p Expression<'p>>;
+
+fn objects_at<'p>(program: &'p Program<'p>, candidates: &[DeclaredObject]) -> ObjectsAt<'p> {
+    let spans: Vec<Span> = candidates
+        .iter()
+        .map(|candidate| candidate.object)
+        .collect();
+    spans
+        .iter()
+        .copied()
+        .zip(expressions_at(program, &spans))
+        .filter_map(|(span, found)| Some((span, found?)))
+        .collect()
+}
+
+struct Located<'p, 'l> {
+    program: &'p Program<'p>,
+    calls: &'l FxHashMap<Span, CallArgs<'p>>,
+    objects: &'l ObjectsAt<'p>,
+}
+
 struct CallsAt<'p, 'w> {
     wanted: &'w FxHashSet<Span>,
     found: FxHashMap<Span, CallArgs<'p>>,
@@ -110,9 +132,9 @@ fn calls_at<'p>(
     at.found
 }
 
-struct CandidatePlan<'a> {
+struct CandidatePlan<'a, 'p> {
     statement: Span,
-    edits: Vec<(Span, Expression<'a>)>,
+    edits: Vec<PlannedEdit<'a, 'p>>,
     reads: usize,
     dead_statements: Vec<Span>,
     dead_kept: Vec<Span>,
@@ -126,11 +148,11 @@ struct ReadRefusals {
 
 fn substitute_function<'a, 'p>(
     calls: &FxHashMap<Span, CallArgs<'p>>,
-    function: &Function<'p>,
+    function: &'p Function<'p>,
     read: &PropRead,
     cx: &mut Cx<'a, '_>,
     refusals: &mut ReadRefusals,
-) -> Option<(Span, Expression<'a>)> {
+) -> Option<PlannedEdit<'a, 'p>> {
     let Some(&(call_span, arguments)) = calls.get(&read.member_span) else {
         refusals.uncalled.record(read.member_span, "");
         return None;
@@ -143,35 +165,46 @@ fn substitute_function<'a, 'p>(
         }
         SiteSafety::Refused(Refusal::Shape) => return None,
     }
-    Some((call_span, inline_site(function, arguments, &*cx)?))
+    Some(PlannedEdit {
+        span: call_span,
+        expr: inline_site(function, arguments, &*cx)?,
+        recipe: Some(Recipe {
+            function,
+            arguments,
+        }),
+    })
 }
 
 fn substitute_read<'a, 'p>(
     calls: &FxHashMap<Span, CallArgs<'p>>,
-    value: &CffValue<'_, 'p>,
+    value: &CffValue<'p, 'p>,
     read: &PropRead,
     cx: &mut Cx<'a, '_>,
     refusals: &mut ReadRefusals,
-) -> Option<(Span, Expression<'a>)> {
+) -> Option<PlannedEdit<'a, 'p>> {
     match value {
-        CffValue::Text(literal) => Some((
-            read.member_span,
-            Expression::StringLiteral(oxc_allocator::Box::new_in(
+        CffValue::Text(literal) => Some(PlannedEdit {
+            span: read.member_span,
+            expr: Expression::StringLiteral(oxc_allocator::Box::new_in(
                 (*literal).clone_in(cx.allocator()),
                 &*cx,
             )),
-        )),
+            recipe: None,
+        }),
         CffValue::Function(function) => substitute_function(calls, function, read, cx, refusals),
     }
 }
 
 fn plan_candidate<'a, 'p>(
-    (program, calls): (&'p Program<'p>, &FxHashMap<Span, CallArgs<'p>>),
+    located: &Located<'p, '_>,
     candidate: &DeclaredObject,
     uses: &ObjectUses,
     cx: &mut Cx<'a, '_>,
-) -> Option<CandidatePlan<'a>> {
-    let props = expression_at(program, candidate.object)
+) -> Option<CandidatePlan<'a, 'p>> {
+    let calls = located.calls;
+    let props = located
+        .objects
+        .get(&candidate.object)
         .and_then(|object| cff_props(object, cx.opts.extended));
     let Some(props) = props else {
         cx.note(notes::CONTROL_FLOW_SHAPE_LOST, Some(candidate.object));
@@ -212,8 +245,8 @@ struct Substitutable<'u> {
     dead: Vec<Span>,
 }
 
-fn substitutable_uses<'p, 'u>(
-    program: &'p Program<'p>,
+fn substitutable_uses<'u>(
+    located: &Located<'_, '_>,
     candidate: &DeclaredObject,
     uses: &'u ObjectUses,
     cx: &mut Cx<'_, '_>,
@@ -231,9 +264,11 @@ fn substitutable_uses<'p, 'u>(
     if !cx.opts.extended {
         return None;
     }
-    let props = expression_at(program, candidate.object)
+    let props = located
+        .objects
+        .get(&candidate.object)
         .and_then(|object| cff_props(object, cx.opts.extended))?;
-    let dead = dead_branch_spans(program, candidate.symbol, &props, &*cx);
+    let dead = dead_branch_spans(located.program, candidate.symbol, &props, &*cx);
     if dead.is_empty() {
         return None;
     }
@@ -253,13 +288,13 @@ fn mutation_spans(uses: &ObjectUses) -> Vec<Span> {
 }
 
 fn plan_declared_object<'a, 'p>(
-    (program, calls): (&'p Program<'p>, &FxHashMap<Span, CallArgs<'p>>),
+    located: &Located<'p, '_>,
     candidate: &DeclaredObject,
     uses: &ObjectUses,
     order: &InitOrder,
     cx: &mut Cx<'a, '_>,
-) -> Option<CandidatePlan<'a>> {
-    let Substitutable { uses, dead } = substitutable_uses(program, candidate, uses, cx)?;
+) -> Option<CandidatePlan<'a, 'p>> {
+    let Substitutable { uses, dead } = substitutable_uses(located, candidate, uses, cx)?;
     if let Err(refused) = reads_are_initialised(&uses.reads, candidate.statement, order) {
         refuse_read_before_declaration(
             refused,
@@ -270,49 +305,29 @@ fn plan_declared_object<'a, 'p>(
         );
         return None;
     }
-    let mut plan = plan_candidate((program, calls), candidate, uses, cx)?;
+    let mut plan = plan_candidate(located, candidate, uses, cx)?;
     if !dead.is_empty() {
-        let writes = dead_write_statements(program, &mutation_spans(uses), &dead);
+        let writes = dead_write_statements(located.program, &mutation_spans(uses), &dead);
         plan.dead_statements = writes.statements;
         plan.dead_kept = writes.kept;
     }
     Some(plan)
 }
 
-fn spans_that_enclose_another(plans: &[CandidatePlan<'_>]) -> FxHashSet<Span> {
-    let mut sorted: Vec<Span> = plans
-        .iter()
-        .flat_map(|plan| plan.edits.iter().map(|(span, _)| *span))
-        .collect();
-    sorted.sort_by_key(|span| (span.start, std::cmp::Reverse(span.end)));
-    let mut open: Vec<Span> = Vec::new();
-    let mut enclosing = FxHashSet::default();
-    for span in sorted {
-        open.retain(|outer| outer.end > span.start);
-        for outer in &open {
-            if *outer != span && outer.end >= span.end {
-                enclosing.insert(*outer);
-            }
-        }
-        open.push(span);
-    }
-    enclosing
-}
-
 fn collect_edits<'a>(
-    plans: Vec<CandidatePlan<'a>>,
+    program: &Program<'_>,
+    plans: Vec<CandidatePlan<'a, '_>>,
     edits: &mut ExprEdits<'a>,
     removals: &mut StmtEdits<'a>,
     cx: &mut Cx<'a, '_>,
 ) {
-    let enclosing = spans_that_enclose_another(&plans);
-    for plan in plans {
-        let mut substituted = 0usize;
-        for (span, expr) in plan.edits {
-            if !enclosing.contains(&span) && edits.insert(span, expr) {
-                substituted += 1;
-            }
-        }
+    let mut plans = plans;
+    let planned: Vec<Vec<PlannedEdit<'a, '_>>> = plans
+        .iter_mut()
+        .map(|plan| std::mem::take(&mut plan.edits))
+        .collect();
+    let substituted = insert_nested(program, planned, edits, &*cx);
+    for (plan, substituted) in plans.into_iter().zip(substituted) {
         if substituted == plan.reads {
             removals.remove(plan.statement);
             for span in plan.dead_statements {
@@ -362,16 +377,22 @@ pub(super) fn inline_declared_objects<'a>(program: &mut Program<'a>, cx: &mut Cx
         cx,
     );
     let calls = calls_at(program, &candidates, &scanned);
-    let plans: Vec<CandidatePlan<'a>> = candidates
+    let objects = objects_at(program, &candidates);
+    let located = Located {
+        program,
+        calls: &calls,
+        objects: &objects,
+    };
+    let plans: Vec<CandidatePlan<'a, '_>> = candidates
         .iter()
         .filter_map(|candidate| {
             let uses = scanned.get(&candidate.symbol)?;
-            plan_declared_object((program, &calls), candidate, uses, &order, cx)
+            plan_declared_object(&located, candidate, uses, &order, cx)
         })
         .collect();
     let mut edits = ExprEdits::new();
     let mut removals = StmtEdits::new();
-    collect_edits(plans, &mut edits, &mut removals, cx);
+    collect_edits(program, plans, &mut edits, &mut removals, cx);
     let wanted = edits.len() + removals.len();
     let applied = edits.apply(program, cx.allocator(), cx.scoping_mut())
         + removals.apply(program, cx.allocator(), cx.scoping_mut());
