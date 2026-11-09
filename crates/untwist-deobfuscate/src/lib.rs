@@ -31,6 +31,7 @@ pub mod pure_calls;
 pub mod refusal_spans;
 pub mod removal;
 pub mod self_defending;
+pub mod shell_scope;
 pub mod stamp;
 pub mod string_array;
 pub mod units;

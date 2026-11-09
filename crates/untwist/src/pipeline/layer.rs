@@ -54,6 +54,7 @@ pub(super) struct Peeled {
     pub(super) text: String,
     pub(super) room: RoomSeed,
     pub(super) form: LayerForm,
+    pub(super) scoped: bool,
 }
 
 pub(super) struct Layering {
@@ -263,6 +264,7 @@ impl Pipeline {
         }
         let program: &Program<'_> = site.program;
         let probe = layers::probe(program)?;
+        let scoped = site.pass_opts.nested_root && calls_eval_directly(probe.expression);
         let index = layering.peeled().saturating_add(1);
         let started = self.begin(LAYER_PASS);
         let cx = layering.cx(self.options.unsafe_transforms);
@@ -286,7 +288,12 @@ impl Pipeline {
         let message = peeled_message(index, form.name(), bytes_in, text.len());
         site.notes.push(layer_note(NoteKind::Progress, message));
         site.stages.push(peel_report(site.stages, started));
-        Some(Peeled { text, room, form })
+        Some(Peeled {
+            text,
+            room,
+            form,
+            scoped,
+        })
     }
 
     #[cfg(feature = "test-hooks")]
@@ -313,6 +320,14 @@ impl Pipeline {
     ) -> Decoded {
         layers::decode(program, &sem.scoping, probe, cx)
     }
+}
+
+fn calls_eval_directly(expression: &oxc_ast::ast::Expression<'_>) -> bool {
+    use oxc_ast::ast::Expression;
+    let Expression::CallExpression(call) = expression.without_parentheses() else {
+        return false;
+    };
+    matches!(call.callee.without_parentheses(), Expression::Identifier(id) if id.name == "eval")
 }
 
 #[cfg(feature = "test-hooks")]

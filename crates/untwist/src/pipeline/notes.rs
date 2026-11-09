@@ -28,6 +28,10 @@ pub const SLOT_NOT_RESERVED: &str = "unique rename could not reserve its counter
 pub const ANONYMOUS_SHELL_STRIPPED: &str = "a function anonymous(...) shell around the whole \
      program was removed; the program is its body";
 
+pub const ANONYMOUS_SHELL_SCOPED: &str = "the body of a stripped function anonymous(...) shell \
+     declares names at its own level, which would become globals at the top level, so it is kept \
+     inside a called function";
+
 pub const ANONYMOUS_SHELL_KEPT: &str = "a function anonymous(...) shell around the whole program \
      was recognised but left in place because";
 
@@ -51,6 +55,7 @@ catalogue!(
     SLOT_NOT_RESERVED,
     ANONYMOUS_SHELL_STRIPPED,
     ANONYMOUS_SHELL_KEPT,
+    ANONYMOUS_SHELL_SCOPED,
     GUARD_ON_ONE_LINE,
     GUARD_KEPT_ACROSS_LINES,
     NESTED_TOO_DEEP,

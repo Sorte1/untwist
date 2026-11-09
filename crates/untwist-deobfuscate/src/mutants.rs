@@ -417,3 +417,14 @@ pub fn trust_sequence_object_reads_for_tests(on: bool) {
 pub(crate) fn sequence_object_reads_trusted() -> bool {
     SEQUENCE_OBJECT_READS_TRUSTED.load(Ordering::Relaxed)
 }
+
+static SHELL_BODIES_LIFTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn lift_shell_bodies_with_bindings_for_tests(on: bool) {
+    SHELL_BODIES_LIFTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn shell_bodies_lifted() -> bool {
+    SHELL_BODIES_LIFTED.load(Ordering::Relaxed)
+}

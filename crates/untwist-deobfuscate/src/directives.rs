@@ -11,6 +11,7 @@ use untwist_core::pass::Cx;
 const ANONYMOUS: &str = "anonymous";
 const ARGUMENTS: &str = "arguments";
 const AWAIT: &str = "await";
+const EVAL: &str = "eval";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShellRefusal {
@@ -42,8 +43,14 @@ impl ShellRefusal {
 #[derive(Debug)]
 pub enum ShellStrip {
     Absent,
-    Kept { span: Span, reason: ShellRefusal },
-    Stripped { hoisted: Vec<String> },
+    Kept {
+        span: Span,
+        reason: ShellRefusal,
+    },
+    Stripped {
+        hoisted: Vec<String>,
+        dropped: Vec<String>,
+    },
 }
 
 fn directive_text<'a>(statement: &Statement<'a>) -> Option<&'a str> {
@@ -409,17 +416,60 @@ fn restore_statement<'a>(
         )));
 }
 
+#[derive(Default)]
+struct ReadNames<'a> {
+    names: FxHashSet<&'a str>,
+    calls_eval: bool,
+}
+
+impl<'a> VisitJs<'a> for ReadNames<'a> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.names.insert(it.name.as_str());
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if matches!(it.callee.without_parentheses(), Expression::Identifier(id) if id.name == EVAL)
+        {
+            self.calls_eval = true;
+        }
+        walk_js::walk_call_expression(self, it);
+    }
+}
+
+fn read_names<'a>(body: &FunctionBody<'a>) -> ReadNames<'a> {
+    let mut scan = ReadNames::default();
+    for statement in &body.statements {
+        scan.visit_statement(statement);
+    }
+    scan
+}
+
+struct Hoisted<'a> {
+    declaration: Option<Statement<'a>>,
+    hoisted: Vec<String>,
+    dropped: Vec<String>,
+}
+
 fn hoisted_parameters<'a>(
     params: FormalParameters<'a>,
+    read: &ReadNames<'_>,
     alloc: &'a Allocator,
-) -> (Statement<'a>, Vec<String>) {
+) -> Hoisted<'a> {
     let builder = AstBuilder::new(alloc);
-    let mut names = Vec::new();
+    let keeps_all = read.calls_eval;
+    let mut hoisted = Vec::new();
+    let mut dropped = Vec::new();
     let mut declarators = AVec::new_in(&builder);
     for param in params.items {
-        if let BindingPattern::BindingIdentifier(id) = &param.pattern {
-            names.push(id.name.to_string());
+        let BindingPattern::BindingIdentifier(id) = &param.pattern else {
+            continue;
+        };
+        let name = id.name.to_string();
+        if !keeps_all && !read.names.contains(name.as_str()) {
+            dropped.push(name);
+            continue;
         }
+        hoisted.push(name);
         declarators.push(VariableDeclarator::new(
             param.span,
             param.pattern,
@@ -429,14 +479,20 @@ fn hoisted_parameters<'a>(
             &builder,
         ));
     }
-    let declaration = Statement::new_variable_declaration(
-        params.span,
-        VariableDeclarationKind::Var,
-        declarators,
-        false,
-        &builder,
-    );
-    (declaration, names)
+    let declaration = (!declarators.is_empty()).then(|| {
+        Statement::new_variable_declaration(
+            params.span,
+            VariableDeclarationKind::Var,
+            declarators,
+            false,
+            &builder,
+        )
+    });
+    Hoisted {
+        declaration,
+        hoisted,
+        dropped,
+    }
 }
 
 fn take_shell<'a>(program: &mut Program<'a>, alloc: &'a Allocator) -> Option<(Span, Function<'a>)> {
@@ -480,11 +536,15 @@ pub fn strip_anonymous_shell<'a>(program: &mut Program<'a>, alloc: &'a Allocator
         return ShellStrip::Absent;
     };
     let body = body.unbox();
+    let read = read_names(&body);
+    let parameters = hoisted_parameters(function.params.unbox(), &read, alloc);
     program.body = body.statements;
     program.directives = body.directives;
-    let (declaration, hoisted) = hoisted_parameters(function.params.unbox(), alloc);
-    if !hoisted.is_empty() {
+    if let Some(declaration) = parameters.declaration {
         program.body.insert(0, declaration);
     }
-    ShellStrip::Stripped { hoisted }
+    ShellStrip::Stripped {
+        hoisted: parameters.hoisted,
+        dropped: parameters.dropped,
+    }
 }
