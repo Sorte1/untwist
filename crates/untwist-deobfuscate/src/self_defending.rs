@@ -371,6 +371,7 @@ fn flag_controller(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
 struct Controllers {
     found: FxHashSet<SymbolId>,
     inline: bool,
+    returner_calls: Vec<Span>,
 }
 
 fn inline_controller_call(stmt: &Statement<'_>) -> bool {
@@ -391,6 +392,10 @@ impl<'a> VisitJs<'a> for Controllers {
                 self.found.insert(symbol);
             }
             self.inline |= inline_controller_call(stmt);
+            if is_inline_returner_call(stmt, &flags) {
+                self.inline = true;
+                self.returner_calls.push(stmt.span());
+            }
         }
         walk_js::walk_statements(self, it);
     }
@@ -401,6 +406,26 @@ struct Removals<'k> {
     scoping: &'k Scoping,
     spans: Vec<Span>,
     variables: FxHashSet<SymbolId>,
+    returner_calls: &'k [Span],
+}
+
+fn is_inline_returner_call(stmt: &Statement<'_>, flags: &[&str]) -> bool {
+    if flags.is_empty() {
+        return false;
+    }
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return false;
+    };
+    let Some((outer, arguments)) = call_parts(&stmt.expression) else {
+        return false;
+    };
+    let Some((inner, inner_arguments)) = call_parts(outer.without_parentheses()) else {
+        return false;
+    };
+    arguments.is_empty()
+        && inner_arguments.len() == 2
+        && (returner(inner.without_parentheses(), flags)
+            || crate::mutants::inline_returners_trusted())
 }
 
 impl Removals<'_> {
@@ -420,7 +445,9 @@ impl Removals<'_> {
             self.spans.push(stmt.span());
             return true;
         }
-        if is_immediate_controller_call(stmt, self.controllers, self.scoping) {
+        if is_immediate_controller_call(stmt, self.controllers, self.scoping)
+            || self.returner_calls.contains(&stmt.span())
+        {
             self.spans.push(stmt.span());
             return true;
         }
@@ -477,6 +504,7 @@ fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
         scoping,
         spans: Vec::new(),
         variables: FxHashSet::default(),
+        returner_calls: &controllers.returner_calls,
     };
     removals.visit_program(program);
     let Removals {

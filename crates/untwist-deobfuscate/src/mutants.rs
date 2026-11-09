@@ -329,3 +329,36 @@ pub fn ignore_function_method_writes_for_tests(on: bool) {
 pub(crate) fn function_method_writes_ignored() -> bool {
     FUNCTION_METHOD_WRITES_IGNORED.load(Ordering::Relaxed)
 }
+
+static INLINE_RETURNERS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_inline_returners_for_tests(on: bool) {
+    INLINE_RETURNERS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn inline_returners_trusted() -> bool {
+    INLINE_RETURNERS_TRUSTED.load(Ordering::Relaxed)
+}
+
+static COOKIE_BLOCK_VARS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_cookie_block_vars_for_tests(on: bool) {
+    COOKIE_BLOCK_VARS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn cookie_block_vars_trusted() -> bool {
+    COOKIE_BLOCK_VARS_TRUSTED.load(Ordering::Relaxed)
+}
+
+static CALLEE_OBJECTS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_callee_objects_for_tests(on: bool) {
+    CALLEE_OBJECTS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn callee_objects_trusted() -> bool {
+    CALLEE_OBJECTS_TRUSTED.load(Ordering::Relaxed)
+}

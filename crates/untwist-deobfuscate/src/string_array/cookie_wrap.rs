@@ -36,6 +36,7 @@ struct Plan {
     assigned: bool,
     holder: Option<String>,
     dropped: Vec<SymbolId>,
+    direct: bool,
 }
 
 fn resolved(scoping: &Scoping, reference: &IdentifierReference<'_>) -> Option<SymbolId> {
@@ -252,6 +253,94 @@ fn block_vars(stmt: &Statement<'_>) -> Vec<SymbolId> {
     found
 }
 
+struct Mentions<'s> {
+    scoping: &'s Scoping,
+    symbol: SymbolId,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for Mentions<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= resolved(self.scoping, it) == Some(self.symbol);
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.found |= it.symbol_id.get() == Some(self.symbol);
+    }
+}
+
+fn mentions(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
+    let mut seen = Mentions {
+        scoping,
+        symbol,
+        found: false,
+    };
+    seen.visit_statement(stmt);
+    seen.found
+}
+
+fn mentions_expr(expr: &Expression<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
+    let mut seen = Mentions {
+        scoping,
+        symbol,
+        found: false,
+    };
+    seen.visit_expression(expr);
+    seen.found
+}
+
+fn overwrites(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
+    match stmt {
+        Statement::VariableDeclaration(declaration) => {
+            let [declarator] = declaration.declarations.as_slice() else {
+                return false;
+            };
+            let binds = matches!(&declarator.id, BindingPattern::BindingIdentifier(id)
+                if id.symbol_id.get() == Some(symbol));
+            binds
+                && declarator
+                    .init
+                    .as_ref()
+                    .is_some_and(|init| !mentions_expr(init, scoping, symbol))
+        }
+        Statement::ExpressionStatement(node) => {
+            let Expression::AssignmentExpression(assignment) = &node.expression else {
+                return false;
+            };
+            let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
+                return false;
+            };
+            assignment.operator == AssignmentOperator::Assign
+                && resolved(scoping, target) == Some(symbol)
+                && !mentions_expr(&assignment.right, scoping, symbol)
+        }
+        _ => false,
+    }
+}
+
+fn overwritten_after(
+    body: &[Statement<'_>],
+    cookie: usize,
+    scoping: &Scoping,
+    symbol: SymbolId,
+) -> bool {
+    if crate::mutants::cookie_block_vars_trusted() {
+        return true;
+    }
+    let outside: Vec<usize> = (0..body.len())
+        .filter(|index| *index != cookie && mentions(&body[*index], scoping, symbol))
+        .collect();
+    let Some(&first) = outside.first() else {
+        return true;
+    };
+
+    first > cookie
+        && overwrites(&body[first], scoping, symbol)
+        && outside
+            .iter()
+            .all(|index| !matches!(body[*index], Statement::FunctionDeclaration(_)))
+}
+
 struct Rotator {
     at: usize,
     name: String,
@@ -303,7 +392,15 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
             .iter()
             .take_while(|stmt| inert(stmt))
             .count();
-    let alias_symbol = alias_of(body.get(alias)?, scoping, array_symbol)?;
+    let aliased = body
+        .get(alias)
+        .and_then(|stmt| alias_of(stmt, scoping, array_symbol));
+    let direct = aliased.is_none();
+    let (alias, alias_symbol) = match aliased {
+        Some(symbol) => (alias, symbol),
+        None if direct => (array, array_symbol),
+        None => return None,
+    };
     let alias_name = scoping.symbol_name(alias_symbol);
     let rotator = rotator_of(body, (array, alias), alias_name, scoping)?;
     let cookie = if rotator.at == alias + 1 {
@@ -328,9 +425,14 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
     if form == Form::Block {
         owned.extend(block_vars(&body[cookie]));
     }
-    let sealed = in_statements(alias_symbol, &[alias, rotator.at])
+    let sealed = (direct || in_statements(alias_symbol, &[alias, rotator.at]))
         && in_statements(rotator.symbol, &rotator_uses)
-        && owned.iter().all(|symbol| in_statements(*symbol, &[cookie]))
+        && holder_symbols
+            .iter()
+            .all(|symbol| in_statements(*symbol, &[cookie]))
+        && owned.iter().skip(holder_symbols.len()).all(|symbol| {
+            in_statements(*symbol, &[cookie]) || overwritten_after(body, cookie, scoping, *symbol)
+        })
         && holder_symbols
             .iter()
             .skip(1)
@@ -339,7 +441,11 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
     let original = [array, alias, rotator.at, cookie]
         .iter()
         .all(|index| body[*index].span().start < SYNTHETIC_BASE);
-    let mut dropped = vec![alias_symbol];
+    let mut dropped = if direct {
+        Vec::new()
+    } else {
+        vec![alias_symbol]
+    };
     dropped.extend(holder_symbols.iter().copied());
     if rotator.assigned {
         dropped.push(rotator.symbol);
@@ -356,6 +462,7 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
         assigned: rotator.assigned,
         holder: holders.first().map(|holder| holder.name.to_string()),
         dropped,
+        direct,
     })
 }
 
@@ -482,7 +589,10 @@ fn rewrite<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'a, '_>) -
     body.push(rotator);
     body.extend(holder);
     body.push(cookie);
-    let mut removed = [plan.alias, plan.rotator, plan.cookie];
+    let mut removed = vec![plan.rotator, plan.cookie];
+    if !plan.direct {
+        removed.push(plan.alias);
+    }
     removed.sort_unstable();
     for index in removed.iter().rev() {
         it.remove(*index);

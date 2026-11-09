@@ -889,6 +889,8 @@ impl<'a> Pass<'a> for InlineDecodedStrings {
         Self::report(&decoded, cx);
         self.apply_unstamp(&decoded, program, cx);
         Self::apply_substitutions(&decoded, program, cx);
-        crate::write_only::request_sweep();
+        if crate::write_only::take_sequenced_value() {
+            crate::write_only::request_sweep();
+        }
     }
 }
