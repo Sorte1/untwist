@@ -384,3 +384,14 @@ pub fn remove_unsealed_rotators_for_tests(on: bool) {
 pub(crate) fn unsealed_rotators_removed() -> bool {
     UNSEALED_ROTATORS_REMOVED.load(Ordering::Relaxed)
 }
+
+static ROTATOR_LOOP_BINDINGS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_rotator_loop_bindings_for_tests(on: bool) {
+    ROTATOR_LOOP_BINDINGS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn rotator_loop_bindings_trusted() -> bool {
+    ROTATOR_LOOP_BINDINGS_TRUSTED.load(Ordering::Relaxed)
+}

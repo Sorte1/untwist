@@ -8,12 +8,17 @@ use untwist_core::ast_util::matcher::{infinite_loop_body, is_plain_declaration};
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
 
-use super::checksum::{sees_its_parameters, unused_name};
+use super::checksum::{parsed_statement, sees_its_parameters, unused_name};
+use super::inlined::used_only_in;
 use super::{array_literal, match_string_array};
 use crate::array_rotator::is_infinite_rotator_loop;
 use crate::mutants::minified_rotators_trusted;
+use crate::mutants::rotator_loop_bindings_trusted;
 use crate::probe::contains_expression;
 use crate::stamp::string_array_unit;
+use oxc_semantic::Scoping;
+use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::symbol::SymbolId;
 use untwist_core::ast_util::matcher::var_function_or_declaration;
 
 fn minified_array_name<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
@@ -69,6 +74,123 @@ fn is_function_array_rotator(expr: &Expression<'_>, array: &str) -> bool {
         && body
             .iter()
             .any(|stmt| contains_expression(stmt, |found| identifier_name(found) == Some(array)))
+}
+
+#[derive(Default)]
+struct LoopEscapes {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for LoopEscapes {
+    fn visit_return_statement(&mut self, _it: &ReturnStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_break_statement(&mut self, it: &BreakStatement<'a>) {
+        self.found |= it.label.is_some();
+    }
+
+    fn visit_continue_statement(&mut self, it: &ContinueStatement<'a>) {
+        self.found |= it.label.is_some();
+    }
+
+    fn visit_labeled_statement(&mut self, _it: &LabeledStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_yield_expression(&mut self, _it: &YieldExpression<'a>) {
+        self.found = true;
+    }
+
+    fn visit_await_expression(&mut self, _it: &AwaitExpression<'a>) {
+        self.found = true;
+    }
+
+    fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {}
+
+    fn visit_class(&mut self, _it: &Class<'a>) {
+        self.found = true;
+    }
+}
+
+#[derive(Default)]
+struct LoopBindings {
+    symbols: Vec<Option<SymbolId>>,
+    names: Vec<String>,
+}
+
+impl<'a> VisitJs<'a> for LoopBindings {
+    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
+        if it.kind == VariableDeclarationKind::Var {
+            for declarator in &it.declarations {
+                self.symbols.push(match &declarator.id {
+                    BindingPattern::BindingIdentifier(id) => {
+                        self.names.push(id.name.to_string());
+                        id.symbol_id.get()
+                    }
+                    _ => None,
+                });
+            }
+        }
+        walk_js::walk_variable_declaration(self, it);
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, _flags: ScopeFlags) {
+        if let Some(id) = it.id.as_ref().filter(|_| it.is_declaration()) {
+            self.names.push(id.name.to_string());
+            self.symbols.push(id.symbol_id.get());
+        }
+    }
+
+    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
+}
+
+#[derive(Default)]
+struct ReadNames {
+    names: Vec<String>,
+}
+
+impl<'a> VisitJs<'a> for ReadNames {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.names.push(it.name.to_string());
+    }
+}
+
+fn loop_helper(stmt: &Statement<'_>, rotator: &Statement<'_>, scoping: &Scoping) -> bool {
+    let Statement::FunctionDeclaration(function) = stmt else {
+        return false;
+    };
+    let Some(symbol) = function.id.as_ref().and_then(|id| id.symbol_id.get()) else {
+        return false;
+    };
+    if !rotator_loop_bindings_trusted() && !used_only_in(scoping, symbol, std::iter::once(rotator))
+    {
+        return false;
+    }
+    let mut declared = LoopBindings::default();
+    declared.visit_statement(rotator);
+    let mut reads = ReadNames::default();
+    reads.visit_function(function, ScopeFlags::Function);
+    !reads.names.iter().any(|name| declared.names.contains(name))
+}
+
+fn is_function_array_loop(stmt: &Statement<'_>, array: &str) -> bool {
+    is_infinite_rotator_loop(stmt)
+        && contains_expression(stmt, |found| identifier_name(found) == Some(array))
+}
+
+fn wrappable_loop(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
+    let mut escapes = LoopEscapes::default();
+    escapes.visit_statement(stmt);
+    let mut uses = LexicalUses::default();
+    uses.visit_statement(stmt);
+    let mut bindings = LoopBindings::default();
+    bindings.visit_statement(stmt);
+    let sealed = rotator_loop_bindings_trusted()
+        || bindings.symbols.iter().all(|symbol| {
+            symbol.is_some_and(|symbol| used_only_in(scoping, symbol, std::iter::once(stmt)))
+        });
+    !escapes.found && (!uses.found || minified_rotators_trusted()) && sealed
 }
 
 fn sequence_head<'k, 'a>(expr: Option<&'k Expression<'a>>) -> Option<&'k Expression<'a>> {
@@ -233,6 +355,22 @@ fn arrow_as_function<'a>(callee: &mut Expression<'a>, cx: &Cx<'a, '_>) -> bool {
         cx,
     );
     true
+}
+
+fn negated_iife_body<'k, 'a>(
+    statement: &'k mut Statement<'a>,
+) -> Option<&'k mut AVec<'a, Statement<'a>>> {
+    let Statement::ExpressionStatement(outer) = statement else {
+        return None;
+    };
+    let Expression::UnaryExpression(unary) = &mut outer.expression else {
+        return None;
+    };
+    let call = called_mut(&mut unary.argument)?;
+    let Expression::FunctionExpression(function) = without_parentheses_mut(&mut call.callee) else {
+        return None;
+    };
+    Some(&mut function.body.as_mut()?.statements)
 }
 
 fn breaks(stmt: &Statement<'_>) -> bool {
@@ -473,7 +611,44 @@ impl<'a> Normalise<'_, 'a, '_> {
         }
     }
 
+    fn wrap_loop(&mut self, it: &mut AVec<'a, Statement<'a>>, array: &str) {
+        let scoping = self.cx.scoping();
+        let Some(at) = it
+            .iter()
+            .position(|stmt| is_function_array_loop(stmt, array) && wrappable_loop(stmt, scoping))
+        else {
+            return;
+        };
+        let helpers: Vec<usize> = (0..it.len())
+            .filter(|index| *index != at && loop_helper(&it[*index], &it[at], scoping))
+            .collect();
+        let moved = helpers.clone();
+        let Some(mut wrapped) = parsed_statement("!function () { 0; }();", self.cx) else {
+            return;
+        };
+        let Some(body) = negated_iife_body(&mut wrapped) else {
+            return;
+        };
+        body.clear();
+        for index in helpers {
+            body.push(it[index].take_in(self.cx));
+        }
+        let mut rotator = it[at].take_in(self.cx);
+        if let Statement::ForStatement(node) = &mut rotator {
+            if let Some(ForStatementInit::VariableDeclaration(declaration)) = node.init.take() {
+                body.push(Statement::VariableDeclaration(declaration));
+            }
+        }
+        body.push(rotator);
+        it[at] = wrapped;
+        for index in moved.iter().rev() {
+            it.remove(*index);
+        }
+        self.changed += 1;
+    }
+
     fn function_array_statements(&mut self, it: &mut AVec<'a, Statement<'a>>, array: &str) {
+        self.wrap_loop(it, array);
         let taken = it.take_in(self.cx);
         for stmt in taken {
             self.place_function_array(stmt, array, it);
