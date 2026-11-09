@@ -120,8 +120,11 @@ modules loaded from elsewhere are supplied with `--wasm-dir`, `--wasm` or `--fet
 webpack bundle the names reach the module files that import from or export to the wasm module,
 and the same names are applied to the combined `deobfuscated.js`. For Emscripten glue whose
 module has no name section, exports are named from `Module._name` wrappers and the export kind
-(`wasmMemory`, `wasmTable`); imports keep their names unless the module's import names are real
-words, since minified names like `a.a` say nothing about the function behind them.
+(`wasmMemory`, `wasmTable`). Minified import names like `a.a` say nothing about the function
+behind them, so an import is named only when its function has the shape of an Emscripten library
+function (`HEAPU8.copyWithin(dest, src, src + num)` is `_emscripten_memcpy_big`) and the module's
+import has that function's signature. Such a module must also have every import the glue
+provides and no import the glue leaves out; otherwise nothing is named.
 
 Exit codes: `0` success; `1` an error, a parse error (output is still produced) or a panic in a
 pass; `2` the output directory already holds output (use `-f`); `3` an input was too deep to

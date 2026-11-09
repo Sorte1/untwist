@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Emscripten glue whose wasm module has no name section gets its imports named when the bound
+  function has the shape of an Emscripten library function and the module's import has its
+  signature: `_emscripten_memcpy_big`, `_emscripten_resize_heap`, `_emscripten_date_now`,
+  `_emscripten_get_now` and `_emscripten_get_heap_max`. Such a module must match the glue's import
+  object both ways, and a library function whose import has another signature names nothing; each
+  gives a warning that says what differs.
+
 ### Fixed
 
 - The safe lane decodes a program whose `for (const key in globalThis)` loop only reads the

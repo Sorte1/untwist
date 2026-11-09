@@ -1,4 +1,8 @@
+#[path = "common/wasm_module.rs"]
+mod wasm_module;
+
 use untwist::{NoteKind, Options, Output, Pipeline, WasmCheck, WasmOrigin, WasmSupply};
+use wasm_module::base64;
 
 fn fixture_path(name: &str) -> String {
     format!("{}/tests/wasm/{name}", env!("CARGO_MANIFEST_DIR"))
@@ -37,23 +41,6 @@ fn wasm_notes(output: &Output) -> Vec<&str> {
         .filter(|note| note.pass == "wasm")
         .map(|note| note.message.as_str())
         .collect()
-}
-
-fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::new();
-    for chunk in bytes.chunks(3) {
-        let word = chunk.iter().enumerate().fold(0u32, |word, (index, byte)| {
-            word | u32::from(*byte) << (16 - 8 * index)
-        });
-        for index in 0..4 {
-            match index <= chunk.len() {
-                true => out.push(ALPHABET[(word >> (18 - 6 * index) & 63) as usize] as char),
-                false => out.push('='),
-            }
-        }
-    }
-    out
 }
 
 #[test]
@@ -456,7 +443,7 @@ fn emscripten_glue_without_a_name_section_is_named_from_its_export_wrappers_and_
     assert_eq!(out.wasm.len(), 1);
     assert_eq!(out.wasm[0].bytes, wasm_bytes("emscripten-nameless.wasm"));
     assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
-    assert_eq!(out.wasm[0].renamed, 4);
+    assert_eq!(out.wasm[0].renamed, 5);
     insta::assert_snapshot!(out.code());
 }
 
