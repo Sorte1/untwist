@@ -22,13 +22,13 @@ refusal-spans = ["untwist-deobfuscate/refusal-spans"]
 test-hooks = ["refusal-spans", "untwist-core/test-hooks", "untwist-deobfuscate/test-hooks", "untwist-eval/test-hooks", "untwist-rename/test-hooks", "untwist-unminify/test-hooks"]
 
 [dependencies]
-untwist-core = { path = "../untwist-core", version = "0.3.0" }
-untwist-deobfuscate = { path = "../untwist-deobfuscate", version = "0.3.0" }
-untwist-eval = { path = "../untwist-eval", version = "0.3.0" }
-untwist-jsx = { path = "../untwist-jsx", version = "0.3.0" }
-untwist-rename = { path = "../untwist-rename", version = "0.3.0" }
-untwist-unminify = { path = "../untwist-unminify", version = "0.3.0" }
-untwist-unpack = { path = "../untwist-unpack", version = "0.3.0" }
+untwist-core = { path = "../untwist-core", version = "0.3.1" }
+untwist-deobfuscate = { path = "../untwist-deobfuscate", version = "0.3.1" }
+untwist-eval = { path = "../untwist-eval", version = "0.3.1" }
+untwist-jsx = { path = "../untwist-jsx", version = "0.3.1" }
+untwist-rename = { path = "../untwist-rename", version = "0.3.1" }
+untwist-unminify = { path = "../untwist-unminify", version = "0.3.1" }
+untwist-unpack = { path = "../untwist-unpack", version = "0.3.1" }
 anyhow.workspace = true
 oxc_allocator.workspace = true
 oxc_ast.workspace = true

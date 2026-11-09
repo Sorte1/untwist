@@ -21,7 +21,7 @@ peak-probe = []
 test-hooks = ["untwist/test-hooks"]
 
 [dependencies]
-untwist = { path = "../untwist", version = "0.3.0" }
+untwist = { path = "../untwist", version = "0.3.1" }
 clap.workspace = true
 anyhow.workspace = true
 serde.workspace = true

@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-09
+
 ### Added
 
 - The obfuscator option and version matrices file a cell under a named refusal when any later
@@ -109,7 +111,9 @@ All notable changes to this project are documented in this file. The format is b
   or rotator use through a variable, parameter, `this` or computed object that can hold it
   (`var P = Array.prototype; P.shift = f`, `Object.defineProperty(P, "shift", ...)`, an aliased
   `Array`, `[].__proto__`). Before, such programs printed wrong strings. The refusal names the
-  write's line and column; `--unsafe` assumes the built-ins are untouched and still decodes. A
+  write's line and column; `--unsafe` assumes the built-ins are untouched and still decodes.
+  Bundles that pass prototypes through unknown calls, such as core-js polyfills next to
+  javascript-obfuscator's self-defending code, are now refused by default and need `--unsafe`. A
   definer call whose keys are all literal and none of them used does not refuse. A function an IIFE returns
   binds its parameters at the calls of the variable it is stored in, a call whose decoder argument
   decodes is a string, and `fn.apply(...)` / `fn.call(...)` on a parameter that only holds program
