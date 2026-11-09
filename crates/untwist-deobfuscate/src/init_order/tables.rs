@@ -219,9 +219,13 @@ impl Sites {
     }
 
     fn sorted(&self) -> Vec<u32> {
-        let mut by_span = self.identity();
-        by_span.sort_unstable_by_key(|site| self.key(*site));
-        by_span
+        let mut keys: Vec<(u32, u32, u32)> = self
+            .identity()
+            .into_iter()
+            .map(|site| self.key(site))
+            .collect();
+        keys.sort_unstable();
+        keys.into_iter().map(|(_, _, site)| site).collect()
     }
 
     fn descends(pair: &[Site]) -> bool {

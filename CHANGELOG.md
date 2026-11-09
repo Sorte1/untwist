@@ -58,6 +58,10 @@ All notable changes to this project are documented in this file. The format is b
   charged and the same output: a 6 MB Krunker build spends 54 % fewer instructions under
   `--unsafe`.
 
+- The decoder interpreter appends array elements without a resize, and the init-order check
+  sorts its reference sites by value: a 6 MB Krunker build spends 2 % fewer instructions under
+  `--unsafe`, with the same output.
+
 ### Fixed
 
 - Wasm glue names found in a bundle module now also apply to that module's function in the
