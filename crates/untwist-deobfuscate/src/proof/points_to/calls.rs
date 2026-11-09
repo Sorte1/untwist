@@ -300,6 +300,16 @@ impl Graph {
     }
 
     fn patch(&mut self, index: u32, method: Method, target: Option<Node>, key: PatchKey) {
+        let call = &self.calls[index as usize];
+        let needed = match method {
+            Method::DefineProperty => 3,
+            Method::SetPrototypeOf | Method::DefineGetter | Method::DefineSetter => 2,
+            Method::DefineProperties | Method::Assign => 2,
+            _ => 1,
+        };
+        if call.spread.is_none() && call.args.len() < needed {
+            return;
+        }
         let Some(target) = target else {
             return;
         };

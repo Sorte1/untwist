@@ -157,9 +157,12 @@ fn a_spent_budget_refuses_through_one_fallback_site() {
 fn code_built_at_run_time_reaches_every_built_in() {
     let sites = site_texts("var g = Function('return this')(); var k = f(); g[k][k] = 1;");
     assert_eq!(sites, ["g[k][k]"]);
-    with_program("var g = Function('return this')(); var k = f(); g[k][k] = 1;", |program, scoping| {
-        let sites = points_to_sites(program, scoping, &FxHashMap::default(), &[]);
-        let used = crate::proof::UsedNames::default();
-        assert!(crate::proof::alias_refusal(&sites, &used, program.source_text).is_some());
-    });
+    with_program(
+        "var g = Function('return this')(); var k = f(); g[k][k] = 1;",
+        |program, scoping| {
+            let sites = points_to_sites(program, scoping, &FxHashMap::default(), &[]);
+            let used = crate::proof::UsedNames::default();
+            assert!(crate::proof::alias_refusal(&sites, &used, program.source_text).is_some());
+        },
+    );
 }

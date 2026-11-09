@@ -222,7 +222,7 @@ impl Graph {
             global_declared: FxHashSet::default(),
             budget: Budget {
                 steps_cap: bytes.saturating_mul(48).clamp(4_000_000, 400_000_000),
-                elements_cap: bytes.saturating_mul(8).clamp(2_000_000, 60_000_000),
+                elements_cap: bytes.saturating_mul(4).clamp(4_000_000, 24_000_000),
                 ..Budget::default()
             },
             exhausted: false,
@@ -796,15 +796,20 @@ impl Graph {
             self.copy(unknown, to);
             self.subscribe(object, Sub::CopyTo(to));
             self.copy(proto, to);
-            if let Some(builtin) = builtin {
-                let (values, world) = model::read_any(builtin);
-                for value in values {
-                    let id = self.builtin(value);
-                    self.insert(to, id);
-                }
-                if world {
+            match builtin {
+                Some(Builtin::Global) => {
                     self.insert(to, ObjectId::WORLD);
+                    let esc = self.esc;
+                    self.insert(esc, object);
                 }
+                Some(builtin) => {
+                    let (values, _) = model::read_any(builtin);
+                    for value in values {
+                        let id = self.builtin(value);
+                        self.insert(to, id);
+                    }
+                }
+                None => {}
             }
         } else {
             let own = self.field_node(object, field);
@@ -996,9 +1001,14 @@ impl Graph {
     }
 
     fn over_budget(&mut self) -> bool {
-        if self.budget.steps >= self.budget.steps_cap
-            || self.budget.elements >= self.budget.elements_cap
-        {
+        let held = self.budget.elements
+            + (self.edges.len()
+                + self.wired_loads.len()
+                + self.wired_stores.len()
+                + self.loads.len()
+                + self.calls.len()
+                + self.pts.len()) as u64;
+        if self.budget.steps >= self.budget.steps_cap || held >= self.budget.elements_cap {
             self.exhausted = true;
             self.queue.clear();
             self.replays.clear();
