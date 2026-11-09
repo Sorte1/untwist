@@ -152,14 +152,15 @@ pub(super) struct Record<'a> {
 fn sequenced<'a>(expr: &'a Expression<'a>, span: Span) -> Option<&'a AssignmentExpression<'a>> {
     match expr.without_parentheses() {
         Expression::SequenceExpression(seq) => {
-            seq.expressions.windows(2).find_map(|pair| match (&pair[0], &pair[1]) {
-                (Expression::AssignmentExpression(assign), Expression::CallExpression(call))
-                    if call.span == span =>
-                {
-                    Some(&**assign)
-                }
-                _ => None,
-            })
+            seq.expressions
+                .windows(2)
+                .find_map(|pair| match (&pair[0], &pair[1]) {
+                    (
+                        Expression::AssignmentExpression(assign),
+                        Expression::CallExpression(call),
+                    ) if call.span == span => Some(&**assign),
+                    _ => None,
+                })
         }
         Expression::LogicalExpression(logical) => sequenced(&logical.right, span),
         Expression::StaticMemberExpression(member) => sequenced(&member.object, span),
@@ -169,10 +170,16 @@ fn sequenced<'a>(expr: &'a Expression<'a>, span: Span) -> Option<&'a AssignmentE
 }
 
 fn sequenced_record<'a>(scoping: &Scoping, shape: &Shape<'a>) -> Option<Record<'a>> {
-    let assign = shape.body.statements.iter().find_map(|statement| match statement {
-        Statement::ReturnStatement(ret) => sequenced(ret.argument.as_ref()?, shape.dispatch.span),
-        _ => None,
-    })?;
+    let assign = shape
+        .body
+        .statements
+        .iter()
+        .find_map(|statement| match statement {
+            Statement::ReturnStatement(ret) => {
+                sequenced(ret.argument.as_ref()?, shape.dispatch.span)
+            }
+            _ => None,
+        })?;
     if assign.operator != AssignmentOperator::Assign {
         return None;
     }

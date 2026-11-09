@@ -187,7 +187,10 @@ fn cached_or_created(source: String) -> String {
 fn minified_bootstraps() -> Vec<(&'static str, String)> {
     vec![
         ("an arrow bootstrap", arrow_outer(proven())),
-        ("the webpack4 runtime in an arrow", arrow_outer(webpack4_proven())),
+        (
+            "the webpack4 runtime in an arrow",
+            arrow_outer(webpack4_proven()),
+        ),
         (
             "the webpack4 runtime reading its cache with ||",
             cached_or_created(webpack4_proven()),
@@ -478,7 +481,11 @@ fn mutants() -> Vec<(&'static str, &'static str, String)> {
             before_bootstrap(
                 &format!("var planted = {planted}; var tail = 'll';"),
                 with_modules("", &[MODULE_ZERO, MODULE_ONE], "(n.s = 0)")
-                    .replacen("return e[t].call(", "return (e[t] || planted)['ca' + tail](", 1)
+                    .replacen(
+                        "return e[t].call(",
+                        "return (e[t] || planted)['ca' + tail](",
+                        1,
+                    )
                     .replacen("var lib = i(1);", "i(5); var lib = i(1);", 1),
             ),
         ),
