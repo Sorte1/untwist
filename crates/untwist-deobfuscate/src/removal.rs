@@ -16,13 +16,15 @@ use oxc_syntax::symbol::SymbolId;
 
 use crate::array_rotator::find_rotators;
 use crate::calls::agnostic::{global_reach, ReachWatch};
-use crate::mutants::decoder_name_watch_dropped;
+use crate::mutants::{decoder_name_watch_dropped, unsealed_rotators_removed};
 use crate::notes;
+use crate::proof::rotator_sealed;
 use crate::stamp::{
     find_stamped, find_stamped_named, is_unedited, original_name, string_array_name, Stamped,
     StampedFn,
 };
 use crate::units::MachineryDepth;
+use untwist_core::ast_util::search::statement_at;
 
 #[derive(Clone, Copy, Default)]
 pub struct Observation {
@@ -102,6 +104,7 @@ pub struct Machinery {
     pub array: Option<Span>,
     pub decoders: Vec<Span>,
     pub rotator: Option<Span>,
+    pub rotator_sealed: bool,
 }
 
 impl Machinery {
@@ -140,6 +143,7 @@ fn units_of(program: &Program<'_>, stamped: &Stamped<'_>) -> Vec<Machinery> {
                 .map(|(entry, _)| entry.statement)
                 .collect(),
             rotator: rotator.map(|(span, _)| span),
+            rotator_sealed: true,
         });
     }
     units
@@ -259,6 +263,11 @@ struct Plan {
 
 impl Plan {
     fn judge(&mut self, machinery: &Machinery, outstanding: &[Span], members: &FxHashSet<Span>) {
+        if let Some(rotator) = machinery.rotator.filter(|_| !machinery.rotator_sealed) {
+            self.kept
+                .push((notes::ROTATOR_NOT_SEALED.to_string(), rotator));
+            return;
+        }
         if let Some(first) = outstanding.first() {
             self.kept
                 .push((notes::machinery_references_kept(outstanding.len()), *first));
@@ -271,6 +280,33 @@ impl Plan {
                 .push((notes::MACHINERY_NOT_A_LIST_MEMBER.to_string(), *stray)),
             None => self.spans.extend(spans),
         }
+    }
+}
+
+fn seal_rotators(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    stamped: &Stamped<'_>,
+    units: &mut [Machinery],
+) {
+    if unsealed_rotators_removed() {
+        return;
+    }
+    let owners = stamped.owners();
+    for machinery in units.iter_mut() {
+        let Some(span) = machinery.rotator else {
+            continue;
+        };
+        let allowed: FxHashSet<SymbolId> = stamped
+            .decoders
+            .iter()
+            .zip(&owners)
+            .filter(|(_, owner)| **owner == Some(machinery.unit))
+            .filter_map(|(entry, _)| entry.symbol)
+            .chain(stamped.array(machinery.unit).and_then(|array| array.symbol))
+            .collect();
+        machinery.rotator_sealed = statement_at(program, span)
+            .is_some_and(|statement| rotator_sealed(statement, scoping, &allowed));
     }
 }
 
@@ -365,7 +401,8 @@ impl RemoveDecoderMachinery {
 
     fn removable(&self, program: &Program<'_>, cx: &mut Cx<'_, '_>) -> Vec<Span> {
         let stamped = find_stamped_named(program, cx.scoping(), is_unedited(cx));
-        let units = units_of(program, &stamped);
+        let mut units = units_of(program, &stamped);
+        seal_rotators(program, cx.scoping(), &stamped, &mut units);
         let Plan { kept, spans } = plan(program, (&stamped, &units));
         for (message, span) in kept {
             cx.note(message, Some(span));

@@ -21,6 +21,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- A function holding an inline rotator loop beside other code (javascript-obfuscator's IIFE
+  wrapper after uglify-js, holding the string array, its decoder and the whole program) was taken
+  for the rotator and removed as decoder machinery, so the output was empty, in both lanes.
+  remove-decoder-machinery now keeps a unit whose rotator reads or writes anything other than its
+  own bindings, the string array and its decoders.
+
 - uglify-js output of javascript-obfuscator 2.19 and later decodes when the rotator of a function
   string array is an arrow IIFE that uglify moved into a declaration
   (`let a = dec, b = ((() => { for (var e = dec, a = arr();;) ... })(), {})`) or to the head of a

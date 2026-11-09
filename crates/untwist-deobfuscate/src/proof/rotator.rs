@@ -381,6 +381,14 @@ pub(super) fn uninitialised(
         .min_by_key(|span| span.start)
 }
 
+pub fn rotator_sealed(
+    statement: &Statement<'_>,
+    scoping: &Scoping,
+    allowed: &FxHashSet<SymbolId>,
+) -> bool {
+    sealed(statement, scoping, allowed).is_none()
+}
+
 pub fn rotator_refusal_at<'a>(
     program: &Program<'a>,
     scoping: &Scoping,

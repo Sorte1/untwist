@@ -373,3 +373,14 @@ pub fn trust_nested_write_targets_for_tests(on: bool) {
 pub(crate) fn nested_writes_trusted() -> bool {
     NESTED_WRITES_TRUSTED.load(Ordering::Relaxed)
 }
+
+static UNSEALED_ROTATORS_REMOVED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn remove_unsealed_rotators_for_tests(on: bool) {
+    UNSEALED_ROTATORS_REMOVED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn unsealed_rotators_removed() -> bool {
+    UNSEALED_ROTATORS_REMOVED.load(Ordering::Relaxed)
+}
