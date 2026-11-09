@@ -289,6 +289,13 @@ impl<'a> Sites<'_, 'a> {
     }
 
     fn identifier_shown_non_global(&self, id: &IdentifierReference<'a>, depth: u8) -> bool {
+        let name_key = self
+            .fresh
+            .symbol(id)
+            .is_some_and(|symbol| self.fresh.bindings.name_keys.contains(&symbol));
+        if name_key {
+            return true;
+        }
         if self
             .fresh
             .literal_init(id)

@@ -57,6 +57,12 @@ impl<'a> Sites<'_, 'a> {
         }
     }
 
+    pub(super) fn observe_enumerated(&mut self, base: &Expression<'a>, span: Span) {
+        if self.observing(span) {
+            self.observe_base(base, span);
+        }
+    }
+
     fn effective_callee<'k>(&self, callee: &'k Expression<'a>) -> &'k Expression<'a> {
         let mut current = callee.without_parentheses();
         while let Expression::SequenceExpression(seq) = current {

@@ -323,20 +323,57 @@ impl<'f, 'a> Shape<'f, 'a> {
     }
 
     pub(super) fn method_key(&mut self, key: &'a Expression<'a>) -> Option<&'static str> {
-        let text = match key.without_parentheses() {
-            Expression::StringLiteral(text) => js_text(text.value).into_owned(),
+        let text = self.key_text(key, 0)?;
+        STRING_METHODS.iter().copied().find(|name| *name == text)
+    }
+
+    fn key_text(&mut self, key: &'a Expression<'a>, depth: u32) -> Option<String> {
+        if depth > MAX_DEPTH {
+            return None;
+        }
+        match key.without_parentheses() {
+            Expression::StringLiteral(text) => Some(js_text(text.value).into_owned()),
             Expression::CallExpression(call) => {
                 self.call(call, 0).then_some(())?;
-                self.resolved.get(&call.span)?.clone()
+                self.resolved.get(&call.span).cloned()
             }
-            _ => return None,
-        };
-        STRING_METHODS.iter().copied().find(|name| *name == text)
+            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+                let left = self.key_text(&binary.left, depth + 1)?;
+                let right = self.key_text(&binary.right, depth + 1)?;
+                Some(left + &right)
+            }
+            _ => None,
+        }
+    }
+}
+
+pub(super) fn is_arithmetic(operator: BinaryOperator) -> bool {
+    matches!(
+        operator,
+        BinaryOperator::Addition
+            | BinaryOperator::Subtraction
+            | BinaryOperator::Multiplication
+            | BinaryOperator::Division
+            | BinaryOperator::Remainder
+    )
+}
+
+fn numeric(expr: &Expression<'_>) -> bool {
+    match expr.without_parentheses() {
+        Expression::NumericLiteral(_) => true,
+        Expression::UnaryExpression(unary) => {
+            unary.operator == UnaryOperator::UnaryNegation && numeric(&unary.argument)
+        }
+        Expression::BinaryExpression(binary) => {
+            is_arithmetic(binary.operator) && numeric(&binary.left) && numeric(&binary.right)
+        }
+        _ => false,
     }
 }
 
 pub(super) fn closed(expr: &Expression<'_>) -> bool {
     match expr.without_parentheses() {
+        Expression::BinaryExpression(_) => numeric(expr),
         Expression::NumericLiteral(_)
         | Expression::StringLiteral(_)
         | Expression::BooleanLiteral(_)

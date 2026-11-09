@@ -92,6 +92,18 @@ pub(super) fn literal(expr: &Expression<'_>) -> Option<V> {
             let inner = literal(&unary.argument)?;
             Some(V::Prim(fold_unary(unary.operator, inner.prim()?)?))
         }
+        Expression::BinaryExpression(binary) if super::shape::is_arithmetic(binary.operator) => {
+            let left = literal(&binary.left)?;
+            let right = literal(&binary.right)?;
+            let (Const::Num(_), Const::Num(_)) = (left.prim()?, right.prim()?) else {
+                return None;
+            };
+            Some(V::Prim(fold_binary(
+                binary.operator,
+                left.prim()?,
+                right.prim()?,
+            )?))
+        }
         other => const_from_literal(other).map(V::Prim),
     }
 }

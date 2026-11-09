@@ -230,6 +230,7 @@ pub(super) struct Bindings<'s, 'a> {
     pub(super) assembled: AssembledTables<'a>,
     enclosing: Option<filtered::Body<'a>>,
     filter_candidates: Vec<Candidate<'a>>,
+    pub(super) name_keys: FxHashSet<SymbolId>,
     pub(super) filters: std::rc::Rc<Filters<'a>>,
 }
 
@@ -271,6 +272,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             assembled: assembled_tables(program, scoping, resolve),
             enclosing: None,
             filter_candidates: Vec::new(),
+            name_keys: FxHashSet::default(),
             filters: std::rc::Rc::default(),
         };
         bindings.visit_program(program);
@@ -628,6 +630,9 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
         let loop_ = self.alloc(it);
         if let Some(found) = filtered::candidate(self.scoping, loop_, self.enclosing) {
             self.filter_candidates.push(found);
+        }
+        if let Some(key) = super::name_keys::loop_key(self.scoping, &it.left) {
+            self.name_keys.insert(key);
         }
         self.for_left = true;
         self.visit_for_statement_left(&it.left);
