@@ -1,4 +1,5 @@
 mod machine;
+mod rewrite;
 mod shape;
 
 use std::cell::RefCell;
@@ -8,6 +9,7 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
+use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 
@@ -15,8 +17,9 @@ use super::bootstrap::Resolve;
 use super::defs::DefTable;
 use super::roles::{Origin, BATCH, CONSTRUCTS, DEFINE_KEYED, GETTERS, MUTATORS, READERS, RUNNERS};
 use super::AKey;
-use crate::value_flow::{flow_rule_disabled, FILTERED_ENUMERATION};
+use crate::value_flow::{flow_rule_disabled, FILTERED_ENUMERATION, FILTERED_REWRITE_ORDER};
 use machine::{is_binary_compare, literal, Machine, V};
+use rewrite::{check_loop, is_rewrite_loop, rewrite_loop, Rewrite};
 pub(super) use shape::Body;
 use shape::{closed, Shape};
 
@@ -118,6 +121,7 @@ struct Pred<'a> {
 #[derive(Default)]
 pub(super) struct Filters<'a> {
     keys: FxHashMap<SymbolId, Span>,
+    rewritten: FxHashMap<SymbolId, Span>,
     preds: FxHashMap<Span, Option<Pred<'a>>>,
     accepted: RefCell<FxHashMap<(Span, String), bool>>,
     source: &'a str,
@@ -139,6 +143,7 @@ impl<'a> Filters<'a> {
             return filters;
         }
         let mutant = flow_rule_disabled(FILTERED_ENUMERATION);
+        let ordered = !flow_rule_disabled(FILTERED_REWRITE_ORDER);
         let sealed = |symbol: SymbolId| {
             let found = defs.get(symbol)?;
             if !found.writes.is_empty() || found.opaque || found.mutated {
@@ -160,9 +165,10 @@ impl<'a> Filters<'a> {
                         || other.key == candidate.found
                 })
                 .count();
+            let rewrite = rewrite_loop(candidate, ordered);
             let valid = mutant
                 || (shared == 1
-                    && uses_are_keys(scoping, candidate)
+                    && uses_are_keys(scoping, candidate, rewrite)
                     && found_declared(scoping, candidate));
             if !valid {
                 continue;
@@ -177,6 +183,9 @@ impl<'a> Filters<'a> {
             };
             filters.keys.insert(candidate.key, candidate.span);
             filters.keys.insert(candidate.found, candidate.span);
+            if let Some(rewrite) = rewrite.filter(|rewrite| rewrite.ordered && !mutant) {
+                filters.rewritten.insert(candidate.found, rewrite.span);
+            }
             filters.preds.insert(candidate.span, pred);
         }
         filters
@@ -190,7 +199,14 @@ impl<'a> Filters<'a> {
         self.keys.is_empty()
     }
 
-    pub(super) fn key(&self, symbol: SymbolId) -> Option<AKey<'static>> {
+    pub(super) fn key(&self, symbol: SymbolId, at: Span) -> Option<AKey<'static>> {
+        let rewritten = self
+            .rewritten
+            .get(&symbol)
+            .is_some_and(|region| region.start <= at.start && at.end <= region.end);
+        if rewritten {
+            return None;
+        }
         self.keys.get(&symbol).map(|span| AKey::Filtered(*span))
     }
 
@@ -296,12 +312,15 @@ fn found_declared(scoping: &Scoping, candidate: &Candidate<'_>) -> bool {
         .any(|ancestor| ancestor == scope)
 }
 
-fn uses_are_keys(scoping: &Scoping, candidate: &Candidate<'_>) -> bool {
+fn uses_are_keys(scoping: &Scoping, candidate: &Candidate<'_>, rewrite: Option<Rewrite>) -> bool {
     let mut check = Uses {
         scoping,
         candidate,
         bad: false,
         declared: false,
+        rewrite,
+        depth: 0,
+        loop_writes: 0,
     };
     match (candidate.within.block, candidate.within.value) {
         (Some(block), _) => check.visit_function_body(block),
@@ -315,7 +334,7 @@ fn uses_are_keys(scoping: &Scoping, candidate: &Candidate<'_>) -> bool {
     let key_written = scoping
         .get_resolved_references(candidate.key)
         .any(|reference| reference.is_write());
-    !check.bad && check.declared && writes == 1 && !key_written
+    !check.bad && check.declared && writes == 1 + check.loop_writes && !key_written
 }
 
 struct Uses<'c, 'a> {
@@ -323,11 +342,20 @@ struct Uses<'c, 'a> {
     candidate: &'c Candidate<'a>,
     bad: bool,
     declared: bool,
+    rewrite: Option<Rewrite>,
+    depth: usize,
+    loop_writes: usize,
 }
 
 impl<'a> Uses<'_, 'a> {
+    fn out_of_order(&self, at: Span) -> bool {
+        self.rewrite
+            .is_some_and(|rewrite| rewrite.ordered && (self.depth > 0 || rewrite.after(at)))
+    }
+
     fn tracked(&self, expr: &Expression<'a>) -> bool {
         match expr.without_parentheses() {
+            Expression::Identifier(id) if self.out_of_order(id.span) => false,
             Expression::Identifier(id) => {
                 let symbol = identifier_symbol(self.scoping, id);
                 symbol == Some(self.candidate.found) || symbol == Some(self.candidate.key)
@@ -338,6 +366,27 @@ impl<'a> Uses<'_, 'a> {
 }
 
 impl<'a> VisitJs<'a> for Uses<'_, 'a> {
+    fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
+        let Some(rewrite) = self.rewrite.filter(|_| is_rewrite_loop(self.rewrite, it)) else {
+            return walk_js::walk_for_statement(self, it);
+        };
+        let checked = check_loop(self.scoping, self.candidate, it, rewrite.ordered);
+        self.bad |= checked.bad;
+        self.loop_writes += checked.writes;
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.depth += 1;
+        walk_js::walk_function(self, it, flags);
+        self.depth -= 1;
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.depth += 1;
+        walk_js::walk_arrow_function_expression(self, it);
+        self.depth -= 1;
+    }
+
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         let symbol = identifier_symbol(self.scoping, it);
         if symbol == Some(self.candidate.found) || symbol == Some(self.candidate.key) {

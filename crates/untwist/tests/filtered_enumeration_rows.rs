@@ -11,16 +11,12 @@ fn rows() -> Vec<(String, String)> {
         .collect()
 }
 
-fn options(unsafe_transforms: bool, mutant: bool) -> Options {
+fn options(unsafe_transforms: bool, mutant: Option<&'static str>) -> Options {
     Options {
         unsafe_transforms,
         unpack: false,
         jsx: false,
-        disabled_passes: if mutant {
-            vec!["filtered-enumeration"]
-        } else {
-            vec![]
-        },
+        disabled_passes: mutant.into_iter().collect(),
         ..Options::default()
     }
 }
@@ -33,7 +29,7 @@ fn transformed(options: &Options, source: &str) -> String {
 }
 
 fn decoded(source: &str) -> bool {
-    !transformed(&options(false, false), source).contains("bQ(")
+    !transformed(&options(false, None), source).contains("bQ(")
 }
 
 #[test]
@@ -66,7 +62,7 @@ fn the_default_lane_runs_like_node() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let safe = options(false, false);
+    let safe = options(false, None);
     let run_safe = |source: &str| transformed(&safe, source);
     let modes: [Mode<'_>; 1] = [("default", &run_safe)];
     let wrong = node_rows::mismatches(&node, &rows(), &modes);
@@ -82,24 +78,24 @@ fn the_decoding_rows_also_run_like_node_in_the_unsafe_lane() {
         .into_iter()
         .filter(|(label, _)| label.starts_with("dec-"))
         .collect();
-    let aggressive = options(true, false);
+    let aggressive = options(true, None);
     let run_unsafe = |source: &str| transformed(&aggressive, source);
     let modes: [Mode<'_>; 1] = [("unsafe", &run_unsafe)];
     let wrong = node_rows::mismatches(&node, &decoding, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
-#[test]
-fn the_sabotage_rows_diverge_from_node_under_the_filtered_enumeration_mutant() {
+fn assert_rows_diverge_under(mutant: &'static str, prefix: &str) {
     let Some(node) = node_or_skip() else {
         return;
     };
     let sabotage: Vec<(String, String)> = rows()
         .into_iter()
-        .filter(|(label, _)| label.starts_with("ref-"))
+        .filter(|(label, _)| label.starts_with(prefix))
         .collect();
-    let mutant = options(false, true);
-    let run_mutant = |source: &str| transformed(&mutant, source);
+    assert!(!sabotage.is_empty(), "no {prefix} rows");
+    let mutated = options(false, Some(mutant));
+    let run_mutant = |source: &str| transformed(&mutated, source);
     let modes: [Mode<'_>; 1] = [("mutant", &run_mutant)];
     let diverged = node_rows::mismatches(&node, &sabotage, &modes);
     let names: Vec<&str> = diverged
@@ -109,7 +105,17 @@ fn the_sabotage_rows_diverge_from_node_under_the_filtered_enumeration_mutant() {
     for (label, _) in &sabotage {
         assert!(
             names.contains(&label.as_str()),
-            "{label} did not diverge from node under the mutant"
+            "{label} did not diverge from node under the {mutant} mutant"
         );
     }
+}
+
+#[test]
+fn the_sabotage_rows_diverge_from_node_under_the_filtered_enumeration_mutant() {
+    assert_rows_diverge_under("filtered-enumeration", "ref-");
+}
+
+#[test]
+fn the_rewrite_order_rows_diverge_from_node_under_the_rewrite_order_mutant() {
+    assert_rows_diverge_under("filtered-rewrite-order", "ref-order-");
 }
