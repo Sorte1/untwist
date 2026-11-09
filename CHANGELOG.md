@@ -77,6 +77,11 @@ All notable changes to this project are documented in this file. The format is b
   proxy object assigned inside a sequence (`f((x = 13, d = { ... }, g(d.k(a, b))))`) moves to its
   empty `var d;` declaration when every other use of `d` comes later in that sequence. The version
   matrix decodes 5 more cells under `--unsafe`.
+- A decoder whose local alias of a function string array is later reused as a temporary
+  (uglify-js output of javascript-obfuscator 4.x and 5.x: `x += t[0], t = memo[x]` or
+  `e = e[0], ..., e = memo[k]`) decodes. The first write must be a top-level statement of the
+  decoder, every earlier use of the alias must read one entry, and no write may assign the array
+  itself.
 
 - A function string array's rotator loop that uglify-js left inline in a function body
   (`for (var u = arr(); ;) try { ... } catch (e) { ... }` beside the module code) is wrapped back

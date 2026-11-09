@@ -428,3 +428,14 @@ pub fn lift_shell_bodies_with_bindings_for_tests(on: bool) {
 pub(crate) fn shell_bodies_lifted() -> bool {
     SHELL_BODIES_LIFTED.load(Ordering::Relaxed)
 }
+
+static REUSED_ARRAY_ALIASES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_reused_array_aliases_for_tests(on: bool) {
+    REUSED_ARRAY_ALIASES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn reused_array_aliases_trusted() -> bool {
+    REUSED_ARRAY_ALIASES_TRUSTED.load(Ordering::Relaxed)
+}
