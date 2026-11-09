@@ -11,6 +11,7 @@ pub mod extract;
 pub mod gate;
 mod guard;
 pub mod helpers;
+pub mod interop;
 mod locals;
 pub mod require_fn;
 pub mod require_paths;

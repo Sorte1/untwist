@@ -56,6 +56,13 @@ pub fn form(call: &CallExpression<'_>) -> Option<(Form, f64)> {
     bound.then_some((Form::Bind, mode(arguments.get(2))?))
 }
 
+pub fn subject<'c, 'a>(call: &'c CallExpression<'a>, form: &Form) -> Option<&'c Expression<'a>> {
+    match form {
+        Form::Call => const_member(&call.callee, "t"),
+        Form::Bind => const_member(const_member(&call.callee, "bind")?, "t"),
+    }
+}
+
 struct Convert<'a, 'n> {
     builder: AstBuilder<'a>,
     runtime: Option<&'n str>,

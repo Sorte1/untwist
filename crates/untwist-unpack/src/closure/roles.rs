@@ -242,10 +242,7 @@ impl<'s> Stray<'s> {
 
 impl<'a> VisitJs<'a> for Stray<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        let free = it
-            .reference_id
-            .get()
-            .is_none_or(|reference| self.scoping.get_reference(reference).symbol_id().is_none());
+        let free = crate::scan::is_free(Some(self.scoping), it);
         self.found |= free && HOST_NAMES.contains(&it.name.as_str());
     }
 

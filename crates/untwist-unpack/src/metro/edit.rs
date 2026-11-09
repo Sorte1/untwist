@@ -56,12 +56,7 @@ pub struct Edit<'a, 'r> {
 
 impl<'a> Edit<'a, '_> {
     fn free(&self, it: &IdentifierReference<'_>) -> bool {
-        let Some(scoping) = self.scoping else {
-            return true;
-        };
-        it.reference_id
-            .get()
-            .is_none_or(|id| scoping.get_reference(id).symbol_id().is_none())
+        crate::scan::is_free(self.scoping, it)
     }
 
     fn watched(&self, name: &str) -> bool {

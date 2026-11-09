@@ -2,10 +2,12 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_mut, VisitMut};
+use oxc_semantic::Scoping;
 use oxc_span::GetSpan;
 use oxc_str::{Ident, Str};
 use rustc_hash::{FxHashMap, FxHashSet};
-use untwist_core::ast_util::prop::{identifier_name, number_key};
+use untwist_core::ast_util::prop::number_key;
+use untwist_core::semantic::build_scoping;
 
 use crate::matcher::argument_expression;
 use crate::model::Bundle;
@@ -20,36 +22,7 @@ fn literal_module_id(argument: Option<&Argument<'_>>) -> Option<String> {
     }
 }
 
-fn require_argument_id(call: &CallExpression<'_>) -> Option<String> {
-    if call.optional || call.arguments.len() != 1 {
-        return None;
-    }
-    if identifier_name(&call.callee) != Some("require") {
-        return None;
-    }
-    literal_module_id(call.arguments.first())
-}
-
-fn bound_require_id(call: &CallExpression<'_>) -> Option<(String, u32)> {
-    if call.optional || call.arguments.len() != 2 {
-        return None;
-    }
-    let object = crate::matcher::const_member(&call.callee, "bind")?;
-    if identifier_name(object) != Some("require") {
-        return None;
-    }
-    let bound_null = matches!(
-        call.arguments.first().and_then(argument_expression),
-        Some(Expression::NullLiteral(_))
-    ) || call
-        .arguments
-        .first()
-        .and_then(argument_expression)
-        .and_then(identifier_name)
-        == Some("require");
-    let id = literal_module_id(call.arguments.get(1))?;
-    bound_null.then_some((id, object.span().start))
-}
+const REQUIRE: &str = "require";
 
 struct Rewrite<'a, 'r> {
     builder: AstBuilder<'a>,
@@ -60,6 +33,7 @@ struct Rewrite<'a, 'r> {
     bind: bool,
     track: bool,
     route: Option<(&'r str, &'r [String])>,
+    scoping: Option<Scoping>,
     shadowed: u32,
     sloppy: bool,
     helpers: Vec<String>,
@@ -80,10 +54,53 @@ impl<'a, 'r> Rewrite<'a, 'r> {
         self.shadowed -= shadows;
     }
 
+    fn free_require(&self, expr: &Expression<'_>) -> bool {
+        match expr {
+            Expression::Identifier(id) => self.free_reference(id),
+            _ => false,
+        }
+    }
+
+    fn free_reference(&self, id: &IdentifierReference<'_>) -> bool {
+        id.name == REQUIRE && self.shadowed == 0 && crate::scan::is_free(self.scoping.as_ref(), id)
+    }
+
+    fn require_argument_id(&self, call: &CallExpression<'_>) -> Option<String> {
+        if call.optional || call.arguments.len() != 1 || !self.free_require(&call.callee) {
+            return None;
+        }
+        literal_module_id(call.arguments.first())
+    }
+
+    fn bound_require_id(&self, call: &CallExpression<'_>) -> Option<(String, u32)> {
+        if call.optional || call.arguments.len() != 2 {
+            return None;
+        }
+        let object = crate::matcher::const_member(&call.callee, "bind")?;
+        if !self.free_require(object) {
+            return None;
+        }
+        let this = call.arguments.first().and_then(argument_expression)?;
+        let bound = matches!(this, Expression::NullLiteral(_)) || self.free_require(this);
+        let id = literal_module_id(call.arguments.get(1))?;
+        bound.then_some((id, object.span().start))
+    }
+
+    fn pass_through(&mut self, it: &mut CallExpression<'a>) {
+        let Some((form, mode)) = crate::webpack::require_t::form(it) else {
+            return;
+        };
+        let free = crate::webpack::require_t::subject(it, &form)
+            .is_some_and(|subject| self.free_require(subject));
+        if free && mode == crate::webpack::require_t::PASS_THROUGH {
+            crate::webpack::require_t::pass_through(&self.builder, it, &form);
+        }
+    }
+
     #[cold]
     fn routed(&mut self, it: &StaticMemberExpression<'a>) -> Option<&'r str> {
-        let (binding, available) = self.route.filter(|_| self.bind && self.shadowed == 0)?;
-        if identifier_name(&it.object) != Some("require") {
+        let (binding, available) = self.route.filter(|_| self.bind)?;
+        if !self.free_require(&it.object) {
             return None;
         }
         let name = it.property.name.as_str();
@@ -95,26 +112,21 @@ impl<'a, 'r> Rewrite<'a, 'r> {
     }
 
     fn bound_this(&mut self, it: &mut CallExpression<'a>) {
-        let Some(binding) = self
-            .route
-            .filter(|_| self.bind && self.shadowed == 0)
-            .map(|r| r.0)
-        else {
+        let Some((binding, available)) = self.route.filter(|_| self.bind) else {
             return;
         };
         let Some(member) = crate::matcher::const_member(&it.callee, "bind") else {
             return;
         };
         let routed = matches!(member, Expression::StaticMemberExpression(inner)
-            if identifier_name(&inner.object) == Some("require")
-                && self.route.is_some_and(|(_, available)| available.iter().any(|h| h == inner.property.name.as_str())));
-        if !routed {
+            if self.free_require(&inner.object)
+                && available.iter().any(|h| h == inner.property.name.as_str()));
+        let this = matches!(it.arguments.first(), Some(Argument::Identifier(this)) if self.free_reference(this));
+        if !routed || !this {
             return;
         }
         if let Some(Argument::Identifier(this)) = it.arguments.first_mut() {
-            if this.name == "require" {
-                this.name = Ident::from_str_in(binding, &self.builder);
-            }
+            this.name = Ident::from_str_in(binding, &self.builder);
         }
     }
 
@@ -145,18 +157,16 @@ impl<'a, 'r> Rewrite<'a, 'r> {
 impl<'a> VisitMut<'a> for Rewrite<'a, '_> {
     fn visit_call_expression(&mut self, it: &mut CallExpression<'a>) {
         if self.bind {
-            if let Some((form, mode)) = crate::webpack::require_t::form(it) {
-                if mode == crate::webpack::require_t::PASS_THROUGH {
-                    crate::webpack::require_t::pass_through(&self.builder, it, &form);
-                }
-            }
+            self.pass_through(it);
         }
-        if let Some(module_id) = require_argument_id(it) {
+        if let Some(module_id) = self.require_argument_id(it) {
             if self.track {
                 self.converted.insert(it.callee.span().start);
             }
             self.replace(it.arguments.first_mut(), &module_id);
-        } else if let Some((module_id, start)) = self.bind.then(|| bound_require_id(it)).flatten() {
+        } else if let Some((module_id, start)) =
+            self.bind.then(|| self.bound_require_id(it)).flatten()
+        {
             if self.track {
                 self.converted.insert(start);
             }
@@ -179,37 +189,34 @@ impl<'a> VisitMut<'a> for Rewrite<'a, '_> {
 
     #[inline]
     fn visit_program(&mut self, it: &mut Program<'a>) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_program(self, it);
         }
         self.sloppy = !shadow::strict(&it.directives) && !it.source_type.is_module();
-        let shadows = self.route.is_some()
-            && (shadow::hoisted(&it.body, self.sloppy) || shadow::lexical(&it.body));
+        let shadows = shadow::hoisted(&it.body, self.sloppy) || shadow::lexical(&it.body);
         self.scoped(shadows, |this| walk_mut::walk_program(this, it));
     }
 
     #[inline]
     fn visit_function(&mut self, it: &mut Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_function(self, it, flags);
         }
         let sloppy = self.sloppy;
         if let Some(body) = &it.body {
             self.sloppy &= !shadow::strict(&body.directives);
         }
-        let shadows = self.route.is_some()
-            && (shadow::params_bind(&it.params)
-                || it.body.as_ref().is_some_and(|body| {
-                    shadow::hoisted(&body.statements, self.sloppy)
-                        || shadow::lexical(&body.statements)
-                }));
+        let shadows = shadow::params_bind(&it.params)
+            || it.body.as_ref().is_some_and(|body| {
+                shadow::hoisted(&body.statements, self.sloppy) || shadow::lexical(&body.statements)
+            });
         self.scoped(shadows, |this| walk_mut::walk_function(this, it, flags));
         self.sloppy = sloppy;
     }
 
     #[inline]
     fn visit_arrow_function_expression(&mut self, it: &mut ArrowFunctionExpression<'a>) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_arrow_function_expression(self, it);
         }
         let body = match &it.body {
@@ -218,7 +225,7 @@ impl<'a> VisitMut<'a> for Rewrite<'a, '_> {
             }
             _ => false,
         };
-        let shadows = self.route.is_some() && (shadow::params_bind(&it.params) || body);
+        let shadows = shadow::params_bind(&it.params) || body;
         self.scoped(shadows, |this| {
             walk_mut::walk_arrow_function_expression(this, it)
         });
@@ -226,85 +233,82 @@ impl<'a> VisitMut<'a> for Rewrite<'a, '_> {
 
     #[inline]
     fn visit_block_statement(&mut self, it: &mut BlockStatement<'a>) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_block_statement(self, it);
         }
-        let shadows = self.route.is_some() && shadow::lexical(&it.body);
+        let shadows = shadow::lexical(&it.body);
         self.scoped(shadows, |this| walk_mut::walk_block_statement(this, it));
     }
 
     #[inline]
     fn visit_static_block(&mut self, it: &mut StaticBlock<'a>) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_static_block(self, it);
         }
-        let shadows = self.route.is_some()
-            && (shadow::lexical(&it.body) || shadow::hoisted(&it.body, self.sloppy));
+        let shadows = shadow::lexical(&it.body) || shadow::hoisted(&it.body, self.sloppy);
         self.scoped(shadows, |this| walk_mut::walk_static_block(this, it));
     }
 
     #[inline]
     fn visit_switch_statement(&mut self, it: &mut SwitchStatement<'a>) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_switch_statement(self, it);
         }
-        let shadows = self.route.is_some()
-            && it
-                .cases
-                .iter()
-                .any(|case| shadow::lexical(&case.consequent));
+        let shadows = it
+            .cases
+            .iter()
+            .any(|case| shadow::lexical(&case.consequent));
         self.scoped(shadows, |this| walk_mut::walk_switch_statement(this, it));
     }
 
     #[inline]
     fn visit_catch_clause(&mut self, it: &mut CatchClause<'a>) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_catch_clause(self, it);
         }
-        let shadows = self.route.is_some()
-            && it
-                .param
-                .as_ref()
-                .is_some_and(|param| shadow::binds(&param.pattern));
+        let shadows = it
+            .param
+            .as_ref()
+            .is_some_and(|param| shadow::binds(&param.pattern));
         self.scoped(shadows, |this| walk_mut::walk_catch_clause(this, it));
     }
 
     #[inline]
     fn visit_for_statement(&mut self, it: &mut ForStatement<'a>) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_for_statement(self, it);
         }
         let head = match &it.init {
             Some(ForStatementInit::VariableDeclaration(d)) => Some(&**d),
             _ => None,
         };
-        let shadows = self.route.is_some() && shadow::for_head_lexical(head);
+        let shadows = shadow::for_head_lexical(head);
         self.scoped(shadows, |this| walk_mut::walk_for_statement(this, it));
     }
 
     #[inline]
     fn visit_for_in_statement(&mut self, it: &mut ForInStatement<'a>) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_for_in_statement(self, it);
         }
         let head = match &it.left {
             ForStatementLeft::VariableDeclaration(d) => Some(&**d),
             _ => None,
         };
-        let shadows = self.route.is_some() && shadow::for_head_lexical(head);
+        let shadows = shadow::for_head_lexical(head);
         self.scoped(shadows, |this| walk_mut::walk_for_in_statement(this, it));
     }
 
     #[inline]
     fn visit_for_of_statement(&mut self, it: &mut ForOfStatement<'a>) {
-        if self.route.is_none() {
+        if self.scoping.is_none() {
             return walk_mut::walk_for_of_statement(self, it);
         }
         let head = match &it.left {
             ForStatementLeft::VariableDeclaration(d) => Some(&**d),
             _ => None,
         };
-        let shadows = self.route.is_some() && shadow::for_head_lexical(head);
+        let shadows = shadow::for_head_lexical(head);
         self.scoped(shadows, |this| walk_mut::walk_for_of_statement(this, it));
     }
 
@@ -338,6 +342,11 @@ pub fn rewritten(converted: &Converted, index: usize) -> Option<&Rewritten> {
         .map(|(_, rewritten)| rewritten)
 }
 
+pub fn scoping_if_bound(program: &Program<'_>) -> Option<Scoping> {
+    crate::esbuild::mentions::binds_any(program, std::iter::once(REQUIRE))
+        .then(|| build_scoping(program).scoping)
+}
+
 pub fn replace_require_paths<'a>(
     alloc: &'a Allocator,
     bundle: &mut Bundle<'a>,
@@ -361,6 +370,7 @@ pub fn replace_require_paths_with<'a>(
     let mut converted = Converted::new();
     for (index, (id, module)) in bundle.modules.iter_mut().enumerate() {
         let from = module.path.as_str().to_string();
+        let scoping = scoping_if_bound(module.program());
         let mut rewrite = Rewrite {
             builder: AstBuilder::new(alloc),
             paths: &paths,
@@ -375,6 +385,7 @@ pub fn replace_require_paths_with<'a>(
                     routing.available.as_slice(),
                 ))
             }),
+            scoping,
             shadowed: 0,
             sloppy: false,
             helpers: Vec::new(),

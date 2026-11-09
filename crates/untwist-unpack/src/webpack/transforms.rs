@@ -7,9 +7,10 @@ use crate::matcher::named_const_member;
 use crate::model::RequireParam;
 use crate::model::{Bundle, BundleKind, Module};
 use crate::runtime::{runtime_binding_import, runtime_id, runtime_path, synthetic_statements};
-use crate::webpack::default_require::convert_default_require_with;
+use crate::webpack::default_require::convert_default_require;
 use crate::webpack::esm::convert_esm;
 use crate::webpack::esm_proof::convert_proven;
+use crate::webpack::interop::convert_interop;
 use crate::webpack::require_paths::{replace_require_paths_with, rewritten, Converted, Routing};
 use crate::webpack::runtime_module::{needed, prepend, runtime_module};
 use crate::webpack::shield::{restore, shield, Shield};
@@ -261,10 +262,10 @@ fn convert_modules<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>, conservati
         for module in bundle.modules.values_mut() {
             convert_esm(alloc, module);
         }
-        convert_default_require_with(alloc, bundle, false);
+        convert_default_require(alloc, bundle);
         return;
     }
-    convert_default_require_with(alloc, bundle, true);
+    convert_interop(alloc, bundle);
     convert_proven(alloc, bundle);
 }
 
