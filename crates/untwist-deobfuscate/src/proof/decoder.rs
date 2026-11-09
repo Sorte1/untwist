@@ -7,7 +7,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 
 use super::{Refusal, STANDARD_GLOBALS};
-use crate::mutants::nested_rotator_builtins_trusted;
+use crate::mutants::{nested_rotator_builtins_trusted, reused_array_aliases_trusted};
 use crate::notes;
 use crate::stamp::StampedFn;
 
@@ -19,7 +19,8 @@ struct DecoderScan<'s> {
     allowed_calls: FxHashSet<Span>,
     function_aliases: FxHashSet<SymbolId>,
     aliases: FxHashSet<SymbolId>,
-    alias_reads: usize,
+    alias_reads: Vec<Span>,
+    alias_refs: Vec<(SymbolId, Span)>,
     fail: Option<Refusal>,
 }
 
@@ -33,7 +34,8 @@ impl<'s> DecoderScan<'s> {
             allowed_calls: FxHashSet::default(),
             function_aliases: FxHashSet::default(),
             aliases: FxHashSet::default(),
-            alias_reads: 0,
+            alias_reads: Vec::new(),
+            alias_refs: Vec::new(),
             fail: None,
         }
     }
@@ -134,7 +136,8 @@ impl<'a> VisitJs<'a> for DecoderScan<'_> {
             self.allowed_calls.insert(call);
         }
         if self.is_alias(&it.object) {
-            self.alias_reads += 1;
+            self.alias_reads
+                .push(it.object.without_parentheses().span());
         }
         walk_js::walk_computed_member_expression(self, it);
     }
@@ -162,6 +165,11 @@ impl<'a> VisitJs<'a> for DecoderScan<'_> {
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if let Some(symbol) = self.resolve(it).flatten() {
+            if self.aliases.contains(&symbol) {
+                self.alias_refs.push((symbol, it.span));
+            }
+        }
         let ok = match self.resolve(it) {
             None => false,
             Some(None) => STANDARD_GLOBALS.contains(&it.name.as_str()),
@@ -178,17 +186,154 @@ impl<'a> VisitJs<'a> for DecoderScan<'_> {
     }
 }
 
-fn aliases_only_read(scoping: &Scoping, scan: &DecoderScan<'_>) -> bool {
-    let references: Vec<_> = scan
+fn writes_of(scoping: &Scoping, symbol: SymbolId) -> usize {
+    scoping
+        .get_resolved_reference_ids(symbol)
+        .iter()
+        .filter(|reference| scoping.get_reference(**reference).is_write())
+        .count()
+}
+
+struct MentionsArray<'d, 's> {
+    scan: &'d DecoderScan<'s>,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for MentionsArray<'_, '_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let symbol = self.scan.resolve(it).flatten();
+        self.found |= symbol.is_some_and(|symbol| {
+            (self.scan.aliases.contains(&symbol) && !self.scan.alias_reads.contains(&it.span))
+                || self.scan.function_aliases.contains(&symbol)
+                || Some(symbol) == self.scan.array_symbol
+        });
+    }
+}
+
+fn kill_of(
+    expr: &Expression<'_>,
+    scan: &DecoderScan<'_>,
+    symbol: SymbolId,
+) -> Option<(Span, Span)> {
+    match expr.without_parentheses() {
+        Expression::SequenceExpression(sequence) => sequence
+            .expressions
+            .iter()
+            .find_map(|part| kill_of(part, scan, symbol)),
+        Expression::AssignmentExpression(assigned)
+            if assigned.operator == AssignmentOperator::Assign =>
+        {
+            let AssignmentTarget::AssignmentTargetIdentifier(target) = &assigned.left else {
+                return None;
+            };
+            if scan.resolve(target).flatten() != Some(symbol) {
+                return None;
+            }
+            let mut mentions = MentionsArray { scan, found: false };
+            mentions.visit_expression(&assigned.right);
+            (!mentions.found).then_some((assigned.span, target.span))
+        }
+        _ => None,
+    }
+}
+
+struct Writes<'d, 's> {
+    scan: &'d DecoderScan<'s>,
+    symbol: SymbolId,
+    found: Vec<(Span, bool)>,
+}
+
+impl<'a> VisitJs<'a> for Writes<'_, '_> {
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let AssignmentTarget::AssignmentTargetIdentifier(target) = &it.left {
+            if self.scan.resolve(target).flatten() == Some(self.symbol) {
+                let mut mentions = MentionsArray {
+                    scan: self.scan,
+                    found: false,
+                };
+                mentions.visit_expression(&it.right);
+                let clean = it.operator == AssignmentOperator::Assign && !mentions.found;
+                self.found.push((it.span, clean));
+            }
+        }
+        walk_js::walk_assignment_expression(self, it);
+    }
+}
+
+fn top_level_kill(
+    function: &Function<'_>,
+    scan: &DecoderScan<'_>,
+    symbol: SymbolId,
+) -> Option<(Span, Span)> {
+    function
+        .body
+        .as_ref()?
+        .statements
+        .iter()
+        .find_map(|stmt| match stmt {
+            Statement::ExpressionStatement(node) => kill_of(&node.expression, scan, symbol),
+            _ => None,
+        })
+}
+
+fn reused_alias_is_read_only(
+    scoping: &Scoping,
+    scan: &DecoderScan<'_>,
+    function: &Function<'_>,
+    symbol: SymbolId,
+) -> bool {
+    if reused_array_aliases_trusted() {
+        return true;
+    }
+    let Some((kill, target)) = top_level_kill(function, scan, symbol) else {
+        return false;
+    };
+    let mut writes = Writes {
+        scan,
+        symbol,
+        found: Vec::new(),
+    };
+    writes.visit_function(function, ScopeFlags::Function);
+    let later_and_clean = writes
+        .found
+        .iter()
+        .all(|(span, clean)| *clean && (*span == kill || span.start > kill.end));
+    if writes.found.len() != writes_of(scoping, symbol) || !later_and_clean {
+        return false;
+    }
+    let seen: Vec<Span> = scan
+        .alias_refs
+        .iter()
+        .filter(|(alias, _)| *alias == symbol)
+        .map(|(_, span)| *span)
+        .collect();
+    seen.len() == scoping.get_resolved_reference_ids(symbol).len()
+        && scoping.symbol_span(symbol).end <= kill.start
+        && seen
+            .iter()
+            .filter(|span| span.start < kill.end && **span != target)
+            .all(|span| scan.alias_reads.contains(span))
+}
+
+fn aliases_only_read(scoping: &Scoping, scan: &DecoderScan<'_>, function: &Function<'_>) -> bool {
+    let (reused, plain): (Vec<SymbolId>, Vec<SymbolId>) = scan
         .aliases
         .iter()
-        .flat_map(|symbol| scoping.get_resolved_reference_ids(*symbol))
-        .collect();
-    let writes = references
+        .copied()
+        .partition(|symbol| writes_of(scoping, *symbol) > 0);
+    let references = plain
         .iter()
-        .filter(|reference| scoping.get_reference(***reference).is_write())
+        .map(|symbol| scoping.get_resolved_reference_ids(*symbol).len())
+        .sum::<usize>();
+    let plain_reads = scan
+        .alias_refs
+        .iter()
+        .filter(|(alias, span)| plain.contains(alias) && scan.alias_reads.contains(span))
         .count();
-    writes == 0 && references.len() == scan.alias_reads
+    references == plain_reads
+        && reused
+            .iter()
+            .all(|symbol| reused_alias_is_read_only(scoping, scan, function, *symbol))
 }
 
 pub fn decoder_refusal(
@@ -202,7 +347,7 @@ pub fn decoder_refusal(
     if scan.fail.is_some() {
         return scan.fail;
     }
-    if !aliases_only_read(scoping, &scan) {
+    if !aliases_only_read(scoping, &scan, decoder.function) {
         return Some(Refusal::at(notes::DECODER_NOT_READ_ONLY, decoder.statement));
     }
     None
