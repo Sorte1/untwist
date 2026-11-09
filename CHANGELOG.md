@@ -44,6 +44,11 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- Wasm glue names found in a bundle module now also apply to that module's function in the
+  combined `deobfuscated.js`. Before, the combined file was checked against the module on its own
+  and kept the minified names when another module held an object like `{ a: { z: 1 } }`, or when
+  two modules each loaded a wasm module.
+
 - A function string array's rotator loop that uglify-js left inline in a function body
   (`for (var u = arr(); ;) try { ... } catch (e) { ... }` beside the module code) is wrapped back
   into its own IIFE, with the decoder wrappers used only by the loop, when nothing else reads the

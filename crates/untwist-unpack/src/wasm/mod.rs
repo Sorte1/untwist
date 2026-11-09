@@ -24,7 +24,7 @@ const BYTE_MAGICS: [&str; 2] = ["0, 97, 115, 109", "0,97,115,109"];
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Rewritten {
     pub text: String,
-    pub renamed: usize,
+    pub applied: Vec<(String, String)>,
     pub mismatch: Option<String>,
     pub copies: Vec<Result<usize, String>>,
 }
@@ -143,7 +143,7 @@ impl<'a> Glue<'a> {
             .collect();
         Rewritten {
             text: splice(self.text, edits),
-            renamed: naming.renamed,
+            applied: naming.applied,
             mismatch: naming.mismatch,
             copies,
         }

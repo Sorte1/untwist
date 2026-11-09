@@ -136,6 +136,11 @@ enum Host {
     Module(usize),
 }
 
+struct Named {
+    file: usize,
+    applied: Vec<(String, String)>,
+}
+
 struct Text {
     host: Host,
     path: String,
@@ -298,17 +303,29 @@ impl Output {
             }
         }
         let in_module = |text: &Text| matches!(text.host, Host::Module(_));
+        let mut module_copies = Vec::new();
+        let mut owned = Vec::new();
         for (text, glue) in texts.iter().zip(&glues).filter(|(text, _)| in_module(text)) {
-            self.rename_glue(text, glue, &[], &mut notes);
+            let Some(named) = self.rename_glue(text, glue, &[], &mut notes) else {
+                continue;
+            };
+            owned.push(named.file);
+            if !named.applied.is_empty() {
+                module_copies.push((named.file, self.module_copy(text.host, named.applied)));
+            }
         }
         let mut copies = self.name_bundle_glue(&resolved, &mut notes);
+        copies.extend(module_copies);
         for (text, glue) in texts
-            .iter()
+            .iter_mut()
             .zip(&glues)
             .filter(|(text, _)| !in_module(text))
         {
             let copied = match (text.host, self.codes.len()) {
-                (Host::Code(0), 1) => std::mem::take(&mut copies),
+                (Host::Code(0), 1) => {
+                    text.files.retain(|file| !owned.contains(file));
+                    std::mem::take(&mut copies)
+                }
                 _ => Vec::new(),
             };
             self.rename_glue(text, glue, &copied, &mut notes);
@@ -317,6 +334,16 @@ impl Output {
             notes.push(self.uncopied(file, DEOBFUSCATED, "it was not parsed again"));
         }
         self.notes.extend(notes);
+    }
+
+    fn module_copy(&self, host: Host, applied: Vec<(String, String)>) -> Option<CopiedRenames> {
+        let Host::Module(index) = host else {
+            return None;
+        };
+        let (start, end) = self.bundle.as_ref()?.modules.get(index)?.span?;
+        Some(CopiedRenames {
+            functions: vec![(Span::new(start, end), applied)],
+        })
     }
 
     fn uncopied(&self, file: usize, path: &str, reason: &str) -> Note {
@@ -438,7 +465,7 @@ impl Output {
         glue: &Glue<'_>,
         copied: &[(usize, Option<CopiedRenames>)],
         notes: &mut Vec<Note>,
-    ) {
+    ) -> Option<Named> {
         let mut files = text.files.clone();
         files.sort_unstable();
         files.dedup();
@@ -469,7 +496,7 @@ impl Output {
             }
         }
         if module.is_none() && text.replacements.is_empty() && copies.is_empty() {
-            return;
+            return None;
         }
         let summary = module.map(|index| &self.wasm[index].summary);
         let rewritten = glue.rewrite(&text.replacements, summary, &copies);
@@ -488,11 +515,16 @@ impl Output {
             ));
         }
         if let Some(index) = module {
-            self.wasm[index].renamed += rewritten.renamed;
+            self.wasm[index].renamed += rewritten.applied.len();
         }
         if let Some(slot) = self.host_text_mut(text.host) {
             *slot = rewritten.text;
         }
+        let named = !rewritten.applied.is_empty() || rewritten.mismatch.is_some();
+        module.filter(|_| named).map(|file| Named {
+            file,
+            applied: rewritten.applied,
+        })
     }
 }
 
