@@ -72,3 +72,38 @@ fn else_if_chain_alternate_stays_unwrapped() {
     }
     ");
 }
+
+#[test]
+fn empty_statements_in_statement_lists() {
+    assert_transform!("a();;\nfunction f() { ; b(); ; }\nswitch (x) { case 1: ; }\n{ ; }", [boxed], @r"
+    a();
+    function f() {
+      b();
+    }
+    switch (x) {
+      case 1:
+    }
+    {}
+    ");
+}
+
+#[test]
+fn empty_statement_that_keeps_a_string_out_of_the_directive_prologue() {
+    assert_transform!("function f() { ; ; \"use strict\"; return this; }", [boxed], @r#"
+    function f() {
+      ;
+      "use strict";
+      return this;
+    }
+    "#);
+}
+
+#[test]
+fn empty_statement_bodies_are_kept() {
+    assert_transform!("if (a); else;\nfor (;;);\nlbl:;", [boxed], @r"
+    if (a);
+    else {}
+    for (;;);
+    lbl:;
+    ");
+}

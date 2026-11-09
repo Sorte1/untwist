@@ -62,6 +62,49 @@ fn wrap_in_block<'a>(slot: &mut Statement<'a>, parent_scope: ScopeId, cx: &mut C
     *slot = Statement::new_block_statement_with_scope_id(span, body, scope_id, &*cx);
 }
 
+fn is_string_statement(stmt: &Statement<'_>) -> bool {
+    matches!(
+        stmt,
+        Statement::ExpressionStatement(node) if matches!(node.expression, Expression::StringLiteral(_))
+    )
+}
+
+fn is_empty(stmt: &Statement<'_>) -> bool {
+    matches!(stmt, Statement::EmptyStatement(_))
+}
+
+fn string_follows(stmts: &[Statement<'_>]) -> Vec<bool> {
+    let mut follows = vec![false; stmts.len()];
+    let mut next_is_string = false;
+    for (index, stmt) in stmts.iter().enumerate().rev() {
+        follows[index] = next_is_string;
+        if !is_empty(stmt) {
+            next_is_string = is_string_statement(stmt);
+        }
+    }
+    follows
+}
+
+fn drop_empty_statements<'a>(stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+    if !stmts.iter().any(is_empty) {
+        return;
+    }
+    let follows = string_follows(stmts);
+    let old = std::mem::replace(stmts, AVec::new_in(&*cx));
+    let mut dropped = 0usize;
+    for (stmt, string_next) in old.into_iter().zip(follows) {
+        let guards_directive = string_next && stmts.iter().all(is_string_statement);
+        if is_empty(&stmt) && !guards_directive {
+            dropped += 1;
+        } else {
+            stmts.push(stmt);
+        }
+    }
+    if dropped > 0 {
+        cx.changed_by(dropped);
+    }
+}
+
 const ACTED_ON_STATEMENTS: StatementVariants = StatementVariants::of(&[
     StatementKind::IfStatement,
     StatementKind::DoWhileStatement,
@@ -81,8 +124,14 @@ impl<'a> Pass<'a> for BlockStatements {
     }
 
     fn interest(&self) -> Interest {
-        (Interest::EXIT_STATEMENT | Interest::EXIT_ARROW_FUNCTION_EXPRESSION)
+        (Interest::EXIT_STATEMENTS
+            | Interest::EXIT_STATEMENT
+            | Interest::EXIT_ARROW_FUNCTION_EXPRESSION)
             .on_statements(ACTED_ON_STATEMENTS)
+    }
+
+    fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        drop_empty_statements(stmts, cx);
     }
 
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
