@@ -43,7 +43,7 @@ pub use names::{
     written_outside, NameScan, Write,
 };
 pub use pending::{resolve_pending_sites, PendingSite, PreScan};
-pub use rotator::{rotator_refusal_at, LiteralBindings, RotatorSite};
+pub use rotator::{rotator_refusal_at, rotator_sealed, LiteralBindings, RotatorSite};
 pub use seal::ROTATOR_GLOBALS;
 pub(crate) use watch::watch_texts;
 pub use watch::{declared_text, reachable_by_name, TextWatch, Watched};
