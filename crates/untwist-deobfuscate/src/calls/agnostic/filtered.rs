@@ -66,10 +66,12 @@ fn found_assignment<'k, 'a>(consequent: &'k Statement<'a>) -> Option<&'k Assignm
         .then_some(assignment)
 }
 
-pub(super) fn candidate<'a>(
+pub(super) type Loop<'a> = (&'a ForInStatement<'a>, Option<Body<'a>>);
+
+fn candidate<'a>(
     scoping: &Scoping,
-    it: &'a ForInStatement<'a>,
-    within: Option<Body<'a>>,
+    (it, within): Loop<'a>,
+    resolve: Resolve<'_>,
 ) -> Option<Candidate<'a>> {
     let within = within?;
     let ForStatementLeft::VariableDeclaration(declaration) = &it.left else {
@@ -83,14 +85,14 @@ pub(super) fn candidate<'a>(
         return None;
     };
     let key = binding.symbol_id.get()?;
-    let test_if = single_if(&it.body)?;
+    let test_if = single_if(super::opaque::live(&it.body, resolve)?)?;
     if test_if.alternate.is_some() {
         return None;
     }
     let Expression::CallExpression(test) = test_if.test.without_parentheses() else {
         return None;
     };
-    let assignment = found_assignment(&test_if.consequent)?;
+    let assignment = found_assignment(super::opaque::live(&test_if.consequent, resolve)?)?;
     let SimpleAssignmentTarget::AssignmentTargetIdentifier(target) =
         assignment.left.as_simple_assignment_target()?
     else {
@@ -133,12 +135,16 @@ impl<'a> Filters<'a> {
         scoping: &Scoping,
         defs: &DefTable<'a>,
         resolve: Resolve<'_>,
-        candidates: &[Candidate<'a>],
+        loops: &[Loop<'a>],
     ) -> Self {
         let mut filters = Self {
             source,
             ..Self::default()
         };
+        let candidates: Vec<Candidate<'a>> = loops
+            .iter()
+            .filter_map(|found| candidate(scoping, *found, resolve))
+            .collect();
         if candidates.is_empty() {
             return filters;
         }
@@ -155,7 +161,7 @@ impl<'a> Filters<'a> {
                 _ => None,
             }
         };
-        for candidate in candidates {
+        for candidate in &candidates {
             let shared = candidates
                 .iter()
                 .filter(|other| {
@@ -168,7 +174,7 @@ impl<'a> Filters<'a> {
             let rewrite = rewrite_loop(candidate, ordered);
             let valid = mutant
                 || (shared == 1
-                    && uses_are_keys(scoping, candidate, rewrite)
+                    && uses_are_keys(scoping, candidate, (rewrite, resolve))
                     && found_declared(scoping, candidate));
             if !valid {
                 continue;
@@ -312,8 +318,13 @@ fn found_declared(scoping: &Scoping, candidate: &Candidate<'_>) -> bool {
         .any(|ancestor| ancestor == scope)
 }
 
-fn uses_are_keys(scoping: &Scoping, candidate: &Candidate<'_>, rewrite: Option<Rewrite>) -> bool {
+fn uses_are_keys(
+    scoping: &Scoping,
+    candidate: &Candidate<'_>,
+    (rewrite, resolve): (Option<Rewrite>, Resolve<'_>),
+) -> bool {
     let mut check = Uses {
+        resolve,
         scoping,
         candidate,
         bad: false,
@@ -338,6 +349,7 @@ fn uses_are_keys(scoping: &Scoping, candidate: &Candidate<'_>, rewrite: Option<R
 }
 
 struct Uses<'c, 'a> {
+    resolve: Resolve<'c>,
     scoping: &'c Scoping,
     candidate: &'c Candidate<'a>,
     bad: bool,
@@ -366,6 +378,31 @@ impl<'a> Uses<'_, 'a> {
 }
 
 impl<'a> VisitJs<'a> for Uses<'_, 'a> {
+    fn visit_if_statement(&mut self, it: &IfStatement<'a>) {
+        let Some(taken) = super::opaque::choice(&it.test, self.resolve) else {
+            return walk_js::walk_if_statement(self, it);
+        };
+        self.visit_expression(&it.test);
+        let branch = if taken {
+            Some(&it.consequent)
+        } else {
+            it.alternate.as_ref()
+        };
+        if let Some(branch) = branch {
+            self.visit_statement(branch);
+        }
+    }
+
+    fn visit_conditional_expression(&mut self, it: &ConditionalExpression<'a>) {
+        match super::opaque::choice(&it.test, self.resolve) {
+            Some(taken) => {
+                self.visit_expression(&it.test);
+                self.visit_expression(if taken { &it.consequent } else { &it.alternate });
+            }
+            None => walk_js::walk_conditional_expression(self, it),
+        }
+    }
+
     fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
         let Some(rewrite) = self.rewrite.filter(|_| is_rewrite_loop(self.rewrite, it)) else {
             return walk_js::walk_for_statement(self, it);
