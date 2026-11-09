@@ -35,8 +35,8 @@ All notable changes to this project are documented in this file. The format is b
   as a global. Shell parameters the body never reads are dropped instead of hoisted as `var`.
 - The safe lane proves a minified webpack 4 bootstrap like the plain one: an arrow function
   bootstrap `(e => { ... })([...])`, a module cache read as `(cache[id] || (m = cache[id] = {...},
-  table[id].call(...), m)).exports`, and module objects passed from a record assigned in that
-  sequence. A whole bundle obfuscated with uglify-js or terser therefore no longer refuses for a
+  table[id].call(...), m)).exports`, module objects passed from a record assigned in that
+  sequence, and bootstrap keys split into concatenations of strings and decoded strings. A whole bundle obfuscated with uglify-js or terser therefore no longer refuses for a
   bootstrap the check could not see.
 - The safe lane decodes a program whose `for (const key in globalThis)` loop only reads the
   names (comparisons, `typeof`, `.length`, a string method call in a test), instead of refusing

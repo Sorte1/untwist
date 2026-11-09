@@ -200,6 +200,10 @@ fn minified_bootstraps() -> Vec<(&'static str, String)> {
             "a minified module defines a computed key on its exports",
             cached_or_created(exports_defined_by_computed_key()),
         ),
+        (
+            "a dispatch key split into a concatenation",
+            webpack4_proven().replacen("e[t].call(", "e[t]['ca' + 'll'](", 1),
+        ),
     ]
 }
 
@@ -467,6 +471,16 @@ fn mutants() -> Vec<(&'static str, &'static str, String)> {
                 &[MODULE_ZERO, &module_one_with(&define_on_global("i"))],
                 "(n.s = 0)",
             ))),
+        ),
+        (
+            "a split dispatch key may name another method",
+            "",
+            before_bootstrap(
+                &format!("var planted = {planted}; var tail = 'll';"),
+                with_modules("", &[MODULE_ZERO, MODULE_ONE], "(n.s = 0)")
+                    .replacen("return e[t].call(", "return (e[t] || planted)['ca' + tail](", 1)
+                    .replacen("var lib = i(1);", "i(5); var lib = i(1);", 1),
+            ),
         ),
         (
             "a minified record is replaced before the dispatch",

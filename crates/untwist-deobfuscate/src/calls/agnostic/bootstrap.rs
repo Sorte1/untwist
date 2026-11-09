@@ -2,7 +2,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
-use oxc_syntax::operator::AssignmentOperator;
+use oxc_syntax::operator::{AssignmentOperator, BinaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
@@ -85,15 +85,24 @@ fn key_name<'a>(member: &MemberExpression<'a>, resolve: Resolve<'_>) -> Option<C
         MemberExpression::StaticMemberExpression(m) => {
             Some(Cow::Borrowed(m.property.name.as_str()))
         }
-        MemberExpression::ComputedMemberExpression(m) => match m.expression.without_parentheses() {
-            Expression::StringLiteral(text) => Some(js_text(text.value)),
-            Expression::CallExpression(call) => resolve
-                .and_then(|map| map.get(&call.span))
-                .and_then(|text| text.as_string())
-                .map(Cow::Owned),
-            _ => None,
-        },
+        MemberExpression::ComputedMemberExpression(m) => key_text(&m.expression, resolve),
         MemberExpression::PrivateFieldExpression(_) => None,
+    }
+}
+
+fn key_text<'a>(expr: &Expression<'a>, resolve: Resolve<'_>) -> Option<Cow<'a, str>> {
+    match expr.without_parentheses() {
+        Expression::StringLiteral(text) => Some(js_text(text.value)),
+        Expression::CallExpression(call) => resolve
+            .and_then(|map| map.get(&call.span))
+            .and_then(|text| text.as_string())
+            .map(Cow::Owned),
+        Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+            let left = key_text(&binary.left, resolve)?;
+            let right = key_text(&binary.right, resolve)?;
+            Some(Cow::Owned(format!("{left}{right}")))
+        }
+        _ => None,
     }
 }
 
