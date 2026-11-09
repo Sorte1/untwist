@@ -1,0 +1,74 @@
+---
+source: crates/untwist/tests/wasm_emscripten.rs
+expression: code
+---
+var Module = typeof Module != "undefined" ? Module : {};
+var wasmBinaryFile = "./wasm/deobfuscated.wasm";
+var wasmExports;
+var wasmMemory;
+var HEAPU8;
+function _emscripten_memcpy_big(e, t, n) {
+  HEAPU8.copyWithin(e, t, t + n);
+}
+function Qa() {
+  throw new Error("abort");
+}
+function _emscripten_date_now() {
+  return Date.now();
+}
+function Ta(e) {
+  try {
+    wasmMemory.grow(e - wasmMemory.buffer.byteLength + 65535 >>> 16);
+    HEAPU8 = new Uint8Array(wasmMemory.buffer);
+    return 1;
+  } catch (t) {}
+}
+var _emscripten_resize_heap = (e) => {
+  const t = HEAPU8.length;
+  e >>>= 0;
+  const n = 2147483648;
+  if (e > n) {
+    return false;
+  }
+  for (let r = 1; r <= 4; r *= 2) {
+    let o = t * (1 + .2 / r);
+    o = Math.min(o, e + 100663296);
+    const i = Math.min(n, Math.ceil(Math.max(e, o) / 65536) * 65536);
+    if (Ta(i)) {
+      return true;
+    }
+  }
+  return false;
+};
+var wasmImports = {
+  a: _emscripten_memcpy_big,
+  b: Qa,
+  c: _emscripten_date_now,
+  d: _emscripten_resize_heap
+};
+function Hb(e) {
+  wasmExports = e.exports;
+  wasmMemory = wasmExports.e;
+  HEAPU8 = new Uint8Array(wasmMemory.buffer);
+  return wasmExports;
+}
+function Rb(e) {
+  const t = atob(e.slice(37));
+  const n = new Uint8Array(t.length);
+  for (let r = 0; r < t.length; ++r) {
+    n[r] = t.charCodeAt(r);
+  }
+  return n;
+}
+function Ib() {
+  const e = { a: wasmImports };
+  return WebAssembly.instantiate(Rb(wasmBinaryFile), e).then((t) => Hb(t.instance));
+}
+var Xb = () => (Xb = wasmExports.f)();
+var _malloc = Module._malloc = (e) => (_malloc = Module._malloc = wasmExports.g)(e);
+Ib().then(() => {
+  Xb();
+  _malloc(_emscripten_date_now());
+  _emscripten_memcpy_big(1, 2, 3);
+  _emscripten_resize_heap(5);
+});

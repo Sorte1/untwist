@@ -10,7 +10,8 @@ use oxc_syntax::node::NodeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::module::{ExportKind, WasmSummary};
+use super::library::known_function;
+use super::module::{ExportKind, WasmImport, WasmSummary};
 use super::rename::{Claimed, Renamer};
 
 const MIN_GLUE_MODULE_LEN: usize = 3;
@@ -502,6 +503,102 @@ impl<'s> Glue<'s, '_> {
         }
     }
 
+    fn provides(&self, import: &WasmImport) -> bool {
+        self.provided.iter().any(|provided| {
+            provided.field == import.name && provided.modules.contains(&import.module)
+        })
+    }
+
+    fn unprovided(&self, summary: &WasmSummary) -> Vec<String> {
+        if summary.has_function_names() {
+            return Vec::new();
+        }
+        let bound: FxHashSet<&str> = self
+            .provided
+            .iter()
+            .flat_map(|provided| provided.modules.iter().map(String::as_str))
+            .collect();
+        summary
+            .imports
+            .iter()
+            .filter(|import| bound.contains(import.module.as_str()) && !self.provides(import))
+            .map(|import| format!("{}.{}", import.module, import.name))
+            .collect()
+    }
+
+    fn import_of<'m>(
+        &self,
+        provided: &Provided,
+        summary: &'m WasmSummary,
+    ) -> Option<&'m WasmImport> {
+        provided
+            .modules
+            .iter()
+            .find_map(|module| summary.import(module, &provided.field))
+    }
+
+    fn library_name(
+        &self,
+        provided: &Provided,
+        import: &WasmImport,
+    ) -> Option<Result<String, String>> {
+        if chosen_name(&import.name, import.function_name.as_ref()).is_some() {
+            return None;
+        }
+        let known = known_function(self.semantic, provided.value?)?;
+        Some(
+            match import
+                .signature
+                .as_ref()
+                .is_some_and(|signature| known.fits(signature))
+            {
+                true => Ok(known.name.to_string()),
+                false => Err(format!(
+                    "{}.{} ({})",
+                    import.module, import.name, known.name
+                )),
+            },
+        )
+    }
+
+    fn unfit(&self, summary: &WasmSummary) -> Vec<String> {
+        self.provided
+            .iter()
+            .filter_map(|provided| {
+                let import = self.import_of(provided, summary)?;
+                self.library_name(provided, import)?.err()
+            })
+            .collect()
+    }
+
+    fn problems(&self, summary: &WasmSummary) -> Vec<String> {
+        let mut problems = Vec::new();
+        let mut push = |what: &str, list: Vec<String>| {
+            if list.is_empty() {
+                return;
+            }
+            let shown: Vec<&str> = list
+                .iter()
+                .take(MISSING_SHOWN)
+                .map(String::as_str)
+                .collect();
+            problems.push(format!("{} {what}, e.g. {}", list.len(), shown.join(", ")));
+        };
+        push(
+            "glue name(s) missing from the module",
+            self.missing(summary),
+        );
+        push(
+            "module import(s) the glue does not provide",
+            self.unprovided(summary),
+        );
+        push(
+            "glue function(s) whose module import has another signature",
+            self.unfit(summary),
+        );
+        problems
+    }
+
     fn missing(&self, summary: &WasmSummary) -> Vec<String> {
         let imports = self.provided.iter().filter_map(|provided| {
             let covered = provided
@@ -524,13 +621,12 @@ impl<'s> Glue<'s, '_> {
             let Some(symbol) = provided.value else {
                 continue;
             };
-            let import = provided
-                .modules
-                .iter()
-                .find_map(|module| summary.import(module, &provided.field));
-            if let Some(name) =
-                import.and_then(|import| chosen_name(&import.name, import.function_name.as_ref()))
-            {
+            let Some(import) = self.import_of(provided, summary) else {
+                continue;
+            };
+            let name = chosen_name(&import.name, import.function_name.as_ref())
+                .or_else(|| self.library_name(provided, import)?.ok());
+            if let Some(name) = name {
                 wanted.push((symbol, name));
             }
         }
@@ -607,19 +703,10 @@ impl<'s> Glue<'s, '_> {
     }
 
     fn naming(&self, summary: &WasmSummary, claimed: &mut Claimed) -> Naming {
-        let missing = self.missing(summary);
-        if !missing.is_empty() {
-            let shown: Vec<&str> = missing
-                .iter()
-                .take(MISSING_SHOWN)
-                .map(String::as_str)
-                .collect();
+        let problems = self.problems(summary);
+        if !problems.is_empty() {
             return Naming {
-                mismatch: Some(format!(
-                    "{} glue name(s) missing from the module, e.g. {}",
-                    missing.len(),
-                    shown.join(", ")
-                )),
+                mismatch: Some(problems.join("; ")),
                 ..Naming::default()
             };
         }
