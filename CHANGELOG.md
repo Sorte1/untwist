@@ -21,6 +21,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- A function string array's rotator loop that uglify-js left inline in a function body
+  (`for (var u = arr(); ;) try { ... } catch (e) { ... }` beside the module code) is wrapped back
+  into its own IIFE, with the decoder wrappers used only by the loop, when nothing else reads the
+  loop's variables or wrappers and the loop uses no `this`, `arguments`, labels, `return`, `yield`
+  or `await`. The version matrix decodes 2 more cells in each lane.
+
 - A function holding an inline rotator loop beside other code (javascript-obfuscator's IIFE
   wrapper after uglify-js, holding the string array, its decoder and the whole program) was taken
   for the rotator and removed as decoder machinery, so the output was empty, in both lanes.
