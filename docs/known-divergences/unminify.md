@@ -30,6 +30,18 @@
   `undefined`/`Infinity` inside a `with` statement or in a program with a direct `eval`. The same
   scope rule now covers `json-parse`'s `JSON` and `evaluate-globals`' `atob`, `unescape`,
   `decodeURI` and `decodeURIComponent`, which used to check declared bindings only.
+- **`json-parse` and the array-callback arm of `remove-double-not` rely on built-ins the program has not replaced.**
+  `JSON.parse("[1,2]")` is the literal only while `JSON.parse` is the built-in, and
+  `xs.filter((v) => !!v)` may lose its `!!` only while `filter` (or `some`, `every`, `find`,
+  `findIndex`, `findLast`, `findLastIndex`) coerces its callback's result. By default each asks
+  the scan `untranspile` uses (`untwist_core::semantic::builtins`) at its first candidate and
+  rewrites in the round after it, only when the program neither writes, deletes nor defines
+  `JSON.parse` or one of those `Array.prototype` methods, nor lets `JSON`, `Array`,
+  `Array.prototype` or the global object escape into a value, in default and in the
+  conservative comparison mode. `--unsafe` rewrites both without the scan, under the assumption
+  that **built-ins are never replaced**. A `!!` in a test position (`if`, loops, `?:`, under `!`) is removed in every
+  program, since no built-in is involved there. The reference deobfuscator rewrites all of
+  these and changes what a program that patches the built-in prints.
 - Class members named `constructor` (and static members named `prototype`) and object properties named `__proto__` are never un-computed by `computed-properties`; doing so would change semantics or be a syntax error.
 - **A negated `if` whose consequent is a lone nested `if` is inverted by default so the chain can
   merge.** `if (!c) { if (d) {…} else {…} } else {…}` becomes `if (c) {…} else if (d) {…} else {…}`.

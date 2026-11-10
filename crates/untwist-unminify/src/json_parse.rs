@@ -8,13 +8,28 @@ use untwist_core::depth::{
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, InputRoom, Interest, Locality, Pass,
 };
+use untwist_core::semantic::builtins::{Reliance, Unpatched};
 use untwist_eval::stack::room;
 
-#[derive(Default)]
-pub struct JsonParse;
+static RELIED_ON: Reliance = Reliance {
+    roots: &["JSON"],
+    members: &[("JSON", false, &["parse"])],
+};
+
+pub struct JsonParse {
+    unpatched: Unpatched,
+}
+
+impl Default for JsonParse {
+    fn default() -> Self {
+        Self {
+            unpatched: Unpatched::new(&RELIED_ON),
+        }
+    }
+}
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
-    Box::new(JsonParse)
+    Box::new(JsonParse::default())
 }
 
 fn is_json_object(expr: &Expression<'_>) -> bool {
@@ -75,7 +90,11 @@ impl<'a> Pass<'a> for JsonParse {
     }
 
     fn interest(&self) -> Interest {
-        Interest::EXIT_EXPRESSION.on_expressions(ACTED_ON_EXPRESSIONS)
+        (Interest::ENTER_PROGRAM | Interest::EXIT_EXPRESSION).on_expressions(ACTED_ON_EXPRESSIONS)
+    }
+
+    fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        self.unpatched.learn(program, cx);
     }
 
     fn exit_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
@@ -97,6 +116,9 @@ impl<'a> Pass<'a> for JsonParse {
             };
             text
         };
+        if !cx.is_global_name("JSON") || !is_json(text) || !self.unpatched.holds(cx) {
+            return;
+        }
         replace_with_literal(expr, text, cx);
     }
 }
@@ -137,14 +159,12 @@ fn printed_bound(text: &str, site_depth: usize, nesting: u32) -> u64 {
         .saturating_add(PRINT_GROWTH.saturating_mul(levels).saturating_mul(lines))
 }
 
+fn is_json(text: &str) -> bool {
+    serde_json::from_str::<serde::de::IgnoredAny>(text).is_ok()
+}
+
 #[inline(never)]
 fn replace_with_literal<'a>(expr: &mut Expression<'a>, text: &'a str, cx: &mut Cx<'a, '_>) {
-    if !cx.is_global_name("JSON") {
-        return;
-    }
-    if serde_json::from_str::<serde::de::IgnoredAny>(text).is_err() {
-        return;
-    }
     let input = cx.opts.room.as_ref();
     let Ok(found) = scan_as(text, &json_limits(input, text), Goal::Module) else {
         return;

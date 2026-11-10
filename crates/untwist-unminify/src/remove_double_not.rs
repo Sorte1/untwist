@@ -4,6 +4,7 @@ use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass, StatementKind,
     StatementVariants,
 };
+use untwist_core::semantic::builtins::{Reliance, Unpatched};
 
 const ARRAY_METHODS: [&str; 7] = [
     "filter",
@@ -15,8 +16,25 @@ const ARRAY_METHODS: [&str; 7] = [
     "every",
 ];
 
-#[derive(Default)]
-pub struct RemoveDoubleNot;
+static RELIED_ON: Reliance = Reliance {
+    roots: &["Array"],
+    members: &[
+        ("Array", false, &["prototype"]),
+        ("Array", true, &ARRAY_METHODS),
+    ],
+};
+
+pub struct RemoveDoubleNot {
+    unpatched: Unpatched,
+}
+
+impl Default for RemoveDoubleNot {
+    fn default() -> Self {
+        Self {
+            unpatched: Unpatched::new(&RELIED_ON),
+        }
+    }
+}
 
 fn not_argument<'e, 'a>(expr: &'e Expression<'a>) -> Option<&'e Expression<'a>> {
     let Expression::UnaryExpression(unary) = expr else {
@@ -107,9 +125,13 @@ impl<'a> Pass<'a> for RemoveDoubleNot {
     }
 
     fn interest(&self) -> Interest {
-        (Interest::EXIT_STATEMENT | Interest::EXIT_EXPRESSION)
+        (Interest::ENTER_PROGRAM | Interest::EXIT_STATEMENT | Interest::EXIT_EXPRESSION)
             .on_expressions(ACTED_ON_EXPRESSIONS)
             .on_statements(ACTED_ON_STATEMENTS)
+    }
+
+    fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        self.unpatched.learn(program, cx);
     }
 
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
@@ -153,6 +175,9 @@ impl<'a> Pass<'a> for RemoveDoubleNot {
                 let Some(body) = arrow.body.as_expression_mut() else {
                     return;
                 };
+                if !is_double_not(body) || !self.unpatched.holds(cx) {
+                    return;
+                }
                 if strip_double_not(body) {
                     cx.changed();
                 }
@@ -163,5 +188,5 @@ impl<'a> Pass<'a> for RemoveDoubleNot {
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
-    Box::new(RemoveDoubleNot)
+    Box::new(RemoveDoubleNot::default())
 }

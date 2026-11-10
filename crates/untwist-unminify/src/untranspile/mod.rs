@@ -236,7 +236,13 @@ impl UntranspileHelpers {
         if !unsafe_transforms && !self.asked.get() {
             return;
         }
-        let scanned = builtins::scan(program, cx.scoping(), self.module, unsafe_transforms);
+        let scanned = builtins::scan(
+            program,
+            cx.scoping(),
+            self.module,
+            unsafe_transforms,
+            &builtins::RELIED_ON,
+        );
         self.builtins = scanned.verdict;
         self.partial = false;
         self.promise_written = scanned.promise_written;
@@ -562,7 +568,7 @@ impl UntranspileHelpers {
         if cx.opts.unsafe_transforms || self.asked.get() {
             return true;
         }
-        let intact = builtins::intact(program, cx.scoping(), self.module);
+        let intact = builtins::intact(program, cx.scoping(), self.module, &builtins::RELIED_ON);
         self.builtins = if intact {
             Builtins::Intact
         } else {
