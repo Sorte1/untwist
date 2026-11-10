@@ -232,10 +232,6 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
-- The decoder state monitor no longer clones its parameter masks for every monitored call, nor the
-  memo table entry and the frame's arguments for every memo read; it compares them in place. Output
-  is unchanged.
-
 - The checks that keep folding away from patched built-ins judge each variable once instead of once
   per use: a counter used as a key after every write (`i=i+1;q[i];`), a reused loop variable, or two
   variables written from each other no longer make the cleanup stage quadratic or worse. Writes to a
