@@ -341,12 +341,13 @@ fn an_exports_object_read_by_the_prelude_is_refused() {
 }
 
 #[test]
-fn an_exports_object_read_by_a_factory_without_that_parameter_is_refused() {
+fn an_exports_object_read_by_a_factory_without_that_parameter_refuses_the_bundle() {
     let text = bundle_with("", ENTRY).replace(
         "    1: (",
         "    2: (module) => { module.exports = typeof __webpack_exports__; },\n    1: (",
     );
-    refused(&text);
+    let options = UnpackOptions::default();
+    assert_eq!(extracted(&text, options, (parse, false)), None, "{text}");
 }
 
 #[test]
