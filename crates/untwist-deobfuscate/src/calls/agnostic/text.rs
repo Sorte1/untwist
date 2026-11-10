@@ -135,8 +135,12 @@ impl<'s, 'a> Sites<'s, 'a> {
             .copied()
             .flatten()
             .is_some_and(|first| self.fresh.is_user_function(first));
-        if first_fn || texts.is_empty() {
+        let function = kind.function();
+        if texts.is_empty() || (first_fn && !function) {
             return false;
+        }
+        if function && self.built_function_unsafe(texts) {
+            return true;
         }
         for text in texts {
             let Some(expr) = text else {
@@ -169,6 +173,27 @@ impl<'s, 'a> Sites<'s, 'a> {
             }
         }
         false
+    }
+
+    fn built_function_unsafe(&self, texts: &[Option<&Expression<'a>>]) -> bool {
+        let resolved = texts
+            .iter()
+            .map(|text| text.and_then(|expr| self.argument_text(expr.without_parentheses())));
+        crate::proof::function_source(resolved)
+            .is_none_or(|source| self.text_writes(&source, Text::Script))
+    }
+
+    fn argument_text(&self, inner: &Expression<'a>) -> Option<String> {
+        if self.native_chain(inner) {
+            return match untwist_eval::fold::fold_literal_chain(inner) {
+                Some(untwist_eval::fold::Const::Str(text)) => Some(text.to_string()),
+                _ => None,
+            };
+        }
+        match self.key_class(inner, KEY_DEPTH) {
+            AKey::Named(text) => Some(text.into_owned()),
+            _ => None,
+        }
     }
 
     pub(super) fn check_forwarded_runner(

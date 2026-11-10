@@ -32,6 +32,7 @@ pub use aliased_flows::builtin_aliases;
 pub use annex_b::refuse_annex_b_bindings;
 pub use decoded_name::{encode_names, names_machinery, EncodedName};
 pub use decoder::{decoder_refusal, statement_used_names, used_names, UsedNames};
+pub(crate) use escape::function_source;
 pub use escape::{
     build_escape_context, scan_escaping_roots_resolved, scan_pending, EscapeContext, EscapeScan,
 };
