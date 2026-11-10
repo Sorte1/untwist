@@ -3,6 +3,8 @@ use oxc_ast_visit::{walk_mut, VisitMut};
 use oxc_span::{GetSpanMut, Span};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::source_map::origins::{is_recording, note_respanned};
+
 pub const SYNTHETIC_BASE: u32 = 1 << 31;
 const SYNTHETIC_MASK: u32 = SYNTHETIC_BASE - 1;
 
@@ -72,6 +74,24 @@ pub fn fresh_spans(count: usize) -> Option<Vec<Span>> {
 struct Fresh<'c> {
     counter: &'c SpanCounter,
     exhausted: bool,
+    pairs: Option<Vec<(Span, Span)>>,
+}
+
+impl<'c> Fresh<'c> {
+    fn new(counter: &'c SpanCounter) -> Self {
+        Self {
+            counter,
+            exhausted: false,
+            pairs: is_recording().then(Vec::new),
+        }
+    }
+
+    fn finish(self) -> bool {
+        if let Some(pairs) = &self.pairs {
+            note_respanned(pairs);
+        }
+        !self.exhausted
+    }
 }
 
 impl Fresh<'_> {
@@ -84,7 +104,11 @@ impl Fresh<'_> {
             self.exhausted = true;
             return;
         }
-        *span = Span::new(start, end);
+        let fresh = Span::new(start, end);
+        if let Some(pairs) = self.pairs.as_mut() {
+            pairs.push((fresh, *span));
+        }
+        *span = fresh;
     }
 }
 
@@ -103,21 +127,15 @@ impl<'a> VisitMut<'a> for Fresh<'_> {
 }
 
 pub fn fresh_spans_expression_with(counter: &SpanCounter, expr: &mut Expression<'_>) -> bool {
-    let mut fresh = Fresh {
-        counter,
-        exhausted: false,
-    };
+    let mut fresh = Fresh::new(counter);
     fresh.visit_expression(expr);
-    !fresh.exhausted
+    fresh.finish()
 }
 
 pub fn fresh_spans_statement_with(counter: &SpanCounter, stmt: &mut Statement<'_>) -> bool {
-    let mut fresh = Fresh {
-        counter,
-        exhausted: false,
-    };
+    let mut fresh = Fresh::new(counter);
     fresh.visit_statement(stmt);
-    !fresh.exhausted
+    fresh.finish()
 }
 
 pub fn fresh_spans_expression(expr: &mut Expression<'_>) -> bool {
