@@ -372,6 +372,20 @@ struct Controllers {
     found: FxHashSet<SymbolId>,
     inline: bool,
     returner_calls: Vec<Span>,
+    returner_variables: FxHashSet<SymbolId>,
+}
+
+fn returner_variable(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
+    if flags.is_empty() {
+        return None;
+    }
+    let (id, init) = single_declarator(stmt)?;
+    let (callee, arguments) = call_parts(init?)?;
+    let made =
+        returner(callee.without_parentheses(), flags) || crate::mutants::inline_returners_trusted();
+    (arguments.len() == 2 && made)
+        .then(|| id.symbol_id.get())
+        .flatten()
 }
 
 fn inline_controller_call(stmt: &Statement<'_>) -> bool {
@@ -395,6 +409,11 @@ impl<'a> VisitJs<'a> for Controllers {
             if is_inline_returner_call(stmt, &flags) {
                 self.inline = true;
                 self.returner_calls.push(stmt.span());
+            }
+            if let Some(variable) = returner_variable(stmt, &flags) {
+                self.inline = true;
+                self.returner_calls.push(stmt.span());
+                self.returner_variables.insert(variable);
             }
         }
         walk_js::walk_statements(self, it);
@@ -509,9 +528,10 @@ fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
     removals.visit_program(program);
     let Removals {
         mut spans,
-        variables,
+        mut variables,
         ..
     } = removals;
+    variables.extend(controllers.returner_variables.iter().copied());
     let mut bare = BareCalls {
         variables: &variables,
         scoping,

@@ -38,6 +38,11 @@ All notable changes to this project are documented in this file. The format is b
   table[id].call(...), m)).exports`, module objects passed from a record assigned in that
   sequence, and bootstrap keys split into concatenations of strings and decoded strings. A whole bundle obfuscated with uglify-js or terser therefore no longer refuses for a
   bootstrap the check could not see.
+- Under `--unsafe`, the self-defending states class that old javascript-obfuscator releases put
+  inside rc4 and base64 decoders (`this.states = [1, 0, 0]`, `newState`, `checkState`, `runState`,
+  `getState`, run once as `new o(dec).checkState()`) is dropped when its variable is read nowhere
+  else and its own state test passes on the printed source, so the decoder decodes. The version
+  matrix decodes 18 more cells under `--unsafe`.
 - The safe lane decodes a program whose `for (const key in globalThis)` loop only reads the
   names (comparisons, `typeof`, `.length`, a string method call in a test), instead of refusing
   the unit as a global reach; the machinery is kept, since the program observes the global

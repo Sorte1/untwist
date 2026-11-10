@@ -450,3 +450,14 @@ pub fn trust_deferred_legacy_reach_for_tests(on: bool) {
 pub(crate) fn deferred_legacy_reach_trusted() -> bool {
     DEFERRED_LEGACY_REACH_TRUSTED.load(Ordering::Relaxed)
 }
+
+static STATES_CLASS_READS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_states_class_reads_for_tests(on: bool) {
+    STATES_CLASS_READS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn states_class_reads_trusted() -> bool {
+    STATES_CLASS_READS_TRUSTED.load(Ordering::Relaxed)
+}
