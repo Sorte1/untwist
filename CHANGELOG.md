@@ -178,8 +178,8 @@ All notable changes to this project are documented in this file. The format is b
   module-scope name. Before, any such call was spliced, so a hoisted function declaration could
   lose to the new `var`, a `return` ended the module and locals leaked into it.
 - A webpack or browserify bundle whose module factory reads a binding of the code around it (a
-  variable beside a nested bundle, a UMD wrapper's external parameter), its own `arguments` or
-  calls `eval` directly is no longer split into module files that cannot see those names. No
+  variable beside a nested bundle, a UMD wrapper's external parameter), its own `arguments`,
+  calls `eval` directly or holds a `with` statement is no longer split into module files that cannot see those names. No
   bundle is written and a note names the module and what it reads.
 - Webpack 5 detection scans a statement list for the require function once. Before, a file with
   many object-literal declarations and no bundle took quadratic time.
