@@ -221,6 +221,7 @@ fn composed_stage_wide() -> Vec<(&'static str, String)> {
         ),
         ("SCOPE_HAZARD", notes::scope_hazard("with statement")),
         ("ROUND_CAP", notes::round_cap(64)),
+        ("ROUND_CAP", notes::round_cap_undone(64)),
         (
             "PREPARATION_STOPPED_EARLY",
             notes::preparation_stopped_early("iteration cap"),

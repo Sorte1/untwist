@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use oxc_allocator::Allocator;
+use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
 use untwist_core::ast_util::respan::synthetic_spans_exhausted;
@@ -10,7 +10,7 @@ use untwist_core::pass::{
     edits, replay_allowed, replayed_report, run_once, run_to_fixpoint, run_to_fixpoint_noting_last,
     IterationTiming, Note, NoteKind, PassCtor, PassGroup, PassOptions, RunReport, StopReason,
 };
-use untwist_core::semantic::{assumed_hazard, scope_hazard, Semantics};
+use untwist_core::semantic::{assumed_hazard, rebuild_scoping, scope_hazard, Semantics};
 use untwist_eval::rotation::RotationMemo;
 
 use crate::decoded::SharedHeap;
@@ -32,6 +32,10 @@ fn group_of<'a>(ctors: &[PassCtor<'a>], opts: PassOptions) -> PassGroup<'a> {
 pub const STRING_ARRAY_MAX_ITERATIONS: u32 = 32;
 
 pub const DEOBFUSCATE_MAX_ROUNDS: u32 = 64;
+
+fn max_rounds() -> u32 {
+    crate::mutants::deobfuscate_round_limit(DEOBFUSCATE_MAX_ROUNDS)
+}
 
 pub const NO_STRING_ARRAY_NOTE: &str =
     "find-string-array: no string array found; deobfuscation skipped";
@@ -205,6 +209,7 @@ struct Aggregate {
     notes: NoteSet,
     stage_stop: Option<StopReason>,
     capped: bool,
+    undone: bool,
     deferred: bool,
     stamped: bool,
     skipped_noted: bool,
@@ -225,6 +230,7 @@ impl Aggregate {
             notes: NoteSet::default(),
             stage_stop: None,
             capped: false,
+            undone: false,
             deferred: false,
             stamped: false,
             skipped_noted: false,
@@ -313,7 +319,10 @@ impl Aggregate {
             self.push_note(Note {
                 pass: "deobfuscate",
                 kind: NoteKind::Refusal,
-                message: notes::round_cap(DEOBFUSCATE_MAX_ROUNDS),
+                message: match self.undone {
+                    true => notes::round_cap_undone(max_rounds()),
+                    false => notes::round_cap(max_rounds()),
+                },
                 span: None,
             });
         }
@@ -502,7 +511,7 @@ impl<'a> Stage<'_, 'a> {
         let mut changes = inlined + decoded;
         let cascades = string_array::legacy::lifted_any() && replay_allowed();
         let mut settled = inlined == 0 || decoded > 0 || !cascades;
-        while !settled && aggregate.rounds + 1 < DEOBFUSCATE_MAX_ROUNDS {
+        while !settled && aggregate.rounds + 1 < max_rounds() {
             let (next, more) = self.next_round_wrappers(alloc, program, sem, aggregate);
             sem = next;
             let Some(inlined) = more else {
@@ -714,6 +723,19 @@ fn finalize_unresolved_machinery<'a>(
     next
 }
 
+fn undone_at_cap<'a>(
+    program: &mut Program<'a>,
+    (sem, before): (Semantics, Program<'a>),
+    aggregate: &mut Aggregate,
+) -> Semantics {
+    if !aggregate.capped || aggregate.per_pass[0] == 0 {
+        return sem;
+    }
+    *program = before;
+    aggregate.undone = true;
+    rebuild_scoping(program, sem.stats)
+}
+
 fn holds_stamped_array(program: &Program<'_>, sem: &Semantics) -> bool {
     names_stamped_array(&sem.scoping) && has_stamped_array(program)
 }
@@ -783,7 +805,7 @@ fn run_rounds<'a>(
             opts.defer_disabled.set(disabled);
             return sem;
         }
-        if aggregate.rounds >= DEOBFUSCATE_MAX_ROUNDS {
+        if aggregate.rounds >= max_rounds() {
             aggregate.capped = true;
             opts.defer_disabled.set(disabled);
             return sem;
@@ -842,7 +864,9 @@ fn deobfuscate_with<'a>(
         defer_disabled: opts.defer_disabled.get(),
     };
     clear_kept_order();
+    let before = program.clone_in(alloc);
     let sem = run_rounds(alloc, program, sem, opts, &shared, &mut aggregate);
+    let sem = undone_at_cap(program, (sem, before), &mut aggregate);
     clear_kept_order();
     let sem = finalize_unresolved_machinery(alloc, program, sem, (opts, &shared), &mut aggregate);
 

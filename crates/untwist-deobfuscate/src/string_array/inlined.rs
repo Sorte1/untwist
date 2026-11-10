@@ -128,6 +128,15 @@ pub(super) fn used_only_in<'s, 'a: 's>(
     symbol: SymbolId,
     statements: impl Iterator<Item = &'s Statement<'a>>,
 ) -> bool {
+    used_only_in_with(scoping, &DynamicScopes::of(scoping), symbol, statements)
+}
+
+pub(super) fn used_only_in_with<'s, 'a: 's>(
+    scoping: &Scoping,
+    dynamic: &DynamicScopes,
+    symbol: SymbolId,
+    statements: impl Iterator<Item = &'s Statement<'a>>,
+) -> bool {
     let mut counted = Counted {
         scoping,
         symbol,
@@ -141,9 +150,7 @@ pub(super) fn used_only_in<'s, 'a: 's>(
     sealed
         && scoping.symbol_redeclarations(symbol).is_empty()
         && scoping.symbol_scope_id(symbol) != scoping.root_scope_id()
-        && DynamicScopes::of(scoping)
-            .refusal(scoping, symbol)
-            .is_none()
+        && dynamic.refusal(scoping, symbol).is_none()
 }
 
 fn only_used_within(scoping: &Scoping, symbol: SymbolId, statements: &[Statement<'_>]) -> bool {
@@ -572,28 +579,38 @@ struct Inline<'c, 'a, 'x> {
     changed: usize,
 }
 
+impl<'a> Inline<'_, 'a, '_> {
+    fn rewrite_list(&mut self, it: &mut AVec<'a, Statement<'a>>) -> usize {
+        if let Some(plan) = plan(it, self.cx.scoping()) {
+            let rewritten = match plan.kind {
+                Kind::Assigned => rewrite(it, &plan, self.cx),
+                Kind::Loop | Kind::LoopWithArray => rewrite_loop(it, &plan, self.cx),
+                Kind::Checksum => rewrite_checksum(it, &plan, self.cx),
+            };
+            return usize::from(rewritten);
+        }
+        if wrap_inlined_cookie(it, self.cx) {
+            return 1;
+        }
+        hoist_decoded_arrays(it, self.cx)
+    }
+}
+
 impl<'a> VisitMut<'a> for Inline<'_, 'a, '_> {
     fn visit_function_body(&mut self, it: &mut FunctionBody<'a>) {
-        if self.changed == 0 {
-            self.changed += declare_single_use_decoder(&mut it.statements, self.cx);
+        let declared = declare_single_use_decoder(&mut it.statements, self.cx);
+        if declared > 0 {
+            self.changed += declared;
+            return;
         }
         walk_mut::walk_function_body(self, it);
     }
 
     fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
-        if self.changed == 0 {
-            if let Some(plan) = plan(it, self.cx.scoping()) {
-                let rewritten = match plan.kind {
-                    Kind::Assigned => rewrite(it, &plan, self.cx),
-                    Kind::Loop | Kind::LoopWithArray => rewrite_loop(it, &plan, self.cx),
-                    Kind::Checksum => rewrite_checksum(it, &plan, self.cx),
-                };
-                self.changed += usize::from(rewritten);
-            } else if wrap_inlined_cookie(it, self.cx) {
-                self.changed += 1;
-            } else {
-                self.changed += hoist_decoded_arrays(it, self.cx);
-            }
+        let rewritten = self.rewrite_list(it);
+        if rewritten > 0 {
+            self.changed += rewritten;
+            return;
         }
         walk_mut::walk_statements(self, it);
     }

@@ -605,39 +605,42 @@ fn legacy_at(
 struct Finder<'s, 'a> {
     scoping: &'s Scoping,
     source: &'a str,
-    found: Option<Legacy>,
+    found: Vec<Legacy>,
 }
 
 impl Finder<'_, '_> {
-    fn scan(&mut self, body: &[Statement<'_>], top_level: bool) {
-        if self.found.is_some() {
-            return;
-        }
-        self.found = (0..body.len())
+    fn scan(&mut self, body: &[Statement<'_>], top_level: bool) -> bool {
+        let found = (0..body.len())
             .find_map(|index| legacy_at(body, index, (self.scoping, self.source, top_level)));
+        let Some(found) = found else {
+            return false;
+        };
+        self.found.push(found);
+        true
     }
 }
 
 impl<'a> VisitJs<'a> for Finder<'_, 'a> {
     fn visit_program(&mut self, it: &Program<'a>) {
-        self.scan(&it.body, true);
+        if self.scan(&it.body, true) {
+            return;
+        }
         walk_js::walk_program(self, it);
     }
 
     fn visit_function_body(&mut self, it: &FunctionBody<'a>) {
-        if self.found.is_some() {
+        if self.scan(&it.statements, false) {
             return;
         }
-        self.scan(&it.statements, false);
         walk_js::walk_function_body(self, it);
     }
 }
 
-fn find_legacy(program: &Program<'_>, scoping: &Scoping) -> Option<Legacy> {
+fn find_legacies(program: &Program<'_>, scoping: &Scoping) -> Vec<Legacy> {
     let mut finder = Finder {
         scoping,
         source: program.source_text,
-        found: None,
+        found: Vec::new(),
     };
     finder.visit_program(program);
     finder.found
@@ -689,7 +692,7 @@ fn reached_by_name(program: &Program<'_>, cx: &Cx<'_, '_>, legacy: &Legacy) -> O
 
 fn refusal(
     program: &Program<'_>,
-    cx: &Cx<'_, '_>,
+    (cx, dynamic): (&Cx<'_, '_>, &DynamicScopes),
     legacy: &Legacy,
     deferred: &mut bool,
 ) -> Option<(String, Span)> {
@@ -698,7 +701,7 @@ fn refusal(
     }
     let scoping = cx.scoping();
     let statement = legacy.statement;
-    if let Some(note) = DynamicScopes::of(scoping).refusal(scoping, legacy.symbol) {
+    if let Some(note) = dynamic.refusal(scoping, legacy.symbol) {
         return Some((note.to_string(), statement));
     }
     if let Some(span) = reached_by_name(program, cx, legacy) {
@@ -792,14 +795,13 @@ fn array_function<'a>(
 }
 
 struct RestoreName<'n> {
-    name: &'n str,
-    name_span: Span,
-    restored: bool,
+    names: Vec<(&'n str, Span)>,
+    restored: usize,
 }
 
 impl<'a> VisitMut<'a> for RestoreName<'_> {
     fn visit_statement(&mut self, it: &mut Statement<'a>) {
-        if self.restored {
+        if self.restored == self.names.len() {
             return;
         }
         let synthetic = it.span().start >= SYNTHETIC_BASE;
@@ -814,9 +816,17 @@ impl<'a> VisitMut<'a> for RestoreName<'_> {
                 }),
             _ => None,
         };
-        if let Some(id) = id.filter(|id| id.name == self.name) {
-            id.span = self.name_span;
-            self.restored = true;
+        let waiting = id.and_then(|id| {
+            let at = self
+                .names
+                .iter()
+                .position(|(name, span)| *name == id.name.as_str() && !span.is_unspanned())?;
+            Some((id, at))
+        });
+        if let Some((id, at)) = waiting {
+            id.span = self.names[at].1;
+            self.names[at].1 = Span::default();
+            self.restored += 1;
             return;
         }
         walk_mut::walk_statement(self, it);
@@ -825,13 +835,13 @@ impl<'a> VisitMut<'a> for RestoreName<'_> {
 
 struct StripDecoder<'c, 'a, 'x> {
     cx: &'c Cx<'a, 'x>,
-    decoder: Span,
+    decoders: Vec<Span>,
     stripped: usize,
 }
 
 impl<'a> VisitMut<'a> for StripDecoder<'_, 'a, '_> {
     fn visit_statement(&mut self, it: &mut Statement<'a>) {
-        if it.span() == self.decoder {
+        if self.decoders.contains(&it.span()) {
             self.stripped += strip_atob_prologues(it, self.cx);
             return;
         }
@@ -845,30 +855,38 @@ fn array_call<'a>(span: Span, name: &str, cx: &Cx<'a, '_>) -> Expression<'a> {
     Expression::new_call_expression(span, callee, None, arguments, false, cx)
 }
 
-fn rewrite<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>, legacy: Legacy) -> bool {
-    let span = legacy.statement;
+struct Planned {
+    name: String,
+    name_span: Span,
+    decoder: Span,
+}
+
+struct Batch<'a> {
+    statements: StmtEdits<'a>,
+    reads: ExprEdits<'a>,
+    checksums: usize,
+    checksums_wanted: usize,
+    planned: Vec<Planned>,
+}
+
+fn plan_rewrite<'a>(
+    program: &mut Program<'a>,
+    cx: &Cx<'a, '_>,
+    (legacy, original): (Legacy, Option<Statement<'a>>),
+    batch: &mut Batch<'a>,
+) -> bool {
     let name = cx.scoping().symbol_name(legacy.symbol).to_string();
-    let count = legacy.rotator.map_or(0, |(_, count)| count);
-    let function = {
-        let view: &Program<'_> = program;
-        statements_at(view, &[span])
-            .into_iter()
-            .next()
-            .flatten()
-            .and_then(|original| array_function(original, &name, count, &*cx))
-    };
-    let Some(function) = function else {
+    let Some(function) = original else {
         return false;
     };
-    let mut statements = StmtEdits::new();
-    let mut planned = statements.replace(span, vec![function]);
+    let mut planned = batch.statements.replace(legacy.statement, vec![function]);
     if let Some((rotator, _)) = legacy.rotator {
-        planned &= statements.remove(rotator);
+        planned &= batch.statements.remove(rotator);
     }
     let alias = if legacy.reassigning {
         let mut alias = None;
         edit_statement(program, legacy.decoder, |decoder| {
-            alias = hoist_array_call(decoder, &name, &*cx);
+            alias = hoist_array_call(decoder, &name, cx);
         });
         let Some(alias) = alias else {
             return false;
@@ -877,38 +895,88 @@ fn rewrite<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>, legacy: Legacy) -
     } else {
         None
     };
-    let mut reads = ExprEdits::new();
     for read in &legacy.reads {
         let replacement = match &alias {
-            Some(alias) => Expression::new_identifier(*read, Ident::from_str_in(alias, &*cx), &*cx),
-            None => array_call(*read, &name, &*cx),
+            Some(alias) => Expression::new_identifier(*read, Ident::from_str_in(alias, cx), cx),
+            None => array_call(*read, &name, cx),
         };
-        planned &= reads.insert(*read, replacement);
+        planned &= batch.reads.insert(*read, replacement);
     }
     if !planned {
         return false;
     }
-    let mut checksum = 0;
     if let Some(span) = legacy.checksum {
+        batch.checksums_wanted += 1;
         edit_statement(program, span, |rotator| {
-            checksum = usize::from(call_the_array_first(rotator, &*cx));
+            batch.checksums += usize::from(call_the_array_first(rotator, cx));
         });
     }
-    let wanted = statements.len() + reads.len() + usize::from(legacy.checksum.is_some());
-    let applied = checksum
-        + reads.apply(program, cx.allocator(), cx.scoping_mut())
-        + statements.apply(program, cx.allocator(), cx.scoping_mut());
-    let mut restore = RestoreName {
-        name: &name,
+    batch.planned.push(Planned {
+        name,
         name_span: legacy.name_span,
-        restored: false,
+        decoder: legacy.decoder,
+    });
+    true
+}
+
+fn array_functions<'a>(
+    program: &Program<'_>,
+    cx: &Cx<'a, '_>,
+    legacies: &[Legacy],
+) -> Vec<Option<Statement<'a>>> {
+    let spans: Vec<Span> = legacies.iter().map(|legacy| legacy.statement).collect();
+    statements_at(program, &spans)
+        .into_iter()
+        .zip(legacies)
+        .map(|(original, legacy)| {
+            let name = cx.scoping().symbol_name(legacy.symbol);
+            let count = legacy.rotator.map_or(0, |(_, count)| count);
+            original.and_then(|original| array_function(original, name, count, cx))
+        })
+        .collect()
+}
+
+fn rewrite_all<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>, legacies: Vec<Legacy>) -> usize {
+    let functions = array_functions(program, &*cx, &legacies);
+    let mut batch = Batch {
+        statements: StmtEdits::new(),
+        reads: ExprEdits::new(),
+        checksums: 0,
+        checksums_wanted: 0,
+        planned: Vec::new(),
+    };
+    for unit in legacies.into_iter().zip(functions) {
+        if !plan_rewrite(program, &*cx, unit, &mut batch) {
+            break;
+        }
+    }
+    if batch.planned.is_empty() {
+        return 0;
+    }
+    let wanted = batch.statements.len() + batch.reads.len() + batch.checksums_wanted;
+    let applied = batch.checksums
+        + batch.reads.apply(program, cx.allocator(), cx.scoping_mut())
+        + batch
+            .statements
+            .apply(program, cx.allocator(), cx.scoping_mut());
+    let mut restore = RestoreName {
+        names: batch
+            .planned
+            .iter()
+            .map(|planned| (planned.name.as_str(), planned.name_span))
+            .collect(),
+        restored: 0,
     };
     restore.visit_program(program);
     let restored = restore.restored;
     let stripped = if cx.opts.unsafe_transforms {
         let mut strip = StripDecoder {
             cx: &*cx,
-            decoder: legacy.decoder,
+            decoders: batch
+                .planned
+                .iter()
+                .map(|planned| planned.decoder)
+                .collect(),
             stripped: 0,
         };
         strip.visit_program(program);
@@ -917,13 +985,16 @@ fn rewrite<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>, legacy: Legacy) -
         0
     };
     cx.changed_by(applied + stripped);
-    if applied != wanted || !restored {
+    if applied != wanted || restored != batch.planned.len() {
         cx.note(
             notes::planned_and_applied_edits(super::PASS, wanted, applied),
             None,
         );
     }
-    applied > 0
+    if applied == 0 {
+        return 0;
+    }
+    batch.planned.len()
 }
 
 pub(super) fn lift_legacy_array<'a>(
@@ -931,20 +1002,30 @@ pub(super) fn lift_legacy_array<'a>(
     cx: &mut Cx<'a, '_>,
     refused: &mut Option<(String, Span)>,
 ) -> bool {
-    let Some(legacy) = find_legacy(program, cx.scoping()) else {
-        return false;
-    };
-    let mut deferred = false;
-    if let Some((note, span)) = refusal(program, cx, &legacy, &mut deferred) {
-        cx.note(note.clone(), Some(span));
-        *refused = Some((note, span));
+    let found = find_legacies(program, cx.scoping());
+    let dynamic = DynamicScopes::of(cx.scoping());
+    let mut accepted = Vec::new();
+    let mut deferred_names = Vec::new();
+    for legacy in found {
+        let mut deferred = false;
+        if let Some((note, span)) = refusal(program, (cx, &dynamic), &legacy, &mut deferred) {
+            if accepted.is_empty() {
+                cx.note(note.clone(), Some(span));
+                *refused = Some((note, span));
+            }
+            break;
+        }
+        deferred_names.push(deferred.then(|| cx.scoping().symbol_name(legacy.symbol).to_string()));
+        accepted.push(legacy);
+    }
+    if accepted.is_empty() {
         return false;
     }
-    let name = cx.scoping().symbol_name(legacy.symbol).to_string();
-    if !rewrite(program, cx, legacy) {
+    let lifted = rewrite_all(program, cx, accepted);
+    if lifted == 0 {
         return false;
     }
-    if deferred {
+    for name in deferred_names.into_iter().take(lifted).flatten() {
         legacy_reach::defer(name);
     }
     LIFTED.with(|lifted| lifted.set(true));
