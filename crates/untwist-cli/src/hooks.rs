@@ -9,6 +9,7 @@ pub const HEAP_BUDGET: &str = "UNTWIST_TEST_HEAP_BUDGET";
 pub const ADMIT_PANIC: &str = "UNTWIST_TEST_ADMIT_PANIC";
 pub const REFUSAL_SPANS: &str = "UNTWIST_TEST_REFUSAL_SPANS";
 pub const POINTS_TO: &str = "UNTWIST_TEST_POINTS_TO";
+pub const WASM_PANIC: &str = "UNTWIST_TEST_WASM_PANIC";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SupervisorHook {
@@ -73,6 +74,14 @@ pub fn test_hooks_from(read: impl Fn(&str) -> Option<std::ffi::OsString>) -> unt
     }
 }
 
+pub fn wasm_panic_from(value: Option<&OsStr>) -> bool {
+    TEST_HOOKS && flag(value)
+}
+
+pub fn wasm_panic() -> bool {
+    wasm_panic_from(std::env::var_os(WASM_PANIC).as_deref())
+}
+
 pub fn test_hooks() -> untwist::TestHooks {
     if !TEST_HOOKS {
         return untwist::TestHooks::default();
@@ -112,6 +121,13 @@ mod tests {
             role(false, SupervisorHook::FailSpawn),
             Role::Supervisor(SupervisorHook::FailSpawn)
         );
+    }
+
+    #[test]
+    fn the_wasm_panic_hook_is_set_only_by_one() {
+        assert!(super::wasm_panic_from(Some(OsStr::new("1"))));
+        assert!(!super::wasm_panic_from(Some(OsStr::new("0"))));
+        assert!(!super::wasm_panic_from(None));
     }
 
     #[test]

@@ -438,6 +438,7 @@ mod tests {
             wasm_unresolved: Vec::new(),
             wasm_check: crate::WasmCheck::default(),
             wasm_unchecked: false,
+            wasm_panicked: false,
         }
     }
 

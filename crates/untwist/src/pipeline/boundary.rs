@@ -18,12 +18,12 @@ fn install_silencer() {
     });
 }
 
-pub(super) struct Boundary {
+pub(crate) struct Boundary {
     was_inside: bool,
 }
 
 impl Boundary {
-    pub(super) fn enter() -> Self {
+    pub(crate) fn enter() -> Self {
         Self::set(true)
     }
 
@@ -36,6 +36,11 @@ impl Boundary {
         let was_inside = INSIDE_BOUNDARY.with(|inside| inside.replace(silenced));
         Self { was_inside }
     }
+}
+
+pub fn contained<T>(run: impl FnOnce() -> T) -> Option<T> {
+    let _boundary = Boundary::enter();
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).ok()
 }
 
 #[cfg(test)]

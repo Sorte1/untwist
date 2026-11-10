@@ -25,6 +25,8 @@ struct OutputJson<'a> {
     depth_refused: &'a [usize],
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     unpack_panicked: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    wasm_panicked: bool,
     stats: &'a untwist::RunStats,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     wasm: &'a [untwist::WasmFile],
@@ -62,6 +64,7 @@ pub fn to_json(
         panicked: &output.panicked,
         depth_refused: &output.depth_refused,
         unpack_panicked: output.unpack_panicked,
+        wasm_panicked: output.wasm_panicked,
         stats: &output.stats,
         wasm: &output.wasm,
         wasm_unresolved: &output.wasm_unresolved,
@@ -188,6 +191,19 @@ mod tests {
         out.panicked = vec![1];
         let json = to_json(&out, None, &[]).unwrap();
         assert!(compact(&json).contains("\"panicked\":[1]"), "{json}");
+    }
+
+    #[test]
+    fn the_json_report_flags_a_panicked_wasm_step_only_when_it_happened() {
+        let mut out = untwist::Pipeline::new(untwist::Options::default()).run("x;");
+        let clean = to_json(&out, None, &[]).unwrap();
+        assert!(!clean.contains("wasm_panicked"), "{clean}");
+        out.wasm_panicked = true;
+        let flagged = to_json(&out, None, &[]).unwrap();
+        assert!(
+            compact(&flagged).contains("\"wasm_panicked\":true"),
+            "{flagged}"
+        );
     }
 
     #[test]

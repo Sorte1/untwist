@@ -4,13 +4,24 @@ use untwist_core::pass::{Note, NoteKind};
 pub use untwist_unpack::wasm::MAX_WASM_BYTES;
 use untwist_unpack::wasm::{self, CopiedRenames, Glue, PayloadRefusal, Scan, Span, WasmSummary};
 
-use crate::pipeline::{admits_reparse, Output};
+use crate::bundle::BundleOutput;
+use crate::pipeline::{admits_reparse, Boundary, Output};
 use crate::write::DEOBFUSCATED;
 
 const PASS: &str = "wasm";
 const WASM_DIR: &str = "wasm";
 const HASHED_SUFFIX: &str = ".module.wasm";
 const MAX_SUFFIX: usize = 1000;
+
+pub const WASM_PANICKED: &str = "settling the wasm modules hit an internal error; the output is \
+     written as it was before that step, with no wasm module extracted or named; please report it";
+
+struct Kept {
+    codes: Vec<String>,
+    bundle: Option<BundleOutput>,
+    wasm: Vec<WasmFile>,
+    wasm_unresolved: Vec<WasmReference>,
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -268,12 +279,51 @@ impl Output {
     }
 
     pub fn settle_wasm(&mut self, supply: &WasmSupply, extract: bool) {
+        self.settled(|output, kept| output.settle_unguarded(supply, extract, kept));
+    }
+
+    fn kept(&self) -> Kept {
+        Kept {
+            codes: self.codes.clone(),
+            bundle: self.bundle.clone(),
+            wasm: self.wasm.clone(),
+            wasm_unresolved: self.wasm_unresolved.clone(),
+        }
+    }
+
+    fn settled(&mut self, settle: impl FnOnce(&mut Self, &mut Option<Kept>)) {
+        let mut kept = None;
+        let boundary = Boundary::enter();
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            settle(self, &mut kept);
+        }));
+        drop(boundary);
+        if outcome.is_ok() {
+            return;
+        }
+        if let Some(kept) = kept {
+            self.codes = kept.codes;
+            self.bundle = kept.bundle;
+            self.wasm = kept.wasm;
+            self.wasm_unresolved = kept.wasm_unresolved;
+        }
+        self.wasm_panicked = true;
+        self.notes.push(Note {
+            pass: PASS,
+            kind: NoteKind::Refusal,
+            message: WASM_PANICKED.to_string(),
+            span: None,
+        });
+    }
+
+    fn settle_unguarded(&mut self, supply: &WasmSupply, extract: bool, kept: &mut Option<Kept>) {
         let check = self.wasm_check;
         self.wasm_unchecked = check == WasmCheck::Off && self.may_embed_wasm();
         let candidates = self.wasm_candidates(check);
         if candidates.is_empty() {
             return;
         }
+        *kept = Some(self.kept());
         let sources: Vec<String> = candidates
             .iter()
             .map(|(host, _)| self.host_text(*host).to_string())
@@ -566,4 +616,59 @@ fn references_of(texts: &[Text]) -> Vec<WasmReference> {
         }
     }
     references
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Options, Pipeline};
+
+    fn output() -> Output {
+        Pipeline::new(Options::default()).run_many(&["let answer = 42;"])
+    }
+
+    #[test]
+    fn a_panic_while_settling_restores_the_output_and_is_reported() {
+        let mut out = output();
+        let before = out.codes.clone();
+
+        out.settled(|output, kept| {
+            *kept = Some(output.kept());
+            output.codes[0] = "half written".to_string();
+            output.wasm_unresolved.push(WasmReference {
+                name: "a.wasm".to_string(),
+                url: "a.wasm".to_string(),
+            });
+            panic!("settling failed");
+        });
+
+        assert_eq!(out.codes, before);
+        assert!(out.wasm_unresolved.is_empty());
+        assert!(out.wasm_panicked);
+        assert!(out
+            .notes
+            .iter()
+            .any(|note| note.pass == PASS && note.message == WASM_PANICKED));
+    }
+
+    #[test]
+    fn a_panic_before_anything_was_kept_is_still_reported() {
+        let mut out = output();
+        let before = out.codes.clone();
+
+        out.settled(|_, _| panic!("settling failed"));
+
+        assert_eq!(out.codes, before);
+        assert!(out.wasm_panicked);
+    }
+
+    #[test]
+    fn settling_without_a_panic_reports_nothing() {
+        let mut out = output();
+
+        out.settle_wasm(&WasmSupply::default(), false);
+
+        assert!(!out.wasm_panicked);
+        assert!(!out.notes.iter().any(|note| note.message == WASM_PANICKED));
+    }
 }

@@ -102,7 +102,8 @@ Common flags:
 | `--single-file` | Write every unpacked module into one file, with a banner per module. |
 | `--wasm-check off\|on\|auto` | Look for wasm modules embedded in the output. `off` (default) only prints a note when the output may hold one; `auto` extracts a byte array or base64 text that holds a whole module with imports or exports, writes it to `wasm/` and names its glue (feature-detect probes are left alone); `on` reparses every output to look, which can be slow on large files. |
 | `--wasm-dir DIR`, `--wasm NAME=PATH` | Supply wasm modules the input loads from elsewhere, so their import and export names can name the glue. This works with every `--wasm-check` mode. |
-| `--fetch-wasm`, `--wasm-base URL` | Download the wasm modules nobody supplied. Nothing is fetched without this flag. |
+| `--fetch-wasm`, `--wasm-base URL` | Download the wasm modules nobody supplied. Nothing is fetched without this flag. The URLs come from the input, so each one is printed before it is requested, and one run fetches at most 16 modules, 64 MiB and for 120 seconds. Redirects are followed three times at most. A host that resolves to a loopback, link-local or private address is refused, and no proxy from the environment is used. |
+| `--fetch-wasm-local` | With `--fetch-wasm`, also fetch from loopback, link-local and private addresses, for input that loads its wasm from your own machine or network. |
 | `--disable PASS` | Turn off individual passes; `--list-passes` prints them all. |
 | `--report text\|json` | Print what every stage and pass did. `-v` is short for `--report text`. |
 | `-j, --jobs N` | Process up to `N` inputs in parallel. The output does not depend on `N`. |

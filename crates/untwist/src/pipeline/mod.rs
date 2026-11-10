@@ -28,6 +28,8 @@ use crate::bundle::BundleOutput;
 use crate::diagnostics::format_diagnostic;
 use crate::options::{Options, Progress};
 use crate::report::StageReport;
+pub use boundary::contained;
+pub(crate) use boundary::Boundary;
 pub use decoded::DecodedSite;
 use input::InputResult;
 use ladder::Ladder;
@@ -66,6 +68,7 @@ pub struct Output {
     pub wasm_unresolved: Vec<crate::wasm::WasmReference>,
     pub wasm_check: crate::wasm::WasmCheck,
     pub wasm_unchecked: bool,
+    pub wasm_panicked: bool,
 }
 
 pub(crate) fn admits_reparse(text: &str) -> bool {
@@ -232,6 +235,7 @@ impl OutputParts {
             wasm_unresolved: Vec::new(),
             wasm_check: crate::wasm::WasmCheck::default(),
             wasm_unchecked: false,
+            wasm_panicked: false,
         }
     }
 }
