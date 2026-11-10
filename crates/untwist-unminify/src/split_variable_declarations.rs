@@ -1,8 +1,9 @@
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::{GetSpan, Span};
-use oxc_traverse::Ancestor;
 use untwist_core::pass::{Cx, Interest, Locality, Pass, StatementKind, StatementVariants};
+
+use crate::statement_slot::{hoist_in_front_of_labels, in_single_statement_slot, labelled_loop};
 
 #[derive(Default)]
 pub struct SplitVariableDeclarations;
@@ -39,6 +40,10 @@ fn needs_split(stmt: &Statement<'_>) -> bool {
     }
 }
 
+fn needs_list_split(stmt: &Statement<'_>) -> bool {
+    needs_split(stmt) || labelled_loop(stmt).is_some_and(needs_split)
+}
+
 fn split_span(start: &mut Option<u32>, declarator: Span) -> Span {
     match start.take() {
         Some(start) if start <= declarator.start => Span::new(start, declarator.end),
@@ -64,6 +69,10 @@ fn push_single_declarations<'a>(
 }
 
 fn split_statement<'a>(stmt: Statement<'a>, out: &mut AVec<'a, Statement<'a>>, cx: &Cx<'a, '_>) {
+    if labelled_loop(&stmt).is_some() {
+        hoist_in_front_of_labels(stmt, out, cx, |body, out| split_statement(body, out, cx));
+        return;
+    }
     match stmt {
         Statement::VariableDeclaration(declaration) => {
             push_single_declarations(out, declaration.unbox(), cx);
@@ -99,21 +108,6 @@ fn split_statement<'a>(stmt: Statement<'a>, out: &mut AVec<'a, Statement<'a>>, c
     }
 }
 
-fn in_single_statement_slot(cx: &Cx<'_, '_>) -> bool {
-    matches!(
-        cx.tcx.parent(),
-        Ancestor::IfStatementConsequent(_)
-            | Ancestor::IfStatementAlternate(_)
-            | Ancestor::DoWhileStatementBody(_)
-            | Ancestor::WhileStatementBody(_)
-            | Ancestor::ForStatementBody(_)
-            | Ancestor::ForInStatementBody(_)
-            | Ancestor::ForOfStatementBody(_)
-            | Ancestor::WithStatementBody(_)
-            | Ancestor::LabeledStatementBody(_)
-    )
-}
-
 const ACTED_ON_STATEMENTS: StatementVariants = StatementVariants::of(&[
     StatementKind::VariableDeclaration,
     StatementKind::ForStatement,
@@ -134,13 +128,13 @@ impl<'a> Pass<'a> for SplitVariableDeclarations {
     }
 
     fn enter_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
-        if !stmts.iter().any(needs_split) {
+        if !stmts.iter().any(needs_list_split) {
             return;
         }
         let capacity = stmts.len() + 4;
         let old = std::mem::replace(stmts, AVec::with_capacity_in(capacity, &*cx));
         for stmt in old {
-            if !needs_split(&stmt) {
+            if !needs_list_split(&stmt) {
                 stmts.push(stmt);
                 continue;
             }
@@ -150,7 +144,7 @@ impl<'a> Pass<'a> for SplitVariableDeclarations {
     }
 
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
-        if !in_single_statement_slot(cx) || !needs_split(stmt) {
+        if !in_single_statement_slot(stmt, cx) || !needs_split(stmt) {
             return;
         }
         if matches!(stmt, Statement::VariableDeclaration(node) if node.kind.is_lexical()) {

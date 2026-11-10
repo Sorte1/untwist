@@ -3,7 +3,6 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
 use oxc_span::GetSpan;
 use oxc_syntax::scope::ScopeFlags;
-use oxc_traverse::Ancestor;
 use untwist_core::ast_util::literal::is_safe_literal;
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass, StatementKind,
@@ -11,6 +10,7 @@ use untwist_core::pass::{
 };
 
 use crate::sequence_hazard::is_hoist_order_safe;
+use crate::statement_slot::{hoist_in_front_of_labels, in_single_statement_slot, labelled_loop};
 
 #[derive(Default)]
 pub struct Sequence;
@@ -196,6 +196,18 @@ fn is_expandable(stmt: &Statement<'_>) -> bool {
     }
 }
 
+fn is_list_expandable(stmt: &Statement<'_>) -> bool {
+    is_expandable(stmt) || labelled_loop(stmt).is_some_and(is_expandable)
+}
+
+fn expand_into<'a>(stmt: Statement<'a>, out: &mut AVec<'a, Statement<'a>>, cx: &Cx<'a, '_>) {
+    if labelled_loop(&stmt).is_some() {
+        hoist_in_front_of_labels(stmt, out, cx, |body, out| out.extend(expand(body, cx)));
+        return;
+    }
+    out.extend(expand(stmt, cx));
+}
+
 fn expand_for_statement_init<'a>(
     node: &mut ForStatement<'a>,
     out: &mut AVec<'a, Statement<'a>>,
@@ -321,21 +333,6 @@ fn move_update_into_body<'a>(node: &mut ForStatement<'a>, cx: &mut Cx<'a, '_>) -
     true
 }
 
-fn in_single_statement_slot(cx: &Cx<'_, '_>) -> bool {
-    matches!(
-        cx.tcx.parent(),
-        Ancestor::IfStatementConsequent(_)
-            | Ancestor::IfStatementAlternate(_)
-            | Ancestor::DoWhileStatementBody(_)
-            | Ancestor::WhileStatementBody(_)
-            | Ancestor::ForStatementBody(_)
-            | Ancestor::ForInStatementBody(_)
-            | Ancestor::ForOfStatementBody(_)
-            | Ancestor::WithStatementBody(_)
-            | Ancestor::LabeledStatementBody(_)
-    )
-}
-
 fn is_hoistable_target(target: &AssignmentTarget<'_>) -> bool {
     match target {
         AssignmentTarget::AssignmentTargetIdentifier(_) => true,
@@ -414,9 +411,7 @@ fn expand_matching_statements<'a>(
             stmts.push(stmt);
             continue;
         }
-        for expanded in expand(stmt, &*cx) {
-            stmts.push(expanded);
-        }
+        expand_into(stmt, stmts, &*cx);
         cx.changed();
     }
 }
@@ -461,7 +456,7 @@ impl<'a> Pass<'a> for Sequence {
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
-        expand_matching_statements(stmts, cx, is_expandable);
+        expand_matching_statements(stmts, cx, is_list_expandable);
     }
 
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
@@ -470,7 +465,7 @@ impl<'a> Pass<'a> for Sequence {
                 cx.changed();
             }
         }
-        if !in_single_statement_slot(cx) || !is_expandable(stmt) {
+        if !in_single_statement_slot(stmt, cx) || !is_expandable(stmt) {
             return;
         }
         if matches!(stmt, Statement::VariableDeclaration(node) if node.kind.is_lexical()) {

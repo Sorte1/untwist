@@ -105,3 +105,51 @@ for (var i = 0; i < 1; i++) {}
 a?.b;
 ");
 }
+
+#[test]
+fn a_conditional_callee_is_not_rewritten() {
+    assert_transform!(
+        "(a === null || a === undefined ? undefined : a.b)(x);",
+        [untwist_unminify::optional_chaining::boxed],
+        @"(a === null || a === undefined ? undefined : a.b)(x);"
+    );
+}
+
+#[test]
+fn a_conditional_callee_with_a_temp_is_not_rewritten() {
+    let source = "var t;\n((t = a.q) === null || t === undefined ? undefined : t.b)(x);";
+    let alloc = untwist_testing::Allocator::default();
+    let output = untwist_testing::transform(
+        &alloc,
+        source,
+        &[untwist_unminify::optional_chaining::boxed],
+    );
+    assert_eq!(output, source);
+}
+
+#[test]
+fn a_conditional_delete_operand_is_not_rewritten() {
+    assert_transform!(
+        "delete (a === null || a === undefined ? undefined : a.b);",
+        [untwist_unminify::optional_chaining::boxed],
+        @"delete (a === null || a === undefined ? undefined : a.b);"
+    );
+}
+
+#[test]
+fn a_conditional_template_tag_is_not_rewritten() {
+    assert_transform!(
+        "(a === null || a === undefined ? undefined : a.b)`x`;",
+        [untwist_unminify::optional_chaining::boxed],
+        @"(a === null || a === undefined ? undefined : a.b)`x`;"
+    );
+}
+
+#[test]
+fn a_conditional_call_argument_is_still_rewritten() {
+    assert_transform!(
+        "f(a === null || a === undefined ? undefined : a.b);",
+        [untwist_unminify::optional_chaining::boxed],
+        @"f(a?.b);"
+    );
+}

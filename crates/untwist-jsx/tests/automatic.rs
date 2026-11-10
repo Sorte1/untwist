@@ -496,3 +496,33 @@ fn a_hoist_whose_free_identifier_is_an_arrow_parameter_is_refused_by_default() {
         "{notes:?}"
     );
 }
+
+#[test]
+fn a_children_prop_that_is_not_last_once_and_without_holes_leaves_the_call() {
+    let sources = [
+        "jsx(\"div\", { children: f(), children: g() });",
+        "jsx(\"div\", { children: a, ...p });",
+        "jsx(\"div\", { children: f(), id: g() });",
+        "jsxs(\"div\", { children: [x, , y] });",
+    ];
+    for source in sources {
+        let code = run(source);
+        assert!(code.starts_with("jsx"), "{source}: {code}");
+        assert!(!code.contains('<'), "{source}: {code}");
+        let notes = notes_of(source);
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.message.starts_with(untwist_jsx::notes::CHILDREN_SHAPE)),
+            "{source}: {notes:?}"
+        );
+    }
+}
+
+#[test]
+fn a_last_children_prop_after_a_spread_is_converted() {
+    assert_eq!(
+        run("jsx(\"div\", { ...p, id: g(), children: f() });"),
+        "<div {...p} id={g()}>{f()}</div>;"
+    );
+}

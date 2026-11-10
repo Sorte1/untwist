@@ -146,3 +146,21 @@ fn the_merge_pass_is_named_and_extended() {
     assert_eq!(pass.name(), "merge-member-declarations");
     assert!(pass.requires_extended());
 }
+
+#[test]
+fn a_base_declared_at_the_top_of_a_script_does_not_merge() {
+    let code = merge("var e = { get x() { globalThis.e = { y: 2 }; return 1; }, y: 1 };\nvar a = e.x;\nvar b = e.y;\nconsole.log(a, b);");
+    assert!(code.contains("var a = e.x;\nvar b = e.y;"), "{code}");
+}
+
+#[test]
+fn an_imported_base_does_not_merge() {
+    let code = merge("import e from \"m\";\nvar a = e.x;\nvar b = e.y;\nexport { a, b };");
+    assert!(code.contains("var a = e.x;\nvar b = e.y;"), "{code}");
+}
+
+#[test]
+fn a_base_declared_at_the_top_of_a_module_still_merges() {
+    let code = merge("const e = g();\nvar a = e.x;\nvar b = e.y;\nexport { a, b };");
+    assert!(code.contains("var { x: a, y: b } = e;"), "{code}");
+}

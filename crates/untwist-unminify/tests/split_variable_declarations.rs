@@ -50,3 +50,24 @@ for (var i = 0, j = 1; i < 10; i++, j++) {
 }
 ");
 }
+
+#[test]
+fn a_labelled_loop_initializer_moves_in_front_of_the_label() {
+    let source = "function f(n) { L: for (var a = 1, b = 2;;) { if (a++ > n) break L; continue L; } return a + b; } console.log(f(3));";
+    let alloc = untwist_testing::Allocator::default();
+    let output = untwist_testing::transform(
+        &alloc,
+        source,
+        &[untwist_unminify::split_variable_declarations::boxed],
+    );
+    assert!(
+        output.contains("var a = 1;\n  var b = 2;\n  L: for (;;)"),
+        "{output}"
+    );
+    untwist_testing::node::assert_node_agrees(source, &output);
+}
+
+#[test]
+fn a_labelled_loop_outside_a_statement_list_is_left_alone() {
+    assert_transform!("if (c) L: for (var a = 1, b = 2;;) continue L;", [untwist_unminify::split_variable_declarations::boxed], @"if (c) L: for (var a = 1, b = 2;;) continue L;");
+}

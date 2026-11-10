@@ -70,6 +70,10 @@ const CASES: &[(Source, &str)] = &[
         notes::KEY_SHAPE,
     ),
     (
+        Source::Whole("jsx(\"div\", { children: a, id: b });"),
+        notes::CHILDREN_SHAPE,
+    ),
+    (
         Source::Built(every_component_uid_bound),
         notes::COMPONENT_NAME_EXHAUSTED,
     ),
@@ -185,6 +189,12 @@ const CAPPED: &[(Source, &str)] = &[
             "jsx(\"a\", {}, k, x);\njsx(\"b\", {}, k, x);\njsx(\"c\", {}, k, x);\njsx(\"d\", {}, k, x);",
         ),
         notes::KEY_SHAPE,
+    ),
+    (
+        Source::Whole(
+            "jsx(\"a\", { children: x, id: 1 });\njsx(\"b\", { children: x, id: 1 });\njsx(\"c\", { children: x, id: 1 });\njsx(\"d\", { children: x, id: 1 });",
+        ),
+        notes::CHILDREN_SHAPE,
     ),
     (
         Source::Built(every_component_uid_bound_at_four_sites),

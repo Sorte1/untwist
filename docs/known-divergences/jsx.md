@@ -137,4 +137,13 @@ Untwist's JSX reconstruction (`untwist-jsx`) is verified against the reference d
   (`crates/untwist-jsx/tests/classic.rs:214` and `tests/automatic.rs:259`), where the two
   backslash rows land in an expression container (`build::attribute_value`,
   `crates/untwist-jsx/src/build.rs:192`; `CONTAINER_CHARS`, `build.rs:13`).
-
+- **An automatic-runtime call whose `children` prop is not last, appears twice or holds an array
+  with holes is left as a call.** JSX children are evaluated after every attribute and are a single
+  list, so `jsx("div", { children: f(), id: g() })` would swap the order of `f()` and `g()`,
+  `jsx("div", { children: a, ...p })` would let `a` win over `p.children`, a second `children`
+  would be dropped with its value, and `jsxs("div", { children: [x, , y] })` would lose a slot. The
+  reference deobfuscator's `transforms/jsx-new.ts` takes the first `children` wherever it sits.
+  Compilers always emit `children` once and last, so no real bundle is refused; Untwist records a
+  spanned `CHILDREN_SHAPE` note (`crates/untwist-jsx/src/notes.rs`) and the row
+  `a_children_prop_that_is_not_last_once_and_without_holes_leaves_the_call`
+  (`crates/untwist-jsx/tests/automatic.rs`) pins it.
