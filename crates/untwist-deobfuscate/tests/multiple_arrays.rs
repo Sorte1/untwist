@@ -204,6 +204,16 @@ fn a_first_unit_whose_decoder_reaches_the_global_object_keeps_the_second_unit_re
 }
 
 #[test]
+fn a_first_unit_whose_decoder_takes_the_global_object_from_a_called_function_keeps_the_second_unit_refused(
+) {
+    let source = with_a_print_before_the_second_rotator("console[b1(0x0)](b1(0x1));").replace(
+        "f = f - 0x0; return e[f]; }; return b1(c, d);",
+        "f = f - 0x0; (function () { return this; })().seen = f; return e[f]; }; return b1(c, d);",
+    );
+    refuses_the_second_unit_before_its_rotator(&source);
+}
+
+#[test]
 fn a_first_unit_whose_decoder_names_function_keeps_the_second_unit_refused() {
     let source = with_a_print_before_the_second_rotator("console[b1(0x0)](b1(0x1));").replace(
         "f = f - 0x0; return e[f]; }; return b1(c, d);",
