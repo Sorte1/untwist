@@ -44,8 +44,26 @@ impl<'s, 'a> Sites<'s, 'a> {
             );
         if fresh {
             self.fresh_used.set(true);
+            if !self.intact_receiver(member, &keys) {
+                self.loose_fresh.set(true);
+            }
         }
         fresh
+    }
+
+    fn intact_receiver(&self, member: &MemberExpression<'a>, keys: &[AKey<'a>]) -> bool {
+        let [AKey::Named(name)] = keys else {
+            return false;
+        };
+        let receiver = member.object().without_parentheses();
+        match name.as_ref() {
+            "create" => !self.object_rebound && self.is_unbound(receiver, "Object"),
+            "bind" => matches!(
+                receiver,
+                Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_)
+            ),
+            _ => false,
+        }
     }
 
     fn assign_returns_fresh(
