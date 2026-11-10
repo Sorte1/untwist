@@ -24,7 +24,7 @@ fn transformed(unsafe_transforms: bool, source: &str) -> String {
 }
 
 #[test]
-fn each_dec_row_loses_its_marker_in_both_lanes() {
+fn each_dec_row_loses_its_marker_in_its_lanes() {
     for (label, marker, source) in rows() {
         assert!(
             label.starts_with("dec-") || label.starts_with("keep-"),
@@ -33,7 +33,12 @@ fn each_dec_row_loses_its_marker_in_both_lanes() {
         if !label.starts_with("dec-") {
             continue;
         }
-        for lane in [false, true] {
+        let lanes: &[bool] = if label.starts_with("dec-unsafe-") {
+            &[true]
+        } else {
+            &[false, true]
+        };
+        for &lane in lanes {
             let code = transformed(lane, &source);
             assert!(!code.contains(&marker), "{label} (unsafe={lane}):\n{code}");
         }
