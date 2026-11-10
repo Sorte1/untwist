@@ -358,3 +358,20 @@ fn a_shell_that_names_eval_keeps_every_parameter() {
         "(function () {\n  var a;\n  var b;\n  eval(x);\n})();"
     );
 }
+
+#[test]
+fn async_and_generator_shells_are_left_alone_in_both_modes() {
+    let shells = [
+        ("async function anonymous(a\n) {\nvar k = await a; console.log(k);\nfor await (const q of a) { console.log(q); }\n}", "async function anonymous"),
+        ("(async function anonymous(a\n) {\nif (a) { console.log(1); }\nawait a;\n})", "async function anonymous"),
+        ("function* anonymous(a\n) {\nvar k = yield a; console.log(k);\n}", "function* anonymous"),
+        ("(async function* anonymous(a\n) {\nyield await a;\n})", "async function* anonymous"),
+    ];
+    for extended in [true, false] {
+        for (source, kept) in shells {
+            let out = Pipeline::new(options(extended, true)).run(source);
+            assert!(out.code().contains(kept), "{source}\n-> {}", out.code());
+            assert_not_a_shell(&out);
+        }
+    }
+}

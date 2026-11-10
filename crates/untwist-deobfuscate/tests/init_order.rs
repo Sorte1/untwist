@@ -426,3 +426,32 @@ fn the_same_shape_one_function_deep_still_inlines() {
         "side();\nvar m = { alpha: 1 };\nfunction f() {\n  return m.alpha;\n}\nreturn f();",
     ));
 }
+
+#[test]
+fn a_number_conversion_of_a_literal_with_a_method_refuses() {
+    for prefix in [
+        "var t = +{ valueOf: function () { try { return f(); } catch (e) { return 7; } } };",
+        "var t = -[{ toString: function () { return f(); } }];",
+        "var t = ~{ valueOf: function () { return f(); } };",
+        "+{ valueOf: function () { return f(); } };",
+    ] {
+        let body = format!(
+            "{prefix}\nvar m = {{ alpha: 1 }};\nfunction f() {{\n  return m.alpha;\n}}\nf();"
+        );
+        assert_refused(&body);
+        assert_refused(&in_a_function(&body));
+    }
+}
+
+#[test]
+fn an_operator_over_a_primitive_literal_still_inlines() {
+    let body = "var t = -1, u = !0, v = typeof \"s\", w = void 0, z = ~-2;\nvar m = { alpha: 1 };\nfunction f() {\n  return m.alpha;\n}\nreturn f();";
+    assert_inlined(&in_a_function(body));
+}
+
+#[test]
+fn a_block_function_reached_by_name_from_outside_its_block_refuses() {
+    assert_refused(&in_a_function(
+        "{\n  function f() {\n    return m.alpha;\n  }\n  g();\n  var m = { alpha: 1 };\n  f();\n}\nfunction g() {\n  return f();\n}",
+    ));
+}
