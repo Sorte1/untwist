@@ -9,6 +9,8 @@ const ROWS: &str = include_str!("data/write_only_rows.txt");
 
 type Switch = fn(bool);
 
+type Rows = Vec<(String, String)>;
+
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
         .filter_map(|line| line.split_once('|'))
@@ -58,7 +60,7 @@ fn the_rows_hold_up_against_node_and_the_kept_ones_need_their_checks() {
     let programs = rows();
     let run_safe = |source: &str| transformed(false, source);
     let run_unsafe = |source: &str| transformed(true, source);
-    let (both, safe_only): (Vec<(String, String)>, Vec<(String, String)>) = programs
+    let (both, safe_only): (Rows, Rows) = programs
         .iter()
         .cloned()
         .partition(|(label, _)| in_lane(label, true));
