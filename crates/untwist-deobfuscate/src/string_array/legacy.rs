@@ -386,9 +386,21 @@ pub(super) fn decoder_function<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Fu
     }
 }
 
+fn plain_parameters(function: &Function<'_>) -> bool {
+    function.params.rest.is_none()
+        && function.params.items.iter().all(|param| {
+            param.initializer.is_none()
+                && matches!(param.pattern, BindingPattern::BindingIdentifier(_))
+        })
+}
+
 fn decoder_reads(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> Option<Vec<Span>> {
     let function = decoder_function(stmt)?;
-    if !indexes_by_first_param(function, scoping, symbol) && !reassigns_itself(stmt) {
+    let reassigning = reassigns_itself(stmt);
+    if !indexes_by_first_param(function, scoping, symbol) && !reassigning {
+        return None;
+    }
+    if reassigning && !plain_parameters(function) {
         return None;
     }
     let mut scan = ReadScan {

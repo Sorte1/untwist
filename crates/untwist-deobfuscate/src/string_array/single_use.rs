@@ -197,9 +197,48 @@ fn only_site(sites: &[(SymbolId, Site)], array: SymbolId) -> Option<Site> {
     }
 }
 
-fn index_is_private(scoping: &Scoping, index: SymbolId, array: SymbolId) -> bool {
+struct VarDeclared {
+    symbol: SymbolId,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for VarDeclared {
+    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
+        self.found |= it.kind == VariableDeclarationKind::Var
+            && it.declarations.iter().any(|declarator| {
+                matches!(&declarator.id, BindingPattern::BindingIdentifier(id)
+                    if id.symbol_id.get() == Some(self.symbol))
+            });
+        walk_js::walk_variable_declaration(self, it);
+    }
+
+    fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {}
+
+    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
+}
+
+fn declared_by_var(statements: &[Statement<'_>], index: SymbolId) -> bool {
+    let mut declared = VarDeclared {
+        symbol: index,
+        found: false,
+    };
+    for stmt in statements {
+        declared.visit_statement(stmt);
+    }
+    declared.found
+}
+
+fn index_is_private(
+    scoping: &Scoping,
+    statements: &[Statement<'_>],
+    index: SymbolId,
+    array: SymbolId,
+) -> bool {
     if single_use_index_trusted() {
         return true;
+    }
+    if !declared_by_var(statements, index) {
+        return false;
     }
     let declared_beside = scoping.symbol_scope_id(index) == scoping.symbol_scope_id(array)
         && scoping
@@ -256,7 +295,7 @@ fn plan(statements: &[Statement<'_>], scoping: &Scoping) -> Option<Plan> {
             return None;
         }
         if let Site::Sequenced(_, index) = site {
-            if !index_is_private(scoping, index, *array) {
+            if !index_is_private(scoping, statements, index, *array) {
                 return None;
             }
         }

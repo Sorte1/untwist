@@ -39,3 +39,7 @@ vp-base-deep|var arr = ['a', 'b']; try { arr[0].y.z(); } catch (e) { console.log
 vp-assign-destructure|var arr = ['a', undefined]; var x; try { ({ x } = arr[1]); } catch (e) { console.log(e.message); }
 vp-alias-call|var arr = ['a', 'b']; var g = arr; try { g[0](); } catch (e) { console.log(e.message); }
 vp-value|var arr = ['a', 'b']; console.log(arr[0].length, typeof arr[1], arr[0] + arr[1]);
+ix-leading-zero|function f() { var a = ["x", "y", "z"]; return [a["01"], a[1], a["2"]]; } console.log(f());
+ix-signed|function f() { var a = ["x", "y", "z"]; return [a["+1"], a[1], a[0]]; } console.log(f());
+ix-spelled-forms|function f() { var a = ["x", "y", "z"]; return [a[`1`], a[0x1], a[1e0], a["1.0"], a[" 1"], a[2]]; } console.log(f());
+ix-alias-leading-zero|var a = ["x", "y", "z"]; var g = a; console.log(g["01"], g[1], a[0]);

@@ -1,12 +1,15 @@
 use oxc_ast::ast::*;
+use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::{
     AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator, UpdateOperator,
 };
+use untwist_core::ast_util::global::is_global_reference;
 use untwist_core::ast_util::matcher::{call_parts, iife, statement_iife};
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 
 use super::legacy::{is_countdown, literal_arithmetic};
+use crate::mutants::minified_rotators_trusted;
 
 const FORMAT_CHECK: &str = "\\w+ *\\(\\) *{\\w+ *['|\"].+['|\"];? *}";
 
@@ -67,10 +70,143 @@ pub(super) fn passes_format_check(source: &str) -> bool {
     (0..text.len()).any(|start| format_check_at(&text, start))
 }
 
+const COOKIE_KEYS: [&str; 5] = [
+    "data",
+    "setCookie",
+    "removeCookie",
+    "getCookie",
+    "updateCookie",
+];
+
+const COOKIE_GLOBALS: [&str; 3] = ["RegExp", "decodeURIComponent", "undefined"];
+
+const LOOKUP_PREFIX: &str = "(?:^|; )";
+const LOOKUP_SUFFIX: &str = "=([^;]*)";
+const LOOKUP_ESCAPE: &str = "([.$?*|{}()[]\\/+^])";
+const COOKIE_KEY: &str = "counter";
+
+fn plain_property<'k, 'a>(property: &'k ObjectPropertyKind<'a>) -> Option<&'k ObjectProperty<'a>> {
+    let ObjectPropertyKind::ObjectProperty(property) = property else {
+        return None;
+    };
+    let plain = property.kind == PropertyKind::Init
+        && !property.computed
+        && !property.method
+        && !property.shorthand;
+    plain.then_some(&**property)
+}
+
+fn literal_data(expr: &Expression<'_>) -> bool {
+    let Expression::ObjectExpression(data) = expr else {
+        return false;
+    };
+    data.properties.iter().all(|property| {
+        plain_property(property).is_some_and(|property| {
+            matches!(
+                property.value,
+                Expression::StringLiteral(_) | Expression::NumericLiteral(_)
+            )
+        })
+    })
+}
+
+fn known_cookie_object(object: &ObjectExpression<'_>) -> bool {
+    let mut seen: Vec<&str> = Vec::new();
+    object.properties.iter().all(|property| {
+        let Some(property) = plain_property(property) else {
+            return false;
+        };
+        let Some(key) = property
+            .key
+            .static_name()
+            .and_then(|key| key.as_str().map(str::to_string))
+        else {
+            return false;
+        };
+        let Some(key) = COOKIE_KEYS.iter().copied().find(|known| *known == key) else {
+            return false;
+        };
+        let value = match key {
+            "data" => literal_data(&property.value),
+            _ => matches!(property.value, Expression::FunctionExpression(_)),
+        };
+        let fresh = !seen.contains(&key);
+        seen.push(key);
+        value && fresh
+    })
+}
+
+pub(super) fn reads_cookie_counter(arguments: &[Argument<'_>]) -> bool {
+    matches!(arguments, [first, second]
+        if matches!(first.as_expression(), Some(Expression::NullLiteral(_)))
+        && matches!(second.as_expression(), Some(Expression::StringLiteral(key)) if key.value == COOKIE_KEY))
+}
+
+pub(super) fn reader_result(expr: &Expression<'_>) -> bool {
+    let Expression::ConditionalExpression(choice) = expr.without_parentheses() else {
+        return false;
+    };
+    let Some(found) = identifier_name(&choice.test) else {
+        return false;
+    };
+    let decoded = call_parts(choice.consequent.without_parentheses()).is_some_and(
+        |(callee, arguments)| {
+            identifier_name(callee) == Some("decodeURIComponent")
+                && matches!(arguments.as_slice(), [argument]
+                    if argument.as_expression().is_some_and(|argument| first_group(argument, found)))
+        },
+    );
+    let missing = match choice.alternate.without_parentheses() {
+        Expression::Identifier(id) => id.name == "undefined",
+        Expression::UnaryExpression(unary) => {
+            unary.operator == UnaryOperator::Void
+                && matches!(unary.argument, Expression::NumericLiteral(_))
+        }
+        _ => false,
+    };
+    decoded && missing
+}
+
+fn first_group(expr: &Expression<'_>, found: &str) -> bool {
+    let Expression::ComputedMemberExpression(member) = expr.without_parentheses() else {
+        return false;
+    };
+    identifier_name(&member.object) == Some(found)
+        && !member.optional
+        && matches!(&member.expression, Expression::NumericLiteral(index) if index.value == 1.0)
+}
+
+pub(super) fn cookie_globals_unshadowed(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
+    struct Globals<'s> {
+        scoping: &'s Scoping,
+        sound: bool,
+    }
+    impl<'a> VisitJs<'a> for Globals<'_> {
+        fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+            let resolved = it.reference_id.get().is_some_and(|reference| {
+                self.scoping.get_reference(reference).symbol_id().is_some()
+            });
+            let named = COOKIE_GLOBALS.contains(&it.name.as_str());
+            if named || !resolved {
+                self.sound &= named && is_global_reference(self.scoping, it);
+            }
+        }
+    }
+    let mut globals = Globals {
+        scoping,
+        sound: true,
+    };
+    globals.visit_statement(stmt);
+    globals.sound
+}
+
 pub(super) fn property<'k, 'a>(
     object: &'k ObjectExpression<'a>,
     name: &str,
 ) -> Option<&'k Function<'a>> {
+    if !known_cookie_object(object) && !minified_rotators_trusted() {
+        return None;
+    }
     object.properties.iter().find_map(|property| {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
             return None;
@@ -115,8 +251,8 @@ fn format_pattern<'k, 'a>(
 ) -> Option<&'k NewExpression<'a>> {
     let pattern = match (identifier_name(pattern), named) {
         (Some(name), Some((bound, init))) if name == bound => init,
-        (Some(_), _) => return None,
-        _ => pattern,
+        (None, None) => pattern,
+        _ => return None,
     };
     match pattern.without_parentheses() {
         Expression::NewExpression(regexp) => Some(regexp),
@@ -231,21 +367,34 @@ pub(super) fn tail_expressions<'k, 'a>(
     Some(tail)
 }
 
+fn text_is(expr: &Expression<'_>, wanted: &str) -> bool {
+    matches!(expr.without_parentheses(), Expression::StringLiteral(text) if text.value == wanted)
+}
+
+fn escaped_key(expr: &Expression<'_>, key: &str) -> bool {
+    call_parts(expr.without_parentheses()).is_some_and(|(callee, arguments)| {
+        let escapes = matches!(arguments.as_slice(), [pattern, replacement]
+            if matches!(pattern.as_expression(), Some(Expression::RegExpLiteral(regexp))
+                if regexp.regex.pattern.text == LOOKUP_ESCAPE && regexp.regex.flags.to_string() == "g")
+            && replacement.as_expression().is_some_and(|replacement| text_is(replacement, "$1")));
+        member_parts(callee.without_parentheses()).is_some_and(|(object, name)| {
+            identifier_name(object) == Some(key) && name == "replace"
+        }) && escapes
+    })
+}
+
 pub(super) fn pattern_text(expr: &Expression<'_>, key: &str) -> bool {
-    match expr.without_parentheses() {
-        Expression::StringLiteral(_) => true,
-        Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
-            pattern_text(&binary.left, key) && pattern_text(&binary.right, key)
-        }
-        other => call_parts(other).is_some_and(|(callee, arguments)| {
-            let escapes = matches!(arguments.as_slice(), [pattern, replacement]
-                if matches!(pattern.as_expression(), Some(Expression::RegExpLiteral(_)))
-                && matches!(replacement.as_expression(), Some(Expression::StringLiteral(_))));
-            member_parts(callee.without_parentheses()).is_some_and(|(object, name)| {
-                identifier_name(object) == Some(key) && name == "replace"
-            }) && escapes
-        }),
-    }
+    let Expression::BinaryExpression(outer) = expr.without_parentheses() else {
+        return false;
+    };
+    let Expression::BinaryExpression(inner) = outer.left.without_parentheses() else {
+        return false;
+    };
+    outer.operator == BinaryOperator::Addition
+        && inner.operator == BinaryOperator::Addition
+        && text_is(&inner.left, LOOKUP_PREFIX)
+        && escaped_key(&inner.right, key)
+        && text_is(&outer.right, LOOKUP_SUFFIX)
 }
 
 pub(super) fn identity(expr: &Expression<'_>) -> bool {
@@ -316,6 +465,9 @@ pub(super) fn lookup_call(init: &Expression<'_>, (matcher, key): (&str, &str)) -
 }
 
 fn rotation_in_reader(function: &Function<'_>, rotate: &str) -> Option<usize> {
+    if function.params.items.len() != 2 {
+        return None;
+    }
     let names: Vec<&str> = function
         .params
         .items
@@ -348,9 +500,12 @@ fn rotation_in_reader(function: &Function<'_>, rotate: &str) -> Option<usize> {
     }
     let kept = rest.len() - rest.iter().rev().take_while(|stmt| is_bare(stmt)).count();
     let tail = tail_expressions(&rest[..kept])?;
-    let [set, call, _] = tail.as_slice() else {
+    let [set, call, result] = tail.as_slice() else {
         return None;
     };
+    if !reader_result(result) {
+        return None;
+    }
     counted_call(set, call, rotate)
 }
 
@@ -382,11 +537,8 @@ fn chosen_by_check<'k, 'a>(stmt: &'k Statement<'a>, check: &str, holder: &str) -
     let Expression::ConditionalExpression(inner) = outer.consequent.without_parentheses() else {
         return false;
     };
-    let reads = method_call(&inner.consequent, holder, "getCookie").is_some_and(|arguments| {
-        matches!(arguments, [first, second]
-            if matches!(first.as_expression(), Some(Expression::NullLiteral(_)))
-            && matches!(second.as_expression(), Some(Expression::StringLiteral(_))))
-    });
+    let reads =
+        method_call(&inner.consequent, holder, "getCookie").is_some_and(reads_cookie_counter);
     identifier_name(&outer.test) == Some(check)
         && identifier_name(&inner.test) == Some(check)
         && reads
@@ -524,6 +676,9 @@ fn calls_with(stmt: &Statement<'_>, callee: &str, (rotate, count): (&str, &str))
 }
 
 fn readable_reader(function: &Function<'_>, (rotate, count): (&str, &str)) -> bool {
+    if function.params.items.len() != 2 {
+        return false;
+    }
     let names: Vec<&str> = function
         .params
         .items
@@ -572,11 +727,7 @@ fn reads_counter(expr: &Expression<'_>, holder: &str, kept: &str) -> bool {
     };
     let target = matches!(&assigned.left,
         AssignmentTarget::AssignmentTargetIdentifier(id) if id.name == kept);
-    let reads = method_call(&assigned.right, holder, "getCookie").is_some_and(|arguments| {
-        matches!(arguments, [first, second]
-            if matches!(first.as_expression(), Some(Expression::NullLiteral(_)))
-            && matches!(second.as_expression(), Some(Expression::StringLiteral(_))))
-    });
+    let reads = method_call(&assigned.right, holder, "getCookie").is_some_and(reads_cookie_counter);
     target && assigned.operator == AssignmentOperator::Assign && reads
 }
 
@@ -757,6 +908,9 @@ pub(super) fn cookie_rotation(
         && references(scoping, function, rotate) == Some(1)
         && references(scoping, function, target) == Some(2);
     if !sealed {
+        return None;
+    }
+    if !cookie_globals_unshadowed(stmt, scoping) {
         return None;
     }
     if !named {

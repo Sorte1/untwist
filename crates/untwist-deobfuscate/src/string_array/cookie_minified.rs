@@ -6,8 +6,8 @@ use untwist_core::ast_util::matcher::iife;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 
 use super::cookie::{
-    counted_call, lookup_call, method_call, passes_format_check, property, tail_expressions,
-    tests_removal_text,
+    cookie_globals_unshadowed, counted_call, lookup_call, method_call, passes_format_check,
+    property, reader_result, reads_cookie_counter, tail_expressions, tests_removal_text,
 };
 use super::legacy::is_countdown_loop;
 use crate::mutants::minified_rotators_trusted;
@@ -106,8 +106,10 @@ fn reader_count(function: &Function<'_>, rotate: &str) -> Option<usize> {
         return None;
     }
     match tail_expressions(&before[leading..])?.as_slice() {
-        [set, call, _] => counted_call(set, call, rotate),
-        [alias, set, call, _] => counted_call(set, call, aliased_to(alias, rotate)?),
+        [set, call, result] if reader_result(result) => counted_call(set, call, rotate),
+        [alias, set, call, result] if reader_result(result) => {
+            counted_call(set, call, aliased_to(alias, rotate)?)
+        }
         _ => None,
     }
 }
@@ -150,11 +152,8 @@ fn chooses<'k, 'a>(expr: &'k Expression<'a>, holder: &str) -> Option<&'k Express
     let Expression::ConditionalExpression(choice) = expr.without_parentheses() else {
         return None;
     };
-    let reads = method_call(&choice.consequent, holder, "getCookie").is_some_and(|arguments| {
-        matches!(arguments, [first, second]
-            if matches!(first.as_expression(), Some(Expression::NullLiteral(_)))
-            && matches!(second.as_expression(), Some(Expression::StringLiteral(_))))
-    });
+    let reads =
+        method_call(&choice.consequent, holder, "getCookie").is_some_and(reads_cookie_counter);
     let sets = method_call(&choice.alternate, holder, "setCookie").is_some();
     (reads && sets).then_some(&choice.test)
 }
@@ -282,6 +281,9 @@ pub(super) fn minified_cookie_rotation(
         && references(scoping, function, rotate) == Some(1)
         && references(scoping, function, target) == Some(2);
     if !sealed && !minified_rotators_trusted() {
+        return None;
+    }
+    if !cookie_globals_unshadowed(stmt, scoping) {
         return None;
     }
     let cookie = assigned_guard(guard).or_else(|| block_guard(guard))?;
