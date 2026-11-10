@@ -180,7 +180,9 @@ fn merge_webpack<'a>(merged: &mut Bundle<'a>, bundle: Bundle<'a>, notes: &mut Ve
     let started = |deferred: &[String], other: &Bundle<'_>| {
         (!deferred.is_empty() && other.runtime.is_some()).then(|| deferred.join(", "))
     };
-    if let Some(ids) = started(&bundle.deferred, merged).or_else(|| started(&merged.deferred, &bundle)) {
+    if let Some(ids) =
+        started(&bundle.deferred, merged).or_else(|| started(&merged.deferred, &bundle))
+    {
         notes.push(note(crate::notes::deferred_with_runtime(ids)));
         return false;
     }
@@ -242,7 +244,9 @@ pub fn merge_noted<'a>(
     if merged.kind == BundleKind::Webpack {
         retag_entry(&mut merged);
         if !merged.deferred.is_empty() {
-            notes.push(note(crate::notes::deferred_not_run(merged.deferred.join(", "))));
+            notes.push(note(crate::notes::deferred_not_run(
+                merged.deferred.join(", "),
+            )));
         }
     }
     (Some(merged), notes)

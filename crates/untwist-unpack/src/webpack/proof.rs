@@ -7,8 +7,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use untwist_core::semantic::build_scoping;
 
-use crate::notes::runtime_not_proven;
 use crate::matcher::{const_member, literal_id as id_text};
+use crate::notes::runtime_not_proven;
 use crate::webpack::guard::{dirname_suffix, guarded};
 use crate::webpack::helpers::{declared_in, pattern_names};
 use crate::webpack::locals::closed_value;
@@ -87,7 +87,9 @@ fn iife_body<'k, 'a>(expr: &'k Expression<'a>) -> Option<Result<&'k FunctionBody
         _ => return None,
     };
     if generator || asynchronous {
-        return Some(refuse("a wrapper in the prelude is a generator or async function"));
+        return Some(refuse(
+            "a wrapper in the prelude is a generator or async function",
+        ));
     }
     if !call.arguments.is_empty() || !params.items.is_empty() || params.rest.is_some() {
         return Some(refuse("a wrapper in the prelude takes arguments"));
@@ -178,7 +180,9 @@ impl<'k, 'a> Proof<'k, 'a> {
         if !is_name(&call.callee, self.require) || call.optional {
             return None;
         }
-        let argument = single(&call.arguments)?.as_expression()?.without_parentheses();
+        let argument = single(&call.arguments)?
+            .as_expression()?
+            .without_parentheses();
         if literal_id(argument) {
             return Some(Ok(()));
         }
@@ -339,7 +343,10 @@ fn started_by(expr: &Expression<'_>, require: &str) -> Option<String> {
                 return None;
             };
             let bound = is_name(target, require)
-                && matches!(this.as_expression()?.without_parentheses(), Expression::NullLiteral(_));
+                && matches!(
+                    this.as_expression()?.without_parentheses(),
+                    Expression::NullLiteral(_)
+                );
             bound.then(|| id_text(id.as_expression()?.without_parentheses()))?
         }
         Expression::ArrowFunctionExpression(arrow) => {
@@ -370,7 +377,9 @@ fn deferred_start<'k>(expr: &'k Expression<'_>, require: &str) -> Option<(&'k st
     let [start] = &then.arguments[..] else {
         return None;
     };
-    let Expression::CallExpression(load) = const_member(&then.callee, "then")?.without_parentheses() else {
+    let Expression::CallExpression(load) =
+        const_member(&then.callee, "then")?.without_parentheses()
+    else {
         return None;
     };
     let Expression::StaticMemberExpression(loader) = &load.callee else {
@@ -385,7 +394,6 @@ fn deferred_start<'k>(expr: &'k Expression<'_>, require: &str) -> Option<(&'k st
     let id = fits.then(|| started_by(start.as_expression()?, require))??;
     Some((loader.property.name.as_str(), id))
 }
-
 
 pub fn deferred_entries(statements: &[Statement<'_>], require: &str) -> Vec<String> {
     let mut found = Vec::new();
@@ -440,7 +448,10 @@ fn require_function<'k, 'a>(shape: &Shape<'k, 'a>) -> Option<(usize, &'k Functio
         .enumerate()
         .find_map(|(index, statement)| match statement {
             Statement::FunctionDeclaration(function)
-                if function.id.as_ref().is_some_and(|id| id.name == shape.require) =>
+                if function
+                    .id
+                    .as_ref()
+                    .is_some_and(|id| id.name == shape.require) =>
             {
                 Some((index, &**function))
             }
@@ -454,14 +465,20 @@ fn skipped(statement: &Statement<'_>, skip: Option<Span>) -> bool {
 }
 
 fn ends_early(statements: &[Statement<'_>], at: usize) -> bool {
-    statements[at + 1..]
-        .iter()
-        .any(|statement| !matches!(statement, Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_)))
+    statements[at + 1..].iter().any(|statement| {
+        !matches!(
+            statement,
+            Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_)
+        )
+    })
 }
 
 fn classify<'k, 'a>(proof: &mut Proof<'k, 'a>, shape: &Shape<'k, 'a>, require_at: usize) -> Proven {
     for (index, statement) in shape.statements.iter().enumerate() {
-        if Some(index) == shape.container_at || index == require_at || skipped(statement, shape.skip) {
+        if Some(index) == shape.container_at
+            || index == require_at
+            || skipped(statement, shape.skip)
+        {
             continue;
         }
         match statement {
@@ -483,7 +500,9 @@ fn uses_proven(proof: &Proof<'_, '_>, shape: &Shape<'_, '_>, require_at: usize) 
         .iter()
         .enumerate()
         .filter(|(index, statement)| {
-            Some(*index) != shape.container_at && *index != require_at && !skipped(statement, shape.skip)
+            Some(*index) != shape.container_at
+                && *index != require_at
+                && !skipped(statement, shape.skip)
         })
         .map(|(_, statement)| match statement {
             Statement::IfStatement(branch) if guarded(statement, shape.require).is_some() => {

@@ -7,10 +7,10 @@ use crate::webpack::container::{is_module_container, module_factories};
 use crate::webpack::extract::{extract_modules_with, strip_trailing_marker_comment};
 use crate::webpack::gate::{routable, Prelude};
 use crate::webpack::helpers::prelude_runtime;
+use crate::webpack::proof::{deferred_entries, Proving, Shape};
 use crate::webpack::require_fn::{
     count_required_entry_ids, find_assigned_entry_id, find_required_entry_id, require_function,
 };
-use crate::webpack::proof::{deferred_entries, Proving, Shape};
 use crate::UnpackOptions;
 
 struct Webpack4<'k, 'a> {

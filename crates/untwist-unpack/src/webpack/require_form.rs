@@ -15,11 +15,9 @@ enum Step<'k, 'a> {
 
 fn sequence<'k, 'a>(expr: &'k Expression<'a>) -> Vec<&'k Expression<'a>> {
     match expr.without_parentheses() {
-        Expression::SequenceExpression(list) => list
-            .expressions
-            .iter()
-            .flat_map(sequence)
-            .collect(),
+        Expression::SequenceExpression(list) => {
+            list.expressions.iter().flat_map(sequence).collect()
+        }
         other => vec![other],
     }
 }
@@ -33,7 +31,9 @@ fn only_return<'k, 'a>(statement: &'k Statement<'a>) -> Option<&'k Expression<'a
         other => other,
     };
     match statement {
-        Statement::ReturnStatement(ret) => ret.argument.as_ref().map(Expression::without_parentheses),
+        Statement::ReturnStatement(ret) => {
+            ret.argument.as_ref().map(Expression::without_parentheses)
+        }
         _ => None,
     }
 }
@@ -52,7 +52,11 @@ fn steps<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<Vec<Step<'k, 'a>>> {
             Statement::ReturnStatement(ret) => {
                 let mut parts = sequence(ret.argument.as_ref()?);
                 let last = parts.pop()?;
-                steps.extend(parts.into_iter().map(|part| Step::Effect(part.without_parentheses())));
+                steps.extend(
+                    parts
+                        .into_iter()
+                        .map(|part| Step::Effect(part.without_parentheses())),
+                );
                 steps.push(Step::Return(last.without_parentheses()));
             }
             Statement::VariableDeclaration(declaration) => {
@@ -60,11 +64,17 @@ fn steps<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<Vec<Step<'k, 'a>>> {
                     let BindingPattern::BindingIdentifier(id) = &declarator.id else {
                         return None;
                     };
-                    steps.push(Step::Bind(id.name.as_str(), declarator.init.as_ref()?.without_parentheses()));
+                    steps.push(Step::Bind(
+                        id.name.as_str(),
+                        declarator.init.as_ref()?.without_parentheses(),
+                    ));
                 }
             }
             Statement::IfStatement(branch) if branch.alternate.is_none() => {
-                steps.push(Step::Guard(branch.test.without_parentheses(), only_return(&branch.consequent)?));
+                steps.push(Step::Guard(
+                    branch.test.without_parentheses(),
+                    only_return(&branch.consequent)?,
+                ));
             }
             _ => return None,
         }
@@ -95,7 +105,8 @@ fn exports_of(expr: &Expression<'_>, object: &str) -> bool {
 }
 
 fn exports_of_slot(expr: &Expression<'_>, cache: &str, index: &str) -> bool {
-    const_member(expr.without_parentheses(), EXPORTS).is_some_and(|inner| indexed(inner, index) == Some(cache))
+    const_member(expr.without_parentheses(), EXPORTS)
+        .is_some_and(|inner| indexed(inner, index) == Some(cache))
 }
 
 fn is_undefined(expr: &Expression<'_>) -> bool {
@@ -103,7 +114,10 @@ fn is_undefined(expr: &Expression<'_>) -> bool {
         Expression::Identifier(id) => id.name == "undefined",
         Expression::UnaryExpression(unary) => {
             unary.operator == UnaryOperator::Void
-                && matches!(unary.argument.without_parentheses(), Expression::NumericLiteral(_))
+                && matches!(
+                    unary.argument.without_parentheses(),
+                    Expression::NumericLiteral(_)
+                )
         }
         _ => false,
     }
@@ -149,14 +163,19 @@ struct Names<'k> {
 fn field_fits(key: &str, value: &Expression<'_>, names: &Names<'_>) -> bool {
     let value = value.without_parentheses();
     match key {
-        EXPORTS => matches!(value, Expression::ObjectExpression(empty) if empty.properties.is_empty()),
+        EXPORTS => {
+            matches!(value, Expression::ObjectExpression(empty) if empty.properties.is_empty())
+        }
         key if ID.contains(&key) => is_name(value, names.index),
         key if LOADED.contains(&key) => is_false(value),
         _ => false,
     }
 }
 
-fn fresh_record<'k>(expr: &'k Expression<'_>, names: &Names<'_>) -> Option<(&'k str, Vec<&'k str>)> {
+fn fresh_record<'k>(
+    expr: &'k Expression<'_>,
+    names: &Names<'_>,
+) -> Option<(&'k str, Vec<&'k str>)> {
     let Expression::AssignmentExpression(assignment) = expr else {
         return None;
     };
@@ -193,14 +212,20 @@ fn fresh_record<'k>(expr: &'k Expression<'_>, names: &Names<'_>) -> Option<(&'k 
     Some((cache, keys))
 }
 
-fn field_set<'k>(expr: &'k Expression<'_>, module: &str, cache: &str, names: &Names<'_>) -> Option<&'k str> {
+fn field_set<'k>(
+    expr: &'k Expression<'_>,
+    module: &str,
+    cache: &str,
+    names: &Names<'_>,
+) -> Option<&'k str> {
     let Expression::AssignmentExpression(assignment) = expr else {
         return None;
     };
     let AssignmentTarget::StaticMemberExpression(member) = &assignment.left else {
         return None;
     };
-    let target = is_name(&member.object, module) || indexed(&member.object, names.index) == Some(cache);
+    let target =
+        is_name(&member.object, module) || indexed(&member.object, names.index) == Some(cache);
     let key = member.property.name.as_str();
     let fits = assignment.operator == AssignmentOperator::Assign
         && target
@@ -224,9 +249,7 @@ fn dispatch(expr: &Expression<'_>, module: &str, names: &Names<'_>) -> bool {
     if arguments.len() != call.arguments.len() {
         return false;
     }
-    let standard = |rest: &[&Expression<'_>]| {
-        matches!(rest, [m, e, r] if is_name(m, module) && exports_of(e, module) && is_name(r, names.require))
-    };
+    let standard = |rest: &[&Expression<'_>]| matches!(rest, [m, e, r] if is_name(m, module) && exports_of(e, module) && is_name(r, names.require));
     if indexed(&call.callee, names.index) == Some(names.container) {
         return standard(&arguments);
     }
@@ -250,7 +273,10 @@ fn loaded(expr: &Expression<'_>, module: &str) -> bool {
         && is_true(&assignment.right)
 }
 
-fn cached_return<'s, 'k, 'a>(steps: &'s [Step<'k, 'a>], names: &Names<'_>) -> Option<(&'k str, &'s [Step<'k, 'a>])> {
+fn cached_return<'s, 'k, 'a>(
+    steps: &'s [Step<'k, 'a>],
+    names: &Names<'_>,
+) -> Option<(&'k str, &'s [Step<'k, 'a>])> {
     match steps {
         [Step::Guard(test, value), rest @ ..] => {
             let cache = indexed(test, names.index)?;
@@ -264,7 +290,11 @@ fn cached_return<'s, 'k, 'a>(steps: &'s [Step<'k, 'a>], names: &Names<'_>) -> Op
     }
 }
 
-pub fn caching_cache<'k>(function: &'k Function<'_>, require: &str, container: &str) -> Option<&'k str> {
+pub fn caching_cache<'k>(
+    function: &'k Function<'_>,
+    require: &str,
+    container: &str,
+) -> Option<&'k str> {
     if function.generator || function.r#async {
         return None;
     }

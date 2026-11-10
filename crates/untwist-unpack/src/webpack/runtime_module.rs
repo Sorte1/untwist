@@ -64,7 +64,11 @@ impl Members<'_> {
             return false;
         };
         let silent = function.params.items.is_empty() && function.params.rest.is_none();
-        silent && function.body.as_ref().is_some_and(|body| !own_arguments(body))
+        silent
+            && function
+                .body
+                .as_ref()
+                .is_some_and(|body| !own_arguments(body))
     }
 
     fn binds_object(&self, call: &CallExpression<'_>) -> bool {
@@ -72,7 +76,8 @@ impl Members<'_> {
             return false;
         };
         let target = self.is_object(bound) || self.own_member(bound).is_some();
-        target && matches!(call.arguments.first(), Some(Argument::Identifier(id)) if id.name == self.object)
+        target
+            && matches!(call.arguments.first(), Some(Argument::Identifier(id)) if id.name == self.object)
     }
 }
 
@@ -222,7 +227,10 @@ impl<'a> VisitJs<'a> for Members<'_> {
         match &it.left {
             AssignmentTarget::StaticMemberExpression(member) if self.is_object(&member.object) => {
                 let plain = it.operator == AssignmentOperator::Assign;
-                self.write(member.property.name.as_str(), plain.then_some(it.span.start));
+                self.write(
+                    member.property.name.as_str(),
+                    plain.then_some(it.span.start),
+                );
                 self.visit_expression(&it.right);
             }
             _ => walk_js::walk_assignment_expression(self, it),
@@ -300,7 +308,11 @@ impl Needs {
         for (at, helper) in runtime.helpers.iter().enumerate() {
             index.insert(helper.name.clone(), at);
         }
-        let mut routes: Vec<bool> = runtime.helpers.iter().map(|helper| helper.movable).collect();
+        let mut routes: Vec<bool> = runtime
+            .helpers
+            .iter()
+            .map(|helper| helper.movable)
+            .collect();
         let mut members = Vec::with_capacity(runtime.helpers.len());
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); runtime.helpers.len()];
         for (at, helper) in runtime.helpers.iter().enumerate() {

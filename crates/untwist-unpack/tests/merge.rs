@@ -71,10 +71,17 @@ fn a_module_id_two_chunks_define_differently_refuses_the_merge() {
 fn a_module_id_two_chunks_define_alike_is_kept_once_without_a_note() {
     let alloc = Allocator::default();
     let first = bundle_of(&alloc, &[("3", "same();\n", false)], None);
-    let second = bundle_of(&alloc, &[("3", "same();\n", false), ("4", "y();\n", false)], None);
+    let second = bundle_of(
+        &alloc,
+        &[("3", "same();\n", false), ("4", "y();\n", false)],
+        None,
+    );
     let (merged, notes) = merge_bundles(&alloc, vec![first, second]).expect("merged bundle");
     assert!(notes.is_empty(), "{notes:?}");
-    assert_eq!(merged.modules.keys().cloned().collect::<Vec<_>>(), vec!["3", "4"]);
+    assert_eq!(
+        merged.modules.keys().cloned().collect::<Vec<_>>(),
+        vec!["3", "4"]
+    );
 }
 
 #[test]
@@ -90,7 +97,9 @@ fn a_chunk_that_starts_modules_is_not_merged_with_a_runtime() {
     let (merged, notes) = merge_noted(&alloc, vec![main, chunk]);
     assert!(merged.is_none());
     assert!(
-        notes[0].message.contains("starts modules once the runtime loads"),
+        notes[0]
+            .message
+            .contains("starts modules once the runtime loads"),
         "{notes:?}"
     );
 }

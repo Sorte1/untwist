@@ -110,7 +110,6 @@ pub fn second_self_contained(kind: &str) -> String {
     format!("{SECOND_SELF_CONTAINED} {kind} bundle; it has its own entry and runtime")
 }
 
-
 pub fn entry_candidates(id: impl Display, count: usize) -> String {
     format!(
         "entry {id} is the first of {count} {ENTRY_CANDIDATES}; the others are modules the \

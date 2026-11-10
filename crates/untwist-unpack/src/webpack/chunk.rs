@@ -166,7 +166,10 @@ fn chunk<'k, 'a>(expr: &'k Expression<'a>) -> Option<Chunk<'k, 'a>> {
     }
     let ids = chunk_ids(payload.elements.first()?.as_expression()?)?;
     let container = payload.elements.get(1)?.as_expression()?;
-    let start = payload.elements.get(2).and_then(ArrayExpressionElement::as_expression);
+    let start = payload
+        .elements
+        .get(2)
+        .and_then(ArrayExpressionElement::as_expression);
     is_module_container(container).then_some(Chunk {
         ids,
         container,

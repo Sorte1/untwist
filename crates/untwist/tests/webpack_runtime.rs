@@ -10,7 +10,8 @@ const REQUIRE_REFUSED: &str =
 const MERGE_REFUSED: &str = "two webpack runtimes differ; no bundle is written";
 const STOCK_O: &str =
     "__webpack_require__.o = function (a, b) { return Object.prototype.hasOwnProperty.call(a, b); };";
-const USE_O: &str = r#"console.log("o:", __webpack_require__.o({ a: 1 }, "a"), __webpack_require__(1));"#;
+const USE_O: &str =
+    r#"console.log("o:", __webpack_require__.o({ a: 1 }, "a"), __webpack_require__(1));"#;
 const M1: &str = r#"module.exports = "m1";"#;
 const STOCK_REQUIRE: &str = "function __webpack_require__(moduleId) {
     if (installedModules[moduleId]) return installedModules[moduleId].exports;
@@ -78,7 +79,9 @@ fn the_stock_runtime_still_unpacks_and_routes_its_helper() {
 #[test]
 fn a_helper_redefined_through_define_property_is_refused() {
     refused(
-        &patched(r#"Object.defineProperty(__webpack_require__, "o", { value: function () { return "patched"; } });"#),
+        &patched(
+            r#"Object.defineProperty(__webpack_require__, "o", { value: function () { return "patched"; } });"#,
+        ),
         "o: patched m1\n",
     );
 }
@@ -94,7 +97,9 @@ fn a_helper_written_through_an_alias_of_the_require_function_is_refused() {
 #[test]
 fn a_helper_written_from_a_nested_function_is_refused() {
     refused(
-        &patched(r#"function patch() { __webpack_require__.o = function () { return "patched"; }; } patch();"#),
+        &patched(
+            r#"function patch() { __webpack_require__.o = function () { return "patched"; }; } patch();"#,
+        ),
         "o: patched m1\n",
     );
 }
@@ -102,7 +107,9 @@ fn a_helper_written_from_a_nested_function_is_refused() {
 #[test]
 fn a_helper_written_under_an_unknown_condition_is_refused() {
     refused(
-        &patched(r#"if (installedModules) __webpack_require__.o = function () { return "patched"; };"#),
+        &patched(
+            r#"if (installedModules) __webpack_require__.o = function () { return "patched"; };"#,
+        ),
         "o: patched m1\n",
     );
 }
@@ -117,7 +124,9 @@ __webpack_require__.o = function () { return "second"; };"#;
 #[test]
 fn a_helper_behind_an_early_return_is_refused() {
     refused(
-        &patched(r#"(function () { if (installedModules) return; __webpack_require__.o = function () { return "never"; }; })();"#),
+        &patched(
+            r#"(function () { if (installedModules) return; __webpack_require__.o = function () { return "never"; }; })();"#,
+        ),
         "o: true m1\n",
     );
 }
@@ -125,7 +134,9 @@ fn a_helper_behind_an_early_return_is_refused() {
 #[test]
 fn a_helper_inside_a_generator_is_refused() {
     refused(
-        &patched(r#"(function* () { __webpack_require__.o = function () { return "never"; }; })();"#),
+        &patched(
+            r#"(function* () { __webpack_require__.o = function () { return "never"; }; })();"#,
+        ),
         "o: true m1\n",
     );
 }
@@ -133,7 +144,9 @@ fn a_helper_inside_a_generator_is_refused() {
 #[test]
 fn a_helper_inside_an_async_function_is_refused() {
     refused(
-        &patched(r#"(async function () { await 0; __webpack_require__.o = function () { return "late"; }; })();"#),
+        &patched(
+            r#"(async function () { await 0; __webpack_require__.o = function () { return "late"; }; })();"#,
+        ),
         "o: true m1\n",
     );
 }
@@ -223,7 +236,11 @@ fn a_helper_reading_a_name_around_the_bundle_is_refused() {
 fn a_helper_reading_the_host_require_is_refused() {
     let prelude = r#"__webpack_require__.x = function () { return require.main === module ? "is main" : typeof require; };"#;
     let first = r#"console.log("x:", __webpack_require__.x(), __webpack_require__(1));"#;
-    refused_with(&bundle(prelude, first, M1), REQUIRE_REFUSED, "x: is main m1\n");
+    refused_with(
+        &bundle(prelude, first, M1),
+        REQUIRE_REFUSED,
+        "x: is main m1\n",
+    );
 }
 
 #[test]

@@ -29,9 +29,8 @@ fn a_chunk_that_runs_its_own_code_on_arrival_is_refused() {
     let (modules, notes) = outcome(STARTS_WITH_CODE);
     assert_eq!(modules, None);
     assert!(
-        notes
-            .iter()
-            .any(|note| note.contains("chunk 1 runs code on arrival that is not webpack's deferred-entry list")),
+        notes.iter().any(|note| note
+            .contains("chunk 1 runs code on arrival that is not webpack's deferred-entry list")),
         "{notes:?}"
     );
 }
@@ -41,9 +40,8 @@ fn a_chunk_with_deferred_entries_is_written_and_says_they_do_not_start() {
     let (modules, notes) = outcome(DEFERRED);
     assert_eq!(modules, Some(1));
     assert!(
-        notes
-            .iter()
-            .any(|note| note.contains("starts these modules only after webpack's runtime loads other files: 5")),
+        notes.iter().any(|note| note
+            .contains("starts these modules only after webpack's runtime loads other files: 5")),
         "{notes:?}"
     );
 }
@@ -70,9 +68,8 @@ fn a_bundle_that_starts_its_entry_after_a_chunk_load_says_the_entry_does_not_sta
     let (modules, notes) = outcome(STARTED_AFTER_A_LOAD);
     assert_eq!(modules, Some(2));
     assert!(
-        notes
-            .iter()
-            .any(|note| note.contains("starts these modules only after webpack's runtime loads other files: 1")),
+        notes.iter().any(|note| note
+            .contains("starts these modules only after webpack's runtime loads other files: 1")),
         "{notes:?}"
     );
 }

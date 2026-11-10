@@ -86,10 +86,11 @@ fn literal_first(compare: &BinaryExpression<'_>) -> bool {
         compare.left,
         Expression::StringLiteral(_) | Expression::NumericLiteral(_)
     );
-    literal && !matches!(
-        compare.right,
-        Expression::StringLiteral(_) | Expression::NumericLiteral(_)
-    )
+    literal
+        && !matches!(
+            compare.right,
+            Expression::StringLiteral(_) | Expression::NumericLiteral(_)
+        )
 }
 
 fn ordered(compare: &mut BinaryExpression<'_>) {
@@ -108,7 +109,10 @@ fn ordered(compare: &mut BinaryExpression<'_>) {
             | BinaryOperator::StrictInequality
             | BinaryOperator::BitwiseAnd
     );
-    if symmetric && literal_first(compare) && (typed || compare.operator == BinaryOperator::BitwiseAnd) {
+    if symmetric
+        && literal_first(compare)
+        && (typed || compare.operator == BinaryOperator::BitwiseAnd)
+    {
         std::mem::swap(&mut compare.left, &mut compare.right);
     }
 }
@@ -125,17 +129,26 @@ impl<'a> Rename<'_, 'a> {
         }
     }
 
-    fn effects(&self, expr: Expression<'a>, out: &mut AVec<'a, Statement<'a>>) -> Option<Expression<'a>> {
+    fn effects(
+        &self,
+        expr: Expression<'a>,
+        out: &mut AVec<'a, Statement<'a>>,
+    ) -> Option<Expression<'a>> {
         match expr {
             Expression::SequenceExpression(sequence) => {
                 let mut parts = sequence.unbox().expressions;
                 let last = parts.pop();
                 for part in parts {
-                    self.push(Statement::new_expression_statement(SPAN, part, &self.builder), out);
+                    self.push(
+                        Statement::new_expression_statement(SPAN, part, &self.builder),
+                        out,
+                    );
                 }
                 last
             }
-            Expression::ParenthesizedExpression(inner) => self.effects(inner.unbox().expression, out),
+            Expression::ParenthesizedExpression(inner) => {
+                self.effects(inner.unbox().expression, out)
+            }
             other => Some(other),
         }
     }
@@ -160,7 +173,8 @@ impl<'a> Rename<'_, 'a> {
                                 &self.builder,
                             ),
                         };
-                        let then = Statement::new_expression_statement(SPAN, logical.right, &self.builder);
+                        let then =
+                            Statement::new_expression_statement(SPAN, logical.right, &self.builder);
                         Statement::new_if_statement(SPAN, test, then, None, &self.builder)
                     }
                     other => Statement::new_expression_statement(SPAN, other, &self.builder),
@@ -175,7 +189,11 @@ impl<'a> Rename<'_, 'a> {
                     .unbox()
                     .argument
                     .and_then(|argument| self.effects(argument, out));
-                out.push(Statement::new_return_statement(SPAN, argument, &self.builder));
+                out.push(Statement::new_return_statement(
+                    SPAN,
+                    argument,
+                    &self.builder,
+                ));
             }
             Statement::IfStatement(branch) => {
                 let branch = branch.unbox();
@@ -184,7 +202,13 @@ impl<'a> Rename<'_, 'a> {
                 };
                 let consequent = self.block(branch.consequent);
                 let alternate = branch.alternate.map(|alternate| self.block(alternate));
-                out.push(Statement::new_if_statement(SPAN, test, consequent, alternate, &self.builder));
+                out.push(Statement::new_if_statement(
+                    SPAN,
+                    test,
+                    consequent,
+                    alternate,
+                    &self.builder,
+                ));
             }
             other => out.push(other),
         }
@@ -229,7 +253,10 @@ fn canonical(statement: &Statement<'_>, require: &str) -> Option<String> {
     let mut bound = Bound::default();
     bound.visit_statement(statement);
     let (_, free) = scoped(&alloc, statement.clone_in(&alloc));
-    if free.iter().any(|(name, _)| bound.names.contains(name) || name.starts_with('$')) {
+    if free
+        .iter()
+        .any(|(name, _)| bound.names.contains(name) || name.starts_with('$'))
+    {
         return None;
     }
     let mut body = AVec::with_capacity_in(1, &builder);
@@ -267,7 +294,11 @@ fn unwrapped<'k, 'a>(statement: &'k Statement<'a>) -> &'k Statement<'a> {
     let ArrowFunctionBody::FunctionBody(body) = &arrow.body else {
         return statement;
     };
-    match (&body.statements[..], call.arguments.is_empty(), arrow.params.items.is_empty()) {
+    match (
+        &body.statements[..],
+        call.arguments.is_empty(),
+        arrow.params.items.is_empty(),
+    ) {
         ([only], true, true) if body.directives.is_empty() && !arrow.r#async => only,
         _ => statement,
     }

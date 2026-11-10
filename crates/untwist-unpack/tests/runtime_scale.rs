@@ -10,7 +10,9 @@ const GROWTH_BOUND: u32 = 8;
 
 fn bundle_with_helpers(count: usize) -> String {
     let helpers: String = (0..count)
-        .map(|index| format!("  __webpack_require__.a{index} = function () {{ return {index}; }};\n"))
+        .map(|index| {
+            format!("  __webpack_require__.a{index} = function () {{ return {index}; }};\n")
+        })
         .collect();
     format!(
         "(function (modules) {{

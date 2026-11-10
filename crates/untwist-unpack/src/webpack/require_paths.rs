@@ -378,10 +378,7 @@ pub fn replace_require_paths_with<'a>(
             bind,
             track: tracked.get(index).copied().unwrap_or(false),
             route: routing.and_then(|routing| {
-                Some((
-                    routing.bindings.get(index)?.as_str(),
-                    &routing.available,
-                ))
+                Some((routing.bindings.get(index)?.as_str(), &routing.available))
             }),
             scoping,
             shadowed: 0,
