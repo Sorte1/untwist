@@ -162,7 +162,11 @@ array or decoder before the rotator runs, no code that is built at run time from
 the proof fails, the call stays in place and the report says why. The output behaves like the
 input.
 
-The safe lane rests on a few stated premises about code it cannot see. Code from outside the file
+The safe lane rests on a few stated premises about code it cannot see. One input file is a closed
+program. Several classic scripts given in one run share one global scope, as scripts on one page
+do: every top-level `var`, function, `let`, `const` and `class` of each is read and written by the
+others, so none is inlined away, removed or renamed. A module (a file with `import`, `export`,
+`import.meta` or top-level `await`) is closed apart from its exports. Code from outside the file
 (`require` results, host functions, other scripts) writes no built-in. It also does not depend on
 the names the obfuscator picked for the string array and its decoders, because that code was
 written before those names existed. So when such code is handed a value that may hold the global

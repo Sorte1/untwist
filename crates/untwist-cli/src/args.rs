@@ -10,7 +10,12 @@ use clap::{Parser, ValueEnum};
     about = "Deobfuscate, unminify and unpack bundled JavaScript"
 )]
 pub struct Args {
-    #[arg(help = "JavaScript files to process; with none given, the program is read from stdin")]
+    #[arg(
+        help = "JavaScript files to process; with none given, the program is read from stdin. \
+                One input is a closed program. Several classic scripts given together share one \
+                global scope, so their top-level bindings are kept and not renamed; a module is \
+                closed apart from its exports"
+    )]
     pub files: Vec<PathBuf>,
     #[arg(
         short,

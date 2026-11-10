@@ -110,6 +110,7 @@ struct Reservation<'r> {
     stack: &'r StackReserve<'static>,
     stats: &'r std::sync::Mutex<crate::stats::RunStats>,
     limits: Limits,
+    shared: bool,
 }
 
 struct Batch<'s> {
@@ -144,6 +145,7 @@ impl<'s> Batch<'s> {
             stack: &self.stack,
             stats: &self.stats,
             limits: self.limits,
+            shared: self.sources.len() > 1,
         }
     }
 }
