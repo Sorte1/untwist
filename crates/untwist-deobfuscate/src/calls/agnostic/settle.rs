@@ -9,7 +9,7 @@ use std::cell::RefCell;
 
 use super::assembled::{broken_tables, drop_tables};
 use super::bind::Bindings;
-use super::filtered::Filters;
+use super::filtered::{Filters, STRING_METHODS};
 use super::flow::Flow;
 use super::fresh::Fresh;
 use super::instance::Unwritten;
@@ -119,6 +119,7 @@ pub(super) struct Pristine {
     pub(super) symbol: bool,
     pub(super) map: bool,
     pub(super) unwritten: Unwritten,
+    filters: bool,
 }
 
 impl Pristine {
@@ -127,6 +128,7 @@ impl Pristine {
             symbol: bindings.symbol_safe(),
             map: bindings.map_safe(),
             unwritten: Unwritten::all(),
+            filters: true,
         }
     }
 
@@ -135,6 +137,7 @@ impl Pristine {
             symbol: self.symbol && !written.may_be("Symbol"),
             map: self.map && !native_map::may_be_patched(written),
             unwritten: self.unwritten.after(written),
+            filters: self.filters && !STRING_METHODS.iter().any(|name| written.may_be(name)),
         }
     }
 }
@@ -197,6 +200,9 @@ fn settle_ordered<'a>(
         };
         if next.source && !judged.source {
             bindings.hide_calls(&globals);
+        }
+        if !next.pristine.filters {
+            filters.open();
         }
         let rebound = rebound_globals(&out, &globals, &bindings, (next.source, &written));
         let broken = broken_tables(&out, &bindings.assembled, machinery);

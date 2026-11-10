@@ -190,8 +190,7 @@ impl<'a> Sites<'_, 'a> {
         let symbol = self.fresh.symbol(id)?;
         let bindings = self.fresh.bindings;
         let (of, index) = bindings.param_of(symbol)?;
-        bindings
-            .never_reassigned(symbol)
+        (bindings.never_reassigned(symbol) && bindings.every_call_visible(of))
             .then_some((symbol, of, index))
     }
 

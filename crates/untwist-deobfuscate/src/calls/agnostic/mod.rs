@@ -2,6 +2,7 @@ mod assembled;
 mod awaited;
 mod bind;
 mod bootstrap;
+mod bound_once;
 mod bound_this;
 mod consume;
 mod defs;

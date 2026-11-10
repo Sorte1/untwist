@@ -1,6 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::GetSpan;
+use oxc_syntax::operator::BinaryOperator;
 use oxc_syntax::scope::ScopeFlags;
 
 use super::collect::{Collector, Key};
@@ -8,7 +9,9 @@ use super::collect::{Collector, Key};
 impl<'a> VisitJs<'a> for Collector<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         self.fn_stack.push(it.span.start);
+        let patterns = std::mem::take(&mut self.pattern_depth);
         walk_js::walk_function(self, it, flags);
+        self.pattern_depth = patterns;
         self.fn_stack.pop();
     }
 
@@ -18,8 +21,110 @@ impl<'a> VisitJs<'a> for Collector<'_> {
             let ret = self.ret_node(it.span.start);
             self.route_into(body, ret);
         }
+        let patterns = std::mem::take(&mut self.pattern_depth);
         walk_js::walk_arrow_function_expression(self, it);
+        self.pattern_depth = patterns;
         self.fn_stack.pop();
+    }
+
+    fn visit_object_pattern(&mut self, it: &ObjectPattern<'a>) {
+        self.pattern_depth += 1;
+        walk_js::walk_object_pattern(self, it);
+        self.pattern_depth -= 1;
+    }
+
+    fn visit_array_pattern(&mut self, it: &ArrayPattern<'a>) {
+        self.pattern_depth += 1;
+        walk_js::walk_array_pattern(self, it);
+        self.pattern_depth -= 1;
+    }
+
+    fn visit_array_assignment_target(&mut self, it: &ArrayAssignmentTarget<'a>) {
+        self.pattern_depth += 1;
+        walk_js::walk_array_assignment_target(self, it);
+        self.pattern_depth -= 1;
+    }
+
+    fn visit_object_assignment_target(&mut self, it: &ObjectAssignmentTarget<'a>) {
+        self.pattern_depth += 1;
+        walk_js::walk_object_assignment_target(self, it);
+        self.pattern_depth -= 1;
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        if self.pattern_depth > 0 {
+            if let Some(bind) = it.symbol_id.get().and_then(|s| self.bind_node(s)) {
+                let any = self.any_node();
+                self.edge(any, bind);
+            }
+        }
+    }
+
+    fn visit_simple_assignment_target(&mut self, it: &SimpleAssignmentTarget<'a>) {
+        if let (SimpleAssignmentTarget::AssignmentTargetIdentifier(id), true) =
+            (it, self.pattern_depth > 0)
+        {
+            let bind = self.ident_node(id);
+            let any = self.any_node();
+            self.edge(any, bind);
+        }
+        walk_js::walk_simple_assignment_target(self, it);
+    }
+
+    fn visit_assignment_target_with_default(&mut self, it: &AssignmentTargetWithDefault<'a>) {
+        self.sink_expr(&it.init, it.span);
+        walk_js::walk_assignment_target_with_default(self, it);
+    }
+
+    fn visit_assignment_target_property_identifier(
+        &mut self,
+        it: &AssignmentTargetPropertyIdentifier<'a>,
+    ) {
+        let bind = self.ident_node(&it.binding);
+        let any = self.any_node();
+        self.edge(any, bind);
+        if let Some(init) = it.init.as_ref() {
+            self.sink_expr(init, it.span);
+        }
+        walk_js::walk_assignment_target_property_identifier(self, it);
+    }
+
+    fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
+        if it.operator == BinaryOperator::Instanceof {
+            self.sink_expr(&it.left, it.span);
+        }
+        walk_js::walk_binary_expression(self, it);
+    }
+
+    fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {
+        self.sink_expr(&it.source, it.span);
+        if let Some(options) = it.options.as_ref() {
+            self.sink_expr(options, it.span);
+        }
+        walk_js::walk_import_expression(self, it);
+    }
+
+    fn visit_v8_intrinsic_expression(&mut self, it: &V8IntrinsicExpression<'a>) {
+        self.sink_arguments(&it.arguments, it.span);
+        self.sink_spreads(&it.arguments, it.span);
+        walk_js::walk_v8_intrinsic_expression(self, it);
+    }
+
+    fn visit_jsx_expression_container(&mut self, it: &JSXExpressionContainer<'a>) {
+        if let Some(expr) = it.expression.as_expression() {
+            self.sink_expr(expr, it.span);
+        }
+        walk_js::walk_jsx_expression_container(self, it);
+    }
+
+    fn visit_jsx_spread_attribute(&mut self, it: &JSXSpreadAttribute<'a>) {
+        self.sink_expr(&it.argument, it.span);
+        walk_js::walk_jsx_spread_attribute(self, it);
+    }
+
+    fn visit_jsx_spread_child(&mut self, it: &JSXSpreadChild<'a>) {
+        self.sink_expr(&it.expression, it.span);
+        walk_js::walk_jsx_spread_child(self, it);
     }
 
     fn visit_return_statement(&mut self, it: &ReturnStatement<'a>) {
@@ -88,9 +193,8 @@ impl<'a> VisitJs<'a> for Collector<'_> {
         if routes {
             match &it.left {
                 AssignmentTarget::AssignmentTargetIdentifier(id) => {
-                    if let Some(bind) = self.symbol_of(id).and_then(|s| self.bind_node(s)) {
-                        self.route_into(&it.right, bind);
-                    }
+                    let bind = self.ident_node(id);
+                    self.route_into(&it.right, bind);
                 }
                 AssignmentTarget::ArrayAssignmentTarget(_)
                 | AssignmentTarget::ObjectAssignmentTarget(_) => {
@@ -208,7 +312,11 @@ impl<'a> VisitJs<'a> for Collector<'_> {
 
     fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
         self.sink_expr(&it.right, it.span);
-        walk_js::walk_for_of_statement(self, it);
+        self.pattern_depth += 1;
+        self.visit_for_statement_left(&it.left);
+        self.pattern_depth -= 1;
+        self.visit_expression(&it.right);
+        self.visit_statement(&it.body);
     }
 
     fn visit_throw_statement(&mut self, it: &ThrowStatement<'a>) {
@@ -218,7 +326,10 @@ impl<'a> VisitJs<'a> for Collector<'_> {
 
     fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
         self.sink_expr(&it.object, it.span);
-        walk_js::walk_with_statement(self, it);
+        self.visit_expression(&it.object);
+        self.with_depth += 1;
+        self.visit_statement(&it.body);
+        self.with_depth -= 1;
     }
 
     fn visit_yield_expression(&mut self, it: &YieldExpression<'a>) {

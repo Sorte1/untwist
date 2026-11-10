@@ -9,7 +9,7 @@ use untwist_core::ast_util::js_text::js_text;
 
 use super::super::stored::Facts;
 
-pub(super) const STRING_METHODS: [&str; 2] = ["charCodeAt", "charAt"];
+pub(in crate::calls::agnostic) const STRING_METHODS: [&str; 2] = ["charCodeAt", "charAt"];
 
 const MAX_NESTING: usize = 8;
 const MAX_DEPTH: u32 = 64;

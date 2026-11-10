@@ -1,5 +1,6 @@
 mod collect;
 mod funcs;
+mod globals;
 pub(super) mod holds;
 #[cfg(test)]
 mod tests;
@@ -50,7 +51,7 @@ impl<'f, 'a> Flow<'f, 'a> {
 
     fn graph(&self) -> &Graph {
         self.graph.get_or_init(|| {
-            let mut prescan = Prescan::new(self.scoping);
+            let mut prescan = Prescan::new(self.scoping, self.program);
             prescan.visit_program(self.program);
             let mut collector = Collector::new(self.scoping, self.resolve, prescan.finish());
             collector.visit_program(self.program);

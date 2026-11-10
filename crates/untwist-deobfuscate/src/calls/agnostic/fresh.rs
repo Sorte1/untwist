@@ -58,7 +58,7 @@ impl<'a> Fresh<'_, 'a> {
         self.bindings
             .defs
             .get(symbol)
-            .filter(|defs| !defs.opaque && !defs.mutated)
+            .filter(|defs| !defs.opaque && !defs.mutated && self.bindings.stable.holds(symbol))
     }
 
     pub(super) fn inlinable_helper(

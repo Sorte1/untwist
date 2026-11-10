@@ -35,3 +35,38 @@ fn an_unproven_global_value_that_reaches_an_intrinsic_or_binding_runs_like_node(
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+const DEFAULT_ROWS: &str = include_str!("data/global_reach_default_rows.txt");
+
+fn default_rows() -> Vec<(String, String)> {
+    DEFAULT_ROWS
+        .lines()
+        .filter_map(|line| line.split_once('|'))
+        .map(|(label, program)| (label.to_string(), program.to_string()))
+        .collect()
+}
+
+#[test]
+fn a_global_value_reaching_a_parameter_or_a_redeclared_function_keeps_the_decoder() {
+    let safe = Options::default();
+    let programs = default_rows();
+    assert!(!programs.is_empty());
+    let decoded: Vec<&str> = programs
+        .iter()
+        .filter(|(_, source)| !transformed(&safe, source).contains("console.log(bQ("))
+        .map(|(label, _)| label.as_str())
+        .collect();
+    assert!(decoded.is_empty(), "decoded: {decoded:?}");
+}
+
+#[test]
+fn a_global_value_reaching_a_parameter_or_a_redeclared_function_runs_like_node() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let safe = Options::default();
+    let run_safe = |source: &str| transformed(&safe, source);
+    let modes: [Mode<'_>; 1] = [("default", &run_safe)];
+    let wrong = node_rows::mismatches(&node, &default_rows(), &modes);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
