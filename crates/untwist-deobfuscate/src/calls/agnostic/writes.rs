@@ -185,11 +185,30 @@ impl<'s, 'a> Sites<'s, 'a> {
     fn native_receiver(&self, name: &str, receiver: &Expression<'a>) -> bool {
         match name {
             "create" => !self.object_rebound && self.is_unbound(receiver, "Object"),
-            _ => matches!(
-                receiver.without_parentheses(),
-                Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_)
-            ),
+            _ => match receiver.without_parentheses() {
+                Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_) => true,
+                other => {
+                    let through = self.function_prototype_of(other);
+                    self.constructor_used
+                        .set(self.constructor_used.get() || through);
+                    through
+                }
+            },
         }
+    }
+
+    fn function_prototype_of(&self, expr: &Expression<'a>) -> bool {
+        let Some(prototype) = expr_member(expr) else {
+            return false;
+        };
+        let Some(constructor) = expr_member(prototype.object()) else {
+            return false;
+        };
+        let named = |member: &MemberExpression<'a>, name: &str| matches!(self.member_keys(member).as_slice(), [AKey::Named(key)] if key == name);
+        named(prototype, "prototype")
+            && named(constructor, "constructor")
+            && matches!(constructor.object().without_parentheses(),
+                Expression::Identifier(id) if self.fresh.holds_function(id))
     }
 
     fn is_unbound(&self, expr: &Expression<'a>, name: &str) -> bool {

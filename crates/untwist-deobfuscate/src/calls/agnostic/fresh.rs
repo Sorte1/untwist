@@ -212,6 +212,19 @@ impl<'s, 'a> Fresh<'s, 'a> {
         }
     }
 
+    pub(super) fn holds_function(&self, id: &IdentifierReference<'_>) -> bool {
+        self.defs(id).is_some_and(|defs| {
+            !defs.fields_written
+                && match defs.inits {
+                    [] => defs.callable,
+                    [Some(init)] => {
+                        function_valued(init) || super::live::iife_returned(init).is_some()
+                    }
+                    _ => false,
+                }
+        })
+    }
+
     pub(super) fn callee_function<'k>(
         &self,
         callee: &'k Expression<'a>,

@@ -501,7 +501,10 @@ impl<'s, 'a> Sites<'s, 'a> {
             return true;
         }
         let refutes = |key: &AKey<'a>| match key {
-            AKey::Named(name) => FRESH_REFUTERS.contains(&name.as_ref()),
+            AKey::Named(name) => {
+                FRESH_REFUTERS.contains(&name.as_ref())
+                    || (self.constructor_used.get() && name == "constructor")
+            }
             AKey::Index => false,
             AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
         };
