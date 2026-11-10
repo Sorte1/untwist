@@ -534,6 +534,9 @@ fn contains(outer: Span, inner: Span) -> bool {
 
 pub(super) fn nest_depth(spans: impl Iterator<Item = Span>) -> usize {
     let mut spans: Vec<Span> = spans.collect();
+    if spans.len() <= MAX_NEST {
+        return spans.len().min(1);
+    }
     spans.sort_unstable_by_key(|span| (span.start, std::cmp::Reverse(span.end)));
     spans.dedup();
     let mut open: Vec<Span> = Vec::new();
