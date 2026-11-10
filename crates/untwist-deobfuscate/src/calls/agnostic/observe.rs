@@ -83,15 +83,21 @@ impl<'a> Sites<'_, 'a> {
     }
 
     fn name_assigned(&self, name: &str) -> bool {
-        self.fresh
-            .scoping
-            .root_unresolved_references()
-            .get(name)
-            .is_some_and(|references| {
-                references
+        let scoping = self.fresh.scoping;
+        self.assigned_globals
+            .get_or_init(|| {
+                scoping
+                    .root_unresolved_references()
                     .iter()
-                    .any(|reference| self.fresh.scoping.get_reference(*reference).is_write())
+                    .filter(|(_, references)| {
+                        references
+                            .iter()
+                            .any(|reference| scoping.get_reference(*reference).is_write())
+                    })
+                    .map(|(name, _)| name.as_str())
+                    .collect()
             })
+            .contains(name)
     }
 
     fn throws_reference(&mut self, expr: &Expression<'a>, span: Span) -> bool {
