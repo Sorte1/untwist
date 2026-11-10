@@ -20,6 +20,7 @@ impl Pipeline {
         untwist_unpack::UnpackOptions {
             split_hoisted: self.options.split_hoisted,
             conservative: !self.options.extended(),
+            trust_free_loader: self.options.unsafe_transforms,
         }
     }
 

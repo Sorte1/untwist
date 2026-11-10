@@ -21,6 +21,7 @@ pub struct Links {
     pub imports: Vec<Vec<(usize, Vec<String>)>>,
     pub exports: Vec<Vec<String>>,
     pub requires: Vec<bool>,
+    pub dropped: Vec<bool>,
 }
 
 fn sanitized(name: &str) -> String {
@@ -110,6 +111,7 @@ pub fn links(scoping: &Scoping, facts: &Facts, segments: &[Range<usize>]) -> Lin
         imports,
         exports,
         requires,
+        dropped: facts.dropped.clone(),
     }
 }
 
@@ -276,11 +278,16 @@ pub fn assemble<'a>(
         tails,
         mut wrapper,
     } = parts;
-    let mut items = owned.into_iter();
+    let mut items = owned.into_iter().zip(&links.dropped);
     let mut bundle = Bundle::new(BundleKind::Rollup, Some(ENTRY_ID.to_string()));
     let last = segments.len() - 1;
     for (at, (head, tail)) in heads.into_iter().zip(tails).enumerate() {
-        let body: Vec<Statement<'a>> = items.by_ref().take(segments[at].len()).collect();
+        let body: Vec<Statement<'a>> = items
+            .by_ref()
+            .take(segments[at].len())
+            .filter(|(_, dropped)| !**dropped)
+            .map(|(statement, _)| statement)
+            .collect();
         let comments = comments_of(source, &body);
         let id = links.ids[at].clone();
         let statements = if at == last {

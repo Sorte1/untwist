@@ -205,6 +205,7 @@ unlinked!(closure_detect, crate::closure::detect_with);
 unlinked!(systemjs_detect, crate::systemjs::detect_with);
 unlinked!(esbuild_detect, crate::esbuild::detect_with);
 unlinked!(metro_detect, crate::metro::detect_with);
+unlinked!(metro_trusting_detect, crate::metro::detect_trusting_with);
 unlinked!(amd_detect, crate::amd::detect_with);
 unlinked!(umd_detect, crate::umd::detect_with);
 unlinked!(rollup_detect, crate::rollup::detect_with);
@@ -240,11 +241,26 @@ enum Scope {
     Nested,
 }
 
+const METRO_TRUSTING: Kind = (
+    BundleKind::Metro,
+    crate::metro::probe,
+    metro_trusting_detect,
+);
+
+fn chosen(kind: Kind, options: UnpackOptions) -> Kind {
+    if options.trust_free_loader && kind.0 == BundleKind::Metro {
+        METRO_TRUSTING
+    } else {
+        kind
+    }
+}
+
 fn kinds(options: UnpackOptions, scope: Scope) -> impl Iterator<Item = Kind> {
     let nested = scope == Scope::Nested;
     KINDS
         .into_iter()
         .filter(move |(kind, _, _)| !nested || !matches!(kind, BundleKind::Amd | BundleKind::Umd))
+        .map(move |kind| chosen(kind, options))
         .chain((options.split_hoisted && !nested).then_some(HOISTED))
 }
 

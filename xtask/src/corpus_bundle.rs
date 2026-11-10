@@ -11,7 +11,8 @@ const HEADER: &str = "(function (modules) {\n  var cache = {};\n  function __web
 
 const ESBUILD_HEADER: &str = "var __getOwnPropNames = Object.getOwnPropertyNames;\nvar __commonJS = (cb, mod) => function __require() {\n  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;\n};\n";
 
-const METRO_HEADER: &str = "var modules = Object.create(null);\nfunction __d(factory, moduleId, dependencyMap) {\n  modules[moduleId] = { factory: factory, dependencyMap: dependencyMap, module: null };\n}\nfunction __r(moduleId) {\n  var record = modules[moduleId];\n  if (record.module) return record.module.exports;\n  var module = (record.module = { exports: {} });\n  record.factory(globalThis, __r, null, null, module, module.exports, record.dependencyMap);\n  return module.exports;\n}\n";
+const METRO_BUNDLE: &str = include_str!("../../fixtures/unpack-bundlers/metro/metro.js");
+const METRO_FIRST_DEFINITION: &str = "\n__d(";
 
 const FACTORY_PARAMS_METRO: &str =
     "global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap";
@@ -77,6 +78,12 @@ fn esbuild_module(index: usize, state: &mut u64) -> String {
     text
 }
 
+fn metro_header() -> &'static str {
+    METRO_BUNDLE
+        .find(METRO_FIRST_DEFINITION)
+        .map_or("", |at| &METRO_BUNDLE[..=at])
+}
+
 fn metro_module(index: usize, state: &mut u64) -> String {
     let mut text = format!("__d(function ({FACTORY_PARAMS_METRO}) {{\n  \"use strict\";\n");
     let deps = if index > 0 {
@@ -138,7 +145,7 @@ fn listed_text(kind: &str, modules: usize, state: &mut u64) -> Result<String> {
             format!("require_m{}();\n", modules - 1),
         ),
         "metro" => (
-            METRO_HEADER,
+            metro_header(),
             metro_module,
             format!("__r({});\n", modules - 1),
         ),

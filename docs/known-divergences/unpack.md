@@ -134,13 +134,28 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   (clusters by reference adjacency, a binding's writers kept with its owner). It is refused for a
   sloppy wrapper, any top-level statement besides the wrapper, any `currentScript` read, and any
   binding written across a module edge. `game.js` reads `document.currentScript` and is therefore
-  not split.
+  not split. A function declared more than once at the wrapper's top level keeps its last
+  declaration only, the one every reference in the wrapper sees; a name declared twice in any other
+  way (a `var` beside a function) is refused, since an ES module may not declare a name twice.
 - **Closure.** Only the module manager's `try {…} catch (e) { X._DumpException(e) }` segments
   are split (ids from `/*_M:id*/` markers or begin/end loader calls checked against the
   `_ModuleManager_initialize` graph). Closure ADVANCED property renaming stays a non-goal. A Closure
   bundle inside a UMD or AMD factory is not re-fed: its top-level `this` is the factory's receiver,
-  which an AMD loader sets to `exports`.
-- **Metro.** Factories with 5 or 6 parameters (Metro < 0.52) are refused.
+  which an AMD loader sets to `exports`. Every written segment runs with `globalThis` as its
+  top-level `this`, which is what the bundle's `this` is in a browser classic script. This is an
+  accepted assumption: required as a CommonJS file under node the bundle's `this` is
+  `module.exports`, so there a bundle that reaches globals through `var window = this` and its
+  output differ.
+- **Metro.** Factories with 5 or 6 parameters (Metro < 0.52) are refused. `__d` and `__r` are
+  Metro's only when the file shows it: the prelude must hold Metro's `require.js` polyfill, equal
+  after α-renaming to a recorded text (`metro/runtimes/`, metro 0.87.2 production, not
+  minified, as written and as the default and `--unsafe` passes leave it), `__METRO_GLOBAL_PREFIX__` must be bound once to the prefix the calls use, no other
+  prelude statement may spell a name ending in `__d` or `__r`, and the statements after the prelude
+  may call nothing at their own level but those two. A prelude that defines the names any other way
+  is refused, a minified or older runtime included, until its text is recorded. A file with no
+  prelude (the names are free, as in a split or lazy bundle) is refused in the safe lane and
+  unpacked with `--unsafe`, which takes the names on trust. A prelude polyfill that replaces the
+  loader without spelling its name (through a computed key) is not seen.
 - **SystemJS.** The entry is the first named register (SystemJS's named-register extension never
   instantiates an anonymous register beside named ones). Setters must be plain binding, namespace or
   re-export forms, and static cycles are refused; `_context.meta` is refused rather than mapped to
@@ -148,7 +163,9 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
 - **AMD and UMD.** AMD needs every top-level statement to be a `define`, all anonymous (one) or all named;
   dependency cycles, loader plugins (`!`), the `define(function (require) {…})` sugar and a `module`
   dependency are refused. A UMD wrapper's non-factory arguments must be inert (`this`, a literal,
-  a `typeof X !== "undefined" ? X : …` guard).
+  a `typeof X !== "undefined" ? X : …` guard). The wrapper's branch is chosen from `typeof define`
+  tests only: a bare `define` read (`if (define && define.amd)`) throws where `define` is not
+  declared, so such a wrapper is refused.
 - **Parcel.** Both runtimes are accepted, the registry (`--no-scope-hoist`) only when its runtime
   text matches one of five recorded forms after α-renaming (`parcel/runtimes/`; if a later
   prepare or unminify change rewrites that runtime differently, Parcel registry bundles are refused
@@ -157,7 +174,11 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   are not accepted, which also keeps an `Object.prototype` name (`require("constructor")`, which
   Parcel's runtime resolves through the prototype) from being read as an external. Accepting
   externals later must exclude those names explicitly. A lazy chunk that the inputs
-  supply is linked into one bundle.
+  supply is linked into one bundle. The scope-hoisted form is accepted only when the statement that
+  defines `parcelRequire` equals a recorded text after α-renaming (Parcel 2.16.4, development
+  and minified, each as written and as prepare and unminify leave it), and `$parcel$modules` and `$parcel$inits` are each declared once as
+  `{}` and named nowhere else at the top level; another Parcel version's definition is refused
+  until its text is recorded.
 - **Turbopack.** Browser chunks with a registration naming their runtime entries, and server chunks
   given together with Next's page loader and `[turbopack]_runtime.js`, are split. A chunk whose
   factories use Turbopack's interop, async or chunk-loading helpers (`i`, `s`, `A`, `l`, …) is

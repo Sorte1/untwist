@@ -3,22 +3,10 @@ mod common;
 use common::{parse, print_module};
 use oxc_allocator::Allocator;
 use untwist_core::print::pretty_codegen;
-use untwist_unpack::{unpack, unpack_taking};
+use untwist_unpack::{unpack, unpack_program_with, unpack_taking, UnpackOptions};
 
 const PARAMS: &str =
     "global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap";
-const LOADER: &str = "var modules = Object.create(null);
-function __d(factory, moduleId, dependencyMap) {
-  modules[moduleId] = { factory: factory, dependencyMap: dependencyMap, module: null };
-}
-function __r(moduleId) {
-  var record = modules[moduleId];
-  if (record.module) return record.module.exports;
-  var module = (record.module = { exports: {} });
-  record.factory(globalThis, __r, null, null, module, module.exports, record.dependencyMap);
-  return module.exports;
-}
-";
 const LEAF: &str = "__d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {
   module.exports = { value: 2 };
 }, 1, []);
@@ -28,11 +16,28 @@ fn def(id: &str, deps: &str, body: &str) -> String {
     format!("__d(function ({PARAMS}) {{\n{body}\n}}, {id}, {deps});\n")
 }
 
+fn loader() -> String {
+    let bundle = fixture("metro.js");
+    let end = bundle.find("\n__d(").expect("a first definition") + 1;
+    bundle[..end].to_string()
+}
+
 fn bundle_with(prelude: &str, entry_body: &str) -> String {
     format!(
-        "{LOADER}{prelude}{LEAF}{}__r(0);\n",
+        "{}{prelude}{LEAF}{}__r(0);\n",
+        loader(),
         def("0", "[1]", entry_body)
     )
+}
+
+fn trusted(source: &str) -> bool {
+    let alloc = Allocator::default();
+    let program = parse(&alloc, source);
+    let options = UnpackOptions {
+        trust_free_loader: true,
+        ..UnpackOptions::default()
+    };
+    unpack_program_with(&alloc, &program, options).is_some()
 }
 
 fn modules(source: &str) -> Option<Vec<(String, String)>> {
@@ -78,7 +83,7 @@ fn the_smallest_bundle_splits_with_paths_and_the_loader_in_the_runtime() {
         code_of(&files, "index.js"),
         "require(\"./_runtime/metro.js\");\nconsole.log(\"eval 0\", require(\"./1.js\").value);"
     );
-    assert!(code_of(&files, "_runtime/metro.js").starts_with("var modules = Object.create(null);"));
+    assert!(code_of(&files, "_runtime/metro.js").starts_with("var __BUNDLE_START_TIME__ ="));
 }
 
 #[test]
@@ -102,8 +107,9 @@ fn old_factories_and_a_bad_call_are_refused() {
         "global, require, module, exports, _dependencyMap",
         "global, require, module, exports, _dependencyMap, x",
     ] {
+        let loader = loader();
         let old =
-            format!("{LOADER}__d(function ({params}) {{\n  console.log(1);\n}}, 0);\n__r(0);\n");
+            format!("{loader}__d(function ({params}) {{\n  console.log(1);\n}}, 0);\n__r(0);\n");
         assert!(modules(&old).is_none(), "{params}");
     }
 }
@@ -111,18 +117,18 @@ fn old_factories_and_a_bad_call_are_refused() {
 #[test]
 fn prelude_bindings_move_to_the_runtime_and_are_imported() {
     let files = modules(&bundle_with(
-        "var __DEV__ = false, prefix = '';\n",
-        "console.log(__DEV__, `${prefix}x`);",
+        "var __FLAG__ = false, prefix = '';\n",
+        "console.log(__FLAG__, `${prefix}x`);",
     ))
     .expect("accepted");
     let index = code_of(&files, "index.js");
     assert!(
-        index.starts_with("var { __DEV__, prefix } = require(\"./_runtime/metro.js\");"),
+        index.starts_with("var { __FLAG__, prefix } = require(\"./_runtime/metro.js\");"),
         "{index}"
     );
     let runtime = code_of(&files, "_runtime/metro.js");
     assert!(
-        runtime.ends_with("module.exports = {\n  __DEV__,\n  prefix\n};"),
+        runtime.ends_with("module.exports = {\n  __FLAG__,\n  prefix\n};"),
         "{runtime}"
     );
 }
@@ -135,7 +141,6 @@ fn a_prelude_binding_that_is_written_or_mutated_by_the_loader_is_refused() {
         "var flag = 1;\nvar flag = 2;\n",
         "console.log(flag);"
     ));
-    assert!(refused("", "console.log(modules);"));
     assert!(refused(
         "var seen = {};\nfunction note(k) { seen[k] = 1; }\n",
         "console.log(seen);"
@@ -168,7 +173,7 @@ fn a_factory_reading_a_bundle_function_is_refused() {
         "{LEAF}{}__r(0);\n",
         def("0", "[1]", "require(_dependencyMap[0]);")
     );
-    assert!(modules(&global_loader).is_some());
+    assert!(trusted(&global_loader));
     assert!(modules(&global_loader.replace("require(_dependencyMap[0]);", "__r(1);")).is_none());
     assert!(modules(&global_loader.replace("require(_dependencyMap[0]);", "__d(f, 2);")).is_none());
 }
@@ -192,7 +197,8 @@ fn the_dependency_map_is_inlined_or_copied_and_never_escapes() {
     assert!(refused("", "_dependencyMap[0] = 2;"));
     assert!(refused("", "_dependencyMap.push(2);"));
     assert!(modules(&format!(
-        "{LOADER}{}__r(0);\n",
+        "{}{}__r(0);\n",
+        loader(),
         def("0", "[]", "_dependencyMap.paths;").replace(", []);", ");")
     ))
     .is_none());
@@ -296,8 +302,9 @@ fn top_level_this_host_names_and_shadowing_refuse() {
 
 #[test]
 fn minified_parameters_are_renamed_without_capturing_host_names() {
+    let loader = loader();
     let minified = format!(
-        "{LOADER}{LEAF}__d(function (g, r, d, a, m, e, n) {{\n  m.exports = r(n[0]);\n  g.x = 1;\n}}, 0, [1]);\n__r(0);\n"
+        "{loader}{LEAF}__d(function (g, r, d, a, m, e, n) {{\n  m.exports = r(n[0]);\n  g.x = 1;\n}}, 0, [1]);\n__r(0);\n"
     );
     let files = modules(&minified).expect("accepted");
     let index = code_of(&files, "index.js");
@@ -314,7 +321,7 @@ fn minified_parameters_are_renamed_without_capturing_host_names() {
 
 #[test]
 fn layout_refusals() {
-    let base = format!("{LOADER}{LEAF}{}", def("0", "[1]", ""));
+    let base = format!("{}{LEAF}{}", loader(), def("0", "[1]", ""));
     assert!(modules(&format!("{base}__r(0);\n")).is_some());
     assert!(modules(&format!("{base}{LEAF}__r(0);\n")).is_none());
     assert!(modules(&format!(
@@ -336,7 +343,8 @@ fn layout_refusals() {
 #[test]
 fn several_run_calls_get_a_synthesized_entry_in_order() {
     let source = format!(
-        "{LOADER}{LEAF}{}__r(1);\n__r(0);\n",
+        "{}{LEAF}{}__r(1);\n__r(0);\n",
+        loader(),
         def("0", "[]", "console.log(0);")
     );
     let files = modules(&source).expect("accepted");
@@ -385,7 +393,8 @@ fn taken_bodies_extract_like_cloned_ones() {
 fn a_module_id_that_names_the_runtime_refuses() {
     let source = |id: &str| {
         format!(
-            "{LOADER}{}{}__r(0);\n",
+            "{}{}{}__r(0);\n",
+            loader(),
             def(id, "[]", "module.exports = { value: 2 };"),
             def(
                 "0",
@@ -396,4 +405,62 @@ fn a_module_id_that_names_the_runtime_refuses() {
     };
     assert!(modules(&source("\"leaf\"")).is_some());
     assert!(modules(&source("\"_runtime/metro\"")).is_none());
+}
+
+#[test]
+fn a_loader_that_is_not_metros_is_refused_whatever_is_trusted() {
+    let fake = "var __d = function (factory, id, deps) {};\n\
+                var __r = function (id) { console.log(\"custom runtime\", id); };\n\
+                __d(function (g, r, i, a, m, e, d) { console.log(\"module 0 ran\"); }, 0, []);\n\
+                __r(0);\n";
+    let handwritten = format!(
+        "var modules = {{}};\nfunction __d(factory, id) {{ modules[id] = factory; }}\n\
+         function __r(id) {{ return modules[id](); }}\n{LEAF}{}__r(0);\n",
+        def("0", "[1]", "")
+    );
+    let known = bundle_with("", "");
+    let changed = known.replace("  global.__c = clear;\n", "");
+    let assigned_later = bundle_with("globalThis.__d = function () {};\n", "");
+    let keyed_later = bundle_with("globalThis[\"__r\"] = function () {};\n", "");
+    let twice = format!("{}{known}", loader());
+    assert_ne!(changed, known);
+    assert!(modules(&known).is_some());
+    for source in [
+        fake,
+        handwritten.as_str(),
+        changed.as_str(),
+        assigned_later.as_str(),
+        keyed_later.as_str(),
+        twice.as_str(),
+    ] {
+        assert!(modules(source).is_none(), "{source}");
+        assert!(!trusted(source), "{source}");
+    }
+}
+
+#[test]
+fn the_loader_prefix_must_be_the_one_the_definitions_use() {
+    let known = bundle_with("", "");
+    let prefixed = known
+        .replace("__METRO_GLOBAL_PREFIX__=''", "__METRO_GLOBAL_PREFIX__='app'")
+        .replace("\n__d(", "\napp__d(");
+    let unprefixed_calls = known.replace("__METRO_GLOBAL_PREFIX__=''", "__METRO_GLOBAL_PREFIX__='app'");
+    let prefixed_run = prefixed.replace("\n__r(0);", "\napp__r(0);");
+    let rebound = bundle_with("__METRO_GLOBAL_PREFIX__ = 'x';\n", "");
+    assert_ne!(prefixed, known);
+    assert_ne!(prefixed_run, prefixed);
+    assert!(modules(&prefixed).is_some());
+    for source in [&unprefixed_calls, &prefixed_run, &rebound] {
+        assert!(modules(source).is_none(), "{source}");
+    }
+}
+
+#[test]
+fn definitions_without_a_loader_in_the_file_split_only_when_trusted() {
+    let free = format!("{LEAF}{}__r(0);\n", def("0", "[1]", ""));
+    let beside_a_flag = format!("var flag = 1;\n{free}");
+    for source in [&free, &beside_a_flag] {
+        assert!(modules(source).is_none(), "{source}");
+        assert!(trusted(source), "{source}");
+    }
 }

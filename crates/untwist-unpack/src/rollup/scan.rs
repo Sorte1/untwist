@@ -21,6 +21,7 @@ pub struct Facts {
     pub spans: Vec<(u32, u32)>,
     pub pinned: Vec<bool>,
     pub requires: Vec<bool>,
+    pub dropped: Vec<bool>,
 }
 
 pub struct Context {
@@ -35,7 +36,35 @@ fn item_of(items: &[Statement<'_>], span: Span) -> Option<u32> {
     inside.then_some(at as u32)
 }
 
-fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Facts {
+fn function_item(items: &[Statement<'_>], span: Span) -> Option<u32> {
+    let item = item_of(items, span)?;
+    let Statement::FunctionDeclaration(function) = &items[item as usize] else {
+        return None;
+    };
+    let id = function.id.as_ref()?;
+    let named = id.span.start <= span.start && span.end <= id.span.end;
+    (named || span == function.span).then_some(item)
+}
+
+fn shadowed_functions(items: &[Statement<'_>], declared: &[Span]) -> Option<Vec<u32>> {
+    let functions: Vec<u32> = declared
+        .iter()
+        .filter_map(|span| function_item(items, *span))
+        .collect();
+    let last = functions.iter().copied().max();
+    match functions.len() {
+        0 => Some(Vec::new()),
+        count if count == declared.len() => Some(
+            functions
+                .into_iter()
+                .filter(|item| Some(*item) != last)
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
+fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Option<Facts> {
     let n = items.len();
     let mut facts = Facts {
         owner: vec![NONE; scoping.symbols_len()],
@@ -46,6 +75,7 @@ fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Facts {
         spans: Vec::new(),
         pinned: vec![false; n],
         requires: vec![false; n],
+        dropped: vec![false; n],
     };
     for &symbol in scoping.get_bindings(scope).values() {
         let span = scoping.symbol_span(symbol);
@@ -59,7 +89,16 @@ fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Facts {
         if first.is_none_or(|known| scoping.symbol_span(known).start > span.start) {
             *first = Some(symbol);
         }
-        for redeclaration in scoping.symbol_redeclarations(symbol) {
+        let redeclarations = scoping.symbol_redeclarations(symbol);
+        if !redeclarations.is_empty() {
+            let declared: Vec<Span> = std::iter::once(span)
+                .chain(redeclarations.iter().map(|redeclaration| redeclaration.span))
+                .collect();
+            for shadowed in shadowed_functions(items, &declared)? {
+                facts.dropped[shadowed as usize] = true;
+            }
+        }
+        for redeclaration in redeclarations {
             match item_of(items, redeclaration.span) {
                 Some(other) if other != item => {
                     facts.spans.push((item.min(other), item.max(other)))
@@ -69,7 +108,7 @@ fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Facts {
             }
         }
     }
-    facts
+    Some(facts)
 }
 
 struct Rules<'s> {
@@ -194,7 +233,7 @@ impl<'a> Policy<'a> for Rules<'_> {
 }
 
 pub fn scan(scoping: &Scoping, items: &[Statement<'_>], context: &Context) -> Option<Facts> {
-    let facts = owners(scoping, items, context.scope);
+    let facts = owners(scoping, items, context.scope)?;
     let mut rules = Rules {
         scoping,
         context,

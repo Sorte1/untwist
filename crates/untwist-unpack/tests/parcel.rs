@@ -808,3 +808,76 @@ fn a_require_of_an_object_prototype_key_refuses() {
     ));
     refused(&hoisted("", &register("valueOf"), &using("valueOf")));
 }
+
+const FOREIGN_DEFINITION: &str = "var $g = globalThis;\n\
+     var parcelRequire = $g[\"parcelRequireabcd\"];\n\
+     if (parcelRequire == null) {\n\
+       parcelRequire = function (id) { return \"not a module\"; };\n\
+       parcelRequire.register = function (id, init) {};\n\
+       $g[\"parcelRequireabcd\"] = parcelRequire;\n\
+     }\n\
+     var parcelRegister = parcelRequire.register;\n\
+     parcelRegister(\"a\", function (module, exports) { module.exports = \"module a\"; });\n\
+     console.log(parcelRequire(\"a\"));\n";
+
+#[test]
+fn a_hoisted_definition_that_is_not_the_known_loader_is_refused() {
+    let known = prelude();
+    accepted(&format!("{known}{REGISTER}{USE}"));
+    refused(FOREIGN_DEFINITION);
+    for (from, to) in [
+        (
+            "return $parcel$modules[id].exports;",
+            "return \"not a module\";",
+        ),
+        ("    $parcel$inits[id] = init;\n", ""),
+        ("      delete $parcel$inits[id];\n", ""),
+        (
+            "$parcel$global[\"parcelRequire94c2\"] = parcelRequire;",
+            "$parcel$global[\"parcelRequireffff\"] = parcelRequire;",
+        ),
+    ] {
+        let changed = known.replace(from, to);
+        assert_ne!(changed, known, "{from}");
+        refused(&format!("{changed}{REGISTER}{USE}"));
+    }
+}
+
+#[test]
+fn a_minified_hoisted_definition_that_is_not_the_known_loader_is_refused() {
+    let known = fixture("min-parcel-hoist-seq.js");
+    accepted(&known);
+    for (from, to) in [
+        ("delete $parcel$inits[e];", ""),
+        (
+            "return $parcel$modules[e].exports;",
+            "return $parcel$inits[e].exports;",
+        ),
+    ] {
+        let changed = known.replace(from, to);
+        assert_ne!(changed, known, "{from}");
+        refused(&changed);
+    }
+}
+
+#[test]
+fn the_stores_of_a_hoisted_definition_are_empty_objects_nothing_else_touches() {
+    let known = prelude();
+    for (from, to) in [
+        (
+            "var $parcel$inits = {};",
+            "var $parcel$inits = new Proxy({}, {});",
+        ),
+        (
+            "var $parcel$modules = {};",
+            "var $parcel$modules = { b1: { exports: 7 } };",
+        ),
+    ] {
+        let changed = known.replace(from, to);
+        assert_ne!(changed, known, "{from}");
+        refused(&format!("{changed}{REGISTER}{USE}"));
+    }
+    refused(&format!(
+        "{known}{REGISTER}$parcel$modules.b1 = {{ exports: 7 }};\n{USE}"
+    ));
+}

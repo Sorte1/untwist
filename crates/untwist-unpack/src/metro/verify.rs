@@ -9,6 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
 
 use super::layout::{Def, Layout, FACTORY_PARAMS};
+use super::loader::{loader, Loader};
 use super::{CANONICAL, DEPENDENCY_MAP_NAME, RUNTIME_NAMES};
 use crate::closed::{Reach, Region};
 use crate::runtime::first_unclosed_helper;
@@ -440,7 +441,15 @@ fn names_free(scoping: &Scoping) -> bool {
     synthesized && host
 }
 
-pub fn verify(source: &Program<'_>, layout: &Layout<'_, '_>) -> bool {
+fn loader_trusted(loader: Loader, trusting: bool) -> bool {
+    match loader {
+        Loader::Known => true,
+        Loader::Absent => trusting,
+        Loader::Foreign => false,
+    }
+}
+
+pub fn verify(source: &Program<'_>, layout: &Layout<'_, '_>, trusting: bool) -> bool {
     let prefix_define = layout.define;
     if source
         .directives
@@ -450,6 +459,9 @@ pub fn verify(source: &Program<'_>, layout: &Layout<'_, '_>) -> bool {
         return false;
     }
     let scoping = build_scoping(source).scoping;
+    if !loader_trusted(loader(&scoping, source, layout), trusting) {
+        return false;
+    }
     let prelude = &source.body[..layout.prelude];
     let indices: Vec<usize> = (0..layout.prelude).collect();
     if !names_free(&scoping) || first_unclosed_helper(&scoping, &source.body, &indices).is_some() {

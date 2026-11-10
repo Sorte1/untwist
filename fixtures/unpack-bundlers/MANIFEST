@@ -68,8 +68,8 @@ esbuild/min-esbuild-cjs.js	hand-written	node	smallest accepted shape	c5f792c0074
 esbuild/min-esbuild-esm.js	hand-written	node	smallest accepted shape	52c55e7e85e883337dbd356df07c8dea660699caa2842a02a585e1d7112b920f
 esbuild/min-esbuild-runtime.js	hand-written	node	smallest accepted shape	1e3eb333ba6b174aa82e06f7148904fc78673b697e594bb192f51e2fc3716942
 esbuild/neg-esbuild-lazy-only.js	hand-written	node	refusal shape	84f271df1bea86ea784c5265a427045ffc365832f192f2ef3281a837639888bc
-metro/min-metro-interop.js	hand-written	node	smallest accepted shape	6ce5766a339708cf2304253a747b33c7db9cfaba1385f77c986f35fcb0008c83
-metro/min-metro.js	hand-written	node	smallest accepted shape	a40b5d1033b6db7b1ae443ca8e3db853ba236e2844048e3c3e0aa7ad9c08f38e
+metro/min-metro-interop.js	hand-written	node	smallest accepted shape: metro@0.87.2 prelude, hand-written modules	69cbd3b5e46920addd75ba629799f7b83b5f0bc6310c0375a47da887504be611
+metro/min-metro.js	hand-written	node	smallest accepted shape: metro@0.87.2 prelude, hand-written modules	264013780c0d6f16b23a0e25159d7692d8b875f41ab24e851713d99198f91177
 metro/neg-metro-bad-call.js	hand-written	node	refusal shape	6a8b38a71178100c86f8fff68c50eb8e9aa8e5472359e86fa8ae06514ff3cda6
 metro/neg-metro-five-params.js	hand-written	node	refusal shape	e3b56d9f26010df5b9dbb5e6ef62b7b3e3faeab133f01519d388914d0c93a3c5
 rollup/min-rollup-forward.js	hand-written	node	smallest accepted shape	e230bb4a65bf40b754b4131d6a547964dd75d3078185b7b4cd7df8e932a3b51c

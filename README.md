@@ -168,6 +168,8 @@ allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `js
 `dead-code`, which deletes branches behind constant comparisons, runs in both lanes.
 `fold-pure-calls` also folds calls to a pure helper that is passed around as a value or that the
 program could rebind through a key it cannot resolve.
+A Metro bundle whose file does not hold Metro's own `__d`/`__r` runtime is unpacked on the trust
+that those names are Metro's.
 This decodes more on aggressively protected code. It is the right choice when you trust that the
 input does not tamper with the runtime, and the wrong one for code written to fool analysis.
 

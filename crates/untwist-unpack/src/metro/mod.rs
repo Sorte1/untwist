@@ -1,6 +1,7 @@
 mod edit;
 mod layout;
 mod link;
+mod loader;
 mod normalize;
 pub mod notes;
 mod verify;
@@ -92,8 +93,26 @@ pub fn detect_with<'k, 'a>(
     frame: &Frame<'k, 'a>,
     bodies: &mut Bodies<'a>,
 ) -> Option<Bundle<'a>> {
+    detect(alloc, source, frame, (bodies, false))
+}
+
+pub fn detect_trusting_with<'k, 'a>(
+    alloc: &'a Allocator,
+    source: &'k Program<'a>,
+    frame: &Frame<'k, 'a>,
+    bodies: &mut Bodies<'a>,
+) -> Option<Bundle<'a>> {
+    detect(alloc, source, frame, (bodies, true))
+}
+
+fn detect<'k, 'a>(
+    alloc: &'a Allocator,
+    source: &'k Program<'a>,
+    frame: &Frame<'k, 'a>,
+    (bodies, trusting): (&mut Bodies<'a>, bool),
+) -> Option<Bundle<'a>> {
     let layout = layout::layout(frame.top)?;
-    if !matches!(bodies, Bodies::Taken(_)) && !verify::verify(source, &layout) {
+    if !matches!(bodies, Bodies::Taken(_)) && !verify::verify(source, &layout, trusting) {
         return None;
     }
     let planned = matches!(bodies, Bodies::Planned(_));
