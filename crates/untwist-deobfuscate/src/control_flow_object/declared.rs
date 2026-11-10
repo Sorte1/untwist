@@ -24,8 +24,8 @@ use crate::notes;
 use super::dead::{dead_branch_spans, dead_write_statements, predicate_branches, Branches};
 use super::nested::{insert_nested, PlannedEdit, Recipe};
 use super::{
-    call_site_is_safe, cff_props, emit_logical_refusals, inline_site, nest_depth,
-    object_declaration, CffValue, Refusal, SiteSafety, MAX_NEST, PASS,
+    call_site_is_safe, cff_props, emit_logical_refusals, inline_site, nested_past_the_limit,
+    object_declaration, CffValue, Refusal, SiteSafety, PASS,
 };
 
 pub struct DeclaredObject {
