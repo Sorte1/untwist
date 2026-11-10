@@ -3,6 +3,21 @@ import { expect, openApp, paste, readRepo, runAndWait, test, skipWithoutGame } f
 
 const JSX_INPUT = 'const React = require("react");\nexport const a = React.createElement("div", { id: "x" }, "hi");\n';
 const BUDGET_BYTES = 200 * 1024 * 1024;
+const BIG_DIFF_HUNK_CAP = 20_000;
+const BIG_BLOCKS = 200_000;
+const CHANGE_EVERY = 50;
+
+function bigJsxInput(): string {
+  const blocks = ['const React = require("react");\n'];
+  for (let index = 0; index < BIG_BLOCKS; index += 1) {
+    blocks.push(
+      index % CHANGE_EVERY === 0
+        ? `export const v${index} = React.createElement("div", { id: "x${index}" }, "hi");\n`
+        : `export function f${index}(a) {\n  return a + ${index};\n}\n`,
+    );
+  }
+  return blocks.join('');
+}
 
 async function sideText(page: Page, side: 'a' | 'b'): Promise<string> {
   return page.evaluate((which) => {
@@ -60,7 +75,7 @@ test('identical modes say so, and a new run drops the comparison', async ({ page
   await expect(page.locator('#diff-before')).toHaveText('input');
 });
 
-test('game.js: two workers at most, each within the budget, Cancel ends the comparison, and the 10 MB diff shows side by side', async ({ page }) => {
+test('game.js: two workers at most, each within the budget, and Cancel ends the comparison', async ({ page }) => {
   skipWithoutGame();
   await openApp(page, '#unpack=0');
   await paste(page, readRepo('fixtures/real-world/game.js'));
@@ -78,15 +93,33 @@ test('game.js: two workers at most, each within the budget, Cancel ends the comp
   await expect(page.locator('#compare-label')).toHaveText('Compare with Unsafe');
   await expect(page.locator('#status-label')).toHaveText('Done');
   await expect.poll(() => page.workers().length).toBeLessThanOrEqual(1);
+  await page.locator('#compare-modes').click();
+  await expect(page.locator('#diff')).toHaveAttribute('data-view', /^(merge|summary)$/, { timeout: 120_000 });
+  const memory = await compareMemory(page);
+  test.info().annotations.push({ type: 'compare-memory', description: `${(memory / 1048576).toFixed(1)} MiB` });
+  expect(memory).toBeGreaterThan(0);
+  expect(memory).toBeLessThanOrEqual(BUDGET_BYTES);
+  await expect.poll(() => page.workers().length).toBeLessThanOrEqual(1);
+});
+
+test('a 10 MB comparison with a few thousand changes shows side by side', async ({ page }) => {
+  test.setTimeout(180_000);
+  const input = bigJsxInput();
+  await openApp(page, '#unpack=0');
+  await paste(page, input);
+  await runAndWait(page);
   await page.evaluate(() => {
     const store: number[] = [];
     (window as unknown as { longTasks: number[] }).longTasks = store;
     new PerformanceObserver((list) => list.getEntries().forEach((entry) => store.push(entry.duration))).observe({ type: 'longtask' });
   });
   await page.locator('#compare-modes').click();
-  await expect(page.locator('#diff')).toHaveAttribute('data-view', 'merge', { timeout: 120_000 });
+  await expect(page.locator('#diff')).toHaveAttribute('data-view', /^(merge|summary)$/, { timeout: 120_000 });
   const chunks = Number(await page.locator('#diff').getAttribute('data-chunks'));
-  expect(chunks).toBeGreaterThan(100);
+  const sizes = `${(input.length / 1e6).toFixed(1)} MB input, ${chunks} changes; side by side needs at most ${BIG_DIFF_HUNK_CAP} changes`;
+  expect(chunks, sizes).toBeGreaterThan(100);
+  expect(chunks, sizes).toBeLessThanOrEqual(BIG_DIFF_HUNK_CAP);
+  await expect(page.locator('#diff'), sizes).toHaveAttribute('data-view', 'merge');
   expect(await sideText(page, 'a')).not.toBe('');
   const shown = await page.evaluate(() => {
     const mark = performance.getEntriesByName('untwist:diff-shown').at(-1) as PerformanceMark | undefined;
@@ -94,13 +127,8 @@ test('game.js: two workers at most, each within the budget, Cancel ends the comp
     return { ...(mark?.detail as { workerMs: number; totalMs: number }), heap, longTasks: (window as unknown as { longTasks: number[] }).longTasks };
   });
   test.info().annotations.push({
-    type: 'game.js compare',
+    type: '10 MB compare',
     description: `${chunks} chunks; worker ${shown.workerMs.toFixed(0)} ms; shown ${shown.totalMs.toFixed(0)} ms; page heap ${(shown.heap / 1048576).toFixed(1)} MiB; long tasks ${JSON.stringify(shown.longTasks.map(Math.round))}`,
   });
   expect(shown.totalMs).toBeLessThanOrEqual(5000);
-  const memory = await compareMemory(page);
-  test.info().annotations.push({ type: 'compare-memory', description: `${(memory / 1048576).toFixed(1)} MiB` });
-  expect(memory).toBeGreaterThan(0);
-  expect(memory).toBeLessThanOrEqual(BUDGET_BYTES);
-  await expect.poll(() => page.workers().length).toBeLessThanOrEqual(1);
 });

@@ -14,6 +14,8 @@ console.log(sum);
 
 const OUTPUT = '#output-editor .cm-content';
 const STATUS = '#output-edit-meta span:last-child';
+const MIB = 1024 * 1024;
+const LANG_CAP_BYTES = 16 * MIB;
 
 async function outputText(page: Page): Promise<string> {
   await expect(async () => {
@@ -162,14 +164,19 @@ test('go to definition jumps from a reference to its declaration', async ({ page
   expect(edited.indexOf('X')).toBeLessThanOrEqual(declared + 3);
 });
 
-test("game.js's output is under the 12 MiB cap: the features are on and references answer", async ({ page }) => {
+test('a large output under the 16 MiB cap, game.js, gets the features and references answer', async ({ page }) => {
   skipWithoutGame();
   test.setTimeout(180_000);
   await openApp(page);
   await paste(page, readRepo('fixtures/real-world/game.js'));
   await runAndWait(page);
   await page.locator(OUTPUT).focus();
-  await expect(page.locator(STATUS)).toHaveText('Language features · ready', { timeout: 60_000 });
+  await expect(page.locator(STATUS)).toHaveText(/^Language features (· ready|are off above)/, { timeout: 60_000 });
+  if ((await page.locator(STATUS).textContent()) !== 'Language features · ready') {
+    const bytes = Buffer.byteLength(await outputText(page), 'utf8');
+    expect(bytes, `this test needs a large output under the ${LANG_CAP_BYTES / MIB} MiB cap, and game.js's output is ${(bytes / MIB).toFixed(2)} MiB`).toBeLessThanOrEqual(LANG_CAP_BYTES);
+  }
+  await expect(page.locator(STATUS)).toHaveText('Language features · ready');
   const marks = await page.evaluate(() =>
     performance.getEntriesByName('untwist:lang-analyzed').map((mark) => (mark as PerformanceMark).detail as { ms: number; memoryBytes: number }),
   );
