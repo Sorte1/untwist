@@ -5,6 +5,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::rc::Rc;
 
 use super::aliased::{is_definer, member_name, BuiltinAliases, DEFINER, GETTER_DEFINER, LOST};
 use super::aliased_solve::{solve_bits, solve_strings};
@@ -107,7 +108,7 @@ impl<'p> Flows<'p> {
 
 struct FlowScan<'s, 'p> {
     scoping: &'s Scoping,
-    decoded: &'s FxHashMap<Span, String>,
+    decoded: &'s FxHashMap<Span, Rc<str>>,
     flows: Flows<'p>,
 }
 
@@ -715,7 +716,7 @@ fn function_value(expr: &Expression<'_>) -> Option<Span> {
 pub fn builtin_aliases<'s>(
     program: &Program<'_>,
     scoping: &'s Scoping,
-    decoded: FxHashMap<Span, String>,
+    decoded: FxHashMap<Span, Rc<str>>,
 ) -> BuiltinAliases<'s> {
     let mut scan = FlowScan {
         scoping,
@@ -865,11 +866,13 @@ pub(super) fn is_function_method(name: &str) -> bool {
     matches!(name, "apply" | "call" | "bind")
 }
 
-fn member_key(member: &MemberExpression<'_>, decoded: &FxHashMap<Span, String>) -> Option<String> {
+fn member_key(member: &MemberExpression<'_>, decoded: &FxHashMap<Span, Rc<str>>) -> Option<String> {
     match member {
         MemberExpression::ComputedMemberExpression(m) => match m.expression.without_parentheses() {
             Expression::StringLiteral(text) => text.value.as_str().map(str::to_string),
-            Expression::CallExpression(call) => decoded.get(&call.span).cloned(),
+            Expression::CallExpression(call) => {
+                decoded.get(&call.span).map(|text| text.to_string())
+            }
             _ => None,
         },
         other => member_name(other).map(str::to_string),
@@ -878,7 +881,7 @@ fn member_key(member: &MemberExpression<'_>, decoded: &FxHashMap<Span, String>) 
 
 fn callee_function(
     flows: &Flows<'_>,
-    (scoping, decoded): (&Scoping, &FxHashMap<Span, String>),
+    (scoping, decoded): (&Scoping, &FxHashMap<Span, Rc<str>>),
     callee: &Expression<'_>,
 ) -> Option<(Span, Option<SymbolId>, Option<String>)> {
     let symbol_of = |id: &IdentifierReference<'_>| {
@@ -919,7 +922,7 @@ fn stays_local(
 
 fn bind_calls<'p>(
     flows: &mut Flows<'p>,
-    (scoping, decoded): (&Scoping, &FxHashMap<Span, String>),
+    (scoping, decoded): (&Scoping, &FxHashMap<Span, Rc<str>>),
 ) -> Bound<'p> {
     let mut bound = Bound {
         flows: Vec::new(),
