@@ -244,7 +244,7 @@ pub fn captured_by_factory(
     check.captured
 }
 
-pub fn first_open<'k, 'a>(
+pub fn first_open<'k, 'a: 'k>(
     scoping: &Scoping,
     factories: impl IntoIterator<Item = (String, Factory<'k, 'a>)>,
     mapped_params: usize,

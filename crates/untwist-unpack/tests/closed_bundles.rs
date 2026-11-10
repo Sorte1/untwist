@@ -226,3 +226,40 @@ fn a_file_of_refused_bundles_is_checked_in_linear_time() {
         "{REFUSED_SHAPES} refused bundles took {spent:?}, over {LINEAR_FACTOR} x parse {parse:?} + scoping {scope:?}"
     );
 }
+
+const UMD_WITH_EXTERNALS: &str = r#"
+(function webpackUniversalModuleDefinition(root, factory) {
+  if (typeof exports === "object" && typeof module === "object") module.exports = factory(require("react"));
+  else if (typeof define === "function" && define.amd) define(["react"], factory);
+  else if (typeof exports === "object") exports["lib"] = factory(require("react"));
+  else root["lib"] = factory(root["React"]);
+})(this, function (__WEBPACK_EXTERNAL_MODULE__1__) {
+  return (function (modules) {
+    var installedModules = {};
+    function __webpack_require__(moduleId) {
+      if (installedModules[moduleId]) return installedModules[moduleId].exports;
+      var module = installedModules[moduleId] = { i: moduleId, l: false, exports: {} };
+      modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+      module.l = true;
+      return module.exports;
+    }
+    return __webpack_require__(__webpack_require__.s = 0);
+  })([
+    function (module, exports, __webpack_require__) { module.exports = __webpack_require__(1).version; },
+    function (module, exports) { module.exports = __WEBPACK_EXTERNAL_MODULE__1__; }
+  ]);
+});
+"#;
+
+#[test]
+fn a_umd_wrapper_with_externals_is_refused() {
+    let found = outcome(UMD_WITH_EXTERNALS, UnpackOptions::default());
+    assert_eq!(found.kind, None);
+    assert_eq!(
+        found.notes,
+        [format!(
+            "module 1 {NOT_CLOSED}: it reads __WEBPACK_EXTERNAL_MODULE__1__, a binding of the bundle's scope"
+        )]
+    );
+    assert!(found.unchanged);
+}
