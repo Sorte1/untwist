@@ -1,0 +1,76 @@
+#[path = "common/host_alias.rs"]
+mod host_alias;
+
+use host_alias::{decoded, global_routes, hosted, rows, transformed, transformed_under_host};
+use untwist_testing::node_rows::{self, node_or_skip, Mode};
+
+const ROUTES_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
+    "ref-document-default-view",
+    "ref-created-element-owner-document",
+    "ref-default-parameter",
+    "ref-destructuring-default-target",
+    "ref-generator-return-value",
+    "ref-awaited-value",
+    "ref-function-constructor-this",
+    "ref-bound-without-receiver",
+    "ref-tagged-template-this",
+];
+
+#[test]
+fn every_row_has_a_known_prefix() {
+    for (label, _) in rows().into_iter().chain(global_routes()) {
+        assert!(
+            label.starts_with("dec-") || label.starts_with("ref-"),
+            "unexpected row label {label}"
+        );
+    }
+}
+
+#[test]
+fn points_to_decodes_only_when_no_route_reaches_a_used_built_in() {
+    let all = rows();
+    assert!(all.len() >= 50, "found {} rows", all.len());
+    let mut wrong = Vec::new();
+    for (label, source) in all {
+        let code = transformed(true, &source);
+        if decoded(&code) != label.starts_with("dec-") {
+            wrong.push(label);
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:?}");
+}
+
+#[test]
+fn points_to_refuses_every_global_object_route() {
+    let mut wrong = Vec::new();
+    for (label, source) in global_routes() {
+        if decoded(&transformed(true, &source)) {
+            wrong.push(label);
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:?}");
+}
+
+#[test]
+fn the_default_lane_refuses_every_global_object_route_outside_the_known_list() {
+    for (label, source) in global_routes() {
+        if ROUTES_THE_DEFAULT_LANE_STILL_DECODES.contains(&label.as_str()) {
+            continue;
+        }
+        let code = transformed(false, &source);
+        assert!(!decoded(&code), "{label}:\n{code}");
+    }
+}
+
+#[test]
+fn points_to_output_runs_like_node_under_a_host() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let mut programs = hosted(&rows());
+    programs.extend(hosted(&global_routes()));
+    let run = |source: &str| transformed_under_host(true, source);
+    let modes: [Mode<'_>; 1] = [("points-to", &run)];
+    let wrong = node_rows::mismatches(&node, &programs, &modes);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
