@@ -108,6 +108,10 @@ impl<'a> ExprEdits<'a> {
         true
     }
 
+    pub fn remove(&mut self, span: Span) -> bool {
+        self.edits.remove(&span).is_some()
+    }
+
     pub fn apply(
         self,
         program: &mut Program<'a>,

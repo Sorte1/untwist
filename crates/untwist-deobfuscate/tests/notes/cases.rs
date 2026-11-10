@@ -49,6 +49,14 @@ fn spinning_units() -> String {
         .collect()
 }
 
+fn a_deep_control_flow_nest() -> String {
+    format!(
+        "var o = {{ abcde: function (a, b) {{ return a + b; }} }};\nx = {}1{};\n",
+        "o.abcde(".repeat(300),
+        ", 1)".repeat(300)
+    )
+}
+
 const A_MUTATING_DECODER: &str = "\
 function __STRING_ARRAY__() { var h = ['log']; __STRING_ARRAY__ = function () { return h; }; return __STRING_ARRAY__(); }
 function __DECODE_0__(c, d) { var e = __STRING_ARRAY__(); __DECODE_0__ = function (f, g) { f = f - 0x0; e[0] = 'mutated'; return e[f]; }; return __DECODE_0__(c, d); }
@@ -565,6 +573,11 @@ pub const CASES: &[Case] = &[
     Case {
         source: Source::Fueled(spinning_units),
         expects: notes::DECODE_FUEL_SPENT,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Built(a_deep_control_flow_nest),
+        expects: notes::CONTROL_FLOW_NEST_TOO_DEEP,
         mode: Match::Contains,
     },
     Case {

@@ -522,6 +522,50 @@ pub struct ControlFlowObject<'a> {
     edits: ExprEdits<'a>,
     logical_refusals: RepeatedSites,
     callee_objects: bool,
+    open_sites: Vec<Span>,
+    refused_nest: Option<Span>,
+}
+
+pub(super) const MAX_NEST: usize = 256;
+
+fn contains(outer: Span, inner: Span) -> bool {
+    outer.start <= inner.start && inner.end <= outer.end
+}
+
+pub(super) fn nest_depth(spans: impl Iterator<Item = Span>) -> usize {
+    let mut spans: Vec<Span> = spans.collect();
+    spans.sort_unstable_by_key(|span| (span.start, std::cmp::Reverse(span.end)));
+    spans.dedup();
+    let mut open: Vec<Span> = Vec::new();
+    let mut deepest = 0;
+    for span in spans {
+        while open.last().is_some_and(|outer| !contains(*outer, span)) {
+            open.pop();
+        }
+        open.push(span);
+        deepest = deepest.max(open.len());
+    }
+    deepest
+}
+
+impl ControlFlowObject<'_> {
+    fn nest_refused(&mut self, span: Span, cx: &mut Cx<'_, '_>) -> bool {
+        if self.refused_nest.is_some_and(|root| contains(root, span)) {
+            return true;
+        }
+        self.open_sites.retain(|outer| contains(*outer, span));
+        self.open_sites.push(span);
+        if self.open_sites.len() <= MAX_NEST {
+            return false;
+        }
+        let root = self.open_sites[0];
+        for site in self.open_sites.drain(..) {
+            self.edits.remove(site);
+        }
+        self.refused_nest = Some(root);
+        cx.note(notes::CONTROL_FLOW_NEST_TOO_DEEP, Some(root));
+        true
+    }
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -549,6 +593,8 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        self.open_sites.clear();
+        self.refused_nest = None;
         let applied = inline_declared_objects(program, cx);
         cx.changed_by(applied);
     }
@@ -590,6 +636,9 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
         else {
             return;
         };
+        if self.nest_refused(expr.span(), cx) {
+            return;
+        }
         match call_site_is_safe(function, arguments, cx) {
             SiteSafety::Safe => {}
             SiteSafety::Refused(Refusal::LogicalArgument) => {

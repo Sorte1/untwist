@@ -268,6 +268,9 @@ pub const CONTROL_FLOW_SPANS_EXHAUSTED: &str =
 pub const CONTROL_FLOW_SHAPE_LOST: &str =
     "control-flow object kept: the declared object was not found at its recorded span, or no \
      longer reads as a control-flow object";
+pub const CONTROL_FLOW_NEST_TOO_DEEP: &str =
+    "control-flow object kept: its calls are nested more than 256 deep, and inlining every level \
+     would copy each argument once per level";
 pub const CONTROL_FLOW_OBJECT_PARTIAL: &str = "control-flow object kept,";
 pub const CONTROL_FLOW_LIVE_MUTATION: &str =
     "control-flow object kept: the declaration has a statically dead branch, but the binding is \
@@ -690,6 +693,7 @@ catalogue!(
     MACHINERY_PARTIAL_REMOVAL,
     CONTROL_FLOW_SPANS_EXHAUSTED,
     CONTROL_FLOW_SHAPE_LOST,
+    CONTROL_FLOW_NEST_TOO_DEEP,
     DEAD_CODE_UNMERGEABLE,
     MERGE_SPANS_EXHAUSTED,
     VAR_DECLARATION_NOT_REBUILT,
