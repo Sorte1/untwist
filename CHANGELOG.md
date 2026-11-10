@@ -232,6 +232,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
+- A chain of string-array aliases (`var q1 = q0; var q2 = q1; ...`) resolves in one round from one
+  scan of the program instead of one program walk per alias per round: 1,000 links went from 108
+  billion instructions to 17 million. Output is unchanged.
 - The checks that keep folding away from patched built-ins judge each variable once instead of once
   per use: a counter used as a key after every write (`i=i+1;q[i];`), a reused loop variable, or two
   variables written from each other no longer make the cleanup stage quadratic or worse. Writes to a
