@@ -166,3 +166,11 @@ fn a_getter_that_is_read_as_well_as_called_is_kept() {
     );
     assert_eq!(safe(&source), printed(&source));
 }
+
+const THE_DECLARED_FORMAT_CHECK: &str = "var fc = ctl(this, function () {\n  function test() {\n    return !test.constructor(\"return /\\\" + this + \\\"/\")().constructor(\"^([^ ]+( +[^ ]+)+)+[^ ]}\").test(fc);\n  }\n  return test();\n});\nfc();\n";
+
+#[test]
+fn a_format_check_written_as_a_declaration_is_removed() {
+    let source = format!("{CONTROLLER}{THE_DECLARED_FORMAT_CHECK}{REST}");
+    assert_eq!(safe(&source).trim(), REST);
+}

@@ -30,6 +30,13 @@ function callback_format_check_inlined() {
   return t();
 }
 
+function callback_format_check_declared() {
+  function t() {
+    return !t.constructor("return /\" + this + \"/")().constructor("^([^ ]+( +[^ ]+)+)+[^ ]}").test(SELF);
+  }
+  return t();
+}
+
 function callback_format_check_compiled() {
   var e = function () {
     return !e.constructor("return /\" + this + \"/")().compile("^([^ ]+( +[^ ]+)+)+[^ ]}").test(SELF);
