@@ -77,6 +77,25 @@ All notable changes to this project are documented in this file. The format is b
   string module ids. An unproven getter keeps `require.n`, served by `_runtime/webpack.js`.
 - A parameter or local named `require` inside a webpack module is no longer rewritten as the
   bundle's require: its arguments stay as written and it is not renamed to the runtime.
+- Control-flow unflattening no longer changes what a program does in these cases; each is now
+  left as written, with a note. A dispatcher whose counter does not start at zero
+  (`var i = 1; while (true) { switch (order[i++]) ... }`) was laid out from its first case. A
+  dispatcher whose counter or order array is declared a second time was read from the first
+  declaration. A `let`, `const`, class or function declared in one case and used in another, or
+  one that would become a script global, was lifted out of the switch, which removed the
+  "before initialization" error the program threw or let it shadow an outer name.
+- A flattened storage object that is declared twice (`var o = {...}; var o = {...};`) is no longer
+  inlined from the first declaration.
+- A storage object key that is not an identifier name, such as `o["a-b"] = 1`, is folded into the
+  object literal as a quoted key instead of the invalid `a-b: 1`.
+- An indirect `eval` stays indirect. A storage forwarder `function (f, x) { return f(x); }` called
+  with `eval` was inlined to `eval(x)`, and `(true ? eval : y)(x)` was folded to `eval(x)`; both
+  turned a global eval into one that reads and writes the caller's local variables.
+- A statement that control-flow unflattening moved ahead of the `var` assignment it depends on is
+  no longer treated as running after it. A call to a small pure function is not folded with a
+  constant that is assigned later, and `var x; ... x = 1;` is not merged into `var x = 1` past a
+  read that now comes first. The order of two statements is taken from where they stand in the
+  tree, not from their positions in the input. A call moved behind its constant now folds.
 
 ### Changed
 
@@ -90,6 +109,10 @@ All notable changes to this project are documented in this file. The format is b
   `o.add(o.add(a, b), c)` are inlined in one pass instead of one level per pass, every
   `var o = {}; o.k = v;` run in a statement list is folded in one pass, and the rotator searches
   for several string arrays share a walk.
+
+- A program with many flattened storage objects that are written after their declaration no
+  longer walks the whole program once per object to find the branches each one decides; one
+  walk serves all of them. 2000 such objects: 12.8 s to 1.2 s in a debug build.
 
 - An RC4 string decoder whose base64 step is an inline function (javascript-obfuscator 0.x after
   uglify, as in Krunker) runs its key schedule and keystream loops natively, with the same steps
