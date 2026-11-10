@@ -10,7 +10,7 @@ use crate::webpack::helpers::prelude_runtime;
 use crate::webpack::require_fn::{
     count_required_entry_ids, find_assigned_entry_id, find_required_entry_id, require_function,
 };
-use crate::webpack::runtime_module::member_names_in;
+use crate::webpack::proof::{Proving, Shape};
 use crate::UnpackOptions;
 
 struct Webpack4<'k, 'a> {
@@ -81,12 +81,36 @@ pub fn detect_webpack4_with<'a>(
     bodies: &mut Bodies<'a>,
     options: UnpackOptions,
 ) -> Option<Bundle<'a>> {
+    detect_webpack4_noted(alloc, source, expr, bodies, options, Proving::own(source))
+}
+
+pub fn detect_webpack4_noted<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    expr: &Expression<'a>,
+    bodies: &mut Bodies<'a>,
+    options: UnpackOptions,
+    mut proving: Proving<'_>,
+) -> Option<Bundle<'a>> {
     let Webpack4 {
         container,
         params,
         body,
         require_name,
     } = webpack4(expr)?;
+    let checked = !matches!(bodies, Bodies::Taken(_)) && !options.conservative;
+    if checked {
+        let container_name = single_param_name(params)?;
+        let shape = Shape {
+            params: Some(params),
+            statements: &body.statements,
+            require: require_name,
+            container: container_name,
+            container_at: None,
+            skip: None,
+        };
+        proving.prove(source, &shape)?;
+    }
     let assigned = find_assigned_entry_id(&body.statements, require_name, None);
     let entry_id = assigned
         .clone()
@@ -102,18 +126,11 @@ pub fn detect_webpack4_with<'a>(
         require_name,
         bodies,
     );
-    if !matches!(bodies, Bodies::Taken(_))
-        && !routable(
-            source.source_text,
-            container,
-            &Prelude {
-                runtime: bundle.runtime.as_ref(),
-                mentioned: member_names_in(require_name, &body.statements),
-            },
-            options,
-        )
-    {
-        return None;
+    if checked {
+        let prelude = Prelude {
+            runtime: bundle.runtime.as_ref(),
+        };
+        proving.gate(routable(source.source_text, container, &prelude, options))?;
     }
     let entry_id = bundle.entry_id.as_deref();
     (bundle.modules, bundle.fresh_requires) =

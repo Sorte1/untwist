@@ -1,56 +1,20 @@
 use oxc_ast::ast::*;
-use rustc_hash::FxHashSet;
 
-use untwist_core::ast_util::prop::identifier_name;
-
-use crate::matcher::{
-    argument_expression, call_parts, const_member, expression_statement, param_names,
-};
+use crate::matcher::param_names;
 use crate::model::{BundleKind, Runtime};
+use crate::notes::require_not_shared;
 use crate::path::PosixPath;
 use crate::runtime::runtime_path;
 use crate::webpack::container::module_factories;
-use crate::webpack::runtime_module::{member_names, needed, COMPUTED};
+use crate::webpack::runtime_module::{uses_in, Needs};
 use crate::UnpackOptions;
 
 const BIND: &str = "bind";
 const RUNTIME_NAME: &str = "webpack";
 const RUNTIME_FILE: &str = "webpack.js";
-const HOST_OWN: [&str; 6] = ["resolve", "cache", "main", "extensions", "length", "name"];
 
 pub struct Prelude<'r, 'a> {
     pub runtime: Option<&'r Runtime<'a>>,
-    pub mentioned: FxHashSet<String>,
-}
-
-fn is_name_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_' || c == '$' || !c.is_ascii()
-}
-
-fn mentions_member(text: &str, name: &str) -> bool {
-    if text.contains("\\u") {
-        return true;
-    }
-    text.match_indices(name).any(|(at, _)| {
-        let before = text[..at].chars().next_back();
-        if before.is_some_and(|c| is_name_char(c) || c == '.') {
-            return false;
-        }
-        let after = text[at + name.len()..].trim_start();
-        matches!(after.chars().next(), Some('.' | '[' | '/' | '?'))
-    })
-}
-
-fn marks(statement: &Statement<'_>, require: &str, exports: &str) -> bool {
-    let Some((callee, arguments)) = expression_statement(statement).and_then(call_parts) else {
-        return false;
-    };
-    let target = arguments
-        .first()
-        .and_then(argument_expression)
-        .and_then(identifier_name);
-    let object = const_member(callee, "r").and_then(identifier_name);
-    arguments.len() == 1 && object == Some(require) && target == Some(exports)
 }
 
 fn claims_runtime(id: &str) -> bool {
@@ -60,59 +24,65 @@ fn claims_runtime(id: &str) -> bool {
             .is_some_and(|path| path.as_str() == runtime_path(BundleKind::Webpack))
 }
 
+fn shared_use(
+    id: &str,
+    require: &str,
+    factory: &crate::matcher::Factory<'_, '_>,
+    needs: Option<&Needs>,
+) -> Result<(), String> {
+    let uses = uses_in(require, &factory.body.statements);
+    if uses.bare {
+        return Err(require_not_shared(id, "passes it on or aliases it"));
+    }
+    if uses.computed {
+        return Err(require_not_shared(id, "reaches it through a computed key"));
+    }
+    let routes = |name: &str| needs.is_some_and(|needs| needs.routes(name));
+    let mut names: Vec<&String> = uses
+        .names
+        .iter()
+        .filter(|name| name.as_str() != BIND && !routes(name))
+        .collect();
+    names.sort_unstable();
+    match names.first() {
+        Some(name) if needs.is_some() => Err(require_not_shared(
+            id,
+            format!("require.{name} is not a helper this bundle's runtime defines and moves"),
+        )),
+        Some(name) => Err(require_not_shared(
+            id,
+            format!("require.{name} has no runtime in this input"),
+        )),
+        None => Ok(()),
+    }
+}
+
 pub fn routable(
     source: &str,
     container: &Expression<'_>,
     prelude: &Prelude<'_, '_>,
     options: UnpackOptions,
-) -> bool {
+) -> Result<(), String> {
     if options.conservative {
-        return true;
+        return Ok(());
     }
-    let runtime = prelude.runtime;
-    let routes = |name: &str| runtime.and_then(|runtime| needed(runtime, name)).is_some();
-    let unroutable: Vec<&str> = runtime
-        .iter()
-        .flat_map(|runtime| &runtime.helpers)
-        .map(|helper| helper.name.as_str())
-        .chain(prelude.mentioned.iter().map(String::as_str))
-        .filter(|name| !routes(name))
-        .collect();
-    let factories = module_factories(container);
-    factories.into_iter().all(|(id, factory)| {
+    let needs = prelude.runtime.map(Needs::of);
+    for (id, factory) in module_factories(container) {
         if claims_runtime(&id) {
-            return false;
+            return Err(require_not_shared(&id, "its id names the runtime module"));
         }
         let params = param_names(factory.params);
         let Some(require) = params.get(2) else {
-            return true;
+            continue;
         };
-        let exports = params.get(1).copied().unwrap_or_default();
-        let harmony = factory
-            .body
-            .statements
-            .iter()
-            .any(|s| marks(s, require, exports));
-        if !harmony && runtime.is_some() && unroutable.is_empty() {
-            return true;
-        }
         let span = factory.body.span;
         let text = source
             .get(span.start as usize..span.end as usize)
             .unwrap_or(source);
-        if !mentions_member(text, require) {
-            return true;
+        if !text.contains(require) && !text.contains("\\u") {
+            continue;
         }
-        let defined_elsewhere = |name: &str| {
-            !harmony
-                && runtime.is_some()
-                && name != COMPUTED
-                && !HOST_OWN.contains(&name)
-                && !unroutable.contains(&name)
-        };
-        member_names(require, factory.body)
-            .iter()
-            .filter(|name| name.as_str() != BIND)
-            .all(|name| routes(name) || defined_elsewhere(name))
-    })
+        shared_use(&id, require, &factory, needs.as_ref())?;
+    }
+    Ok(())
 }

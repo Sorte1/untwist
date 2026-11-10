@@ -145,6 +145,7 @@ pub struct Bundle<'a> {
     pub link: Option<String>,
     pub fixed_paths: Vec<String>,
     pub numeric_ids: bool,
+    pub deferred: Vec<String>,
 }
 
 impl<'a> Bundle<'a> {
@@ -161,6 +162,7 @@ impl<'a> Bundle<'a> {
             link: None,
             fixed_paths: Vec::new(),
             numeric_ids: false,
+            deferred: Vec::new(),
         }
     }
 

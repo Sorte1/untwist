@@ -12,9 +12,10 @@ use crate::links::Links;
 use crate::matcher::Factory;
 use crate::model::{body_key, Bodies, BodyKey, Bundle, BundleKind};
 use crate::notes::factory_not_closed;
-use crate::webpack::chunk::{chunk_factories, detect_webpack_chunk_with, is_webpack_chunk};
-use crate::webpack::detect4::{detect_webpack4_with, is_webpack4, webpack4_factories};
-use crate::webpack::detect5::{detect_webpack5_with, is_webpack5, webpack5_factories};
+use crate::webpack::chunk::{chunk_factories, detect_webpack_chunk_noted, is_webpack_chunk};
+use crate::webpack::detect4::{detect_webpack4_noted, is_webpack4, webpack4_factories};
+use crate::webpack::detect5::{detect_webpack5_noted, is_webpack5, webpack5_factories};
+use crate::webpack::proof::Proving;
 use crate::UnpackOptions;
 
 const MAPPED_PARAMS: usize = 3;
@@ -64,8 +65,9 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
     fn statements(&mut self, body: &[Statement<'a>]) {
         let (alloc, source, options) = (self.alloc, self.source, self.options);
         if self.closed(webpack5_factories(body)) {
+            let proving = Proving::new(self.scoping.as_ref(), self.unproven);
             self.bundle = attempt(self.bodies, |bodies| {
-                detect_webpack5_with(alloc, source, body, bodies, options)
+                detect_webpack5_noted(alloc, source, body, bodies, options, proving)
             });
         }
     }
@@ -73,13 +75,15 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
     fn expression(&mut self, expr: &Expression<'a>) {
         let (alloc, source, options) = (self.alloc, self.source, self.options);
         if self.closed(webpack4_factories(expr)) {
+            let proving = Proving::new(self.scoping.as_ref(), self.unproven);
             self.bundle = attempt(self.bodies, |bodies| {
-                detect_webpack4_with(alloc, source, expr, bodies, options)
+                detect_webpack4_noted(alloc, source, expr, bodies, options, proving)
             });
         }
         if self.bundle.is_none() && self.closed(chunk_factories(expr)) {
+            let proving = Proving::new(self.scoping.as_ref(), self.unproven);
             self.bundle = attempt(self.bodies, |bodies| {
-                detect_webpack_chunk_with(alloc, source, expr, bodies, options)
+                detect_webpack_chunk_noted(alloc, source, expr, bodies, options, proving)
             });
         }
         if self.bundle.is_none() && self.closed(browserify_factories(expr)) {

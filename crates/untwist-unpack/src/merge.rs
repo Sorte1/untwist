@@ -3,8 +3,9 @@ use oxc_span::GetSpan;
 use rustc_hash::FxHashMap;
 use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 use untwist_core::pass::{Note, NoteKind};
+use untwist_core::print::{print, PrintStyle};
 
-use crate::model::{Bundle, BundleKind, Module};
+use crate::model::{Bundle, BundleKind, Helper, Module};
 use crate::runtime::{declared_names, runtime_id};
 use crate::share::fold_runtime;
 
@@ -131,7 +132,66 @@ fn linked_groups<'a>(
     out
 }
 
-fn merge_webpack<'a>(merged: &mut Bundle<'a>, bundle: Bundle<'a>, notes: &mut Vec<Note>) {
+fn compact(module: &Module<'_>) -> String {
+    print(module.program(), PrintStyle::Compact)
+}
+
+fn source_of<'s>(bundle: &Bundle<'s>) -> Option<&'s str> {
+    bundle
+        .modules
+        .values()
+        .next()
+        .map(|module| module.program().source_text)
+}
+
+fn helper_text<'s>(helper: &Helper<'_>, source: &'s str) -> Option<&'s str> {
+    let span = helper.statement.span();
+    let real = !span.is_empty() && span.end < SYNTHETIC_BASE;
+    real.then(|| source.get(span.start as usize..span.end as usize))?
+}
+
+fn same_webpack_runtime(merged: &Bundle<'_>, bundle: &Bundle<'_>) -> bool {
+    let (Some(kept), Some(later)) = (&merged.runtime, &bundle.runtime) else {
+        return true;
+    };
+    if later.helpers.is_empty() {
+        return true;
+    }
+    let (Some(kept_source), Some(later_source)) = (source_of(merged), source_of(bundle)) else {
+        return false;
+    };
+    let known: FxHashMap<&str, Option<&str>> = kept
+        .helpers
+        .iter()
+        .map(|helper| (helper.name.as_str(), helper_text(helper, kept_source)))
+        .collect();
+    kept.require_name == later.require_name
+        && later.helpers.iter().all(|helper| {
+            let text = helper_text(helper, later_source);
+            text.is_some() && known.get(helper.name.as_str()) == Some(&text)
+        })
+}
+
+fn merge_webpack<'a>(merged: &mut Bundle<'a>, bundle: Bundle<'a>, notes: &mut Vec<Note>) -> bool {
+    if !same_webpack_runtime(merged, &bundle) {
+        notes.push(note(crate::notes::runtimes_differ()));
+        return false;
+    }
+    let started = |deferred: &[String], other: &Bundle<'_>| {
+        (!deferred.is_empty() && other.runtime.is_some()).then(|| deferred.join(", "))
+    };
+    if let Some(ids) = started(&bundle.deferred, merged).or_else(|| started(&merged.deferred, &bundle)) {
+        notes.push(note(crate::notes::deferred_with_runtime(ids)));
+        return false;
+    }
+    if let Some(id) = bundle.modules.iter().find_map(|(id, module)| {
+        let kept = merged.modules.get(id)?;
+        (compact(kept) != compact(module)).then_some(id)
+    }) {
+        notes.push(note(crate::notes::duplicate_differs(id)));
+        return false;
+    }
+    merged.deferred.extend(bundle.deferred.iter().cloned());
     if merged.entry_id.is_none() {
         merged.entry_id = bundle.entry_id;
         merged.entry_candidates = bundle.entry_candidates;
@@ -149,11 +209,11 @@ fn merge_webpack<'a>(merged: &mut Bundle<'a>, bundle: Bundle<'a>, notes: &mut Ve
     }
     for (id, module) in bundle.modules {
         if merged.modules.contains_key(&id) {
-            notes.push(note(crate::notes::duplicate_module(&id)));
             continue;
         }
         merged.modules.insert(id, module);
     }
+    true
 }
 
 pub fn merge_noted<'a>(
@@ -175,12 +235,15 @@ pub fn merge_noted<'a>(
             notes.push(note(crate::notes::second_self_contained(
                 bundle.kind.as_str(),
             )));
-        } else {
-            merge_webpack(&mut merged, bundle, &mut notes);
+        } else if !merge_webpack(&mut merged, bundle, &mut notes) {
+            return (None, notes);
         }
     }
     if merged.kind == BundleKind::Webpack {
         retag_entry(&mut merged);
+        if !merged.deferred.is_empty() {
+            notes.push(note(crate::notes::deferred_not_run(merged.deferred.join(", "))));
+        }
     }
     (Some(merged), notes)
 }

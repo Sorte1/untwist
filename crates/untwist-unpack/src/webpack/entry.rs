@@ -14,7 +14,7 @@ use crate::rename::rename_factory_parameters;
 use crate::webpack::container::module_factories;
 use crate::webpack::extract::WEBPACK_PARAMS;
 use crate::webpack::helpers::{declared_in, pattern_names};
-use crate::webpack::runtime_module::needed;
+use crate::webpack::runtime_module::Needs;
 
 const NO_MODULE: &str = "\0module";
 const NO_EXPORTS: &str = "\0exports";
@@ -239,10 +239,10 @@ fn exports_name<'s>(
     Some(found)
 }
 
-struct Uses<'s, 'r> {
+struct Uses<'s> {
     scoping: &'s Scoping,
     require: &'s str,
-    runtime: Option<&'r Runtime<'r>>,
+    needs: Option<Needs>,
     depth: u32,
     allowed: FxHashSet<usize>,
     refused: bool,
@@ -252,7 +252,7 @@ fn address<T>(it: &T) -> usize {
     std::ptr::from_ref(it) as usize
 }
 
-impl Uses<'_, '_> {
+impl Uses<'_> {
     fn unresolved(&self, id: &IdentifierReference<'_>) -> bool {
         crate::scan::is_free(Some(self.scoping), id)
     }
@@ -272,8 +272,7 @@ impl Uses<'_, '_> {
     }
 
     fn routes(&self, name: &str) -> bool {
-        self.runtime
-            .is_some_and(|runtime| needed(runtime, name).is_some())
+        self.needs.as_ref().is_some_and(|needs| needs.routes(name))
     }
 
     fn allow(&mut self, id: &IdentifierReference<'_>) {
@@ -320,7 +319,7 @@ impl Uses<'_, '_> {
     }
 }
 
-impl<'a> VisitJs<'a> for Uses<'_, '_> {
+impl<'a> VisitJs<'a> for Uses<'_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if let Some(callee) = self.free_require(&it.callee) {
             let [argument] = it.arguments.as_slice() else {
@@ -421,7 +420,7 @@ fn proven<'s>(
     let mut uses = Uses {
         scoping: &scoping,
         require,
-        runtime,
+        needs: runtime.map(Needs::of),
         depth: 0,
         allowed: FxHashSet::default(),
         refused: false,

@@ -9,9 +9,11 @@ use crate::matcher::{
     argument_expression, call_parts, const_member, expression_statement, literal_id, Factory,
 };
 use crate::model::{Bodies, Bundle, BundleKind};
+use crate::notes::chunk_start_unproven;
 use crate::webpack::container::{is_module_container, module_factories};
 use crate::webpack::extract::extract_modules_with;
 use crate::webpack::gate::{routable, Prelude};
+use crate::webpack::proof::Proving;
 use crate::UnpackOptions;
 
 const GLOBAL_PREFIX: &str = "webpack";
@@ -142,7 +144,13 @@ fn program_entry_id(source: &Program<'_>) -> Option<String> {
     })
 }
 
-fn chunk<'k, 'a>(expr: &'k Expression<'a>) -> Option<(Vec<String>, &'k Expression<'a>)> {
+struct Chunk<'k, 'a> {
+    ids: Vec<String>,
+    container: &'k Expression<'a>,
+    start: Option<&'k Expression<'a>>,
+}
+
+fn chunk<'k, 'a>(expr: &'k Expression<'a>) -> Option<Chunk<'k, 'a>> {
     let (callee, arguments) = call_parts(expr)?;
     if arguments.len() != 1 {
         return None;
@@ -158,7 +166,46 @@ fn chunk<'k, 'a>(expr: &'k Expression<'a>) -> Option<(Vec<String>, &'k Expressio
     }
     let ids = chunk_ids(payload.elements.first()?.as_expression()?)?;
     let container = payload.elements.get(1)?.as_expression()?;
-    is_module_container(container).then_some((ids, container))
+    let start = payload.elements.get(2).and_then(ArrayExpressionElement::as_expression);
+    is_module_container(container).then_some(Chunk {
+        ids,
+        container,
+        start,
+    })
+}
+
+fn deferred_entries(start: &Expression<'_>) -> Option<Vec<String>> {
+    let Expression::ArrayExpression(list) = start.without_parentheses() else {
+        return None;
+    };
+    list.elements
+        .iter()
+        .map(|element| {
+            let ids = chunk_ids(element.as_expression()?.without_parentheses())?;
+            ids.into_iter().next()
+        })
+        .collect()
+}
+
+fn started(chunk: &Chunk<'_, '_>, length: usize) -> Result<Vec<String>, String> {
+    if length > 3 {
+        return Err(chunk_start_unproven(chunk.ids.join(", ")));
+    }
+    match chunk.start {
+        None => Ok(Vec::new()),
+        Some(start) => {
+            deferred_entries(start).ok_or_else(|| chunk_start_unproven(chunk.ids.join(", ")))
+        }
+    }
+}
+
+fn payload_len(expr: &Expression<'_>) -> usize {
+    call_parts(expr)
+        .and_then(|(_, arguments)| argument_expression(arguments.first()?))
+        .map_or(0, |payload| match payload {
+            Expression::ArrayExpression(payload) => payload.elements.len(),
+            _ => 0,
+        })
 }
 
 pub fn is_webpack_chunk(expr: &Expression<'_>) -> bool {
@@ -166,7 +213,7 @@ pub fn is_webpack_chunk(expr: &Expression<'_>) -> bool {
 }
 
 pub fn chunk_factories<'k, 'a>(expr: &'k Expression<'a>) -> Option<Vec<(String, Factory<'k, 'a>)>> {
-    chunk(expr).map(|(_, container)| module_factories(container))
+    chunk(expr).map(|found| module_factories(found.container))
 }
 
 pub fn detect_webpack_chunk<'a>(
@@ -190,22 +237,36 @@ pub fn detect_webpack_chunk_with<'a>(
     bodies: &mut Bodies<'a>,
     options: UnpackOptions,
 ) -> Option<Bundle<'a>> {
-    let (ids, container) = chunk(expr)?;
-    if !matches!(bodies, Bodies::Taken(_))
-        && !routable(
-            source.source_text,
-            container,
-            &Prelude {
-                runtime: None,
-                mentioned: Default::default(),
-            },
-            options,
-        )
-    {
-        return None;
+    detect_webpack_chunk_noted(alloc, source, expr, bodies, options, Proving::own(source))
+}
+
+pub fn detect_webpack_chunk_noted<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    expr: &Expression<'a>,
+    bodies: &mut Bodies<'a>,
+    options: UnpackOptions,
+    mut proving: Proving<'_>,
+) -> Option<Bundle<'a>> {
+    let found = chunk(expr)?;
+    let deferred = match options.conservative {
+        true => Vec::new(),
+        false => match started(&found, payload_len(expr)) {
+            Ok(deferred) => deferred,
+            Err(why) => {
+                proving.gate(Err(why));
+                return None;
+            }
+        },
+    };
+    let container = found.container;
+    if !matches!(bodies, Bodies::Taken(_)) {
+        let prelude = Prelude { runtime: None };
+        proving.gate(routable(source.source_text, container, &prelude, options))?;
     }
     let mut bundle = Bundle::new(BundleKind::Webpack, None);
-    bundle.chunk_ids = ids;
+    bundle.chunk_ids = found.ids;
+    bundle.deferred = deferred;
     (bundle.modules, bundle.fresh_requires) =
         extract_modules_with(alloc, source, (container, None), bodies, options);
     if bundle.entry_id.is_none() {

@@ -104,7 +104,7 @@ fn the_outermost_bundle_wins() {
 
 #[test]
 fn an_unwrapped_top_level_webpack_5_bundle_is_found() {
-    let source = "var __webpack_modules__ = { 2: (module, exports, require) => {\n  x();\n} };\nfunction __webpack_require__(id) {\n  __webpack_modules__[id]();\n}\n__webpack_require__(__webpack_require__.s = 2);\n".to_string();
+    let source = "var __webpack_modules__ = { 2: (module, exports, require) => {\n  x();\n} };\nvar __webpack_module_cache__ = {};\nfunction __webpack_require__(id) {\n  var cached = __webpack_module_cache__[id];\n  if (cached !== undefined) return cached.exports;\n  var module = __webpack_module_cache__[id] = { exports: {} };\n  __webpack_modules__[id](module, module.exports, __webpack_require__);\n  return module.exports;\n}\n__webpack_require__(__webpack_require__.s = 2);\n".to_string();
     let alloc = Allocator::default();
     let bundle = bundle_from(&alloc, &source).expect("top-level webpack 5 bundle");
     assert_eq!(bundle.entry_id.as_deref(), Some("2"));

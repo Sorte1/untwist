@@ -3,8 +3,8 @@ mod common;
 use common::bundle_of;
 use common::PrintedModule;
 use oxc_allocator::Allocator;
-use untwist_unpack::merge::merge_bundles;
-use untwist_unpack::model::BundleKind;
+use untwist_unpack::merge::{merge_bundles, merge_noted};
+use untwist_unpack::model::{BundleKind, Runtime};
 
 #[test]
 fn modules_and_chunk_ids_are_unioned() {
@@ -52,14 +52,62 @@ fn a_second_entry_from_a_later_chunk_is_ignored_and_reported() {
 }
 
 #[test]
-fn duplicate_module_ids_keep_the_first_and_are_reported() {
+fn a_module_id_two_chunks_define_differently_refuses_the_merge() {
     let alloc = Allocator::default();
     let first = bundle_of(&alloc, &[("3", "first();\n", false)], None);
     let second = bundle_of(&alloc, &[("3", "second();\n", false)], None);
-    let (merged, notes) = merge_bundles(&alloc, vec![first, second]).expect("merged bundle");
-    assert_eq!(merged.modules["3"].code().trim_end(), "first();");
+    let (merged, notes) = merge_noted(&alloc, vec![first, second]);
+    assert!(merged.is_none());
     assert_eq!(notes.len(), 1);
-    assert!(notes[0].message.contains("duplicate module 3"), "{notes:?}");
+    assert!(
+        notes[0]
+            .message
+            .contains("module 3 is defined differently by two inputs"),
+        "{notes:?}"
+    );
+}
+
+#[test]
+fn a_module_id_two_chunks_define_alike_is_kept_once_without_a_note() {
+    let alloc = Allocator::default();
+    let first = bundle_of(&alloc, &[("3", "same();\n", false)], None);
+    let second = bundle_of(&alloc, &[("3", "same();\n", false), ("4", "y();\n", false)], None);
+    let (merged, notes) = merge_bundles(&alloc, vec![first, second]).expect("merged bundle");
+    assert!(notes.is_empty(), "{notes:?}");
+    assert_eq!(merged.modules.keys().cloned().collect::<Vec<_>>(), vec!["3", "4"]);
+}
+
+#[test]
+fn a_chunk_that_starts_modules_is_not_merged_with_a_runtime() {
+    let alloc = Allocator::default();
+    let mut main = bundle_of(&alloc, &[("0", "x();\n", true)], Some("0"));
+    main.runtime = Some(Runtime {
+        require_name: "__webpack_require__".to_string(),
+        helpers: Vec::new(),
+    });
+    let mut chunk = bundle_of(&alloc, &[("5", "y();\n", false)], None);
+    chunk.deferred = vec!["5".to_string()];
+    let (merged, notes) = merge_noted(&alloc, vec![main, chunk]);
+    assert!(merged.is_none());
+    assert!(
+        notes[0].message.contains("starts modules once the runtime loads"),
+        "{notes:?}"
+    );
+}
+
+#[test]
+fn a_lone_chunk_that_starts_modules_says_so() {
+    let alloc = Allocator::default();
+    let mut chunk = bundle_of(&alloc, &[("5", "y();\n", false)], None);
+    chunk.deferred = vec!["5".to_string()];
+    let (merged, notes) = merge_noted(&alloc, vec![chunk]);
+    assert!(merged.is_some());
+    assert!(
+        notes[0]
+            .message
+            .contains("starts these modules only once webpack's runtime loads: 5"),
+        "{notes:?}"
+    );
 }
 
 #[test]
