@@ -122,6 +122,10 @@ impl<'a> Policy<'a> for Sound<'_, '_, 'a> {
     fn this(&mut self, frame: Frame) {
         self.loose |= frame.functions == 0;
     }
+
+    fn with(&mut self) {
+        self.check.with();
+    }
 }
 
 fn closed_and_shaped(scoping: &Scoping, callback: &Callback<'_, '_>) -> bool {

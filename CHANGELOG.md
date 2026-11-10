@@ -27,6 +27,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- An unpacked esbuild bundle no longer hands a module a stale copy of a binding. A binding that
+  an `__esm` init assigns is now exported from `_runtime/esbuild.js` through a getter and read as
+  `runtime.name`; before, a module that read it after the init ran still saw `undefined`. A bundle
+  is left unpacked when `__commonJS`, `__esm` or another trusted helper is declared twice or
+  assigned, when a factory holds a `with` statement (AMD, UMD and Rollup too), and a helper that
+  reads `require`, `module`, `exports`, `__filename` or `__dirname` is no longer moved into the
+  runtime module.
 - A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
   globals. When the body still declares a `var`, function, class, `let` or `const` at its own
   level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that

@@ -12,8 +12,10 @@ use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step};
 pub enum Captured {
     Binding(String),
     Parameter(String),
+    Host(String),
     Arguments,
     Eval,
+    With,
 }
 
 impl Captured {
@@ -21,8 +23,10 @@ impl Captured {
         match self {
             Self::Binding(name) => format!("it reads {name}, a binding of the bundle's scope"),
             Self::Parameter(name) => format!("it reads {name}, a factory parameter no module maps"),
+            Self::Host(name) => format!("it reads {name}, which every module has for itself"),
             Self::Arguments => "it reads the factory's own arguments".to_string(),
             Self::Eval => "it calls eval directly".to_string(),
+            Self::With => "it holds a with statement".to_string(),
         }
     }
 }
@@ -31,6 +35,8 @@ pub struct Allowed<'s> {
     pub mapped_params: usize,
     pub helpers: &'s FxHashSet<SymbolId>,
 }
+
+pub const HOST_NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
 
 const KNOWN_PARAMS: usize = 8;
 
@@ -160,6 +166,7 @@ pub struct Check<'s, 'k, 'a> {
     scoping: &'s Scoping,
     region: Region<'k, 'a>,
     helpers: &'s FxHashSet<SymbolId>,
+    hosts: bool,
     captured: Option<Captured>,
 }
 
@@ -169,12 +176,33 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             scoping,
             region: Region::factory(factory, allowed.mapped_params),
             helpers: allowed.helpers,
+            hosts: false,
+            captured: None,
+        }
+    }
+
+    fn statement(
+        scoping: &'s Scoping,
+        statement: &Statement<'_>,
+        helpers: &'s FxHashSet<SymbolId>,
+        hosts: bool,
+    ) -> Self {
+        Self {
+            scoping,
+            region: Region::statement(statement),
+            helpers,
+            hosts,
             captured: None,
         }
     }
 
     pub fn into_captured(self) -> Option<Captured> {
         self.captured
+    }
+
+    fn host(&self, reach: Reach, name: &str) -> Option<Captured> {
+        let read = self.hosts && reach == Reach::Free && HOST_NAMES.contains(&name);
+        read.then(|| Captured::Host(name.to_string()))
     }
 }
 
@@ -186,7 +214,9 @@ impl<'a> Policy<'a> for Check<'_, '_, 'a> {
     fn reference(&mut self, frame: Frame, it: &IdentifierReference<'a>) {
         if self.captured.is_none() {
             let reach = self.region.reach((self.scoping, self.helpers), frame, it);
-            self.captured = reach.captured(self.scoping);
+            self.captured = reach
+                .captured(self.scoping)
+                .or_else(|| self.host(reach, it.name.as_str()));
         }
     }
 
@@ -195,6 +225,10 @@ impl<'a> Policy<'a> for Check<'_, '_, 'a> {
             self.captured = Some(Captured::Eval);
         }
         Step::Walk
+    }
+
+    fn with(&mut self) {
+        self.captured.get_or_insert(Captured::With);
     }
 }
 
@@ -215,12 +249,17 @@ pub fn captured_by_statement(
     statement: &Statement<'_>,
     helpers: &FxHashSet<SymbolId>,
 ) -> Option<Captured> {
-    let mut check = Check {
-        scoping,
-        region: Region::statement(statement),
-        helpers,
-        captured: None,
-    };
+    let mut check = Check::statement(scoping, statement, helpers, false);
+    Scan::new(&mut check).visit_statement(statement);
+    check.captured
+}
+
+pub fn captured_by_helper(
+    scoping: &Scoping,
+    statement: &Statement<'_>,
+    helpers: &FxHashSet<SymbolId>,
+) -> Option<Captured> {
+    let mut check = Check::statement(scoping, statement, helpers, true);
     Scan::new(&mut check).visit_statement(statement);
     check.captured
 }

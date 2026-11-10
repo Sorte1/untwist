@@ -230,3 +230,11 @@ fn the_fixtures_extract_alike_taken_and_cloned() {
     }
     assert_eq!(found, 3);
 }
+
+#[test]
+fn a_factory_holding_a_with_statement_is_refused() {
+    refused(
+        "define([\"require\", \"exports\"], function (r, e) {\n  var o = { e: { tag: \"inner\" } };\n  with (o) { e.x = 1; }\n  console.log(Object.keys(e), Object.keys(o.e));\n});",
+    );
+    refused("define([\"dep\"], function (dep) { with ({ dep: 1 }) { return dep; } });");
+}

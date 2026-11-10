@@ -187,6 +187,10 @@ impl<'a> Policy<'a> for Rules<'_> {
             self.pin();
         }
     }
+
+    fn with(&mut self) {
+        self.refused = true;
+    }
 }
 
 pub fn scan(scoping: &Scoping, items: &[Statement<'_>], context: &Context) -> Option<Facts> {

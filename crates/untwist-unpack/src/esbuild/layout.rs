@@ -47,6 +47,7 @@ pub struct Layout<'k, 'a> {
     pub prefix: Vec<usize>,
     pub shim: Option<&'k BindingIdentifier<'a>>,
     pub banner: Option<usize>,
+    pub trusted: Vec<&'k BindingIdentifier<'a>>,
 }
 
 impl Layout<'_, '_> {
@@ -133,7 +134,14 @@ pub fn scopes<'k, 'a>(
 struct Lazies<'a> {
     commonjs: FxHashMap<&'a str, CallForm>,
     esm: FxHashSet<&'a str>,
+    getters: FxHashSet<&'a str>,
     exports_helper: bool,
+}
+
+impl Lazies<'_> {
+    fn trusts(&self, name: &str) -> bool {
+        self.commonjs.contains_key(name) || self.esm.contains(name) || self.getters.contains(name)
+    }
 }
 
 fn declarators<'k, 'a>(
@@ -176,6 +184,7 @@ fn lazies<'a>(list: &[Statement<'a>]) -> Lazies<'a> {
     let mut found = Lazies {
         commonjs: FxHashMap::default(),
         esm: FxHashSet::default(),
+        getters: FxHashSet::default(),
         exports_helper: false,
     };
     let getters = names_getters(list);
@@ -193,8 +202,11 @@ fn lazies<'a>(list: &[Statement<'a>]) -> Lazies<'a> {
             CallForm::FirstKey => getter.is_some_and(|getter| getters.contains(getter)),
         });
         match proven {
-            Some((form, _)) => {
+            Some((form, getter)) => {
                 found.commonjs.insert(id.name.as_str(), form);
+                found
+                    .getters
+                    .extend(getter.filter(|_| form == CallForm::FirstKey));
             }
             None => {
                 found.esm.insert(id.name.as_str());
@@ -392,6 +404,16 @@ fn shim<'k, 'a>(list: &'k [Statement<'a>], prefix: &[usize]) -> Option<&'k Bindi
         .find_map(|(_, _, id, init)| init.filter(|init| is_require_shim(init)).map(|_| id))
 }
 
+fn trusted<'k, 'a>(
+    list: &'k [Statement<'a>],
+    lazies: &Lazies<'_>,
+) -> Vec<&'k BindingIdentifier<'a>> {
+    declarators(list)
+        .map(|(_, _, id, _)| id)
+        .filter(|id| lazies.trusts(id.name.as_str()))
+        .collect()
+}
+
 pub fn layout<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
     let lazies = lazies(list);
     if lazies.commonjs.is_empty() && lazies.esm.is_empty() {
@@ -405,6 +427,7 @@ pub fn layout<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
         prefix: Vec::new(),
         shim: None,
         banner: banner_of(list),
+        trusted: trusted(list, &lazies),
     };
     if !layout.accepted() {
         return None;

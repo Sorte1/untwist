@@ -87,3 +87,40 @@ fn the_runtime_notes_name_the_kind_and_the_helper() {
         "esbuild helper __toESM cannot move to a runtime module: it reads the factory's own arguments"
     );
 }
+
+#[test]
+fn a_helper_that_reads_a_name_each_module_has_for_itself_stays_in_the_bundle() {
+    for (source, name) in [
+        ("var load = () => require(\"./config.json\");", "require"),
+        ("var kind = () => typeof module;", "module"),
+        ("var own = () => exports.a;", "exports"),
+        ("function file() { return __filename; }", "__filename"),
+        ("function dir() { return __dirname; }", "__dirname"),
+    ] {
+        let alloc = Allocator::default();
+        let program = parse(&alloc, source);
+        let scoping = build_scoping(&program).scoping;
+
+        let found = first_unclosed_helper(&scoping, &program.body, &[0])
+            .map(|(_, captured)| captured.describe());
+
+        assert_eq!(
+            found,
+            Some(format!(
+                "it reads {name}, which every module has for itself"
+            )),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_helper_that_binds_a_host_name_itself_still_moves() {
+    let alloc = Allocator::default();
+    let program = parse(&alloc, "var load = (require, module) => require(module);");
+    let scoping = build_scoping(&program).scoping;
+
+    let found = first_unclosed_helper(&scoping, &program.body, &[0]);
+
+    assert_eq!(found, None);
+}

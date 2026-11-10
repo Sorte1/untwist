@@ -77,7 +77,7 @@ pub trait Policy<'a> {
 
     fn returns(&mut self, _frame: Frame) {}
 
-    fn with(&mut self) {}
+    fn with(&mut self);
 }
 
 pub struct Scan<'p, P: ?Sized> {

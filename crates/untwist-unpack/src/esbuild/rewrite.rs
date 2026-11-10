@@ -5,14 +5,17 @@ use oxc_ast_visit::{walk_mut, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_span::GetSpan;
 use oxc_str::{Ident, Str};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::Note;
 use untwist_core::semantic::build_scoping;
 
+use crate::esbuild::live::read_through_runtime;
 use crate::esbuild::mentions::{binds_any_or, fresh_name, mentioned};
 use crate::model::{Bundle, BundleKind, Module};
 use crate::path::relative_path;
-use crate::runtime::{declared_names, js_string, runtime_id, runtime_path, synthetic_statements};
+use crate::runtime::{
+    declared_names, js_string, live_exports, runtime_id, runtime_path, synthetic_statements,
+};
 
 const REQUIRE: &str = "require";
 const CREATE_REQUIRE: &str = "createRequire";
@@ -118,26 +121,54 @@ fn entry_require<'a>(alloc: &'a Allocator, program: &mut Program<'a>) -> String 
     name
 }
 
-fn runtime_names(bundle: &Bundle<'_>) -> Vec<String> {
-    bundle
-        .modules
-        .get(&runtime_id(BundleKind::Esbuild))
-        .map(|module| declared_names(&module.program().body))
-        .unwrap_or_default()
+struct Shared {
+    names: Vec<String>,
+    wanted: FxHashMap<String, usize>,
+    live: FxHashMap<String, usize>,
+}
+
+fn indexed(names: &[String]) -> FxHashMap<String, usize> {
+    names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| (name.clone(), index))
+        .collect()
+}
+
+fn shared(bundle: &Bundle<'_>) -> Shared {
+    let Some(runtime) = bundle.modules.get(&runtime_id(BundleKind::Esbuild)) else {
+        return Shared {
+            names: Vec::new(),
+            wanted: FxHashMap::default(),
+            live: FxHashMap::default(),
+        };
+    };
+    let body = &runtime.program().body;
+    let live = live_exports(body);
+    let read_live: FxHashSet<&str> = live.iter().map(String::as_str).collect();
+    let names: Vec<String> = declared_names(body)
+        .into_iter()
+        .filter(|name| !read_live.contains(name.as_str()))
+        .collect();
+    Shared {
+        wanted: indexed(&names),
+        live: indexed(&live),
+        names,
+    }
 }
 
 fn runtime_import<'a>(
     alloc: &'a Allocator,
     module: &Module<'a>,
-    names: &[String],
+    (binding, names): (Option<&str>, &[String]),
     require: &str,
 ) -> Option<AVec<'a, Statement<'a>>> {
     let specifier = relative_path(module.path.as_str(), &runtime_path(BundleKind::Esbuild));
-    let text = format!(
-        "var {{ {} }} = {require}({});",
-        names.join(", "),
-        js_string(&specifier)
-    );
+    let specifier = js_string(&specifier);
+    let whole = binding.map(|binding| format!("var {binding} = {require}({specifier});\n"));
+    let named = (!names.is_empty())
+        .then(|| format!("var {{ {} }} = {require}({specifier});", names.join(", ")));
+    let text = whole.into_iter().chain(named).collect::<String>();
     synthetic_statements(alloc, text)
 }
 
@@ -171,7 +202,7 @@ fn rewrite_module<'a>(
     module: &mut Module<'a>,
     paths: &FxHashMap<String, String>,
     shim: Option<&str>,
-    (runtime, wanted): (&[String], &FxHashMap<String, usize>),
+    shared: &Shared,
 ) -> Option<()> {
     let from = module.path.as_str().to_string();
     let dependencies = std::mem::take(&mut module.dependencies);
@@ -182,10 +213,12 @@ fn rewrite_module<'a>(
     let is_entry = module.is_entry;
     let shim = shim.filter(|_| !is_entry);
     let program = module.program_mut();
-    let watched = specifiers.keys().copied().chain(shim);
-    let rebound = binds_any_or(program, watched, (!is_entry).then_some(wanted));
+    let live = shared.live.keys().map(String::as_str);
+    let watched = specifiers.keys().copied().chain(shim).chain(live);
+    let rebound = binds_any_or(program, watched, (!is_entry).then_some(&shared.wanted));
     let scoping = rebound.then(|| build_scoping(program).scoping);
-    let needs_require = !specifiers.is_empty() || !runtime.is_empty();
+    let needs_require =
+        !specifiers.is_empty() || !shared.names.is_empty() || !shared.live.is_empty();
     let require = if is_entry && needs_require {
         entry_require(alloc, program)
     } else {
@@ -200,21 +233,23 @@ fn rewrite_module<'a>(
     };
     calls.visit_program(program);
     drop(specifiers);
-    let used = used_runtime(program, (runtime, wanted), is_entry, scoping.as_ref());
+    let names = (shared.names.as_slice(), &shared.wanted);
+    let used = used_runtime(program, names, is_entry, scoping.as_ref());
+    let binding = read_through_runtime(alloc, program, &shared.live, scoping.as_ref());
     module.dependencies = dependencies;
-    import_runtime(alloc, module, &used, &require)
+    import_runtime(alloc, module, (binding.as_deref(), &used), &require)
 }
 
 fn import_runtime<'a>(
     alloc: &'a Allocator,
     module: &mut Module<'a>,
-    used: &[String],
+    (binding, used): (Option<&str>, &[String]),
     require: &str,
 ) -> Option<()> {
-    if used.is_empty() {
+    if binding.is_none() && used.is_empty() {
         return Some(());
     }
-    let import = runtime_import(alloc, module, used, require)?;
+    let import = runtime_import(alloc, module, (binding, used), require)?;
     let is_entry = module.is_entry;
     let program = module.program_mut();
     let at = if is_entry {
@@ -236,16 +271,11 @@ pub fn rewrite<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
         .runtime
         .as_ref()
         .map(|runtime| runtime.require_name.clone());
-    let runtime = runtime_names(bundle);
-    let wanted: FxHashMap<String, usize> = runtime
-        .iter()
-        .enumerate()
-        .map(|(index, name)| (name.clone(), index))
-        .collect();
+    let shared = shared(bundle);
     let runtime_key = runtime_id(BundleKind::Esbuild);
     for (id, module) in bundle.modules.iter_mut() {
         if *id != runtime_key {
-            let _ = rewrite_module(alloc, module, &paths, shim.as_deref(), (&runtime, &wanted));
+            let _ = rewrite_module(alloc, module, &paths, shim.as_deref(), &shared);
         }
     }
     Vec::new()
