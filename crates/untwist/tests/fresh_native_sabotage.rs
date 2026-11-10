@@ -29,12 +29,12 @@ fn transformed(options: &Options, source: &str) -> String {
 }
 
 #[test]
-fn every_ref_row_diverges_from_node_once_the_induction_is_trusted_everywhere() {
+fn every_sab_row_diverges_from_node_once_the_induction_is_trusted_everywhere() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let sabotage = with_prefix("ref-");
-    assert!(sabotage.len() >= 6, "found {} rows", sabotage.len());
+    let sabotage = with_prefix("sab-");
+    assert!(sabotage.len() >= 8, "found {} rows", sabotage.len());
     let safe = options(false);
     let run_safe = |source: &str| transformed(&safe, source);
     let modes: [Mode<'_>; 1] = [("mutant", &run_safe)];

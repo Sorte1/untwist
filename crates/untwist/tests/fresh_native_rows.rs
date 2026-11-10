@@ -2,7 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/fresh_native_rows.txt");
-const PREFIXES: [&str; 2] = ["dec-", "ref-"];
+const PREFIXES: [&str; 3] = ["dec-", "ref-", "sab-"];
 
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
@@ -38,7 +38,7 @@ fn transformed(options: &Options, source: &str) -> String {
 #[test]
 fn every_row_has_a_known_prefix() {
     let all = rows();
-    assert!(all.len() >= 10, "found {} rows", all.len());
+    assert!(all.len() >= 18, "found {} rows", all.len());
     for (label, _) in all {
         assert!(
             PREFIXES.iter().any(|prefix| label.starts_with(prefix)),
@@ -53,7 +53,7 @@ fn the_safe_lane_drops_the_machinery_of_exactly_the_dec_rows() {
         let clean = label.starts_with("dec-");
         let code = transformed(&options(false), &source);
         assert_eq!(
-            !code.contains("arr0"),
+            !code.contains("function aQ"),
             clean,
             "{label}: expected clean={clean}:\n{code}"
         );
