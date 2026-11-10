@@ -8,11 +8,6 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
-- One step pool per input for string-array decoding, 32 times the per-decode fuel or 2,000 steps
-  per input byte, whichever is larger. A file made of many small decoders that each spin to their
-  own budget no longer runs for hours; once the pool is spent the remaining decoders are left
-  encoded with a note.
-
 - Memory and time budgets: `--max-memory` (default 4 GiB) and `--timeout`, also as library
   options and in the wasm build (1 GiB by default). An input that reaches a budget stops its passes
   and keeps the output so far (`budget-memory`, `budget-time`); one that goes past the memory cap
