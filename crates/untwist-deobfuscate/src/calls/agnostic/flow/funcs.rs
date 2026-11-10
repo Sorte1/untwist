@@ -4,7 +4,7 @@ use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::ScopeFlags;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::globals::Globals;
@@ -106,8 +106,10 @@ impl<'s> Prescan<'s> {
     }
 
     fn exposed(&self, symbol: SymbolId) -> bool {
+        let flags = self.scoping.symbol_flags(symbol);
         self.script
             && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
+            && flags.intersects(SymbolFlags::FunctionScopedVariable | SymbolFlags::Function)
             && self.globals.may_reach(self.scoping.symbol_name(symbol))
     }
 

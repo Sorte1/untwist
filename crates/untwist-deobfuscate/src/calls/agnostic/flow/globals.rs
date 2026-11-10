@@ -70,6 +70,19 @@ impl Globals {
             .is_none()
     }
 
+    fn global_object(scoping: &Scoping, object: &Expression<'_>, this_global: bool) -> bool {
+        match object.without_parentheses() {
+            Expression::Identifier(id) => {
+                GLOBAL_NAMES.contains(&id.name.as_str()) && Self::unresolved(scoping, id)
+            }
+            Expression::ThisExpression(_) => this_global,
+            other => other
+                .as_member_expression()
+                .and_then(static_key)
+                .is_some_and(|key| GLOBAL_KEYS.contains(&key.as_ref())),
+        }
+    }
+
     fn global_base(&self, scoping: &Scoping, object: &Expression<'_>, this_global: bool) -> bool {
         match object.without_parentheses() {
             Expression::Identifier(id) => Self::unresolved(scoping, id),
@@ -102,7 +115,7 @@ impl Globals {
     ) {
         let object = member.object().without_parentheses();
         self.base_next = Self::looked_up(scoping, object).then_some(object.span().start);
-        if !self.global_base(scoping, object, this_global) {
+        if !Self::global_object(scoping, object, this_global) {
             return;
         }
         match static_key(member) {
