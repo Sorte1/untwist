@@ -5,12 +5,13 @@ use oxc_semantic::Scoping;
 use oxc_span::{Span, SPAN};
 use oxc_str::Ident;
 use oxc_syntax::operator::UpdateOperator;
-use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::{call_parts, infinite_loop_body};
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
+use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 use crate::control_flow_object::single_declarator;
 use crate::notes;
@@ -50,9 +51,16 @@ fn sequence_declaration<'k, 'a>(
     Some((id, text.split('|').map(str::to_string).collect()))
 }
 
+fn starts_at_zero(init: &Expression<'_>) -> bool {
+    matches!(
+        fold_to_const(init, &FoldOptions::default()),
+        Some(Const::Num(start)) if start == 0.0
+    )
+}
+
 fn iterator_declaration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k BindingIdentifier<'a>> {
-    let (id, _) = single_declarator(stmt)?;
-    Some(id)
+    let (id, init) = single_declarator(stmt)?;
+    starts_at_zero(init?).then_some(id)
 }
 
 fn bare_infinite_loop_body<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Statement<'a>> {
@@ -119,9 +127,10 @@ fn prelude_switch<'k, 'a>(stmts: &'k [Statement<'a>]) -> Option<Prelude<'k, 'a>>
 }
 
 fn bindings_are_private(bindings: &[SymbolId; 2], scoping: &Scoping) -> bool {
-    bindings
-        .iter()
-        .all(|symbol| scoping.get_resolved_reference_ids(*symbol).len() == PRELUDE_REFERENCES)
+    bindings.iter().all(|symbol| {
+        scoping.get_resolved_reference_ids(*symbol).len() == PRELUDE_REFERENCES
+            && scoping.symbol_redeclarations(*symbol).is_empty()
+    })
 }
 
 fn case_label(case: &SwitchCase<'_>) -> Option<String> {
@@ -283,50 +292,105 @@ pub fn fall_through_case<'k, 'a>(
     falling_through_case(prelude_switch(stmts)?.switch, sequence)
 }
 
-fn lexical_names<'k, 'a>(stmt: &'k Statement<'a>) -> Vec<(&'k str, Span)> {
+fn lexical_bindings<'k, 'a>(stmt: &'k Statement<'a>) -> Vec<&'k BindingIdentifier<'a>> {
     match stmt {
         Statement::VariableDeclaration(declaration) if declaration.kind.is_lexical() => declaration
             .declarations
             .iter()
             .flat_map(|declarator| declarator.id.get_binding_identifiers())
-            .map(|id| (id.name.as_str(), id.span))
             .collect(),
-        Statement::ClassDeclaration(class) => class
-            .id
-            .as_ref()
-            .map(|id| (id.name.as_str(), id.span))
-            .into_iter()
-            .collect(),
-        Statement::FunctionDeclaration(function) => function
-            .id
-            .as_ref()
-            .map(|id| (id.name.as_str(), id.span))
-            .into_iter()
-            .collect(),
+        Statement::ClassDeclaration(class) => class.id.iter().collect(),
+        Statement::FunctionDeclaration(function) => function.id.iter().collect(),
         _ => Vec::new(),
     }
 }
 
-fn shadowed_declaration(switch: &SwitchStatement<'_>, scoping: &Scoping) -> Option<Span> {
-    let scope = switch.scope_id.get()?;
+fn case_bindings<'k, 'a>(case: &'k SwitchCase<'a>) -> Vec<&'k BindingIdentifier<'a>> {
+    case.consequent.iter().flat_map(lexical_bindings).collect()
+}
+
+fn is_outside_every_function(scope: ScopeId, scoping: &Scoping) -> bool {
+    !scoping
+        .scope_ancestors(scope)
+        .any(|ancestor| scoping.scope_flags(ancestor).is_function())
+}
+
+fn captures_an_outer_name(name: &str, scope: ScopeId, scoping: &Scoping) -> bool {
+    scoping.root_unresolved_references().contains_key(name)
+        || scoping
+            .scope_ancestors(scope)
+            .skip(1)
+            .any(|ancestor| scoping.get_binding(ancestor, Ident::from(name)).is_some())
+}
+
+fn shadowed_declaration(
+    switch: &SwitchStatement<'_>,
+    scope: ScopeId,
+    scoping: &Scoping,
+) -> Option<Span> {
+    let becomes_global = is_outside_every_function(scope, scoping);
     switch
         .cases
         .iter()
-        .flat_map(|case| case.consequent.iter())
-        .flat_map(lexical_names)
-        .find(|(name, _)| {
-            scoping
-                .scope_ancestors(scope)
-                .skip(1)
-                .any(|ancestor| scoping.get_binding(ancestor, Ident::from(*name)).is_some())
+        .flat_map(case_bindings)
+        .find(|id| becomes_global || captures_an_outer_name(id.name.as_str(), scope, scoping))
+        .map(|id| id.span)
+}
+
+struct CaseReferences<'s> {
+    scoping: &'s Scoping,
+    counts: FxHashMap<SymbolId, usize>,
+}
+
+impl<'a> VisitJs<'a> for CaseReferences<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let symbol = it
+            .reference_id
+            .get()
+            .and_then(|id| self.scoping.get_reference(id).symbol_id());
+        if let Some(count) = symbol.and_then(|symbol| self.counts.get_mut(&symbol)) {
+            *count += 1;
+        }
+    }
+}
+
+fn binding_used_outside_its_case(case: &SwitchCase<'_>, scoping: &Scoping) -> Option<Span> {
+    let declared = case_bindings(case);
+    if declared.is_empty() {
+        return None;
+    }
+    let mut inside = CaseReferences {
+        scoping,
+        counts: declared
+            .iter()
+            .filter_map(|id| id.symbol_id.get())
+            .map(|symbol| (symbol, 0))
+            .collect(),
+    };
+    inside.visit_statements(&case.consequent);
+    declared
+        .iter()
+        .find(|id| {
+            id.symbol_id.get().is_none_or(|symbol| {
+                inside.counts.get(&symbol).copied()
+                    != Some(scoping.get_resolved_reference_ids(symbol).len())
+            })
         })
-        .map(|(_, span)| span)
+        .map(|id| id.span)
+}
+
+fn shared_declaration(switch: &SwitchStatement<'_>, scoping: &Scoping) -> Option<Span> {
+    switch
+        .cases
+        .iter()
+        .find_map(|case| binding_used_outside_its_case(case, scoping))
 }
 
 fn plan(stmts: &[Statement<'_>], cx: &mut Cx<'_, '_>) -> Option<Vec<String>> {
     let prelude = prelude_switch(stmts)?;
     let switch = prelude.switch;
     let labels = case_labels(switch)?;
+    let scope = switch.scope_id.get()?;
     if !bindings_are_private(&prelude.bindings, cx.scoping()) {
         return None;
     }
@@ -334,8 +398,12 @@ fn plan(stmts: &[Statement<'_>], cx: &mut Cx<'_, '_>) -> Option<Vec<String>> {
         cx.note(notes::SWITCH_CASE_EXIT, Some(case.span));
         return None;
     }
-    if let Some(span) = shadowed_declaration(switch, cx.scoping()) {
+    if let Some(span) = shadowed_declaration(switch, scope, cx.scoping()) {
         cx.note(notes::SWITCH_CASE_SHADOW, Some(span));
+        return None;
+    }
+    if let Some(span) = shared_declaration(switch, cx.scoping()) {
+        cx.note(notes::SWITCH_CASE_BINDING_SHARED, Some(span));
         return None;
     }
     if let Some(label) = sequence_mismatch(&labels, &prelude.sequence) {

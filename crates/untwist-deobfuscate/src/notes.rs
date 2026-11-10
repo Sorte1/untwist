@@ -291,6 +291,9 @@ pub const SWITCH_CASE_EXIT: &str =
      continue";
 pub const SWITCH_CASE_SHADOW: &str =
     "control-flow switch not flattened: a case declares a binding that would collide once hoisted";
+pub const SWITCH_CASE_BINDING_SHARED: &str =
+    "control-flow switch not flattened: a case declares a binding that code outside that case \
+     refers to, where the switch leaves it uninitialised";
 
 pub const DEAD_CODE_UNMERGEABLE: &str =
     "the taken branch declares a binding that cannot be merged; the conditional is kept";
@@ -628,6 +631,7 @@ catalogue!(
     SWITCH_FALLTHROUGH,
     SWITCH_CASE_EXIT,
     SWITCH_CASE_SHADOW,
+    SWITCH_CASE_BINDING_SHARED,
     MERGE_USE_BEFORE_INIT,
     MERGE_ADOPTED_DYNAMIC_KEY,
     DEAD_CODE_DISCARDED_FUNCTION,
