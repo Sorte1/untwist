@@ -3,7 +3,7 @@ use oxc_span::Span;
 
 use super::judge::Walker;
 use super::scope::Freshness;
-use super::{Allowance, BareUse, TriggerKind};
+use super::{Allowance, BareUse, StoredValue, TriggerKind};
 
 #[derive(Clone, Copy)]
 pub(super) enum UseKind {
@@ -84,10 +84,15 @@ impl<'a> Walker<'a, '_> {
                 allowance,
             });
         }
-        for (root, key, value) in std::mem::take(&mut self.pending_writes) {
+        for (root, key, value, inert) in std::mem::take(&mut self.pending_writes) {
             let function = value
                 .is_some_and(|binding| binding == usize::MAX || self.is_local_function(binding));
-            self.out.function_writes.push((root, key, function));
+            self.out.function_writes.push(StoredValue {
+                root,
+                key,
+                function,
+                settled: function || inert,
+            });
         }
     }
 }

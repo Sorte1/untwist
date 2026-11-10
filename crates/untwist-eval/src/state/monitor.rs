@@ -388,13 +388,17 @@ fn record_new_entry(owner: usize, addr: usize, key: PropKey, value: &Value<'_>) 
         return;
     }
     settle_miss(owner, addr, &key);
+    let stored = canon(value);
+    if !crate::mutants::miss_results_unchecked() {
+        mark_innermost_frame_read(owner, stored.clone());
+    }
     TABLE.with(|table| {
         table.borrow_mut().insert(
             (addr, key),
             TableEntry {
                 read_args,
                 epoch,
-                value: canon(value),
+                value: stored,
             },
         );
     });

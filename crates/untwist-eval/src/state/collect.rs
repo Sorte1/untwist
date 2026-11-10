@@ -58,7 +58,8 @@ pub(super) fn collect_for_function<'a>(
     let Some(body) = &function.body else {
         return Collected::default();
     };
-    let rewrite = own_name.and_then(|name| template_rewrite(function, name));
+    let array = machinery.first().copied().unwrap_or_default();
+    let rewrite = own_name.and_then(|name| template_rewrite(function, name, array));
     let template = own_name.filter(|_| rewrite.is_some());
     let call_target = template
         .and_then(|name| self_rewrite_target(&body.statements, Some(name)))
@@ -137,6 +138,13 @@ pub(super) struct BareUse<'a> {
     pub(super) allowance: Allowance,
 }
 
+pub(super) struct StoredValue<'a> {
+    pub(super) root: &'a str,
+    pub(super) key: &'a str,
+    pub(super) function: bool,
+    pub(super) settled: bool,
+}
+
 #[derive(Default)]
 pub(super) struct Collected<'a> {
     pub(super) triggers: Vec<Trigger<'a>>,
@@ -146,7 +154,7 @@ pub(super) struct Collected<'a> {
     pub(super) captures: Vec<Span>,
     pub(super) bare_uses: Vec<BareUse<'a>>,
     pub(super) receivers: Vec<(&'a str, &'a str)>,
-    pub(super) function_writes: Vec<(&'a str, &'a str, bool)>,
+    pub(super) function_writes: Vec<StoredValue<'a>>,
     pub(super) rewrite: Option<Span>,
 }
 

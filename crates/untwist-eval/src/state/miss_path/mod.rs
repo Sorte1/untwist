@@ -195,7 +195,7 @@ fn decoder_proven(target: &Decoder<'_, '_>) -> bool {
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    let inner = template_rewrite(function, name)
+    let inner = template_rewrite(function, name, target.array)
         .and_then(|_| self_rewrite_target(&body.statements, Some(name)));
     let Some(inner) = inner else {
         return false;

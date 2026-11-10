@@ -1,6 +1,7 @@
 use oxc_ast::ast::{
     Argument, ArrowFunctionExpression, AssignmentTarget, BindingIdentifier, BindingPattern,
-    CallExpression, Expression, Function, MemberExpression, SimpleAssignmentTarget, Statement,
+    CallExpression, Expression, Function, IdentifierReference, MemberExpression,
+    SimpleAssignmentTarget, Statement, WithStatement,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
@@ -13,11 +14,13 @@ use crate::stack;
 struct LocalNames<'a> {
     names: FxHashSet<&'a str>,
     bindings: FxHashMap<&'a str, usize>,
+    functions: FxHashMap<&'a str, usize>,
 }
 
 #[derive(Default)]
 struct Written<'a> {
     names: FxHashSet<&'a str>,
+    dynamic: bool,
 }
 
 impl<'a> VisitJs<'a> for Written<'a> {
@@ -43,6 +46,15 @@ impl<'a> VisitJs<'a> for Written<'a> {
         }
         walk_js::walk_simple_assignment_target(self, it);
     }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.dynamic |= it.name.as_str() == "eval";
+    }
+
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.dynamic = true;
+        walk_js::walk_with_statement(self, it);
+    }
 }
 
 impl<'a> VisitJs<'a> for LocalNames<'a> {
@@ -65,6 +77,9 @@ impl<'a> VisitJs<'a> for LocalNames<'a> {
     fn visit_function(&mut self, it: &Function<'a>, _flags: ScopeFlags) {
         if let Some(id) = &it.id {
             self.names.insert(id.name.as_str());
+            if it.is_declaration() {
+                *self.functions.entry(id.name.as_str()).or_default() += 1;
+            }
         }
     }
 
@@ -260,6 +275,14 @@ pub(super) fn context<'a>(statements: &'a [Statement<'a>]) -> Context<'a> {
     }
     let unwritten =
         |name: &&str| locals.bindings.get(name) == Some(&1) && !written.names.contains(name);
+    let bound_once = |name: &&str| {
+        crate::mutants::rotator_wrappers_trusted()
+            || (locals.functions.get(name) == Some(&1)
+                && !locals.bindings.contains_key(name)
+                && !written.names.contains(name)
+                && !written.dynamic)
+    };
+    wrappers.retain(|name, _| bound_once(name));
     let aliases = aliases
         .into_iter()
         .filter(|(alias, target)| unwritten(alias) && !locals.names.contains(target))

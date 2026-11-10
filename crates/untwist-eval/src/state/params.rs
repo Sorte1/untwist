@@ -308,7 +308,7 @@ pub(super) fn used_params_beside_captures(function: &Function<'_>, captures: &[S
         .map(|param| param_name(&param.pattern))
         .collect();
     let mut usage = ParamUsage {
-        used: vec![false; names.len()],
+        used: names.iter().map(Option::is_none).collect(),
         names,
         shadowed: Vec::new(),
         captures,
@@ -407,4 +407,36 @@ fn positions_of(names: &[Option<&str>], name: &str) -> Vec<usize> {
         .filter(|(_, slot)| **slot == Some(name))
         .map(|(index, _)| index)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use oxc_allocator::Allocator;
+    use oxc_ast::ast::Statement;
+    use untwist_core::parse::parse_program;
+
+    use super::used_params;
+
+    fn used(source: &str) -> Vec<bool> {
+        let alloc = Allocator::default();
+        let parsed = parse_program(&alloc, source);
+        let program = alloc.alloc(parsed.program);
+        let function = program
+            .body
+            .iter()
+            .find_map(|statement| match statement {
+                Statement::FunctionDeclaration(function) => Some(function),
+                _ => None,
+            })
+            .expect("a function");
+        used_params(function)
+    }
+
+    #[test]
+    fn a_destructured_parameter_counts_as_used() {
+        assert_eq!(
+            used("function d(i, { k }, [m], n) { return i; }"),
+            [true, true, true, false]
+        );
+    }
 }

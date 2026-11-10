@@ -1,10 +1,11 @@
 use oxc_ast::ast::{
     Argument, ArrayExpression, ArrowFunctionExpression, AssignmentExpression, AssignmentOperator,
     AssignmentTarget, AssignmentTargetPattern, BindingPattern, BlockStatement, CallExpression,
-    CatchClause, Class, Expression, ForInStatement, ForOfStatement, ForStatement, ForStatementLeft,
-    Function, IdentifierReference, IfStatement, LogicalExpression, LogicalOperator,
-    MemberExpression, NewExpression, SimpleAssignmentTarget, Statement, SwitchStatement,
-    UnaryExpression, UpdateExpression, VariableDeclarator, WithStatement,
+    CatchClause, Class, Expression, ExpressionStatement, ForInStatement, ForOfStatement,
+    ForStatement, ForStatementLeft, Function, IdentifierReference, IfStatement, LogicalExpression,
+    LogicalOperator, MemberExpression, NewExpression, SequenceExpression, SimpleAssignmentTarget,
+    Statement, SwitchStatement, UnaryExpression, UpdateExpression, VariableDeclarator,
+    WithStatement,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{GetSpan, Span};
@@ -21,7 +22,25 @@ use super::scope::{
     FrameKind, Freshness,
 };
 use super::{gate_guard, member_peel_from, FinalKey, MemberAccess, RecognizedGate, TriggerKind};
+use crate::mutants::{template_prefix_trusted, value_gates_recognized};
 use crate::stack;
+
+fn is_inert_value(expr: &Expression<'_>) -> bool {
+    match expr.without_parentheses() {
+        Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BigIntLiteral(_)
+        | Expression::StringLiteral(_) => true,
+        Expression::ObjectExpression(object) => object.properties.is_empty(),
+        Expression::Identifier(id) => id.name.as_str() == "arguments",
+        Expression::UnaryExpression(node) if node.operator != UnaryOperator::Delete => {
+            is_inert_value(&node.argument)
+                || matches!(node.argument.without_parentheses(), Expression::ArrayExpression(array) if array.elements.is_empty())
+        }
+        _ => false,
+    }
+}
 
 fn may_replace_prototype(member: &MemberExpression<'_>) -> bool {
     member
@@ -57,6 +76,9 @@ impl<'a> Walker<'a, '_> {
             }
             self.push_trigger(span, TriggerKind::Identifier);
             return false;
+        }
+        if !from_inner && !template_prefix_trusted() {
+            self.push_trigger(span, TriggerKind::Identifier);
         }
         self.bindings[binding].writes += 1;
         self.check_region(binding);
@@ -244,7 +266,12 @@ impl<'a> Walker<'a, '_> {
             Expression::Identifier(id) => self.resolve(id.name.as_str()),
             _ => None,
         };
-        self.pending_writes.push((peel.root, key, function));
+        self.pending_writes.push((
+            peel.root,
+            key,
+            function,
+            !self.in_region() || is_inert_value(value),
+        ));
     }
 
     fn recognize_gate(&mut self, test: &Expression<'a>, region: Span) -> bool {
@@ -264,6 +291,23 @@ impl<'a> Walker<'a, '_> {
             conditional,
         });
         true
+    }
+
+    fn mark_discarded(&mut self, expr: &Expression<'a>) {
+        match expr {
+            Expression::ParenthesizedExpression(node) => self.mark_discarded(&node.expression),
+            Expression::SequenceExpression(node) => {
+                for item in &node.expressions {
+                    self.mark_discarded(item);
+                }
+            }
+            Expression::LogicalExpression(node) => self.discarded.push(node.span),
+            _ => {}
+        }
+    }
+
+    fn value_is_discarded(&self, span: Span) -> bool {
+        value_gates_recognized() || self.discarded.contains(&span)
     }
 
     fn in_block_scope(&mut self, declared: Vec<Declared<'a>>, walk: impl FnOnce(&mut Self)) {
@@ -521,10 +565,29 @@ impl<'a> VisitJs<'a> for Walker<'a, '_> {
         }
     }
 
+    fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
+        self.mark_discarded(&it.expression);
+        self.visit_expression(&it.expression);
+    }
+
+    fn visit_sequence_expression(&mut self, it: &SequenceExpression<'a>) {
+        if let Some((_, leading)) = it.expressions.split_last() {
+            for item in leading {
+                self.mark_discarded(item);
+            }
+        }
+        for item in &it.expressions {
+            self.visit_expression(item);
+        }
+    }
+
     fn visit_logical_expression(&mut self, it: &LogicalExpression<'a>) {
         self.visit_expression(&it.left);
         let region = it.right.span();
-        if it.operator == LogicalOperator::And && self.recognize_gate(&it.left, region) {
+        if it.operator == LogicalOperator::And
+            && self.value_is_discarded(it.span)
+            && self.recognize_gate(&it.left, region)
+        {
             self.enter_region(region);
             self.visit_expression(&it.right);
             self.leave_region();
