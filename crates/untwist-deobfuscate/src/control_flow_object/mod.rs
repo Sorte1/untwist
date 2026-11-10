@@ -532,23 +532,24 @@ fn contains(outer: Span, inner: Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
 }
 
-pub(super) fn nest_depth(spans: impl Iterator<Item = Span>) -> usize {
+pub(super) fn nested_past_the_limit(spans: impl Iterator<Item = Span>) -> bool {
     let mut spans: Vec<Span> = spans.collect();
     if spans.len() <= MAX_NEST {
-        return spans.len().min(1);
+        return false;
     }
     spans.sort_unstable_by_key(|span| (span.start, std::cmp::Reverse(span.end)));
     spans.dedup();
     let mut open: Vec<Span> = Vec::new();
-    let mut deepest = 0;
     for span in spans {
         while open.last().is_some_and(|outer| !contains(*outer, span)) {
             open.pop();
         }
         open.push(span);
-        deepest = deepest.max(open.len());
+        if open.len() > MAX_NEST {
+            return true;
+        }
     }
-    deepest
+    false
 }
 
 impl ControlFlowObject<'_> {

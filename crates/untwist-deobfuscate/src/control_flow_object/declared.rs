@@ -231,7 +231,7 @@ fn plan_candidate<'a, 'p>(
             .then(|| calls.get(&read.member_span).map(|(span, _)| *span))
             .flatten()
     });
-    if nest_depth(nested) > MAX_NEST {
+    if nested_past_the_limit(nested) {
         cx.note(notes::CONTROL_FLOW_NEST_TOO_DEEP, Some(candidate.statement));
         return None;
     }
