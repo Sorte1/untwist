@@ -40,6 +40,19 @@ fn an_input_the_worker_died_on_is_refused_before_its_scan() {
 }
 
 #[test]
+fn an_unpack_lost_to_the_budget_is_recorded_as_a_budget_stop() {
+    let output = isolated(Isolation {
+        unpack_lost: true,
+        unpack_over: Some(untwist::BudgetHit::Memory),
+        ..Isolation::default()
+    })
+    .run(NORMAL);
+    assert!(!output.unpack_panicked);
+    assert_eq!(output.unpack_budget, Some(untwist::BudgetHit::Memory));
+    assert!(output.bundle.is_none());
+}
+
+#[test]
 fn a_lost_unpack_is_recorded_as_an_unpack_panic() {
     let output = isolated(Isolation {
         unpack_lost: true,

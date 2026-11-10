@@ -108,6 +108,13 @@ fn report_diagnostics(err: &mut dyn Write, result: &Output) -> io::Result<()> {
             "warning: unpacking hit an internal error; the inputs were written without a bundle; please report it"
         )?;
     }
+    if let Some(hit) = result.unpack_budget {
+        writeln!(
+            err,
+            "warning: unpacking reached the run's budget ({}); the inputs were written without a bundle",
+            hit.as_str()
+        )?;
+    }
     Ok(())
 }
 
@@ -272,7 +279,10 @@ fn exit_code(result: &Output) -> u8 {
     if result.parse_errors > 0 || panicked {
         return 1;
     }
-    if !result.depth_refused.is_empty() || !result.budget_hits.is_empty() {
+    if !result.depth_refused.is_empty()
+        || !result.budget_hits.is_empty()
+        || result.unpack_budget.is_some()
+    {
         return 3;
     }
     0

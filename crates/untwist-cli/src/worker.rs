@@ -76,7 +76,14 @@ pub struct Rerun {
     pub over_budget: Vec<(usize, untwist::BudgetHit)>,
     pub serial: bool,
     pub unpack_lost: bool,
+    pub unpack_over: Option<untwist::BudgetHit>,
     pub abort: Abort,
+}
+
+fn over_hit(value: &OsString) -> Option<untwist::BudgetHit> {
+    [untwist::BudgetHit::Memory, untwist::BudgetHit::Time]
+        .into_iter()
+        .find(|hit| value.as_os_str() == hit.as_str())
 }
 
 fn is_one(value: Option<OsString>) -> bool {
@@ -104,7 +111,8 @@ impl Rerun {
             refused,
             over_budget,
             serial: is_one(read(SERIAL)),
-            unpack_lost: is_one(read(UNPACK_LOST)),
+            unpack_lost: read(UNPACK_LOST).is_some_and(|value| !value.is_empty()),
+            unpack_over: read(UNPACK_LOST).and_then(|value| over_hit(&value)),
             abort: Abort::parse(read(ABORT).filter(|_| TEST_HOOKS)),
         }
     }
@@ -151,6 +159,7 @@ fn isolation(rerun: Rerun) -> (Isolation, bool) {
         refused: rerun.refused,
         over_budget: rerun.over_budget,
         unpack_lost: rerun.unpack_lost,
+        unpack_over: rerun.unpack_over,
     };
     (isolation, emit_aborts)
 }

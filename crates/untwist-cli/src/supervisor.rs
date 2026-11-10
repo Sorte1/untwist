@@ -226,8 +226,14 @@ fn spawn(
     if reruns.serial {
         command.env(SERIAL, "1");
     }
-    if reruns.unpack_lost {
-        command.env(UNPACK_LOST, "1");
+    match (reruns.unpack_lost, reruns.unpack_over) {
+        (true, Some(hit)) => {
+            command.env(UNPACK_LOST, hit.as_str());
+        }
+        (true, None) => {
+            command.env(UNPACK_LOST, "1");
+        }
+        (false, _) => {}
     }
     command.spawn()
 }
@@ -336,6 +342,7 @@ fn fallback(args: &Args, stdin: Option<Arc<[u8]>>, reruns: &Reruns, error: &io::
             .map(|(at, hit)| (*at, *hit))
             .collect(),
         unpack_lost: reruns.unpack_lost,
+        unpack_over: reruns.unpack_over,
     };
     crate::in_process(args, stdin.map(|bytes| bytes.to_vec()), false, isolation)
 }

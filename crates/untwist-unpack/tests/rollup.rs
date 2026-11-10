@@ -536,3 +536,14 @@ fn a_function_that_shares_its_name_with_another_kind_of_declaration_refuses_the_
     refused(&iife(&with_var));
     refused(&iife(&var_last));
 }
+
+#[test]
+fn many_independent_segments_split_with_one_import_each_in_the_entry() {
+    let body: String = (0..400)
+        .map(|k| format!("var a{k} = {k}; var b{k} = a{k} + 1;\n"))
+        .collect();
+    let files = split(&iife(&format!("{body}console.log(b0, b399);"))).expect("rollup");
+    let entry = code(&files, "index.js");
+    assert_eq!(entry.matches("import ").count(), files.len() - 1, "{entry}");
+    assert!(entry.contains("import { b0 } from"), "{entry}");
+}

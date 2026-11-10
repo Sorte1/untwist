@@ -239,3 +239,50 @@ fn many_inputs_that_each_fit_the_memory_cap_all_go_through() {
     let written = std::fs::read_dir(dir.path().join("out")).unwrap().count();
     assert!(written >= 40, "{written} files; {stderr}");
 }
+
+fn many_hoisted_segments(pairs: usize) -> String {
+    let body: String = (0..pairs)
+        .map(|k| format!("var a{k} = {k}; var b{k} = a{k} + 1;\n"))
+        .collect();
+    format!("(function () {{\n\"use strict\";\n{body}console.log(b0);\n}})();\n")
+}
+
+#[test]
+fn a_budget_stop_while_unpacking_is_a_clean_refusal() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("hoisted.js");
+    std::fs::write(&input, many_hoisted_segments(8000)).unwrap();
+    for cap in ["12MiB", "20MiB"] {
+        let out_dir = dir.path().join(format!("out-{cap}"));
+        let out = common::bin()
+            .arg(&input)
+            .args(["--split-hoisted", "--no-deobfuscate", "--no-unminify"])
+            .args(["--max-memory", cap, "-o"])
+            .arg(&out_dir)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert_eq!(out.status.code(), Some(3), "{cap}: {stderr}");
+        assert!(!stderr.contains("internal error"), "{cap}: {stderr}");
+        assert!(stderr.contains("budget-memory"), "{cap}: {stderr}");
+        assert!(!out_dir.join("bundle.json").exists(), "{cap}");
+    }
+}
+
+#[test]
+fn many_hoisted_segments_split_within_a_small_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("hoisted.js");
+    std::fs::write(&input, many_hoisted_segments(8000)).unwrap();
+    let out_dir = dir.path().join("out");
+    let out = common::bin()
+        .arg(&input)
+        .args(["--split-hoisted", "--no-deobfuscate", "--no-unminify"])
+        .args(["--max-memory", "256MiB", "-o"])
+        .arg(&out_dir)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert_eq!(out.status.code(), Some(0), "{stderr}");
+    assert!(out_dir.join("bundle.json").exists(), "{stderr}");
+}

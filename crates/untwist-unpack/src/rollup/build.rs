@@ -69,35 +69,41 @@ fn segment_of(segments: &[Range<usize>], n: usize) -> Vec<usize> {
     of
 }
 
+fn grouped(mut edges: Vec<(usize, usize, String)>, count: usize) -> Vec<Vec<(usize, Vec<String>)>> {
+    edges.sort_unstable();
+    edges.dedup();
+    let mut imports: Vec<Vec<(usize, Vec<String>)>> = vec![Vec::new(); count];
+    for (to, from, name) in edges {
+        match imports[to].last_mut() {
+            Some((known, names)) if *known == from => names.push(name),
+            _ => imports[to].push((from, vec![name])),
+        }
+    }
+    if let Some(last) = imports.last_mut() {
+        let mut named = std::mem::take(last).into_iter().peekable();
+        for from in 0..count - 1 {
+            match named.next_if(|(known, _)| *known == from) {
+                Some(found) => last.push(found),
+                None => last.push((from, Vec::new())),
+            }
+        }
+    }
+    imports
+}
+
 pub fn links(scoping: &Scoping, facts: &Facts, segments: &[Range<usize>]) -> Links {
     let count = segments.len();
     let of = segment_of(segments, facts.declares.len());
-    let mut imports: Vec<Vec<Vec<String>>> = vec![vec![Vec::new(); count]; count];
+    let mut edges: Vec<(usize, usize, String)> = Vec::new();
     let mut exports: Vec<Vec<String>> = vec![Vec::new(); count];
     for &(item, symbol) in &facts.uses {
         let (to, from) = (of[item as usize], of[facts.owner[symbol.index()] as usize]);
         if from < to {
             let name = scoping.symbol_name(symbol).to_string();
-            imports[to][from].push(name.clone());
+            edges.push((to, from, name.clone()));
             exports[from].push(name);
         }
     }
-    let imports = imports
-        .into_iter()
-        .enumerate()
-        .map(|(to, lists)| {
-            lists
-                .into_iter()
-                .enumerate()
-                .filter(|(from, names)| !names.is_empty() || (to + 1 == count && *from < to))
-                .map(|(from, mut names)| {
-                    names.sort_unstable();
-                    names.dedup();
-                    (from, names)
-                })
-                .collect()
-        })
-        .collect();
     for names in &mut exports {
         names.sort_unstable();
         names.dedup();
@@ -108,7 +114,7 @@ pub fn links(scoping: &Scoping, facts: &Facts, segments: &[Range<usize>]) -> Lin
         .collect();
     Links {
         ids: chunk_ids(scoping, facts, segments),
-        imports,
+        imports: grouped(edges, count),
         exports,
         requires,
         dropped: facts.dropped.clone(),
