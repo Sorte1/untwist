@@ -1,14 +1,7 @@
-use oxc_allocator::{Allocator, Box as ABox, CloneIn, Vec as AVec};
 use oxc_ast::ast::*;
-use oxc_ast::builder::AstBuilder;
-use oxc_ast_visit::VisitMut;
-use oxc_semantic::Scoping;
-use oxc_span::{SourceType, SPAN};
-use oxc_str::Ident;
-use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashMap;
-use untwist_core::print::function_text;
-use untwist_core::semantic::build_scoping;
+use oxc_ast_visit::VisitJs;
+
+use crate::canon::{function_shape, statement_shape};
 
 const KNOWN: [&str; 7] = [
     include_str!("runtimes/dev.txt"),
@@ -20,73 +13,77 @@ const KNOWN: [&str; 7] = [
     include_str!("runtimes/min-default.txt"),
 ];
 
-struct Canon<'a, 's> {
-    alloc: &'a Allocator,
-    scoping: &'s Scoping,
-    names: FxHashMap<SymbolId, Ident<'a>>,
-}
-
-impl<'a> Canon<'a, '_> {
-    fn name(&mut self, symbol: SymbolId) -> Ident<'a> {
-        let alloc = self.alloc;
-        let next = self.names.len();
-        *self
-            .names
-            .entry(symbol)
-            .or_insert_with(|| Ident::from_str_in(&format!("#{next}"), &alloc))
-    }
-}
-
-impl<'a> VisitMut<'a> for Canon<'a, '_> {
-    fn visit_identifier_reference(&mut self, it: &mut IdentifierReference<'a>) {
-        let symbol = it
-            .reference_id
-            .get()
-            .and_then(|id| self.scoping.get_reference(id).symbol_id());
-        if let Some(symbol) = symbol {
-            it.name = self.name(symbol);
-        }
-    }
-
-    fn visit_binding_identifier(&mut self, it: &mut BindingIdentifier<'a>) {
-        if let Some(symbol) = it.symbol_id.get() {
-            it.name = self.name(symbol);
-        }
-    }
-}
-
-fn canonical(function: &Function<'_>, source_text: &str) -> Option<String> {
-    let alloc = Allocator::default();
-    let builder = AstBuilder::new(&alloc);
-    let copy = function.clone_in(&alloc);
-    let expression = Expression::FunctionExpression(ABox::new_in(copy, &&alloc));
-    let statement = Statement::new_expression_statement(SPAN, expression, &builder);
-    let mut program = Program::new(
-        SPAN,
-        SourceType::cjs(),
-        source_text,
-        AVec::new_in(&builder),
-        None,
-        AVec::new_in(&builder),
-        AVec::from_iter_in([statement], &builder),
-        &builder,
-    );
-    let scoping = build_scoping(&program).scoping;
-    let mut canon = Canon {
-        alloc: &alloc,
-        scoping: &scoping,
-        names: FxHashMap::default(),
-    };
-    canon.visit_program(&mut program);
-    let Some(Statement::ExpressionStatement(statement)) = program.body.first() else {
-        return None;
-    };
-    let Expression::FunctionExpression(function) = &statement.expression else {
-        return None;
-    };
-    Some(function_text(function, true))
-}
+const KEY: &str = "%KEY%";
+const KNOWN_DEFINITIONS: [&str; 5] = [
+    include_str!("runtimes/hoisted.txt"),
+    include_str!("runtimes/hoisted-default.txt"),
+    include_str!("runtimes/hoisted-min.txt"),
+    include_str!("runtimes/hoisted-min-prepared.txt"),
+    include_str!("runtimes/hoisted-min-default.txt"),
+];
 
 pub fn proven(function: &Function<'_>, source_text: &str) -> bool {
-    canonical(function, source_text).is_some_and(|text| KNOWN.contains(&text.as_str()))
+    function_shape(function, source_text).is_some_and(|text| KNOWN.contains(&text.as_str()))
+}
+
+const STORES: [&str; 2] = ["$parcel$inits", "$parcel$modules"];
+
+#[derive(Default)]
+struct Stores {
+    bound: usize,
+    read: usize,
+}
+
+impl<'a> VisitJs<'a> for Stores {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.read += usize::from(STORES.contains(&it.name.as_str()));
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.bound += usize::from(STORES.contains(&it.name.as_str()));
+    }
+}
+
+fn empty_object(declarator: &VariableDeclarator<'_>) -> bool {
+    matches!(
+        &declarator.init,
+        Some(Expression::ObjectExpression(object)) if object.properties.is_empty()
+    )
+}
+
+fn empty_stores<'k>(top: &'k [Statement<'_>]) -> Vec<&'k str> {
+    let mut names: Vec<&str> = top
+        .iter()
+        .filter_map(|statement| match statement {
+            Statement::VariableDeclaration(declaration) => Some(&declaration.declarations),
+            _ => None,
+        })
+        .flatten()
+        .filter(|declarator| empty_object(declarator))
+        .filter_map(|declarator| match &declarator.id {
+            BindingPattern::BindingIdentifier(id) => Some(id.name.as_str()),
+            _ => None,
+        })
+        .filter(|name| STORES.contains(name))
+        .collect();
+    names.sort_unstable();
+    names
+}
+
+fn stores_untouched(top: &[Statement<'_>], definition: usize) -> bool {
+    let mut stores = Stores::default();
+    for (index, statement) in top.iter().enumerate() {
+        if index != definition {
+            stores.visit_statement(statement);
+        }
+    }
+    stores.read == 0 && stores.bound == STORES.len() && empty_stores(top) == STORES
+}
+
+pub fn defined(top: &[Statement<'_>], definition: usize, key: &str, source_text: &str) -> bool {
+    let text = statement_shape(&top[definition], source_text);
+    let known = KNOWN_DEFINITIONS
+        .iter()
+        .any(|known| known.replace(KEY, key) == text);
+    known && stores_untouched(top, definition)
 }

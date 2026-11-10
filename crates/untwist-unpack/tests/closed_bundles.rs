@@ -91,6 +91,7 @@ const OPEN_BODIES: [(&str, &str); 3] = [
 const CONSERVATIVE: UnpackOptions = UnpackOptions {
     split_hoisted: false,
     conservative: true,
+    trust_free_loader: false,
 };
 
 struct Outcome {

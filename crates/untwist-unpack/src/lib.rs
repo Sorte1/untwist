@@ -2,6 +2,7 @@ pub mod amd;
 pub mod assign;
 pub mod browserify;
 pub mod bun;
+mod canon;
 pub mod closed;
 pub mod closure;
 pub mod detect;
@@ -48,6 +49,7 @@ const PASS_NAME: &str = "unpack";
 pub struct UnpackOptions {
     pub split_hoisted: bool,
     pub conservative: bool,
+    pub trust_free_loader: bool,
 }
 
 pub struct UnpackResult<'a> {

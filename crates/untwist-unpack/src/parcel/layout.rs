@@ -443,10 +443,13 @@ fn definition(top: &[Statement<'_>], name: &str) -> Option<Option<usize>> {
     }
 }
 
-fn hoisted<'k, 'a>(top: &'k [Statement<'a>]) -> Option<Hoisted<'k, 'a>> {
+fn hoisted<'k, 'a>(top: &'k [Statement<'a>], source_text: &str) -> Option<Hoisted<'k, 'a>> {
     let (at_require, (require, global)) = position(top, require_declarator)?;
     let name = require.name.as_str();
     let at_definition = definition(top, name)?;
+    if at_definition.is_some_and(|at| !runtime::defined(top, at, &global, source_text)) {
+        return None;
+    }
     let (at_register, register) = position(top, |s| register_declarator(s, name))?;
     let between = at_definition.unwrap_or(at_require);
     if !(at_require <= between && between < at_register) || at_definition == Some(at_require) {
@@ -500,5 +503,5 @@ pub fn layout<'k, 'a>(frame: &Frame<'k, 'a>, program: &'k Program<'a>) -> Option
         }
         return registry(arguments).map(Layout::Registry);
     }
-    hoisted(frame.top).map(Layout::Hoisted)
+    hoisted(frame.top, program.source_text).map(Layout::Hoisted)
 }

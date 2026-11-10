@@ -284,3 +284,20 @@ fn a_sequence_before_the_wrapper_or_a_wrapper_argument_with_effects_is_refused()
         );
     }
 }
+
+#[test]
+fn a_bare_define_read_is_not_folded() {
+    let factory = "this, function () { return 1; }";
+    for body in [
+        "if (define && define.amd) define(factory); else module.exports = factory();",
+        "if (!define) module.exports = factory(); else define(factory);",
+        "define ? define(factory) : (module.exports = factory());",
+    ] {
+        refused(&wrapper(body, factory));
+    }
+    let probed = wrapper(
+        "if (typeof define === \"function\" && define.amd) define(factory); else module.exports = factory();",
+        factory,
+    );
+    assert!(split(&probed).is_some());
+}

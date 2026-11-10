@@ -13,6 +13,7 @@ const FIXTURES: &str = "../../fixtures/unpack-bundlers/rollup";
 const ON: UnpackOptions = UnpackOptions {
     split_hoisted: true,
     conservative: false,
+    trust_free_loader: false,
 };
 
 fn files(bundle: Option<Bundle<'_>>, alloc: &Allocator) -> Option<Files> {
@@ -499,4 +500,39 @@ fn with_the_flag_the_sweep_splits_only_the_recorded_inputs() {
     }
     assert!(files.len() > 270, "sweep shrank to {}", files.len());
     assert_eq!(found, SWEEP_SPLIT);
+}
+
+const DECLARED_TWICE: &str = "function f() { return 1; }\nfunction f() { return 2; }\n\
+     var a = f();\nfunction a2() { return a + f(); }\nfunction a3() { return a2() + a; }\n\
+     var b = 10;\nfunction b2() { return b * 2; }\nfunction b3() { return b2() + b; }\n\
+     var c = 5;\nfunction c2() { return c * 3; }\nfunction c3() { return c2() + c; }\n\
+     console.log(a3(), b3(), c3());";
+
+#[test]
+fn a_function_declared_twice_keeps_only_its_last_declaration() {
+    let source = iife(DECLARED_TWICE);
+
+    let files = split(&source).expect("a split");
+
+    let all: Vec<&str> = files.iter().map(|(_, code)| code.as_str()).collect();
+    let all = all.join("\n");
+    assert_eq!(all.matches("function f()").count(), 1, "{files:?}");
+    assert!(
+        all.contains("return 2;") && !all.contains("return 1;"),
+        "{files:?}"
+    );
+    assert_eq!(split_taken(&source).0, Some(files));
+}
+
+#[test]
+fn a_function_that_shares_its_name_with_another_kind_of_declaration_refuses_the_split() {
+    let with_var = DECLARED_TWICE.replace("function f() { return 1; }", "var f;");
+    let var_last = DECLARED_TWICE.replace(
+        "function f() { return 2; }\n",
+        "function f() { return 2; }\nvar f;\n",
+    );
+    assert_ne!(with_var, DECLARED_TWICE);
+    assert_ne!(var_last, DECLARED_TWICE);
+    refused(&iife(&with_var));
+    refused(&iife(&var_last));
 }

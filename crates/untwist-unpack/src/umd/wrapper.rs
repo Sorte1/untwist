@@ -65,7 +65,6 @@ fn truth(expr: &Expression<'_>) -> Option<bool> {
         },
         Expression::Identifier(id) => match id.name.as_str() {
             "exports" | "module" => Some(true),
-            "define" => Some(false),
             _ => None,
         },
         Expression::StaticMemberExpression(member) => {
