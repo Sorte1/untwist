@@ -15,4 +15,5 @@ pub mod pass;
 pub mod print;
 pub mod reflow;
 pub mod semantic;
+pub mod source_map;
 pub mod type_space;

@@ -10,6 +10,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::ast_util::respan::{fresh_spans_expression, fresh_spans_statement};
+use crate::source_map::origins::note_replaced;
 
 fn is_usable(span: Span) -> bool {
     span.start < span.end
@@ -142,6 +143,7 @@ impl<'a> VisitMut<'a> for ExprApplier<'a, '_> {
         let span = it.span();
         if let Some(replacement) = self.edits.get(&span) {
             *it = replacement.clone_in(self.alloc);
+            note_replaced(it, span);
             seed_expression(it, self.root, self.scoping);
             self.applied.insert(span);
         }
@@ -249,6 +251,7 @@ impl<'a> VisitMut<'a> for StmtApplier<'a, '_> {
                 }
             };
             for replacement in &mut replacements {
+                note_replaced(replacement, span);
                 seed_statement(replacement, self.root, self.scoping);
             }
             self.applied.insert(span);
