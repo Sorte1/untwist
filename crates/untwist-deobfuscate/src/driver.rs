@@ -778,6 +778,11 @@ fn run_rounds<'a>(
             opts.defer_disabled.set(disabled);
             return sem;
         }
+        if untwist_core::budget::check().is_err() {
+            aggregate.stage_stop = Some(StopReason::Budget);
+            opts.defer_disabled.set(disabled);
+            return sem;
+        }
         if aggregate.rounds >= DEOBFUSCATE_MAX_ROUNDS {
             aggregate.capped = true;
             opts.defer_disabled.set(disabled);

@@ -91,9 +91,12 @@ pub fn loop_cap(array_len: usize) -> u64 {
 
 const _: () = assert!(CALL_DEPTH_CAP <= u16::MAX as u32);
 
+pub const STEP_SLICE: u64 = 1 << 20;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Budget {
     steps_left: u64,
+    steps_held: u64,
     steps_total: u64,
     depth: u16,
     peak_depth: u16,
@@ -102,8 +105,10 @@ pub struct Budget {
 
 impl Budget {
     pub fn new(steps: u64) -> Self {
+        let slice = steps.min(STEP_SLICE);
         Self {
-            steps_left: steps,
+            steps_left: slice,
+            steps_held: steps - slice,
             steps_total: steps,
             depth: 0,
             peak_depth: 0,
@@ -111,19 +116,30 @@ impl Budget {
         }
     }
 
+    #[inline]
     pub fn spend(&mut self, steps: u64) -> EvalResult<()> {
         match self.steps_left.checked_sub(steps) {
             Some(left) => {
                 self.steps_left = left;
                 Ok(())
             }
-            None => {
-                self.steps_left = 0;
-                #[cfg(feature = "test-hooks")]
-                crate::test_hooks::note_bail_nesting(self.nesting);
-                Err(Bail::Fuel)
-            }
+            None => self.spend_past_the_slice(steps),
         }
+    }
+
+    #[cold]
+    fn spend_past_the_slice(&mut self, steps: u64) -> EvalResult<()> {
+        let Some(after) = self.steps_left().checked_sub(steps) else {
+            self.steps_left = 0;
+            self.steps_held = 0;
+            #[cfg(feature = "test-hooks")]
+            crate::test_hooks::note_bail_nesting(self.nesting);
+            return Err(Bail::Fuel);
+        };
+        crate::heap::spent_run_budget()?;
+        self.steps_left = after.min(STEP_SLICE);
+        self.steps_held = after - self.steps_left;
+        Ok(())
     }
 
     pub fn enter_call(&mut self) -> EvalResult<()> {
@@ -180,11 +196,11 @@ impl Budget {
     }
 
     pub fn steps_used(&self) -> u64 {
-        self.steps_total - self.steps_left
+        self.steps_total - self.steps_left()
     }
 
     pub fn steps_left(&self) -> u64 {
-        self.steps_left
+        self.steps_left + self.steps_held
     }
 }
 

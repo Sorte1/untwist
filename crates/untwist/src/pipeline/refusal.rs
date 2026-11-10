@@ -12,9 +12,10 @@ use untwist_eval::stack_reserve::{
 use super::boundary::Boundary;
 use super::input::{FinalTextGuard, InputResult};
 use super::ladder::{on_a_worker_stack, Ladder};
-use super::{Output, OutputParts, Pipeline, UNPACK_PANICKED};
+use super::{Output, OutputParts, Pipeline, BUDGET_UNPACK, UNPACK_PANICKED};
 use crate::bundle::BundleOutput;
 use crate::options::Progress;
+use untwist_core::budget::{Hit, Limits};
 
 pub const NESTED_TOO_DEEP: &str = "this input nests deeper than untwist can parse on its stack; \
      it is passed through unchanged";
@@ -34,6 +35,17 @@ pub const TYPESCRIPT_IN_JAVASCRIPT: &str = "this input uses TypeScript syntax th
 pub const WORKER_DIED: &str = "processing this input stopped the worker process, which ran out \
      of stack or memory; it is passed through unchanged";
 
+pub const OVER_MEMORY_REFUSED: &str = "budget-memory: processing this input went over the memory \
+     budget (--max-memory) before its passes could stop; it is passed through unchanged";
+
+pub const OVER_TIME_REFUSED: &str = "budget-time: processing this input ran past the time budget \
+     (--timeout) before its passes could stop; it is passed through unchanged";
+
+pub const TOO_LARGE_FOR_THE_BUDGET: &str = "budget-memory: parsing this input alone would take \
+     more than the memory budget (--max-memory); it is passed through unchanged";
+
+pub const PARSE_BYTES_PER_INPUT_BYTE: u64 = 16;
+
 pub const ADMIT_PANICKED: &str = "reading this input before its parse hit an internal error; it \
      is passed through unchanged";
 
@@ -41,12 +53,15 @@ const MIB: u64 = 1 << 20;
 
 const ADMIT_PANIC_HOOK: &str = "a test hook panicked in admit";
 
-const INPUT_REFUSALS: [&str; 6] = [
+const INPUT_REFUSALS: [&str; 9] = [
     NESTED_TOO_DEEP,
     PARENTHESES_TOO_DEEP,
     PRINT_TOO_LARGE,
     TYPESCRIPT_IN_JAVASCRIPT,
     WORKER_DIED,
+    OVER_MEMORY_REFUSED,
+    OVER_TIME_REFUSED,
+    TOO_LARGE_FOR_THE_BUDGET,
     ADMIT_PANICKED,
 ];
 
@@ -121,13 +136,37 @@ impl Pipeline {
         })
     }
 
+    fn parse_exceeds_the_budget(&self, input_len: usize) -> bool {
+        let needed = u64::try_from(input_len)
+            .unwrap_or(u64::MAX)
+            .saturating_mul(PARSE_BYTES_PER_INPUT_BYTE);
+        self.options.max_memory.is_some_and(|limit| needed > limit)
+    }
+
+    fn died_of(&self, index: usize) -> &'static str {
+        let over = self.options.isolation.over_budget.iter();
+        match over
+            .filter(|(at, _)| *at == index)
+            .map(|(_, hit)| *hit)
+            .next()
+        {
+            Some(Hit::Memory) => OVER_MEMORY_REFUSED,
+            Some(Hit::Time) => OVER_TIME_REFUSED,
+            None => WORKER_DIED,
+        }
+    }
+
     fn admit<'p>(&self, index: usize, source: &str, stack: &StackReserve<'p>) -> Admitted<'p> {
         if self.options.hooks().admit_panic == Some(index) {
             std::panic::panic_any(ADMIT_PANIC_HOOK);
         }
         if self.options.isolation.refused.contains(&index) {
             stack.give_up(index);
-            return Err(WORKER_DIED);
+            return Err(self.died_of(index));
+        }
+        if self.parse_exceeds_the_budget(source.len()) {
+            stack.give_up(index);
+            return Err(TOO_LARGE_FOR_THE_BUDGET);
         }
         if self.options.hooks().scan_off {
             return Ok((stack.reserve(index, MIB), None));
@@ -148,6 +187,24 @@ impl Pipeline {
                 Err(refusal_note(refusal))
             }
         }
+    }
+
+    pub(super) fn unpack_budgeted(
+        &self,
+        parts: &mut OutputParts,
+        limits: Limits,
+    ) -> Option<BundleOutput> {
+        let budget = untwist_core::budget::enter(limits);
+        let ready = untwist_core::budget::check().is_ok();
+        let bundle = ready.then(|| self.unpack_admitted(parts)).flatten();
+        let spent = untwist_core::budget::hit();
+        parts.memory_peak = parts.memory_peak.max(budget.peak());
+        drop(budget);
+        if spent.is_none() || !self.options.unpack {
+            return bundle;
+        }
+        parts.notes.push(pipeline_refusal(BUDGET_UNPACK));
+        None
     }
 
     pub(super) fn unpack_admitted(&self, parts: &mut OutputParts) -> Option<BundleOutput> {

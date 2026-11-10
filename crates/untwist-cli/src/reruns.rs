@@ -1,4 +1,7 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+
+use untwist::BudgetHit;
 
 #[cfg(target_os = "linux")]
 const SIGBUS: i32 = 7;
@@ -12,13 +15,30 @@ const SIGNAL_EXIT_BASE: i32 = 128;
 pub enum Death {
     Exit(u8),
     Crash(i32),
+    Over(BudgetHit),
     Stopped(i32),
+}
+
+#[derive(Clone, Copy)]
+enum Cause {
+    Signal(i32),
+    Budget(BudgetHit),
+}
+
+impl fmt::Display for Cause {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Cause::Signal(signal) => write!(formatter, "signal {signal}"),
+            Cause::Budget(hit) => formatter.write_str(hit.as_str()),
+        }
+    }
 }
 
 impl Death {
     pub fn from_parts(code: Option<i32>, signal: Option<i32>) -> Death {
         if let Some(code) = code {
-            return Death::Exit(u8::try_from(code).unwrap_or(1));
+            let code = u8::try_from(code).unwrap_or(1);
+            return crate::budget::hit_of_exit(code).map_or(Death::Exit(code), Death::Over);
         }
         let signal = signal.unwrap_or(0);
         if CRASH_SIGNALS.contains(&signal) {
@@ -31,6 +51,7 @@ impl Death {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reruns {
     pub refused: BTreeSet<usize>,
+    pub over_budget: BTreeMap<usize, BudgetHit>,
     pub serial: bool,
     pub unpack_lost: bool,
     pub spawns: usize,
@@ -41,6 +62,7 @@ impl Reruns {
     pub fn new(inputs: usize) -> Self {
         Self {
             refused: BTreeSet::new(),
+            over_budget: BTreeMap::new(),
             serial: false,
             unpack_lost: false,
             spawns: 1,
@@ -58,6 +80,16 @@ impl Reruns {
         }
         let indices: Vec<String> = self.refused.iter().map(usize::to_string).collect();
         Some(indices.join(","))
+    }
+
+    pub fn over_list(&self, hit: BudgetHit) -> Option<String> {
+        let indices: Vec<String> = self
+            .over_budget
+            .iter()
+            .filter(|(_, over)| **over == hit)
+            .map(|(index, _)| index.to_string())
+            .collect();
+        (!indices.is_empty()).then(|| indices.join(","))
     }
 }
 
@@ -98,11 +130,12 @@ pub fn next(state: &Reruns, phase: &Phase, death: Death) -> Action {
             let message = format!("error: the worker process was stopped by signal {signal}");
             return Action::Fail { message, code };
         }
-        Death::Crash(signal) => signal,
+        Death::Crash(signal) => Cause::Signal(signal),
+        Death::Over(hit) => Cause::Budget(hit),
     };
     if phase.emitted {
         return fail(format!(
-            "error: the worker process died while writing its output (signal {signal})"
+            "error: the worker process died while writing its output ({signal})"
         ));
     }
     let mut rerun = state.clone();
@@ -115,6 +148,11 @@ pub fn next(state: &Reruns, phase: &Phase, death: Death) -> Action {
             return kept_dying(signal);
         }
         rerun.refused.extend(phase.begun.iter().copied());
+        if let Cause::Budget(hit) = signal {
+            rerun
+                .over_budget
+                .extend(phase.begun.iter().map(|index| (*index, hit)));
+        }
     } else if phase.begun.len() > 1 {
         rerun.serial = true;
     } else if phase.unpack && !state.unpack_lost {
@@ -123,7 +161,7 @@ pub fn next(state: &Reruns, phase: &Phase, death: Death) -> Action {
         rerun.refused.extend(served);
     } else {
         return fail(format!(
-            "error: the worker process died outside any input (signal {signal})"
+            "error: the worker process died outside any input ({signal})"
         ));
     }
     rerun.spawns += 1;
@@ -133,9 +171,9 @@ pub fn next(state: &Reruns, phase: &Phase, death: Death) -> Action {
     Action::Rerun(rerun)
 }
 
-fn kept_dying(signal: i32) -> Action {
+fn kept_dying(signal: Cause) -> Action {
     fail(format!(
-        "error: the worker process kept dying after every rerun (signal {signal})"
+        "error: the worker process kept dying after every rerun ({signal})"
     ))
 }
 
@@ -187,6 +225,35 @@ mod tests {
             let action = next(&Reruns::new(2), &phase(&[0], true, true), Death::Exit(code));
             assert_eq!(action, Action::Exit(code));
         }
+    }
+
+    #[test]
+    fn a_budget_death_refuses_the_input_and_names_the_budget() {
+        let Action::Rerun(rerun) = next(
+            &Reruns::new(3),
+            &phase(&[1], false, false),
+            Death::Over(untwist::BudgetHit::Memory),
+        ) else {
+            panic!("a rerun");
+        };
+        assert_eq!(rerun.refused, BTreeSet::from([1]));
+        assert_eq!(
+            rerun.over_list(untwist::BudgetHit::Memory).as_deref(),
+            Some("1")
+        );
+        assert_eq!(rerun.over_list(untwist::BudgetHit::Time), None);
+        assert_eq!(
+            Death::from_parts(Some(i32::from(crate::budget::EXIT_OVER_TIME)), None),
+            Death::Over(untwist::BudgetHit::Time)
+        );
+        let Action::Fail { message, .. } = next(
+            &Reruns::new(1),
+            &phase(&[0], false, true),
+            Death::Over(untwist::BudgetHit::Time),
+        ) else {
+            panic!("a failure");
+        };
+        assert!(message.ends_with("(budget-time)"), "{message}");
     }
 
     #[test]

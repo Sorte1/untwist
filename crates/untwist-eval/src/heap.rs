@@ -4,6 +4,24 @@ use std::rc::Rc;
 
 use crate::bail::{Bail, EvalResult};
 
+#[inline]
+fn run_budget() -> EvalResult<()> {
+    if untwist_core::budget::tripped() {
+        return Err(checked_run_budget());
+    }
+    Ok(())
+}
+
+#[cold]
+fn checked_run_budget() -> Bail {
+    let hit = untwist_core::budget::hit().unwrap_or(untwist_core::budget::Hit::Memory);
+    Bail::RunBudget(hit)
+}
+
+pub fn spent_run_budget() -> EvalResult<()> {
+    untwist_core::budget::check().map_err(Bail::RunBudget)
+}
+
 pub struct HeapLedger {
     limit: u64,
     live: Cell<u64>,
@@ -40,7 +58,7 @@ impl HeapLedger {
         if self.is_over() {
             return Err(Bail::Budget);
         }
-        Ok(())
+        run_budget()
     }
 
     fn take_lenient(&self, bytes: u64) {
@@ -56,6 +74,7 @@ impl HeapLedger {
         if live > self.limit {
             return Err(Bail::Budget);
         }
+        run_budget()?;
         self.live.set(live);
         if live > self.peak.get() {
             self.peak.set(live);

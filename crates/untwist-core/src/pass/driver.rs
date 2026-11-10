@@ -9,6 +9,7 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
 use oxc_semantic::{Scoping, Stats};
 
+use crate::budget;
 use crate::clock::Instant;
 use crate::print::{print, PrintStyle};
 use crate::semantic::{refresh_scoping, Round, Semantics, Shape};
@@ -26,6 +27,7 @@ pub enum StopReason {
     Converged,
     IterationCap,
     Cycle,
+    Budget,
 }
 
 impl StopReason {
@@ -34,6 +36,7 @@ impl StopReason {
             StopReason::Converged => "converged",
             StopReason::IterationCap => "iteration_cap",
             StopReason::Cycle => "cycle",
+            StopReason::Budget => "budget",
         }
     }
 }
@@ -146,7 +149,7 @@ fn run_one_iteration<'a>(
     group: &mut PassGroup<'a>,
     state: &mut IterationState<'_>,
 ) -> (Scoping, Stats, Option<StopReason>) {
-    let is_last_allowed = state.tally.iterations + 1 >= state.cap;
+    let is_last_allowed = state.tally.iterations + 1 >= state.cap || budget::check().is_err();
     group.set_defer_disabled(is_last_allowed);
     let before = Shape::of(&scoping);
     let (traversed, timing) = timed_traverse(alloc, program, scoping, group);
@@ -345,6 +348,9 @@ fn check_stop(
     if iterations >= cap {
         return Some(StopReason::IterationCap);
     }
+    if budget::check().is_err() {
+        return Some(StopReason::Budget);
+    }
     if iterations < CYCLE_CHECK_START {
         return None;
     }
@@ -476,7 +482,7 @@ fn fingerprint_program(program: &Program<'_>) -> u64 {
 
 fn driver_note(stop: StopReason, iterations: u32, cap: u32) -> Option<Note> {
     let message = match stop {
-        StopReason::Converged => return None,
+        StopReason::Converged | StopReason::Budget => return None,
         StopReason::IterationCap => format!("iteration cap {cap} reached with changes pending"),
         StopReason::Cycle => format!(
             "passes oscillate: iteration {iterations} reproduced an earlier program; stopping"

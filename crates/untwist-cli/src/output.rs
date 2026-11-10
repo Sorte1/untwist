@@ -3,6 +3,8 @@ use std::path::Path;
 use serde::Serialize;
 use untwist::{Output, StopReason};
 
+use crate::budget::{bytes_text, Limits};
+
 #[derive(Serialize)]
 struct OutputJson<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -32,14 +34,62 @@ struct OutputJson<'a> {
     wasm: &'a [untwist::WasmFile],
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     wasm_unresolved: &'a [untwist::WasmReference],
+    budget: BudgetJson,
     #[cfg(feature = "test-hooks")]
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     refusal_span: &'a [String],
 }
 
+#[derive(Serialize)]
+struct BudgetJson {
+    #[serde(flatten)]
+    limits: Limits,
+    memory_peak: u64,
+    hits: Vec<HitJson>,
+}
+
+#[derive(Serialize)]
+struct HitJson {
+    input: usize,
+    reason: &'static str,
+}
+
+fn budget_json(output: &Output, limits: Limits) -> BudgetJson {
+    BudgetJson {
+        limits,
+        memory_peak: output.memory_peak,
+        hits: output
+            .budget_hits
+            .iter()
+            .map(|(input, hit)| HitJson {
+                input: *input,
+                reason: hit.as_str(),
+            })
+            .collect(),
+    }
+}
+
+fn budget_line(output: &Output, limits: Limits) -> String {
+    let memory = limits
+        .max_memory
+        .map_or("unlimited".to_string(), bytes_text);
+    let timeout = limits.timeout.map_or("none".to_string(), |timeout| {
+        format!("{:.1} s", timeout.as_secs_f64())
+    });
+    let mut line = format!(
+        "budget: max-memory {memory}, timeout {timeout}, memory peak {}",
+        bytes_text(output.memory_peak)
+    );
+    for (input, hit) in &output.budget_hits {
+        line.push_str(&format!(", input {} {}", input + 1, hit.as_str()));
+    }
+    line.push('\n');
+    line
+}
+
 pub fn to_json(
     output: &Output,
-    output_path: Option<&Path>,
+    (output_path, limits): (Option<&Path>, Limits),
     files_written: &[String],
 ) -> serde_json::Result<String> {
     let stages = untwist::stage_rows(&output.stages);
@@ -68,6 +118,7 @@ pub fn to_json(
         stats: &output.stats,
         wasm: &output.wasm,
         wasm_unresolved: &output.wasm_unresolved,
+        budget: budget_json(output, limits),
         #[cfg(feature = "test-hooks")]
         refusal_span: &output.refusal_spans,
     };
@@ -89,7 +140,7 @@ fn elapsed_of(stage: &untwist::StageReport, pass: &str) -> f64 {
         .map_or(0.0, |(_, elapsed)| elapsed.as_secs_f64() * 1000.0)
 }
 
-pub fn text_report(output: &Output) -> String {
+pub fn text_report(output: &Output, limits: Limits) -> String {
     let mut text = String::new();
     for stage in &output.stages {
         text.push_str(&format!(
@@ -101,6 +152,7 @@ pub fn text_report(output: &Output) -> String {
             match stage.stop {
                 StopReason::IterationCap => " [CAP]",
                 StopReason::Cycle => " [CYCLE]",
+                StopReason::Budget => " [BUDGET]",
                 StopReason::Converged => "",
             }
         ));
@@ -131,6 +183,7 @@ pub fn text_report(output: &Output) -> String {
         let indices: Vec<String> = output.depth_refused.iter().map(usize::to_string).collect();
         text.push_str(&format!("depth_refused: {}\n", indices.join(", ")));
     }
+    text.push_str(&budget_line(output, limits));
     for file in &output.wasm {
         text.push_str(&format!(
             "wasm: {} ({}, {} bytes, {} imports, {} exports, {} renamed)\n",
@@ -161,6 +214,7 @@ pub fn text_report(output: &Output) -> String {
 #[cfg(test)]
 mod tests {
     use super::to_json;
+    use crate::budget::Limits;
 
     fn compact(json: &str) -> String {
         json.chars().filter(|c| !c.is_whitespace()).collect()
@@ -173,7 +227,7 @@ mod tests {
             console.log(b(0x0) + b(0x1));";
         let out = untwist::Pipeline::new(untwist::Options::default()).run(source);
         let json: serde_json::Value =
-            serde_json::from_str(&to_json(&out, None, &[]).unwrap()).unwrap();
+            serde_json::from_str(&to_json(&out, (None, Limits::default()), &[]).unwrap()).unwrap();
         assert_eq!(json["stats"], serde_json::to_value(out.stats).unwrap());
         assert!(
             json["stats"]["decode"]["steps"].as_u64().unwrap() > 0,
@@ -189,17 +243,17 @@ mod tests {
     fn the_json_report_names_the_input_that_panicked() {
         let mut out = untwist::Pipeline::new(untwist::Options::default()).run("");
         out.panicked = vec![1];
-        let json = to_json(&out, None, &[]).unwrap();
+        let json = to_json(&out, (None, Limits::default()), &[]).unwrap();
         assert!(compact(&json).contains("\"panicked\":[1]"), "{json}");
     }
 
     #[test]
     fn the_json_report_flags_a_panicked_wasm_step_only_when_it_happened() {
         let mut out = untwist::Pipeline::new(untwist::Options::default()).run("x;");
-        let clean = to_json(&out, None, &[]).unwrap();
+        let clean = to_json(&out, (None, Limits::default()), &[]).unwrap();
         assert!(!clean.contains("wasm_panicked"), "{clean}");
         out.wasm_panicked = true;
-        let flagged = to_json(&out, None, &[]).unwrap();
+        let flagged = to_json(&out, (None, Limits::default()), &[]).unwrap();
         assert!(
             compact(&flagged).contains("\"wasm_panicked\":true"),
             "{flagged}"
@@ -209,10 +263,10 @@ mod tests {
     #[test]
     fn the_json_report_flags_a_panicked_unpack_only_when_it_happened() {
         let mut out = untwist::Pipeline::new(untwist::Options::default()).run("x;");
-        let clean = to_json(&out, None, &[]).unwrap();
+        let clean = to_json(&out, (None, Limits::default()), &[]).unwrap();
         assert!(!clean.contains("unpack_panicked"), "{clean}");
         out.unpack_panicked = true;
-        let flagged = to_json(&out, None, &[]).unwrap();
+        let flagged = to_json(&out, (None, Limits::default()), &[]).unwrap();
         assert!(
             compact(&flagged).contains("\"unpack_panicked\":true"),
             "{flagged}"
@@ -222,33 +276,39 @@ mod tests {
     #[test]
     fn the_reports_list_refused_inputs_only_when_there_are_some() {
         let mut out = untwist::Pipeline::new(untwist::Options::default()).run("x;");
-        assert!(!to_json(&out, None, &[]).unwrap().contains("depth_refused"));
-        assert!(!super::text_report(&out).contains("depth_refused"));
+        assert!(!to_json(&out, (None, Limits::default()), &[])
+            .unwrap()
+            .contains("depth_refused"));
+        assert!(!super::text_report(&out, Limits::default()).contains("depth_refused"));
         out.depth_refused = vec![0, 3];
-        let json = to_json(&out, None, &[]).unwrap();
+        let json = to_json(&out, (None, Limits::default()), &[]).unwrap();
         assert!(compact(&json).contains("\"depth_refused\":[0,3]"), "{json}");
-        assert!(super::text_report(&out).contains("parse_errors: 0\ndepth_refused: 0, 3\n"));
+        assert!(super::text_report(&out, Limits::default())
+            .contains("parse_errors: 0\ndepth_refused: 0, 3\n"));
     }
 
     #[cfg(feature = "test-hooks")]
     #[test]
     fn the_reports_list_refusal_spans_only_when_there_are_some() {
         let mut out = untwist::Pipeline::new(untwist::Options::default()).run("x;");
-        assert!(!to_json(&out, None, &[]).unwrap().contains("refusal_span"));
-        assert!(!super::text_report(&out).contains("refusal_span"));
+        assert!(!to_json(&out, (None, Limits::default()), &[])
+            .unwrap()
+            .contains("refusal_span"));
+        assert!(!super::text_report(&out, Limits::default()).contains("refusal_span"));
         out.refusal_spans = vec!["3:7 GLOBAL_REACH".to_string()];
-        let json = to_json(&out, None, &[]).unwrap();
+        let json = to_json(&out, (None, Limits::default()), &[]).unwrap();
         assert!(
             compact(&json).contains("\"refusal_span\":[\"3:7GLOBAL_REACH\"]"),
             "{json}"
         );
-        assert!(super::text_report(&out).ends_with("refusal_span: 3:7 GLOBAL_REACH\n"));
+        assert!(super::text_report(&out, Limits::default())
+            .ends_with("refusal_span: 3:7 GLOBAL_REACH\n"));
     }
 
     #[test]
     fn a_clean_json_report_omits_the_panicked_key() {
         let out = untwist::Pipeline::new(untwist::Options::default()).run("");
-        let json = to_json(&out, None, &[]).unwrap();
+        let json = to_json(&out, (None, Limits::default()), &[]).unwrap();
         assert!(!json.contains("\"panicked\""), "{json}");
     }
 }

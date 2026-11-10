@@ -6,6 +6,7 @@ macro_rules! catalogue {
 }
 
 pub mod ast_util;
+pub mod budget;
 pub mod clock;
 pub mod depth;
 pub mod guard_shape;

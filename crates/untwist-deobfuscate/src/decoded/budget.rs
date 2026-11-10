@@ -88,6 +88,7 @@ pub(crate) struct InputHeap {
     ledger: Option<Rc<HeapLedger>>,
     inline: u64,
     room: Option<InputRoom>,
+    run_clamped: bool,
 }
 
 pub(crate) fn printed_bytes(value: &Decoded) -> u64 {
@@ -120,9 +121,11 @@ impl InputHeap {
         room: Option<&InputRoom>,
     ) {
         if self.ledger.is_none() {
-            let limit = forced.unwrap_or_else(|| heap_budget(input_len));
-            self.ledger = Some(HeapLedger::new(limit));
-            self.inline = (heap_budget(input_len) / INLINED_COPIES) & !SPENT;
+            let run_room = untwist_core::budget::room().unwrap_or(u64::MAX);
+            let wanted = forced.unwrap_or_else(|| heap_budget(input_len));
+            self.run_clamped = run_room < wanted;
+            self.ledger = Some(HeapLedger::new(wanted.min(run_room)));
+            self.inline = (heap_budget(input_len).min(run_room) / INLINED_COPIES) & !SPENT;
             self.room = room.cloned();
         }
     }
@@ -160,6 +163,9 @@ impl InputHeap {
         let over = self.ledger.as_ref().is_some_and(|ledger| ledger.is_over());
         if ended_early || over {
             self.inline |= SPENT;
+            if self.run_clamped {
+                untwist_core::budget::trip(untwist_core::budget::Hit::Memory);
+            }
         }
     }
 

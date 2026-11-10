@@ -426,6 +426,8 @@ mod tests {
             unpack_panicked: false,
             single_file: false,
             heap_peak: 0,
+            memory_peak: 0,
+            budget_hits: Vec::new(),
             stats: crate::RunStats::default(),
             snapshots: Vec::new(),
             decoded_strings: Vec::new(),

@@ -2,7 +2,9 @@ use std::str::SplitWhitespace;
 
 use untwist::{Options, RenameMode, WasmCheck};
 
-const VALUE_FLAGS: [&str; 7] = [
+pub const DEFAULT_MAX_MEMORY: u64 = 1 << 30;
+
+const VALUE_FLAGS: [&str; 9] = [
     "--rename",
     "--wasm-check",
     "--max-iterations",
@@ -10,6 +12,8 @@ const VALUE_FLAGS: [&str; 7] = [
     "-j",
     "--jobs",
     "--disable",
+    "--max-memory",
+    "--timeout",
 ];
 
 fn value<'f>(words: &mut SplitWhitespace<'f>, flag: &str) -> Result<&'f str, String> {
@@ -71,6 +75,16 @@ fn valued(mut options: Options, flag: &str, word: &str) -> Result<Options, Strin
         "--rename" => options.rename = rename_mode(word)?,
         "--max-iterations" => options.max_iterations = Some(number(word, flag)?),
         "--fuel" => options.fuel = Some(fuel(word)?),
+        "--max-memory" => {
+            let bytes =
+                untwist::budget_memory_size(word).map_err(|error| format!("{flag} {error}"))?;
+            options.max_memory = (bytes != u64::MAX).then_some(bytes);
+        }
+        "--timeout" => {
+            let timeout =
+                untwist::budget_timeout_secs(word).map_err(|error| format!("{flag} {error}"))?;
+            options.timeout = Some(timeout);
+        }
         "--disable" => return disable(options, word),
         "--wasm-check" => {
             options.wasm_check = WasmCheck::named(word)
@@ -93,7 +107,10 @@ fn apply(options: Options, flag: &str, words: &mut SplitWhitespace<'_>) -> Resul
 
 pub fn options_from(flags: &str) -> Result<Options, String> {
     let mut words = flags.split_whitespace();
-    let mut options = Options::default();
+    let mut options = Options {
+        max_memory: Some(DEFAULT_MAX_MEMORY),
+        ..Options::default()
+    };
     while let Some(flag) = words.next() {
         options = apply(options, flag, &mut words)?;
     }
@@ -113,6 +130,19 @@ mod tests {
             (options.unpack, options.jsx, options.unsafe_transforms),
             (defaults.unpack, defaults.jsx, defaults.unsafe_transforms)
         );
+    }
+
+    #[test]
+    fn the_memory_budget_has_a_playground_default_and_flags_change_it() {
+        let options = options_from("").unwrap();
+        assert_eq!(options.max_memory, Some(super::DEFAULT_MAX_MEMORY));
+        assert_eq!(options.timeout, None);
+        let options = options_from("--max-memory 256MiB --timeout 30").unwrap();
+        assert_eq!(options.max_memory, Some(256 << 20));
+        assert_eq!(options.timeout, Some(std::time::Duration::from_secs(30)));
+        let options = options_from("--max-memory unlimited").unwrap();
+        assert_eq!(options.max_memory, None);
+        assert!(options_from("--max-memory lots").is_err());
     }
 
     #[test]

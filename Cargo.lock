@@ -1704,6 +1704,7 @@ version = "0.3.1"
 dependencies = [
  "anyhow",
  "clap",
+ "libc",
  "serde",
  "serde_json",
  "sysinfo",
