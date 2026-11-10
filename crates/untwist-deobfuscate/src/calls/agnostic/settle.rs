@@ -91,6 +91,7 @@ pub(super) fn run<'s, 'a>(
         bindings,
         sealed: RefCell::default(),
         memo: Default::default(),
+        resolve,
     };
     let mut sites = Sites::new(
         fresh,

@@ -497,6 +497,33 @@ impl<'a> Uses<'_, 'a> {
         }
     }
 
+    fn visit_dispatch(&mut self, call: &CallExpression<'a>) {
+        if let Some(member) = call.callee.without_parentheses().as_member_expression() {
+            let element = match member {
+                MemberExpression::ComputedMemberExpression(element)
+                    if matches!(self.role(&element.object), Some(Role::Table)) =>
+                {
+                    Some(&**element)
+                }
+                _ => match member.object().without_parentheses() {
+                    Expression::ComputedMemberExpression(element) => Some(&**element),
+                    _ => None,
+                },
+            };
+            if let Some(element) = element {
+                self.visit_expression(&element.expression);
+            }
+        }
+        for argument in &call.arguments {
+            let require = argument
+                .as_expression()
+                .is_some_and(|expr| matches!(self.role(expr), Some(Role::Require(_))));
+            if !require {
+                self.visit_argument(argument);
+            }
+        }
+    }
+
     fn visit_arguments(&mut self, arguments: &oxc_allocator::Vec<'a, Argument<'a>>) {
         for argument in arguments {
             self.visit_argument(argument);
@@ -543,7 +570,7 @@ impl<'a> VisitJs<'a> for Uses<'_, 'a> {
             return self.fail(hit.as_str());
         }
         if it.span == self.shape.dispatch.span {
-            return;
+            return self.visit_dispatch(it);
         }
         if let Some(kept) = self.kept_arguments(it) {
             self.visit_expression(&it.callee);

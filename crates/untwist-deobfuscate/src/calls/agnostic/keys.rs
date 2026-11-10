@@ -84,7 +84,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                 AKey::Index
             }
             Expression::BinaryExpression(binary) => self.concat_key(binary, next),
-            Expression::ArrayExpression(array) => self.array_key(array, next),
+            Expression::ArrayExpression(_) => AKey::Unknown,
             Expression::TemplateLiteral(template) if template.expressions.is_empty() => {
                 template_key(template)
             }
@@ -150,16 +150,6 @@ impl<'s, 'a> Sites<'s, 'a> {
                 AKey::Named(Cow::Owned(format!("{left}{right}")))
             }
             _ => AKey::Unknown,
-        }
-    }
-
-    fn array_key(&self, array: &ArrayExpression<'a>, depth: u8) -> AKey<'a> {
-        match array.elements.as_slice() {
-            [] => AKey::Named(Cow::Borrowed("")),
-            [single] => single
-                .as_expression()
-                .map_or(AKey::Unknown, |element| self.key_class(element, depth)),
-            _ => AKey::Index,
         }
     }
 
@@ -380,37 +370,55 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
         .map_or(inner, Expression::without_parentheses);
         if let Expression::ComputedMemberExpression(member) = element_read {
-            if let Some(elements) = self.literal_array(&member.object) {
-                if self.fresh.is_numeric(&member.expression) {
-                    let mut keys: Vec<AKey<'a>> = elements
-                        .iter()
-                        .map(|element| {
-                            element
-                                .as_expression()
-                                .map_or(AKey::Unknown, |inner| self.key_class(inner, depth))
-                        })
-                        .collect();
-                    keys.push(AKey::Named(Cow::Borrowed("undefined")));
-                    keys.sort();
-                    keys.dedup();
-                    return Keys::Many(keys);
-                }
+            if let Some(keys) = self.element_keys(member, depth) {
+                return Keys::Many(keys);
             }
         }
         Keys::One(self.key_class(expr, depth))
     }
 
-    pub(super) fn literal_array(
+    fn element_keys(
+        &self,
+        member: &ComputedMemberExpression<'a>,
+        depth: u8,
+    ) -> Option<Vec<AKey<'a>>> {
+        let (array, written) = self.written_array(&member.object)?;
+        let in_range = match member.expression.without_parentheses() {
+            Expression::NumericLiteral(index) => super::fresh::array_element(array, index.value),
+            _ => None,
+        };
+        let mut keys: Vec<AKey<'a>> = match in_range {
+            Some(element) => vec![self.key_class(element, depth)],
+            None if self.fresh.is_numeric(&member.expression) => {
+                self.bounds_used.set(true);
+                let mut keys: Vec<AKey<'a>> = array
+                    .elements
+                    .iter()
+                    .map(|element| {
+                        element
+                            .as_expression()
+                            .map_or(AKey::Unknown, |inner| self.key_class(inner, depth))
+                    })
+                    .collect();
+                keys.push(AKey::Named(Cow::Borrowed("undefined")));
+                keys
+            }
+            None => return None,
+        };
+        keys.extend(written.iter().map(|value| self.key_class(value, depth)));
+        keys.sort();
+        keys.dedup();
+        Some(keys)
+    }
+
+    fn written_array(
         &self,
         expr: &Expression<'a>,
-    ) -> Option<&'a oxc_allocator::Vec<'a, ArrayExpressionElement<'a>>> {
+    ) -> Option<(&'a ArrayExpression<'a>, &'s [&'a Expression<'a>])> {
         let Expression::Identifier(id) = expr.without_parentheses() else {
             return None;
         };
-        match self.fresh.literal_init(id)?.without_parentheses() {
-            Expression::ArrayExpression(array) => Some(&array.elements),
-            _ => None,
-        }
+        self.fresh.written_array(id)
     }
 
     pub(super) fn member_keys(&self, member: &MemberExpression<'a>) -> Keys<'a> {

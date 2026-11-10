@@ -10,6 +10,53 @@ use crate::value_flow::{flow_rule_disabled, INSTANCE_RECEIVERS};
 
 const ASSIGN_DEPTH: u8 = 3;
 
+const CHAIN_METHODS: [&str; 44] = [
+    "at",
+    "charAt",
+    "charCodeAt",
+    "codePointAt",
+    "concat",
+    "endsWith",
+    "fill",
+    "flat",
+    "includes",
+    "indexOf",
+    "join",
+    "lastIndexOf",
+    "localeCompare",
+    "match",
+    "normalize",
+    "padEnd",
+    "padStart",
+    "pop",
+    "push",
+    "repeat",
+    "replace",
+    "replaceAll",
+    "reverse",
+    "search",
+    "shift",
+    "slice",
+    "sort",
+    "splice",
+    "split",
+    "startsWith",
+    "substr",
+    "substring",
+    "toExponential",
+    "toFixed",
+    "toLocaleLowerCase",
+    "toLocaleUpperCase",
+    "toLowerCase",
+    "toPrecision",
+    "toString",
+    "toUpperCase",
+    "trim",
+    "trimEnd",
+    "trimStart",
+    "unshift",
+];
+
 impl<'s, 'a> Sites<'s, 'a> {
     pub(super) fn target_fresh(&self, expr: &Expression<'a>, depth: u8) -> bool {
         if self.fresh.is_fresh(expr) || self.native_chain(expr) || self.native_fresh_call(expr) {
@@ -85,10 +132,12 @@ impl<'s, 'a> Sites<'s, 'a> {
             self.assign_used.set(true);
             return true;
         }
-        let fresh = !keys.is_empty()
-            && keys.iter().all(
-                |key| matches!(key, AKey::Named(name) if FRESH_NATIVES.contains(&name.as_ref())),
-            );
+        let fresh = match keys.as_slice() {
+            [AKey::Named(name)] if FRESH_NATIVES.contains(&name.as_ref()) => {
+                self.native_receiver(name, member.object())
+            }
+            _ => false,
+        };
         if fresh {
             self.fresh_used.set(true);
             if !self.intact_receiver(member, &keys) {
@@ -133,6 +182,16 @@ impl<'s, 'a> Sites<'s, 'a> {
                 .is_some_and(|target| self.target_fresh(target, ASSIGN_DEPTH))
     }
 
+    fn native_receiver(&self, name: &str, receiver: &Expression<'a>) -> bool {
+        match name {
+            "create" => !self.object_rebound && self.is_unbound(receiver, "Object"),
+            _ => matches!(
+                receiver.without_parentheses(),
+                Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_)
+            ),
+        }
+    }
+
     fn is_unbound(&self, expr: &Expression<'a>, name: &str) -> bool {
         matches!(expr.without_parentheses(), Expression::Identifier(id)
             if id.name == name && self.fresh.symbol(id).is_none())
@@ -149,7 +208,8 @@ impl<'s, 'a> Sites<'s, 'a> {
             let [AKey::Named(key)] = keys.as_slice() else {
                 return false;
             };
-            if !call.arguments.iter().all(plain_argument) {
+            if !CHAIN_METHODS.contains(&key.as_ref()) || !call.arguments.iter().all(plain_argument)
+            {
                 return false;
             }
             methods.push(key.clone());

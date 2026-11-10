@@ -511,6 +511,13 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         walk_js::walk_tagged_template_expression(self, it);
     }
 
+    fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {
+        if !super::bind::imports_another_file(&it.source) {
+            self.mark_code(it.span);
+        }
+        walk_js::walk_import_expression(self, it);
+    }
+
     fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
         self.observe_arguments(it.span, &it.callee, &it.arguments);
         self.direct
