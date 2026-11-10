@@ -301,3 +301,24 @@ fn a_bare_define_read_is_not_folded() {
     );
     assert!(split(&probed).is_some());
 }
+
+#[test]
+fn a_wrapper_with_repeated_parameters_or_an_async_wrapper_is_refused() {
+    refused("(function (f, f) {\n  if (typeof exports === \"object\") module.exports = f();\n})(function () { return 1; }, null);");
+    refused("(function (root, factory, root) {\n  if (typeof exports === \"object\") module.exports = factory();\n})(this, function () { return 1; }, null);");
+    refused("(async function (root, factory) {\n  if (typeof exports === \"object\") module.exports = factory();\n})(this, function () { throw new Error(\"x\"); });");
+    refused("(async (root, factory) => {\n  if (typeof exports === \"object\") module.exports = factory();\n})(this, function () { return 1; });");
+    assert!(split("((root, factory) => {\n  if (typeof exports === \"object\") module.exports = factory();\n})(this, function () { return 1; });").is_some());
+}
+
+#[test]
+fn a_factory_with_a_repeated_parameter_is_refused() {
+    refused(&wrapper(
+        "if (typeof exports === \"object\") module.exports = factory(require(\"fs\"));",
+        "this, function (dep, dep) { console.log(typeof dep); }",
+    ));
+    refused(&wrapper(
+        "if (typeof exports === \"object\") module.exports = factory(require(\"fs\"), require(\"path\"));",
+        "this, function (dep, dep) { console.log(dep.sep); }",
+    ));
+}

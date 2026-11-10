@@ -90,15 +90,25 @@ fn each_marked_segment_becomes_a_module_and_the_entry_requires_them_in_order() {
         segment("b", "console.log(_.a);"),
     ]))
     .expect("a closure bundle");
-    assert_eq!(paths(&files), ["a.js", "b.js", "index.js"]);
+    assert_eq!(
+        paths(&files),
+        ["a.js", "b.js", "index.js", "_runtime/closure.js"]
+    );
     let a = code(&files, "a.js");
-    assert!(a.contains("globalThis._s = globalThis._s || {};"), "{a}");
     assert!(
-        a.contains("var window = this;") && a.contains("_.a = 1;"),
+        a.starts_with("const __closure_namespace = require(\"./_runtime/closure.js\").namespace;"),
         "{a}"
     );
-    assert!(a.contains(".call(globalThis, globalThis._s)"), "{a}");
+    assert!(!a.contains("globalThis._s"), "{a}");
+    assert!(a.contains("_.a = 1;"), "{a}");
+    assert!(a.contains(".call(globalThis, __closure_namespace)"), "{a}");
     assert!(!a.contains("console.log"), "{a}");
+    let runtime = code(&files, "_runtime/closure.js");
+    assert!(
+        runtime.starts_with("globalThis._s = globalThis._s || {};"),
+        "{runtime}"
+    );
+    assert!(runtime.contains("namespace: globalThis._s"), "{runtime}");
     let index = code(&files, "index.js");
     assert!(index.contains("_ModuleManager_initialize"), "{index}");
     assert!(
@@ -306,14 +316,18 @@ fn a_bundle_with_setup_but_no_marked_segment_refuses() {
 }
 
 #[test]
-fn every_module_repeats_the_prelude_and_the_entry_holds_the_setup_once() {
+fn a_module_copies_only_the_prelude_it_names_and_the_entry_holds_the_setup_once() {
     let files = split(&bundle(&[
-        segment("a", "_.a = 1;"),
+        segment("a", "_.a = window.a;"),
         segment("b", "_.b = 2;"),
     ]))
     .expect("closure");
+    assert_eq!(
+        code(&files, "a.js").matches("var window = this;").count(),
+        1
+    );
+    assert!(!code(&files, "b.js").contains("var window"));
     for path in ["a.js", "b.js"] {
-        assert_eq!(code(&files, path).matches("var window = this;").count(), 1);
         assert!(!code(&files, path).contains("_ModuleManager_initialize"));
     }
     assert_eq!(
@@ -361,7 +375,8 @@ fn the_entry_requires_each_module_once_and_not_itself() {
     ]))
     .expect("closure");
     let index = code(&files, "index.js");
-    assert_eq!(index.matches("require(").count(), 2, "{index}");
+    assert_eq!(index.matches("require(").count(), 3, "{index}");
+    assert_eq!(index.matches("_runtime/closure.js").count(), 1, "{index}");
     assert!(!index.contains("index.js"), "{index}");
 }
 
@@ -391,7 +406,10 @@ fn a_block_function_used_only_in_its_segment_splits() {
         segment("a", "function own() { return 1; } _.a = own();"),
         segment("b", "console.log(_.a);"),
     ]));
-    assert_eq!(paths(&files), ["a.js", "b.js", "index.js"]);
+    assert_eq!(
+        paths(&files),
+        ["a.js", "b.js", "index.js", "_runtime/closure.js"]
+    );
 }
 
 #[test]
@@ -407,7 +425,7 @@ fn a_var_shared_across_segments_moves_to_the_holder() {
     );
     let a = code(&files, "a.js");
     assert!(
-        a.starts_with("const __closure_vars = require(\"./_runtime/closure.js\");"),
+        a.contains("const __closure_vars = require(\"./_runtime/closure.js\").vars;"),
         "{a}"
     );
     assert!(a.contains("var own;"), "{a}");
@@ -426,16 +444,9 @@ fn a_var_shared_across_segments_moves_to_the_holder() {
     assert!(c.contains("new __closure_vars.shared(0)"), "{c}");
     assert!(c.contains("__closure_vars.shared.call(null, 3)"), "{c}");
     let index = code(&files, "index.js");
-    assert!(
-        index.contains("require(\"./_runtime/closure.js\")"),
-        "{index}"
-    );
     assert_eq!(index.matches("_runtime/closure.js").count(), 1, "{index}");
     let holder = code(&files, "_runtime/closure.js");
-    assert!(
-        holder.contains("module.exports = Object.create(null);"),
-        "{holder}"
-    );
+    assert!(holder.contains("vars: Object.create(null)"), "{holder}");
 }
 
 #[test]
@@ -500,15 +511,24 @@ fn loader_calls_name_unmarked_segments() {
         loader_segment("main", "console.log(_.a);"),
     ));
     let files = split_both(&source);
-    assert_eq!(paths(&files), ["sy1.js", "main.js", "index.js"]);
+    assert_eq!(
+        paths(&files),
+        ["sy1.js", "main.js", "index.js", "_runtime/closure.js"]
+    );
     let plain = wrap(&format!("{}\n{}", setup(), loader_segment("x", "_.a = 1;")));
-    assert_eq!(paths(&split_both(&plain)), ["x.js", "index.js"]);
+    assert_eq!(
+        paths(&split_both(&plain)),
+        ["x.js", "index.js", "_runtime/closure.js"]
+    );
     let marked = wrap(&format!(
         "{}\n{}",
         setup(),
         segment("x", "_.l(\"x\"); _.a = 1; _.m();")
     ));
-    assert_eq!(paths(&split_both(&marked)), ["x.js", "index.js"]);
+    assert_eq!(
+        paths(&split_both(&marked)),
+        ["x.js", "index.js", "_runtime/closure.js"]
+    );
 }
 
 #[test]
@@ -545,5 +565,58 @@ fn inconsistent_loader_ids_refuse() {
         ],
     ] {
         refused(&wrap(&segments.join("\n")));
+    }
+}
+
+#[test]
+fn a_segment_that_replaces_the_namespace_on_the_global_refuses() {
+    for write in [
+        "window._s = { shared: 1 };",
+        "globalThis._s = {};",
+        "self[\"_s\"] = null;",
+        "delete window._s;",
+        "this._s = null;",
+        "[window._s] = [{}];",
+    ] {
+        refused(&bundle(&[segment("a", "_.a = 1;"), segment("b", write)]));
+    }
+    for kept in [
+        "window._t = {};",
+        "_._s = 1;",
+        "_.f = function () { this._s = 1; };",
+        "window[key] = 1;",
+    ] {
+        assert!(split(&bundle(&[segment("a", kept)])).is_some(), "{kept}");
+    }
+}
+
+#[test]
+fn every_file_reads_the_one_namespace_object_from_the_runtime() {
+    let files = split_both(&bundle(&[
+        segment("a", "_.a = 1;"),
+        segment("b", "console.log(_.a);"),
+    ]));
+    for path in ["a.js", "b.js", "index.js"] {
+        let text = code(&files, path);
+        assert_eq!(
+            text.matches("require(\"./_runtime/closure.js\").namespace")
+                .count(),
+            1,
+            "{text}"
+        );
+        assert!(!text.contains("_s ||"), "{text}");
+    }
+}
+
+#[test]
+fn many_prelude_vars_are_not_copied_into_every_module() {
+    let prelude: String = (0..50).map(|k| format!("var w{k} = this;\n")).collect();
+    let segments: Vec<String> = (0..50)
+        .map(|k| segment(&format!("m{k}"), "_.n = (_.n || 0) + 1;"))
+        .collect();
+    let source = bundle(&segments).replace("  var window = this;\n", &prelude);
+    let files = split(&source).expect("closure");
+    for (path, text) in &files {
+        assert!(!text.contains("var w"), "{path}: {text}");
     }
 }

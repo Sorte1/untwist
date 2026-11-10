@@ -264,3 +264,10 @@ fn a_factory_holding_a_with_statement_is_refused() {
     );
     refused("define([\"dep\"], function (dep) { with ({ dep: 1 }) { return dep; } });");
 }
+
+#[test]
+fn a_callback_with_a_repeated_parameter_is_refused() {
+    refused("define([\"fs\"], function (dep, dep) { console.log(typeof dep); });");
+    refused("define([\"fs\", \"path\"], function (dep, dep) { console.log(dep.sep); });");
+    refused("define(\"a\", [], function () { return 1; });\ndefine(\"main\", [\"a\"], function (x, x) { console.log(x); });");
+}

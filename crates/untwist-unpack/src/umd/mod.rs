@@ -13,7 +13,7 @@ use crate::esbuild::check::bare_specifier;
 use crate::frame::Frame;
 use crate::model::{Bodies, Bundle, BundleKind, Module};
 use crate::scan::{Frame as Depth, Policy, Scan, Step};
-use crate::umd::wrapper::{parts, Umd};
+use crate::umd::wrapper::{parts, plain_wrapper, Umd};
 
 const MODULE_ID: &str = "umd";
 const HOST_NAMES: [&str; 5] = ["require", "module", "exports", "__filename", "__dirname"];
@@ -67,7 +67,10 @@ pub fn probe(frame: &Frame<'_, '_>) -> bool {
     parts(frame).is_some()
 }
 
-fn proven(source: &Program<'_>, umd: &Umd<'_, '_>) -> bool {
+fn proven(source: &Program<'_>, frame: &Frame<'_, '_>, umd: &Umd<'_, '_>) -> bool {
+    if !plain_wrapper(frame) {
+        return false;
+    }
     let scoping = build_scoping(source).scoping;
     sound(&scoping, &umd.callback, &umd.pairs, false) && !reads_host(&scoping, &umd.callback)
 }
@@ -79,7 +82,7 @@ pub fn detect_with<'k, 'a>(
     bodies: &mut Bodies<'a>,
 ) -> Option<Bundle<'a>> {
     let umd = parts(frame)?;
-    if !matches!(bodies, Bodies::Taken(_)) && !proven(source, &umd) {
+    if !matches!(bodies, Bodies::Taken(_)) && !proven(source, frame, &umd) {
         return None;
     }
     let program = module_program(alloc, source, &umd.callback, umd.returns, bodies)?;

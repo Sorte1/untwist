@@ -447,7 +447,7 @@ fn a_host_name_read_in_the_entry_refuses() {
         assert!(split(&entry(read)).is_some(), "{read}");
     }
     let bun = format!(
-        "(function(exports, require, module, __filename, __dirname) {{{DIRECT}var require_a = __commonJS((e, m) => {{ m.exports = 1; }});\nconsole.log(require_a(), READ);\n}})\n"
+        "// @bun @bun-cjs\n(function(exports, require, module, __filename, __dirname) {{{DIRECT}var require_a = __commonJS((e, m) => {{ m.exports = 1; }});\nconsole.log(require_a(), READ);\n}})\n"
     );
     assert!(split(&bun.replace("READ", "require(\"path\")")).is_some());
     for read in ["__filename", "module.id", "require(\"./x.js\")"] {
@@ -484,9 +484,11 @@ fn an_entry_call_before_the_factory_is_declared_refuses() {
 #[test]
 fn a_bun_factory_that_reads_the_wrapper_module_refuses_and_restores() {
     let ok = format!(
-        "(function(exports, require, module, __filename, __dirname) {{{DIRECT}var require_a = __commonJS((e, m) => {{ m.exports = require(\"path\").sep; }});\nconsole.log(require_a());\n}})\n"
+        "// @bun @bun-cjs\n(function(exports, require, module, __filename, __dirname) {{{DIRECT}var require_a = __commonJS((e, m) => {{ m.exports = require(\"path\").sep; }});\nconsole.log(require_a());\n}})\n"
     );
     let files = split(&ok).expect("a bun bundle");
+    refused(&ok.replacen("// @bun @bun-cjs\n", "", 1));
+    refused(&ok.replacen("// @bun @bun-cjs\n", "// @bun\n", 1));
     assert_eq!(
         code(&files, "require_a.js"),
         "module.exports = require(\"path\").sep;"

@@ -5,7 +5,9 @@ use crate::amd::factory::{
     callback, is_relative, pair_up, Callback, Dependency, Returns, EXPORTS, MODULE, REQUIRE,
 };
 use crate::frame::{Frame, Shape};
-use crate::matcher::{anonymous_factory, argument_expression};
+use crate::matcher::{
+    anonymous_factory, argument_expression, distinct, unwrap_statement_expression,
+};
 
 const RESERVED_PARAMS: [&str; 4] = ["define", "exports", "module", "require"];
 
@@ -207,6 +209,25 @@ fn inert_root(expr: &Expression<'_>) -> bool {
         }
         _ => false,
     }
+}
+
+pub fn plain_wrapper(frame: &Frame<'_, '_>) -> bool {
+    let Some(Statement::ExpressionStatement(statement)) = frame.top.first() else {
+        return false;
+    };
+    let expression = unwrap_statement_expression(&statement.expression).without_parentheses();
+    let Expression::CallExpression(call) = expression else {
+        return false;
+    };
+    let (plain, params) = match call.callee.without_parentheses() {
+        Expression::FunctionExpression(function) => {
+            (!function.r#async && !function.generator, &function.params)
+        }
+        Expression::ArrowFunctionExpression(arrow) => (!arrow.r#async, &arrow.params),
+        _ => return false,
+    };
+    let names = crate::matcher::param_names(params);
+    plain && names.len() == params.items.len() && distinct(&names)
 }
 
 pub fn parts<'k, 'a>(frame: &Frame<'k, 'a>) -> Option<Umd<'k, 'a>> {

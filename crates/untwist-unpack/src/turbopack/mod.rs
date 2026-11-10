@@ -7,7 +7,7 @@ mod verify;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
-use untwist_core::pass::Note;
+use untwist_core::pass::{Note, NoteKind};
 
 use crate::frame::Frame;
 use crate::links::Links;
@@ -47,5 +47,11 @@ pub fn detect_with<'k, 'a>(
 
 pub fn transforms<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
     link::link(alloc, bundle);
-    Vec::new()
+    let premise = bundle.link.is_none().then(|| Note {
+        pass: "unpack",
+        kind: NoteKind::Progress,
+        message: notes::browser_premise(),
+        span: None,
+    });
+    premise.into_iter().collect()
 }

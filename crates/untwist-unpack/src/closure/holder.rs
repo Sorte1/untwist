@@ -12,15 +12,24 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::closure::roles::Role;
 
 const HOLDER: &str = "__closure_vars";
+const NAMESPACE: &str = "__closure_namespace";
 
-pub fn holder_name(source_text: &str) -> String {
+fn fresh_name(base: &str, source_text: &str) -> String {
     (1..)
         .map(|index| match index {
-            1 => HOLDER.to_string(),
-            index => format!("{HOLDER}{index}"),
+            1 => base.to_string(),
+            index => format!("{base}{index}"),
         })
         .find(|name| !source_text.contains(name.as_str()))
         .unwrap_or_default()
+}
+
+pub fn holder_name(source_text: &str) -> String {
+    fresh_name(HOLDER, source_text)
+}
+
+pub fn namespace_name(source_text: &str) -> String {
+    fresh_name(NAMESPACE, source_text)
 }
 
 struct Seen<'s, 'a> {

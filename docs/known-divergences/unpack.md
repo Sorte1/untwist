@@ -139,7 +139,11 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   way (a `var` beside a function) is refused, since an ES module may not declare a name twice.
 - **Closure.** Only the module manager's `try {…} catch (e) { X._DumpException(e) }` segments
   are split (ids from `/*_M:id*/` markers or begin/end loader calls checked against the
-  `_ModuleManager_initialize` graph). Closure ADVANCED property renaming stays a non-goal. A Closure
+  `_ModuleManager_initialize` graph). The namespace object is read once, in
+  `_runtime/closure.js`, and every file gets that one object as its wrapper parameter, as the
+  bundle binds it once; a segment that assigns or deletes the namespace property on the global
+  object (`window._ = …`, `this._ = …`) is refused. A `var x = this` line of the wrapper is copied
+  only into the files that name `x`. Closure ADVANCED property renaming stays a non-goal. A Closure
   bundle inside a UMD or AMD factory is not re-fed: its top-level `this` is the factory's receiver,
   which an AMD loader sets to `exports`. Every written segment runs with `globalThis` as its
   top-level `this`, which is what the bundle's `this` is in a browser classic script. This is an
@@ -173,12 +177,18 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   re-export forms, and static cycles are refused; `_context.meta` is refused rather than mapped to
   `import.meta`, whose `url` depends on the file's location. An `execute() {}` method that uses
   `super` at its own level is refused.
+- **Bun.** Bun's CommonJS wrapper `(function (exports, require, module, __filename, __dirname) {…})`
+  is unwrapped only when the file starts with Bun's `// @bun @bun-cjs` pragma (after a hashbang
+  line at most), which is what makes Bun call the function; the file is read as Bun runs it.
+  Without the pragma the expression is left as written, and an `async` wrapper is not Bun's.
 - **AMD and UMD.** AMD needs every top-level statement to be a `define`, all anonymous (one) or all named;
   dependency cycles, loader plugins (`!`), the `define(function (require) {…})` sugar and a `module`
   dependency are refused. A UMD wrapper's non-factory arguments must be inert (`this`, a literal,
   a `typeof X !== "undefined" ? X : …` guard). The wrapper's branch is chosen from `typeof define`
   tests only: a bare `define` read (`if (define && define.amd)`) throws where `define` is not
-  declared, so such a wrapper is refused.
+  declared, so such a wrapper is refused. The wrapper must be a plain function or arrow
+  (not `async`) with distinct parameter names, and a factory or `define` callback that repeats a
+  parameter name is refused.
 - **Parcel.** Both runtimes are accepted, the registry (`--no-scope-hoist`) only when its runtime
   text matches one of five recorded forms after α-renaming (`parcel/runtimes/`; if a later
   prepare or unminify change rewrites that runtime differently, Parcel registry bundles are refused
@@ -193,7 +203,10 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   `{}` and named nowhere else at the top level; another Parcel version's definition is refused
   until its text is recorded.
 - **Turbopack.** Browser chunks with a registration naming their runtime entries, and server chunks
-  given together with Next's page loader and `[turbopack]_runtime.js`, are split. A chunk whose
+  given together with Next's page loader and `[turbopack]_runtime.js`, are split. A browser chunk
+  holds no runtime, so it is read as if Turbopack's standard runtime loads it, and every such
+  unpack prints a note saying so; a chunk the standard runtime would not run that way is refused,
+  such as a registration pushed before a module list. A chunk whose
   factories use Turbopack's interop, async or chunk-loading helpers (`i`, `s`, `A`, `l`, …) is
   refused: those helpers live only in the runtime file, so they cannot be moved. Browser multi-chunk
   input is refused (no node oracle).
