@@ -5,7 +5,7 @@ use super::lexer::{
     self, Tok, BEFORE_EXPR, CLASS, ID_START, LINE, LINE_TOKEN, RUN, SPACE, SPECIAL,
 };
 use super::typescript::maybe_typescript;
-use super::words::awaits_an_operand;
+use super::words::{awaits_an_operand, may_end_a_statement};
 use super::{
     mode_of, DepthRefusal, Mode, Scanner, Watch, PENDING_ARROW, PENDING_BODY, PENDING_OPERAND,
     PENDING_SEMI, PENDING_SPECULATIVE,
@@ -349,6 +349,9 @@ impl Scanner<'_> {
 
     #[inline(always)]
     fn settle(&mut self, hot: &mut Hot, tok: Tok, start: usize) -> Result<bool, DepthRefusal> {
+        if may_end_a_statement(hot.prev, hot.newline) {
+            self.end_statement_before(hot.pending, tok, start, hot.position);
+        }
         if hot.pending == 0 {
             return Ok(true);
         }

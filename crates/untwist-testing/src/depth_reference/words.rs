@@ -1,6 +1,6 @@
 use super::lexer::Tok;
 use super::scope::{operand_word, Step, AWAIT, YIELD};
-use super::{Goal, Scanner};
+use super::{Goal, Scanner, PENDING_ARROW, PENDING_BODY};
 
 fn is_assignment(text: &[u8]) -> bool {
     text.ends_with(b"=") && !matches!(text, b"==" | b"===" | b"!=" | b"!==" | b"<=" | b">=")
@@ -32,6 +32,53 @@ fn binds_an_operand(prev: Tok) -> bool {
     )
 }
 
+#[inline(always)]
+pub(super) fn may_end_a_statement(prev: Tok, newline: bool) -> bool {
+    prev == Tok::BraceR || (newline && ends_an_expression(prev))
+}
+
+fn ends_an_expression(prev: Tok) -> bool {
+    matches!(
+        prev,
+        Tok::Name
+            | Tok::Num
+            | Tok::Str
+            | Tok::Regex
+            | Tok::BackQuote
+            | Tok::ParenR
+            | Tok::BracketR
+            | Tok::KwThis
+            | Tok::KwNull
+            | Tok::KwTrue
+            | Tok::KwFalse
+    )
+}
+
+fn starts_a_statement(tok: Tok, word: &[u8]) -> bool {
+    match tok {
+        Tok::Name => {
+            !word.contains(&b'\\')
+                && !matches!(word, b"as" | b"satisfies" | b"implements" | b"from")
+        }
+        Tok::NameAsync
+        | Tok::NameYield
+        | Tok::NameAwait
+        | Tok::NameLet
+        | Tok::NameStatic
+        | Tok::NameUsing
+        | Tok::Num
+        | Tok::Str => true,
+        Tok::KwCatch
+        | Tok::KwElse
+        | Tok::KwFinally
+        | Tok::KwWhile
+        | Tok::KwExtends
+        | Tok::KwIn
+        | Tok::KwInstanceof => false,
+        _ => (Tok::KwBreak as u8..=Tok::KwDelete as u8).contains(&(tok as u8)),
+    }
+}
+
 pub(super) fn reading_is_doubtful(tok: Tok, first: u8) -> bool {
     match tok {
         Tok::Slash | Tok::Regex | Tok::JsxTagStart | Tok::BraceL | Tok::IncDec => true,
@@ -43,6 +90,13 @@ pub(super) fn reading_is_doubtful(tok: Tok, first: u8) -> bool {
 }
 
 impl Scanner<'_> {
+    #[inline(never)]
+    pub(super) fn starts_a_new_statement(&self, pending: u8, tok: Tok, word: &[u8]) -> bool {
+        pending & (PENDING_BODY | PENDING_ARROW) == 0
+            && !self.contexts.decorated_at(self.contexts.len())
+            && starts_a_statement(tok, word)
+    }
+
     pub(super) fn opens_an_assignment(&self, step: &Step) -> bool {
         if step.tok != Tok::NameYield {
             return awaits_an_operand(step.prev);

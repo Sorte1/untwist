@@ -323,6 +323,9 @@ impl<'s> Scanner<'s> {
     #[inline(never)]
     fn token(&mut self, tok: Tok, start: usize, newline: bool) -> Result<(), DepthRefusal> {
         let tok = self.clause_name(tok);
+        if words::may_end_a_statement(self.prev, newline) {
+            self.end_statement_before(self.pending, tok, start, self.position);
+        }
         if tok == Tok::Name && !self.contexts.expr_allowed {
             self.typescript_word(start, newline)?;
         }
@@ -334,6 +337,13 @@ impl<'s> Scanner<'s> {
         }
         self.prev = tok;
         Ok(())
+    }
+
+    fn end_statement_before(&mut self, pending: u8, tok: Tok, start: usize, end: usize) {
+        let word = self.source.get(start..end).unwrap_or_default();
+        if self.starts_a_new_statement(pending, tok, word) {
+            self.frames.reset_run();
+        }
     }
 
     #[inline(always)]
@@ -480,6 +490,9 @@ impl<'s> Scanner<'s> {
         }
         if tok == Tok::BackQuote && self.contexts.opens_a_template() {
             self.templates = self.templates.saturating_add(1);
+            if !self.contexts.expr_allowed {
+                self.frames.count_run()?;
+            }
         }
         self.contexts.update(tok, self.prev, newline)?;
         if tok == Tok::KwClass {

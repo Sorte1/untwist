@@ -59,6 +59,8 @@ pub enum Class {
     Whilenb,
     Fornb,
     Elseifnb,
+    Tagged,
+    Lines,
 }
 
 pub const TABLE_ONE: &[Class] = &[
@@ -97,6 +99,7 @@ pub const TABLE_ONE: &[Class] = &[
     Class::While,
     Class::Klass,
     Class::Try,
+    Class::Tagged,
 ];
 
 pub const TABLE_THREE: &[Class] = &[
@@ -189,6 +192,8 @@ pub const ALL: &[Class] = &[
     Class::Whilenb,
     Class::Fornb,
     Class::Elseifnb,
+    Class::Tagged,
+    Class::Lines,
 ];
 
 struct Shape {
@@ -285,6 +290,8 @@ const NAMES: &[&str] = &[
     "whilenb",
     "fornb",
     "elseifnb",
+    "tagged",
+    "lines",
 ];
 
 fn table_one_shape(class: Class) -> Option<Shape> {
@@ -324,6 +331,7 @@ fn table_one_shape(class: Class) -> Option<Shape> {
         Class::While => shape("", "while(a){", "", "}", ""),
         Class::Klass => shape("x=", "class{m(){return ", "1", "}}", ";"),
         Class::Try => shape("", "try{", "", "}finally{}", ""),
+        Class::Tagged => shape("x=a", "``", "", "", ";"),
         _ => return None,
     })
 }
@@ -352,6 +360,7 @@ fn other_shape(class: Class) -> Shape {
         Class::Whilenb => shape("", "while(a)", "f();", "", ""),
         Class::Fornb => shape("", "for(;;)", "f();", "", ""),
         Class::Elseifnb => shape("if(a)x;", "else if(a)x;", "", "", ""),
+        Class::Lines => shape("", "a = b.c(d)\n", "", "", ""),
         _ => shape("", "", "", "", ""),
     }
 }
