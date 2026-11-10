@@ -25,3 +25,8 @@ ref-native-assigned-on-console|var F = function () { return "X"; }; var W = cons
 dec-unused-definer|var F = function () { return "X"; }; var d = Object.defineProperty; console.log('abc'.charAt(0));
 dec-unused-optional-definer|var F = function () { return "X"; }; var d = Object?.defineProperty; console.log('abc'.charAt(0));
 dec-definer-to-console|var F = function () { return "X"; }; console.log(typeof Object.defineProperty); console.log('abc'.charAt(0));
+ref-global-read-by-key|var F = function () { return "X"; }; var d = Object.defineProperty; if (globalThis.d) globalThis["d"](String.prototype, "charAt", { value: F }); console.log('abc'.charAt(0));
+ref-global-read-by-unknown-key|var F = function () { return "X"; }; var d = Object.defineProperty; var k = ["d"][0]; if (globalThis[k]) globalThis[k](String.prototype, "charAt", { value: F }); console.log('abc'.charAt(0));
+ref-global-object-passed|var F = function () { return "X"; }; var d = Object.defineProperty; var g = globalThis; var e = Reflect.get(g, "d"); if (e) e(String.prototype, "charAt", { value: F }); console.log('abc'.charAt(0));
+ref-global-object-destructured|var F = function () { return "X"; }; var d = Object.defineProperty; var { d: e } = globalThis; if (e) e(String.prototype, "charAt", { value: F }); console.log('abc'.charAt(0));
+ref-global-object-from-text|var F = function () { return "X"; }; var d = Object.defineProperty; var g = Function("return this")(); var e = Reflect.get(g, "d"); if (e) e(String.prototype, "charAt", { value: F }); console.log('abc'.charAt(0));

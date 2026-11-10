@@ -33,6 +33,7 @@ pub(super) struct Pre {
     pub(super) by_symbol: FxHashMap<SymbolId, u32>,
     pub(super) globals: Globals,
     pub(super) exposed: FxHashSet<SymbolId>,
+    pub(super) exposed_names: FxHashSet<String>,
     pub(super) accessor_names: FxHashSet<String>,
     pub(super) closed_reads: FxHashSet<u32>,
 }
@@ -162,6 +163,10 @@ impl<'s> Prescan<'s> {
             funcs: resolved,
             by_symbol,
             globals: self.globals,
+            exposed_names: exposed
+                .iter()
+                .map(|symbol| self.scoping.symbol_name(*symbol).to_string())
+                .collect(),
             exposed,
             accessor_names: self.accessor_names,
             closed_reads: self.closed_reads,

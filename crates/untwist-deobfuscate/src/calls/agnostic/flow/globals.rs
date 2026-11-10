@@ -6,7 +6,7 @@ use oxc_span::GetSpan;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::js_text::js_text;
 
-const GLOBAL_NAMES: [&str; 7] = [
+pub(super) const GLOBAL_NAMES: [&str; 7] = [
     "window",
     "self",
     "globalThis",
@@ -16,7 +16,7 @@ const GLOBAL_NAMES: [&str; 7] = [
     "parent",
 ];
 
-const GLOBAL_KEYS: [&str; 10] = [
+pub(super) const GLOBAL_KEYS: [&str; 10] = [
     "window",
     "self",
     "globalThis",
@@ -29,7 +29,7 @@ const GLOBAL_KEYS: [&str; 10] = [
     "opener",
 ];
 
-const RUNNERS: [&str; 2] = ["eval", "Function"];
+pub(super) const RUNNERS: [&str; 2] = ["eval", "Function"];
 
 pub(super) const NATIVE_HOLDERS: [&str; 2] = ["console", "JSON"];
 

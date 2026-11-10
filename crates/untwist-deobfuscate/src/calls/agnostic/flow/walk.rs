@@ -54,8 +54,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
     fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
         if self.pattern_depth > 0 {
             if let Some(bind) = it.symbol_id.get().and_then(|s| self.bind_node(s)) {
-                let any = self.any_node();
-                self.edge(any, bind);
+                self.feed_pattern_target(bind);
             }
         }
     }
@@ -65,8 +64,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
             (it, self.pattern_depth > 0)
         {
             let bind = self.ident_node(id);
-            let any = self.any_node();
-            self.edge(any, bind);
+            self.feed_pattern_target(bind);
         }
         walk_js::walk_simple_assignment_target(self, it);
     }
@@ -81,8 +79,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
         it: &AssignmentTargetPropertyIdentifier<'a>,
     ) {
         let bind = self.ident_node(&it.binding);
-        let any = self.any_node();
-        self.edge(any, bind);
+        self.feed_pattern_target(bind);
         if let Some(init) = it.init.as_ref() {
             self.sink_expr(init, it.span);
         }
@@ -140,6 +137,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
         let key = self.key_of_member(it);
         let holder = self.field_node(&key);
         self.edge(holder, node);
+        self.feed_global_read(&key, node);
         walk_js::walk_member_expression(self, it);
     }
 
