@@ -149,11 +149,76 @@ pub(super) struct Record<'a> {
     caches: Vec<&'a IdentifierReference<'a>>,
 }
 
+fn sequenced<'a>(expr: &'a Expression<'a>, span: Span) -> Option<&'a AssignmentExpression<'a>> {
+    match expr.without_parentheses() {
+        Expression::SequenceExpression(seq) => {
+            seq.expressions
+                .windows(2)
+                .find_map(|pair| match (&pair[0], &pair[1]) {
+                    (
+                        Expression::AssignmentExpression(assign),
+                        Expression::CallExpression(call),
+                    ) if call.span == span => Some(&**assign),
+                    _ => None,
+                })
+        }
+        Expression::LogicalExpression(logical) => sequenced(&logical.right, span),
+        Expression::StaticMemberExpression(member) => sequenced(&member.object, span),
+        Expression::ComputedMemberExpression(member) => sequenced(&member.object, span),
+        _ => None,
+    }
+}
+
+fn sequenced_record<'a>(scoping: &Scoping, shape: &Shape<'a>) -> Option<Record<'a>> {
+    let assign = shape
+        .body
+        .statements
+        .iter()
+        .find_map(|statement| match statement {
+            Statement::ReturnStatement(ret) => {
+                sequenced(ret.argument.as_ref()?, shape.dispatch.span)
+            }
+            _ => None,
+        })?;
+    if assign.operator != AssignmentOperator::Assign {
+        return None;
+    }
+    let AssignmentTarget::AssignmentTargetIdentifier(target) = &assign.left else {
+        return None;
+    };
+    let symbol = symbol_of(scoping, target)?;
+    let declared = shape.body.statements.iter().any(|statement| {
+        matches!(statement, Statement::VariableDeclaration(decl)
+            if decl.kind == VariableDeclarationKind::Var
+                && decl.declarations.iter().any(|declarator| declarator.init.is_none()
+                    && matches!(&declarator.id, BindingPattern::BindingIdentifier(id)
+                        if id.symbol_id.get() == Some(symbol))))
+    });
+    let writes = scoping
+        .get_resolved_reference_ids(symbol)
+        .iter()
+        .filter(|reference| scoping.get_reference(**reference).is_write())
+        .count();
+    if !declared || writes != 1 || !scoping.symbol_redeclarations(symbol).is_empty() {
+        return None;
+    }
+    let mut caches = Vec::new();
+    let literal = created_literal(&assign.right, &mut caches)?;
+    Some(Record {
+        symbol,
+        literal,
+        caches,
+    })
+}
+
 pub(super) fn module_record<'a>(scoping: &Scoping, shape: &Shape<'a>) -> Option<Record<'a>> {
     let statements = &shape.body.statements;
-    let at = statements
+    let Some(at) = statements
         .iter()
-        .position(|statement| statement_leads(statement, shape.dispatch.span))?;
+        .position(|statement| statement_leads(statement, shape.dispatch.span))
+    else {
+        return sequenced_record(scoping, shape);
+    };
     let Statement::VariableDeclaration(decl) = statements.get(at.checked_sub(1)?)? else {
         return None;
     };

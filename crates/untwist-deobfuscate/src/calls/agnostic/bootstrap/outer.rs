@@ -27,6 +27,16 @@ impl<'a> VisitJs<'a> for ArrowArguments {
     }
 }
 
+fn arrow_plain(
+    call: &CallExpression<'_>,
+    arrow: &ArrowFunctionExpression<'_>,
+    body: &FunctionBody<'_>,
+) -> bool {
+    let mut scan = ArrowArguments::default();
+    scan.visit_function_body(body);
+    !call.optional && !arrow.r#async && arrow.params.rest.is_none() && !scan.found
+}
+
 pub(super) struct Outer<'a> {
     pub(super) body: &'a FunctionBody<'a>,
     pub(super) table: SymbolId,
@@ -86,15 +96,27 @@ pub(super) fn outers<'a>(scoping: &Scoping, call: &'a CallExpression<'a>) -> Vec
             let plain = outer_plain(call, outer);
             declared(scoping, body, plain)
         }
-        Expression::ArrowFunctionExpression(arrow) if arrow.params.items.is_empty() => {
+        Expression::ArrowFunctionExpression(arrow) => {
             let ArrowFunctionBody::FunctionBody(body) = &arrow.body else {
                 return Vec::new();
             };
-            let mut scan = ArrowArguments::default();
-            scan.visit_function_body(body);
-            let plain =
-                !call.optional && !arrow.r#async && arrow.params.rest.is_none() && !scan.found;
-            declared(scoping, body, plain)
+            let plain = arrow_plain(call, arrow, body);
+            if arrow.params.items.is_empty() {
+                return declared(scoping, body, plain);
+            }
+            let (Some(table), Some(elements)) = (
+                arrow.params.items.first().and_then(binding_symbol),
+                call.arguments.first().and_then(Argument::as_expression),
+            ) else {
+                return Vec::new();
+            };
+            vec![Outer {
+                body,
+                table,
+                elements,
+                direct: false,
+                plain,
+            }]
         }
         _ => Vec::new(),
     }

@@ -33,6 +33,11 @@ All notable changes to this project are documented in this file. The format is b
   reads the global object (such as `globalThis[name]`) sees what the called shell saw. Before,
   a decoder the deobfuscator kept (or every function with `--no-deobfuscate`) became reachable
   as a global. Shell parameters the body never reads are dropped instead of hoisted as `var`.
+- The safe lane proves a minified webpack 4 bootstrap like the plain one: an arrow function
+  bootstrap `(e => { ... })([...])`, a module cache read as `(cache[id] || (m = cache[id] = {...},
+  table[id].call(...), m)).exports`, module objects passed from a record assigned in that
+  sequence, and bootstrap keys split into concatenations of strings and decoded strings. A whole bundle obfuscated with uglify-js or terser therefore no longer refuses for a
+  bootstrap the check could not see.
 - The safe lane decodes a program whose `for (const key in globalThis)` loop only reads the
   names (comparisons, `typeof`, `.length`, a string method call in a test), instead of refusing
   the unit as a global reach; the machinery is kept, since the program observes the global

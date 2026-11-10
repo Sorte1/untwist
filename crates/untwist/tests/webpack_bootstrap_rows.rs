@@ -168,6 +168,50 @@ fn webpack4_proven() -> String {
     patched_after_named_rotator("Q", "true", &webpack4(RECORD, DISPATCH))
 }
 
+fn arrow_outer(source: String) -> String {
+    assert!(source.contains("!(function (e) {"));
+    source.replacen("!(function (e) {", "!((e) => {", 1)
+}
+
+fn cached_or_created(source: String) -> String {
+    let canonical = format!(
+        "if (r[t]) return r[t].exports;\n    {RECORD}\n    return {DISPATCH}, (m.l = true), m.exports;"
+    );
+    let minified = format!(
+        "var m;\n    return (r[t] || ((m = r[t] = {{ i: t, l: false, exports: {{}} }}), {DISPATCH}, (m.l = true), m)).exports;"
+    );
+    assert!(source.contains(&canonical));
+    source.replacen(&canonical, &minified, 1)
+}
+
+fn minified_bootstraps() -> Vec<(&'static str, String)> {
+    vec![
+        ("an arrow bootstrap", arrow_outer(proven())),
+        (
+            "the webpack4 runtime in an arrow",
+            arrow_outer(webpack4_proven()),
+        ),
+        (
+            "the webpack4 runtime reading its cache with ||",
+            cached_or_created(webpack4_proven()),
+        ),
+        (
+            "the minified webpack4 runtime",
+            arrow_outer(cached_or_created(webpack4_proven())),
+        ),
+        (
+            "a minified module defines a computed key on its exports",
+            cached_or_created(exports_defined_by_computed_key()),
+        ),
+        (
+            "a dispatch key split into a concatenation",
+            webpack4_proven().replacen("e[t].call(", "e[t]['ca' + 'll'](", 1),
+        ),
+    ]
+}
+
+const MINIFIED_RECORD: &str = "(m = r[t] = { i: t, l: false, exports: {} }), ";
+
 fn define_on_exports() -> String {
     format!("i.d(t, String.fromCharCode(98, 81), {PATCH});")
 }
@@ -414,6 +458,57 @@ fn mutants() -> Vec<(&'static str, &'static str, String)> {
             ),
         ),
         (
+            "require.d is called on the global object in an arrow bootstrap",
+            "",
+            arrow_outer(with_modules(
+                "",
+                &[MODULE_ZERO, &module_one_with(&define_on_global("i"))],
+                "(n.s = 0)",
+            )),
+        ),
+        (
+            "require.d is called on the global object in a minified bootstrap",
+            "",
+            arrow_outer(cached_or_created(with_modules(
+                "",
+                &[MODULE_ZERO, &module_one_with(&define_on_global("i"))],
+                "(n.s = 0)",
+            ))),
+        ),
+        (
+            "a split dispatch key may name another method",
+            "",
+            before_bootstrap(
+                &format!("var planted = {planted}; var tail = 'll';"),
+                with_modules("", &[MODULE_ZERO, MODULE_ONE], "(n.s = 0)")
+                    .replacen(
+                        "return e[t].call(",
+                        "return (e[t] || planted)['ca' + tail](",
+                        1,
+                    )
+                    .replacen("var lib = i(1);", "i(5); var lib = i(1);", 1),
+            ),
+        ),
+        (
+            "a minified record is replaced before the dispatch",
+            "",
+            cached_or_created(exports_defined_by_computed_key()).replacen(
+                MINIFIED_RECORD,
+                &format!("{MINIFIED_RECORD}(m = {{ exports: globalThis }}), "),
+                1,
+            ),
+        ),
+        (
+            "an arrow bootstrap may dispatch a function outside the table",
+            notes::WEBPACK_BOOTSTRAP_UNPROVEN,
+            arrow_outer(before_bootstrap(
+                &format!("var planted = {planted};"),
+                with_modules("", &[MODULE_ZERO, MODULE_ONE], "(n.s = 0)")
+                    .replacen("return e[t].call(", "return (e[t] || planted).call(", 1)
+                    .replacen("var lib = i(1);", "i(5); var lib = i(1);", 1),
+            )),
+        ),
+        (
             "the module table is written by the bootstrap",
             notes::WEBPACK_BOOTSTRAP_UNPROVEN,
             with_modules(
@@ -525,16 +620,17 @@ fn every_lane_decodes_a_proven_webpack_bootstrap() {
 
 #[test]
 fn every_lane_decodes_the_webpack4_runtime_with_proven_module_objects() {
-    for source in [
-        webpack4_proven(),
-        exports_defined_by_computed_key(),
-        amd_factory_ignores_require(),
-        webpack5_proven(),
-    ] {
+    let rows = [
+        ("the webpack4 runtime", webpack4_proven()),
+        ("a computed exports key", exports_defined_by_computed_key()),
+        ("an AMD factory", amd_factory_ignores_require()),
+        ("the webpack 5 runtime", webpack5_proven()),
+    ];
+    for (label, source) in rows.into_iter().chain(minified_bootstraps()) {
         for lane in LANES {
             let out = run(&source, lane);
             let messages: Vec<&str> = out.notes.iter().map(|n| n.message.as_str()).collect();
-            assert!(decoded(&source, lane), "{lane:?}: {messages:#?}");
+            assert!(decoded(&source, lane), "{label} {lane:?}: {messages:#?}");
         }
     }
 }
@@ -619,6 +715,12 @@ fn node_agrees_in_the_safe_and_conservative_lanes_and_every_mutant_diverges_when
         ("the webpack 5 runtime".to_string(), webpack5_proven()),
     ];
     programs.extend(
+        minified_bootstraps()
+            .into_iter()
+            .map(|(label, source)| (label.to_string(), source)),
+    );
+    let proven_count = programs.len();
+    programs.extend(
         mutants()
             .into_iter()
             .map(|(label, _, source)| (label.to_string(), source)),
@@ -630,14 +732,14 @@ fn node_agrees_in_the_safe_and_conservative_lanes_and_every_mutant_diverges_when
     assert!(wrong.is_empty(), "{wrong:#?}");
     let unsafe_lane = lane_runner(Lane::Unsafe);
     let modes: [Mode<'_>; 1] = [("unsafe", &unsafe_lane)];
-    assert!(mismatches(&node, &programs[..5], &modes).is_empty());
+    assert!(mismatches(&node, &programs[..proven_count], &modes).is_empty());
     let decoded_modes: [Mode<'_>; 1] = [("decoded", &decoded_anyway)];
-    let mut diverged: Vec<String> = mismatches(&node, &programs[5..], &decoded_modes)
+    let mut diverged: Vec<String> = mismatches(&node, &programs[proven_count..], &decoded_modes)
         .into_iter()
         .filter_map(|row| row.split(" (decoded)").next().map(str::to_string))
         .collect();
     diverged.sort();
-    let mut want: Vec<String> = programs[5..]
+    let mut want: Vec<String> = programs[proven_count..]
         .iter()
         .map(|(label, _)| label.clone())
         .collect();
