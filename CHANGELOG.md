@@ -110,6 +110,11 @@ All notable changes to this project are documented in this file. The format is b
   run only the wrapper and decode passes and skip the stages that have nothing to do: a 6 MB
   Krunker build spends 10 % fewer instructions under `--unsafe`, with the same output.
 
+- The native RC4 decoder fills its 256-entry state array in one batch when the step budget
+  covers the whole loop, with the same steps and heap charged and each element written as
+  before: a 6 MB Krunker build spends 5 % fewer instructions under `--unsafe`, with the same
+  output.
+
 ### Fixed
 
 - Wasm glue names found in a bundle module now also apply to that module's function in the
