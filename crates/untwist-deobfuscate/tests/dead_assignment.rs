@@ -139,6 +139,13 @@ fn a_var_declared_in_a_class_static_block_is_left_alone() {
 }
 
 #[test]
+fn an_assignment_after_a_same_named_sloppy_block_function_is_left_alone() {
+    left_alone(
+        "function f() {\n  var x;\n  {\n    function x() {}\n  }\n  x = 5;\n  return typeof x;\n}",
+    );
+}
+
+#[test]
 fn a_program_with_a_scope_hazard_is_left_alone() {
     left_alone(A_SCOPE_HAZARD);
 }

@@ -12,7 +12,10 @@ use untwist_core::ast_util::matcher::is_literal_argument;
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::ast_util::search::{expression_at, statement_at};
 use untwist_core::pass::Cx;
-use untwist_core::semantic::{is_constant_binding, read_reference_count, write_reference_count};
+use untwist_core::semantic::{
+    is_constant_binding, is_constant_binding_in, read_reference_count, write_reference_count,
+    AnnexBWrites,
+};
 
 use crate::init_order::{scan_init_order, DeclarationSlot, InitOrder};
 use crate::mutants::external_write_order_trusted;
@@ -543,6 +546,11 @@ fn plan_externals<'a>(
 ) {
     let variables = variable_facts(program, cx.scoping(), symbols);
     let globals = global_bindings(program, cx, symbols);
+    let writes = if symbols.is_empty() || crate::mutants::annex_b_writes_trusted() {
+        AnnexBWrites::default()
+    } else {
+        AnnexBWrites::of(program, cx.scoping())
+    };
     let mut kept = StmtEdits::new();
     for (index, symbol) in symbols.iter().copied().enumerate() {
         let Some(facts) = variables.facts(index) else {
@@ -552,6 +560,10 @@ fn plan_externals<'a>(
         crate::fused::check::record("variable-facts", facts_digest(&facts, symbol));
         if let Some(span) = globals.reached(symbol) {
             cx.note(notes::GLOBAL_BINDING_REACHED, Some(span));
+            continue;
+        }
+        if writes.may_write(symbol) {
+            cx.note(notes::BLOCK_FUNCTION_NAME, facts.declaration);
             continue;
         }
         let removals = if globals.observed(symbol) {
@@ -565,7 +577,7 @@ fn plan_externals<'a>(
             inline_assigned_variable(program, &facts, symbol, order, cx, edits, removals);
         }
     }
-    let sources = constant_sources(program, &variables, symbols, cx.scoping());
+    let sources = constant_sources(program, &variables, symbols, cx.scoping(), &writes);
     if !sources.is_empty() {
         plan_externals(program, &sources, order, cx, edits, removals);
     }
@@ -576,6 +588,7 @@ fn constant_sources(
     variables: &Variables,
     symbols: &[SymbolId],
     scoping: &Scoping,
+    writes: &AnnexBWrites,
 ) -> Vec<SymbolId> {
     let mut found = Vec::new();
     for (index, symbol) in symbols.iter().enumerate() {
@@ -597,7 +610,9 @@ fn constant_sources(
     let mut seen = FxHashSet::default();
     found
         .into_iter()
-        .filter(|symbol| is_constant_binding(scoping, *symbol) && !symbols.contains(symbol))
+        .filter(|symbol| {
+            is_constant_binding_in(scoping, writes, *symbol) && !symbols.contains(symbol)
+        })
         .filter(|symbol| seen.insert(*symbol))
         .collect()
 }

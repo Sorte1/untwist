@@ -204,6 +204,38 @@ fn the_folded_literal_is_also_refused_before_the_declaration_under_conservative(
     );
 }
 
+fn extended(source: &str) -> String {
+    let alloc = Allocator::default();
+    common::run_ctors_extended(
+        &alloc,
+        source,
+        &[untwist_deobfuscate::merge_object_assignments::boxed],
+    )
+}
+
+#[test]
+fn a_literal_overwritten_by_a_sloppy_block_function_is_not_inlined() {
+    let control = extended("function f() {\n  var o = { a: 1, b: \"x\" };\n  {\n    function p() {}\n  }\n  return typeof g(o);\n}");
+    assert!(control.contains("g({"), "{control}");
+    let source = "function f() {\n  var o = { a: 1, b: \"x\" };\n  {\n    function o() {}\n  }\n  return typeof g(o);\n}";
+    let code = extended(source);
+    assert_eq!(code.trim(), printed(source).trim());
+}
+
+#[test]
+fn keys_of_an_object_a_sloppy_block_function_overwrites_are_not_inlined() {
+    let control = extended("function f() {\n  var o = {};\n  o.a = 1;\n  o.b = \"x\";\n  {\n    function p() {}\n  }\n  return typeof o.a;\n}");
+    assert!(!control.contains("typeof o.a"), "{control}");
+    let code = extended("function f() {\n  var o = {};\n  o.a = 1;\n  o.b = \"x\";\n  {\n    function o() {}\n  }\n  return typeof o.a;\n}");
+    assert!(code.contains("typeof o.a"), "{code}");
+}
+
+#[test]
+fn a_strict_function_still_inlines_past_a_block_function() {
+    let code = extended("function f() {\n  \"use strict\";\n  var o = { a: 1 };\n  {\n    function o() {}\n  }\n  return typeof g(o);\n}");
+    assert!(code.contains("g({ a: 1 })"), "{code}");
+}
+
 #[test]
 fn a_scope_hazard_refuses_the_inline() {
     for source in [

@@ -5,6 +5,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
+use untwist_core::semantic::AnnexBWrites;
 
 pub fn resolved_symbol(reference: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
     scoping
@@ -54,6 +55,33 @@ pub fn refuse_block_function_names<T, const N: usize>(
         !shared
     });
     drop(names);
+    for span in refused {
+        cx.note(crate::notes::BLOCK_FUNCTION_NAME, Some(span));
+    }
+}
+
+pub fn refuse_annex_b_writes<T>(
+    candidates: &mut Vec<T>,
+    site: impl Fn(&T) -> (Span, SymbolId),
+    program: &Program<'_>,
+    cx: &mut Cx<'_, '_>,
+) {
+    if candidates.is_empty() || crate::mutants::annex_b_writes_trusted() {
+        return;
+    }
+    let writes = AnnexBWrites::of(program, cx.scoping());
+    if writes.is_empty() {
+        return;
+    }
+    let mut refused = Vec::new();
+    candidates.retain(|candidate| {
+        let (span, symbol) = site(candidate);
+        let written = writes.may_write(symbol);
+        if written {
+            refused.push(span);
+        }
+        !written
+    });
     for span in refused {
         cx.note(crate::notes::BLOCK_FUNCTION_NAME, Some(span));
     }

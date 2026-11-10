@@ -497,3 +497,14 @@ pub(crate) fn deobfuscate_round_limit(rounds: u32) -> u32 {
         limit => limit.min(rounds),
     }
 }
+
+static ANNEX_B_WRITES_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_annex_b_writes_for_tests(on: bool) {
+    ANNEX_B_WRITES_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn annex_b_writes_trusted() -> bool {
+    ANNEX_B_WRITES_TRUSTED.load(Ordering::Relaxed)
+}

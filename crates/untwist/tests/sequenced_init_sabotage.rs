@@ -1,6 +1,7 @@
 use untwist::{Options, Pipeline};
 use untwist_deobfuscate::mutants::{
-    ignore_declarator_writes_for_tests, trust_nested_literal_writes_for_tests,
+    ignore_declarator_writes_for_tests, trust_annex_b_writes_for_tests,
+    trust_nested_literal_writes_for_tests,
 };
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
@@ -47,6 +48,9 @@ fn assert_rows_diverge(prefix: &str, switch: fn(bool)) {
 
 #[test]
 fn initialiser_and_nested_write_rows_diverge_from_node_once_their_check_is_dropped() {
-    assert_rows_diverge("ref-init-", ignore_declarator_writes_for_tests);
+    assert_rows_diverge("ref-init-", |on| {
+        ignore_declarator_writes_for_tests(on);
+        trust_annex_b_writes_for_tests(on);
+    });
     assert_rows_diverge("ref-nested-", trust_nested_literal_writes_for_tests);
 }
