@@ -3,6 +3,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::model::{self, Read};
 use super::object::{Builtin, Method, Obj, ObjectId, Objects, SiteKind};
+use crate::mutants::{back_routes_dropped, unbound_this_dropped, world_constructors_dropped};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub(super) struct Node(u32);
@@ -33,6 +34,8 @@ pub(super) struct FnInfo {
     pub(super) this: Option<Node>,
     pub(super) ret: Node,
     pub(super) arguments: Option<Node>,
+    pub(super) sloppy: bool,
+    pub(super) supers: Option<Node>,
 }
 
 #[derive(Clone)]
@@ -40,6 +43,7 @@ pub(super) struct BoundInfo {
     pub(super) target: Node,
     pub(super) this: Node,
     pub(super) args: Vec<Node>,
+    pub(super) loose: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -50,6 +54,8 @@ pub(super) struct Call {
     pub(super) spread: Option<Node>,
     pub(super) result: Option<Node>,
     pub(super) construct: bool,
+    pub(super) loose: bool,
+    pub(super) firm: bool,
     pub(super) span: Span,
 }
 
@@ -102,6 +108,8 @@ enum Watch {
     Define(u32),
     ProtoSet(u32),
     EscapeSites,
+    Child(ObjectId),
+    Heirs(u32),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -119,6 +127,8 @@ type CallKey = (
     Option<Node>,
     Option<Node>,
     Option<Span>,
+    bool,
+    bool,
 );
 
 #[derive(Default)]
@@ -165,16 +175,12 @@ pub(super) struct Graph {
     wired_loads: FxHashSet<(ObjectId, Field, Node)>,
     wired_stores: FxHashSet<(ObjectId, Field, Node)>,
     applied: FxHashSet<(u32, ObjectId)>,
-    world_applied: FxHashSet<(u32, ObjectId)>,
     call_keys: FxHashSet<CallKey>,
     names: FxHashMap<Box<str>, Field>,
     name_list: Vec<Box<str>>,
     pub(super) esc: Node,
     pub(super) world: Node,
     pub(super) empty: Node,
-    world_calls: Vec<u32>,
-    esc_builtins: Vec<ObjectId>,
-    pub(super) esc_has_roots: bool,
     pub(super) patches: Vec<Patch>,
     patch_seen: FxHashSet<(u32, Method)>,
     pub(super) skip_definers: FxHashSet<Span>,
@@ -183,6 +189,14 @@ pub(super) struct Graph {
     derived: FxHashMap<(u8, Vec<Node>, Span), Node>,
     simple_sites: FxHashMap<(Span, usize), SimpleSite>,
     sink: Option<Node>,
+    returning: Vec<ObjectId>,
+    returned: Vec<ObjectId>,
+    children: FxHashMap<ObjectId, Vec<ObjectId>>,
+    adopted: FxHashSet<(ObjectId, ObjectId)>,
+    heirs: FxHashMap<ObjectId, Node>,
+    heir_copies: Vec<Node>,
+    receivers: FxHashMap<Node, Node>,
+    world_fields: Option<Node>,
     budget: Budget,
     exhausted: bool,
 }
@@ -223,16 +237,12 @@ impl Graph {
             wired_loads: FxHashSet::default(),
             wired_stores: FxHashSet::default(),
             applied: FxHashSet::default(),
-            world_applied: FxHashSet::default(),
             call_keys: FxHashSet::default(),
             names: FxHashMap::default(),
             name_list: Vec::new(),
             esc: Node(0),
             world: Node(0),
             empty: Node(0),
-            world_calls: Vec::new(),
-            esc_builtins: Vec::new(),
-            esc_has_roots: false,
             patches: Vec::new(),
             patch_seen: FxHashSet::default(),
             skip_definers: FxHashSet::default(),
@@ -241,6 +251,14 @@ impl Graph {
             derived: FxHashMap::default(),
             simple_sites: FxHashMap::default(),
             sink: None,
+            returning: Vec::new(),
+            returned: Vec::new(),
+            children: FxHashMap::default(),
+            adopted: FxHashSet::default(),
+            heirs: FxHashMap::default(),
+            heir_copies: Vec::new(),
+            receivers: FxHashMap::default(),
+            world_fields: None,
             budget: Budget {
                 steps_cap: bytes.saturating_mul(48).clamp(4_000_000, 400_000_000),
                 elements_cap: bytes.saturating_mul(4).clamp(4_000_000, 24_000_000),
@@ -268,8 +286,20 @@ impl Graph {
         Node(id as u32)
     }
 
-    pub(super) fn points_to(&self, node: Node) -> &[ObjectId] {
-        &self.pts[node.0 as usize]
+    pub(super) fn points_to(&self, node: Node) -> Vec<ObjectId> {
+        self.widened(&self.pts[node.0 as usize])
+    }
+
+    fn widened(&self, objects: &[ObjectId]) -> Vec<ObjectId> {
+        let mut found = objects.to_vec();
+        if objects.first() == Some(&ObjectId::WORLD) {
+            for object in &self.returning {
+                if objects.binary_search(object).is_err() {
+                    found.push(*object);
+                }
+            }
+        }
+        found
     }
 
     pub(super) fn name(&mut self, text: &str) -> Field {
@@ -427,6 +457,8 @@ impl Graph {
             spread: None,
             result: Some(site.result),
             construct: false,
+            loose: true,
+            firm: false,
             span,
         });
         self.live = live;
@@ -466,6 +498,8 @@ impl Graph {
             call.spread,
             call.result,
             call.construct.then_some(call.span),
+            call.loose,
+            call.firm,
         );
         if !self.call_keys.insert(key) {
             return;
@@ -549,7 +583,15 @@ impl Graph {
         let Some(name) = self.field_name(field).map(str::to_string) else {
             return;
         };
-        match model::read(builtin, &name) {
+        let read = if builtin == Builtin::Global
+            && back_routes_dropped()
+            && model::is_back_route(&name)
+        {
+            Read::World
+        } else {
+            model::read(builtin, &name)
+        };
+        match read {
             Read::Values(values) => {
                 for value in values {
                     let id = self.builtin(*value);
@@ -559,6 +601,10 @@ impl Graph {
             Read::World => {
                 if !self.global_declared.contains(&field) {
                     self.insert(node, ObjectId::WORLD);
+                }
+                if builtin == Builtin::Global && model::is_back_route(&name) && !back_routes_dropped()
+                {
+                    self.insert(node, object);
                 }
             }
         }
@@ -570,6 +616,7 @@ impl Graph {
         }
         let node = self.node();
         self.protos.insert(object, node);
+        self.watch(node, Watch::Child(object));
         if let Some(builtin) = self.objects.as_builtin(object) {
             for proto in model::protos(builtin) {
                 let id = self.builtin(*proto);
@@ -637,28 +684,122 @@ impl Graph {
     pub(super) fn define_one(&mut self, target: Node, key: Key, descriptor: Node, span: Span) {
         let names = [self.name("value"), self.name("get"), self.name("set")];
         let [value, getter, setter] = names.map(|name| self.loaded(descriptor, name));
-        let world = self.world;
-        self.call(Call {
-            callee: getter,
-            this: Some(target),
-            args: Vec::new(),
-            spread: None,
-            result: Some(value),
-            construct: false,
-            span,
-        });
-        self.call(Call {
-            callee: setter,
-            this: Some(target),
-            args: vec![world],
-            spread: None,
-            result: None,
-            construct: false,
-            span,
-        });
+        self.getter_call(target, getter, value, span);
+        self.setter_call(target, key, setter, span);
         self.store(target, key, value);
         self.store(target, Key::Static(Field::ACCESSORS), getter);
         self.store(target, Key::Static(Field::ACCESSORS), setter);
+    }
+
+    pub(super) fn getter_call(&mut self, target: Node, getter: Node, result: Node, span: Span) {
+        let this = self.receivers(target);
+        self.call(Call {
+            callee: getter,
+            this: Some(this),
+            args: Vec::new(),
+            spread: None,
+            result: Some(result),
+            construct: false,
+            loose: false,
+            firm: false,
+            span,
+        });
+    }
+
+    pub(super) fn setter_call(&mut self, target: Node, key: Key, setter: Node, span: Span) {
+        let this = self.receivers(target);
+        let value = self.node();
+        self.load(this, key, value);
+        self.call(Call {
+            callee: setter,
+            this: Some(this),
+            args: vec![value],
+            spread: None,
+            result: None,
+            construct: false,
+            loose: false,
+            firm: false,
+            span,
+        });
+    }
+
+    fn receivers(&mut self, target: Node) -> Node {
+        if let Some(node) = self.receivers.get(&target) {
+            return *node;
+        }
+        let node = self.node();
+        self.receivers.insert(target, node);
+        let index = self.heir_copies.len() as u32;
+        self.heir_copies.push(node);
+        self.watch(target, Watch::Heirs(index));
+        node
+    }
+
+    fn heirs_node(&mut self, object: ObjectId) -> Node {
+        if let Some(node) = self.heirs.get(&object) {
+            return *node;
+        }
+        let root = self.node();
+        self.heirs.insert(object, root);
+        self.insert(root, object);
+        let mut work = vec![(object, root)];
+        while let Some((holder, above)) = work.pop() {
+            let children = self.children.get(&holder).cloned().unwrap_or_default();
+            for child in children {
+                let below = match self.heirs.get(&child) {
+                    Some(node) => *node,
+                    None => {
+                        let node = self.node();
+                        self.heirs.insert(child, node);
+                        self.insert(node, child);
+                        work.push((child, node));
+                        node
+                    }
+                };
+                self.copy(below, above);
+            }
+        }
+        root
+    }
+
+    fn adopt(&mut self, parent: ObjectId, child: ObjectId) {
+        match self.objects.get(parent) {
+            Obj::World | Obj::Str(_) => return,
+            Obj::Builtin(builtin) if builtin.is_primitive() => return,
+            _ => {}
+        }
+        if !self.adopted.insert((parent, child)) {
+            return;
+        }
+        self.children.entry(parent).or_default().push(child);
+        if let Some(above) = self.heirs.get(&parent).copied() {
+            let below = self.heirs_node(child);
+            self.copy(below, above);
+        }
+    }
+
+    fn heirs_into(&mut self, object: ObjectId, to: Node) {
+        match self.objects.get(object).clone() {
+            Obj::World => {
+                self.insert(to, ObjectId::WORLD);
+            }
+            Obj::Str(_) => {}
+            Obj::Builtin(builtin) if builtin.is_primitive() => {}
+            Obj::Builtin(builtin) => {
+                for prim in model::PRIMITIVES {
+                    if builtin == Builtin::ObjectProto || model::protos(*prim).contains(&builtin) {
+                        let id = self.builtin(*prim);
+                        self.insert(to, id);
+                    }
+                }
+                let heirs = self.heirs_node(object);
+                self.copy(heirs, to);
+            }
+            Obj::Site(..) => {
+                let heirs = self.heirs_node(object);
+                self.copy(heirs, to);
+            }
+        }
     }
 
     fn key_fields(&mut self, key: Key, objects: Option<&[ObjectId]>) -> Vec<Field> {
@@ -698,7 +839,7 @@ impl Graph {
             Watch::LoadKey(index) => {
                 let (base, key, to) = self.loads[index as usize];
                 let fields = self.key_fields(key, Some(delta));
-                for object in self.pts[base.0 as usize].clone() {
+                for object in self.points_to(base) {
                     for field in &fields {
                         self.wire_load(object, *field, to);
                     }
@@ -716,7 +857,7 @@ impl Graph {
             Watch::StoreKey(index) => {
                 let (base, key, from) = self.stores[index as usize];
                 let fields = self.key_fields(key, Some(delta));
-                for object in self.pts[base.0 as usize].clone() {
+                for object in self.points_to(base) {
                     for field in &fields {
                         self.wire_store(object, *field, from);
                     }
@@ -754,6 +895,17 @@ impl Graph {
                     }
                 }
             }
+            Watch::Child(child) => {
+                for object in delta {
+                    self.adopt(*object, child);
+                }
+            }
+            Watch::Heirs(index) => {
+                let to = self.heir_copies[index as usize];
+                for object in delta {
+                    self.heirs_into(*object, to);
+                }
+            }
             Watch::ProtoSet(index) => {
                 let (_, from) = self.proto_sets[index as usize];
                 for object in delta {
@@ -774,13 +926,27 @@ impl Graph {
     fn fields_into(&mut self, object: ObjectId, sub: Sub, target: Node) {
         match self.objects.get(object) {
             Obj::World => {
-                let world = self.world;
-                self.store(target, Key::Static(Field::UNKNOWN), world);
+                let fields = self.world_fields();
+                self.store(target, Key::Static(Field::UNKNOWN), fields);
             }
             Obj::Str(_) => {}
             Obj::Builtin(builtin) if builtin.is_primitive() => {}
             _ => self.subscribe(object, sub),
         }
+    }
+
+    pub(super) fn world_fields(&mut self) -> Node {
+        if let Some(node) = self.world_fields {
+            return node;
+        }
+        let node = self.node();
+        self.world_fields = Some(node);
+        let world = self.world;
+        let live = self.live;
+        self.live = true;
+        self.load(world, Key::Static(Field::UNKNOWN), node);
+        self.live = live;
+        node
     }
 
     fn keys_into(&mut self, object: ObjectId, to: Node) {
@@ -852,6 +1018,7 @@ impl Graph {
         let builtin = match self.objects.get(object) {
             Obj::World => {
                 self.insert(to, ObjectId::WORLD);
+                self.world_read(field, to);
                 return;
             }
             Obj::Str(_) => Some(Builtin::PrimString),
@@ -875,20 +1042,15 @@ impl Graph {
             self.copy(unknown, to);
             self.subscribe(object, Sub::CopyTo(to));
             self.copy(proto, to);
-            match builtin {
-                Some(Builtin::Global) => {
+            if let Some(builtin) = builtin {
+                if builtin == Builtin::Global {
                     self.insert(to, ObjectId::WORLD);
-                    let esc = self.esc;
-                    self.insert(esc, object);
                 }
-                Some(builtin) => {
-                    let (values, _) = model::read_any(builtin);
-                    for value in values {
-                        let id = self.builtin(value);
-                        self.insert(to, id);
-                    }
+                let (values, _) = model::read_any(builtin);
+                for value in values {
+                    let id = self.builtin(value);
+                    self.insert(to, id);
                 }
-                None => {}
             }
         } else {
             let own = self.field_node(object, field);
@@ -904,6 +1066,29 @@ impl Graph {
         self.live = live;
     }
 
+    fn world_read(&mut self, field: Field, to: Node) {
+        if field.internal() {
+            return;
+        }
+        let name = self.field_name(field).map(str::to_string);
+        let any = field == Field::UNKNOWN;
+        let route = any || name.as_deref().is_some_and(model::is_back_route);
+        if route && !back_routes_dropped() {
+            let global = self.builtin(Builtin::Global);
+            self.insert(to, global);
+        }
+        let inherited = any
+            || name
+                .as_deref()
+                .is_some_and(|name| model::WORLD_CONSTRUCTOR_NAMES.contains(&name));
+        if inherited && !world_constructors_dropped() {
+            for builtin in model::WORLD_CONSTRUCTORS {
+                let id = self.builtin(*builtin);
+                self.insert(to, id);
+            }
+        }
+    }
+
     fn wire_store(&mut self, object: ObjectId, field: Field, from: Node) {
         if !self.wired_stores.insert((object, field, from)) {
             return;
@@ -914,8 +1099,9 @@ impl Graph {
             Obj::Str(_) => {}
             Obj::Builtin(builtin) if !builtin.patchable() => {}
             Obj::Builtin(_) => {
+                let proto = self.proto_node(object);
                 let target = if is_proto {
-                    self.proto_node(object)
+                    proto
                 } else {
                     self.field_node(object, field)
                 };
@@ -970,6 +1156,10 @@ impl Graph {
                     }
                     if let Some(this) = info.this {
                         self.copy(world, this);
+                        if info.sloppy && !unbound_this_dropped() {
+                            let global = self.builtin(Builtin::Global);
+                            self.insert(this, global);
+                        }
                     }
                     if let Some(arguments) = info.arguments {
                         self.copy(world, arguments);
@@ -985,31 +1175,10 @@ impl Graph {
                 }
             }
             Obj::Builtin(builtin) => {
-                if builtin.is_primitive() || !self.escaped.insert(object) {
-                    return;
-                }
-                if !builtin.is_method() && builtin != Builtin::Machinery {
-                    self.esc_has_roots = true;
-                }
-                self.esc_builtins.push(object);
-                let calls = self.world_calls.clone();
-                for index in calls {
-                    self.world_apply(index, object);
-                }
-                let (values, _) = model::read_any(builtin);
-                let esc = self.esc;
-                for value in values.iter().chain(model::protos(builtin)) {
-                    let id = self.builtin(*value);
-                    self.insert(esc, id);
+                if !builtin.is_primitive() && self.escaped.insert(object) {
+                    self.returned.push(object);
                 }
             }
-        }
-    }
-
-    pub(super) fn world_call(&mut self, index: u32) {
-        self.world_calls.push(index);
-        for object in self.esc_builtins.clone() {
-            self.world_apply(index, object);
         }
     }
 
@@ -1028,10 +1197,6 @@ impl Graph {
 
     pub(super) fn first_implicit(&mut self, value: Node) -> bool {
         self.implicit_done.insert(value)
-    }
-
-    pub(super) fn first_world_apply(&mut self, index: u32, object: ObjectId) -> bool {
-        self.world_applied.insert((index, object))
     }
 
     pub(super) fn first_apply(&mut self, index: u32, object: ObjectId) -> bool {
@@ -1062,8 +1227,12 @@ impl Graph {
                 return;
             }
             self.budget.steps += 1;
+            if let Some(object) = self.returned.pop() {
+                self.come_back(object);
+                continue;
+            }
             if let Some((node, watch)) = self.replays.pop() {
-                let objects = self.pts[node.0 as usize].clone();
+                let objects = self.points_to(node);
                 self.handle(watch, &objects);
                 continue;
             }
@@ -1081,13 +1250,39 @@ impl Graph {
                 }
             }
             let watches = self.watches[node.0 as usize].clone();
-            for watch in watches {
-                self.handle(watch, &delta);
+            if !watches.is_empty() {
+                let mut seen = delta.clone();
+                if delta.contains(&ObjectId::WORLD) {
+                    let set = &self.pts[node.0 as usize];
+                    for object in &self.returning {
+                        if set.binary_search(object).is_err() {
+                            seen.push(*object);
+                        }
+                    }
+                }
+                for watch in watches {
+                    self.handle(watch, &seen);
+                }
             }
             if node == self.esc {
                 for object in &delta {
                     self.escape_object(*object);
                 }
+            }
+        }
+    }
+
+    fn come_back(&mut self, object: ObjectId) {
+        self.returning.push(object);
+        for index in 0..self.pts.len() {
+            let set = &self.pts[index];
+            if set.first() != Some(&ObjectId::WORLD) || set.binary_search(&object).is_ok() {
+                continue;
+            }
+            let watches = self.watches[index].clone();
+            self.budget.steps += watches.len() as u64;
+            for watch in watches {
+                self.handle(watch, &[object]);
             }
         }
     }
@@ -1127,6 +1322,11 @@ impl Graph {
     #[cfg(test)]
     pub(super) fn cap_for_tests(&mut self, steps: u64) {
         self.budget.steps_cap = steps;
+    }
+
+    #[cfg(test)]
+    pub(super) fn steps(&self) -> u64 {
+        self.budget.steps
     }
 }
 

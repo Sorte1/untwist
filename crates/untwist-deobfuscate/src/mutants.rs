@@ -519,3 +519,36 @@ pub fn trust_annex_b_writes_for_tests(on: bool) {
 pub(crate) fn annex_b_writes_trusted() -> bool {
     ANNEX_B_WRITES_TRUSTED.load(Ordering::Relaxed)
 }
+
+static BACK_ROUTES_OFF: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_back_routes_for_tests(on: bool) {
+    BACK_ROUTES_OFF.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn back_routes_dropped() -> bool {
+    BACK_ROUTES_OFF.load(Ordering::Relaxed)
+}
+
+static UNBOUND_THIS_OFF: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_unbound_this_for_tests(on: bool) {
+    UNBOUND_THIS_OFF.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn unbound_this_dropped() -> bool {
+    UNBOUND_THIS_OFF.load(Ordering::Relaxed)
+}
+
+static WORLD_CONSTRUCTORS_OFF: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn drop_world_constructors_for_tests(on: bool) {
+    WORLD_CONSTRUCTORS_OFF.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn world_constructors_dropped() -> bool {
+    WORLD_CONSTRUCTORS_OFF.load(Ordering::Relaxed)
+}
