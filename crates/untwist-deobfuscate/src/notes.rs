@@ -73,6 +73,10 @@ pub const WRAPPER_BODY_NOT_SELF_CONTAINED: &str =
 pub const WRAPPER_BINDING_UNSTABLE: &str =
     "the wrapper's binding is written again, or it is declared in a block whose name code outside \
      the block may reach, so a call may reach another function and it was left in place";
+pub const WRAPPER_SIGNATURE_NOT_PLAIN: &str =
+    "the wrapper is async, a generator, or has a default, rest, destructured or repeated \
+     parameter, so calling it does more than evaluate the expression it returns and it was left \
+     in place";
 pub const WRAPPER_READ_BEFORE_DECLARATION: &str =
     "the wrapper is a var bound to a function expression that may be read before its declaration \
      runs, where it is still undefined, so it was left in place";
@@ -142,6 +146,9 @@ pub const DECODER_USED_AS_VALUE: &str =
 pub const MACHINERY_NAME_SPELLED: &str =
     "a string or property name in the program spells this function's name, so code the program \
      builds at run time may reach it by that name, and it was left unrenamed and undecoded";
+pub const MACHINERY_NAME_BOUND: &str =
+    "the input already declares a name in the spelling reserved for marked string-array \
+     machinery, so its own bindings could be taken for machinery, and nothing was decoded";
 pub const DECODER_WRITTEN_OUTSIDE: &str =
     "the decoder's binding is assigned outside its own body, so a call site may reach another \
      function, and it was left unrenamed and undecoded";
@@ -582,6 +589,7 @@ catalogue!(
     WRAPPER_SITE_IMPURE_ARGUMENT,
     WRAPPER_BODY_NOT_SELF_CONTAINED,
     WRAPPER_BINDING_UNSTABLE,
+    WRAPPER_SIGNATURE_NOT_PLAIN,
     WRAPPER_READ_BEFORE_DECLARATION,
     WRAPPER_PARTIAL,
     TERNARY_HOLDS_A_SCOPE,
@@ -610,6 +618,7 @@ catalogue!(
     MACHINERY_IN_A_BLOCK,
     DECODER_USED_AS_VALUE,
     MACHINERY_NAME_SPELLED,
+    MACHINERY_NAME_BOUND,
     DECODER_WRITTEN_OUTSIDE,
     MACHINERY_REDECLARED,
     STRING_ARRAY_DECLARED_UNDEFINED,

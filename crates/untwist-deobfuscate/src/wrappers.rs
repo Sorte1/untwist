@@ -22,14 +22,16 @@ use crate::alias_forms::{
     single_property_source, ObjectAlias,
 };
 use crate::bindings::{reference_symbol, resolved_symbol};
+use crate::call_checks::call_checks_apply;
 use crate::fused::{Fused, Member, Walk};
 use crate::init_order::{lend_order_with, note_overflow, sharing_mark, DeclarationSlot, LentOrder};
 use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
-use crate::proof::has_with_statement;
+use crate::proof::{has_with_statement, refuse_annex_b_bindings};
 use crate::stamp::{find_stamped_named, is_unedited};
 use crate::units::MachineryDepth;
-use crate::wrapper_calls::{inline_function_wrappers, inline_immediate_wrappers};
+use crate::wrapper_calls::inline_function_wrappers;
+use crate::wrapper_immediate::inline_immediate_wrappers;
 
 pub const ALIAS_FORM_CHECKS: &str = "inline-decoder-wrappers/alias-form-checks";
 
@@ -584,6 +586,10 @@ fn variable_alias_plan<'a>(
 
     let (mut sites, forms, declarations, order) =
         alias_scans(program, cx, (shares && !keeps_machinery, keeps_machinery));
+    if call_checks_apply(cx.opts) {
+        let site = |site: &AliasSite| (site.statement, [site.symbol]);
+        refuse_annex_b_bindings(&mut sites, site, program, cx);
+    }
     if keeps_machinery {
         let scoping = cx.scoping();
         sites.retain(|site| in_target_scope(scoping, site, &targets));

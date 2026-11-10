@@ -13,6 +13,7 @@ use untwist_core::pass::{
 use untwist_core::semantic::{assumed_hazard, rebuild_scoping, scope_hazard, Semantics};
 use untwist_eval::rotation::RotationMemo;
 
+use crate::call_checks::{call_checks_apply, input_binds_a_machinery_name};
 use crate::decoded::SharedHeap;
 use crate::init_order::clear_kept_order;
 use crate::note_set::NoteSet;
@@ -752,13 +753,17 @@ pub fn drop_cleared_observation(notes: &mut Vec<Note>, sweep: &RunReport) {
     }
 }
 
+fn input_spells_the_stamp(program: &Program<'_>, sem: &Semantics, opts: &PassOptions) -> bool {
+    call_checks_apply(opts) && input_binds_a_machinery_name(program.source_text, &sem.scoping)
+}
+
 pub fn run_machinery_sweep<'a>(
     alloc: &'a Allocator,
     program: &mut Program<'a>,
     sem: Semantics,
     opts: &PassOptions,
 ) -> (Semantics, RunReport) {
-    if !holds_stamped_array(program, &sem) {
+    if !holds_stamped_array(program, &sem) || input_spells_the_stamp(program, &sem, opts) {
         return (sem, RunReport::default());
     }
     let mut group = group_of(&[removal::boxed], opts.clone());
@@ -771,7 +776,7 @@ pub fn run_final_machinery<'a>(
     sem: Semantics,
     opts: &PassOptions,
 ) -> (Semantics, RunReport) {
-    if !holds_stamped_array(program, &sem) {
+    if !holds_stamped_array(program, &sem) || input_spells_the_stamp(program, &sem, opts) {
         return (sem, RunReport::default());
     }
     let mut group = group_of(&[removal::boxed, unstamp::boxed], opts.clone());
@@ -855,6 +860,15 @@ fn deobfuscate_with<'a>(
     let _deferral = crate::legacy_reach::open_stage(!opts.unsafe_transforms && !opts.nested_root);
     let mut aggregate = Aggregate::new();
     let sem = prepare(alloc, program, prepared, opts, &mut aggregate);
+    if input_spells_the_stamp(program, &sem, opts) {
+        aggregate.push_note(Note {
+            pass: "deobfuscate",
+            kind: NoteKind::Refusal,
+            message: notes::MACHINERY_NAME_BOUND.to_string(),
+            span: None,
+        });
+        return (sem, aggregate.finish());
+    }
     preflight(&sem, &mut aggregate);
 
     let shared = Shared {
