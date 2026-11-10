@@ -1,9 +1,12 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::fmt;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
+use crate::bundle::BundleOutput;
 use crate::pipeline::Output;
+use crate::plan::{plan, Plan, PlanRefusal, PlannedFile, Role, ACTION_REMOVE, ACTION_WRITE};
 use anyhow::{Context, Result};
 
 pub const DEOBFUSCATED: &str = "deobfuscated.js";
@@ -54,158 +57,96 @@ impl Output {
     }
 }
 
-#[derive(Debug)]
-pub struct PlannedFile {
-    pub path: PathBuf,
-    pub relative: String,
-    pub contents: Vec<u8>,
-}
-
-pub fn is_safe_relative(path: &str) -> bool {
-    if path.is_empty() || path.starts_with('/') || path.contains('\\') {
-        return false;
-    }
-    if path.split('/').any(|segment| segment == "..") {
-        return false;
-    }
-    let first = path.split('/').next().unwrap_or_default();
-    !(first.len() >= 2 && first.as_bytes().get(1) == Some(&b':'))
-}
-
-fn deobfuscated_name(index: usize, total: usize, input: Option<&Path>) -> String {
-    if total <= 1 {
-        return DEOBFUSCATED.to_string();
-    }
-    let stem = input
-        .and_then(Path::file_stem)
-        .and_then(|stem| stem.to_str())
-        .filter(|stem| is_safe_relative(stem))
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("input{index}"));
-    format!("deobfuscated.{stem}.js")
-}
-
-const OWNER_OUTPUT: &str = "the deobfuscated output is already planned at that path";
-const OWNER_MODULE: &str = "an earlier module is already planned at that path";
-
 #[derive(Debug, PartialEq, Eq)]
-pub enum PlanRefusal {
-    Unsafe(String),
-    Collision { path: String, owner: &'static str },
-    NotRemoved(String),
-    SuffixesExhausted(String),
+pub struct OutputConflict {
+    pub paths: Vec<String>,
 }
 
-const MAX_DEOBFUSCATED_SUFFIX: usize = 1000;
-
-fn with_stem_suffix(name: &str, suffix: &str) -> String {
-    match name.rfind('.') {
-        Some(dot) => format!("{}{suffix}{}", &name[..dot], &name[dot..]),
-        None => format!("{name}{suffix}"),
+impl fmt::Display for OutputConflict {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.paths.as_slice() {
+            [] => write!(f, "the output directory already holds this run's files"),
+            [only] => write!(f, "{only:?} already exists in the output directory"),
+            [first, _] => write!(
+                f,
+                "{first:?} and 1 more file already exist in the output directory"
+            ),
+            [first, rest @ ..] => write!(
+                f,
+                "{first:?} and {} more files already exist in the output directory",
+                rest.len()
+            ),
+        }
     }
 }
 
-fn uniquify_deobfuscated_name(base: &str, taken: &mut HashSet<String>) -> Option<String> {
-    let mut candidate = base.to_string();
-    let mut suffix = 2usize;
-    while taken.contains(&candidate) && suffix <= MAX_DEOBFUSCATED_SUFFIX {
-        candidate = with_stem_suffix(base, &format!("-{suffix}"));
-        suffix += 1;
-    }
-    taken.insert(candidate.clone()).then_some(candidate)
-}
+impl std::error::Error for OutputConflict {}
 
-fn plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> (Vec<PlannedFile>, Vec<PlanRefusal>) {
-    if result.single_file {
-        return (single_file_plan(dir, result), Vec::new());
-    }
-    plan_per_module(dir, result, inputs)
-}
-
-fn single_file_plan(dir: &Path, result: &Output) -> Vec<PlannedFile> {
-    let mut planned = vec![PlannedFile {
-        path: dir.join(DEOBFUSCATED),
-        relative: DEOBFUSCATED.to_string(),
-        contents: result.concatenated().into_owned().into_bytes(),
-    }];
-    if let Some(bundle) = result.bundle.as_ref() {
-        planned.push(PlannedFile {
-            path: dir.join(BUNDLE_JSON),
-            relative: BUNDLE_JSON.to_string(),
-            contents: bundle.bundle_json().into_bytes(),
-        });
-    }
-    planned.extend(result.wasm.iter().map(|file| PlannedFile {
-        path: dir.join(&file.path),
-        relative: file.path.clone(),
-        contents: file.bytes.clone(),
-    }));
-    planned
-}
-
-#[derive(Default)]
-struct ModulePlan {
-    planned: Vec<PlannedFile>,
-    refused: Vec<PlanRefusal>,
-    taken: HashSet<String>,
-    outputs: HashSet<String>,
-}
-
-impl ModulePlan {
-    fn plan_output(&mut self, dir: &Path, base: String, code: &str) {
-        let Some(relative) = uniquify_deobfuscated_name(&base, &mut self.taken) else {
-            self.refused.push(PlanRefusal::SuffixesExhausted(base));
-            return;
+fn is_occupied(dir: &Path, relative: &str) -> bool {
+    let mut current = dir.to_path_buf();
+    let mut segments = relative.split('/').peekable();
+    while let Some(segment) = segments.next() {
+        current.push(segment);
+        let Ok(metadata) = std::fs::metadata(&current) else {
+            return false;
         };
-        self.outputs.insert(relative.clone());
-        self.planned.push(PlannedFile {
-            path: dir.join(&relative),
-            relative,
-            contents: code.as_bytes().to_vec(),
-        });
-    }
-
-    fn plan_module(&mut self, dir: &Path, path: String, contents: Vec<u8>) {
-        if !is_safe_relative(&path) {
-            self.refused.push(PlanRefusal::Unsafe(path));
-            return;
+        if segments.peek().is_none() || !metadata.is_dir() {
+            return true;
         }
-        if !self.taken.insert(path.clone()) {
-            let owner = match self.outputs.contains(&path) {
-                true => OWNER_OUTPUT,
-                false => OWNER_MODULE,
-            };
-            self.refused.push(PlanRefusal::Collision { path, owner });
-            return;
-        }
-        self.planned.push(PlannedFile {
-            path: dir.join(&path),
-            relative: path,
-            contents,
-        });
     }
+    false
 }
 
-fn plan_per_module(
-    dir: &Path,
-    result: &Output,
-    inputs: &[PathBuf],
-) -> (Vec<PlannedFile>, Vec<PlanRefusal>) {
-    let mut plan = ModulePlan::default();
-    let total = result.codes.len();
-    for (index, code) in result.codes.iter().enumerate() {
-        let base = deobfuscated_name(index, total, inputs.get(index).map(PathBuf::as_path));
-        plan.plan_output(dir, base, code);
+fn occupied(dir: &Path, planned: &[PlannedFile]) -> Vec<String> {
+    planned
+        .iter()
+        .filter(|file| is_occupied(dir, &file.relative))
+        .map(|file| file.relative.clone())
+        .collect()
+}
+
+fn canonical_inputs(inputs: &[PathBuf]) -> Vec<PathBuf> {
+    inputs
+        .iter()
+        .filter_map(|input| input.canonicalize().ok())
+        .collect()
+}
+
+fn is_input(path: &Path, inputs: &[PathBuf]) -> bool {
+    !inputs.is_empty()
+        && path
+            .canonicalize()
+            .is_ok_and(|canonical| inputs.contains(&canonical))
+}
+
+fn without_inputs(plan: Plan, inputs: &[PathBuf]) -> Plan {
+    let (files, dropped): (Vec<PlannedFile>, Vec<PlannedFile>) = plan
+        .files
+        .into_iter()
+        .partition(|file| !is_input(&file.path, inputs));
+    let dropped_modules = dropped.iter().filter_map(|file| match file.role {
+        Role::Module(index) => Some(index),
+        _ => None,
+    });
+    let unwritten_modules = plan
+        .unwritten_modules
+        .into_iter()
+        .chain(dropped_modules)
+        .collect();
+    let refused = plan
+        .refused
+        .into_iter()
+        .chain(
+            dropped
+                .iter()
+                .map(|file| PlanRefusal::InputFile(file.relative.clone())),
+        )
+        .collect();
+    Plan {
+        files,
+        refused,
+        unwritten_modules,
     }
-    if let Some(bundle) = result.bundle.as_ref() {
-        for file in bundle.files() {
-            plan.plan_module(dir, file.path, file.code.into_bytes());
-        }
-    }
-    for file in &result.wasm {
-        plan.plan_module(dir, file.path.clone(), file.bytes.clone());
-    }
-    (plan.planned, plan.refused)
 }
 
 fn recorded_module_paths(dir: &Path) -> Vec<PathBuf> {
@@ -221,7 +162,7 @@ fn recorded_module_paths(dir: &Path) -> Vec<PathBuf> {
     modules
         .iter()
         .filter_map(|module| module.get("path").and_then(serde_json::Value::as_str))
-        .filter(|path| is_safe_relative(path))
+        .filter(|path| crate::plan::is_safe_relative(path))
         .map(|path| dir.join(path))
         .collect()
 }
@@ -237,6 +178,13 @@ pub fn stale_paths(dir: &Path, planned: &[PlannedFile]) -> Vec<PathBuf> {
     paths
 }
 
+fn is_absent(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+    )
+}
+
 fn symlink_free(dir: &Path, relative: &str) -> Result<bool> {
     let mut current = dir.to_path_buf();
     for segment in relative.split('/') {
@@ -247,7 +195,7 @@ fn symlink_free(dir: &Path, relative: &str) -> Result<bool> {
                     return Ok(false);
                 }
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) if is_absent(&err) => {}
             Err(err) => {
                 return Err(err).with_context(|| format!("check {}", current.display()));
             }
@@ -256,26 +204,40 @@ fn symlink_free(dir: &Path, relative: &str) -> Result<bool> {
     Ok(true)
 }
 
-pub fn clean(dir: &Path, paths: &[PathBuf]) -> Result<Vec<String>> {
-    let mut refused = Vec::new();
-    for path in paths {
-        let Ok(relative) = path.strip_prefix(dir) else {
-            refused.push(path.display().to_string());
-            continue;
-        };
-        let Some(relative) = relative.to_str() else {
-            refused.push(path.display().to_string());
-            continue;
-        };
-        if !symlink_free(dir, relative)? {
-            refused.push(relative.to_string());
-            continue;
-        }
-        if path.is_file() {
-            std::fs::remove_file(path).with_context(|| format!("remove {}", path.display()))?;
-        }
+fn failed(path: &str, action: &'static str, error: &anyhow::Error) -> PlanRefusal {
+    PlanRefusal::Failed {
+        path: path.to_string(),
+        action,
+        reason: format!("{error:#}"),
     }
-    Ok(refused)
+}
+
+fn removed(dir: &Path, path: &Path, relative: &str) -> Result<bool> {
+    if !symlink_free(dir, relative)? {
+        return Ok(false);
+    }
+    if path.is_file() {
+        std::fs::remove_file(path).with_context(|| format!("remove {}", path.display()))?;
+    }
+    Ok(true)
+}
+
+fn removal_refusal(dir: &Path, path: &Path) -> Option<PlanRefusal> {
+    let Some(relative) = path.strip_prefix(dir).ok().and_then(Path::to_str) else {
+        return Some(PlanRefusal::NotRemoved(path.display().to_string()));
+    };
+    match removed(dir, path, relative) {
+        Ok(true) => None,
+        Ok(false) => Some(PlanRefusal::NotRemoved(relative.to_string())),
+        Err(error) => Some(failed(relative, ACTION_REMOVE, &error)),
+    }
+}
+
+pub fn clean(dir: &Path, paths: &[PathBuf]) -> Vec<PlanRefusal> {
+    paths
+        .iter()
+        .filter_map(|path| removal_refusal(dir, path))
+        .collect()
 }
 
 fn deepest_existing_ancestor(path: &Path) -> PathBuf {
@@ -320,31 +282,97 @@ fn write_via_temp_file(path: &Path, contents: &[u8]) -> Result<()> {
         .with_context(|| format!("persist {}", path.display()))
 }
 
-fn write_all(dir: &Path, planned: &[PlannedFile]) -> Result<(Vec<String>, Vec<String>)> {
-    let dir_canonical = dir
-        .canonicalize()
-        .with_context(|| format!("canonicalize {}", dir.display()))?;
-    let mut written = Vec::with_capacity(planned.len());
-    let mut refused = Vec::new();
-    for file in planned {
-        if !symlink_free(dir, &file.relative)? {
-            refused.push(file.relative.clone());
-            continue;
+struct Target<'a> {
+    dir: &'a Path,
+    dir_canonical: PathBuf,
+}
+
+impl Target<'_> {
+    fn written(&self, file: &PlannedFile, contents: &[u8]) -> Result<bool> {
+        if !symlink_free(self.dir, &file.relative)? {
+            return Ok(false);
         }
-        let contained = is_contained(&dir_canonical, &file.path)
+        let contained = is_contained(&self.dir_canonical, &file.path)
             .with_context(|| format!("check {}", file.path.display()))?;
         if !contained {
-            refused.push(file.relative.clone());
-            continue;
+            return Ok(false);
         }
         if let Some(parent) = file.path.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("create {}", parent.display()))?;
         }
-        write_via_temp_file(&file.path, &file.contents)?;
-        written.push(file.relative.clone());
+        write_via_temp_file(&file.path, contents)?;
+        Ok(true)
     }
-    Ok((written, refused))
+
+    fn refusal(&self, file: &PlannedFile, contents: &[u8]) -> Option<PlanRefusal> {
+        match self.written(file, contents) {
+            Ok(true) => None,
+            Ok(false) => Some(PlanRefusal::Unsafe(file.relative.clone())),
+            Err(error) => Some(failed(&file.relative, ACTION_WRITE, &error)),
+        }
+    }
+}
+
+fn listing_contents<'a>(
+    file: &'a PlannedFile,
+    bundle: Option<&BundleOutput>,
+    unwritten_modules: &[usize],
+) -> Cow<'a, [u8]> {
+    match bundle {
+        Some(bundle) => Cow::Owned(
+            bundle
+                .listing_without(unwritten_modules)
+                .json()
+                .into_bytes(),
+        ),
+        None => Cow::Borrowed(&file.contents),
+    }
+}
+
+struct Written {
+    files: Vec<String>,
+    refused: Vec<PlanRefusal>,
+    unwritten_modules: Vec<usize>,
+}
+
+fn write_all(dir: &Path, plan: &Plan, bundle: Option<&BundleOutput>) -> Result<Written> {
+    let target = Target {
+        dir,
+        dir_canonical: dir
+            .canonicalize()
+            .with_context(|| format!("canonicalize {}", dir.display()))?,
+    };
+    let mut unwritten_modules = plan.unwritten_modules.clone();
+    let mut refusals: Vec<Option<PlanRefusal>> = Vec::with_capacity(plan.files.len());
+    for file in &plan.files {
+        let refusal = match file.role {
+            Role::Listing => None,
+            _ => target.refusal(file, &file.contents),
+        };
+        if let (Some(_), Role::Module(index)) = (&refusal, file.role) {
+            unwritten_modules.push(index);
+        }
+        refusals.push(refusal);
+    }
+    for (file, refusal) in plan.files.iter().zip(&mut refusals) {
+        if file.role == Role::Listing {
+            let contents = listing_contents(file, bundle, &unwritten_modules);
+            *refusal = target.refusal(file, &contents);
+        }
+    }
+    unwritten_modules.sort_unstable();
+    Ok(Written {
+        files: plan
+            .files
+            .iter()
+            .zip(&refusals)
+            .filter(|(_, refusal)| refusal.is_none())
+            .map(|(file, _)| file.relative.clone())
+            .collect(),
+        refused: refusals.into_iter().flatten().collect(),
+        unwritten_modules,
+    })
 }
 
 #[derive(Debug)]
@@ -353,9 +381,10 @@ pub struct WriteReport {
     pub refused: Vec<PlanRefusal>,
     pub stale: Vec<String>,
     pub first: Option<PathBuf>,
+    pub unwritten_modules: Vec<usize>,
 }
 
-fn left_behind(dir: &Path, planned: &[PlannedFile]) -> (Vec<String>, Vec<String>) {
+fn left_behind(dir: &Path, planned: &[PlannedFile]) -> (Vec<String>, Vec<PlanRefusal>) {
     let planned_paths: HashSet<&Path> = planned.iter().map(|file| file.path.as_path()).collect();
     let mut stale = Vec::new();
     let mut refused = Vec::new();
@@ -365,10 +394,17 @@ fn left_behind(dir: &Path, planned: &[PlannedFile]) -> (Vec<String>, Vec<String>
         }
         match path.strip_prefix(dir).ok().and_then(Path::to_str) {
             Some(relative) => stale.push(relative.to_string()),
-            None => refused.push(path.display().to_string()),
+            None => refused.push(PlanRefusal::NotRemoved(path.display().to_string())),
         }
     }
     (stale, refused)
+}
+
+fn removable(dir: &Path, planned: &[PlannedFile], inputs: &[PathBuf]) -> Vec<PathBuf> {
+    stale_paths(dir, planned)
+        .into_iter()
+        .filter(|path| !is_input(path, inputs))
+        .collect()
 }
 
 impl Output {
@@ -377,7 +413,8 @@ impl Output {
         dir: &Path,
         inputs: &[PathBuf],
     ) -> (Vec<PlannedFile>, Vec<PlanRefusal>) {
-        plan(dir, self, inputs)
+        let plan = plan(dir, self, inputs);
+        (plan.files, plan.refused)
     }
 
     pub fn write_to(&self, dir: impl AsRef<Path>) -> Result<WriteReport> {
@@ -390,197 +427,32 @@ impl Output {
         inputs: &[PathBuf],
         force: bool,
     ) -> Result<WriteReport> {
-        let (planned, mut refused) = self.plan_write(dir, inputs);
+        let plan = plan(dir, self, inputs);
+        if !force {
+            let paths = occupied(dir, &plan.files);
+            if !paths.is_empty() {
+                return Err(OutputConflict { paths }.into());
+            }
+        }
+        let inputs = canonical_inputs(inputs);
+        let mut plan = without_inputs(plan, &inputs);
         let (stale, not_removed) = match force && dir.is_dir() {
-            true => (Vec::new(), clean(dir, &stale_paths(dir, &planned))?),
-            false => left_behind(dir, &planned),
+            true => (
+                Vec::new(),
+                clean(dir, &removable(dir, &plan.files, &inputs)),
+            ),
+            false => left_behind(dir, &plan.files),
         };
-        refused.extend(not_removed.into_iter().map(PlanRefusal::NotRemoved));
+        plan.refused.extend(not_removed);
         std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
-        let (files, write_refused) = write_all(dir, &planned)?;
-        refused.extend(write_refused.into_iter().map(PlanRefusal::Unsafe));
+        let written = write_all(dir, &plan, self.bundle.as_ref())?;
+        plan.refused.extend(written.refused);
         Ok(WriteReport {
-            files,
-            refused,
+            files: written.files,
+            refused: plan.refused,
             stale,
-            first: planned.first().map(|file| file.path.clone()),
+            first: plan.files.first().map(|file| file.path.clone()),
+            unwritten_modules: written.unwritten_modules,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bundle::{BundleOutput, ModuleOutput};
-
-    fn output_with(codes: Vec<String>, bundle: Option<BundleOutput>) -> Output {
-        Output {
-            codes,
-            stages: Vec::new(),
-            parse_diagnostics: Vec::new(),
-            parse_errors: 0,
-            notes: Vec::new(),
-            bundle,
-            panicked: Vec::new(),
-            depth_refused: Vec::new(),
-            unpack_panicked: false,
-            single_file: false,
-            heap_peak: 0,
-            memory_peak: 0,
-            budget_hits: Vec::new(),
-            stats: crate::RunStats::default(),
-            snapshots: Vec::new(),
-            decoded_strings: Vec::new(),
-            statement_spans: None,
-            #[cfg(feature = "refusal-spans")]
-            refusal_spans: Vec::new(),
-            #[cfg(feature = "refusal-spans")]
-            refusal_sites: Vec::new(),
-            wasm: Vec::new(),
-            wasm_unresolved: Vec::new(),
-            wasm_check: crate::WasmCheck::default(),
-            wasm_unchecked: false,
-            wasm_panicked: false,
-        }
-    }
-
-    fn bundle_with(paths: &[&str]) -> BundleOutput {
-        BundleOutput {
-            kind: "webpack".to_string(),
-            entry_id: None,
-            chunk_ids: Vec::new(),
-            modules: paths
-                .iter()
-                .enumerate()
-                .map(|(index, path)| ModuleOutput {
-                    id: index.to_string(),
-                    path: (*path).to_string(),
-                    is_entry: false,
-                    code: format!("module {index}"),
-                    span: None,
-                })
-                .collect(),
-        }
-    }
-
-    #[test]
-    fn a_collision_names_which_file_already_owns_the_path() {
-        let dir = Path::new("/out");
-        let against_output = output_with(
-            vec!["deobfuscated code".to_string()],
-            Some(bundle_with(&[DEOBFUSCATED])),
-        );
-        let (_, refused) = plan(dir, &against_output, &[]);
-        assert_eq!(
-            refused,
-            vec![PlanRefusal::Collision {
-                path: DEOBFUSCATED.to_string(),
-                owner: OWNER_OUTPUT,
-            }]
-        );
-        let against_module = output_with(
-            vec!["deobfuscated code".to_string()],
-            Some(bundle_with(&["shared.js", "shared.js"])),
-        );
-        let (_, refused) = plan(dir, &against_module, &[]);
-        assert_eq!(
-            refused,
-            vec![PlanRefusal::Collision {
-                path: "shared.js".to_string(),
-                owner: OWNER_MODULE,
-            }]
-        );
-    }
-
-    #[test]
-    fn a_module_colliding_with_the_deobfuscated_output_is_refused() {
-        let dir = Path::new("/out");
-        let bundle = BundleOutput {
-            kind: "webpack".to_string(),
-            entry_id: None,
-            chunk_ids: Vec::new(),
-            modules: vec![ModuleOutput {
-                id: "./deobfuscated".to_string(),
-                path: "deobfuscated.js".to_string(),
-                is_entry: false,
-                code: "module code".to_string(),
-                span: None,
-            }],
-        };
-        let result = output_with(vec!["deobfuscated code".to_string()], Some(bundle));
-        let (planned, refused) = plan(dir, &result, &[]);
-        let deobfuscated = planned
-            .iter()
-            .find(|file| file.relative == DEOBFUSCATED)
-            .expect("deobfuscated file planned");
-        assert_eq!(deobfuscated.contents, b"deobfuscated code");
-        assert!(planned.iter().all(|file| file.contents != b"module code"));
-        assert!(refused.iter().any(
-            |refusal| matches!(refusal, PlanRefusal::Collision { path, .. } if path == DEOBFUSCATED)
-        ));
-    }
-
-    #[test]
-    fn a_deobfuscated_name_with_every_suffix_taken_is_refused_not_planned_twice() {
-        let mut taken: HashSet<String> = HashSet::new();
-        taken.insert("deobfuscated.a.js".to_string());
-        for suffix in 2..=MAX_DEOBFUSCATED_SUFFIX {
-            taken.insert(format!("deobfuscated.a-{suffix}.js"));
-        }
-        let before = taken.len();
-        assert_eq!(
-            uniquify_deobfuscated_name("deobfuscated.a.js", &mut taken),
-            None
-        );
-        assert_eq!(taken.len(), before);
-    }
-
-    #[test]
-    fn deobfuscated_names_are_uniquified_on_collision() {
-        let dir = Path::new("/out");
-        let result = output_with(vec!["first".to_string(), "second".to_string()], None);
-        let inputs = vec![PathBuf::from("a/bundle.js"), PathBuf::from("b/bundle.js")];
-        let (planned, refused) = plan(dir, &result, &inputs);
-        assert!(refused.is_empty());
-        let names: Vec<&str> = planned.iter().map(|file| file.relative.as_str()).collect();
-        assert_eq!(
-            names,
-            vec!["deobfuscated.bundle.js", "deobfuscated.bundle-2.js"]
-        );
-    }
-
-    #[test]
-    fn empty_path_is_unsafe() {
-        assert!(!is_safe_relative(""));
-    }
-
-    #[test]
-    fn absolute_path_is_unsafe() {
-        assert!(!is_safe_relative("/etc/passwd"));
-    }
-
-    #[test]
-    fn backslash_path_is_unsafe() {
-        assert!(!is_safe_relative("sub\\file.js"));
-    }
-
-    #[test]
-    fn parent_segment_is_unsafe() {
-        assert!(!is_safe_relative("../escape.js"));
-    }
-
-    #[test]
-    fn nested_parent_segment_is_unsafe() {
-        assert!(!is_safe_relative("sub/../../escape.js"));
-    }
-
-    #[test]
-    fn drive_letter_path_is_unsafe() {
-        assert!(!is_safe_relative("C:/escape.js"));
-    }
-
-    #[test]
-    fn safe_relative_path_is_accepted() {
-        assert!(is_safe_relative("sub/index.js"));
     }
 }

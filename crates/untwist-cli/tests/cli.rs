@@ -538,7 +538,13 @@ fn a_hard_linked_target_file_is_not_written_through() {
     let victim = outside.path().join("victim.js");
     std::fs::write(&victim, "keep me").unwrap();
     std::fs::hard_link(&victim, outdir.join("1.js")).unwrap();
-    let out = bin().arg("-o").arg(&outdir).arg(&input).output().unwrap();
+    let out = bin()
+        .arg("-o")
+        .arg(&outdir)
+        .arg("-f")
+        .arg(&input)
+        .output()
+        .unwrap();
     assert!(out.status.success());
     assert_eq!(std::fs::read_to_string(&victim).unwrap(), "keep me");
     assert_eq!(

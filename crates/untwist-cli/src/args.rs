@@ -22,7 +22,7 @@ pub struct Args {
     #[arg(
         short,
         long,
-        help = "with --output, overwrite an existing directory and delete the files a previous run left there"
+        help = "with --output, overwrite the files this run writes and delete the files a previous run left there"
     )]
     pub force: bool,
     #[arg(

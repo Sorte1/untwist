@@ -3,6 +3,7 @@ mod diagnostics;
 mod options;
 mod passes;
 mod pipeline;
+mod plan;
 mod plugin;
 mod report;
 mod stats;
@@ -10,7 +11,7 @@ mod wasm;
 mod wasm_graph;
 mod write;
 
-pub use bundle::{BundleOutput, FileOutput, ModuleOutput};
+pub use bundle::{BundleListing, BundleOutput, FileOutput, ModuleOutput};
 pub use options::{Isolation, Options, Progress, ProgressSink, TestHooks, TEST_HOOKS};
 pub use passes::{pass_named, PassInfo, PASSES};
 pub use pipeline::{
@@ -24,6 +25,7 @@ pub use pipeline::{
 pub use pipeline::{DecodedSite, Snapshot, SnapshotCode};
 #[cfg(feature = "refusal-spans")]
 pub use pipeline::{RefusalSite, SiteAt};
+pub use plan::{is_safe_relative, PlanRefusal, PlannedFile};
 pub use plugin::{PluginCtor, Plugins, Stage};
 pub use report::{stage_rows, StageReport, StageRow};
 pub use stats::{CollisionStats, DecodeStats, RunStats};
@@ -36,12 +38,9 @@ pub use untwist_rename::RenameMode;
 pub use untwist_unpack::{Mapping, MappingMatcher};
 pub use wasm::{
     SuppliedWasm, WasmCheck, WasmFile, WasmOrigin, WasmReference, WasmSupply, MAX_WASM_BYTES,
-    WASM_PANICKED,
+    WASM_DIR, WASM_PANICKED,
 };
-pub use write::{
-    clean, is_safe_relative, stale_paths, PlanRefusal, PlannedFile, WriteReport, BUNDLE_JSON,
-    DEOBFUSCATED,
-};
+pub use write::{clean, stale_paths, OutputConflict, WriteReport, BUNDLE_JSON, DEOBFUSCATED};
 
 pub fn all_pass_ctors<'a>() -> Vec<PassCtor<'a>> {
     let mut ctors = untwist_unminify::prepare_ctors();

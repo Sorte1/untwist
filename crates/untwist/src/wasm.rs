@@ -9,7 +9,7 @@ use crate::pipeline::{admits_reparse, Boundary, Output};
 use crate::write::DEOBFUSCATED;
 
 const PASS: &str = "wasm";
-const WASM_DIR: &str = "wasm";
+pub const WASM_DIR: &str = "wasm";
 const HASHED_SUFFIX: &str = ".module.wasm";
 const MAX_SUFFIX: usize = 1000;
 
