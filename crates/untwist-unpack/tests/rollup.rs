@@ -517,7 +517,10 @@ fn a_function_declared_twice_keeps_only_its_last_declaration() {
     let all: Vec<&str> = files.iter().map(|(_, code)| code.as_str()).collect();
     let all = all.join("\n");
     assert_eq!(all.matches("function f()").count(), 1, "{files:?}");
-    assert!(all.contains("return 2;") && !all.contains("return 1;"), "{files:?}");
+    assert!(
+        all.contains("return 2;") && !all.contains("return 1;"),
+        "{files:?}"
+    );
     assert_eq!(split_taken(&source).0, Some(files));
 }
 

@@ -119,7 +119,10 @@ pub fn loader(scoping: &Scoping, source: &Program<'_>, layout: &Layout<'_, '_>) 
         .collect();
     let foreign =
         (0..prelude.len()).any(|index| !known.contains(&index) && mentions(&prelude[index]));
-    let prefix = layout.define.strip_suffix(DEFINE_SUFFIX).unwrap_or_default();
+    let prefix = layout
+        .define
+        .strip_suffix(DEFINE_SUFFIX)
+        .unwrap_or_default();
     match (known.as_slice(), foreign) {
         ([], false) => Loader::Absent,
         ([at], false)

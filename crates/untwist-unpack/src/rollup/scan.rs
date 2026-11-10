@@ -92,7 +92,11 @@ fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Option<
         let redeclarations = scoping.symbol_redeclarations(symbol);
         if !redeclarations.is_empty() {
             let declared: Vec<Span> = std::iter::once(span)
-                .chain(redeclarations.iter().map(|redeclaration| redeclaration.span))
+                .chain(
+                    redeclarations
+                        .iter()
+                        .map(|redeclaration| redeclaration.span),
+                )
                 .collect();
             for shadowed in shadowed_functions(items, &declared)? {
                 facts.dropped[shadowed as usize] = true;

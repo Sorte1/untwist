@@ -442,9 +442,15 @@ fn a_loader_that_is_not_metros_is_refused_whatever_is_trusted() {
 fn the_loader_prefix_must_be_the_one_the_definitions_use() {
     let known = bundle_with("", "");
     let prefixed = known
-        .replace("__METRO_GLOBAL_PREFIX__=''", "__METRO_GLOBAL_PREFIX__='app'")
+        .replace(
+            "__METRO_GLOBAL_PREFIX__=''",
+            "__METRO_GLOBAL_PREFIX__='app'",
+        )
         .replace("\n__d(", "\napp__d(");
-    let unprefixed_calls = known.replace("__METRO_GLOBAL_PREFIX__=''", "__METRO_GLOBAL_PREFIX__='app'");
+    let unprefixed_calls = known.replace(
+        "__METRO_GLOBAL_PREFIX__=''",
+        "__METRO_GLOBAL_PREFIX__='app'",
+    );
     let prefixed_run = prefixed.replace("\n__r(0);", "\napp__r(0);");
     let rebound = bundle_with("__METRO_GLOBAL_PREFIX__ = 'x';\n", "");
     assert_ne!(prefixed, known);
