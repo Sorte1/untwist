@@ -12,6 +12,7 @@ fn no_note_is_a_substring_of_another() {
 fn every_constant_is_catalogued_exactly_once() {
     let sources = [
         include_str!("../src/notes.rs"),
+        include_str!("../src/browserify/notes.rs"),
         include_str!("../src/esbuild/notes.rs"),
         include_str!("../src/bun/notes.rs"),
         include_str!("../src/rollup/notes.rs"),

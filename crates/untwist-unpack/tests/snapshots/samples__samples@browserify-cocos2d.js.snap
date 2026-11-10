@@ -7,7 +7,7 @@ type: browserify
 entry: BattleHint
 
 === BattleHint -> index.js (entry)
-
+require("./GChangeCount.js");
 
 === GChangeCount -> GChangeCount.js
 

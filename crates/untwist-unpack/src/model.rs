@@ -138,6 +138,7 @@ pub struct Bundle<'a> {
     pub modules: IndexMap<String, Module<'a>>,
     pub runtime: Option<Runtime<'a>>,
     pub fresh_requires: Vec<(String, String)>,
+    pub later_entries: Vec<Option<String>>,
     pub link: Option<String>,
     pub fixed_paths: Vec<String>,
 }
@@ -152,6 +153,7 @@ impl<'a> Bundle<'a> {
             modules: IndexMap::new(),
             runtime: None,
             fresh_requires: Vec::new(),
+            later_entries: Vec::new(),
             link: None,
             fixed_paths: Vec::new(),
         }

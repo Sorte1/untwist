@@ -41,6 +41,10 @@ All notable changes to this project are documented in this file. The format is b
   assignment inside `with` keeps its comma sequence. JSX reconstruction leaves an automatic-runtime
   call alone when `children` is not the last prop, appears twice or holds an array with holes.
 
+- An unpacked browserify bundle now loads the modules the bundle loads. Each `require` whose
+  request is in the module's dependency map names the file of the mapped module, so two versions
+  of one package, a bundled `events` or `buffer` shim and a module reached from two directories
+  link right. Every entry of a bundle with several entries runs from `index.js`, in order.
 - An unpacked esbuild bundle no longer hands a module a stale copy of a binding. A binding that
   an `__esm` init assigns is now exported from `_runtime/esbuild.js` through a getter and read as
   `runtime.name`; before, a module that read it after the init ran still saw `undefined`. A bundle

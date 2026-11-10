@@ -13,7 +13,7 @@ function add(a, b) {
 module.exports = add;
 
 === 2 -> index.js (entry)
-const sum = require("./sum");
+const sum = require("./sum.js");
 const numbers = [1, 2, 3];
 const result = sum(numbers);
 const outputElement = document.getElementById("output");
@@ -29,8 +29,8 @@ function reduce(list, iteratee, memo) {
 module.exports = reduce;
 
 === 4 -> sum.js
-var reduce = require("./reduce");
-var add = require("./add");
+var reduce = require("./reduce.js");
+var add = require("./add.js");
 function sum(list) {
   return reduce(list, add, 0);
 }

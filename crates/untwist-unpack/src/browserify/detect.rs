@@ -5,12 +5,23 @@ use untwist_core::ast_util::prop::prop_name;
 
 use crate::browserify::tree::{dependency_tree, infer_index_directories, resolve_dependency_tree};
 use crate::matcher::{anonymous_factory, argument_expression, call_parts, literal_id, param_names};
-use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module};
+use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module, RequireParam};
 use crate::path::PosixPath;
 use crate::rename::rename_factory_parameters;
 use crate::UnpackOptions;
 
 pub const BROWSERIFY_PARAMS: [&str; 3] = ["require", "module", "exports"];
+const REQUIRE_PARAM: usize = 0;
+
+type Entries = (String, Vec<Option<String>>);
+
+fn require_param(params: usize, fresh: bool) -> RequireParam {
+    match (params > REQUIRE_PARAM, fresh) {
+        (false, _) => RequireParam::Absent,
+        (true, true) => RequireParam::Fresh,
+        (true, false) => RequireParam::Default,
+    }
+}
 
 fn three_identifier_params(params: &FormalParameters<'_>) -> bool {
     params.rest.is_none()
@@ -122,7 +133,7 @@ fn assign_resolved_paths(bundle: &mut Bundle<'_>, resolved: &IndexMap<String, St
     }
 }
 
-fn browserify<'k, 'a>(expr: &'k Expression<'a>) -> Option<(&'k ObjectExpression<'a>, String)> {
+fn browserify<'k, 'a>(expr: &'k Expression<'a>) -> Option<(&'k ObjectExpression<'a>, Entries)> {
     let (callee, arguments) = call_parts(expr)?;
     if arguments.len() != 3 || !is_prelude(callee) {
         return None;
@@ -140,7 +151,13 @@ fn browserify<'k, 'a>(expr: &'k Expression<'a>) -> Option<(&'k ObjectExpression<
         return None;
     };
     let entry_id = literal_id(entries.elements.first()?.as_expression()?)?;
-    Some((files, entry_id))
+    let later = entries
+        .elements
+        .iter()
+        .skip(1)
+        .map(|element| element.as_expression().and_then(literal_id))
+        .collect();
+    Some((files, (entry_id, later)))
 }
 
 pub fn is_browserify(expr: &Expression<'_>) -> bool {
@@ -174,20 +191,28 @@ pub fn detect_browserify_with<'a>(
     bodies: &mut Bodies<'a>,
     options: UnpackOptions,
 ) -> Option<Bundle<'a>> {
-    let (files, entry_id) = browserify(expr)?;
+    let (files, (entry_id, later_entries)) = browserify(expr)?;
     let mut bundle = Bundle::new(BundleKind::Browserify, Some(entry_id.clone()));
+    bundle.later_entries = later_entries;
     for property in &files.properties {
         let entry = module_entry(property)?;
         let mut program = module_from_body_with(alloc, source, entry.body, bodies);
-        rename_factory_parameters(
+        let params = param_names(entry.params);
+        let fresh = rename_factory_parameters(
             alloc,
             &mut program,
-            (&param_names(entry.params), &BROWSERIFY_PARAMS),
+            (&params, &BROWSERIFY_PARAMS),
             options.conservative,
-        );
+        )
+        .into_iter()
+        .find_map(|(index, name)| (index == REQUIRE_PARAM).then_some(name));
         let is_entry = entry.id == entry_id;
         let mut module = Module::new(entry.id.clone(), program, is_entry);
         module.dependencies = entry.dependencies;
+        module.runtime_require = require_param(params.len(), fresh.is_some());
+        bundle
+            .fresh_requires
+            .extend(fresh.map(|name| (entry.id.clone(), name)));
         bundle.modules.insert(entry.id, module);
     }
     if bundle.modules.is_empty() {
