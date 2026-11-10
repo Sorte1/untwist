@@ -29,29 +29,17 @@ fn transformed(options: &Options, source: &str) -> String {
 }
 
 #[test]
-fn every_sab_row_diverges_from_node_once_the_induction_is_trusted_everywhere() {
+fn every_ref_row_prints_like_node_even_when_the_induction_is_trusted_everywhere() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let sabotage = with_prefix("sab-");
-    assert!(sabotage.len() >= 8, "found {} rows", sabotage.len());
+    let refused = with_prefix("ref-");
+    assert!(refused.len() >= 8, "found {} rows", refused.len());
     let safe = options(false);
     let run_safe = |source: &str| transformed(&safe, source);
     let modes: [Mode<'_>; 1] = [("mutant", &run_safe)];
     trust_fresh_native_induction_for_tests(true);
-    let diverged = node_rows::mismatches(&node, &sabotage, &modes);
+    let wrong = node_rows::mismatches(&node, &refused, &modes);
     trust_fresh_native_induction_for_tests(false);
-    let names: Vec<&str> = diverged
-        .iter()
-        .filter_map(|row| row.split(" (mutant):").next())
-        .collect();
-    let kept: Vec<&str> = sabotage
-        .iter()
-        .map(|(label, _)| label.as_str())
-        .filter(|label| !names.contains(label))
-        .collect();
-    assert!(
-        kept.is_empty(),
-        "these rows still print like node under the mutant: {kept:?}"
-    );
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
