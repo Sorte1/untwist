@@ -22,6 +22,7 @@ pub mod rollup;
 pub mod runtime;
 pub mod scan;
 pub mod share;
+pub mod specifier;
 pub mod systemjs;
 pub mod turbopack;
 pub mod umd;

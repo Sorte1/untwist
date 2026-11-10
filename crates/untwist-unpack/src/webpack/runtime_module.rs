@@ -4,8 +4,8 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use rustc_hash::FxHashSet;
 
 use crate::model::{Bundle, BundleKind, Module, Runtime};
-use crate::path::relative_path;
 use crate::runtime::{js_string, module_of, runtime_path, synthetic_statements};
+use crate::specifier::ModulePaths;
 use crate::webpack::shadow;
 use oxc_syntax::scope::ScopeFlags;
 
@@ -168,11 +168,12 @@ pub fn needed(runtime: &Runtime<'_>, root: &str) -> Option<Vec<usize>> {
 
 fn paths_object(bundle: &Bundle<'_>) -> String {
     let from = runtime_path(BundleKind::Webpack);
+    let paths = ModulePaths::of(bundle);
     let entries: Vec<String> = bundle
         .modules
         .iter()
         .map(|(id, module)| {
-            let path = relative_path(&from, module.path.as_str());
+            let path = paths.specifier(&from, module.path.as_str());
             format!("{}: {}", js_string(id), js_string(&path))
         })
         .collect();

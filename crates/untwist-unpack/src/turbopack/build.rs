@@ -9,9 +9,10 @@ use super::{ENTRY_ID, NAMES};
 use crate::esbuild::build::has_use_strict;
 use crate::matcher::param_names;
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module};
-use crate::path::{relative_path, PosixPath};
+use crate::path::PosixPath;
 use crate::rename::rename_factory_parameters;
 use crate::runtime::{js_string, synthetic_statements};
+use crate::specifier::ModulePaths;
 
 pub const CONTEXT: &str = "__turbopack_context__";
 
@@ -152,7 +153,7 @@ pub fn loader_bundle<'a>(
     let entry_path = format!("{ENTRY_ID}.js");
     let text = format!(
         "require({})({});\n{CONTEXT}.r({});\n",
-        js_string(&relative_path(&entry_path, &path)),
+        js_string(&ModulePaths::default().specifier(&entry_path, &path)),
         js_string(&found.name),
         literal(&found.entry)
     );

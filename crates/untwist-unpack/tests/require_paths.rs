@@ -76,11 +76,11 @@ fn specifiers_are_relative_to_the_requiring_module() {
         Some("2"),
     );
     bundle.modules["2"].path = PosixPath::parse("utils/color.js").expect("safe");
-    bundle.modules["4"].path = PosixPath::parse("node_modules/package").expect("safe");
+    bundle.modules["4"].path = PosixPath::parse("node_modules/package/index.js").expect("safe");
     replace_require_paths(&alloc, &mut bundle);
     assert_eq!(
         bundle.modules["2"].code().trim_end(),
-        "const a = require(\"../1.js\");\nconst b = require(\"package\");"
+        "const a = require(\"../1.js\");\nconst b = require(\"package/index.js\");"
     );
 }
 

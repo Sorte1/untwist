@@ -50,20 +50,7 @@ pub fn join_posix(base: &str, rest: &str) -> String {
     normalize_posix(&format!("{base}/{rest}"))
 }
 
-pub fn relative_path(from: &str, to: &str) -> String {
-    let to = normalize_posix(to);
-    if let Some(bare) = to.strip_prefix(NODE_MODULES) {
-        return bare.to_string();
-    }
-    let relative = relative_posix(dirname_of(from), &to);
-    if relative.starts_with('.') {
-        relative
-    } else {
-        format!("./{relative}")
-    }
-}
-
-fn relative_posix(from: &str, to: &str) -> String {
+pub(crate) fn relative_posix(from: &str, to: &str) -> String {
     let from_parts: Vec<&str> = from.split('/').filter(|s| !s.is_empty()).collect();
     let to_parts: Vec<&str> = to.split('/').filter(|s| !s.is_empty()).collect();
     let shared = from_parts
