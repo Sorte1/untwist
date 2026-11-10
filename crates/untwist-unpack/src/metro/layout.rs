@@ -1,5 +1,5 @@
 use oxc_ast::ast::*;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::prop::number_key;
 
 use crate::matcher::{argument_expression, param_names, Factory};
@@ -11,6 +11,7 @@ const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 
 pub struct Def<'k, 'a> {
     pub id: String,
+    pub numeric: bool,
     pub function: &'k Function<'a>,
     pub deps: Option<&'k ArrayExpression<'a>>,
 }
@@ -33,6 +34,7 @@ pub struct Layout<'k, 'a> {
     pub prelude: usize,
     pub defs: Vec<Def<'k, 'a>>,
     pub runs: Vec<(String, bool)>,
+    pub numeric: bool,
 }
 
 fn called<'k, 'a>(statement: &'k Statement<'a>) -> Option<(&'k str, &'k CallExpression<'a>)> {
@@ -64,6 +66,11 @@ pub fn module_id(expression: &Expression<'_>) -> Option<String> {
         Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
         _ => None,
     }
+}
+
+pub fn typed_id(expression: &Expression<'_>) -> Option<(String, bool)> {
+    let numeric = matches!(expression, Expression::NumericLiteral(_));
+    module_id(expression).map(|id| (id, numeric))
 }
 
 fn argument<'k, 'a>(call: &'k CallExpression<'a>, index: usize) -> Option<&'k Expression<'a>> {
@@ -138,13 +145,18 @@ fn definition<'k, 'a>(call: &'k CallExpression<'a>) -> Option<Def<'k, 'a>> {
         return None;
     }
     let function = factory_function(argument(call, 0)?)?;
-    let id = module_id(argument(call, 1)?)?;
+    let (id, numeric) = typed_id(argument(call, 1)?)?;
     let deps = match argument(call, 2) {
         Some(expression) => Some(dependency_list(expression)?),
         None => None,
     };
     let extras_inert = (3..call.arguments.len()).all(|at| argument(call, at).is_some_and(is_inert));
-    extras_inert.then_some(Def { id, function, deps })
+    extras_inert.then_some(Def {
+        id,
+        numeric,
+        function,
+        deps,
+    })
 }
 
 fn run_target(statement: &Statement<'_>, prefix: &str) -> Option<(String, bool)> {
@@ -153,32 +165,40 @@ fn run_target(statement: &Statement<'_>, prefix: &str) -> Option<(String, bool)>
     if (run_prefix != prefix && !run_prefix.is_empty()) || call.arguments.len() != 1 {
         return None;
     }
-    let target = argument(call, 0)?;
-    let numeric = matches!(target, Expression::NumericLiteral(_));
-    Some((module_id(target)?, numeric))
+    typed_id(argument(call, 0)?)
 }
 
 fn chosen_prefix<'k>(top: &'k [Statement<'_>]) -> Option<&'k str> {
-    let mut counts: Vec<(&str, usize)> = Vec::new();
-    for statement in top {
+    let mut counts: FxHashMap<&str, (usize, usize)> = FxHashMap::default();
+    for (order, statement) in top.iter().enumerate() {
         let Some(prefix) = define_prefix(statement) else {
             continue;
         };
         let valid = called(statement)
             .and_then(|(_, call)| definition(call))
             .is_some();
-        match counts.iter_mut().find(|(seen, _)| *seen == prefix) {
-            Some((_, count)) => *count += usize::from(valid),
-            None => counts.push((prefix, usize::from(valid))),
-        }
+        counts.entry(prefix).or_insert((order, 0)).1 += usize::from(valid);
     }
-    let mut chosen: Option<(&str, usize)> = None;
-    for (prefix, count) in counts {
-        if count > 0 && chosen.is_none_or(|(_, best)| count > best) {
-            chosen = Some((prefix, count));
-        }
-    }
-    chosen.map(|(prefix, _)| prefix)
+    counts
+        .into_iter()
+        .filter(|(_, (_, count))| *count > 0)
+        .max_by_key(|(_, (first, count))| (*count, std::cmp::Reverse(*first)))
+        .map(|(prefix, _)| prefix)
+}
+
+fn keyable(id: &str) -> bool {
+    id != "__proto__" && id != super::ENTRY_ID
+}
+
+fn deps_typed(deps: Option<&ArrayExpression<'_>>, numeric: bool) -> bool {
+    deps.is_none_or(|deps| {
+        deps.elements.iter().all(|element| {
+            element
+                .as_expression()
+                .and_then(typed_id)
+                .is_some_and(|(id, kind)| kind == numeric && keyable(&id))
+        })
+    })
 }
 
 pub fn probe(top: &[Statement<'_>]) -> bool {
@@ -212,15 +232,22 @@ pub fn layout<'k, 'a>(top: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
         }
         runs.push(run_target(statement, prefix)?);
     }
+    let numeric = defs.first()?.numeric;
     let ids: FxHashSet<&str> = defs.iter().map(|def| def.id.as_str()).collect();
     let runtime = runtime_id(BundleKind::Metro);
     let closed = ids.len() == defs.len()
         && !ids.contains(runtime.as_str())
         && runs.iter().all(|(run, _)| ids.contains(run.as_str()));
-    closed.then_some(Layout {
+    let typed = defs
+        .iter()
+        .all(|def| def.numeric == numeric && keyable(&def.id))
+        && runs.iter().all(|(_, run)| *run == numeric)
+        && defs.iter().all(|def| deps_typed(def.deps, numeric));
+    (closed && typed).then_some(Layout {
         define,
         prelude,
         defs,
         runs,
+        numeric,
     })
 }
