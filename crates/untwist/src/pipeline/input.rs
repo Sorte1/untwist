@@ -14,6 +14,7 @@ use untwist_core::semantic::{
 };
 use untwist_core::source_map::{self, Mapped, OwnedSourceMap, Recording};
 use untwist_core::type_space::{declares_an_interface, holds_type_space};
+use untwist_core::visible::{respelled_as, respelling, Respelling};
 use untwist_deobfuscate::layers::{verdict, LayerForm, Refusal};
 use untwist_eval::stack::room;
 use untwist_rename::unique::TurnGuard;
@@ -47,6 +48,7 @@ pub(super) struct InputResult {
     pub(super) snapshots: Snapshots,
     pub(super) decoded_strings: Vec<super::DecodedSite>,
     pub(super) statement_spans: Option<Vec<(u32, u32)>>,
+    pub(super) respelling: Respelling,
     #[cfg(feature = "refusal-spans")]
     pub(super) refusal_sites: Vec<super::RefusalSite>,
     pub(super) mapped: Option<Mapped>,
@@ -209,7 +211,7 @@ impl Pipeline {
             let (code, guards) = self.reflow(processed, &mut result.unbundled);
             result.notes.extend(guard_notes(guards.tally()));
             result.guards = guards;
-            Some(code)
+            Some(respelled_as(code, result.respelling))
         }));
         let outcome = match outcome {
             Ok(None) => return InputResult::refused(source, TYPESCRIPT_IN_JAVASCRIPT),
@@ -386,11 +388,14 @@ impl Pipeline {
                         .then(|| source_map::mapped(&mut parsed.program, &origins.finish()))
                         .flatten();
                 }
+                result.respelling = respelling(&parsed.program, printed.text());
                 Step::Done(Some(printed))
             }
             Err(_) => {
                 result.note_panicked();
-                Step::Done(Some(Printed::unplaced(pretty_codegen(&parsed.program))))
+                let printed = Printed::unplaced(pretty_codegen(&parsed.program));
+                result.respelling = respelling(&parsed.program, printed.text());
+                Step::Done(Some(printed))
             }
         }
     }

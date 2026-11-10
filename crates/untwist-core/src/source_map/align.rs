@@ -1,6 +1,7 @@
 use oxc_sourcemap::{OwnedSourceMap, Token};
 
 use super::lines::{char_len, line_break, utf16_len};
+use crate::visible::is_hidden;
 
 const PLACE_MARKER: &str = "\u{E000}";
 const LOOKAHEAD: usize = 4;
@@ -54,9 +55,64 @@ impl Cursor<'_> {
 struct Aligner<'t> {
     from: Cursor<'t>,
     to: Cursor<'t>,
+    tabs: usize,
+}
+
+fn escape_len(body: &[u8]) -> Option<usize> {
+    match body.first()? {
+        b'x' => Some(3),
+        b'u' => Some(5),
+        b't' | b'r' | b'n' => Some(1),
+        _ => None,
+    }
+}
+
+fn reference_len(rest: &[u8]) -> Option<usize> {
+    rest.starts_with(b"&#x")
+        .then(|| rest.iter().position(|byte| *byte == b';'))
+        .flatten()
+        .map(|semicolon| semicolon + 1)
 }
 
 impl Aligner<'_> {
+    fn skip_from_space(&mut self) {
+        let start = self.from.at;
+        self.from.skip_space();
+        self.tabs += self.from.text[start..self.from.at]
+            .iter()
+            .filter(|byte| **byte == b'\t')
+            .count();
+    }
+
+    fn skip_escape(&mut self, left: &[u8]) -> bool {
+        let rest = &self.to.text[self.to.at..];
+        if self.tabs > 0 && rest.starts_with(b"\\t") {
+            self.tabs -= 1;
+            self.to.at += 2;
+            return true;
+        }
+        let hidden = std::str::from_utf8(left)
+            .ok()
+            .and_then(|text| text.chars().next())
+            .is_some_and(is_hidden);
+        if !hidden {
+            return false;
+        }
+        let after_backslash = self.to.at > 0 && self.to.text[self.to.at - 1] == b'\\';
+        let skipped = match rest.first() {
+            Some(b'\\') => escape_len(&rest[1..]).map(|len| len + 1),
+            Some(b'&') => reference_len(rest),
+            Some(_) if after_backslash => escape_len(rest),
+            _ => None,
+        };
+        let Some(skipped) = skipped else {
+            return false;
+        };
+        self.to.at = (self.to.at + skipped).min(self.to.text.len());
+        self.from.step();
+        true
+    }
+
     fn skip_noise(&mut self) -> bool {
         if let Some(end) = comment_end(self.to.text, self.to.at) {
             self.to.at = end;
@@ -85,15 +141,17 @@ impl Aligner<'_> {
     }
 
     fn advance(&mut self) {
-        self.from.skip_space();
+        self.skip_from_space();
         self.to.skip_space();
         match (self.from.current(), self.to.current()) {
             (Some(left), Some(right)) if left == right => {
+                self.tabs = 0;
                 self.from.step();
                 self.to.step();
             }
-            (Some(_), Some(_)) => {
-                if !self.skip_noise() {
+            (Some(left), Some(_)) => {
+                let left = left.to_vec();
+                if !self.skip_escape(&left) && !self.skip_noise() {
                     self.resync();
                 }
             }
@@ -115,7 +173,7 @@ impl Aligner<'_> {
 
     fn position_of(&mut self, target: usize) -> usize {
         loop {
-            self.from.skip_space();
+            self.skip_from_space();
             if self.from.at >= target || self.from.at >= self.from.text.len() {
                 self.settle_on();
                 return self.to.at.min(self.to.text.len());
@@ -217,6 +275,7 @@ pub fn retarget(map: OwnedSourceMap, printed: &str, finished: &str) -> OwnedSour
             text: finished.as_bytes(),
             at: 0,
         },
+        tabs: 0,
     };
     let mut lines_from = LineWalk::new(printed.as_bytes());
     let mut lines_to = LineWalk::new(finished.as_bytes());

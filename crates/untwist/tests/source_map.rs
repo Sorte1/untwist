@@ -374,3 +374,24 @@ fn inline_links_embed_the_map() {
     let map = source_map::parse(&embedded).expect("parses");
     assert_eq!(map.get_source(0), Some("stdin"));
 }
+
+#[test]
+fn a_map_stays_on_the_code_after_a_string_with_escaped_hidden_characters() {
+    let source = "var a = \"\\u009b\\u009b\\u202e\\t\", b = later(1);\nvar c = `x${\"\\u0085\"}y`, d = after(2);\n";
+    let output = mapped(source);
+    assert!(
+        output.code().contains("\\x9B\\x9B\\u202E\\t"),
+        "{}",
+        output.code()
+    );
+    let map = reparsed(output.source_maps[0].as_ref().expect("a map"));
+    for name in ["later(1)", "after(2)"] {
+        let at = position_of(output.code(), name);
+        let origin = original_at(&map, at.0, at.1);
+        assert!(
+            source_text_at(source, origin).starts_with(name),
+            "{name}: {:?}",
+            source_text_at(source, origin)
+        );
+    }
+}

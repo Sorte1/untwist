@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use oxc_allocator::Allocator;
 use serde::Serialize;
 use untwist_core::pass::{Note, NoteKind};
+use untwist_core::visible::visible_string_literal;
 pub use untwist_unpack::wasm::MAX_WASM_BYTES;
 use untwist_unpack::wasm::{self, CopiedRenames, Glue, PayloadRefusal, Scan, Span, WasmSummary};
 
@@ -227,7 +228,7 @@ fn relative_to(host: &str, target: &str) -> String {
 }
 
 fn quoted(text: &str) -> String {
-    serde_json::to_string(text).unwrap_or_else(|_| format!("\"{text}\""))
+    visible_string_literal(&serde_json::to_string(text).unwrap_or_else(|_| format!("\"{text}\"")))
 }
 
 impl Output {
