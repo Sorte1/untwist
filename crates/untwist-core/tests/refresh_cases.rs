@@ -483,3 +483,84 @@ fn a_stray_binding_rebuilds() {
     });
     assert_eq!(outcome, Outcome::Rebuilt);
 }
+
+fn append_empty_statement<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+    let empty = Statement::new_empty_statement(SPAN, cx);
+    program.body.push(empty);
+}
+
+#[test]
+fn a_delete_through_an_optional_chain_keeps_the_member_write_flag() {
+    let _serial = serial();
+    let (outcome, _) = refresh(
+        "var x = 1, o = {};\ndelete o?.p;\ndelete o?.[x];\n",
+        |program, cx| zero_first_initializer(program, cx),
+    );
+    assert_eq!(outcome, Outcome::Patched);
+}
+
+#[test]
+fn a_program_with_export_references_is_rebuilt_rather_than_patched() {
+    let _serial = serial();
+    let (outcome, _) = refresh(
+        "var x = 1, a = 2;\nexport { a };\nexport default missing;\n",
+        |program, cx| zero_first_initializer(program, cx),
+    );
+    assert_eq!(outcome, Outcome::Rebuilt);
+}
+
+const CORPUS: [&str; 8] = [
+    "unminify",
+    "reference/deobfuscate",
+    "reference/unpack",
+    "jsx",
+    "behaviour",
+    "corpus-npm",
+    "untranspile",
+    "unpack-bundlers",
+];
+
+const LARGEST_CORPUS_FILE: u64 = 256 * 1024;
+
+fn corpus_files() -> Vec<std::path::PathBuf> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
+    let mut files: Vec<std::path::PathBuf> = CORPUS
+        .iter()
+        .filter_map(|dir| std::fs::read_dir(root.join(dir)).ok())
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|ext| ext == "js" || ext == "mjs" || ext == "jsx")
+        })
+        .filter(|path| std::fs::metadata(path).is_ok_and(|meta| meta.len() <= LARGEST_CORPUS_FILE))
+        .collect();
+    files.sort();
+    files
+}
+
+#[test]
+fn every_corpus_file_patches_like_a_fresh_build() {
+    let _serial = serial();
+    let files = corpus_files();
+    assert!(files.len() > 200, "found {} corpus files", files.len());
+    for path in files {
+        let source = std::fs::read_to_string(&path).expect("readable fixture");
+        let alloc = Allocator::default();
+        if !parse_program(&alloc, &source).diagnostics.is_empty() {
+            continue;
+        }
+        let caught = catch_unwind(AssertUnwindSafe(|| {
+            refresh(&source, append_empty_statement)
+        }));
+        check_patches_for_tests(false);
+        if let Err(payload) = caught {
+            let text = payload
+                .downcast_ref::<String>()
+                .cloned()
+                .unwrap_or_default();
+            panic!("{}: {text}", path.display());
+        }
+    }
+}
