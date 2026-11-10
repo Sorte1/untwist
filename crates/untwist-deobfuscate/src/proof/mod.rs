@@ -1,5 +1,6 @@
 mod aliased;
 mod aliased_flows;
+mod aliased_solve;
 mod annex_b;
 mod code_modules;
 mod decoded_name;
