@@ -21,14 +21,21 @@ CHANGELOG entry before committing if it needs it.
 
 The tag runs `.github/workflows/release.yml`:
 
-1. **verify** checks the tag with `cargo xtask check-version vX.Y.Z`, then runs fmt, clippy
-   and the workspace tests.
+1. **verify** runs no tests itself. It checks the tag with `cargo xtask check-version vX.Y.Z`
+   and stops the release unless both of these hold:
+   - the tagged commit is on `main` (an ancestor of `origin/main`);
+   - the `test` job of the CI workflow passed on that exact commit. A CI run that is still
+     going is waited for, up to 90 minutes.
 2. **crates** publishes every publishable crate with `cargo publish --workspace`.
 3. **npm** builds the wasm package and publishes `untwist` with provenance.
 4. **web** deploys the site to production.
 5. **github-release** creates the GitHub release with the CHANGELOG section as its notes.
 
 The publish jobs skip a version that is already published, so a failed run can be rerun.
+
+If verify stops because CI failed on the release commit, or never ran on it (a newer push to
+`main` cancels a CI run that has not started), rerun that CI run with `gh run rerun <run id>`
+and, once `test` passes, rerun the release.
 
 ## One-time setup
 
