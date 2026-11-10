@@ -3,15 +3,19 @@ use std::collections::HashMap;
 use untwist_core::pass::{Note, NoteKind};
 use untwist_unpack::wasm::glue::chosen_name;
 use untwist_unpack::wasm::{
-    self, CopiedRenames, GlueImport, ImportValue, ModuleFacts, Span, WasmSummary,
+    self, CopiedRenames, ExportKind, GlueImport, ImportValue, ModuleFacts, Span, WasmSummary,
 };
 
 use crate::pipeline::{admits_reparse, Output};
 
 const HASHED_SUFFIX: &str = ".module.wasm";
 const MISSING_SHOWN: usize = 3;
+const BINDGEN_INTERNAL_PREFIX: &str = "__wbindgen_";
+const SETTER_NAME: &str = "__wbg_set_wasm";
+const HOLDER_NAME: &str = "wasm";
 
 type Renames = HashMap<usize, Vec<(String, String)>>;
+type Holder = (usize, String);
 
 struct Graph<'o> {
     paths: Vec<&'o str>,
@@ -114,6 +118,103 @@ impl Graph<'_> {
         }
     }
 
+    fn requires_of(&self, wrapper: usize) -> Vec<Holder> {
+        let mut holders = Vec::new();
+        for (consumer, facts) in self.facts.iter().enumerate() {
+            for (holder, spec) in &facts.requires {
+                if self.resolve(consumer, spec) == Some(wrapper) {
+                    holders.push((consumer, holder.clone()));
+                }
+            }
+        }
+        holders
+    }
+
+    fn requires_target(&self, consumer: usize, holder: &str, target: usize) -> bool {
+        self.facts[consumer]
+            .requires
+            .iter()
+            .any(|(name, spec)| name == holder && self.resolve(consumer, spec) == Some(target))
+    }
+
+    fn handed_only(&self, glue: usize, export: &str, direct: &[Holder]) -> bool {
+        let mut handed = false;
+        for (consumer, facts) in self.facts.iter().enumerate() {
+            let targets = |holder: &str| self.requires_target(consumer, holder, glue);
+            if facts
+                .loose
+                .iter()
+                .any(|(holder, key)| key == export && targets(holder))
+            {
+                return false;
+            }
+            for (holder, key, argument) in &facts.handoffs {
+                if key != export || !targets(holder) {
+                    continue;
+                }
+                if !direct.contains(&(consumer, argument.clone())) {
+                    return false;
+                }
+                handed = true;
+            }
+        }
+        handed
+    }
+
+    fn setters_of(&self, direct: &[Holder]) -> Vec<(usize, String, String)> {
+        let mut setters = Vec::new();
+        for (glue, facts) in self.facts.iter().enumerate() {
+            for (function, binding) in &facts.setters {
+                let mut exported = facts
+                    .exports
+                    .iter()
+                    .filter(|(_, local)| local == function)
+                    .map(|(export, _)| export);
+                let handed = match (exported.next(), exported.next()) {
+                    (Some(export), None) => self.handed_only(glue, export, direct),
+                    _ => false,
+                };
+                if handed {
+                    setters.push((glue, function.clone(), binding.clone()));
+                }
+            }
+        }
+        setters
+    }
+
+    fn forwarders(&self, holders: &[Holder], summary: &WasmSummary) -> Renames {
+        let mut calls: Vec<(usize, &str, &str)> = Vec::new();
+        for (module, holder) in holders {
+            for (function, by, read) in &self.facts[*module].calls {
+                if by == holder && !read.starts_with(BINDGEN_INTERNAL_PREFIX) {
+                    calls.push((*module, function.as_str(), read.as_str()));
+                }
+            }
+        }
+        calls.sort_unstable();
+        calls.dedup();
+        let mut renames: Renames = HashMap::new();
+        for (module, function, read) in &calls {
+            let one_export = calls
+                .iter()
+                .filter(|(other, name, _)| other == module && name == function)
+                .count()
+                == 1;
+            let one_caller = calls.iter().filter(|(_, _, other)| other == read).count() == 1;
+            let export = summary
+                .export(read)
+                .filter(|export| export.kind == ExportKind::Function);
+            let name = export.and_then(|export| chosen_name(&export.name, None));
+            if let (true, true, Some(name)) = (one_export, one_caller, name) {
+                renames
+                    .entry(*module)
+                    .or_default()
+                    .push((function.to_string(), name));
+            }
+        }
+        renames
+    }
+
     fn plan(
         &self,
         wrapper: usize,
@@ -134,28 +235,34 @@ impl Graph<'_> {
                 renames.entry(target).or_default().push((local, name));
             }
         }
-        for (consumer, facts) in self.facts.iter().enumerate() {
-            for (holder, spec) in &facts.requires {
-                if self.resolve(consumer, spec) != Some(wrapper) {
-                    continue;
-                }
-                for (_, read) in facts.reads.iter().filter(|(by, _)| by == holder) {
-                    if summary.export(read).is_none() {
-                        missing.push(format!("export {read}"));
-                    }
-                }
-                for (binding, _, read) in facts.bindings.iter().filter(|(_, by, _)| by == holder) {
-                    let name = summary.export(read).and_then(|export| {
-                        chosen_name(&export.name, export.function_name.as_ref())
-                    });
-                    if let Some(name) = name {
-                        renames
-                            .entry(consumer)
-                            .or_default()
-                            .push((binding.clone(), name));
-                    }
+        let mut holders = self.requires_of(wrapper);
+        for (glue, function, binding) in self.setters_of(&holders) {
+            let named = renames.entry(glue).or_default();
+            named.push((function, SETTER_NAME.to_string()));
+            named.push((binding.clone(), HOLDER_NAME.to_string()));
+            holders.push((glue, binding));
+        }
+        for (consumer, holder) in &holders {
+            let facts = &self.facts[*consumer];
+            for (_, read) in facts.reads.iter().filter(|(by, _)| by == holder) {
+                if summary.export(read).is_none() {
+                    missing.push(format!("export {read}"));
                 }
             }
+            for (binding, _, read) in facts.bindings.iter().filter(|(_, by, _)| by == holder) {
+                let name = summary
+                    .export(read)
+                    .and_then(|export| chosen_name(&export.name, export.function_name.as_ref()));
+                if let Some(name) = name {
+                    renames
+                        .entry(*consumer)
+                        .or_default()
+                        .push((binding.clone(), name));
+                }
+            }
+        }
+        for (module, named) in self.forwarders(&holders, summary) {
+            renames.entry(module).or_default().extend(named);
         }
         missing.sort();
         missing.dedup();
