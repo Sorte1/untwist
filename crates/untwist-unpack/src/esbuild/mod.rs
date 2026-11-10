@@ -1,6 +1,7 @@
 pub mod build;
 pub mod check;
 pub mod layout;
+pub mod live;
 pub mod mentions;
 pub mod notes;
 pub mod rewrite;
@@ -21,6 +22,7 @@ use crate::esbuild::build::{
 };
 use crate::esbuild::check::{entry_sound, factory_closed, Proof};
 use crate::esbuild::layout::{layout, scopes, Host, Layout, Scope};
+use crate::esbuild::live::read_as_members;
 use crate::esbuild::mentions::closure;
 use crate::frame::Frame;
 use crate::model::{Bodies, Bundle, BundleKind};
@@ -217,8 +219,29 @@ fn entry_proven(proof: &Proof<'_>, plan: &Plan<'_, '_>, moved: &[usize]) -> bool
     entry_sound(proof, statements, declarators)
 }
 
+fn unchanged(scoping: &Scoping, binding: &BindingIdentifier<'_>) -> bool {
+    binding.symbol_id.get().is_some_and(|symbol| {
+        scoping.symbol_redeclarations(symbol).is_empty()
+            && !scoping
+                .get_resolved_references(symbol)
+                .any(|reference| reference.is_write())
+    })
+}
+
+fn helpers_unchanged(scoping: &Scoping, layout: &Layout<'_, '_>) -> bool {
+    layout
+        .trusted
+        .iter()
+        .copied()
+        .chain(layout.shim)
+        .all(|binding| unchanged(scoping, binding))
+}
+
 fn proven(source: &Program<'_>, plan: &Plan<'_, '_>) -> Option<Vec<usize>> {
     let scoping = build_scoping(source).scoping;
+    if !helpers_unchanged(&scoping, &plan.layout) {
+        return None;
+    }
     let (candidates, wanted) = helper_names(plan);
     let moved = closure(
         plan.scope.list,
@@ -241,7 +264,7 @@ fn proven(source: &Program<'_>, plan: &Plan<'_, '_>) -> Option<Vec<usize>> {
         .keys()
         .chain(&proof.helpers)
         .all(|&symbol| scoping.symbol_redeclarations(symbol).is_empty());
-    if !declared_once {
+    if !declared_once || !read_as_members(&scoping, plan.scope.list, &moved, &proof.helpers) {
         return None;
     }
     let factories = plan

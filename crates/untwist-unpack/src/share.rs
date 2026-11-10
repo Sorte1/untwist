@@ -12,7 +12,7 @@ use untwist_core::semantic::build_scoping;
 use crate::esbuild::mentions::{mentioned, names_anywhere};
 use crate::model::{Bundle, BundleKind, Module};
 use crate::rename::{rename_binding, rename_parameters};
-use crate::runtime::{declared_names, module_of, synthetic_statements};
+use crate::runtime::{declared_names, live_exports, module_of, synthetic_statements};
 
 fn synthetic(statement: &Statement<'_>) -> bool {
     statement.span().end >= SYNTHETIC_BASE
@@ -240,12 +240,22 @@ fn append<'a>(
     Some(())
 }
 
+fn exports_live(bundle: &Bundle<'_>, key: &str) -> bool {
+    bundle
+        .modules
+        .get(key)
+        .is_some_and(|module| !live_exports(&module.program().body).is_empty())
+}
+
 pub fn fold_runtime<'a>(
     alloc: &'a Allocator,
     keep: &mut Bundle<'a>,
     drop: &mut Bundle<'a>,
     key: &str,
 ) -> Option<()> {
+    if exports_live(keep, key) || exports_live(drop, key) {
+        return None;
+    }
     let dropped = drop.modules.shift_remove(key)?;
     let kept = keep.modules.get(key)?;
     let names: FxHashSet<String> = declared_names(&dropped.program().body)

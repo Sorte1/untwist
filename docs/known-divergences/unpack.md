@@ -107,7 +107,14 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
 - **The runtime module.** A helper whose semantics are not `require`'s (esbuild's
   `__toESM`/`__esm`, webpack's `.t`, Parcel's hoisted helpers) is moved verbatim from the bundle
   into `_runtime/<kind>.js`, which the modules that use it require; it must itself be closed (only
-  globals and other helpers free). Metro's `importDefault`/`importAll` live inside Metro's polyfill
+  globals and other helpers free), hold no `with`, and read none of the host names below, which
+  every written file has for itself. A moved esbuild binding that is assigned after its declaration
+  (the `var` an `__esm` init fills) is exported through a getter, and the modules read it as
+  `runtime.name` each time, a call as `(0, runtime.name)()`; a bundle that deletes such a name,
+  assigns it outside the runtime module or names it where only a binding fits (an `export { name }`,
+  a `for (name in …)` target) is not unpacked, and two inputs whose runtime exports such a getter
+  are not linked into one bundle. esbuild's lazy helpers, the names getter they call and the
+  `__require` shim are trusted only while each is declared once and never assigned. Metro's `importDefault`/`importAll` live inside Metro's polyfill
   closure, so `_runtime/metro.js` holds a synthesized `metroRequire(id)` plus copies of Metro's two
   interop functions. Closure's shared `var`s live in a null-prototype holder,
   `_runtime/closure.js`.

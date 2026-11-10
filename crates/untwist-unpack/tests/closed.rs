@@ -101,3 +101,26 @@ fn the_refusal_names_what_the_factory_reads() {
         "module 3 is not closed over its own scope; no bundle is written: it calls eval directly"
     );
 }
+
+#[test]
+fn a_factory_holding_a_with_statement_is_not_closed() {
+    let alloc = Allocator::default();
+    let program = parse(
+        &alloc,
+        "var modules = [function (module, exports) { with (exports) { a = 1; } }];",
+    );
+    let scoping = build_scoping(&program).scoping;
+    let helpers = FxHashSet::default();
+    let allowed = Allowed {
+        mapped_params: 3,
+        helpers: &helpers,
+    };
+
+    let found: Vec<Option<String>> = factories(&program)
+        .into_iter()
+        .map(|factory| captured_by_factory(&scoping, factory, &allowed))
+        .map(|captured| captured.map(|captured| captured.describe()))
+        .collect();
+
+    assert_eq!(found, [Some("it holds a with statement".to_string())]);
+}

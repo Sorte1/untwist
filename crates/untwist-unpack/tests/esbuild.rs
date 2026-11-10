@@ -670,3 +670,108 @@ fn a_hostile_hundred_thousand_module_bundle_splits_in_linear_time() {
         "{MODULES} modules took {spent:?}, over {LINEAR_FACTOR} x parse {parse:?} + scoping {scope:?}"
     );
 }
+
+const ESM: &str = "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n";
+
+#[test]
+fn a_runtime_binding_written_after_its_declaration_is_read_live() {
+    let source = format!(
+        "{DIRECT}{ESM}var value;\nvar init_value = __esm(() => {{ value = 42; }});\nvar require_main = __commonJS((exports, module) => {{ init_value(); module.exports = value; }});\nconsole.log(require_main(), value);\n"
+    );
+
+    let files = split(&source).expect("an esbuild bundle");
+
+    let runtime = code(&files, "_runtime/esbuild.js");
+    assert!(runtime.contains("get value() {"), "{runtime}");
+    assert!(runtime.contains("init_value"), "{runtime}");
+    let main = code(&files, "require_main.js");
+    assert!(
+        main.starts_with("var runtime = require(\"./_runtime/esbuild.js\");\nvar { init_value } = require(\"./_runtime/esbuild.js\");\n"),
+        "{main}"
+    );
+    assert!(main.contains("module.exports = runtime.value;"), "{main}");
+    let entry = code(&files, "index.js");
+    assert!(
+        entry.contains("console.log(require(\"./require_main.js\"), runtime.value);"),
+        "{entry}"
+    );
+    assert!(!entry.contains("{ value"), "{entry}");
+    let (taken, _) = split_taken(&source);
+    assert_eq!(taken.as_ref(), Some(&files));
+}
+
+#[test]
+fn a_live_runtime_binding_keeps_its_call_receiver_and_its_shorthand_key() {
+    let source = format!(
+        "{DIRECT}var greet;\nvar set = () => {{ greet = function () {{ return this; }}; }};\nvar require_main = __commonJS((exports, module) => {{ set(); var local = (greet) => greet; module.exports = {{ greet, called: greet(), tagged: greet`x`, kind: typeof greet, local }}; }});\nconsole.log(require_main());\n"
+    );
+
+    let files = split(&source).expect("an esbuild bundle");
+
+    let main = code(&files, "require_main.js");
+    assert!(main.contains("greet: runtime.greet,"), "{main}");
+    assert!(main.contains("called: (0, runtime.greet)(),"), "{main}");
+    assert!(main.contains("tagged: (0, runtime.greet)`x`,"), "{main}");
+    assert!(main.contains("kind: typeof runtime.greet,"), "{main}");
+    assert!(main.contains("var local = (greet) => greet;"), "{main}");
+}
+
+#[test]
+fn a_live_runtime_binding_read_where_a_member_cannot_stand_is_refused() {
+    for read in ["delete value;", "for (value in exports) {}", "value++;"] {
+        refused(&format!(
+            "{DIRECT}var value;\nvar set = () => {{ value = 1; }};\nvar require_main = __commonJS((exports, module) => {{ set(); {read} module.exports = value; }});\nconsole.log(require_main());\n"
+        ));
+    }
+}
+
+#[test]
+fn a_lazy_helper_declared_twice_or_assigned_again_is_not_trusted() {
+    let tail = "var require_a = __commonJS((exports, module) => { module.exports = \"a\"; });\nconsole.log(require_a());\n";
+    for second in [
+        "var __commonJS = (cb) => () => 42;\n",
+        "var __commonJS = function (cb) { return 42; };\n",
+        "__commonJS = (cb) => () => 42;\n",
+        "function swap() { __commonJS = (cb) => () => 42; }\nswap();\n",
+    ] {
+        refused(&format!("{DIRECT}{second}{tail}"));
+    }
+}
+
+#[test]
+fn a_first_key_helper_whose_names_getter_changes_is_not_trusted() {
+    for second in [
+        "__getOwnPropNames = () => [\"other\"];\n",
+        "var __getOwnPropNames = () => [\"other\"];\n",
+    ] {
+        refused(&format!(
+            "{HELPERS}{second}{}console.log(require_a());\n",
+            factory("src/a.js", "exports, module", "module.exports = 1;")
+        ));
+    }
+}
+
+#[test]
+fn a_with_statement_in_a_factory_or_in_the_entry_is_refused() {
+    refused(&format!(
+        "{DIRECT}var require_a = __commonJS((e, m) => {{ var o = {{ e: {{ tag: \"inner\" }} }}; with (o) {{ e.x = 1; }} m.exports = Object.keys(e); }});\nconsole.log(require_a());\n"
+    ));
+    refused(&format!(
+        "{DIRECT}var require_a = __commonJS((exports, module) => {{ module.exports = 1; }});\nwith ({{ require_a: () => 2 }}) {{ console.log(require_a()); }}\n"
+    ));
+}
+
+#[test]
+fn a_helper_that_reads_a_host_name_is_never_moved_into_the_runtime() {
+    for read in [
+        "require(\"./config.json\").name",
+        "typeof module.exports.__esm",
+        "exports.a",
+        "__filename",
+        "typeof __dirname",
+    ] {
+        refused(&format!(
+            "{DIRECT}{ESM}var init_x = __esm(() => {{ console.log({read}); }});\nvar require_a = __commonJS((exports, module) => {{ init_x(); module.exports = 1; }});\nconsole.log(require_a());\n"
+        ));
+    }
+}

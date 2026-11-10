@@ -48,6 +48,10 @@ impl<'a> Policy<'a> for Hosts<'_> {
     fn reference(&mut self, _frame: Depth, it: &IdentifierReference<'a>) {
         self.read |= HOST_NAMES.contains(&it.name.as_str()) && self.free(it);
     }
+
+    fn with(&mut self) {
+        self.read = true;
+    }
 }
 
 fn reads_host(scoping: &Scoping, callback: &Callback<'_, '_>) -> bool {

@@ -7,10 +7,9 @@ use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::closed::HOST_NAMES;
 use crate::esbuild::layout::FactoryDecl;
 use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step};
-
-const HOST_NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
 
 pub struct Proof<'s> {
     pub scoping: &'s Scoping,
@@ -231,6 +230,10 @@ impl<'a> Policy<'a> for Check<'_, '_> {
         if matches!(self.mode, Mode::Factory { .. }) {
             self.ok &= frame.receiver();
         }
+    }
+
+    fn with(&mut self) {
+        self.ok = false;
     }
 }
 

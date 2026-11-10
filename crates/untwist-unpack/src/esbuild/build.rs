@@ -12,7 +12,7 @@ use crate::matcher::param_names;
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module, Runtime};
 use crate::path::PosixPath;
 use crate::rename::rename_parameters_uncaptured;
-use crate::runtime::{declared_names, runtime_id, runtime_module};
+use crate::runtime::{declared_names, live_runtime_module, runtime_id};
 
 pub const ENTRY_ID: &str = "index";
 const MODULE_PARAMS: [&str; 2] = ["exports", "module"];
@@ -339,7 +339,7 @@ fn runtime_of<'a>(
     for &index in moved {
         statements.push(plan.scope.list[index].clone_in(alloc));
     }
-    let (mut module, _) = runtime_module(alloc, source, BundleKind::Esbuild, statements)?;
+    let mut module = live_runtime_module(alloc, source, BundleKind::Esbuild, statements)?;
     let program = module.program_mut();
     program.directives = strict_directives(alloc, &program.directives, plan.strict);
     Some(module)

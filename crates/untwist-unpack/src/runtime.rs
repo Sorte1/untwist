@@ -2,13 +2,16 @@ use oxc_allocator::{Allocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_semantic::Scoping;
-use oxc_span::SourceType;
+use oxc_span::{GetSpan, SourceType};
+use oxc_str::Ident;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
-use untwist_core::ast_util::respan::fresh_spans_statement;
+use untwist_core::ast_util::prop::prop_name;
+use untwist_core::ast_util::respan::{fresh_spans_statement, SYNTHETIC_BASE};
 use untwist_core::parse::parse_program;
+use untwist_core::semantic::build_scoping;
 
-use crate::closed::{captured_by_statement, Captured};
+use crate::closed::{captured_by_helper, Captured};
 use crate::model::{BundleKind, Module};
 use crate::path::{relative_path, PosixPath};
 
@@ -99,7 +102,7 @@ pub fn first_unclosed_helper(
     let helpers = helper_symbols(list, indices);
     indices.iter().find_map(|&index| {
         let statement = list.get(index)?;
-        let captured = captured_by_statement(scoping, statement, &helpers)?;
+        let captured = captured_by_helper(scoping, statement, &helpers)?;
         let name = declared_names(std::slice::from_ref(statement)).join(", ");
         Some((name, captured))
     })
@@ -149,6 +152,75 @@ pub fn runtime_module<'a>(
     statements.extend(synthetic_statements(alloc, exports)?);
     let module = module_of(alloc, source.source_text, kind, statements)?;
     Some((module, names))
+}
+
+fn written_names(program: &Program<'_>, names: &[String]) -> FxHashSet<String> {
+    let scoping = build_scoping(program).scoping;
+    let root = scoping.root_scope_id();
+    let written = |name: &String| {
+        scoping
+            .find_binding(root, Ident::from(name.as_str()))
+            .is_some_and(|symbol| {
+                scoping
+                    .get_resolved_references(symbol)
+                    .any(|reference| reference.is_write())
+            })
+    };
+    names.iter().filter(|name| written(name)).cloned().collect()
+}
+
+fn live_exports_text(names: &[String], live: &FxHashSet<String>) -> String {
+    let properties: Vec<String> = names
+        .iter()
+        .map(|name| match live.contains(name) {
+            true => format!("get {name}() {{ return {name}; }}"),
+            false => name.clone(),
+        })
+        .collect();
+    format!("module.exports = {{ {} }};", properties.join(", "))
+}
+
+pub fn live_runtime_module<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    kind: BundleKind,
+    statements: AVec<'a, Statement<'a>>,
+) -> Option<Module<'a>> {
+    let (mut module, names) = runtime_module(alloc, source, kind, statements)?;
+    let live = written_names(module.program(), &names);
+    if live.is_empty() {
+        return Some(module);
+    }
+    let exports = synthetic_statements(alloc, live_exports_text(&names, &live))?;
+    let program = module.program_mut();
+    program.body.pop();
+    program.body.extend(exports);
+    Some(module)
+}
+
+pub fn live_exports(statements: &[Statement<'_>]) -> Vec<String> {
+    let Some(Statement::ExpressionStatement(last)) = statements.last() else {
+        return Vec::new();
+    };
+    let Expression::AssignmentExpression(exports) = &last.expression else {
+        return Vec::new();
+    };
+    let Expression::ObjectExpression(object) = &exports.right else {
+        return Vec::new();
+    };
+    if last.span().end < SYNTHETIC_BASE {
+        return Vec::new();
+    }
+    object
+        .properties
+        .iter()
+        .filter_map(|property| match property {
+            ObjectPropertyKind::ObjectProperty(property) if property.kind == PropertyKind::Get => {
+                prop_name(&property.key).map(|name| name.into_owned())
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 pub fn module_of<'a>(
