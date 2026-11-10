@@ -174,6 +174,11 @@ differ only for that object, which compares loosely equal to `null` without bein
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
 premise.
 
+With `--rename`, the safe lane keeps the name of every function and class when the file reads
+`.name` with a static key, since renaming them would change what it reads. A read through a
+computed key (`f[key]`) or through reflection is not seen, as `fn.toString()` is not;
+[`docs/known-divergences/rename.md`](docs/known-divergences/rename.md) has the details.
+
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
 patched, even when the program visibly patches one, and a few passes that rest on heuristics are
 allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).

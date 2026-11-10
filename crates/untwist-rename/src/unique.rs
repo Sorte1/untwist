@@ -170,7 +170,7 @@ impl<'a> Pass<'a> for Unique {
         let index = slot.index();
         let namer = namer.as_deref();
         #[cfg(feature = "test-hooks")]
-        let keep = cx.opts.keep_script_globals;
+        let setting = crate::pins::Setting::of(program, cx.opts);
         run_mode_once(
             done,
             program,
@@ -186,7 +186,7 @@ impl<'a> Pass<'a> for Unique {
                 #[cfg(feature = "test-hooks")]
                 crate::fresh::assert_same_unique_plan(
                     program,
-                    (&plan, keep),
+                    (&plan, setting),
                     |collected, _, fresh| {
                         let usage = collect_naming_usage(program, fresh);
                         let mut replayed = before;

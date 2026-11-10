@@ -1,6 +1,6 @@
 use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::{Cx, Interest, Pass};
 
@@ -51,7 +51,10 @@ fn decide(program: &Program<'_>, collected: &Collected, scoping: &Scoping) -> Re
     loop {
         let mut changed = false;
         for hint in &usage.hints {
-            if collected.pinned.contains(&hint.symbol) || moved.contains(&hint.symbol) {
+            if collected.pinned.contains(&hint.symbol)
+                || moved.contains(&hint.symbol)
+                || makes_a_global_property(collected, scoping, hint.symbol)
+            {
                 continue;
             }
             if !is_identifier_name(&hint.key) || hint.key == PROTO_KEY {
@@ -74,4 +77,11 @@ fn decide(program: &Program<'_>, collected: &Collected, scoping: &Scoping) -> Re
         }
     }
     oracle.into_plan()
+}
+
+fn makes_a_global_property(collected: &Collected, scoping: &Scoping, symbol: SymbolId) -> bool {
+    let declared = SymbolFlags::FunctionScopedVariable.union(SymbolFlags::Function);
+    collected.classic_script
+        && scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
+        && scoping.symbol_flags(symbol).intersects(declared)
 }

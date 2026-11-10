@@ -10,6 +10,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::js_text::js_text;
 use untwist_core::ast_util::prop::member_parts;
+use untwist_core::machinery_name::is_machinery_name;
 use untwist_core::semantic::{
     closed_eval_names, eval_payload_names, observers, Observers, Strictness,
 };
@@ -111,6 +112,7 @@ pub struct Collected {
     pub hazard: Option<&'static str>,
     pub observed: FxHashSet<SymbolId>,
     pub assumed_unobserved: bool,
+    pub classic_script: bool,
     pub(crate) rule: OuterRule,
 }
 
@@ -131,14 +133,6 @@ pub fn module_export_name<'n>(name: &'n ModuleExportName<'_>) -> Cow<'n, str> {
         ModuleExportName::IdentifierName(id) => Cow::Borrowed(id.name.as_str()),
         ModuleExportName::IdentifierReference(id) => Cow::Borrowed(id.name.as_str()),
         ModuleExportName::StringLiteral(literal) => js_text(literal.value),
-    }
-}
-
-pub(crate) fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, keep: bool) {
-    if keep {
-        collected
-            .pinned
-            .extend(untwist_core::semantic::pins::script_global_symbols(scoping));
     }
 }
 
@@ -218,6 +212,10 @@ impl Collector<'_> {
             return;
         };
         self.observe_through_with(symbol);
+        if is_machinery_name(id.name.as_str()) {
+            self.out.pinned.insert(symbol);
+        }
+        self.mark_hoisted_site(symbol);
         self.out.sites.push(BindingSite {
             symbol,
             role: role.clone(),
@@ -236,6 +234,38 @@ impl Collector<'_> {
             scope: self.scoping.symbol_scope_id(symbol),
             role,
         });
+    }
+
+    fn mark_hoisted_site(&mut self, symbol: SymbolId) {
+        let declared = self.scoping.symbol_scope_id(symbol);
+        let current = self.current();
+        if declared == current || !self.scoping.scope_is_descendant_of(current, declared) {
+            return;
+        }
+        self.mark_free_below(symbol, current, declared);
+    }
+
+    fn mark_free_below(&mut self, symbol: SymbolId, from: ScopeId, declared: ScopeId) {
+        let scoping = self.scoping;
+        for scope in scoping
+            .scope_ancestors(from)
+            .take_while(|&scope| scope != declared)
+        {
+            self.out.free.entry(scope).or_default().insert(symbol);
+        }
+    }
+
+    fn pin_var_scope_namesakes(&mut self, name: &str) {
+        let scoping = self.scoping;
+        let name = Ident::from(name);
+        for scope in scoping.scope_ancestors(self.current()) {
+            if let Some(symbol) = scoping.get_binding(scope, name) {
+                self.out.pinned.insert(symbol);
+            }
+            if scoping.scope_flags(scope).is_var() {
+                break;
+            }
+        }
     }
 
     fn observe_through_with(&mut self, symbol: SymbolId) {
@@ -313,6 +343,7 @@ impl Collector<'_> {
                 continue;
             };
             self.pin(Some(id));
+            self.pin_var_scope_namesakes(id.name.as_str());
             self.out
                 .block_function_names
                 .insert(id.name.as_str().to_string());
@@ -645,15 +676,8 @@ impl<'a> VisitJs<'a> for Collector<'_> {
             return;
         };
         self.observe_through_with(symbol);
-        let scoping = self.scoping;
-        let declared = scoping.symbol_scope_id(symbol);
-        let current = self.current();
-        for scope in scoping
-            .scope_ancestors(current)
-            .take_while(|&scope| scope != declared)
-        {
-            self.out.free.entry(scope).or_default().insert(symbol);
-        }
+        let declared = self.scoping.symbol_scope_id(symbol);
+        self.mark_free_below(symbol, self.current(), declared);
     }
 }
 

@@ -26,7 +26,7 @@ impl<'a> Sites<'_, 'a> {
                 self.list_reaches(call.arguments.get(listed))
             });
         if reached {
-            self.hit(call.span);
+            self.hit_text(call.span);
         }
     }
 
@@ -88,13 +88,13 @@ impl<'a> Sites<'_, 'a> {
             return;
         }
         if self.texts_reach(arguments.iter()) {
-            self.hit(span);
+            self.hit_text(span);
         }
     }
 
     pub(super) fn reach_template_text(&mut self, span: Span, text: Option<&str>) {
         if self.watching_text(span) && text.is_none_or(|text| self.names_reach(text)) {
-            self.hit(span);
+            self.hit_text(span);
         }
     }
 
