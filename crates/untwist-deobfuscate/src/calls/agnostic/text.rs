@@ -9,7 +9,8 @@ use super::sites::*;
 use super::AKey;
 use crate::value_flow::{flow_rule_disabled, STORAGE_PROXY};
 
-const FUNCTION_RUNNERS: [&str; 4] = ["Function", "constructor", "compileFunction", "_compile"];
+pub(super) const FUNCTION_RUNNERS: [&str; 4] =
+    ["Function", "constructor", "compileFunction", "_compile"];
 
 pub(super) fn closed_runner_read<'a>(
     call: &CallExpression<'a>,
@@ -52,7 +53,14 @@ impl<'s, 'a> Sites<'s, 'a> {
         self.mark_origin_sink(origin, span, "closed eval of a runner", has_sink);
     }
 
-    pub(super) fn text_writes(&self, text: &str, function: bool) -> bool {
+    pub(super) fn text_writes(&self, text: &str, kind: Text) -> bool {
+        if kind.markup() && text.contains('<') {
+            return true;
+        }
+        if kind == Text::Markup {
+            return false;
+        }
+        let function = kind.function();
         let body = if function {
             format!("(function () {{\n{text}\n}});")
         } else {
@@ -63,26 +71,40 @@ impl<'s, 'a> Sites<'s, 'a> {
             || (!function && crate::proof::literal_text_binds(&body))
     }
 
-    pub(super) fn check_text(
-        &mut self,
-        call_span: Span,
-        arguments: &[Argument<'a>],
-        function: bool,
-    ) {
+    pub(super) fn check_text(&mut self, call_span: Span, arguments: &[Argument<'a>], kind: Text) {
         self.mark_source(call_span, "code from text");
-        if self.text_unsafe(arguments, function) {
-            self.text_judged = true;
-            self.mark_code(call_span);
-            self.text_judged = false;
+        if !self.text_unsafe(arguments, kind) {
+            return;
+        }
+        let plain = kind
+            .plain()
+            .is_some_and(|plain| self.text_unsafe(arguments, plain));
+        self.mark_judged(call_span, kind, plain);
+    }
+
+    fn mark_judged(&mut self, span: Span, kind: Text, plain: bool) {
+        if kind.markup() && !plain {
+            self.mark_opaque_text(span);
+            return;
+        }
+        self.mark_judged_code(span);
+    }
+
+    pub(super) fn mark_judged_code(&mut self, span: Span) {
+        self.text_judged = true;
+        self.mark_code(span);
+        self.text_judged = false;
+    }
+
+    fn mark_forwarded(&mut self, span: Span, kind: Text, plain: bool) {
+        if kind.markup() && !plain {
+            self.mark_opaque_text(span);
+        } else {
+            self.mark_text_code(span);
         }
     }
 
-    pub(super) fn check_template(
-        &mut self,
-        span: Span,
-        quasi: &TemplateLiteral<'a>,
-        function: bool,
-    ) {
+    pub(super) fn check_template(&mut self, span: Span, quasi: &TemplateLiteral<'a>, kind: Text) {
         self.mark_source(span, "code from a template");
         let text = quasi
             .quasis
@@ -91,20 +113,23 @@ impl<'s, 'a> Sites<'s, 'a> {
             .filter(|_| quasi.expressions.is_empty())
             .map(js_text);
         self.reach_template_text(span, text.as_deref());
-        if text.is_none_or(|text| self.text_writes(&text, function)) {
-            self.text_judged = true;
-            self.mark_code(span);
-            self.text_judged = false;
+        let writes = |kind: Text| {
+            text.as_deref()
+                .is_none_or(|text| self.text_writes(text, kind))
+        };
+        if writes(kind) {
+            let plain = kind.plain().is_some_and(writes);
+            self.mark_judged(span, kind, plain);
         }
     }
 
-    pub(super) fn text_unsafe(&self, arguments: &[Argument<'a>], function: bool) -> bool {
+    pub(super) fn text_unsafe(&self, arguments: &[Argument<'a>], kind: Text) -> bool {
         let texts: Vec<Option<&Expression<'a>>> =
             arguments.iter().map(Argument::as_expression).collect();
-        self.texts_unsafe(&texts, function)
+        self.texts_unsafe(&texts, kind)
     }
 
-    fn texts_unsafe(&self, texts: &[Option<&Expression<'a>>], function: bool) -> bool {
+    pub(super) fn texts_unsafe(&self, texts: &[Option<&Expression<'a>>], kind: Text) -> bool {
         let first_fn = texts
             .first()
             .copied()
@@ -130,7 +155,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             if self.native_chain(inner) {
                 match untwist_eval::fold::fold_literal_chain(inner) {
                     Some(untwist_eval::fold::Const::Str(text))
-                        if !self.text_writes(&text, function) =>
+                        if !self.text_writes(&text, kind) =>
                     {
                         continue
                     }
@@ -139,7 +164,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                 }
             }
             match self.key_class(inner, KEY_DEPTH) {
-                AKey::Named(text) if !self.text_writes(&text, function) => {}
+                AKey::Named(text) if !self.text_writes(&text, kind) => {}
                 _ => return true,
             }
         }
@@ -152,11 +177,21 @@ impl<'s, 'a> Sites<'s, 'a> {
         function: &Expression<'a>,
         forward: Forward,
     ) {
-        let Some(text_function) = self.runner_callee(function) else {
+        let Some(kind) = self.runner_callee(function) else {
             return;
         };
         self.mark_source(call.span, "a forwarded runner");
         self.reach_forwarded(call, forward);
+        if !self.forwarded_unsafe(call, forward, kind) {
+            return;
+        }
+        let plain = kind
+            .plain()
+            .is_some_and(|plain| self.forwarded_unsafe(call, forward, plain));
+        self.mark_forwarded(call.span, kind, plain);
+    }
+
+    fn forwarded_unsafe(&self, call: &CallExpression<'a>, forward: Forward, kind: Text) -> bool {
         let call_texts = forward.call.then(|| {
             let texts: Vec<Option<&Expression<'a>>> = call
                 .arguments
@@ -164,17 +199,15 @@ impl<'s, 'a> Sites<'s, 'a> {
                 .skip(1)
                 .map(Argument::as_expression)
                 .collect();
-            self.texts_unsafe(&texts, text_function)
+            self.texts_unsafe(&texts, kind)
         });
         let listed = if forward.reflect { 2 } else { 1 };
         let list_texts = (forward.apply || forward.reflect)
-            .then(|| self.listed_texts_unsafe(call.arguments.get(listed), text_function));
-        if call_texts.unwrap_or(false) || list_texts.unwrap_or(false) {
-            self.mark_text_code(call.span);
-        }
+            .then(|| self.listed_texts_unsafe(call.arguments.get(listed), kind));
+        call_texts.unwrap_or(false) || list_texts.unwrap_or(false)
     }
 
-    fn listed_texts_unsafe(&self, list: Option<&Argument<'a>>, function: bool) -> bool {
+    fn listed_texts_unsafe(&self, list: Option<&Argument<'a>>, kind: Text) -> bool {
         let Some(list) = list else {
             return false;
         };
@@ -188,15 +221,19 @@ impl<'s, 'a> Sites<'s, 'a> {
             .iter()
             .map(ArrayExpressionElement::as_expression)
             .collect();
-        self.texts_unsafe(&texts, function)
+        self.texts_unsafe(&texts, kind)
     }
 
-    pub(super) fn runner_callee(&self, callee: &Expression<'a>) -> Option<bool> {
+    pub(super) fn runner_callee(&self, callee: &Expression<'a>) -> Option<Text> {
         match callee.without_parentheses() {
             Expression::Identifier(id)
                 if RUNNERS.contains(&id.name.as_str()) && self.fresh.symbol(id).is_none() =>
             {
-                Some(id.name == "Function")
+                Some(if id.name == "Function" {
+                    Text::Function
+                } else {
+                    Text::Script
+                })
             }
             other => {
                 let member = other.as_member_expression()?;
@@ -204,11 +241,9 @@ impl<'s, 'a> Sites<'s, 'a> {
                     return None;
                 }
                 let keys = self.member_keys(member);
-                keys.iter().any(|key| origin_of(key).runner).then(|| {
-                    keys.iter().all(|key| {
-                        matches!(key, AKey::Named(name) if FUNCTION_RUNNERS.contains(&name.as_ref()))
-                    })
-                })
+                keys.iter()
+                    .any(|key| origin_of(key).runner)
+                    .then(|| self.member_text(&keys))
             }
         }
     }
@@ -245,7 +280,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         let Expression::CallExpression(inner) = member.object().without_parentheses() else {
             return;
         };
-        if self.runner_callee(&inner.callee) != Some(true) {
+        if self.runner_callee(&inner.callee) != Some(Text::Function) {
             return;
         }
         let keys = self.member_keys(member);
@@ -290,7 +325,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         let Some(arg) = self.substituted_param(function, call, callee) else {
             return;
         };
-        let Some(text_function) = self.runner_callee(arg) else {
+        let Some(kind) = self.runner_callee(arg) else {
             return;
         };
         self.mark_source(call.span, "a proxied runner");
@@ -298,12 +333,20 @@ impl<'s, 'a> Sites<'s, 'a> {
             .insert(span_key(arg.without_parentheses().span()));
         let inner: &'a CallExpression<'a> = self.alloc(inner);
         let mut flagged = false;
+        let mut plain = false;
         let bound = self.with_params(function, call, || {
-            flagged = self.text_unsafe(&inner.arguments, text_function);
+            flagged = self.text_unsafe(&inner.arguments, kind);
+            plain = kind
+                .plain()
+                .is_some_and(|plain| self.text_unsafe(&inner.arguments, plain));
         });
         let judged = !flow_rule_disabled(STORAGE_PROXY);
         if judged && (bound.is_none() || flagged) {
-            self.mark_text_code(call.span);
+            self.mark_forwarded(
+                call.span,
+                kind,
+                plain || bound.is_none() && kind.plain().is_some(),
+            );
         }
     }
 

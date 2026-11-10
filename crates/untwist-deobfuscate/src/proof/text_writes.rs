@@ -84,6 +84,10 @@ const TEXT_RUNNERS: &[&str] = &[
     "Script",
     "SourceTextModule",
     "constructor",
+    "write",
+    "writeln",
+    "insertAdjacentHTML",
+    "createContextualFragment",
 ];
 
 fn reach_key(key: &PropertyKey<'_>) -> bool {

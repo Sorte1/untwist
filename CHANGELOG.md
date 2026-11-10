@@ -181,6 +181,13 @@ All notable changes to this project are documented in this file. The format is b
   for self-defending and debug protection pass such a `this` along, so some of those outputs now
   keep the decoder in the default lane (`--unsafe` decodes them).
 
+- Program text handed to the DOM keeps the decoder calls it may reach, as `eval` of unknown text
+  does: `document.write`/`writeln`, `insertAdjacentHTML`, `createContextualFragment` and
+  assignments to `innerHTML`, `outerHTML` or `srcdoc`, and, when the program can create a script
+  element, assignments to `text`, `textContent`, `innerText` or `src` and text nodes appended to
+  it. Before, markup such as `<img onerror=...>` built from decoded strings was inlined and could
+  run different code than the input.
+
 ### Changed
 
 - Unminify drops empty statements (`;`) from statement lists, such as the one left behind once a

@@ -386,7 +386,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             && !self.table_dispatch(&call.callee)
         {
             self.reach_text(call.span, &call.arguments);
-            self.check_text(call.span, &call.arguments, true);
+            self.check_text(call.span, &call.arguments, self.unbounded_text());
         }
         if unbounded {
             self.generic(call);
@@ -418,6 +418,7 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     pub(super) fn judge_collected(mut self) -> (Agnostic<'a>, bool, bool) {
+        self.judge_script_sinks();
         if !self.walks_on() {
             return self.into_saturated();
         }
@@ -434,10 +435,10 @@ impl<'s, 'a> Sites<'s, 'a> {
         if self.out.runner_unbounded.is_some() {
             for new in news {
                 self.reach_text(new.span, &new.arguments);
-                self.check_text(new.span, &new.arguments, true);
+                self.check_text(new.span, &new.arguments, self.unbounded_text());
             }
             for template in tagged {
-                self.check_template(template.span, &template.quasi, true);
+                self.check_template(template.span, &template.quasi, self.unbounded_text());
             }
         }
         if saturated_while_watching {
