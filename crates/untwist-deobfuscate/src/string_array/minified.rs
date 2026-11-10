@@ -9,13 +9,14 @@ use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
 
 use super::checksum::{parsed_statement, sees_its_parameters, unused_name};
-use super::inlined::used_only_in;
+use super::inlined::used_only_in_with;
 use super::{array_literal, match_string_array};
 use crate::array_rotator::is_infinite_rotator_loop;
 use crate::mutants::minified_rotators_trusted;
 use crate::mutants::rotator_loop_bindings_trusted;
 use crate::probe::contains_expression;
 use crate::stamp::string_array_unit;
+use crate::stamp::DynamicScopes;
 use oxc_semantic::Scoping;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
@@ -162,7 +163,12 @@ impl<'a> VisitJs<'a> for ReadNames {
     }
 }
 
-fn loop_helper(stmt: &Statement<'_>, rotator: &Statement<'_>, scoping: &Scoping) -> bool {
+fn loop_helper(
+    stmt: &Statement<'_>,
+    rotator: &Statement<'_>,
+    (scoping, dynamic): (&Scoping, &DynamicScopes),
+    declared: &LoopBindings,
+) -> bool {
     let Statement::FunctionDeclaration(function) = stmt else {
         return false;
     };
@@ -175,12 +181,11 @@ fn loop_helper(stmt: &Statement<'_>, rotator: &Statement<'_>, scoping: &Scoping)
     {
         return false;
     }
-    if !rotator_loop_bindings_trusted() && !used_only_in(scoping, symbol, std::iter::once(rotator))
+    if !rotator_loop_bindings_trusted()
+        && !used_only_in_with(scoping, dynamic, symbol, std::iter::once(rotator))
     {
         return false;
     }
-    let mut declared = LoopBindings::default();
-    declared.visit_statement(rotator);
     let mut reads = ReadNames::default();
     reads.visit_function(function, ScopeFlags::Function);
     !reads.names.iter().any(|name| declared.names.contains(name))
@@ -192,6 +197,10 @@ fn is_function_array_loop(stmt: &Statement<'_>, array: &str) -> bool {
 }
 
 pub(super) fn closed_loop(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
+    closed_loop_with(stmt, scoping, &DynamicScopes::of(scoping))
+}
+
+fn closed_loop_with(stmt: &Statement<'_>, scoping: &Scoping, dynamic: &DynamicScopes) -> bool {
     let mut escapes = LoopEscapes::default();
     escapes.visit_statement(stmt);
     let mut uses = LexicalUses::default();
@@ -200,7 +209,9 @@ pub(super) fn closed_loop(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
     bindings.visit_statement(stmt);
     let sealed = rotator_loop_bindings_trusted()
         || bindings.symbols.iter().all(|symbol| {
-            symbol.is_some_and(|symbol| used_only_in(scoping, symbol, std::iter::once(stmt)))
+            symbol.is_some_and(|symbol| {
+                used_only_in_with(scoping, dynamic, symbol, std::iter::once(stmt))
+            })
         });
     !escapes.found && (!uses.found || minified_rotators_trusted()) && sealed
 }
@@ -504,6 +515,7 @@ fn checksum_as_parameter<'a>(call: &mut CallExpression<'a>, array: &str, cx: &Cx
 struct Normalise<'c, 'a, 'x> {
     cx: &'c Cx<'a, 'x>,
     changed: usize,
+    dynamic: std::cell::OnceCell<DynamicScopes>,
 }
 
 impl<'a> Normalise<'_, 'a, '_> {
@@ -625,14 +637,25 @@ impl<'a> Normalise<'_, 'a, '_> {
 
     fn wrap_loop(&mut self, it: &mut AVec<'a, Statement<'a>>, array: &str) {
         let scoping = self.cx.scoping();
-        let Some(at) = it
+        let Some(candidate) = it
             .iter()
-            .position(|stmt| is_function_array_loop(stmt, array) && closed_loop(stmt, scoping))
+            .position(|stmt| is_function_array_loop(stmt, array))
         else {
             return;
         };
+        let dynamic = self.dynamic.get_or_init(|| DynamicScopes::of(scoping));
+        let Some(at) = (candidate..it.len()).find(|index| {
+            is_function_array_loop(&it[*index], array)
+                && closed_loop_with(&it[*index], scoping, dynamic)
+        }) else {
+            return;
+        };
+        let mut declared = LoopBindings::default();
+        declared.visit_statement(&it[at]);
         let helpers: Vec<usize> = (0..it.len())
-            .filter(|index| *index != at && loop_helper(&it[*index], &it[at], scoping))
+            .filter(|index| {
+                *index != at && loop_helper(&it[*index], &it[at], (scoping, dynamic), &declared)
+            })
             .collect();
         let moved = helpers.clone();
         let Some(mut wrapped) = parsed_statement("!function () { 0; }();", self.cx) else {
@@ -665,9 +688,14 @@ impl<'a> Normalise<'_, 'a, '_> {
 
     fn function_array_statements(&mut self, it: &mut AVec<'a, Statement<'a>>, array: &str) {
         self.wrap_loop(it, array);
-        let taken = it.take_in(self.cx);
-        for stmt in taken {
-            self.place_function_array(stmt, array, it);
+        let splits = it.iter().any(|stmt| {
+            declaration_led_by_rotator(stmt, array) || statement_led_by_rotator(stmt, array)
+        });
+        if splits {
+            let taken = it.take_in(self.cx);
+            for stmt in taken {
+                self.place_function_array(stmt, array, it);
+            }
         }
         for stmt in it.iter_mut() {
             if let Statement::ExpressionStatement(node) = stmt {
@@ -692,16 +720,19 @@ impl<'a> Normalise<'_, 'a, '_> {
 impl<'a> VisitMut<'a> for Normalise<'_, 'a, '_> {
     fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
         if let Some(array) = it.iter().find_map(minified_array_name).map(str::to_string) {
-            let taken = it.take_in(self.cx);
-            for stmt in taken {
-                self.place(stmt, &array, it);
+            let splits = it.iter().any(|stmt| {
+                joined_declaration(stmt, &array) || sequence_led_by_array_call(stmt, &array)
+            });
+            if splits {
+                let taken = it.take_in(self.cx);
+                for stmt in taken {
+                    self.place(stmt, &array, it);
+                }
             }
-            let again = it.take_in(self.cx);
-            for mut stmt in again {
-                if let Statement::ExpressionStatement(node) = &mut stmt {
+            for stmt in it.iter_mut() {
+                if let Statement::ExpressionStatement(node) = stmt {
                     self.rotator(&mut node.expression, &array);
                 }
-                it.push(stmt);
             }
         } else if let Some(array) = it.iter().find_map(function_array_name).map(str::to_string) {
             self.function_array_statements(it, &array);
@@ -711,7 +742,11 @@ impl<'a> VisitMut<'a> for Normalise<'_, 'a, '_> {
 }
 
 pub(super) fn normalise_minified<'a>(program: &mut Program<'a>, cx: &Cx<'a, '_>) -> usize {
-    let mut normalise = Normalise { cx, changed: 0 };
+    let mut normalise = Normalise {
+        cx,
+        changed: 0,
+        dynamic: std::cell::OnceCell::new(),
+    };
     normalise.visit_program(program);
     normalise.changed
 }

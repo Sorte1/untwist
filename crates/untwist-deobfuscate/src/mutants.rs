@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 static WRAPPER_GUARDS_OFF: AtomicBool = AtomicBool::new(false);
 
@@ -482,4 +482,18 @@ pub fn trust_bootstrap_helper_targets_for_tests(on: bool) {
 
 pub(crate) fn bootstrap_helper_targets_trusted() -> bool {
     HELPER_TARGETS_TRUSTED.load(Ordering::Relaxed)
+}
+
+static ROUND_LIMIT: AtomicU32 = AtomicU32::new(0);
+
+#[doc(hidden)]
+pub fn limit_deobfuscate_rounds_for_tests(rounds: u32) {
+    ROUND_LIMIT.store(rounds, Ordering::SeqCst);
+}
+
+pub(crate) fn deobfuscate_round_limit(rounds: u32) -> u32 {
+    match ROUND_LIMIT.load(Ordering::Relaxed) {
+        0 => rounds,
+        limit => limit.min(rounds),
+    }
 }

@@ -529,6 +529,10 @@ pub fn round_cap(max: u32) -> String {
     format!("{ROUND_CAP} {max} reached with changes pending")
 }
 
+pub fn round_cap_undone(max: u32) -> String {
+    format!("{ROUND_CAP} {max} reached after the string-array rewrites began; the program is kept as it was before deobfuscation")
+}
+
 pub fn preparation_stopped_early(stop: &str) -> String {
     format!("{PREPARATION_STOPPED_EARLY}: {stop}")
 }

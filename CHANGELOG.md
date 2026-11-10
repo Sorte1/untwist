@@ -61,6 +61,12 @@ All notable changes to this project are documented in this file. The format is b
   recognised only in its full template with unshadowed globals; `a["01"]` and `a["+1"]` are no
   longer read as `a[1]`; and an `eval` layer that deletes or redefines through a value that may be
   the global object is kept for `--unsafe`.
+- Many string arrays in one file no longer cost a pass run each: the string-array rewrites of
+  separate functions and the legacy lifts now happen in the same run, and a rotator loop beside
+  many function declarations is checked in linear time. 2,000 single-use arrays now decode in 1.2 s
+  and 31 MB instead of stopping at the round cap after 3 s and 405 MB. When the deobfuscate round
+  cap is reached after the string-array rewrites began, the program is kept as it was before
+  deobfuscation instead of in a half-rewritten form.
 - An unpacked esbuild bundle no longer hands a module a stale copy of a binding. A binding that
   an `__esm` init assigns is now exported from `_runtime/esbuild.js` through a getter and read as
   `runtime.name`; before, a module that read it after the init ran still saw `undefined`. A bundle
