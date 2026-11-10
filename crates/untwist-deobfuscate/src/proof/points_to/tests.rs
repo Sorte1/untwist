@@ -81,9 +81,8 @@ fn a_definer_called_through_call_is_a_site() {
 
 #[test]
 fn an_escaped_function_parameter_may_hold_an_escaped_builtin() {
-    let sites = site_texts(
-        "function f(o) { o.push = 1; } window.handler = f; host(Array.prototype);",
-    );
+    let sites =
+        site_texts("function f(o) { o.push = 1; } window.handler = f; host(Array.prototype);");
     assert_eq!(sites, ["o.push"]);
 }
 
@@ -247,4 +246,52 @@ fn small_inputs_settle_in_few_steps() {
             assert!(steps < SMALL_INPUT_STEPS, "{input}: {steps} steps");
         });
     }
+}
+
+const SELF_REACHING_BOUND_CALLS: &[&str] = &[
+    "document.defaultView.Object.defineProperty(String.prototype, m, { value: 1 });",
+    "function d(c) { return String.fromCharCode(0x68) + c; } document.defaultView.Object.defineProperty(String.prototype, m, { value: 1 }); d(1);",
+];
+
+const HELD_OVERSHOOT: u64 = 64;
+
+#[test]
+fn a_bound_call_that_reaches_itself_ends_within_the_budget() {
+    for input in SELF_REACHING_BOUND_CALLS {
+        with_program(input, |program, scoping| {
+            let decoded = FxHashMap::default();
+            let mut generator = super::generate::Gen::new(program, scoping, &decoded, &[]);
+            generator.run(program);
+            generator.g.solve(None);
+            let (held, cap) = generator.g.held_and_cap();
+            assert!(
+                held <= cap + HELD_OVERSHOOT,
+                "{input}: held {held} of {cap}"
+            );
+            let sites = generator.sites();
+            if generator.g.exhausted() {
+                assert_eq!(sites.len(), 1, "{input}");
+                assert_eq!(sites[0].span(), Span::default(), "{input}");
+            }
+        });
+    }
+}
+
+#[test]
+fn a_spent_budget_stops_the_work_inside_one_handler() {
+    let args = vec!["1"; 399].join(", ");
+    let source = format!("var a = []; var p = a.push; p.call(a, {args});");
+    with_program(&source, |program, scoping| {
+        let decoded = FxHashMap::default();
+        let mut generator = super::generate::Gen::new(program, scoping, &decoded, &[]);
+        generator.run(program);
+        generator.g.cap_elements_for_tests(300);
+        generator.g.solve(None);
+        assert!(generator.g.exhausted());
+        let stores = generator.g.stores_issued();
+        assert!(
+            stores < 16,
+            "{stores} stores issued after the budget ran out"
+        );
+    });
 }

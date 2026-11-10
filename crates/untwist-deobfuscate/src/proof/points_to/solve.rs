@@ -172,6 +172,7 @@ pub(super) struct Graph {
     escaped: FxHashSet<ObjectId>,
     pub(super) functions: FxHashMap<ObjectId, FnInfo>,
     pub(super) bound: FxHashMap<ObjectId, BoundInfo>,
+    pub(super) spills: FxHashMap<ObjectId, Node>,
     wired_loads: FxHashSet<(ObjectId, Field, Node)>,
     wired_stores: FxHashSet<(ObjectId, Field, Node)>,
     applied: FxHashSet<(u32, ObjectId)>,
@@ -234,6 +235,7 @@ impl Graph {
             escaped: FxHashSet::default(),
             functions: FxHashMap::default(),
             bound: FxHashMap::default(),
+            spills: FxHashMap::default(),
             wired_loads: FxHashSet::default(),
             wired_stores: FxHashSet::default(),
             applied: FxHashSet::default(),
@@ -332,6 +334,9 @@ impl Graph {
     }
 
     fn insert(&mut self, node: Node, object: ObjectId) -> bool {
+        if self.exhausted {
+            return false;
+        }
         let set = &mut self.pts[node.0 as usize];
         let Err(at) = set.binary_search(&object) else {
             return false;
@@ -366,10 +371,10 @@ impl Graph {
     }
 
     pub(super) fn copy(&mut self, from: Node, to: Node) {
-        if from == to || self.defer(Init::Copy(from, to)) {
+        if from == to || self.defer(Init::Copy(from, to)) || self.exhausted {
             return;
         }
-        if !self.edges.insert((from, to)) {
+        if !self.edges.insert((from, to)) || self.spent(0) {
             return;
         }
         self.copies[from.0 as usize].push(to);
@@ -400,6 +405,9 @@ impl Graph {
     }
 
     fn watch(&mut self, node: Node, watch: Watch) {
+        if self.spent(1) {
+            return;
+        }
         self.watches[node.0 as usize].push(watch);
         if !self.pts[node.0 as usize].is_empty() {
             self.replays.push((node, watch));
@@ -407,7 +415,7 @@ impl Graph {
     }
 
     pub(super) fn load(&mut self, base: Node, key: Key, to: Node) {
-        if self.defer(Init::Load(base, key, to)) {
+        if self.defer(Init::Load(base, key, to)) || self.exhausted {
             return;
         }
         let index = self.loads.len() as u32;
@@ -471,7 +479,7 @@ impl Graph {
     }
 
     pub(super) fn store(&mut self, base: Node, key: Key, from: Node) {
-        if self.defer(Init::Store(base, key, from)) {
+        if self.defer(Init::Store(base, key, from)) || self.exhausted {
             return;
         }
         let index = self.stores.len() as u32;
@@ -501,7 +509,10 @@ impl Graph {
             call.loose,
             call.firm,
         );
-        if !self.call_keys.insert(key) {
+        if self.exhausted || !self.call_keys.insert(key) {
+            return;
+        }
+        if self.spent(call.args.len() as u64) {
             return;
         }
         let index = self.calls.len() as u32;
@@ -583,14 +594,12 @@ impl Graph {
         let Some(name) = self.field_name(field).map(str::to_string) else {
             return;
         };
-        let read = if builtin == Builtin::Global
-            && back_routes_dropped()
-            && model::is_back_route(&name)
-        {
-            Read::World
-        } else {
-            model::read(builtin, &name)
-        };
+        let read =
+            if builtin == Builtin::Global && back_routes_dropped() && model::is_back_route(&name) {
+                Read::World
+            } else {
+                model::read(builtin, &name)
+            };
         match read {
             Read::Values(values) => {
                 for value in values {
@@ -602,7 +611,9 @@ impl Graph {
                 if !self.global_declared.contains(&field) {
                     self.insert(node, ObjectId::WORLD);
                 }
-                if builtin == Builtin::Global && model::is_back_route(&name) && !back_routes_dropped()
+                if builtin == Builtin::Global
+                    && model::is_back_route(&name)
+                    && !back_routes_dropped()
                 {
                     self.insert(node, object);
                 }
@@ -708,7 +719,14 @@ impl Graph {
 
     pub(super) fn setter_call(&mut self, target: Node, key: Key, setter: Node, span: Span) {
         let this = self.receivers(target);
-        let value = self.node();
+        let inputs = match key {
+            Key::Dynamic(node) => (4, vec![this, setter, node]),
+            Key::Static(Field(field)) => (5, vec![this, setter, Node(field)]),
+        };
+        let (value, fresh) = self.derived(inputs.0, inputs.1, span);
+        if !fresh {
+            return;
+        }
         self.load(this, key, value);
         self.call(Call {
             callee: setter,
@@ -1288,19 +1306,32 @@ impl Graph {
     }
 
     fn over_budget(&mut self) -> bool {
-        let held = self.budget.elements
-            + (self.edges.len()
-                + self.wired_loads.len()
-                + self.wired_stores.len()
-                + self.loads.len()
-                + self.calls.len()
-                + self.pts.len()) as u64;
+        self.spent(0)
+    }
+
+    fn spent(&mut self, charge: u64) -> bool {
+        if self.exhausted {
+            return true;
+        }
+        self.budget.elements += charge;
+        let held = self.held();
         if self.budget.steps >= self.budget.steps_cap || held >= self.budget.elements_cap {
             self.exhausted = true;
             self.queue.clear();
             self.replays.clear();
         }
         self.exhausted
+    }
+
+    fn held(&self) -> u64 {
+        self.budget.elements
+            + (self.edges.len()
+                + self.wired_loads.len()
+                + self.wired_stores.len()
+                + self.loads.len()
+                + self.stores.len()
+                + self.calls.len()
+                + self.pts.len()) as u64
     }
 
     fn apply_init(&mut self, item: Init) {
@@ -1327,6 +1358,21 @@ impl Graph {
     #[cfg(test)]
     pub(super) fn steps(&self) -> u64 {
         self.budget.steps
+    }
+
+    #[cfg(test)]
+    pub(super) fn cap_elements_for_tests(&mut self, elements: u64) {
+        self.budget.elements_cap = elements;
+    }
+
+    #[cfg(test)]
+    pub(super) fn held_and_cap(&self) -> (u64, u64) {
+        (self.held(), self.budget.elements_cap)
+    }
+
+    #[cfg(test)]
+    pub(super) fn stores_issued(&self) -> usize {
+        self.stores.len()
     }
 }
 

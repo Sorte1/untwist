@@ -7,6 +7,7 @@ use crate::mutants::unbound_this_dropped;
 const UNKNOWN: Key = Key::Static(Field::UNKNOWN);
 const ACCESSORS: Key = Key::Static(Field::ACCESSORS);
 const ENTRIES: Key = Key::Static(Field::ENTRIES);
+const BOUND_ARGS_LIMIT: usize = 16;
 
 impl Graph {
     pub(super) fn apply_call(&mut self, index: u32, callee: ObjectId) {
@@ -98,6 +99,20 @@ impl Graph {
         };
         let mut args = info.args.clone();
         args.extend(call.args.iter().copied());
+        let spread = if args.len() > BOUND_ARGS_LIMIT
+            || (call.spread.is_some() && self.spills.contains_key(&bound))
+        {
+            let spill = self.spill(bound);
+            for extra in args.split_off(BOUND_ARGS_LIMIT.min(args.len())) {
+                self.copy(extra, spill);
+            }
+            if let Some(spread) = call.spread {
+                self.copy(spread, spill);
+            }
+            Some(spill)
+        } else {
+            call.spread
+        };
         self.call(Call {
             callee: info.target,
             this: if call.construct {
@@ -106,13 +121,22 @@ impl Graph {
                 Some(info.this)
             },
             args,
-            spread: call.spread,
+            spread,
             result: call.result,
             construct: call.construct,
             loose: info.loose,
             firm: false,
             span: call.span,
         });
+    }
+
+    fn spill(&mut self, bound: ObjectId) -> Node {
+        if let Some(node) = self.spills.get(&bound) {
+            return *node;
+        }
+        let node = self.node();
+        self.spills.insert(bound, node);
+        node
     }
 
     fn fresh(&mut self, span: Span, kind: SiteKind, proto: &[Builtin]) -> (ObjectId, Node) {
@@ -168,7 +192,10 @@ impl Graph {
     }
 
     pub(super) fn iterate(&mut self, value: Node) -> Node {
-        let elements = self.node();
+        let (elements, fresh) = self.derived(3, vec![value], Span::default());
+        if !fresh {
+            return elements;
+        }
         self.load(value, UNKNOWN, elements);
         let iterator_fn = self.node();
         self.load_named(value, "@@iterator", iterator_fn);
@@ -697,7 +724,11 @@ impl Graph {
             _ => None,
         };
         if let Some(range) = coerced {
-            let values: Vec<Node> = call.args[range].iter().chain(&call.spread).copied().collect();
+            let values: Vec<Node> = call.args[range]
+                .iter()
+                .chain(&call.spread)
+                .copied()
+                .collect();
             for value in values {
                 self.implicit(value);
             }
