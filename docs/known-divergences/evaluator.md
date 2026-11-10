@@ -34,6 +34,12 @@ engine. The items below are deliberate; every one of them is pinned by
   lexical binding is referenced before its declaration ends (or from a hoisted function), a
   switch whose cases declare lexically, or a lexical loop head that names its own bindings. `for (let …;;)` and `for (let … in/of …)` give each iteration its own
   binding, as JS does.
+- Parameter defaults have no scope of their own and no dead zone: they run in the frame of
+  the function body. A default whose value could differ for that reason is **refused**, in
+  every context, when it is evaluated: one that names its own parameter or a later one
+  (a `ReferenceError` in JS), and one whose nested function names a `var`, function or
+  top-level `let`/`const` of the body (which JS resolves outside the function). A default
+  that names a body `var` directly reads the outer binding, as JS does.
 - Strictness is modelled. An assignment to a name that resolves nowhere throws a
   `ReferenceError` in strict code, after the right-hand side runs, as V8 does; in sloppy code it
   creates the global. Code is strict under a `"use strict"` directive of the script, a function
@@ -105,12 +111,9 @@ engine. The items below are deliberate; every one of them is pinned by
   instance inherits the target's prototype and `instanceof` holds for both.
 - A RegExp's `lastIndex` is tracked internally but is not readable or writable from JS;
   `re.lastIndex` is `undefined` outside decoding, and a read or write of it bails while
-  decoding.
-- `fold::is_pure` means "no side effects", **not** "cannot throw". `null.x` and
-  `decodeURIComponent('%')` are both pure and both throw, so a dead-code consumer that deletes
-  pure expressions deletes observable throws. (`JSON.parse('x')` happens to be impure here for
-  an unrelated reason — a member call is only pure when its receiver expression is itself
-  pure, and the identifier `JSON` is not — but do not rely on that.)
+  decoding. `test`, `exec` and the string methods move the internal index as JS does: a
+  global `replace`, `replaceAll` or `match` starts from 0 and leaves 0, and a sticky one
+  starts at the index and moves it.
 - Hostile host objects (`window`, `document`, `navigator`, `process`) are `typeof "object"`
   and hostile host functions (`eval`, `Function`, `setTimeout`, `Date`, `fetch`, …) are
   `typeof "function"`, but every other access — reading a property, writing one, calling or

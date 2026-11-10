@@ -12,8 +12,8 @@ use crate::builtins::pattern_hooks::{
     note_regexp_match, note_regexp_search, REPLACE, SEARCH,
 };
 use crate::builtins::regexp::{
-    compile_regexp, exec_result, live_range, match_at, match_from, regexp_data, slice, RegExpMatch,
-    Subject,
+    compile_regexp, exec_result, is_sticky, live_range, match_at, match_from, regexp_data, slice,
+    RegExpMatch, Subject,
 };
 use crate::builtins::string::{find_units, receiver};
 use crate::host::Host;
@@ -82,6 +82,28 @@ fn next_match<'a>(
             },
         )),
     }
+}
+
+fn restart(matcher: &Matcher) {
+    if let Matcher::Regex { data, .. } = matcher {
+        data.last_index.set(0);
+    }
+}
+
+fn single_match<'a>(
+    host: &mut dyn Host<'a>,
+    matcher: &Matcher,
+    text: &JsString,
+) -> Eval<'a, Option<RegExpMatch>> {
+    let sticky = match matcher {
+        Matcher::Regex { data, .. } if is_sticky(data) => data,
+        _ => return next_match(host, matcher, text, 0),
+    };
+    let found = next_match(host, matcher, text, sticky.last_index.get())?;
+    sticky
+        .last_index
+        .set(found.as_ref().map_or(0, |found| found.range.end));
+    Ok(found)
 }
 
 const DOLLAR: u16 = b'$' as u16;
@@ -233,7 +255,17 @@ fn replace_matches<'a>(
     let mut out = Utf16Builder::charged(reserve_text(host, 0)?);
     let mut cursor = 0;
     let mut copied = 0;
-    while let Some(found) = next_match(host, matcher, text, cursor)? {
+    if global {
+        restart(matcher);
+    }
+    loop {
+        let found = match global {
+            true => next_match(host, matcher, text, cursor)?,
+            false => single_match(host, matcher, text)?,
+        };
+        let Some(found) = found else {
+            break;
+        };
         host.spend(1)?;
         let head = slice(text, &(copied..found.range.start));
         charge_for_length(host, head.len())?;
@@ -310,7 +342,7 @@ fn single_match_result<'a>(
     matcher: &Matcher,
     text: &JsString,
 ) -> Eval<'a, Value<'a>> {
-    let Some(found) = next_match(host, matcher, text, 0)? else {
+    let Some(found) = single_match(host, matcher, text)? else {
         return Ok(Value::Null);
     };
     exec_result(host, text, &found)
@@ -355,6 +387,7 @@ pub(crate) fn native_match<'a>(
     let is_global = regexp_data(&raw_pattern).is_some_and(|data| data.global);
     let matcher = regexp_matcher(host, &raw_pattern, &text)?;
     if is_global {
+        restart(&matcher);
         return match_all(host, &matcher, &text);
     }
     single_match_result(host, &matcher, &text)

@@ -55,6 +55,7 @@ pub struct Interp<'a> {
     pub loop_len_hint: usize,
     coercion: NativeCoercion,
     arguments_name: Name,
+    root_constants: Vec<Name>,
     pub(crate) prototype_key: PropKey,
     pub(crate) functions: crate::compile::FnTable<'a>,
     regexes: shared::SharedRegexes,
@@ -113,6 +114,7 @@ impl<'a> Interp<'a> {
             loop_len_hint: 0,
             coercion: NativeCoercion::Outside,
             arguments_name,
+            root_constants: Vec::new(),
             prototype_key: PropKey::Name(JsString::from_str(call::PROTOTYPE_KEY)),
             functions: crate::compile::FnTable::default(),
             regexes: shared::SharedRegexes::default(),
@@ -130,6 +132,26 @@ impl<'a> Interp<'a> {
 
     pub(crate) fn root_frame(&self) -> &FrameRef<'a> {
         &self.root
+    }
+
+    pub(crate) fn note_root_constant(&mut self, frame: &FrameRef<'a>, name: Name) {
+        if frame.borrow().parent.is_none() && !self.root_constants.contains(&name) {
+            self.root_constants.push(name);
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn has_root_constants(&self) -> bool {
+        !self.root_constants.is_empty()
+    }
+
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn writes_root_constant(&self, env: &FrameRef<'a>, name: Name) -> Eval<'a, bool> {
+        if !self.root_constants.contains(&name) {
+            return Ok(false);
+        }
+        Ok(crate::env::binds_outermost(env, name)?)
     }
 
     pub(crate) fn arguments_name(&self) -> Name {

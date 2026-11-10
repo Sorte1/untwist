@@ -5,6 +5,8 @@ use untwist_eval::heap::HeapLedger;
 use untwist_eval::interp::{eval_script_decoding, eval_script_in, Interp};
 use untwist_eval::test_hooks::{compile_census, frozen, record_units, CompileCensus, UnitRecord};
 
+const UNSOUND_DEFAULT: &str = "unsupported construct: a parameter default that reads its own parameter, a later one or a binding of the function body";
+
 struct Compared {
     default: Vec<UnitRecord>,
     census: CompileCensus,
@@ -187,21 +189,33 @@ fn the_ledger_per_call_of_a_compiled_function_that_captures_its_frame() {
 }
 
 #[test]
-fn a_default_that_reads_a_later_parameter_reads_the_outer_binding_compiled() {
-    let census = compiled(
-        "an arrow, the walker's outer",
+fn a_default_that_reads_a_later_parameter_is_refused() {
+    let compared = compare(
+        "an arrow, node throws a ReferenceError",
         "var b = 'outer'; var f = (a = b, b) => a; f();",
-        "string:outer",
+        false,
     );
-    assert_eq!(census.maybe, 0, "the own frame's undeclared slot is exact");
+
+    assert_eq!(compared.default[0].bail.as_deref(), Some(UNSOUND_DEFAULT));
 }
 
 #[test]
-fn a_closure_made_in_a_default_reads_a_later_parameter_through_maybe() {
-    let census = compiled(
-        "Maybe, the walker's outer,inner",
+fn a_closure_made_in_a_default_that_reads_a_later_parameter_is_refused() {
+    let compared = compare(
+        "a closure in a default, node throws a ReferenceError",
         "var r, b = 'outer'; function f(g = () => b, h = g(), b) { r = h + ',' + g(); } f(undefined, undefined, 'inner'); r;",
-        "string:outer,inner",
+        false,
+    );
+
+    assert_eq!(compared.default[0].bail.as_deref(), Some(UNSOUND_DEFAULT));
+}
+
+#[test]
+fn a_closure_made_before_a_let_reads_it_through_maybe() {
+    let census = compiled(
+        "Maybe, node inner",
+        "var r, x = 'outer'; function f() { var g = () => x; let x = 'inner'; r = g(); } f(); r;",
+        "string:inner",
     );
     assert!(census.maybe > 0, "Maybe: {census:?}");
 }

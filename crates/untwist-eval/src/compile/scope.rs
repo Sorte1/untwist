@@ -319,13 +319,16 @@ pub(crate) enum Near {
     Far,
 }
 
+pub(crate) const CONSTANT_ASSIGNMENT: &str = "Assignment to constant variable.";
+
 pub(crate) fn finish_store<'a>(interp: &mut Interp<'a>, stored: Stored) -> Eval<'a, ()> {
     match stored {
         Stored::Done => Ok(()),
         Stored::Immutable if interp.strict => {
-            Err(interp.throw(ErrorKind::TypeError, "Assignment to constant variable."))
+            Err(interp.throw(ErrorKind::TypeError, CONSTANT_ASSIGNMENT))
         }
         Stored::Immutable => Ok(()),
+        Stored::Constant => Err(interp.throw(ErrorKind::TypeError, CONSTANT_ASSIGNMENT)),
     }
 }
 
@@ -375,11 +378,15 @@ impl LayoutBuilder {
     }
 
     pub(crate) fn slot_for(&mut self, name: Name) -> Option<u32> {
+        self.slot_of_kind(name, SlotKind::Mutable)
+    }
+
+    pub(crate) fn slot_of_kind(&mut self, name: Name, kind: SlotKind) -> Option<u32> {
         if let Some(slot) = self.index.get(&name) {
             return Some(*slot);
         }
         let slot = u32::try_from(self.slots.len()).ok()?;
-        self.slots.push((name, SlotKind::Mutable));
+        self.slots.push((name, kind));
         self.index.insert(name, slot);
         Some(slot)
     }

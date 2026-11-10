@@ -554,6 +554,9 @@ fn direct_declarators<'a>(
         } else if !has_binding(frame, name)? {
             declare(frame, name, Value::Undefined);
         }
+        if declaration.kind == VariableDeclarationKind::Const {
+            interp.note_root_constant(frame, name);
+        }
     }
     Ok(())
 }

@@ -10,7 +10,7 @@ use crate::budget::loop_cap;
 use crate::compile::assign::{Place, Target};
 use crate::compile::declare::{compile_declaration, Declaration};
 use crate::compile::expr::compile_expression;
-use crate::compile::lexical::{is_lexical, none_proven};
+use crate::compile::lexical::{is_lexical, none_proven, slot_kind};
 use crate::compile::scope::{LayoutBuilder, Provable, ScopeChain};
 use crate::compile::{refuse, Code, Compiler, Lazy, Reach};
 use crate::frame::{Frame, FrameLayout, FrameRef};
@@ -189,7 +189,7 @@ fn for_head<'a>(node: &'a ForStatement<'a>, cx: &mut Compiler<'_, 'a>) -> Option
                     continue;
                 };
                 let name = cx.names.intern(id.name.as_str());
-                let slot = builder.slot_for(name)?;
+                let slot = builder.slot_of_kind(name, slot_kind(declaration.kind))?;
                 if declaration.kind == VariableDeclarationKind::Let {
                     per_iteration.push((slot, name));
                 }
@@ -338,6 +338,7 @@ pub(crate) struct ForEach<'a> {
     left: Left<'a>,
     layout: Rc<FrameLayout>,
     lexical: bool,
+    shares_frame: bool,
     body: Lazy<'a>,
 }
 
@@ -359,7 +360,11 @@ fn declared_left<'a>(
     let BindingPattern::BindingIdentifier(id) = &declarator.id else {
         return Some(Some(Left::Refuse(&DESTRUCTURING_FOR_IN)));
     };
-    let slot = builder.slot_for(cx.names.intern(id.name.as_str()))?;
+    let name = cx.names.intern(id.name.as_str());
+    if declaration.kind == VariableDeclarationKind::Var {
+        return Some(Some(Left::Identifier(name, id.name.as_str())));
+    }
+    let slot = builder.slot_of_kind(name, slot_kind(declaration.kind))?;
     Some(Some(Left::Declared(slot)))
 }
 
@@ -394,10 +399,15 @@ fn compile_each<'a>(
 ) -> Option<Looped<'a>> {
     let lexical = matches!(left, ForStatementLeft::VariableDeclaration(declaration)
         if declaration.kind != VariableDeclarationKind::Var);
+    let shares_frame = matches!(left, ForStatementLeft::VariableDeclaration(declaration)
+        if declaration.kind == VariableDeclarationKind::Var);
     let mut builder = LayoutBuilder::new();
     let declared = declared_left(left, &mut builder, cx)?;
     let layout = builder.finish()?;
-    let inner = ScopeChain::new(layout.clone(), Provable::All, Some(scope.clone()));
+    let inner = match shares_frame {
+        true => scope.clone(),
+        false => ScopeChain::new(layout.clone(), Provable::All, Some(scope.clone())),
+    };
     let left = match declared {
         Some(left) => left,
         None => other_left(left, &inner, cx),
@@ -409,6 +419,7 @@ fn compile_each<'a>(
         left,
         layout,
         lexical,
+        shares_frame,
         body: Lazy::new(body, inner),
     }))
 }
@@ -438,6 +449,13 @@ impl<'a> ForEach<'a> {
         }
     }
 
+    fn shared(&self, interp: &Interp<'a>, frame: &FrameRef<'a>) -> FrameRef<'a> {
+        match self.shares_frame {
+            true => frame.clone(),
+            false => interp.realm.new_fixed_env(&self.layout, frame),
+        }
+    }
+
     fn run_in(
         &self,
         interp: &mut Interp<'a>,
@@ -446,7 +464,7 @@ impl<'a> ForEach<'a> {
     ) -> Eval<'a, Completion<'a>> {
         let target = self.right.run(interp, frame, reach)?;
         let keys = interp.enumerable_keys(&target)?;
-        let shared = interp.realm.new_fixed_env(&self.layout, frame);
+        let shared = self.shared(interp, frame);
         for key in keys {
             if !interp.still_has_key(&target, &key)? {
                 continue;
@@ -470,7 +488,7 @@ impl<'a> ForEach<'a> {
         let target = self.right.run(interp, frame, reach)?;
         interp.note_iterator_symbol(&target)?;
         let iterated = interp.iterable_object(&target)?;
-        let shared = interp.realm.new_fixed_env(&self.layout, frame);
+        let shared = self.shared(interp, frame);
         let cap = loop_cap(interp.loop_len_hint);
         for index in 0usize.. {
             let Some(item) = object::array_element(&iterated, index) else {

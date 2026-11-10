@@ -17,6 +17,7 @@ const INDEXED_LAYOUT: usize = 8;
 pub enum SlotKind {
     Mutable,
     Immutable,
+    Constant,
 }
 
 #[derive(Debug)]
@@ -60,8 +61,16 @@ impl FrameLayout {
         }
     }
 
-    pub(crate) fn is_immutable(&self, slot: usize) -> bool {
-        self.kinds.get(slot) == Some(&SlotKind::Immutable)
+    pub(crate) fn is_mutable(&self, slot: usize) -> bool {
+        self.kinds.get(slot) == Some(&SlotKind::Mutable)
+    }
+
+    fn refused(&self, slot: usize) -> Option<Stored> {
+        match self.kinds.get(slot)? {
+            SlotKind::Mutable => None,
+            SlotKind::Immutable => Some(Stored::Immutable),
+            SlotKind::Constant => Some(Stored::Constant),
+        }
     }
 }
 
@@ -79,11 +88,13 @@ fn tail_word(value: &Value<'_>) -> u32 {
 pub(crate) enum Stored {
     Done,
     Immutable,
+    Constant,
 }
 
 pub enum WriteSlot<'s, 'a> {
     Slot(&'s mut Value<'a>),
     Immutable,
+    Constant,
     Absent,
 }
 
@@ -219,6 +230,9 @@ impl<'a> FrameBody<'a> {
         if self.is_immutable(name) {
             return WriteSlot::Immutable;
         }
+        if self.fixed_kind(name) == Some(SlotKind::Constant) {
+            return WriteSlot::Constant;
+        }
         self.get_mut(name)
             .map_or(WriteSlot::Absent, WriteSlot::Slot)
     }
@@ -235,7 +249,7 @@ impl<'a> FrameBody<'a> {
         };
         let slot = layout.slot(name)?;
         let writable =
-            !layout.is_immutable(slot) && fixed_is_declared(slots, *declared, layout.len(), slot);
+            layout.is_mutable(slot) && fixed_is_declared(slots, *declared, layout.len(), slot);
         writable.then(|| slots.get_mut(slot)).flatten()
     }
 
@@ -249,13 +263,16 @@ impl<'a> FrameBody<'a> {
 
     #[cold]
     fn fixed_is_immutable(&self, name: Name) -> bool {
+        self.fixed_kind(name) == Some(SlotKind::Immutable)
+    }
+
+    #[cold]
+    fn fixed_kind(&self, name: Name) -> Option<SlotKind> {
         let FrameBody::Fixed { layout, .. } = self else {
-            return false;
+            return None;
         };
-        layout
-            .slot(name)
-            .is_some_and(|slot| layout.is_immutable(slot))
-            && self.fixed_get(name).is_some()
+        let kind = *layout.kinds.get(layout.slot(name)?)?;
+        self.fixed_get(name).map(|_| kind)
     }
 
     #[inline]
@@ -356,8 +373,8 @@ impl<'a> FrameBody<'a> {
         let FrameBody::Fixed { layout, .. } = self else {
             return None;
         };
-        if layout.is_immutable(slot as usize) {
-            return Some(Stored::Immutable);
+        if !layout.is_mutable(slot as usize) {
+            return layout.refused(slot as usize);
         }
         let place = self.slot_value_mut(slot)?;
         *place = value;

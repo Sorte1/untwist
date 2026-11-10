@@ -49,14 +49,7 @@ pub fn to_primitive<'a>(
     };
     if crate::object::decoding() {
         let marker = PropKey::Name(JsString::from_str("@@toPrimitive"));
-        let method = host.get_property(value, &marker)?;
-        if method.is_callable() {
-            host.refuse_coercion_call(&method)?;
-            let result = host.call_value(&method, value.clone(), &[])?;
-            if !matches!(result, Value::Object(_)) {
-                return Ok(result);
-            }
-        }
+        host.get_property(value, &marker)?;
     }
     let order = match hint {
         Hint::String => ["toString", "valueOf"],

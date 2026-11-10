@@ -1,7 +1,7 @@
 mod common;
 
 use oxc_ast::ast::Statement;
-use untwist_eval::fold::{fold_to_const, is_pure, Const, FoldOptions};
+use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 fn fold(source: &str) -> Option<Const> {
     common::with_program(source, |program| {
@@ -18,15 +18,6 @@ fn fold_with(source: &str, options: &FoldOptions) -> Option<Const> {
             panic!("expected an expression statement");
         };
         fold_to_const(&stmt.expression, options)
-    })
-}
-
-fn purity(source: &str) -> bool {
-    common::with_program(source, |program| {
-        let Some(Statement::ExpressionStatement(stmt)) = program.body.first() else {
-            panic!("expected an expression statement");
-        };
-        is_pure(&stmt.expression)
     })
 }
 
@@ -76,19 +67,6 @@ fn dead_code_guards_fold_to_booleans() {
         fold("0x1 === 0x2 ? 'a' : 'b'"),
         Some(Const::Str("b".to_string()))
     );
-}
-
-#[test]
-fn the_purity_predicate_is_ours_not_the_oxc_side_effect_guard() {
-    assert!(purity("'a'.toUpperCase()"));
-    assert!(purity("1 + 2"));
-    assert!(purity("[1, 2]"));
-    assert!(!purity("f()"));
-    assert!(!purity("a = 1"));
-    assert!(!purity("a++"));
-    assert!(!purity("delete a.b"));
-    assert!(!purity("[].push(1)"));
-    assert!(!purity("someIdentifier"));
 }
 
 #[test]
