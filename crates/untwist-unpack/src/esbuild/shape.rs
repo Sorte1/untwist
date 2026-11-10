@@ -70,6 +70,46 @@ pub fn lazy_helper<'k, 'a>(init: &'k Expression<'a>) -> Option<(Vec<&'a str>, In
     Some((params, inner))
 }
 
+fn inner_bindings<'a>(init: &Expression<'a>) -> Vec<&'a str> {
+    let Expression::ArrowFunctionExpression(outer) = init.without_parentheses() else {
+        return Vec::new();
+    };
+    let Some(Inner::Expr(value)) = arrow_inner(outer) else {
+        return Vec::new();
+    };
+    let mut names = Vec::new();
+    let statements = match value.without_parentheses() {
+        Expression::FunctionExpression(function) => {
+            names.extend(function.id.as_ref().map(|id| id.name.as_str()));
+            function.body.as_deref().map(|body| &body.statements[..])
+        }
+        Expression::ArrowFunctionExpression(arrow) => match arrow_inner(arrow) {
+            Some(Inner::Block(statements)) => Some(statements),
+            _ => None,
+        },
+        _ => None,
+    };
+    if let Some([Statement::TryStatement(attempt)]) = statements {
+        let caught = attempt
+            .handler
+            .as_deref()
+            .and_then(|handler| handler.param.as_ref());
+        if let Some(BindingPattern::BindingIdentifier(error)) = caught.map(|param| &param.pattern) {
+            names.push(error.name.as_str());
+        }
+    }
+    names
+}
+
+pub fn helper_shadows(init: &Expression<'_>, params: &[&str], getter: Option<&str>) -> bool {
+    let implicit = params
+        .iter()
+        .any(|name| matches!(*name, "eval" | "arguments"));
+    let getter_param = getter.is_some_and(|getter| params.contains(&getter));
+    let read: Vec<&str> = params.iter().copied().chain(getter).collect();
+    implicit || getter_param || inner_bindings(init).iter().any(|name| read.contains(name))
+}
+
 pub fn export_helper(init: &Expression<'_>) -> bool {
     let Expression::ArrowFunctionExpression(arrow) = init.without_parentheses() else {
         return false;

@@ -487,3 +487,23 @@ fn a_sequence_around_the_wrapper_iife_is_refused() {
     refused(&format!("f(), function () {{\n{register}}}();\n"));
     refused(&format!("!(f(), function () {{\n{register}}}());\n"));
 }
+
+#[test]
+fn super_in_a_method_form_execute_refuses() {
+    let method = "System.register(\"main\", [], function (_export) {\n  \"use strict\";\n  return { execute() { BODY } };\n});\n";
+    let source = method.replace("BODY", "console.log(typeof super.hasOwnProperty);");
+    refused(&source);
+    let alloc = Allocator::default();
+    let program = parse(&alloc, &source);
+    assert_eq!(
+        untwist_unpack::detect::refused_kind(&program, Default::default()),
+        Some(untwist_unpack::BundleKind::SystemJs)
+    );
+    refused(&method.replace("BODY", "var f = () => super.x;\nconsole.log(f());"));
+    for nested in [
+        "class A { m() { return super.toString; } }\nconsole.log(new A().m());",
+        "var o = { m() { return super.toString; } };\nconsole.log(o.m());",
+    ] {
+        accepted(&method.replace("BODY", nested));
+    }
+}

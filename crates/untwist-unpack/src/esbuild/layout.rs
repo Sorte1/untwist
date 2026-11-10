@@ -7,8 +7,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::prop::prop_name;
 
 use crate::esbuild::shape::{
-    commonjs_call, export_helper, is_object_get_own_property_names, is_object_member_chain,
-    is_require_shim, lazy_helper, CallForm,
+    commonjs_call, export_helper, helper_shadows, is_object_get_own_property_names,
+    is_object_member_chain, is_require_shim, lazy_helper, CallForm,
 };
 use crate::frame::{Frame, Shape};
 use crate::matcher::{anonymous_factory, unreassigned_var, Factory};
@@ -48,6 +48,7 @@ pub struct Layout<'k, 'a> {
     pub shim: Option<&'k BindingIdentifier<'a>>,
     pub banner: Option<usize>,
     pub trusted: Vec<&'k BindingIdentifier<'a>>,
+    pub unsound: bool,
 }
 
 impl Layout<'_, '_> {
@@ -136,6 +137,7 @@ struct Lazies<'a> {
     esm: FxHashSet<&'a str>,
     getters: FxHashSet<&'a str>,
     exports_helper: bool,
+    shadowed: bool,
 }
 
 impl Lazies<'_> {
@@ -186,6 +188,7 @@ fn lazies<'a>(list: &[Statement<'a>]) -> Lazies<'a> {
         esm: FxHashSet::default(),
         getters: FxHashSet::default(),
         exports_helper: false,
+        shadowed: false,
     };
     let getters = names_getters(list);
     for (_, _, id, init) in declarators(list) {
@@ -203,6 +206,7 @@ fn lazies<'a>(list: &[Statement<'a>]) -> Lazies<'a> {
         });
         match proven {
             Some((form, getter)) => {
+                found.shadowed |= helper_shadows(init, &params, getter);
                 found.commonjs.insert(id.name.as_str(), form);
                 found
                     .getters
@@ -270,12 +274,16 @@ fn fits_factory_params(factory: &Factory<'_, '_>) -> bool {
     crate::esbuild::shape::simple_params(factory.params).is_some_and(|params| params.len() <= 2)
 }
 
-fn factories<'k, 'a>(
-    list: &'k [Statement<'a>],
-    lazies: &Lazies<'a>,
-) -> Option<(Vec<FactoryDecl<'k, 'a>>, usize)> {
+struct Found<'k, 'a> {
+    factories: Vec<FactoryDecl<'k, 'a>>,
+    lazy: usize,
+    proto_key: bool,
+}
+
+fn factories<'k, 'a>(list: &'k [Statement<'a>], lazies: &Lazies<'a>) -> Option<Found<'k, 'a>> {
     let mut found = Vec::new();
     let mut lazy = 0;
+    let mut proto_key = false;
     for (statement, declarator, binding, init) in declarators(list) {
         let Some((callee, argument)) = init.and_then(callee_of) else {
             continue;
@@ -291,6 +299,7 @@ fn factories<'k, 'a>(
         if !fits_factory_params(&function) {
             return None;
         }
+        proto_key |= key.as_deref() == Some("__proto__");
         found.push(FactoryDecl {
             statement,
             declarator,
@@ -301,7 +310,11 @@ fn factories<'k, 'a>(
             scope,
         });
     }
-    Some((found, lazy))
+    Some(Found {
+        factories: found,
+        lazy,
+        proto_key,
+    })
 }
 
 fn creates_require(list: &[Statement<'_>], callee: &str) -> bool {
@@ -380,16 +393,81 @@ fn prefix_statement(statement: &Statement<'_>, lazy_callees: &FxHashSet<&str>) -
     }
 }
 
-fn prefix(list: &[Statement<'_>], lazies: &Lazies<'_>, layout: &Layout<'_, '_>) -> Vec<usize> {
-    let lazy_callees: FxHashSet<&str> = lazies
+fn lazy_callees<'a>(lazies: &Lazies<'a>) -> FxHashSet<&'a str> {
+    lazies
         .commonjs
         .keys()
         .copied()
         .chain(lazies.esm.iter().copied())
-        .collect();
+        .collect()
+}
+
+fn defined_before_any_effect(
+    list: &[Statement<'_>],
+    lazy_callees: &FxHashSet<&str>,
+    factories: &[FactoryDecl<'_, '_>],
+) -> bool {
+    let Some(last) = factories.last() else {
+        return true;
+    };
+    let Some(Statement::VariableDeclaration(declaration)) = list.get(last.statement) else {
+        return false;
+    };
+    let quiet_before = list[..last.statement]
+        .iter()
+        .all(|statement| quiet_statement(statement, lazy_callees));
+    quiet_before
+        && declaration.declarations[..last.declarator]
+            .iter()
+            .all(|declarator| quiet_init(declarator.init.as_ref(), lazy_callees))
+}
+
+fn inert_value(expr: &Expression<'_>) -> bool {
+    match expr.without_parentheses() {
+        Expression::NumericLiteral(_)
+        | Expression::StringLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::BigIntLiteral(_) => true,
+        Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+        Expression::ArrayExpression(array) => array
+            .elements
+            .iter()
+            .all(|element| element.as_expression().is_some_and(inert_value)),
+        Expression::ObjectExpression(object) => object.properties.iter().all(|property| {
+            matches!(property, ObjectPropertyKind::ObjectProperty(property)
+                if !property.computed
+                    && property.kind == PropertyKind::Init
+                    && inert_value(&property.value))
+        }),
+        _ => false,
+    }
+}
+
+fn quiet_init(init: Option<&Expression<'_>>, lazy_callees: &FxHashSet<&str>) -> bool {
+    init.is_some_and(inert_value) || effect_free(init, lazy_callees)
+}
+
+fn quiet_statement(statement: &Statement<'_>, lazy_callees: &FxHashSet<&str>) -> bool {
+    if prefix_statement(statement, lazy_callees).is_some() {
+        return true;
+    }
+    matches!(statement, Statement::VariableDeclaration(declaration)
+    if unreassigned_var(declaration.kind)
+        && declaration.declarations.iter().all(|declarator| {
+            matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+                && quiet_init(declarator.init.as_ref(), lazy_callees)
+        }))
+}
+
+fn prefix(
+    list: &[Statement<'_>],
+    lazy_callees: &FxHashSet<&str>,
+    layout: &Layout<'_, '_>,
+) -> Vec<usize> {
     let mut found = Vec::new();
     for (index, statement) in list.iter().enumerate() {
-        match prefix_statement(statement, &lazy_callees) {
+        match prefix_statement(statement, lazy_callees) {
             Some(true) if !layout.is_factory_statement(index) => found.push(index),
             Some(_) => {}
             None => break,
@@ -419,10 +497,13 @@ pub fn layout<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
     if lazies.commonjs.is_empty() && lazies.esm.is_empty() {
         return None;
     }
-    let (factories, lazy_factories) = factories(list, &lazies)?;
+    let found = factories(list, &lazies)?;
+    let lazy_callees = lazy_callees(&lazies);
+    let early = !defined_before_any_effect(list, &lazy_callees, &found.factories);
     let mut layout = Layout {
-        factories,
-        lazy_factories,
+        unsound: lazies.shadowed || found.proto_key || early,
+        factories: found.factories,
+        lazy_factories: found.lazy,
         exports_helper: lazies.exports_helper,
         prefix: Vec::new(),
         shim: None,
@@ -432,7 +513,7 @@ pub fn layout<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
     if !layout.accepted() {
         return None;
     }
-    layout.prefix = prefix(list, &lazies, &layout);
+    layout.prefix = prefix(list, &lazy_callees, &layout);
     layout.shim = shim(list, &layout.prefix);
     Some(layout)
 }

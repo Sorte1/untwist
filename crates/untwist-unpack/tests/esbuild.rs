@@ -237,7 +237,7 @@ fn an_esm_entry_gets_a_created_require() {
 #[test]
 fn an_esm_entry_that_reads_require_gets_a_fresh_name() {
     let source = format!(
-        "export const has = typeof require;\n{HELPERS}{}console.log(require_a());\n",
+        "{HELPERS}{}console.log(require_a());\nexport const has = typeof require;\n",
         factory("a.js", "exports", "exports.a = 1;")
     );
     let files = split(&source).expect("an esbuild bundle");
@@ -761,4 +761,135 @@ fn a_helper_that_reads_a_host_name_is_never_moved_into_the_runtime() {
             "{DIRECT}{ESM}var init_x = __esm(() => {{ console.log({read}); }});\nvar require_a = __commonJS((exports, module) => {{ init_x(); module.exports = 1; }});\nconsole.log(require_a());\n"
         ));
     }
+}
+
+fn refused_with_note(source: &str) {
+    refused(source);
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    assert_eq!(
+        untwist_unpack::detect::refused_kind(&parsed.program, Default::default()),
+        Some(BundleKind::Esbuild),
+        "no refusal note for:\n{source}"
+    );
+}
+
+const GUARDED: &str = "var __commonJS = (cb, mod) => function __require() { try { return mod || cb((mod = { exports: {} }).exports, mod), mod.exports; } catch (e) { throw mod = 0, e; } };\n";
+
+#[test]
+fn a_helper_binding_that_shadows_a_name_the_helper_reads_refuses() {
+    let direct = "var require_a = __commonJS((exports, module) => { module.exports = \"a\"; });\nconsole.log(require_a());\n";
+    let keyed = format!(
+        "{}console.log(require_a());\n",
+        factory("a.js", "exports, module", "module.exports = \"a\";")
+    );
+    let named = DIRECT
+        .replace("() => (", "function __require() { return ")
+        .replace("mod.exports);", "mod.exports; };");
+    assert!(split(&format!("{named}{direct}")).is_some(), "{named}");
+    assert!(split(&format!("{GUARDED}{direct}")).is_some());
+    assert!(split(&format!("{HELPERS}{keyed}")).is_some());
+    for shadow in ["function mod()", "function cb()"] {
+        let helper = named.replace("function __require()", shadow);
+        refused_with_note(&format!("{helper}{direct}"));
+    }
+    refused_with_note(&format!(
+        "{}{keyed}",
+        HELPERS.replace("function __require()", "function __getOwnPropNames()")
+    ));
+    refused_with_note(&format!(
+        "{}{direct}",
+        GUARDED.replace(
+            "catch (e) { throw mod = 0, e; }",
+            "catch (mod) { throw mod = 0, mod; }"
+        )
+    ));
+    for param in ["eval", "arguments"] {
+        let helper = named.replace("cb", param);
+        refused_with_note(&format!("{helper}{direct}"));
+    }
+    let getter_param = HELPERS
+        .replace("(cb, mod)", "(__getOwnPropNames, mod)")
+        .replace(
+            "cb[__getOwnPropNames(cb)[0]]",
+            "__getOwnPropNames[__getOwnPropNames(__getOwnPropNames)[0]]",
+        );
+    refused_with_note(&format!("{getter_param}{keyed}"));
+}
+
+#[test]
+fn a_bound_object_in_the_keyed_helper_refuses() {
+    let keyed = factory("a.js", "exports, module", "module.exports = \"a\";");
+    let source = format!("{HELPERS}{keyed}console.log(require_a());\n");
+    assert!(split(&source).is_some());
+    refused_with_note(&format!(
+        "var Object = {{ getOwnPropertyNames: () => [\"toString\"] }};\n{source}"
+    ));
+    refused_with_note(&format!("{source}function Object() {{}}\n"));
+    let wrapped = format!("(() => {{\nvar Object = globalThis.Object;\n{source}}})();\n");
+    refused_with_note(&wrapped);
+}
+
+#[test]
+fn a_keyed_factory_named_proto_refuses() {
+    let source = format!(
+        "{HELPERS}var require_a = __commonJS({{ __proto__: function (exports, module) {{ module.exports = 1; }} }});\nconsole.log(require_a());\n"
+    );
+    refused_with_note(&source);
+    refused_with_note(&source.replace("__proto__:", "\"__proto__\":"));
+    let plain = source.replace("__proto__:", "\"a.js\":");
+    assert!(split(&plain).is_some());
+}
+
+#[test]
+fn super_in_a_method_form_factory_refuses() {
+    refused_with_note(&format!(
+        "{HELPERS}{}console.log(require_a());\n",
+        factory(
+            "a.js",
+            "exports, module",
+            "module.exports = typeof super.hasOwnProperty;"
+        )
+    ));
+    refused_with_note(&format!(
+        "{HELPERS}{}console.log(require_a());\n",
+        factory(
+            "a.js",
+            "exports, module",
+            "var f = () => super.toString;\nmodule.exports = f();"
+        )
+    ));
+    for nested in [
+        "class A { m() { return super.toString; } }\nmodule.exports = new A().m();",
+        "var o = { m() { return super.toString; } };\nmodule.exports = o.m();",
+        "class A { f = super.toString; }\nmodule.exports = new A().f;",
+    ] {
+        let source = format!(
+            "{HELPERS}{}console.log(require_a());\n",
+            factory("a.js", "exports, module", nested)
+        );
+        assert!(split(&source).is_some(), "{nested}");
+    }
+}
+
+#[test]
+fn entry_code_between_factory_declarations_refuses() {
+    let a = "var require_a = __commonJS((exports, module) => { exports.before = true; module.exports.b = require_b(); });\n";
+    let b = "var require_b = __commonJS((exports, module) => { module.exports = \"b\"; });\n";
+    let tail = "console.log(JSON.stringify(require_a()));\n";
+    assert!(split(&format!("{DIRECT}{a}{b}{tail}")).is_some());
+    refused_with_note(&format!(
+        "{DIRECT}{a}try {{ require_a(); }} catch (e) {{ console.log(\"caught\"); }}\n{b}{tail}"
+    ));
+    refused_with_note(&format!(
+        "{DIRECT}function early() {{ return require_b(); }}\ntry {{ console.log(early()); }} catch (e) {{ console.log(\"not yet\"); }}\n{b}console.log(require_b());\n"
+    ));
+    refused_with_note(&format!(
+        "{DIRECT}{}, early = require_a();\n{b}{tail}",
+        a.trim_end().trim_end_matches(';')
+    ));
+    assert!(split(&format!(
+        "{DIRECT}function later() {{ return require_b(); }}\nvar alias = () => require_a();\n{a}{b}console.log(later(), alias());\n"
+    ))
+    .is_some());
 }

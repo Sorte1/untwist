@@ -71,6 +71,8 @@ pub trait Policy<'a> {
 
     fn this(&mut self, _frame: Frame) {}
 
+    fn super_(&mut self, _frame: Frame) {}
+
     fn new_target(&mut self, _frame: Frame) {}
 
     fn import_meta(&mut self) {}
@@ -226,6 +228,10 @@ impl<'a, P: Policy<'a> + ?Sized> VisitJs<'a> for Scan<'_, P> {
 
     fn visit_this_expression(&mut self, _it: &ThisExpression) {
         self.policy.this(self.frame);
+    }
+
+    fn visit_super(&mut self, _it: &Super) {
+        self.policy.super_(self.frame);
     }
 
     fn visit_new_target(&mut self, _it: &NewTarget) {

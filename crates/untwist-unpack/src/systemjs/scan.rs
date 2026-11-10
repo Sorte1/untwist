@@ -365,6 +365,10 @@ impl<'a> Policy<'a> for Scan<'_, 'a> {
         self.refused |= !frame.receiver();
     }
 
+    fn super_(&mut self, frame: Frame) {
+        self.refused |= !frame.receiver();
+    }
+
     fn dynamic_import(&mut self) {
         self.refused = true;
     }
