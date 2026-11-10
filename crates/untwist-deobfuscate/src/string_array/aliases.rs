@@ -176,36 +176,46 @@ fn root_name_reaches(scoping: &Scoping, alias: SymbolId, root: SymbolId) -> bool
     })
 }
 
-fn binding_is_never_rewritten(uses: &SymbolUses, scoping: &Scoping, symbol: SymbolId) -> bool {
-    scoping.symbol_redeclarations(symbol).is_empty()
-        && is_constant_binding(scoping, symbol)
-        && uses.of(symbol).map_or(0, |found| found.writes) == 0
-}
-
-struct Stability {
-    uses: SymbolUses,
+struct Stability<'p, 'a> {
+    program: &'p Program<'a>,
+    symbols: FxHashSet<SymbolId>,
+    uses: Option<SymbolUses>,
     known: FxHashMap<SymbolId, bool>,
 }
 
-impl Stability {
-    fn scan(program: &Program<'_>, scoping: &Scoping, sites: &ArrayAliasSites) -> Self {
-        let symbols: FxHashSet<SymbolId> = sites
+impl<'p, 'a> Stability<'p, 'a> {
+    fn new(program: &'p Program<'a>, sites: &ArrayAliasSites) -> Self {
+        let symbols = sites
             .aliases
             .iter()
             .flat_map(|alias| [alias.symbol, alias.source])
             .chain(sites.arrays.keys().copied())
             .collect();
         Self {
-            uses: scan_symbol_uses(program, scoping, &symbols),
+            program,
+            symbols,
+            uses: None,
             known: FxHashMap::default(),
         }
+    }
+
+    fn uses(&mut self, scoping: &Scoping) -> &SymbolUses {
+        let (program, symbols) = (self.program, &self.symbols);
+        self.uses
+            .get_or_insert_with(|| scan_symbol_uses(program, scoping, symbols))
     }
 
     fn of(&mut self, scoping: &Scoping, symbol: SymbolId) -> bool {
         if let Some(known) = self.known.get(&symbol) {
             return *known;
         }
-        let stable = binding_is_never_rewritten(&self.uses, scoping, symbol);
+        let stable = scoping.symbol_redeclarations(symbol).is_empty()
+            && is_constant_binding(scoping, symbol)
+            && self
+                .uses(scoping)
+                .of(symbol)
+                .map_or(0, |found| found.writes)
+                == 0;
         self.known.insert(symbol, stable);
         stable
     }
@@ -234,7 +244,7 @@ fn precedes(
 fn alias_roots(
     sites: &ArrayAliasSites,
     slots: &FxHashMap<SymbolId, (ScopeId, usize)>,
-    stability: &mut Stability,
+    stability: &mut Stability<'_, '_>,
     scoping: &Scoping,
 ) -> FxHashMap<SymbolId, SymbolId> {
     let mut roots: FxHashMap<SymbolId, SymbolId> = FxHashMap::default();
@@ -264,7 +274,7 @@ fn resolved_root(
     sites: &ArrayAliasSites,
     roots: &FxHashMap<SymbolId, SymbolId>,
     scoping: &Scoping,
-    stability: &mut Stability,
+    stability: &mut Stability<'_, '_>,
     alias: &ArrayAlias,
 ) -> Option<SymbolId> {
     let root = roots.get(&alias.symbol).copied()?;
@@ -444,7 +454,7 @@ fn record_unscanned_order(program: &Program<'_>, scoping: &Scoping) {
 fn checked_aliases<'k>(
     program: &Program<'_>,
     resolved: &[(&'k ArrayAlias, SymbolId)],
-    uses: &SymbolUses,
+    stability: &mut Stability<'_, '_>,
     cx: &mut Cx<'_, '_>,
 ) -> Vec<AliasPlan<'k>> {
     if resolved.is_empty() {
@@ -461,7 +471,7 @@ fn checked_aliases<'k>(
         .collect();
     let names = name_counts(cx.scoping(), resolved.iter().map(|(_, root)| *root));
     let checking = Checking {
-        uses,
+        uses: stability.uses(cx.scoping()),
         order: &order,
         feeds: &feeds,
         names: &names,
@@ -481,7 +491,7 @@ pub(super) fn resolve_array_aliases<'a>(
         return FxHashSet::default();
     }
     let slots = declaration_slots(&sites);
-    let mut stability = Stability::scan(program, cx.scoping(), &sites);
+    let mut stability = Stability::new(program, &sites);
     let roots = alias_roots(&sites, &slots, &mut stability, cx.scoping());
     let resolved: Vec<(&ArrayAlias, SymbolId)> = sites
         .aliases
@@ -491,7 +501,7 @@ pub(super) fn resolve_array_aliases<'a>(
                 .map(|root| (alias, root))
         })
         .collect();
-    let mut plans = checked_aliases(program, &resolved, &stability.uses, cx);
+    let mut plans = checked_aliases(program, &resolved, &mut stability, cx);
     crate::proof::refuse_annex_b_bindings(
         &mut plans,
         |plan| (plan.alias.statement, [plan.alias.symbol, plan.root]),
