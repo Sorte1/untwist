@@ -906,6 +906,7 @@ fn a_lazy_helper_whose_argument_has_an_effect_is_not_moved_out_of_order() {
         ),
         ("...[() => {}]", "...[() => { globalThis.b = 1; }]"),
         ("make()", "make()"),
+        ("require_b()", "require_b()"),
         ("{ [key()]() {} }", "{ [key()]() { globalThis.b = 1; } }"),
     ] {
         refused(&format!(
