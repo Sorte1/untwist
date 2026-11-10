@@ -122,6 +122,11 @@ All notable changes to this project are documented in this file. The format is b
   natives that made the object, so webpack's `require.d` descriptors (`{enumerable: !0, get: r}`)
   and computed keys no longer refute them. A `bind` called on any other object, and any write to
   `Object`, its definers or a built-in, still refuses as before.
+- When the safe lane proves a webpack 4 bootstrap, an object that `require.d` or `require.r`
+  defines on counts as fresh if every call the proof names passes a fresh object: a module's
+  `exports`, an `Object.create(null)` namespace or a function literal. Whole bundles whose only
+  unknown keys were the export names `require.d` defines therefore lose their string array,
+  decoders and rotator in the safe lane too.
 - Under `--unsafe`, the self-defending states class that old javascript-obfuscator releases put
   inside rc4 and base64 decoders (`this.states = [1, 0, 0]`, `newState`, `checkState`, `runState`,
   `getState`, run once as `new o(dec).checkState()`) is dropped when its variable is read nowhere

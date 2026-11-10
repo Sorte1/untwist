@@ -4,6 +4,7 @@ use oxc_span::GetSpan;
 use super::roles::*;
 use super::sites::*;
 use super::AKey;
+use crate::mutants::bootstrap_helper_targets_trusted;
 use crate::proof::prototype_root_ref;
 use crate::value_flow::{flow_rule_disabled, INSTANCE_RECEIVERS};
 
@@ -15,12 +16,38 @@ impl<'s, 'a> Sites<'s, 'a> {
             return true;
         }
         match expr.without_parentheses() {
-            Expression::Identifier(id) if depth > 0 => self
-                .fresh
-                .literal_init(id)
-                .is_some_and(|init| self.target_fresh(init, depth - 1)),
+            Expression::Identifier(id) if depth > 0 => {
+                self.fresh
+                    .literal_init(id)
+                    .is_some_and(|init| self.target_fresh(init, depth - 1))
+                    || self.helper_param_fresh(id, depth - 1)
+            }
             _ => false,
         }
+    }
+
+    fn helper_param_fresh(&self, id: &IdentifierReference<'a>, depth: u8) -> bool {
+        let Some(symbol) = self.fresh.symbol(id) else {
+            return false;
+        };
+        let bindings = self.fresh.bindings;
+        if bindings.holds_dispatched_object(symbol) {
+            return true;
+        }
+        let Some((owner, index)) = bindings.bootstrap_param(symbol) else {
+            return false;
+        };
+        if bootstrap_helper_targets_trusted() {
+            return true;
+        }
+        let mut calls = bindings.call_sites(owner).peekable();
+        calls.peek().is_some()
+            && calls.all(|call| {
+                call.arguments
+                    .get(index)
+                    .and_then(Argument::as_expression)
+                    .is_some_and(|value| self.target_fresh(value, depth))
+            })
     }
 
     fn plain_literal(&self, expr: &Expression<'a>) -> bool {

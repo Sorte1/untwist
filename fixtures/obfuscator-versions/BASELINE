@@ -16,12 +16,12 @@
 0.10.2--plain-norot-t1--iife--uglify	1	1/1	1/1	-	0	-
 0.10.2--plain-norot-t1-cff--wp4-module--terser	1	1/1	1/1	-	0	-
 0.10.2--plain-norot-t1-self--top--none	1	1/1	1/1	-	0	-
-0.10.2--plain-norot-t1-unicode--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-names (1)
+0.10.2--plain-norot-t1-unicode--wp4-bundle--none	1	1/1	1/1	-	0	-
 0.10.2--plain-norot-t75--wp4-module--none	1	0/1	0/1	-	0	-
 0.10.2--plain-norot-t75-self--iife--terser	1	1/1	1/1	-	0	-
 0.10.2--plain-rot-t1-dead--wp4-module--uglify	1	1/1	1/1	-	0	-
 0.10.2--plain-rot-t1-unicode--top--terser	1	0/1	0/1	-	0	safe-global-names (1)
-0.10.2--plain-rot-t75--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
+0.10.2--plain-rot-t75--wp4-bundle--terser	1	1/1	1/1	-	0	-
 0.10.2--plain-rot-t75-cff--top--uglify	1	1/1	1/1	-	0	-
 0.10.2--plain-rot-t75-dead--iife--none	1	1/1	1/1	-	0	-
 0.10.2--plain-rot-t75-self--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -53,7 +53,7 @@
 0.16.0--plain-norot-t1-keys--wp4-module--uglify	1	1/1	1/1	-	0	-
 0.16.0--plain-norot-t1-unicode--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-names (1)
 0.16.0--plain-norot-t75-keys--top--uglify	1	1/1	1/1	-	0	-
-0.16.0--plain-norot-t75-keys--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
+0.16.0--plain-norot-t75-keys--wp4-bundle--terser	1	1/1	1/1	-	0	-
 0.16.0--plain-norot-t75-mangled--iife--uglify	1	1/1	1/1	-	0	-
 0.16.0--plain-norot-t75-mangled--top--terser	1	1/1	1/1	-	0	-
 0.16.0--plain-rot-t1-keys--iife--none	1	1/1	1/1	-	0	-
@@ -85,8 +85,8 @@
 0.18.8--b64-rot-t1-unicode--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.18.8--b64-rot-t75--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.18.8--b64-rot-t75-mangled--iife--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
-0.18.8--plain-norot-t1-unicode--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-names (1)
-0.18.8--plain-norot-t1-unicode--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-names (1)
+0.18.8--plain-norot-t1-unicode--wp4-bundle--none	1	1/1	1/1	-	0	-
+0.18.8--plain-norot-t1-unicode--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 0.18.8--plain-norot-t75--top--terser	1	1/1	1/1	-	0	-
 0.18.8--plain-norot-t75--wp4-module--terser	1	1/1	1/1	-	0	-
 0.18.8--plain-norot-t75-keys--top--none	1	0/1	0/1	-	0	legacy-array-reached (1)
@@ -126,7 +126,7 @@
 0.20.4--plain-norot-t75-cff--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.20.4--plain-norot-t75-keys--iife--uglify	1	1/1	1/1	-	0	-
 0.20.4--plain-norot-t75-split--wp4-module--none	1	1/1	1/1	-	0	-
-0.20.4--plain-norot-t75-unicode--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
+0.20.4--plain-norot-t75-unicode--wp4-bundle--terser	1	1/1	1/1	-	0	-
 0.20.4--plain-rot-t1-mangled--wp4-module--uglify	1	1/1	1/1	-	0	-
 0.20.4--plain-rot-t1-self--wp4-module--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 0.20.4--plain-rot-t1-split--top--terser	1	1/1	1/1	-	0	-
@@ -158,7 +158,7 @@
 0.23.2--b64-rot-shuf-t1-dead--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.23.2--b64-rot-shuf-t75-keys--wp4-module--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.23.2--plain-norot-noshuf-t1-cff--top--none	1	1/1	1/1	-	0	-
-0.23.2--plain-norot-noshuf-t1-split--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-names (1)
+0.23.2--plain-norot-noshuf-t1-split--wp4-bundle--none	1	1/1	1/1	-	0	-
 0.23.2--plain-norot-shuf-t1-mangled--iife--none	1	1/1	1/1	-	0	-
 0.23.2--plain-norot-shuf-t1-unicode--iife--terser	1	1/1	1/1	-	0	-
 0.23.2--plain-rot-noshuf-t1-dead--wp4-module--uglify	1	1/1	1/1	-	0	-
@@ -199,11 +199,11 @@
 0.28.5--plain-norot-shuf-t1-self--wp4-module--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 0.28.5--plain-norot-shuf-t75-unicode--top--terser	1	0/1	1/1	-	0	safe-global-names (1)
 0.28.5--plain-rot-noshuf-t1-dead--iife--none	1	1/1	1/1	-	0	-
-0.28.5--plain-rot-noshuf-t1-split--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
+0.28.5--plain-rot-noshuf-t1-split--wp4-bundle--terser	1	1/1	1/1	-	0	-
 0.28.5--plain-rot-noshuf-t75-keys--iife--uglify	1	1/1	1/1	-	0	-
 0.28.5--plain-rot-noshuf-t75-self--top--uglify	1	1/1	1/1	-	0	-
 0.28.5--plain-rot-shuf-t1--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
-0.28.5--plain-rot-shuf-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-names (1)
+0.28.5--plain-rot-shuf-t1-split--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 0.28.5--plain-rot-shuf-t75-split--wp4-module--uglify	1	1/1	1/1	-	0	-
 0.28.5--rc4-norot-noshuf-t1--wp4-module--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.28.5--rc4-norot-noshuf-t1-split--iife--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
@@ -232,11 +232,11 @@
 1.12.1--plain-norot-noshuf-t75-numbers--wp4-module--terser	1	1/1	1/1	-	0	-
 1.12.1--plain-norot-shuf-t1--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.12.1--plain-norot-shuf-t1-self--top--uglify	1	1/1	1/1	-	0	-
-1.12.1--plain-norot-shuf-t75-numbers--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-names (1)
+1.12.1--plain-norot-shuf-t75-numbers--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 1.12.1--plain-norot-shuf-t75-split--top--terser	1	1/1	1/1	-	0	-
 1.12.1--plain-norot-shuf-t75-unicode--wp4-module--none	1	1/1	1/1	-	0	-
 1.12.1--plain-rot-noshuf-t1-keys--iife--none	1	1/1	1/1	-	0	-
-1.12.1--plain-rot-noshuf-t1-unicode--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
+1.12.1--plain-rot-noshuf-t1-unicode--wp4-bundle--terser	1	1/1	1/1	-	0	-
 1.12.1--plain-rot-noshuf-t75--iife--terser	1	1/1	1/1	-	0	-
 1.12.1--plain-rot-noshuf-t75-dead--top--none	1	0/1	1/1	-	0	safe-global-names (1)
 1.12.1--plain-rot-noshuf-t75-mangled--iife--uglify	1	1/1	1/1	-	0	-
@@ -255,14 +255,14 @@
 1.12.1--rc4-rot-shuf-t75-mangled--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.4.0--b64-norot-noshuf-t1-keys--top--none	1	1/1	1/1	-	0	-
 1.4.0--b64-norot-noshuf-t1-unicode--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-1.4.0--b64-norot-noshuf-t75--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
+1.4.0--b64-norot-noshuf-t75--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 1.4.0--b64-norot-noshuf-t75-self--wp4-module--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
 1.4.0--b64-norot-shuf-t75-keys--iife--uglify	1	0/1	0/1	-	0	builtin-replaced-decoded-key (1), object-keys-computed-key (1)
 1.4.0--b64-norot-shuf-t75-mangled--iife--terser	1	1/1	1/1	-	0	-
 1.4.0--b64-norot-shuf-t75-unicode--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-1.4.0--b64-rot-noshuf-t1-mangled--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
+1.4.0--b64-rot-noshuf-t1-mangled--wp4-bundle--none	1	1/1	1/1	-	0	-
 1.4.0--b64-rot-noshuf-t75--iife--none	1	1/1	1/1	-	0	-
-1.4.0--b64-rot-shuf-t1-split--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
+1.4.0--b64-rot-shuf-t1-split--wp4-bundle--terser	1	1/1	1/1	-	0	-
 1.4.0--b64-rot-shuf-t1-unicode--top--uglify	1	1/1	1/1	-	0	-
 1.4.0--b64-rot-shuf-t75-cff--top--terser	1	1/1	1/1	-	0	-
 1.4.0--plain-norot-noshuf-t1--iife--none	1	1/1	1/1	-	0	-
@@ -271,7 +271,7 @@
 1.4.0--plain-norot-noshuf-t1-self--top--none	1	0/1	1/1	-	0	safe-global-names (1)
 1.4.0--plain-norot-noshuf-t1-split--wp4-module--none	1	1/1	1/1	-	0	-
 1.4.0--plain-norot-noshuf-t1-unicode--iife--uglify	1	1/1	1/1	-	0	-
-1.4.0--plain-norot-shuf-t1-dead--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
+1.4.0--plain-norot-shuf-t1-dead--wp4-bundle--terser	1	1/1	1/1	-	0	-
 1.4.0--plain-rot-noshuf-t1-keys--wp4-module--uglify	1	1/1	1/1	-	0	-
 1.4.0--plain-rot-shuf-t1-cff--iife--terser	1	1/1	1/1	-	0	-
 1.4.0--plain-rot-shuf-t75-cff--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -282,7 +282,7 @@
 1.4.0--rc4-norot-noshuf-t75-split--top--uglify	1	1/1	1/1	-	0	-
 1.4.0--rc4-norot-shuf-t75-dead--iife--uglify	1	1/1	1/1	-	0	-
 1.4.0--rc4-norot-shuf-t75-self--iife--terser	1	1/1	1/1	-	0	-
-1.4.0--rc4-rot-noshuf-t1-split--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
+1.4.0--rc4-rot-noshuf-t1-split--wp4-bundle--terser	1	1/1	1/1	-	0	-
 1.4.0--rc4-rot-noshuf-t1-unicode--iife--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
 1.4.0--rc4-rot-shuf-t1-dead--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.4.0--rc4-rot-shuf-t1-dead--wp4-module--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
@@ -292,7 +292,7 @@
 1.6.0--b64-norot-noshuf-t75-numbers--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.6.0--b64-norot-noshuf-t75-unicode--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 1.6.0--b64-norot-shuf-t1-mangled--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-1.6.0--b64-norot-shuf-t1-unicode--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
+1.6.0--b64-norot-shuf-t1-unicode--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 1.6.0--b64-norot-shuf-t75-mangled--top--uglify	1	1/1	1/1	-	0	-
 1.6.0--b64-norot-shuf-t75-mangled--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.6.0--b64-norot-shuf-t75-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -323,7 +323,7 @@
 1.6.0--rc4-rot-noshuf-t1-dead--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.6.0--rc4-rot-noshuf-t75-split--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 1.6.0--rc4-rot-shuf-t1-split--iife--uglify	1	1/1	1/1	-	0	-
-1.6.0--rc4-rot-shuf-t75--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
+1.6.0--rc4-rot-shuf-t75--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 1.6.0--rc4-rot-shuf-t75-keys--top--uglify	1	1/1	1/1	-	0	-
 2.11.1--b64-norot-noshuf-noshift-inum-w3f-t1-mangled--top--uglify	1	1/1	1/1	-	0	-
 2.11.1--b64-norot-noshuf-shift-istr-w2f5-t1-dead--iife--terser	1	1/1	1/1	-	0	-
@@ -334,7 +334,7 @@
 2.11.1--b64-rot-noshuf-noshift-istr-w2f5-t1-self--iife--none	1	1/1	1/1	-	0	-
 2.11.1--b64-rot-noshuf-shift-istr-w3f-t75-unicode--top--none	1	1/1	1/1	-	0	-
 2.11.1--b64-rot-shuf-noshift-inum-w1-t75-self--wp4-module--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
-2.11.1--b64-rot-shuf-noshift-inum-w2u-t1-mangled--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.11.1--b64-rot-shuf-noshift-inum-w2u-t1-mangled--wp4-bundle--none	1	1/1	1/1	-	0	-
 2.11.1--b64-rot-shuf-shift-inum-w0-t75-self--wp4-module--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
 2.11.1--b64-rot-shuf-shift-istr-w3f-t75-self--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.11.1--plain-norot-noshuf-noshift-istr-w2u-t75-numbers--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -343,7 +343,7 @@
 2.11.1--plain-norot-shuf-noshift-inum-w1-t1-dead--iife--uglify	1	0/1	0/1	-	0	decoder-used-as-value (2)
 2.11.1--plain-norot-shuf-noshift-inum-w3f-t75-keys--wp4-module--uglify	1	1/1	1/1	-	0	-
 2.11.1--plain-rot-noshuf-noshift-inum-w1-t1-mangled--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.11.1--plain-rot-noshuf-noshift-inum-w1-t75-mangled--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
+2.11.1--plain-rot-noshuf-noshift-inum-w1-t75-mangled--wp4-bundle--terser	1	1/1	1/1	-	0	-
 2.11.1--plain-rot-noshuf-shift-inum-w0-t1-unicode--iife--none	1	1/1	1/1	-	0	-
 2.11.1--plain-rot-noshuf-shift-istr-w2u-t75-mangled--top--terser	1	1/1	1/1	-	0	-
 2.11.1--plain-rot-shuf-noshift-inum-w1-t1-cff--wp4-module--none	1	1/1	1/1	-	0	-
@@ -384,7 +384,7 @@
 2.13.0--plain-rot-shuf-noshift-istr-w3f-t1-mangled--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.13.0--plain-rot-shuf-shift-inum-w2f5-t1-mangled--wp4-module--terser	1	1/1	1/1	-	0	-
 2.13.0--plain-rot-shuf-shift-istr-w0-t1-unicode--top--none	1	1/1	1/1	-	0	-
-2.13.0--plain-rot-shuf-shift-istr-w0-t75-split--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-names (1)
+2.13.0--plain-rot-shuf-shift-istr-w0-t75-split--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 2.13.0--rc4-norot-noshuf-noshift-inum-w0-t1-split--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.13.0--rc4-norot-noshuf-shift-istr-w1-t1-numbers--iife--uglify	1	0/1	0/1	-	0	decoder-used-as-value (2)
 2.13.0--rc4-norot-noshuf-shift-istr-w2u-t75-self--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -404,14 +404,14 @@
 2.14.0--b64-norot-shuf-shift-inum-w0-t75-self--top--none	1	1/1	1/1	-	0	-
 2.14.0--b64-norot-shuf-shift-inum-w2f5-t1-cff--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--b64-norot-shuf-shift-inum-w2u-t75-keys--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.14.0--b64-rot-noshuf-noshift-inum-w1-t75-unicode--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.14.0--b64-rot-noshuf-noshift-inum-w1-t75-unicode--wp4-bundle--none	1	1/1	1/1	-	0	-
 2.14.0--b64-rot-noshuf-shift-inum-w2u-t1-split--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.14.0--b64-rot-noshuf-shift-istr-w0-t75--iife--uglify	1	1/1	1/1	-	0	-
 2.14.0--b64-rot-noshuf-shift-istr-w2f5-t75-unicode--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-2.14.0--b64-rot-noshuf-shift-istr-w2u-t1-dead--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.14.0--b64-rot-noshuf-shift-istr-w2u-t1-dead--wp4-bundle--terser	1	1/1	1/1	-	0	-
 2.14.0--b64-rot-shuf-shift-inum-w3f-t75-numbers--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.14.0--plain-norot-noshuf-noshift-inum-w2f5-t1-self--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.14.0--plain-norot-noshuf-noshift-istr-w2f5-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-names (1)
+2.14.0--plain-norot-noshuf-noshift-istr-w2f5-t1-split--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 2.14.0--plain-norot-noshuf-shift-inum-w3f-t75-cff--wp4-module--terser	1	1/1	1/1	-	0	-
 2.14.0--plain-norot-shuf-noshift-inum-w1-t75-numbers--wp4-module--uglify	1	1/1	1/1	-	0	-
 2.14.0--plain-norot-shuf-shift-inum-w2u-t1-numbers--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -422,14 +422,14 @@
 2.14.0--plain-rot-shuf-noshift-istr-w2u-t75-cff--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.14.0--plain-rot-shuf-shift-istr-w2u-t75-dead--top--none	1	1/1	1/1	-	0	-
 2.14.0--plain-rot-shuf-shift-istr-w3f-t1-unicode--top--terser	1	1/1	1/1	-	0	-
-2.14.0--rc4-norot-noshuf-noshift-inum-w1-t1-split--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.14.0--rc4-norot-noshuf-noshift-inum-w2f5-t1-numbers--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.14.0--rc4-norot-noshuf-noshift-inum-w1-t1-split--wp4-bundle--none	1	1/1	1/1	-	0	-
+2.14.0--rc4-norot-noshuf-noshift-inum-w2f5-t1-numbers--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 2.14.0--rc4-norot-noshuf-noshift-istr-w2f5-t1-mangled--iife--none	1	1/1	1/1	-	0	-
 2.14.0--rc4-norot-noshuf-shift-istr-w3f-t75-self--top--terser	1	0/1	1/1	-	0	safe-global-names (1)
 2.14.0--rc4-norot-shuf-shift-inum-w0-t1-split--iife--terser	1	1/1	1/1	-	0	-
 2.14.0--rc4-norot-shuf-shift-istr-w2u-t1--top--none	1	1/1	1/1	-	0	-
 2.14.0--rc4-rot-noshuf-noshift-istr-w2f5-t75-numbers--iife--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-2.14.0--rc4-rot-noshuf-shift-inum-w1-t75-mangled--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.14.0--rc4-rot-noshuf-shift-inum-w1-t75-mangled--wp4-bundle--terser	1	1/1	1/1	-	0	-
 2.14.0--rc4-rot-noshuf-shift-istr-w1-t75-self--wp4-module--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
 2.14.0--rc4-rot-noshuf-shift-istr-w2u-t1--top--none	1	1/1	1/1	-	0	-
 2.14.0--rc4-rot-noshuf-shift-istr-w2u-t1-keys--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
@@ -478,7 +478,7 @@
 2.18.1--b64-norot-shuf-noshift-inum-w3f-t1-numbers--iife--none	1	1/1	1/1	-	0	-
 2.18.1--b64-rot-noshuf-noshift-inum-w2f5-t75-mangled--top--uglify	1	1/1	1/1	-	0	-
 2.18.1--b64-rot-noshuf-noshift-inum-w3f-t1--top--terser	1	1/1	1/1	-	0	-
-2.18.1--b64-rot-shuf-noshift-inum-w3f-t75-split--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.18.1--b64-rot-shuf-noshift-inum-w3f-t75-split--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 2.18.1--b64-rot-shuf-noshift-istr-w0-t75-unicode--iife--uglify	1	1/1	1/1	-	0	-
 2.18.1--b64-rot-shuf-noshift-istr-w1-t1-numbers--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.18.1--b64-rot-shuf-noshift-istr-w2u-t1--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
@@ -488,7 +488,7 @@
 2.18.1--plain-norot-noshuf-shift-istr-w3f-t75--top--terser	1	1/1	1/1	-	0	-
 2.18.1--plain-norot-shuf-noshift-istr-w2u-t1-self--top--none	1	1/1	1/1	-	0	-
 2.18.1--plain-norot-shuf-shift-inum-w3f-t1-mangled--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.18.1--plain-norot-shuf-shift-istr-w2f5-t1-unicode--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-names (1)
+2.18.1--plain-norot-shuf-shift-istr-w2f5-t1-unicode--wp4-bundle--none	1	1/1	1/1	-	0	-
 2.18.1--plain-rot-noshuf-noshift-inum-w0-t1-cff--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.18.1--plain-rot-noshuf-noshift-inum-w0-t1-keys--iife--none	1	1/1	1/1	-	0	-
 2.18.1--plain-rot-noshuf-noshift-inum-w3f-t75-mangled--wp4-module--none	1	1/1	1/1	-	0	-
@@ -503,7 +503,7 @@
 2.18.1--rc4-norot-shuf-shift-inum-w2u-t75-numbers--iife--none	1	1/1	1/1	-	0	-
 2.18.1--rc4-norot-shuf-shift-inum-w3f-t75-cff--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), stateful-decoder-escape (1)
 2.18.1--rc4-rot-noshuf-noshift-inum-w3f-t75-numbers--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.18.1--rc4-rot-noshuf-noshift-istr-w2f5-t75-split--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.18.1--rc4-rot-noshuf-noshift-istr-w2f5-t75-split--wp4-bundle--none	1	1/1	1/1	-	0	-
 2.18.1--rc4-rot-noshuf-shift-inum-w2u-t1-cff--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.18.1--rc4-rot-shuf-noshift-inum-w0-t75-split--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.18.1--rc4-rot-shuf-noshift-istr-w1-t1-self--wp4-module--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
@@ -519,12 +519,12 @@
 2.19.1--b64-rot-shuf-noshift-istr-w2u-t1-numbers--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.19.1--b64-rot-shuf-shift-inum-w2f5-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
 2.19.1--b64-rot-shuf-shift-inum-w3f-t75-keys--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
-2.19.1--plain-norot-noshuf-noshift-inum-w1-t1-split--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
+2.19.1--plain-norot-noshuf-noshift-inum-w1-t1-split--wp4-bundle--terser	1	1/1	1/1	-	0	-
 2.19.1--plain-norot-noshuf-noshift-istr-w2f5-t1-numbers--wp4-module--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 2.19.1--plain-norot-noshuf-shift-istr-w0-t75-cff--wp4-module--none	1	1/1	1/1	-	0	-
 2.19.1--plain-norot-shuf-noshift-inum-w3f-t75-keys--iife--uglify	1	1/1	1/1	-	0	-
 2.19.1--plain-norot-shuf-shift-istr-w1-t1--top--none	1	0/1	1/1	-	0	safe-global-names (1)
-2.19.1--plain-norot-shuf-shift-istr-w2u-t1--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-names (1)
+2.19.1--plain-norot-shuf-shift-istr-w2u-t1--wp4-bundle--none	1	1/1	1/1	-	0	-
 2.19.1--plain-rot-noshuf-noshift-inum-w2f5-t75-dead--top--uglify	1	0/1	0/1	-	0	rotator-reads-outside (2)
 2.19.1--plain-rot-noshuf-shift-inum-w1-t75-split--iife--terser	1	1/1	1/1	-	0	-
 2.19.1--plain-rot-noshuf-shift-istr-w0-t75-self--top--terser	1	0/1	0/1	-	0	rotator-reads-outside (2)
@@ -540,13 +540,13 @@
 2.19.1--rc4-rot-noshuf-noshift-istr-w0-t1-unicode--top--none	1	1/1	1/1	-	0	-
 2.19.1--rc4-rot-noshuf-shift-istr-w3f-t75-split--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-key-reach (1)
 2.19.1--rc4-rot-shuf-noshift-inum-w1-t75-self--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
-2.19.1--rc4-rot-shuf-noshift-inum-w2u-t75-numbers--wp4-bundle--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
+2.19.1--rc4-rot-shuf-noshift-inum-w2u-t75-numbers--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 2.19.1--rc4-rot-shuf-shift-istr-w2f5-t1-cff--wp4-module--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 2.19.1--rc4-rot-shuf-shift-istr-w2u-t75-cff--iife--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 2.4.3--b64-norot-noshuf-w0-t1-split--top--uglify	1	1/1	1/1	-	0	-
 2.4.3--b64-norot-noshuf-w3f-t1-keys--wp4-bundle--uglify	1	0/1	0/1	-	0	legacy-array-reached (1), object-keys-computed-key (1)
 2.4.3--b64-norot-noshuf-w3f-t1-mangled--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-2.4.3--b64-norot-shuf-w0-t75-keys--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.4.3--b64-norot-shuf-w0-t75-keys--wp4-bundle--terser	1	1/1	1/1	-	0	-
 2.4.3--b64-norot-shuf-w1-t75-split--top--terser	1	1/1	1/1	-	0	-
 2.4.3--b64-norot-shuf-w2u-t1-self--top--none	1	0/1	1/1	-	0	safe-global-names (1)
 2.4.3--b64-rot-noshuf-w1-t1-dead--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -564,7 +564,7 @@
 2.4.3--plain-rot-noshuf-w1-t1-keys--iife--uglify	1	1/1	1/1	-	0	-
 2.4.3--plain-rot-noshuf-w2u-t1-split--wp4-module--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
 2.4.3--plain-rot-shuf-w0-t75-dead--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-names (1)
-2.4.3--plain-rot-shuf-w2u-t1-keys--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
+2.4.3--plain-rot-shuf-w2u-t1-keys--wp4-bundle--terser	1	1/1	1/1	-	0	-
 2.4.3--plain-rot-shuf-w3f-t75--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-names (1)
 2.4.3--plain-rot-shuf-w3f-t75-dead--top--terser	1	0/1	1/1	-	0	safe-global-names (1)
 2.4.3--rc4-norot-noshuf-w2u-t75-cff--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -576,7 +576,7 @@
 2.4.3--rc4-rot-noshuf-w0-t75-self--wp4-module--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
 2.4.3--rc4-rot-noshuf-w1-t1-self--iife--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
 2.4.3--rc4-rot-noshuf-w1-t1-unicode--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
-2.4.3--rc4-rot-noshuf-w3f-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.4.3--rc4-rot-noshuf-w3f-t1-split--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 2.4.3--rc4-rot-shuf-w2u-t1-keys--wp4-module--uglify	1	0/1	0/1	-	0	builtin-alias-patched (1), wrapper-alias-redeclared (1)
 2.4.3--rc4-rot-shuf-w3f-t75-numbers--top--none	1	1/1	1/1	-	0	-
 2.9.6--b64-norot-noshuf-noshift-istr-w2f5-t75-keys--iife--terser	1	1/1	1/1	-	0	-
@@ -584,15 +584,15 @@
 2.9.6--b64-norot-noshuf-shift-istr-w2f5-t1-mangled--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.9.6--b64-norot-shuf-noshift-inum-w3f-t1-self--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.9.6--b64-norot-shuf-noshift-istr-w1-t1-dead--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-2.9.6--b64-norot-shuf-shift-inum-w0-t1-mangled--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.9.6--b64-norot-shuf-shift-inum-w0-t1-mangled--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 2.9.6--b64-norot-shuf-shift-istr-w2u-t1-cff--iife--none	1	1/1	1/1	-	0	-
 2.9.6--b64-rot-noshuf-noshift-inum-w2u-t1-dead--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.9.6--b64-rot-noshuf-shift-istr-w3f-t75-self--wp4-module--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
-2.9.6--b64-rot-shuf-noshift-inum-w0-t1--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.9.6--b64-rot-shuf-noshift-inum-w0-t1--wp4-bundle--terser	1	1/1	1/1	-	0	-
 2.9.6--b64-rot-shuf-shift-inum-w1-t1--iife--uglify	1	1/1	1/1	-	0	-
 2.9.6--b64-rot-shuf-shift-istr-w2f5-t1-split--top--none	1	1/1	1/1	-	0	-
-2.9.6--plain-norot-noshuf-shift-inum-w0-t1-keys--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-names (1)
-2.9.6--plain-norot-noshuf-shift-istr-w3f-t75-dead--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-names (1)
+2.9.6--plain-norot-noshuf-shift-inum-w0-t1-keys--wp4-bundle--terser	1	1/1	1/1	-	0	-
+2.9.6--plain-norot-noshuf-shift-istr-w3f-t75-dead--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 2.9.6--plain-norot-shuf-noshift-inum-w1-t75-numbers--iife--terser	1	1/1	1/1	-	0	-
 2.9.6--plain-norot-shuf-noshift-inum-w2f5-t75-numbers--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 2.9.6--plain-norot-shuf-noshift-inum-w2u-t75-split--wp4-module--terser	1	1/1	1/1	-	0	-
@@ -607,7 +607,7 @@
 2.9.6--rc4-norot-noshuf-noshift-inum-w3f-t1-keys--iife--uglify	1	1/1	1/1	-	0	-
 2.9.6--rc4-norot-noshuf-noshift-istr-w2f5-t75-unicode--top--none	1	1/1	1/1	-	0	-
 2.9.6--rc4-norot-noshuf-shift-inum-w1-t1-split--iife--terser	1	1/1	1/1	-	0	-
-2.9.6--rc4-norot-noshuf-shift-inum-w2f5-t75-numbers--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
+2.9.6--rc4-norot-noshuf-shift-inum-w2f5-t75-numbers--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 2.9.6--rc4-norot-shuf-noshift-inum-w0-t75--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.9.6--rc4-norot-shuf-shift-istr-w2u-t75-mangled--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.9.6--rc4-rot-noshuf-noshift-istr-w0-t75-keys--top--terser	1	1/1	1/1	-	0	-
@@ -639,29 +639,29 @@
 3.2.7--plain-rot-shuf-shift-istr-w0-calls-t75-unicode--top--none	1	1/1	1/1	-	0	-
 3.2.7--plain-rot-shuf-shift-istr-w2u-calls-t1-split--wp4-bundle--uglify	1	0/1	0/1	-	0	wrapper-alias-redeclared (2)
 3.2.7--plain-rot-shuf-shift-istr-w2u-nocalls-t75-split--iife--terser	1	1/1	1/1	-	0	-
-3.2.7--plain-rot-shuf-shift-istr-w3f-nocalls-t75-unicode--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-names (1)
+3.2.7--plain-rot-shuf-shift-istr-w3f-nocalls-t75-unicode--wp4-bundle--none	1	1/1	1/1	-	0	-
 3.2.7--rc4-norot-noshuf-noshift-inum-w0-calls-t75-mangled--iife--none	1	1/1	1/1	-	0	-
 3.2.7--rc4-norot-noshuf-noshift-istr-w2u-calls-t1-cff--top--uglify	1	1/1	1/1	-	0	-
 3.2.7--rc4-norot-noshuf-shift-inum-w3f-calls-t1-cff--wp4-module--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 3.2.7--rc4-norot-shuf-noshift-istr-w1-calls-t1-self--iife--uglify	1	0/1	0/1	-	0	stateful-decoder-state (2)
 3.2.7--rc4-norot-shuf-shift-inum-w2f5-calls-t75-numbers--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-3.2.7--rc4-rot-noshuf-noshift-inum-w0-nocalls-t75-mangled--wp4-bundle--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
+3.2.7--rc4-rot-noshuf-noshift-inum-w0-nocalls-t75-mangled--wp4-bundle--none	1	1/1	1/1	-	0	-
 3.2.7--rc4-rot-noshuf-noshift-istr-w2u-calls-t75--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 3.2.7--rc4-rot-noshuf-shift-inum-w1-nocalls-t1-split--top--none	1	1/1	1/1	-	0	-
 3.2.7--rc4-rot-noshuf-shift-inum-w2f5-calls-t75-cff--iife--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 3.2.7--rc4-rot-noshuf-shift-inum-w3f-nocalls-t75-dead--top--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
-3.2.7--rc4-rot-shuf-noshift-inum-w3f-nocalls-t1-numbers--wp4-bundle--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
+3.2.7--rc4-rot-shuf-noshift-inum-w3f-nocalls-t1-numbers--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 3.2.7--rc4-rot-shuf-shift-istr-w3f-calls-t1-numbers--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-key-reach (1)
 4.2.2--b64-norot-noshuf-noshift-inum-w2f5-calls-t1-dead--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-key-reach (1)
 4.2.2--b64-norot-noshuf-noshift-istr-w3f-calls-t75-self--iife--none	1	1/1	1/1	-	0	-
-4.2.2--b64-norot-noshuf-shift-inum-w2u-nocalls-t1--wp4-bundle--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
+4.2.2--b64-norot-noshuf-shift-inum-w2u-nocalls-t1--wp4-bundle--none	1	1/1	1/1	-	0	-
 4.2.2--b64-norot-shuf-noshift-istr-w0-calls-t1-split--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 4.2.2--b64-norot-shuf-noshift-istr-w1-calls-t1--top--none	1	1/1	1/1	-	0	-
 4.2.2--b64-norot-shuf-noshift-istr-w2f5-nocalls-t75-keys--iife--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 4.2.2--b64-rot-shuf-noshift-istr-w1-calls-t1-dead--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 4.2.2--b64-rot-shuf-noshift-istr-w2f5-calls-t1-cff--top--uglify	1	1/1	1/1	-	0	-
 4.2.2--b64-rot-shuf-shift-istr-w0-calls-t75-self--top--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-4.2.2--b64-rot-shuf-shift-istr-w1-nocalls-t1-unicode--wp4-bundle--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
+4.2.2--b64-rot-shuf-shift-istr-w1-nocalls-t1-unicode--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 4.2.2--b64-rot-shuf-shift-istr-w2u-calls-t1-keys--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 4.2.2--b64-rot-shuf-shift-istr-w3f-calls-t75-dead--iife--uglify	1	1/1	1/1	-	0	-
 4.2.2--plain-norot-noshuf-noshift-inum-w3f-calls-t1-mangled--top--none	1	1/1	1/1	-	0	-
@@ -671,12 +671,12 @@
 4.2.2--plain-norot-shuf-noshift-istr-w2f5-nocalls-t1-dead--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-key-reach (1)
 4.2.2--plain-norot-shuf-shift-istr-w1-nocalls-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-key-reach (1)
 4.2.2--plain-rot-noshuf-noshift-inum-w1-calls-t1-unicode--iife--none	1	1/1	1/1	-	0	-
-4.2.2--plain-rot-noshuf-noshift-inum-w1-nocalls-t1-mangled--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-names (1)
+4.2.2--plain-rot-noshuf-noshift-inum-w1-nocalls-t1-mangled--wp4-bundle--uglify	1	1/1	1/1	-	0	-
 4.2.2--plain-rot-noshuf-noshift-istr-w2f5-calls-t1-self--iife--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 4.2.2--plain-rot-noshuf-shift-istr-w3f-calls-t75--wp4-module--uglify	1	0/1	0/1	-	0	wrapper-binding-unstable (2)
 4.2.2--plain-rot-shuf-noshift-inum-w2u-nocalls-t1-split--iife--uglify	1	0/1	0/1	-	0	wrapper-alias-redeclared (2)
 4.2.2--plain-rot-shuf-shift-istr-w0-nocalls-t75-numbers--top--terser	1	1/1	1/1	-	0	-
-4.2.2--rc4-norot-noshuf-shift-istr-w0-calls-t75-keys--wp4-bundle--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
+4.2.2--rc4-norot-noshuf-shift-istr-w0-calls-t75-keys--wp4-bundle--none	1	1/1	1/1	-	0	-
 4.2.2--rc4-norot-shuf-noshift-inum-w1-calls-t75-cff--top--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 4.2.2--rc4-norot-shuf-noshift-inum-w2f5-calls-t1-cff--wp4-module--terser	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 4.2.2--rc4-norot-shuf-noshift-istr-w3f-calls-t75-mangled--wp4-module--uglify	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
@@ -725,11 +725,11 @@
 5.9.1--rc4-rot-shuf-shift-inum-w0-calls-t75-cff--iife--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 5.9.1--rc4-rot-shuf-shift-istr-w2u-nocalls-t1-keys--top--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
-legacy-array-reached	159	159	159	0	safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded
-builtin-replaced-decoded-key	76	76	76	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
+legacy-array-reached	140	140	140	0	safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded
 builtin-alias-patched	72	72	72	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
+builtin-replaced-decoded-key	70	70	70	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
 decoder-reads-outer-binding	60	60	61	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
-safe-global-names	43	43	43	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
+safe-global-names	20	20	20	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
 safe-global-key-reach	13	13	13	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 array-reached-outside	11	11	22	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
 stateful-decoder-state	6	6	9	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
