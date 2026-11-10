@@ -106,9 +106,15 @@ impl<'a> VisitJs<'a> for LoopEscapes {
         self.found = true;
     }
 
-    fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {}
+    fn visit_function(&mut self, it: &Function<'a>, _flags: ScopeFlags) {
+        self.found |= it.is_declaration();
+    }
 
     fn visit_class(&mut self, _it: &Class<'a>) {
+        self.found = true;
+    }
+
+    fn visit_with_statement(&mut self, _it: &WithStatement<'a>) {
         self.found = true;
     }
 }
@@ -163,6 +169,12 @@ fn loop_helper(stmt: &Statement<'_>, rotator: &Statement<'_>, scoping: &Scoping)
     let Some(symbol) = function.id.as_ref().and_then(|id| id.symbol_id.get()) else {
         return false;
     };
+    if !scoping
+        .scope_flags(scoping.symbol_scope_id(symbol))
+        .is_function()
+    {
+        return false;
+    }
     if !rotator_loop_bindings_trusted() && !used_only_in(scoping, symbol, std::iter::once(rotator))
     {
         return false;
@@ -179,7 +191,7 @@ fn is_function_array_loop(stmt: &Statement<'_>, array: &str) -> bool {
         && contains_expression(stmt, |found| identifier_name(found) == Some(array))
 }
 
-fn wrappable_loop(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
+pub(super) fn closed_loop(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
     let mut escapes = LoopEscapes::default();
     escapes.visit_statement(stmt);
     let mut uses = LexicalUses::default();
@@ -283,7 +295,7 @@ impl<'a> VisitJs<'a> for LexicalUses {
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        self.found |= it.name == "arguments";
+        self.found |= it.name == "arguments" || it.name == "eval";
     }
 
     fn visit_expression(&mut self, it: &Expression<'a>) {
@@ -615,7 +627,7 @@ impl<'a> Normalise<'_, 'a, '_> {
         let scoping = self.cx.scoping();
         let Some(at) = it
             .iter()
-            .position(|stmt| is_function_array_loop(stmt, array) && wrappable_loop(stmt, scoping))
+            .position(|stmt| is_function_array_loop(stmt, array) && closed_loop(stmt, scoping))
         else {
             return;
         };
@@ -635,7 +647,11 @@ impl<'a> Normalise<'_, 'a, '_> {
         }
         let mut rotator = it[at].take_in(self.cx);
         if let Statement::ForStatement(node) = &mut rotator {
-            if let Some(ForStatementInit::VariableDeclaration(declaration)) = node.init.take() {
+            let hoisted = matches!(&node.init, Some(ForStatementInit::VariableDeclaration(declaration))
+                if declaration.kind == VariableDeclarationKind::Var);
+            if let Some(ForStatementInit::VariableDeclaration(declaration)) =
+                node.init.take_if(|_| hoisted)
+            {
                 body.push(Statement::VariableDeclaration(declaration));
             }
         }

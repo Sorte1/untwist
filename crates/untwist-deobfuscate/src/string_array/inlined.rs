@@ -14,6 +14,7 @@ use super::checksum::parsed_statement;
 use super::cookie_wrap::wrap_inlined_cookie;
 use super::for_init::hoist_decoded_arrays;
 use super::legacy::{incremented, is_countdown, literal_arithmetic, predecrements, pushes_shifted};
+use super::minified::closed_loop;
 use super::single_use::declare_single_use_decoder;
 use super::{array_declaration, array_literal};
 use crate::array_rotator::is_infinite_rotator_loop;
@@ -350,7 +351,7 @@ fn checksum_plan(body: &[Statement<'_>], index: usize, scoping: &Scoping) -> Opt
         .count();
     let at = index + 1 + movers;
     let rotator = body.get(at)?;
-    if length == 0 || !is_infinite_rotator_loop(rotator) {
+    if length == 0 || !is_infinite_rotator_loop(rotator) || !closed_loop(rotator, scoping) {
         return None;
     }
     let looped = loop_alias(rotator, array)?;

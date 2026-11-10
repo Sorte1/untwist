@@ -45,6 +45,14 @@ All notable changes to this project are documented in this file. The format is b
   request is in the module's dependency map names the file of the mapped module, so two versions
   of one package, a bundled `events` or `buffer` shim and a module reached from two directories
   link right. Every entry of a bundle with several entries runs from `index.js`, in order.
+- The string-array recognisers no longer rewrite programs they cannot prove equal. A rotator loop
+  moves into a function only when it is closed (no `return`, outer label, function declaration,
+  `eval`, `this` or `arguments`, and its `for` head stays as written); an arrow rotator that calls
+  `eval` stays an arrow; a single-use index that `arguments` can alias stays; a self-reassigning
+  decoder that reads the array in a parameter default is not lifted; the cookie rotator is
+  recognised only in its full template with unshadowed globals; `a["01"]` and `a["+1"]` are no
+  longer read as `a[1]`; and an `eval` layer that deletes or redefines through a value that may be
+  the global object is kept for `--unsafe`.
 - An unpacked esbuild bundle no longer hands a module a stale copy of a binding. A binding that
   an `__esm` init assigns is now exported from `_runtime/esbuild.js` through a getter and read as
   `runtime.name`; before, a module that read it after the init ran still saw `undefined`. A bundle

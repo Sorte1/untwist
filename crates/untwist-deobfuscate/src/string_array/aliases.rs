@@ -265,7 +265,8 @@ fn alias_never_escapes(uses: &ObjectUses) -> bool {
     uses.writes == 0
         && uses.opaque == 0
         && uses.reads.iter().all(|read| {
-            read.name.parse::<usize>().is_ok() || ROTATION_METHODS.contains(&read.name.as_str())
+            super::canonical_index(&read.name).is_some()
+                || ROTATION_METHODS.contains(&read.name.as_str())
         })
 }
 

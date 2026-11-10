@@ -204,11 +204,20 @@ fn observes_globals(program: &Program<'_>) -> bool {
 
 pub(super) fn deletes_a_global(argument: &Expression<'_>) -> bool {
     match argument.without_parentheses() {
-        Expression::Identifier(_) => true,
-        other => other
-            .as_member_expression()
-            .is_some_and(|member| is_global_object(member.object())),
+        Expression::Identifier(_) | Expression::ChainExpression(_) => true,
+        other => other.as_member_expression().is_some(),
     }
+}
+
+fn fresh_value(expr: &Expression<'_>) -> bool {
+    matches!(
+        expr.without_parentheses(),
+        Expression::ObjectExpression(_)
+            | Expression::ArrayExpression(_)
+            | Expression::FunctionExpression(_)
+            | Expression::ArrowFunctionExpression(_)
+            | Expression::ClassExpression(_)
+    )
 }
 
 fn is_global_object(expr: &Expression<'_>) -> bool {
@@ -236,7 +245,7 @@ pub(super) fn reflects_on_globals(call: &CallExpression<'_>) -> bool {
             .arguments
             .first()
             .and_then(Argument::as_expression)
-            .is_some_and(is_global_object)
+            .is_none_or(|first| !fresh_value(first))
 }
 
 fn member_names<'a>(member: &MemberExpression<'a>) -> Option<(&'a str, &'a str)> {

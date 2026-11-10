@@ -8,3 +8,5 @@ ref-index-read-later|(function(){var arr0=['one','two'];var c;console.log((c='0x
 premise-index-read-by-eval|(function(){var arr0=['one','two'];var c;console.log((c='0x1',arr0[c-=0]));console.log(eval('c'));})();
 ref-index-written-later|(function(){var arr0=['one','two'];var c;console.log((c='0x1',arr0[c-=0]));console.log(c);})();
 ref-lexical-index|(function(){var arr0=['one','two'];try{console.log((c='0x1',arr0[c-=0]))}catch(e){console.log(e.name)}let c;})();
+ref-index-is-a-parameter-read-through-arguments|(function(c){var arr0=['one','two'];console.log((c='0x1',arr0[c-=0]),arguments[0]);})('0x0');
+ref-index-is-a-parameter-read-through-arguments-later|(function(c){var arr0=['one','two'];var r=String((c='0x1',arr0[c-=0]));console.log(r+arguments[0]);})(0);

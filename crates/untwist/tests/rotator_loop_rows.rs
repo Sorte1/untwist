@@ -2,7 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/rotator_loop_rows.txt");
-const PREFIXES: [&str; 3] = ["dec-", "ref-counter-", "ref-lexical-"];
+const PREFIXES: [&str; 4] = ["dec-", "ref-counter-", "ref-lexical-", "ref-open-"];
 
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()

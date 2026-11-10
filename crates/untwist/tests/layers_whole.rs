@@ -5,6 +5,7 @@ use untwist_deobfuscate::layers::notes::{
     LAYER_BAILED, LAYER_CAP, LAYER_CYCLE, LAYER_FUEL, LAYER_INJECTION, LAYER_NEEDS_UNSAFE,
     LAYER_NOT_A_STRING, LAYER_PEELED, LAYER_SHAPE, LAYER_TOO_DEEP, LAYER_UNPARSABLE,
 };
+use untwist_testing::node_rows::{mismatches, node_or_skip, Mode};
 
 const KINDS: &[&str] = &["eval/", "function/"];
 
@@ -243,6 +244,11 @@ fn each_scanned_form_keeps_a_declaring_payload_for_unsafe() {
         "delete window['x']",
         "delete self.x",
         "delete this.x",
+        "var g = globalThis; delete g.x",
+        "delete [globalThis][0].x",
+        "delete o?.x",
+        "var o = {}; Object.defineProperty(o, 'x', {}); delete o.x;",
+        "var g = globalThis; Object.defineProperty(g, 'x', {})",
         "Object.getOwnPropertyDescriptor(globalThis, 'x')",
         "Object.getOwnPropertyDescriptors(o)",
         "Reflect.getOwnPropertyDescriptor(o, 'x')",
@@ -270,7 +276,8 @@ fn each_scanned_form_keeps_a_declaring_payload_for_unsafe() {
         "if (a) { var x; }",
         "for (var i = 0; i < 1; i++) {}",
         "{ function g() {} }",
-        "var o = {}; Object.defineProperty(o, 'x', {}); delete o.x;",
+        "Object.defineProperty({}, 'x', {});",
+        "delete f();",
     ];
     for payload in clean {
         let source = format!("eval({payload:?});");
@@ -334,4 +341,38 @@ fn a_function_layer_is_the_create_dynamic_function_source_called_with_the_argume
     for (source, want) in rows {
         assert_eq!(peeled(source, false), want, "{source}");
     }
+}
+
+const GLOBAL_OBSERVERS: [(&str, &str); 4] = [
+    (
+        "a delete through an alias of the global object",
+        "eval(\"var x = 1; var g = globalThis; console.log(delete g.x, typeof x);\");",
+    ),
+    (
+        "a delete through an array holding the global object",
+        "eval(\"var x = 1; console.log(delete [globalThis][0].x, typeof x);\");",
+    ),
+    (
+        "a delete of a declared function through the global object",
+        "eval(\"function f() { return 1; } console.log(f(), delete [globalThis][0].f, typeof f);\");",
+    ),
+    (
+        "a redefinition through an alias of the global object",
+        "eval(\"var x = 1; var g = globalThis; try { Object.defineProperty(g, 'x', { get: function () { return 2; } }); console.log(x); } catch (e) { console.log('threw ' + e.constructor.name); }\");",
+    ),
+];
+
+#[test]
+fn a_payload_that_can_tell_its_vars_from_script_vars_runs_like_node() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let programs: Vec<(String, String)> = GLOBAL_OBSERVERS
+        .iter()
+        .map(|(label, source)| (label.to_string(), source.to_string()))
+        .collect();
+    let run_safe = |source: &str| Pipeline::new(options(false)).run(source).code().to_string();
+    let modes: [Mode<'_>; 1] = [("default", &run_safe)];
+    let wrong = mismatches(&node, &programs, &modes);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

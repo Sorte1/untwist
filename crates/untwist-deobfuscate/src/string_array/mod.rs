@@ -425,13 +425,16 @@ fn collect_indices(
     length: usize,
     unexpected: &mut RepeatedSites,
 ) -> Option<Vec<(Span, usize)>> {
-    if !reads.iter().any(|read| read.name.parse::<usize>().is_ok()) {
+    if !reads
+        .iter()
+        .any(|read| canonical_index(&read.name).is_some())
+    {
         return None;
     }
     let mut indices = Vec::with_capacity(reads.len());
     for read in reads {
-        match read.name.parse::<usize>() {
-            Ok(index) if index < length => indices.push((read.member_span, index)),
+        match canonical_index(&read.name) {
+            Some(index) if index < length => indices.push((read.member_span, index)),
             _ => {
                 unexpected.record(read.member_span, &read.name);
                 return None;
@@ -439,6 +442,11 @@ fn collect_indices(
         }
     }
     Some(indices)
+}
+
+pub(super) fn canonical_index(name: &str) -> Option<usize> {
+    let index: u32 = name.parse().ok()?;
+    (index != u32::MAX && index.to_string() == name).then_some(index as usize)
 }
 
 fn undefined_not_global(
