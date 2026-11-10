@@ -70,7 +70,7 @@ impl<'a> VisitJs<'a> for Body<'a> {
         walk_js::walk_return_statement(self, it);
     }
 
-    fn visit_meta_property(&mut self, _it: &MetaProperty<'a>) {
+    fn visit_new_target(&mut self, _it: &NewTarget) {
         self.escapes |= self.functions == 0;
     }
 }
