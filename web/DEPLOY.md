@@ -15,7 +15,10 @@ Every asset name except `index.html`, `_headers` and the font licences carries a
   Actions tab on the release tag with "production" ticked. See `RELEASING.md`.
 - **Previews.** A push to any branch other than `main` that touches `web/**`, `crates/**`,
   `Cargo.toml`, `Cargo.lock` or the workflow gets its own preview URL, and the link is posted
-  on the branch's open pull request. A push to `main` deploys nothing.
+  on the branch's open pull request. A push to `main` deploys to the `main-latest` preview.
+  A tag push deploys nothing by itself; the release workflow does.
+- **Cache.** Previews keep a cargo and wasm target cache. The release and a production
+  deploy build without it, so nothing an earlier build left behind reaches npm or the site.
 - **Secrets.** `CLOUDFLARE_API_TOKEN` (Account › Cloudflare Pages › Edit) and
   `CLOUDFLARE_ACCOUNT_ID`, as repository secrets. Without them a preview build skips the
   deploy and a production deploy fails. Only the deploy step reads them.
@@ -35,7 +38,11 @@ Every asset name except `index.html`, `_headers` and the font licences carries a
 
 - `sw.js` is `no-cache`, so a deploy reaches the browsers on their next visit.
 
-The page also carries its own Content-Security-Policy `<meta>` (see `vite.config.ts`).
+- `Content-Security-Policy` is sent with every file, so it binds the workers and the service
+  worker as well as the page. It forbids framing (`frame-ancestors 'none'`, with
+  `X-Frame-Options: DENY` for older browsers), `<base>`, form targets and plugins. The build
+  copies the same policy, without `frame-ancestors`, into a `<meta>` tag, so `vite preview` and
+  any host that ignores `_headers` still apply it.
 
 ## Offline
 

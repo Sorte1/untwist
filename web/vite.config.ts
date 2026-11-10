@@ -1,15 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
+import { metaPolicy } from './src/csp.ts';
 import { serviceWorker } from './scripts/service-worker.ts';
 
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval'",
-  "worker-src 'self'",
-  "connect-src 'self' https:",
-  "img-src 'self' data:",
-  "style-src 'self'",
-  "font-src 'self'",
-].join('; ');
+const CSP = metaPolicy(readFileSync(new URL('./public/_headers', import.meta.url), 'utf8'));
 
 const output = {
   assetFileNames: (asset: { readonly names: readonly string[] }) =>
