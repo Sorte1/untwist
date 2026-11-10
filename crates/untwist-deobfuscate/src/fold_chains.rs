@@ -3,6 +3,7 @@ use oxc_semantic::Scoping;
 use oxc_span::GetSpan;
 use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::ScopeFlags;
+use rustc_hash::FxHashMap;
 use untwist_core::ast_util::global::references_are_global;
 use untwist_core::ast_util::matcher::call_parts;
 use untwist_core::ast_util::prop::member_parts;
@@ -35,6 +36,8 @@ const IMPLICIT_KEYS: &[&str] = &[
     "lastIndex",
 ];
 
+const BUDGET_STRIDE: usize = 1 << 10;
+
 const SPECIES_CREATING: &[&str] = &[
     "concat", "slice", "splice", "map", "filter", "flat", "flatMap",
 ];
@@ -46,6 +49,40 @@ fn chain_root<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k Expression<'a>> {
         Some(root) => Some(root),
         None => Some(object),
     }
+}
+
+fn chain_link<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k Expression<'a>> {
+    let (callee, _) = call_parts(expr)?;
+    member_parts(callee).map(|(object, _)| object)
+}
+
+fn link_key(expr: &Expression<'_>) -> usize {
+    match expr {
+        Expression::CallExpression(call) => std::ptr::from_ref::<CallExpression<'_>>(call) as usize,
+        _ => 0,
+    }
+}
+
+fn literal_rooted(expr: &Expression<'_>, rooted: &mut FxHashMap<usize, bool>) -> Option<bool> {
+    let mut object = chain_link(expr)?;
+    let mut links = vec![link_key(expr)];
+    let literal = loop {
+        if let Some(&known) = rooted.get(links.last()?) {
+            break known;
+        }
+        let Some(next) = chain_link(object) else {
+            break is_literal_root(object);
+        };
+        if links.len() % BUDGET_STRIDE == 0 && untwist_core::budget::check().is_err() {
+            return None;
+        }
+        links.push(link_key(object));
+        object = next;
+    };
+    for link in links {
+        rooted.insert(link, literal);
+    }
+    Some(literal)
 }
 
 fn is_literal_element(expr: &Expression<'_>) -> bool {
@@ -375,13 +412,18 @@ fn may_be_patched(
 }
 
 #[inline(never)]
-fn fold_call<'a>(expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>, a: Option<&FoldRecord>) {
+fn fold_call<'a>(
+    expr: &mut Expression<'a>,
+    cx: &mut Cx<'a, '_>,
+    a: Option<&FoldRecord>,
+    rooted: &mut FxHashMap<usize, bool>,
+) {
+    if literal_rooted(expr, rooted) != Some(true) {
+        return;
+    }
     let Some(root) = chain_root(expr) else {
         return;
     };
-    if !is_literal_root(root) {
-        return;
-    }
     let Some(folded) = fold_literal_chain(expr) else {
         return;
     };
@@ -460,6 +502,7 @@ fn fold_char_code<'a>(expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>, a: Option<
 pub struct FoldLiteralChains {
     eval_checked: bool,
     a: Option<FoldRecord>,
+    rooted: FxHashMap<usize, bool>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -489,6 +532,7 @@ impl<'a> Pass<'a> for FoldLiteralChains {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        self.rooted.clear();
         if !self.eval_checked {
             self.eval_checked = true;
             if has_direct_eval(cx.scoping()) || has_with_statement(cx.scoping()) {
@@ -504,7 +548,7 @@ impl<'a> Pass<'a> for FoldLiteralChains {
             fold_char_code(expr, cx, self.a.as_ref());
         }
         if matches!(expr, Expression::CallExpression(_)) {
-            fold_call(expr, cx, self.a.as_ref());
+            fold_call(expr, cx, self.a.as_ref(), &mut self.rooted);
         }
     }
 }
