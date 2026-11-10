@@ -3,10 +3,14 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 pub type Filter = fn(IpAddr) -> Option<&'static str>;
 
 const NAT64_PREFIX: [u16; 6] = [0x64, 0xff9b, 0, 0, 0, 0];
+const LOCAL_NAT64_PREFIX: [u16; 3] = [0x64, 0xff9b, 1];
+const TRANSLATED_PREFIX: [u16; 6] = [0, 0, 0, 0, 0xffff, 0];
+const TEREDO_PREFIX: [u16; 2] = [0x2001, 0];
 const SIX_TO_FOUR: u16 = 0x2002;
+const PLATFORM_HOSTS: [Ipv4Addr; 1] = [Ipv4Addr::new(168, 63, 129, 16)];
 
 fn v4_refusal(address: Ipv4Addr) -> Option<&'static str> {
-    let [first, second, ..] = address.octets();
+    let [first, second, third, _] = address.octets();
     if first == 0 {
         return Some("unspecified");
     }
@@ -25,8 +29,13 @@ fn v4_refusal(address: Ipv4Addr) -> Option<&'static str> {
     if address.is_multicast() {
         return Some("multicast");
     }
-    if first >= 240 {
+    let protocol_assignments = (first, second, third) == (192, 0, 0);
+    let benchmarking = first == 198 && (18..20).contains(&second);
+    if first >= 240 || protocol_assignments || benchmarking {
         return Some("reserved");
+    }
+    if PLATFORM_HOSTS.contains(&address) {
+        return Some("platform");
     }
     None
 }
@@ -37,7 +46,7 @@ fn embedded_v4(address: Ipv6Addr) -> Option<Ipv4Addr> {
     if let Some(mapped) = address.to_ipv4_mapped() {
         return Some(mapped);
     }
-    if segments[..6] == NAT64_PREFIX {
+    if segments[..6] == NAT64_PREFIX || segments[..6] == TRANSLATED_PREFIX {
         return Some(from(segments[6], segments[7]));
     }
     if segments[0] == SIX_TO_FOUR {
@@ -59,9 +68,14 @@ fn v6_refusal(address: Ipv6Addr) -> Option<&'static str> {
     if let Some(embedded) = embedded_v4(address) {
         return v4_refusal(embedded);
     }
-    let first = address.segments()[0];
-    if first & 0xfe00 == 0xfc00 {
+    let segments = address.segments();
+    let first = segments[0];
+    let site_local = first & 0xffc0 == 0xfec0;
+    if first & 0xfe00 == 0xfc00 || site_local || segments[..3] == LOCAL_NAT64_PREFIX {
         return Some("private");
+    }
+    if segments[..2] == TEREDO_PREFIX {
+        return Some("reserved");
     }
     if first & 0xffc0 == 0xfe80 {
         return Some("link-local");
@@ -98,8 +112,14 @@ mod tests {
             "93.184.216.34",
             "172.32.0.1",
             "100.128.0.1",
+            "192.0.1.1",
+            "198.17.255.255",
+            "198.20.0.1",
+            "168.63.129.17",
             "2606:4700:4700::1111",
+            "2001:4860:4860::8888",
             "::ffff:8.8.8.8",
+            "::ffff:0:8.8.8.8",
             "64:ff9b::808:808",
         ] {
             assert_eq!(class(address), None, "{address}");
@@ -129,6 +149,9 @@ mod tests {
             "192.168.1.1",
             "fc00::1",
             "fd12:3456::1",
+            "fec0::1",
+            "64:ff9b:1::a00:1",
+            "64:ff9b:1:ffff::808:808",
         ] {
             assert_eq!(class(address), Some("private"), "{address}");
         }
@@ -149,6 +172,19 @@ mod tests {
         assert_eq!(class("100.127.255.255"), Some("shared"));
         assert_eq!(class("240.0.0.1"), Some("reserved"));
         assert_eq!(class("255.255.255.255"), Some("reserved"));
+        assert_eq!(class("192.0.0.192"), Some("reserved"));
+        assert_eq!(class("198.18.0.1"), Some("reserved"));
+        assert_eq!(class("198.19.255.255"), Some("reserved"));
+        assert_eq!(
+            class("2001:0:4136:e378:8000:63bf:3fff:fdd2"),
+            Some("reserved")
+        );
+    }
+
+    #[test]
+    fn a_platform_host_in_public_space_is_refused() {
+        assert_eq!(class("168.63.129.16"), Some("platform"));
+        assert_eq!(class("::ffff:168.63.129.16"), Some("platform"));
     }
 
     #[test]
@@ -161,6 +197,7 @@ mod tests {
         assert_eq!(class("64:ff9b::7f00:1"), Some("loopback"));
         assert_eq!(class("2002:c0a8:101::1"), Some("private"));
         assert_eq!(class("::10.0.0.1"), Some("private"));
+        assert_eq!(class("::ffff:0:127.0.0.1"), Some("loopback"));
     }
 
     #[test]

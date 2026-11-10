@@ -69,11 +69,9 @@ pub fn supply(args: &Args, err: &mut dyn Write) -> anyhow::Result<WasmSupply> {
 }
 
 fn hidden(c: char) -> bool {
-    c.is_control()
-        || matches!(
-            c,
-            '\u{2028}' | '\u{2029}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
-        )
+    let invisible = matches!(c, '\u{61c}' | '\u{200b}'..='\u{200f}' | '\u{feff}');
+    let separator_or_direction = matches!(c, '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{2069}');
+    c.is_control() || invisible || separator_or_direction
 }
 
 fn printable(text: &str) -> String {
@@ -230,6 +228,11 @@ mod tests {
         assert_eq!(printable("a\r\nb\u{7f}"), "a\\u{d}\\u{a}b\\u{7f}");
         assert_eq!(printable("a\u{9b}b\u{2028}c"), "a\\u{9b}b\\u{2028}c");
         assert_eq!(printable("a\u{202e}b"), "a\\u{202e}b");
+        assert_eq!(printable("a\u{200f}b\u{61c}c"), "a\\u{200f}b\\u{61c}c");
+        assert_eq!(
+            printable("a\u{200b}b\u{2060}c\u{feff}"),
+            "a\\u{200b}b\\u{2060}c\\u{feff}"
+        );
         assert_eq!(printable("plain é text"), "plain é text");
     }
 }
