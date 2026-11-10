@@ -24,7 +24,7 @@ use crate::probe::{expression_contains, holds_own_scope};
 use crate::proof::refuse_annex_b_bindings;
 use crate::stamp::{declaration_symbol, decoder_index, is_machinery_name};
 use crate::units::MachineryDepth;
-use crate::wrapper_args::SiteView;
+use crate::wrapper_args::{kinds_fit, SiteView};
 use crate::wrapper_chain::{drop_broken_chains, promote_forwarders, Candidate, Chain, Fits};
 use crate::wrapper_effects::{inline_keeping_effects, inline_local_writes};
 use crate::wrapper_sites::{called_expression, collect_sites, CallSite, FunctionsAt, Sites};
@@ -370,13 +370,13 @@ impl<'p, 'a> Round<'_, 'p, 'a, '_> {
             let inlined = inline_function_call(wrapper.function, site.arguments, self.cx);
             return (inlined, site_kept);
         }
-        let fits: Fits<'_> = &|uses, arguments, depth| {
-            let in_parameters = depth == 0 && site.in_parameters;
-            self.view.arguments_fit(uses, arguments, in_parameters)
-        };
-        let inlined = self
-            .chain
-            .inline_through(site.wrapper, site.arguments, fits, self.cx);
+        let fits: Fits<'_> = &kinds_fit;
+        let inlined = self.chain.inline_through(
+            (site.wrapper, site.arguments, site.in_parameters),
+            &self.view,
+            fits,
+            self.cx,
+        );
         (inlined, notes::wrapper_site_impure_argument)
     }
 

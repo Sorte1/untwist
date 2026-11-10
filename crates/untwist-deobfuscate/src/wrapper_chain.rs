@@ -3,12 +3,12 @@ use oxc_ast::ast::{Argument, Expression, Function};
 use oxc_semantic::Scoping;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
-use untwist_core::ast_util::inline::{inline_function_call, returned_expression};
+use untwist_core::ast_util::inline::{inline_function_call, param_names, returned_expression};
 use untwist_core::pass::Cx;
 
 use crate::call_checks::is_plain_function;
 use crate::probe::{expression_contains, holds_own_scope};
-use crate::wrapper_args::{body_uses, BodyUses};
+use crate::wrapper_args::{body_uses, BodyUses, Kind, SiteView};
 use crate::wrapper_calls::{binding_is_stable, body_is_self_contained, WrapperShape};
 
 pub(crate) const CHAIN_DEPTH_CAP: usize = 16;
@@ -76,7 +76,7 @@ pub(crate) struct Chain<'p> {
     links: FxHashMap<SymbolId, Link<'p>>,
 }
 
-pub(crate) type Fits<'f> = &'f dyn Fn(&BodyUses, &AVec<'_, Argument<'_>>, usize) -> bool;
+pub(crate) type Fits<'f> = &'f dyn Fn(&BodyUses, &[Kind]) -> bool;
 
 impl<'p> Chain<'p> {
     pub(crate) fn add(&mut self, shape: &WrapperShape, function: &'p Function<'p>) {
@@ -95,25 +95,30 @@ impl<'p> Chain<'p> {
 
     pub(crate) fn inline_through<'a>(
         &self,
-        wrapper: SymbolId,
-        arguments: &AVec<'_, Argument<'_>>,
+        (wrapper, arguments, in_parameters): (SymbolId, &AVec<'_, Argument<'_>>, bool),
+        view: &SiteView<'_>,
         fits: Fits<'_>,
         cx: &Cx<'a, '_>,
     ) -> Option<Expression<'a>> {
         let mut link = self.links.get(&wrapper)?;
-        if !fits(&link.uses, arguments, 0) {
+        let mut kinds = view.kinds_of(arguments, in_parameters)?;
+        if !fits(&link.uses, &kinds) {
             return None;
         }
         let mut inlined = inline_function_call(link.function, arguments, cx)?;
         let mut depth = 0;
         while let Some(target) = link.forwards_to {
             depth += 1;
+            let Expression::CallExpression(forwarded) = returned_expression(link.function)? else {
+                return None;
+            };
+            kinds =
+                view.kinds_through(&kinds, &param_names(link.function)?, &forwarded.arguments)?;
             link = self.links.get(&target)?;
             let Expression::CallExpression(call) = &inlined else {
                 return None;
             };
-            if depth > CHAIN_DEPTH_CAP || call.optional || !fits(&link.uses, &call.arguments, depth)
-            {
+            if depth > CHAIN_DEPTH_CAP || call.optional || !fits(&link.uses, &kinds) {
                 return None;
             }
             inlined = inline_function_call(link.function, &call.arguments, cx)?;

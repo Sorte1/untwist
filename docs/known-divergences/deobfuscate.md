@@ -217,17 +217,36 @@
     expressions of those other than `in` and `instanceof`, may be duplicated, dropped and
     reordered. An identifier is proven to hold a primitive when its binding is never written
     after its declaration, is declared with a string or number literal, no direct `eval` can see
-    it, and either it is a `var` or the read follows the declaration in the same function, so it
-    cannot run in the dead zone;
+    it, and it cannot be read in its dead zone: it is a `var`, the read follows the declaration in
+    the same function, or the declaration is among the first statements of a function body that
+    only declare literals or functions, so no code of that function, and no closure it creates,
+    runs before it is initialised;
   - a bare identifier may be dropped when it resolves to a `var`, function or parameter binding,
     which has no dead zone, and the site is neither under `with` nor inside a parameter list;
-  - at most one other argument per site is accepted (an identifier the body uses, a decoder
-    call, an expression over identifiers), and only when the body uses its parameter exactly
-    once, outside `?:`, `&&`, `||` and `??`, and the wrapper's returned expression holds nothing
-    but literals, those operators, its parameters and calls to fixed names. Everything around
-    that one argument is then free of effects, so it still runs once and nothing observable moves
-    across it. Two such arguments are refused although each runs once and in order: an object's
-    `valueOf` run by the first could change what the second reads.
+  - an identifier read after assignments to it earlier in the same comma sequence, or in the
+    expression statements right before the statement that makes the call, counts as such a value
+    too when each assigned value is built from literals and proven primitives with unary and
+    arithmetic operators, as in terser's `(e = "0x24d", n = "0x258", w(e - 0x20e, n))`, and no
+    other argument of the call can run code;
+  - a bare identifier that is never written, has no dead zone, is not global, and whose function
+    neither reads `arguments` nor can be reached by a direct `eval`, may be read anywhere among
+    the other arguments when the body only passes it on as a bare argument of its call: reading
+    it has no effect and its value cannot change;
+  - any other argument (an identifier the body uses, a decoder call, an expression over
+    identifiers) is accepted only when the body uses its parameter exactly once, outside `?:`,
+    `&&`, `||` and `??`, and the wrapper's returned expression holds nothing but literals, those
+    operators, its parameters and calls to fixed names. One such argument is then surrounded by
+    effect-free work, so it still runs once and nothing observable moves across it. Several are
+    accepted only when the body reads them in the order the call passes them, makes no call
+    besides the one it forwards to, and every one but the last is a unary or arithmetic
+    expression, whose effects all happen while it is evaluated and whose result is a primitive.
+    `w(o, n)` with `o` an object is refused: `o`'s `valueOf` would run after `n` is read in the
+    program but before it in the inlined body.
+  - through a chain of wrappers, each link is judged on what is already known of the arguments
+    it receives, not on the substituted text;
+  - a function expression called where it is written, whose body only returns a call to an
+    outer binding, is inlined first when every argument is a value of the first kind, so a
+    wrapper it forwards to sees those values.
 
   Anything else -- `w(x, y)` where the body reads both, `w(o, 1)` where the body reads `o` twice,
   `w(i++, 1)`, `w(f(), 1)`, a member read -- keeps that call site with a note, and the wrapper

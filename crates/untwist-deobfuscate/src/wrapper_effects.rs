@@ -271,7 +271,7 @@ pub fn inline_local_writes<'p, 'a>(
     if writes.parts.is_empty() {
         return None;
     }
-    let fits: Fits<'_> = &|uses, _, _| !uses.is_blocked();
-    let inlined = chain.inline_through(wrapper, arguments, fits, cx)?;
+    let fits: Fits<'_> = &|uses, _| !uses.is_blocked();
+    let inlined = chain.inline_through((wrapper, arguments, false), view, fits, cx)?;
     Some(settled_after(&writes.parts, inlined, span, cx))
 }

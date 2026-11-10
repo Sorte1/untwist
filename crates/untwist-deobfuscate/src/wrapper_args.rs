@@ -7,14 +7,15 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use untwist_core::ast_util::inline::{param_names, returned_expression};
 
 use crate::call_checks::is_under_with;
-use crate::primitive_names::PrimitiveNames;
+use crate::primitive_names::{is_stable, PrimitiveNames};
 
 const UNDEFINED: &str = "undefined";
-const SENSITIVE_ARGUMENT_CAP: usize = 1;
+const FORWARDED_CALLS: usize = 1;
 
 #[derive(Clone, Copy, Default)]
 struct ParamUse {
     count: usize,
+    bare: usize,
     crooked: bool,
 }
 
@@ -22,16 +23,27 @@ impl ParamUse {
     fn is_single(self) -> bool {
         self.count == 1 && !self.crooked
     }
+
+    fn is_bare(self) -> bool {
+        self.bare == self.count && !self.crooked
+    }
 }
 
 pub struct BodyUses {
     params: Vec<ParamUse>,
+    order: Vec<usize>,
+    calls: usize,
     blocked: bool,
 }
 
 impl BodyUses {
     pub fn is_blocked(&self) -> bool {
         self.blocked
+    }
+
+    fn reads_in_order(&self, indices: &[usize]) -> bool {
+        let read = self.order.iter().filter(|index| indices.contains(index));
+        read.eq(indices.iter())
     }
 }
 
@@ -60,6 +72,8 @@ enum Flow {
 struct UseScan<'n> {
     names: &'n [&'n str],
     uses: Vec<ParamUse>,
+    order: Vec<usize>,
+    calls: usize,
     straight: bool,
     blocked: bool,
 }
@@ -74,6 +88,19 @@ impl UseScan<'_> {
         if let Some(entry) = self.uses.get_mut(index) {
             entry.count += 1;
             entry.crooked |= !straight;
+            self.order.push(index);
+        }
+    }
+
+    fn note_bare_arguments(&mut self, call: &CallExpression<'_>) {
+        for argument in &call.arguments {
+            let Some(Expression::Identifier(id)) = argument.as_expression() else {
+                continue;
+            };
+            let index = self.index_of(id.name.as_str());
+            if let Some(entry) = index.and_then(|index| self.uses.get_mut(index)) {
+                entry.bare += 1;
+            }
         }
     }
 
@@ -117,6 +144,10 @@ impl<'a> VisitJs<'a> for UseScan<'_> {
             }
             return;
         }
+        if let Expression::CallExpression(call) = it {
+            self.calls += 1;
+            self.note_bare_arguments(call);
+        }
         let flow = self.flow_of(it);
         let outer = self.straight;
         self.blocked |= flow == Flow::Foreign;
@@ -140,12 +171,16 @@ pub fn body_uses(function: &Function<'_>) -> Option<BodyUses> {
     let mut scan = UseScan {
         names: &names,
         uses: vec![ParamUse::default(); names.len()],
+        order: Vec::new(),
+        calls: 0,
         straight: true,
         blocked: false,
     };
     scan.visit_expression(returned);
     Some(BodyUses {
         params: scan.uses,
+        order: scan.order,
+        calls: scan.calls,
         blocked: scan.blocked,
     })
 }
@@ -175,11 +210,37 @@ enum Binding {
     Bound(SymbolId),
 }
 
-#[derive(Clone, Copy)]
-enum Kind {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
     Pure,
+    Settled,
+    Stable,
     Name,
+    Valued,
     Compound,
+}
+
+fn operated(kind: Kind) -> Kind {
+    match kind {
+        Kind::Pure | Kind::Settled => kind,
+        _ => Kind::Valued,
+    }
+}
+
+fn joined(left: Kind, right: Kind) -> Kind {
+    match (operated(left), operated(right)) {
+        (Kind::Pure, Kind::Pure) => Kind::Pure,
+        (Kind::Pure | Kind::Settled, Kind::Pure | Kind::Settled) => Kind::Settled,
+        _ => Kind::Valued,
+    }
+}
+
+fn yields_a_primitive(expression: &Expression<'_>) -> bool {
+    match expression.without_parentheses() {
+        Expression::UnaryExpression(unary) => keeps_its_operand(unary.operator),
+        Expression::BinaryExpression(binary) => is_arithmetic(binary.operator),
+        _ => false,
+    }
 }
 
 pub struct SiteView<'s> {
@@ -256,11 +317,23 @@ impl<'s> SiteView<'s> {
             )
     }
 
+    fn is_settled_read(&self, id: &IdentifierReference<'_>) -> bool {
+        matches!(self.binding(id), Binding::Bound(_))
+            && self.primitives.written_just_before(id.span.start)
+    }
+
     fn kind(&self, expression: &Expression<'_>, in_parameters: bool) -> Kind {
-        if is_pure_value(expression, &|id| {
+        let fixed = |id: &IdentifierReference<'_>| {
             self.is_plain_undefined(id) || self.holds_a_primitive(id)
-        }) {
+        };
+        if is_pure_value(expression, &fixed) {
             return Kind::Pure;
+        }
+        if is_pure_value(expression, &|id| fixed(id) || self.is_settled_read(id)) {
+            return Kind::Settled;
+        }
+        if yields_a_primitive(expression) {
+            return Kind::Valued;
         }
         let Expression::Identifier(id) = expression.without_parentheses() else {
             return Kind::Compound;
@@ -271,7 +344,63 @@ impl<'s> SiteView<'s> {
         if in_parameters || !self.is_hoisted(symbol) {
             return Kind::Compound;
         }
+        if is_stable(self.scoping, symbol) {
+            return Kind::Stable;
+        }
         Kind::Name
+    }
+
+    pub fn kinds_of(
+        &self,
+        arguments: &AVec<'_, Argument<'_>>,
+        in_parameters: bool,
+    ) -> Option<Vec<Kind>> {
+        arguments
+            .iter()
+            .map(|argument| {
+                argument
+                    .as_expression()
+                    .map(|expression| self.kind(expression, in_parameters))
+            })
+            .collect()
+    }
+
+    pub fn kinds_through(
+        &self,
+        bound: &[Kind],
+        names: &[&str],
+        arguments: &AVec<'_, Argument<'_>>,
+    ) -> Option<Vec<Kind>> {
+        arguments
+            .iter()
+            .map(|argument| {
+                argument
+                    .as_expression()
+                    .map(|expression| self.composed(expression, bound, names))
+            })
+            .collect()
+    }
+
+    fn composed(&self, expression: &Expression<'_>, bound: &[Kind], names: &[&str]) -> Kind {
+        match expression.without_parentheses() {
+            Expression::NumericLiteral(_)
+            | Expression::StringLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NullLiteral(_) => Kind::Pure,
+            Expression::Identifier(id) => match names.iter().position(|name| *name == id.name) {
+                Some(index) => bound.get(index).copied().unwrap_or(Kind::Pure),
+                None if self.is_plain_undefined(id) || self.holds_a_primitive(id) => Kind::Pure,
+                None => Kind::Compound,
+            },
+            Expression::UnaryExpression(unary) if keeps_its_operand(unary.operator) => {
+                operated(self.composed(&unary.argument, bound, names))
+            }
+            Expression::BinaryExpression(binary) if is_arithmetic(binary.operator) => joined(
+                self.composed(&binary.left, bound, names),
+                self.composed(&binary.right, bound, names),
+            ),
+            _ => Kind::Compound,
+        }
     }
 
     pub fn arguments_fit(
@@ -280,22 +409,38 @@ impl<'s> SiteView<'s> {
         arguments: &AVec<'_, Argument<'_>>,
         in_parameters: bool,
     ) -> bool {
-        if uses.blocked {
-            return false;
-        }
-        let mut sensitive = 0;
-        for (index, argument) in arguments.iter().enumerate() {
-            let Some(expression) = argument.as_expression() else {
-                return false;
-            };
-            let used = uses.params.get(index).copied().unwrap_or_default();
-            match self.kind(expression, in_parameters) {
-                Kind::Pure => {}
-                Kind::Name if used.count == 0 => {}
-                Kind::Name | Kind::Compound if used.is_single() => sensitive += 1,
-                Kind::Name | Kind::Compound => return false,
-            }
-        }
-        sensitive <= SENSITIVE_ARGUMENT_CAP
+        self.kinds_of(arguments, in_parameters)
+            .is_some_and(|kinds| kinds_fit(uses, &kinds))
     }
+}
+
+pub fn kinds_fit(uses: &BodyUses, kinds: &[Kind]) -> bool {
+    if uses.blocked {
+        return false;
+    }
+    let mut sensitive = Vec::new();
+    let mut settled = false;
+    for (index, kind) in kinds.iter().enumerate() {
+        let used = uses.params.get(index).copied().unwrap_or_default();
+        match kind {
+            Kind::Pure => {}
+            Kind::Settled => settled = true,
+            Kind::Name if used.count == 0 => {}
+            Kind::Stable if used.is_bare() => {}
+            _ if used.is_single() => sensitive.push(index),
+            _ => return false,
+        }
+    }
+    if settled && !sensitive.is_empty() {
+        return false;
+    }
+    let Some((_, earlier)) = sensitive.split_last() else {
+        return true;
+    };
+    earlier.is_empty()
+        || (uses.calls <= FORWARDED_CALLS
+            && uses.reads_in_order(&sensitive)
+            && earlier
+                .iter()
+                .all(|index| kinds.get(*index) == Some(&Kind::Valued)))
 }
