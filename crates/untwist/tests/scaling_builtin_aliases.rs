@@ -56,5 +56,5 @@ fn a_function_chain_returning_a_builtin_is_solved_without_a_sweep_per_link() {
 #[test]
 fn a_decoder_beside_a_reversed_alias_chain_still_decodes() {
     let out = Pipeline::new(Options::default()).run(&reversed(50, "'x'"));
-    assert!(out.code().contains("\"Hello\""), "{}", out.code());
+    assert!(out.code().contains("\"hello\""), "{}", out.code());
 }
