@@ -334,10 +334,51 @@ pub const WINDOW_PROPERTIES: [&str; 41] = [
     "webkitCancelAnimationFrame",
 ];
 
+pub const NODE_BUILTIN_MODULES: [&str; 38] = [
+    "assert",
+    "async_hooks",
+    "buffer",
+    "child_process",
+    "cluster",
+    "constants",
+    "dgram",
+    "diagnostics_channel",
+    "dns",
+    "domain",
+    "events",
+    "fs",
+    "http",
+    "http2",
+    "https",
+    "inspector",
+    "net",
+    "os",
+    "path",
+    "perf_hooks",
+    "punycode",
+    "querystring",
+    "readline",
+    "repl",
+    "stream",
+    "string_decoder",
+    "sys",
+    "timers",
+    "tls",
+    "trace_events",
+    "tty",
+    "url",
+    "util",
+    "v8",
+    "vm",
+    "wasi",
+    "worker_threads",
+    "zlib",
+];
+
 const EVENT_HANDLER_PREFIX: &str = "on";
 
 pub fn is_host_global_property(name: &str) -> bool {
-    is_host_global(name)
+    (is_host_global(name) && NODE_BUILTIN_MODULES.binary_search(&name).is_err())
         || WINDOW_PROPERTIES.binary_search(&name).is_ok()
         || name
             .strip_prefix(EVENT_HANDLER_PREFIX)
