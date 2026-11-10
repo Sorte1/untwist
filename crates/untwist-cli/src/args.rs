@@ -177,6 +177,13 @@ pub struct Args {
     )]
     pub fetch_wasm: bool,
     #[arg(
+        long = "fetch-wasm-local",
+        requires = "fetch_wasm",
+        help = "with --fetch-wasm, also fetch from loopback, link-local and private addresses, \
+                which are refused otherwise; for input that loads wasm from your own network"
+    )]
+    pub fetch_wasm_local: bool,
+    #[arg(
         long = "wasm-base",
         value_name = "URL",
         requires = "fetch_wasm",

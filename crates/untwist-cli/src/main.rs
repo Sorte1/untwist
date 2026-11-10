@@ -231,7 +231,8 @@ fn print_stdout(
 }
 
 fn exit_code(result: &Output) -> u8 {
-    if result.parse_errors > 0 || !result.panicked.is_empty() || result.unpack_panicked {
+    let panicked = !result.panicked.is_empty() || result.unpack_panicked || result.wasm_panicked;
+    if result.parse_errors > 0 || panicked {
         return 1;
     }
     if !result.depth_refused.is_empty() {
@@ -266,9 +267,7 @@ fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
     let mut result = Pipeline::new(std::mem::take(&mut session.options)).run_many(&borrowed);
     (session.emitted)();
     let err = &mut *session.err;
-    let mut supply = wasm_supply::supply(args, err)?;
-    wasm_supply::fetch_unsupplied(args, &result, &mut supply, err).context(STDERR)?;
-    result.settle_wasm(&supply, args.output.is_some());
+    wasm_supply::settle(args, &mut result, err)?;
     report_diagnostics(err, &result).context(STDERR)?;
     report_wasm(err, &result).context(STDERR)?;
 
@@ -389,6 +388,13 @@ mod tests {
     fn a_lost_bundle_makes_the_exit_code_non_zero() {
         let mut out = untwist::Pipeline::new(untwist::Options::default()).run("");
         out.unpack_panicked = true;
+        assert_eq!(exit_code(&out), 1);
+    }
+
+    #[test]
+    fn a_panic_in_the_wasm_step_makes_the_exit_code_non_zero() {
+        let mut out = untwist::Pipeline::new(untwist::Options::default()).run("");
+        out.wasm_panicked = true;
         assert_eq!(exit_code(&out), 1);
     }
 

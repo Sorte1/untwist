@@ -165,33 +165,74 @@ fn a_wasm_override_wins_over_the_wasm_dir() {
 
 struct Server {
     url: String,
+    origin: String,
     hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
-fn serve(body: Vec<u8>) -> Server {
-    use std::io::{Read, Write};
+enum Reply {
+    Body(Vec<u8>),
+    Redirect(String),
+}
+
+fn respond(stream: &mut std::net::TcpStream, reply: &Reply) {
+    use std::io::Write;
+    let (head, body): (String, &[u8]) = match reply {
+        Reply::Body(body) => (
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/wasm\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            ),
+            body,
+        ),
+        Reply::Redirect(location) => (
+            format!(
+                "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            ),
+            &[],
+        ),
+    };
+    let _ = stream.write_all(head.as_bytes());
+    let _ = stream.write_all(body);
+}
+
+fn requested_path(stream: &mut std::net::TcpStream) -> String {
+    use std::io::Read;
+    let mut request = [0u8; 4096];
+    let read = stream.read(&mut request).unwrap_or(0);
+    String::from_utf8_lossy(&request[..read])
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or("/")
+        .to_string()
+}
+
+fn serve_routes(route: impl Fn(&str) -> Reply + Send + 'static) -> Server {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!(
-        "http://{}/pkg/app_bg.3f2a91c0.wasm",
-        listener.local_addr().unwrap()
-    );
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let url = format!("{origin}/pkg/app_bg.3f2a91c0.wasm");
     let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let counted = hits.clone();
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
             counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let mut request = [0u8; 4096];
-            let _ = stream.read(&mut request);
-            let head = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/wasm\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                body.len()
-            );
-            let _ = stream.write_all(head.as_bytes());
-            let _ = stream.write_all(&body);
+            let path = requested_path(&mut stream);
+            respond(&mut stream, &route(&path));
         }
     });
-    Server { url, hits }
+    Server { url, origin, hits }
+}
+
+fn serve(body: Vec<u8>) -> Server {
+    serve_routes(move |_| Reply::Body(body.clone()))
+}
+
+fn hits(server: &Server) -> usize {
+    server.hits.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn bindgen_wasm() -> Vec<u8> {
+    std::fs::read(fixture("bindgen.wasm")).unwrap()
 }
 
 fn absolute_glue(dir: &std::path::Path, url: &str) -> std::path::PathBuf {
@@ -225,7 +266,7 @@ fn fetch_wasm_downloads_an_absolute_url_and_names_the_glue() {
     let server = serve(std::fs::read(fixture("bindgen.wasm")).unwrap());
     let input = absolute_glue(dir.path(), &server.url);
     let out = bin()
-        .args(["--report", "json", "--fetch-wasm"])
+        .args(["--report", "json", "--fetch-wasm", "--fetch-wasm-local"])
         .arg(&input)
         .output()
         .unwrap();
@@ -255,7 +296,14 @@ fn a_relative_url_is_fetched_against_the_wasm_base() {
     let server = serve(std::fs::read(fixture("bindgen.wasm")).unwrap());
     let base = server.url.replace("pkg/app_bg.3f2a91c0.wasm", "index.html");
     let out = bin()
-        .args(["--report", "json", "--fetch-wasm", "--wasm-base", &base])
+        .args([
+            "--report",
+            "json",
+            "--fetch-wasm",
+            "--fetch-wasm-local",
+            "--wasm-base",
+            &base,
+        ])
         .arg(fixture("bindgen-remote.js"))
         .output()
         .unwrap();
@@ -263,6 +311,183 @@ fn a_relative_url_is_fetched_against_the_wasm_base() {
     let _ = dir;
     assert_eq!(server.hits.load(std::sync::atomic::Ordering::SeqCst), 1);
     assert_eq!(json["wasm"][0]["url"], server.url.as_str());
+}
+
+#[test]
+fn a_loopback_address_is_not_requested_without_the_local_flag() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = serve(bindgen_wasm());
+    let input = absolute_glue(dir.path(), &server.url);
+    let out = bin()
+        .args(["--report", "json", "--fetch-wasm"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    let json = report_of(&out);
+    assert_eq!(hits(&server), 0);
+    assert_eq!(json["wasm_unresolved"][0]["url"], server.url.as_str());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("loopback address 127.0.0.1") && stderr.contains("--fetch-wasm-local"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn each_url_is_printed_before_it_is_requested() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = serve(bindgen_wasm());
+    let input = absolute_glue(dir.path(), &server.url);
+    let out = bin()
+        .args(["--fetch-wasm", "--fetch-wasm-local"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!("note: fetching {}\n", server.url)),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_url_with_control_characters_is_printed_escaped_and_not_requested() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("glue.js");
+    std::fs::write(
+        &input,
+        "WebAssembly.instantiateStreaming(fetch('http://x.invalid/\\u001b[31m/a.wasm'));",
+    )
+    .unwrap();
+    let out = bin().arg("--fetch-wasm").arg(&input).output().unwrap();
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let line = stderr
+        .lines()
+        .find(|line| line.starts_with("note: not fetching a.wasm: "))
+        .unwrap_or_else(|| panic!("{stderr:?}"));
+    assert!(line.contains("\\u{1b}[31m/a.wasm"), "{line:?}");
+    assert!(!line.contains('\u{1b}'), "{line:?}");
+    assert!(!stderr.contains("note: fetching"), "{stderr:?}");
+}
+
+fn glue_loading(urls: &[String]) -> String {
+    urls.iter()
+        .map(|url| format!("WebAssembly.instantiateStreaming(fetch({url:?}));\n"))
+        .collect()
+}
+
+#[test]
+fn references_past_the_sixteenth_are_named_and_not_fetched() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = serve(bindgen_wasm());
+    let urls: Vec<String> = (0..18)
+        .map(|index| format!("{}/m{index}.wasm", server.origin))
+        .collect();
+    let input = dir.path().join("many.js");
+    std::fs::write(&input, glue_loading(&urls)).unwrap();
+    let out = bin()
+        .args(["--report", "json", "--fetch-wasm", "--fetch-wasm-local"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    let json = report_of(&out);
+    assert_eq!(hits(&server), 16);
+    let unresolved: Vec<&str> = json["wasm_unresolved"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|reference| reference["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(unresolved, ["m16.wasm", "m17.wasm"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    for name in unresolved {
+        assert!(
+            stderr.contains(&format!("note: not fetching {name}: ")),
+            "{stderr}"
+        );
+    }
+    assert!(stderr.contains("16 wasm modules"), "{stderr}");
+}
+
+#[test]
+fn a_redirect_is_followed_and_its_target_is_printed() {
+    let dir = tempfile::tempdir().unwrap();
+    let body = bindgen_wasm();
+    let server = serve_routes(move |path| match path {
+        "/real.wasm" => Reply::Body(body.clone()),
+        _ => Reply::Redirect("/real.wasm".to_string()),
+    });
+    let input = absolute_glue(dir.path(), &server.url);
+    let out = bin()
+        .args(["--report", "json", "--fetch-wasm", "--fetch-wasm-local"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    let json = report_of(&out);
+    assert_eq!(hits(&server), 2);
+    assert_eq!(json["wasm"][0]["renamed"], 3);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!("note: fetching {}/real.wasm\n", server.origin)),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_fourth_redirect_is_not_followed() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = serve_routes(|path| Reply::Redirect(format!("{path}x")));
+    let input = absolute_glue(dir.path(), &server.url);
+    let out = bin()
+        .args(["--report", "json", "--fetch-wasm", "--fetch-wasm-local"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    let json = report_of(&out);
+    assert_eq!(hits(&server), 4);
+    assert_eq!(json["wasm_unresolved"][0]["url"], server.url.as_str());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("more than 3 redirects"), "{stderr}");
+}
+
+#[test]
+fn a_redirect_to_another_scheme_is_not_followed() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = serve_routes(|_| Reply::Redirect("file:///etc/app.wasm".to_string()));
+    let input = absolute_glue(dir.path(), &server.url);
+    let out = bin()
+        .args(["--report", "json", "--fetch-wasm", "--fetch-wasm-local"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    let json = report_of(&out);
+    assert_eq!(hits(&server), 1);
+    assert_eq!(json["wasm_unresolved"][0]["url"], server.url.as_str());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("redirects to file:///etc/app.wasm"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_panic_while_supplying_wasm_is_a_named_error_and_the_code_is_still_printed() {
+    let out = bin()
+        .env("UNTWIST_TEST_WASM_PANIC", "1")
+        .arg(fixture("bindgen-remote.js"))
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("warning: supplying wasm modules hit an internal error"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("panicked at"), "{stderr}");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("function greet(e, t)"), "{stdout}");
 }
 
 #[test]

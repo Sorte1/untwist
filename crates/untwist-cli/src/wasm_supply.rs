@@ -1,12 +1,20 @@
+mod address;
+mod fetch;
+mod url;
+
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use untwist::{Output, SuppliedWasm, WasmOrigin, WasmReference, WasmSupply};
 
 use crate::args::Args;
+use crate::{hooks, STDERR};
+use fetch::{Failure, Fetcher, LIMITS};
 
 const MAX_WASM_BYTES: u64 = untwist::MAX_WASM_BYTES as u64;
-const FETCH_TIMEOUT_SECS: u64 = 30;
+const SUPPLY_PANICKED: &str = "supplying wasm modules hit an internal error; the output is \
+     written without the modules --wasm, --wasm-dir and --fetch-wasm would give; please report it";
 
 fn read_limited(path: &Path) -> io::Result<Vec<u8>> {
     let file = std::fs::File::open(path)?;
@@ -60,55 +68,35 @@ pub fn supply(args: &Args, err: &mut dyn Write) -> anyhow::Result<WasmSupply> {
     Ok(WasmSupply { files })
 }
 
-fn is_absolute(url: &str) -> bool {
-    url.starts_with("https://") || url.starts_with("http://")
+fn hidden(c: char) -> bool {
+    let invisible = matches!(c, '\u{61c}' | '\u{200b}'..='\u{200f}' | '\u{feff}');
+    let separator_or_direction = matches!(c, '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{2069}');
+    c.is_control() || invisible || separator_or_direction
 }
 
-fn joined(base: &str, url: &str) -> String {
-    match url.strip_prefix('/') {
-        Some(rooted) => {
-            let origin_end = base
-                .find("://")
-                .and_then(|scheme| base[scheme + 3..].find('/').map(|at| scheme + 3 + at))
-                .unwrap_or(base.len());
-            format!("{}/{rooted}", &base[..origin_end])
+fn printable(text: &str) -> String {
+    text.chars().fold(String::new(), |mut shown, c| {
+        match hidden(c) {
+            true => shown.push_str(&format!("\\u{{{:x}}}", u32::from(c))),
+            false => shown.push(c),
         }
-        None => {
-            let directory = match base.ends_with('/') {
-                true => base,
-                false => base.rsplit_once('/').map_or(base, |(head, _)| head),
-            };
-            format!(
-                "{}/{}",
-                directory.trim_end_matches('/'),
-                url.trim_start_matches("./")
-            )
-        }
-    }
+        shown
+    })
 }
 
-pub fn fetch_url(reference: &WasmReference, base: Option<&str>) -> Option<String> {
-    if is_absolute(&reference.url) {
-        return Some(reference.url.clone());
+pub fn fetch_url(reference: &WasmReference, base: Option<&str>) -> Result<String, String> {
+    let target = &reference.url;
+    if url::has_scheme(target) {
+        return url::fetchable(target)
+            .ok_or_else(|| format!("{target} is not an http(s) URL that can be requested"));
     }
-    let base = base.filter(|base| is_absolute(base))?;
-    Some(joined(base, &reference.url))
-}
-
-fn fetch(url: &str) -> Result<Vec<u8>, String> {
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS)))
-        .build()
-        .into();
-    let response = agent.get(url).call().map_err(|error| error.to_string())?;
-    let mut bytes = Vec::new();
-    response
-        .into_body()
-        .into_reader()
-        .take(MAX_WASM_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|error| error.to_string())?;
-    Ok(bytes)
+    let Some(base) = base else {
+        return Err(format!(
+            "{target} is relative; pass --wasm-base to fetch it"
+        ));
+    };
+    url::joined(base, target)
+        .ok_or_else(|| format!("{target} gives no http(s) URL against --wasm-base {base}"))
 }
 
 pub fn fetch_unsupplied(
@@ -120,28 +108,63 @@ pub fn fetch_unsupplied(
     if !args.fetch_wasm {
         return Ok(());
     }
+    let mut fetcher = Fetcher::new(args.fetch_wasm_local, LIMITS);
     for reference in result.wasm_references() {
         if supply.find(&reference.name).is_some() {
             continue;
         }
-        let Some(url) = fetch_url(&reference, args.wasm_base.as_deref()) else {
-            writeln!(
-                err,
-                "note: not fetching {}: {} is relative; pass --wasm-base to fetch it",
-                reference.name, reference.url
-            )?;
-            continue;
+        let name = printable(&reference.name);
+        let unfetched = fetch_url(&reference, args.wasm_base.as_deref())
+            .and_then(|target| fetcher.exhausted().map_or(Ok(target), Err));
+        let target = match unfetched {
+            Ok(target) => target,
+            Err(why) => {
+                writeln!(err, "note: not fetching {name}: {}", printable(&why))?;
+                continue;
+            }
         };
-        match fetch(&url) {
+        match fetcher.fetch(&target, err) {
             Ok(bytes) => supply.files.push(SuppliedWasm {
                 name: reference.name.clone(),
                 bytes,
                 origin: WasmOrigin::Fetched,
-                url: Some(url),
+                url: Some(target),
             }),
-            Err(error) => writeln!(err, "warning: fetching {url} failed: {error}")?,
+            Err(Failure::Stderr(error)) => return Err(error),
+            Err(Failure::Fetch(why)) => writeln!(
+                err,
+                "warning: fetching {} failed: {}",
+                printable(&target),
+                printable(&why)
+            )?,
         }
     }
+    Ok(())
+}
+
+fn supplied_and_fetched(
+    args: &Args,
+    result: &Output,
+    err: &mut dyn Write,
+) -> anyhow::Result<WasmSupply> {
+    if hooks::wasm_panic() {
+        panic!("wasm supply test hook");
+    }
+    let mut supply = supply(args, err)?;
+    fetch_unsupplied(args, result, &mut supply, err).context(STDERR)?;
+    Ok(supply)
+}
+
+pub fn settle(args: &Args, result: &mut Output, err: &mut dyn Write) -> anyhow::Result<()> {
+    let supply = match untwist::contained(|| supplied_and_fetched(args, &*result, &mut *err)) {
+        Some(supply) => supply?,
+        None => {
+            result.wasm_panicked = true;
+            writeln!(err, "warning: {SUPPLY_PANICKED}").context(STDERR)?;
+            WasmSupply::default()
+        }
+    };
+    result.settle_wasm(&supply, args.output.is_some());
     Ok(())
 }
 
@@ -151,34 +174,65 @@ mod tests {
 
     fn reference(url: &str) -> WasmReference {
         WasmReference {
-            name: untwist_unpack_name(url),
+            name: url.rsplit('/').next().unwrap_or(url).to_string(),
             url: url.to_string(),
         }
     }
 
-    fn untwist_unpack_name(url: &str) -> String {
-        url.rsplit('/').next().unwrap_or(url).to_string()
+    fn target(url: &str, base: Option<&str>) -> Option<String> {
+        fetch_url(&reference(url), base).ok()
     }
 
     #[test]
     fn a_relative_url_is_fetched_only_against_an_absolute_base() {
-        assert_eq!(fetch_url(&reference("pkg/a.wasm"), None), None);
-        assert_eq!(fetch_url(&reference("pkg/a.wasm"), Some("pkg/")), None);
+        assert_eq!(target("pkg/a.wasm", None), None);
+        assert_eq!(target("pkg/a.wasm", Some("pkg/")), None);
         assert_eq!(
-            fetch_url(
-                &reference("pkg/a.wasm"),
-                Some("https://x.dev/app/index.html")
-            )
-            .as_deref(),
+            target("pkg/a.wasm", Some("https://x.dev/app/index.html")).as_deref(),
             Some("https://x.dev/app/pkg/a.wasm")
         );
         assert_eq!(
-            fetch_url(&reference("/static/a.wasm"), Some("https://x.dev/app/")).as_deref(),
+            target("/static/a.wasm", Some("https://x.dev/app/")).as_deref(),
             Some("https://x.dev/static/a.wasm")
         );
         assert_eq!(
-            fetch_url(&reference("https://cdn.dev/a.wasm"), None).as_deref(),
+            target("https://cdn.dev/a.wasm", None).as_deref(),
             Some("https://cdn.dev/a.wasm")
         );
+    }
+
+    #[test]
+    fn a_base_that_is_only_an_origin_keeps_its_host() {
+        assert_eq!(
+            target("pkg/a.wasm", Some("https://x.dev")).as_deref(),
+            Some("https://x.dev/pkg/a.wasm")
+        );
+    }
+
+    #[test]
+    fn a_url_that_cannot_be_requested_says_why() {
+        let relative = fetch_url(&reference("pkg/a.wasm"), None).unwrap_err();
+        let scheme = fetch_url(&reference("ftp://x.dev/a.wasm"), None).unwrap_err();
+        let base = fetch_url(&reference("a.wasm"), Some("x.dev")).unwrap_err();
+        assert!(
+            relative.contains("pass --wasm-base to fetch it"),
+            "{relative}"
+        );
+        assert!(scheme.contains("is not an http(s) URL"), "{scheme}");
+        assert!(base.contains("against --wasm-base x.dev"), "{base}");
+    }
+
+    #[test]
+    fn control_and_direction_characters_are_shown_escaped() {
+        assert_eq!(printable("a\u{1b}[31mb"), "a\\u{1b}[31mb");
+        assert_eq!(printable("a\r\nb\u{7f}"), "a\\u{d}\\u{a}b\\u{7f}");
+        assert_eq!(printable("a\u{9b}b\u{2028}c"), "a\\u{9b}b\\u{2028}c");
+        assert_eq!(printable("a\u{202e}b"), "a\\u{202e}b");
+        assert_eq!(printable("a\u{200f}b\u{61c}c"), "a\\u{200f}b\\u{61c}c");
+        assert_eq!(
+            printable("a\u{200b}b\u{2060}c\u{feff}"),
+            "a\\u{200b}b\\u{2060}c\\u{feff}"
+        );
+        assert_eq!(printable("plain é text"), "plain é text");
     }
 }

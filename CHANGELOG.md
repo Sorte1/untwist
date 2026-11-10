@@ -226,6 +226,23 @@ All notable changes to this project are documented in this file. The format is b
   differ from what the program prints. The memo monitor now also records missed reads, and every
   read of the memo must use the key the decoder writes.
 
+### Security
+
+- `--fetch-wasm` is bounded, since the URLs it requests come from the input. One run fetches at
+  most 16 modules and 64 MiB within 120 seconds; a reference past a limit is named in a note and
+  the run goes on. Each URL is printed to stderr, with control characters escaped, before it is
+  requested. A redirect is followed at most three times and each target is checked like the
+  first URL. A host that resolves to a loopback, link-local, private, shared, unspecified,
+  multicast or reserved address (IPv4-mapped and other embedded forms included) is not
+  contacted, the connection goes to the address that was checked, and no proxy from the
+  environment is used. The new `--fetch-wasm-local` lifts the address check for input that
+  loads its wasm from your own machine or network.
+- `--wasm-base` is joined to a relative reference the way a browser does it, so a base without a
+  path (`https://x.dev`) no longer gives `https:/pkg/a.wasm`.
+- An internal error while wasm modules are supplied, fetched or named no longer ends the run
+  after the code was produced: the output is written without that step, a warning names it, the
+  exit code is 1 and `--json` carries `"wasm_panicked": true`.
+
 ## [0.3.1] - 2026-11-09
 
 ### Added
