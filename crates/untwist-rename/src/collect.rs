@@ -4,14 +4,18 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
+use oxc_str::Ident;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::js_text::js_text;
 use untwist_core::ast_util::prop::member_parts;
-use untwist_core::semantic::{eval_payload_names, scope_hazard, Strictness};
+use untwist_core::semantic::{
+    closed_eval_names, eval_payload_names, observers, Observers, Strictness,
+};
 use untwist_eval::coerce::number_to_string;
 
+use crate::hazards::{is_direct_eval, Hazards};
 use crate::oracle::OuterRule;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -105,6 +109,8 @@ pub struct Collected {
     pub eval_names: Vec<String>,
     pub jsx_tags: FxHashSet<SymbolId>,
     pub hazard: Option<&'static str>,
+    pub observed: FxHashSet<SymbolId>,
+    pub assumed_unobserved: bool,
     pub(crate) rule: OuterRule,
 }
 
@@ -148,14 +154,24 @@ pub fn collect(program: &Program<'_>, scoping: &Scoping, rule: OuterRule) -> Col
         loop_depth: 0,
         strict: Strictness::default(),
         recorded: FxHashMap::default(),
+        withs: Vec::new(),
+        hazards: Hazards::default(),
         out: Collected::default(),
     };
     collector.visit_program(program);
     let Collector {
-        recorded, mut out, ..
+        recorded,
+        hazards,
+        mut out,
+        ..
     } = collector;
     out.by_symbol = recorded;
-    out.hazard = scope_hazard(scoping);
+    out.hazard = hazards.name();
+    out.assumed_unobserved = observers() == Observers::None;
+    if out.assumed_unobserved {
+        out.observed.clear();
+    }
+    out.pinned.extend(out.observed.iter().copied());
     if scoping.root_unresolved_references().contains_key("eval") {
         out.eval_names = eval_payload_names(program);
     }
@@ -176,6 +192,8 @@ struct Collector<'s> {
     loop_depth: usize,
     strict: Strictness,
     recorded: FxHashMap<SymbolId, usize>,
+    withs: Vec<Option<ScopeId>>,
+    hazards: Hazards,
     out: Collected,
 }
 
@@ -203,6 +221,7 @@ impl Collector<'_> {
         let Some(symbol) = id.symbol_id.get() else {
             return;
         };
+        self.observe_through_with(symbol);
         self.out.sites.push(BindingSite {
             symbol,
             role: role.clone(),
@@ -221,6 +240,40 @@ impl Collector<'_> {
             scope: self.scoping.symbol_scope_id(symbol),
             role,
         });
+    }
+
+    fn observe_through_with(&mut self, symbol: SymbolId) {
+        let Some(&with) = self.withs.last() else {
+            return;
+        };
+        let declared = self.scoping.symbol_scope_id(symbol);
+        let inside = with.is_some_and(|with| {
+            self.scoping
+                .scope_ancestors(declared)
+                .any(|scope| scope == with)
+        });
+        if !inside {
+            self.out.observed.insert(symbol);
+        }
+    }
+
+    fn observe_eval(&mut self, call: &CallExpression<'_>) {
+        self.hazards.eval = true;
+        let site = self.current();
+        let scoping = self.scoping;
+        let Some(names) = closed_eval_names(call) else {
+            for scope in scoping.scope_ancestors(site) {
+                for (_, symbol) in scoping.get_bindings(scope).iter() {
+                    self.out.observed.insert(*symbol);
+                }
+            }
+            return;
+        };
+        for name in names {
+            if let Some(symbol) = scoping.find_binding(site, Ident::from(name.as_str())) {
+                self.out.observed.insert(symbol);
+            }
+        }
     }
 
     fn pin(&mut self, id: Option<&BindingIdentifier<'_>>) {
@@ -332,10 +385,21 @@ impl<'a> VisitJs<'a> for Collector<'_> {
     }
 
     fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.hazards.with = true;
+        self.visit_expression(&it.object);
         let scope = it.scope_id.get();
         self.push(scope);
-        walk_js::walk_with_statement(self, it);
+        self.withs.push(scope);
+        self.visit_statement(&it.body);
+        self.withs.pop();
         self.pop(scope);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if is_direct_eval(it) {
+            self.observe_eval(it);
+        }
+        walk_js::walk_call_expression(self, it);
     }
 
     fn visit_labeled_statement(&mut self, it: &LabeledStatement<'a>) {
@@ -584,6 +648,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
         let Some(symbol) = reference_symbol(it, self.scoping) else {
             return;
         };
+        self.observe_through_with(symbol);
         let scoping = self.scoping;
         let declared = scoping.symbol_scope_id(symbol);
         let current = self.current();

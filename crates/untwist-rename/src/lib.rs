@@ -7,6 +7,7 @@ pub mod fingerprint;
 #[cfg(feature = "test-hooks")]
 pub mod fresh;
 pub mod generate;
+mod hazards;
 pub mod holders;
 pub mod human;
 pub mod import_path;

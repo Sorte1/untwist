@@ -190,7 +190,7 @@ impl<'a> Pass<'a> for LetToConst {
             return;
         }
         let candidates = let_symbols(program, cx.scoping());
-        self.constant = effectively_constant_bindings(program, cx.scoping(), &candidates);
+        self.constant = effectively_constant_bindings(cx.scoping(), &candidates);
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {

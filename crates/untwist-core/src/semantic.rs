@@ -1,14 +1,14 @@
 use oxc_ast::ast::{
-    AccessorProperty, ArrowFunctionBody, ArrowFunctionExpression, AssignmentExpression,
-    AssignmentTarget, BindingPattern, Expression, FormalParameter, Function, FunctionBody,
-    IdentifierReference, Program, PropertyDefinition, Statement, StaticBlock,
+    AccessorProperty, ArrowFunctionExpression, AssignmentExpression, AssignmentTarget,
+    BindingPattern, Expression, FormalParameter, Function, IdentifierReference, Program,
+    PropertyDefinition, Statement, StaticBlock,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::{Scoping, SemanticBuilder, Stats};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
-use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 #[cfg(feature = "test-hooks")]
@@ -397,116 +397,13 @@ pub fn is_binding_possibly_used_before(
     bindings_possibly_used_before(program, scoping, &[(symbol, boundary)]).contains(&symbol)
 }
 
-struct OwnerBodyScan {
-    owner_scope_id: ScopeId,
-    boundary: Span,
-    found: bool,
-}
-
-impl<'a> VisitJs<'a> for OwnerBodyScan {
-    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        if it.scope_id.get() == Some(self.owner_scope_id) {
-            if let Some(body) = it.body.as_deref() {
-                self.found = body_has_the_write(body, self.boundary);
-            }
-            return;
-        }
-        walk_js::walk_function(self, it, flags);
-    }
-
-    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
-        if it.scope_id.get() == Some(self.owner_scope_id) {
-            if let ArrowFunctionBody::FunctionBody(body) = &it.body {
-                self.found = body_has_the_write(body, self.boundary);
-            }
-            return;
-        }
-        walk_js::walk_arrow_function_expression(self, it);
-    }
-}
-
-fn body_has_the_write(body: &FunctionBody<'_>, boundary: Span) -> bool {
-    body.statements.iter().any(|statement| {
-        let Statement::ExpressionStatement(inner) = statement else {
-            return false;
-        };
-        let Expression::AssignmentExpression(assignment) = &inner.expression else {
-            return false;
-        };
-        assignment.span == boundary
-    })
-}
-
-fn is_write_at_owner_body_level(
-    program: &Program<'_>,
-    scoping: &Scoping,
-    symbol: SymbolId,
-    boundary: Span,
-) -> bool {
-    let Some(owner_scope_id) = owner_scope_of(scoping, symbol) else {
-        return false;
-    };
-    let mut scan = OwnerBodyScan {
-        owner_scope_id,
-        boundary,
-        found: false,
-    };
-    scan.visit_program(program);
-    scan.found
-}
-
-fn may_be_parameter(scoping: &Scoping, symbol: SymbolId) -> bool {
-    scoping
-        .symbol_flags(symbol)
-        .contains(SymbolFlags::FunctionScopedVariable)
-}
-
 pub fn effectively_constant_bindings(
-    program: &Program<'_>,
     scoping: &Scoping,
     candidates: &[SymbolId],
 ) -> FxHashSet<SymbolId> {
-    let mut constant = FxHashSet::default();
-    let mut rest = FxHashSet::default();
-    for symbol in candidates {
-        if is_constant_binding(scoping, *symbol) {
-            constant.insert(*symbol);
-        } else if write_reference_count(scoping, *symbol) == 1 {
-            rest.insert(*symbol);
-        }
-    }
-    rest.retain(|symbol| may_be_parameter(scoping, *symbol));
-    if rest.is_empty() {
-        return constant;
-    }
-    let parameters = parameter_symbols(program);
-    rest.retain(|symbol| parameters.contains(symbol));
-    if rest.is_empty() {
-        return constant;
-    }
-    let spans = write_spans(program, scoping, &rest);
-    let pairs: Vec<(SymbolId, Span)> = rest
+    candidates
         .iter()
-        .filter_map(|symbol| match spans.get(symbol).map(Vec::as_slice) {
-            Some([only]) => Some((*symbol, *only)),
-            _ => None,
-        })
-        .filter(|(symbol, span)| is_write_at_owner_body_level(program, scoping, *symbol, *span))
-        .collect();
-    let used_before = bindings_possibly_used_before(program, scoping, &pairs);
-    constant.extend(
-        pairs
-            .into_iter()
-            .map(|(symbol, _)| symbol)
-            .filter(|symbol| !used_before.contains(symbol)),
-    );
-    constant
-}
-
-pub fn is_effectively_constant_binding(
-    program: &Program<'_>,
-    scoping: &Scoping,
-    symbol: SymbolId,
-) -> bool {
-    effectively_constant_bindings(program, scoping, &[symbol]).contains(&symbol)
+        .copied()
+        .filter(|symbol| is_constant_binding(scoping, *symbol))
+        .collect()
 }

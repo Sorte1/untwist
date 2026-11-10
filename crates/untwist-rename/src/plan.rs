@@ -11,8 +11,6 @@ use untwist_core::semantic::build_scoping;
 use crate::collect::{collect, Collected};
 use crate::oracle::OuterRule;
 
-const HAZARD_SUFFIX: &str = "may defeat scope analysis; renaming anyway";
-
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct RenamePlan {
     names: Vec<(SymbolId, String)>,
@@ -58,6 +56,18 @@ impl RenamePlan {
         renames.apply(program, scoping);
         changed
     }
+}
+
+fn observed_note(hazard: &str, collected: &Collected) -> String {
+    if collected.assumed_unobserved {
+        return format!("{hazard} may defeat scope analysis; --unsafe assumes it sees no binding");
+    }
+    let kept = match collected.observed.len() {
+        0 => "it can see no binding to rename".to_string(),
+        1 => "the 1 binding it can see keeps its name".to_string(),
+        count => format!("the {count} bindings it can see keep their names"),
+    };
+    format!("{hazard} may defeat scope analysis; {kept}")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -126,7 +136,7 @@ pub fn run_mode_once<'a, F>(
     let renamed = plan.apply(program, scoping, &*cx);
     drop(rebuilt);
     if let Some(hazard) = hazard {
-        cx.note(format!("{hazard} {HAZARD_SUFFIX}"), None);
+        cx.note(observed_note(hazard, &collected), None);
     }
     for note in plan.notes.drain(..) {
         cx.note(note, None);
