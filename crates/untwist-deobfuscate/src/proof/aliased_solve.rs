@@ -48,7 +48,7 @@ impl Work {
     }
 
     fn over_budget(&self) -> bool {
-        self.popped % BUDGET_STRIDE == 0 && untwist_core::budget::check().is_err()
+        self.popped.is_multiple_of(BUDGET_STRIDE) && untwist_core::budget::check().is_err()
     }
 
     fn push(&mut self, at: usize) {
