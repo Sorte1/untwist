@@ -45,7 +45,9 @@ All notable changes to this project are documented in this file. The format is b
   template forwards, or the template's leading declaration does more than fetch the array), when an
   `flag === undefined && (flag = true)` gate is used as a value, when a memo miss returns something
   other than what it stores, or when an init gate leaves behind a helper with its own mutable state.
-  Each such decoder is refused, or bails in the monitor, instead.
+  Each such decoder is refused, or bails in the monitor, instead. A rotator's local helper is judged
+  by its declared body only when nothing else binds or writes its name, so a later
+  `var w = function () {...}` no longer makes the checksum skip calls and pick the wrong rotation.
 
 - An unpacked browserify bundle now loads the modules the bundle loads. Each `require` whose
   request is in the module's dependency map names the file of the mapped module, so two versions

@@ -51,6 +51,9 @@ fn is_inert_element(expr: &Expression<'_>) -> bool {
             is_inert_element(&node.argument)
         }
         Expression::RegExpLiteral(_) => false,
+        Expression::Identifier(id) => id.name.as_str() == "undefined",
+        Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+        Expression::ArrayExpression(_) => is_array_of_literals(expr),
         other => other.is_literal(),
     }
 }

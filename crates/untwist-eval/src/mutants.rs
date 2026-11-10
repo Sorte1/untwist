@@ -164,3 +164,14 @@ pub fn trust_state_left_by_gates_for_tests(on: bool) {
 pub(crate) fn gate_state_trusted() -> bool {
     GATE_STATE_TRUSTED.load(Ordering::Relaxed)
 }
+
+static ROTATOR_WRAPPERS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_rotator_wrappers_by_declaration_for_tests(on: bool) {
+    ROTATOR_WRAPPERS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn rotator_wrappers_trusted() -> bool {
+    ROTATOR_WRAPPERS_TRUSTED.load(Ordering::Relaxed)
+}
