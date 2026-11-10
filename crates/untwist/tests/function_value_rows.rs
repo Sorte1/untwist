@@ -88,3 +88,33 @@ fn every_refusal_diverges_from_node_when_every_callee_is_taken_as_a_user_functio
         .collect();
     assert!(same.is_empty(), "these still print like node: {same:?}");
 }
+
+const FAN_OUT_HEAD: &str = "function sa() { var h = ['log', 'hello', 'world']; sa = function () { return h; }; return sa(); }\nfunction dec(c, d) { var e = sa(); return (dec = function (f, g) { f = f - 0x0; var i = e[f]; return String.fromCharCode(i.charCodeAt(0)) + i.slice(1); }), dec(c, d); }\n";
+
+fn fanned_out_parameters(width: usize) -> String {
+    let mut source = String::from(FAN_OUT_HEAD);
+    source.push_str("(function () {\nfunction f1(a) { a(1); }\n");
+    for level in 2..=5 {
+        let calls = format!("f{}(a); ", level - 1).repeat(width);
+        source.push_str(&format!("function f{level}(a) {{ {calls}}}\n"));
+    }
+    source.push_str("f5(function () {});\n})();\nconsole.log(dec(0x1), dec(0x2));\n");
+    source
+}
+
+#[test]
+fn parameters_passed_down_many_call_sites_are_judged_in_bounded_time() {
+    let source = fanned_out_parameters(32);
+    let started = std::time::Instant::now();
+    let code = Pipeline::new(Options::default())
+        .run(&source)
+        .code()
+        .to_string();
+    let elapsed = started.elapsed();
+    assert!(code.contains("console.log"), "{code}");
+    assert!(
+        elapsed < std::time::Duration::from_secs(20),
+        "a {}-byte program took {elapsed:?}",
+        source.len()
+    );
+}

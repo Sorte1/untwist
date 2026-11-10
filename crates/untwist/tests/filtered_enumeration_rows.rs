@@ -119,3 +119,22 @@ fn the_sabotage_rows_diverge_from_node_under_the_filtered_enumeration_mutant() {
 fn the_rewrite_order_rows_diverge_from_node_under_the_rewrite_order_mutant() {
     assert_rows_diverge_under("filtered-rewrite-order", "ref-order-");
 }
+
+const LOOPING_FILTER: &str = "(function () { var that = {}; var pred = function (s) { for (var i = 0; i < 1e9; i++) {} return s.charCodeAt(0) == 122; }; var b; for (var k in that) { if (pred(k)) { b = k; break; } } var r = that[b]; r(); })();\n";
+
+#[test]
+fn many_filter_loops_with_looping_predicates_are_judged_in_bounded_time() {
+    let source = format!(
+        "{}console.log('abc'.charAt(0));\n",
+        LOOPING_FILTER.repeat(800)
+    );
+    let started = std::time::Instant::now();
+    let code = transformed(&options(false, None), &source);
+    let elapsed = started.elapsed();
+    assert!(code.contains("console.log"), "{}", code.len());
+    assert!(
+        elapsed < std::time::Duration::from_secs(30),
+        "a {}-byte program took {elapsed:?}",
+        source.len()
+    );
+}
