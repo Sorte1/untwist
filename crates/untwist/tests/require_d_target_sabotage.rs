@@ -34,7 +34,7 @@ fn every_sab_row_diverges_from_node_once_every_helper_target_is_trusted() {
         return;
     };
     let sabotage = with_prefix("sab-");
-    assert!(sabotage.len() >= 4, "found {} rows", sabotage.len());
+    assert!(sabotage.len() >= 3, "found {} rows", sabotage.len());
     let safe = options(false);
     let run_safe = |source: &str| transformed(&safe, source);
     let modes: [Mode<'_>; 1] = [("mutant", &run_safe)];

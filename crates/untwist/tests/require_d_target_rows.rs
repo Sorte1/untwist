@@ -2,7 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/require_d_target_rows.txt");
-const PREFIXES: [&str; 2] = ["dec-", "sab-"];
+const PREFIXES: [&str; 3] = ["dec-", "ref-", "sab-"];
 
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
@@ -38,7 +38,7 @@ fn transformed(options: &Options, source: &str) -> String {
 #[test]
 fn every_row_has_a_known_prefix() {
     let all = rows();
-    assert!(all.len() >= 8, "found {} rows", all.len());
+    assert!(all.len() >= 13, "found {} rows", all.len());
     for (label, _) in all {
         assert!(
             PREFIXES.iter().any(|prefix| label.starts_with(prefix)),
