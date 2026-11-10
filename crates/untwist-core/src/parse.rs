@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    ArrowFunctionExpression, AwaitExpression, Class, ForOfStatement, Function, ImportMeta, Program,
-    Statement, VariableDeclaration,
+    ArrowFunctionExpression, AwaitExpression, Class, ForOfStatement, Function, Program, Statement,
+    VariableDeclaration,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_diagnostics::{OxcDiagnostic, Severity};
@@ -22,9 +22,10 @@ pub fn script_source_type() -> SourceType {
 }
 
 pub fn parse_program<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
-    let mut as_module = parse_with(alloc, source, SourceType::mjs().with_jsx(true));
+    let (mut as_module, module_syntax) =
+        parse_recording(alloc, source, SourceType::mjs().with_jsx(true));
     if !has_error(&as_module.diagnostics) {
-        if !is_module_code(&as_module.program) {
+        if !module_syntax && !has_top_level_await(&as_module.program) {
             as_module.source_type = script_source_type();
             as_module.program.source_type = as_module.source_type;
         }
@@ -43,6 +44,14 @@ pub fn parse_with<'a>(
     source: &'a str,
     source_type: SourceType,
 ) -> Parsed<'a> {
+    parse_recording(alloc, source, source_type).0
+}
+
+fn parse_recording<'a>(
+    alloc: &'a Allocator,
+    source: &'a str,
+    source_type: SourceType,
+) -> (Parsed<'a>, bool) {
     let options = ParseOptions {
         allow_return_outside_function: true,
         preserve_parens: false,
@@ -51,11 +60,13 @@ pub fn parse_with<'a>(
     let ret = Parser::new(alloc, source, source_type)
         .with_options(options)
         .parse();
-    Parsed {
+    let module_syntax = ret.module_record.has_module_syntax;
+    let parsed = Parsed {
         program: ret.program,
         diagnostics: ret.diagnostics.into_vec(),
         source_type,
-    }
+    };
+    (parsed, module_syntax)
 }
 
 pub fn has_error(diagnostics: &[OxcDiagnostic]) -> bool {
@@ -98,24 +109,15 @@ fn decode_percent_segments(input: &str) -> String {
 }
 
 #[derive(Default)]
-struct ModuleCode {
+struct TopLevelAwait {
     found: bool,
 }
 
-impl<'a> VisitJs<'a> for ModuleCode {
+impl<'a> VisitJs<'a> for TopLevelAwait {
     fn visit_statement(&mut self, it: &Statement<'a>) {
-        if self.found {
-            return;
+        if !self.found {
+            walk_js::walk_statement(self, it);
         }
-        if it.is_module_declaration() {
-            self.found = true;
-            return;
-        }
-        walk_js::walk_statement(self, it);
-    }
-
-    fn visit_import_meta(&mut self, _: &ImportMeta) {
-        self.found = true;
     }
 
     fn visit_await_expression(&mut self, _: &AwaitExpression<'a>) {
@@ -132,51 +134,15 @@ impl<'a> VisitJs<'a> for ModuleCode {
         walk_js::walk_variable_declaration(self, it);
     }
 
-    fn visit_function(&mut self, it: &Function<'a>, _: ScopeFlags) {
-        self.visit_import_meta_only(|scan| {
-            if let Some(body) = &it.body {
-                scan.visit_function_body(body);
-            }
-            scan.visit_formal_parameters(&it.params);
-        });
-    }
+    fn visit_function(&mut self, _: &Function<'a>, _: ScopeFlags) {}
 
-    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
-        self.visit_import_meta_only(|scan| {
-            scan.visit_formal_parameters(&it.params);
-            scan.visit_arrow_function_body(&it.body);
-        });
-    }
+    fn visit_arrow_function_expression(&mut self, _: &ArrowFunctionExpression<'a>) {}
 
-    fn visit_class(&mut self, it: &Class<'a>) {
-        self.visit_import_meta_only(|scan| walk_js::walk_class(scan, it));
-    }
+    fn visit_class(&mut self, _: &Class<'a>) {}
 }
 
-#[derive(Default)]
-struct MetaScan {
-    found: bool,
-}
-
-impl<'a> VisitJs<'a> for MetaScan {
-    fn visit_import_meta(&mut self, _: &ImportMeta) {
-        self.found = true;
-    }
-}
-
-impl ModuleCode {
-    fn visit_import_meta_only(&mut self, walk: impl FnOnce(&mut MetaScan)) {
-        if self.found {
-            return;
-        }
-        let mut scan = MetaScan::default();
-        walk(&mut scan);
-        self.found |= scan.found;
-    }
-}
-
-pub fn is_module_code(program: &Program<'_>) -> bool {
-    let mut scan = ModuleCode::default();
+fn has_top_level_await(program: &Program<'_>) -> bool {
+    let mut scan = TopLevelAwait::default();
     scan.visit_program(program);
     scan.found
 }

@@ -112,9 +112,21 @@ pub fn is_hoisted_block_function(scoping: &Scoping, symbol: SymbolId) -> bool {
 }
 
 pub fn block_function_symbols(scoping: &Scoping) -> FxHashSet<SymbolId> {
+    let in_block: FxHashSet<NodeId> = scoping
+        .scope_descendants_from_root()
+        .filter(|scope| {
+            let flags = scoping.scope_flags(*scope);
+            flags.is_function() && !flags.is_arrow() && declared_in_block(scoping, Some(*scope))
+        })
+        .map(|scope| scoping.get_node_id(scope))
+        .collect();
+    if in_block.is_empty() {
+        return FxHashSet::default();
+    }
     scoping
         .symbol_ids()
-        .filter(|symbol| declaring_block(scoping, *symbol).is_some())
+        .filter(|symbol| is_function_declaration(scoping, *symbol))
+        .filter(|symbol| in_block.contains(&scoping.symbol_declaration(*symbol)))
         .collect()
 }
 
