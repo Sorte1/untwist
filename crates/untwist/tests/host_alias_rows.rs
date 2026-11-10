@@ -4,7 +4,7 @@ mod host_alias;
 use host_alias::{decoded, global_routes, hosted, rows, transformed, transformed_under_host};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const ROUTES_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
+const ROWS_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
     "ref-document-default-view",
     "ref-created-element-owner-document",
     "ref-default-parameter",
@@ -14,6 +14,14 @@ const ROUTES_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
     "ref-function-constructor-this",
     "ref-bound-without-receiver",
     "ref-tagged-template-this",
+    "ref-route-store-through-owner-document",
+    "ref-route-resolved-key-on-event-target",
+    "ref-route-store-through-event-view",
+    "ref-route-unknown-key-on-event-target",
+    "ref-route-literal-store-through-event-view-alias",
+    "ref-unknown-key-on-event-target",
+    "ref-super-returns-the-global-object",
+    "ref-default-constructor-returns-the-global-object",
 ];
 
 #[test]
@@ -52,9 +60,10 @@ fn points_to_refuses_every_global_object_route() {
 }
 
 #[test]
-fn the_default_lane_refuses_every_global_object_route_outside_the_known_list() {
-    for (label, source) in global_routes() {
-        if ROUTES_THE_DEFAULT_LANE_STILL_DECODES.contains(&label.as_str()) {
+fn the_default_lane_refuses_every_refused_row_outside_the_known_list() {
+    let all = rows().into_iter().chain(global_routes());
+    for (label, source) in all.filter(|(label, _)| label.starts_with("ref-")) {
+        if ROWS_THE_DEFAULT_LANE_STILL_DECODES.contains(&label.as_str()) {
             continue;
         }
         let code = transformed(false, &source);

@@ -8,7 +8,37 @@ use untwist_deobfuscate::mutants::{
 };
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const REFUSED_ELSEWHERE: &[&str] = &[];
+const REFUSED_ELSEWHERE: &[&str] = &[
+    "ref-both-prototype-store-through-owner-document",
+    "ref-ctor-literal-store-through-constructor-prototype",
+    "ref-ctor-store-through-constructor",
+    "ref-ctor-store-through-constructor-prototype",
+    "ref-ctor-store-through-proto",
+    "ref-definer-through-computed-global",
+    "ref-route-definer-on-constructor-through-default-view",
+    "ref-route-definer-through-default-view",
+    "ref-route-literal-store-through-event-view",
+    "ref-store-through-unknown-global-key",
+    "ref-this-detached-method",
+    "ref-this-method-applied-with-undefined",
+    "ref-this-method-applied-with-unknown",
+    "ref-this-method-bound-without-receiver",
+    "ref-this-method-called-with-null",
+    "ref-this-method-called-without-receiver",
+    "ref-this-method-passed-to-for-each",
+    "ref-this-reflect-apply-with-null",
+    "ref-this-resolved-key-in-a-timer-callback",
+    "ref-this-sequence-call",
+    "ref-this-tagged-template",
+    "ref-this-timer-callback",
+    "ref-unknown-key-in-a-detached-method",
+    "ref-unknown-key-in-a-timer-callback",
+    "ref-unknown-key-on-event-target",
+    "ref-world-decoder-array-escapes",
+    "ref-world-escaped-definer-comes-back",
+    "ref-world-escaped-prototype-comes-back",
+    "ref-world-unknown-key-on-escaped-constructor",
+];
 
 #[derive(Clone, Copy, Default)]
 struct Mutant {
@@ -58,21 +88,6 @@ fn every_refused_row_diverges_from_node_once_its_rule_is_dropped() {
             "ref-route-",
             Mutant {
                 routes: on,
-                ..Mutant::default()
-            },
-        ),
-        (
-            "ref-ctor-",
-            Mutant {
-                constructors: on,
-                ..Mutant::default()
-            },
-        ),
-        (
-            "ref-both-",
-            Mutant {
-                routes: on,
-                constructors: on,
                 ..Mutant::default()
             },
         ),

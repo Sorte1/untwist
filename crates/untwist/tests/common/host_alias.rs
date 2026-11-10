@@ -5,15 +5,19 @@ use untwist_deobfuscate::proof::BUILTIN_ALIAS_BITS;
 
 pub const PRELUDE: &str = include_str!("../data/host_alias/prelude.js");
 const HEAD: &str = include_str!("../data/host_alias/head.js");
+const PLAIN_HEAD: &str = include_str!("../data/host_alias/plain_head.js");
+const BARE_HEAD: &str = include_str!("../data/host_alias/bare_head.js");
 const ROWS: &str = include_str!("../data/host_alias/rows.txt");
+const KEYED_ROWS: &str = include_str!("../data/host_alias/keyed_rows.txt");
+const BARE_ROWS: &str = include_str!("../data/host_alias/bare_rows.txt");
 const GLOBAL_ROUTES: &str = include_str!("../data/host_alias/global_routes.txt");
 const TAIL: &str = "console.log(dec0(0x1),dec0(0x2));";
 
-fn framed(rows: &str) -> Vec<(String, String)> {
+fn framed(head: &str, rows: &str) -> Vec<(String, String)> {
     rows.lines()
         .filter_map(|line| line.split_once('|'))
         .map(|(label, patch)| {
-            let head = HEAD.trim_end();
+            let head = head.trim_end();
             (
                 label.to_string(),
                 format!("(function(){{{head}{patch}{TAIL}}})();"),
@@ -23,11 +27,14 @@ fn framed(rows: &str) -> Vec<(String, String)> {
 }
 
 pub fn rows() -> Vec<(String, String)> {
-    framed(ROWS)
+    let mut rows = framed(HEAD, ROWS);
+    rows.extend(framed(PLAIN_HEAD, KEYED_ROWS));
+    rows.extend(framed(BARE_HEAD, BARE_ROWS));
+    rows
 }
 
 pub fn global_routes() -> Vec<(String, String)> {
-    framed(GLOBAL_ROUTES)
+    framed(HEAD, GLOBAL_ROUTES)
 }
 
 pub fn hosted(rows: &[(String, String)]) -> Vec<(String, String)> {
