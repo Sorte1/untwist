@@ -191,6 +191,7 @@ pub struct Stamped<'p> {
     pub arrays: Vec<StampedFn<'p>>,
     pub decoders: Vec<StampedFn<'p>>,
     pub incomplete: bool,
+    pub top_level_sorted: bool,
 }
 
 impl<'p> Stamped<'p> {
@@ -299,7 +300,19 @@ pub fn find_stamped<'p>(program: &'p Program<'p>) -> Stamped<'p> {
         arrays: ordered(collector.arrays),
         decoders: ordered(collector.decoders),
         incomplete: collector.incomplete,
+        top_level_sorted: top_level_sorted(program),
     }
+}
+
+fn top_level_sorted(program: &Program<'_>) -> bool {
+    program
+        .body
+        .iter()
+        .all(|statement| statement.span().start < statement.span().end)
+        && program
+            .body
+            .windows(2)
+            .all(|pair| pair[0].span().end <= pair[1].span().start)
 }
 
 #[derive(Default)]
@@ -369,6 +382,25 @@ impl<'a> VisitJs<'a> for StrictAt {
             walk_js::walk_class(self, it);
         }
     }
+}
+
+pub fn context_is_strict_in(program: &Program<'_>, statement: Span, sorted: bool) -> bool {
+    if !sorted || statement.start >= statement.end {
+        return context_is_strict(program, statement);
+    }
+    let after = program
+        .body
+        .partition_point(|candidate| candidate.span().start <= statement.start);
+    let Some(candidate) = after.checked_sub(1).and_then(|at| program.body.get(at)) else {
+        return false;
+    };
+    let mut scan = StrictAt {
+        target: statement,
+        strict: program_is_strict(program),
+        found: None,
+    };
+    scan.visit_statement(candidate);
+    scan.found.unwrap_or(false)
 }
 
 pub fn context_is_strict(program: &Program<'_>, statement: Span) -> bool {

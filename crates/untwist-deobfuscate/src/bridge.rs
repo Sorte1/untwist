@@ -15,7 +15,7 @@ use crate::proof::{
     Refusal, Reliance, RotatorSite, UsedNames,
 };
 use crate::stamp::{
-    context_is_strict, find_stamped_named, original_name, referenced_units, Stamped, StampedFn,
+    context_is_strict_in, find_stamped_named, original_name, referenced_units, Stamped, StampedFn,
 };
 
 #[derive(Default)]
@@ -224,7 +224,8 @@ fn unit_program<'p>(
     positions: &[usize],
     rotator: Option<(Span, &'p Expression<'p>)>,
 ) -> DecoderProgram<'p> {
-    let array_strict = context_is_strict(program, array.statement);
+    let sorted = stamped.top_level_sorted;
+    let array_strict = context_is_strict_in(program, array.statement, sorted);
     DecoderProgram {
         source_text: program.source_text,
         string_array: FnRef {
@@ -238,12 +239,12 @@ fn unit_program<'p>(
             .map(|decoder| FnRef {
                 name: decoder.name,
                 function: decoder.function,
-                strict: context_is_strict(program, decoder.statement),
+                strict: context_is_strict_in(program, decoder.statement, sorted),
             })
             .collect(),
         rotator: rotator.map(|(_, expression)| expression),
         strict: rotator.map_or(array_strict, |(statement, _)| {
-            context_is_strict(program, statement)
+            context_is_strict_in(program, statement, sorted)
         }),
     }
 }
