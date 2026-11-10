@@ -2,9 +2,12 @@ use std::rc::Rc;
 
 use crate::bail::{Bail, ErrorKind, EvalResult};
 use crate::builtins::shape::SHAPES;
+use crate::builtins::Realm;
 use crate::host::Host;
-use crate::object::{decoding, lookup_root_address, OBJECT_PROTOTYPE_KEYS};
-use crate::value::{Abrupt, FnCode, IntrinsicProto, ObjKind, ObjRef, PropKey, Value};
+use crate::object::{
+    decoding, is_arguments, is_constructor_key, lookup_root_address, OBJECT_PROTOTYPE_KEYS,
+};
+use crate::value::{Abrupt, Eval, FnCode, IntrinsicProto, ObjKind, ObjRef, PropKey, Value};
 
 const FUNCTION_OWN_KEYS: [&str; 5] = ["length", "name", "arguments", "caller", "prototype"];
 
@@ -341,11 +344,79 @@ pub fn miss_is_unmodelled(target: &Value<'_>, key: &PropKey) -> bool {
     }
 }
 
+const UNMODELLED_MEMBER: &str = "a property node has that the evaluator does not model";
+
 pub fn refuse_unmodelled_miss(target: &Value<'_>, key: &PropKey) -> EvalResult<()> {
     if miss_is_unmodelled(target, key) {
-        return Err(Bail::Unsupported(
-            &"a property node has that the evaluator does not model",
-        ));
+        return Err(Bail::Unsupported(&UNMODELLED_MEMBER));
+    }
+    Ok(())
+}
+
+pub(crate) const UNMODELLED_CONSTRUCTOR: &str =
+    "a constructor the evaluator does not model, read through a built-in prototype";
+
+const BOOLEAN_MEMBER: &str = "a boolean has no modelled prototype";
+
+pub fn refuse_boolean_member<'a>() -> Eval<'a, Value<'a>> {
+    Err(Bail::Unsupported(&BOOLEAN_MEMBER).into())
+}
+
+pub fn refuse_primitive_miss<'a>(
+    target: &Value<'a>,
+    key: &PropKey,
+    found: Value<'a>,
+) -> Eval<'a, Value<'a>> {
+    if matches!(found, Value::Undefined) {
+        if is_constructor_key(key) {
+            return Err(Bail::Unsupported(&UNMODELLED_CONSTRUCTOR).into());
+        }
+        refuse_unmodelled_miss(target, key)?;
+    }
+    Ok(found)
+}
+
+pub fn refuse_own_undefined(obj: &ObjRef<'_>, key: &PropKey) -> EvalResult<()> {
+    if !is_constructor_key(key) {
+        return Ok(());
+    }
+    if !obj.borrow().props.contains_key(key) || is_intrinsic_object(obj) {
+        return Err(Bail::Unsupported(&UNMODELLED_CONSTRUCTOR));
+    }
+    Ok(())
+}
+
+pub fn refuse_inherited_miss<'a>(
+    realm: &Realm<'a>,
+    (target, obj, root): (&Value<'a>, &ObjRef<'a>, bool),
+    key: &PropKey,
+    inherited: Option<&Value<'a>>,
+) -> EvalResult<()> {
+    if decoding() && is_arguments(obj) {
+        crate::interp::refuse_arguments_miss(key, inherited)?;
+    }
+    if is_constructor_key(key) {
+        refuse_unmodelled_constructor(obj, inherited)?;
+    }
+    if inherited.is_none() {
+        realm.refuse_global_object(obj)?;
+        if root && intrinsic_miss(key) {
+            return Err(Bail::Unsupported(&UNMODELLED_MEMBER));
+        }
+        refuse_unmodelled_miss(target, key)?;
+    }
+    Ok(())
+}
+
+fn refuse_unmodelled_constructor(obj: &ObjRef<'_>, found: Option<&Value<'_>>) -> EvalResult<()> {
+    let unmodelled = matches!(found, Some(Value::Undefined))
+        || match &obj.borrow().kind {
+            ObjKind::Function(closure) => closure.is_generator_or_async(),
+            ObjKind::Bound(_) => true,
+            _ => false,
+        };
+    if unmodelled {
+        return Err(Bail::Unsupported(&UNMODELLED_CONSTRUCTOR));
     }
     Ok(())
 }

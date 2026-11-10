@@ -11,7 +11,7 @@ use oxc_syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::bail::{Bail, ErrorKind, EvalResult};
 use crate::budget::Budget;
@@ -23,6 +23,9 @@ use crate::host::Host;
 use crate::object::{lookup_property, set_property, string_property};
 use crate::ops::{binary_op, string_key, to_boolean, to_js_string, to_property_key, unary_op};
 use crate::stack;
+use crate::unmodelled::{
+    refuse_boolean_member, refuse_inherited_miss, refuse_own_undefined, refuse_primitive_miss,
+};
 use crate::value::{
     js_string_from_js_str, js_string_from_literal, Abrupt, Eval, JsString, NativeId, ObjKind,
     ObjRef, PropKey, Value,
@@ -51,6 +54,7 @@ pub(crate) struct PureHost {
     globals: Globals<'static>,
     allow_local_mutation: bool,
     heap: Option<Rc<HeapLedger>>,
+    roots: FxHashSet<usize>,
 }
 
 pub(crate) type ConstHost = BudgetHost;
@@ -59,12 +63,18 @@ impl PureHost {
     pub(crate) fn new() -> Self {
         let (realm, globals) = Realm::with_globals();
         realm.compact(&globals);
+        let roots = globals
+            .objects()
+            .iter()
+            .map(|(obj, _)| Rc::as_ptr(obj) as usize)
+            .collect();
         Self {
             budget: Budget::new(FOLD_STEP_BUDGET),
             realm,
             globals,
             allow_local_mutation: false,
             heap: None,
+            roots,
         }
     }
 
@@ -204,22 +214,29 @@ impl Host<'static> for PureHost {
             )),
             Value::Str(text) => match string_property(text, key) {
                 Some(value) => Ok(value),
-                None => Ok(self.realm.string_prototype_member(key)?),
+                None => {
+                    refuse_primitive_miss(target, key, self.realm.string_prototype_member(key)?)
+                }
             },
-            Value::Number(_) => Ok(self.realm.number_prototype_member(key)?),
-            Value::Bool(_) => Ok(Value::Undefined),
+            Value::Number(_) => {
+                refuse_primitive_miss(target, key, self.realm.number_prototype_member(key)?)
+            }
+            Value::Bool(_) => refuse_boolean_member(),
             Value::Object(obj) => {
                 if let Some(name) = self.realm.hostile_name(obj) {
                     return Err(Bail::hostile_global(name).into());
                 }
                 let own = lookup_property(obj, key)?;
-                match own {
-                    Some(value) => Ok(value),
-                    None => Ok(self
-                        .realm
-                        .intrinsic_member(target, key)?
-                        .unwrap_or(Value::Undefined)),
+                if matches!(own, Some(Value::Undefined)) {
+                    refuse_own_undefined(obj, key)?;
                 }
+                if let Some(value) = own {
+                    return Ok(value);
+                }
+                let inherited = self.realm.intrinsic_member(target, key)?;
+                let root = self.roots.contains(&(Rc::as_ptr(obj) as usize));
+                refuse_inherited_miss(&self.realm, (target, obj, root), key, inherited.as_ref())?;
+                Ok(inherited.unwrap_or(Value::Undefined))
             }
         }
     }

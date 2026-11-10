@@ -36,6 +36,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- The constant folder no longer reads a property it does not model as `undefined`: `true.toString`,
+  `Math.SQRT2`, `Math.abs.length`, `({}).constructor` and the like are left unfolded, so an `eval`
+  layer built from them is no longer peeled to the wrong text.
 - Unminify no longer changes meaning in five shapes: a `null`/`undefined` check used as a callee,
   a template tag or a `delete` operand stays a conditional instead of becoming `a?.b`; a labelled
   loop whose head is split keeps its label on the loop (the moved statements go in front of the
