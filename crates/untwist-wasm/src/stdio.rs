@@ -19,6 +19,9 @@ fn stop_warning(stage: &str, iterations: u32, stop: StopReason) -> Option<String
         StopReason::Cycle => Some(format!(
             "warning: {stage} stopped after {iterations} iterations because its passes oscillate; output may not be fully simplified"
         )),
+        StopReason::Budget => Some(format!(
+            "warning: {stage} stopped after {iterations} iterations because the run reached its budget; output may not be fully simplified"
+        )),
         StopReason::Converged => None,
     }
 }
@@ -47,6 +50,14 @@ pub fn stderr_of(result: &Output) -> String {
             index + 1
         );
     }
+    for (index, hit) in &result.budget_hits {
+        let _ = writeln!(
+            err,
+            "warning: input {} reached its budget ({}); its passes stopped early and the output is the tree as far as they got",
+            index + 1,
+            hit.as_str()
+        );
+    }
     if result.unpack_panicked {
         let _ = writeln!(
             err,
@@ -60,7 +71,7 @@ pub fn exit_code(result: &Output) -> u8 {
     if result.parse_errors > 0 || !result.panicked.is_empty() || result.unpack_panicked {
         return 1;
     }
-    if !result.depth_refused.is_empty() {
+    if !result.depth_refused.is_empty() || !result.budget_hits.is_empty() {
         return 3;
     }
     0

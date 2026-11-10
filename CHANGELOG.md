@@ -8,6 +8,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- Memory and time budgets: `--max-memory` (default 4 GiB) and `--timeout`, also as library
+  options and in the wasm build (1 GiB by default). An input that reaches a budget stops its passes
+  and keeps the output so far (`budget-memory`, `budget-time`); one that goes past the memory cap
+  before its passes can stop is passed through unchanged instead of exhausting the machine.
+  `--report` shows the budget and the memory peak.
+
 - Emscripten glue whose wasm module has no name section gets its imports named when the bound
   function has the shape of an Emscripten library function and the module's import has its
   signature: `_emscripten_memcpy_big`, `_emscripten_resize_heap`, `_emscripten_date_now`,

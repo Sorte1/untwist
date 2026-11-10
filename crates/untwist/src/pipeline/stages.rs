@@ -152,7 +152,7 @@ impl Pipeline {
             return sem;
         };
         for _ in 0..SETTLE_ROUNDS {
-            if changes == 0 {
+            if changes == 0 || untwist_core::budget::check().is_err() {
                 return sem;
             }
             let started = site.notes.len();

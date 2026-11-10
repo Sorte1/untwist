@@ -4,12 +4,14 @@ use std::path::PathBuf;
 use std::process::{Child, ChildStderr, Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use crate::args::Args;
+use crate::budget::TIME_LEFT;
 use crate::channel::{Event, Record, Relay, RelayEnd, Stream};
 use crate::hooks::SupervisorHook;
 use crate::reruns::{next, Action, Death, Phase, Reruns};
-use crate::worker::{REFUSE, SERIAL, UNPACK_LOST, WORKER};
+use crate::worker::{OVER_MEMORY, OVER_TIME, REFUSE, SERIAL, UNPACK_LOST, WORKER};
 
 const HELPER_STACK: usize = 64 * 1024;
 const DRAIN_BUFFER: usize = 8 * 1024;
@@ -181,7 +183,12 @@ fn executable(hook: SupervisorHook) -> io::Result<PathBuf> {
     std::env::current_exe()
 }
 
-fn spawn(exe: &PathBuf, reruns: &Reruns, hook: SupervisorHook, piped: bool) -> io::Result<Child> {
+fn spawn(
+    exe: &PathBuf,
+    reruns: &Reruns,
+    hook: SupervisorHook,
+    (piped, time_left): (bool, Option<Duration>),
+) -> io::Result<Child> {
     if hook == SupervisorHook::FailSpawn {
         return Err(io::Error::other("spawning is refused (test hook)"));
     }
@@ -196,11 +203,25 @@ fn spawn(exe: &PathBuf, reruns: &Reruns, hook: SupervisorHook, piped: bool) -> i
         .env_remove(REFUSE)
         .env_remove(SERIAL)
         .env_remove(UNPACK_LOST)
+        .env_remove(OVER_MEMORY)
+        .env_remove(OVER_TIME)
+        .env_remove(TIME_LEFT)
         .stdin(if piped { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if let Some(list) = reruns.refused_list() {
         command.env(REFUSE, list);
+    }
+    for (name, hit) in [
+        (OVER_MEMORY, untwist::BudgetHit::Memory),
+        (OVER_TIME, untwist::BudgetHit::Time),
+    ] {
+        if let Some(list) = reruns.over_list(hit) {
+            command.env(name, list);
+        }
+    }
+    if let Some(left) = time_left {
+        command.env(TIME_LEFT, left.as_millis().to_string());
     }
     if reruns.serial {
         command.env(SERIAL, "1");
@@ -309,6 +330,11 @@ fn fallback(args: &Args, stdin: Option<Arc<[u8]>>, reruns: &Reruns, error: &io::
     let isolation = untwist::Isolation {
         progress: None,
         refused: reruns.refused.iter().copied().collect(),
+        over_budget: reruns
+            .over_budget
+            .iter()
+            .map(|(at, hit)| (*at, *hit))
+            .collect(),
         unpack_lost: reruns.unpack_lost,
     };
     crate::in_process(args, stdin.map(|bytes| bytes.to_vec()), false, isolation)
@@ -355,8 +381,12 @@ pub fn run(args: &Args, hook: SupervisorHook) -> u8 {
         Ok(exe) => exe,
         Err(error) => return fallback(args, stdin, &reruns, &error),
     };
+    let started = Instant::now();
     loop {
-        let child = match spawn(&exe, &reruns, hook, stdin.is_some()) {
+        let time_left = args
+            .timeout
+            .map(|timeout| timeout.saturating_sub(started.elapsed()));
+        let child = match spawn(&exe, &reruns, hook, (stdin.is_some(), time_left)) {
             Ok(child) => child,
             Err(error) => return fallback(args, stdin, &reruns, &error),
         };

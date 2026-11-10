@@ -15,7 +15,8 @@ const USAGE_ERROR: u8 = 2;
 
 #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
 #[global_allocator]
-static ALLOCATOR: talc::wasm::WasmDynamicTalc = talc::wasm::new_wasm_dynamic_allocator();
+static ALLOCATOR: untwist::CountingAlloc<talc::wasm::WasmDynamicTalc> =
+    untwist::CountingAlloc(talc::wasm::new_wasm_dynamic_allocator());
 
 #[wasm_bindgen(getter_with_clone)]
 pub struct RunOutput {

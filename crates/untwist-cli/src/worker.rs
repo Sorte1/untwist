@@ -12,6 +12,8 @@ pub const WORKER: &str = "UNTWIST_INTERNAL_WORKER";
 pub const REFUSE: &str = "UNTWIST_INTERNAL_REFUSE";
 pub const SERIAL: &str = "UNTWIST_INTERNAL_SERIAL";
 pub const UNPACK_LOST: &str = "UNTWIST_INTERNAL_UNPACK_LOST";
+pub const OVER_MEMORY: &str = "UNTWIST_INTERNAL_OVER_MEMORY";
+pub const OVER_TIME: &str = "UNTWIST_INTERNAL_OVER_TIME";
 pub const ABORT: &str = "UNTWIST_TEST_WORKER_ABORT";
 const MID_RECORD: &str = "mid-record:";
 #[cfg(target_os = "linux")]
@@ -71,6 +73,7 @@ fn indices(list: &str) -> Option<Vec<usize>> {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Rerun {
     pub refused: Vec<usize>,
+    pub over_budget: Vec<(usize, untwist::BudgetHit)>,
     pub serial: bool,
     pub unpack_lost: bool,
     pub abort: Abort,
@@ -86,8 +89,20 @@ impl Rerun {
             .and_then(|value| value.into_string().ok())
             .and_then(|list| indices(&list))
             .unwrap_or_default();
+        let over = |name: &str, hit: untwist::BudgetHit| {
+            read(name)
+                .and_then(|value| value.into_string().ok())
+                .and_then(|list| indices(&list))
+                .unwrap_or_default()
+                .into_iter()
+                .map(move |index| (index, hit))
+        };
+        let over_budget = over(OVER_MEMORY, untwist::BudgetHit::Memory)
+            .chain(over(OVER_TIME, untwist::BudgetHit::Time))
+            .collect();
         Self {
             refused,
+            over_budget,
             serial: is_one(read(SERIAL)),
             unpack_lost: is_one(read(UNPACK_LOST)),
             abort: Abort::parse(read(ABORT).filter(|_| TEST_HOOKS)),
@@ -134,6 +149,7 @@ fn isolation(rerun: Rerun) -> (Isolation, bool) {
     let isolation = Isolation {
         progress: Some(progress),
         refused: rerun.refused,
+        over_budget: rerun.over_budget,
         unpack_lost: rerun.unpack_lost,
     };
     (isolation, emit_aborts)
@@ -151,9 +167,18 @@ fn be_the_first_process_the_oom_killer_picks() {
 #[cfg(not(target_os = "linux"))]
 fn be_the_first_process_the_oom_killer_picks() {}
 
+fn arm_budgets(args: &Args, options: &mut untwist::Options) {
+    let limits = args.limits();
+    let left = crate::budget::time_left_from(std::env::var_os(crate::budget::TIME_LEFT));
+    options.timeout = left.or(limits.timeout);
+    crate::budget::arm_hard_memory(&limits);
+    crate::budget::arm_watchdog(options.timeout);
+}
+
 pub fn run(args: &Args) -> u8 {
     be_the_first_process_the_oom_killer_picks();
     let mut options = crate::base_options(args);
+    arm_budgets(args, &mut options);
     let _stdout_buffered_in_in_process_order = std::io::stdout();
     if let Err(error) = open_channel() {
         let _ = writeln!(

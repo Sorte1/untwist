@@ -15,6 +15,7 @@ fn stop_rank(stop: StopReason) -> u8 {
         StopReason::Converged => 0,
         StopReason::IterationCap => 1,
         StopReason::Cycle => 2,
+        StopReason::Budget => 3,
     }
 }
 

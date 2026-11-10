@@ -107,6 +107,8 @@ Common flags:
 | `--disable PASS` | Turn off individual passes; `--list-passes` prints them all. |
 | `--report text\|json` | Print what every stage and pass did. `-v` is short for `--report text`. |
 | `-j, --jobs N` | Process up to `N` inputs in parallel. The output does not depend on `N`. |
+| `--max-memory SIZE` | Memory untwist may use, such as `512MiB`, `8G` or `unlimited` (default `4GiB`). At three quarters of it an input stops its passes and keeps the output so far, with the note `budget-memory`; at the full size the worker process stops and that input is passed through unchanged. `--report` shows the budget and the peak. |
+| `--timeout SECS` | Wall-clock seconds the whole run may take (default: no limit). At the limit every input stops its passes and keeps the output so far, with the note `budget-time`; an input still running a while later is passed through unchanged. |
 | `--fuel N` | Interpreter steps a string-array decode may spend before giving up (default 50,000,000 plus 500,000 per distinct decoder call, at most 1,000,000,000; 1,000,000,000 with `--unsafe`). |
 
 `untwist --help` lists every flag.

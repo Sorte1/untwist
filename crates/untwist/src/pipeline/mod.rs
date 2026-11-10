@@ -18,6 +18,7 @@ mod unpack;
 use std::num::NonZeroUsize;
 
 use oxc_diagnostics::OxcDiagnostic;
+use untwist_core::budget::{Deadline, Hit, Limits};
 use untwist_core::parse::error_count;
 use untwist_core::pass::Note;
 use untwist_core::reflow::GuardRecord;
@@ -39,9 +40,10 @@ pub use snapshots::{Snapshot, SnapshotCode};
 
 pub use notes::{
     ADMIT_PANICKED, ANONYMOUS_SHELL_KEPT, ANONYMOUS_SHELL_SCOPED, ANONYMOUS_SHELL_STRIPPED,
-    GUARD_KEPT_ACROSS_LINES, GUARD_ON_ONE_LINE, NESTED_TOO_DEEP, PANICKED, PARENTHESES_TOO_DEEP,
-    PIPELINE_NOTES, PRINT_TOO_LARGE, TYPESCRIPT_IN_JAVASCRIPT, UNPACK_PANICKED,
-    UNPACK_TEXT_TOO_DEEP, WORKER_DIED,
+    BUDGET_MEMORY_REACHED, BUDGET_TIME_REACHED, BUDGET_UNPACK, GUARD_KEPT_ACROSS_LINES,
+    GUARD_ON_ONE_LINE, NESTED_TOO_DEEP, OVER_MEMORY_REFUSED, OVER_TIME_REFUSED, PANICKED,
+    PARENTHESES_TOO_DEEP, PIPELINE_NOTES, PRINT_TOO_LARGE, TOO_LARGE_FOR_THE_BUDGET,
+    TYPESCRIPT_IN_JAVASCRIPT, UNPACK_PANICKED, UNPACK_TEXT_TOO_DEEP, WORKER_DIED,
 };
 
 pub struct Output {
@@ -56,6 +58,8 @@ pub struct Output {
     pub unpack_panicked: bool,
     pub single_file: bool,
     pub heap_peak: u64,
+    pub memory_peak: u64,
+    pub budget_hits: Vec<(usize, Hit)>,
     pub stats: crate::stats::RunStats,
     pub snapshots: Vec<Snapshot>,
     pub decoded_strings: Vec<DecodedSite>,
@@ -101,6 +105,7 @@ struct Reservation<'r> {
     slot: Option<FileSlot>,
     stack: &'r StackReserve<'static>,
     stats: &'r std::sync::Mutex<crate::stats::RunStats>,
+    limits: Limits,
 }
 
 struct Batch<'s> {
@@ -109,10 +114,11 @@ struct Batch<'s> {
     slots: Vec<Option<FileSlot>>,
     stack: StackReserve<'static>,
     stats: std::sync::Mutex<crate::stats::RunStats>,
+    limits: Limits,
 }
 
 impl<'s> Batch<'s> {
-    fn new(sources: &'s [&'s str]) -> Self {
+    fn new(sources: &'s [&'s str], limits: Limits) -> Self {
         let rename_state = shared_state();
         let slots = (0..sources.len())
             .map(|index| reserve(&rename_state, index))
@@ -123,6 +129,7 @@ impl<'s> Batch<'s> {
             slots,
             stack: StackReserve::default(),
             stats: std::sync::Mutex::default(),
+            limits,
         }
     }
 
@@ -132,6 +139,7 @@ impl<'s> Batch<'s> {
             slot: self.slots.get(index).copied().flatten(),
             stack: &self.stack,
             stats: &self.stats,
+            limits: self.limits,
         }
     }
 }
@@ -147,6 +155,8 @@ struct OutputParts {
     depth_refused: Vec<usize>,
     unpack_panicked: bool,
     heap_peak: u64,
+    memory_peak: u64,
+    budget_hits: Vec<(usize, Hit)>,
     stats: crate::stats::RunStats,
     guards: GuardRecord,
     unbundled: bool,
@@ -191,6 +201,10 @@ impl OutputParts {
             parts.panicked.extend(result.panicked.then_some(index));
             parts.depth_refused.extend(result.refused.then_some(index));
             parts.heap_peak = parts.heap_peak.max(result.heap_peak);
+            parts.memory_peak = parts.memory_peak.max(result.memory_peak);
+            parts
+                .budget_hits
+                .extend(result.budget_hit.map(|hit| (index, hit)));
             parts.guards.absorb(result.guards);
         }
         parts
@@ -223,6 +237,8 @@ impl OutputParts {
             unpack_panicked: self.unpack_panicked,
             single_file,
             heap_peak: self.heap_peak,
+            memory_peak: self.memory_peak,
+            budget_hits: self.budget_hits,
             stats: self.stats,
             snapshots: self.snapshots,
             decoded_strings: self.decoded_strings,
@@ -269,14 +285,14 @@ impl Pipeline {
 
     fn run_batch(&self, sources: &[&str], trust_the_reflow: bool) -> Output {
         let ladder = Ladder::new(self.options.hooks());
-        let batch = Batch::new(sources);
+        let batch = Batch::new(sources, self.limits());
         let pooled = self.run_pooled(&batch, &ladder);
         ladder::on_a_worker_stack(&ladder, |_| {
             let results = pooled.unwrap_or_else(|| self.run_sequentially(&batch));
             let mut parts = OutputParts::from_results(results);
             parts.unbundled &= trust_the_reflow;
             let _ = crate::stats::RunStats::taken();
-            let bundle = self.unpack_admitted(&mut parts);
+            let bundle = self.unpack_budgeted(&mut parts, batch.limits);
             let inputs = *batch
                 .stats
                 .lock()
@@ -287,6 +303,13 @@ impl Pipeline {
                 ..parts.into_output(bundle, self.options.single_file)
             }
         })
+    }
+
+    fn limits(&self) -> Limits {
+        Limits {
+            memory: self.options.max_memory,
+            deadline: self.options.timeout.map(Deadline::after),
+        }
     }
 
     fn run_sequentially(&self, batch: &Batch<'_>) -> Vec<InputResult> {

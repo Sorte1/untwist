@@ -600,7 +600,7 @@ fn aliased_writes(
     (program, scoping): (&Program<'_>, &Scoping),
     runs: &[UnitRun<'_, '_>],
     points_to: bool,
-) -> Vec<AliasSite> {
+) -> Option<Vec<AliasSite>> {
     let mut decoded = FxHashMap::default();
     for run in runs.iter().filter(|run| run.request.reliance.is_none()) {
         let Ok(values) = &run.result else {
@@ -612,12 +612,24 @@ fn aliased_writes(
                     decoded.insert(call.span, text);
                 }
             }
+            if untwist_core::budget::tripped() {
+                return None;
+            }
         }
     }
     if points_to {
-        return points_to_sites(program, scoping, &decoded, &[]);
+        return Some(points_to_sites(program, scoping, &decoded, &[]));
     }
-    alias_sites(program, &builtin_aliases(program, scoping, decoded), &[])
+    Some(alias_sites(
+        program,
+        &builtin_aliases(program, scoping, decoded),
+        &[],
+    ))
+}
+
+fn budget_refusal() -> String {
+    let hit = untwist_core::budget::hit().unwrap_or(untwist_core::budget::Hit::Memory);
+    format!("{}: the run reached its budget", hit.as_str())
 }
 
 thread_local! {
@@ -645,8 +657,12 @@ fn alias_refusals(
                 if cached.contains_key(&run.request.unit) {
                     continue;
                 }
+                let Some(sites) = &sites else {
+                    cached.insert(run.request.unit, (budget_refusal(), Span::default()));
+                    continue;
+                };
                 if let Some(refusal) =
-                    alias_refusal(&sites, &run.request.guard.used, program.source_text)
+                    alias_refusal(sites, &run.request.guard.used, program.source_text)
                 {
                     cached.insert(run.request.unit, (refusal.message(), refusal.span));
                 }

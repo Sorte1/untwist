@@ -636,6 +636,7 @@ impl InterpEvaluator {
         memo: &mut RotationMemo,
         escaped_decoders: &FxHashSet<usize>,
     ) -> EvalResult<Vec<Option<Value<'a>>>> {
+        crate::heap::spent_run_budget()?;
         let shape = candidate_shape(program, escaped_decoders)?;
         let result = match &shape {
             Some(shape) => self.decode_with_memo_monitored(program, calls, memo, shape),
@@ -703,6 +704,7 @@ fn eval_calls_until_spent<'a>(
 ) -> EvalResult<Vec<Option<Value<'a>>>> {
     let mut values = Vec::with_capacity(calls.len());
     for call in calls {
+        crate::heap::spent_run_budget()?;
         match session.eval_call(call) {
             Ok(value) => values.push(Some(value)),
             Err(Bail::Budget) => break,

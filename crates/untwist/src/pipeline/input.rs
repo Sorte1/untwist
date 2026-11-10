@@ -39,6 +39,8 @@ pub(super) struct InputResult {
     pub(super) panicked: bool,
     pub(super) refused: bool,
     pub(super) heap_peak: u64,
+    pub(super) memory_peak: u64,
+    pub(super) budget_hit: Option<untwist_core::budget::Hit>,
     pub(super) guards: GuardRecord,
     pub(super) unbundled: bool,
     pub(super) snapshots: Snapshots,
@@ -57,6 +59,19 @@ impl InputResult {
         };
         result.note_panicked();
         result
+    }
+
+    fn note_budget(&mut self, peak: u64, hit: Option<untwist_core::budget::Hit>) {
+        self.memory_peak = peak;
+        self.budget_hit = hit;
+        if let Some(hit) = hit {
+            self.notes.push(Note {
+                pass: "pipeline",
+                kind: NoteKind::Refusal,
+                message: super::notes::budget_note(hit).to_string(),
+                span: None,
+            });
+        }
     }
 
     pub(super) fn note_panicked(&mut self) {
@@ -118,6 +133,7 @@ impl Pipeline {
         if announced {
             self.options.progress(Progress::InputBegins(index));
         }
+        let budget = untwist_core::budget::enter(reservation.limits);
         reset_synthetic_spans();
         untwist_deobfuscate::reset_run_state();
         let _ = crate::stats::RunStats::taken();
@@ -139,6 +155,9 @@ impl Pipeline {
             }
             Err(note) => InputResult::refused(&source, note),
         };
+        let mut result = result;
+        result.note_budget(budget.peak(), untwist_core::budget::hit());
+        drop(budget);
         let taken = crate::stats::RunStats::taken();
         let mut sink = stats_sink
             .lock()
@@ -576,6 +595,7 @@ mod tests {
             slot: None,
             stack: &stack,
             stats: &stats,
+            limits: untwist_core::budget::Limits::default(),
         };
         let printed = pipeline
             .process(

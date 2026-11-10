@@ -136,6 +136,26 @@ pub struct Args {
     )]
     pub fuel: Option<u64>,
     #[arg(
+        long = "max-memory",
+        value_name = "SIZE",
+        default_value = crate::budget::DEFAULT_MAX_MEMORY,
+        value_parser = untwist::budget_memory_size,
+        help = "memory untwist may use (such as 512MiB or 8G, or unlimited). At three quarters of \
+                it an input stops its passes and keeps the output so far (note budget-memory); \
+                at the full size the worker process stops and that input is passed through \
+                unchanged"
+    )]
+    pub max_memory: u64,
+    #[arg(
+        long,
+        value_name = "SECS",
+        value_parser = untwist::budget_timeout_secs,
+        help = "wall-clock seconds the whole run may take (default: no limit). At the limit every \
+                input stops its passes and keeps the output so far (note budget-time); an input \
+                still running a while later is passed through unchanged"
+    )]
+    pub timeout: Option<std::time::Duration>,
+    #[arg(
         long = "disable",
         value_name = "PASS",
         value_delimiter = ',',
@@ -277,6 +297,13 @@ impl Args {
         self.rename.unwrap_or(RenameArg::None).mode()
     }
 
+    pub fn limits(&self) -> crate::budget::Limits {
+        crate::budget::Limits {
+            max_memory: (self.max_memory != u64::MAX).then_some(self.max_memory),
+            timeout: self.timeout,
+        }
+    }
+
     pub fn options(&self) -> untwist::Options {
         untwist::Options {
             unminify: self.unminify,
@@ -295,6 +322,8 @@ impl Args {
             single_file: self.single_file,
             jobs: self.jobs,
             fuel: self.fuel,
+            max_memory: self.limits().soft_memory(),
+            timeout: self.timeout,
             disabled_passes: self.disable.clone(),
             wasm_check: self.wasm_check.check(),
             ..untwist::Options::default()

@@ -15,9 +15,11 @@ pub use options::{Isolation, Options, Progress, ProgressSink, TestHooks, TEST_HO
 pub use passes::{pass_named, PassInfo, PASSES};
 pub use pipeline::{
     contained, job_width, Output, Pipeline, ADMIT_PANICKED, ANONYMOUS_SHELL_KEPT,
-    ANONYMOUS_SHELL_SCOPED, ANONYMOUS_SHELL_STRIPPED, GUARD_KEPT_ACROSS_LINES, GUARD_ON_ONE_LINE,
-    NESTED_TOO_DEEP, PANICKED, PARENTHESES_TOO_DEEP, PIPELINE_NOTES, PRINT_TOO_LARGE,
-    TYPESCRIPT_IN_JAVASCRIPT, UNPACK_PANICKED, UNPACK_TEXT_TOO_DEEP, WORKER_DIED,
+    ANONYMOUS_SHELL_SCOPED, ANONYMOUS_SHELL_STRIPPED, BUDGET_MEMORY_REACHED, BUDGET_TIME_REACHED,
+    BUDGET_UNPACK, GUARD_KEPT_ACROSS_LINES, GUARD_ON_ONE_LINE, NESTED_TOO_DEEP,
+    OVER_MEMORY_REFUSED, OVER_TIME_REFUSED, PANICKED, PARENTHESES_TOO_DEEP, PIPELINE_NOTES,
+    PRINT_TOO_LARGE, TOO_LARGE_FOR_THE_BUDGET, TYPESCRIPT_IN_JAVASCRIPT, UNPACK_PANICKED,
+    UNPACK_TEXT_TOO_DEEP, WORKER_DIED,
 };
 pub use pipeline::{DecodedSite, Snapshot, SnapshotCode};
 #[cfg(feature = "refusal-spans")]
@@ -25,6 +27,10 @@ pub use pipeline::{RefusalSite, SiteAt};
 pub use plugin::{PluginCtor, Plugins, Stage};
 pub use report::{stage_rows, StageReport, StageRow};
 pub use stats::{CollisionStats, DecodeStats, RunStats};
+pub use untwist_core::budget::{
+    memory_size as budget_memory_size, set_hard_limit as set_hard_memory_limit,
+    timeout_secs as budget_timeout_secs, CountingAlloc, Hit as BudgetHit,
+};
 pub use untwist_core::pass::{IterationTiming, Note, NoteKind, PassCtor, StopReason};
 pub use untwist_rename::RenameMode;
 pub use untwist_unpack::{Mapping, MappingMatcher};

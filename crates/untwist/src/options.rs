@@ -1,6 +1,7 @@
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::time::Duration;
 
 use untwist_rename::RenameMode;
 use untwist_unpack::Mapping;
@@ -42,6 +43,7 @@ impl fmt::Debug for ProgressSink {
 pub struct Isolation {
     pub progress: Option<ProgressSink>,
     pub refused: Vec<usize>,
+    pub over_budget: Vec<(usize, untwist_core::budget::Hit)>,
     pub unpack_lost: bool,
 }
 
@@ -76,6 +78,8 @@ pub struct Options {
     pub single_file: bool,
     pub jobs: Option<NonZeroUsize>,
     pub fuel: Option<u64>,
+    pub max_memory: Option<u64>,
+    pub timeout: Option<Duration>,
     pub isolation: Isolation,
     #[cfg(feature = "test-hooks")]
     pub test_hooks: TestHooks,
@@ -106,6 +110,8 @@ impl Default for Options {
             single_file: false,
             jobs: None,
             fuel: None,
+            max_memory: None,
+            timeout: None,
             isolation: Isolation::default(),
             #[cfg(feature = "test-hooks")]
             test_hooks: TestHooks::default(),

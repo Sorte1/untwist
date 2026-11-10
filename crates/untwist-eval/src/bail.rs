@@ -45,6 +45,8 @@ pub enum Bail {
     Budget,
     #[error("a property's attributes refuse it")]
     Refused,
+    #[error("{}: the run reached its budget", .0.as_str())]
+    RunBudget(untwist_core::budget::Hit),
 }
 
 impl Bail {

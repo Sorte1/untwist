@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use untwist_core::budget::Hit;
 use untwist_core::catalogue;
 use untwist_core::pass::{note_survives_retraction, Note, NoteKind};
 use untwist_core::reflow::GuardTally;
@@ -7,8 +8,11 @@ use untwist_deobfuscate::notes;
 
 pub use super::refusal::ADMIT_PANICKED;
 pub use super::refusal::NESTED_TOO_DEEP;
+pub use super::refusal::OVER_MEMORY_REFUSED;
+pub use super::refusal::OVER_TIME_REFUSED;
 pub use super::refusal::PARENTHESES_TOO_DEEP;
 pub use super::refusal::PRINT_TOO_LARGE;
+pub use super::refusal::TOO_LARGE_FOR_THE_BUDGET;
 pub use super::refusal::TYPESCRIPT_IN_JAVASCRIPT;
 pub use super::refusal::UNPACK_TEXT_TOO_DEEP;
 pub use super::refusal::WORKER_DIED;
@@ -42,6 +46,24 @@ pub const GUARD_KEPT_ACROSS_LINES: &str = "a self-defending check that reads a f
      source survived, but that function holds a line break no one-line print can remove, so the \
      output may not run as the input did:";
 
+pub const BUDGET_MEMORY_REACHED: &str = "budget-memory: this input reached the memory budget \
+     (--max-memory); the work after that point was cut short or refused, so the output is the \
+     tree as far as the passes got";
+
+pub const BUDGET_TIME_REACHED: &str = "budget-time: this input reached the time budget \
+     (--timeout); the work after that point was cut short or refused, so the output is the tree \
+     as far as the passes got";
+
+pub const BUDGET_UNPACK: &str = "the run reached its budget before or while unpacking; the \
+     inputs are written without a bundle";
+
+pub(super) fn budget_note(hit: Hit) -> &'static str {
+    match hit {
+        Hit::Memory => BUDGET_MEMORY_REACHED,
+        Hit::Time => BUDGET_TIME_REACHED,
+    }
+}
+
 pub const REACH_REASON: &str = ": code that may hold the global object, or code from text, may \
      reach the string array's function by a key that may be its name or by an enumeration that \
      yields values, so the decoder calls were left alone; the report lists the details";
@@ -49,6 +71,9 @@ pub const REACH_REASON: &str = ": code that may hold the global object, or code 
 catalogue!(
     PIPELINE_NOTES,
     REACH_REASON,
+    BUDGET_MEMORY_REACHED,
+    BUDGET_TIME_REACHED,
+    BUDGET_UNPACK,
     PANICKED,
     UNPACK_PANICKED,
     UNPACK_TEXT_UNPARSABLE,
@@ -64,6 +89,9 @@ catalogue!(
     UNPACK_TEXT_TOO_DEEP,
     TYPESCRIPT_IN_JAVASCRIPT,
     WORKER_DIED,
+    OVER_MEMORY_REFUSED,
+    OVER_TIME_REFUSED,
+    TOO_LARGE_FOR_THE_BUDGET,
     ADMIT_PANICKED
 );
 

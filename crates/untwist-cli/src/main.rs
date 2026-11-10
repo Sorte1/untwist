@@ -1,4 +1,5 @@
 pub(crate) mod args;
+pub(crate) mod budget;
 pub(crate) mod channel;
 pub(crate) mod hooks;
 mod output;
@@ -71,6 +72,11 @@ fn report_diagnostics(err: &mut dyn Write, result: &Output) -> io::Result<()> {
                 "warning: {} stopped after {} iterations because its passes oscillate; output may not be fully simplified",
                 stage.stage, stage.iterations
             )?,
+            StopReason::Budget => writeln!(
+                err,
+                "warning: {} stopped after {} iterations because the run reached its budget; output may not be fully simplified",
+                stage.stage, stage.iterations
+            )?,
             StopReason::Converged => {}
         }
     }
@@ -86,6 +92,14 @@ fn report_diagnostics(err: &mut dyn Write, result: &Output) -> io::Result<()> {
             err,
             "warning: input {} was not processed: {note}",
             index + 1
+        )?;
+    }
+    for (index, hit) in &result.budget_hits {
+        writeln!(
+            err,
+            "warning: input {} reached its budget ({}); its passes stopped early and the output is the tree as far as they got",
+            index + 1,
+            hit.as_str()
         )?;
     }
     if result.unpack_panicked {
@@ -211,13 +225,14 @@ fn resolve_output(err: &mut dyn Write, args: &Args, result: &Output) -> Result<R
 
 fn print_stdout(
     out: &mut dyn Write,
-    report: Option<ReportFormat>,
+    (report, limits): (Option<ReportFormat>, budget::Limits),
     result: &Output,
     output_path: Option<&Path>,
     files_written: &[String],
 ) -> Result<()> {
     let written = if matches!(report, Some(ReportFormat::Json)) {
-        stdout::write_line(out, &output::to_json(result, output_path, files_written)?)
+        let limits = (output_path, limits);
+        stdout::write_line(out, &output::to_json(result, limits, files_written)?)
     } else if output_path.is_none() && result.single_file {
         stdout::write_line(out, &result.concatenated())
     } else if output_path.is_none() {
@@ -235,7 +250,7 @@ fn exit_code(result: &Output) -> u8 {
     if result.parse_errors > 0 || panicked {
         return 1;
     }
-    if !result.depth_refused.is_empty() {
+    if !result.depth_refused.is_empty() || !result.budget_hits.is_empty() {
         return 3;
     }
     0
@@ -284,14 +299,14 @@ fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
 
     print_stdout(
         session.out,
-        report,
+        (report, args.limits()),
         &result,
         output_path.as_deref(),
         &files_written,
     )?;
     let err = &mut *session.err;
     if matches!(report, Some(ReportFormat::Text)) {
-        err.write_all(output::text_report(&result).as_bytes())
+        err.write_all(output::text_report(&result, args.limits()).as_bytes())
             .context(STDERR)?;
     }
     Ok(exit_code(&result))
@@ -348,6 +363,9 @@ fn supervised(args: &Args, hook: hooks::SupervisorHook) -> u8 {
 fn supervised(args: &Args, _: hooks::SupervisorHook) -> u8 {
     in_process(args, None, true, Isolation::default())
 }
+
+#[global_allocator]
+static ALLOCATOR: budget::Counting = budget::counting();
 
 fn main() -> ExitCode {
     main_with(&|| {}, &|| {})

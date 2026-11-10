@@ -259,7 +259,7 @@ impl Pipeline {
         sem: &Semantics,
         layering: &mut Layering,
     ) -> Option<Peeled> {
-        if !self.layers_enabled() {
+        if !self.layers_enabled() || untwist_core::budget::check().is_err() {
             return None;
         }
         let program: &Program<'_> = site.program;
