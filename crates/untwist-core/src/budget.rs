@@ -75,6 +75,9 @@ struct Meter {
     limit: Cell<i64>,
     hit: Cell<u8>,
     deadline: Cell<Option<Deadline>>,
+    depth: Cell<u32>,
+    working_base: Cell<i64>,
+    working: Cell<i64>,
 }
 
 thread_local! {
@@ -88,11 +91,15 @@ thread_local! {
             limit: Cell::new(i64::MAX),
             hit: Cell::new(0),
             deadline: Cell::new(None),
+            depth: Cell::new(0),
+            working_base: Cell::new(0),
+            working: Cell::new(0),
         }
     };
 }
 
 static TOTAL: AtomicI64 = AtomicI64::new(0);
+static WORKING: AtomicI64 = AtomicI64::new(0);
 static HARD: AtomicI64 = AtomicI64::new(i64::MAX);
 static HARD_ACTION: OnceLock<fn()> = OnceLock::new();
 
@@ -133,19 +140,45 @@ impl Meter {
         self.high.set(next_high(used, self.limit.get()));
         self.low.set(used.saturating_sub(DRIFT));
         let delta = used.wrapping_sub(self.flushed.replace(used));
-        let total = TOTAL
-            .fetch_add(delta, Ordering::Relaxed)
-            .wrapping_add(delta);
-        if total > HARD.load(Ordering::Relaxed) {
-            if let Some(action) = HARD_ACTION.get() {
-                action();
-            }
+        TOTAL.fetch_add(delta, Ordering::Relaxed);
+        if self.depth.get() > 0 {
+            self.count_working(used);
         }
         if used > self.peak.get() {
             self.peak.set(used);
         }
         if used > self.limit.get() && self.hit.get() == 0 {
             self.hit.set(Hit::Memory.code());
+        }
+    }
+
+    fn count_working(&self, used: i64) {
+        let now = used.saturating_sub(self.working_base.get()).max(0);
+        let delta = now.wrapping_sub(self.working.replace(now));
+        let working = WORKING
+            .fetch_add(delta, Ordering::Relaxed)
+            .wrapping_add(delta);
+        if working > HARD.load(Ordering::Relaxed) {
+            if let Some(action) = HARD_ACTION.get() {
+                action();
+            }
+        }
+    }
+
+    fn open(&self, used: i64) {
+        let depth = self.depth.get();
+        if depth == 0 {
+            self.working_base.set(used);
+            self.working.set(0);
+        }
+        self.depth.set(depth.saturating_add(1));
+    }
+
+    fn close(&self) {
+        let depth = self.depth.get().saturating_sub(1);
+        self.depth.set(depth);
+        if depth == 0 {
+            WORKING.fetch_sub(self.working.replace(0), Ordering::Relaxed);
         }
     }
 }
@@ -226,6 +259,7 @@ pub fn enter(limits: Limits) -> Scope {
             .map_or(i64::MAX, |bytes| used.saturating_add(signed_u64(bytes)));
         meter.limit.set(own.min(limit));
         meter.high.set(next_high(used, meter.limit.get()));
+        meter.open(used);
         Scope {
             base: used,
             peak: meter.peak.replace(used),
@@ -256,6 +290,7 @@ impl Drop for Scope {
             meter.limit.set(self.limit);
             meter.hit.set(self.hit);
             meter.deadline.set(self.deadline);
+            meter.close();
         });
     }
 }
@@ -272,12 +307,49 @@ pub fn hit() -> Option<Hit> {
     METER.with(|meter| Hit::from_code(meter.hit.get()))
 }
 
+#[cfg(feature = "test-hooks")]
+mod stop_points {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static SEEN: AtomicU64 = AtomicU64::new(0);
+    static STOP_AT: AtomicU64 = AtomicU64::new(u64::MAX);
+
+    pub fn arm(at: Option<u64>) {
+        SEEN.store(0, Ordering::SeqCst);
+        STOP_AT.store(at.unwrap_or(u64::MAX), Ordering::SeqCst);
+    }
+
+    pub fn seen() -> u64 {
+        SEEN.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn reached() -> bool {
+        SEEN.fetch_add(1, Ordering::SeqCst) == STOP_AT.load(Ordering::SeqCst)
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+pub use stop_points::{arm as stop_at_check_point, seen as check_points_seen};
+
+#[cfg(feature = "test-hooks")]
+fn at_check_point() {
+    if stop_points::reached() {
+        trip(Hit::Time);
+    }
+}
+
+#[cfg(not(feature = "test-hooks"))]
+#[inline(always)]
+fn at_check_point() {}
+
 #[inline]
 pub fn tripped() -> bool {
+    at_check_point();
     METER.with(|meter| meter.hit.get() != 0)
 }
 
 pub fn check() -> Result<(), Hit> {
+    at_check_point();
     METER.with(|meter| {
         if let Some(hit) = Hit::from_code(meter.hit.get()) {
             return Err(hit);

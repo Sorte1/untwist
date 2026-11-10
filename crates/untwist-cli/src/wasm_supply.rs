@@ -108,7 +108,11 @@ pub fn fetch_unsupplied(
     if !args.fetch_wasm {
         return Ok(());
     }
-    let mut fetcher = Fetcher::new(args.fetch_wasm_local, LIMITS);
+    let limits = match hooks::fetch_request() {
+        Some(request) => fetch::Limits { request, ..LIMITS },
+        None => LIMITS,
+    };
+    let mut fetcher = Fetcher::new(args.fetch_wasm_local, limits);
     for reference in result.wasm_references() {
         if supply.find(&reference.name).is_some() {
             continue;

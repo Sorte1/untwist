@@ -147,17 +147,15 @@ impl Pipeline {
             .then(|| TurnGuard::new(reservation.state, index));
         let stats_sink = reservation.stats;
         let (source, admitted) = self.admit_guarded(index, raw, reservation.stack);
-        let result = match admitted {
-            Ok((stack, room)) => {
-                #[cfg(target_arch = "wasm32")]
-                let _nesting = WasmInputNesting::enter(room.as_ref());
-                self.run_verified(&source, reservation, (room, stack.bytes()))
-            }
-            Err(note) => InputResult::refused(&source, note),
-        };
-        let mut result = result;
-        result.note_budget(budget.peak(), untwist_core::budget::hit());
+        let processed = admitted.map(|(stack, room)| {
+            #[cfg(target_arch = "wasm32")]
+            let _nesting = WasmInputNesting::enter(room.as_ref());
+            self.run_verified(&source, reservation, (room, stack.bytes()))
+        });
+        let (peak, hit) = (budget.peak(), untwist_core::budget::hit());
         drop(budget);
+        let mut result = processed.unwrap_or_else(|note| InputResult::refused(&source, note));
+        result.note_budget(peak, hit);
         let taken = crate::stats::RunStats::taken();
         let mut sink = stats_sink
             .lock()

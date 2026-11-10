@@ -196,6 +196,7 @@ pub fn run(args: &Args) -> u8 {
     let (isolation, emit_aborts) = isolation(rerun);
     options.isolation = isolation;
     let emitted = move || {
+        crate::budget::disarm_watchdog();
         marker(Record::Emit);
         if emit_aborts {
             std::process::abort();
