@@ -19,7 +19,7 @@ use anyhow::{Context, Result};
 use args::{Args, ReportFormat};
 use clap::Parser;
 use hooks::Role;
-use untwist::{Isolation, Output, Pipeline, PlanRefusal, StopReason, BUNDLE_JSON, DEOBFUSCATED};
+use untwist::{Isolation, Output, OutputConflict, Pipeline, PlanRefusal, StopReason, DEOBFUSCATED};
 
 pub(crate) struct Session<'a> {
     pub(crate) out: &'a mut dyn Write,
@@ -136,17 +136,14 @@ fn report_wasm(err: &mut dyn Write, result: &Output) -> io::Result<()> {
     Ok(())
 }
 
-const OUTPUT_FILES: &[&str] = &[DEOBFUSCATED, BUNDLE_JSON];
-
 enum ResolvedOutput {
     None,
     Conflict,
     Refused,
-    Written { path: PathBuf, files: Vec<String> },
-}
-
-fn output_files_exist(dir: &Path) -> bool {
-    OUTPUT_FILES.iter().any(|name| dir.join(name).is_file())
+    Written {
+        written: output::Written,
+        failed: bool,
+    },
 }
 
 fn is_protected_dir(dir: &Path) -> Result<bool> {
@@ -192,34 +189,61 @@ fn report_refusals(err: &mut dyn Write, refused: &[PlanRefusal]) -> io::Result<(
                     "warning: refusing to write {path:?}: every numbered form of that name is already planned"
                 )?;
             }
+            PlanRefusal::InputFile(path) => {
+                writeln!(
+                    err,
+                    "warning: refusing to write {path:?}: it is one of the input files"
+                )?;
+            }
+            PlanRefusal::Failed {
+                path,
+                action,
+                reason,
+            } => {
+                writeln!(err, "warning: could not {action} {path:?}: {reason}")?;
+            }
         }
     }
     Ok(())
+}
+
+fn conflict(err: &mut dyn Write, error: anyhow::Error) -> Result<ResolvedOutput> {
+    let Some(conflict) = error.downcast_ref::<OutputConflict>() else {
+        return Err(error);
+    };
+    writeln!(err, "error: {conflict} (use --force)").context(STDERR)?;
+    Ok(ResolvedOutput::Conflict)
 }
 
 fn resolve_output(err: &mut dyn Write, args: &Args, result: &Output) -> Result<ResolvedOutput> {
     let Some(dir) = &args.output else {
         return Ok(ResolvedOutput::None);
     };
-    if args.force {
-        if is_protected_dir(dir)? {
-            writeln!(
-                err,
-                "error: refusing to force-clean {} (current directory, filesystem root, or $HOME)",
-                dir.display()
-            )
-            .context(STDERR)?;
-            return Ok(ResolvedOutput::Refused);
-        }
-    } else if dir.is_dir() && output_files_exist(dir) {
-        writeln!(err, "error: output directory already exists (use --force)").context(STDERR)?;
-        return Ok(ResolvedOutput::Conflict);
+    if is_protected_dir(dir)? {
+        writeln!(
+            err,
+            "error: refusing to write into {} (current directory, filesystem root, or $HOME)",
+            dir.display()
+        )
+        .context(STDERR)?;
+        return Ok(ResolvedOutput::Refused);
     }
-    let report = result.write_to_with(dir, &args.files, args.force)?;
+    let report = match result.write_to_with(dir, &args.files, args.force) {
+        Ok(report) => report,
+        Err(error) => return conflict(err, error),
+    };
     report_refusals(err, &report.refused).context(STDERR)?;
+    let failed = report
+        .refused
+        .iter()
+        .any(|refusal| matches!(refusal, PlanRefusal::Failed { .. }));
     Ok(ResolvedOutput::Written {
-        path: report.first.unwrap_or_else(|| dir.join(DEOBFUSCATED)),
-        files: report.files,
+        written: output::Written {
+            path: Some(report.first.unwrap_or_else(|| dir.join(DEOBFUSCATED))),
+            files: report.files,
+            unwritten_modules: report.unwritten_modules,
+        },
+        failed,
     })
 }
 
@@ -227,20 +251,18 @@ fn print_stdout(
     out: &mut dyn Write,
     (report, limits): (Option<ReportFormat>, budget::Limits),
     result: &Output,
-    output_path: Option<&Path>,
-    files_written: &[String],
+    written: &output::Written,
 ) -> Result<()> {
-    let written = if matches!(report, Some(ReportFormat::Json)) {
-        let limits = (output_path, limits);
-        stdout::write_line(out, &output::to_json(result, limits, files_written)?)
-    } else if output_path.is_none() && result.single_file {
+    let printed = if matches!(report, Some(ReportFormat::Json)) {
+        stdout::write_line(out, &output::to_json(result, written, limits)?)
+    } else if written.path.is_none() && result.single_file {
         stdout::write_line(out, &result.concatenated())
-    } else if output_path.is_none() {
+    } else if written.path.is_none() {
         stdout::write_codes(out, &result.codes)
     } else {
         Ok(())
     };
-    written
+    printed
         .and_then(|()| out.flush())
         .context("write to stdout")
 }
@@ -290,26 +312,23 @@ fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
         .report
         .or_else(|| args.verbose.then_some(ReportFormat::Text));
 
-    let (output_path, files_written) = match resolve_output(err, args, &result)? {
+    let (written, write_failed) = match resolve_output(err, args, &result)? {
         ResolvedOutput::Conflict => return Ok(2),
         ResolvedOutput::Refused => return Ok(1),
-        ResolvedOutput::Written { path, files } => (Some(path), files),
-        ResolvedOutput::None => (None, Vec::new()),
+        ResolvedOutput::Written { written, failed } => (written, failed),
+        ResolvedOutput::None => (output::Written::default(), false),
     };
 
-    print_stdout(
-        session.out,
-        (report, args.limits()),
-        &result,
-        output_path.as_deref(),
-        &files_written,
-    )?;
+    print_stdout(session.out, (report, args.limits()), &result, &written)?;
     let err = &mut *session.err;
     if matches!(report, Some(ReportFormat::Text)) {
         err.write_all(output::text_report(&result, args.limits()).as_bytes())
             .context(STDERR)?;
     }
-    Ok(exit_code(&result))
+    Ok(match exit_code(&result) {
+        0 if write_failed => 1,
+        code => code,
+    })
 }
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]

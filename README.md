@@ -34,7 +34,9 @@ engine as WebAssembly, and your code never leaves the page.
 - **Unpack.** Detects webpack 4/5 (including JSONP chunks), browserify, esbuild and Bun, SystemJS,
   AMD, UMD, Parcel, Metro, Turbopack and Closure bundles, extracts their modules and rewrites
   `require`/`import` specifiers to relative paths. Rollup and Vite scope-hoisted bundles can be
-  split on request. Several input files can be unpacked together.
+  split on request. Several input files can be unpacked together. The unpacked tree is untrusted
+  code: its file names and contents come from the bundle. Do not open it with an editor or tool
+  that runs project configuration on its own.
 - **Rename.** Optional: `mangle` (short names, compatible with webcrack's `-m`), `simple` (short names per function) or
   `unique` (readable, program-wide names such as `fn1`, `arr2`, `handler3`).
 - **JSX.** Rebuilds JSX from `React.createElement` and the automatic `jsx`/`jsxs` runtime.
@@ -94,7 +96,7 @@ Common flags:
 | Flag | What it does |
 | --- | --- |
 | `-o, --output DIR` | Write `deobfuscated.js`, and, when a bundle is found, `bundle.json` and one file per module. |
-| `-f, --force` | Replace the files a previous run wrote to `DIR`. |
+| `-f, --force` | Overwrite the files in `DIR` that this run writes and remove the ones a previous run left there. Input files are never overwritten. |
 | `--unsafe` | Use the unsafe lane (see below). |
 | `--rename MODE` | `none` (default), `mangle`, `simple` or `unique`. `-m` is short for `--rename mangle`. |
 | `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx` | Skip a stage. |
@@ -134,8 +136,8 @@ import has that function's signature. Such a module must also have every import 
 provides and no import the glue leaves out; otherwise nothing is named.
 
 Exit codes: `0` success; `1` an error, a parse error (output is still produced) or a panic in a
-pass; `2` the output directory already holds output (use `-f`); `3` an input was too deep to
-process safely and was passed through unchanged.
+pass; `2` a file this run would write already exists in the output directory (use `-f`); `3` an
+input was too deep to process safely and was passed through unchanged.
 
 ## Safe and unsafe lanes
 

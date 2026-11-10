@@ -23,21 +23,64 @@ pub fn normalize_posix(raw: &str) -> String {
     parts.join("/")
 }
 
+pub const MAX_SEGMENT_BYTES: usize = 255;
+pub const MAX_PATH_BYTES: usize = 1024;
+pub const RESERVED_FILES: &[&str] = &["deobfuscated.js", "bundle.json"];
+pub const RESERVED_DIRECTORIES: &[&str] = &["wasm"];
+
+const FORBIDDEN_CHARACTERS: &[char] = &[':', '<', '>', '"', '|', '?', '*', '\\'];
+const TOOL_DIRECTORIES: &[&str] = &[
+    ".git", ".hg", ".svn", ".vscode", ".idea", ".husky", ".github",
+];
+const DEVICE_NAMES: &[&str] = &[
+    "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
+    "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+];
+
+fn is_unprintable(ch: char) -> bool {
+    ch.is_control() || ch == '\u{2028}' || ch == '\u{2029}'
+}
+
+fn is_device_name(segment: &str) -> bool {
+    let stem = segment
+        .split('.')
+        .next()
+        .unwrap_or(segment)
+        .trim_end_matches(' ');
+    DEVICE_NAMES
+        .iter()
+        .any(|name| stem.eq_ignore_ascii_case(name))
+}
+
+fn is_unsafe_segment(segment: &str) -> bool {
+    segment.len() > MAX_SEGMENT_BYTES
+        || segment.ends_with(['.', ' '])
+        || is_device_name(segment)
+        || TOOL_DIRECTORIES
+            .iter()
+            .any(|name| segment.eq_ignore_ascii_case(name))
+}
+
 pub fn is_unsafe_path(normalized: &str) -> bool {
-    if normalized.is_empty() {
+    if normalized.is_empty() || normalized.len() > MAX_PATH_BYTES || normalized.starts_with('/') {
         return true;
     }
-    if normalized.starts_with('/') || normalized.contains('\\') {
+    if normalized == ".." || normalized.starts_with("../") {
         return true;
     }
     if normalized
-        .split('/')
-        .next()
-        .is_some_and(|first| first.len() >= 2 && first.as_bytes()[1] == b':')
+        .chars()
+        .any(|ch| is_unprintable(ch) || FORBIDDEN_CHARACTERS.contains(&ch))
     {
         return true;
     }
-    normalized == ".." || normalized.starts_with("../")
+    if normalized.split('/').any(is_unsafe_segment) {
+        return true;
+    }
+    normalized
+        .rsplit('/')
+        .next()
+        .is_some_and(|name| name.starts_with('.'))
 }
 
 pub fn join_posix(base: &str, rest: &str) -> String {

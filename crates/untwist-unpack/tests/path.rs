@@ -75,3 +75,152 @@ fn dirname_and_stem_suffix() {
         .expect("safe")
         .is_node_modules());
 }
+
+#[test]
+fn control_characters_make_a_path_unsafe() {
+    for path in [
+        "a\u{0}b.js",
+        "a\u{1b}[31mRED.js",
+        "a\nb.js",
+        "a\rb.js",
+        "a\u{7f}.js",
+        "a\u{85}.js",
+        "a\u{9b}.js",
+        "a\u{2028}.js",
+        "a\u{2029}.js",
+        "dir\tname/a.js",
+    ] {
+        assert!(is_unsafe_path(path), "{path:?}");
+    }
+}
+
+#[test]
+fn characters_windows_reserves_make_a_path_unsafe() {
+    for path in [
+        "a.js:stream",
+        "a<b.js",
+        "a>b.js",
+        "external \"react\".js",
+        "a|b.js",
+        "a.js?vue&type=script.js",
+        "a*.js",
+        "sub\\a.js",
+    ] {
+        assert!(is_unsafe_path(path), "{path:?}");
+    }
+}
+
+#[test]
+fn a_segment_ending_in_a_dot_or_a_space_is_unsafe() {
+    for path in ["a./b.js", "a /b.js", "dir/name.", "dir/name ", ".../a.js"] {
+        assert!(is_unsafe_path(path), "{path:?}");
+    }
+}
+
+#[test]
+fn windows_device_names_are_unsafe_in_any_case_and_with_any_extension() {
+    for path in [
+        "CON",
+        "con.js",
+        "Prn.js",
+        "AUX.tar.gz",
+        "nul",
+        "dir/NUL.js",
+        "COM1.js",
+        "com9",
+        "LPT1.js",
+        "lpt9.txt",
+        "aux/a.js",
+        "CON .js",
+    ] {
+        assert!(is_unsafe_path(path), "{path:?}");
+    }
+    for path in [
+        "console.js",
+        "com10.js",
+        "com0.js",
+        "lpt.js",
+        "auxiliary/a.js",
+    ] {
+        assert!(!is_unsafe_path(path), "{path:?}");
+    }
+}
+
+#[test]
+fn tool_directories_are_unsafe_anywhere_in_a_path() {
+    for path in [
+        ".git/hooks/x.js",
+        "a/.git/config.js",
+        ".GIT/hooks/x.js",
+        ".hg/a.js",
+        ".svn/a.js",
+        ".vscode/settings.js",
+        ".idea/a.js",
+        ".husky/pre-commit.js",
+        ".github/workflows/a.js",
+    ] {
+        assert!(is_unsafe_path(path), "{path:?}");
+    }
+}
+
+#[test]
+fn a_file_name_starting_with_a_dot_is_unsafe_but_a_directory_is_not() {
+    for path in [".eslintrc.js", "src/.env.js", ".npmrc"] {
+        assert!(is_unsafe_path(path), "{path:?}");
+    }
+    for path in [
+        "node_modules/.pnpm/a@1.0.0/node_modules/a/index.js",
+        ".cache/a.js",
+        "eslint.config.js",
+        "package.json.js",
+        "@scope/pkg/index.js",
+        "a b.js",
+    ] {
+        assert!(!is_unsafe_path(path), "{path:?}");
+    }
+}
+
+#[test]
+fn a_segment_longer_than_a_file_name_may_be_is_unsafe() {
+    let fits = format!("{}.js", "a".repeat(252));
+    let too_long = format!("{}.js", "a".repeat(253));
+    assert!(!is_unsafe_path(&fits));
+    assert!(is_unsafe_path(&too_long));
+    assert!(is_unsafe_path(&format!("{}/a.js", "d".repeat(256))));
+    assert!(is_unsafe_path(&format!("{}.js", "é".repeat(127))));
+}
+
+#[test]
+fn a_path_longer_than_the_whole_path_limit_is_unsafe() {
+    let fits = format!("{}a.js", "a/".repeat(500));
+    let too_long = format!("{}a.js", "a/".repeat(520));
+    assert!(!is_unsafe_path(&fits));
+    assert!(is_unsafe_path(&too_long));
+}
+
+#[test]
+fn the_fallback_name_of_a_very_long_id_still_fits_in_a_file_name() {
+    let id = "x".repeat(10_000);
+    let path = untwist_unpack::model::fallback_path(&id);
+    assert!(path.as_str().starts_with("_unsafe_x"), "{}", path.as_str());
+    assert!(path.as_str().len() <= 240, "{}", path.as_str().len());
+    assert!(!is_unsafe_path(path.as_str()));
+}
+
+#[test]
+fn the_names_the_tool_generates_are_safe() {
+    for path in [
+        untwist_unpack::path::ENTRY_PATH.to_string(),
+        untwist_unpack::model::fallback_path("./a\u{1b}[31m")
+            .as_str()
+            .to_string(),
+        untwist_unpack::model::fallback_path("")
+            .as_str()
+            .to_string(),
+        untwist_unpack::model::fallback_path("CON")
+            .as_str()
+            .to_string(),
+    ] {
+        assert!(!is_unsafe_path(&path), "{path:?}");
+    }
+}

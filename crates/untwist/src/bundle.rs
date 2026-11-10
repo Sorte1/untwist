@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::Serialize;
 use untwist_core::print::pretty_codegen;
 use untwist_core::reflow::{GuardRecord, GuardTally, Reflower};
@@ -32,6 +34,23 @@ pub struct BundleOutput {
     #[serde(rename = "chunkIds", skip_serializing_if = "Vec::is_empty")]
     pub chunk_ids: Vec<String>,
     pub modules: Vec<ModuleOutput>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BundleListing<'a> {
+    #[serde(rename = "type")]
+    kind: &'a str,
+    #[serde(rename = "entryId")]
+    entry_id: Option<&'a str>,
+    #[serde(rename = "chunkIds", skip_serializing_if = "<[_]>::is_empty")]
+    chunk_ids: &'a [String],
+    modules: Vec<&'a ModuleOutput>,
+}
+
+impl BundleListing<'_> {
+    pub fn json(&self) -> String {
+        serde_json::to_string_pretty(self).unwrap_or_default()
+    }
 }
 
 pub(crate) fn single_text_len<T: AsRef<str>>(codes: &[T]) -> Option<u32> {
@@ -85,8 +104,24 @@ impl BundleOutput {
         self.modules.iter().find(|module| module.is_entry)
     }
 
+    pub fn listing_without(&self, unwritten_modules: &[usize]) -> BundleListing<'_> {
+        let unwritten: HashSet<usize> = unwritten_modules.iter().copied().collect();
+        BundleListing {
+            kind: &self.kind,
+            entry_id: self.entry_id.as_deref(),
+            chunk_ids: &self.chunk_ids,
+            modules: self
+                .modules
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !unwritten.contains(index))
+                .map(|(_, module)| module)
+                .collect(),
+        }
+    }
+
     pub fn bundle_json(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_default()
+        self.listing_without(&[]).json()
     }
 
     pub fn files(&self) -> Vec<FileOutput> {

@@ -78,6 +78,25 @@ All notable changes to this project are documented in this file. The format is b
   or that array method, or passes `JSON`, `Array`, `Array.prototype` or the global object around
   as a value. The replaced function could return something else, so the rewrite changed what
   the program did. `--unsafe` keeps both rewrites.
+- `-o DIR` without `--force` stops with exit code 2 when any file the run would write already
+  exists in `DIR`, and names it. Before, only `deobfuscated.js` and `bundle.json` were checked, so
+  a module path could replace an unrelated file. The current directory, the file system root and
+  `$HOME` are refused as output directories with and without `--force`, and an input file is
+  never overwritten or removed, also with `--force`.
+- A module file that cannot be written (a NUL byte in the name, a path segment over 255 bytes, a
+  path under another module's file, a directory that is not writable) is reported and skipped,
+  and the rest of the tree is written. Before, the first such file ended the run with part of the
+  tree on disk. `bundle.json` and the JSON report list only the modules that were written. A
+  write that fails on disk gives exit code 1.
+- A module id no longer becomes a file name that is unsafe to keep on disk: one with a control
+  character, one of `: < > " | ? *` or a backslash, a segment ending in a dot or a space, a
+  Windows device name (`CON`, `NUL`, `COM1`, ...), a `.git`, `.hg`, `.svn`, `.vscode`, `.idea`,
+  `.husky` or `.github` directory, or a dot-leading file name such as `.npmrc`. Such a module
+  gets a generated name and keeps its id in `bundle.json`. Module paths that differ only in case,
+  or where one is a directory of another, get distinct names, and `deobfuscated.js`,
+  `bundle.json` and `wasm/` are never used for a module.
+- Any number of module ids that normalise to one path get distinct names. Before, the 1001st
+  shared a name with another module, and naming them took quadratic time.
 - A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
   globals. When the body still declares a `var`, function, class, `let` or `const` at its own
   level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that
