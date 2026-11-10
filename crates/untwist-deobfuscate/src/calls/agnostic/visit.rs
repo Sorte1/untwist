@@ -54,6 +54,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                         is_definer_key(name)
                             || READERS.contains(&name.as_ref())
                             || key_roles(name).runner
+                            || MARKUP_CALLS.contains(&name.as_ref())
                             || matches!(name.as_ref(), "call" | "apply" | "bind")
                     }
                     AKey::Index => false,
@@ -239,6 +240,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                 .as_expression()
                 .map_or_else(|| Keys::Many(Vec::new()), |expr| self.key_set(expr)),
         };
+        self.note_script_read(&keys);
         for key in keys {
             self.mark_origin(origin_of(&key), span, "destructured read");
         }
@@ -260,6 +262,8 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
         self.note_store(it);
+        self.note_markup_store(it);
+        self.note_script_store(it);
         if it.operator == AssignmentOperator::Assign {
             let held: &'a AssignmentExpression<'a> = self.alloc(it);
             if let Some(member) = held.left.as_member_expression() {
@@ -286,6 +290,8 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
                 "write"
             };
             self.write_site(member, kind);
+            self.check_markup_target(member);
+            self.check_script_target(member);
         } else if let SimpleAssignmentTarget::AssignmentTargetIdentifier(id) = it {
             if self.fresh.symbol(id).is_none() {
                 self.push(
@@ -308,6 +314,7 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
             match property {
                 ObjectPropertyKind::ObjectProperty(p) => {
                     let key = self.property_key(&p.key);
+                    self.check_markup_property(&key, p);
                     if matches!(&key, AKey::Named(name) if !FRESH_NATIVES.contains(&name.as_ref()))
                     {
                         self.induced.push(key);
@@ -474,13 +481,15 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         self.note_call_shape(it);
         self.proxied_runner(it);
         self.note_creation(it);
-        if let Some(function) = self.runner_callee(&it.callee) {
+        self.note_script_creator(it);
+        self.note_text_node_call(it);
+        if let Some(kind) = self.runner_callee(&it.callee) {
             if !self.creation_only.contains(&span_key(it.span)) {
                 self.reach_text(it.span, &it.arguments);
                 if closed_runner_read(it, self.fresh.scoping).is_some() {
                     self.mark_closed_runner_read(it.span);
                 } else {
-                    self.check_text(it.span, &it.arguments, function);
+                    self.check_text(it.span, &it.arguments, kind);
                 }
             }
         }
@@ -493,8 +502,8 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
 
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
         self.observe_template(it);
-        if let Some(function) = self.runner_callee(&it.tag) {
-            self.check_template(it.span, &it.quasi, function);
+        if let Some(kind) = self.runner_callee(&it.tag) {
+            self.check_template(it.span, &it.quasi, kind);
         } else if !self.fresh.is_user_function(&it.tag) {
             let tagged = self.alloc(it);
             self.tagged.push(tagged);
@@ -512,9 +521,10 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         {
             self.refute_fresh = true;
         }
-        if let Some(function) = self.runner_callee(&it.callee) {
+        self.note_text_node_new(it);
+        if let Some(kind) = self.runner_callee(&it.callee) {
             self.reach_text(it.span, &it.arguments);
-            self.check_text(it.span, &it.arguments, function);
+            self.check_text(it.span, &it.arguments, kind);
         } else if !self.fresh.is_user_function(&it.callee) {
             let new = self.alloc(it);
             self.news.push(new);
@@ -536,6 +546,9 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         }
         let start = span_key(it.span());
         let escaped = !self.direct.contains(&start) && !self.tests.contains(&start);
+        if escaped {
+            self.note_script_read(&parent_keys);
+        }
         if escaped
             && parent_keys.iter().any(|key| self.key_origin(key).any())
             && !self.holds_array(it.object())

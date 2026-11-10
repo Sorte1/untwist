@@ -1207,3 +1207,17 @@
   is taken to throw before the call runs, so a call such as `hostOnlyLogger(this)` does not count
   as observation and the decoder machinery may be removed. On that host the output can then print
   different global names than the input. Under node and in browsers the rule is exact.
+
+- **Program text handed to the DOM counts as code from text, and a script element the page
+  already holds is assumed to receive none**. `document.write` and `writeln`,
+  `insertAdjacentHTML`, `createContextualFragment` and assignments to `innerHTML`, `outerHTML`
+  and `srcdoc` can start a script or an event handler, so their text is judged like the text of
+  `eval`: a text the check cannot resolve, or one that contains `<`, keeps the decoder calls and
+  its machinery. Assignments to `text`, `textContent`, `innerText` or `src` (a `src` that is not
+  a literal, or is a `data:`, `javascript:` or `blob:` URL) and `createTextNode`/`append` of a
+  text count the same way only when the program can create a script element: a
+  `createElement` or `createElementNS` whose tag is not a literal, or is `script` in any case.
+  **The assumption**: a program that only fetches a script element the page already has
+  (`document.querySelector('script')`, `document.scripts[0]`) and writes program text into it is
+  not seen, and its strings may be decoded. Pinned by `crates/untwist/tests/dom_sink_rows.rs`
+  (`dec-existing-script-text` is that assumption).

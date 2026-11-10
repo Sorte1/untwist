@@ -134,6 +134,11 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) extended: Cell<bool>,
     pub(super) param_keys: RefCell<FxHashMap<oxc_syntax::symbol::SymbolId, bool>>,
     pub(super) text_judged: bool,
+    pub(super) markup_unbounded: bool,
+    pub(super) inert_markup: FxHashSet<u64>,
+    pub(super) script_creator: bool,
+    pub(super) script_sinks: Vec<super::script::ScriptSink>,
+    pub(super) noted_scripts: FxHashSet<u64>,
     pub(super) forward_calls: FxHashSet<Span>,
     pub(super) pending_texts: RefCell<Vec<String>>,
     pub(super) flow: &'s Flow<'s, 'a>,
@@ -195,6 +200,11 @@ impl<'s, 'a> Sites<'s, 'a> {
             extended: Cell::new(false),
             param_keys: RefCell::default(),
             text_judged: false,
+            markup_unbounded: false,
+            inert_markup: FxHashSet::default(),
+            script_creator: false,
+            script_sinks: Vec::new(),
+            noted_scripts: FxHashSet::default(),
             forward_calls: FxHashSet::default(),
             pending_texts: RefCell::default(),
             flow,
@@ -334,6 +344,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             if origin.runner && self.out.runner_unbounded.is_none() {
                 self.out.runner_unbounded = Some((span, reason));
             }
+            self.markup_unbounded |= origin.markup;
         }
         self.bind_unbounded |= origin.bind;
         self.apply_unbounded |= origin.apply;

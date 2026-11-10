@@ -34,6 +34,21 @@ impl<'a> Sites<'_, 'a> {
         observers() != Observers::None && self.watching(span)
     }
 
+    pub(super) fn mark_opaque_text(&mut self, span: Span) {
+        if self.watching_text(span) {
+            self.hit(span);
+        }
+        self.mark_code(span);
+    }
+
+    pub(super) fn text_watched(&self, span: Span) -> bool {
+        self.watching_text(span)
+    }
+
+    pub(super) fn text_hits(&self, span: Span, text: &Expression<'a>) -> bool {
+        self.watching_text(span) && self.text_reaches(text)
+    }
+
     fn list_reaches(&self, list: Option<&Argument<'a>>) -> bool {
         let Some(list) = list else {
             return false;

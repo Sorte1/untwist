@@ -223,6 +223,13 @@ All notable changes to this project are documented in this file. The format is b
 - Webpack 5 detection scans a statement list for the require function once. Before, a file with
   many object-literal declarations and no bundle took quadratic time.
 
+- Program text handed to the DOM keeps the decoder calls it may reach, as `eval` of unknown text
+  does: `document.write`/`writeln`, `insertAdjacentHTML`, `createContextualFragment` and
+  assignments to `innerHTML`, `outerHTML` or `srcdoc`, and, when the program can create a script
+  element, assignments to `text`, `textContent`, `innerText` or `src` and text nodes appended to
+  it. Before, markup such as `<img onerror=...>` built from decoded strings was inlined and could
+  run different code than the input.
+
 ### Changed
 
 - The checks that keep folding away from patched built-ins judge each variable once instead of once

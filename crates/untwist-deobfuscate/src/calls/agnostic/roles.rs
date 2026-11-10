@@ -45,6 +45,50 @@ pub(super) const RUNNERS: [&str; 14] = [
     "_compile",
 ];
 
+pub(super) const SCRIPT_CREATORS: [&str; 2] = ["createElement", "createElementNS"];
+
+pub(super) const SCRIPT_TEXT_STORES: [&str; 4] = ["text", "textContent", "innerText", "innerHTML"];
+
+pub(super) const SCRIPT_SOURCE: &str = "src";
+
+pub(super) const TEXT_NODE_CALLS: [&str; 2] = ["createTextNode", "append"];
+
+pub(super) const MARKUP_CALLS: [&str; 4] = [
+    "write",
+    "writeln",
+    "insertAdjacentHTML",
+    "createContextualFragment",
+];
+
+pub(super) const MARKUP_STORES: [&str; 3] = ["innerHTML", "outerHTML", "srcdoc"];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Text {
+    Script,
+    Function,
+    Markup,
+    ScriptOrMarkup,
+    FunctionOrMarkup,
+}
+
+impl Text {
+    pub(super) fn function(self) -> bool {
+        matches!(self, Text::Function | Text::FunctionOrMarkup)
+    }
+
+    pub(super) fn markup(self) -> bool {
+        !matches!(self, Text::Script | Text::Function)
+    }
+
+    pub(super) fn plain(self) -> Option<Text> {
+        match self {
+            Text::ScriptOrMarkup => Some(Text::Script),
+            Text::FunctionOrMarkup => Some(Text::Function),
+            Text::Script | Text::Function | Text::Markup => None,
+        }
+    }
+}
+
 pub(super) const SELECTOR_TAKERS: [&str; 6] = [
     "querySelector",
     "querySelectorAll",
@@ -94,6 +138,7 @@ pub(super) struct Origin {
     pub(super) bind: bool,
     pub(super) apply: bool,
     pub(super) construct: bool,
+    pub(super) markup: bool,
 }
 
 impl Origin {
@@ -129,12 +174,14 @@ pub(super) fn origin_of(key: &AKey<'_>) -> Origin {
     match key {
         AKey::Named(name) => {
             let roles = key_roles(name);
+            let markup = MARKUP_CALLS.contains(&name.as_ref());
             Origin {
                 definer: roles.definer || roles.reader,
-                runner: roles.runner,
+                runner: roles.runner || markup,
                 bind: name == "bind",
                 apply: name == "apply" || name == "call",
                 construct: roles.construct,
+                markup,
             }
         }
         AKey::Index => Origin::default(),
@@ -144,6 +191,7 @@ pub(super) fn origin_of(key: &AKey<'_>) -> Origin {
             bind: true,
             apply: true,
             construct: true,
+            markup: true,
         },
     }
 }

@@ -15,7 +15,9 @@ use rustc_hash::FxHashMap;
 
 use super::bootstrap::Resolve;
 use super::defs::DefTable;
-use super::roles::{Origin, BATCH, CONSTRUCTS, DEFINE_KEYED, GETTERS, MUTATORS, READERS, RUNNERS};
+use super::roles::{
+    Origin, BATCH, CONSTRUCTS, DEFINE_KEYED, GETTERS, MARKUP_CALLS, MUTATORS, READERS, RUNNERS,
+};
 use super::stored::Facts;
 use super::AKey;
 use crate::value_flow::{
@@ -293,10 +295,13 @@ impl<'a> Filters<'a> {
                 || any(&MUTATORS)
                 || any(&["set", "setPrototypeOf"])
                 || any(&READERS),
-            runner: any(&RUNNERS) || self.accepts(scoping, filter, "constructor"),
+            runner: any(&RUNNERS)
+                || any(&MARKUP_CALLS)
+                || self.accepts(scoping, filter, "constructor"),
             bind: self.accepts(scoping, filter, "bind"),
             apply: any(&["apply", "call"]),
             construct: any(&CONSTRUCTS),
+            markup: any(&MARKUP_CALLS),
         }
     }
 }
