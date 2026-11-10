@@ -34,6 +34,12 @@ All notable changes to this project are documented in this file. The format is b
   assigned, when a factory holds a `with` statement (AMD, UMD and Rollup too), and a helper that
   reads `require`, `module`, `exports`, `__filename` or `__dirname` is no longer moved into the
   runtime module.
+- Files written without semicolons are no longer refused as nesting too deep: the depth scan
+  now ends a statement at a line break or closing brace followed by a token that starts a new
+  statement, so 40,000 lines of `a = b.c(d)` or 40,000 `function f(){}` are processed. A chain
+  of tagged templates (a name followed by many empty template literals) costs nesting like a
+  call chain and is refused when it is too deep, instead of taking the worker to gigabytes of
+  memory.
 - A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
   globals. When the body still declares a `var`, function, class, `let` or `const` at its own
   level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that
