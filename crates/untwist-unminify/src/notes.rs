@@ -32,6 +32,11 @@ pub const UNTRANSPILE_MACHINE_KEPT: &str = "a transpiled generator was kept: its
 pub const UNTRANSPILE_ASYNC_KEPT: &str = "a transpiled async function was kept: its receiver, \
      arguments, parameters or bindings would change meaning as an async function";
 
+pub const UNTRANSPILE_HELPER_UNTRUSTED: &str = "a transpiler helper was left in place: its \
+     binding may hold something else when a call runs (a script-level helper the global object \
+     can replace, a shared `this && this.x` definition outside a module, or a var helper whose \
+     initialiser may not have run first)";
+
 catalogue!(
     ALL_NOTES,
     LET_TO_CONST_SCOPE_HAZARD,
@@ -42,5 +47,6 @@ catalogue!(
     UNTRANSPILE_OBJECT_REST_KEPT,
     UNTRANSPILE_CLASS_PROTOTYPE_OPEN,
     UNTRANSPILE_MACHINE_KEPT,
-    UNTRANSPILE_ASYNC_KEPT
+    UNTRANSPILE_ASYNC_KEPT,
+    UNTRANSPILE_HELPER_UNTRUSTED
 );

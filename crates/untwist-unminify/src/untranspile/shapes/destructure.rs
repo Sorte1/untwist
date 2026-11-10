@@ -43,7 +43,7 @@ const OBJ_REST_PARTS: &[Kind] = &[
 #[allow(clippy::too_many_arguments)]
 const fn variant(
     kind: Kind,
-    hash: u64,
+    hash: u128,
     (params, statements): (u8, u8),
     lead: u8,
     focus: u8,
@@ -66,7 +66,7 @@ const fn variant(
 pub const VARIANTS: &[Variant] = &[
     variant(
         Kind::ArrayWithHoles,
-        0x09cc_ded2_726b_1002,
+        0xdcc3_037d_bcca_0439_fad9_8bcb_b4b0_3ca3,
         (1, 1),
         IF,
         CALL,
@@ -75,7 +75,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::IterableToArrayLimit,
-        0xa904_84c9_dc94_4d18,
+        0x6dcc_f45a_c3b1_de70_763d_42ae_3a9f_67c6,
         (2, 2),
         DECLARATION,
         CONDITIONAL,
@@ -84,7 +84,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::IterableToArrayLimit,
-        0xd915_26c8_aeb0_138e,
+        0xe45f_68dc_a31d_11e1_9104_738c_87c8_5931,
         (2, 2),
         DECLARATION,
         CONDITIONAL,
@@ -93,7 +93,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::IterableToArrayLimit,
-        0x8138_7451_2162_ecd5,
+        0xf6e2_9388_f626_d47b_2d99_4751_dca1_5298,
         (2, 9),
         DECLARATION,
         CONDITIONAL,
@@ -102,7 +102,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::IterableToArrayLimit,
-        0x5120_d98e_d5f2_064c,
+        0x06bd_dab7_3232_c76c_b222_765f_6090_2193,
         (2, 2),
         DECLARATION,
         CONDITIONAL,
@@ -111,7 +111,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::NonIterableRest,
-        0x6bb6_67b2_9a4b_9f96,
+        0x58c2_d314_bf15_79a4_27cb_eb3b_4862_ad0b,
         (0, 1),
         THROW,
         NEW,
@@ -120,7 +120,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::NonIterableRest,
-        0x35bf_3bc6_8f1e_3efb,
+        0x2bc3_9f9d_2726_c56a_c052_a76f_3f70_3412,
         (0, 1),
         THROW,
         NEW,
@@ -129,7 +129,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::SlicedToArray,
-        0x5ae9_6530_2a20_e940,
+        0x1a09_12b5_e13b_4e8c_dc32_8ff7_19e3_2f7b,
         (2, 1),
         RETURN,
         LOGICAL,
@@ -138,7 +138,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::ObjectWithoutProperties,
-        0xe707_d5c1_e9bd_bf4c,
+        0x5468_2284_e6ec_4c7e_b65a_02ee_48ac_e3ae,
         (2, 6),
         IF,
         BINARY,
@@ -147,7 +147,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::ObjectWithoutProperties,
-        0x93f2_3ed7_de6f_8fc4,
+        0x61cc_2d08_cf92_2ca0_a408_83c1_54f7_da49,
         (2, 9),
         IF,
         BINARY,
@@ -156,7 +156,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::ObjectWithoutProperties,
-        0xd9ae_8e1d_81f3_7cfe,
+        0xe845_42dc_9653_1499_9ef0_2c14_6067_0589,
         (2, 9),
         IF,
         BINARY,
@@ -165,7 +165,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::ObjectWithoutPropertiesLoose,
-        0x6cb5_5b95_65c7_b132,
+        0x3e44_7c9f_0518_b8f8_d2b0_ef5d_572f_21da,
         (2, 4),
         IF,
         BINARY,
@@ -174,7 +174,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::ObjectWithoutPropertiesLoose,
-        0x4bad_167a_4634_aced,
+        0xb1d6_072e_74c6_2e4b_bd08_49e1_1c5b_ec4a,
         (2, 7),
         IF,
         BINARY,
@@ -183,7 +183,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::ObjectWithoutPropertiesLoose,
-        0x1b27_c5ea_ac28_c1a9,
+        0xe61a_1009_669b_fcd2_ffc0_fcbc_c208_d5bb,
         (2, 7),
         IF,
         BINARY,
@@ -192,7 +192,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Rest,
-        0xc3a5_613a_7fbd_7035,
+        0x9971_f330_abf4_40b4_216d_309e_d44b_cf98,
         (2, 4),
         DECLARATION,
         OBJECT,
@@ -201,7 +201,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Rest,
-        0x3415_59b9_cbec_981f,
+        0x26a2_272e_15b4_d6ab_b29c_bac2_897d_d8e6,
         (2, 4),
         DECLARATION,
         OBJECT,
@@ -210,7 +210,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::ObjRest,
-        0xd927_46d4_be9f_9781,
+        0x2b34_3383_62ba_8248_1bcc_b127_f2e1_9db3,
         (2, 4),
         DECLARATION,
         OBJECT,

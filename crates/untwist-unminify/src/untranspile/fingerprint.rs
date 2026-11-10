@@ -5,9 +5,8 @@ use oxc_semantic::Scoping;
 use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
+use sha2::{Digest, Sha256};
 
-const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 pub const RECORDING_CAP: u32 = 12_000;
 const CLOSE: u8 = 0xff;
 const GLOBAL: u8 = 0xf0;
@@ -69,7 +68,7 @@ impl<const N: usize> Symbols<N> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Print {
-    pub hash: u64,
+    pub hash: u128,
     pub tokens: u32,
     pub external: Externals,
     pub own_reads: u32,
@@ -81,7 +80,7 @@ struct Printer<'s> {
     cap: u32,
     outer: ScopeId,
     own: Option<SymbolId>,
-    hash: u64,
+    stream: Vec<u8>,
     tokens: u32,
     locals: Symbols<LOCAL_SLOTS>,
     external: Externals,
@@ -121,7 +120,7 @@ impl<'s> Printer<'s> {
             cap,
             outer,
             own,
-            hash: FNV_OFFSET,
+            stream: Vec::new(),
             tokens: 0,
             locals: Symbols::EMPTY,
             external: Externals::EMPTY,
@@ -132,8 +131,8 @@ impl<'s> Printer<'s> {
     }
 
     fn finish(self) -> Option<Print> {
-        (!self.overflow && self.tokens <= self.cap).then_some(Print {
-            hash: self.hash,
+        (!self.overflow && self.tokens <= self.cap).then(|| Print {
+            hash: digest(&self.stream),
             tokens: self.tokens,
             external: self.external,
             own_reads: self.own_reads,
@@ -142,7 +141,7 @@ impl<'s> Printer<'s> {
     }
 
     fn byte(&mut self, byte: u8) {
-        self.hash = (self.hash ^ u64::from(byte)).wrapping_mul(FNV_PRIME);
+        self.stream.push(byte);
     }
 
     fn word(&mut self, word: u64) {
@@ -307,6 +306,13 @@ impl<'s> Printer<'s> {
             _ => {}
         }
     }
+}
+
+fn digest(stream: &[u8]) -> u128 {
+    let full = Sha256::digest(stream);
+    let mut head = [0u8; 16];
+    head.copy_from_slice(&full[..16]);
+    u128::from_be_bytes(head)
 }
 
 fn canonical_unary(it: &UnaryExpression<'_>) -> Option<Option<bool>> {

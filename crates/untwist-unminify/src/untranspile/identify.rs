@@ -364,13 +364,14 @@ fn is_this_member(expression: &Expression<'_>, name: &str) -> bool {
 fn shared_part<'k, 'a>(
     init: &'k Expression<'a>,
     name: &str,
-    at_root: bool,
+    at_module_root: bool,
 ) -> Option<&'k Expression<'a>> {
     let Expression::LogicalExpression(logical) = init.without_parentheses() else {
         return None;
     };
-    let shared =
-        logical.operator == LogicalOperator::Or && at_root && is_this_member(&logical.left, name);
+    let shared = logical.operator == LogicalOperator::Or
+        && at_module_root
+        && is_this_member(&logical.left, name);
     shared.then_some(&logical.right)
 }
 
@@ -407,6 +408,7 @@ fn alias_of(init: &Expression<'_>, scoping: &Scoping) -> Option<Alias> {
 pub fn declarator(
     declarator: &VariableDeclarator<'_>,
     scoping: &Scoping,
+    module: bool,
 ) -> Option<(SymbolId, Helper)> {
     let BindingPattern::BindingIdentifier(id) = &declarator.id else {
         return None;
@@ -416,8 +418,8 @@ pub fn declarator(
     if let Some(alias) = alias_of(init, scoping) {
         return aliased(symbol, alias, scoping);
     }
-    let at_root = scoping.symbol_scope_id(symbol) == scoping.root_scope_id();
-    let (function, definition) = match shared_part(init, id.name.as_str(), at_root) {
+    let at_module_root = module && scoping.symbol_scope_id(symbol) == scoping.root_scope_id();
+    let (function, definition) = match shared_part(init, id.name.as_str(), at_module_root) {
         Some(function) => (function, Definition::Shared),
         None => (init, Definition::Declarator),
     };
@@ -453,7 +455,7 @@ fn aliased(symbol: SymbolId, alias: Alias, scoping: &Scoping) -> Option<(SymbolI
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SeenPrint {
     pub name: String,
-    pub hash: u64,
+    pub hash: u128,
     pub params: u8,
     pub statements: u8,
     pub lead: u8,

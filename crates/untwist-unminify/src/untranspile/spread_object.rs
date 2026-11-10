@@ -4,6 +4,7 @@ use oxc_semantic::Scoping;
 use oxc_span::SPAN;
 use untwist_core::pass::{Cx, Safety};
 
+use super::define_chain;
 use super::identify::Table;
 use super::shapes::Kind;
 use super::spread::{shape, Gate};
@@ -241,7 +242,7 @@ fn chain_members<'a>(
         SPAN,
         PropertyKind::Init,
         key,
-        value,
+        define_chain::unnamed(value, cx),
         false,
         false,
         true,
