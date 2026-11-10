@@ -31,7 +31,7 @@ function __DECODE_0__(c, d) {
 })(__STRING_ARRAY__, 0xe);
 console['log'](__DECODE_0__(0x0), __DECODE_0__(0x1), __DECODE_0__(0x2));";
 
-const HIGH_PRESET_ROUNDS: u32 = 6;
+const HIGH_PRESET_ROUNDS: u32 = 2;
 const HIGH_PRESET_SEARCHES: usize = 1;
 const HIGH_PRESET_HITS: usize = 0;
 const HIGH_PRESET_STORED: usize = 0;

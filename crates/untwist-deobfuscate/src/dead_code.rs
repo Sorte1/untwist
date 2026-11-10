@@ -13,6 +13,7 @@ use untwist_core::ast_util::rename::{is_name_taken, taken_names, Renames, UNIQUE
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
 };
+use untwist_core::semantic::unbound::is_unbound_name;
 use untwist_core::semantic::{program_is_strict, scope_hazard};
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
@@ -111,6 +112,9 @@ fn relocate<'a>(
     if !collides(name, outer, moved, cx) {
         return Some(name.to_string());
     }
+    if is_unbound_name(name) {
+        return None;
+    }
     let fresh = fresh_name(name, cx.scoping(), moved, handed_out)?;
     handed_out.insert(fresh.clone());
     staged.push((symbol, Ident::from_str_in(&fresh, cx)));
@@ -132,6 +136,9 @@ fn plan_merge<'a>(
         return None;
     }
     let scope_id = block.scope_id.get()?;
+    if block.body.iter().any(declares_without_a_symbol) {
+        return None;
+    }
     let mut introduced = Vec::new();
     for (symbol, name) in declared_in(scope_id, cx.scoping()) {
         let final_name = relocate(&name, symbol, outer, moved, handed_out, staged, cx)?;
@@ -144,6 +151,25 @@ fn plan_merge<'a>(
         }
     }
     Some(introduced)
+}
+
+fn declares_without_a_symbol(statement: &Statement<'_>) -> bool {
+    match statement {
+        Statement::VariableDeclaration(declaration) => declaration
+            .declarations
+            .iter()
+            .flat_map(|declarator| declarator.id.get_binding_identifiers())
+            .any(|id| id.symbol_id.get().is_none()),
+        Statement::FunctionDeclaration(function) => function
+            .id
+            .as_ref()
+            .is_some_and(|id| id.symbol_id.get().is_none()),
+        Statement::ClassDeclaration(class) => class
+            .id
+            .as_ref()
+            .is_some_and(|id| id.symbol_id.get().is_none()),
+        _ => false,
+    }
 }
 
 fn declared_in(scope: ScopeId, scoping: &Scoping) -> Vec<(SymbolId, String)> {

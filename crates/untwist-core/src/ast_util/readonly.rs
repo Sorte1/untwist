@@ -129,6 +129,7 @@ pub struct UsesScan<'s> {
     uses: FxHashMap<SymbolId, ObjectUses>,
     bare: FxHashMap<SymbolId, Vec<Span>>,
     all: FxHashMap<SymbolId, Vec<Span>>,
+    unresolved: FxHashMap<SymbolId, Vec<Span>>,
     missed: usize,
 }
 
@@ -145,6 +146,7 @@ impl<'s> UsesScan<'s> {
             uses: FxHashMap::default(),
             bare: FxHashMap::default(),
             all: FxHashMap::default(),
+            unresolved: FxHashMap::default(),
             missed: 0,
         }
     }
@@ -158,11 +160,24 @@ impl<'s> UsesScan<'s> {
         self.symbols.contains(&symbol).then_some(symbol)
     }
 
+    fn unresolved_use(&mut self, id: &IdentifierReference<'_>) {
+        if id.reference_id.get().is_some() {
+            return;
+        }
+        let scoping = self.scoping;
+        for symbol in self.symbols {
+            if scoping.symbol_name(*symbol) == id.name.as_str() {
+                self.unresolved.entry(*symbol).or_default().push(id.span);
+            }
+        }
+    }
+
     fn target_of(&mut self, expr: &Expression<'_>) -> Option<(SymbolId, Span)> {
         let Expression::Identifier(id) = expr else {
             return None;
         };
         let Some(symbol) = self.resolve(id) else {
+            self.unresolved_use(id);
             self.missed = address_of(id);
             return None;
         };
@@ -174,8 +189,9 @@ impl<'s> UsesScan<'s> {
         if address_of(id) == self.missed {
             return;
         }
-        if let Some(symbol) = self.resolve(id) {
-            self.push_bare(symbol, id.span);
+        match self.resolve(id) {
+            Some(symbol) => self.push_bare(symbol, id.span),
+            None => self.unresolved_use(id),
         }
     }
 
@@ -258,8 +274,9 @@ impl<'s> UsesScan<'s> {
 
     #[inline(always)]
     pub fn reference(&mut self, it: &IdentifierReference<'_>) {
-        if let Some(symbol) = self.resolve(it) {
-            self.all.entry(symbol).or_default().push(it.span);
+        match self.resolve(it) {
+            Some(symbol) => self.all.entry(symbol).or_default().push(it.span),
+            None => self.unresolved_use(it),
         }
     }
 
@@ -270,6 +287,7 @@ impl<'s> UsesScan<'s> {
             mut uses,
             bare,
             all,
+            mut unresolved,
             ..
         } = self;
         for symbol in symbols {
@@ -285,6 +303,9 @@ impl<'s> UsesScan<'s> {
                         .collect()
                 })
                 .unwrap_or_default();
+            if let Some(spans) = unresolved.remove(symbol) {
+                entry.opaque_spans.extend(spans);
+            }
             entry.opaque = u32::try_from(entry.opaque_spans.len()).unwrap_or(u32::MAX);
         }
         SymbolUses {

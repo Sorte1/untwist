@@ -272,6 +272,9 @@ pub const CONTROL_FLOW_USE_BEFORE_INIT: &str =
 pub const CONTROL_FLOW_SPANS_EXHAUSTED: &str =
     "control-flow object keys not folded: the synthetic span counter is exhausted, so the \
      completed object could not be given a span outside the source range";
+pub const CONTROL_FLOW_RENAMED_BEFORE_INSERTION: &str =
+    "control-flow object call kept for now: another pass renamed a name the inlined copy \
+     mentions, so the copy waits for the next iteration";
 pub const CONTROL_FLOW_SHAPE_LOST: &str =
     "control-flow object kept: the declared object was not found at its recorded span, or no \
      longer reads as a control-flow object";
@@ -671,6 +674,7 @@ catalogue!(
     CONTROL_FLOW_NEST_TOO_DEEP,
     CONTROL_FLOW_LIVE_MUTATION,
     CONTROL_FLOW_DEAD_WRITE_KEPT,
+    CONTROL_FLOW_RENAMED_BEFORE_INSERTION,
     LOGICAL_FORWARDER_ARGUMENT,
     SWITCH_SEQUENCE,
     SWITCH_FALLTHROUGH,

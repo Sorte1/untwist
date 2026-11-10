@@ -15,6 +15,7 @@ impl<'a> VisitJs<'a> for Finder<'_> {
             return;
         }
         let Some(reference_id) = it.reference_id.get() else {
+            self.found = self.scoping.symbol_name(self.target) == it.name.as_str();
             return;
         };
         if self.scoping.get_reference(reference_id).symbol_id() == Some(self.target) {

@@ -498,14 +498,17 @@ fn a_settle_chain_equals_forced_full_rounds() {
     assert!(!settled.codes.join("\n").contains("atob"));
 }
 
+const STALE_REPLAY_FIXTURE: &str =
+    "2.15.6--rc4-rot-noshuf-noshift-istr-w3f-t1-split--iife--terser--functions-1.js";
+
 #[test]
 fn a_settled_replay_that_ignores_edits_diverges_on_a_named_fixture() {
     let _serial = serial();
-    let source = js_files_in("fixtures/corpus-npm")
+    let source = js_files_in("fixtures/obfuscator-versions")
         .into_iter()
-        .find(|(label, _)| label.ends_with("case-010.js"))
+        .find(|(label, _)| label.ends_with(STALE_REPLAY_FIXTURE))
         .map(|(_, source)| source)
-        .expect("corpus-npm/case-010.js");
+        .expect(STALE_REPLAY_FIXTURE);
     stale_settled_for_tests(true);
     let stale = run(&source, MODES[2], false);
     stale_settled_for_tests(false);

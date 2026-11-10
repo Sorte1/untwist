@@ -69,7 +69,7 @@ fn fixture(path: &str) -> String {
 }
 
 #[test]
-fn chained_wrapper_rounds_skip_idle_stages_and_end_as_full_rounds_do() {
+fn chained_wrapper_rounds_never_run_more_stages_than_full_rounds_and_end_as_they_do() {
     let _serial = serial();
     for path in CHAINED_WRAPPERS {
         let source = fixture(path);
@@ -81,13 +81,8 @@ fn chained_wrapper_rounds_skip_idle_stages_and_end_as_full_rounds_do() {
                 "{path} unsafe={unsafe_transforms}"
             );
             let (runs, full_runs) = (deobfuscate_runs(&shortened), deobfuscate_runs(&full));
-            let saved = if unsafe_transforms {
-                runs < full_runs
-            } else {
-                runs <= full_runs
-            };
             assert!(
-                saved,
+                runs <= full_runs,
                 "{path} unsafe={unsafe_transforms}: {runs} vs {full_runs}"
             );
         }

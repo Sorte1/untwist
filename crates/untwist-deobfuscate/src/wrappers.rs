@@ -823,6 +823,9 @@ fn inline_variable_aliases<'a>(
     for (symbol, name) in &plan.aliases {
         renames.insert(*symbol, *name);
     }
+    if renames.meets_an_unbound_reference(cx.scoping()) {
+        return 0;
+    }
     let mut renamed = renames.apply(program, cx.scoping());
 
     let mut removals = StmtEdits::new();

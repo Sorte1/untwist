@@ -206,6 +206,7 @@ fn remember_failure(passes: u64) {
 pub fn forget_failures() {
     FAILED.with(|cell| cell.set(([0; REMEMBERED], 0)));
     super::renamed::forget();
+    super::unbound::forget();
 }
 
 pub fn refresh_scoping(
@@ -215,6 +216,7 @@ pub fn refresh_scoping(
     round: Round,
 ) -> Semantics {
     super::renamed::replay(program, &mut held);
+    super::unbound::forget();
     let presize = presized(stats, round.before, Shape::of(&held));
     match patch(program, held, round) {
         Some(mut patched) => {
