@@ -20,10 +20,10 @@ pub(crate) use trace::is_constructor_key;
 use trace::{already_walked, note_constructor_root, push_trace_key, ROOT_FLAG};
 pub use trace::{
     decoding, is_intrinsic_root, is_registered_intrinsic, lookup_root_address, note_builtin_roots,
-    note_intrinsic, note_intrinsic_root, note_intrinsics, note_prototype_links, note_root,
-    note_root_touch, recording, register_root_address, reset_root_table, root_name, set_decoding,
-    set_recording, set_tracing, take_builtin_roots, take_trace, Consulted, ProtoRead,
-    MAX_ROOT_REGISTRATIONS, PROTOTYPE_LINKS, ROOT_TABLE_SLOTS,
+    note_intrinsic, note_intrinsic_constructor, note_intrinsic_root, note_intrinsics,
+    note_prototype_links, note_root, note_root_touch, recording, register_root_address,
+    reset_root_table, root_name, set_decoding, set_recording, set_tracing, take_builtin_roots,
+    take_trace, Consulted, ProtoRead, MAX_ROOT_REGISTRATIONS, PROTOTYPE_LINKS, ROOT_TABLE_SLOTS,
 };
 #[cfg(feature = "test-hooks")]
 pub use trace::{trace_cache_owns_its_keys, trace_slot};

@@ -7,6 +7,10 @@ use crate::builtins::args::check_array_growth;
 use crate::builtins::args::{
     argument, charge_for_length, heap_checkpoint, live_array, reserve_text,
 };
+use crate::builtins::pattern_hooks::{
+    note_flags_and_exec, note_is_regexp, note_pattern_hook, note_primitive_match,
+    note_regexp_match, note_regexp_search, REPLACE, SEARCH,
+};
 use crate::builtins::regexp::{
     compile_regexp, exec_result, live_range, match_at, match_from, regexp_data, slice, RegExpMatch,
     Subject,
@@ -161,7 +165,14 @@ fn replace_impl<'a>(
     let text = receiver(host, &this)?;
     let raw_pattern = argument(args, 0);
     let replacement = argument(args, 1);
+    if force_global {
+        note_is_regexp(host, &raw_pattern)?;
+    }
+    note_pattern_hook(host, &raw_pattern, REPLACE)?;
     let existing = regexp_data(&raw_pattern);
+    if existing.is_some() {
+        note_flags_and_exec();
+    }
     if force_global && existing.as_ref().is_some_and(|data| !data.global) {
         return Err(host.throw(
             ErrorKind::TypeError,
@@ -250,7 +261,10 @@ pub(crate) fn native_search<'a>(
     args: &[Value<'a>],
 ) -> Eval<'a, Value<'a>> {
     let text = receiver(host, &this)?;
-    let matcher = regexp_matcher(host, &argument(args, 0), &text)?;
+    let raw_pattern = argument(args, 0);
+    note_pattern_hook(host, &raw_pattern, SEARCH)?;
+    note_regexp_search();
+    let matcher = regexp_matcher(host, &raw_pattern, &text)?;
     match next_match(host, &matcher, &text, 0)? {
         Some(found) => Ok(Value::Number(found.range.start as f64)),
         None => Ok(Value::Number(-1.0)),
@@ -302,6 +316,8 @@ pub(crate) fn native_match<'a>(
         let marker = PropKey::Name(JsString::from_str("@@match"));
         host.get_property(&raw_pattern, &marker)?;
     }
+    note_primitive_match(&raw_pattern);
+    note_regexp_match();
     let is_global = regexp_data(&raw_pattern).is_some_and(|data| data.global);
     let matcher = regexp_matcher(host, &raw_pattern, &text)?;
     if is_global {

@@ -287,3 +287,179 @@ fn every_array_creating_method_consults_the_constructor_and_its_species() {
         }
     }
 }
+
+const SUBJECT: &str = "var s = '' + e[c]; ";
+
+fn consulted_keys(body: &str, root: IntrinsicProto, names: &[&str]) -> Vec<String> {
+    let found = consulted(&format!("{SUBJECT}{body}"), 0);
+    names
+        .iter()
+        .filter(|name| !has(&found, root, &key(name)))
+        .map(|name| format!("{body} did not consult {root:?} {name}"))
+        .collect()
+}
+
+const FLAG_READS: [&str; 9] = [
+    "flags",
+    "hasIndices",
+    "global",
+    "ignoreCase",
+    "multiline",
+    "dotAll",
+    "unicode",
+    "unicodeSets",
+    "sticky",
+];
+
+#[test]
+fn a_primitive_pattern_consults_its_hook_on_its_own_prototype_and_the_object_prototype() {
+    let cases: [(&str, IntrinsicProto, &str); 8] = [
+        (
+            "return s.split('').join('');",
+            IntrinsicProto::String,
+            "@@split",
+        ),
+        (
+            "return s.replace('x', 'y');",
+            IntrinsicProto::String,
+            "@@replace",
+        ),
+        (
+            "return s.replaceAll('x', 'y');",
+            IntrinsicProto::String,
+            "@@replace",
+        ),
+        ("return s.search('x');", IntrinsicProto::String, "@@search"),
+        ("return s.match('x');", IntrinsicProto::String, "@@match"),
+        (
+            "return s.split(1).join('');",
+            IntrinsicProto::Number,
+            "@@split",
+        ),
+        (
+            "return s.replace(1, 'y');",
+            IntrinsicProto::Number,
+            "@@replace",
+        ),
+        (
+            "return s.split(true).join('');",
+            IntrinsicProto::Object,
+            "@@split",
+        ),
+    ];
+    let mut missing = Vec::new();
+    for (body, root, hook) in cases {
+        missing.extend(consulted_keys(body, root, &[hook]));
+        missing.extend(consulted_keys(body, IntrinsicProto::Object, &[hook]));
+    }
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+}
+
+#[test]
+fn an_object_pattern_consults_its_hook_along_its_prototype_chain() {
+    let mut missing = consulted_keys(
+        "return s.replace({}, 'y');",
+        IntrinsicProto::Object,
+        &["@@replace"],
+    );
+    missing.extend(consulted_keys(
+        "return s.split([]).join('');",
+        IntrinsicProto::Array,
+        &["@@split"],
+    ));
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+}
+
+#[test]
+fn a_regexp_pattern_consults_its_hook_and_the_members_the_hook_reads() {
+    let cases: [(&str, &[&str]); 9] = [
+        ("return s.replace(/x/g, 'y');", &["@@replace", "exec"]),
+        (
+            "return s.replaceAll(/x/g, 'y');",
+            &["@@match", "@@replace", "exec"],
+        ),
+        ("return s.search(/x/);", &["@@search", "exec"]),
+        ("return s.search('x');", &["@@search", "exec"]),
+        ("return s.match(/x/);", &["@@match", "exec"]),
+        ("return s.match(/x/g);", &["@@match", "exec"]),
+        ("return s.match('x');", &["@@match", "exec"]),
+        (
+            "return s.split(/x/).join('');",
+            &["@@split", "constructor", "@@match", "exec"],
+        ),
+        ("return /x/.test(s) ? s : '';", &["exec"]),
+    ];
+    let mut missing = Vec::new();
+    for (body, names) in cases {
+        missing.extend(consulted_keys(body, IntrinsicProto::RegExp, names));
+    }
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+}
+
+#[test]
+fn the_regexp_hooks_that_read_the_flags_consult_every_flag_getter() {
+    let mut missing = Vec::new();
+    for body in [
+        "return s.replace(/x/g, 'y');",
+        "return s.replaceAll(/x/g, 'y');",
+        "return s.match(/x/);",
+        "return s.match('x');",
+        "return s.split(/x/).join('');",
+        "return s + /x/g;",
+    ] {
+        missing.extend(consulted_keys(body, IntrinsicProto::RegExp, &FLAG_READS));
+    }
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+}
+
+#[test]
+fn a_regexp_turned_to_text_consults_its_source() {
+    let missing = consulted_keys("return s + /x/g;", IntrinsicProto::RegExp, &["source"]);
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+}
+
+#[test]
+fn a_wrapped_regexp_or_a_substring_test_consults_the_match_symbol_or_stops_the_decode() {
+    let mut missing = Vec::new();
+    for body in [
+        "return s.replace(new RegExp(/x/g), 'y');",
+        "return s.includes([]) ? s : '';",
+        "return s.startsWith([]) ? s : '';",
+        "return s.endsWith([]) ? s : '';",
+        "return s.includes({}) ? s : '';",
+        "return s.startsWith({}) ? s : '';",
+        "return s.endsWith({}) ? s : '';",
+    ] {
+        if !decode_bails(&format!("{SUBJECT}{body}"), 0) {
+            missing.extend(consulted_keys(body, IntrinsicProto::Object, &["@@match"]));
+        }
+    }
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+}
+
+#[test]
+fn a_missing_or_null_pattern_consults_no_hook() {
+    for body in ["return s.split()[0];", "return s.split(null)[0];"] {
+        let found = consulted(&format!("{SUBJECT}{body}"), 0);
+        assert!(
+            !found.iter().any(|(_, what)| *what == key("@@split")),
+            "{body} {found:?}"
+        );
+    }
+}
+
+#[test]
+fn a_string_pattern_under_replace_or_split_consults_no_regexp_member() {
+    for body in [
+        "return s.replace('x', 'y');",
+        "return s.split('').join('');",
+    ] {
+        let found = consulted(&format!("{SUBJECT}{body}"), 0);
+        assert!(
+            !found
+                .iter()
+                .any(|(root, _)| *root == IntrinsicProto::RegExp),
+            "{body} {found:?}"
+        );
+    }
+}

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use rustc_hash::FxHashSet;
 
-use crate::value::{IntrinsicProto, ObjRef, PropKey, ReservedString, Value};
+use crate::value::{IntrinsicProto, JsString, ObjRef, PropKey, ReservedString, Value};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Consulted {
@@ -484,6 +484,15 @@ pub fn note_intrinsic(tag: IntrinsicProto, key: &PropKey) {
         return;
     }
     push_trace_key(tag.bit(), key);
+}
+
+pub fn note_intrinsic_constructor(tag: IntrinsicProto) {
+    if !recording() {
+        return;
+    }
+    let key = PropKey::Name(JsString::from_str("constructor"));
+    push_trace_key(tag.bit(), &key);
+    note_constructor_root(tag.bit());
 }
 
 pub fn note_intrinsics(tags: &[IntrinsicProto], what: Consulted) {
