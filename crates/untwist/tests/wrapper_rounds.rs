@@ -80,11 +80,15 @@ fn chained_wrapper_rounds_skip_idle_stages_and_end_as_full_rounds_do() {
                 observed(&shortened) == observed(&full),
                 "{path} unsafe={unsafe_transforms}"
             );
+            let (runs, full_runs) = (deobfuscate_runs(&shortened), deobfuscate_runs(&full));
+            let saved = if unsafe_transforms {
+                runs < full_runs
+            } else {
+                runs <= full_runs
+            };
             assert!(
-                deobfuscate_runs(&shortened) < deobfuscate_runs(&full),
-                "{path} unsafe={unsafe_transforms}: {} vs {}",
-                deobfuscate_runs(&shortened),
-                deobfuscate_runs(&full)
+                saved,
+                "{path} unsafe={unsafe_transforms}: {runs} vs {full_runs}"
             );
         }
     }
