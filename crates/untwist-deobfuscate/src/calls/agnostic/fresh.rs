@@ -1,5 +1,6 @@
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
+use oxc_span::GetSpan;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
@@ -444,18 +445,17 @@ impl<'s, 'a> Fresh<'s, 'a> {
             Expression::Identifier(_) => self.bindings.assembled.get(&symbol)?.fields.clone(),
             _ => return None,
         };
-        let mut fields = FxHashMap::default();
-        for (name, value) in entries {
-            if defs.method_called && !self.field_keeps_this(value) {
-                return None;
-            }
-            fields.insert(name, value);
-        }
-        let accessed = self.bindings.accessed.get(&symbol);
+        let fields: FxHashMap<Cow<'a, str>, &'a Expression<'a>> = entries.into_iter().collect();
         let own = |member: &&MemberExpression<'_>| {
-            self.accessed_key(member)
-                .is_some_and(|key| fields.contains_key(key.as_ref()))
+            let Some(value) = self
+                .accessed_key(member)
+                .and_then(|key| fields.get(key.as_ref()).copied())
+            else {
+                return false;
+            };
+            !self.bindings.called.contains(&member.span().start) || self.field_keeps_this(value)
         };
+        let accessed = self.bindings.accessed.get(&symbol);
         accessed
             .is_none_or(|members| members.iter().all(own))
             .then_some(fields)

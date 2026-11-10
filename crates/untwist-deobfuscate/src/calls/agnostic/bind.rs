@@ -262,6 +262,7 @@ pub(super) struct Bindings<'s, 'a> {
     pub(super) element_values: FxHashMap<SymbolId, Vec<&'a Expression<'a>>>,
     pub(super) other_fields_written: FxHashSet<SymbolId>,
     pub(super) accessed: FxHashMap<SymbolId, Vec<&'a MemberExpression<'a>>>,
+    pub(super) called: FxHashSet<u32>,
 }
 
 impl<'s, 'a> Bindings<'s, 'a> {
@@ -310,6 +311,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             element_values: FxHashMap::default(),
             other_fields_written: FxHashSet::default(),
             accessed: FxHashMap::default(),
+            called: FxHashSet::default(),
         };
         bindings.visit_program(program);
         bindings.defs.finish();
@@ -850,6 +852,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
             if let Expression::Identifier(id) = member.object().without_parentheses() {
                 if let Some(symbol) = self.reference_symbol(id) {
                     self.entry(symbol).set(METHOD_CALLED);
+                    self.called.insert(member.span().start);
                 }
             }
         }
@@ -880,6 +883,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
             if let Expression::Identifier(id) = member.object().without_parentheses() {
                 if let Some(symbol) = self.reference_symbol(id) {
                     self.entry(symbol).set(METHOD_CALLED);
+                    self.called.insert(member.span().start);
                 }
             }
         }
