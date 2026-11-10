@@ -493,7 +493,14 @@ impl<'s, 'a> Sites<'s, 'a> {
             return false;
         }
         if self.loose_fresh.get() {
-            return !self.induced.iter().any(refutes);
+            return !self.induced.iter().chain(&self.assigned).any(refutes);
+        }
+        let setters_reachable =
+            self.out.sites.iter().any(|site| {
+                site.outside && matches!(site.root, ProtoRoot::Object | ProtoRoot::Either)
+            });
+        if setters_reachable && self.assigned.iter().any(refutes) {
+            return false;
         }
         !self.outside_keys().any(
             |key| matches!(key, AKey::Named(name) if INDUCTION_REFUTERS.contains(&name.as_ref())),
@@ -512,6 +519,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         self.outside_keys()
             .chain(&self.defined)
             .chain(&self.induced)
+            .chain(&self.assigned)
     }
 
     fn creations_native(&mut self) {

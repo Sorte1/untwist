@@ -23,6 +23,26 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 
+    fn plain_literal(&self, expr: &Expression<'a>) -> bool {
+        let literal = match expr.without_parentheses() {
+            Expression::Identifier(id) => self.fresh.literal_init(id),
+            other => Some(other),
+        };
+        let Some(Expression::ObjectExpression(object)) =
+            literal.map(Expression::without_parentheses)
+        else {
+            return false;
+        };
+        object.properties.iter().all(|property| match property {
+            ObjectPropertyKind::ObjectProperty(p) => {
+                !p.computed
+                    && p.kind == PropertyKind::Init
+                    && p.key.static_name().is_some_and(|name| name != "__proto__")
+            }
+            ObjectPropertyKind::SpreadProperty(_) => false,
+        })
+    }
+
     pub(super) fn native_fresh_call(&self, expr: &Expression<'a>) -> bool {
         if !self.fresh_calls {
             return false;
@@ -163,7 +183,11 @@ impl<'s, 'a> Sites<'s, 'a> {
         let keys = self.member_keys(member);
         if self.target_fresh(member.object(), 4) {
             if !self.in_machinery(member.span()) {
-                self.defined.extend(keys);
+                if kind == "write" && self.plain_literal(member.object()) {
+                    self.assigned.extend(keys);
+                } else {
+                    self.defined.extend(keys);
+                }
             }
             return;
         }
