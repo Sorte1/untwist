@@ -472,3 +472,14 @@ pub fn trust_fresh_native_induction_for_tests(on: bool) {
 pub(crate) fn fresh_native_induction_trusted() -> bool {
     FRESH_NATIVE_INDUCTION_TRUSTED.load(Ordering::Relaxed)
 }
+
+static HELPER_TARGETS_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_bootstrap_helper_targets_for_tests(on: bool) {
+    HELPER_TARGETS_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn bootstrap_helper_targets_trusted() -> bool {
+    HELPER_TARGETS_TRUSTED.load(Ordering::Relaxed)
+}

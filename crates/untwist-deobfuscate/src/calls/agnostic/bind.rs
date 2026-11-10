@@ -376,6 +376,11 @@ impl<'s, 'a> Bindings<'s, 'a> {
         self.params.get(&owner) == Some(&(owner, 0))
     }
 
+    pub(super) fn bootstrap_param(&self, symbol: SymbolId) -> Option<(SymbolId, usize)> {
+        let (func, index) = self.params.get(&symbol).copied()?;
+        (self.owners.contains(&func) && self.never_reassigned(symbol)).then_some((func, index))
+    }
+
     pub(super) fn param_of(&self, symbol: SymbolId) -> Option<(SymbolId, usize)> {
         let (func, index) = self.params.get(&symbol).copied()?;
         (self.is_iife_owner(func) || self.owners.contains(&func) || self.does_not_escape(func))
