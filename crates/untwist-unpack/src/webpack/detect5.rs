@@ -1,8 +1,9 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 
+use crate::matcher::Factory;
 use crate::model::{Bodies, Bundle, BundleKind};
-use crate::webpack::container::{container_is_empty, is_module_container};
+use crate::webpack::container::{container_is_empty, is_module_container, module_factories};
 use crate::webpack::entry::{attach, site};
 use crate::webpack::extract::extract_modules_with;
 use crate::webpack::gate::{routable, Prelude};
@@ -53,6 +54,12 @@ fn webpack5<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Candidate<'k, 'a>, &'k
 
 pub fn is_webpack5(body: &[Statement<'_>]) -> bool {
     webpack5(body).is_some()
+}
+
+pub fn webpack5_factories<'k, 'a>(
+    body: &'k [Statement<'a>],
+) -> Option<Vec<(String, Factory<'k, 'a>)>> {
+    webpack5(body).map(|(candidate, _)| module_factories(candidate.container))
 }
 
 pub fn detect_webpack5<'a>(

@@ -6,10 +6,10 @@ use oxc_syntax::operator::{AssignmentOperator, LogicalOperator};
 use untwist_core::ast_util::prop::{identifier_name, member_parts, number_key};
 
 use crate::matcher::{
-    argument_expression, call_parts, const_member, expression_statement, literal_id,
+    argument_expression, call_parts, const_member, expression_statement, literal_id, Factory,
 };
 use crate::model::{Bodies, Bundle, BundleKind};
-use crate::webpack::container::is_module_container;
+use crate::webpack::container::{is_module_container, module_factories};
 use crate::webpack::extract::extract_modules_with;
 use crate::webpack::gate::{routable, Prelude};
 use crate::UnpackOptions;
@@ -163,6 +163,10 @@ fn chunk<'k, 'a>(expr: &'k Expression<'a>) -> Option<(Vec<String>, &'k Expressio
 
 pub fn is_webpack_chunk(expr: &Expression<'_>) -> bool {
     chunk(expr).is_some()
+}
+
+pub fn chunk_factories<'k, 'a>(expr: &'k Expression<'a>) -> Option<Vec<(String, Factory<'k, 'a>)>> {
+    chunk(expr).map(|(_, container)| module_factories(container))
 }
 
 pub fn detect_webpack_chunk<'a>(

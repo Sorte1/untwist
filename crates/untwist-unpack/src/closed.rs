@@ -244,6 +244,21 @@ pub fn captured_by_factory(
     check.captured
 }
 
+pub fn first_open<'k, 'a>(
+    scoping: &Scoping,
+    factories: impl IntoIterator<Item = (String, Factory<'k, 'a>)>,
+    mapped_params: usize,
+) -> Option<(String, Captured)> {
+    let helpers = FxHashSet::default();
+    let allowed = Allowed {
+        mapped_params,
+        helpers: &helpers,
+    };
+    factories.into_iter().find_map(|(id, factory)| {
+        captured_by_factory(scoping, factory, &allowed).map(|captured| (id, captured))
+    })
+}
+
 pub fn captured_by_statement(
     scoping: &Scoping,
     statement: &Statement<'_>,

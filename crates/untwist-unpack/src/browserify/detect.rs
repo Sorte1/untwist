@@ -4,7 +4,9 @@ use oxc_ast::ast::*;
 use untwist_core::ast_util::prop::prop_name;
 
 use crate::browserify::tree::{dependency_tree, infer_index_directories, resolve_dependency_tree};
-use crate::matcher::{anonymous_factory, argument_expression, call_parts, literal_id, param_names};
+use crate::matcher::{
+    anonymous_factory, argument_expression, call_parts, literal_id, param_names, Factory,
+};
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module, RequireParam};
 use crate::path::PosixPath;
 use crate::rename::rename_factory_parameters;
@@ -168,6 +170,24 @@ pub fn is_browserify(expr: &Expression<'_>) -> bool {
                 .iter()
                 .all(|property| module_entry(property).is_some())
     })
+}
+
+pub fn browserify_factories<'k, 'a>(
+    expr: &'k Expression<'a>,
+) -> Option<Vec<(String, Factory<'k, 'a>)>> {
+    let (files, _) = browserify(expr)?;
+    files
+        .properties
+        .iter()
+        .map(|property| {
+            let entry = module_entry(property)?;
+            let factory = Factory {
+                params: entry.params,
+                body: entry.body,
+            };
+            Some((entry.id, factory))
+        })
+        .collect()
 }
 
 pub fn detect_browserify<'a>(
