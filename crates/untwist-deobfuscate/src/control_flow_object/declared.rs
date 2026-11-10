@@ -221,10 +221,14 @@ fn plan_candidate<'a, 'p>(
         cx.note(notes::CONTROL_FLOW_SHAPE_LOST, Some(candidate.object));
         return None;
     };
+    let mut by_key = FxHashMap::default();
+    for (key, value) in &props {
+        by_key.entry(key.as_ref()).or_insert(value);
+    }
     let mut edits = Vec::with_capacity(uses.reads.len());
     let mut refusals = ReadRefusals::default();
     for read in &uses.reads {
-        let Some((_, value)) = props.iter().find(|(key, _)| *key == read.name) else {
+        let Some(value) = by_key.get(read.name.as_str()).copied() else {
             cx.note(
                 notes::control_flow_missing_prop(&read.name),
                 Some(read.member_span),

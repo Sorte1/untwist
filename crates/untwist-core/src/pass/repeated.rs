@@ -1,5 +1,6 @@
 use super::{Cx, NoteKind};
 use oxc_span::Span;
+use rustc_hash::FxHashMap;
 
 pub const SPANNED_NOTE_CAP: usize = 3;
 
@@ -22,13 +23,14 @@ impl RepeatedSites {
     }
 
     pub fn breakdown(&self) -> Vec<(String, usize)> {
-        let mut counted: Vec<(String, usize)> = Vec::new();
+        let mut counts: FxHashMap<&str, usize> = FxHashMap::default();
         for (_, detail) in &self.sites {
-            match counted.iter_mut().find(|(name, _)| name == detail) {
-                Some((_, count)) => *count += 1,
-                None => counted.push((detail.clone(), 1)),
-            }
+            *counts.entry(detail.as_str()).or_default() += 1;
         }
+        let mut counted: Vec<(String, usize)> = counts
+            .into_iter()
+            .map(|(detail, count)| (detail.to_string(), count))
+            .collect();
         counted.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
         counted
     }

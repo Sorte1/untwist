@@ -119,3 +119,26 @@ fn the_synthetic_counter_restarts_on_every_reset_on_every_thread() {
     let unaffected = fresh_span().expect("a span");
     assert_eq!(unaffected, Span::new(advanced.end + 1, advanced.end + 2));
 }
+
+#[test]
+fn a_numeric_key_is_spelled_the_way_javascript_spells_it() {
+    use untwist_core::ast_util::prop::number_key;
+    let cases = [
+        (0.0, "0"),
+        (-0.0, "0"),
+        (1.0, "1"),
+        (-3.0, "-3"),
+        (0.5, "0.5"),
+        (1e20, "100000000000000000000"),
+        (1e21, "1e+21"),
+        (1e-7, "1e-7"),
+        (f64::INFINITY, "Infinity"),
+        (f64::NEG_INFINITY, "-Infinity"),
+        (f64::NAN, "NaN"),
+        (1152921504606846976.0, "1152921504606847000"),
+        (9007199254740992.0, "9007199254740992"),
+    ];
+    for (value, spelled) in cases {
+        assert_eq!(number_key(value), spelled, "{value}");
+    }
+}

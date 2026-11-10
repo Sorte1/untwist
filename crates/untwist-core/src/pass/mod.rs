@@ -13,7 +13,7 @@ use oxc_allocator::{Address, Allocator, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::{AstBuilder, GetAstBuilder};
 use oxc_semantic::Scoping;
-use oxc_span::{GetSpan, Span};
+use oxc_span::{Span, SPAN};
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use oxc_traverse::TraverseCtx;
@@ -30,9 +30,9 @@ pub use group::PassGroup;
 use group::Scratch;
 #[cfg(feature = "test-hooks")]
 pub use group::{
-    cascade_off_for_tests, cascade_root_lists_for_tests, probe_variants_for_tests,
-    skip_innermost_list_for_tests, take_variant_violations_for_tests, treat_as_neutral_for_tests,
-    walk_every_group_for_tests,
+    cascade_off_for_tests, cascade_root_lists_for_tests, check_shared_spans_for_tests,
+    probe_variants_for_tests, skip_innermost_list_for_tests, take_shared_span_violations_for_tests,
+    take_variant_violations_for_tests, treat_as_neutral_for_tests, walk_every_group_for_tests,
 };
 pub use interest::{
     ExpressionKind, ExpressionVariants, Interest, StatementKind, StatementVariants,
@@ -334,12 +334,11 @@ impl<'a> Cx<'a, '_> {
         if matches!(stmt, Statement::BlockStatement(_)) {
             return stmt;
         }
-        let span = stmt.span();
         let scope_id = self
             .tcx
             .insert_scope_below_statement(&stmt, ScopeFlags::empty());
         let body = AVec::from_iter_in([stmt], &*self);
-        Statement::new_block_statement_with_scope_id(span, body, scope_id, self)
+        Statement::new_block_statement_with_scope_id(SPAN, body, scope_id, self)
     }
 }
 

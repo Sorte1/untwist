@@ -1,7 +1,7 @@
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
-use oxc_span::GetSpan;
+use oxc_span::{GetSpan, SPAN};
 use oxc_syntax::scope::ScopeFlags;
 use untwist_core::ast_util::literal::is_safe_literal;
 use untwist_core::pass::{
@@ -392,7 +392,7 @@ fn hoist_assignment_sequence<'a>(expr: &mut Expression<'a>, cx: &Cx<'a, '_>) -> 
     let assignment = std::mem::replace(expr, placeholder);
     let mut expressions = leading;
     expressions.push(assignment);
-    *expr = Expression::new_sequence_expression(span, expressions, cx);
+    *expr = Expression::new_sequence_expression(SPAN, expressions, cx);
     true
 }
 
@@ -475,7 +475,7 @@ impl<'a> Pass<'a> for Sequence {
         let placeholder = Statement::new_empty_statement(span, &*cx);
         let taken = std::mem::replace(stmt, placeholder);
         let body = expand(taken, &*cx);
-        *stmt = cx.block(span, body);
+        *stmt = cx.block(SPAN, body);
         cx.changed();
     }
 

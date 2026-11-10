@@ -194,6 +194,8 @@ impl<'a> PassGroup<'a> {
         ctx: &mut TraverseCtx<'a, ()>,
     ) {
         unpark(node, &mut self.parked);
+        #[cfg(feature = "test-hooks")]
+        super::span_check::check(node, || self.changed_passes());
         let before = self.total_changes();
         self.run_program_hook(
             Interest::EXIT_PROGRAM,
@@ -262,6 +264,17 @@ impl<'a> PassGroup<'a> {
             self.scope.enter_statement(node, depth);
         }
         false
+    }
+
+    #[cfg(feature = "test-hooks")]
+    fn changed_passes(&self) -> String {
+        let changed: Vec<&str> = self
+            .per_pass_changes()
+            .into_iter()
+            .filter(|(_, count)| *count > 0)
+            .map(|(name, _)| name)
+            .collect();
+        format!("the walk of {}", changed.join(", "))
     }
 
     #[cfg(feature = "test-hooks")]

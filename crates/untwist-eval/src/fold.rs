@@ -5,7 +5,7 @@ use oxc_ast::ast::{
     UnaryExpression,
 };
 use oxc_ast::builder::GetAstBuilder;
-use oxc_span::Span;
+use oxc_span::{Span, SPAN};
 use oxc_syntax::number::NumberBase;
 use oxc_syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
 use std::cell::RefCell;
@@ -326,7 +326,7 @@ pub fn const_to_expression<'a>(
             }
             if v.is_sign_negative() {
                 let literal =
-                    Expression::new_numeric_literal(span, v.abs(), None, NumberBase::Decimal, b);
+                    Expression::new_numeric_literal(SPAN, v.abs(), None, NumberBase::Decimal, b);
                 Some(Expression::new_unary_expression(
                     span,
                     UnaryOperator::UnaryNegation,

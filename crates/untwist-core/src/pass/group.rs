@@ -25,6 +25,8 @@ mod nested;
 #[cfg(feature = "test-hooks")]
 mod probe;
 mod scope;
+#[cfg(feature = "test-hooks")]
+mod span_check;
 mod walk;
 
 use scope::Scope;
@@ -38,6 +40,9 @@ pub use nested::mutants::{cascade_off_for_tests, cascade_root_lists_for_tests};
 
 #[cfg(feature = "test-hooks")]
 pub use probe::{probe_variants_for_tests, take_variant_violations_for_tests};
+
+#[cfg(feature = "test-hooks")]
+pub use span_check::{check_shared_spans_for_tests, take_shared_span_violations_for_tests};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Mode {
@@ -489,6 +494,8 @@ impl<'a> PassGroup<'a> {
             };
             call(pass.as_mut(), node, &mut cx);
             *time += started.elapsed();
+            #[cfg(feature = "test-hooks")]
+            span_check::check(node, || format!("{name} ({})", hook.named().join(", ")));
         }
         scratch.marks.quiet();
     }

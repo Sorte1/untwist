@@ -74,3 +74,37 @@ fn a_rest_call_to_a_callee_other_than_the_first_parameter_is_not_inlined() {
         None
     );
 }
+
+#[test]
+fn an_async_or_generator_function_is_not_inlined() {
+    for source in [
+        "async function w(a, b) { return a + b; }\nw(1, 2);",
+        "function* w(a, b) { return a + b; }\nw(1, 2);",
+        "async function w(a, ...b) { return a(...b); }\nw(f, 1, 2);",
+        "async function* w(f, x) { return f(x); }\nw(g, 1);",
+    ] {
+        assert_eq!(try_inline(source), None, "{source}");
+    }
+}
+
+#[test]
+fn a_function_with_a_default_parameter_is_not_inlined() {
+    for source in [
+        "function w(a, b = 5) { return a + b; }\nw(1, undefined);",
+        "function w(f, x = 7) { return f(x); }\nw(g);",
+        "function w(a = g, ...b) { return a(...b); }\nw(undefined, 1);",
+    ] {
+        assert_eq!(try_inline(source), None, "{source}");
+    }
+}
+
+#[test]
+fn a_body_that_reads_the_receiver_is_not_inlined() {
+    for source in [
+        "function w(a) { return this.k + a; }\nw(1);",
+        "function w(a) { return arguments[0] + a; }\nw(1);",
+        "function w(a) { return new.target || a; }\nw(1);",
+    ] {
+        assert_eq!(try_inline(source), None, "{source}");
+    }
+}
