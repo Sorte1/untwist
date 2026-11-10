@@ -7,16 +7,17 @@ type: webpack
 entry: 0
 
 === 0 -> index.js (entry)
+const __webpack_require__ = require("./_runtime/webpack.js");
 const a = require("./1.js");
 const b = require("./2.js");
 const c = require("./3.js");
-const bDefault = b.default;
-const cDefault = c;
-const dDefault = b.default;
-const eDefault = c;
+const bDefault = __webpack_require__.n(b);
+const cDefault = __webpack_require__.n(c);
+const dDefault = __webpack_require__.n(b).a;
+const eDefault = __webpack_require__.n(c)();
 console.log(a.counter);
-console.log(bDefault.VERSION);
-console.log(cDefault.VERSION);
+console.log(bDefault().VERSION);
+console.log(cDefault.a.VERSION);
 
 === 1 -> 1.js
 const __webpack_require__ = require("./_runtime/webpack.js");
@@ -73,6 +74,15 @@ n.r = function (e) {
     Object.defineProperty(e, Symbol.toStringTag, { value: "Module" });
   }
   Object.defineProperty(e, "__esModule", { value: true });
+};
+n.n = function (e) {
+  const t = e && e.__esModule ? function () {
+    return e.default;
+  } : function () {
+    return e;
+  };
+  n.d(t, "a", t);
+  return t;
 };
 n.o = function (e, t) {
   return Object.prototype.hasOwnProperty.call(e, t);

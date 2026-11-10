@@ -43,6 +43,32 @@ fn default_require_sees_the_esm_flag_convert_esm_set() {
                 "const b = require(1);\nconst g = require.n(b);\nconsole.log(g());\n",
                 false,
             ),
+            (
+                "1",
+                "require.r(exports);\nrequire.d(exports, \"default\", function () {\n  return v;\n});\nconst v = 1;\n",
+                false,
+            ),
+        ],
+        Some("0"),
+    );
+    apply_transforms(&alloc, &mut bundle);
+    assert_eq!(
+        bundle.modules["0"].code().trim_end(),
+        "const b = require(\"./1.js\");\nconsole.log(b.default);"
+    );
+}
+
+#[test]
+fn a_target_that_replaces_its_exports_keeps_the_interop_getter() {
+    let alloc = Allocator::default();
+    let mut bundle = bundle_of(
+        &alloc,
+        &[
+            (
+                "0",
+                "const b = require(1);\nconst g = require.n(b);\nconsole.log(g());\n",
+                false,
+            ),
             ("1", "require.r(exports);\nmodule.exports = 1;\n", false),
         ],
         Some("0"),
@@ -50,7 +76,7 @@ fn default_require_sees_the_esm_flag_convert_esm_set() {
     apply_transforms(&alloc, &mut bundle);
     assert_eq!(
         bundle.modules["0"].code().trim_end(),
-        "const b = require(\"./1.js\");\nconst g = b.default;\nconsole.log(g);"
+        "const b = require(\"./1.js\");\nconst g = require.n(b);\nconsole.log(g());"
     );
 }
 

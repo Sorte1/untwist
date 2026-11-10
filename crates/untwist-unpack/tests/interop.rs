@@ -173,6 +173,24 @@ fn a_local_named_require_is_not_the_runtime() {
 }
 
 #[test]
+fn a_runtime_helper_that_cannot_swap_a_module_does_not_stop_the_bundle() {
+    for helper in [
+        "module = require.hmd(module);\n",
+        "module = require.nmd(module);\n",
+        "require.g.seen = true;\n",
+    ] {
+        let entry: &'static str =
+            Box::leak(format!("{PAIR}lib_default.a;\n{helper}").into_boxed_str());
+        let (changes, code) = entry_after(entry, HARMONY);
+        assert_eq!(changes, 1, "{code}");
+        assert_eq!(
+            code,
+            format!("var lib = require(1);\nlib.default;\n{}", helper.trim_end())
+        );
+    }
+}
+
+#[test]
 fn one_module_that_hands_the_runtime_away_stops_the_whole_bundle() {
     for leak in [
         "hand(require);\n",

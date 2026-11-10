@@ -19,7 +19,7 @@ use crate::webpack::esm_proof::marks_exports;
 use crate::webpack::esm_scan::literal_id;
 
 const REQUIRE: &str = "require";
-const KNOWN_MEMBERS: [&str; 8] = ["bind", "d", "e", "n", "o", "p", "r", "t"];
+const KNOWN_MEMBERS: [&str; 11] = ["bind", "d", "e", "g", "hmd", "n", "nmd", "o", "p", "r", "t"];
 
 fn address<T>(it: &T) -> usize {
     std::ptr::from_ref(it) as usize
