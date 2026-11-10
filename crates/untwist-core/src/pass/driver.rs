@@ -481,7 +481,7 @@ fn fingerprinted(iterations: u32) -> bool {
     }
     let stride = (iterations / DENSE_CYCLE_CHECKS).max(1);
     let stride = 1 << stride.ilog2();
-    iterations % stride == 0
+    iterations.is_multiple_of(stride)
 }
 
 fn fingerprint_program(program: &Program<'_>) -> u64 {
