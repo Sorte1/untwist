@@ -19,7 +19,7 @@ use crate::note_set::NoteSet;
 use crate::notes;
 use crate::stamp::{find_stamped, has_stamped_array, names_stamped_array, RefusedByDecode};
 use crate::{
-    array_rotator, control_flow_object, control_flow_switch, dead_assignment, dead_code,
+    array_rotator, calls, control_flow_object, control_flow_switch, dead_assignment, dead_code,
     debug_protection, decoded, decoder, evaluate_globals, fold_chains, merge_object_assignments,
     object_props, pure_calls, removal, self_defending, string_array, unstamp, var_transformation,
     wrappers,
@@ -407,6 +407,7 @@ struct Shared {
     refused: RefusedByDecode,
     heap: SharedHeap,
     observed: Rc<removal::ObservedNames>,
+    defer_disabled: bool,
 }
 
 fn stage_group<'a>(
@@ -451,6 +452,94 @@ fn stage_options(index: usize, opts: &PassOptions) -> PassOptions {
     }
 }
 
+struct Stage<'s, 'a> {
+    ctors: &'s [PassCtor<'a>],
+    opts: &'s PassOptions,
+    shared: &'s Shared,
+}
+
+impl<'a> Stage<'_, 'a> {
+    fn run(
+        &self,
+        alloc: &'a Allocator,
+        program: &mut Program<'a>,
+        sem: Semantics,
+        index: usize,
+        aggregate: &mut Aggregate,
+    ) -> (Semantics, u32) {
+        let (next, report, deferred) = self.run_unabsorbed(alloc, program, sem, index, aggregate);
+        aggregate.deferred |= deferred;
+        let changes = aggregate.absorb(index, report);
+        (next, changes)
+    }
+
+    fn run_unabsorbed(
+        &self,
+        alloc: &'a Allocator,
+        program: &mut Program<'a>,
+        sem: Semantics,
+        index: usize,
+        aggregate: &Aggregate,
+    ) -> (Semantics, RunReport, bool) {
+        self.shared.observed.at(aggregate.total_changes);
+        let mut group = stage_group(index, &self.ctors[index], self.opts, self.shared);
+        let (next, report) = run_once(alloc, program, sem, &mut group);
+        if index == WRAPPERS {
+            clear_kept_order();
+        }
+        (next, report, group.deferred_pending())
+    }
+
+    fn wrappers_then_decode(
+        &self,
+        alloc: &'a Allocator,
+        program: &mut Program<'a>,
+        sem: Semantics,
+        aggregate: &mut Aggregate,
+    ) -> (Semantics, u32) {
+        let (sem, inlined) = self.run(alloc, program, sem, WRAPPERS, aggregate);
+        let (mut sem, decoded) = self.run(alloc, program, sem, INLINE_DECODED, aggregate);
+        let mut changes = inlined + decoded;
+        let cascades = string_array::legacy::lifted_any() && replay_allowed();
+        let mut settled = inlined == 0 || decoded > 0 || !cascades;
+        while !settled && aggregate.rounds + 1 < DEOBFUSCATE_MAX_ROUNDS {
+            let (next, more) = self.next_round_wrappers(alloc, program, sem, aggregate);
+            sem = next;
+            let Some(inlined) = more else {
+                break;
+            };
+            let (next, decoded) = self.run(alloc, program, sem, INLINE_DECODED, aggregate);
+            sem = next;
+            changes += inlined + decoded;
+            settled = decoded > 0;
+        }
+        (sem, changes)
+    }
+
+    fn next_round_wrappers(
+        &self,
+        alloc: &'a Allocator,
+        program: &mut Program<'a>,
+        sem: Semantics,
+        aggregate: &mut Aggregate,
+    ) -> (Semantics, Option<u32>) {
+        let flags = calls::call_flags();
+        let disabled = self.opts.defer_disabled.replace(self.shared.defer_disabled);
+        let (next, report, deferred) =
+            self.run_unabsorbed(alloc, program, sem, WRAPPERS, aggregate);
+        if report.total_changes == 0 {
+            calls::restore_call_flags(flags);
+            self.opts.defer_disabled.set(disabled);
+            return (next, None);
+        }
+        aggregate.rounds += 1;
+        aggregate.begin_round();
+        aggregate.deferred |= deferred;
+        let inlined = aggregate.absorb(WRAPPERS, report);
+        (next, Some(inlined))
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_round<'a>(
     alloc: &'a Allocator,
@@ -472,17 +561,22 @@ fn run_round<'a>(
 
     let stamped = note_stamped(program, &sem.scoping, aggregate);
     if stamped || aggregate.stamped {
-        for (index, ctor) in ctors.iter().enumerate().skip(1) {
-            shared.observed.at(aggregate.total_changes);
-            let mut group = stage_group(index, ctor, opts, shared);
-            let (next, report) = run_once(alloc, program, sem, &mut group);
+        let stage = Stage {
+            ctors: &ctors,
+            opts,
+            shared,
+        };
+        for index in [FIND_DECODERS, OBJECT_PROPS] {
+            let (next, stage_changes) = stage.run(alloc, program, sem, index, aggregate);
             sem = next;
-            aggregate.deferred |= group.deferred_pending();
-            changes += aggregate.absorb(index, report);
-            if index == WRAPPERS {
-                clear_kept_order();
-            }
+            changes += stage_changes;
         }
+        let (next, stage_changes) = stage.wrappers_then_decode(alloc, program, sem, aggregate);
+        sem = next;
+        changes += stage_changes;
+        let (next, stage_changes) = stage.run(alloc, program, sem, REMOVE_MACHINERY, aggregate);
+        sem = next;
+        changes += stage_changes;
     } else {
         aggregate.note_skipped();
         if aggregate.rounds > 0 || changes > 0 {
@@ -674,7 +768,7 @@ fn run_rounds<'a>(
         stage_options(0, opts),
     );
     let mut sem = sem;
-    let disabled = opts.defer_disabled.get();
+    let disabled = shared.defer_disabled;
     loop {
         let (next, changes) = run_round(alloc, program, sem, opts, &mut finder, shared, aggregate);
         sem = next;
@@ -740,6 +834,7 @@ fn deobfuscate_with<'a>(
         refused: Rc::default(),
         heap: SharedHeap::default(),
         observed: Rc::default(),
+        defer_disabled: opts.defer_disabled.get(),
     };
     clear_kept_order();
     let sem = run_rounds(alloc, program, sem, opts, &shared, &mut aggregate);
