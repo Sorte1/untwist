@@ -5,6 +5,7 @@ use untwist_core::catalogue;
 use untwist_core::pass::{note_survives_retraction, Note, NoteKind};
 use untwist_core::reflow::GuardTally;
 use untwist_deobfuscate::notes;
+use untwist_deobfuscate::PROTECTIONS_ORDER;
 
 pub use super::refusal::ADMIT_PANICKED;
 pub use super::refusal::NESTED_TOO_DEEP;
@@ -121,6 +122,19 @@ pub(super) fn retain_last_spanned(notes: Vec<Note>, runs: &[StageRun]) -> Vec<No
         .filter(|(index, note)| !superseded[*index] || note_survives_retraction(note))
         .map(|(_, note)| note)
         .collect()
+}
+
+pub(super) fn retain_latest_protection_notes(notes: &mut Vec<Note>, latest: usize) {
+    let is_protection = |note: &Note| PROTECTIONS_ORDER.contains(&note.pass);
+    let total = notes.iter().filter(|note| is_protection(note)).count();
+    let mut superseded = total.saturating_sub(latest);
+    notes.retain(|note| {
+        if superseded == 0 || !is_protection(note) {
+            return true;
+        }
+        superseded -= 1;
+        false
+    });
 }
 
 fn guard_note(kind: NoteKind, message: &str, count: u32) -> Option<Note> {
