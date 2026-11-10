@@ -11,8 +11,8 @@ use untwist_core::semantic::build_scoping;
 use super::layout::Id;
 use crate::esbuild::mentions::binds_any;
 use crate::model::Bundle;
-use crate::path::relative_path;
 use crate::runtime::synthetic_statements;
+use crate::specifier::ModulePaths;
 
 const REQUIRE: &str = "require";
 
@@ -21,7 +21,7 @@ struct Rewrite<'a, 'r> {
     builder: AstBuilder<'a>,
     scoping: Option<&'r Scoping>,
     context: &'r str,
-    paths: &'r FxHashMap<String, String>,
+    paths: &'r ModulePaths,
     from: &'r str,
 }
 
@@ -55,7 +55,7 @@ impl<'a> Rewrite<'a, '_> {
         let Some(path) = target else {
             return;
         };
-        let specifier = relative_path(self.from, path);
+        let specifier = self.paths.specifier(self.from, path);
         call.callee = self.identifier(call.callee.span(), REQUIRE);
         if let Some(argument) = call.arguments.first_mut() {
             let span = argument.span();
@@ -123,11 +123,7 @@ impl<'a> VisitMut<'a> for Rewrite<'a, '_> {
 }
 
 pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) {
-    let paths: FxHashMap<String, String> = bundle
-        .modules
-        .iter()
-        .map(|(id, module)| (id.clone(), module.path.as_str().to_string()))
-        .collect();
+    let paths = ModulePaths::of(bundle);
     let contexts: FxHashMap<String, String> = std::mem::take(&mut bundle.fresh_requires)
         .into_iter()
         .collect();

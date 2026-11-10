@@ -4,7 +4,7 @@ use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::VisitMut;
 use oxc_semantic::Scoping;
 use oxc_str::Ident;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use untwist_core::pass::{Note, NoteKind};
 use untwist_core::semantic::build_scoping;
 
@@ -13,9 +13,9 @@ use super::{
     DEPENDENCY_MAP_NAME, GLOBAL_NAME, IMPORT_ALL_NAME, IMPORT_DEFAULT_NAME, IMPORT_PREFIX,
 };
 use crate::model::{Bundle, BundleKind, Module};
-use crate::path::relative_path;
 use crate::rename::generate_uid;
-use crate::runtime::{js_string, module_of, runtime_path, synthetic_statements};
+use crate::runtime::{js_string, module_of, runtime_path, runtime_specifier, synthetic_statements};
+use crate::specifier::ModulePaths;
 use crate::webpack::runtime_module::prepend;
 use crate::PASS_NAME;
 
@@ -86,11 +86,7 @@ fn prologue_text(module: &Module<'_>, used: &Used) -> String {
     text
 }
 
-type Context<'r> = (
-    &'r FxHashMap<String, String>,
-    &'r [String],
-    &'r [(String, String)],
-);
+type Context<'r> = (&'r ModulePaths, &'r [String], &'r [(String, String)]);
 
 const SHADOWABLE: [&str; 2] = [GLOBAL_NAME, IMPORT_PREFIX];
 
@@ -168,7 +164,7 @@ fn edited<'a>(
 fn rewrite<'a>(
     alloc: &'a Allocator,
     module: &mut Module<'a>,
-    (paths, prelude): (&FxHashMap<String, String>, &[String]),
+    (paths, prelude): (&ModulePaths, &[String]),
     notes: &mut Vec<Note>,
 ) -> Used {
     let deps = std::mem::take(&mut module.dependencies);
@@ -207,11 +203,12 @@ fn declarator_names(statements: &[Statement<'_>]) -> Vec<String> {
 
 fn paths_text(bundle: &Bundle<'_>) -> String {
     let from = runtime_path(BundleKind::Metro);
+    let paths = ModulePaths::of(bundle);
     let entries: Vec<String> = bundle
         .modules
         .iter()
         .map(|(id, module)| {
-            let path = relative_path(&from, module.path.as_str());
+            let path = paths.specifier(&from, module.path.as_str());
             format!("{}: {}", js_string(id), js_string(&path))
         })
         .collect();
@@ -275,10 +272,7 @@ fn import_runtime<'a>(
     module: &mut Module<'a>,
     names: &[String],
 ) -> Option<()> {
-    let specifier = js_string(&relative_path(
-        module.path.as_str(),
-        &runtime_path(BundleKind::Metro),
-    ));
+    let specifier = js_string(&runtime_specifier(module.path.as_str(), BundleKind::Metro));
     let text = match names.is_empty() {
         true => format!("require({specifier});"),
         false => format!("var {{ {} }} = require({specifier});", names.join(", ")),
@@ -293,11 +287,7 @@ pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
         statements.extend(runtime.helpers.into_iter().map(|helper| helper.statement));
     }
     let prelude = declarator_names(&statements);
-    let paths: FxHashMap<String, String> = bundle
-        .modules
-        .iter()
-        .map(|(id, module)| (id.clone(), module.path.as_str().to_string()))
-        .collect();
+    let paths = ModulePaths::of(bundle);
     let mut notes = Vec::new();
     let used: Vec<Used> = bundle
         .modules

@@ -61,6 +61,14 @@ All notable changes to this project are documented in this file. The format is b
   note says how many bindings were kept. Before, those bindings were renamed and the note said
   "renaming anyway". With `--unsafe`, which assumes that nothing observes scopes, they are still
   renamed, and the note says so.
+
+- An unpacked module no longer loads the wrong file through a bare specifier. A require of a file
+  under the root `node_modules/` is written bare (`require("lib/index.js")`) only when node would
+  resolve it to that file; when a nearer `node_modules` directory in the output holds the same
+  name, or the name is that of a node core module, the relative path is written instead. A
+  sibling path starting with a dot (`.config/a.js`) is written with its `./`.
+- An AMD or UMD factory that declares a function named like one of its parameters is left as it
+  is. Unpacking it bound the dependency where the factory saw the function.
 - A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
   globals. When the body still declares a `var`, function, class, `let` or `const` at its own
   level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that

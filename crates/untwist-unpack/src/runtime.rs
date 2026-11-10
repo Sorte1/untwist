@@ -13,7 +13,8 @@ use untwist_core::semantic::build_scoping;
 
 use crate::closed::{captured_by_helper, Captured};
 use crate::model::{BundleKind, Module};
-use crate::path::{relative_path, PosixPath};
+use crate::path::PosixPath;
+use crate::specifier::ModulePaths;
 
 pub const RUNTIME_DIR: &str = "_runtime";
 
@@ -245,13 +246,17 @@ pub fn module_of<'a>(
     Some(module)
 }
 
+pub fn runtime_specifier(from: &str, kind: BundleKind) -> String {
+    ModulePaths::default().specifier(from, &runtime_path(kind))
+}
+
 pub fn runtime_binding_import<'a>(
     alloc: &'a Allocator,
     from: &PosixPath,
     kind: BundleKind,
     binding: &str,
 ) -> Option<Statement<'a>> {
-    let specifier = relative_path(from.as_str(), &runtime_path(kind));
+    let specifier = runtime_specifier(from.as_str(), kind);
     let text = format!("const {binding} = require({});", js_string(&specifier));
     synthetic_statements(alloc, text)?.pop()
 }
@@ -262,7 +267,7 @@ pub fn runtime_import<'a>(
     kind: BundleKind,
     names: &[String],
 ) -> Option<Statement<'a>> {
-    let specifier = relative_path(from.as_str(), &runtime_path(kind));
+    let specifier = runtime_specifier(from.as_str(), kind);
     let text = format!(
         "const {{ {} }} = require({});",
         names.join(", "),

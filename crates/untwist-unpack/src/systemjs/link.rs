@@ -7,7 +7,7 @@ use rustc_hash::FxHashMap;
 use super::build::relink_dynamic;
 use super::DYNAMIC;
 use crate::model::Bundle;
-use crate::path::relative_path;
+use crate::specifier::ModulePaths;
 
 fn remap<'a>(
     builder: &AstBuilder<'a>,
@@ -43,11 +43,7 @@ fn statements<'a>(
 }
 
 pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) {
-    let paths: FxHashMap<String, String> = bundle
-        .modules
-        .iter()
-        .map(|(id, module)| (id.clone(), module.path.as_str().to_string()))
-        .collect();
+    let paths = ModulePaths::of(bundle);
     let builder = AstBuilder::new(alloc);
     for module in bundle.modules.values_mut() {
         if module.dependencies.is_empty() {
@@ -57,7 +53,7 @@ pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) {
         let targets: FxHashMap<String, String> = module
             .dependencies
             .iter()
-            .filter_map(|(_, id)| Some((id.clone(), relative_path(&from, paths.get(id)?))))
+            .filter_map(|(_, id)| Some((id.clone(), paths.specifier(&from, paths.get(id)?))))
             .collect();
         let dynamic = module.dependencies.iter().any(|(kind, _)| kind == DYNAMIC);
         let program = module.program_mut();

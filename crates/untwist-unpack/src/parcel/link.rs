@@ -12,8 +12,10 @@ use super::links::{loader, Form};
 use super::{resolve, single_string};
 use crate::esbuild::mentions::{binds_any, mentioned};
 use crate::model::{Bundle, BundleKind, Module};
-use crate::path::relative_path;
-use crate::runtime::{declared_names, js_string, runtime_id, runtime_path, synthetic_statements};
+use crate::runtime::{
+    declared_names, js_string, runtime_id, runtime_specifier, synthetic_statements,
+};
+use crate::specifier::ModulePaths;
 
 const REQUIRE: &str = "require";
 
@@ -23,7 +25,7 @@ struct Rewrite<'a, 'r> {
     callee: &'r str,
     hoisted: bool,
     deps: &'r [(String, String)],
-    paths: &'r FxHashMap<String, String>,
+    paths: &'r ModulePaths,
     from: &'r str,
 }
 
@@ -34,7 +36,7 @@ impl<'a> Rewrite<'a, '_> {
 
     fn specifier(&self, target: &str) -> Option<String> {
         match self.paths.get(target) {
-            Some(path) => Some(relative_path(self.from, path)),
+            Some(path) => Some(self.paths.specifier(self.from, path)),
             None => (!self.hoisted).then(|| target.to_string()),
         }
     }
@@ -73,7 +75,7 @@ impl<'a> Rewrite<'a, '_> {
         let id = single_string(call).filter(|_| fits)?;
         self.paths
             .get(id)
-            .map(|path| relative_path(self.from, path))
+            .map(|path| self.paths.specifier(self.from, path))
     }
 }
 
@@ -124,7 +126,7 @@ fn rewrite_loader<'a>(
     builder: AstBuilder<'a>,
     program: &mut Program<'a>,
     hoisted: Option<&str>,
-    paths: &FxHashMap<String, String>,
+    paths: &ModulePaths,
     from: &str,
 ) {
     let found = loader(&program.body, hoisted).map(|found| (found.form, found.id.to_string()));
@@ -148,7 +150,7 @@ fn rewrite_loader<'a>(
     load.callee = Expression::new_identifier(span, Ident::from_str_in(REQUIRE, &builder), &builder);
     if let Some(argument) = load.arguments.first_mut() {
         let span = argument.span();
-        let specifier = relative_path(from, path);
+        let specifier = paths.specifier(from, path);
         *argument = Argument::from(Expression::new_string_literal(
             span,
             Str::from_str_in(&specifier, &builder),
@@ -166,7 +168,7 @@ fn runtime_import<'a>(
     if names.is_empty() {
         return Some(());
     }
-    let specifier = relative_path(module.path.as_str(), &runtime_path(BundleKind::Parcel));
+    let specifier = runtime_specifier(module.path.as_str(), BundleKind::Parcel);
     let text = format!(
         "var {{ {} }} = require({});",
         names.join(", "),
@@ -203,7 +205,7 @@ fn link_module<'a>(
     alloc: &'a Allocator,
     module: &mut Module<'a>,
     (callee, hoisted): (&str, bool),
-    paths: &FxHashMap<String, String>,
+    paths: &ModulePaths,
     runtime: &[String],
 ) -> Option<()> {
     let from = module.path.as_str().to_string();
@@ -232,11 +234,7 @@ fn link_module<'a>(
 }
 
 pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) {
-    let paths: FxHashMap<String, String> = bundle
-        .modules
-        .iter()
-        .map(|(id, module)| (id.clone(), module.path.as_str().to_string()))
-        .collect();
+    let paths = ModulePaths::of(bundle);
     let hoisted = bundle
         .runtime
         .as_ref()

@@ -5,12 +5,12 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_str::{Ident, Str};
 use oxc_syntax::number::NumberBase;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 
 use super::layout::module_id;
 use super::{DEPENDENCY_MAP_NAME, GLOBAL_NAME, IMPORT_ALL_NAME, IMPORT_DEFAULT_NAME};
 use crate::matcher::argument_expression;
-use crate::path::relative_path;
+use crate::specifier::ModulePaths;
 
 #[derive(Default)]
 pub struct Used {
@@ -45,7 +45,7 @@ pub struct Edit<'a, 'r> {
     pub shadowed: bool,
     pub escaped: bool,
     pub deps: &'r [(String, String)],
-    pub paths: &'r FxHashMap<String, String>,
+    pub paths: &'r ModulePaths,
     pub from: &'r str,
     pub prelude: &'r [String],
     pub fresh: Option<Ident<'a>>,
@@ -140,7 +140,7 @@ impl<'a> Edit<'a, '_> {
         }
         let id = self.required_id(argument_expression(call.arguments.first()?)?)?;
         match self.paths.get(&id) {
-            Some(path) => Some(relative_path(self.from, path)),
+            Some(path) => Some(self.paths.specifier(self.from, path)),
             None => {
                 self.missing.push(id);
                 None

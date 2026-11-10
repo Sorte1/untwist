@@ -202,6 +202,32 @@ fn a_factory_that_is_not_closed_is_refused() {
 }
 
 #[test]
+fn a_function_declaration_that_takes_a_parameters_name_is_refused() {
+    for source in [
+        "define(\"dep\", [], function () { return \"dep value\"; });\ndefine(\"main\", [\"dep\"], function (a) { function a() { return \"inner function\"; } console.log(typeof a === \"function\" ? a() : a); });",
+        "define([\"path\"], function (a) { function a() {} a(); });",
+        "define([\"exports\"], function (e) { function e() {} e(); });",
+        "define([\"exports\"], function (exports) { function exports() {} exports(); });",
+        "define([\"path\"], function (a) { if (a) { function a() {} } console.log(a); });",
+        "define([\"path\"], function (a) { try { a(); } catch (error) { function a() {} } console.log(a); });",
+    ] {
+        refused(source);
+    }
+}
+
+#[test]
+fn a_parameters_name_declared_in_a_nested_function_is_not_the_parameter() {
+    let files = split(
+        "define([\"path\"], function (a) {\n  var f = function () { function a() {} return a; };\n  var g = function a() {};\n  console.log(a.sep, f, g);\n});",
+    )
+    .expect("amd");
+    assert_eq!(
+        code(&files, "index.js"),
+        "var a = require(\"path\");\nvar f = function() {\n  function a() {}\n  return a;\n};\nvar g = function a() {};\nconsole.log(a.sep, f, g);"
+    );
+}
+
+#[test]
 fn a_define_that_is_bound_or_a_top_level_binding_the_factory_reads_is_refused() {
     refused("function define() {}\ndefine([], function () {});");
     refused("var shared = 1;\ndefine([], function () { return shared; });");

@@ -12,10 +12,10 @@ use untwist_core::semantic::build_scoping;
 use crate::esbuild::live::read_through_runtime;
 use crate::esbuild::mentions::{binds_any_or, fresh_name, mentioned};
 use crate::model::{Bundle, BundleKind, Module};
-use crate::path::relative_path;
 use crate::runtime::{
-    declared_names, js_string, live_exports, runtime_id, runtime_path, synthetic_statements,
+    declared_names, js_string, live_exports, runtime_id, runtime_specifier, synthetic_statements,
 };
+use crate::specifier::ModulePaths;
 
 const REQUIRE: &str = "require";
 const CREATE_REQUIRE: &str = "createRequire";
@@ -163,7 +163,7 @@ fn runtime_import<'a>(
     (binding, names): (Option<&str>, &[String]),
     require: &str,
 ) -> Option<AVec<'a, Statement<'a>>> {
-    let specifier = relative_path(module.path.as_str(), &runtime_path(BundleKind::Esbuild));
+    let specifier = runtime_specifier(module.path.as_str(), BundleKind::Esbuild);
     let specifier = js_string(&specifier);
     let whole = binding.map(|binding| format!("var {binding} = {require}({specifier});\n"));
     let named = (!names.is_empty())
@@ -200,7 +200,7 @@ fn used_runtime(
 fn rewrite_module<'a>(
     alloc: &'a Allocator,
     module: &mut Module<'a>,
-    paths: &FxHashMap<String, String>,
+    paths: &ModulePaths,
     shim: Option<&str>,
     shared: &Shared,
 ) -> Option<()> {
@@ -208,7 +208,7 @@ fn rewrite_module<'a>(
     let dependencies = std::mem::take(&mut module.dependencies);
     let specifiers: FxHashMap<&str, String> = dependencies
         .iter()
-        .filter_map(|(id, name)| Some((name.as_str(), relative_path(&from, paths.get(id)?))))
+        .filter_map(|(id, name)| Some((name.as_str(), paths.specifier(&from, paths.get(id)?))))
         .collect();
     let is_entry = module.is_entry;
     let shim = shim.filter(|_| !is_entry);
@@ -262,11 +262,7 @@ fn import_runtime<'a>(
 }
 
 pub fn rewrite<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
-    let paths: FxHashMap<String, String> = bundle
-        .modules
-        .iter()
-        .map(|(id, module)| (id.clone(), module.path.as_str().to_string()))
-        .collect();
+    let paths = ModulePaths::of(bundle);
     let shim = bundle
         .runtime
         .as_ref()

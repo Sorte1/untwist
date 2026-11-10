@@ -5,13 +5,13 @@ use oxc_ast_visit::{walk_mut, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_span::GetSpan;
 use oxc_str::{Ident, Str};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::number_key;
 use untwist_core::semantic::build_scoping;
 
 use crate::matcher::argument_expression;
 use crate::model::Bundle;
-use crate::path::relative_path;
+use crate::specifier::ModulePaths;
 use crate::webpack::shadow;
 
 fn literal_module_id(argument: Option<&Argument<'_>>) -> Option<String> {
@@ -26,7 +26,7 @@ const REQUIRE: &str = "require";
 
 struct Rewrite<'a, 'r> {
     builder: AstBuilder<'a>,
-    paths: &'r FxHashMap<String, String>,
+    paths: &'r ModulePaths,
     from: &'r str,
     missing: Vec<String>,
     converted: FxHashSet<u32>,
@@ -145,10 +145,10 @@ impl<'a, 'r> Rewrite<'a, 'r> {
 
     fn specifier(&mut self, module_id: &str) -> String {
         match self.paths.get(module_id) {
-            Some(path) => relative_path(self.from, path),
+            Some(path) => self.paths.specifier(self.from, path),
             None => {
                 self.missing.push(module_id.to_string());
-                relative_path(self.from, &format!("{module_id}.js"))
+                self.paths.specifier(self.from, &format!("{module_id}.js"))
             }
         }
     }
@@ -361,11 +361,7 @@ pub fn replace_require_paths_with<'a>(
     tracked: &[bool],
     routing: Option<&Routing>,
 ) -> (Vec<(String, String)>, Converted) {
-    let paths: FxHashMap<String, String> = bundle
-        .modules
-        .iter()
-        .map(|(id, module)| (id.clone(), module.path.as_str().to_string()))
-        .collect();
+    let paths = ModulePaths::of(bundle).matching_reference(!bind);
     let mut missing = Vec::new();
     let mut converted = Converted::new();
     for (index, (id, module)) in bundle.modules.iter_mut().enumerate() {

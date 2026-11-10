@@ -21,10 +21,10 @@ use crate::closure::roles::{roles, Role, Stray, ENTRY_ID};
 use crate::closure::shell::{probe_body, shell, Shell};
 use crate::frame::Frame;
 use crate::model::{body_key, Bodies, Bundle, BundleKind};
-use crate::path::relative_path;
 use crate::runtime::{
     declared_names, js_string, runtime_binding_import, runtime_id, synthetic_statements,
 };
+use crate::specifier::ModulePaths;
 
 pub fn probe(frame: &Frame<'_, '_>) -> bool {
     shell(frame.top).is_some_and(|found| probe_body(&found))
@@ -185,12 +185,13 @@ pub fn transforms<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note
         return Vec::new();
     };
     let runtime = runtime_id(BundleKind::Closure);
+    let paths = ModulePaths::of(bundle);
     let text: String = bundle
         .modules
         .values()
         .filter(|module| !module.is_entry && module.id != runtime)
         .map(|module| {
-            let target = relative_path(entry.as_str(), module.path.as_str());
+            let target = paths.specifier(entry.as_str(), module.path.as_str());
             format!("require({});\n", js_string(&target))
         })
         .collect();

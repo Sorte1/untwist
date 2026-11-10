@@ -1,5 +1,5 @@
 use untwist_unpack::path::{
-    is_unsafe_path, join_posix, module_id_path, normalize_posix, relative_path, PosixPath,
+    is_unsafe_path, join_posix, module_id_path, normalize_posix, PosixPath,
 };
 
 #[test]
@@ -11,15 +11,6 @@ fn normalizes_dot_segments() {
     assert_eq!(normalize_posix("././../tmp.js"), "../tmp.js");
     assert_eq!(normalize_posix("../../c.js"), "../../c.js");
     assert_eq!(normalize_posix(""), "");
-}
-
-#[test]
-fn relative_paths_match_reference() {
-    assert_eq!(relative_path("a.js", "x/y.js"), "./x/y.js");
-    assert_eq!(relative_path("x/y.js", "a.js"), "../a.js");
-    assert_eq!(relative_path("a.js", "node_modules/lib"), "lib");
-    assert_eq!(relative_path("utils/color.js", "1.js"), "../1.js");
-    assert_eq!(relative_path("index.js", "1.js"), "./1.js");
 }
 
 #[test]

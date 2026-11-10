@@ -18,7 +18,7 @@ use untwist_core::semantic::build_scoping;
 
 use crate::frame::Frame;
 use crate::model::{body_key, Bodies, Bundle, BundleKind};
-use crate::path::relative_path;
+use crate::specifier::ModulePaths;
 use build::{assemble, links, Links};
 use scan::{scan, Context};
 use shell::{shell, wrapper, Shell};
@@ -133,11 +133,7 @@ fn relink<'a>(
 
 pub fn transforms<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
     let builder = AstBuilder::new(alloc);
-    let paths: FxHashMap<String, String> = bundle
-        .modules
-        .values()
-        .map(|module| (module.id.clone(), module.path.as_str().to_string()))
-        .collect();
+    let paths = ModulePaths::of(bundle);
     for module in bundle.modules.values_mut() {
         let targets: FxHashMap<String, String> = module
             .dependencies
@@ -145,7 +141,7 @@ pub fn transforms<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note
             .filter_map(|(id, _)| {
                 Some((
                     id.clone(),
-                    relative_path(module.path.as_str(), paths.get(id)?),
+                    paths.specifier(module.path.as_str(), paths.get(id)?),
                 ))
             })
             .collect();
