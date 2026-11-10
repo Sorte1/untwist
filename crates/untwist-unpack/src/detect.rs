@@ -1,16 +1,23 @@
 use oxc_allocator::{Allocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, walk_js_mut, VisitJs, VisitJsMut};
+use oxc_semantic::Scoping;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::semantic::build_scoping;
 
-use crate::browserify::detect::{detect_browserify_with, is_browserify};
+use crate::browserify::detect::{browserify_factories, detect_browserify_with, is_browserify};
+use crate::closed::first_open;
 use crate::frame::Frame;
 use crate::links::Links;
+use crate::matcher::Factory;
 use crate::model::{body_key, Bodies, BodyKey, Bundle, BundleKind};
-use crate::webpack::chunk::{detect_webpack_chunk_with, is_webpack_chunk};
-use crate::webpack::detect4::{detect_webpack4_with, is_webpack4};
-use crate::webpack::detect5::{detect_webpack5_with, is_webpack5};
+use crate::notes::factory_not_closed;
+use crate::webpack::chunk::{chunk_factories, detect_webpack_chunk_with, is_webpack_chunk};
+use crate::webpack::detect4::{detect_webpack4_with, is_webpack4, webpack4_factories};
+use crate::webpack::detect5::{detect_webpack5_with, is_webpack5, webpack5_factories};
 use crate::UnpackOptions;
+
+const MAPPED_PARAMS: usize = 3;
 
 trait Finder<'a> {
     fn found(&self) -> bool;
@@ -24,6 +31,29 @@ struct Extract<'a, 'p, 'b> {
     bodies: &'b mut Bodies<'a>,
     options: UnpackOptions,
     bundle: Option<Bundle<'a>>,
+    scoping: Option<Scoping>,
+    unproven: &'b mut Option<String>,
+}
+
+impl<'a> Extract<'a, '_, '_> {
+    fn closed(&mut self, factories: Option<Vec<(String, Factory<'_, 'a>)>>) -> bool {
+        let Some(factories) = factories else {
+            return false;
+        };
+        if self.options.conservative {
+            return true;
+        }
+        let source = self.source;
+        let scoping = self
+            .scoping
+            .get_or_insert_with(|| build_scoping(source).scoping);
+        let Some((id, captured)) = first_open(scoping, factories, MAPPED_PARAMS) else {
+            return true;
+        };
+        self.unproven
+            .get_or_insert_with(|| factory_not_closed(id, captured.describe()));
+        false
+    }
 }
 
 impl<'a> Finder<'a> for Extract<'a, '_, '_> {
@@ -33,27 +63,30 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
 
     fn statements(&mut self, body: &[Statement<'a>]) {
         let (alloc, source, options) = (self.alloc, self.source, self.options);
-        self.bundle = attempt(self.bodies, |bodies| {
-            detect_webpack5_with(alloc, source, body, bodies, options)
-        });
+        if self.closed(webpack5_factories(body)) {
+            self.bundle = attempt(self.bodies, |bodies| {
+                detect_webpack5_with(alloc, source, body, bodies, options)
+            });
+        }
     }
 
     fn expression(&mut self, expr: &Expression<'a>) {
         let (alloc, source, options) = (self.alloc, self.source, self.options);
-        let bodies = &mut *self.bodies;
-        self.bundle = attempt(bodies, |bodies| {
-            detect_webpack4_with(alloc, source, expr, bodies, options)
-        })
-        .or_else(|| {
-            attempt(bodies, |bodies| {
+        if self.closed(webpack4_factories(expr)) {
+            self.bundle = attempt(self.bodies, |bodies| {
+                detect_webpack4_with(alloc, source, expr, bodies, options)
+            });
+        }
+        if self.bundle.is_none() && self.closed(chunk_factories(expr)) {
+            self.bundle = attempt(self.bodies, |bodies| {
                 detect_webpack_chunk_with(alloc, source, expr, bodies, options)
-            })
-        })
-        .or_else(|| {
-            attempt(bodies, |bodies| {
+            });
+        }
+        if self.bundle.is_none() && self.closed(browserify_factories(expr)) {
+            self.bundle = attempt(self.bodies, |bodies| {
                 detect_browserify_with(alloc, source, expr, bodies, options)
-            })
-        });
+            });
+        }
     }
 }
 
@@ -232,7 +265,7 @@ fn extract_kinds<'a>(
 fn extract_with<'a>(
     alloc: &'a Allocator,
     program: &Program<'a>,
-    bodies: &mut Bodies<'a>,
+    (bodies, unproven): (&mut Bodies<'a>, &mut Option<String>),
     (options, links, scope): (UnpackOptions, &Links, Scope),
 ) -> Option<Bundle<'a>> {
     if scope == Scope::Nested {
@@ -245,6 +278,8 @@ fn extract_with<'a>(
             bodies,
             options,
             bundle: None,
+            scoping: None,
+            unproven,
         },
     };
     detector.visit_program(program);
@@ -257,7 +292,7 @@ fn cloned<'a>(
     program: &Program<'a>,
     context: (UnpackOptions, &Links, Scope),
 ) -> Option<Bundle<'a>> {
-    extract_with(alloc, program, &mut Bodies::Cloned, context)
+    extract_with(alloc, program, (&mut Bodies::Cloned, &mut None), context)
 }
 
 fn refeedable(bundle: &Bundle<'_>) -> bool {
@@ -293,7 +328,7 @@ fn refeed<'a>(
     let context = (options, &none, Scope::Nested);
     let program = module.program_mut();
     let nested = if taken {
-        taking(alloc, program, context)
+        taking(alloc, program, context, &mut None)
     } else {
         cloned(alloc, program, context)
     };
@@ -387,7 +422,7 @@ pub fn unpack_program_taking_with<'a>(
     program: &mut Program<'a>,
     options: UnpackOptions,
 ) -> Option<Bundle<'a>> {
-    unpack_program_linked(alloc, program, options, &Links::default())
+    unpack_program_linked(alloc, program, options, &Links::default(), &mut None)
 }
 
 pub fn unpack_program_linked<'a>(
@@ -395,8 +430,9 @@ pub fn unpack_program_linked<'a>(
     program: &mut Program<'a>,
     options: UnpackOptions,
     links: &Links,
+    unproven: &mut Option<String>,
 ) -> Option<Bundle<'a>> {
-    let bundle = taking(alloc, program, (options, links, Scope::Top))?;
+    let bundle = taking(alloc, program, (options, links, Scope::Top), unproven)?;
     Some(refeed(alloc, bundle, options, true))
 }
 
@@ -404,9 +440,10 @@ fn taking<'a>(
     alloc: &'a Allocator,
     program: &mut Program<'a>,
     context: (UnpackOptions, &Links, Scope),
+    unproven: &mut Option<String>,
 ) -> Option<Bundle<'a>> {
     let mut planned = Bodies::Planned(Vec::new());
-    extract_with(alloc, program, &mut planned, context)?;
+    extract_with(alloc, program, (&mut planned, unproven), context)?;
     let Bodies::Planned(keys) = planned else {
         return None;
     };
@@ -418,7 +455,7 @@ fn taking<'a>(
     taker.visit_program(program);
     let held = taker.taken.len();
     let mut taken = Bodies::Taken(taker.taken);
-    if let Some(bundle) = extract_with(alloc, program, &mut taken, context) {
+    if let Some(bundle) = extract_with(alloc, program, (&mut taken, &mut None), context) {
         return Some(bundle);
     }
     let Bodies::Taken(pool) = taken else {
@@ -466,7 +503,7 @@ mod tests {
         assert!(extract_with(
             &alloc,
             &parsed.program,
-            &mut planned,
+            (&mut planned, &mut None),
             (UnpackOptions::default(), &none, Scope::Top)
         )
         .is_some());

@@ -158,6 +158,17 @@ fn refused_target(rest: &str) {
     stays_commonjs(&out);
 }
 
+fn unbundled_target(rest: &str) {
+    let target =
+        format!("\"use strict\"; n.r(t); n.d(t, \"a\", function () {{ return a; }}); {rest}");
+    let text = source(HELPERS, &["var m = n(1); console.log(m.a);", &target]);
+    assert_eq!(
+        printed_with(&text, UnpackOptions::default()),
+        None,
+        "{text}"
+    );
+}
+
 #[test]
 fn refuses_define_on_a_namespace_object() {
     refused_target("function a() {} var ns = {}; n.d(ns, \"z\", function () { return a; });");
@@ -179,8 +190,8 @@ fn refuses_top_level_this() {
 }
 
 #[test]
-fn refuses_top_level_arguments() {
-    refused_target("function a() {} console.log(arguments.length);");
+fn top_level_arguments_refuses_the_bundle() {
+    unbundled_target("function a() {} console.log(arguments.length);");
 }
 
 #[test]
@@ -204,8 +215,8 @@ fn refuses_await_as_an_identifier() {
 }
 
 #[test]
-fn refuses_direct_eval() {
-    refused_target("function a() {} eval(\"1\");");
+fn direct_eval_refuses_the_bundle() {
+    unbundled_target("function a() {} eval(\"1\");");
 }
 
 #[test]

@@ -1,9 +1,9 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 
-use crate::matcher::{argument_expression, call_parts, single_param_name};
+use crate::matcher::{argument_expression, call_parts, single_param_name, Factory};
 use crate::model::{Bodies, Bundle, BundleKind};
-use crate::webpack::container::is_module_container;
+use crate::webpack::container::{is_module_container, module_factories};
 use crate::webpack::extract::{extract_modules_with, strip_trailing_marker_comment};
 use crate::webpack::gate::{routable, Prelude};
 use crate::webpack::helpers::prelude_runtime;
@@ -52,6 +52,12 @@ fn webpack4<'k, 'a>(expr: &'k Expression<'a>) -> Option<Webpack4<'k, 'a>> {
 
 pub fn is_webpack4(expr: &Expression<'_>) -> bool {
     webpack4(expr).is_some()
+}
+
+pub fn webpack4_factories<'k, 'a>(
+    expr: &'k Expression<'a>,
+) -> Option<Vec<(String, Factory<'k, 'a>)>> {
+    webpack4(expr).map(|found| module_factories(found.container))
 }
 
 pub fn detect_webpack4<'a>(

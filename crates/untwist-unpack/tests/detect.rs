@@ -21,7 +21,6 @@ fn every_webpack_shape_is_found_through_its_wrapper() {
     for (name, entry) in [
         ("webpack-4.js", Some("2")),
         ("webpack-object.js", Some("386")),
-        ("webpack-0.11.x.js", Some("0")),
         ("webpack-esm.js", Some("0")),
         ("webpack-var-injection.js", Some("0")),
         ("webpack-5.js", Some("2")),
@@ -36,6 +35,22 @@ fn every_webpack_shape_is_found_through_its_wrapper() {
         assert_eq!(entry_id.as_deref(), entry, "{name}");
         assert!(!modules.is_empty(), "{name}");
     }
+}
+
+#[test]
+fn a_bundle_whose_factory_holds_a_with_statement_is_found_only_by_the_reference_lane() {
+    let source = fixture("webpack-0.11.x.js");
+    let alloc = Allocator::default();
+    assert!(bundle_from(&alloc, &source).is_none());
+    let program = common::prepared(&alloc, &source);
+    let conservative = untwist_unpack::UnpackOptions {
+        conservative: true,
+        ..untwist_unpack::UnpackOptions::default()
+    };
+    let bundle =
+        untwist_unpack::unpack_program_with(&alloc, &program, conservative).expect("a bundle");
+    assert_eq!(bundle.kind, BundleKind::Webpack);
+    assert_eq!(bundle.entry_id.as_deref(), Some("0"));
 }
 
 #[test]

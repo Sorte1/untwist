@@ -1,11 +1,11 @@
 mod common;
 
 use common::PrintedModule;
-use common::{fixture, module_summary, parse, prepared};
+use common::{cpu_or_wall, fixture, module_summary, parse, prepared};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 use untwist_unpack::model::{Bundle, BundleKind};
-use untwist_unpack::webpack::detect5::{detect_webpack5, detect_webpack5_with};
+use untwist_unpack::webpack::detect5::{detect_webpack5, detect_webpack5_with, is_webpack5};
 
 fn bundle_from_wrapper<'a>(alloc: &'a Allocator, program: &Program<'a>) -> Option<Bundle<'a>> {
     let Some(Statement::ExpressionStatement(stmt)) = program.body.first() else {
@@ -122,4 +122,56 @@ fn an_empty_container_is_never_the_modules_container() {
     let alloc = Allocator::default();
     let program = parse(&alloc, source);
     assert!(detect_webpack5(&alloc, &program, &program.body).is_none());
+}
+
+const HOSTILE_DECLARATIONS: usize = 100_000;
+const LINEAR_FACTOR: u32 = 5;
+
+fn scanned_in_linear_time(source: &str) {
+    let alloc = Allocator::default();
+    let (parsed, parse) = cpu_or_wall(|| untwist_core::parse::parse_program(&alloc, source));
+    let (_, scope) = cpu_or_wall(|| untwist_core::semantic::build_scoping(&parsed.program));
+    let (found, spent) = cpu_or_wall(|| is_webpack5(&parsed.program.body));
+    assert!(!found);
+    let bound = (parse + scope) * LINEAR_FACTOR;
+    assert!(
+        spent < bound,
+        "{HOSTILE_DECLARATIONS} declarations took {spent:?}, over {LINEAR_FACTOR} x parse {parse:?} + scoping {scope:?}"
+    );
+}
+
+#[test]
+fn a_hundred_thousand_container_shaped_declarations_are_scanned_in_linear_time() {
+    let source: String = (0..HOSTILE_DECLARATIONS)
+        .map(|index| format!("var a{index}=[function(){{}}];\n"))
+        .collect();
+    scanned_in_linear_time(&source);
+}
+
+#[test]
+fn containers_among_require_functions_for_other_containers_are_scanned_in_linear_time() {
+    let source: String = (0..HOSTILE_DECLARATIONS / 2)
+        .map(|index| {
+            format!("var a{index}=[function(){{}}];\nfunction r{index}(i){{b{index}[i]();}}\n")
+        })
+        .collect();
+    scanned_in_linear_time(&source);
+}
+
+#[test]
+fn a_hostile_file_of_container_shaped_declarations_is_not_a_bundle() {
+    let source: String = (0..HOSTILE_DECLARATIONS)
+        .map(|index| format!("var a{index}=[function(){{}}];\n"))
+        .collect();
+    let alloc = Allocator::default();
+    let (parsed, parse) = cpu_or_wall(|| untwist_core::parse::parse_program(&alloc, &source));
+    let (_, scope) = cpu_or_wall(|| untwist_core::semantic::build_scoping(&parsed.program));
+    let (bundle, spent) =
+        cpu_or_wall(|| untwist_unpack::unpack(&alloc, &parsed.program, &[]).is_some());
+    assert!(!bundle);
+    let bound = (parse + scope) * LINEAR_FACTOR;
+    assert!(
+        spent < bound,
+        "{HOSTILE_DECLARATIONS} declarations took {spent:?}, over {LINEAR_FACTOR} x parse {parse:?} + scoping {scope:?}"
+    );
 }

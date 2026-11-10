@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use untwist::{Options, Pipeline};
 use untwist_testing::node::{node, run, skip_allowed, SKIP_MESSAGE};
 
@@ -7,6 +9,7 @@ const SOURCE: &str = "bundle.js";
 pub struct Unpacked {
     dir: tempfile::TempDir,
     bundle: String,
+    notes: Vec<String>,
 }
 
 impl Unpacked {
@@ -23,7 +26,16 @@ impl Unpacked {
         Self {
             dir,
             bundle: bundle.to_string(),
+            notes: out.notes.into_iter().map(|note| note.message).collect(),
         }
+    }
+
+    pub fn has(&self, path: &str) -> bool {
+        self.dir.path().join(path).exists()
+    }
+
+    pub fn notes(&self) -> &[String] {
+        &self.notes
     }
 
     pub fn file(&self, path: &str) -> String {
@@ -36,6 +48,10 @@ impl Unpacked {
     }
 
     pub fn runs_like_the_bundle(&self, expected: &str) {
+        self.file_runs_like_the_bundle(ENTRY, expected);
+    }
+
+    pub fn file_runs_like_the_bundle(&self, path: &str, expected: &str) {
         let Some(node) = node() else {
             let required = std::env::var("UNTWIST_REQUIRE_NODE").ok();
             assert!(
@@ -47,10 +63,16 @@ impl Unpacked {
         let source = self.dir.path().join(SOURCE);
         std::fs::write(&source, &self.bundle).expect("write the bundle");
         let bundle = run(&node, &source).expect("spawn").expect("terminates");
-        let tree = run(&node, &self.dir.path().join(ENTRY))
+        let tree = run(&node, &self.dir.path().join(path))
             .expect("spawn")
             .expect("terminates");
         assert_eq!(bundle.stdout, expected, "{}", bundle.stderr);
-        assert_eq!(tree.stdout, expected, "{}\n{}", tree.stderr, self.entry());
+        assert_eq!(
+            tree.stdout,
+            expected,
+            "{}\n{}",
+            tree.stderr,
+            self.file(path)
+        );
     }
 }

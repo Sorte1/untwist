@@ -36,11 +36,13 @@ fn detected<'a>(
                 return None;
             }
             let links = groups.views.get(input).unwrap_or(&none);
-            let bundle = unpack_program_linked(alloc, program, options, links);
+            let mut unproven = None;
+            let bundle = unpack_program_linked(alloc, program, options, links, &mut unproven);
             if bundle.is_none() {
-                if let Some(kind) = refused_kind(program, options) {
-                    notes.push(note(notes::shape_refused(kind.as_str())));
-                }
+                let refused = unproven.or_else(|| {
+                    refused_kind(program, options).map(|kind| notes::shape_refused(kind.as_str()))
+                });
+                notes.extend(refused.map(note));
             }
             bundle
         })

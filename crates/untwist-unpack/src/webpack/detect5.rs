@@ -1,13 +1,14 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 
+use crate::matcher::Factory;
 use crate::model::{Bodies, Bundle, BundleKind};
-use crate::webpack::container::{container_is_empty, is_module_container};
+use crate::webpack::container::{container_is_empty, is_module_container, module_factories};
 use crate::webpack::entry::{attach, site};
 use crate::webpack::extract::extract_modules_with;
 use crate::webpack::gate::{routable, Prelude};
 use crate::webpack::helpers::prelude_runtime_skipping;
-use crate::webpack::require_fn::{find_assigned_entry_id, require_function};
+use crate::webpack::require_fn::{find_assigned_entry_id, Dispatchers};
 use crate::webpack::runtime_module::member_names_in;
 use crate::UnpackOptions;
 
@@ -40,18 +41,25 @@ fn container_candidate<'k, 'a>(index: usize, stmt: &'k Statement<'a>) -> Option<
 }
 
 fn webpack5<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Candidate<'k, 'a>, &'k str)> {
+    let dispatchers = Dispatchers::of(body);
+    if dispatchers.is_empty() {
+        return None;
+    }
     body.iter().enumerate().find_map(|(index, stmt)| {
         let candidate = container_candidate(index, stmt)?;
-        let require_name = body[index + 1..]
-            .iter()
-            .find_map(|stmt| require_function(stmt, candidate.name))?
-            .name;
+        let require_name = dispatchers.first_after(candidate.name, index)?;
         Some((candidate, require_name))
     })
 }
 
 pub fn is_webpack5(body: &[Statement<'_>]) -> bool {
     webpack5(body).is_some()
+}
+
+pub fn webpack5_factories<'k, 'a>(
+    body: &'k [Statement<'a>],
+) -> Option<Vec<(String, Factory<'k, 'a>)>> {
+    webpack5(body).map(|(candidate, _)| module_factories(candidate.container))
 }
 
 pub fn detect_webpack5<'a>(
