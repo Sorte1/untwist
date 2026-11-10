@@ -11,5 +11,5 @@ module.exports = 1;
 
 === 2 -> index.js (entry)
 const vscode = require("vscode");
-const lib = require("./lib");
+const lib = require("./lib.js");
 console.log(lib);

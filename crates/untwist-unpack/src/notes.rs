@@ -50,6 +50,7 @@ pub(crate) use kind_notes;
 
 pub static TABLES: &[&[(&str, &str)]] = &[
     ALL_NOTES,
+    crate::browserify::notes::NOTES,
     crate::esbuild::notes::NOTES,
     crate::bun::notes::NOTES,
     crate::rollup::notes::NOTES,

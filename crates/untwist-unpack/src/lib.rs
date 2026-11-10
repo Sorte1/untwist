@@ -77,7 +77,8 @@ fn kind_transforms<'a>(
         BundleKind::Webpack => {
             webpack::transforms::apply_transforms_with(alloc, bundle, options.conservative)
         }
-        BundleKind::Browserify => Vec::new(),
+        BundleKind::Browserify if options.conservative => Vec::new(),
+        BundleKind::Browserify => browserify::link::transforms(alloc, bundle),
         BundleKind::Esbuild => esbuild::transforms(alloc, bundle),
         BundleKind::Rollup => rollup::transforms(alloc, bundle),
         BundleKind::SystemJs => systemjs::transforms(alloc, bundle),
