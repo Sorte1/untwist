@@ -5,7 +5,7 @@ use oxc_span::Span;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::borrow::Cow;
 use untwist_core::ast_util::js_text::js_text;
 
@@ -356,8 +356,8 @@ struct Uses<'s, 'a> {
     scoping: &'s Scoping,
     resolve: Resolve<'s>,
     shape: &'s Shape<'a>,
-    aliases: &'s [SymbolId],
-    keys: &'s [String],
+    aliases: &'s FxHashSet<SymbolId>,
+    keys: &'s FxHashSet<&'s str>,
     failed: Option<&'static str>,
     table_stored: bool,
     cache_stored: bool,
@@ -399,7 +399,7 @@ impl<'a> Uses<'_, 'a> {
             Expression::StringLiteral(text) => Some(js_text(text.value).into_owned()),
             _ => None,
         };
-        key.is_some_and(|key| self.keys.contains(&key))
+        key.is_some_and(|key| self.keys.contains(key.as_str()))
     }
 
     fn module_id(&mut self, call: &CallExpression<'a>) {
@@ -539,6 +539,9 @@ impl<'a> Uses<'_, 'a> {
 
 impl<'a> VisitJs<'a> for Uses<'_, 'a> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if let Err(hit) = untwist_core::budget::check() {
+            return self.fail(hit.as_str());
+        }
         if it.span == self.shape.dispatch.span {
             return;
         }
@@ -684,23 +687,24 @@ pub(super) fn prove<'a>(
     if scoping.symbol_is_mutated(table_symbol) || !outer.plain {
         return Err(TABLE_ESCAPES);
     }
-    let mut aliases = Vec::new();
+    let mut aliases = FxHashSet::default();
     for params in &table.functions {
         for index in &shape.aliases {
             if let Some(symbol) = params.items.get(*index).and_then(binding_symbol) {
                 if scoping.symbol_is_mutated(symbol) {
                     return Err(REQUIRE_ESCAPES);
                 }
-                aliases.push(symbol);
+                aliases.insert(symbol);
             }
         }
     }
+    let keys: FxHashSet<&str> = table.keys.iter().map(String::as_str).collect();
     let mut uses = Uses {
         scoping,
         resolve,
         shape: &shape,
         aliases: &aliases,
-        keys: &table.keys,
+        keys: &keys,
         failed: None,
         table_stored: false,
         cache_stored: false,

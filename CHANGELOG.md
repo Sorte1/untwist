@@ -213,6 +213,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
+- The checks that keep folding away from patched built-ins judge each variable once instead of once
+  per use: a counter used as a key after every write (`i=i+1;q[i];`), a reused loop variable, or two
+  variables written from each other no longer make the cleanup stage quadratic or worse. Writes to a
+  free global are looked up in a set built once, and a webpack 4 bootstrap finds each module id by
+  hash, so a 7.7 MB bundle of 80,000 modules no longer spends 14 s there. Output is unchanged.
+
 - Unminify drops empty statements (`;`) from statement lists, such as the one left behind once a
   dead `if (false)` block is removed. An empty statement that keeps a string out of a function's
   directive prologue stays.

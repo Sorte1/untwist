@@ -16,10 +16,20 @@ pub(super) struct Fresh<'s, 'a> {
     pub(super) scoping: &'s Scoping,
     pub(super) bindings: &'s Bindings<'s, 'a>,
     pub(super) sealed: std::cell::RefCell<FxHashMap<SymbolId, Fields<'a>>>,
+    pub(super) memo: Memo,
+}
+
+type AssumedKey = [Option<SymbolId>; ASSUMED_KEY_LEN];
+
+#[derive(Default)]
+pub(super) struct Memo {
+    numeric: std::cell::RefCell<FxHashMap<(SymbolId, u8, AssumedKey), bool>>,
+    fresh: std::cell::RefCell<FxHashMap<(SymbolId, u8), bool>>,
 }
 
 const PRIMITIVE_GLOBALS: [&str; 3] = ["undefined", "NaN", "Infinity"];
 const DEPTH: u8 = 6;
+const ASSUMED_KEY_LEN: usize = DEPTH as usize / 2;
 
 pub(super) fn array_element<'k, 'a>(
     array: &'k ArrayExpression<'a>,
@@ -111,9 +121,18 @@ impl<'a> Fresh<'_, 'a> {
     }
 
     fn identifier_fresh(&self, id: &IdentifierReference<'_>, depth: u8) -> bool {
-        if self.symbol(id).is_none() {
+        let Some(symbol) = self.symbol(id) else {
             return PRIMITIVE_GLOBALS.contains(&id.name.as_str());
+        };
+        if let Some(&known) = self.memo.fresh.borrow().get(&(symbol, depth)) {
+            return known;
         }
+        let fresh = self.identifier_fresh_uncached(id, depth);
+        self.memo.fresh.borrow_mut().insert((symbol, depth), fresh);
+        fresh
+    }
+
+    fn identifier_fresh_uncached(&self, id: &IdentifierReference<'_>, depth: u8) -> bool {
         if self.numeric_binding(id, depth, None) {
             return true;
         }
@@ -130,14 +149,14 @@ impl<'a> Fresh<'_, 'a> {
             && defs
                 .inits
                 .iter()
-                .all(|init| init.is_none_or(|init| self.fresh_at(init, depth)));
+                .all(|init| init.is_none_or(|init| within_budget() && self.fresh_at(init, depth)));
         inits_fresh && (!defs.mutated || self.writes_fresh(defs.writes, depth))
     }
 
     fn writes_fresh(&self, writes: &[Option<&Expression<'_>>], depth: u8) -> bool {
         writes
             .iter()
-            .all(|value| value.is_some_and(|value| self.fresh_at(value, depth)))
+            .all(|value| value.is_some_and(|value| within_budget() && self.fresh_at(value, depth)))
     }
 
     fn constructs_fresh(&self, callee: &Expression<'_>, depth: u8) -> bool {
@@ -442,6 +461,26 @@ impl<'a> Fresh<'_, 'a> {
         if Assumed::holds(assumed, symbol) {
             return true;
         }
+        let Some(key) = Assumed::key(assumed) else {
+            return self.numeric_binding_uncached(symbol, depth, assumed);
+        };
+        if let Some(&known) = self.memo.numeric.borrow().get(&(symbol, depth, key)) {
+            return known;
+        }
+        let numeric = self.numeric_binding_uncached(symbol, depth, assumed);
+        self.memo
+            .numeric
+            .borrow_mut()
+            .insert((symbol, depth, key), numeric);
+        numeric
+    }
+
+    fn numeric_binding_uncached(
+        &self,
+        symbol: SymbolId,
+        depth: u8,
+        assumed: Option<&Assumed<'_>>,
+    ) -> bool {
         let Some(defs) = self.bindings.defs.get(symbol) else {
             return false;
         };
@@ -453,9 +492,15 @@ impl<'a> Fresh<'_, 'a> {
             && !defs.callable
             && !defs.inits.is_empty()
             && defs.inits.iter().chain(defs.writes).all(|value| {
-                value.is_some_and(|value| self.numeric_at(value, depth - 1, Some(&assumed)))
+                value.is_some_and(|value| {
+                    within_budget() && self.numeric_at(value, depth - 1, Some(&assumed))
+                })
             })
     }
+}
+
+fn within_budget() -> bool {
+    untwist_core::budget::check().is_ok()
 }
 
 struct Assumed<'s> {
@@ -472,6 +517,18 @@ impl Assumed<'_> {
             at = assumed.outer;
         }
         false
+    }
+
+    fn key(mut at: Option<&Assumed<'_>>) -> Option<AssumedKey> {
+        let mut key = [None; ASSUMED_KEY_LEN];
+        let mut len = 0;
+        while let Some(assumed) = at {
+            *key.get_mut(len)? = Some(assumed.symbol);
+            len += 1;
+            at = assumed.outer;
+        }
+        key.sort_unstable();
+        Some(key)
     }
 }
 

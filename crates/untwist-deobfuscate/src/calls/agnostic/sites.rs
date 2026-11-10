@@ -139,6 +139,7 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) flow: &'s Flow<'s, 'a>,
     pub(super) holds: Holds<'s, 'a>,
     pub(super) known_rests: FxHashMap<Span, Vec<AKey<'a>>>,
+    pub(super) assigned_globals: std::cell::OnceCell<FxHashSet<&'s str>>,
 }
 
 impl<'s, 'a> Sites<'s, 'a> {
@@ -199,6 +200,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             flow,
             holds,
             known_rests: FxHashMap::default(),
+            assigned_globals: std::cell::OnceCell::new(),
         }
     }
 
