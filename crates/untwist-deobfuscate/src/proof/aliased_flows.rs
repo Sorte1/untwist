@@ -6,14 +6,12 @@ use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::aliased::{
-    is_definer, member_name, BuiltinAliases, ANY, DANGER, DEFINER, GETTER_DEFINER, GLOBAL, LOST,
-    OBJECT_CONSTRUCTOR,
-};
+use super::aliased::{is_definer, member_name, BuiltinAliases, DEFINER, GETTER_DEFINER, LOST};
+use super::aliased_solve::{solve_bits, solve_strings};
 use crate::stamp::{decoder_index, string_array_unit};
 
 #[derive(Clone, Copy)]
-enum Target {
+pub(super) enum Target {
     Symbol(SymbolId),
     Pattern(SymbolId),
     Lost,
@@ -787,54 +785,15 @@ pub fn builtin_aliases<'s>(
         unknown_strings: FxHashSet::default(),
         string_arrays: FxHashMap::default(),
         string_objects: FxHashMap::default(),
+        recording: std::cell::Cell::new(false),
+        reads: std::cell::RefCell::default(),
     };
     aliases.unknown_strings.extend(unknown_strings);
     aliases
         .unknown_strings
         .extend(aliases.values.keys().copied());
     solve_strings(&mut aliases, &flows, (&array_inits, &escaped));
-    loop {
-        let mut changed = false;
-        for (target, expr) in &flows {
-            let mut value = aliases.value(expr);
-            if matches!(target, Target::Lost) {
-                if let Some(function) = aliases.function_span(expr) {
-                    value |= aliases.returned(function);
-                }
-            }
-            if value == 0 {
-                continue;
-            }
-            let slot = match *target {
-                Target::Symbol(symbol) => aliases.values.entry(symbol).or_insert(0),
-                Target::Pattern(symbol) => aliases.values.entry(symbol).or_insert(0),
-                Target::Lost => &mut aliases.lost,
-                Target::Return(function) => aliases.returns.entry(function).or_insert(0),
-                Target::ThisArgument => &mut aliases.this_bits,
-            };
-            let added = if matches!(target, Target::Pattern(_)) {
-                ANY
-            } else {
-                value & !LOST
-            };
-            let merged = *slot | added;
-            if merged != *slot {
-                *slot = merged;
-                changed = true;
-            }
-        }
-        for (object, value) in &installs {
-            let installs_code = value.is_none_or(|value| aliases.function_span(value).is_some());
-            let bits = aliases.value(object) & (DANGER | OBJECT_CONSTRUCTOR | GLOBAL);
-            if installs_code && bits & !aliases.this_bits != 0 {
-                aliases.this_bits |= bits;
-                changed = true;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
+    solve_bits(&mut aliases, &flows, &installs);
     let definer_bits = DEFINER | GETTER_DEFINER | LOST;
     aliases.function_methods_written |= function_method_values
         .iter()
@@ -842,14 +801,17 @@ pub fn builtin_aliases<'s>(
     aliases
 }
 
-fn written_after_init(scoping: &Scoping, symbol: SymbolId) -> bool {
+pub(super) fn written_after_init(scoping: &Scoping, symbol: SymbolId) -> bool {
     scoping
         .get_resolved_reference_ids(symbol)
         .iter()
         .any(|reference| scoping.get_reference(*reference).is_write())
 }
 
-fn string_array(aliases: &BuiltinAliases<'_>, init: &Expression<'_>) -> Option<Vec<String>> {
+pub(super) fn string_array(
+    aliases: &BuiltinAliases<'_>,
+    init: &Expression<'_>,
+) -> Option<Vec<String>> {
     let Expression::ArrayExpression(array) = init.without_parentheses() else {
         return None;
     };
@@ -862,7 +824,7 @@ fn string_array(aliases: &BuiltinAliases<'_>, init: &Expression<'_>) -> Option<V
         })
 }
 
-fn string_object(
+pub(super) fn string_object(
     aliases: &BuiltinAliases<'_>,
     init: &Expression<'_>,
 ) -> Option<FxHashMap<String, Vec<String>>> {
@@ -885,78 +847,13 @@ fn string_object(
     Some(found)
 }
 
-fn merge_names(mut left: Vec<String>, right: Vec<String>) -> Option<Vec<String>> {
+pub(super) fn merge_names(mut left: Vec<String>, right: Vec<String>) -> Option<Vec<String>> {
     for name in right {
         if !left.contains(&name) {
             left.push(name);
         }
     }
     (left.len() <= 64).then_some(left)
-}
-
-fn solve_strings(
-    aliases: &mut BuiltinAliases<'_>,
-    flows: &[(Target, &Expression<'_>)],
-    (arrays, escaped): (&[(SymbolId, &Expression<'_>)], &FxHashSet<SymbolId>),
-) {
-    loop {
-        let mut changed = false;
-        for (symbol, init) in arrays {
-            if escaped.contains(symbol) || written_after_init(aliases.scoping, *symbol) {
-                continue;
-            }
-            if let Some(names) = string_array(aliases, init) {
-                let known = aliases.string_arrays.get(symbol).map_or(0, Vec::len);
-                if names.len() != known {
-                    aliases.string_arrays.insert(*symbol, names);
-                    changed = true;
-                }
-            }
-            if let Some(properties) = string_object(aliases, init) {
-                let size = |map: &FxHashMap<String, Vec<String>>| {
-                    map.values().map(Vec::len).sum::<usize>()
-                };
-                let known = aliases.string_objects.get(symbol).map_or(0, size);
-                if size(&properties) != known {
-                    aliases.string_objects.insert(*symbol, properties);
-                    changed = true;
-                }
-            }
-        }
-        for (target, expr) in flows {
-            let symbol = match target {
-                Target::Symbol(symbol) => *symbol,
-                Target::Pattern(symbol) => {
-                    changed |= aliases.unknown_strings.insert(*symbol);
-                    continue;
-                }
-                _ => continue,
-            };
-            if aliases.unknown_strings.contains(&symbol) {
-                continue;
-            }
-            let previous = aliases.strings.get(&symbol).cloned().unwrap_or_default();
-            let size = previous.len();
-            match aliases
-                .key_set(expr)
-                .and_then(|names| merge_names(previous, names))
-            {
-                Some(names) if names.len() != size => {
-                    aliases.strings.insert(symbol, names);
-                    changed = true;
-                }
-                Some(_) => {}
-                None => {
-                    aliases.strings.remove(&symbol);
-                    aliases.unknown_strings.insert(symbol);
-                    changed = true;
-                }
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
 }
 
 struct Bound<'p> {

@@ -7,6 +7,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::aliased_flows::{is_function_method, is_machinery};
+use super::aliased_solve::Read;
 use super::writes::{
     is_getter_definer, is_owned_definer, is_pending_key, key_of, record_definer_patch,
     record_member_patch, PatchKey,
@@ -209,6 +210,8 @@ pub struct BuiltinAliases<'s> {
     pub(super) unknown_strings: FxHashSet<SymbolId>,
     pub(super) string_arrays: FxHashMap<SymbolId, Vec<String>>,
     pub(super) string_objects: FxHashMap<SymbolId, FxHashMap<String, Vec<String>>>,
+    pub(super) recording: std::cell::Cell<bool>,
+    pub(super) reads: std::cell::RefCell<Vec<Read>>,
 }
 
 const KEY_SET_LIMIT: usize = 64;
@@ -229,6 +232,12 @@ impl<'s> BuiltinAliases<'s> {
             .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
     }
 
+    fn note(&self, read: Read) {
+        if self.recording.get() {
+            self.reads.borrow_mut().push(read);
+        }
+    }
+
     pub(super) fn expand(&self, bits: u16) -> u16 {
         if bits & LOST != 0 {
             (bits & !LOST) | self.lost
@@ -239,7 +248,10 @@ impl<'s> BuiltinAliases<'s> {
 
     fn identifier(&self, id: &IdentifierReference<'_>) -> u16 {
         match self.symbol_of(id) {
-            Some(symbol) => self.expand(self.values.get(&symbol).copied().unwrap_or(0)),
+            Some(symbol) => {
+                self.note(Read::Value(symbol));
+                self.expand(self.values.get(&symbol).copied().unwrap_or(0))
+            }
             None => global_value(id.name.as_str()).unwrap_or(self.lost),
         }
     }
@@ -279,6 +291,7 @@ impl<'s> BuiltinAliases<'s> {
     }
 
     pub(super) fn returned(&self, function: Span) -> u16 {
+        self.note(Read::Return(function));
         self.expand(self.returns.get(&function).copied().unwrap_or(0))
     }
 
@@ -309,6 +322,7 @@ impl<'s> BuiltinAliases<'s> {
             }
             Expression::Identifier(id) => {
                 let symbol = self.symbol_of(id)?;
+                self.note(Read::Strings(symbol));
                 if self.unknown_strings.contains(&symbol) {
                     return None;
                 }
@@ -319,6 +333,7 @@ impl<'s> BuiltinAliases<'s> {
                     return None;
                 };
                 let symbol = self.symbol_of(id)?;
+                self.note(Read::Table(symbol));
                 if let Some(names) = self.string_arrays.get(&symbol) {
                     return Some(names.clone());
                 }
@@ -359,6 +374,7 @@ impl<'s> BuiltinAliases<'s> {
     }
 
     fn object_strings(&self, symbol: SymbolId, keys: &[String]) -> Option<Vec<String>> {
+        self.note(Read::Table(symbol));
         let properties = self.string_objects.get(&symbol)?;
         keys.iter().try_fold(Vec::new(), |found, key| {
             merged(found, properties.get(key)?.clone())
