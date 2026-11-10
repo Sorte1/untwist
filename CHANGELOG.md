@@ -108,6 +108,12 @@ All notable changes to this project are documented in this file. The format is b
   table[id].call(...), m)).exports`, module objects passed from a record assigned in that
   sequence, and bootstrap keys split into concatenations of strings and decoded strings. A whole bundle obfuscated with uglify-js or terser therefore no longer refuses for a
   bootstrap the check could not see.
+- The safe lane keeps trusting `Object.create` and `bind` when the program defines own properties,
+  under any key, on objects those natives made: `Object.create` called on the unshadowed `Object`
+  and `bind` called on a function literal. Such a definition cannot be the first patch of the
+  natives that made the object, so webpack's `require.d` descriptors (`{enumerable: !0, get: r}`)
+  and computed keys no longer refute them. A `bind` called on any other object, and any write to
+  `Object`, its definers or a built-in, still refuses as before.
 - Under `--unsafe`, the self-defending states class that old javascript-obfuscator releases put
   inside rc4 and base64 decoders (`this.states = [1, 0, 0]`, `newState`, `checkState`, `runState`,
   `getState`, run once as `new o(dec).checkState()`) is dropped when its variable is read nowhere

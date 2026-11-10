@@ -6,6 +6,7 @@ use super::keys::Keys;
 use super::roles::*;
 use super::sites::*;
 use super::{AKey, Agnostic};
+use crate::mutants::fresh_native_induction_trusted;
 use crate::proof::ProtoRoot;
 
 impl<'s, 'a> Sites<'s, 'a> {
@@ -227,7 +228,11 @@ impl<'s, 'a> Sites<'s, 'a> {
         );
         if !self.is_target(target) {
             if !self.in_machinery(span) {
-                self.defined.extend(keys);
+                if matches!(kind, "define" | "getter") {
+                    self.induced.extend(keys);
+                } else {
+                    self.defined.extend(keys);
+                }
             }
             return;
         }
@@ -250,6 +255,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         span: Span,
         target: Option<Elem<'_, 'a>>,
         sources: &[Elem<'_, 'a>],
+        defines: bool,
     ) {
         let Some(target) = target else {
             return;
@@ -263,7 +269,11 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
         if !self.is_target(target) {
             if !self.in_machinery(span) {
-                self.defined.extend(keys);
+                if defines {
+                    self.induced.extend(keys);
+                } else {
+                    self.defined.extend(keys);
+                }
             }
             return;
         }
@@ -298,7 +308,12 @@ impl<'s, 'a> Sites<'s, 'a> {
                 );
             }
         } else if BATCH.contains(&key) {
-            self.batch(span, at(0), args.get(1..).unwrap_or(&[]));
+            self.batch(
+                span,
+                at(0),
+                args.get(1..).unwrap_or(&[]),
+                key == "defineProperties",
+            );
         } else if key == "setPrototypeOf" {
             if at(0).is_some_and(|target| self.is_target(target)) {
                 self.push(span, AKey::Named(Cow::Borrowed("__proto__")), "set-proto");
@@ -458,24 +473,53 @@ impl<'s, 'a> Sites<'s, 'a> {
                     AKey::Index => false,
                     AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
                 });
-        let natives = assigns
-            && (!self.fresh_used.get()
-                || !self.refute_fresh
-                    && !self.defined_keys().any(|key| match key {
-                        AKey::Named(name) => FRESH_REFUTERS.contains(&name.as_ref()),
-                        AKey::Index => false,
-                        AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
-                    }));
+        let natives = assigns && (!self.fresh_used.get() || self.natives_hold());
         (chains, natives)
     }
 
-    fn defined_keys(&self) -> impl Iterator<Item = &AKey<'a>> + '_ {
+    fn natives_hold(&self) -> bool {
+        if self.refute_fresh {
+            return false;
+        }
+        if fresh_native_induction_trusted() {
+            return true;
+        }
+        let refutes = |key: &AKey<'a>| match key {
+            AKey::Named(name) => FRESH_REFUTERS.contains(&name.as_ref()),
+            AKey::Index => false,
+            AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
+        };
+        if self.outside_keys().chain(&self.defined).any(refutes) {
+            return false;
+        }
+        if self.loose_fresh.get() {
+            return !self.induced.iter().chain(&self.assigned).any(refutes);
+        }
+        let setters_reachable =
+            self.out.sites.iter().any(|site| {
+                site.outside && matches!(site.root, ProtoRoot::Object | ProtoRoot::Either)
+            });
+        if setters_reachable && self.assigned.iter().any(refutes) {
+            return false;
+        }
+        !self.outside_keys().any(
+            |key| matches!(key, AKey::Named(name) if INDUCTION_REFUTERS.contains(&name.as_ref())),
+        )
+    }
+
+    fn outside_keys(&self) -> impl Iterator<Item = &AKey<'a>> + '_ {
         self.out
             .sites
             .iter()
             .filter(|site| site.outside)
             .map(|site| &site.key)
+    }
+
+    fn defined_keys(&self) -> impl Iterator<Item = &AKey<'a>> + '_ {
+        self.outside_keys()
             .chain(&self.defined)
+            .chain(&self.induced)
+            .chain(&self.assigned)
     }
 
     fn creations_native(&mut self) {

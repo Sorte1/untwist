@@ -67,6 +67,15 @@ pub(super) const FRESH_NATIVES: [&str; 2] = ["bind", "create"];
 
 pub(super) const FRESH_REFUTERS: [&str; 3] = ["bind", "create", "get"];
 
+pub(super) const INDUCTION_REFUTERS: [&str; 6] = [
+    "Object",
+    "defineProperty",
+    "defineProperties",
+    "__defineGetter__",
+    "__defineSetter__",
+    "deleteProperty",
+];
+
 pub(super) const ASSIGN_REFUTERS: [&str; 2] = ["assign", "Object"];
 
 pub(super) fn is_definer_key(key: &str) -> bool {

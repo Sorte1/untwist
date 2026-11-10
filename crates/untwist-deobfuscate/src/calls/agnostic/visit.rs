@@ -308,7 +308,12 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
             match property {
                 ObjectPropertyKind::ObjectProperty(p) => {
                     let key = self.property_key(&p.key);
-                    self.defined.push(key);
+                    if matches!(&key, AKey::Named(name) if !FRESH_NATIVES.contains(&name.as_ref()))
+                    {
+                        self.induced.push(key);
+                    } else {
+                        self.defined.push(key);
+                    }
                 }
                 ObjectPropertyKind::SpreadProperty(_) => self.defined.push(AKey::Unknown),
             }

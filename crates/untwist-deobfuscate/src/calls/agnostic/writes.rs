@@ -23,6 +23,26 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 
+    fn plain_literal(&self, expr: &Expression<'a>) -> bool {
+        let literal = match expr.without_parentheses() {
+            Expression::Identifier(id) => self.fresh.literal_init(id),
+            other => Some(other),
+        };
+        let Some(Expression::ObjectExpression(object)) =
+            literal.map(Expression::without_parentheses)
+        else {
+            return false;
+        };
+        object.properties.iter().all(|property| match property {
+            ObjectPropertyKind::ObjectProperty(p) => {
+                !p.computed
+                    && p.kind == PropertyKind::Init
+                    && p.key.static_name().is_some_and(|name| name != "__proto__")
+            }
+            ObjectPropertyKind::SpreadProperty(_) => false,
+        })
+    }
+
     pub(super) fn native_fresh_call(&self, expr: &Expression<'a>) -> bool {
         if !self.fresh_calls {
             return false;
@@ -44,8 +64,26 @@ impl<'s, 'a> Sites<'s, 'a> {
             );
         if fresh {
             self.fresh_used.set(true);
+            if !self.intact_receiver(member, &keys) {
+                self.loose_fresh.set(true);
+            }
         }
         fresh
+    }
+
+    fn intact_receiver(&self, member: &MemberExpression<'a>, keys: &[AKey<'a>]) -> bool {
+        let [AKey::Named(name)] = keys else {
+            return false;
+        };
+        let receiver = member.object().without_parentheses();
+        match name.as_ref() {
+            "create" => !self.object_rebound && self.is_unbound(receiver, "Object"),
+            "bind" => matches!(
+                receiver,
+                Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_)
+            ),
+            _ => false,
+        }
     }
 
     fn assign_returns_fresh(
@@ -145,7 +183,11 @@ impl<'s, 'a> Sites<'s, 'a> {
         let keys = self.member_keys(member);
         if self.target_fresh(member.object(), 4) {
             if !self.in_machinery(member.span()) {
-                self.defined.extend(keys);
+                if kind == "write" && self.plain_literal(member.object()) {
+                    self.assigned.extend(keys);
+                } else {
+                    self.defined.extend(keys);
+                }
             }
             return;
         }
