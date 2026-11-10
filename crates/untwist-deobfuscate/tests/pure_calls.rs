@@ -1,3 +1,5 @@
+mod common;
+
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::{assume_observers, Observers};
 use untwist_deobfuscate::pure_calls;
@@ -338,4 +340,41 @@ fn a_program_without_a_pure_function_is_unchanged() {
         transform_report(&alloc, source, &[pure_calls::boxed], PassOptions::default());
     assert_eq!(report.total_changes, 0);
     assert_eq!(report.iterations, 1);
+}
+
+const A_CALL_MOVED_AHEAD_OF_ITS_CONSTANT: &str = "function hi() {\n  var d = \"1|0\".split(\"|\");\n  var e = 0;\n  while (true) {\n    switch (d[e++]) {\n      case \"0\":\n        var K = 5;\n        continue;\n      case \"1\":\n        console.log(add(1));\n        continue;\n    }\n    break;\n  }\n  function add(a) {\n    return a + K;\n  }\n}\nhi();";
+
+const A_CALL_MOVED_AHEAD_OF_ITS_FUNCTION: &str = "function hi() {\n  var d = \"1|0\".split(\"|\");\n  var e = 0;\n  while (true) {\n    switch (d[e++]) {\n      case \"0\":\n        var add = function (a) {\n    return a + 1;\n  };\n        continue;\n      case \"1\":\n        try {\n    console.log(add(1));\n  } catch (err) {\n    console.log(\"threw\");\n  }\n        continue;\n    }\n    break;\n  }\n  \n}\nhi();";
+
+const A_TOP_LEVEL_CALL_MOVED_AHEAD_OF_ITS_CONSTANT: &str = "var d = \"1|0\".split(\"|\");\nvar e = 0;\nwhile (true) {\n  switch (d[e++]) {\n    case \"0\":\n      var K = 5;\n      continue;\n    case \"1\":\n      console.log(add(1));\n      continue;\n  }\n  break;\n}\nfunction add(a) {\n  return a + K;\n}";
+
+const A_CALL_MOVED_BEHIND_ITS_CONSTANT: &str = "function hi() {\n  var d = \"1|0\".split(\"|\");\n  var e = 0;\n  while (true) {\n    switch (d[e++]) {\n      case \"0\":\n        console.log(add(1));\n        continue;\n      case \"1\":\n        var K = 5;\n        continue;\n    }\n    break;\n  }\n  function add(a) {\n    return a + K;\n  }\n}\nhi();";
+
+#[test]
+fn a_call_the_flattener_moved_ahead_of_its_constant_is_not_folded() {
+    let (code, _notes) = common::run_all_stages_safe_lane(A_CALL_MOVED_AHEAD_OF_ITS_CONSTANT);
+    assert!(
+        code.contains("console.log(add(1));\n  var K = 5;"),
+        "{code}"
+    );
+}
+
+#[test]
+fn a_call_the_flattener_moved_ahead_of_its_function_is_not_folded() {
+    let (code, _notes) = common::run_all_stages_safe_lane(A_CALL_MOVED_AHEAD_OF_ITS_FUNCTION);
+    assert!(code.contains("console.log(add(1));"), "{code}");
+    assert!(!code.contains("console.log(2)"), "{code}");
+}
+
+#[test]
+fn a_top_level_call_the_flattener_moved_ahead_of_its_constant_is_not_folded() {
+    let (code, _notes) =
+        common::run_all_stages_safe_lane(A_TOP_LEVEL_CALL_MOVED_AHEAD_OF_ITS_CONSTANT);
+    assert!(code.contains("console.log(add(1));\nvar K = 5;"), "{code}");
+}
+
+#[test]
+fn a_call_the_flattener_moved_behind_its_constant_folds() {
+    let (code, _notes) = common::run_all_stages_safe_lane(A_CALL_MOVED_BEHIND_ITS_CONSTANT);
+    assert!(code.contains("console.log(6);"), "{code}");
 }

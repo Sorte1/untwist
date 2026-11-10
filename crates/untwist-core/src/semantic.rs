@@ -1,7 +1,7 @@
 use oxc_ast::ast::{
-    AccessorProperty, ArrowFunctionBody, ArrowFunctionExpression, AssignmentTarget, BindingPattern,
-    Expression, FormalParameter, Function, FunctionBody, IdentifierReference, Program,
-    PropertyDefinition, Statement, StaticBlock,
+    AccessorProperty, ArrowFunctionBody, ArrowFunctionExpression, AssignmentExpression,
+    AssignmentTarget, BindingPattern, Expression, FormalParameter, Function, FunctionBody,
+    IdentifierReference, Program, PropertyDefinition, Statement, StaticBlock,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::{Scoping, SemanticBuilder, Stats};
@@ -189,6 +189,7 @@ fn owner_scope_of(scoping: &Scoping, symbol: SymbolId) -> Option<ScopeId> {
 struct CandidateState {
     owner_depth: Option<u32>,
     boundary: Span,
+    passed: bool,
     found: bool,
 }
 
@@ -222,6 +223,27 @@ impl UseScan<'_> {
             }
         }
         self.depth -= 1;
+    }
+
+    fn pass_the_write(&mut self, assignment: &AssignmentExpression<'_>) {
+        if assignment.operator != AssignmentOperator::Assign {
+            return;
+        }
+        let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
+            return;
+        };
+        let symbol = target
+            .reference_id
+            .get()
+            .and_then(|id| self.scoping.get_reference(id).symbol_id());
+        let Some(state) = symbol.and_then(|symbol| self.states.get_mut(&symbol)) else {
+            return;
+        };
+        if state.boundary.start <= assignment.span.start
+            && assignment.span.end <= state.boundary.end
+        {
+            state.passed = true;
+        }
     }
 }
 
@@ -293,6 +315,11 @@ impl<'a> VisitJs<'a> for UseScan<'_> {
         walk_js::walk_expression(self, it);
     }
 
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        walk_js::walk_assignment_expression(self, it);
+        self.pass_the_write(it);
+    }
+
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         if self.remaining == 0 {
             return;
@@ -316,7 +343,7 @@ impl<'a> VisitJs<'a> for UseScan<'_> {
         if !is_nested && reference.flags().is_write_only() {
             return;
         }
-        if is_nested || it.span.start < state.boundary.end {
+        if is_nested || !state.passed {
             state.found = true;
             self.remaining -= 1;
         }
@@ -341,6 +368,7 @@ pub fn bindings_possibly_used_before(
             CandidateState {
                 owner_depth,
                 boundary,
+                passed: false,
                 found: false,
             },
         );

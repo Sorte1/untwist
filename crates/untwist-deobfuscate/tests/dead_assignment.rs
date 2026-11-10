@@ -306,3 +306,34 @@ fn the_pass_is_named_and_declares_its_mode_and_safety() {
     assert!(pass.requires_extended());
     assert_eq!(pass.safety(), Safety::Safe);
 }
+
+const A_READ_THE_FLATTENER_MOVES_AHEAD_OF_THE_ASSIGNMENT: &str = "function f(g) {\n  var d = \"2|1|0\".split(\"|\");\n  var e = 0;\n  while (true) {\n    switch (d[e++]) {\n      case \"0\":\n        x = 5;\n        continue;\n      case \"1\":\n        g(x);\n        continue;\n      case \"2\":\n        var x;\n        continue;\n    }\n    break;\n  }\n  return x;\n}\nf(console.log);";
+
+const A_READ_BESIDE_THE_DECLARATION_THE_FLATTENER_MOVES_AHEAD: &str = "function f(g) {\n  var d = \"1|0\".split(\"|\");\n  var e = 0;\n  while (true) {\n    switch (d[e++]) {\n      case \"0\":\n        x = \"late\";\n        continue;\n      case \"1\":\n        var x;\n        g(x);\n        continue;\n    }\n    break;\n  }\n}\nf(console.log);";
+
+fn every_lane(source: &str) -> [(String, Vec<String>); 2] {
+    [
+        common::run_all_stages_extended(source),
+        common::run_all_stages_safe_lane(source),
+    ]
+}
+
+#[test]
+fn a_read_the_flattener_moved_ahead_of_the_assignment_keeps_the_declaration_empty() {
+    for (code, all) in every_lane(A_READ_THE_FLATTENER_MOVES_AHEAD_OF_THE_ASSIGNMENT) {
+        assert!(code.contains("g(x);\n  x = 5;"), "{code}");
+        assert!(code.contains("var x;"), "{code}");
+        assert!(
+            all.iter()
+                .any(|note| note.contains(notes::DEAD_ASSIGNMENT_READ_BEFORE_THE_WRITE)),
+            "{all:?}"
+        );
+    }
+}
+
+#[test]
+fn a_read_beside_the_declaration_moved_ahead_of_the_assignment_keeps_it_empty() {
+    for (code, _all) in every_lane(A_READ_BESIDE_THE_DECLARATION_THE_FLATTENER_MOVES_AHEAD) {
+        assert!(code.contains("var x;\n  g(x);\n  x = \"late\";"), "{code}");
+    }
+}
