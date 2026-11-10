@@ -21,7 +21,9 @@ use anyhow::{Context, Result};
 use args::{Args, ReportFormat};
 use clap::Parser;
 use hooks::Role;
-use untwist::{Isolation, Output, OutputConflict, Pipeline, PlanRefusal, StopReason, DEOBFUSCATED};
+use untwist::{
+    printable, Isolation, Output, OutputConflict, Pipeline, PlanRefusal, StopReason, DEOBFUSCATED,
+};
 
 pub(crate) struct Session<'a> {
     pub(crate) out: &'a mut dyn Write,
@@ -61,7 +63,7 @@ fn read_inputs(args: &Args, held: Option<Vec<u8>>) -> Result<Vec<String>> {
 
 fn report_diagnostics(err: &mut dyn Write, result: &Output) -> io::Result<()> {
     for diagnostic in &result.parse_diagnostics {
-        writeln!(err, "{diagnostic}")?;
+        writeln!(err, "{}", printable(diagnostic))?;
     }
     for stage in &result.stages {
         match stage.stop {
@@ -126,8 +128,8 @@ const STDERR: &str = "write to stderr";
 fn report_wasm(err: &mut dyn Write, result: &Output) -> io::Result<()> {
     for note in result.notes.iter().filter(|note| note.pass == "wasm") {
         match note.kind {
-            untwist::NoteKind::Refusal => writeln!(err, "warning: {}", note.message)?,
-            untwist::NoteKind::Progress => writeln!(err, "note: {}", note.message)?,
+            untwist::NoteKind::Refusal => writeln!(err, "warning: {}", printable(&note.message))?,
+            untwist::NoteKind::Progress => writeln!(err, "note: {}", printable(&note.message))?,
         }
     }
     if result.wasm_unchecked {
@@ -140,7 +142,8 @@ fn report_wasm(err: &mut dyn Write, result: &Output) -> io::Result<()> {
         writeln!(
             err,
             "note: wasm module {} was not resolved; it is loaded from {}; save it under that name and pass --wasm-dir, or pass --fetch-wasm",
-            reference.name, reference.url
+            printable(&reference.name),
+            printable(&reference.url)
         )?;
     }
     Ok(())
@@ -223,7 +226,11 @@ fn report_refusals(err: &mut dyn Write, refused: &[PlanRefusal]) -> io::Result<(
                 action,
                 reason,
             } => {
-                writeln!(err, "warning: could not {action} {path:?}: {reason}")?;
+                writeln!(
+                    err,
+                    "warning: could not {action} {path:?}: {}",
+                    printable(reason)
+                )?;
             }
         }
     }
@@ -246,7 +253,7 @@ fn resolve_output(err: &mut dyn Write, args: &Args, result: &Output) -> Result<R
         writeln!(
             err,
             "error: refusing to write into {} (current directory, filesystem root, or the home directory)",
-            dir.display()
+            printable(&dir.display().to_string())
         )
         .context(STDERR)?;
         return Ok(ResolvedOutput::Refused);
@@ -369,7 +376,7 @@ fn reported(err: &mut dyn Write, outcome: Result<u8>) -> u8 {
     match outcome {
         Ok(code) => code,
         Err(error) => {
-            let _ = writeln!(err, "error: {error:#}");
+            let _ = writeln!(err, "error: {}", printable(&format!("{error:#}")));
             1
         }
     }

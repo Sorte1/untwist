@@ -6,6 +6,7 @@ mod passes;
 mod pipeline;
 mod plan;
 mod plugin;
+mod printable;
 mod report;
 mod stats;
 mod wasm;
@@ -29,6 +30,7 @@ pub use pipeline::{DecodedSite, Snapshot, SnapshotCode};
 pub use pipeline::{RefusalSite, SiteAt};
 pub use plan::{is_safe_relative, PlanRefusal, PlannedFile};
 pub use plugin::{PluginCtor, Plugins, Stage};
+pub use printable::printable;
 pub use report::{stage_rows, StageReport, StageRow};
 pub use stats::{CollisionStats, DecodeStats, RunStats};
 pub use untwist_core::budget::{

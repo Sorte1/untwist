@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use serde::Serialize;
-use untwist::{Output, StopReason};
+use untwist::{printable, Output, StopReason};
 
 use crate::budget::{bytes_text, Limits};
 
@@ -182,7 +182,7 @@ pub fn text_report(output: &Output, limits: Limits) -> String {
             "bundle: {} ({} modules, entry {})\n",
             bundle.kind,
             bundle.modules.len(),
-            bundle.entry_id.as_deref().unwrap_or("none")
+            printable(bundle.entry_id.as_deref().unwrap_or("none"))
         ));
     }
     text.push_str(&format!("parse_errors: {}\n", output.parse_errors));
@@ -194,7 +194,7 @@ pub fn text_report(output: &Output, limits: Limits) -> String {
     for file in &output.wasm {
         text.push_str(&format!(
             "wasm: {} ({}, {} bytes, {} imports, {} exports, {} renamed)\n",
-            file.path,
+            printable(&file.path),
             file.origin.as_str(),
             file.byte_length,
             file.imports,
@@ -205,11 +205,16 @@ pub fn text_report(output: &Output, limits: Limits) -> String {
     for reference in &output.wasm_unresolved {
         text.push_str(&format!(
             "wasm_unresolved: {} {}\n",
-            reference.name, reference.url
+            printable(&reference.name),
+            printable(&reference.url)
         ));
     }
     for note in &output.notes {
-        text.push_str(&format!("note: {}: {}\n", note.pass, note.message));
+        text.push_str(&format!(
+            "note: {}: {}\n",
+            note.pass,
+            printable(&note.message)
+        ));
     }
     #[cfg(feature = "test-hooks")]
     for span in &output.refusal_spans {
