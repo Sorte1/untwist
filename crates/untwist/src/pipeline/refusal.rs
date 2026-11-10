@@ -4,6 +4,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use untwist_core::depth::{limits_for, print_estimate, scan, DepthRefusal, UNIT_STACK_BYTES};
 use untwist_core::parse::strip_bookmarklet;
 use untwist_core::pass::{InputRoom, Note, NoteKind};
+use untwist_core::source_map::OwnedSourceMap;
 use untwist_eval::stack::room;
 use untwist_eval::stack_reserve::{
     StackReservation, StackReserve, DECODED_TEXT_STACK_BYTES, STACK_RESERVE_BYTES,
@@ -12,6 +13,7 @@ use untwist_eval::stack_reserve::{
 use super::boundary::Boundary;
 use super::input::{FinalTextGuard, InputResult};
 use super::ladder::{on_a_worker_stack, Ladder};
+use super::unpack::Prior;
 use super::{Output, OutputParts, Pipeline, BUDGET_UNPACK, UNPACK_PANICKED};
 use crate::bundle::BundleOutput;
 use crate::options::Progress;
@@ -225,8 +227,11 @@ impl Pipeline {
         );
         let guard = (FinalTextGuard::PremiseP1, parts.unbundled);
         if parts.depth_refused.is_empty() {
-            let (codes, earlier) = (&parts.codes, &parts.guards);
-            return self.unpack_final_texts(codes, earlier, guard, stages, notes, panicked);
+            let prior = Prior {
+                guards: &parts.guards,
+                maps: &parts.source_maps,
+            };
+            return self.unpack_final_texts(&parts.codes, prior, guard, stages, notes, panicked);
         }
         let mut texts: Vec<&str> = Vec::with_capacity(admitted);
         texts.extend(
@@ -237,7 +242,18 @@ impl Pipeline {
                 .filter(|(index, _)| !parts.depth_refused.contains(index))
                 .map(|(_, code)| code.as_str()),
         );
-        self.unpack_final_texts(&texts, &parts.guards, guard, stages, notes, panicked)
+        let maps: Vec<Option<OwnedSourceMap>> = parts
+            .source_maps
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| !parts.depth_refused.contains(index))
+            .map(|(_, map)| map.clone())
+            .collect();
+        let prior = Prior {
+            guards: &parts.guards,
+            maps: &maps,
+        };
+        self.unpack_final_texts(&texts, prior, guard, stages, notes, panicked)
     }
 
     #[doc(hidden)]
@@ -260,8 +276,8 @@ impl Pipeline {
             );
             let earlier = &parts.guards;
             let scan = (FinalTextGuard::Scan, false);
-            let bundle =
-                self.unpack_final_texts(final_texts, earlier, scan, stages, notes, panicked);
+            let prior = Prior::guards(earlier);
+            let bundle = self.unpack_final_texts(final_texts, prior, scan, stages, notes, panicked);
             Output {
                 wasm_check: self.options.wasm_check,
                 ..parts.into_output(bundle, self.options.single_file)

@@ -55,6 +55,7 @@ fn write_to_refuses_a_traversing_module_path() {
         is_entry: false,
         code: "escaped();".to_string(),
         span: None,
+        map: None,
     });
     let report = out.write_to(&dir).expect("write");
     assert!(
@@ -224,6 +225,7 @@ fn a_module_colliding_with_the_deobfuscated_output_is_refused_not_overwritten() 
             is_entry: false,
             code: "module code".to_string(),
             span: None,
+            map: None,
         }],
     });
     let (planned, refused) = out.plan_write(dir.path(), &[]);
@@ -386,6 +388,7 @@ fn bundle_json_lists_only_the_modules_that_were_written() {
             is_entry: false,
             code: "escaped();".to_string(),
             span: None,
+            map: None,
         },
     );
 
@@ -419,6 +422,7 @@ fn a_file_that_cannot_be_written_is_refused_and_the_rest_is_written() {
             is_entry: false,
             code: "locked();".to_string(),
             span: None,
+            map: None,
         },
     );
 
@@ -462,6 +466,7 @@ fn bundle_of(paths: &[&str]) -> BundleOutput {
                 is_entry: false,
                 code: format!("module({index});"),
                 span: None,
+                map: None,
             })
             .collect(),
     }

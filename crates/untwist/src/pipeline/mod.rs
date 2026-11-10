@@ -22,6 +22,7 @@ use untwist_core::budget::{Deadline, Hit, Limits};
 use untwist_core::parse::error_count;
 use untwist_core::pass::Note;
 use untwist_core::reflow::GuardRecord;
+use untwist_core::source_map::{self, OwnedSourceMap};
 use untwist_eval::stack_reserve::StackReserve;
 use untwist_rename::unique::{reserve, shared_state, FileSlot, SharedUniqueState};
 
@@ -73,6 +74,8 @@ pub struct Output {
     pub wasm_check: crate::wasm::WasmCheck,
     pub wasm_unchecked: bool,
     pub wasm_panicked: bool,
+    pub source_maps: Vec<Option<OwnedSourceMap>>,
+    pub source_map_link: Option<crate::maps::MapLink>,
 }
 
 pub(crate) fn admits_reparse(text: &str) -> bool {
@@ -167,6 +170,7 @@ struct OutputParts {
     refusal_spans: Vec<String>,
     #[cfg(feature = "refusal-spans")]
     refusal_sites: Vec<RefusalSite>,
+    source_maps: Vec<Option<OwnedSourceMap>>,
 }
 
 impl OutputParts {
@@ -193,6 +197,7 @@ impl OutputParts {
                 }));
             parts.statement_spans = result.statement_spans.filter(|_| !several);
             parts.unbundled &= result.refused || result.unbundled;
+            parts.source_maps.push(result.source_map);
             parts.codes.push(result.code);
             parts.stages.extend(result.stages);
             parts.notes.extend(result.notes);
@@ -252,7 +257,31 @@ impl OutputParts {
             wasm_check: crate::wasm::WasmCheck::default(),
             wasm_unchecked: false,
             wasm_panicked: false,
+            source_maps: self.source_maps,
+            source_map_link: None,
         }
+    }
+}
+
+fn settle_maps(results: &mut [InputResult], sources: &[&str], inputs: &[Option<String>]) {
+    let total = sources.len();
+    for (index, (result, source)) in results.iter_mut().zip(sources).enumerate() {
+        let map = result
+            .source_map
+            .take()
+            .unwrap_or_else(|| match result.code == *source {
+                true => source_map::identity(source),
+                false => source_map::unmapped(source),
+            });
+        let map = source_map::renamed(map, &source_map::input_name(index, total));
+        let input = inputs
+            .get(index)
+            .and_then(Option::as_deref)
+            .and_then(source_map::parse);
+        result.source_map = Some(match input {
+            Some(input) => source_map::compose(map, input),
+            None => map,
+        });
     }
 }
 
@@ -288,7 +317,10 @@ impl Pipeline {
         let batch = Batch::new(sources, self.limits());
         let pooled = self.run_pooled(&batch, &ladder);
         ladder::on_a_worker_stack(&ladder, |_| {
-            let results = pooled.unwrap_or_else(|| self.run_sequentially(&batch));
+            let mut results = pooled.unwrap_or_else(|| self.run_sequentially(&batch));
+            if self.options.source_map {
+                settle_maps(&mut results, batch.sources, &self.options.input_source_maps);
+            }
             let mut parts = OutputParts::from_results(results);
             parts.unbundled &= trust_the_reflow;
             let _ = crate::stats::RunStats::taken();

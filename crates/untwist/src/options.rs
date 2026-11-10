@@ -89,6 +89,8 @@ pub struct Options {
     pub decoded_strings: bool,
     pub statement_spans: bool,
     pub wasm_check: WasmCheck,
+    pub source_map: bool,
+    pub input_source_maps: Vec<Option<String>>,
 }
 
 impl Default for Options {
@@ -121,6 +123,8 @@ impl Default for Options {
             decoded_strings: false,
             statement_spans: false,
             wasm_check: WasmCheck::Off,
+            source_map: false,
+            input_source_maps: Vec::new(),
         }
     }
 }

@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use serde::Serialize;
 use untwist_core::print::pretty_codegen;
 use untwist_core::reflow::{GuardRecord, GuardTally, Reflower};
+use untwist_core::source_map::OwnedSourceMap;
 use untwist_unpack::model::Bundle;
 
 use crate::write::BUNDLE_JSON;
@@ -23,6 +24,8 @@ pub struct ModuleOutput {
     pub code: String,
     #[serde(skip)]
     pub span: Option<(u32, u32)>,
+    #[serde(skip)]
+    pub map: Option<OwnedSourceMap>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -80,6 +83,7 @@ impl BundleOutput {
                     is_entry: module.is_entry,
                     code: pretty_codegen(module.program()),
                     span: span_of(module.program().span, text_len),
+                    map: None,
                 })
                 .collect(),
         }

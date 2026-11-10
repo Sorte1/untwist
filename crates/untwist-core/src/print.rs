@@ -1,6 +1,10 @@
 use oxc_ast::ast::{Function, Program};
 use oxc_codegen::{Codegen, CodegenOptions, CommentOptions, Context, Gen, IndentChar};
 
+use std::path::PathBuf;
+
+use oxc_sourcemap::{OwnedSourceMap, SourceMap};
+
 use crate::reflow::reflow;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +42,18 @@ fn codegen(program: &Program<'_>, style: PrintStyle) -> String {
 
 pub fn pretty_codegen(program: &Program<'_>) -> String {
     codegen(program, PrintStyle::Pretty)
+}
+
+pub fn mapped_codegen(program: &Program<'_>, source: &str) -> (String, Option<OwnedSourceMap>) {
+    let options = CodegenOptions {
+        comments: CommentOptions::disabled(),
+        source_map_path: Some(PathBuf::from(source)),
+        ..options(PrintStyle::Pretty)
+    };
+    let printed = Codegen::new().with_options(options).build(program);
+    let mut code = printed.code;
+    code.truncate(code.trim_end().len());
+    (code, printed.map.map(SourceMap::into_owned_sourcemap))
 }
 
 fn unwrapped(text: String) -> String {
