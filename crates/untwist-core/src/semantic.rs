@@ -21,7 +21,10 @@ mod refresh;
 mod renamed;
 mod strictness;
 
-pub use annex_b::{is_constant_binding_in, AnnexBFunction, AnnexBWrites};
+pub use annex_b::{
+    block_function_symbols, declared_in_block, declaring_block, is_constant_binding_in,
+    is_hoisted_block_function, AnnexBFunction, AnnexBWrites,
+};
 pub use observers::{
     assume_observers, assumed_hazard, closed_eval_names, eval_payload_names, observers,
     with_observes, Observers, ObserversGuard,
@@ -106,7 +109,9 @@ pub fn write_reference_count(scoping: &Scoping, symbol: SymbolId) -> usize {
 }
 
 pub fn is_constant_binding(scoping: &Scoping, symbol: SymbolId) -> bool {
-    !scoping.symbol_is_mutated(symbol) && scoping.symbol_redeclarations(symbol).is_empty()
+    !scoping.symbol_is_mutated(symbol)
+        && scoping.symbol_redeclarations(symbol).is_empty()
+        && !is_hoisted_block_function(scoping, symbol)
 }
 
 #[derive(Default)]

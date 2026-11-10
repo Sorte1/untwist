@@ -73,7 +73,10 @@ fn import_meta_and_top_level_await_make_a_module() {
 #[test]
 fn await_inside_an_async_function_does_not_make_a_module() {
     let alloc = Allocator::default();
-    let p = parse_program(&alloc, "async function f() { await g(); for await (const x of y) {} }");
+    let p = parse_program(
+        &alloc,
+        "async function f() { await g(); for await (const x of y) {} }",
+    );
     assert!(!p.source_type.is_module());
 }
 
@@ -85,7 +88,10 @@ fn a_sloppy_script_hoists_a_block_function_to_its_function() {
         "function outer() { { function atob(s) { return s; } } return atob(\"x\"); }",
     );
     let sem = build_scoping(&p.program);
-    assert!(!sem.scoping.root_unresolved_references().contains_key("atob"));
+    assert!(!sem
+        .scoping
+        .root_unresolved_references()
+        .contains_key("atob"));
 }
 
 #[test]
@@ -96,5 +102,8 @@ fn a_strict_script_keeps_a_block_function_in_its_block() {
         "\"use strict\"; function outer() { { function atob(s) { return s; } } return atob(\"x\"); }",
     );
     let sem = build_scoping(&p.program);
-    assert!(sem.scoping.root_unresolved_references().contains_key("atob"));
+    assert!(sem
+        .scoping
+        .root_unresolved_references()
+        .contains_key("atob"));
 }

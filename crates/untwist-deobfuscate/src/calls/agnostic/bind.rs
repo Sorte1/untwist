@@ -742,7 +742,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
         if let (Some(id), true) = (&it.id, it.is_declaration()) {
             if let Some(symbol) = id.symbol_id.get() {
                 self.handled.insert(id.span.start);
-                if crate::bindings::is_block_function(self.scoping, symbol) {
+                if crate::bindings::is_block_function(self.scoping, it) {
                     self.annex.insert(id.name.as_str());
                 }
                 let fresh = function_constructs_fresh(it);

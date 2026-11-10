@@ -4,8 +4,9 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_syntax::node::NodeId;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 
 use super::{is_constant_binding, Strictness};
@@ -56,6 +57,65 @@ impl AnnexBWrites {
                 .map(|target| (function.function, target))
         })
     }
+}
+
+pub fn declared_in_block(scoping: &Scoping, function_scope: Option<ScopeId>) -> bool {
+    function_scope
+        .and_then(|scope| scoping.scope_parent_id(scope))
+        .is_some_and(|parent| !scoping.scope_flags(parent).is_var())
+}
+
+fn is_function_declaration(scoping: &Scoping, symbol: SymbolId) -> bool {
+    let flags = scoping.symbol_flags(symbol);
+    flags.contains(SymbolFlags::Function) && !flags.contains(SymbolFlags::FunctionExpression)
+}
+
+fn scope_owned_by(scoping: &Scoping, node: NodeId) -> Option<ScopeId> {
+    let count = scoping.scopes_len();
+    let (mut low, mut high) = (0, count);
+    while low < high {
+        let middle = low + (high - low) / 2;
+        if scoping.get_node_id(ScopeId::new(middle)) < node {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    let found = (low < count)
+        .then(|| ScopeId::new(low))
+        .filter(|scope| scoping.get_node_id(*scope) == node);
+    found.or_else(|| {
+        (0..count)
+            .map(ScopeId::new)
+            .find(|scope| scoping.get_node_id(*scope) == node)
+    })
+}
+
+pub fn declaring_block(scoping: &Scoping, symbol: SymbolId) -> Option<ScopeId> {
+    if !is_function_declaration(scoping, symbol) {
+        return None;
+    }
+    let home = scoping.symbol_scope_id(symbol);
+    if !scoping.scope_flags(home).is_var() {
+        return Some(home);
+    }
+    scope_owned_by(scoping, scoping.symbol_declaration(symbol))
+        .and_then(|scope| scoping.scope_parent_id(scope))
+        .filter(|parent| !scoping.scope_flags(*parent).is_var())
+}
+
+pub fn is_hoisted_block_function(scoping: &Scoping, symbol: SymbolId) -> bool {
+    scoping
+        .scope_flags(scoping.symbol_scope_id(symbol))
+        .is_var()
+        && declaring_block(scoping, symbol).is_some()
+}
+
+pub fn block_function_symbols(scoping: &Scoping) -> FxHashSet<SymbolId> {
+    scoping
+        .symbol_ids()
+        .filter(|symbol| declaring_block(scoping, *symbol).is_some())
+        .collect()
 }
 
 pub fn is_constant_binding_in(scoping: &Scoping, writes: &AnnexBWrites, symbol: SymbolId) -> bool {

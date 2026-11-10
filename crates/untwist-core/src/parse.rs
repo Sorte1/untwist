@@ -2,14 +2,14 @@ use std::borrow::Cow;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    ArrowFunctionExpression, AwaitExpression, Class, ForOfStatement, Function,
-    ImportMeta, Program, Statement, VariableDeclaration,
+    ArrowFunctionExpression, AwaitExpression, Class, ForOfStatement, Function, ImportMeta, Program,
+    Statement, VariableDeclaration,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
-use oxc_syntax::scope::ScopeFlags;
 use oxc_diagnostics::{OxcDiagnostic, Severity};
 use oxc_parser::{ParseOptions, Parser};
 pub use oxc_span::SourceType;
+use oxc_syntax::scope::ScopeFlags;
 
 pub struct Parsed<'a> {
     pub program: Program<'a>,

@@ -1,7 +1,9 @@
 use oxc_allocator::Allocator;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use untwist_core::parse::parse_program;
-use untwist_core::semantic::{build_scoping, is_constant_binding_in, AnnexBWrites, Semantics};
+use untwist_core::semantic::{
+    block_function_symbols, build_scoping, is_constant_binding_in, AnnexBWrites, Semantics,
+};
 
 fn outer_binding(sem: &Semantics, name: &str) -> SymbolId {
     sem.scoping
@@ -152,4 +154,50 @@ fn function_level_declarations_are_not_annex_b() {
     assert!(writes.is_empty());
     let flags = sem.scoping.symbol_flags(outer_binding(&sem, "x"));
     assert!(flags.contains(SymbolFlags::Function));
+}
+
+fn block_function_names(source: &str) -> Vec<String> {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    let sem = build_scoping(&parsed.program);
+    let mut names: Vec<String> = block_function_symbols(&sem.scoping)
+        .into_iter()
+        .map(|symbol| sem.scoping.symbol_name(symbol).to_string())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn a_hoisted_sloppy_block_function_is_still_a_block_function() {
+    assert_eq!(
+        block_function_names(
+            "function o(c) { if (c) { function p() {} } function q() {} var r = function s() {}; return p; }"
+        ),
+        ["p"]
+    );
+}
+
+#[test]
+fn block_functions_of_strict_code_and_of_the_top_level_are_found() {
+    assert_eq!(
+        block_function_names("'use strict'; { function a() {} } function b() {}"),
+        ["a"]
+    );
+    assert_eq!(
+        block_function_names("{ function a() {} } function b() {}"),
+        ["a"]
+    );
+}
+
+#[test]
+fn a_hoisted_block_function_is_written_where_its_block_runs() {
+    let source = "function o(c) { if (c) { function p() {} } return typeof p; }";
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    let sem = build_scoping(&parsed.program);
+    let writes = AnnexBWrites::of(&parsed.program, &sem.scoping);
+    let p = outer_binding(&sem, "p");
+    assert!(writes.may_write(p));
+    assert!(!is_constant_binding_in(&sem.scoping, &writes, p));
 }

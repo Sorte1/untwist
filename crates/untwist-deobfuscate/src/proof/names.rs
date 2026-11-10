@@ -8,6 +8,7 @@ use oxc_span::Span;
 use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use untwist_core::semantic::declaring_block;
 
 fn is_identifier_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_' || c == '$'
@@ -176,7 +177,12 @@ fn is_within(scoping: &Scoping, scope: ScopeId, outer: ScopeId) -> bool {
 
 fn is_block_level(scoping: &Scoping, candidate: SymbolId, home: ScopeId) -> bool {
     let scope = scoping.symbol_scope_id(candidate);
-    !scoping.scope_flags(scope).is_var() && is_within(scoping, scope, home)
+    let block = if scoping.scope_flags(scope).is_var() {
+        declaring_block(scoping, candidate)
+    } else {
+        Some(scope)
+    };
+    block.is_some_and(|block| is_within(scoping, block, home))
 }
 
 pub fn redeclared(scoping: &Scoping, symbol: SymbolId) -> Option<Span> {
