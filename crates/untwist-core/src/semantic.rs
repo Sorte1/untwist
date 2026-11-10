@@ -11,6 +11,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+mod annex_b;
 pub mod builtins;
 #[cfg(feature = "test-hooks")]
 pub mod compare;
@@ -19,6 +20,7 @@ mod refresh;
 mod renamed;
 mod strictness;
 
+pub use annex_b::{is_constant_binding_in, AnnexBFunction, AnnexBWrites};
 pub use observers::{
     assume_observers, assumed_hazard, closed_eval_names, eval_payload_names, observers,
     with_observes, Observers, ObserversGuard,

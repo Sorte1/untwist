@@ -15,6 +15,7 @@ use untwist_core::pass::{Cx, Interest, Pass};
 use untwist_core::semantic::{bindings_possibly_used_before, scope_hazard, write_reference_count};
 use untwist_eval::fold::{fold_to_const, FoldOptions};
 
+use crate::bindings::refuse_annex_b_writes;
 use crate::notes;
 use crate::var_transformation::var_with_init;
 
@@ -226,7 +227,13 @@ impl<'a> Pass<'a> for DeadAssignmentElimination {
         if scope_hazard(cx.scoping()).is_some() {
             return;
         }
-        let candidates = collect(program, cx.scoping());
+        let mut candidates = collect(program, cx.scoping());
+        refuse_annex_b_writes(
+            &mut candidates,
+            |candidate| (candidate.assignment_statement, candidate.symbol),
+            program,
+            cx,
+        );
         let boundaries: Vec<(SymbolId, Span)> = candidates
             .iter()
             .map(|candidate| (candidate.symbol, candidate.assignment_statement))

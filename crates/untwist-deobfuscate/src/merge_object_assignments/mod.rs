@@ -14,7 +14,9 @@ use untwist_core::ast_util::respan::synthetic_spans_exhausted;
 use untwist_core::pass::{Cx, Interest, Pass};
 use untwist_core::semantic::{is_constant_binding, read_reference_count, scope_hazard};
 
-use crate::bindings::{reference_symbol, resolved_symbol, unexposed_globals};
+use crate::bindings::{
+    reference_symbol, refuse_annex_b_writes, resolved_symbol, unexposed_globals,
+};
 use crate::control_flow_object::single_declarator;
 use crate::fused::{Fused, Member, Walk};
 use crate::init_order::{
@@ -401,10 +403,16 @@ fn plan_inline(
     cx: &mut Cx<'_, '_>,
     shares: bool,
 ) -> Vec<InlinePlan> {
-    let reachable: Vec<(Span, SymbolId)> = candidates
+    let mut reachable: Vec<(Span, SymbolId)> = candidates
         .into_iter()
         .filter(|(statement, symbol)| is_a_candidate(*statement, *symbol, cx.scoping()))
         .collect();
+    refuse_annex_b_writes(
+        &mut reachable,
+        |(statement, symbol)| (*statement, *symbol),
+        program,
+        cx,
+    );
     let reachable = unexposed_globals(reachable, |(_, symbol)| *symbol, program, cx.scoping());
     if reachable.is_empty() {
         return Vec::new();

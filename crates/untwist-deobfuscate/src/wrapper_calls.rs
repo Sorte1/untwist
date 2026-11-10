@@ -14,7 +14,7 @@ use untwist_core::ast_util::literal::is_undefined_like;
 use untwist_core::ast_util::matcher::{call_parts, var_function_or_declaration};
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
-use untwist_core::semantic::is_constant_binding;
+use untwist_core::semantic::{is_constant_binding, AnnexBWrites};
 
 use crate::init_order::try_scan_init_order;
 use crate::mutants::wrapper_guards_dropped;
@@ -580,6 +580,32 @@ fn refuse_var_wrappers_read_early(
     );
 }
 
+fn refuse_annex_b_wrappers(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    search: &mut WrapperSearch<'_>,
+) {
+    if search.found.is_empty()
+        || wrapper_guards_dropped()
+        || crate::mutants::annex_b_writes_trusted()
+    {
+        return;
+    }
+    let writes = AnnexBWrites::of(program, scoping);
+    if writes.is_empty() {
+        return;
+    }
+    let (written, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut search.found)
+        .into_iter()
+        .partition(|shape| writes.may_write(shape.symbol));
+    search.found = kept;
+    search.rejected.extend(
+        written
+            .into_iter()
+            .map(|shape| (shape.statement, notes::WRAPPER_BINDING_UNSTABLE)),
+    );
+}
+
 fn plan_round<'p, 'a>(
     program: &Program<'p>,
     cx: &Cx<'a, '_>,
@@ -595,6 +621,7 @@ fn plan_round<'p, 'a>(
     if search.found.is_empty() && search.rejected.is_empty() {
         return None;
     }
+    refuse_annex_b_wrappers(program, cx.scoping(), &mut search);
     refuse_var_wrappers_read_early(program, cx.scoping(), &mut search);
     let sites = collect_sites(program, cx.scoping(), &search.found);
     let mut plan = RoundPlan {
