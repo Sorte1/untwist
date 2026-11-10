@@ -1,5 +1,6 @@
 pub mod edit;
 pub mod frame;
+pub mod frame_reads;
 pub mod global;
 pub mod inline;
 pub mod js_text;

@@ -5,6 +5,7 @@ use oxc_semantic::Scoping;
 use oxc_span::SPAN;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
+use untwist_core::ast_util::frame_reads::reads_function_frame;
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
 };
@@ -384,9 +385,10 @@ impl<'a> Pass<'a> for FunctionToArrow<'a> {
         self.pending.clear();
     }
 
-    fn enter_program(&mut self, _program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+    fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         let scoping = cx.scoping();
-        self.active = scope_hazard(scoping).is_none();
+        self.active = scope_hazard(scoping).is_none()
+            && (cx.opts.unsafe_transforms || !reads_function_frame(program));
         self.callees.clear();
         self.pending.clear();
         self.frozen.clear();

@@ -686,9 +686,16 @@
   exists for — a right-hand side that reads the parameter itself (`e = e || {}`, `n = +n`) is
   normalisation and not smuggling; a function declaration inside the owning function that carries
   the parameter's name would collide with the rewritten `var` once hoisted; and any `.arguments`
-  member access anywhere in the program can alias some function's parameters. A note for work the
+  or `.caller` member access anywhere in the program can see some function's parameters or caller. A note for work the
   pass never claimed is noise — one Rollup bundle produces hundreds of them. The reference deobfuscator has no such
   pass and reports nothing either way.
+- **`Function#arguments` and `Function#caller` read through a key built at run time are a limit.**
+  In sloppy code `f.arguments` holds the parameter values of `f`'s active call and `f.caller` the
+  function that called it. When the program reads `.arguments` or `.caller` (with a dot, a
+  string-literal key or a destructuring key) on anything that is not the `arguments` object or a
+  literal, `var-transformation`, `function-to-arrow` and `default-parameters` leave every function
+  alone in the safe lane; under `--unsafe` they do not look for such reads. A read through a key that is not a literal at that point (`f[k]` with `k` equal to
+  `"arguments"`) is not seen; it is the same class of limit as `fn.toString()`.
 - **`dead-assignment-elimination` collapses only a declaration and an assignment that sit in the
   binding's own statement list.** The empty `var` and its single write must both be members of the
   owner list — the owning function's body statements, or the program's top level — and never of a
