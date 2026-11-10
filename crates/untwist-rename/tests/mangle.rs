@@ -235,9 +235,9 @@ fn the_driver_settles_after_a_single_renaming_iteration() {
     let (output, report) = run_report("let x = 1; function abc(q) { return q; eval('x'); }");
     assert_eq!(report.iterations, 2);
     assert!(report.converged(), "stop={:?}", report.stop);
-    assert_eq!(report.per_pass, vec![("mangle", 3)]);
+    assert_eq!(report.per_pass, vec![("mangle", 2)]);
     assert_eq!(hazard_notes(&report.notes).len(), 1);
-    assert!(output.starts_with("let vLN1 = 1;"));
+    assert!(output.starts_with("let x = 1;"), "{output}");
 }
 
 #[test]
@@ -248,7 +248,7 @@ fn a_scope_hazard_is_reported_once_per_run() {
     assert_eq!(hazards[0].pass, "mangle");
     assert_eq!(
         hazards[0].message,
-        "direct eval may defeat scope analysis; renaming anyway"
+        "direct eval may defeat scope analysis; the 1 binding it can see keeps its name"
     );
 
     let (_, with_notes) = render(
@@ -261,7 +261,7 @@ fn a_scope_hazard_is_reported_once_per_run() {
     assert_eq!(with_hazards.len(), 1);
     assert_eq!(
         with_hazards[0].message,
-        "with statement may defeat scope analysis; renaming anyway"
+        "with statement may defeat scope analysis; it can see no binding to rename"
     );
 }
 

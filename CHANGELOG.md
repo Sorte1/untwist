@@ -49,7 +49,12 @@ All notable changes to this project are documented in this file. The format is b
   of tagged templates (a name followed by many empty template literals) costs nesting like a
   call chain and is refused when it is too deep, instead of taking the worker to gigabytes of
   memory.
-
+- `--rename` (every mode) keeps the names of the bindings a direct `eval` or a `with` body can
+  see: the names a string-literal `eval` payload reads, every binding on the scope chain of any
+  other direct `eval`, and every outer binding a `with` body reads, writes or declares. The report
+  note says how many bindings were kept. Before, those bindings were renamed and the note said
+  "renaming anyway". With `--unsafe`, which assumes that nothing observes scopes, they are still
+  renamed, and the note says so.
 - A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
   globals. When the body still declares a `var`, function, class, `let` or `const` at its own
   level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that

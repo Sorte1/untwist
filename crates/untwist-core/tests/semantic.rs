@@ -5,9 +5,8 @@ use rustc_hash::FxHashSet;
 use untwist_core::parse::parse_program;
 use untwist_core::semantic::{
     bindings_possibly_used_before, build_scoping, effectively_constant_bindings, has_module_syntax,
-    is_binding_possibly_used_before, is_constant_binding, is_effectively_constant_binding,
-    parameter_symbols, read_reference_count, rebuild_scoping, single_write_span,
-    write_reference_count,
+    is_binding_possibly_used_before, is_constant_binding, parameter_symbols, read_reference_count,
+    rebuild_scoping, single_write_span, write_reference_count,
 };
 
 #[test]
@@ -44,14 +43,6 @@ fn find_symbol(
         .expect("bound")
 }
 
-fn effectively_constant(source: &str, name: &str) -> bool {
-    let alloc = Allocator::default();
-    let parsed = parse_program(&alloc, source);
-    let sem = build_scoping(&parsed.program);
-    let symbol = find_symbol(&sem, name);
-    is_effectively_constant_binding(&parsed.program, &sem.scoping, symbol)
-}
-
 fn constant_binding(source: &str, name: &str) -> bool {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, source);
@@ -70,47 +61,6 @@ fn possibly_used_before(source: &str, name: &str) -> bool {
 }
 
 #[test]
-fn issue_169_a_parameter_reassigned_once_and_not_read_before_is_effectively_constant() {
-    assert!(effectively_constant(
-        "function f(a, b, c) { console.log(b); b = 1; c = 2; }",
-        "c"
-    ));
-}
-
-#[test]
-fn issue_169_a_parameter_read_before_the_assignment_is_not() {
-    assert!(!effectively_constant(
-        "function f(a, b, c) { console.log(c); c = 2; }",
-        "c"
-    ));
-}
-
-#[test]
-fn issue_169_a_parameter_reassigned_twice_is_not() {
-    assert!(!effectively_constant(
-        "function f(c) { c = 1; c = 2; }",
-        "c"
-    ));
-}
-
-#[test]
-fn issue_169_a_use_inside_a_nested_function_counts_as_possibly_before() {
-    assert!(!effectively_constant(
-        "function f(c) { var g = function () { return c; }; c = 2; }",
-        "c"
-    ));
-}
-
-#[test]
-fn issue_169_a_var_is_not_a_parameter_and_keeps_the_old_rule() {
-    assert!(!effectively_constant("function f() { var c; c = 2; }", "c"));
-    assert!(effectively_constant(
-        "function f() { var c = 2; return c; }",
-        "c"
-    ));
-}
-
-#[test]
 fn parameter_symbols_and_single_write_span_agree() {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, "function f(c) { c = 2; }");
@@ -122,65 +72,9 @@ fn parameter_symbols_and_single_write_span_agree() {
 }
 
 #[test]
-fn issue_169_a_parameter_used_only_inside_its_own_nested_function_is_effectively_constant() {
-    assert!(effectively_constant(
-        "(function () { function f(c) { c = 2; return c; } })();",
-        "c"
-    ));
-}
-
-#[test]
-fn issue_169_a_read_in_the_assignments_own_right_hand_side_is_a_use_before_the_write() {
-    assert!(!effectively_constant(
-        "function f(c) { c = c + 1; return c; }",
-        "c"
-    ));
-}
-
-#[test]
-fn finding_1_a_write_inside_a_nested_closure_is_not_effectively_constant() {
-    assert!(!effectively_constant(
-        "function f(c) { var g = function () { c = 2; }; return c; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { var g = () => { c = 2; }; return c; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { var o = { m() { c = 2; } }; return c; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { var o = { get p() { return (c = 2); } }; return c; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { function h(d = (c = 2)) { return d; } return c; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { return (() => { c = 2; })(); }",
-        "c"
-    ));
-}
-
-#[test]
 fn finding_1_a_nested_write_is_possibly_used_before_through_the_public_predicate() {
     assert!(possibly_used_before(
         "function f(c) { var g = function () { c = 2; }; return c; }",
-        "c"
-    ));
-}
-
-#[test]
-fn issue_169_a_nested_use_after_the_assignment_still_counts_as_possibly_before() {
-    assert!(!effectively_constant(
-        "function f(c) { c = 2; var g = function () { return c; }; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { c = 2; var g = () => c; }",
         "c"
     ));
 }
@@ -192,14 +86,6 @@ fn finding_3_single_write_span_refuses_a_second_write() {
     let sem = build_scoping(&parsed.program);
     let symbol = find_symbol(&sem, "c");
     assert!(single_write_span(&parsed.program, &sem.scoping, symbol).is_none());
-}
-
-#[test]
-fn finding_3_a_parameter_also_incremented_is_not_effectively_constant() {
-    assert!(!effectively_constant(
-        "function f(c) { c = 1; c++; return c; }",
-        "c"
-    ));
 }
 
 #[test]
@@ -216,10 +102,6 @@ fn finding_4_ownership_is_live_for_a_root_var_and_a_block_scoped_let() {
 
 #[test]
 fn finding_4_class_field_initialisers_are_deferred_contexts() {
-    assert!(!effectively_constant(
-        "function f(c) { class K { p = (c = 2); } return c; }",
-        "c"
-    ));
     assert!(possibly_used_before(
         "function f(c) { c = 2; class K { p = c; } }",
         "c"
@@ -238,34 +120,6 @@ fn finding_4_class_static_blocks_are_deferred_contexts() {
 fn finding_4_accessor_property_values_are_deferred_contexts() {
     assert!(possibly_used_before(
         "function f(c) { c = 2; class K { accessor p = c; } }",
-        "c"
-    ));
-}
-
-#[test]
-fn finding_5_a_conditional_single_write_is_not_effectively_constant() {
-    assert!(!effectively_constant(
-        "function f(c) { if (g()) { c = 2; } return c; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { while (g()) { c = 1; } return c; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { for (;;c = 0) { g(c); } }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { try { g(); } catch (e) { c = 2; } return c; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { switch (g()) { case 1: c = 2; } return c; }",
-        "c"
-    ));
-    assert!(!effectively_constant(
-        "function f(c) { (0, c = 2); return c; }",
         "c"
     ));
 }
@@ -314,7 +168,7 @@ fn a_redeclared_binding_is_not_constant() {
 }
 
 #[test]
-fn the_batched_predicate_agrees_with_the_single_one_on_every_shape() {
+fn effectively_constant_bindings_keeps_the_constant_candidates() {
     const SOURCE: &str = "\
 let never = 1;
 let written = 2;
@@ -330,11 +184,11 @@ function f(p, q, r) {
     let parsed = parse_program(&alloc, SOURCE);
     let sem = build_scoping(&parsed.program);
     let all: Vec<_> = sem.scoping.symbol_ids().collect();
-    let batched = effectively_constant_bindings(&parsed.program, &sem.scoping, &all);
+    let batched = effectively_constant_bindings(&sem.scoping, &all);
     for symbol in all {
         assert_eq!(
             batched.contains(&symbol),
-            is_effectively_constant_binding(&parsed.program, &sem.scoping, symbol),
+            is_constant_binding(&sem.scoping, symbol),
             "{} disagrees",
             sem.scoping.symbol_name(symbol)
         );
@@ -343,12 +197,9 @@ function f(p, q, r) {
     let constant: FxHashSet<&str> = batched.iter().map(name_of).collect();
     assert!(constant.contains("never"));
     assert!(constant.contains("r"));
-    assert!(
-        constant.contains("p"),
-        "a parameter written once before any read is constant"
-    );
+    assert!(!constant.contains("p"));
     assert!(!constant.contains("written"));
-    assert!(!constant.contains("q"), "q is read before its only write");
+    assert!(!constant.contains("q"));
 }
 
 #[test]
@@ -356,7 +207,7 @@ fn an_empty_candidate_list_walks_nothing_and_returns_nothing() {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, "let a = 1;");
     let sem = build_scoping(&parsed.program);
-    assert!(effectively_constant_bindings(&parsed.program, &sem.scoping, &[]).is_empty());
+    assert!(effectively_constant_bindings(&sem.scoping, &[]).is_empty());
 }
 
 #[test]
