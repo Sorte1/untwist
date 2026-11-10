@@ -187,12 +187,16 @@ impl Utf16Builder {
     }
 
     pub fn push(&mut self, text: &JsString) -> EvalResult<()> {
-        let needed = self.units.len() + text.len();
+        self.push_units(text.units())
+    }
+
+    pub fn push_units(&mut self, units: &[u16]) -> EvalResult<()> {
+        let needed = self.units.len() + units.len();
         if needed > STRING_LEN_CAP {
             return Err(Bail::StringLength);
         }
         self.reserve_charged(needed)?;
-        self.units.extend_from_slice(text.units());
+        self.units.extend_from_slice(units);
         Ok(())
     }
 

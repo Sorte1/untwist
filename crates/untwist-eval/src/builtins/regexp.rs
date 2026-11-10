@@ -7,11 +7,12 @@ use regress::{backends, Flags, Regex};
 use crate::bail::{Bail, ErrorKind, EvalResult};
 use crate::budget::{REGEXP_STEPS_PER_FUEL, REGEXP_STEP_CAP};
 use crate::builtins::args::{
-    argument, charge_for_length, charge_for_scan, grow_object, live_array, live_slice,
+    argument, charge_for_length, charge_for_scan, grow_object, live_array, live_slice, live_text,
     write_property,
 };
 use crate::builtins::pattern_hooks::{note_exec, note_is_regexp, note_regexp_text};
 use crate::builtins::{regexp_syntax, Globals, NativeFn, NativeTable, Realm};
+use crate::heap::Charge;
 use crate::host::Host;
 use crate::ops::to_js_string;
 use crate::unmodelled::throw_or_refuse;
@@ -26,13 +27,22 @@ pub struct RegExpMatch {
     pub groups: Vec<Option<Range<usize>>>,
 }
 
-struct OffsetMap {
-    byte_offsets: Vec<usize>,
-    unit_offsets: Vec<usize>,
+enum OffsetMap {
+    Ascii(usize),
+    Mapped {
+        byte_offsets: Vec<usize>,
+        unit_offsets: Vec<usize>,
+    },
 }
 
+const OFFSET_ENTRY_BYTES: u64 = 2 * std::mem::size_of::<usize>() as u64;
+const UTF8_BYTES_PER_UNIT: u64 = 3;
+
 impl OffsetMap {
-    fn new(text: &str) -> Self {
+    fn new(text: &str, ascii: bool) -> Self {
+        if ascii {
+            return Self::Ascii(text.len());
+        }
         let mut byte_offsets = Vec::new();
         let mut unit_offsets = Vec::new();
         let mut units = 0usize;
@@ -43,20 +53,46 @@ impl OffsetMap {
         }
         byte_offsets.push(text.len());
         unit_offsets.push(units);
-        Self {
+        Self::Mapped {
             byte_offsets,
             unit_offsets,
         }
     }
 
+    fn bytes_for(units: usize, ascii: bool) -> u64 {
+        let (per_unit, entries) = match ascii {
+            true => (1, 0),
+            false => (UTF8_BYTES_PER_UNIT, units as u64 + 1),
+        };
+        (units as u64)
+            .saturating_mul(per_unit)
+            .saturating_add(entries.saturating_mul(OFFSET_ENTRY_BYTES))
+    }
+
     fn byte_at_unit(&self, unit: usize) -> Option<usize> {
-        let index = self.unit_offsets.partition_point(|&at| at < unit);
-        self.byte_offsets.get(index).copied()
+        match self {
+            Self::Ascii(len) => (unit <= *len).then_some(unit),
+            Self::Mapped {
+                byte_offsets,
+                unit_offsets,
+            } => {
+                let index = unit_offsets.partition_point(|&at| at < unit);
+                byte_offsets.get(index).copied()
+            }
+        }
     }
 
     fn unit_at_byte(&self, byte: usize) -> Option<usize> {
-        let index = self.byte_offsets.binary_search(&byte).ok()?;
-        self.unit_offsets.get(index).copied()
+        match self {
+            Self::Ascii(len) => (byte <= *len).then_some(byte),
+            Self::Mapped {
+                byte_offsets,
+                unit_offsets,
+            } => {
+                let index = byte_offsets.binary_search(&byte).ok()?;
+                unit_offsets.get(index).copied()
+            }
+        }
     }
 
     fn unit_range(&self, range: &Range<usize>) -> Option<Range<usize>> {
@@ -70,6 +106,7 @@ pub struct Subject {
     map: OffsetMap,
     unit_len: usize,
     scan_charged: Cell<bool>,
+    _held: Option<Charge>,
 }
 
 impl Subject {
@@ -81,17 +118,20 @@ impl Subject {
             )
             .into());
         }
+        host.spend(1 + (units.len() as u64) / 64)?;
+        let ascii = units.iter().all(|unit| *unit < 0x80);
+        let held = host.reserve_live(OffsetMap::bytes_for(units.len(), ascii))?;
         let Ok(text) = String::from_utf16(units) else {
             return Err(Bail::Unsupported(&"regex over ill-formed UTF-16").into());
         };
-        host.spend(1 + (units.len() as u64) / 64)?;
-        let map = OffsetMap::new(&text);
+        let map = OffsetMap::new(&text, ascii);
         Ok(Self {
-            ascii: units.iter().all(|unit| *unit < 0x80),
+            ascii,
             text,
             map,
             unit_len: units.len(),
             scan_charged: Cell::new(false),
+            _held: held,
         })
     }
 }
@@ -462,10 +502,10 @@ fn native_to_string<'a>(
     };
     note_regexp_text();
     charge_for_length(host, data.source.len() + data.flags.len())?;
-    Ok(Value::Str(source_text(&data)))
+    Ok(Value::Str(live_text(host, source_units(&data))?))
 }
 
-pub fn source_text(data: &RegExpData) -> JsString {
+fn source_units(data: &RegExpData) -> Vec<u16> {
     let mut units: Vec<u16> = vec![SLASH];
     if data.source.is_empty() {
         units.extend("(?:)".encode_utf16());
@@ -478,7 +518,7 @@ pub fn source_text(data: &RegExpData) -> JsString {
             units.push(flag);
         }
     }
-    JsString::from_units(units)
+    units
 }
 
 const COMPILED_BYTES_PER_UNIT: u64 = 64;
