@@ -256,9 +256,7 @@ fn proven(source: &Program<'_>, plan: &Plan<'_, '_>) -> Option<Vec<usize>> {
         Host::Top => Some(scoping.root_scope_id()),
         Host::Iife | Host::Bun => wrapper_scope(&plan.scope),
     };
-    let Some(list_scope) = list_scope else {
-        return None;
-    };
+    let list_scope = list_scope?;
     let free_object = scoping
         .find_binding(list_scope, oxc_str::Ident::from("Object"))
         .is_none();
