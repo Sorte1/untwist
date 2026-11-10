@@ -1,5 +1,6 @@
 mod bundle;
 mod diagnostics;
+mod maps;
 mod options;
 mod passes;
 mod pipeline;
@@ -12,6 +13,7 @@ mod wasm_graph;
 mod write;
 
 pub use bundle::{BundleListing, BundleOutput, FileOutput, ModuleOutput};
+pub use maps::{MapLink, MAP_SUFFIX};
 pub use options::{Isolation, Options, Progress, ProgressSink, TestHooks, TEST_HOOKS};
 pub use passes::{pass_named, PassInfo, PASSES};
 pub use pipeline::{
@@ -34,6 +36,7 @@ pub use untwist_core::budget::{
     timeout_secs as budget_timeout_secs, CountingAlloc, Hit as BudgetHit,
 };
 pub use untwist_core::pass::{IterationTiming, Note, NoteKind, PassCtor, StopReason};
+pub use untwist_core::source_map::{self, Coverage, OwnedSourceMap};
 pub use untwist_rename::RenameMode;
 pub use untwist_unpack::{Mapping, MappingMatcher};
 pub use wasm::{

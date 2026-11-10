@@ -12,6 +12,7 @@ use untwist_core::reflow::{print_placing, Check, GuardRecord, Printed};
 use untwist_core::semantic::{
     assume_observers, build_scoping, forget_failures, Observers, Semantics,
 };
+use untwist_core::source_map::{self, Mapped, OwnedSourceMap, Recording};
 use untwist_core::type_space::{declares_an_interface, holds_type_space};
 use untwist_deobfuscate::layers::{verdict, LayerForm, Refusal};
 use untwist_eval::stack::room;
@@ -48,6 +49,8 @@ pub(super) struct InputResult {
     pub(super) statement_spans: Option<Vec<(u32, u32)>>,
     #[cfg(feature = "refusal-spans")]
     pub(super) refusal_sites: Vec<super::RefusalSite>,
+    pub(super) mapped: Option<Mapped>,
+    pub(super) source_map: Option<OwnedSourceMap>,
 }
 
 impl InputResult {
@@ -214,6 +217,9 @@ impl Pipeline {
             Err(panic) => Err(panic),
         };
         settle(outcome, source, &mut result);
+        if self.options.source_map {
+            result.source_map = Some(final_map(source, &mut result));
+        }
         result.notes = consolidate_reach(dedupe_spanned(std::mem::take(&mut result.notes)));
         #[cfg(feature = "refusal-spans")]
         {
@@ -345,6 +351,7 @@ impl Pipeline {
                 untwist_deobfuscate::decoded_strings::Recorder::start(),
             )
         });
+        let origins = self.options.source_map.then(Recording::start);
         #[cfg(feature = "refusal-spans")]
         let recorder = self.records_refusal_spans().then(|| {
             (
@@ -373,7 +380,13 @@ impl Pipeline {
                 if first && self.options.statement_spans {
                     result.statement_spans = Some(statement_spans(&parsed.program));
                 }
-                Step::Done(Some(self.printed(&alloc, &mut parsed.program, errors == 0)))
+                let printed = self.printed(&alloc, &mut parsed.program, errors == 0);
+                if let Some(origins) = origins {
+                    result.mapped = (layering.peeled() == 0)
+                        .then(|| source_map::mapped(&mut parsed.program, &origins.finish()))
+                        .flatten();
+                }
+                Step::Done(Some(printed))
             }
             Err(_) => {
                 result.note_panicked();
@@ -432,6 +445,16 @@ impl Pipeline {
         }
         self.shaping_stages(site, sem, reservation);
         Staged::Done
+    }
+}
+
+fn final_map(source: &str, result: &mut InputResult) -> OwnedSourceMap {
+    match result.mapped.take() {
+        Some(mapped) if !result.panicked => {
+            source_map::retarget(mapped.map, &mapped.printed, &result.code)
+        }
+        _ if result.code == source => source_map::identity(source),
+        _ => source_map::unmapped(source),
     }
 }
 

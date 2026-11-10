@@ -1,8 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use crate::maps::{link, MapLink, Target};
 use crate::pipeline::Output;
 use crate::write::{BUNDLE_JSON, DEOBFUSCATED};
+use untwist_core::source_map::OwnedSourceMap;
 use untwist_unpack::path::{MAX_PATH_BYTES, MAX_SEGMENT_BYTES};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -11,6 +13,7 @@ pub(crate) enum Role {
     Listing,
     Module(usize),
     Wasm,
+    SourceMap,
 }
 
 #[derive(Debug)]
@@ -55,6 +58,7 @@ const OWNER_OUTPUT: &str = "the deobfuscated output is already planned at that p
 const OWNER_MODULE: &str = "an earlier module is already planned at that path";
 const OWNER_LISTING: &str = "the bundle listing is written at that path";
 const OWNER_WASM: &str = "a wasm module is already planned at that path";
+const OWNER_MAP: &str = "a source map is already planned at that path";
 const OWNER_INSIDE: &str = "other files are already planned inside that path";
 const OWNER_ABOVE: &str = "a file is already planned at a parent of that path";
 
@@ -139,14 +143,82 @@ struct Candidate {
     owner: &'static str,
 }
 
+struct Linking<'l> {
+    link: MapLink,
+    inputs: &'l [PathBuf],
+    total: usize,
+}
+
+impl Linking<'_> {
+    fn of<'o>(result: &Output, inputs: &'o [PathBuf]) -> Option<Linking<'o>> {
+        Some(Linking {
+            link: result.source_map_link?,
+            inputs,
+            total: result.codes.len(),
+        })
+    }
+
+    fn linked(
+        &self,
+        relative: &str,
+        code: &str,
+        map: &OwnedSourceMap,
+    ) -> (Vec<u8>, Option<Candidate>) {
+        let target = Target {
+            relative,
+            inputs: self.inputs,
+            total: self.total,
+        };
+        let linked = link(code, map, self.link, &target);
+        let file = linked.map.map(|(relative, json)| Candidate {
+            relative,
+            contents: json.into_bytes(),
+            role: Role::SourceMap,
+            owner: OWNER_MAP,
+        });
+        (linked.code.into_bytes(), file)
+    }
+}
+
 #[derive(Default)]
-struct Planner {
+struct Planner<'l> {
     claims: Claims,
     refused: Vec<PlanRefusal>,
     unwritten_modules: Vec<usize>,
+    linking: Option<Linking<'l>>,
 }
 
-impl Planner {
+impl Planner<'_> {
+    fn admit_mapped(
+        &mut self,
+        dir: &Path,
+        candidate: Candidate,
+        map: Option<&OwnedSourceMap>,
+    ) -> Vec<PlannedFile> {
+        let refused = self
+            .refusal_of(&candidate.relative, &claim_key(&candidate.relative))
+            .is_some();
+        let (Some(linking), Some(map), false) = (self.linking.as_ref(), map, refused) else {
+            return self.admit(dir, candidate).into_iter().collect();
+        };
+        let code = String::from_utf8_lossy(&candidate.contents).into_owned();
+        let (contents, map_file) = linking.linked(&candidate.relative, &code, map);
+        let mut planned: Vec<PlannedFile> = self
+            .admit(
+                dir,
+                Candidate {
+                    contents,
+                    ..candidate
+                },
+            )
+            .into_iter()
+            .collect();
+        if let Some(map_file) = map_file {
+            planned.extend(self.admit(dir, map_file));
+        }
+        planned
+    }
+
     fn refusal_of(&self, relative: &str, key: &str) -> Option<PlanRefusal> {
         if !is_safe_relative(relative) || key.is_empty() {
             return Some(PlanRefusal::Unsafe(relative.to_string()));
@@ -194,7 +266,8 @@ impl Planner {
                 self.refused.push(PlanRefusal::SuffixesExhausted(base));
                 continue;
             };
-            planned.extend(self.admit(
+            let map = result.source_maps.get(index).and_then(Option::as_ref);
+            planned.extend(self.admit_mapped(
                 dir,
                 Candidate {
                     relative,
@@ -202,6 +275,7 @@ impl Planner {
                     role: Role::Output,
                     owner: OWNER_OUTPUT,
                 },
+                map,
             ));
         }
         planned
@@ -242,7 +316,7 @@ impl Planner {
         };
         let mut planned = Vec::with_capacity(bundle.modules.len());
         for (index, module) in bundle.modules.iter().enumerate() {
-            planned.extend(self.admit(
+            planned.extend(self.admit_mapped(
                 dir,
                 Candidate {
                     relative: module.path.clone(),
@@ -250,6 +324,7 @@ impl Planner {
                     role: Role::Module(index),
                     owner: OWNER_MODULE,
                 },
+                module.map.as_ref(),
             ));
         }
         planned
@@ -259,20 +334,38 @@ impl Planner {
 pub(crate) fn plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
     if result.single_file {
         return Plan {
-            files: single_file_plan(dir, result),
+            files: single_file_plan(dir, result, inputs),
             ..Plan::default()
         };
     }
     plan_per_module(dir, result, inputs)
 }
 
-fn single_file_plan(dir: &Path, result: &Output) -> Vec<PlannedFile> {
+fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Vec<PlannedFile> {
+    let concatenated = result.concatenated();
+    let map = match (result.bundle.as_ref(), result.source_maps.as_slice()) {
+        (None, [Some(map)]) => Some(map),
+        _ => None,
+    };
+    let linked = Linking::of(result, inputs)
+        .zip(map)
+        .map(|(linking, map)| linking.linked(DEOBFUSCATED, &concatenated, map));
+    let (contents, map_file) = match linked {
+        Some(linked) => linked,
+        None => (concatenated.into_owned().into_bytes(), None),
+    };
     let mut planned = vec![PlannedFile {
         path: dir.join(DEOBFUSCATED),
         relative: DEOBFUSCATED.to_string(),
-        contents: result.concatenated().into_owned().into_bytes(),
+        contents,
         role: Role::Output,
     }];
+    planned.extend(map_file.map(|file| PlannedFile {
+        path: dir.join(&file.relative),
+        relative: file.relative,
+        contents: file.contents,
+        role: file.role,
+    }));
     if let Some(bundle) = result.bundle.as_ref() {
         planned.push(PlannedFile {
             path: dir.join(BUNDLE_JSON),
@@ -304,7 +397,10 @@ fn listing_contents(result: &Output, unwritten_modules: &[usize]) -> Vec<u8> {
 }
 
 fn plan_per_module(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
-    let mut planner = Planner::default();
+    let mut planner = Planner {
+        linking: Linking::of(result, inputs),
+        ..Planner::default()
+    };
     let outputs = planner.outputs(dir, result, inputs);
     let listing = planner.listing(dir, result);
     let wasm = planner.wasm(dir, result);
@@ -358,6 +454,8 @@ mod tests {
             wasm_check: crate::WasmCheck::default(),
             wasm_unchecked: false,
             wasm_panicked: false,
+            source_maps: Vec::new(),
+            source_map_link: None,
         }
     }
 
@@ -375,6 +473,7 @@ mod tests {
                     is_entry: false,
                     code: format!("module {index}"),
                     span: None,
+                    map: None,
                 })
                 .collect(),
         }
@@ -609,5 +708,41 @@ mod tests {
     #[test]
     fn safe_relative_path_is_accepted() {
         assert!(is_safe_relative("sub/index.js"));
+    }
+
+    fn mapped_modules(paths: &[&str]) -> Plan {
+        let mut bundle = bundle_with(paths);
+        for module in &mut bundle.modules {
+            module.map = Some(untwist_core::source_map::identity(&module.code));
+        }
+        let mut result = output_with(vec!["deobfuscated code".to_string()], Some(bundle));
+        result.source_map_link = Some(MapLink::File);
+        plan(Path::new("/out"), &result, &[])
+    }
+
+    #[test]
+    fn a_written_module_gets_its_map_beside_it() {
+        let plan = mapped_modules(&["sub/a.js"]);
+        let map = plan
+            .files
+            .iter()
+            .find(|file| file.role == Role::SourceMap)
+            .expect("a planned map");
+        assert_eq!(map.relative, "sub/a.js.map");
+        let module = plan
+            .files
+            .iter()
+            .find(|file| file.relative == "sub/a.js")
+            .expect("the module");
+        assert!(
+            String::from_utf8_lossy(&module.contents).ends_with("//# sourceMappingURL=a.js.map")
+        );
+    }
+
+    #[test]
+    fn a_refused_module_name_gets_no_map_and_no_link() {
+        let plan = mapped_modules(&["../escape.js", "a\\b.js"]);
+        assert!(plan.files.iter().all(|file| file.role != Role::SourceMap));
+        assert_eq!(plan.unwritten_modules, vec![0, 1]);
     }
 }

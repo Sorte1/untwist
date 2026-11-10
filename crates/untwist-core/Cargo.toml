@@ -24,6 +24,7 @@ oxc_syntax.workspace = true
 oxc_traverse.workspace = true
 oxc_codegen.workspace = true
 oxc_diagnostics.workspace = true
+oxc_sourcemap.workspace = true
 rustc-hash.workspace = true
 
 [features]
