@@ -24,7 +24,7 @@ fn escape_sequences() {
         "\"'\".concat(foo, \"' \\\"\").concat(bar, \"\\\"\").concat(\"$\\0\\b\\f\\n\\r\\t\\v\");",
         [untwist_unminify::template_literals::boxed],
         @r#"
-`'${foo}' "${bar}"\$\0\b\f
+`'${foo}' "${bar}"\$\x00\b\f
 \r\t\v`;
 "#
     );

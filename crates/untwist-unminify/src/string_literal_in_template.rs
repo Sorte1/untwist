@@ -19,7 +19,7 @@ pub(crate) fn escape_template(text: &str) -> String {
             '\\' => out.push_str("\\\\"),
             '`' => out.push_str("\\`"),
             '$' => out.push_str("\\$"),
-            '\0' => out.push_str("\\0"),
+            '\0' => out.push_str("\\x00"),
             '\u{8}' => out.push_str("\\b"),
             '\u{c}' => out.push_str("\\f"),
             '\r' => out.push_str("\\r"),
@@ -29,6 +29,36 @@ pub(crate) fn escape_template(text: &str) -> String {
         }
     }
     out
+}
+
+fn escaped_at(text: &str, index: usize) -> bool {
+    text.as_bytes()[..index]
+        .iter()
+        .rev()
+        .take_while(|&&byte| byte == b'\\')
+        .count()
+        % 2
+        == 1
+}
+
+pub(crate) fn join_raw(head: &mut String, tail: &str) {
+    let len = head.len();
+    match tail.as_bytes().first() {
+        Some(b'{') if head.ends_with('$') && !escaped_at(head, len - 1) => {
+            head.truncate(len - 1);
+            head.push_str("\\$");
+        }
+        Some(b'0'..=b'9') if head.ends_with("\\0") && escaped_at(head, len - 1) => {
+            head.truncate(len - 2);
+            head.push_str("\\x00");
+        }
+        Some(b'\n') if head.ends_with('\r') => {
+            head.truncate(len - 1);
+            head.push('\n');
+        }
+        _ => {}
+    }
+    head.push_str(tail);
 }
 
 struct Pending<'a> {
@@ -62,14 +92,14 @@ impl<'a> Pending<'a> {
     }
 
     fn append_literal(&mut self, text: &str) {
-        self.raw.push_str(&escape_template(text));
+        join_raw(&mut self.raw, &escape_template(text));
         if let Some(cooked) = &mut self.cooked {
             cooked.push_str(text);
         }
     }
 
     fn merge(&mut self, element: &TemplateElement<'a>) {
-        self.raw.push_str(element.value.raw.as_str());
+        join_raw(&mut self.raw, element.value.raw.as_str());
         match element.value.cooked.and_then(|text| text.as_str()) {
             Some(text) => {
                 if let Some(cooked) = &mut self.cooked {

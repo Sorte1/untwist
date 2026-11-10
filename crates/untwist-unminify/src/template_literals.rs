@@ -1,4 +1,4 @@
-use crate::string_literal_in_template::escape_template;
+use crate::string_literal_in_template::{escape_template, join_raw};
 use oxc_allocator::{Box as ABox, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_span::SPAN;
@@ -69,7 +69,7 @@ fn append_raw<'a>(template: &mut TemplateLiteral<'a>, text: &str, cx: &mut Cx<'a
         return;
     };
     let mut raw = last.value.raw.as_str().to_string();
-    raw.push_str(text);
+    join_raw(&mut raw, text);
     last.value.raw = Str::from_str_in(&raw, cx);
     last.value.cooked = None;
 }
@@ -79,7 +79,7 @@ fn prepend_raw<'a>(template: &mut TemplateLiteral<'a>, text: &str, cx: &mut Cx<'
         return;
     };
     let mut raw = text.to_string();
-    raw.push_str(first.value.raw.as_str());
+    join_raw(&mut raw, first.value.raw.as_str());
     first.value.raw = Str::from_str_in(&raw, cx);
     first.value.cooked = None;
 }
