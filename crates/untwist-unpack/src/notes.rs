@@ -4,7 +4,6 @@ use untwist_core::catalogue;
 
 pub const UNSAFE_PATH_REPLACED: &str = "replaced by";
 pub const UNSAFE_OUTPUT_PATH_REPLACED: &str = "unsafe output path";
-pub const UNIQUIFY_EXHAUSTED: &str = "could not uniquify";
 pub const PATH_COLLISION: &str = "output path collision, writing";
 pub const MAPPING_UNSAFE_PATH: &str = "unsafe path, ignored";
 pub const MAPPING_UNMATCHED: &str = "no module matched";
@@ -24,7 +23,6 @@ catalogue!(
     ALL_NOTES,
     UNSAFE_PATH_REPLACED,
     UNSAFE_OUTPUT_PATH_REPLACED,
-    UNIQUIFY_EXHAUSTED,
     PATH_COLLISION,
     MAPPING_UNSAFE_PATH,
     MAPPING_UNMATCHED,
@@ -68,10 +66,6 @@ pub fn unsafe_path_replaced(id: impl Display, source: impl Debug, path: &str) ->
 
 pub fn unsafe_output_path_replaced(id: impl Display, path: impl Debug) -> String {
     format!("module {id}: {UNSAFE_OUTPUT_PATH_REPLACED} {path:?} replaced")
-}
-
-pub fn uniquify_exhausted(id: impl Display, base: &str, attempts: usize) -> String {
-    format!("module {id}: {UNIQUIFY_EXHAUSTED} {base} after {attempts} attempts")
 }
 
 pub fn path_collision(id: impl Display, path: &str, base: &str) -> String {

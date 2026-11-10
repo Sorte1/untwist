@@ -55,27 +55,167 @@ fn colliding_paths_are_uniquified_from_the_original_stem() {
     );
 }
 
-#[test]
-fn exhausting_the_suffix_range_is_reported_distinctly() {
-    let alloc = Allocator::default();
-    let sources: Vec<(String, &str, bool)> = (0..1001)
-        .map(|i| (format!("m{i}"), "x();\n", false))
-        .collect();
-    let refs: Vec<(&str, &str, bool)> = sources
+fn bundle_of_ids<'a>(alloc: &'a Allocator, ids: &[String]) -> untwist_unpack::model::Bundle<'a> {
+    let sources: Vec<(&str, &str, bool)> = ids
         .iter()
-        .map(|(id, code, is_esm)| (id.as_str(), *code, *is_esm))
+        .map(|id| (id.as_str(), "x();\n", false))
         .collect();
-    let mut bundle = bundle_of(&alloc, &refs, None);
-    for module in bundle.modules.values_mut() {
-        module.path = PosixPath::parse("shared.js").expect("safe");
-    }
-    let notes = assign_paths(&mut bundle);
+    bundle_of(alloc, &sources, None)
+}
+
+fn assert_distinct_ignoring_case(paths: &[String]) {
+    let folded: std::collections::HashSet<String> =
+        paths.iter().map(|path| path.to_lowercase()).collect();
+    assert_eq!(folded.len(), paths.len(), "{paths:?}");
+}
+
+const MANY_COLLIDING_IDS: usize = 20_000;
+const LINEAR_TIME_BUDGET: std::time::Duration = std::time::Duration::from_secs(5);
+
+#[test]
+fn thousands_of_ids_that_normalise_to_one_path_all_get_distinct_names_quickly() {
+    let alloc = Allocator::default();
+    let ids: Vec<String> = (0..MANY_COLLIDING_IDS)
+        .map(|index| format!("x{index}/../a"))
+        .collect();
+    let mut bundle = bundle_of_ids(&alloc, &ids);
+
+    let started = std::time::Instant::now();
+    assign_paths(&mut bundle);
+    let elapsed = started.elapsed();
+
+    let assigned = paths(&bundle);
+    assert_eq!(assigned.len(), MANY_COLLIDING_IDS);
+    assert_distinct_ignoring_case(&assigned);
+    assert_eq!(assigned[0], "a.js");
+    assert_eq!(assigned[1], "a-2.js");
+    assert_eq!(
+        assigned[MANY_COLLIDING_IDS - 1],
+        format!("a-{MANY_COLLIDING_IDS}.js")
+    );
+    assert!(elapsed < LINEAR_TIME_BUDGET, "{elapsed:?}");
+}
+
+#[test]
+fn a_very_deep_module_id_gets_a_flat_name() {
+    let alloc = Allocator::default();
+    let ids = [format!("{}a", "a/".repeat(20_000)), "b".to_string()];
+    let mut bundle = bundle_of_ids(&alloc, &ids);
+
+    assign_paths(&mut bundle);
+
+    let assigned = paths(&bundle);
     assert!(
-        notes
-            .iter()
-            .any(|note| note.message.contains("could not uniquify")
-                && note.message.contains("shared.js")),
-        "{notes:?}"
+        assigned[0].starts_with("_unsafe_a_a_"),
+        "{}",
+        &assigned[0][..40]
+    );
+    assert!(!assigned[0].contains('/'));
+    assert_eq!(assigned[1], "b.js");
+}
+
+#[test]
+fn a_numbered_name_another_module_already_holds_is_skipped() {
+    let alloc = Allocator::default();
+    let ids = ["a-2".to_string(), "a".to_string(), "x/../a".to_string()];
+    let mut bundle = bundle_of_ids(&alloc, &ids);
+
+    assign_paths(&mut bundle);
+
+    assert_eq!(
+        paths(&bundle),
+        vec![
+            "a-2.js".to_string(),
+            "a.js".to_string(),
+            "a-3.js".to_string()
+        ]
+    );
+}
+
+#[test]
+fn ids_that_differ_only_in_case_get_names_that_differ_in_more_than_case() {
+    let alloc = Allocator::default();
+    let ids = [
+        "A".to_string(),
+        "a".to_string(),
+        "lib/Util".to_string(),
+        "LIB/util".to_string(),
+    ];
+    let mut bundle = bundle_of_ids(&alloc, &ids);
+
+    let notes = assign_paths(&mut bundle);
+
+    let assigned = paths(&bundle);
+    assert_distinct_ignoring_case(&assigned);
+    assert_eq!(assigned[0], "A.js");
+    assert_eq!(assigned[1], "a-2.js");
+    assert_eq!(notes.len(), 2, "{notes:?}");
+}
+
+#[test]
+fn a_module_under_a_path_another_module_holds_as_a_file_gets_a_flat_name() {
+    let alloc = Allocator::default();
+    let ids = [
+        "a.js".to_string(),
+        "a.js/b".to_string(),
+        "A.JS/c".to_string(),
+    ];
+    let mut bundle = bundle_of_ids(&alloc, &ids);
+
+    let notes = assign_paths(&mut bundle);
+
+    let assigned = paths(&bundle);
+    assert_eq!(assigned[0], "a.js");
+    assert!(!assigned[1].contains('/'), "{assigned:?}");
+    assert!(!assigned[2].contains('/'), "{assigned:?}");
+    assert_distinct_ignoring_case(&assigned);
+    assert_eq!(notes.len(), 2, "{notes:?}");
+}
+
+#[test]
+fn a_module_named_like_a_directory_other_modules_live_in_is_renamed() {
+    let alloc = Allocator::default();
+    let ids = ["a.js/b".to_string(), "a.js".to_string(), "A".to_string()];
+    let mut bundle = bundle_of_ids(&alloc, &ids);
+
+    let notes = assign_paths(&mut bundle);
+
+    assert_eq!(
+        paths(&bundle),
+        vec![
+            "a.js/b.js".to_string(),
+            "a-2.js".to_string(),
+            "A-3.js".to_string()
+        ]
+    );
+    assert_eq!(notes.len(), 2, "{notes:?}");
+}
+
+#[test]
+fn the_names_the_tool_writes_itself_are_never_given_to_a_module() {
+    let alloc = Allocator::default();
+    let ids = [
+        "deobfuscated".to_string(),
+        "Deobfuscated".to_string(),
+        "listing".to_string(),
+        "binary".to_string(),
+        "wasm/inside".to_string(),
+    ];
+    let mut bundle = bundle_of_ids(&alloc, &ids);
+    bundle.modules["listing"].path = PosixPath::parse("BUNDLE.json").expect("safe");
+    bundle.modules["binary"].path = PosixPath::parse("wasm").expect("safe");
+
+    assign_paths(&mut bundle);
+
+    assert_eq!(
+        paths(&bundle),
+        vec![
+            "deobfuscated-2.js".to_string(),
+            "Deobfuscated-3.js".to_string(),
+            "BUNDLE-2.json".to_string(),
+            "wasm-2".to_string(),
+            "wasm/inside.js".to_string(),
+        ]
     );
 }
 

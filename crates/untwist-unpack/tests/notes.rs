@@ -37,10 +37,6 @@ fn every_builder_spells_the_text_it_replaced() {
         "module 3: unsafe output path \"a/../b\" replaced"
     );
     assert_eq!(
-        notes::uniquify_exhausted("3", "a.js", 1000),
-        "module 3: could not uniquify a.js after 1000 attempts"
-    );
-    assert_eq!(
         notes::path_collision("3", "a-1.js", "a.js"),
         "module 3: output path collision, writing a-1.js instead of a.js"
     );

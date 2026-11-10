@@ -110,9 +110,12 @@ impl<'a> Module<'a> {
     }
 }
 
+const MAX_FALLBACK_ID_CHARS: usize = 200;
+
 pub fn fallback_path(id: &str) -> PosixPath {
     let sanitized: String = id
         .chars()
+        .take(MAX_FALLBACK_ID_CHARS)
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
         .collect();
     PosixPath::parse(&format!("_unsafe_{sanitized}.js"))

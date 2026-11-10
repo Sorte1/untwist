@@ -1,11 +1,12 @@
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::{Note, NoteKind};
 
 use crate::model::{fallback_path, Bundle};
-use crate::path::{PosixPath, ENTRY_PATH};
+use crate::path::{PosixPath, ENTRY_PATH, MAX_SEGMENT_BYTES, RESERVED_DIRECTORIES, RESERVED_FILES};
 
 const PASS_NAME: &str = "unpack";
-const MAX_COLLISION_SUFFIX: usize = 1000;
+const FIRST_SUFFIX: usize = 2;
+const LONGEST_SUFFIX_BYTES: usize = 21;
 
 fn note(message: String) -> Note {
     Note {
@@ -16,13 +17,106 @@ fn note(message: String) -> Note {
     }
 }
 
+fn folded(path: &str) -> String {
+    path.to_lowercase()
+}
+
+fn parents(key: &str) -> impl Iterator<Item = &str> {
+    key.match_indices('/').map(|(index, _)| &key[..index])
+}
+
+fn has_suffix_room(path: &PosixPath) -> bool {
+    let name = path.as_str().rsplit('/').next().unwrap_or_default();
+    name.len() + LONGEST_SUFFIX_BYTES <= MAX_SEGMENT_BYTES
+}
+
+#[derive(Default)]
+struct Taken {
+    files: FxHashSet<String>,
+    directories: FxHashSet<String>,
+    next_suffix: FxHashMap<String, usize>,
+}
+
+impl Taken {
+    fn reserved(has_entry: bool) -> Self {
+        let mut taken = Self::default();
+        taken
+            .files
+            .extend(RESERVED_FILES.iter().map(|name| folded(name)));
+        taken
+            .directories
+            .extend(RESERVED_DIRECTORIES.iter().map(|name| folded(name)));
+        if has_entry {
+            taken.files.insert(folded(ENTRY_PATH));
+        }
+        taken
+    }
+
+    fn is_under_a_file(&self, key: &str) -> bool {
+        parents(key).any(|parent| self.files.contains(parent))
+    }
+
+    fn is_free(&self, key: &str) -> bool {
+        !self.files.contains(key) && !self.directories.contains(key) && !self.is_under_a_file(key)
+    }
+
+    fn claim(&mut self, key: String) {
+        for parent in parents(&key) {
+            if !self.directories.contains(parent) {
+                self.directories.insert(parent.to_string());
+            }
+        }
+        self.files.insert(key);
+    }
+
+    fn next_free(&mut self, base: &PosixPath) -> PosixPath {
+        let base_key = folded(base.as_str());
+        let mut suffix = self
+            .next_suffix
+            .get(&base_key)
+            .copied()
+            .unwrap_or(FIRST_SUFFIX);
+        loop {
+            let candidate = base.with_stem_suffix(&format!("-{suffix}"));
+            suffix += 1;
+            if self.is_free(&folded(candidate.as_str())) {
+                self.next_suffix.insert(base_key, suffix);
+                return candidate;
+            }
+        }
+    }
+
+    fn unique(&mut self, id: &str, base: PosixPath, notes: &mut Vec<Note>) -> PosixPath {
+        let key = folded(base.as_str());
+        if self.is_free(&key) {
+            self.claim(key);
+            return base;
+        }
+        let flat = self.is_under_a_file(&key) || !has_suffix_room(&base);
+        let stem = if flat {
+            fallback_path(id)
+        } else {
+            base.clone()
+        };
+        let path = if self.is_free(&folded(stem.as_str())) {
+            stem
+        } else {
+            self.next_free(&stem)
+        };
+        notes.push(note(crate::notes::path_collision(
+            id,
+            path.as_str(),
+            base.as_str(),
+        )));
+        self.claim(folded(path.as_str()));
+        path
+    }
+}
+
 pub fn assign_paths(bundle: &mut Bundle<'_>) -> Vec<Note> {
     let mut notes = Vec::new();
-    let mut taken: FxHashSet<String> = FxHashSet::default();
     let mut entry_reserved = bundle.modules.values().any(|module| module.is_entry);
-    if entry_reserved {
-        taken.insert(ENTRY_PATH.to_string());
-    }
+    let mut taken = Taken::reserved(entry_reserved);
     for module in bundle.modules.values_mut() {
         if let Some(source) = &module.unsafe_path_source {
             notes.push(note(crate::notes::unsafe_path_replaced(
@@ -46,41 +140,8 @@ pub fn assign_paths(bundle: &mut Bundle<'_>) -> Vec<Note> {
             entry_reserved = false;
             base
         } else {
-            unique(&mut taken, &module.id, base, &mut notes)
+            taken.unique(&module.id, base, &mut notes)
         };
     }
     notes
-}
-
-fn unique(
-    taken: &mut FxHashSet<String>,
-    id: &str,
-    base: PosixPath,
-    notes: &mut Vec<Note>,
-) -> PosixPath {
-    if !taken.contains(base.as_str()) {
-        taken.insert(base.as_str().to_string());
-        return base;
-    }
-    let mut path = base.clone();
-    let mut suffix = 2usize;
-    while taken.contains(path.as_str()) && suffix <= MAX_COLLISION_SUFFIX {
-        path = base.with_stem_suffix(&format!("-{suffix}"));
-        suffix += 1;
-    }
-    if taken.contains(path.as_str()) {
-        notes.push(note(crate::notes::uniquify_exhausted(
-            id,
-            base.as_str(),
-            MAX_COLLISION_SUFFIX,
-        )));
-    } else if suffix > 2 {
-        notes.push(note(crate::notes::path_collision(
-            id,
-            path.as_str(),
-            base.as_str(),
-        )));
-    }
-    taken.insert(path.as_str().to_string());
-    path
 }
