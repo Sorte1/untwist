@@ -44,10 +44,10 @@ fn printed(source: &str) -> String {
 #[test]
 fn inline_properties_without_inlining_object() {
     assert_transform!(
-        "function f() {\n  const obj = {};\n  obj.foo = foo;\n  obj.bar = 1;\n  foo++;\n  return obj;\n}",
+        "function f(foo) {\n  const obj = {};\n  obj.foo = foo;\n  obj.bar = 1;\n  foo++;\n  return obj;\n}",
         [untwist_deobfuscate::merge_object_assignments::boxed],
         @r#"
-    function f() {
+    function f(foo) {
       const obj = {
         foo,
         bar: 1
@@ -157,17 +157,238 @@ fn a_value_that_can_run_code_refuses_the_fold() {
     }
 }
 
+fn run_mode(source: &str, extended: bool) -> String {
+    let alloc = Allocator::default();
+    let (code, report) = untwist_testing::transform_report(
+        &alloc,
+        source,
+        &[untwist_deobfuscate::merge_object_assignments::boxed],
+        PassOptions {
+            extended,
+            ..PassOptions::default()
+        },
+    );
+    assert!(report.converged(), "{:?}", report.stop);
+    code
+}
+
+const A_VALUE_THAT_THROWS: &str = "function f() {\n  try {\n    var o = {};\n    o.a = 1;\n    o.b = missing;\n  } catch (e) {\n    console.log(o.a);\n  }\n}\nf();";
+const A_VALUE_BEHIND_A_GETTER: &str = "function n() {\n  var peek = function () {\n    return o;\n  };\n  var holder = {\n    get q() {\n      return peek().a;\n    }\n  };\n  var o = {};\n  o.a = 1;\n  o.b = holder.q;\n  console.log(o.b);\n}\nn();";
+const A_VALUE_READ_BEFORE_ITS_LET: &str = "function t() {\n  try {\n    var o = {};\n    o.a = 1;\n    o.b = later;\n  } catch (e) {\n    console.log(o.a);\n  }\n  let later = 2;\n}\nt();";
+const A_VALUE_READ_BEFORE_ITS_PARAMETER: &str = "function d(first = (() => {\n  try {\n    var o = {};\n    o.a = 1;\n    o.b = second;\n  } catch (e) {\n    return o.a;\n  }\n})(), second) {\n  console.log(first);\n}\nd();";
+
 #[test]
-fn a_plain_member_read_still_folds() {
-    assert_transform!(
-        "function f() {\n  const obj = {};\n  obj.a = other.b;\n  return obj;\n}",
-        [untwist_deobfuscate::merge_object_assignments::boxed],
-        @r#"
-    function f() {
-      const obj = { a: other.b };
-      return obj;
+fn a_value_that_can_throw_or_run_a_getter_is_not_folded_past() {
+    for source in [
+        A_VALUE_THAT_THROWS,
+        A_VALUE_BEHIND_A_GETTER,
+        A_VALUE_READ_BEFORE_ITS_LET,
+        A_VALUE_READ_BEFORE_ITS_PARAMETER,
+    ] {
+        for extended in [true, false] {
+            let code = run_mode(source, extended);
+            assert!(code.contains("o.b ="), "extended={extended}: {code}");
+            untwist_testing::node::assert_node_agrees(source, &code);
+        }
     }
-    "#
+}
+
+#[test]
+fn a_value_that_is_not_provably_inert_refuses_the_fold() {
+    for value in [
+        "other.b",
+        "other[0]",
+        "missing",
+        "this",
+        "`${text}`",
+        "-count",
+        "count + 1",
+        "count == 1",
+        "key in other",
+        "[...items]",
+        "{ ...other }",
+        "{ [missing]: 1 }",
+        "{ a: other.b }",
+        "[other.b]",
+        "class {}",
+        "outer",
+        "flag ? other.b : 1",
+        "flag || other.b",
+        "typeof other.b",
+        "void other.b",
+    ] {
+        let source = format!(
+            "const outer = 1;\nfunction f(other, text, count, key, items, flag) {{\n  const obj = {{}};\n  obj.a = {value};\n  return [obj, obj];\n}}"
+        );
+        for extended in [true, false] {
+            let code = run_mode(&source, extended);
+            assert_eq!(code, printed(&source), "extended={extended}: {value}");
+        }
+    }
+}
+
+#[test]
+fn a_value_that_cannot_throw_or_run_code_still_folds() {
+    for value in [
+        "1",
+        "\"text\"",
+        "null",
+        "true",
+        "undefined",
+        "void 0",
+        "!0",
+        "-1",
+        "1 + 2",
+        "`plain`",
+        "10n",
+        "/x/g",
+        "function () {\n    return missing.x;\n  }",
+        "() => other.y",
+        "[1, \"x\", early]",
+        "{ n: null }",
+        "{ \"quoted\": early }",
+        "param",
+        "hoisted",
+        "early",
+        "declared",
+        "Before",
+        "typeof missing",
+        "typeof param",
+        "param === early",
+        "param ? early : 2",
+        "param || early",
+    ] {
+        let source = format!(
+            "function f(param) {{\n  var hoisted = 1;\n  const early = 2;\n  class Before {{}}\n  const obj = {{}};\n  obj.a = {value};\n  return [obj, obj];\n  function declared() {{}}\n}}"
+        );
+        for extended in [true, false] {
+            let code = run_mode(&source, extended);
+            assert!(!code.contains("obj.a ="), "extended={extended}: {code}");
+            assert!(
+                code.contains("const obj = {"),
+                "extended={extended}: {code}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_lexical_binding_counts_as_initialised_only_after_an_earlier_statement_of_the_same_list() {
+    for (source, folds) in [
+        (
+            "let k = 1;\nconst obj = {};\nobj.a = k;\nlog(obj, obj);",
+            true,
+        ),
+        (
+            "const [k] = list;\nconst obj = {};\nobj.a = k;\nlog(obj, obj);",
+            true,
+        ),
+        (
+            "const obj = {};\nobj.a = k;\nlet k = 1;\nlog(obj, obj);",
+            false,
+        ),
+        (
+            "let k = 1;\n{\n  const obj = {};\n  obj.a = k;\n  log(obj, obj);\n}",
+            false,
+        ),
+        (
+            "let k = 1;\nfunction f() {\n  const obj = {};\n  obj.a = k;\n  return [obj, obj];\n}",
+            false,
+        ),
+    ] {
+        for extended in [true, false] {
+            let code = run_mode(source, extended);
+            assert_eq!(
+                !code.contains("obj.a ="),
+                folds,
+                "extended={extended}: {code}"
+            );
+        }
+    }
+}
+
+const A_DELETED_BINDING: &str =
+    "function g() {\n  var o = { a: 1, b: \"x\" };\n  console.log(delete o);\n}\ng();";
+const A_DELETED_BINDING_IN_PARENTHESES: &str =
+    "function g() {\n  var o = { a: 1 };\n  console.log(delete (o));\n}\ng();";
+const A_FOLDED_THEN_DELETED_BINDING: &str =
+    "function g() {\n  var o = {};\n  o.a = 1;\n  console.log(delete o);\n}\ng();";
+const AN_UPDATED_BINDING: &str =
+    "function g() {\n  var o = { a: 1 };\n  console.log(o++);\n}\ng();";
+const AN_ASSIGNED_BINDING: &str =
+    "function g() {\n  var o = { a: 1 };\n  console.log(o = 2);\n}\ng();";
+const A_COMPOUND_ASSIGNED_BINDING: &str =
+    "function g() {\n  var o = { a: 1 };\n  console.log(o += \"x\");\n}\ng();";
+
+#[test]
+fn a_literal_is_not_inlined_into_a_delete_an_update_or_an_assignment_target() {
+    for source in [
+        A_DELETED_BINDING,
+        A_DELETED_BINDING_IN_PARENTHESES,
+        A_FOLDED_THEN_DELETED_BINDING,
+        AN_UPDATED_BINDING,
+        AN_ASSIGNED_BINDING,
+        A_COMPOUND_ASSIGNED_BINDING,
+    ] {
+        for extended in [true, false] {
+            let code = run_mode(source, extended);
+            assert!(code.contains("var o = {"), "extended={extended}: {code}");
+            untwist_testing::node::assert_node_agrees(source, &code);
+        }
+    }
+}
+
+fn single_use_literals(count: usize) -> String {
+    (0..count)
+        .map(|index| format!("const v{index} = {{ k: {index} }};\nuse(v{index});\n"))
+        .collect()
+}
+
+fn inline_single_use_literals(count: usize) -> (String, std::time::Duration) {
+    let source = single_use_literals(count);
+    let alloc = Allocator::default();
+    let started = std::time::Instant::now();
+    let (code, report) = untwist_testing::transform_report(
+        &alloc,
+        &source,
+        &[untwist_deobfuscate::merge_object_assignments::boxed],
+        PassOptions::default(),
+    );
+    let elapsed = started.elapsed();
+    assert!(report.converged(), "{:?}", report.stop);
+    (code, elapsed)
+}
+
+fn quickest_inline_of(count: usize) -> std::time::Duration {
+    (0..INLINE_TIMING_RUNS)
+        .map(|_| inline_single_use_literals(count).1)
+        .min()
+        .expect("at least one timed run")
+}
+
+const INLINE_TIMING_RUNS: usize = 3;
+const SMALL_LITERAL_RUN: usize = 1_500;
+const LITERAL_RUN_GROWTH: usize = 8;
+const LINEAR_GROWTH_ALLOWANCE: u32 = 3;
+
+#[test]
+fn every_single_use_literal_in_a_long_run_is_inlined() {
+    let count = 400;
+    let (code, _) = inline_single_use_literals(count);
+    assert!(!code.contains("const v"), "{code}");
+    for index in [0, 1, count / 2, count - 1] {
+        assert!(code.contains(&format!("use({{ k: {index} }});")), "{code}");
+    }
+}
+
+#[test]
+fn inlining_single_use_literals_scales_with_the_program_not_its_square() {
+    let small = quickest_inline_of(SMALL_LITERAL_RUN);
+    let large = quickest_inline_of(SMALL_LITERAL_RUN * LITERAL_RUN_GROWTH);
+    let allowed = small * (LITERAL_RUN_GROWTH as u32) * LINEAR_GROWTH_ALLOWANCE;
+    assert!(
+        large <= allowed,
+        "{SMALL_LITERAL_RUN} literals took {small:?}, {LITERAL_RUN_GROWTH} times as many took {large:?}"
     );
 }
 

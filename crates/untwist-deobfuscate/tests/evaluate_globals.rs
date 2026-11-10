@@ -191,3 +191,67 @@ fn issue_157_the_js_line_terminators_are_escaped_rather_than_written_raw() {
     );
     assert!(!printed.contains('\u{2028}'), "{printed}");
 }
+
+fn default_lane(source: &str) -> String {
+    let alloc = untwist_testing::Allocator::default();
+    untwist_testing::transform_with(
+        &alloc,
+        source,
+        &[untwist_deobfuscate::evaluate_globals::boxed],
+        untwist_core::pass::PassOptions::default(),
+    )
+}
+
+#[test]
+fn an_untouched_global_still_folds_in_the_default_lane() {
+    assert_eq!(
+        default_lane("console.log(atob(\"aGk=\"));"),
+        "console.log(\"hi\");"
+    );
+}
+
+#[test]
+fn a_global_the_program_assigns_is_left_alone_in_the_default_lane() {
+    let source =
+        "atob = function (s) {\n  return \"patched:\" + s;\n};\nconsole.log(atob(\"aGk=\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_assigned_inside_a_function_is_left_alone_in_the_default_lane() {
+    let source = "function patch() {\n  decodeURIComponent = String;\n}\npatch();\nconsole.log(decodeURIComponent(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_assigned_after_the_call_is_left_alone_in_the_default_lane() {
+    let source =
+        "function show() {\n  console.log(unescape(\"%41\"));\n}\nunescape = String;\nshow();";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_a_block_function_declares_is_left_alone_in_the_default_lane() {
+    let source = "{\n  function decodeURI(s) {\n    return \"mine:\" + s;\n  }\n}\nconsole.log(decodeURI(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn only_the_assigned_global_is_left_alone_in_the_default_lane() {
+    assert_eq!(
+        default_lane("atob = String;\nconsole.log(atob(\"aGk=\"), unescape(\"%41\"));"),
+        "atob = String;\nconsole.log(atob(\"aGk=\"), \"A\");"
+    );
+}
+
+#[test]
+fn an_assigned_global_still_folds_under_unsafe() {
+    assert_transform!(
+        "atob = String;\nconsole.log(atob(\"aGk=\"));",
+        [untwist_deobfuscate::evaluate_globals::boxed],
+        @r#"
+    atob = String;
+    console.log("hi");
+    "#
+    );
+}

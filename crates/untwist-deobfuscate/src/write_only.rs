@@ -2,7 +2,7 @@ use oxc_allocator::{TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
 use oxc_semantic::Scoping;
-use oxc_span::{GetSpan, Span};
+use oxc_span::{GetSpan, Span, SPAN};
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
@@ -288,9 +288,54 @@ pub(crate) fn plan(program: &Program<'_>, scoping: &Scoping) -> Option<Plan> {
     (!plan.dropped.is_empty()).then_some(plan)
 }
 
+#[derive(Clone, Copy)]
+enum Position {
+    Callee,
+    Delete,
+    Typeof,
+}
+
+impl Position {
+    fn reads_a_reference(self, tail: &Expression<'_>, scoping: &Scoping) -> bool {
+        match (self, tail.without_parentheses()) {
+            (Position::Typeof, Expression::Identifier(id)) => id
+                .reference_id
+                .get()
+                .is_none_or(|reference| scoping.get_reference(reference).symbol_id().is_none()),
+            (Position::Typeof, _) => false,
+            (_, tail) => matches!(
+                tail,
+                Expression::Identifier(_)
+                    | Expression::StaticMemberExpression(_)
+                    | Expression::ComputedMemberExpression(_)
+                    | Expression::PrivateFieldExpression(_)
+                    | Expression::ChainExpression(_)
+            ),
+        }
+    }
+}
+
+fn operand_position(parent: &Expression<'_>) -> Option<Position> {
+    match parent {
+        Expression::CallExpression(_) | Expression::TaggedTemplateExpression(_) => {
+            Some(Position::Callee)
+        }
+        Expression::ChainExpression(chain) => {
+            matches!(chain.expression, ChainElement::CallExpression(_)).then_some(Position::Callee)
+        }
+        Expression::UnaryExpression(unary) => match unary.operator {
+            UnaryOperator::Delete => Some(Position::Delete),
+            UnaryOperator::Typeof => Some(Position::Typeof),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 struct Apply<'c, 'a, 'x> {
     cx: &'c Cx<'a, 'x>,
     plan: Plan,
+    position: Option<Position>,
     applied: usize,
 }
 
@@ -310,13 +355,29 @@ impl<'a> VisitMut<'a> for Apply<'_, 'a, '_> {
     }
 
     fn visit_expression(&mut self, it: &mut Expression<'a>) {
+        let position = self.position.take();
+        self.position = match &*it {
+            Expression::ParenthesizedExpression(_) => position,
+            other => operand_position(other),
+        };
         walk_mut::walk_expression(self, it);
-        if let Expression::SequenceExpression(sequence) = it {
-            if sequence.expressions.len() == 1 {
-                if let Some(only) = sequence.expressions.pop() {
-                    *it = only;
-                }
-            }
+        self.position = None;
+        let Expression::SequenceExpression(sequence) = it else {
+            return;
+        };
+        if sequence.expressions.len() != 1 {
+            return;
+        }
+        let scoping = self.cx.scoping();
+        let pinned = position
+            .zip(sequence.expressions.first())
+            .is_some_and(|(position, tail)| position.reads_a_reference(tail, scoping));
+        if pinned {
+            let zero =
+                Expression::new_numeric_literal(SPAN, 0.0, None, NumberBase::Decimal, self.cx);
+            sequence.expressions.insert(0, zero);
+        } else if let Some(only) = sequence.expressions.pop() {
+            *it = only;
         }
     }
 
@@ -340,6 +401,7 @@ pub(crate) fn apply<'a>(program: &mut Program<'a>, plan: Plan, cx: &Cx<'a, '_>) 
     let mut apply = Apply {
         cx,
         plan,
+        position: None,
         applied: 0,
     };
     apply.visit_program(program);

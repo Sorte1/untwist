@@ -10,6 +10,7 @@ use untwist_core::ast_util::respan::{fresh_spans, synthetic_spans_exhausted};
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{is_constant_binding, write_reference_count};
 
+use super::inert::{Inert, Settled};
 use crate::bindings::{reference_symbol, resolved_symbol};
 use crate::control_flow_object::single_declarator;
 use crate::notes;
@@ -130,9 +131,10 @@ impl KeyRule<'_> {
 fn folds_into_object(
     stmt: &Statement<'_>,
     symbol: SymbolId,
-    scoping: &Scoping,
     rule: &KeyRule<'_>,
+    inert: &mut Inert<'_, '_>,
 ) -> Option<bool> {
+    let scoping = inert.scoping;
     let assignment = plain_assignment(stmt)?;
     let (object, key) = property_target(&assignment.left)?;
     let adopted = rule.accepts(&key, scoping)?;
@@ -142,7 +144,7 @@ fn folds_into_object(
     if reorders_key_conversion(&key, &assignment.right) {
         return None;
     }
-    if is_unsafe_value(&assignment.right, symbol, scoping) {
+    if is_unsafe_value(&assignment.right, symbol, scoping) || !inert.accepts(&assignment.right) {
         return None;
     }
     Some(adopted)
@@ -222,13 +224,20 @@ fn plan_at(
     index: usize,
     scoping: &Scoping,
     rule: &KeyRule<'_>,
+    settled: &mut Settled,
 ) -> Option<Fold> {
     let (symbol, constant) = empty_object_binding(stmts.get(index)?, scoping)?;
     let mut count = 0usize;
     let mut adopted = false;
+    let mut inert = Inert {
+        stmts,
+        before: index,
+        scoping,
+        settled,
+    };
     while let Some(taken) = stmts
         .get(index + 1 + count)
-        .and_then(|stmt| folds_into_object(stmt, symbol, scoping, rule))
+        .and_then(|stmt| folds_into_object(stmt, symbol, rule, &mut inert))
     {
         adopted |= taken;
         count += 1;
@@ -250,8 +259,9 @@ fn plan_fold(
     from: usize,
     scoping: &Scoping,
     rule: &KeyRule<'_>,
+    settled: &mut Settled,
 ) -> Option<Fold> {
-    (from..stmts.len()).find_map(|index| plan_at(stmts, index, scoping, rule))
+    (from..stmts.len()).find_map(|index| plan_at(stmts, index, scoping, rule, settled))
 }
 
 fn merged_key<'a>(
@@ -394,7 +404,8 @@ pub(super) fn fold_assignments<'a>(
     };
     let mut from = 0usize;
     let mut total = 0usize;
-    while let Some(plan) = plan_fold(stmts, from, cx.scoping(), &rule) {
+    let mut settled = Settled::default();
+    while let Some(plan) = plan_fold(stmts, from, cx.scoping(), &rule, &mut settled) {
         let Some(count) = fold_one(stmts, &plan, folded, cx) else {
             break;
         };

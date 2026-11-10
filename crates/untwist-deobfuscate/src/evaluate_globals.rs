@@ -1,5 +1,6 @@
 use oxc_ast::ast::*;
 use oxc_span::GetSpan;
+use untwist_core::ast_util::global::program_rebinds_global;
 use untwist_core::ast_util::matcher::call_parts;
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
@@ -53,6 +54,10 @@ impl<'a> Pass<'a> for EvaluateGlobals {
             return;
         };
         let span = expr.span();
+        if !cx.opts.unsafe_transforms && program_rebinds_global(cx.scoping(), name) {
+            cx.note(notes::global_rebound(name), Some(span));
+            return;
+        }
         let Some(value @ Const::Str(_)) = fold_to_const(expr, &FoldOptions::default()) else {
             cx.note(notes::global_not_evaluated(name), Some(span));
             return;
