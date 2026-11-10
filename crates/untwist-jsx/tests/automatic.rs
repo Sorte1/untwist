@@ -415,8 +415,8 @@ fn a_hoist_out_of_a_default_parameter_is_refused_by_default() {
 #[test]
 fn a_hoist_whose_free_identifiers_are_visible_at_the_anchor_still_lands_by_default() {
     assert_eq!(
-        run_default("function g(w, i) {\n  if (x) f(jsx(w[i], {}));\n}"),
-        "function g(w, i) {\n  const Component = w[i];\n  if (x) f(<Component />);\n}"
+        run_default("function g(w, i) {\n  f(jsx(w[i], {}));\n}"),
+        "function g(w, i) {\n  const Component = w[i];\n  f(<Component />);\n}"
     );
 }
 
@@ -477,10 +477,10 @@ fn a_lowercase_component_used_by_both_runtimes_is_renamed_once() {
 }
 
 #[test]
-fn a_hoist_out_of_a_var_loop_head_lands_in_both_modes() {
+fn a_hoist_out_of_a_var_loop_test_is_refused_by_default_and_lands_under_conservative() {
     let source = "for (var i = 0; g(jsx(w[i], {})); i++) h();";
     let expected = "const Component = w[i];\nfor (var i = 0; g(<Component />); i++) h();";
-    assert_eq!(run_default(source), expected);
+    assert_eq!(run_default(source), source);
     assert_eq!(run(source), expected);
 }
 
@@ -525,4 +525,43 @@ fn a_last_children_prop_after_a_spread_is_converted() {
         run("jsx(\"div\", { ...p, id: g(), children: f() });"),
         "<div {...p} id={g()}>{f()}</div>;"
     );
+}
+
+#[test]
+fn a_hoist_that_would_run_before_an_earlier_operand_is_refused_by_default() {
+    for source in [
+        "function f(w, k) {\n  return w && jsx(w[k], { id: 1 });\n}",
+        "function f(w, h) {\n  return h(g(), jsx(w[pick()], {}));\n}",
+        "function f(w, k) {\n  return [k(), jsx(w[k], {})];\n}",
+        "function f(w, k) {\n  return k ? jsx(w[k], {}) : null;\n}",
+    ] {
+        assert_eq!(run_default(source), source);
+        assert!(
+            transform(source, true)
+                .1
+                .notes
+                .iter()
+                .any(|note| note.message.starts_with(untwist_jsx::notes::HOIST_ORDER)),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_hoist_that_runs_first_in_its_statement_still_lands() {
+    let output = run_default("function f(w) {\n  return jsx(\"div\", { a: jsx(w[1], {}) });\n}");
+    assert!(output.contains("const Component = w[1];"), "{output}");
+    assert!(output.contains("<div a={<Component />} />"), "{output}");
+}
+
+#[test]
+fn a_key_in_the_props_beside_a_key_argument_is_left_as_a_call() {
+    let output = run_default("jsx(\"div\", { key: 1, a: 2 }, \"k\");");
+    assert!(output.starts_with("jsx(\"div\""), "{output}");
+}
+
+#[test]
+fn a_spread_in_a_children_array_is_left_as_a_call() {
+    let source = "jsxs(\"div\", { children: [...xs, \"t\"] });";
+    assert_eq!(run_default(source), source);
 }

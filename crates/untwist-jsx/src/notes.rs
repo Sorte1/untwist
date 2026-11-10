@@ -17,12 +17,17 @@ pub const TYPE_HOISTED: &str =
 pub const HOIST_ANCHOR_UNRESOLVED: &str =
     "the element type has no JSX spelling and reads a binding that is not visible where its \
      const declaration would land, so the element was left as a call";
+pub const HOIST_ORDER: &str =
+    "the element type has no JSX spelling and runs after an operand that may short-circuit, throw \
+     or run code first, so hoisting it before the enclosing statement would change what runs \
+     first and the element was left as a call";
 pub const KEY_SHAPE: &str =
     "the call passes more than a type, its props and a key, which only the development runtime \
-     (jsxDEV/jsxsDEV) emits, and it is not reconstructed, so the call was left alone";
+     (jsxDEV/jsxsDEV) emits, or passes a key both in its props and as an argument, which one key \
+     attribute cannot express, so the call was left alone";
 pub const CHILDREN_SHAPE: &str =
-    "the children prop is not the last prop, appears more than once or holds an array with holes, \
-     which JSX children cannot express in the same order, so the call was left alone";
+    "the children prop is not the last prop, appears more than once or holds an array with holes \
+     or a spread, which JSX children cannot express in the same order, so the call was left alone";
 pub const COMPONENT_NAME_EXHAUSTED: &str =
     "every Component uid up to the suffix budget is already bound in this program, so the \
      element type could not be renamed or hoisted and the call was left alone";
@@ -41,6 +46,7 @@ catalogue!(
     LOWERCASE_UNBOUND,
     TYPE_HOISTED,
     HOIST_ANCHOR_UNRESOLVED,
+    HOIST_ORDER,
     KEY_SHAPE,
     CHILDREN_SHAPE,
     COMPONENT_NAME_EXHAUSTED,

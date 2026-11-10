@@ -326,3 +326,19 @@ fn tslib_classes_are_kept_with_one_note() {
         .count();
     assert_eq!(open, 1, "{notes:?}");
 }
+
+const ESBUILD_FIELD_HELPERS: &str = "var __defProp = Object.defineProperty;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== \"symbol\" ? key + \"\" : key, value);
+";
+
+#[test]
+fn an_anonymous_function_moved_into_a_field_keeps_its_empty_name() {
+    let source = format!(
+        "{ESBUILD_FIELD_HELPERS}class A {{ constructor() {{ __publicField(this, \"x\", 1); __publicField(this, \"f\", () => {{}}); __publicField(this, \"g\", class {{}}); __publicField(this, \"h\", function () {{}}); }} }}\nconst a = new A();\nconsole.log(JSON.stringify([a.x, a.f.name, a.g.name, a.h.name]));\n"
+    );
+    let (code, _) = run_with(&source, true, true);
+    assert!(code.contains("f = (0, () => {});"), "{code}");
+    assert!(code.contains("x = 1;"), "{code}");
+    untwist_testing::node::assert_node_agrees(&source, &code);
+}

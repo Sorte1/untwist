@@ -54,7 +54,12 @@ Untwist's JSX reconstruction (`untwist-jsx`) is verified against the reference d
   evaluated once at definition instead of per call. The hazard is evaluation time as well as
   resolution, and the evaluation-time half — an arrow expression body or a loop test evaluated
   once where the call ran per use — is not a resolution question; it stays inherited from the reference deobfuscator in
-  both modes.
+  the conservative comparison mode. By default a hoist is also refused, with `HOIST_ORDER`, unless
+  the call runs first in its statement: no conditional, logical right side, loop test or nested
+  function lies between them, and every operand evaluated before the type is a literal, a name,
+  a function or another such call (`return w && jsx(w[k], {})` and `h(g(), jsx(w[pick()], {}))`
+  stay as calls). By default a call that passes `key` in its props and as its third argument,
+  and a `jsxs` children array with a spread, stay as calls.
 - **A fragment child prints inline by default; the conservative comparison mode keeps the reference deobfuscator's container.** The reference deobfuscator's
   `convertChildren` (`transforms/jsx.ts:161-178`) and `convertChild` (`transforms/jsx-new.ts:205-220`)
   pass a child through only when `t.isJSXElement` holds, so a fragment that is a child lands in an
