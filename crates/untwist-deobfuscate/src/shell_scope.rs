@@ -2,7 +2,7 @@ use oxc_allocator::{Allocator, Box as ABox, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_js, VisitJs};
-use oxc_span::Span;
+use oxc_span::{Span, SPAN};
 use oxc_syntax::scope::ScopeFlags;
 
 const EVAL: &str = "eval";
@@ -75,7 +75,7 @@ fn called_function<'a>(
         builder,
     );
     let function = Expression::new_function_expression(
-        span,
+        SPAN,
         FunctionType::FunctionExpression,
         None,
         false,
@@ -88,7 +88,7 @@ fn called_function<'a>(
         Some(body),
         builder,
     );
-    let callee = Expression::new_parenthesized_expression(span, function, builder);
+    let callee = Expression::new_parenthesized_expression(SPAN, function, builder);
     let call =
         Expression::new_call_expression(span, callee, None, AVec::new_in(builder), false, builder);
     Statement::new_expression_statement(span, call, builder)

@@ -3,11 +3,7 @@ use std::borrow::Cow;
 use oxc_ast::ast::*;
 
 pub fn number_key(value: f64) -> String {
-    if value.fract() == 0.0 && value.abs() < 1e21 {
-        format!("{}", value as i64)
-    } else {
-        format!("{value}")
-    }
+    ryu_js::Buffer::new().format(value).to_string()
 }
 
 pub fn prop_name<'k>(key: &'k PropertyKey<'_>) -> Option<Cow<'k, str>> {

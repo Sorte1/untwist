@@ -1732,6 +1732,7 @@ dependencies = [
  "oxc_syntax",
  "oxc_traverse",
  "rustc-hash",
+ "ryu-js",
  "untwist-core",
 ]
 

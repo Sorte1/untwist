@@ -6,7 +6,8 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use untwist_core::ast_util::edit::ExprEdits;
 use untwist_core::ast_util::global::is_global_reference;
 use untwist_core::ast_util::inline::{
-    inline_function_call, inline_spread_forward, param_names, rest_param, returned_expression,
+    inline_function_call, inline_spread_forward, is_plain_function, param_names, rest_param,
+    returned_expression,
 };
 use untwist_core::ast_util::matcher::call_parts;
 use untwist_core::ast_util::prop::{
@@ -155,6 +156,9 @@ fn cff_value<'k, 'a>(expr: &'k Expression<'a>) -> Option<CffValue<'k, 'a>> {
     match expr {
         Expression::StringLiteral(literal) => Some(CffValue::Text(literal)),
         Expression::FunctionExpression(function) => {
+            if !is_plain_function(function) {
+                return None;
+            }
             if spread_call(function) {
                 return Some(CffValue::Function(function));
             }

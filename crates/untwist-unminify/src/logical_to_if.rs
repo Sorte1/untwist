@@ -60,12 +60,11 @@ impl<'a> Pass<'a> for LogicalToIf {
         let operator = logical.operator;
         let body_span = logical.right.span();
         let body = Statement::new_expression_statement(body_span, logical.right, cx);
-        let consequent = cx.block(body_span, AVec::from_iter_in([body], cx));
+        let consequent = cx.block(SPAN, AVec::from_iter_in([body], cx));
         let test = if operator == LogicalOperator::And {
             logical.left
         } else {
-            let left_span = logical.left.span();
-            Expression::new_unary_expression(left_span, UnaryOperator::LogicalNot, logical.left, cx)
+            Expression::new_unary_expression(SPAN, UnaryOperator::LogicalNot, logical.left, cx)
         };
         *stmt = Statement::new_if_statement(statement_span, test, consequent, None, cx);
         cx.changed();

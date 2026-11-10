@@ -17,32 +17,37 @@ pub fn returned_expression<'k, 'a>(function: &'k Function<'a>) -> Option<&'k Exp
     statement.argument.as_ref()
 }
 
+pub fn is_plain_function(function: &Function<'_>) -> bool {
+    !function.r#async && !function.generator
+}
+
+fn simple_name<'k>(item: &'k FormalParameter<'_>) -> Option<&'k str> {
+    if item.initializer.is_some() {
+        return None;
+    }
+    match &item.pattern {
+        BindingPattern::BindingIdentifier(id) => Some(id.name.as_str()),
+        _ => None,
+    }
+}
+
 pub fn param_names<'k, 'a>(function: &'k Function<'a>) -> Option<Vec<&'k str>> {
     if function.params.rest.is_some() {
         return None;
     }
-    let mut names = Vec::with_capacity(function.params.items.len());
-    for item in &function.params.items {
-        let BindingPattern::BindingIdentifier(id) = &item.pattern else {
-            return None;
-        };
-        names.push(id.name.as_str());
-    }
-    Some(names)
+    function.params.items.iter().map(simple_name).collect()
 }
 
 pub fn rest_param<'k, 'a>(function: &'k Function<'a>) -> Option<(&'k str, &'k str)> {
     let rest = function.params.rest.as_ref()?;
-    if function.params.items.len() != 1 {
-        return None;
-    }
-    let BindingPattern::BindingIdentifier(first) = &function.params.items[0].pattern else {
+    let [first] = function.params.items.as_slice() else {
         return None;
     };
+    let first = simple_name(first)?;
     let BindingPattern::BindingIdentifier(name) = &rest.rest.argument else {
         return None;
     };
-    Some((first.name.as_str(), name.name.as_str()))
+    Some((first, name.name.as_str()))
 }
 
 fn forwards_rest(function: &Function<'_>) -> bool {
@@ -146,6 +151,9 @@ pub fn inline_spread_forward<'p, 'a>(
     arguments: &AVec<'p, Argument<'p>>,
     b: &impl GetAstBuilder<'a>,
 ) -> Option<Expression<'a>> {
+    if !is_plain_function(function) {
+        return None;
+    }
     let names = param_names(function)?;
     let (last, leading) = arguments.split_last()?;
     let spread_last = matches!(last, Argument::SpreadElement(_))
@@ -178,6 +186,9 @@ pub fn inline_function_call<'p, 'a>(
     arguments: &AVec<'p, Argument<'p>>,
     b: &impl GetAstBuilder<'a>,
 ) -> Option<Expression<'a>> {
+    if !is_plain_function(function) {
+        return None;
+    }
     let builder = b.builder();
     let allocator = builder.allocator();
     if rest_param(function).is_some() {

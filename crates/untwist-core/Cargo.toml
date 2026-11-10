@@ -26,6 +26,7 @@ oxc_codegen.workspace = true
 oxc_diagnostics.workspace = true
 oxc_sourcemap.workspace = true
 rustc-hash.workspace = true
+ryu-js.workspace = true
 
 [features]
 test-hooks = []

@@ -1,4 +1,5 @@
 use oxc_ast::ast::*;
+use oxc_span::SPAN;
 use oxc_str::Ident;
 use oxc_syntax::reference::ReferenceFlags;
 use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
@@ -59,9 +60,12 @@ impl<'a> Pass<'a> for Infinity {
         if !cx.is_global_name("Infinity") {
             return;
         }
-        let infinity =
-            cx.tcx
-                .create_unbound_ident_expr(span, Ident::from("Infinity"), ReferenceFlags::Read);
+        let ident_span = if negative { SPAN } else { span };
+        let infinity = cx.tcx.create_unbound_ident_expr(
+            ident_span,
+            Ident::from("Infinity"),
+            ReferenceFlags::Read,
+        );
         *expr = if negative {
             Expression::new_unary_expression(span, UnaryOperator::UnaryNegation, infinity, &*cx)
         } else {

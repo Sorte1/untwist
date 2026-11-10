@@ -2,6 +2,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::walk_js;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
+use untwist_core::ast_util::prop::number_key;
 
 use super::generate::{Gen, MemberSite, SiteKey};
 use super::object::{Builtin, SiteKind};
@@ -21,10 +22,6 @@ fn primitive_syntax(expr: &Expression<'_>) -> bool {
             | Expression::BinaryExpression(_)
             | Expression::UpdateExpression(_)
     )
-}
-
-fn number_key(value: f64) -> Option<String> {
-    (value.fract() == 0.0 && value.abs() < 1e18).then(|| format!("{}", value as i64))
 }
 
 pub(super) struct Member {
@@ -243,10 +240,9 @@ impl Gen<'_> {
                     Some(name) => Key::Static(self.g.name(name)),
                     None => Key::Static(Field::UNKNOWN),
                 },
-                Some(Expression::NumericLiteral(number)) => match number_key(number.value) {
-                    Some(name) => Key::Static(self.g.name(&name)),
-                    None => Key::Static(Field::UNKNOWN),
-                },
+                Some(Expression::NumericLiteral(number)) => {
+                    Key::Static(self.g.name(&number_key(number.value)))
+                }
                 Some(expr) => self.key_of(expr).0,
                 None => Key::Static(Field::UNKNOWN),
             },
@@ -264,9 +260,8 @@ impl Gen<'_> {
                 }
             }
             Expression::NumericLiteral(number) => {
-                if let Some(name) = number_key(number.value) {
-                    return (Key::Static(self.g.name(&name)), SiteKey::Name(name));
-                }
+                let name = number_key(number.value);
+                return (Key::Static(self.g.name(&name)), SiteKey::Name(name));
             }
             Expression::CallExpression(call) => {
                 if let Some(name) = self.decoded.get(&call.span).cloned() {

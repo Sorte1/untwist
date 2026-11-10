@@ -57,9 +57,8 @@ fn wrap_in_block<'a>(slot: &mut Statement<'a>, parent_scope: ScopeId, cx: &mut C
     );
     let placeholder = Statement::new_empty_statement(SPAN, &*cx);
     let inner = std::mem::replace(slot, placeholder);
-    let span = inner.span();
     let body = AVec::from_iter_in([inner], &*cx);
-    *slot = Statement::new_block_statement_with_scope_id(span, body, scope_id, &*cx);
+    *slot = Statement::new_block_statement_with_scope_id(SPAN, body, scope_id, &*cx);
 }
 
 fn is_string_statement(stmt: &Statement<'_>) -> bool {

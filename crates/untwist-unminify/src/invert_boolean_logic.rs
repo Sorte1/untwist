@@ -1,5 +1,5 @@
 use oxc_ast::ast::*;
-use oxc_span::{GetSpan, SPAN};
+use oxc_span::SPAN;
 use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
@@ -45,8 +45,7 @@ fn negate<'a>(slot: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
     }
     let placeholder = Expression::new_null_literal(SPAN, &*cx);
     let inner = std::mem::replace(slot, placeholder);
-    let span = inner.span();
-    *slot = Expression::new_unary_expression(span, UnaryOperator::LogicalNot, inner, &*cx);
+    *slot = Expression::new_unary_expression(SPAN, UnaryOperator::LogicalNot, inner, &*cx);
 }
 
 fn invert_logical_spine<'a>(argument: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {

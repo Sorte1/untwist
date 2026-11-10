@@ -176,3 +176,52 @@ fn a_read_of_an_earlier_parameter_inside_a_default_still_folds() {
     let (code, _notes) = common::run_all_stages_extended(source);
     assert!(code.contains("a = c || b"), "{code}");
 }
+
+fn key(mut index: usize) -> String {
+    let mut letters = Vec::new();
+    for _ in 0..5 {
+        letters.push(char::from(b'a' + (index % 26) as u8));
+        index /= 26;
+    }
+    letters.into_iter().rev().collect()
+}
+
+fn refused_forwarders(count: usize) -> String {
+    let props: Vec<String> = (0..count)
+        .map(|index| format!("{}: function (a, b) {{ return a || b; }}", key(index)))
+        .collect();
+    let calls: Vec<String> = (0..count)
+        .map(|index| format!("  o.{}(x(), y());", key(index)))
+        .collect();
+    format!(
+        "function x() {{ return 0; }}\nfunction y() {{ return 1; }}\nvar o = {{ {} }};\nfunction run() {{\n{}\n}}\n",
+        props.join(", "),
+        calls.join("\n")
+    )
+}
+
+fn fastest_run(source: &str) -> std::time::Duration {
+    (0..3)
+        .map(|_| {
+            let alloc = Allocator::default();
+            let started = std::time::Instant::now();
+            common::default_run(&alloc, source, control_flow_object::boxed);
+            started.elapsed()
+        })
+        .min()
+        .unwrap_or_default()
+}
+
+#[test]
+fn refusing_many_distinct_logical_forwarders_takes_time_in_proportion_to_their_number() {
+    let small = refused_forwarders(2_000);
+    let large = refused_forwarders(8_000);
+    let alloc = Allocator::default();
+    let code = common::default_run(&alloc, &small, control_flow_object::boxed);
+    assert!(code.contains("o.aaaaa(x(), y())"), "{code}");
+    let ratio = fastest_run(&large).as_secs_f64() / fastest_run(&small).as_secs_f64();
+    assert!(
+        ratio < 8.0,
+        "four times the forwarders took {ratio:.1} times as long"
+    );
+}
