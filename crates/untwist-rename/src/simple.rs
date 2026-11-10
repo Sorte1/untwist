@@ -136,6 +136,7 @@ fn decide_with_limit(
                 oracle.take(info.symbol, std::iter::once(name))
             }
             None => {
+                counters.insert(unit, start.saturating_add(limit));
                 let current = oracle.current_name(info.symbol).to_string();
                 oracle.take(info.symbol, uid_candidates(&current))
             }
