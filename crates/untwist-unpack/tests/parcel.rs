@@ -881,3 +881,91 @@ fn the_stores_of_a_hoisted_definition_are_empty_objects_nothing_else_touches() {
         "{known}{REGISTER}$parcel$modules.b1 = {{ exports: 7 }};\n{USE}"
     ));
 }
+
+#[test]
+fn a_registry_call_without_externals_refuses_a_builtin_require() {
+    let builtin = entry("e,r,t", "var p=e(\"path\");t.s=p.sep", "");
+    let internal = entry("e,r,t", "t.v=e(\"./b.js\").v", "\"./b.js\":\"b\"");
+    let four = format!("[\"a\"],\"a\",\"{GLOBAL}\"");
+    refused(&registry_with(&builtin, &four));
+    assert!(split(&registry_with(&internal, &four)).is_some());
+    assert!(split(&registry(&builtin)).is_some());
+}
+
+#[test]
+fn more_runtime_arguments_than_the_runtime_takes_refuse() {
+    let modules = entry("e,r,t", "t.v=1", "");
+    refused(&registry_with(
+        &modules,
+        &format!("[\"a\"],\"a\",\"{GLOBAL}\",{{}},null,null,null,null"),
+    ));
+}
+
+#[test]
+fn a_factory_that_can_replace_the_registry_global_refuses_builtin_and_root_requires() {
+    let builtin = "var p=e(\"path\");";
+    let root = "var q=r.bundle.root(\"b\");";
+    for reach in [
+        "globalThis[\"parcelRequire\"+\"94c2\"]=function(){};",
+        "globalThis.parcelRequire94c2=null;",
+        "window[k]=1;",
+        "delete self[k];",
+        "var g=globalThis;",
+        "f(global);",
+        "o4[k]=1;",
+        "Object.assign(x,{parcelRequire94c2:1});",
+        "Function(\"return this\")();",
+        "(0,eval)(\"this\");",
+        "t.f=function(){this[k]=1};",
+    ] {
+        for uses in [builtin, root] {
+            let body = format!("{uses}{reach}");
+            refused(&registry(&entry("e,r,t,o4", &body, "")));
+        }
+        let quiet = format!("t.v=e(\"./b.js\").v;{reach}");
+        assert!(
+            split(&registry(&entry("e,r,t,o4", &quiet, "\"./b.js\":\"b\""))).is_some(),
+            "{reach}"
+        );
+    }
+    for harmless in [
+        "t.w=typeof window;",
+        "t.x=globalThis.Math.max(1,2);",
+        "globalThis.other=1;",
+        "t.f=function(){this.x=1};",
+        "t.y=globalThis[\"Math\"];",
+        "t.z=o4===globalThis;",
+    ] {
+        let body = format!("{builtin}{harmless}");
+        assert!(
+            split(&registry(&entry("e,r,t,o4", &body, ""))).is_some(),
+            "{harmless}"
+        );
+    }
+}
+
+#[test]
+fn a_var_helper_read_before_its_definition_stays_in_the_entry() {
+    let register =
+        "parcelRegister(\"b1\", function(module, exports) {\nmodule.exports = $h();\n});\n";
+    let use_it = "console.log(typeof seen, parcelRequire(\"b1\"));\n";
+    refused(&hoisted(
+        "var seen = $h;\nvar $h = function () { return \"helper\"; };\n",
+        register,
+        use_it,
+    ));
+    refused(&hoisted(
+        "function early() { return $h; }\nvar seen = early;\nvar $h = function () { return \"helper\"; };\n",
+        register,
+        use_it,
+    ));
+    let files = accepted(&hoisted(
+        "var $h = function () { return \"helper\"; };\nvar seen = $h;\n",
+        register,
+        use_it,
+    ));
+    assert!(
+        code(&files, "_runtime/parcel.js").contains("$h"),
+        "{files:?}"
+    );
+}

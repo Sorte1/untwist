@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
@@ -11,6 +13,7 @@ use untwist_core::semantic::build_scoping;
 
 use super::layout::{Def, Hoisted, Layout, Registry};
 use super::links::{loader, ParcelView};
+use super::slot::reaches_slot;
 use super::{
     bare, candidates, is_builtin, moved_helpers, resolve, single_string, ENTRY_ID, HOISTED_NAMES,
     INHERITED, REGISTRY_NAMES, REGISTRY_PARAMS,
@@ -43,6 +46,8 @@ struct Rules<'s, 'l> {
     names: [&'l str; 2],
     helpers: &'l FxHashMap<SymbolId, usize>,
     moved: &'l FxHashSet<SymbolId>,
+    builtins: bool,
+    slot: bool,
     mode: Mode,
     ok: bool,
 }
@@ -102,11 +107,13 @@ impl Rules<'_, '_> {
         }
     }
 
-    fn registry_require(&self, call: &CallExpression<'_>, site: Option<ScopeId>) -> bool {
+    fn registry_require(&mut self, call: &CallExpression<'_>, site: Option<ScopeId>) -> bool {
         let Some(target) = single_string(call).map(|spec| resolve(self.deps, spec)) else {
             return false;
         };
-        (self.ids.contains(target) || is_builtin(target))
+        let builtin = !self.ids.contains(target);
+        self.slot |= builtin;
+        (!builtin || (self.builtins && is_builtin(target)))
             && self.require_unbound(site, self.require_param)
     }
 
@@ -147,7 +154,7 @@ impl Rules<'_, '_> {
         }
     }
 
-    fn call_fits(&self, call: &CallExpression<'_>) -> Option<bool> {
+    fn call_fits(&mut self, call: &CallExpression<'_>) -> Option<bool> {
         if call.optional {
             return None;
         }
@@ -156,6 +163,7 @@ impl Rules<'_, '_> {
         }
         if self.mode == Mode::Factory {
             if let Some(site) = self.root_site(&call.callee) {
+                self.slot = true;
                 return Some(self.internal(call, site));
             }
         }
@@ -302,6 +310,8 @@ struct Context<'s, 'l> {
     hoisted: Option<(SymbolId, SymbolId, [&'l str; 2])>,
     helpers: FxHashMap<SymbolId, usize>,
     moved: FxHashSet<SymbolId>,
+    builtins: bool,
+    slot: Cell<bool>,
 }
 
 impl<'s, 'l> Context<'s, 'l> {
@@ -324,6 +334,8 @@ impl<'s, 'l> Context<'s, 'l> {
             names,
             helpers: &self.helpers,
             moved: &self.moved,
+            builtins: self.builtins,
+            slot: false,
             mode,
             ok: true,
         }
@@ -350,6 +362,7 @@ impl<'s, 'l> Context<'s, 'l> {
         };
         rules.module_param = symbols.get(1 - offset).copied().flatten();
         Scan::new(&mut rules).visit_function_body(body);
+        self.slot.set(self.slot.get() || rules.slot);
         rules.ok && (offset == 1 || self.global_unshadowed(def, symbols.len()))
     }
 
@@ -413,11 +426,25 @@ fn registry(scoping: &Scoping, layout: &Registry<'_, '_>, view: Option<&ParcelVi
         hoisted: None,
         helpers: FxHashMap::default(),
         moved: FxHashSet::default(),
+        builtins: layout.externals,
+        slot: Cell::new(false),
     };
-    layout
+    let factories = layout
         .defs
         .iter()
-        .all(|def| context.factory(def, &REGISTRY_NAMES))
+        .all(|def| context.factory(def, &REGISTRY_NAMES));
+    factories && !(context.slot.get() && slot_reached(scoping, layout))
+}
+
+fn slot_reached(scoping: &Scoping, layout: &Registry<'_, '_>) -> bool {
+    layout.defs.iter().any(|def| {
+        let global = param_symbols(def.function)
+            .get(REGISTRY_PARAMS - 1)
+            .copied()
+            .flatten();
+        def.body()
+            .is_none_or(|body| reaches_slot(scoping, body, &layout.global, global))
+    })
 }
 
 fn entry_statement<'a>(
@@ -488,6 +515,8 @@ fn hoisted(
         hoisted: Some((require, register, names)),
         helpers,
         moved: FxHashSet::default(),
+        builtins: true,
+        slot: Cell::new(false),
     };
     if !layout
         .defs

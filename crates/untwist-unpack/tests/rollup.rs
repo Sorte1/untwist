@@ -547,3 +547,16 @@ fn many_independent_segments_split_with_one_import_each_in_the_entry() {
     assert_eq!(entry.matches("import ").count(), files.len() - 1, "{entry}");
     assert!(entry.contains("import { b0 } from"), "{entry}");
 }
+
+#[test]
+fn a_var_and_a_function_of_one_name_in_one_item_refuse() {
+    let pairs = "var a = 1; function getA() { return a; }\nvar b = 2; function getB() { return b + getA(); }\nvar c = 3; function getC() { return c + getB(); }";
+    for clash in [
+        "var dup; function dup() { return 1; }",
+        "function dup() { return 1; } var dup;",
+    ] {
+        refused(&iife(&format!(
+            "{pairs}\n{clash}\nvar d = 4; function getD() {{ return d + getC(); }}\nconsole.log(getD(), typeof dup);"
+        )));
+    }
+}
