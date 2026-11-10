@@ -22,6 +22,7 @@ pub mod sequence;
 mod sequence_hazard;
 pub mod split_for_loop_vars;
 pub mod split_variable_declarations;
+mod statement_slot;
 pub mod string_literal_in_template;
 pub mod template_literals;
 pub mod ternary_to_if;

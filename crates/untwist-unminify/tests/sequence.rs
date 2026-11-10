@@ -232,3 +232,53 @@ fn a_var_loop_update_with_a_closure_still_moves_into_the_body() {
     assert!(output.contains("i++) {"), "{output}");
     untwist_testing::node::assert_node_agrees(source, &output);
 }
+
+#[test]
+fn a_labelled_loop_head_moves_in_front_of_the_label() {
+    let source = "function f(x, n) { var i, j; L: for (i = 0, j = 1; i < n; i++) { if (x[i]) continue L; j++; } return j; } console.log(f([0, 1, 0, 1], 4));";
+    let output = sequence_output(source, true);
+    assert!(
+        output.contains("i = 0;\n  j = 1;\n  L: for (; i < n; i++)"),
+        "{output}"
+    );
+    untwist_testing::node::assert_node_agrees(source, &output);
+}
+
+#[test]
+fn a_labelled_for_in_head_moves_in_front_of_every_label() {
+    let source = "function f(o) { var n = 0; A: B: for (var k in (n++, o)) { for (;;) { n++; continue A; } } return n; } console.log(f({ a: 1, b: 2 }));";
+    let output = sequence_output(source, true);
+    assert!(
+        output.contains("n++;\n  A: B: for (var k in o)"),
+        "{output}"
+    );
+    untwist_testing::node::assert_node_agrees(source, &output);
+}
+
+#[test]
+fn a_labelled_loop_outside_a_statement_list_is_left_alone() {
+    assert_transform!("if (c) L: for (i = 0, j = 1; i < n; i++) continue L;", [untwist_unminify::sequence::boxed], @"if (c) L: for (i = 0, j = 1; i < n; i++) continue L;");
+}
+
+#[test]
+fn a_labelled_block_is_still_wrapped() {
+    assert_transform!("L: if (a(), b()) break L;", [untwist_unminify::sequence::boxed], @r"
+L: {
+  a();
+  if (b()) break L;
+}
+");
+}
+
+#[test]
+fn an_assignment_inside_with_keeps_its_sequence() {
+    assert_transform!("function w(o) { var x = 0; with (o) { x = (delete o.x, 1); } return x; }", [untwist_unminify::sequence::boxed], @r"
+function w(o) {
+  var x = 0;
+  with(o) {
+    x = (delete o.x, 1);
+  }
+  return x;
+}
+");
+}

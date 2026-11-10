@@ -77,6 +77,7 @@ pub struct JsxNew<'a> {
     type_hoisted: RepeatedSites,
     hoist_anchor_unresolved: RepeatedSites,
     key_shape: RepeatedSites,
+    children_shape: RepeatedSites,
     component_name_exhausted: RepeatedSites,
 }
 
@@ -149,6 +150,10 @@ impl<'a> Convert<'a> for JsxNew<'a> {
         }
         if let Some(shape) = build::inconvertible_prop(Some(props)) {
             self.attribute_shape.record(expr.span(), shape);
+            return None;
+        }
+        if let Some(shape) = children_shape(props, pragma) {
+            self.children_shape.record(expr.span(), shape);
             return None;
         }
         let fragment = self.bindings.names_member(type_expr, build::FRAGMENT, cx);
@@ -324,6 +329,11 @@ impl<'a> JsxNew<'a> {
                 ),
                 (&mut self.key_shape, notes::KEY_SHAPE, NoteKind::Refusal),
                 (
+                    &mut self.children_shape,
+                    notes::CHILDREN_SHAPE,
+                    NoteKind::Refusal,
+                ),
+                (
                     &mut self.component_name_exhausted,
                     notes::COMPONENT_NAME_EXHAUSTED,
                     NoteKind::Refusal,
@@ -332,6 +342,47 @@ impl<'a> JsxNew<'a> {
             cx,
         );
     }
+}
+
+fn is_children_prop(property: &ObjectPropertyKind<'_>) -> bool {
+    let ObjectPropertyKind::ObjectProperty(property) = property else {
+        return false;
+    };
+    prop_name(&property.key).is_some_and(|name| name == build::CHILDREN)
+}
+
+fn has_elision(value: &Expression<'_>) -> bool {
+    let Expression::ArrayExpression(array) = value else {
+        return false;
+    };
+    array
+        .elements
+        .iter()
+        .any(|element| matches!(element, ArrayExpressionElement::Elision(_)))
+}
+
+fn children_shape(props: &Expression<'_>, pragma: &str) -> Option<&'static str> {
+    let Expression::ObjectExpression(object) = props else {
+        return None;
+    };
+    match object
+        .properties
+        .iter()
+        .filter(|p| is_children_prop(p))
+        .count()
+    {
+        0 => return None,
+        1 => {}
+        _ => return Some("children appears more than once"),
+    }
+    let last = object.properties.last()?;
+    if !is_children_prop(last) {
+        return Some("children is not the last prop");
+    }
+    let ObjectPropertyKind::ObjectProperty(last) = last else {
+        return None;
+    };
+    (plural(pragma) && has_elision(&last.value)).then_some("children array has holes")
 }
 
 fn take_prop<'a>(

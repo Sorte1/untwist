@@ -5,6 +5,7 @@ use crate::transpile_util::{
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::{ContentEq, Span, SPAN};
+use oxc_traverse::Ancestor;
 use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
@@ -52,6 +53,9 @@ impl<'a> Pass<'a> for OptionalChaining {
         let Expression::ConditionalExpression(_) = &*node else {
             return;
         };
+        if is_reference_position(cx) {
+            return;
+        }
         if rewrite_simple(node, cx) || rewrite_temp(node, &mut self.temps, cx) {
             cx.changed();
         }
@@ -59,6 +63,20 @@ impl<'a> Pass<'a> for OptionalChaining {
 
     fn exit_statements(&mut self, node: &mut AVec<'a, Statement<'a>>, _cx: &mut Cx<'a, '_>) {
         self.temps.strip_declarations(node);
+    }
+}
+
+fn is_reference_position(cx: &Cx<'_, '_>) -> bool {
+    let parent = cx
+        .tcx
+        .ancestors()
+        .find(|ancestor| !matches!(ancestor, Ancestor::ParenthesizedExpressionExpression(_)));
+    match parent {
+        Some(Ancestor::CallExpressionCallee(_) | Ancestor::TaggedTemplateExpressionTag(_)) => true,
+        Some(Ancestor::UnaryExpressionArgument(unary)) => {
+            *unary.operator() == UnaryOperator::Delete
+        }
+        _ => false,
     }
 }
 

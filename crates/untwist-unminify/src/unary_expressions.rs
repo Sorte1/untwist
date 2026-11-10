@@ -10,14 +10,25 @@ pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
     Box::new(UnaryExpressions)
 }
 
-fn is_discardable_unary(expr: &Expression<'_>) -> bool {
+fn is_discardable_unary(expr: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
     let Expression::UnaryExpression(unary) = expr else {
         return false;
     };
-    matches!(
-        unary.operator,
-        UnaryOperator::Void | UnaryOperator::LogicalNot | UnaryOperator::Typeof
-    )
+    match unary.operator {
+        UnaryOperator::Void | UnaryOperator::LogicalNot => true,
+        UnaryOperator::Typeof => !is_unresolved_identifier(&unary.argument, cx),
+        _ => false,
+    }
+}
+
+fn is_unresolved_identifier(expr: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
+    let Expression::Identifier(id) = expr.without_parentheses() else {
+        return false;
+    };
+    id.reference_id
+        .get()
+        .and_then(|reference| cx.scoping().get_reference(reference).symbol_id())
+        .is_none()
 }
 
 fn is_void_return(stmt: &Statement<'_>) -> bool {
@@ -72,7 +83,7 @@ impl<'a> Pass<'a> for UnaryExpressions {
         let Statement::ExpressionStatement(statement) = stmt else {
             return;
         };
-        if !is_discardable_unary(&statement.expression) {
+        if !is_discardable_unary(&statement.expression, cx) {
             return;
         }
         statement.expression.replace_with(|old| match old {

@@ -72,4 +72,10 @@
   has neither form (issues #120 and #6 are both open), so the conservative comparison mode leaves every shape alone. This
   closes both issues with one pass: #120 asked for the narrow JSX-adjacent case and #6 for the general
   one, and the general one minus the member case is the sound rule.
-
+- **`x != null ? x : y` becomes `x ?? y`, in every mode.** The loose test is the form terser
+  rewrites the strict pair `x !== null && x !== undefined` into, so refusing it would lose most real
+  cases. The two differ for one value only: `document.all` (an object with the `[[IsHTMLDDA]]` slot)
+  is loosely equal to `null` but is not nullish, so `document.all != null ? document.all : g` gives
+  `g` and `document.all ?? g` gives `document.all`. Untwist assumes no tested value is
+  `document.all`; the strict pair carries no such assumption. TypeScript emits the strict pair for
+  this reason, and Babel's loose mode emits `!= null` under the same assumption.

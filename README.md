@@ -151,7 +151,9 @@ object, the machinery can still be removed. Outside code that prints that value 
 observing it (`require("util").inspect(globalThis)` keeps the machinery). A removal that relies
 on this premise says so in the report (`the machinery was dropped under the outside-code
 premise`). Nor does any code give `Object.prototype` an accessor for a key the obfuscator
-generated or for a webpack module id, so storing an object under such a key runs no code.
+generated or for a webpack module id, so storing an object under such a key runs no code. And
+no value the program tests is `document.all`, so `x != null ? x : y` becomes `x ?? y`: the two
+differ only for that object, which compares loosely equal to `null` without being nullish.
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
 premise.
 

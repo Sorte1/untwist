@@ -27,6 +27,14 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- Unminify no longer changes meaning in five shapes: a `null`/`undefined` check used as a callee,
+  a template tag or a `delete` operand stays a conditional instead of becoming `a?.b`; a labelled
+  loop whose head is split keeps its label on the loop (the moved statements go in front of the
+  label), so `continue L` still parses; `typeof x;` stays when `x` is not declared; member reads of
+  a script's top-level binding or an import are not merged into one destructuring; and an
+  assignment inside `with` keeps its comma sequence. JSX reconstruction leaves an automatic-runtime
+  call alone when `children` is not the last prop, appears twice or holds an array with holes.
+
 - An unpacked esbuild bundle no longer hands a module a stale copy of a binding. A binding that
   an `__esm` init assigns is now exported from `_runtime/esbuild.js` through a getter and read as
   `runtime.name`; before, a module that read it after the init ran still saw `undefined`. A bundle
@@ -34,12 +42,14 @@ All notable changes to this project are documented in this file. The format is b
   assigned, when a factory holds a `with` statement (AMD, UMD and Rollup too), and a helper that
   reads `require`, `module`, `exports`, `__filename` or `__dirname` is no longer moved into the
   runtime module.
+
 - Files written without semicolons are no longer refused as nesting too deep: the depth scan
   now ends a statement at a line break or closing brace followed by a token that starts a new
   statement, so 40,000 lines of `a = b.c(d)` or 40,000 `function f(){}` are processed. A chain
   of tagged templates (a name followed by many empty template literals) costs nesting like a
   call chain and is refused when it is too deep, instead of taking the worker to gigabytes of
   memory.
+
 - A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
   globals. When the body still declares a `var`, function, class, `let` or `const` at its own
   level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that

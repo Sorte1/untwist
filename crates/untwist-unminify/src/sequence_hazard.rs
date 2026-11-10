@@ -18,6 +18,10 @@ struct LeadingScan<'a> {
 
 #[inline(never)]
 pub fn is_hoist_order_safe<'a>(assign: &AssignmentExpression<'a>, cx: &Cx<'a, '_>) -> bool {
+    let scoping = cx.scoping();
+    if is_inside_with(scoping, cx.current_scope_id(), scoping.root_scope_id()) {
+        return false;
+    }
     let compound = assign.operator != AssignmentOperator::Assign;
     let Some(guarded) = guarded_parts(&assign.left, compound) else {
         return false;

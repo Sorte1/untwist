@@ -6,7 +6,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use untwist_core::ast_util::pattern::object_pattern;
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::{is_constant_binding, scope_hazard};
+use untwist_core::semantic::{has_module_syntax, is_constant_binding, scope_hazard};
 
 use super::shapes;
 
@@ -19,6 +19,7 @@ const MAX_RUN: usize = 32;
 #[derive(Default)]
 pub struct MergeMemberDeclarations {
     hazard: bool,
+    script_root: Option<ScopeId>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -92,11 +93,19 @@ impl MergeMemberDeclarations {
             .get_reference(base.reference_id.get()?)
             .symbol_id()?;
         let target = id.symbol_id.get()?;
-        (target != base && is_constant_binding(scoping, base)).then_some(Read {
+        let mergeable = target != base
+            && is_constant_binding(scoping, base)
+            && !self.is_externally_rebindable(scoping, base);
+        mergeable.then_some(Read {
             kind: declaration.kind,
             base,
             target,
         })
+    }
+
+    fn is_externally_rebindable(&self, scoping: &Scoping, base: SymbolId) -> bool {
+        scoping.symbol_flags(base).contains(SymbolFlags::Import)
+            || Some(scoping.symbol_scope_id(base)) == self.script_root
     }
 
     fn repeats(&self, statements: &[Statement<'_>], target: SymbolId, scoping: &Scoping) -> bool {
@@ -208,8 +217,9 @@ impl<'a> Pass<'a> for MergeMemberDeclarations {
         Interest::ENTER_PROGRAM | Interest::EXIT_STATEMENTS
     }
 
-    fn enter_program(&mut self, _program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+    fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.hazard = scope_hazard(cx.scoping()).is_some();
+        self.script_root = (!has_module_syntax(program)).then(|| cx.scoping().root_scope_id());
     }
 
     fn exit_statements(&mut self, node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
