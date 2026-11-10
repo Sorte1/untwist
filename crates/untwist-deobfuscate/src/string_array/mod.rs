@@ -13,9 +13,7 @@ use untwist_core::ast_util::global::{is_global_reference, is_global_reference_id
 use untwist_core::ast_util::literal::{is_undefined_like, undefined_expression};
 use untwist_core::ast_util::matcher::{call_parts, var_function_or_declaration};
 use untwist_core::ast_util::prop::identifier_name;
-use untwist_core::ast_util::readonly::{
-    readonly_bindings_uses, scan_object_uses, ObjectUses, PropRead,
-};
+use untwist_core::ast_util::readonly::{readonly_bindings_uses, ObjectUses, PropRead};
 use untwist_core::ast_util::rename::Renames;
 use untwist_core::ast_util::search::statements_at;
 use untwist_core::pass::{Cx, Interest, NoteKind, Pass, RepeatedSites};
