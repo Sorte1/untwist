@@ -1,6 +1,6 @@
 use crate::transpile_util::{
-    assignment_temp_symbol, has_reference_counts, identifier_symbol_is, is_undefined_identifier,
-    take_logical_left_assignment_value, TempVars,
+    assignment_temp_symbol, has_reference_counts, identifier_symbol_is, is_repeatable,
+    is_undefined_identifier, take_logical_left_assignment_value, TempVars,
 };
 use oxc_allocator::{Box as ABox, Vec as AVec};
 use oxc_ast::ast::*;
@@ -286,7 +286,7 @@ fn rewrite_simple<'a>(node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
     let Some(left) = simple_test(&conditional.test, cx) else {
         return false;
     };
-    if !ContentEq::content_eq(left, &conditional.consequent) {
+    if !ContentEq::content_eq(left, &conditional.consequent) || !is_repeatable(left, cx) {
         return false;
     }
     let span = conditional.span;
@@ -320,8 +320,9 @@ pub fn would_rewrite(conditional: &ConditionalExpression<'_>, cx: &Cx<'_, '_>) -
     let consequent_is = |symbol| identifier_symbol_is(&conditional.consequent, symbol, cx);
     strict_temp_test(&conditional.test, cx).is_some_and(consequent_is)
         || loose_temp_test(&conditional.test, cx).is_some_and(consequent_is)
-        || simple_test(&conditional.test, cx)
-            .is_some_and(|left| ContentEq::content_eq(left, &conditional.consequent))
+        || simple_test(&conditional.test, cx).is_some_and(|left| {
+            ContentEq::content_eq(left, &conditional.consequent) && is_repeatable(left, cx)
+        })
 }
 
 fn iife_matches(call: &CallExpression<'_>, cx: &Cx<'_, '_>) -> bool {

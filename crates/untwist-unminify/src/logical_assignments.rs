@@ -1,7 +1,7 @@
 use crate::transpile_util::{
-    assignment_temp_symbol, identifier_symbol_is, keys_match, member_parts,
-    restore_logical_assignment, take_logical_assignment, take_temp_member_target, target_parts,
-    TempVars,
+    assignment_temp_symbol, identifier_symbol_is, is_repeatable, is_repeatable_target, keys_match,
+    member_parts, restore_logical_assignment, take_logical_assignment, take_temp_member_target,
+    target_parts, TempVars,
 };
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
@@ -118,7 +118,8 @@ fn rewrite_plain<'a>(
     let Some(assignment) = inner_assignment(logical) else {
         return false;
     };
-    if !target_matches(&assignment.left, &logical.left) {
+    if !target_matches(&assignment.left, &logical.left) || !is_repeatable_target(&logical.left, cx)
+    {
         return false;
     }
     let Some((span, _, _, assignment)) = take_logical_assignment(node, cx) else {
@@ -156,7 +157,7 @@ fn rewrite_temp_object<'a>(
         return false;
     };
     if !identifier_symbol_is(holder, symbol, cx)
-        || !keys_match(&left_key, &right_key)
+        || !keys_match(&left_key, &right_key, cx)
         || !temps.is_temp(symbol, 1, cx)
     {
         return false;
@@ -194,6 +195,7 @@ fn temp_key_symbol(
     };
     if target.optional
         || !ContentEq::content_eq(&target.object, &member.object)
+        || !is_repeatable(&member.object, cx)
         || !identifier_symbol_is(&target.expression, symbol, cx)
         || !temps.is_temp(symbol, 1, cx)
     {

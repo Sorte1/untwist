@@ -40,6 +40,14 @@ pub fn is_global_reference(scoping: &Scoping, id: &IdentifierReference<'_>) -> b
     is_global_reference_id(scoping, id.reference_id.get())
 }
 
+pub fn is_declared_reference(scoping: &Scoping, id: &IdentifierReference<'_>) -> bool {
+    let Some(reference) = id.reference_id.get() else {
+        return false;
+    };
+    let reference = scoping.get_reference(reference);
+    reference.symbol_id().is_some() && !object_environment_may_bind(scoping, reference.scope_id())
+}
+
 pub fn is_global_undefined(expr: &Expression<'_>, scoping: &Scoping) -> bool {
     matches!(
         expr,

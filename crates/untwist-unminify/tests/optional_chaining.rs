@@ -153,3 +153,105 @@ fn a_conditional_call_argument_is_still_rewritten() {
         @"f(a?.b);"
     );
 }
+
+fn default_lane(source: &str) -> String {
+    let alloc = Allocator::default();
+    untwist_testing::transform_with(
+        &alloc,
+        source,
+        &[untwist_unminify::optional_chaining::boxed],
+        PassOptions::default(),
+    )
+}
+
+fn unsafe_lane(source: &str) -> String {
+    let alloc = Allocator::default();
+    untwist_testing::transform(
+        &alloc,
+        source,
+        &[untwist_unminify::optional_chaining::boxed],
+    )
+}
+
+const REPEATED_CALL: &str = r#"var n = 0;
+function f() { n++; return { c: n }; }
+var r = f() === null || f() === undefined ? undefined : f().c;
+console.log(r, n);"#;
+
+const REPEATED_GETTER: &str = r#"var reads = 0;
+var o = { get p() { reads++; return { c: reads }; } };
+var r = o.p === null || o.p === undefined ? undefined : o.p.c;
+console.log(r, reads);"#;
+
+const REPEATED_GLOBAL_ACCESSOR: &str = r#"var reads = 0;
+Object.defineProperty(globalThis, "gx", { get() { return { c: ++reads }; }, configurable: true });
+var r = gx === null || gx === undefined ? undefined : gx.c;
+console.log(r, reads);"#;
+
+const REPEATED_WITH_ACCESSOR: &str = r#"var reads = 0;
+var scope = { get a() { return { c: ++reads }; } };
+var a = null;
+var r;
+with (scope) { r = a === null || a === undefined ? undefined : a.c; }
+console.log(r, reads);"#;
+
+#[test]
+fn a_repeated_operand_that_can_run_code_keeps_its_conditional_by_default() {
+    for source in [
+        REPEATED_CALL,
+        REPEATED_GETTER,
+        REPEATED_GLOBAL_ACCESSOR,
+        REPEATED_WITH_ACCESSOR,
+    ] {
+        let output = default_lane(source);
+        assert!(!output.contains("?."), "{output}");
+        untwist_testing::node::assert_node_agrees(source, &output);
+    }
+}
+
+#[test]
+fn a_repeated_call_keeps_its_conditional_under_unsafe() {
+    let output = unsafe_lane(REPEATED_CALL);
+    assert!(!output.contains("?."), "{output}");
+    untwist_testing::node::assert_node_agrees(REPEATED_CALL, &output);
+}
+
+#[test]
+fn a_call_free_member_chain_still_converts_under_unsafe() {
+    assert!(unsafe_lane(REPEATED_GETTER).contains("o.p?.c"));
+    assert!(unsafe_lane(REPEATED_GLOBAL_ACCESSOR).contains("gx?.c"));
+}
+
+#[test]
+fn transpiler_output_still_converts_by_default() {
+    let rows = [
+        (
+            "function h(a) { return a === null || a === undefined ? undefined : a.b; }",
+            "return a?.b;",
+        ),
+        (
+            "function h(a, b) { return a === null || a === undefined ? undefined : a[b]; }",
+            "return a?.[b];",
+        ),
+        (
+            "function h() { return this === null || this === undefined ? undefined : this.b; }",
+            "return this?.b;",
+        ),
+        (
+            "function h(a) { var _a; return (_a = a.x) === null || _a === undefined ? undefined : _a.b; }",
+            "return a.x?.b;",
+        ),
+        (
+            "function h(f) { var _f; return (_f = f()) === null || _f === undefined ? undefined : _f.b; }",
+            "return f()?.b;",
+        ),
+        (
+            "function h(a) { var _a; return (_a = a === null || a === undefined ? undefined : a.b) === null || _a === undefined ? undefined : _a.c; }",
+            "return a?.b?.c;",
+        ),
+    ];
+    for (source, expected) in rows {
+        let output = default_lane(source);
+        assert!(output.contains(expected), "{output}");
+    }
+}
