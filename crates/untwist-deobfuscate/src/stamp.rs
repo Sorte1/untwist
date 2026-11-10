@@ -10,7 +10,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::var_function_or_declaration;
-use untwist_core::ast_util::rename::{is_name_taken, Renames};
+use untwist_core::ast_util::rename::{taken_names, Renames};
 use untwist_core::pass::Cx;
 use untwist_core::semantic::program_is_strict;
 
@@ -70,11 +70,15 @@ fn name_unit_counts(unstamp: &[Vec<(SymbolId, String)>]) -> FxHashMap<&str, usiz
 
 pub fn unstamp_blocked(unstamp: &[Vec<(SymbolId, String)>], scoping: &Scoping) -> Vec<bool> {
     let counts = name_unit_counts(unstamp);
+    let taken = std::cell::OnceCell::new();
     unstamp
         .iter()
         .map(|symbols| {
             symbols.iter().any(|(_, name)| {
-                is_name_taken(scoping, name) || counts.get(name.as_str()).is_some_and(|n| *n > 1)
+                taken
+                    .get_or_init(|| taken_names(scoping))
+                    .contains(name.as_str())
+                    || counts.get(name.as_str()).is_some_and(|n| *n > 1)
             })
         })
         .collect()

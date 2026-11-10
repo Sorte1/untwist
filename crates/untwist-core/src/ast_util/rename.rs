@@ -124,6 +124,19 @@ pub fn is_name_taken(scoping: &Scoping, name: &str) -> bool {
         .any(|symbol| scoping.symbol_name(symbol) == name)
 }
 
+pub fn taken_names(scoping: &Scoping) -> FxHashSet<&str> {
+    scoping
+        .symbol_ids()
+        .map(|symbol| scoping.symbol_name(symbol))
+        .chain(
+            scoping
+                .root_unresolved_references()
+                .keys()
+                .map(|name| name.as_str()),
+        )
+        .collect()
+}
+
 pub const UNIQUE_NAME_SUFFIX_CAP: u32 = 1000;
 
 pub fn unique_name<'a>(
@@ -144,9 +157,10 @@ pub fn unique_name_avoiding<'a>(
         return Some(Ident::from_str_in(base, alloc));
     }
     let stem = base.strip_suffix("__").unwrap_or(base);
+    let taken = taken_names(scoping);
     for suffix in 2..=UNIQUE_NAME_SUFFIX_CAP {
         let candidate = format!("{stem}_{suffix}__");
-        if !is_taken(&candidate, scoping, reserved) {
+        if !taken.contains(candidate.as_str()) && !reserved.contains(&candidate) {
             return Some(Ident::from_str_in(&candidate, alloc));
         }
     }

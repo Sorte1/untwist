@@ -130,3 +130,33 @@ fn an_exhausted_suffix_budget_returns_none_rather_than_a_taken_name() {
     let (alloc, sem) = scoped(&source);
     assert_eq!(unique_name("foo", &sem.scoping, &&alloc), None);
 }
+
+fn crowded_lookup(count: usize) -> std::time::Duration {
+    let names: Vec<String> = (2..count).map(|suffix| format!("foo_{suffix}__")).collect();
+    let source = format!("var foo, {};", names.join(", "));
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, &source);
+    let sem = build_scoping(&parsed.program);
+    (0..3)
+        .map(|_| {
+            let started = std::time::Instant::now();
+            for _ in 0..20 {
+                let name = unique_name("foo", &sem.scoping, &&alloc).expect("a free suffix");
+                assert_eq!(name.as_str(), format!("foo_{count}__"));
+            }
+            started.elapsed()
+        })
+        .min()
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_crowded_base_name_scans_the_symbols_once_per_lookup() {
+    let small = crowded_lookup(200).max(std::time::Duration::from_micros(200));
+    let large = crowded_lookup(800);
+    let ratio = large.as_secs_f64() / small.as_secs_f64();
+    assert!(
+        ratio < 8.0,
+        "800 crowded names took {large:?}, 200 took {small:?}: x{ratio:.1}"
+    );
+}
