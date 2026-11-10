@@ -58,10 +58,9 @@ pub struct Args {
     pub unminify: bool,
     #[arg(
         long = "unsafe",
-        help = "enable the four passes tagged unsafe: deobfuscate's dead-code, which folds an if \
-                whose test is a constant comparison and deletes the branch it proves unreachable; \
-                unminify's template-literals; and the JSX stage's jsx and jsx-new, which \
-                reconstruct React.createElement and jsx/jsxs calls"
+        help = "use the unsafe lane: assume built-ins are not patched, and enable the three \
+                passes tagged unsafe: the transpile stage's template-literals, and the JSX \
+                stage's jsx and jsx-new, which reconstruct React.createElement and jsx/jsxs calls"
     )]
     pub unsafe_transforms: bool,
     #[arg(
@@ -140,19 +139,20 @@ pub struct Args {
         value_name = "SIZE",
         default_value = crate::budget::DEFAULT_MAX_MEMORY,
         value_parser = untwist::budget_memory_size,
-        help = "memory untwist may use (such as 512MiB or 8G, or unlimited). At three quarters of \
-                it an input stops its passes and keeps the output so far (note budget-memory); \
-                at the full size the worker process stops and that input is passed through \
-                unchanged"
+        help = "memory the inputs being processed may use (such as 512MiB or 8G, or unlimited); \
+                the texts the run holds are not counted. At three quarters of it an input stops \
+                its passes and keeps the output so far (note budget-memory); at the full size the \
+                worker process stops and that input is passed through unchanged"
     )]
     pub max_memory: u64,
     #[arg(
         long,
         value_name = "SECS",
         value_parser = untwist::budget_timeout_secs,
-        help = "wall-clock seconds the whole run may take (default: no limit). At the limit every \
-                input stops its passes and keeps the output so far (note budget-time); an input \
-                still running a while later is passed through unchanged"
+        help = "wall-clock seconds processing the inputs may take (default: no limit); writing \
+                the output and --fetch-wasm are not limited by it. At the limit every input stops \
+                its passes and keeps the output so far (note budget-time); an input still running \
+                a while later is passed through unchanged"
     )]
     pub timeout: Option<std::time::Duration>,
     #[arg(
@@ -349,6 +349,39 @@ mod tests {
     fn the_conservative_flag_turns_the_superset_passes_off() {
         let args = Args::parse_from(["untwist", "--conservative", "in.js"]);
         assert!(!args.options().extended);
+    }
+
+    fn unsafe_help() -> String {
+        let command = <Args as clap::CommandFactory>::command();
+        let unsafe_flag = command
+            .get_arguments()
+            .find(|arg| arg.get_long() == Some("unsafe"))
+            .expect("the --unsafe flag");
+        unsafe_flag.get_help().expect("help text").to_string()
+    }
+
+    fn names_pass(help: &str, name: &str) -> bool {
+        help.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+            .any(|word| word == name)
+    }
+
+    #[test]
+    fn the_unsafe_help_names_exactly_the_passes_tagged_unsafe() {
+        let help = unsafe_help();
+        for pass in untwist::PASSES {
+            assert_eq!(
+                names_pass(&help, pass.name),
+                pass.unsafe_only,
+                "{}: {help}",
+                pass.name
+            );
+        }
+        let tagged = untwist::PASSES
+            .iter()
+            .filter(|pass| pass.unsafe_only)
+            .count();
+        assert_eq!(tagged, 3, "{help}");
+        assert!(help.contains("three passes tagged unsafe"), "{help}");
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use std::alloc::System;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -12,6 +13,8 @@ const SOFT_SHARE_NUMERATOR: u64 = 3;
 const SOFT_SHARE_DENOMINATOR: u64 = 4;
 const GRACE_FLOOR: Duration = Duration::from_secs(2);
 const GRACE_DIVISOR: u32 = 4;
+
+static PIPELINE_DONE: AtomicBool = AtomicBool::new(false);
 
 pub type Counting = CountingAlloc<System>;
 
@@ -77,8 +80,14 @@ pub fn arm_watchdog(timeout: Option<Duration>) {
         .stack_size(64 * 1024)
         .spawn(move || {
             std::thread::sleep(timeout + grace);
-            die(EXIT_OVER_TIME);
+            if !PIPELINE_DONE.load(Ordering::SeqCst) {
+                die(EXIT_OVER_TIME);
+            }
         });
+}
+
+pub fn disarm_watchdog() {
+    PIPELINE_DONE.store(true, Ordering::SeqCst);
 }
 
 pub fn hit_of_exit(code: u8) -> Option<BudgetHit> {

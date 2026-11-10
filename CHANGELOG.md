@@ -12,7 +12,10 @@ All notable changes to this project are documented in this file. The format is b
   options and in the wasm build (1 GiB by default). An input that reaches a budget stops its passes
   and keeps the output so far (`budget-memory`, `budget-time`); one that goes past the memory cap
   before its passes can stop is passed through unchanged instead of exhausting the machine.
-  `--report` shows the budget and the memory peak.
+  `--report` shows the budget and the memory peak. Only the memory an input works with counts
+  against the cap, not the other inputs and outputs the run holds, and the time limit covers
+  processing only: a slow reader of the output and `--fetch-wasm` (which keeps its own limits)
+  are never cut off by it.
 
 - Emscripten glue whose wasm module has no name section gets its imports named when the bound
   function has the shape of an Emscripten library function and the module's import has its

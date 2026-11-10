@@ -109,8 +109,8 @@ Common flags:
 | `--disable PASS` | Turn off individual passes; `--list-passes` prints them all. |
 | `--report text\|json` | Print what every stage and pass did. `-v` is short for `--report text`. |
 | `-j, --jobs N` | Process up to `N` inputs in parallel. The output does not depend on `N`. |
-| `--max-memory SIZE` | Memory untwist may use, such as `512MiB`, `8G` or `unlimited` (default `4GiB`). At three quarters of it an input stops its passes and keeps the output so far, with the note `budget-memory`; at the full size the worker process stops and that input is passed through unchanged. `--report` shows the budget and the peak. |
-| `--timeout SECS` | Wall-clock seconds the whole run may take (default: no limit). At the limit every input stops its passes and keeps the output so far, with the note `budget-time`; an input still running a while later is passed through unchanged. |
+| `--max-memory SIZE` | Memory the inputs being processed may use (the texts the run holds are not counted), such as `512MiB`, `8G` or `unlimited` (default `4GiB`). At three quarters of it an input stops its passes and keeps the output so far, with the note `budget-memory`; at the full size the worker process stops and that input is passed through unchanged. `--report` shows the budget and the peak. |
+| `--timeout SECS` | Wall-clock seconds processing the inputs may take (default: no limit); writing the output and `--fetch-wasm` are not limited by it. At the limit every input stops its passes and keeps the output so far, with the note `budget-time`; an input still running a while later is passed through unchanged. |
 | `--fuel N` | Interpreter steps a string-array decode may spend before giving up (default 50,000,000 plus 500,000 per distinct decoder call, at most 1,000,000,000; 1,000,000,000 with `--unsafe`). |
 
 `untwist --help` lists every flag.
@@ -164,9 +164,10 @@ premise.
 
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
 patched, even when the program visibly patches one, and a few passes that rest on heuristics are
-allowed to run. These are `dead-code` (deletes branches behind constant comparisons),
-`template-literals`, and JSX reconstruction. `fold-pure-calls` also folds calls to a pure helper
-that is passed around as a value or that the program could rebind through a key it cannot resolve.
+allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).
+`dead-code`, which deletes branches behind constant comparisons, runs in both lanes.
+`fold-pure-calls` also folds calls to a pure helper that is passed around as a value or that the
+program could rebind through a key it cannot resolve.
 This decodes more on aggressively protected code. It is the right choice when you trust that the
 input does not tamper with the runtime, and the wrong one for code written to fool analysis.
 

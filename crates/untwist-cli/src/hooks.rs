@@ -10,6 +10,7 @@ pub const ADMIT_PANIC: &str = "UNTWIST_TEST_ADMIT_PANIC";
 pub const REFUSAL_SPANS: &str = "UNTWIST_TEST_REFUSAL_SPANS";
 pub const POINTS_TO: &str = "UNTWIST_TEST_POINTS_TO";
 pub const WASM_PANIC: &str = "UNTWIST_TEST_WASM_PANIC";
+pub const FETCH_REQUEST_MS: &str = "UNTWIST_TEST_FETCH_REQUEST_MS";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SupervisorHook {
@@ -82,6 +83,15 @@ pub fn wasm_panic() -> bool {
     wasm_panic_from(std::env::var_os(WASM_PANIC).as_deref())
 }
 
+pub fn fetch_request_from(value: Option<&OsStr>) -> Option<std::time::Duration> {
+    let millis = number(value).filter(|millis| TEST_HOOKS && *millis > 0)?;
+    Some(std::time::Duration::from_millis(millis as u64))
+}
+
+pub fn fetch_request() -> Option<std::time::Duration> {
+    fetch_request_from(std::env::var_os(FETCH_REQUEST_MS).as_deref())
+}
+
 pub fn test_hooks() -> untwist::TestHooks {
     if !TEST_HOOKS {
         return untwist::TestHooks::default();
@@ -128,6 +138,15 @@ mod tests {
         assert!(super::wasm_panic_from(Some(OsStr::new("1"))));
         assert!(!super::wasm_panic_from(Some(OsStr::new("0"))));
         assert!(!super::wasm_panic_from(None));
+    }
+
+    #[test]
+    fn the_fetch_request_hook_reads_positive_milliseconds() {
+        let read = |value: &str| super::fetch_request_from(Some(OsStr::new(value)));
+        assert_eq!(read("250"), Some(std::time::Duration::from_millis(250)));
+        assert_eq!(read("0"), None);
+        assert_eq!(read("soon"), None);
+        assert_eq!(super::fetch_request_from(None), None);
     }
 
     #[test]
