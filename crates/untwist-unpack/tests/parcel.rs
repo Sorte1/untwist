@@ -995,3 +995,24 @@ fn a_require_of_a_numeric_id_spelled_otherwise_than_javascript_refuses() {
         refused(&registry(&modules));
     }
 }
+
+#[test]
+fn a_moved_helper_that_reads_the_bundle_context_refuses() {
+    let register =
+        "parcelRegister(\"b1\", function(module, exports) {\nexports.v = $help();\n});\n";
+    for helper in [
+        "var $help = () => this.x;\n",
+        "var $help = () => typeof import.meta.url;\n",
+        "var $help = () => import(\"./x.js\");\n",
+        "var $help = () => arguments.length;\n",
+    ] {
+        refused(&hoisted(helper, register, USE));
+    }
+    for helper in [
+        "var $help = function () { return this; };\n",
+        "function $help() { return new.target; }\n",
+        "var $help = () => ({ m() { return super.toString; } });\n",
+    ] {
+        assert!(split(&hoisted(helper, register, USE)).is_some(), "{helper}");
+    }
+}

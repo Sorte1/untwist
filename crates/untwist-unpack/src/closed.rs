@@ -6,7 +6,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 
 use crate::matcher::Factory;
-use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step};
+use crate::scan::{is_direct_eval, is_free, Frame, Policy, Scan, Step, Suspend};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Captured {
@@ -17,6 +17,7 @@ pub enum Captured {
     Eval,
     With,
     Outer(&'static str),
+    Context(&'static str),
 }
 
 impl Captured {
@@ -31,6 +32,9 @@ impl Captured {
             Self::Outer(what) => {
                 format!("it uses {what}, which an arrow factory takes from the bundle's scope")
             }
+            Self::Context(what) => {
+                format!("it uses {what} of the bundle, which the runtime module does not share")
+            }
         }
     }
 }
@@ -38,6 +42,46 @@ impl Captured {
 pub struct Allowed<'s> {
     pub mapped_params: usize,
     pub helpers: &'s FxHashSet<SymbolId>,
+}
+
+const GLOBAL_FALLBACK: [&str; 3] = ["globalThis", "global", "window"];
+
+fn typeof_guard<'k, 'a>(test: &'k Expression<'a>) -> Option<&'k IdentifierReference<'a>> {
+    let Expression::BinaryExpression(binary) = test.without_parentheses() else {
+        return None;
+    };
+    let Expression::UnaryExpression(unary) = &binary.left else {
+        return None;
+    };
+    let undefined =
+        matches!(&binary.right, Expression::StringLiteral(text) if text.value == "undefined");
+    let guard = binary.operator == BinaryOperator::StrictInequality
+        && unary.operator == UnaryOperator::Typeof
+        && undefined;
+    match (&unary.argument, guard) {
+        (Expression::Identifier(id), true) => Some(id),
+        _ => None,
+    }
+}
+
+fn global_fallback(scoping: &Scoping, it: &ConditionalExpression<'_>) -> bool {
+    let mut level = it;
+    for name in GLOBAL_FALLBACK {
+        let Some(guarded) = typeof_guard(&level.test) else {
+            return false;
+        };
+        let read = matches!(level.consequent.without_parentheses(),
+            Expression::Identifier(id) if id.name == name && is_free(Some(scoping), id));
+        if guarded.name != name || !is_free(Some(scoping), guarded) || !read {
+            return false;
+        }
+        match level.alternate.without_parentheses() {
+            Expression::ConditionalExpression(next) => level = next,
+            Expression::ThisExpression(_) => return name == "window",
+            _ => return false,
+        }
+    }
+    false
 }
 
 pub const HOST_NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
@@ -217,6 +261,12 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             self.captured.get_or_insert(Captured::Outer(what));
         }
     }
+
+    fn context(&mut self, outer: bool, what: &'static str) {
+        if self.hosts && outer {
+            self.captured.get_or_insert(Captured::Context(what));
+        }
+    }
 }
 
 impl<'a> Policy<'a> for Check<'_, '_, 'a> {
@@ -246,14 +296,41 @@ impl<'a> Policy<'a> for Check<'_, '_, 'a> {
 
     fn this(&mut self, frame: Frame) {
         self.outer(frame, "this");
+        self.context(!frame.receiver(), "this");
     }
 
     fn super_(&mut self, frame: Frame) {
         self.outer(frame, "super");
+        self.context(!frame.receiver(), "super");
     }
 
     fn new_target(&mut self, frame: Frame) {
         self.outer(frame, "new.target");
+        self.context(!frame.receiver(), "new.target");
+    }
+
+    fn conditional(&mut self, frame: Frame, it: &ConditionalExpression<'a>) -> Step {
+        let fallback = self.hosts && !frame.receiver() && global_fallback(self.scoping, it);
+        match fallback {
+            true => Step::Skip,
+            false => Step::Walk,
+        }
+    }
+
+    fn suspends(&mut self, frame: Frame, what: Suspend) {
+        let what = match what {
+            Suspend::Await => "await",
+            Suspend::Yield => "yield",
+        };
+        self.context(!frame.deferred(), what);
+    }
+
+    fn import_meta(&mut self) {
+        self.context(true, "import.meta");
+    }
+
+    fn dynamic_import(&mut self) {
+        self.context(true, "import()");
     }
 }
 

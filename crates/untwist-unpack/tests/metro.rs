@@ -467,6 +467,44 @@ fn definitions_without_a_loader_in_the_file_split_only_when_trusted() {
     for source in [&free, &beside_a_flag] {
         assert!(modules(source).is_none(), "{source}");
         assert!(trusted(source), "{source}");
+
+fn a_prelude_binding_that_reads_the_bundle_context_refuses() {
+    for helper in [
+        "var top = () => this;\n",
+        "var top = () => class { [this]() {} };\n",
+        "var top = () => typeof import.meta.url;\n",
+        "var top = () => import(\"./x.js\");\n",
+        "var top = () => arguments.length;\n",
+    ] {
+        assert!(refused(helper, "console.log(top());"), "{helper}");
+    }
+    for helper in [
+        "var top = () => 1;\n",
+        "var top = function () { return this; };\n",
+        "var top = () => ({ m() { return super.toString; } });\n",
+    ] {
+        assert!(!refused(helper, "console.log(top());"), "{helper}");
+    }
+}
+
+const GLOBAL_FALLBACK: &str = "typeof globalThis !== 'undefined' ? globalThis : typeof global !== 'undefined' ? global : typeof window !== 'undefined' ? window : this";
+
+#[test]
+fn the_loader_global_fallback_metro_prints_moves_to_the_runtime() {
+    let files = modules(&fixture("metro.js")).expect("the metro build splits");
+    let runtime = code_of(&files, "_runtime/metro.js");
+    assert!(runtime.contains(": this);"), "{runtime}");
+    let wrapped =
+        |argument: &str| format!("(function (global) {{\n  global.flag = 1;\n}})({argument});\n");
+    assert!(!refused(&wrapped(GLOBAL_FALLBACK), "console.log(1);"));
+    for argument in [
+        "typeof window !== 'undefined' ? window : this",
+        "typeof globalThis !== 'undefined' ? globalThis : this",
+        "globalThis || this",
+        "typeof globalThis !== 'undefined' ? this : typeof global !== 'undefined' ? global : typeof window !== 'undefined' ? window : this",
+        "typeof globalThis === 'undefined' ? globalThis : typeof global !== 'undefined' ? global : typeof window !== 'undefined' ? window : this",
+    ] {
+        assert!(refused(&wrapped(argument), "console.log(1);"), "{argument}");
     }
 }
 

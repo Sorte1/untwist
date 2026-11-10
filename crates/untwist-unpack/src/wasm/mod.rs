@@ -48,43 +48,68 @@ pub fn may_embed_wasm(text: &str) -> bool {
 }
 
 fn holds_base64_module(text: &str) -> bool {
-    text.match_indices(payload::BASE64_MAGIC).any(|(at, _)| {
+    holds_candidate(text, payload::BASE64_MAGIC, |at| {
         let run = &text[at..];
         let len = run
             .bytes()
             .take_while(|byte| payload::is_base64_byte(*byte))
             .count();
         let body = &run[..len];
-        payload::base64_holds_module(body)
-            && payload::decode_base64(body).map_or(true, |bytes| loadable(&bytes))
+        let found = payload::base64_holds_module(body)
+            && payload::decode_base64(body).map_or(true, |bytes| loadable(&bytes));
+        (found, at + len)
     })
 }
 
 fn holds_byte_module(text: &str) -> bool {
     BYTE_MAGICS.iter().any(|magic| {
-        text.match_indices(magic).any(|(at, _)| {
-            listed_bytes(&text[at + magic.len()..]).is_some_and(|bytes| loadable(&bytes))
+        holds_candidate(text, magic, |at| {
+            let start = at + magic.len();
+            let (bytes, used) = listed_bytes(&text[start..]);
+            (bytes.is_some_and(|bytes| loadable(&bytes)), start + used)
         })
     })
 }
 
-fn listed_bytes(mut rest: &str) -> Option<Vec<u8>> {
+fn holds_candidate(text: &str, magic: &str, mut judge: impl FnMut(usize) -> (bool, usize)) -> bool {
+    let mut from = 0;
+    while let Some(found) = text.get(from..).and_then(|rest| rest.find(magic)) {
+        if untwist_core::budget::check().is_err() {
+            return true;
+        }
+        let (holds, end) = judge(from + found);
+        if holds {
+            return true;
+        }
+        from = end.max(from + found + magic.len());
+    }
+    false
+}
+
+fn listed_bytes(text: &str) -> (Option<Vec<u8>>, usize) {
     let mut bytes = payload::WASM_MAGIC.to_vec();
+    let mut rest = text;
+    let used = |rest: &str| text.len() - rest.len();
     loop {
         let trimmed = rest.trim_start();
         if trimmed.starts_with(']') {
-            return Some(bytes);
+            return (Some(bytes), used(trimmed));
         }
-        let after = trimmed.strip_prefix(',')?.trim_start();
+        let Some(after) = trimmed.strip_prefix(',').map(str::trim_start) else {
+            return (None, used(trimmed));
+        };
         let len = after
             .bytes()
             .take_while(|byte| byte.is_ascii_alphanumeric() || *byte == b'.')
             .count();
-        bytes.push(byte_literal(&after[..len])?);
-        if bytes.len() > MAX_WASM_BYTES {
-            return Some(bytes);
-        }
+        let Some(byte) = byte_literal(&after[..len]) else {
+            return (None, used(after));
+        };
+        bytes.push(byte);
         rest = &after[len..];
+        if bytes.len() > MAX_WASM_BYTES {
+            return (Some(bytes), used(rest));
+        }
     }
 }
 
