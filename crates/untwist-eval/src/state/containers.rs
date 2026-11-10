@@ -42,9 +42,17 @@ fn receiver_is_recognized(owned: &[(Owner, Collected<'_>)], root: &str, key: &st
     let mut writes = owned
         .iter()
         .flat_map(|(_, collected)| collected.function_writes.iter())
-        .filter(|(written_root, written_key, _)| *written_root == root && *written_key == key)
+        .filter(|write| write.root == root && write.key == key)
         .peekable();
-    writes.peek().is_some() && writes.all(|(_, _, function)| *function)
+    writes.peek().is_some() && writes.all(|write| write.function)
+}
+
+fn stored_values_are_settled(owned: &[(Owner, Collected<'_>)]) -> bool {
+    crate::mutants::gate_state_trusted()
+        || owned
+            .iter()
+            .flat_map(|(_, collected)| collected.function_writes.iter())
+            .all(|write| write.settled)
 }
 
 fn after_every_gate(
@@ -96,14 +104,15 @@ fn names_are_recognized(owned: &[(Owner, Collected<'_>)], collected: &Collected<
 }
 
 pub(super) fn uses_are_recognized(owned: &[(Owner, Collected<'_>)]) -> bool {
-    owned.iter().all(|(_, collected)| {
-        names_are_recognized(owned, collected)
-            && collected
-                .accesses
-                .iter()
-                .filter(|access| {
-                    !access.is_write && !access.local && is_container(owned, access.peel.root)
-                })
-                .all(|access| read_is_recognized(owned, &access.peel))
-    })
+    stored_values_are_settled(owned)
+        && owned.iter().all(|(_, collected)| {
+            names_are_recognized(owned, collected)
+                && collected
+                    .accesses
+                    .iter()
+                    .filter(|access| {
+                        !access.is_write && !access.local && is_container(owned, access.peel.root)
+                    })
+                    .all(|access| read_is_recognized(owned, &access.peel))
+        })
 }

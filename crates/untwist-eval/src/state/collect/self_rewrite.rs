@@ -1,10 +1,17 @@
 use oxc_ast::ast::{
-    Argument, AssignmentTarget, BindingPattern, CallExpression, Expression, Function, Statement,
+    Argument, ArrayExpressionElement, AssignmentTarget, BindingPattern, CallExpression, Expression,
+    Function, Statement, VariableDeclaration,
 };
 use oxc_span::{GetSpan, Span};
-use oxc_syntax::operator::AssignmentOperator;
+use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 
-pub(in crate::state) fn template_rewrite(function: &Function<'_>, own_name: &str) -> Option<Span> {
+use crate::mutants::{template_arity_trusted, template_prefix_trusted};
+
+pub(in crate::state) fn template_rewrite(
+    function: &Function<'_>,
+    own_name: &str,
+    array: &str,
+) -> Option<Span> {
     let body = function.body.as_ref()?;
     let rewrite = body
         .statements
@@ -22,7 +29,7 @@ pub(in crate::state) fn template_rewrite(function: &Function<'_>, own_name: &str
             },
             _ => None,
         });
-    rewrite.filter(|_| outer_is_template(function, own_name))
+    rewrite.filter(|_| outer_is_template(function, own_name, array))
 }
 
 fn rewrite_span(expr: &Expression<'_>, own_name: &str) -> Option<Span> {
@@ -38,16 +45,91 @@ fn has_plain_parameters(function: &Function<'_>) -> bool {
             .all(|param| param.initializer.is_none())
 }
 
-fn outer_is_template(function: &Function<'_>, own_name: &str) -> bool {
+fn is_inert_element(expr: &Expression<'_>) -> bool {
+    match expr.without_parentheses() {
+        Expression::UnaryExpression(node) if node.operator == UnaryOperator::Void => {
+            is_inert_element(&node.argument)
+        }
+        Expression::RegExpLiteral(_) => false,
+        other => other.is_literal(),
+    }
+}
+
+fn is_array_of_literals(expr: &Expression<'_>) -> bool {
+    let Expression::ArrayExpression(array) = expr.without_parentheses() else {
+        return false;
+    };
+    array.elements.iter().all(|element| match element {
+        ArrayExpressionElement::Elision(_) => true,
+        ArrayExpressionElement::SpreadElement(_) => false,
+        other => other.as_expression().is_some_and(is_inert_element),
+    })
+}
+
+fn is_array_fetch(expr: &Expression<'_>, array: &str, shadowed: &[&str]) -> bool {
+    let Expression::CallExpression(call) = expr.without_parentheses() else {
+        return false;
+    };
+    let Expression::Identifier(callee) = &call.callee else {
+        return false;
+    };
+    let name = callee.name.as_str();
+    !call.optional && call.arguments.is_empty() && name == array && !shadowed.contains(&name)
+}
+
+fn is_known_declaration(
+    declaration: &VariableDeclaration<'_>,
+    function: &Function<'_>,
+    own_name: &str,
+    array: &str,
+) -> bool {
+    let [declarator] = declaration.declarations.as_slice() else {
+        return false;
+    };
+    let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+        return false;
+    };
+    let mut shadowed: Vec<&str> = function
+        .params
+        .items
+        .iter()
+        .filter_map(|param| param.pattern.get_binding_identifier())
+        .map(|param| param.name.as_str())
+        .collect();
+    shadowed.push(id.name.as_str());
+    match &declarator.init {
+        None => true,
+        Some(init) if own_name == array => is_array_of_literals(init),
+        Some(init) => is_array_fetch(init, array, &shadowed),
+    }
+}
+
+fn inner_fits_the_forward(function: &Function<'_>, own_name: &str) -> bool {
     let Some(body) = &function.body else {
         return false;
     };
-    if !has_plain_parameters(function) {
+    let Some(inner) = self_rewrite_target(&body.statements, Some(own_name)) else {
+        return false;
+    };
+    template_arity_trusted()
+        || (inner.params.rest.is_none() && inner.params.items.len() <= function.params.items.len())
+}
+
+fn outer_is_template(function: &Function<'_>, own_name: &str, array: &str) -> bool {
+    let Some(body) = &function.body else {
+        return false;
+    };
+    if !has_plain_parameters(function) || !inner_fits_the_forward(function, own_name) {
         return false;
     }
     let mut statements = body.statements.iter();
     let mut current = statements.next();
-    if matches!(current, Some(Statement::VariableDeclaration(_))) {
+    if let Some(Statement::VariableDeclaration(declaration)) = current {
+        if !template_prefix_trusted()
+            && !is_known_declaration(declaration, function, own_name, array)
+        {
+            return false;
+        }
         current = statements.next();
     }
     let matched = match current {

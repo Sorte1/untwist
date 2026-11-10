@@ -8,6 +8,7 @@ use super::scope::{declared_in_body, Binding, Declared, Frame, FrameKind, Freshn
 use super::template_arguments::ArgumentScope;
 use super::uses::PendingUse;
 use super::{unwrap_parens, Collected, FinalKey, MemberPeel, Trigger, TriggerKind};
+use crate::mutants::{gate_state_trusted, template_parameters_trusted};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Reach {
@@ -44,7 +45,7 @@ pub(super) struct Walker<'a, 'm> {
     pub(super) inner_params: (usize, usize),
     pub(super) calling: bool,
     pub(super) pending_bare: Vec<PendingUse<'a>>,
-    pub(super) pending_writes: Vec<(&'a str, &'a str, Option<usize>)>,
+    pub(super) pending_writes: Vec<(&'a str, &'a str, Option<usize>, bool)>,
     pub(super) creation: Option<Span>,
     pub(super) exempt_self: Option<&'a str>,
     pub(super) call_target: Option<Span>,
@@ -55,6 +56,9 @@ pub(super) struct Walker<'a, 'm> {
     pub(super) captured: Vec<usize>,
     pub(super) strict: bool,
     pub(super) argument_scopes: Vec<ArgumentScope>,
+    pub(super) outer_params: Vec<usize>,
+    pub(super) param_reads: Vec<(usize, Span)>,
+    pub(super) discarded: Vec<Span>,
     pub(super) out: Collected<'a>,
 }
 
@@ -132,6 +136,9 @@ impl<'a, 'm> Walker<'a, 'm> {
             captured: Vec::new(),
             strict: false,
             argument_scopes: Vec::new(),
+            outer_params: Vec::new(),
+            param_reads: Vec::new(),
+            discarded: Vec::new(),
             out: Collected::default(),
         }
     }
@@ -153,6 +160,8 @@ impl<'a, 'm> Walker<'a, 'm> {
         self.enter_arguments_scope(function, first);
         if kind == FrameKind::Call {
             prefix_gate_tests(&body.statements, &mut self.gate_tests);
+        } else {
+            self.note_outer_params(function);
         }
         self.visit_formal_parameters(&function.params);
         for statement in &body.statements {
@@ -161,6 +170,19 @@ impl<'a, 'm> Walker<'a, 'm> {
         self.leave_arguments_scope();
         self.pop_frame();
         self.strict = outer;
+    }
+
+    fn note_outer_params(&mut self, function: &Function<'a>) {
+        let Some(frame) = self.frames.last() else {
+            return;
+        };
+        self.outer_params = function
+            .params
+            .items
+            .iter()
+            .filter_map(|param| param.pattern.get_binding_identifier())
+            .filter_map(|id| frame.names.get(id.name.as_str()).copied())
+            .collect();
     }
 
     pub(super) fn push_frame(
@@ -190,7 +212,9 @@ impl<'a, 'm> Walker<'a, 'm> {
     pub(super) fn push_block_frame(&mut self, declared: Vec<Declared<'a>>) {
         let kind = self.innermost_kind().unwrap_or(FrameKind::Nested);
         let start = self.frames.last().map_or(0, |frame| frame.start);
+        let first = self.bindings.len();
         let names = self.bind_names(declared);
+        self.judge_gate_block(first);
         self.frames.push(Frame {
             names,
             kind,
@@ -198,6 +222,22 @@ impl<'a, 'm> Walker<'a, 'm> {
             is_block: true,
             start,
         });
+    }
+
+    fn judge_gate_block(&mut self, first: usize) {
+        if gate_state_trusted() {
+            return;
+        }
+        let fresh = first..self.bindings.len();
+        for &(region, depth) in &self.regions {
+            let direct = self.frames[depth.min(self.frames.len())..]
+                .iter()
+                .all(|frame| frame.is_block);
+            if direct {
+                self.gate_refs
+                    .extend(fresh.clone().map(|binding| (binding, region)));
+            }
+        }
     }
 
     fn bind_names(&mut self, declared: Vec<Declared<'a>>) -> FxHashMap<&'a str, usize> {
@@ -302,6 +342,23 @@ impl<'a, 'm> Walker<'a, 'm> {
         if self.arguments_exempt != Some(id.span) {
             self.check_region(binding);
         }
+        self.note_param_read(binding, id.span);
+    }
+
+    fn note_param_read(&mut self, binding: usize, span: Span) {
+        let from_inner = self.innermost_kind() != Some(FrameKind::Outer);
+        if from_inner && self.outer_params.contains(&binding) && !template_parameters_trusted() {
+            self.param_reads.push((binding, span));
+        }
+    }
+
+    fn judge_param_reads(&mut self) {
+        let reads = std::mem::take(&mut self.param_reads);
+        for (binding, span) in reads {
+            if !self.is_valid_capture(binding) {
+                self.push_trigger(span, TriggerKind::Unrecognized);
+            }
+        }
     }
 
     pub(super) fn access_at(&self, span: Span) -> u32 {
@@ -322,6 +379,7 @@ impl<'a, 'm> Walker<'a, 'm> {
         for entry in deferred {
             self.judge_deferred(entry);
         }
+        self.judge_param_reads();
         let gate_refs = std::mem::take(&mut self.gate_refs);
         for (binding, region) in gate_refs {
             if !self.is_gate_local(binding, region) {

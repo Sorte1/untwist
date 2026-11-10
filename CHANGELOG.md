@@ -40,6 +40,12 @@ All notable changes to this project are documented in this file. The format is b
   a script's top-level binding or an import are not merged into one destructuring; and an
   assignment inside `with` keeps its comma sequence. JSX reconstruction leaves an automatic-runtime
   call alone when `children` is not the last prop, appears twice or holds an array with holes.
+- Stateful decoders are no longer decoded wrongly when the self-rewriting template is not a plain
+  forwarder (the rewritten decoder reads a template parameter, declares more parameters than the
+  template forwards, or the template's leading declaration does more than fetch the array), when an
+  `flag === undefined && (flag = true)` gate is used as a value, when a memo miss returns something
+  other than what it stores, or when an init gate leaves behind a helper with its own mutable state.
+  Each such decoder is refused, or bails in the monitor, instead.
 
 - An unpacked browserify bundle now loads the modules the bundle loads. Each `require` whose
   request is in the module's dependency map names the file of the mapped module, so two versions
