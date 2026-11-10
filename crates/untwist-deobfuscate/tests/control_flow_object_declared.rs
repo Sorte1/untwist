@@ -313,3 +313,36 @@ fn a_logical_forwarder_refused_until_its_argument_is_substituted_is_still_inline
         assert!(!code.contains("jK"), "{code}");
     }
 }
+
+const A_DECLARED_FORWARDER_HANDED_EVAL: &str = "function hi() {\n  var x = \"local\";\n  var obj = {\n    aokfw: function (a, b) {\n      return a(b);\n    },\n    bqwer: \"x\"\n  };\n  return obj.aokfw(eval, \"typeof x\");\n}";
+
+#[test]
+fn a_declared_forwarder_handed_eval_keeps_the_call_indirect_in_both_modes() {
+    let alloc = Allocator::default();
+    for code in [
+        common::default_run(
+            &alloc,
+            A_DECLARED_FORWARDER_HANDED_EVAL,
+            untwist_deobfuscate::control_flow_object::boxed,
+        ),
+        common::conservative_run(
+            &alloc,
+            A_DECLARED_FORWARDER_HANDED_EVAL,
+            untwist_deobfuscate::control_flow_object::boxed,
+        ),
+    ] {
+        assert!(!code.contains("eval(\"typeof x\")"), "{code}");
+        assert!(code.contains("obj.aokfw(eval, \"typeof x\")"), "{code}");
+    }
+}
+
+#[test]
+fn a_declared_forwarder_handed_eval_stays_indirect_through_every_stage() {
+    for (code, _notes) in [
+        common::run_all_stages(A_DECLARED_FORWARDER_HANDED_EVAL),
+        common::run_all_stages_extended(A_DECLARED_FORWARDER_HANDED_EVAL),
+        common::run_all_stages_safe_lane(A_DECLARED_FORWARDER_HANDED_EVAL),
+    ] {
+        assert!(!code.contains("eval(\"typeof x\")"), "{code}");
+    }
+}

@@ -1,6 +1,7 @@
 use oxc_allocator::{CloneIn, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -261,7 +262,7 @@ fn substitutable_uses<'u>(
             dead: Vec::new(),
         });
     }
-    if !cx.opts.extended {
+    if !cx.opts.extended || is_redeclared(cx.scoping(), candidate.symbol) {
         return None;
     }
     let props = located
@@ -277,6 +278,10 @@ fn substitutable_uses<'u>(
         return None;
     }
     Some(Substitutable { uses, dead })
+}
+
+fn is_redeclared(scoping: &Scoping, symbol: SymbolId) -> bool {
+    !scoping.symbol_redeclarations(symbol).is_empty()
 }
 
 fn mutation_spans(uses: &ObjectUses) -> Vec<Span> {

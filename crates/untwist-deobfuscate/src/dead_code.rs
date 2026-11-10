@@ -547,8 +547,10 @@ impl<'a> DeadCode<'a> {
             | Expression::ChainExpression(_) => {
                 guarded || (callee && !crate::mutants::dead_member_callees_folded())
             }
-            Expression::Identifier(_) => {
-                guarded || *self.with.get_or_insert_with(|| has_with(cx.scoping()))
+            Expression::Identifier(id) => {
+                guarded
+                    || (callee && id.name == "eval")
+                    || *self.with.get_or_insert_with(|| has_with(cx.scoping()))
             }
             _ => false,
         }

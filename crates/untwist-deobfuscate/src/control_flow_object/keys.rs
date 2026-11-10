@@ -2,7 +2,8 @@ use oxc_allocator::{Box as ABox, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
 use oxc_span::{Span, SPAN};
-use oxc_str::Ident;
+use oxc_str::{Ident, Str};
+use oxc_syntax::identifier::is_identifier_name;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::ast_util::respan::{fresh_spans, fresh_spans_expression};
@@ -132,7 +133,10 @@ fn assigned_property<'a>(
     property_span: Span,
     cx: &Cx<'a, '_>,
 ) -> ObjectPropertyKind<'a> {
-    let key = PropertyKey::new_static_identifier(key_span, Ident::from_str_in(key, cx), cx);
+    let key = match is_identifier_name(key) {
+        true => PropertyKey::new_static_identifier(key_span, Ident::from_str_in(key, cx), cx),
+        false => PropertyKey::new_string_literal(key_span, Str::from_str_in(key, cx), None, cx),
+    };
     ObjectPropertyKind::new_object_property(
         property_span,
         PropertyKind::Init,

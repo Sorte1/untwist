@@ -255,3 +255,44 @@ fn a_folded_key_assignment_carries_real_synthetic_spans() {
     scan.visit_program(&parsed.program);
     assert!(scan.0.is_empty(), "{:?}", scan.0);
 }
+
+const KEYS_THAT_ARE_NOT_IDENTIFIER_NAMES: &str = "function hi() {\n  var t = {};\n  t[\"a-b\"] = function (a, b) { return a + b; };\n  t[\"c d\"] = \"x\";\n  var o = t;\n  return [o[\"a-b\"](o[\"c d\"], unknown()), o];\n}";
+
+fn parses_cleanly(code: &str) -> bool {
+    let alloc = Allocator::default();
+    parse_program(&alloc, code).diagnostics.is_empty()
+}
+
+#[test]
+fn folded_keys_that_are_not_identifier_names_are_printed_quoted() {
+    let alloc = Allocator::default();
+    let code = common::default_run(
+        &alloc,
+        KEYS_THAT_ARE_NOT_IDENTIFIER_NAMES,
+        untwist_deobfuscate::control_flow_object::boxed,
+    );
+    assert!(code.contains("\"a-b\": function"), "{code}");
+    assert!(code.contains("\"c d\": \"x\""), "{code}");
+    assert!(parses_cleanly(&code), "{code}");
+}
+
+#[test]
+fn folded_keys_that_are_not_identifier_names_parse_after_every_stage() {
+    let (code, _notes) = common::run_all_stages_extended(KEYS_THAT_ARE_NOT_IDENTIFIER_NAMES);
+    assert!(parses_cleanly(&code), "{code}");
+    let (code, _notes) = common::run_all_stages_safe_lane(KEYS_THAT_ARE_NOT_IDENTIFIER_NAMES);
+    assert!(parses_cleanly(&code), "{code}");
+}
+
+#[test]
+fn folded_keys_that_are_identifier_names_are_printed_bare() {
+    let alloc = Allocator::default();
+    let code = common::default_run(
+        &alloc,
+        "function hi() {\n  var t = {};\n  t[\"add\"] = function (a, b) { return a + b; };\n  t[\"class\"] = \"x\";\n  var o = t;\n  return [o.add(o[\"class\"], unknown()), o];\n}",
+        untwist_deobfuscate::control_flow_object::boxed,
+    );
+    assert!(code.contains("add: function"), "{code}");
+    assert!(code.contains("class: \"x\""), "{code}");
+    assert!(parses_cleanly(&code), "{code}");
+}
