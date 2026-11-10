@@ -250,7 +250,7 @@ impl<'a> VisitJs<'a> for TargetIdentifiers<'_> {
 
 impl<'s, 'p> VisitJs<'p> for FlowScan<'s, 'p> {
     fn visit_program(&mut self, it: &Program<'p>) {
-        let strict = it.source_type.is_module() || has_use_strict(&it.directives);
+        let strict = untwist_core::semantic::program_is_strict(it);
         self.flows.strict.push(strict);
         walk_js::walk_program(self, it);
     }

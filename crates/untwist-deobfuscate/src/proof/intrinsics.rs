@@ -453,7 +453,7 @@ impl<'a> VisitJs<'a> for BaseScan<'_> {
     }
 
     fn visit_program(&mut self, it: &Program<'a>) {
-        let strict = it.source_type.is_module() || it.has_use_strict_directive();
+        let strict = untwist_core::semantic::program_is_strict(it);
         self.strict.push(strict);
         walk_js::walk_program(self, it);
         self.strict.pop();

@@ -131,6 +131,13 @@ All notable changes to this project are documented in this file. The format is b
   constant that is assigned later, and `var x; ... x = 1;` is not merged into `var x = 1` past a
   read that now comes first. The order of two statements is taken from where they stand in the
   tree, not from their positions in the input. A call moved behind its constant now folds.
+- A script without `"use strict"` is no longer treated as strict by the built-in alias proofs.
+  In such a script `this` at the top level and in a plainly called function is the global
+  object, so a write through it can replace a built-in the decoder uses; a program that does
+  this, or writes an unknown key through such a `this`, keeps its decoder calls instead
+  of getting strings decoded with the original built-in. The call wrappers obfuscator.io emits
+  for self-defending and debug protection pass such a `this` along, so some of those outputs now
+  keep the decoder in the default lane (`--unsafe` decodes them).
 
 ### Changed
 

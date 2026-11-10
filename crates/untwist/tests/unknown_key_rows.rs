@@ -33,9 +33,27 @@ fn messages(out: &Output) -> Vec<&str> {
 }
 
 #[test]
-fn a_sum_key_that_cannot_end_a_watched_name_does_not_refuse() {
+fn a_sum_key_that_cannot_end_a_watched_name_is_not_a_write_to_the_decoder() {
     let out = run(&sum_key_write("Q"), false, false);
-    assert!(!calls_left(&out, "bQ"), "{:#?}", messages(&out));
+    let seen = messages(&out);
+    assert!(
+        !seen
+            .iter()
+            .any(|m| m.contains(notes::STRING_ARRAY_GLOBAL_REACH)),
+        "{seen:#?}"
+    );
+}
+
+#[test]
+fn a_sum_key_on_the_global_object_refuses_as_a_possible_built_in_write() {
+    let out = run(&sum_key_write("Q"), false, false);
+    assert!(calls_left(&out, "bQ"), "{}", out.code());
+    let seen = messages(&out);
+    assert!(
+        seen.iter()
+            .any(|m| m.contains(notes::BUILTIN_ALIAS_PATCHED)),
+        "{seen:#?}"
+    );
 }
 
 #[test]

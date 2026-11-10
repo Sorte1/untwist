@@ -95,7 +95,7 @@ impl<'s> Gen<'s> {
             frames: Vec::new(),
             global,
             global_object,
-            script: !program.source_type.is_module(),
+            script: !untwist_core::semantic::has_module_syntax(program),
             members: Vec::new(),
             fallback: None,
             dump: None,
