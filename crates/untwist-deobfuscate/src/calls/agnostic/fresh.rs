@@ -212,13 +212,17 @@ impl<'s, 'a> Fresh<'s, 'a> {
         }
     }
 
-    pub(super) fn holds_function(&self, id: &IdentifierReference<'_>) -> bool {
+    pub(super) fn holds_function_or_primitive(&self, id: &IdentifierReference<'_>) -> bool {
         self.defs(id).is_some_and(|defs| {
             !defs.fields_written
                 && match defs.inits {
                     [] => defs.callable,
                     [Some(init)] => {
-                        function_valued(init) || super::live::iife_returned(init).is_some()
+                        function_valued(init)
+                            || super::live::iife_returns_only(init, |value| {
+                                function_valued(value)
+                                    || super::holds::primitive_result(value.without_parentheses())
+                            })
                     }
                     _ => false,
                 }

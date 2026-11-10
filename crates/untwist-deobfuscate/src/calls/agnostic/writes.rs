@@ -208,7 +208,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         named(prototype, "prototype")
             && named(constructor, "constructor")
             && matches!(constructor.object().without_parentheses(),
-                Expression::Identifier(id) if self.fresh.holds_function(id))
+                Expression::Identifier(id) if self.fresh.holds_function_or_primitive(id))
     }
 
     fn is_unbound(&self, expr: &Expression<'a>, name: &str) -> bool {

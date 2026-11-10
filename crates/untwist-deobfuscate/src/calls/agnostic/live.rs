@@ -15,8 +15,7 @@ pub(super) fn opaque_branch<'k, 'a>(it: &'k IfStatement<'a>) -> Option<Option<&'
 
 #[derive(Default)]
 struct LiveReturns<'a> {
-    first: Option<&'a ReturnStatement<'a>>,
-    more: bool,
+    all: Vec<&'a ReturnStatement<'a>>,
 }
 
 impl<'a> VisitJs<'a> for LiveReturns<'a> {
@@ -36,26 +35,26 @@ impl<'a> VisitJs<'a> for LiveReturns<'a> {
     }
 
     fn visit_return_statement(&mut self, it: &ReturnStatement<'a>) {
-        if self.first.is_some() {
-            self.more = true;
-        } else {
-            self.first = Some(self.alloc(it));
-        }
+        self.all.push(self.alloc(it));
     }
 }
 
-fn single_live_return<'a>(body: &'a FunctionBody<'a>) -> Option<&'a Expression<'a>> {
+fn live_returns<'a>(body: &'a FunctionBody<'a>) -> Vec<&'a ReturnStatement<'a>> {
     let mut scan = LiveReturns::default();
     for statement in &body.statements {
         scan.visit_statement(statement);
     }
-    if scan.more {
-        return None;
-    }
-    scan.first?.argument.as_ref()
+    scan.all
 }
 
-pub(super) fn iife_returned<'a>(init: &'a Expression<'a>) -> Option<&'a Function<'a>> {
+fn single_live_return<'a>(body: &'a FunctionBody<'a>) -> Option<&'a Expression<'a>> {
+    match live_returns(body).as_slice() {
+        [only] => only.argument.as_ref(),
+        _ => None,
+    }
+}
+
+fn iife_body<'a>(init: &'a Expression<'a>) -> Option<&'a FunctionBody<'a>> {
     let Expression::CallExpression(call) = init.without_parentheses() else {
         return None;
     };
@@ -71,7 +70,22 @@ pub(super) fn iife_returned<'a>(init: &'a Expression<'a>) -> Option<&'a Function
     {
         return None;
     }
-    let returned = single_live_return(outer.body.as_ref()?)?;
+    outer.body.as_deref()
+}
+
+pub(super) fn iife_returns_only<'a>(
+    init: &'a Expression<'a>,
+    allowed: impl Fn(&'a Expression<'a>) -> bool,
+) -> bool {
+    iife_body(init).is_some_and(|body| {
+        live_returns(body)
+            .iter()
+            .all(|it| it.argument.as_ref().is_none_or(&allowed))
+    })
+}
+
+pub(super) fn iife_returned<'a>(init: &'a Expression<'a>) -> Option<&'a Function<'a>> {
+    let returned = single_live_return(iife_body(init)?)?;
     let Expression::FunctionExpression(inner) = returned.without_parentheses() else {
         return None;
     };
