@@ -25,7 +25,8 @@ pub const CHUNK_START_UNPROVEN: &str =
     "runs code on arrival that is not webpack's deferred-entry list; no bundle is written";
 pub const DEFERRED_WITH_RUNTIME: &str =
     "starts modules once the runtime loads, which the written files cannot order; no bundle is written";
-pub const DEFERRED_NOT_RUN: &str = "starts these modules only once webpack's runtime loads";
+pub const DEFERRED_NOT_RUN: &str =
+    "starts these modules only after webpack's runtime loads other files";
 pub const DUPLICATE_DIFFERS: &str =
     "is defined differently by two inputs and the load order is unknown; no bundle is written";
 
@@ -166,7 +167,7 @@ pub fn deferred_with_runtime(ids: impl Display) -> String {
 }
 
 pub fn deferred_not_run(ids: impl Display) -> String {
-    format!("the chunk {DEFERRED_NOT_RUN}: {ids}; the written modules do not start them")
+    format!("the bundle {DEFERRED_NOT_RUN}: {ids}; the written modules do not start them")
 }
 
 pub fn duplicate_differs(id: impl Display) -> String {

@@ -105,7 +105,7 @@ fn a_lone_chunk_that_starts_modules_says_so() {
     assert!(
         notes[0]
             .message
-            .contains("starts these modules only once webpack's runtime loads: 5"),
+            .contains("starts these modules only after webpack's runtime loads other files: 5"),
         "{notes:?}"
     );
 }

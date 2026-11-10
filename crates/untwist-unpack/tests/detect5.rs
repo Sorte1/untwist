@@ -95,7 +95,8 @@ fn a_runtime_with_no_assigned_entry_has_no_entry() {
     let source = fixture("webpack-5-no-entry.js");
     let alloc = Allocator::default();
     let program = prepared(&alloc, &source);
-    let bundle = bundle_from_wrapper(&alloc, &program).expect("webpack 5 bundle");
+    assert!(bundle_from_wrapper(&alloc, &program).is_none());
+    let bundle = conservative_bundle_from_wrapper(&alloc, &program).expect("webpack 5 bundle");
     assert_eq!(bundle.entry_id, None);
     assert_eq!(
         module_summary(&bundle),
@@ -105,7 +106,7 @@ fn a_runtime_with_no_assigned_entry_has_no_entry() {
 
 #[test]
 fn a_decoy_container_before_the_real_one_does_not_defeat_detection() {
-    let source = "var installedChunks = { 0: function () {} };\nvar __webpack_modules__ = { 2: (module, exports, require) => { x(); } };\nfunction __webpack_require__(id) {\n  __webpack_modules__[id]();\n}\n__webpack_require__(__webpack_require__.s = 2);\n";
+    let source = "var installedChunks = { 0: function () {} };\nvar __webpack_modules__ = { 2: (module, exports, require) => { x(); } };\nvar __webpack_module_cache__ = {};\nfunction __webpack_require__(id) {\n  var cached = __webpack_module_cache__[id];\n  if (cached !== undefined) return cached.exports;\n  var module = __webpack_module_cache__[id] = { exports: {} };\n  __webpack_modules__[id](module, module.exports, __webpack_require__);\n  return module.exports;\n}\n__webpack_require__(__webpack_require__.s = 2);\n";
     let alloc = Allocator::default();
     let program = parse(&alloc, source);
     let bundle = detect_webpack5(&alloc, &program, &program.body).expect("webpack 5 bundle");

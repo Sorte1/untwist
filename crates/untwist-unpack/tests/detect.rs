@@ -25,7 +25,6 @@ fn every_webpack_shape_is_found_through_its_wrapper() {
         ("webpack-var-injection.js", Some("0")),
         ("webpack-5.js", Some("2")),
         ("webpack-5-method.js", Some("2")),
-        ("webpack-5-no-entry.js", None),
         ("webpack-jsonp-chunk.js", None),
         ("webpack-5-json.js", None),
         ("webpack-chunk-no-entries.js", None),
@@ -51,6 +50,13 @@ fn a_bundle_whose_factory_holds_a_with_statement_is_found_only_by_the_reference_
         untwist_unpack::unpack_program_with(&alloc, &program, conservative).expect("a bundle");
     assert_eq!(bundle.kind, BundleKind::Webpack);
     assert_eq!(bundle.entry_id.as_deref(), Some("0"));
+}
+
+#[test]
+fn a_runtime_that_loads_other_chunk_files_at_startup_is_not_proven() {
+    let source = fixture("webpack-5-no-entry.js");
+    let alloc = Allocator::default();
+    assert!(bundle_from(&alloc, &source).is_none());
 }
 
 #[test]

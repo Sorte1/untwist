@@ -106,7 +106,7 @@ fn a_chunk_id_that_collides_with_a_module_id_is_never_read_as_an_entry() {
 fn a_runtime_helper_property_is_never_an_entry_marker() {
     for helper in ["j", "e", "d", "m", "r"] {
         let source = format!(
-            "(() => {{\n  var __webpack_modules__ = {{ 1: (module) => {{ module.exports = 1; }} }};\n  var __webpack_module_cache__ = {{}};\n  function __webpack_require__(id) {{\n    var m = __webpack_module_cache__[id] = {{ exports: {{}} }};\n    __webpack_modules__[id](m, m.exports, __webpack_require__);\n    return m.exports;\n  }}\n  __webpack_require__.{helper} = 1;\n}})();"
+            "(() => {{\n  var __webpack_modules__ = {{ 1: (module) => {{ module.exports = 1; }} }};\n  var __webpack_module_cache__ = {{}};\n  function __webpack_require__(id) {{\n    var cached = __webpack_module_cache__[id];\n    if (cached !== undefined) return cached.exports;\n    var m = __webpack_module_cache__[id] = {{ exports: {{}} }};\n    __webpack_modules__[id](m, m.exports, __webpack_require__);\n    return m.exports;\n  }}\n  __webpack_require__.{helper} = 1;\n}})();"
         );
         let alloc = oxc_allocator::Allocator::default();
         let parsed = untwist_core::parse::parse_program(&alloc, &source);

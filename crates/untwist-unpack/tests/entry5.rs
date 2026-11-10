@@ -8,7 +8,7 @@ use untwist_unpack::{finish_with, unpack_program_taking_with, unpack_program_wit
 
 const FACTORIES: &str = "  var __webpack_modules__ = {\n    1: (__unused, __webpack_exports__, __webpack_require__) => {\n      \"use strict\";\n      __webpack_require__.d(__webpack_exports__, { a: () => a });\n      const a = 1;\n    },\n  };\n";
 const REQUIRE: &str = "  var __webpack_module_cache__ = {};\n  function __webpack_require__(moduleId) {\n    var cached = __webpack_module_cache__[moduleId];\n    if (cached !== undefined) return cached.exports;\n    var module = (__webpack_module_cache__[moduleId] = { exports: {} });\n    __webpack_modules__[moduleId](module, module.exports, __webpack_require__);\n    return module.exports;\n  }\n";
-const HELPERS: &str = "  (() => { __webpack_require__.d = (exports, definition) => { for (var key in definition) { if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) Object.defineProperty(exports, key, { enumerable: true, get: definition[key] }); } }; })();\n  (() => { __webpack_require__.o = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop); })();\n  (() => { __webpack_require__.r = (exports) => { Object.defineProperty(exports, \"__esModule\", { value: true }); }; })();\n";
+const HELPERS: &str = "  (() => { __webpack_require__.d = (exports, definition) => { for (var key in definition) { if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) Object.defineProperty(exports, key, { enumerable: true, get: definition[key] }); } }; })();\n  (() => { __webpack_require__.o = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop); })();\n  (() => { __webpack_require__.r = (exports) => { if (typeof Symbol !== \"undefined\" && Symbol.toStringTag) { Object.defineProperty(exports, Symbol.toStringTag, { value: \"Module\" }); } Object.defineProperty(exports, \"__esModule\", { value: true }); }; })();\n";
 const ENTRY: &str = "  var __webpack_exports__ = {};\n  (() => {\n    \"use strict\";\n    __webpack_require__.r(__webpack_exports__);\n    var m = __webpack_require__(1);\n    console.log(m.a);\n  })();\n";
 
 fn bundle_with(prelude: &str, entry: &str) -> String {
@@ -71,7 +71,9 @@ fn index(out: &Out) -> Option<&str> {
 }
 
 fn refused(text: &str) {
-    let out = unpacked(text);
+    let Some(out) = extracted(text, UnpackOptions::default(), (parse, false)) else {
+        return;
+    };
     assert_eq!(out.entry, None, "{text}");
     assert!(index(&out).is_none(), "{text}");
 }

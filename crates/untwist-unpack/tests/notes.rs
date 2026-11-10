@@ -83,7 +83,7 @@ fn every_builder_spells_the_text_it_replaced() {
     );
     assert_eq!(
         notes::deferred_not_run("5"),
-        "the chunk starts these modules only once webpack's runtime loads: 5; the written modules do not start them"
+        "the bundle starts these modules only after webpack's runtime loads other files: 5; the written modules do not start them"
     );
     assert_eq!(
         notes::entry_candidates("1", 3),

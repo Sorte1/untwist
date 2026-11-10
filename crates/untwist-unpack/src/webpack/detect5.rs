@@ -9,7 +9,7 @@ use crate::webpack::extract::extract_modules_with;
 use crate::webpack::gate::{routable, Prelude};
 use crate::webpack::helpers::prelude_runtime_skipping;
 use crate::webpack::require_fn::{find_assigned_entry_id, Dispatchers};
-use crate::webpack::proof::{Proving, Shape};
+use crate::webpack::proof::{deferred_entries, Proving, Shape};
 use crate::UnpackOptions;
 
 struct Candidate<'k, 'a> {
@@ -114,6 +114,9 @@ pub fn detect_webpack5_noted<'a>(
         proving.prove(source, &shape)?;
     }
     let mut bundle = Bundle::new(BundleKind::Webpack, entry_id);
+    if !options.conservative {
+        bundle.deferred = deferred_entries(body, require_name);
+    }
     bundle.runtime =
         prelude_runtime_skipping(alloc, (None, body), (require_name, skip), bodies);
     if checked {

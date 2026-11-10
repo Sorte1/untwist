@@ -43,7 +43,36 @@ fn a_chunk_with_deferred_entries_is_written_and_says_they_do_not_start() {
     assert!(
         notes
             .iter()
-            .any(|note| note.contains("starts these modules only once webpack's runtime loads: 5")),
+            .any(|note| note.contains("starts these modules only after webpack's runtime loads other files: 5")),
+        "{notes:?}"
+    );
+}
+
+const STARTED_AFTER_A_LOAD: &str = r#"(function (modules) {
+  var installedModules = {};
+  function __webpack_require__(moduleId) {
+    if (installedModules[moduleId]) return installedModules[moduleId].exports;
+    var module = (installedModules[moduleId] = { i: moduleId, l: false, exports: {} });
+    modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+    module.l = true;
+    return module.exports;
+  }
+  __webpack_require__.e = function () { return Promise.resolve(); };
+  __webpack_require__.e(0).then(__webpack_require__.bind(null, 1));
+})([
+  function (module) { module.exports = "zero"; },
+  function (module, exports, __webpack_require__) { console.log(__webpack_require__(0)); }
+]);
+"#;
+
+#[test]
+fn a_bundle_that_starts_its_entry_after_a_chunk_load_says_the_entry_does_not_start() {
+    let (modules, notes) = outcome(STARTED_AFTER_A_LOAD);
+    assert_eq!(modules, Some(2));
+    assert!(
+        notes
+            .iter()
+            .any(|note| note.contains("starts these modules only after webpack's runtime loads other files: 1")),
         "{notes:?}"
     );
 }

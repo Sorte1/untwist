@@ -8,6 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
 
 use crate::notes::runtime_not_proven;
+use crate::matcher::{const_member, literal_id as id_text};
 use crate::webpack::guard::{dirname_suffix, guarded};
 use crate::webpack::helpers::{declared_in, pattern_names};
 use crate::webpack::locals::closed_value;
@@ -29,6 +30,7 @@ pub struct Shape<'k, 'a> {
 
 struct Proof<'k, 'a> {
     require: &'k str,
+    skip: Option<Span>,
     declared: FxHashSet<&'k str>,
     values: Vec<&'k Expression<'a>>,
     units: Vec<&'k FunctionBody<'a>>,
@@ -194,6 +196,9 @@ impl<'k, 'a> Proof<'k, 'a> {
     }
 
     fn element(&mut self, expr: &'k Expression<'a>, top: bool) -> Proven {
+        if top && self.skip == Some(expr.span()) {
+            return Ok(());
+        }
         if let Expression::AssignmentExpression(assignment) = expr.without_parentheses() {
             if let Some(proven) = self.helper(assignment) {
                 return proven;
@@ -208,6 +213,11 @@ impl<'k, 'a> Proof<'k, 'a> {
         if top {
             if let Some(proven) = self.entry_call(expr) {
                 return proven;
+            }
+            if let Some((loader, _)) = deferred_start(expr, self.require) {
+                if self.defined.contains_key(loader) {
+                    return Ok(());
+                }
             }
         }
         if let Some(body) = iife_body(expr) {
@@ -319,6 +329,86 @@ impl<'k, 'a> Proof<'k, 'a> {
             Some(argument) => self.expression_statement(argument, true),
         }
     }
+}
+
+fn started_by(expr: &Expression<'_>, require: &str) -> Option<String> {
+    match expr.without_parentheses() {
+        Expression::CallExpression(call) => {
+            let target = const_member(&call.callee, "bind")?;
+            let [this, id] = &call.arguments[..] else {
+                return None;
+            };
+            let bound = is_name(target, require)
+                && matches!(this.as_expression()?.without_parentheses(), Expression::NullLiteral(_));
+            bound.then(|| id_text(id.as_expression()?.without_parentheses()))?
+        }
+        Expression::ArrowFunctionExpression(arrow) => {
+            let body = match &arrow.body {
+                ArrowFunctionBody::FunctionBody(_) => return None,
+                body => body.as_expression()?,
+            };
+            if !arrow.params.items.is_empty() || arrow.r#async {
+                return None;
+            }
+            let Expression::CallExpression(call) = body.without_parentheses() else {
+                return None;
+            };
+            let [id] = &call.arguments[..] else {
+                return None;
+            };
+            is_name(&call.callee, require)
+                .then(|| id_text(id.as_expression()?.without_parentheses()))?
+        }
+        _ => None,
+    }
+}
+
+fn deferred_start<'k>(expr: &'k Expression<'_>, require: &str) -> Option<(&'k str, String)> {
+    let Expression::CallExpression(then) = expr.without_parentheses() else {
+        return None;
+    };
+    let [start] = &then.arguments[..] else {
+        return None;
+    };
+    let Expression::CallExpression(load) = const_member(&then.callee, "then")?.without_parentheses() else {
+        return None;
+    };
+    let Expression::StaticMemberExpression(loader) = &load.callee else {
+        return None;
+    };
+    let literals = load.arguments.iter().all(|argument| {
+        argument
+            .as_expression()
+            .is_some_and(|value| id_text(value.without_parentheses()).is_some())
+    });
+    let fits = is_name(&loader.object, require) && literals;
+    let id = fits.then(|| started_by(start.as_expression()?, require))??;
+    Some((loader.property.name.as_str(), id))
+}
+
+
+pub fn deferred_entries(statements: &[Statement<'_>], require: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for statement in statements {
+        let expr = match statement {
+            Statement::ExpressionStatement(statement) => &statement.expression,
+            Statement::ReturnStatement(ret) => match &ret.argument {
+                Some(argument) => argument,
+                None => continue,
+            },
+            _ => continue,
+        };
+        let elements = match expr.without_parentheses() {
+            Expression::SequenceExpression(sequence) => sequence.expressions.iter().collect(),
+            other => vec![other],
+        };
+        found.extend(
+            elements
+                .into_iter()
+                .filter_map(|element| deferred_start(element, require).map(|(_, id)| id)),
+        );
+    }
+    found
 }
 
 fn top_names<'k>(shape: &Shape<'k, '_>) -> Vec<&'k str> {
@@ -525,6 +615,7 @@ pub fn prove<'k, 'a>(shape: &Shape<'k, 'a>, scoping: &Scoping) -> Proven {
     }
     let mut proof = Proof {
         require: shape.require,
+        skip: shape.skip,
         declared: names,
         values: Vec::new(),
         units: Vec::new(),
@@ -560,7 +651,7 @@ impl<'s> Proving<'s> {
         }
     }
 
-    fn refused(&mut self, why: String) -> Option<()> {
+    fn refused<T>(&mut self, why: String) -> Option<T> {
         if let Some(unproven) = self.unproven.as_deref_mut() {
             unproven.get_or_insert(why);
         }

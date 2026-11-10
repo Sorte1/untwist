@@ -3,8 +3,9 @@ mod common;
 use common::PrintedModule;
 use common::{first_expression_statement, fixture, module_summary, prepared};
 use oxc_allocator::Allocator;
-use untwist_unpack::model::BundleKind;
-use untwist_unpack::webpack::detect4::detect_webpack4;
+use untwist_unpack::model::{Bodies, BundleKind};
+use untwist_unpack::webpack::detect4::{detect_webpack4, detect_webpack4_with};
+use untwist_unpack::UnpackOptions;
 
 #[test]
 fn unpacks_the_array_container_fixture() {
@@ -60,7 +61,13 @@ fn finds_the_returned_entry_id_of_a_webpack_0_11_bundle() {
     let source = fixture("webpack-0.11.x.js");
     let alloc = Allocator::default();
     let program = prepared(&alloc, &source);
-    let bundle = detect_webpack4(&alloc, &program, first_expression_statement(&program))
+    let expr = first_expression_statement(&program);
+    assert!(detect_webpack4(&alloc, &program, expr).is_none());
+    let conservative = UnpackOptions {
+        conservative: true,
+        ..UnpackOptions::default()
+    };
+    let bundle = detect_webpack4_with(&alloc, &program, expr, &mut Bodies::Cloned, conservative)
         .expect("webpack 0.11.x bundle");
     assert_eq!(bundle.entry_id.as_deref(), Some("0"));
     assert_eq!(

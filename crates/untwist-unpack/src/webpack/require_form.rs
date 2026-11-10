@@ -43,13 +43,17 @@ fn steps<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<Vec<Step<'k, 'a>>> {
     for statement in statements {
         match statement {
             Statement::ExpressionStatement(statement) => {
-                steps.extend(sequence(&statement.expression).into_iter().map(Step::Effect));
+                steps.extend(
+                    sequence(&statement.expression)
+                        .into_iter()
+                        .map(|part| Step::Effect(part.without_parentheses())),
+                );
             }
             Statement::ReturnStatement(ret) => {
                 let mut parts = sequence(ret.argument.as_ref()?);
                 let last = parts.pop()?;
-                steps.extend(parts.into_iter().map(Step::Effect));
-                steps.push(Step::Return(last));
+                steps.extend(parts.into_iter().map(|part| Step::Effect(part.without_parentheses())));
+                steps.push(Step::Return(last.without_parentheses()));
             }
             Statement::VariableDeclaration(declaration) => {
                 for declarator in &declaration.declarations {

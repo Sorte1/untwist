@@ -10,7 +10,7 @@ use crate::webpack::helpers::prelude_runtime;
 use crate::webpack::require_fn::{
     count_required_entry_ids, find_assigned_entry_id, find_required_entry_id, require_function,
 };
-use crate::webpack::proof::{Proving, Shape};
+use crate::webpack::proof::{deferred_entries, Proving, Shape};
 use crate::UnpackOptions;
 
 struct Webpack4<'k, 'a> {
@@ -117,6 +117,9 @@ pub fn detect_webpack4_noted<'a>(
         .or_else(|| find_required_entry_id(&body.statements, require_name, None));
 
     let mut bundle = Bundle::new(BundleKind::Webpack, entry_id);
+    if !options.conservative {
+        bundle.deferred = deferred_entries(&body.statements, require_name);
+    }
     if assigned.is_none() {
         bundle.entry_candidates = count_required_entry_ids(&body.statements, require_name);
     }
