@@ -1,11 +1,12 @@
 use oxc_allocator::UnstableAddress;
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
+use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{ContentEq, Span, SPAN};
 use oxc_syntax::symbol::SymbolId;
 use oxc_traverse::Ancestor;
 use rustc_hash::FxHashSet;
-use untwist_core::ast_util::global::is_global_undefined;
+use untwist_core::ast_util::global::{is_declared_reference, is_global_undefined};
 use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{read_reference_count, write_reference_count};
@@ -190,15 +191,105 @@ pub fn target_parts<'k, 'a>(
     }
 }
 
-pub fn keys_match(left: &MemberKey<'_, '_>, right: &MemberKey<'_, '_>) -> bool {
+pub fn keys_match(left: &MemberKey<'_, '_>, right: &MemberKey<'_, '_>, cx: &Cx<'_, '_>) -> bool {
     match (left, right) {
         (MemberKey::Static(left), MemberKey::Static(right)) => {
             left.name.as_str() == right.name.as_str()
         }
         (MemberKey::Computed(left), MemberKey::Computed(right)) => {
-            ContentEq::content_eq(*left, *right)
+            ContentEq::content_eq(*left, *right) && is_repeatable_key(left, cx)
         }
         _ => false,
+    }
+}
+
+fn is_plain_literal(expr: &Expression<'_>) -> bool {
+    matches!(
+        expr,
+        Expression::NullLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::StringLiteral(_)
+    )
+}
+
+fn reads_the_same_twice(expr: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
+    match expr {
+        Expression::ThisExpression(_) => true,
+        Expression::Identifier(identifier) => is_declared_reference(cx.scoping(), identifier),
+        _ => is_plain_literal(expr),
+    }
+}
+
+#[derive(Default)]
+struct RunsCode {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for RunsCode {
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        self.found |= match it {
+            Expression::UnaryExpression(unary) => unary.operator == UnaryOperator::Delete,
+            other => matches!(
+                other,
+                Expression::CallExpression(_)
+                    | Expression::NewExpression(_)
+                    | Expression::UpdateExpression(_)
+                    | Expression::AssignmentExpression(_)
+                    | Expression::AwaitExpression(_)
+                    | Expression::YieldExpression(_)
+                    | Expression::TaggedTemplateExpression(_)
+                    | Expression::ImportExpression(_)
+                    | Expression::ChainExpression(_)
+            ),
+        };
+        if !self.found {
+            walk_js::walk_expression(self, it);
+        }
+    }
+}
+
+fn is_free_of_calls(expr: &Expression<'_>) -> bool {
+    let mut scan = RunsCode::default();
+    scan.visit_expression(expr);
+    !scan.found
+}
+
+fn is_call_free_chain(expr: &Expression<'_>) -> bool {
+    match expr {
+        Expression::Identifier(_) | Expression::ThisExpression(_) => true,
+        Expression::StaticMemberExpression(member) => is_call_free_chain(&member.object),
+        Expression::ComputedMemberExpression(member) => {
+            is_call_free_chain(&member.object) && is_free_of_calls(&member.expression)
+        }
+        _ => is_plain_literal(expr),
+    }
+}
+
+pub fn is_repeatable(expr: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
+    if cx.opts.unsafe_transforms {
+        is_call_free_chain(expr)
+    } else {
+        reads_the_same_twice(expr, cx)
+    }
+}
+
+fn is_repeatable_key(key: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
+    if cx.opts.unsafe_transforms {
+        is_free_of_calls(key)
+    } else {
+        reads_the_same_twice(key, cx)
+    }
+}
+
+pub fn is_repeatable_target(expr: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
+    match member_parts(expr) {
+        Some((object, MemberKey::Static(_))) => is_repeatable(object, cx),
+        Some((object, MemberKey::Computed(key))) => {
+            is_repeatable(object, cx) && is_repeatable_key(key, cx)
+        }
+        None => matches!(expr, Expression::Identifier(_)) && is_repeatable(expr, cx),
     }
 }
 

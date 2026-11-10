@@ -89,3 +89,103 @@ var _c;
         @r#"oobj["obj"][incr()] ??= incr();"#
     );
 }
+
+fn default_lane(source: &str) -> String {
+    let alloc = Allocator::default();
+    untwist_testing::transform_with(
+        &alloc,
+        source,
+        &[untwist_unminify::nullish_coalescing_assignment::boxed],
+        PassOptions::default(),
+    )
+}
+
+fn unsafe_lane(source: &str) -> String {
+    let alloc = Allocator::default();
+    untwist_testing::transform(
+        &alloc,
+        source,
+        &[untwist_unminify::nullish_coalescing_assignment::boxed],
+    )
+}
+
+const UPDATE_KEY: &str = r#"function m(a, i, z) { a[i++] ?? (a[i++] = z); return [i, a]; }
+console.log(JSON.stringify(m([null, null, null], 0, 7)));"#;
+
+const CALL_OBJECT: &str = r#"var n = 0;
+var o = { y: null };
+function f() { n++; return o; }
+f().y ?? (f().y = 2);
+console.log(n, o.y);"#;
+
+const GETTER_OBJECT: &str = r#"var reads = 0;
+var inner = {};
+var o = { get p() { reads++; return inner; } };
+o.p.y ?? (o.p.y = 1);
+console.log(reads, inner.y);"#;
+
+const GLOBAL_ACCESSOR_OBJECT: &str = r#"var reads = 0;
+var store = {};
+Object.defineProperty(globalThis, "gobj", { get() { reads++; return store; }, configurable: true });
+gobj.k ?? (gobj.k = 1);
+console.log(reads, store.k);"#;
+
+const TEMP_OBJECT_GLOBAL_ACCESSOR_KEY: &str = r#"var reads = 0;
+var store = {};
+Object.defineProperty(globalThis, "gkey", { get() { reads++; return "k"; }, configurable: true });
+var t;
+(t = store)[gkey] ?? (t[gkey] = 1);
+console.log(reads, store.k);"#;
+
+#[test]
+fn a_repeated_operand_that_can_run_code_keeps_its_pair_by_default() {
+    for source in [
+        UPDATE_KEY,
+        CALL_OBJECT,
+        GETTER_OBJECT,
+        GLOBAL_ACCESSOR_OBJECT,
+        TEMP_OBJECT_GLOBAL_ACCESSOR_KEY,
+    ] {
+        let output = default_lane(source);
+        assert!(!output.contains("??="), "{output}");
+        untwist_testing::node::assert_node_agrees(source, &output);
+    }
+}
+
+#[test]
+fn a_repeated_call_or_update_keeps_its_pair_under_unsafe() {
+    for source in [UPDATE_KEY, CALL_OBJECT] {
+        let output = unsafe_lane(source);
+        assert!(!output.contains("??="), "{output}");
+        untwist_testing::node::assert_node_agrees(source, &output);
+    }
+}
+
+#[test]
+fn a_call_free_member_chain_still_converts_under_unsafe() {
+    assert!(unsafe_lane(GETTER_OBJECT).contains("o.p.y ??= 1"));
+    assert!(unsafe_lane(GLOBAL_ACCESSOR_OBJECT).contains("gobj.k ??= 1"));
+    assert!(unsafe_lane(TEMP_OBJECT_GLOBAL_ACCESSOR_KEY).contains("store[gkey] ??= 1"));
+}
+
+#[test]
+fn transpiler_output_still_converts_by_default() {
+    let rows = [
+        ("function h(a, b) { a ?? (a = b); return a; }", "a ??= b;"),
+        ("function h(a, c) { a.b ?? (a.b = c); }", "a.b ??= c;"),
+        ("function h(a, k, c) { a[k] ?? (a[k] = c); }", "a[k] ??= c;"),
+        (
+            "function h(a, c) { var _a; (_a = a).b ?? (_a.b = c); }",
+            "a.b ??= c;",
+        ),
+        (
+            "function h(a, k, c) { var _a; (_a = a)[k] ?? (_a[k] = c); }",
+            "a[k] ??= c;",
+        ),
+        ("function h(c) { this.b ?? (this.b = c); }", "this.b ??= c;"),
+    ];
+    for (source, expected) in rows {
+        let output = default_lane(source);
+        assert!(output.contains(expected), "{output}");
+    }
+}

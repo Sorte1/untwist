@@ -1,5 +1,5 @@
 use crate::transpile_util::{
-    assignment_temp_symbol, identifier_symbol_is, is_undefined_identifier,
+    assignment_temp_symbol, identifier_symbol_is, is_repeatable, is_undefined_identifier,
     take_logical_left_assignment_value, TempVars,
 };
 use oxc_allocator::Vec as AVec;
@@ -234,7 +234,7 @@ fn rewrite_simple<'a>(node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
     let Some(object) = member_object(&conditional.alternate) else {
         return false;
     };
-    if !ContentEq::content_eq(first, object) {
+    if !ContentEq::content_eq(first, object) || !is_repeatable(first, cx) {
         return false;
     }
     let span = conditional.span;
@@ -301,7 +301,9 @@ pub fn would_rewrite(conditional: &ConditionalExpression<'_>, cx: &Cx<'_, '_>) -
     let Some(object) = member_object(&conditional.alternate) else {
         return false;
     };
-    let simple = ContentEq::content_eq(first, second) && ContentEq::content_eq(first, object);
+    let simple = ContentEq::content_eq(first, second)
+        && ContentEq::content_eq(first, object)
+        && is_repeatable(first, cx);
     simple
         || assignment_temp_symbol(first, cx).is_some_and(|symbol| {
             identifier_symbol_is(second, symbol, cx) && identifier_symbol_is(object, symbol, cx)

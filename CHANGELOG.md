@@ -122,6 +122,12 @@ All notable changes to this project are documented in this file. The format is b
   `bundle.json` and `wasm/` are never used for a module.
 - Any number of module ids that normalise to one path get distinct names. Before, the 1001st
   shared a name with another module, and naming them took quadratic time.
+- `a.b != null ? a.b : c`, `a.b && a.b.c`, `a.b || (a.b = c)` and `a.b ?? (a.b = c)` are no longer
+  merged into `??`, `?.`, `||=` and `??=` when the repeated operand is a property read or an
+  undeclared global: a getter or proxy ran twice before and once after. The merge now needs
+  `this`, a literal or a declared variable (for an assignment target, such an object and key).
+  `--unsafe` still merges call-free member chains, and the temporary-variable forms Babel,
+  TypeScript and terser emit convert as before.
 - A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
   globals. When the body still declares a `var`, function, class, `let` or `const` at its own
   level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that

@@ -81,3 +81,162 @@ fn preserve_parens_does_not_panic() {
     );
     let _ = run_to_fixpoint(&alloc, &mut parsed.program, sem, &mut group);
 }
+
+fn default_lane(source: &str) -> String {
+    let alloc = Allocator::default();
+    untwist_testing::transform_with(
+        &alloc,
+        source,
+        &[untwist_unminify::logical_assignments::boxed],
+        PassOptions::default(),
+    )
+}
+
+fn unsafe_lane(source: &str) -> String {
+    let alloc = Allocator::default();
+    untwist_testing::transform(
+        &alloc,
+        source,
+        &[untwist_unminify::logical_assignments::boxed],
+    )
+}
+
+const UPDATE_KEY: &str = r#"function m(a, i, z) { a[i++] || (a[i++] = z); return [i, a]; }
+console.log(JSON.stringify(m([0, 0, 0], 0, 7)));"#;
+
+const CALL_OBJECT: &str = r#"var n = 0;
+var o = { y: 1 };
+function f() { n++; return o; }
+f().y && (f().y = 2);
+console.log(n, o.y);"#;
+
+const CALL_KEY: &str = r#"var n = 0;
+var a = {};
+function k() { return "k" + n++; }
+a[k()] || (a[k()] = 1);
+console.log(n, JSON.stringify(a));"#;
+
+const TEMP_KEY_CALL_OBJECT: &str = r#"var n = 0;
+var store = {};
+function a() { n++; return store; }
+function k() { return "k"; }
+var t;
+a()[t = k()] || (a()[t] = 1);
+console.log(n, JSON.stringify(store));"#;
+
+const TEMP_OBJECT_UPDATE_KEY: &str = r#"function m(o, i, z) { var t; (t = o)[i++] || (t[i++] = z); return [i, o]; }
+console.log(JSON.stringify(m([0, 0, 0], 0, 7)));"#;
+
+const GETTER_OBJECT: &str = r#"var reads = 0;
+var inner = {};
+var o = { get p() { reads++; return inner; } };
+o.p.y || (o.p.y = 1);
+console.log(reads, inner.y);"#;
+
+const GLOBAL_ACCESSOR_OBJECT: &str = r#"var reads = 0;
+var store = {};
+Object.defineProperty(globalThis, "gobj", { get() { reads++; return store; }, configurable: true });
+gobj.k || (gobj.k = 1);
+console.log(reads, store.k);"#;
+
+const GLOBAL_ACCESSOR_KEY: &str = r#"var reads = 0;
+var store = {};
+Object.defineProperty(globalThis, "gkey", { get() { reads++; return "k"; }, configurable: true });
+store[gkey] || (store[gkey] = 1);
+console.log(reads, store.k);"#;
+
+const TEMP_KEY_GETTER_OBJECT: &str = r#"var reads = 0;
+var inner = {};
+var o = { get p() { reads++; return inner; } };
+function k() { return "k"; }
+var t;
+o.p[t = k()] || (o.p[t] = 1);
+console.log(reads, inner.k);"#;
+
+const WITH_IDENTIFIER: &str = r#"var seen = 0;
+var x = 0;
+var scope = new Proxy({ x: 0 }, { has(target, key) { if (key === "x") seen++; return key in target; } });
+with (scope) { x || (x = 5); }
+console.log(seen, scope.x, x);"#;
+
+const RUNS_CODE_IN_EITHER_LANE: [&str; 5] = [
+    UPDATE_KEY,
+    CALL_OBJECT,
+    CALL_KEY,
+    TEMP_KEY_CALL_OBJECT,
+    TEMP_OBJECT_UPDATE_KEY,
+];
+
+const READS_TWICE: [&str; 5] = [
+    GETTER_OBJECT,
+    GLOBAL_ACCESSOR_OBJECT,
+    GLOBAL_ACCESSOR_KEY,
+    TEMP_KEY_GETTER_OBJECT,
+    WITH_IDENTIFIER,
+];
+
+fn has_logical_assignment(output: &str) -> bool {
+    output.contains("||=") || output.contains("&&=")
+}
+
+#[test]
+fn a_repeated_operand_that_can_run_code_keeps_its_pair_by_default() {
+    for source in RUNS_CODE_IN_EITHER_LANE.iter().chain(&READS_TWICE) {
+        let output = default_lane(source);
+        assert!(!has_logical_assignment(&output), "{output}");
+        untwist_testing::node::assert_node_agrees(source, &output);
+    }
+}
+
+#[test]
+fn a_repeated_call_or_update_keeps_its_pair_under_unsafe() {
+    for source in RUNS_CODE_IN_EITHER_LANE {
+        let output = unsafe_lane(source);
+        assert!(!has_logical_assignment(&output), "{output}");
+        untwist_testing::node::assert_node_agrees(source, &output);
+    }
+}
+
+#[test]
+fn a_call_free_member_chain_still_converts_under_unsafe() {
+    assert!(unsafe_lane(GETTER_OBJECT).contains("o.p.y ||= 1"));
+    assert!(unsafe_lane(GLOBAL_ACCESSOR_OBJECT).contains("gobj.k ||= 1"));
+    assert!(unsafe_lane(GLOBAL_ACCESSOR_KEY).contains("store[gkey] ||= 1"));
+    assert!(unsafe_lane(TEMP_KEY_GETTER_OBJECT).contains("o.p[k()] ||= 1"));
+    assert!(unsafe_lane("a[i + 1] || (a[i + 1] = z);").contains("a[i + 1] ||= z"));
+}
+
+#[test]
+fn transpiler_output_still_converts_by_default() {
+    let rows = [
+        ("function h(a) { a.x || (a.x = 1); }", "a.x ||= 1;"),
+        ("function h(a, k) { a[k] || (a[k] = 2); }", "a[k] ||= 2;"),
+        (
+            r#"function h(a) { a["s"] && (a["s"] = 3); }"#,
+            r#"a["s"] &&= 3;"#,
+        ),
+        ("function h(a) { a[0] || (a[0] = 3); }", "a[0] ||= 3;"),
+        ("function h(x) { x || (x = 4); return x; }", "x ||= 4;"),
+        ("function h() { this.q || (this.q = 5); }", "this.q ||= 5;"),
+        (
+            "function h(f, b) { var _o; (_o = f()).z || (_o.z = b); }",
+            "f().z ||= b;",
+        ),
+        (
+            "function h(f, k, b) { var _o; (_o = f())[k] || (_o[k] = b); }",
+            "f()[k] ||= b;",
+        ),
+        (
+            "function h(a, k, z) { var _k; a[_k = k()] || (a[_k] = z); }",
+            "a[k()] ||= z;",
+        ),
+        (
+            "function h(x, y, z) { var _x, _y; (_x = x.p)[_y = y()] || (_x[_y] = z); }",
+            "x.p[y()] ||= z;",
+        ),
+    ];
+    for (source, expected) in rows {
+        let output = default_lane(source);
+        assert!(output.contains(expected), "{output}");
+    }
+}
