@@ -5,6 +5,7 @@ import {
   alwaysFetchWasm,
   checkedWasm,
   isAbsoluteUrl,
+  limitedBody,
   MAX_WASM_BYTES,
   parseWasmReport,
   resolvedUrl,
@@ -50,8 +51,8 @@ async function fetchWasm(url: string): Promise<Uint8Array<ArrayBuffer>> {
   if (!response.ok) {
     throw new Error(`${url} answered ${response.status}`);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.length > MAX_WASM_BYTES) {
+  const bytes = await limitedBody(response, MAX_WASM_BYTES);
+  if (bytes === null) {
     throw new Error(`${url} is over the wasm size limit`);
   }
   return bytes;
