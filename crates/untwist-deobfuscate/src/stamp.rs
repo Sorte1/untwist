@@ -191,7 +191,13 @@ pub struct Stamped<'p> {
     pub arrays: Vec<StampedFn<'p>>,
     pub decoders: Vec<StampedFn<'p>>,
     pub incomplete: bool,
-    pub top_level_sorted: bool,
+    pub top_level: TopLevel,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TopLevel {
+    pub sorted: bool,
+    pub strict: bool,
 }
 
 impl<'p> Stamped<'p> {
@@ -300,7 +306,10 @@ pub fn find_stamped<'p>(program: &'p Program<'p>) -> Stamped<'p> {
         arrays: ordered(collector.arrays),
         decoders: ordered(collector.decoders),
         incomplete: collector.incomplete,
-        top_level_sorted: top_level_sorted(program),
+        top_level: TopLevel {
+            sorted: top_level_sorted(program),
+            strict: program_is_strict(program),
+        },
     }
 }
 
@@ -384,8 +393,8 @@ impl<'a> VisitJs<'a> for StrictAt {
     }
 }
 
-pub fn context_is_strict_in(program: &Program<'_>, statement: Span, sorted: bool) -> bool {
-    if !sorted || statement.start >= statement.end {
+pub fn context_is_strict_in(program: &Program<'_>, statement: Span, top: TopLevel) -> bool {
+    if !top.sorted || statement.start >= statement.end {
         return context_is_strict(program, statement);
     }
     let after = program
@@ -396,7 +405,7 @@ pub fn context_is_strict_in(program: &Program<'_>, statement: Span, sorted: bool
     };
     let mut scan = StrictAt {
         target: statement,
-        strict: program_is_strict(program),
+        strict: top.strict,
         found: None,
     };
     scan.visit_statement(candidate);

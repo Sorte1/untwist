@@ -23,8 +23,8 @@ fn lookups(count: usize) -> Duration {
     let source = units(count);
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, &source);
-    let sorted = find_stamped(&parsed.program).top_level_sorted;
-    assert!(sorted);
+    let sorted = find_stamped(&parsed.program).top_level;
+    assert!(sorted.sorted);
     (0..3)
         .map(|_| {
             let started = Instant::now();
@@ -43,7 +43,7 @@ fn the_sorted_lookup_answers_as_the_full_walk_does() {
     for text in [source.as_str(), &units(30)] {
         let alloc = Allocator::default();
         let parsed = parse_program(&alloc, text);
-        let sorted = find_stamped(&parsed.program).top_level_sorted;
+        let sorted = find_stamped(&parsed.program).top_level;
         let mut spans: Vec<_> = parsed.program.body.iter().map(GetSpan::span).collect();
         spans.push(oxc_span::Span::new(1, 4));
         for span in spans {

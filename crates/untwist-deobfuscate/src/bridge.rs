@@ -224,7 +224,7 @@ fn unit_program<'p>(
     positions: &[usize],
     rotator: Option<(Span, &'p Expression<'p>)>,
 ) -> DecoderProgram<'p> {
-    let sorted = stamped.top_level_sorted;
+    let sorted = stamped.top_level;
     let array_strict = context_is_strict_in(program, array.statement, sorted);
     DecoderProgram {
         source_text: program.source_text,

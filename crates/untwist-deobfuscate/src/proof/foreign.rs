@@ -11,7 +11,7 @@ use super::decoder::decoder_refusal;
 use super::intrinsics::{machinery_unreachable, Machinery};
 use super::rotator::{uninitialised, LiteralBindings, RotatorSite};
 use super::seal::sealed;
-use crate::stamp::{context_is_strict_in, Stamped, StampedFn};
+use crate::stamp::{context_is_strict_in, Stamped, StampedFn, TopLevel};
 
 const HOST_SINK: &str = "console";
 
@@ -20,11 +20,11 @@ struct ForeignUnit<'r, 'p> {
     decoders: Vec<&'r StampedFn<'p>>,
     rotators: Vec<RotatorSite>,
     proven: OnceCell<bool>,
-    sorted: bool,
+    sorted: TopLevel,
 }
 
 impl<'r, 'p> ForeignUnit<'r, 'p> {
-    fn new(array: &'r StampedFn<'p>, rotators: &[(usize, RotatorSite)], sorted: bool) -> Self {
+    fn new(array: &'r StampedFn<'p>, rotators: &[(usize, RotatorSite)], sorted: TopLevel) -> Self {
         Self {
             array,
             decoders: Vec::new(),
@@ -133,7 +133,7 @@ impl<'r, 'p> ForeignUnits<'r, 'p> {
         let mut units: Vec<ForeignUnit<'r, 'p>> = stamped
             .arrays
             .iter()
-            .map(|array| ForeignUnit::new(array, rotators, stamped.top_level_sorted))
+            .map(|array| ForeignUnit::new(array, rotators, stamped.top_level))
             .collect();
         let mut decoder_units = Vec::new();
         for decoder in &stamped.decoders {
