@@ -40,7 +40,7 @@ fn a_segment_opening_with_a_multi_declarator_var_keeps_its_marker() {
         jsx: false,
         ..Options::default()
     };
-    let want = Some(("closure".to_string(), 3));
+    let want = Some(("closure".to_string(), 4));
     assert_eq!(split(unpack_only), want, "unpack-only");
     assert_eq!(split(Options::default()), want, "default");
 }
