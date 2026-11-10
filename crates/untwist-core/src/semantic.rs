@@ -11,6 +11,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+pub mod builtins;
 #[cfg(feature = "test-hooks")]
 pub mod compare;
 mod observers;

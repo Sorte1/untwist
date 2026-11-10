@@ -69,6 +69,11 @@ All notable changes to this project are documented in this file. The format is b
   sibling path starting with a dot (`.config/a.js`) is written with its `./`.
 - An AMD or UMD factory that declares a function named like one of its parameters is left as it
   is. Unpacking it bound the dependency where the factory saw the function.
+- `JSON.parse("…")` is no longer replaced by its literal, and `!!` is no longer removed from an
+  array-method callback such as `xs.filter((v) => !!v)`, in a program that replaces `JSON.parse`
+  or that array method, or passes `JSON`, `Array`, `Array.prototype` or the global object around
+  as a value. The replaced function could return something else, so the rewrite changed what
+  the program did. `--unsafe` keeps both rewrites.
 - A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
   globals. When the body still declares a `var`, function, class, `let` or `const` at its own
   level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that
