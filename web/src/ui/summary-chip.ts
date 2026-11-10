@@ -1,6 +1,7 @@
 import { byId, setText } from '../dom';
 import type { AppState } from '../state';
 import type { Store } from '../store';
+import { reportField } from '../report-json';
 
 interface Summary {
   readonly stages: number;
@@ -9,20 +10,15 @@ interface Summary {
 }
 
 export function summaryOf(json: string): Summary | null {
-  try {
-    const value = JSON.parse(json) as { stages?: ReadonlyArray<{ iterations: number; elapsed_ms: number }> };
-    const stages = value.stages;
-    if (!Array.isArray(stages)) {
-      return null;
-    }
-    return {
-      stages: stages.length,
-      rounds: stages.reduce((sum, stage) => sum + stage.iterations, 0),
-      totalMs: stages.reduce((sum, stage) => sum + stage.elapsed_ms, 0),
-    };
-  } catch {
+  const stages = reportField(json, 'stages') as ReadonlyArray<{ iterations: number; elapsed_ms: number }> | undefined;
+  if (!Array.isArray(stages)) {
     return null;
   }
+  return {
+    stages: stages.length,
+    rounds: stages.reduce((sum, stage) => sum + stage.iterations, 0),
+    totalMs: stages.reduce((sum, stage) => sum + stage.elapsed_ms, 0),
+  };
 }
 
 export function chipLabel(summary: Summary): string {

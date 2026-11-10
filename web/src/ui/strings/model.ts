@@ -29,7 +29,7 @@ function spanOf(row: RawRow, length: number): readonly [number, number] | undefi
 }
 
 function callOf(text: string, span: readonly [number, number]): string {
-  const slice = text.slice(span[0], span[1]);
+  const slice = text.slice(span[0], Math.min(span[1], span[0] + CALL_CHARS + 1));
   const end = slice.indexOf('\n');
   const line = end === -1 ? slice : slice.slice(0, end);
   return line.length > CALL_CHARS || end !== -1 ? `${line.slice(0, CALL_CHARS)}…` : line;

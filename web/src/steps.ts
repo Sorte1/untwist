@@ -1,5 +1,6 @@
 import type { RunResult } from './engine/types';
 import type { AppState } from './state';
+import { reportField } from './report-json';
 
 export const SNAPSHOT_EXTRAS = 'snapshots';
 
@@ -42,14 +43,12 @@ interface StageRow {
 }
 
 function rowsOf(report: string): { snapshots: SnapshotRow[]; stages: StageRow[] } {
-  try {
-    const value = JSON.parse(report) as { snapshots?: unknown; stages?: unknown };
-    const snapshots = Array.isArray(value.snapshots) ? (value.snapshots as SnapshotRow[]) : [];
-    const stages = Array.isArray(value.stages) ? (value.stages as StageRow[]) : [];
-    return { snapshots, stages };
-  } catch {
-    return { snapshots: [], stages: [] };
-  }
+  const snapshots = reportField(report, 'snapshots');
+  const stages = reportField(report, 'stages');
+  return {
+    snapshots: Array.isArray(snapshots) ? (snapshots as SnapshotRow[]) : [],
+    stages: Array.isArray(stages) ? (stages as StageRow[]) : [],
+  };
 }
 
 function labelOf(row: SnapshotRow): string {

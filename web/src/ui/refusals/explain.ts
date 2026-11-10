@@ -1,4 +1,5 @@
 import { lineColumn, lineIndex, type LineIndex } from '../diagnostics-model';
+import { reportField } from '../../report-json';
 
 export const SHOWN_SITES = 100;
 const CODE_CHARS = 80;
@@ -62,7 +63,8 @@ export function sentenceFor(what: string): string {
   if (patched !== null) {
     return written(patched[1] ?? '', what.startsWith('BUILTIN_PATCHED write'));
   }
-  return READS[what.replace(ROLES, '')] ?? `${what}.`;
+  const key = what.replace(ROLES, '');
+  return Object.hasOwn(READS, key) ? (READS[key] as string) : `${what}.`;
 }
 
 function isSpan(value: unknown): value is readonly [number, number] {
@@ -70,18 +72,15 @@ function isSpan(value: unknown): value is readonly [number, number] {
 }
 
 function parsed(report: string): { sites: Site[]; notes: NoteRow[] } {
-  try {
-    const value = JSON.parse(report) as { refusalSites?: unknown; notes?: unknown };
-    const sites = Array.isArray(value.refusalSites) ? value.refusalSites.filter((site): site is Site => typeof site?.what === 'string') : [];
-    const notes = Array.isArray(value.notes) ? value.notes.filter((note): note is NoteRow => typeof note?.message === 'string') : [];
-    return { sites, notes };
-  } catch {
-    return { sites: [], notes: [] };
-  }
+  const refusalSites = reportField(report, 'refusalSites');
+  const allNotes = reportField(report, 'notes');
+  const sites = Array.isArray(refusalSites) ? refusalSites.filter((site): site is Site => typeof site?.what === 'string') : [];
+  const notes = Array.isArray(allNotes) ? allNotes.filter((note): note is NoteRow => typeof note?.message === 'string') : [];
+  return { sites, notes };
 }
 
 function quoted(text: string, span: readonly [number, number]): string {
-  const slice = text.slice(span[0], span[1]);
+  const slice = text.slice(span[0], Math.min(span[1], span[0] + CODE_CHARS + 1));
   const end = slice.indexOf('\n');
   const line = end === -1 ? slice : slice.slice(0, end);
   return line.length > CODE_CHARS || end !== -1 ? `${line.slice(0, CODE_CHARS)}…` : line;

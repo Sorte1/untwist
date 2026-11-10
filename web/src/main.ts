@@ -4,7 +4,7 @@ import { Cancelled, Engine, REPORT_EXTRAS } from './engine/engine';
 import { initialState, runCancelled, runFailed, runFinished, runStarted, stageBegan, ticked, type AppState, type InputState } from './state';
 import { flagsFrom } from './settings/flags';
 import { registerServiceWorker } from './pwa/register';
-import { parseHash, writeHash } from './settings/hash';
+import { settingsFromHash, writeHash } from './settings/hash';
 import { createStore, type Store } from './store';
 import { applyTheme, preferredTheme } from './theme';
 import { mountCompareModes } from './ui/compare-modes';
@@ -87,7 +87,7 @@ function runner(store: Store<AppState>, start: (input: InputState, flags: string
 }
 
 function main(): void {
-  const parsed = parseHash(window.location.hash);
+  const parsed = settingsFromHash(window.location.hash);
   const store = createStore(initialState(preferredTheme(), parsed.settings, parsed.problems));
   const engine = new Engine();
   applyTheme(store.get().theme);
@@ -101,7 +101,7 @@ function main(): void {
     }
   });
   window.addEventListener('hashchange', () => {
-    const next = parseHash(window.location.hash);
+    const next = settingsFromHash(window.location.hash);
     store.update((state) => ({ ...state, settings: next.settings, settingsProblems: next.problems, theme: next.settings.theme ?? state.theme }));
   });
   const start = starter(store, engine);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { flagsFrom } from './flags';
-import { parseHash, writeHash } from './hash';
+import { HASH_CAP, MAX_PROBLEMS, parseHash, settingsFromHash, writeHash } from './hash';
 import { changedCount, CLI_DEFAULTS, DEFAULT_FUEL, DEFAULTS, RENAME_MODES, WASM_CHECKS, type Settings } from './settings';
 import cases from './flags.json';
 
@@ -112,5 +112,51 @@ describe('a malformed link', () => {
       'Setting "unpack" has an invalid value "%"; the default is used.',
       'Unknown setting "%zz" in the link was ignored.',
     ]);
+  });
+
+  it('treats the names Object.prototype carries as unknown settings', () => {
+    for (const name of ['toString', 'constructor', '__proto__', 'valueOf', 'hasOwnProperty']) {
+      const parsed = parseHash(`#${name}=1&rename=unique`);
+      expect(parsed.settings).toEqual({ ...DEFAULTS, rename: 'unique' });
+      expect(parsed.problems).toEqual([`Unknown setting "${name}" in the link was ignored.`]);
+    }
+  });
+
+  it('lists a few problems and counts the rest when the link holds many unknown settings', () => {
+    const parsed = parseHash(`#${'a&'.repeat(200_000)}unsafe=0`);
+    expect(parsed.problems.length).toBeLessThanOrEqual(MAX_PROBLEMS + 2);
+    expect(parsed.problems.slice(0, MAX_PROBLEMS)).toEqual(Array.from({ length: MAX_PROBLEMS }, () => 'Unknown setting "a" in the link was ignored.'));
+    expect(parsed.problems.at(-1)).toMatch(/^The link is longer than [\d,]+ characters; the settings after that were ignored\.$/);
+    expect(parsed.problems.at(-2)).toMatch(/^And [\d,]+ more problems with the settings in the link\.$/);
+  });
+
+  it('reads the settings of a link that stays under the length cap, after a long code part', () => {
+    const parsed = parseHash(`#code=${'x'.repeat(HASH_CAP - 40)}&unsafe=0&rename=unique`);
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.settings).toEqual({ ...DEFAULTS, unsafe: false, rename: 'unique' });
+  });
+
+  it('cuts a long key or value in a problem', () => {
+    const key = 'k'.repeat(10_000);
+    const parsed = parseHash(`#${key}=1&rename=${'v'.repeat(10_000)}`);
+    expect(parsed.problems).toHaveLength(2);
+    for (const problem of parsed.problems) {
+      expect(problem.length).toBeLessThan(200);
+    }
+    expect(parsed.problems[0]).toBe(`Unknown setting "${'k'.repeat(80)}…" in the link was ignored.`);
+  });
+});
+
+describe('settingsFromHash', () => {
+  it('gives the parsed settings of a well-formed link', () => {
+    expect(settingsFromHash('#unsafe=0')).toEqual(parseHash('#unsafe=0'));
+  });
+
+  it('starts with the defaults and one problem when reading the link throws', () => {
+    const parsed = settingsFromHash('#unsafe=0', () => {
+      throw new Error('boom');
+    });
+    expect(parsed.settings).toEqual(DEFAULTS);
+    expect(parsed.problems).toEqual(['The settings in the link could not be read; the defaults are used.']);
   });
 });

@@ -1,3 +1,5 @@
+import { reportField } from '../report-json';
+
 export type Level = 'error' | 'warning' | 'info';
 
 export interface DiagnosticRow {
@@ -29,15 +31,8 @@ function stderrRows(stderr: string): DiagnosticRow[] {
 }
 
 export function diagnosticsOf(report: string, stderr: string): DiagnosticRow[] {
-  try {
-    const value = JSON.parse(report) as { diagnostics?: unknown };
-    if (Array.isArray(value.diagnostics)) {
-      return value.diagnostics.filter(isRow);
-    }
-  } catch {
-    return stderrRows(stderr);
-  }
-  return stderrRows(stderr);
+  const diagnostics = reportField(report, 'diagnostics');
+  return Array.isArray(diagnostics) ? diagnostics.filter(isRow) : stderrRows(stderr);
 }
 
 export function warningCount(rows: readonly DiagnosticRow[]): number {
@@ -55,30 +50,40 @@ export function shownMessage(row: DiagnosticRow): string {
 export interface LineIndex {
   readonly text: string;
   readonly starts: readonly number[];
+  readonly pairs: readonly number[];
 }
+
+const SURROGATE_PAIR = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
 
 export function lineIndex(text: string): LineIndex {
   const starts = [0];
   for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) {
     starts.push(at + 1);
   }
-  return { text, starts };
+  const pairs = Array.from(text.matchAll(SURROGATE_PAIR), (match) => match.index);
+  return { text, starts, pairs };
+}
+
+function lastAtMost(sorted: readonly number[], value: number): number {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if ((sorted[mid] ?? 0) <= value) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
 }
 
 export function lineColumn(index: LineIndex, offset: number): { line: number; column: number } {
-  let low = 0;
-  let high = index.starts.length - 1;
-  while (low < high) {
-    const mid = (low + high + 1) >> 1;
-    if ((index.starts[mid] ?? 0) <= offset) {
-      low = mid;
-    } else {
-      high = mid - 1;
-    }
-  }
-  const start = index.starts[low] ?? 0;
-  const column = [...index.text.slice(start, Math.min(offset, index.text.length))].length + 1;
-  return { line: low + 1, column };
+  const end = Math.min(offset, index.text.length);
+  const line = Math.max(1, lastAtMost(index.starts, offset));
+  const start = index.starts[line - 1] ?? 0;
+  const joined = end - start >= 2 ? lastAtMost(index.pairs, end - 2) - lastAtMost(index.pairs, start - 1) : 0;
+  return { line, column: end - start - joined + 1 };
 }
 
 export function docPosition(text: string, offset: number): number {
@@ -87,6 +92,13 @@ export function docPosition(text: string, offset: number): number {
     joined += 1;
   }
   return offset - joined;
+}
+
+export function cappedProblems(problems: readonly string[], cap: number): readonly string[] {
+  if (problems.length <= cap) {
+    return problems;
+  }
+  return [...problems.slice(0, cap), `And ${(problems.length - cap).toLocaleString('en-US')} more settings notes.`];
 }
 
 export type StripTone = 'err' | 'warn' | 'muted' | 'text';
