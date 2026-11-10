@@ -75,7 +75,7 @@ fn is_export_name(name: &str) -> bool {
     first && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
 }
 
-fn marks_exports(statement: &Statement<'_>) -> bool {
+pub(crate) fn marks_exports(statement: &Statement<'_>) -> bool {
     is_define_esmodule(statement)
         && expression_statement(statement)
             .and_then(|e| require_helper_call(e, "r"))
@@ -329,8 +329,4 @@ pub fn convert_proven<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> usiz
         }
     }
     converted
-}
-
-pub fn is_harmony(module: &Module<'_>) -> bool {
-    module.is_esm() || module.program().body.iter().any(is_define_esmodule)
 }

@@ -25,9 +25,7 @@ struct Hosts<'s> {
 
 impl Hosts<'_> {
     fn free(&self, id: &IdentifierReference<'_>) -> bool {
-        id.reference_id
-            .get()
-            .is_none_or(|reference| self.scoping.get_reference(reference).symbol_id().is_none())
+        crate::scan::is_free(Some(self.scoping), id)
     }
 }
 

@@ -29,12 +29,7 @@ struct Rewrite<'a, 'r> {
 
 impl<'a> Rewrite<'a, '_> {
     fn free(&self, id: &IdentifierReference<'_>) -> bool {
-        let Some(scoping) = self.scoping else {
-            return true;
-        };
-        id.reference_id
-            .get()
-            .is_none_or(|reference| scoping.get_reference(reference).symbol_id().is_none())
+        crate::scan::is_free(self.scoping, id)
     }
 
     fn specifier(&self, target: &str) -> Option<String> {

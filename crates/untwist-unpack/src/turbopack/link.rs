@@ -30,12 +30,7 @@ impl<'a> Rewrite<'a, '_> {
         let Expression::Identifier(id) = expr else {
             return false;
         };
-        let free = self.scoping.is_none_or(|scoping| {
-            id.reference_id
-                .get()
-                .is_none_or(|reference| scoping.get_reference(reference).symbol_id().is_none())
-        });
-        id.name == self.context && free
+        id.name == self.context && crate::scan::is_free(self.scoping, id)
     }
 
     fn method<'k>(&self, expr: &'k Expression<'_>) -> Option<&'k str> {

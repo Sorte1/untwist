@@ -110,15 +110,20 @@ impl<'a, P: Policy<'a> + ?Sized> Scan<'_, P> {
     }
 }
 
+pub fn is_free(scoping: Option<&Scoping>, id: &IdentifierReference<'_>) -> bool {
+    let Some(scoping) = scoping else {
+        return true;
+    };
+    id.reference_id
+        .get()
+        .is_none_or(|reference| scoping.get_reference(reference).symbol_id().is_none())
+}
+
 pub fn is_direct_eval(scoping: &Scoping, callee: &Expression<'_>) -> bool {
     let Expression::Identifier(id) = callee.without_parentheses() else {
         return false;
     };
-    id.name == "eval"
-        && id
-            .reference_id
-            .get()
-            .is_none_or(|reference| scoping.get_reference(reference).symbol_id().is_none())
+    id.name == "eval" && is_free(Some(scoping), id)
 }
 
 impl<'a, P: Policy<'a> + ?Sized> VisitJs<'a> for Scan<'_, P> {

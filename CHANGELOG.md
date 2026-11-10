@@ -70,6 +70,13 @@ All notable changes to this project are documented in this file. The format is b
   (`sub.vW = function (f, a, b, c) { return st.aBcDe(f, a, b, c); }`), as control-flow flattening
   emits inside a nested callback. Each step must pass every parameter on in order; one that
   reorders or drops them still refuses.
+- A webpack `require.n` getter is replaced by `x.default` only when the required module is proven
+  to be a harmony module, and at each use rather than once at the declaration. Before, the
+  unpacked tree read `undefined` for a CommonJS module that set `__esModule` late or replaced
+  `module.exports`, for a circular import, and left `g()` calls with no helper behind them on
+  string module ids. An unproven getter keeps `require.n`, served by `_runtime/webpack.js`.
+- A parameter or local named `require` inside a webpack module is no longer rewritten as the
+  bundle's require: its arguments stay as written and it is not renamed to the runtime.
 
 ### Changed
 

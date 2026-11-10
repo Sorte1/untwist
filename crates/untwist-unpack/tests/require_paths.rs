@@ -120,3 +120,39 @@ fn non_literal_and_multi_argument_requires_are_left_alone() {
         "const a = require(require.ab + \"build/Release/spdlog.node\");\nconst b = require(1, 2);\nconst c = other(1);"
     );
 }
+
+fn rewritten_alone(source: &'static str) -> String {
+    let alloc = Allocator::default();
+    let mut bundle = bundle_of(
+        &alloc,
+        &[("0", source, false), ("1", "module.exports = 1;\n", false)],
+        Some("0"),
+    );
+    replace_require_paths(&alloc, &mut bundle);
+    bundle.modules["0"].code().trim_end().to_string()
+}
+
+#[test]
+fn a_local_named_require_keeps_its_arguments() {
+    for source in [
+        "function load(require) {\n  return require(1);\n}\n",
+        "function load() {\n  var require = other;\n  return require(1);\n}\n",
+        "function load() {\n  function require() {}\n  return require(1);\n}\n",
+        "var load = function require() {\n  return require(1);\n};\n",
+        "try {} catch (require) {\n  require(1);\n}\n",
+        "var load = (require) => require(1);\n",
+        "function load(require) {\n  return require.bind(null, 1);\n}\n",
+        "function load(require) {\n  return require.t(1, 9);\n}\n",
+        "class Loader {\n  load(require) {\n    return require(1);\n  }\n}\n",
+    ] {
+        assert_eq!(rewritten_alone(source), source.trim_end());
+    }
+}
+
+#[test]
+fn the_runtime_beside_a_local_named_require_is_still_rewritten() {
+    assert_eq!(
+        rewritten_alone("function load(require) {\n  return require(1);\n}\nvar a = require(1);\n"),
+        "function load(require) {\n  return require(1);\n}\nvar a = require(\"./1.js\");"
+    );
+}
