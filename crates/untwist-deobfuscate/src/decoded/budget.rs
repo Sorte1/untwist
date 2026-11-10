@@ -9,7 +9,9 @@ use oxc_span::GetSpan;
 use rustc_hash::FxHashSet;
 use untwist_core::pass::InputRoom;
 use untwist_eval::bail::{Bail, EvalResult};
-use untwist_eval::budget::{heap_budget, safe_unit_fuel, Budget, UNSAFE_STEP_BUDGET};
+use untwist_eval::budget::{
+    default_fuel, heap_budget, input_fuel, safe_unit_fuel, Budget, UNSAFE_STEP_BUDGET,
+};
 use untwist_eval::decode::{Decoded, InterpEvaluator};
 use untwist_eval::heap::HeapLedger;
 
@@ -38,6 +40,13 @@ impl UnitFuel {
             (Some(fuel), _) => Self::Fixed(fuel),
             (None, true) => Self::Fixed(UNSAFE_STEP_BUDGET),
             (None, false) => Self::PerDistinctCall,
+        }
+    }
+
+    fn base(self) -> u64 {
+        match self {
+            Self::Fixed(fuel) => fuel,
+            Self::PerDistinctCall => default_fuel(false),
         }
     }
 
@@ -89,6 +98,7 @@ pub(crate) struct InputHeap {
     inline: u64,
     room: Option<InputRoom>,
     run_clamped: bool,
+    fuel_left: Option<u64>,
 }
 
 pub(crate) fn printed_bytes(value: &Decoded) -> u64 {
@@ -147,6 +157,25 @@ impl InputHeap {
 
     pub(crate) fn is_spent(&self) -> bool {
         self.inline & SPENT != 0
+    }
+
+    pub(crate) fn start_fuel(&mut self, input_len: usize, fuel: UnitFuel) {
+        self.fuel_left
+            .get_or_insert_with(|| input_fuel(input_len, fuel.base()));
+    }
+
+    pub(crate) fn unit_fuel(&self, wanted: u64) -> Option<u64> {
+        match self.fuel_left {
+            Some(0) => None,
+            Some(left) => Some(wanted.min(left)),
+            None => Some(wanted),
+        }
+    }
+
+    pub(crate) fn spend_fuel(&mut self, steps: u64) {
+        if let Some(left) = self.fuel_left.as_mut() {
+            *left = left.saturating_sub(steps);
+        }
     }
 
     pub(crate) fn evaluator(&self, fuel: u64) -> InterpEvaluator {

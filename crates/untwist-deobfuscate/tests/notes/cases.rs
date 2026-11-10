@@ -33,6 +33,22 @@ function a() { var h = ['x']; a = function () { return h; }; return a(); }
 function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; var t = e[f]['repeat'](4096)['repeat'](4096), u = t['repeat'](1); return u['length'] > 0 ? e[f] : t; }; return b(c, d); }
 console.log(b(0x0));";
 
+const SPINNING_UNIT_FUEL: u64 = 1_000_000;
+const SPINNING_UNITS: usize = 40;
+
+fn spinning_units() -> String {
+    (0..SPINNING_UNITS)
+        .map(|unit| {
+            format!(
+                "function a{unit}() {{ var h = ['x{unit}']; a{unit} = function () {{ return h; }}; return a{unit}(); }}\n\
+                 function b{unit}(c, d) {{ var e = a{unit}(); b{unit} = function (f, g) {{ f = f - 0x0; \
+                 for (var i = 0; i < 99999; i++) {{ for (var j = 0; j < 99999; j++) {{ c = c + 1 - 1; }} }} \
+                 return e[f]; }}; return b{unit}(c, d); }}\nconsole.log(b{unit}(0x0));\n"
+            )
+        })
+        .collect()
+}
+
 const A_MUTATING_DECODER: &str = "\
 function __STRING_ARRAY__() { var h = ['log']; __STRING_ARRAY__ = function () { return h; }; return __STRING_ARRAY__(); }
 function __DECODE_0__(c, d) { var e = __STRING_ARRAY__(); __DECODE_0__ = function (f, g) { f = f - 0x0; e[0] = 'mutated'; return e[f]; }; return __DECODE_0__(c, d); }
@@ -217,6 +233,7 @@ pub enum Source {
     Whole(&'static str),
     Headed(&'static str),
     Built(fn() -> String),
+    Fueled(fn() -> String),
     Superset(&'static str),
     DefaultLane(&'static str),
 }
@@ -238,7 +255,7 @@ pub fn program(source: &Source) -> String {
             (*text).to_string()
         }
         Source::Headed(body) => format!("{HEAD}{body}"),
-        Source::Built(build) => build(),
+        Source::Built(build) | Source::Fueled(build) => build(),
     }
 }
 
@@ -246,6 +263,7 @@ pub fn stage_notes(case: &Case, source: &str) -> (String, Vec<Note>) {
     match case.source {
         Source::Superset(_) => crate::common::run_all_stage_notes_extended(source),
         Source::DefaultLane(_) => crate::common::run_all_stage_notes_default_lane(source),
+        Source::Fueled(_) => crate::common::run_all_stage_notes_fueled(source, SPINNING_UNIT_FUEL),
         _ => crate::common::run_all_stage_notes(source),
     }
 }
@@ -543,6 +561,11 @@ pub const CASES: &[Case] = &[
         source: Source::Whole(A_DECODER_THAT_SPENDS_THE_HEAP_BUDGET),
         expects: notes::DECODE_BUDGET_SPENT,
         mode: Match::Exact,
+    },
+    Case {
+        source: Source::Fueled(spinning_units),
+        expects: notes::DECODE_FUEL_SPENT,
+        mode: Match::Contains,
     },
     Case {
         source: Source::Whole(A_MUTATING_DECODER),

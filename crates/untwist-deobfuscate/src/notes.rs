@@ -437,6 +437,8 @@ pub fn wrapper_rounds(cap: usize) -> String {
     format!("{WRAPPER_ROUNDS} {cap} rounds")
 }
 
+pub const DECODE_FUEL_SPENT: &str = "decoding stopped partway because this input's step \
+     budget is spent, so the remaining decoder units were left encoded";
 pub const DECODE_BUDGET_SPENT: &str = "decoding stopped partway because this input's heap \
      budget is spent, so the remaining call sites were left encoded";
 
@@ -579,6 +581,7 @@ catalogue!(
     REFERENCE_NOT_DOMINATED,
     DECODE_BAILED,
     DECODE_BUDGET_SPENT,
+    DECODE_FUEL_SPENT,
     DECODE_ERROR,
     NON_STRING_RESULTS,
     NON_PRIMITIVE_RESULT,

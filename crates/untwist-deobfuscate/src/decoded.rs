@@ -416,9 +416,10 @@ fn run_decode_units<'a, 'r>(
     memo: &mut RotationMemo,
     defer_all: bool,
     heap: &mut InputHeap,
-) -> (Vec<UnitRun<'a, 'r>>, bool) {
+) -> (Vec<UnitRun<'a, 'r>>, (bool, bool)) {
     let mut runs = Vec::new();
     let mut deferred = false;
+    let mut fuel_spent = false;
     for request in &plan.requests {
         if request.calls.is_empty() {
             continue;
@@ -427,7 +428,11 @@ fn run_decode_units<'a, 'r>(
             deferred = true;
             continue;
         }
-        let mut evaluator = heap.evaluator(fuel.for_unit(request));
+        let Some(unit_fuel) = heap.unit_fuel(fuel.for_unit(request)) else {
+            fuel_spent = true;
+            continue;
+        };
+        let mut evaluator = heap.evaluator(unit_fuel);
         let result = if heap.is_spent() {
             Err(Bail::Budget)
         } else {
@@ -438,6 +443,7 @@ fn run_decode_units<'a, 'r>(
                 &request.guard.escaped_decoders,
             );
             untwist_eval::stats::record(&evaluator.budget);
+            heap.spend_fuel(evaluator.budget.steps_used());
             decoded
         };
         heap.settle(&result);
@@ -447,7 +453,7 @@ fn run_decode_units<'a, 'r>(
             result,
         });
     }
-    (runs, deferred)
+    (runs, (deferred, fuel_spent))
 }
 
 fn plan_notes(plan: &DecodePlan<'_>, decoded: &mut Decoded) {
@@ -501,7 +507,11 @@ fn decode_program(
         limits.defer_budget,
         &mut cache,
     );
-    let (runs, deferred) = run_decode_units(&plan, limits.fuel, memo, defer_all, heap);
+    let (runs, (deferred, fuel_spent)) =
+        run_decode_units(&plan, limits.fuel, memo, defer_all, heap);
+    if fuel_spent {
+        decoded.notes.push((notes::DECODE_FUEL_SPENT.into(), None));
+    }
     if reached_code_runner(&runs) {
         published.mark();
     }
@@ -890,6 +900,7 @@ impl<'a> Pass<'a> for InlineDecodedStrings {
             points_to: cx.opts.rule_disabled(BUILTIN_ALIAS_BITS),
         };
         let mut heap = self.heap.borrow_mut();
+        heap.start_fuel(program.source_text.len(), limits.fuel);
         heap.start(
             program.source_text.len(),
             cx.opts.heap_budget,
