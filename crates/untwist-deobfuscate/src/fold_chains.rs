@@ -73,7 +73,7 @@ fn literal_rooted(expr: &Expression<'_>, rooted: &mut FxHashMap<usize, bool>) ->
         let Some(next) = chain_link(object) else {
             break is_literal_root(object);
         };
-        if links.len() % BUDGET_STRIDE == 0 && untwist_core::budget::check().is_err() {
+        if links.len().is_multiple_of(BUDGET_STRIDE) && untwist_core::budget::check().is_err() {
             return None;
         }
         links.push(link_key(object));
