@@ -6,7 +6,19 @@ use oxc_syntax::scope::ScopeFlags;
 
 use super::{Builtins, Reliance, Scanned};
 
-const GLOBAL_OBJECTS: [&str; 4] = ["globalThis", "window", "self", "global"];
+mod reach;
+
+use reach::{call_of, member_of};
+
+const GLOBAL_OBJECTS: [&str; 7] = [
+    "globalThis",
+    "window",
+    "self",
+    "global",
+    "top",
+    "parent",
+    "frames",
+];
 
 const DEFINERS: [(&str, &str); 8] = [
     ("Object", "defineProperty"),
@@ -211,6 +223,12 @@ impl Scan<'_> {
     }
 
     fn is_root(&self, expression: &Expression<'_>) -> bool {
+        self.is_named_root(expression)
+            || self.is_code_runner_name(expression)
+            || self.is_reached(expression)
+    }
+
+    fn is_named_root(&self, expression: &Expression<'_>) -> bool {
         if self.is_builtin(expression) || self.is_global_object(expression) {
             return true;
         }
@@ -239,7 +257,7 @@ impl Scan<'_> {
     fn global_key(&self, object: &Expression<'_>, key: Option<&str>) -> bool {
         let named =
             |name: &str| self.reliance.roots.contains(&name) || GLOBAL_OBJECTS.contains(&name);
-        (self.is_global_object(object) || self.is_root(object) && !self.is_builtin(object))
+        (self.is_global_object(object) || self.is_named_root(object) && !self.is_builtin(object))
             && key.is_none_or(named)
     }
 
@@ -269,13 +287,40 @@ impl Scan<'_> {
         self.reaches_builtin(object) || self.global_key(object, key)
     }
 
-    fn member_write(&self, target: &Expression<'_>) -> bool {
+    fn writes_reached(&self, object: &Expression<'_>, key: Option<&str>) -> bool {
+        if key.is_some_and(|key| self.names_a_root(key))
+            || (self.is_reached(object) && self.relies_on_key(key))
+        {
+            return true;
+        }
+        let mut current = object.without_parentheses();
+        while let Some((inner, _)) = member_of(current) {
+            current = inner.without_parentheses();
+            if self.is_reached(current) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn judge_write(&mut self, object: &Expression<'_>, key: Option<&str>) -> bool {
+        if self.writes_member(object, key) {
+            self.written();
+            return true;
+        }
+        if self.writes_reached(object, key) {
+            self.aliased();
+        }
+        false
+    }
+
+    fn member_write(&mut self, target: &Expression<'_>) -> bool {
         match target.without_parentheses() {
             Expression::StaticMemberExpression(member) => {
-                self.writes_member(&member.object, Some(member.property.name.as_str()))
+                self.judge_write(&member.object, Some(member.property.name.as_str()))
             }
             Expression::ComputedMemberExpression(member) => {
-                self.writes_member(&member.object, literal_key(&member.expression))
+                self.judge_write(&member.object, literal_key(&member.expression))
             }
             _ => false,
         }
@@ -358,16 +403,16 @@ impl Scan<'_> {
             .any(|(owner, method)| *method == name && self.global_named(root, &[owner]))
     }
 
-    fn defines_on_builtin(&self, arguments: &[Argument<'_>]) -> bool {
+    fn defines_on_builtin(&mut self, arguments: &[Argument<'_>]) -> bool {
         let mut parts = arguments.iter().map(Argument::as_expression);
         let Some(Some(target)) = parts.next() else {
             return true;
         };
         let key = parts.next().flatten().and_then(literal_key);
-        self.writes_member(target, key)
+        self.judge_write(target, key)
     }
 
-    fn legacy_definition(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
+    fn legacy_definition(&mut self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
         let Expression::StaticMemberExpression(member) = callee.without_parentheses() else {
             return false;
         };
@@ -378,12 +423,59 @@ impl Scan<'_> {
             .first()
             .and_then(Argument::as_expression)
             .and_then(literal_key);
-        self.writes_member(&member.object, key)
+        self.judge_write(&member.object, key)
     }
 
     fn visit_unless_root(&mut self, expression: &Expression<'_>) {
+        match expression.without_parentheses() {
+            Expression::LogicalExpression(logical) if installs_if_missing(logical).is_none() => {
+                self.visit_unless_root(&logical.left);
+                self.visit_unless_root(&logical.right);
+                return;
+            }
+            Expression::ConditionalExpression(conditional) => {
+                self.visit_unless_root(&conditional.test);
+                self.visit_unless_root(&conditional.consequent);
+                self.visit_unless_root(&conditional.alternate);
+                return;
+            }
+            Expression::SequenceExpression(sequence) => {
+                sequence
+                    .expressions
+                    .iter()
+                    .for_each(|expression| self.visit_unless_root(expression));
+                return;
+            }
+            _ => {}
+        }
         if self.writes_only || !self.is_root(expression) {
             self.visit_expression(expression);
+        } else if self.is_reached(expression) {
+            self.visit_reached(expression);
+        }
+    }
+
+    fn visit_reached(&mut self, expression: &Expression<'_>) {
+        if let Some(call) = call_of(expression) {
+            if !self.reads_prototypes(&call.callee) {
+                self.visit_callee(&call.callee);
+            }
+            self.visit_arguments(&call.arguments);
+            return;
+        }
+        let Some((object, _)) = member_of(expression) else {
+            return;
+        };
+        self.visit_unless_root(object);
+        if let Expression::ComputedMemberExpression(member) = expression.without_parentheses() {
+            self.visit_expression(&member.expression);
+        }
+        if let Expression::ChainExpression(chain) = expression.without_parentheses() {
+            if let Some(MemberExpression::ComputedMemberExpression(member)) =
+                chain.expression.as_member_expression()
+            {
+                self.visit_expression(&member.expression);
+            }
         }
     }
 
@@ -411,8 +503,11 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         if self.settled() {
             return;
         }
-        if !self.writes_only && self.is_root(it) {
+        if !self.writes_only && (self.is_root(it) || self.reads_prototypes(it)) {
             self.aliased();
+            if self.is_reached(it) {
+                self.visit_reached(it);
+            }
             return;
         }
         walk_js::walk_expression(self, it);
@@ -436,11 +531,32 @@ impl<'a> VisitJs<'a> for Scan<'_> {
             self.written();
             return;
         }
-        self.visit_callee(&it.callee);
+        if self.runs_code(&it.callee, &it.arguments) {
+            self.aliased();
+        }
+        if !self.reads_prototypes(&it.callee) {
+            self.visit_callee(&it.callee);
+        }
         self.visit_arguments(&it.arguments);
     }
 
+    fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
+        self.visit_unless_root(&it.expression);
+    }
+
+    fn visit_sequence_expression(&mut self, it: &SequenceExpression<'a>) {
+        if let Some((last, discarded)) = it.expressions.split_last() {
+            discarded
+                .iter()
+                .for_each(|expression| self.visit_unless_root(expression));
+            self.visit_expression(last);
+        }
+    }
+
     fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
+        if self.runs_code(&it.callee, &it.arguments) {
+            self.aliased();
+        }
         self.visit_callee(&it.callee);
         self.visit_arguments(&it.arguments);
     }
@@ -448,6 +564,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
         match it.operator {
             UnaryOperator::Typeof if self.is_root(&it.argument) => {}
+            UnaryOperator::LogicalNot | UnaryOperator::Void => self.visit_unless_root(&it.argument),
             UnaryOperator::Delete if self.member_write(&it.argument) => self.written(),
             UnaryOperator::Delete if self.reaches_promise(&it.argument) => {
                 self.promise_written = true;
@@ -486,10 +603,31 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_if_statement(&mut self, it: &IfStatement<'a>) {
-        match guarded_install(it) {
-            Some(value) => self.visit_expression(value),
-            None => walk_js::walk_if_statement(self, it),
+        if let Some(value) = guarded_install(it) {
+            self.visit_expression(value);
+            return;
         }
+        self.visit_unless_root(&it.test);
+        self.visit_statement(&it.consequent);
+        if let Some(alternate) = &it.alternate {
+            self.visit_statement(alternate);
+        }
+    }
+
+    fn visit_while_statement(&mut self, it: &WhileStatement<'a>) {
+        self.visit_unless_root(&it.test);
+        self.visit_statement(&it.body);
+    }
+
+    fn visit_do_while_statement(&mut self, it: &DoWhileStatement<'a>) {
+        self.visit_statement(&it.body);
+        self.visit_unless_root(&it.test);
+    }
+
+    fn visit_conditional_expression(&mut self, it: &ConditionalExpression<'a>) {
+        self.visit_unless_root(&it.test);
+        self.visit_expression(&it.consequent);
+        self.visit_expression(&it.alternate);
     }
 
     fn visit_logical_expression(&mut self, it: &LogicalExpression<'a>) {
@@ -514,10 +652,10 @@ impl<'a> VisitJs<'a> for Scan<'_> {
                 self.global_named(id, self.reliance.roots) || self.global_named(id, &GLOBAL_OBJECTS)
             }
             SimpleAssignmentTarget::StaticMemberExpression(member) => {
-                self.writes_member(&member.object, Some(member.property.name.as_str()))
+                self.judge_write(&member.object, Some(member.property.name.as_str()))
             }
             SimpleAssignmentTarget::ComputedMemberExpression(member) => {
-                self.writes_member(&member.object, literal_key(&member.expression))
+                self.judge_write(&member.object, literal_key(&member.expression))
             }
             _ => false,
         };

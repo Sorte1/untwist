@@ -295,3 +295,28 @@ fn a_formatted_program_converts_every_spread_under_unsafe() {
     assert!(!code.contains("__spreadArray"), "{code}");
     assert!(!code.contains("__spreadValues"), "{code}");
 }
+
+const CONCAT_REACHED_THROUGH_VALUES: [&str; 6] = [
+    "[].__proto__.concat = function () { return [\"evil\"]; };",
+    "[].constructor.prototype.concat = function () { return [\"evil\"]; };",
+    "Object.getPrototypeOf([]).concat = function () { return [\"evil\"]; };",
+    "(function (A) { A.prototype.concat = function () { return [\"evil\"]; }; })([].constructor);",
+    "Object.defineProperty([].__proto__, \"concat\", { value: function () { return [\"evil\"]; } });",
+    "if (!Array.prototype.concat) { Array.prototype.concat = 1; } [].__proto__[\"concat\"] = function () { return [\"evil\"]; };",
+];
+
+#[test]
+fn a_prototype_patched_through_a_value_keeps_the_helpers_in_the_default_mode() {
+    for patch in CONCAT_REACHED_THROUGH_VALUES {
+        let source = format!(
+            "{PATCHED}{patch}\nfunction run(a, b) {{ return [a].concat([b]).join(\",\") + \"|\" + _toConsumableArray([a, b]).length; }}\nconsole.log(run(1, 2));\n"
+        );
+        let code = run(&source, false);
+        assert!(
+            code.contains("_toConsumableArray([a, b])"),
+            "{patch}\n{code}"
+        );
+        assert!(code.contains("[a].concat([b])"), "{patch}\n{code}");
+        untwist_testing::node::assert_node_agrees(&source, &code);
+    }
+}
