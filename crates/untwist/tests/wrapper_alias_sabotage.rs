@@ -1,4 +1,5 @@
 use untwist::{Options, Pipeline};
+use untwist_deobfuscate::call_checks::CALL_SOUNDNESS_CHECKS;
 use untwist_deobfuscate::mutants::drop_wrapper_guards_for_tests;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
@@ -17,6 +18,7 @@ fn transformed(source: &str) -> String {
     let options = Options {
         unpack: false,
         jsx: false,
+        disabled_passes: vec![CALL_SOUNDNESS_CHECKS],
         ..Options::default()
     };
     Pipeline::new(options).run(source).code().to_string()
