@@ -65,6 +65,7 @@ fn switched(mut options: Options, flag: &str) -> Option<Options> {
         "--keep-human-names" => options.rename_all = false,
         "--single-file" => options.single_file = true,
         "-m" | "--mangle" => options.rename = RenameMode::Mangle,
+        "--source-map" => options.source_map = true,
         _ => return None,
     }
     Some(options)

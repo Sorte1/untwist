@@ -212,6 +212,26 @@ pub struct Args {
     )]
     pub wasm_base: Option<String>,
     #[arg(
+        long = "source-map",
+        value_name = "MODE",
+        num_args = 0..=1,
+        default_missing_value = "file",
+        value_parser = source_map_mode,
+        help = "write a source map from the output back to the input: file (the default) puts \
+                <output>.map beside every file --output writes, one per unpacked module; inline \
+                appends it as a data URL, also on stdout. Give input files before the flag or \
+                write --source-map=file"
+    )]
+    pub source_map: Option<untwist::MapLink>,
+    #[arg(
+        long = "input-source-map",
+        value_name = "PATH",
+        requires = "source_map",
+        help = "with --source-map, map back through the input's own source map: PATH names its \
+                file, inline reads the sourceMappingURL data URL at the end of every input"
+    )]
+    pub input_source_map: Option<String>,
+    #[arg(
         long = "list-passes",
         help = "print every pass the engine can run, with its stage, and exit"
     )]
@@ -234,6 +254,16 @@ pub fn pass_list() -> String {
         text.push_str(&format!("{:width$}  {}{tag}\n", pass.name, pass.stage));
     }
     text
+}
+
+fn source_map_mode(word: &str) -> Result<untwist::MapLink, String> {
+    match word {
+        "file" => Ok(untwist::MapLink::File),
+        "inline" => Ok(untwist::MapLink::Inline),
+        _ => Err(format!(
+            "takes file or inline, not {word}; give input files before --source-map"
+        )),
+    }
 }
 
 fn fuel_steps(word: &str) -> Result<u64, String> {
@@ -326,6 +356,7 @@ impl Args {
             timeout: self.timeout,
             disabled_passes: self.disable.clone(),
             wasm_check: self.wasm_check.check(),
+            source_map: self.source_map.is_some(),
             ..untwist::Options::default()
         }
     }

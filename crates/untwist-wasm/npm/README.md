@@ -38,7 +38,7 @@ const result = run(source, '--unsafe', false);
 `run(source, flags, refused)` processes one script and returns a `RunOutput`. `flags` is the CLI's
 flags as one string: `--unsafe`, `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx`,
 `--single-file`, `--keep-human-names`, `--rename none|simple|unique|mangle`, `-m`,
-`--max-iterations N`, `--fuel N`, `--max-memory SIZE`, `--timeout SECS` and
+`--max-iterations N`, `--fuel N`, `--max-memory SIZE`, `--timeout SECS`, `--source-map` and
 `--disable PASS[,PASS]`. Pass `false` for `refused`; `true` returns the input unchanged.
 
 `--max-memory` and `--timeout` stop an input between its passes, keeping the output so far; one
@@ -53,6 +53,7 @@ memory and its budget state as they were at the trap.
 | `stdout` | the processed code |
 | `stderr` | warnings and diagnostics |
 | `code` | exit code: `0` success, `1` error, `2` bad flags, `3` input too deep |
+| `source_map` | with `--source-map`: the source map (JSON) from `stdout` back to `source`; empty without the flag, and when `--single-file` printed a bundle's modules |
 | `limits` | comma-separated limits that fired (`refused`, `budget`, `unpack-text`, `eval-cap`), or empty |
 
 Call `free()` on the result when done. `pass_table()` returns every pass as JSON, with its stage

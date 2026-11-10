@@ -328,7 +328,39 @@ pub(crate) fn base_options(args: &Args) -> untwist::Options {
     args.options().with_test_hooks(hooks::test_hooks())
 }
 
+const INLINE_INPUT_MAP: &str = "inline";
+
+fn input_source_maps(args: &Args, sources: &[String]) -> Result<Vec<Option<String>>> {
+    let Some(given) = &args.input_source_map else {
+        return Ok(Vec::new());
+    };
+    if given == INLINE_INPUT_MAP {
+        return Ok(sources
+            .iter()
+            .map(|source| Output::input_source_map(source))
+            .collect());
+    }
+    if sources.len() > 1 {
+        anyhow::bail!("--input-source-map takes a file only with a single input; use inline");
+    }
+    let text = std::fs::read_to_string(given).with_context(|| format!("read {given}"))?;
+    if untwist::source_map::parse(&text).is_none() {
+        anyhow::bail!("{given} is not a source map");
+    }
+    Ok(vec![Some(text)])
+}
+
+fn check_source_map_target(args: &Args) -> Result<()> {
+    if args.source_map == Some(untwist::MapLink::File) && args.output.is_none() {
+        anyhow::bail!(
+            "--source-map file needs --output DIR; use --source-map inline to append the map to stdout"
+        );
+    }
+    Ok(())
+}
+
 fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
+    check_source_map_target(args)?;
     if session.preflight {
         preflight_warning(args, session.err)?;
     }
@@ -339,7 +371,13 @@ fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
 
 fn run_on(args: &Args, session: &mut Session<'_>, sources: &[String]) -> Result<u8> {
     let borrowed: Vec<&str> = sources.iter().map(String::as_str).collect();
-    let mut result = Pipeline::new(std::mem::take(&mut session.options)).run_many(&borrowed);
+    let mut options = std::mem::take(&mut session.options);
+    options.input_source_maps = input_source_maps(args, sources)?;
+    let mut result = Pipeline::new(options).run_many(&borrowed);
+    result.source_map_link = args.source_map;
+    if args.source_map.is_some() && args.output.is_none() {
+        result.codes = result.inline_linked_codes(&args.files);
+    }
     (session.emitted)();
     let err = &mut *session.err;
     wasm_supply::settle(args, &mut result, err)?;
