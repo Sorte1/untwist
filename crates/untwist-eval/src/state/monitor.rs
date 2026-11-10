@@ -256,17 +256,24 @@ fn canon_argument(value: &Value<'_>, numeric: bool) -> Canon {
 }
 
 fn push_frame(decoder: usize, args: &[Value<'_>], awaiting_forward: bool) {
-    let (used, numeric) = ACTIVE_SHAPE.with(|shape| {
+    let read_args = ACTIVE_SHAPE.with(|shape| {
         let shape = shape.borrow();
-        let of = |params: &[Vec<bool>]| params.get(decoder).cloned().unwrap_or_default();
-        (of(&shape.used_params), of(&shape.numeric_params))
+        let used = shape
+            .used_params
+            .get(decoder)
+            .map_or(&[][..], Vec::as_slice);
+        let numeric = shape
+            .numeric_params
+            .get(decoder)
+            .map_or(&[][..], Vec::as_slice);
+        args.iter()
+            .enumerate()
+            .filter(|(index, _)| used.get(*index).copied().unwrap_or(true))
+            .map(|(index, value)| {
+                canon_argument(value, numeric.get(index).copied().unwrap_or(false))
+            })
+            .collect()
     });
-    let read_args = args
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| used.get(*index).copied().unwrap_or(true))
-        .map(|(index, value)| canon_argument(value, numeric.get(index).copied().unwrap_or(false)))
-        .collect();
     let epoch = EPOCH.with(Cell::get);
     FRAME_STACK.with(|stack| {
         stack.borrow_mut().push(Frame {
@@ -416,25 +423,39 @@ fn check_and_record(owner: usize, addr: usize, key: PropKey, value: &Value<'_>, 
         breach();
         return;
     }
-    let found = TABLE.with(|table| table.borrow().get(&(addr, key.clone())).cloned());
-    let Some(entry) = found else {
-        if is_read {
-            breach();
-        } else {
-            record_new_entry(owner, addr, key, value);
-        }
-        return;
-    };
-    match innermost_frame_for_owner(owner) {
-        Some((read_args, epoch)) if entry.read_args == read_args && entry.epoch == epoch => {
-            if is_read {
-                mark_innermost_frame_read(owner, entry.value);
-            } else if entry.value != canon(value) {
-                breach();
-            }
-        }
-        _ => breach(),
+    let verdict = TABLE.with(|table| {
+        let table = table.borrow();
+        let entry = table.get(&(addr, key.clone()))?;
+        let same_frame = FRAME_STACK.with(|stack| {
+            stack
+                .borrow()
+                .iter()
+                .rev()
+                .find(|frame| frame.decoder == owner)
+                .is_some_and(|frame| {
+                    frame.read_args == entry.read_args && frame.epoch == entry.epoch
+                })
+        });
+        Some(match (same_frame, is_read) {
+            (false, _) => Verdict::Breach,
+            (true, true) => Verdict::Read(entry.value.clone()),
+            (true, false) if entry.value != canon(value) => Verdict::Breach,
+            (true, false) => Verdict::Held,
+        })
+    });
+    match verdict {
+        None if is_read => breach(),
+        None => record_new_entry(owner, addr, key, value),
+        Some(Verdict::Breach) => breach(),
+        Some(Verdict::Read(stored)) => mark_innermost_frame_read(owner, stored),
+        Some(Verdict::Held) => {}
     }
+}
+
+enum Verdict {
+    Breach,
+    Read(Canon),
+    Held,
 }
 
 fn is_a_gate_key(key: &PropKey) -> bool {
