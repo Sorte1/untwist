@@ -1,7 +1,7 @@
 use oxc_span::Span;
 
 use super::generate::{Gen, SiteKey};
-use super::object::Obj;
+use super::object::{Obj, ObjectId};
 use super::solve::{Field, Graph, Node, PatchKey};
 use crate::mutants::builtin_aliases_trusted;
 use crate::proof::aliased::{AliasKey, AliasSite};
@@ -116,10 +116,13 @@ impl Gen<'_> {
     }
 
     pub(super) fn describe(&self, node: Node) -> Vec<String> {
-        let mut found: Vec<String> = self
-            .g
-            .points_to(node)
+        let objects = self.g.points_to(node);
+        let world = objects.first() == Some(&ObjectId::WORLD);
+        let mut found: Vec<String> = objects
             .iter()
+            .filter(|object| {
+                !(world && self.g.objects.is_site(**object) && self.g.is_escaped(**object))
+            })
             .map(|object| self.g.objects.describe(*object))
             .collect();
         found.sort();

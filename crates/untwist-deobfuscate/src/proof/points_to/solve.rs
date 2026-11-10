@@ -3,7 +3,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::model::{self, Read};
 use super::object::{Builtin, Method, Obj, ObjectId, Objects, SiteKind};
-use crate::mutants::{back_routes_dropped, unbound_this_dropped, world_constructors_dropped};
+use crate::mutants::{
+    back_routes_dropped, escaped_objects_kept, unbound_this_dropped, world_constructors_dropped,
+};
 
 const CHECK_EVERY: u32 = 4096;
 
@@ -124,6 +126,8 @@ enum Watch {
     Heirs(u32),
     ExtraHeir(u32),
     Convert,
+    WorldProto,
+    WorldProtos,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -217,6 +221,9 @@ pub(super) struct Graph {
     extra_heirs: Vec<Node>,
     receivers: FxHashMap<Node, Node>,
     world_fields: Option<Node>,
+    world_protos: Node,
+    world_proto_sets: Node,
+    world_loads: Vec<(Field, Node)>,
     budget: Budget,
     exhausted: bool,
 }
@@ -284,6 +291,9 @@ impl Graph {
             extra_heirs: Vec::new(),
             receivers: FxHashMap::default(),
             world_fields: None,
+            world_protos: Node(0),
+            world_proto_sets: Node(0),
+            world_loads: Vec::new(),
             budget: Budget {
                 steps_cap: bytes.saturating_mul(48).clamp(4_000_000, 400_000_000),
                 elements_cap: bytes.saturating_mul(4).clamp(4_000_000, 24_000_000),
@@ -295,6 +305,10 @@ impl Graph {
         graph.world = graph.node();
         graph.callers = graph.node();
         graph.empty = graph.node();
+        graph.world_protos = graph.node();
+        graph.world_proto_sets = graph.node();
+        let world_protos = graph.world_protos;
+        graph.watches[world_protos.0 as usize].push(Watch::WorldProtos);
         graph.insert(graph.world, ObjectId::WORLD);
         graph
     }
@@ -358,7 +372,7 @@ impl Graph {
     }
 
     fn insert(&mut self, node: Node, object: ObjectId) -> bool {
-        if self.exhausted {
+        if self.exhausted || self.covered_by_world(node, object) {
             return false;
         }
         let set = &mut self.pts[node.0 as usize];
@@ -376,6 +390,32 @@ impl Graph {
             self.queue.push(node);
         }
         true
+    }
+
+    fn covered_by_world(&self, node: Node, object: ObjectId) -> bool {
+        node != self.esc
+            && self.pts[node.0 as usize].first() == Some(&ObjectId::WORLD)
+            && self.objects.is_site(object)
+            && self.escaped.contains(&object)
+            && !escaped_objects_kept()
+    }
+
+    fn standard_proto(&self, object: ObjectId) -> bool {
+        match self.objects.get(object) {
+            Obj::Builtin(builtin) => matches!(
+                builtin,
+                Builtin::ObjectProto
+                    | Builtin::FunctionProto
+                    | Builtin::ArrayProto
+                    | Builtin::StringProto
+                    | Builtin::NumberProto
+                    | Builtin::BooleanProto
+                    | Builtin::SymbolProto
+                    | Builtin::CollectionProto
+                    | Builtin::IteratorProto
+            ),
+            _ => true,
+        }
     }
 
     fn defer(&mut self, init: Init) -> bool {
@@ -988,11 +1028,27 @@ impl Graph {
                     }
                 }
             }
+            Watch::WorldProto => {
+                let world_protos = self.world_protos;
+                for object in delta {
+                    if !self.standard_proto(*object) {
+                        self.insert(world_protos, *object);
+                    }
+                }
+            }
+            Watch::WorldProtos => {
+                let loads = self.world_loads.clone();
+                for object in delta {
+                    for (field, to) in &loads {
+                        self.wire_load(*object, *field, *to);
+                    }
+                }
+            }
             Watch::ProtoSet(index) => {
                 let (_, from) = self.proto_sets[index as usize];
                 for object in delta {
                     match self.objects.get(*object) {
-                        Obj::World => self.escape(from),
+                        Obj::World => self.world_proto_set(from),
                         Obj::Str(_) => {}
                         Obj::Builtin(builtin) if builtin.is_primitive() => {}
                         _ => {
@@ -1122,6 +1178,13 @@ impl Graph {
             Obj::World => {
                 self.insert(to, ObjectId::WORLD);
                 self.world_read(field, to);
+                if !escaped_objects_kept() {
+                    self.world_loads.push((field, to));
+                    let protos = self.pts[self.world_protos.0 as usize].clone();
+                    for proto in protos {
+                        self.wire_load(proto, field, to);
+                    }
+                }
                 return;
             }
             Obj::Str(_) => Some(Builtin::PrimString),
@@ -1276,6 +1339,7 @@ impl Graph {
         }
         let is_proto = field == self.proto_name();
         match self.objects.get(object) {
+            Obj::World if is_proto => self.world_proto_set(from),
             Obj::World => self.escape(from),
             Obj::Str(_) => self.store_on_primitive(Builtin::PrimString, field, from),
             Obj::Builtin(builtin) if builtin.is_primitive() => {
@@ -1324,6 +1388,14 @@ impl Graph {
         }
     }
 
+    fn world_proto_set(&mut self, from: Node) {
+        self.escape(from);
+        if !escaped_objects_kept() {
+            let sets = self.world_proto_sets;
+            self.copy(from, sets);
+        }
+    }
+
     fn escape_object(&mut self, object: ObjectId) {
         match self.objects.get(object).clone() {
             Obj::World | Obj::Str(_) => {}
@@ -1340,6 +1412,11 @@ impl Graph {
                 self.field_node(object, Field::UNKNOWN);
                 let proto = self.proto_node(object);
                 self.escape_sites(proto);
+                if !escaped_objects_kept() {
+                    self.watch(proto, Watch::WorldProto);
+                    let sets = self.world_proto_sets;
+                    self.copy(sets, proto);
+                }
                 if let Some(info) = self.functions.get(&object).cloned() {
                     let world = self.world;
                     for param in info.params.iter().chain(info.rest.iter()) {

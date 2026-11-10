@@ -563,3 +563,14 @@ pub fn drop_world_constructors_for_tests(on: bool) {
 pub(crate) fn world_constructors_dropped() -> bool {
     WORLD_CONSTRUCTORS_OFF.load(Ordering::Relaxed)
 }
+
+static ESCAPED_OBJECTS_KEPT: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn keep_escaped_objects_for_tests(on: bool) {
+    ESCAPED_OBJECTS_KEPT.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn escaped_objects_kept() -> bool {
+    ESCAPED_OBJECTS_KEPT.load(Ordering::Relaxed)
+}
