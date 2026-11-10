@@ -1,4 +1,4 @@
-use untwist_eval::builtins::object::own_keys;
+use untwist_eval::builtins::object::own_keys_uncharged;
 use untwist_eval::builtins::regexp::source_text;
 use untwist_eval::coerce::number_to_string;
 use untwist_eval::inspect::{intrinsic_label, native_label, natural_prototype};
@@ -206,7 +206,7 @@ impl Renderer<'_> {
     }
 
     fn plain(&self, value: &Value<'_>, obj: &ObjRef<'_>, depth: usize) -> Rendered {
-        let keys = own_keys(value).map_err(|bail| format!("unrendered keys: {bail}"))?;
+        let keys = own_keys_uncharged(value).map_err(|bail| format!("unrendered keys: {bail}"))?;
         let mut parts = Vec::with_capacity(keys.len());
         for key in keys {
             let member = own_property(obj, &string_key(key.clone())).unwrap_or(Value::Undefined);

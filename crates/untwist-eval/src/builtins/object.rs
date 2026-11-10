@@ -52,29 +52,40 @@ pub fn unmodelled_literal_entry(entry: &ObjectProperty<'_>) -> Option<&'static &
 
 const FRESH_KEY_UNITS: usize = 10;
 
-fn charge_keys<'a>(
-    host: &mut dyn Host<'a>,
-    keys: usize,
-    fresh: usize,
-) -> EvalResult<Option<Charge>> {
+fn key_count(target: &Value<'_>) -> usize {
+    let Some(obj) = target.as_object() else {
+        return match target {
+            Value::Str(text) => text.len(),
+            _ => 0,
+        };
+    };
+    let borrowed = obj.borrow();
+    let dense = match &borrowed.kind {
+        ObjKind::Array(items) | ObjKind::Arguments(items) => items.len(),
+        ObjKind::MappedArguments(mapped) => mapped.items.len(),
+        _ => 0,
+    };
+    dense + borrowed.props.len()
+}
+
+fn charge_keys<'a>(host: &mut dyn Host<'a>, keys: usize) -> EvalResult<Option<Charge>> {
     if keys > ARRAY_LEN_CAP {
         return Err(Bail::ArrayLength);
     }
     host.spend(1 + keys as u64)?;
-    let slots = (keys as u64).saturating_mul(std::mem::size_of::<JsString>() as u64);
-    let texts = (fresh as u64).saturating_mul(text_bytes(FRESH_KEY_UNITS));
-    host.reserve_live(slots.saturating_add(texts))
+    let slot = std::mem::size_of::<JsString>() as u64 + text_bytes(FRESH_KEY_UNITS);
+    host.reserve_live((keys as u64).saturating_mul(slot))
 }
 
 pub fn own_keys<'a>(host: &mut dyn Host<'a>, target: &Value<'a>) -> EvalResult<Vec<JsString>> {
+    let _held = charge_keys(host, key_count(target))?;
+    own_keys_uncharged(target)
+}
+
+pub fn own_keys_uncharged(target: &Value<'_>) -> EvalResult<Vec<JsString>> {
     crate::state::note_key_observation(target);
     crate::unmodelled::refuse_unmodelled_keys(target)?;
     let Some(obj) = target.as_object() else {
-        let count = match target {
-            Value::Str(text) => text.len(),
-            _ => 0,
-        };
-        let _held = charge_keys(host, count, count)?;
         return Ok(primitive_keys(target));
     };
     crate::object::refuse_undefined_array_items(obj)?;
@@ -84,10 +95,7 @@ pub fn own_keys<'a>(host: &mut dyn Host<'a>, target: &Value<'a>) -> EvalResult<V
         ObjKind::MappedArguments(mapped) => Some(mapped.items.len()),
         _ => None,
     };
-    let props = borrowed.props.len();
-    let dense = dense_len.unwrap_or(0);
-    let _held = charge_keys(host, dense + props, dense + props)?;
-    let mut keys = Vec::with_capacity(dense + props);
+    let mut keys = Vec::with_capacity(dense_len.unwrap_or(0) + borrowed.props.len());
     if let Some(len) = dense_len {
         for index in 0..len {
             keys.push(number_to_js_string(index as f64));

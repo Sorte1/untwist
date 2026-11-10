@@ -505,6 +505,10 @@ fn native_to_string<'a>(
     Ok(Value::Str(live_text(host, source_units(&data))?))
 }
 
+pub fn source_text(data: &RegExpData) -> JsString {
+    JsString::from_units(source_units(data))
+}
+
 fn source_units(data: &RegExpData) -> Vec<u16> {
     let mut units: Vec<u16> = vec![SLASH];
     if data.source.is_empty() {
