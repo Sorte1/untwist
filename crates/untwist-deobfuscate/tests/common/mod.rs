@@ -224,6 +224,17 @@ pub fn run_all_stage_notes_extended(source: &str) -> (String, Vec<Note>) {
     )
 }
 
+pub fn run_all_stages_safe_lane(source: &str) -> (String, Vec<String>) {
+    messages_of(run_stages_with(
+        source,
+        PassOptions {
+            unsafe_transforms: false,
+            extended: true,
+            ..pass_options()
+        },
+    ))
+}
+
 pub fn run_all_stage_notes_default_lane(source: &str) -> (String, Vec<Note>) {
     run_stages_with(
         source,

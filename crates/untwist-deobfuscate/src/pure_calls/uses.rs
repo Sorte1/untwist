@@ -20,6 +20,7 @@ pub(super) enum Role {
 
 pub(super) struct Site {
     pub(super) span: Span,
+    pub(super) position: u32,
     pub(super) symbol: SymbolId,
     pub(super) args: Option<Vec<Const>>,
     pub(super) hoisted: Vec<ScopeId>,
@@ -30,12 +31,14 @@ pub(super) struct Uses {
     pub(super) sites: Vec<Site>,
     pub(super) escaped: FxHashSet<SymbolId>,
     pub(super) references: FxHashMap<SymbolId, Vec<Span>>,
+    pub(super) declared_at: FxHashMap<SymbolId, u32>,
 }
 
 struct Walk<'s> {
     scoping: &'s Scoping,
     tracked: &'s FxHashMap<SymbolId, Role>,
     hoisted: Vec<ScopeId>,
+    position: u32,
     found: Uses,
 }
 
@@ -48,6 +51,7 @@ pub(super) fn uses(
         scoping,
         tracked,
         hoisted: Vec::new(),
+        position: 0,
         found: Uses::default(),
     };
     walk.visit_program(program);
@@ -81,6 +85,11 @@ fn member_key<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k Expression<'a>> {
 }
 
 impl Walk<'_> {
+    fn advance(&mut self) -> u32 {
+        self.position += 1;
+        self.position
+    }
+
     fn role(&self, id: &IdentifierReference<'_>) -> Option<(SymbolId, Role)> {
         let symbol = resolved_symbol(id, self.scoping)?;
         Some((symbol, *self.tracked.get(&symbol)?))
@@ -121,8 +130,10 @@ impl Walk<'_> {
             return false;
         };
         self.record(symbol, callee.span, false);
+        let position = self.advance();
         self.found.sites.push(Site {
             span: it.span,
+            position,
             symbol,
             args: literal_arguments(&it.arguments),
             hoisted: self.hoisted.clone(),
@@ -142,6 +153,22 @@ impl<'a> VisitJs<'a> for Walk<'_> {
         if scope.is_some() {
             self.hoisted.pop();
         }
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        walk_js::walk_variable_declarator(self, it);
+        let BindingPattern::BindingIdentifier(id) = &it.id else {
+            return;
+        };
+        let Some(symbol) = id
+            .symbol_id
+            .get()
+            .filter(|symbol| self.tracked.contains_key(symbol))
+        else {
+            return;
+        };
+        let position = self.advance();
+        self.found.declared_at.insert(symbol, position);
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {

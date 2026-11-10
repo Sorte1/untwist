@@ -4,7 +4,8 @@ use oxc_allocator::Allocator;
 use untwist_core::parse::parse_program;
 use untwist_core::print::{print, PrintStyle};
 use untwist_deobfuscate::notes::{
-    SWITCH_CASE_EXIT, SWITCH_CASE_SHADOW, SWITCH_FALLTHROUGH, SWITCH_SEQUENCE,
+    SWITCH_CASE_BINDING_SHARED, SWITCH_CASE_EXIT, SWITCH_CASE_SHADOW, SWITCH_FALLTHROUGH,
+    SWITCH_SEQUENCE,
 };
 use untwist_testing::assert_transform;
 
@@ -451,4 +452,181 @@ fn a_case_declaration_that_collides_with_nothing_still_flattens() {
     }
     "#
     );
+}
+
+fn dispatch(prelude: &str, cases: &str, after: &str) -> String {
+    format!(
+        "function hi(p) {{\n  var d = '0|1|2'.split('|');\n  {prelude}\n  while (!![]) {{\n    switch (d[e++]) {{\n{cases}\n    }}\n    break;\n  }}\n{after}}}"
+    )
+}
+
+const PLAIN_CASES: &str =
+    "      case '0':\n        a();\n        continue;\n      case '1':\n        b();\n        continue;\n      case '2':\n        c();\n        continue;";
+
+fn assert_left_alone(source: &str, wanted: Option<&str>) {
+    let alloc = Allocator::default();
+    let (code, notes) = run_one(&alloc, source);
+    assert_eq!(code, printed(source));
+    match wanted {
+        Some(note) => assert!(notes.iter().any(|found| found == note), "{notes:?}"),
+        None => assert!(notes.is_empty(), "{notes:?}"),
+    }
+}
+
+fn cases_with(first: &str, second: &str) -> String {
+    format!(
+        "      case '0':\n{first}\n        continue;\n      case '1':\n{second}\n        continue;\n      case '2':\n        c();\n        continue;"
+    )
+}
+
+#[test]
+fn an_iterator_that_starts_past_zero_is_left_alone() {
+    assert_left_alone(&dispatch("var e = 1;", PLAIN_CASES, ""), None);
+}
+
+#[test]
+fn an_iterator_initialised_by_a_call_is_left_alone() {
+    assert_left_alone(&dispatch("var e = g();", PLAIN_CASES, ""), None);
+}
+
+#[test]
+fn an_iterator_without_an_initialiser_is_left_alone() {
+    assert_left_alone(&dispatch("var e;", PLAIN_CASES, ""), None);
+}
+
+#[test]
+fn an_iterator_initialised_by_a_string_zero_is_left_alone() {
+    assert_left_alone(&dispatch("var e = '0';", PLAIN_CASES, ""), None);
+}
+
+#[test]
+fn an_iterator_initialised_by_arithmetic_that_folds_to_zero_still_flattens() {
+    let source = dispatch("var e = 3 - 3;", PLAIN_CASES, "");
+    let alloc = Allocator::default();
+    let (code, notes) = run_one(&alloc, &source);
+    assert_eq!(code.trim(), "function hi(p) {\n  a();\n  b();\n  c();\n}");
+    assert!(notes.is_empty(), "{notes:?}");
+}
+
+#[test]
+fn a_case_that_redeclares_the_iterator_is_left_alone() {
+    let cases = cases_with("        a();\n        var e = 5;", "        b();");
+    assert_left_alone(&dispatch("var e = 0;", &cases, ""), None);
+}
+
+#[test]
+fn a_case_that_redeclares_the_sequence_array_is_left_alone() {
+    let cases = cases_with("        a();\n        var d = [];", "        b();");
+    assert_left_alone(&dispatch("var e = 0;", &cases, ""), None);
+}
+
+#[test]
+fn an_iterator_that_shares_its_name_with_a_parameter_is_left_alone() {
+    let cases = cases_with("        arguments[0] = 5;", "        b();");
+    assert_left_alone(
+        &dispatch("var p = 0;", &cases, "").replace("d[e++]", "d[p++]"),
+        None,
+    );
+}
+
+#[test]
+fn a_case_declaration_that_would_capture_a_global_name_is_refused() {
+    let cases = cases_with(
+        "        let name = 'inner';\n        a(name);",
+        "        b();",
+    );
+    assert_left_alone(
+        &dispatch("var e = 0;", &cases, "  z(typeof name, name);\n"),
+        Some(SWITCH_CASE_SHADOW),
+    );
+}
+
+#[test]
+fn a_case_declaration_read_by_another_case_is_refused() {
+    let cases = cases_with("        let x = 1;\n        a(x);", "        b(x);");
+    assert_left_alone(
+        &dispatch("var e = 0;", &cases, ""),
+        Some(SWITCH_CASE_BINDING_SHARED),
+    );
+}
+
+#[test]
+fn a_case_declaration_captured_by_a_closure_in_another_case_is_refused() {
+    let cases = cases_with(
+        "        const x = 1;\n        a(x);",
+        "        b(function () {\n          return x;\n        });",
+    );
+    assert_left_alone(
+        &dispatch("var e = 0;", &cases, ""),
+        Some(SWITCH_CASE_BINDING_SHARED),
+    );
+}
+
+#[test]
+fn a_case_class_used_by_another_case_is_refused() {
+    let cases = cases_with("        class K {}\n        a(K);", "        b(new K());");
+    assert_left_alone(
+        &dispatch("var e = 0;", &cases, ""),
+        Some(SWITCH_CASE_BINDING_SHARED),
+    );
+}
+
+#[test]
+fn a_case_function_called_by_another_case_is_refused() {
+    let cases = cases_with("        function k() {}\n        a(k);", "        b(k);");
+    let source = dispatch("var e = 0;", &cases, "");
+    let alloc = Allocator::default();
+    let (code, _) = run_one(&alloc, &source);
+    assert_eq!(code, printed(&source));
+}
+
+#[test]
+fn a_case_function_called_after_the_loop_is_refused() {
+    let cases = cases_with("        function k() {}\n        a(k);", "        b();");
+    let source = dispatch("var e = 0;", &cases, "  k();\n");
+    let alloc = Allocator::default();
+    let (code, _) = run_one(&alloc, &source);
+    assert_eq!(code, printed(&source));
+}
+
+#[test]
+fn a_case_declaration_at_the_top_level_of_a_script_is_refused() {
+    let source = "var d = '0|1'.split('|');\nvar e = 0;\nwhile (!![]) {\n  switch (d[e++]) {\n    case '0':\n      let x = 1;\n      a(x);\n      continue;\n    case '1':\n      b();\n      continue;\n  }\n  break;\n}";
+    assert_left_alone(source, Some(SWITCH_CASE_SHADOW));
+}
+
+#[test]
+fn a_case_declaration_used_only_inside_its_case_still_flattens() {
+    let cases = cases_with(
+        "        let x = 1;\n        class K {}\n        a(x, K);",
+        "        b();",
+    );
+    let source = dispatch("var e = 0;", &cases, "");
+    let alloc = Allocator::default();
+    let (code, notes) = run_one(&alloc, &source);
+    assert_eq!(
+        code.trim(),
+        "function hi(p) {\n  let x = 1;\n  class K {}\n  a(x, K);\n  b();\n  c();\n}"
+    );
+    assert!(notes.is_empty(), "{notes:?}");
+}
+
+#[test]
+fn a_strict_case_function_called_by_another_case_is_refused() {
+    let cases = cases_with("        function k() {}\n        a(k);", "        b(k);");
+    let source = format!("'use strict';\n{}", dispatch("var e = 0;", &cases, ""));
+    assert_left_alone(&source, Some(SWITCH_CASE_BINDING_SHARED));
+}
+
+#[test]
+fn a_case_declaration_named_like_a_global_read_in_another_function_is_refused() {
+    let cases = cases_with(
+        "        let name = 'inner';\n        a(name);",
+        "        b();",
+    );
+    let source = format!(
+        "{}\nfunction other() {{\n  return name;\n}}",
+        dispatch("var e = 0;", &cases, "")
+    );
+    assert_left_alone(&source, Some(SWITCH_CASE_SHADOW));
 }

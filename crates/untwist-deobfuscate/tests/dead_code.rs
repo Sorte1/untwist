@@ -571,3 +571,28 @@ fn an_identifier_picked_from_a_literal_ternary_is_folded_except_under_typeof() {
     "#
     );
 }
+
+#[test]
+fn eval_picked_from_a_literal_test_in_callee_position_stays_indirect() {
+    assert_transform!(
+        "(true ? eval : 0)(\"typeof x\");\n(false || eval)(\"typeof x\");\n(1 && eval)(\"typeof x\");",
+        [untwist_deobfuscate::dead_code::boxed],
+        @r#"
+    (true ? eval : 0)("typeof x");
+    (false || eval)("typeof x");
+    (1 && eval)("typeof x");
+    "#
+    );
+}
+
+#[test]
+fn eval_picked_from_a_literal_test_outside_callee_position_is_folded() {
+    assert_transform!(
+        "var a = true ? eval : 0;\n(true ? evaluate : 0)(\"typeof x\");",
+        [untwist_deobfuscate::dead_code::boxed],
+        @r#"
+    var a = eval;
+    evaluate("typeof x");
+    "#
+    );
+}

@@ -1,7 +1,6 @@
 use oxc_ast::ast::{Expression, Program};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
-use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::PassOptions;
@@ -267,8 +266,13 @@ fn root_reached<'p>(
     Reached::Neither
 }
 
-fn runs_after(site: &Site, declaration: Span, scope: ScopeId, scoping: &Scoping) -> bool {
-    site.span.start >= declaration.end
+fn runs_after(site: &Site, symbol: SymbolId, found: &Uses, scoping: &Scoping) -> bool {
+    let scope = scoping.symbol_scope_id(symbol);
+    let declared_first = found
+        .declared_at
+        .get(&symbol)
+        .is_some_and(|declared| site.position > *declared);
+    declared_first
         && !site.hoisted.iter().any(|function| {
             scoping
                 .scope_ancestors(*function)
@@ -280,26 +284,13 @@ fn runs_after(site: &Site, declaration: Span, scope: ScopeId, scoping: &Scoping)
 fn ordered(
     site: &Site,
     candidate: &Candidate<'_, '_>,
-    declared: &Declared<'_>,
+    (declared, found): (&Declared<'_>, &Uses),
     scoping: &Scoping,
 ) -> bool {
     let func = candidate.func;
-    let own = func.hoisted
-        || runs_after(
-            site,
-            func.statement,
-            scoping.symbol_scope_id(func.symbol),
-            scoping,
-        );
+    let own = func.hoisted || runs_after(site, func.symbol, found, scoping);
     own && candidate.consulted.iter().all(|symbol| {
-        declared.constants.get(symbol).is_some_and(|constant| {
-            runs_after(
-                site,
-                constant.statement,
-                scoping.symbol_scope_id(*symbol),
-                scoping,
-            )
-        })
+        declared.constants.contains_key(symbol) && runs_after(site, *symbol, found, scoping)
     })
 }
 
@@ -340,7 +331,7 @@ fn folds(
         .iter()
         .filter_map(|site| {
             let candidate = by_symbol.get(&site.symbol)?;
-            if !ordered(site, candidate, declared, scoping) {
+            if !ordered(site, candidate, (declared, found), scoping) {
                 return None;
             }
             let value = evaluate(site, candidate.func, declared, scoping)?;

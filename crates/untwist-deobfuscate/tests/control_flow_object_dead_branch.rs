@@ -185,3 +185,34 @@ fn a_dead_statement_that_only_reads_the_object_is_removed() {
     assert!(code.contains(r#"console.log("6|0|4")"#), "{code}");
     assert!(!code.contains("obj"), "{code}");
 }
+
+const A_TWICE_DECLARED_OBJECT_WITH_A_DEAD_WRITE: &str = "function hi() {\n  var obj = {\n    aokfw: function (a, b) {\n      return a === b;\n    },\n    rLxJs: \"x\"\n  };\n  var obj = {\n    aokfw: function (a, b) {\n      return a !== b;\n    },\n    rLxJs: \"y\"\n  };\n  if (obj.aokfw(\"a\", \"b\")) {\n    obj.zzzzz = 1;\n  } else {\n    console.log(obj.rLxJs);\n  }\n}\nhi();";
+
+#[test]
+fn an_object_declared_twice_is_left_alone_on_the_dead_branch_route() {
+    left_alone(A_TWICE_DECLARED_OBJECT_WITH_A_DEAD_WRITE);
+    let alloc = Allocator::default();
+    assert_eq!(
+        conservative_run(&alloc, A_TWICE_DECLARED_OBJECT_WITH_A_DEAD_WRITE, boxed).trim(),
+        A_TWICE_DECLARED_OBJECT_WITH_A_DEAD_WRITE.trim()
+    );
+}
+
+#[test]
+fn an_object_declared_twice_never_answers_from_its_first_declaration() {
+    for (unsafe_transforms, extended) in [(false, true), (true, true), (false, false)] {
+        let code = deobfuscate_stage(
+            A_TWICE_DECLARED_OBJECT_WITH_A_DEAD_WRITE,
+            unsafe_transforms,
+            extended,
+        );
+        assert!(
+            !code.contains("console.log(\"x\")"),
+            "unsafe={unsafe_transforms} extended={extended}\n{code}"
+        );
+        assert!(
+            code.contains("obj.zzzzz = 1"),
+            "unsafe={unsafe_transforms} extended={extended}\n{code}"
+        );
+    }
+}

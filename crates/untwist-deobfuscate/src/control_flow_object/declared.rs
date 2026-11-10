@@ -1,6 +1,9 @@
+use std::cell::OnceCell;
+
 use oxc_allocator::{CloneIn, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -18,7 +21,7 @@ use crate::init_order::{
 };
 use crate::notes;
 
-use super::dead::{dead_branch_spans, dead_write_statements};
+use super::dead::{dead_branch_spans, dead_write_statements, predicate_branches, Branches};
 use super::nested::{insert_nested, PlannedEdit, Recipe};
 use super::{
     call_site_is_safe, cff_props, emit_logical_refusals, inline_site, object_declaration, CffValue,
@@ -87,6 +90,14 @@ struct Located<'p, 'l> {
     program: &'p Program<'p>,
     calls: &'l FxHashMap<Span, CallArgs<'p>>,
     objects: &'l ObjectsAt<'p>,
+    branches: OnceCell<Branches<'p>>,
+}
+
+impl<'p> Located<'p, '_> {
+    fn branches(&self, scoping: &Scoping) -> &Branches<'p> {
+        self.branches
+            .get_or_init(|| predicate_branches(self.program, scoping))
+    }
 }
 
 struct CallsAt<'p, 'w> {
@@ -261,14 +272,15 @@ fn substitutable_uses<'u>(
             dead: Vec::new(),
         });
     }
-    if !cx.opts.extended {
+    if !cx.opts.extended || is_redeclared(cx.scoping(), candidate.symbol) {
         return None;
     }
     let props = located
         .objects
         .get(&candidate.object)
         .and_then(|object| cff_props(object, cx.opts.extended))?;
-    let dead = dead_branch_spans(located.program, candidate.symbol, &props, &*cx);
+    let branches = located.branches(cx.scoping());
+    let dead = dead_branch_spans(branches, candidate.symbol, &props, &*cx);
     if dead.is_empty() {
         return None;
     }
@@ -277,6 +289,10 @@ fn substitutable_uses<'u>(
         return None;
     }
     Some(Substitutable { uses, dead })
+}
+
+fn is_redeclared(scoping: &Scoping, symbol: SymbolId) -> bool {
+    !scoping.symbol_redeclarations(symbol).is_empty()
 }
 
 fn mutation_spans(uses: &ObjectUses) -> Vec<Span> {
@@ -307,7 +323,8 @@ fn plan_declared_object<'a, 'p>(
     }
     let mut plan = plan_candidate(located, candidate, uses, cx)?;
     if !dead.is_empty() {
-        let writes = dead_write_statements(located.program, &mutation_spans(uses), &dead);
+        let branches = located.branches(cx.scoping());
+        let writes = dead_write_statements(branches, &mutation_spans(uses), &dead);
         plan.dead_statements = writes.statements;
         plan.dead_kept = writes.kept;
     }
@@ -382,6 +399,7 @@ pub(super) fn inline_declared_objects<'a>(program: &mut Program<'a>, cx: &mut Cx
         program,
         calls: &calls,
         objects: &objects,
+        branches: OnceCell::new(),
     };
     let plans: Vec<CandidatePlan<'a, '_>> = candidates
         .iter()

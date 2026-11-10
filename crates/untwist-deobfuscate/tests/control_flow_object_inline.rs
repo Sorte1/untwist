@@ -293,3 +293,38 @@ fn the_spread_form_refuses_a_call_site_that_spreads_its_callee() {
     "
     );
 }
+
+#[test]
+fn a_forwarded_eval_is_not_turned_into_a_direct_call() {
+    assert_transform!(
+        "({\n  QuFtJ: function (n, r) {\n    return n(r);\n  }\n}).QuFtJ(eval, s);",
+        [untwist_deobfuscate::control_flow_object::boxed],
+        @"
+    ({ QuFtJ: function (n, r) {
+      return n(r);
+    } }).QuFtJ(eval, s);
+    "
+    );
+}
+
+#[test]
+fn the_spread_form_does_not_turn_a_forwarded_eval_into_a_direct_call() {
+    assert_transform!(
+        "({\n  UcfbR: function (a, ...b) {\n    return a(...b);\n  }\n}).UcfbR(eval, p);",
+        [untwist_deobfuscate::control_flow_object::boxed],
+        @r"
+    ({ UcfbR: function (a, ...b) {
+      return a(...b);
+    } }).UcfbR(eval, p);
+    "
+    );
+}
+
+#[test]
+fn a_forwarded_callee_merely_named_like_eval_is_still_inlined() {
+    assert_transform!(
+        "({\n  QuFtJ: function (n, r) {\n    return n(r);\n  }\n}).QuFtJ(evaluate, s);",
+        [untwist_deobfuscate::control_flow_object::boxed],
+        @"evaluate(s);"
+    );
+}

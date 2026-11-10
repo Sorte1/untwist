@@ -804,6 +804,13 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Whole(
+            "function hi() {\n  var d = '0|1'.split('|');\n  var e = 0;\n  while (!![]) {\n    switch (d[e++]) {\n      case '0':\n        let x = 2;\n        a(x);\n        continue;\n      case '1':\n        b(x);\n        continue;\n    }\n    break;\n  }\n}",
+        ),
+        expects: notes::SWITCH_CASE_BINDING_SHARED,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Whole("log(o);\nconst o = {};\no.a = 1;"),
         expects: notes::MERGE_USE_BEFORE_INIT,
         mode: Match::Contains,

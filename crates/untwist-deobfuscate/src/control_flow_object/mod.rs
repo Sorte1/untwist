@@ -435,10 +435,18 @@ fn inline_site<'p, 'a>(
     cx: &Cx<'a, '_>,
 ) -> Option<Expression<'a>> {
     let inlined = inline_function_call(function, arguments, cx);
-    if inlined.is_some() || !cx.opts.unsafe_transforms {
-        return inlined;
-    }
-    inline_spread_forward(function, arguments, cx)
+    let inlined = match inlined {
+        None if cx.opts.unsafe_transforms => inline_spread_forward(function, arguments, cx),
+        inlined => inlined,
+    };
+    inlined.filter(|expr| !is_direct_eval(expr))
+}
+
+fn is_direct_eval(expr: &Expression<'_>) -> bool {
+    let Expression::CallExpression(call) = expr.without_parentheses() else {
+        return false;
+    };
+    matches!(call.callee.without_parentheses(), Expression::Identifier(id) if id.name == "eval")
 }
 
 fn shape_verdict(safe: bool) -> SiteSafety {

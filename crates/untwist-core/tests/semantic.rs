@@ -1,4 +1,5 @@
 use oxc_allocator::Allocator;
+use oxc_ast::ast::Statement;
 use oxc_str::Ident;
 use rustc_hash::FxHashSet;
 use untwist_core::parse::parse_program;
@@ -372,4 +373,42 @@ fn module_syntax_is_an_import_or_an_export_and_nothing_else() {
     assert!(!is_module("let x = 1;\n(0, eval)(\"x = 2\");"));
     assert!(!is_module("\"use strict\";\nlet x = 1;"));
     assert!(!is_module("var m = import(\"m\");"));
+}
+
+fn possibly_used_before_once_the_first_two_statements_swap(source: &str, name: &str) -> bool {
+    let alloc = Allocator::default();
+    let mut parsed = parse_program(&alloc, source);
+    let Some(Statement::FunctionDeclaration(function)) = parsed.program.body.first_mut() else {
+        panic!("the source must start with a function declaration");
+    };
+    let body = function.body.as_mut().expect("a function body");
+    body.statements.swap(0, 1);
+    let sem = build_scoping(&parsed.program);
+    let symbol = find_symbol(&sem, name);
+    let boundary = single_write_span(&parsed.program, &sem.scoping, symbol).expect("single write");
+    is_binding_possibly_used_before(&parsed.program, &sem.scoping, symbol, boundary)
+}
+
+#[test]
+fn a_read_moved_ahead_of_the_write_counts_as_before_it_whatever_its_span() {
+    assert!(possibly_used_before_once_the_first_two_statements_swap(
+        "function f(g, a) { a = 5; g(a); return a; }",
+        "a"
+    ));
+}
+
+#[test]
+fn a_read_moved_behind_the_write_does_not_count_as_before_it() {
+    assert!(!possibly_used_before_once_the_first_two_statements_swap(
+        "function f(g, a) { g(a); a = 5; return a; }",
+        "a"
+    ));
+}
+
+#[test]
+fn a_read_in_the_right_hand_side_still_counts_once_statements_have_moved() {
+    assert!(possibly_used_before_once_the_first_two_statements_swap(
+        "function f(g, a) { g(); a = a + 1; return a; }",
+        "a"
+    ));
 }

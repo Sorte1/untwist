@@ -252,3 +252,28 @@ fn the_pass_is_named_and_declares_its_mode_and_safety() {
     assert!(pass.requires_extended());
     assert_eq!(pass.safety(), Safety::Safe);
 }
+
+const A_PARAMETER_READ_THE_FLATTENER_MOVES_AHEAD_OF_THE_ASSIGNMENT: &str = "function f(g, a) {\n  var d = \"1|0\".split(\"|\");\n  var e = 0;\n  while (true) {\n    switch (d[e++]) {\n      case \"0\":\n        a = 5;\n        continue;\n      case \"1\":\n        g(a);\n        continue;\n    }\n    break;\n  }\n  return a;\n}\nf(console.log, 1);";
+
+#[test]
+fn a_parameter_read_the_flattener_moved_ahead_of_the_assignment_stays_a_parameter() {
+    let (code, all) = common::run_all_stages_extended(
+        A_PARAMETER_READ_THE_FLATTENER_MOVES_AHEAD_OF_THE_ASSIGNMENT,
+    );
+    assert!(
+        code.contains("function f(g, a) {\n  g(a);\n  a = 5;"),
+        "{code}"
+    );
+    assert!(
+        all.iter()
+            .any(|note| note.contains(notes::VAR_PARAMETER_USED_BEFORE_THE_ASSIGNMENT)),
+        "{all:?}"
+    );
+    let (code, _notes) = common::run_all_stages_safe_lane(
+        A_PARAMETER_READ_THE_FLATTENER_MOVES_AHEAD_OF_THE_ASSIGNMENT,
+    );
+    assert!(
+        code.contains("function f(g, a) {\n  g(a);\n  a = 5;"),
+        "{code}"
+    );
+}
