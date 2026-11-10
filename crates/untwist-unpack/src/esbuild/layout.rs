@@ -453,8 +453,7 @@ fn quiet_statement(statement: &Statement<'_>, lazy_callees: &FxHashSet<&str>) ->
         return true;
     }
     matches!(statement, Statement::VariableDeclaration(declaration)
-    if unreassigned_var(declaration.kind)
-        && declaration.declarations.iter().all(|declarator| {
+    if declaration.declarations.iter().all(|declarator| {
             matches!(declarator.id, BindingPattern::BindingIdentifier(_))
                 && quiet_init(declarator.init.as_ref(), lazy_callees)
         }))
