@@ -172,6 +172,21 @@ fn a_factory_that_is_not_closed_is_refused() {
 }
 
 #[test]
+fn a_function_declaration_that_takes_a_parameters_name_is_refused() {
+    for factory in [
+        "function (e, os) { function os() {} e.v = os(); }",
+        "function (e) { function e() {} e(); }",
+        "function (e, os) { if (e) { function os() {} } e.v = os; }",
+    ] {
+        refused(&with_factory(factory));
+    }
+    assert!(split(&with_factory(
+        "function (e, os) { e.v = function () { function os() {} return os; }; }"
+    ))
+    .is_some());
+}
+
+#[test]
 fn a_factory_that_reads_a_host_name_free_is_refused() {
     for read in [
         "__filename",

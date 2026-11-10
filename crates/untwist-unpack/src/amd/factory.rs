@@ -5,7 +5,7 @@ use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::GetSpan;
 use oxc_str::Ident;
-use oxc_syntax::scope::ScopeId;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use rustc_hash::FxHashSet;
 use untwist_core::parse::parse_program;
 use untwist_core::pass::{Note, NoteKind};
@@ -14,9 +14,10 @@ use crate::closed::{Allowed, Check};
 use crate::esbuild::build::has_use_strict;
 use crate::matcher::{anonymous_factory, Factory};
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind};
-use crate::path::{dirname_posix, join_posix, relative_path};
+use crate::path::{dirname_posix, join_posix};
 use crate::runtime::{js_string, synthetic_statements};
 use crate::scan::{Frame, Policy, Scan, Step};
+use crate::specifier::ModulePaths;
 
 pub const EXPORTS: &str = "\0exports";
 pub const MODULE: &str = "\0module";
@@ -186,6 +187,37 @@ fn reads_host(scoping: &Scoping, callback: &Callback<'_, '_>) -> bool {
     })
 }
 
+struct Redeclared<'n> {
+    names: &'n [&'n str],
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for Redeclared<'_> {
+    fn visit_function(&mut self, it: &Function<'a>, _flags: ScopeFlags) {
+        self.found |= it.is_declaration()
+            && it
+                .id
+                .as_ref()
+                .is_some_and(|id| self.names.contains(&id.name.as_str()));
+    }
+
+    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
+
+    fn visit_class(&mut self, _it: &Class<'a>) {}
+}
+
+fn redeclares_a_parameter(callback: &Callback<'_, '_>) -> bool {
+    let Some(names) = callback.names() else {
+        return true;
+    };
+    let mut redeclared = Redeclared {
+        names: &names,
+        found: false,
+    };
+    redeclared.visit_function_body(callback.body);
+    redeclared.found
+}
+
 pub fn sound(
     scoping: &Scoping,
     callback: &Callback<'_, '_>,
@@ -194,6 +226,7 @@ pub fn sound(
 ) -> bool {
     closed_and_shaped(scoping, callback)
         && named_only_as_mapped(scoping, callback, pairs)
+        && !redeclares_a_parameter(callback)
         && !(host_free && reads_host(scoping, callback))
 }
 
@@ -346,7 +379,7 @@ fn prelude_line(pair: &Dependency, specifier: impl Fn(&str) -> String) -> String
     }
 }
 
-fn prelude_of(bundle: &Bundle<'_>, id: &str) -> String {
+fn prelude_of(bundle: &Bundle<'_>, paths: &ModulePaths, id: &str) -> String {
     let Some(module) = bundle.modules.get(id) else {
         return String::new();
     };
@@ -362,9 +395,9 @@ fn prelude_of(bundle: &Bundle<'_>, id: &str) -> String {
             Target::External
         };
         match target {
-            Target::Module(target) => bundle.path_of(&target).map_or_else(
+            Target::Module(target) => paths.get(&target).map_or_else(
                 || dependency.to_string(),
-                |path| relative_path(module.path.as_str(), path.as_str()),
+                |path| paths.specifier(module.path.as_str(), path),
             ),
             Target::External | Target::Missing => dependency.to_string(),
         }
@@ -377,10 +410,11 @@ fn prelude_of(bundle: &Bundle<'_>, id: &str) -> String {
 }
 
 pub fn prepend_dependencies<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
+    let paths = ModulePaths::of(bundle);
     let preludes: Vec<(String, String)> = bundle
         .modules
         .keys()
-        .map(|id| (id.clone(), prelude_of(bundle, id)))
+        .map(|id| (id.clone(), prelude_of(bundle, &paths, id)))
         .collect();
     let mut notes = Vec::new();
     for (id, text) in preludes {
