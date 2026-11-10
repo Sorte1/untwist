@@ -1,6 +1,6 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{Expression, Program};
-use oxc_ast::AstBuilder;
+use oxc_ast::builder::AstBuilder;
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_span::SPAN;
