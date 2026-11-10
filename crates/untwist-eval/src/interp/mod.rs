@@ -20,6 +20,7 @@ use crate::host::Host;
 use crate::names::{Name, Names};
 use crate::object::{self, lookup_property, string_property, Consulted, MAX_ROOT_REGISTRATIONS};
 use crate::source::function_source;
+use crate::unmodelled::{refuse_boolean_member, refuse_inherited_miss, refuse_primitive_miss};
 use crate::value::{
     js_string_from_literal, Abrupt, Closure, Eval, FnCode, IntrinsicProto, JsObject, JsString,
     ObjKind, ObjRef, PropKey, PropMap, Value,
@@ -32,20 +33,6 @@ pub fn refuse_arguments_miss(key: &PropKey, inherited: Option<&Value<'_>>) -> Ev
         ));
     }
     Ok(())
-}
-
-fn refuse_unmodelled<'a>(
-    target: &Value<'a>,
-    key: &PropKey,
-    found: Value<'a>,
-) -> Eval<'a, Value<'a>> {
-    if matches!(found, Value::Undefined) {
-        if object::is_constructor_key(key) {
-            return Err(Bail::Unsupported(&UNMODELLED_CONSTRUCTOR).into());
-        }
-        crate::unmodelled::refuse_unmodelled_miss(target, key)?;
-    }
-    Ok(found)
 }
 
 fn code_address(code: FnCode<'_>) -> usize {
@@ -368,7 +355,7 @@ impl<'a> Interp<'a> {
         }
         match string_property(text, key) {
             Some(value) => Ok(value),
-            None => refuse_unmodelled(target, key, self.realm.string_prototype_member(key)?),
+            None => refuse_primitive_miss(target, key, self.realm.string_prototype_member(key)?),
         }
     }
 
@@ -385,7 +372,7 @@ impl<'a> Interp<'a> {
         } else if self.hole_under_an_indexed_prototype(target, obj, key)? {
             return Err(Bail::Unsupported(&HOLE_UNDER_AN_INDEXED_PROTOTYPE));
         }
-        refuse_placeholder_constructor(obj, key)
+        crate::unmodelled::refuse_own_undefined(obj, key)
     }
 
     fn hole_under_an_indexed_prototype(
@@ -510,9 +497,9 @@ impl<'a> Host<'a> for Interp<'a> {
             )),
             Value::Str(text) => self.string_member(target, text, key),
             Value::Number(_) => {
-                refuse_unmodelled(target, key, self.realm.number_prototype_member(key)?)
+                refuse_primitive_miss(target, key, self.realm.number_prototype_member(key)?)
             }
-            Value::Bool(_) => Err(Bail::Unsupported(&"a boolean has no modelled prototype").into()),
+            Value::Bool(_) => refuse_boolean_member(),
             Value::Object(obj) => {
                 if let Some(name) = self.realm.hostile_name(obj) {
                     return Err(Bail::hostile_global(name).into());
@@ -530,15 +517,13 @@ impl<'a> Host<'a> for Interp<'a> {
                             }
                         }
                         let inherited = self.realm.intrinsic_member(target, key)?;
-                        if object::decoding() && object::is_arguments(obj) {
-                            refuse_arguments_miss(key, inherited.as_ref())?;
-                        }
-                        if object::is_constructor_key(key) {
-                            refuse_unmodelled_constructor(obj, inherited.as_ref())?;
-                        }
+                        refuse_inherited_miss(
+                            &self.realm,
+                            (target, obj, false),
+                            key,
+                            inherited.as_ref(),
+                        )?;
                         if inherited.is_none() {
-                            self.realm.refuse_global_object(obj)?;
-                            crate::unmodelled::refuse_unmodelled_miss(target, key)?;
                             if let Some(sentinel) = crate::state::probe_miss(obj, key) {
                                 return Ok(sentinel);
                             }
@@ -608,34 +593,8 @@ fn intrinsic_for_root_name(name: &str) -> Option<IntrinsicProto> {
         .map(|(_, intrinsic)| *intrinsic)
 }
 
-const UNMODELLED_CONSTRUCTOR: &str =
-    "a constructor the evaluator does not model, read through a built-in prototype";
-
 const HOLE_UNDER_AN_INDEXED_PROTOTYPE: &str =
     "an array hole or undefined element whose index a prototype also holds";
-
-fn refuse_placeholder_constructor(obj: &ObjRef<'_>, key: &PropKey) -> EvalResult<()> {
-    if !object::is_constructor_key(key) {
-        return Ok(());
-    }
-    if !obj.borrow().props.contains_key(key) || crate::unmodelled::is_intrinsic_object(obj) {
-        return Err(Bail::Unsupported(&UNMODELLED_CONSTRUCTOR));
-    }
-    Ok(())
-}
-
-fn refuse_unmodelled_constructor(obj: &ObjRef<'_>, found: Option<&Value<'_>>) -> EvalResult<()> {
-    let unmodelled = matches!(found, Some(Value::Undefined))
-        || match &obj.borrow().kind {
-            ObjKind::Function(closure) => closure.is_generator_or_async(),
-            ObjKind::Bound(_) => true,
-            _ => false,
-        };
-    if unmodelled {
-        return Err(Bail::Unsupported(&UNMODELLED_CONSTRUCTOR));
-    }
-    Ok(())
-}
 
 fn note_possible_hole(obj: &ObjRef<'_>, key: &PropKey) {
     if !matches!(key, PropKey::Index(_)) {
