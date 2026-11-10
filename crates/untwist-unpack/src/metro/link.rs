@@ -10,7 +10,7 @@ use untwist_core::semantic::build_scoping;
 
 use super::edit::{Edit, Used};
 use super::{
-    DEPENDENCY_MAP_NAME, GLOBAL_NAME, IMPORT_ALL_NAME, IMPORT_DEFAULT_NAME, IMPORT_PREFIX,
+    DEPENDENCY_MAP_NAME, ENTRY_ID, GLOBAL_NAME, IMPORT_ALL_NAME, IMPORT_DEFAULT_NAME, IMPORT_PREFIX,
 };
 use crate::model::{Bundle, BundleKind, Module};
 use crate::rename::generate_uid;
@@ -23,7 +23,11 @@ const HELPERS: &str = r#"var metroHasOwn = Object.prototype.hasOwnProperty;
 var metroEmpty = {};
 var metroImports = new Map();
 function metroRequire(moduleId) {
-  return require(metroModulePaths[moduleId]);
+  var path = metroModulePaths.get(moduleId);
+  if (path === undefined) {
+    throw Error("Requiring unknown module \"" + moduleId + "\".");
+  }
+  return require(path);
 }
 function metroRecord(moduleId) {
   var record = metroImports.get(moduleId);
@@ -86,7 +90,7 @@ fn prologue_text(module: &Module<'_>, used: &Used) -> String {
     text
 }
 
-type Context<'r> = (&'r ModulePaths, &'r [String], &'r [(String, String)]);
+type Context<'r> = (&'r ModulePaths, &'r [String], &'r [(String, String)], bool);
 
 const SHADOWABLE: [&str; 2] = [GLOBAL_NAME, IMPORT_PREFIX];
 
@@ -111,7 +115,7 @@ fn body_text<'t>(module: &Module<'t>) -> &'t str {
 fn edit_with<'a>(
     alloc: &'a Allocator,
     module: &mut Module<'a>,
-    (paths, prelude, deps): Context<'_>,
+    (paths, prelude, deps, numeric): Context<'_>,
     (scoping, checking, fresh): (Option<&Scoping>, bool, Option<&str>),
 ) -> (Used, Vec<String>, bool) {
     let from = module.path.as_str().to_string();
@@ -122,6 +126,7 @@ fn edit_with<'a>(
         shadowed: false,
         escaped: false,
         deps,
+        numeric,
         paths,
         from: &from,
         prelude,
@@ -164,11 +169,11 @@ fn edited<'a>(
 fn rewrite<'a>(
     alloc: &'a Allocator,
     module: &mut Module<'a>,
-    (paths, prelude): (&ModulePaths, &[String]),
+    (paths, prelude, numeric): (&ModulePaths, &[String], bool),
     notes: &mut Vec<Note>,
 ) -> Used {
     let deps = std::mem::take(&mut module.dependencies);
-    let (used, missing) = edited(alloc, module, (paths, prelude, deps.as_slice()));
+    let (used, missing) = edited(alloc, module, (paths, prelude, deps.as_slice(), numeric));
     module.dependencies = deps;
     notes.extend(missing.iter().map(|target| Note {
         pass: PASS_NAME,
@@ -207,12 +212,20 @@ fn paths_text(bundle: &Bundle<'_>) -> String {
     let entries: Vec<String> = bundle
         .modules
         .iter()
+        .filter(|(id, _)| id.as_str() != ENTRY_ID)
         .map(|(id, module)| {
             let path = paths.specifier(&from, module.path.as_str());
-            format!("{}: {}", js_string(id), js_string(&path))
+            let key = match bundle.numeric_ids {
+                true => id.clone(),
+                false => js_string(id),
+            };
+            format!("[{key}, {}]", js_string(&path))
         })
         .collect();
-    format!("var metroModulePaths = {{ {} }};\n", entries.join(", "))
+    format!(
+        "var metroModulePaths = new Map([{}]);\n",
+        entries.join(", ")
+    )
 }
 
 fn bindings(used: &Used, prelude: &[String]) -> Vec<String> {
@@ -288,11 +301,15 @@ pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
     }
     let prelude = declarator_names(&statements);
     let paths = ModulePaths::of(bundle);
+    let numeric = bundle.numeric_ids;
     let mut notes = Vec::new();
     let used: Vec<Used> = bundle
         .modules
         .values_mut()
-        .map(|module| rewrite(alloc, module, (&paths, &prelude), &mut notes))
+        .map(|module| {
+            let context = (&paths, prelude.as_slice(), numeric);
+            rewrite(alloc, module, context, &mut notes)
+        })
         .collect();
     if statements.is_empty() && !used.iter().any(|u| u.helpers() || !u.prelude.is_empty()) {
         return notes;

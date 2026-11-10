@@ -40,7 +40,7 @@ pub const RUNTIME_NAMES: [&str; 8] = [
     "metroImportDefault",
     "metroImportAll",
 ];
-const ENTRY_ID: &str = "index";
+pub(crate) const ENTRY_ID: &str = "index";
 
 pub fn probe(frame: &Frame<'_, '_>) -> bool {
     layout::probe(frame.top)
@@ -122,6 +122,7 @@ fn detect<'k, 'a>(
         _ => Some(ENTRY_ID.to_string()),
     };
     let mut bundle = Bundle::new(BundleKind::Metro, entry.clone());
+    bundle.numeric_ids = layout.numeric;
     for def in &layout.defs {
         let factory = def.factory()?;
         let mut program = module_from_body_with(alloc, source, factory.body, bodies);

@@ -227,9 +227,8 @@ fn an_escaped_require_routes_to_the_runtime_and_others_refuse() {
     assert!(index.contains("_require.importAll(1);"), "{index}");
     let runtime = code_of(&files, "_runtime/metro.js");
     assert!(
-        runtime.contains(
-            "var metroModulePaths = {\n  \"1\": \"../1.js\",\n  \"0\": \"../index.js\"\n};"
-        ),
+        runtime
+            .contains("var metroModulePaths = new Map([[1, \"../1.js\"], [0, \"../index.js\"]]);"),
         "{runtime}"
     );
     assert!(refused("", "var r = require;"));
@@ -393,11 +392,11 @@ fn taken_bodies_extract_like_cloned_ones() {
 fn a_module_id_that_names_the_runtime_refuses() {
     let source = |id: &str| {
         format!(
-            "{}{}{}__r(0);\n",
+            "{}{}{}__r(\"main\");\n",
             loader(),
             def(id, "[]", "module.exports = { value: 2 };"),
             def(
-                "0",
+                "\"main\"",
                 &format!("[{id}]"),
                 "console.log(require(_dependencyMap[0]).value);"
             )
@@ -468,5 +467,123 @@ fn definitions_without_a_loader_in_the_file_split_only_when_trusted() {
     for source in [&free, &beside_a_flag] {
         assert!(modules(source).is_none(), "{source}");
         assert!(trusted(source), "{source}");
+    }
+}
+
+#[test]
+fn a_literal_id_of_the_other_type_is_left_to_the_runtime() {
+    let source = format!(
+        "{}{}{}__r(0);\n",
+        loader(),
+        def(
+            "0",
+            "[1]",
+            "var id = \"1\";\nconsole.log(require(\"1\"), require(id), require(_dependencyMap[0]).v);"
+        ),
+        def("1", "[]", "exports.v = \"one\";")
+    );
+    let files = modules(&source).expect("accepted");
+    let index = code_of(&files, "index.js");
+    assert!(index.contains("_require(\"1\")"), "{index}");
+    assert!(index.contains("_require(id)"), "{index}");
+    assert!(index.contains("require(\"./1.js\").v"), "{index}");
+    let runtime = code_of(&files, "_runtime/metro.js");
+    assert!(
+        runtime
+            .contains("var metroModulePaths = new Map([[0, \"../index.js\"], [1, \"../1.js\"]]);"),
+        "{runtime}"
+    );
+    assert!(
+        runtime.contains("throw Error(\"Requiring unknown module \\\"\" + moduleId + \"\\\".\");"),
+        "{runtime}"
+    );
+}
+
+#[test]
+fn a_run_or_dependency_of_the_other_type_refuses() {
+    let base = format!(
+        "{}{}{}",
+        loader(),
+        def("0", "[1]", "console.log(0);"),
+        def("1", "[]", "console.log(1);")
+    );
+    assert!(modules(&format!("{base}__r(1);\n__r(0);\n")).is_some());
+    assert!(modules(&format!("{base}__r(1);\n__r(\"0\");\n")).is_none());
+    let string_dep = base.replace("}, 0, [1]);", "}, 0, [\"1\"]);");
+    assert!(modules(&format!("{string_dep}__r(0);\n")).is_none());
+}
+
+#[test]
+fn mixed_id_types_and_proto_ids_refuse() {
+    let pair = |entry: &str, leaf: &str, run: &str| {
+        format!(
+            "{}{}{}__r({run});\n",
+            loader(),
+            def(
+                entry,
+                &format!("[{leaf}]"),
+                "console.log(require(_dependencyMap[0]).v);"
+            ),
+            def(leaf, "[]", "exports.v = 1;")
+        )
+    };
+    let strings = modules(&pair("\"main\"", "\"leaf\"", "\"main\"")).expect("string ids");
+    let runtime = code_of(&strings, "_runtime/metro.js");
+    assert!(
+        !runtime.contains("metroModulePaths") || runtime.contains("new Map([[\"main\""),
+        "{runtime}"
+    );
+    assert!(modules(&pair("0", "\"leaf\"", "0")).is_none());
+    assert!(modules(&pair("\"main\"", "\"__proto__\"", "\"main\"")).is_none());
+    assert!(modules(&pair("\"index\"", "\"leaf\"", "\"index\"")).is_none());
+}
+
+fn prefixes_bundle(count: usize) -> String {
+    let mut source = loader();
+    for index in 0..count {
+        source.push_str(&format!(
+            "p{index}__d(function (g, r, i, a, m, e, d) {{}}, {index}, []);\n"
+        ));
+    }
+    source
+}
+
+fn prelude_bundle(count: usize) -> String {
+    let mut source = loader();
+    for index in 0..count {
+        source.push_str(&format!("var v{index} = {{}};\n"));
+    }
+    let reads: Vec<String> = (0..count).map(|index| format!("v{index}.x")).collect();
+    source.push_str(&format!(
+        "function use() {{ return [{}]; }}\n",
+        reads.join(", ")
+    ));
+    source.push_str(&def("0", "[]", ""));
+    source.push_str("__r(0);\n");
+    source
+}
+
+fn unpack_time(source: &str) -> std::time::Duration {
+    let alloc = Allocator::default();
+    let program = parse(&alloc, source);
+    let started = std::time::Instant::now();
+    let _ = unpack(&alloc, &program, &[]);
+    started.elapsed()
+}
+
+#[test]
+fn detection_time_grows_linearly_with_prefixes_and_prelude_vars() {
+    const SMALL: usize = 5_000;
+    const LARGE: usize = 40_000;
+    const LINEAR_FACTOR: u32 = 3;
+    for bundle in [prefixes_bundle, prelude_bundle] {
+        let small = unpack_time(&bundle(SMALL));
+        let large = unpack_time(&bundle(LARGE));
+        let bound =
+            small * (LARGE / SMALL) as u32 * LINEAR_FACTOR + std::time::Duration::from_millis(50);
+        assert!(
+            large < bound,
+            "{LARGE} took {large:?}, {SMALL} took {small:?}"
+        );
     }
 }

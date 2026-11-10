@@ -7,8 +7,8 @@ use oxc_str::{Ident, Str};
 use oxc_syntax::number::NumberBase;
 use rustc_hash::FxHashSet;
 
-use super::layout::module_id;
-use super::{DEPENDENCY_MAP_NAME, GLOBAL_NAME, IMPORT_ALL_NAME, IMPORT_DEFAULT_NAME};
+use super::layout::typed_id;
+use super::{DEPENDENCY_MAP_NAME, ENTRY_ID, GLOBAL_NAME, IMPORT_ALL_NAME, IMPORT_DEFAULT_NAME};
 use crate::matcher::argument_expression;
 use crate::specifier::ModulePaths;
 
@@ -45,6 +45,7 @@ pub struct Edit<'a, 'r> {
     pub shadowed: bool,
     pub escaped: bool,
     pub deps: &'r [(String, String)],
+    pub numeric: bool,
     pub paths: &'r ModulePaths,
     pub from: &'r str,
     pub prelude: &'r [String],
@@ -75,7 +76,7 @@ impl<'a> Edit<'a, '_> {
             && call.arguments.len() == 1
             && argument
                 .and_then(|argument| self.required_id(argument))
-                .is_some_and(|id| self.paths.contains_key(&id))
+                .is_some_and(|id| self.defined(&id).is_some())
     }
 
     fn check_call(&mut self, it: &mut CallExpression<'a>) {
@@ -127,8 +128,14 @@ impl<'a> Edit<'a, '_> {
             Expression::ComputedMemberExpression(member) => {
                 self.indexed(member).map(|(_, id)| id.clone())
             }
-            other => module_id(other),
+            other => typed_id(other)
+                .filter(|(_, numeric)| *numeric == self.numeric)
+                .map(|(id, _)| id),
         }
+    }
+
+    fn defined(&self, id: &str) -> Option<&str> {
+        (id != ENTRY_ID).then(|| self.paths.get(id)).flatten()
     }
 
     fn required_path(&mut self, call: &CallExpression<'a>) -> Option<String> {
@@ -138,8 +145,14 @@ impl<'a> Edit<'a, '_> {
         if callee.name != "require" || !self.free(callee) || call.arguments.len() != 1 {
             return None;
         }
-        let id = self.required_id(argument_expression(call.arguments.first()?)?)?;
-        match self.paths.get(&id) {
+        let argument = argument_expression(call.arguments.first()?)?;
+        let Some(id) = self.required_id(argument) else {
+            if let Some((id, _)) = typed_id(argument.without_parentheses()) {
+                self.missing.push(id);
+            }
+            return None;
+        };
+        match self.defined(&id) {
             Some(path) => Some(self.paths.specifier(self.from, path)),
             None => {
                 self.missing.push(id);

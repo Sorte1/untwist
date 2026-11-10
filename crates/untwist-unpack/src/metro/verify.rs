@@ -77,7 +77,7 @@ impl Member {
 
 #[derive(Default)]
 struct Contexts {
-    watched: Vec<String>,
+    watched: FxHashSet<String>,
     calls: FxHashSet<Span>,
     method_objects: FxHashSet<Span>,
     members: FxHashMap<Span, Member>,
@@ -96,10 +96,7 @@ impl Contexts {
     }
 
     fn watched_id(&self, id: &IdentifierReference<'_>) -> Option<Span> {
-        self.watched
-            .iter()
-            .any(|name| name == id.name.as_str())
-            .then_some(id.span)
+        self.watched.contains(id.name.as_str()).then_some(id.span)
     }
 
     fn watched_span(&self, expression: &Expression<'_>) -> Option<Span> {

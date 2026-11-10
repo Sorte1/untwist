@@ -155,7 +155,11 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   is refused, a minified or older runtime included, until its text is recorded. A file with no
   prelude (the names are free, as in a split or lazy bundle) is refused in the safe lane and
   unpacked with `--unsafe`, which takes the names on trust. A prelude polyfill that replaces the
-  loader without spelling its name (through a computed key) is not seen.
+  loader without spelling its name (through a computed key) is not seen. Module ids keep their type,
+  as in Metro's `Map`: every definition, dependency entry and `__r` target must be all numbers or all
+  strings, and an id `__proto__` or `index` is refused. A literal `require` argument of the other type
+  is left to `metroRequire`, whose table is a `Map` and which throws Metro's "Requiring unknown module"
+  for an id it does not hold.
 - **SystemJS.** The entry is the first named register (SystemJS's named-register extension never
   instantiates an anonymous register beside named ones). Setters must be plain binding, namespace or
   re-export forms, and static cycles are refused; `_context.meta` is refused rather than mapped to
