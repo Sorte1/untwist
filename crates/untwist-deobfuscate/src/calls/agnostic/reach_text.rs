@@ -36,7 +36,7 @@ impl<'a> Sites<'_, 'a> {
 
     pub(super) fn mark_opaque_text(&mut self, span: Span) {
         if self.watching_text(span) {
-            self.hit(span);
+            self.hit_text(span);
         }
         self.mark_code(span);
     }

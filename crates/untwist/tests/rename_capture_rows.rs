@@ -201,3 +201,15 @@ fn a_module_top_level_binding_may_still_take_a_shorthand_key() {
     let code = renamed(source, RenameMode::Simple, true);
     assert!(code.contains("{ status }"), "{code}");
 }
+
+#[test]
+fn top_level_lexicals_keep_their_names_when_a_script_element_runs_text() {
+    let source = "let _0x3 = 7;
+var s = document.createElement('script');
+s.text = 'console.log(_0x3)';
+document.head.appendChild(s);";
+    for mode in MODES {
+        let code = renamed(source, mode, true);
+        assert!(code.contains("let _0x3 = 7"), "{mode:?}: {code}");
+    }
+}
