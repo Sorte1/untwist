@@ -41,8 +41,8 @@ fn spinning_units() -> String {
         .map(|unit| {
             format!(
                 "function a{unit}() {{ var h = ['x{unit}']; a{unit} = function () {{ return h; }}; return a{unit}(); }}\n\
-                 function b{unit}(c, d) {{ var e = a{unit}(); b{unit} = function (f, g) {{ f = f - 0x0; \
-                 for (var i = 0; i < 99999; i++) {{ for (var j = 0; j < 99999; j++) {{ c = c + 1 - 1; }} }} \
+                 function b{unit}(c, d) {{ var e = a{unit}(); b{unit} = function (f, g) {{ f = f - 0x0; var t = 0; \
+                 for (var i = 0; i < 99999; i++) {{ for (var j = 0; j < 99999; j++) {{ t = t + 1 - 1; }} }} \
                  return e[f]; }}; return b{unit}(c, d); }}\nconsole.log(b{unit}(0x0));\n"
             )
         })
