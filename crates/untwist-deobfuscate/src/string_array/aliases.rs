@@ -1,10 +1,12 @@
 use super::*;
 use oxc_syntax::symbol::SymbolFlags;
+use untwist_core::ast_util::readonly::{scan_symbol_uses, SymbolUses};
 
 pub struct ArrayAlias {
     pub symbol: SymbolId,
     pub source: SymbolId,
     pub statement: Span,
+    pub init: Span,
     pub scope: ScopeId,
     pub index: usize,
 }
@@ -32,7 +34,7 @@ impl AliasSearch<'_> {
                     self.sites.arrays.insert(symbol, (scope, index));
                 }
             }
-            let Some((symbol, source)) = alias_of(statement, self.scoping) else {
+            let Some((symbol, source, init)) = alias_of(statement, self.scoping) else {
                 continue;
             };
             if self.scoping.symbol_scope_id(symbol) == scope {
@@ -40,6 +42,7 @@ impl AliasSearch<'_> {
                     symbol,
                     source,
                     statement: statement.span(),
+                    init,
                     scope,
                     index,
                 });
@@ -86,7 +89,7 @@ impl<'a> VisitJs<'a> for AliasSearch<'_> {
     }
 }
 
-fn alias_of(stmt: &Statement<'_>, scoping: &Scoping) -> Option<(SymbolId, SymbolId)> {
+fn alias_of(stmt: &Statement<'_>, scoping: &Scoping) -> Option<(SymbolId, SymbolId, Span)> {
     let Statement::VariableDeclaration(declaration) = stmt else {
         return None;
     };
@@ -107,7 +110,7 @@ fn alias_of(stmt: &Statement<'_>, scoping: &Scoping) -> Option<(SymbolId, Symbol
     if symbol == source {
         return None;
     }
-    Some((symbol, source))
+    Some((symbol, source, init.span))
 }
 
 pub(super) fn search_aliases(
@@ -123,12 +126,19 @@ pub(super) fn search_aliases(
     (search.sites, search.simple)
 }
 
-fn name_is_unique(scoping: &Scoping, name: &str) -> bool {
-    scoping
-        .symbol_ids()
-        .filter(|symbol| scoping.symbol_name(*symbol) == name)
-        .count()
-        == 1
+fn name_counts(
+    scoping: &Scoping,
+    roots: impl Iterator<Item = SymbolId>,
+) -> FxHashMap<String, usize> {
+    let mut counts: FxHashMap<String, usize> = roots
+        .map(|root| (scoping.symbol_name(root).to_owned(), 0))
+        .collect();
+    for symbol in scoping.symbol_ids() {
+        if let Some(count) = counts.get_mut(scoping.symbol_name(symbol)) {
+            *count += 1;
+        }
+    }
+    counts
 }
 
 fn root_name_reaches(scoping: &Scoping, alias: SymbolId, root: SymbolId) -> bool {
@@ -166,23 +176,46 @@ fn root_name_reaches(scoping: &Scoping, alias: SymbolId, root: SymbolId) -> bool
     })
 }
 
-fn binding_is_never_rewritten(program: &Program<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
-    scoping.symbol_redeclarations(symbol).is_empty()
-        && is_constant_binding(scoping, symbol)
-        && scan_object_uses(program, scoping, symbol).writes == 0
-}
-
-#[derive(Default)]
-struct Stability {
+struct Stability<'p, 'a> {
+    program: &'p Program<'a>,
+    symbols: FxHashSet<SymbolId>,
+    uses: Option<SymbolUses>,
     known: FxHashMap<SymbolId, bool>,
 }
 
-impl Stability {
-    fn of(&mut self, program: &Program<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
+impl<'p, 'a> Stability<'p, 'a> {
+    fn new(program: &'p Program<'a>, sites: &ArrayAliasSites) -> Self {
+        let symbols = sites
+            .aliases
+            .iter()
+            .flat_map(|alias| [alias.symbol, alias.source])
+            .chain(sites.arrays.keys().copied())
+            .collect();
+        Self {
+            program,
+            symbols,
+            uses: None,
+            known: FxHashMap::default(),
+        }
+    }
+
+    fn uses(&mut self, scoping: &Scoping) -> &SymbolUses {
+        let (program, symbols) = (self.program, &self.symbols);
+        self.uses
+            .get_or_insert_with(|| scan_symbol_uses(program, scoping, symbols))
+    }
+
+    fn of(&mut self, scoping: &Scoping, symbol: SymbolId) -> bool {
         if let Some(known) = self.known.get(&symbol) {
             return *known;
         }
-        let stable = binding_is_never_rewritten(program, scoping, symbol);
+        let stable = scoping.symbol_redeclarations(symbol).is_empty()
+            && is_constant_binding(scoping, symbol)
+            && self
+                .uses(scoping)
+                .of(symbol)
+                .map_or(0, |found| found.writes)
+                == 0;
         self.known.insert(symbol, stable);
         stable
     }
@@ -211,8 +244,7 @@ fn precedes(
 fn alias_roots(
     sites: &ArrayAliasSites,
     slots: &FxHashMap<SymbolId, (ScopeId, usize)>,
-    program: &Program<'_>,
-    stability: &mut Stability,
+    stability: &mut Stability<'_, '_>,
     scoping: &Scoping,
 ) -> FxHashMap<SymbolId, SymbolId> {
     let mut roots: FxHashMap<SymbolId, SymbolId> = FxHashMap::default();
@@ -229,7 +261,7 @@ fn alias_roots(
             if !precedes(slots, alias.source, alias) {
                 continue;
             }
-            if stability.of(program, scoping, alias.source) && !roots.contains_key(&alias.symbol) {
+            if stability.of(scoping, alias.source) && !roots.contains_key(&alias.symbol) {
                 roots.insert(alias.symbol, root);
                 progressed = true;
             }
@@ -241,9 +273,8 @@ fn alias_roots(
 fn resolved_root(
     sites: &ArrayAliasSites,
     roots: &FxHashMap<SymbolId, SymbolId>,
-    program: &Program<'_>,
     scoping: &Scoping,
-    stability: &mut Stability,
+    stability: &mut Stability<'_, '_>,
     alias: &ArrayAlias,
 ) -> Option<SymbolId> {
     let root = roots.get(&alias.symbol).copied()?;
@@ -254,40 +285,53 @@ fn resolved_root(
     if scope != alias.scope || index >= alias.index {
         return None;
     }
-    let stable =
-        stability.of(program, scoping, alias.symbol) && stability.of(program, scoping, root);
+    let stable = stability.of(scoping, alias.symbol) && stability.of(scoping, root);
     stable.then_some(root)
 }
 
 const ROTATION_METHODS: [&str; 2] = ["push", "shift"];
 
-fn alias_never_escapes(uses: &ObjectUses) -> bool {
+fn alias_never_escapes(uses: &ObjectUses, root: SymbolId, feeds: &Feeds) -> bool {
     uses.writes == 0
-        && uses.opaque == 0
+        && uses.opaque_spans.iter().all(|span| {
+            feeds
+                .get(span)
+                .is_some_and(|(fed_root, _)| *fed_root == root)
+        })
         && uses.reads.iter().all(|read| {
             super::canonical_index(&read.name).is_some()
                 || ROTATION_METHODS.contains(&read.name.as_str())
         })
 }
 
+type Feeds = FxHashMap<Span, (SymbolId, SymbolId)>;
+
 struct AliasPlan<'k> {
     alias: &'k ArrayAlias,
     root: SymbolId,
     reads: Vec<Span>,
+    feeds: Vec<SymbolId>,
+}
+
+struct Checking<'c> {
+    uses: &'c SymbolUses,
+    order: &'c InitOrder,
+    feeds: &'c Feeds,
+    names: &'c FxHashMap<String, usize>,
 }
 
 fn check_one_alias<'k>(
-    program: &Program<'_>,
     (alias, root): (&'k ArrayAlias, SymbolId),
-    order: &InitOrder,
+    checking: &Checking<'_>,
     cx: &mut Cx<'_, '_>,
 ) -> Option<AliasPlan<'k>> {
-    let uses = scan_object_uses(program, cx.scoping(), alias.symbol);
-    if !alias_never_escapes(&uses) {
+    let default = ObjectUses::default();
+    let uses = checking.uses.of(alias.symbol).unwrap_or(&default);
+    if !alias_never_escapes(uses, root, checking.feeds) {
         cx.note(notes::ARRAY_ALIAS_ESCAPES, Some(alias.statement));
         return None;
     }
-    if let Err(refused) = reads_are_initialised(&uses.reads, alias.statement, order) {
+    if let Err(refused) = reads_are_initialised(&uses.reads, alias.statement, checking.order) {
         refuse_read_before_declaration(
             refused,
             alias.symbol,
@@ -298,8 +342,8 @@ fn check_one_alias<'k>(
         return None;
     }
     let name = cx.scoping().symbol_name(root).to_string();
-    if !name_is_unique(cx.scoping(), &name) && !root_name_reaches(cx.scoping(), alias.symbol, root)
-    {
+    let unique = checking.names.get(name.as_str()) == Some(&1);
+    if !unique && !root_name_reaches(cx.scoping(), alias.symbol, root) {
         cx.note(
             notes::array_alias_name_not_unique(&name),
             Some(alias.statement),
@@ -312,7 +356,48 @@ fn check_one_alias<'k>(
         .filter(|read| !ROTATION_METHODS.contains(&read.name.as_str()))
         .map(|read| read.member_span)
         .collect();
-    Some(AliasPlan { alias, root, reads })
+    let feeds = uses
+        .opaque_spans
+        .iter()
+        .filter_map(|span| checking.feeds.get(span).map(|(_, fed)| *fed))
+        .collect();
+    Some(AliasPlan {
+        alias,
+        root,
+        reads,
+        feeds,
+    })
+}
+
+fn keep_fed_aliases(plans: &mut Vec<AliasPlan<'_>>, cx: &mut Cx<'_, '_>) {
+    let mut planned: FxHashSet<SymbolId> = plans.iter().map(|plan| plan.alias.symbol).collect();
+    let mut feeders: FxHashMap<SymbolId, Vec<SymbolId>> = FxHashMap::default();
+    let mut lost = Vec::new();
+    for plan in plans.iter() {
+        for fed in &plan.feeds {
+            feeders.entry(*fed).or_default().push(plan.alias.symbol);
+            if !planned.contains(fed) {
+                lost.push(plan.alias.symbol);
+            }
+        }
+    }
+    for symbol in &lost {
+        planned.remove(symbol);
+    }
+    while let Some(symbol) = lost.pop() {
+        for feeder in feeders.get(&symbol).into_iter().flatten() {
+            if planned.remove(feeder) {
+                lost.push(*feeder);
+            }
+        }
+    }
+    plans.retain(|plan| {
+        let kept = planned.contains(&plan.alias.symbol);
+        if !kept {
+            cx.note(notes::ARRAY_ALIAS_ESCAPES, Some(plan.alias.statement));
+        }
+        kept
+    });
 }
 
 fn keep_value_aliases(program: &Program<'_>, plans: &mut Vec<AliasPlan<'_>>, cx: &mut Cx<'_, '_>) {
@@ -369,6 +454,7 @@ fn record_unscanned_order(program: &Program<'_>, scoping: &Scoping) {
 fn checked_aliases<'k>(
     program: &Program<'_>,
     resolved: &[(&'k ArrayAlias, SymbolId)],
+    stability: &mut Stability<'_, '_>,
     cx: &mut Cx<'_, '_>,
 ) -> Vec<AliasPlan<'k>> {
     if resolved.is_empty() {
@@ -379,9 +465,20 @@ fn checked_aliases<'k>(
     let order = crate::init_order::scan_init_order(program, cx);
     #[cfg(debug_assertions)]
     crate::fused::check::record("alias-order", order.digest());
+    let feeds: Feeds = resolved
+        .iter()
+        .map(|(alias, root)| (alias.init, (*root, alias.symbol)))
+        .collect();
+    let names = name_counts(cx.scoping(), resolved.iter().map(|(_, root)| *root));
+    let checking = Checking {
+        uses: stability.uses(cx.scoping()),
+        order: &order,
+        feeds: &feeds,
+        names: &names,
+    };
     resolved
         .iter()
-        .filter_map(|(alias, root)| check_one_alias(program, (alias, *root), &order, cx))
+        .filter_map(|(alias, root)| check_one_alias((alias, *root), &checking, cx))
         .collect()
 }
 
@@ -394,17 +491,17 @@ pub(super) fn resolve_array_aliases<'a>(
         return FxHashSet::default();
     }
     let slots = declaration_slots(&sites);
-    let mut stability = Stability::default();
-    let roots = alias_roots(&sites, &slots, program, &mut stability, cx.scoping());
+    let mut stability = Stability::new(program, &sites);
+    let roots = alias_roots(&sites, &slots, &mut stability, cx.scoping());
     let resolved: Vec<(&ArrayAlias, SymbolId)> = sites
         .aliases
         .iter()
         .filter_map(|alias| {
-            resolved_root(&sites, &roots, program, cx.scoping(), &mut stability, alias)
+            resolved_root(&sites, &roots, cx.scoping(), &mut stability, alias)
                 .map(|root| (alias, root))
         })
         .collect();
-    let mut plans = checked_aliases(program, &resolved, cx);
+    let mut plans = checked_aliases(program, &resolved, &mut stability, cx);
     crate::proof::refuse_annex_b_bindings(
         &mut plans,
         |plan| (plan.alias.statement, [plan.alias.symbol, plan.root]),
@@ -413,6 +510,7 @@ pub(super) fn resolve_array_aliases<'a>(
     );
     keep_value_aliases(program, &mut plans, cx);
     keep_unreached_aliases(program, &mut plans, cx);
+    keep_fed_aliases(&mut plans, cx);
     let mut renames = Renames::new();
     let mut removals = StmtEdits::new();
     let mut renamed_into = FxHashSet::default();
