@@ -1,11 +1,14 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
-use oxc_ast_visit::{walk_mut, VisitMut};
+use oxc_ast_visit::{walk_mut, VisitJs, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_str::Ident;
+use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
+
+use crate::closed::HOST_NAMES;
 
 const MAX_UID_ATTEMPTS: u32 = 1000;
 
@@ -213,4 +216,95 @@ pub fn rename_binding<'a>(
     };
     apply.visit_program(program);
     apply.changes > 0
+}
+
+struct WrapperNames<'n> {
+    names: &'n [&'n str],
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for WrapperNames<'_> {
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.found |= self.names.contains(&it.name.as_str());
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, _flags: ScopeFlags) {
+        if let Some(id) = &it.id {
+            self.visit_binding_identifier(id);
+        }
+    }
+
+    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
+
+    fn visit_class(&mut self, it: &Class<'a>) {
+        if let Some(id) = &it.id {
+            self.visit_binding_identifier(id);
+        }
+    }
+}
+
+fn fresh_module_name(base: &str, scoping: &Scoping, used: &FxHashSet<String>) -> String {
+    let unresolved = scoping.root_unresolved_references();
+    (1..=MAX_UID_ATTEMPTS)
+        .map(|index| match index {
+            1 => format!("_{base}"),
+            _ => format!("_{base}{index}"),
+        })
+        .find(|candidate| {
+            !used.contains(candidate)
+                && !unresolved.contains_key(candidate.as_str())
+                && scoping
+                    .get_root_binding(Ident::from(candidate.as_str()))
+                    .is_none()
+                && !scoping
+                    .symbol_ids()
+                    .any(|symbol| scoping.symbol_name(symbol) == candidate)
+        })
+        .unwrap_or_else(|| format!("_{base}_{}", used.len()))
+}
+
+pub fn rename_wrapper_bindings<'a>(
+    alloc: &'a Allocator,
+    program: &mut Program<'a>,
+    params: &[&str],
+) -> usize {
+    if program.source_type.is_module() {
+        return 0;
+    }
+    let names: Vec<&str> = HOST_NAMES
+        .iter()
+        .copied()
+        .filter(|name| !params.contains(name))
+        .collect();
+    let mut probe = WrapperNames {
+        names: &names,
+        found: false,
+    };
+    probe.visit_program(program);
+    if !probe.found {
+        return 0;
+    }
+    let scoping = build_scoping(program).scoping;
+    let mut symbols: FxHashMap<SymbolId, Ident<'a>> = FxHashMap::default();
+    let mut used: FxHashSet<String> = FxHashSet::default();
+    for name in names {
+        let Some(symbol) = scoping.get_root_binding(Ident::from(name)) else {
+            continue;
+        };
+        let uid = fresh_module_name(name, &scoping, &used);
+        symbols.insert(symbol, Ident::from_str_in(&uid, &alloc));
+        used.insert(uid);
+    }
+    if symbols.is_empty() {
+        return 0;
+    }
+    let free: FxHashMap<&str, Ident<'a>> = FxHashMap::default();
+    let mut apply = Apply {
+        free: &free,
+        symbols: &symbols,
+        scoping: &scoping,
+        changes: 0,
+    };
+    apply.visit_program(program);
+    apply.changes
 }

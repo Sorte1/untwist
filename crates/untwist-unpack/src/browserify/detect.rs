@@ -9,7 +9,7 @@ use crate::matcher::{
 };
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module, RequireParam};
 use crate::path::PosixPath;
-use crate::rename::rename_factory_parameters;
+use crate::rename::{rename_factory_parameters, rename_wrapper_bindings};
 use crate::UnpackOptions;
 
 pub const BROWSERIFY_PARAMS: [&str; 3] = ["require", "module", "exports"];
@@ -227,6 +227,7 @@ pub fn detect_browserify_with<'a>(
         )
         .into_iter()
         .find_map(|(index, name)| (index == REQUIRE_PARAM).then_some(name));
+        rename_wrapper_bindings(alloc, &mut program, &params);
         let is_entry = entry.id == entry_id;
         let mut module = Module::new(entry.id.clone(), program, is_entry);
         module.dependencies = entry.dependencies;

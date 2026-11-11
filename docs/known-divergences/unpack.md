@@ -131,6 +131,14 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   `require`, `module`, `exports`, `__filename` or `__dirname` the bundler did not map is refused
   (except a bare `require("pkg")` of a host package, which is kept as the host's), since the
   written file would see a different value.
+- **Wrapper names a module declares itself are renamed.** A factory body (or an unwrapped entry)
+  that declares `require`, `module`, `exports`, `__filename` or `__dirname` itself, where that name
+  is not one of the factory's own parameters, gets the binding renamed (`_require`, ...) in the
+  written CommonJS file: node's wrapper binds those names, so a `let` would no longer parse and an
+  uninitialised `var` would read the wrapper's value instead of `undefined`.
+- **esbuild's `__require` shim in an ES-module bundle.** Without the `createRequire` banner the
+  shim finds no `require` and throws "Dynamic require ... is not supported"; such a bundle is not
+  split, since a written CommonJS file would load the module instead.
 - **Rollup/Vite scope hoisting is opt-in: `--split-hoisted`.** A hoisted bundle has no module
   boundaries of its own, so the split is a heuristic over the wrapper's top-level declarations
   (clusters by reference adjacency, a binding's writers kept with its owner). It is refused for a

@@ -9,7 +9,7 @@ use super::{candidates, moved_helpers, ENTRY_ID, GLOBAL_PARAM, HOISTED_NAMES, RE
 use crate::esbuild::mentions::names_anywhere;
 use crate::matcher::{expression_statement, param_names};
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module, Runtime};
-use crate::rename::rename_factory_parameters;
+use crate::rename::{rename_factory_parameters, rename_wrapper_bindings};
 use crate::runtime::{js_string, runtime_module, synthetic_statements};
 
 fn prepend<'a>(program: &mut Program<'a>, statements: AVec<'a, Statement<'a>>) {
@@ -72,6 +72,7 @@ fn registry_module<'a>(
             global_prologue(alloc, &mut program, &fresh)?;
         }
     }
+    rename_wrapper_bindings(alloc, &mut program, &params);
     Some((program, require))
 }
 
@@ -270,13 +271,11 @@ fn hoisted<'a>(
         programs.iter().flat_map(|p| p.body.iter()),
     );
     if !chunk {
+        let mut entry = entry_program(alloc, source, layout, &moved);
+        rename_wrapper_bindings(alloc, &mut entry, &[]);
         bundle.modules.insert(
             ENTRY_ID.to_string(),
-            Module::new(
-                ENTRY_ID.to_string(),
-                entry_program(alloc, source, layout, &moved),
-                true,
-            ),
+            Module::new(ENTRY_ID.to_string(), entry, true),
         );
     }
     if !moved.is_empty() {
@@ -286,12 +285,9 @@ fn hoisted<'a>(
     for (def, mut program) in layout.defs.iter().zip(programs) {
         let body = def.body()?;
         program.directives = body.directives.clone_in(alloc);
-        renamed(
-            alloc,
-            &mut program,
-            &param_names(&def.function.params),
-            &HOISTED_NAMES,
-        );
+        let params = param_names(&def.function.params);
+        renamed(alloc, &mut program, &params, &HOISTED_NAMES);
+        rename_wrapper_bindings(alloc, &mut program, &params);
         bundle
             .modules
             .insert(def.id.clone(), Module::new(def.id.clone(), program, false));

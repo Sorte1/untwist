@@ -11,7 +11,7 @@ use crate::esbuild::mentions::mentioned;
 use crate::matcher::param_names;
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module, Runtime};
 use crate::path::PosixPath;
-use crate::rename::rename_parameters_uncaptured;
+use crate::rename::{rename_parameters_uncaptured, rename_wrapper_bindings};
 use crate::runtime::{declared_names, live_runtime_module, runtime_id};
 
 pub const ENTRY_ID: &str = "index";
@@ -22,6 +22,7 @@ pub struct Plan<'k, 'a> {
     pub scope: Scope<'k, 'a>,
     pub layout: Layout<'k, 'a>,
     pub strict: bool,
+    pub module: bool,
 }
 
 pub fn has_use_strict(directives: &[Directive<'_>]) -> bool {
@@ -299,6 +300,13 @@ fn entry_statements<'a>(
     out
 }
 
+fn wrapper_params<'k>(plan: &Plan<'k, '_>) -> Vec<&'k str> {
+    match plan.scope.function.filter(|_| plan.scope.host == Host::Bun) {
+        Some(wrapper) => param_names(wrapper.params),
+        None => Vec::new(),
+    }
+}
+
 fn entry_program<'a>(
     alloc: &'a Allocator,
     source: &Program<'a>,
@@ -356,7 +364,8 @@ pub fn bundle<'a>(
     let ids = factory_ids(source, list, &plan.layout, !moved.is_empty());
     let names = factory_names(&plan.layout);
     let mut bundle = Bundle::new(BundleKind::Esbuild, Some(ENTRY_ID.to_string()));
-    let entry = entry_program(alloc, source, plan, moved);
+    let mut entry = entry_program(alloc, source, plan, moved);
+    rename_wrapper_bindings(alloc, &mut entry, &wrapper_params(plan));
     let mut entry = Module::new(ENTRY_ID.to_string(), entry, true);
     let mut found: Vec<usize> = mentioned(&names, entry.program().body.iter())
         .into_iter()
@@ -378,6 +387,7 @@ pub fn bundle<'a>(
         {
             rename_parameters_uncaptured(alloc, &mut program, &params, &MODULE_PARAMS);
         }
+        rename_wrapper_bindings(alloc, &mut program, &params);
         let mut module = Module::new(id.clone(), program, false);
         module.dependencies = named(found, &plan.layout, &ids);
         bundle.modules.insert(id.clone(), module);
