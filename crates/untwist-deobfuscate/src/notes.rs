@@ -83,7 +83,6 @@ pub const WRAPPER_READ_BEFORE_DECLARATION: &str =
 pub const WRAPPER_PARTIAL: &str = "wrapper kept,";
 pub const WRAPPER_ROUNDS: &str = "decoder wrappers did not settle after";
 
-pub const TERNARY_NOT_FOUND: &str = "the decoder's ternary argument could not be split";
 pub const TERNARY_HOLDS_A_SCOPE: &str =
     "the decoder's ternary argument holds a function, arrow or class whose scopes the split clone \
      cannot carry, so the call site was left alone";
@@ -717,7 +716,6 @@ catalogue!(
     WRAPPER_ALIAS_NO_SPAN,
     WRAPPER_BODY_MISSING,
     WRAPPER_ROUNDS,
-    TERNARY_NOT_FOUND,
     DECODE_PARTIAL,
     MACHINERY_NO_USABLE_SPAN,
     MACHINERY_PARTIAL_REMOVAL,
