@@ -1,0 +1,15 @@
+ref-arguments-destructured-from-a-callable-value|var h = function () { return 1; }; var r; try { var { arguments: a } = h; r = typeof a; } catch (e) { r = "threw"; } console.log(h(), r);
+ref-arguments-of-a-defaulted-parameter|function f(b, a) { if (a === void 0) a = 1; return f.arguments[1]; } console.log(f(0, undefined));
+ref-arguments-of-a-method|var o = { m: function (a) { a = 2; return o.m.arguments[0]; } }; console.log(o.m(1));
+ref-arguments-read-through-a-literal-key|function f(a) { a = 5; return f["arguments"][0]; } console.log(f(1));
+ref-arguments-read-with-a-dot|function f(a) { a = 5; return f.arguments[0]; } console.log(f(1));
+ref-caller-destructured-from-a-passed-callback|function g(f) { try { var { caller } = f; return typeof caller; } catch (e) { return "threw"; } } console.log(g(function () { return 1; }));
+ref-caller-literal-key-on-a-callable-value|var h = function () { return 1; }; var r; try { r = typeof h["caller"]; } catch (e) { r = "threw"; } console.log(h(), r);
+ref-caller-of-a-callback|function g() { return g.caller === null ? "null" : typeof g.caller; } console.log([1].map(function (x) { return g(); })[0]);
+ref-caller-of-a-reassigned-parameter|function g() { return g.caller === f ? "f" : "other"; } function f(a) { a = 5; return g() + a; } console.log(f(1));
+ref-caller-read-by-destructuring|var h = function () { var { caller } = h; return typeof caller; }; console.log(h());
+ref-caller-read-on-a-callable-value|var h = function () { return 1; }; var r; try { r = typeof h.caller; } catch (e) { r = "threw"; } console.log(h(), r);
+ref-caller-read-on-a-function-expression|var h = function () { return typeof h.caller; }; console.log(h());
+ref-caller-read-on-a-passed-callback|function g(f) { try { return typeof f.caller; } catch (e) { return "threw"; } } console.log(g(function () { return 1; }));
+ref-caller-read-through-a-literal-key|var h = function () { return typeof h["caller"]; }; console.log(h());
+ref-caller-sees-the-calling-function|function g() { return typeof g.caller.prototype; } function main() { var h = function () { return g(); }; return h(); } console.log(main());

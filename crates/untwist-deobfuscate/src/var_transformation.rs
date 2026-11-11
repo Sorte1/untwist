@@ -9,6 +9,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::edit::StmtEdits;
+use untwist_core::ast_util::frame_reads::reads_function_frame;
 use untwist_core::ast_util::rename::{unique_name, Renames};
 use untwist_core::ast_util::search::statement_at;
 use untwist_core::pass::{Cx, Interest, Pass};
@@ -321,7 +322,8 @@ impl<'a> Pass<'a> for VarTransformation {
             return;
         }
         let facts = collect(program, cx.scoping());
-        if facts.aliases_arguments {
+        if facts.aliases_arguments || (!cx.opts.unsafe_transforms && reads_function_frame(program))
+        {
             cx.note(notes::VAR_ARGUMENTS_PROPERTY_ALIAS, None);
             return;
         }

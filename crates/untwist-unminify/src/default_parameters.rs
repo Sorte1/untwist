@@ -3,6 +3,7 @@ use oxc_allocator::{Box as ABox, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_span::SPAN;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use untwist_core::ast_util::frame_reads::reads_function_frame;
 use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::pass::{Cx, Interest, Locality, Pass};
 
@@ -13,10 +14,12 @@ use guards::{Host, Moved};
 const MAX_PARAMETER_INDEX: usize = 256;
 
 #[derive(Default)]
-pub struct DefaultParameters;
+pub struct DefaultParameters {
+    frame_read: bool,
+}
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
-    Box::new(DefaultParameters)
+    Box::new(DefaultParameters::default())
 }
 
 #[derive(Clone, Copy)]
@@ -37,10 +40,17 @@ impl<'a> Pass<'a> for DefaultParameters {
     }
 
     fn interest(&self) -> Interest {
-        Interest::EXIT_FUNCTION
+        Interest::ENTER_PROGRAM | Interest::EXIT_FUNCTION
+    }
+
+    fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        self.frame_read = !cx.opts.unsafe_transforms && reads_function_frame(program);
     }
 
     fn exit_function(&mut self, node: &mut Function<'a>, cx: &mut Cx<'a, '_>) {
+        if self.frame_read {
+            return;
+        }
         let Some(host) = guards::host(node, cx) else {
             return;
         };
