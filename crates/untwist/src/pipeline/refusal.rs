@@ -19,6 +19,24 @@ use crate::bundle::BundleOutput;
 use crate::options::Progress;
 use untwist_core::budget::{Hit, Limits};
 
+const HOG_CHUNK_BYTES: usize = 1 << 20;
+const HOG_CHUNKS: usize = 1 << 10;
+const STALL_STEP: std::time::Duration = std::time::Duration::from_millis(50);
+const STALL_STEPS: u32 = 600;
+
+fn hog() {
+    let held: Vec<Vec<u8>> = (0..HOG_CHUNKS)
+        .map(|_| std::hint::black_box(Vec::with_capacity(HOG_CHUNK_BYTES)))
+        .collect();
+    drop(std::hint::black_box(held));
+}
+
+fn stall() {
+    for _ in 0..STALL_STEPS {
+        std::thread::sleep(STALL_STEP);
+    }
+}
+
 pub const NESTED_TOO_DEEP: &str = "this input nests deeper than untwist can parse on its stack; \
      it is passed through unchanged";
 
@@ -158,6 +176,16 @@ impl Pipeline {
         }
     }
 
+    fn load_as_the_hooks_say(&self, index: usize) {
+        let hooks = self.options.hooks();
+        if hooks.hog == Some(index) {
+            hog();
+        }
+        if hooks.stall == Some(index) {
+            stall();
+        }
+    }
+
     fn admit<'p>(&self, index: usize, source: &str, stack: &StackReserve<'p>) -> Admitted<'p> {
         if self.options.hooks().admit_panic == Some(index) {
             std::panic::panic_any(ADMIT_PANIC_HOOK);
@@ -170,6 +198,7 @@ impl Pipeline {
             stack.give_up(index);
             return Err(TOO_LARGE_FOR_THE_BUDGET);
         }
+        self.load_as_the_hooks_say(index);
         if self.options.hooks().scan_off {
             return Ok((stack.reserve(index, MIB), None));
         }

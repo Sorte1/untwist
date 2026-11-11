@@ -29,7 +29,15 @@ worker sets its `oom_score_adj` to 1000 on Linux, so a host-wide OOM kill picks 
 under systemd's default `OOMPolicy=stop` (a service or scope with `MemoryMax=`), or in a cgroup
 with `memory.oom.group=1`, a memory kill stops the whole unit, the CLI included, and nothing is
 refused. Set `OOMPolicy=continue` on such a unit. The `UNTWIST_INTERNAL_*` variables are internal
-to that protocol. `UNTWIST_TEST_SUPERVISOR=off` runs without the worker, for measurement only; the
+to that protocol. Windows builds, `UNTWIST_TEST_SUPERVISOR=off` (for measurement) and a host that cannot start a
+worker run the pipeline in the CLI's own process. There `--max-memory` and `--timeout` stay hard
+stops: at the full memory cap the allocating thread is parked, and past the timeout and its grace
+a watchdog takes over; either way the run is repeated in the same process with the inputs that
+were in progress refused (`budget-memory` or `budget-time`, as above), under a raised cap and, for
+time, with no time left, and the process exits with that run's code. If that repeat runs out of
+memory again or takes longer than the time left plus ten seconds, the CLI exits `1` with no
+output. A crash (stack overflow, failed allocation) has no repeat in this mode: it ends the run
+with no output for any input. The
 other `UNTWIST_TEST_*` hooks exist only in builds with the `test-hooks` feature (the README's
 "Test hooks").
 

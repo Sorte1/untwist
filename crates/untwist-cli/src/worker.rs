@@ -218,6 +218,7 @@ pub fn run(args: &Args) -> u8 {
         preflight: false,
         options,
         emitted: &emitted,
+        inputs_read: &|_| {},
     };
     crate::finish(args, &mut session)
 }

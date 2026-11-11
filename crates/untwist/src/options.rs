@@ -56,6 +56,8 @@ pub struct TestHooks {
     pub scan_off: bool,
     pub heap_budget: Option<u64>,
     pub admit_panic: Option<usize>,
+    pub stall: Option<usize>,
+    pub hog: Option<usize>,
     pub layer_stub: Option<&'static [(&'static str, &'static str)]>,
     pub refusal_spans: bool,
     pub points_to: bool,

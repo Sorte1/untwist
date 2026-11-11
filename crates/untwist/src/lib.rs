@@ -33,7 +33,8 @@ pub use report::{stage_rows, StageReport, StageRow};
 pub use stats::{CollisionStats, DecodeStats, RunStats};
 pub use untwist_core::budget::{
     memory_size as budget_memory_size, set_hard_limit as set_hard_memory_limit,
-    timeout_secs as budget_timeout_secs, CountingAlloc, Hit as BudgetHit,
+    timeout_secs as budget_timeout_secs, working_total as budget_working_total, CountingAlloc,
+    Hit as BudgetHit,
 };
 pub use untwist_core::pass::{IterationTiming, Note, NoteKind, PassCtor, StopReason};
 pub use untwist_core::source_map::{self, Coverage, OwnedSourceMap};

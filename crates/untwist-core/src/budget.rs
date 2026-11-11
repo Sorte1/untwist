@@ -108,6 +108,10 @@ pub fn set_hard_limit(bytes: u64, action: fn()) {
     HARD.store(signed_u64(bytes), Ordering::Relaxed);
 }
 
+pub fn working_total() -> u64 {
+    u64::try_from(WORKING.load(Ordering::Relaxed)).unwrap_or(0)
+}
+
 pub fn process_total() -> u64 {
     u64::try_from(TOTAL.load(Ordering::Relaxed)).unwrap_or(0)
 }

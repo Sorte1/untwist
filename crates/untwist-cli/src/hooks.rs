@@ -7,6 +7,8 @@ pub const LADDER_FIRST: &str = "UNTWIST_TEST_LADDER_FIRST";
 pub const SCAN_OFF: &str = "UNTWIST_TEST_SCAN_OFF";
 pub const HEAP_BUDGET: &str = "UNTWIST_TEST_HEAP_BUDGET";
 pub const ADMIT_PANIC: &str = "UNTWIST_TEST_ADMIT_PANIC";
+pub const STALL: &str = "UNTWIST_TEST_STALL";
+pub const HOG: &str = "UNTWIST_TEST_HOG";
 pub const REFUSAL_SPANS: &str = "UNTWIST_TEST_REFUSAL_SPANS";
 pub const POINTS_TO: &str = "UNTWIST_TEST_POINTS_TO";
 pub const WASM_PANIC: &str = "UNTWIST_TEST_WASM_PANIC";
@@ -69,6 +71,8 @@ pub fn test_hooks_from(read: impl Fn(&str) -> Option<std::ffi::OsString>) -> unt
             .filter(|bytes| *bytes > 0)
             .map(|bytes| bytes as u64),
         admit_panic: number(read(ADMIT_PANIC).as_deref()),
+        stall: number(read(STALL).as_deref()),
+        hog: number(read(HOG).as_deref()),
         layer_stub: None,
         refusal_spans: flag(read(REFUSAL_SPANS).as_deref()),
         points_to: flag(read(POINTS_TO).as_deref()),
@@ -103,7 +107,7 @@ pub fn test_hooks() -> untwist::TestHooks {
 mod tests {
     use super::{
         role, supervisor_hook_from, test_hooks_from, Role, SupervisorHook, ADMIT_PANIC,
-        HEAP_BUDGET, LADDER_FIRST, LADDER_REFUSE, POINTS_TO, REFUSAL_SPANS, SCAN_OFF,
+        HEAP_BUDGET, HOG, LADDER_FIRST, LADDER_REFUSE, POINTS_TO, REFUSAL_SPANS, SCAN_OFF, STALL,
     };
     use std::ffi::{OsStr, OsString};
 
@@ -189,8 +193,11 @@ mod tests {
             (ADMIT_PANIC, "3"),
             (REFUSAL_SPANS, "1"),
             (POINTS_TO, "1"),
+            (STALL, "1"),
+            (HOG, "0"),
         ]));
         assert_eq!(hooks.admit_panic, Some(3));
+        assert_eq!((hooks.stall, hooks.hog), (Some(1), Some(0)));
         assert!(hooks.refusal_spans);
         assert!(hooks.points_to);
         assert_eq!(hooks.ladder_refuse, 2);
