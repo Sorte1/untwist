@@ -11,7 +11,7 @@ use crate::compile::{Code, Compiler, Lazy, LazyExpr, Reach};
 use crate::env::hoist_function_declarations;
 use crate::frame::{Frame, FrameLayout, FrameRef, SlotKind};
 use crate::interp::Interp;
-use crate::ops::strict_equals;
+use crate::ops::charged_strict_equals;
 use crate::semantics::statements::{block_declares_bindings, declares_function, ANNEX_B_FUNCTION};
 use crate::value::{Abrupt, Completion, Eval, FnCode, Value};
 
@@ -280,7 +280,8 @@ impl<'a> Switch<'a> {
             let Some(test) = &case.test else {
                 continue;
             };
-            if strict_equals(&discriminant, &test.eval(interp, &scope, reach)?) {
+            let value = test.eval(interp, &scope, reach)?;
+            if charged_strict_equals(&discriminant, &value, interp)? {
                 start = Some(index);
                 break;
             }

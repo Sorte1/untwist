@@ -148,3 +148,92 @@ fn a_memory_budget_hit_is_deterministic() {
     assert_eq!(first.code(), second.code());
     assert_eq!(notes_of(&first), notes_of(&second));
 }
+
+const DOLLAR_TEMPLATE_PROBE: &str = r#"function _0xarr() { var h = ['hello','world','foo','bar']; _0xarr = function () { return h; }; return _0xarr(); }
+function _0xdec(c, d) {
+  var e = _0xarr();
+  _0xdec = function (f, g) { f = f - 0; var h = e[f]; var s = "x"; for (var i = 0; i < 23; i++) s += s; var r = "$'"; for (var i = 0; i < 10; i++) r += r; r = r.slice(0, 2048); try { h = h + s.replace("x", r).length; } catch (z) { h = h + "caught"; } return h; };
+  return _0xdec(c, d);
+}
+console.log(_0xdec(0));
+"#;
+
+#[test]
+fn a_replace_template_that_repeats_the_subject_is_refused_inside_the_memory_budget() {
+    let output = under_memory(DOLLAR_TEMPLATE_PROBE, 256 << 20);
+    assert!(output.budget_hits.is_empty(), "{:?}", notes_of(&output));
+    assert!(output.panicked.is_empty());
+    assert!(output.code().contains("_0xdec(0)"), "{}", output.code());
+}
+
+#[test]
+fn each_replace_template_form_is_refused_inside_the_memory_budget() {
+    for (template, pattern) in [
+        ("$&", "/x+/"),
+        ("$`", "/x$/"),
+        ("$'", "/x/"),
+        ("$1$'", "/(x)/"),
+    ] {
+        let source = DOLLAR_TEMPLATE_PROBE
+            .replace("var r = \"$'\"", &format!("var r = \"{template}\""))
+            .replace("s.replace(\"x\", r)", &format!("s.replace({pattern}, r)"));
+        let output = under_memory(&source, 256 << 20);
+        assert!(
+            output.budget_hits.is_empty(),
+            "{template}: {:?}",
+            notes_of(&output)
+        );
+        assert!(
+            output.code().contains("_0xdec(0)"),
+            "{template}: {}",
+            output.code()
+        );
+    }
+}
+
+fn small_decoder(body: &str) -> String {
+    DOLLAR_TEMPLATE_PROBE.replace(
+        "var s = \"x\"; for (var i = 0; i < 23; i++) s += s; var r = \"$'\"; for (var i = 0; i < 10; i++) r += r; r = r.slice(0, 2048); try { h = h + s.replace(\"x\", r).length; } catch (z) { h = h + \"caught\"; }",
+        body,
+    )
+}
+
+fn assert_refused_inside_the_budget(body: &str) {
+    let source = small_decoder(body);
+    assert_ne!(source, DOLLAR_TEMPLATE_PROBE);
+    let output = under_memory(&source, 256 << 20);
+    assert!(
+        output.budget_hits.is_empty(),
+        "{body}: {:?}",
+        notes_of(&output)
+    );
+    assert!(output.panicked.is_empty());
+    assert!(
+        output.code().contains("_0xdec(0)"),
+        "{body}: {}",
+        output.code()
+    );
+}
+
+#[test]
+fn regexp_source_strings_kept_in_an_array_are_refused_inside_the_memory_budget() {
+    assert_refused_inside_the_budget(
+        "var p = \"\"; for (var i = 0; i < 4096; i++) p += \"/\"; var re = new RegExp(p); var q = []; for (var i = 0; i < 20000; i++) q.push(re.toString()); h = h + q.length;",
+    );
+}
+
+#[test]
+fn the_keys_of_a_long_string_are_refused_inside_the_memory_budget() {
+    for read in ["Object.keys(s)", "Object.values(s)", "Object.assign({}, s)"] {
+        assert_refused_inside_the_budget(&format!(
+            "var s = \"x\"; for (var i = 0; i < 24; i++) s += s; h = h + typeof {read};"
+        ));
+    }
+}
+
+#[test]
+fn a_regexp_over_a_long_non_ascii_string_is_refused_inside_the_memory_budget() {
+    assert_refused_inside_the_budget(
+        "var s = \"\\u00e9\"; for (var i = 0; i < 23; i++) s += s; h = h + /y/.test(s);",
+    );
+}

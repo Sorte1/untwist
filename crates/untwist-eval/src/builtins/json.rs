@@ -443,7 +443,7 @@ fn write_json_object<'a>(
     let mut out = Utf16Builder::charged(reserve_text(host, 0)?);
     out.push(&JsString::from_str("{"))?;
     let mut first = true;
-    for key in own_keys(value)? {
+    for key in own_keys(host, value)? {
         let member = host.get_property(value, &string_key(key.clone()))?;
         let Some(rendered) = write_json(host, &member, stack)? else {
             continue;

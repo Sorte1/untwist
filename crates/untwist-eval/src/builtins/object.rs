@@ -1,6 +1,7 @@
 use oxc_ast::ast::{Expression, ObjectProperty, PropertyKey, PropertyKind};
 
 use crate::bail::{Bail, ErrorKind, EvalResult};
+use crate::budget::ARRAY_LEN_CAP;
 use crate::builtins::args::{
     adopt_array, adopt_charge, argument, grow_object, heap_checkpoint, live_array, reserve_array,
     text_bytes, write_property,
@@ -49,7 +50,39 @@ pub fn unmodelled_literal_entry(entry: &ObjectProperty<'_>) -> Option<&'static &
     None
 }
 
-pub fn own_keys<'a>(target: &Value<'a>) -> EvalResult<Vec<JsString>> {
+const FRESH_KEY_UNITS: usize = 10;
+
+fn key_count(target: &Value<'_>) -> usize {
+    let Some(obj) = target.as_object() else {
+        return match target {
+            Value::Str(text) => text.len(),
+            _ => 0,
+        };
+    };
+    let borrowed = obj.borrow();
+    let dense = match &borrowed.kind {
+        ObjKind::Array(items) | ObjKind::Arguments(items) => items.len(),
+        ObjKind::MappedArguments(mapped) => mapped.items.len(),
+        _ => 0,
+    };
+    dense + borrowed.props.len()
+}
+
+fn charge_keys<'a>(host: &mut dyn Host<'a>, keys: usize) -> EvalResult<Option<Charge>> {
+    if keys > ARRAY_LEN_CAP {
+        return Err(Bail::ArrayLength);
+    }
+    host.spend(1 + keys as u64)?;
+    let slot = std::mem::size_of::<JsString>() as u64 + text_bytes(FRESH_KEY_UNITS);
+    host.reserve_live((keys as u64).saturating_mul(slot))
+}
+
+pub fn own_keys<'a>(host: &mut dyn Host<'a>, target: &Value<'a>) -> EvalResult<Vec<JsString>> {
+    let _held = charge_keys(host, key_count(target))?;
+    own_keys_uncharged(target)
+}
+
+pub fn own_keys_uncharged(target: &Value<'_>) -> EvalResult<Vec<JsString>> {
     crate::state::note_key_observation(target);
     crate::unmodelled::refuse_unmodelled_keys(target)?;
     let Some(obj) = target.as_object() else {
@@ -57,12 +90,12 @@ pub fn own_keys<'a>(target: &Value<'a>) -> EvalResult<Vec<JsString>> {
     };
     crate::object::refuse_undefined_array_items(obj)?;
     let borrowed = obj.borrow();
-    let mut keys = Vec::new();
     let dense_len = match &borrowed.kind {
         ObjKind::Array(items) | ObjKind::Arguments(items) => Some(items.len()),
         ObjKind::MappedArguments(mapped) => Some(mapped.items.len()),
         _ => None,
     };
+    let mut keys = Vec::with_capacity(dense_len.unwrap_or(0) + borrowed.props.len());
     if let Some(len) = dense_len {
         for index in 0..len {
             keys.push(number_to_js_string(index as f64));
@@ -193,7 +226,8 @@ fn native_keys<'a>(
     _this: Value<'a>,
     args: &[Value<'a>],
 ) -> Eval<'a, Value<'a>> {
-    let keys = own_keys(&keyed(host, args)?)?;
+    let target = keyed(host, args)?;
+    let keys = own_keys(host, &target)?;
     let fresh = reserve_fresh_keys(host, &keys)?;
     let keys = keys.into_iter().map(Value::Str).collect::<Vec<_>>();
     let reserved = reserve_array(host, keys.capacity())?;
@@ -220,7 +254,7 @@ fn native_values<'a>(
 ) -> Eval<'a, Value<'a>> {
     let target = keyed(host, args)?;
     let mut out = Vec::new();
-    for (done, key) in own_keys(&target)?.into_iter().enumerate() {
+    for (done, key) in own_keys(host, &target)?.into_iter().enumerate() {
         heap_checkpoint(host, done)?;
         out.push(host.get_property(&target, &string_key(key))?);
     }
@@ -234,7 +268,7 @@ fn native_entries<'a>(
 ) -> Eval<'a, Value<'a>> {
     let target = keyed(host, args)?;
     let mut out = Vec::new();
-    for (done, key) in own_keys(&target)?.into_iter().enumerate() {
+    for (done, key) in own_keys(host, &target)?.into_iter().enumerate() {
         heap_checkpoint(host, done)?;
         let fresh = reserve_fresh_keys(host, std::slice::from_ref(&key))?;
         let value = host.get_property(&target, &string_key(key.clone()))?;
@@ -262,7 +296,7 @@ fn native_assign<'a>(
     };
     for source in args.iter().skip(1) {
         host.refuse_global_object(source)?;
-        for key in own_keys(source)? {
+        for key in own_keys(host, source)? {
             if key.eq_str("__proto__") {
                 return Err(Bail::Unsupported(&"Object.assign of an own __proto__ key").into());
             }

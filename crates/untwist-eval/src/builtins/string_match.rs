@@ -104,43 +104,76 @@ fn capture_reference(units: &[u16], at: usize, captures: usize) -> Option<(usize
     Some((first, 1))
 }
 
-fn expand_replacement(template: &JsString, text: &JsString, found: &RegExpMatch) -> JsString {
+fn expand_replacement(
+    out: &mut Utf16Builder,
+    template: &JsString,
+    text: &JsString,
+    found: &RegExpMatch,
+) -> EvalResult<()> {
     let units = template.units();
-    let mut out: Vec<u16> = Vec::with_capacity(units.len());
     let mut index = 0;
     while index < units.len() {
-        if units[index] != DOLLAR || index + 1 >= units.len() {
-            out.push(units[index]);
-            index += 1;
-            continue;
+        let literal = units[index..]
+            .iter()
+            .position(|&unit| unit == DOLLAR)
+            .map_or(units.len(), |at| index + at);
+        out.push_units(&units[index..literal])?;
+        index = literal;
+        if index + 1 >= units.len() {
+            out.push_units(&units[index..])?;
+            break;
         }
-        let next = units[index + 1];
-        if next == DOLLAR {
-            out.push(DOLLAR);
-            index += 2;
-        } else if next == u16::from(b'&') {
-            out.extend_from_slice(slice(text, &found.range).units());
-            index += 2;
-        } else if next == u16::from(b'`') {
-            out.extend_from_slice(slice(text, &(0..found.range.start)).units());
-            index += 2;
-        } else if next == u16::from(b'\'') {
-            out.extend_from_slice(slice(text, &(found.range.end..text.len())).units());
-            index += 2;
-        } else if let Some((group, width)) = capture_reference(units, index + 1, found.groups.len())
-        {
-            match group.checked_sub(1).and_then(|at| found.groups.get(at)) {
-                Some(Some(range)) => out.extend_from_slice(slice(text, range).units()),
-                Some(None) => {}
-                None => out.extend_from_slice(&units[index..index + 1 + width]),
-            }
-            index += 1 + width;
-        } else {
-            out.push(DOLLAR);
-            index += 1;
-        }
+        index += expand_reference(out, units, index, text, found)?;
     }
-    JsString::from_units(out)
+    Ok(())
+}
+
+fn expand_reference(
+    out: &mut Utf16Builder,
+    units: &[u16],
+    index: usize,
+    text: &JsString,
+    found: &RegExpMatch,
+) -> EvalResult<usize> {
+    let next = units[index + 1];
+    if next == DOLLAR {
+        out.push_units(&[DOLLAR])?;
+        return Ok(2);
+    }
+    let range = match next {
+        b if b == u16::from(b'&') => found.range.clone(),
+        b if b == u16::from(b'`') => 0..found.range.start,
+        b if b == u16::from(b'\'') => found.range.end..text.len(),
+        _ => return expand_group(out, units, index, text, found),
+    };
+    push_range(out, text, &range)?;
+    Ok(2)
+}
+
+fn expand_group(
+    out: &mut Utf16Builder,
+    units: &[u16],
+    index: usize,
+    text: &JsString,
+    found: &RegExpMatch,
+) -> EvalResult<usize> {
+    let Some((group, width)) = capture_reference(units, index + 1, found.groups.len()) else {
+        out.push_units(&[DOLLAR])?;
+        return Ok(1);
+    };
+    match group.checked_sub(1).and_then(|at| found.groups.get(at)) {
+        Some(Some(range)) => push_range(out, text, range)?,
+        Some(None) => {}
+        None => out.push_units(&units[index..index + 1 + width])?,
+    }
+    Ok(1 + width)
+}
+
+fn push_range(out: &mut Utf16Builder, text: &JsString, range: &Range<usize>) -> EvalResult<()> {
+    let units = text.units();
+    let start = range.start.min(units.len());
+    let end = range.end.min(units.len()).max(start);
+    out.push_units(&units[start..end])
 }
 
 fn callback_arguments<'a>(text: &JsString, found: &RegExpMatch) -> Vec<Value<'a>> {
@@ -205,9 +238,9 @@ fn replace_matches<'a>(
         let head = slice(text, &(copied..found.range.start));
         charge_for_length(host, head.len())?;
         out.push(&head)?;
-        let piece = replacement_piece(host, text, &found, replacement, template)?;
-        charge_for_length(host, piece.len())?;
-        out.push(&piece)?;
+        let before = out.len();
+        replacement_piece(host, &mut out, text, &found, replacement, template)?;
+        charge_for_length(host, out.len() - before)?;
         copied = found.range.end;
         cursor = found.range.end.max(found.range.start + 1);
         if !global || cursor > text.len() {
@@ -223,20 +256,21 @@ fn replace_matches<'a>(
 
 fn replacement_piece<'a>(
     host: &mut dyn Host<'a>,
+    out: &mut Utf16Builder,
     text: &JsString,
     found: &RegExpMatch,
     replacement: &Value<'a>,
     template: &JsString,
-) -> Eval<'a, JsString> {
+) -> Eval<'a, ()> {
     if replacement.is_callable() {
         let produced = host.call_value(
             replacement,
             Value::Undefined,
             &callback_arguments(text, found),
         )?;
-        return to_js_string(&produced, host);
+        return Ok(out.push(&to_js_string(&produced, host)?)?);
     }
-    Ok(expand_replacement(template, text, found))
+    Ok(expand_replacement(out, template, text, found)?)
 }
 
 pub(crate) fn native_replace<'a>(

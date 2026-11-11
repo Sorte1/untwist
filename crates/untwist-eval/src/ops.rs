@@ -250,6 +250,15 @@ pub fn binary_op<'a>(
     }
 }
 
+pub(crate) fn charged_strict_equals<'a>(
+    left: &Value<'a>,
+    right: &Value<'a>,
+    host: &mut dyn Host<'a>,
+) -> EvalResult<bool> {
+    host.spend(string_comparison_cost(left, right))?;
+    Ok(strict_equals(left, right))
+}
+
 fn string_comparison_cost(left: &Value<'_>, right: &Value<'_>) -> u64 {
     match (left, right) {
         (Value::Str(a), Value::Str(b)) => (a.len().min(b.len()) as u64) / 64,

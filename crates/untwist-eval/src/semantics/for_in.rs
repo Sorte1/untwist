@@ -18,7 +18,7 @@ impl<'a> Interp<'a> {
         if self.inherits_keys(target)? {
             return Err(Bail::Unsupported(&"for-in over an object that inherits keys").into());
         }
-        Ok(crate::builtins::object::own_keys(target)?)
+        Ok(crate::builtins::object::own_keys(self, target)?)
     }
 
     #[inline(never)]
