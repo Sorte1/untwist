@@ -12,3 +12,8 @@ pure-block-function-skipped-by-a-false-test|function o(c) { var r = "start"; if 
 block-function-aliased-before-its-block|function o() { var a = g; { function g() { return "inner"; } } return typeof a; } console.log(o());
 pure-string-block-function|function o(c) { if (c) { function m(s) { return s.split("").reverse().join(""); } } return c ? m("abc") : "none"; } console.log(o(0), o(1));
 block-function-typeof-per-iteration|function o() { var out = []; for (var i = 0; i < 2; i++) { out.push(typeof q); { function q() { return i; } } } return out.join(); } console.log(o());
+dead-branch-keeps-a-block-function-in-its-block|var arr=["a"]; (function(){ try{ console.log(arr[0]) }catch(e){ console.log(e.name) } if (true) { function arr(){} } console.log(typeof arr) })();
+dead-branch-keeps-a-bare-block-function-in-a-block|var arr=["a"]; (function(){ try{ console.log(arr[0]) }catch(e){ console.log(e.name) } if (true) function arr(){} console.log(typeof arr) })();
+opaque-branch-keeps-a-block-function-in-its-block|var arr=["a"]; (function(){ try{ console.log(arr[0]) }catch(e){ console.log(e.name) } if ("ab" === "ab") { function arr(){} } console.log(typeof arr) })();
+opaque-branch-keeps-a-bare-block-function-in-a-block|var arr=["a"]; (function(){ try{ console.log(arr[0]) }catch(e){ console.log(e.name) } if ("ab" === "ab") function arr(){} console.log(typeof arr) })();
+opaque-branch-keeps-a-labelled-block-function-in-its-block|var arr=["a"]; (function(){ try{ console.log(arr[0]) }catch(e){ console.log(e.name) } if ("ab" === "ab") { l: function arr(){} } console.log(typeof arr) })();

@@ -126,8 +126,11 @@ fn plan_merge<'a>(
     cx: &Cx<'a, '_>,
 ) -> Option<Vec<(SymbolId, String)>> {
     let Statement::BlockStatement(block) = statement else {
-        return Some(Vec::new());
+        return (!declares_function(statement)).then(Vec::new);
     };
+    if block.body.iter().any(declares_function) {
+        return None;
+    }
     let scope_id = block.scope_id.get()?;
     let mut introduced = Vec::new();
     for (symbol, name) in declared_in(scope_id, cx.scoping()) {
@@ -275,6 +278,14 @@ fn var_statement<'a>(names: &[(Ident<'a>, Option<SymbolId>)], cx: &Cx<'a, '_>) -
         cx,
     );
     Statement::new_variable_declaration(SPAN, VariableDeclarationKind::Var, declarators, false, cx)
+}
+
+fn declares_function(statement: &Statement<'_>) -> bool {
+    match statement {
+        Statement::FunctionDeclaration(_) => true,
+        Statement::LabeledStatement(labeled) => declares_function(&labeled.body),
+        _ => false,
+    }
 }
 
 fn has_with(scoping: &Scoping) -> bool {
