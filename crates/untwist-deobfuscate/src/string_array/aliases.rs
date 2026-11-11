@@ -1,5 +1,4 @@
 use super::*;
-use oxc_syntax::symbol::SymbolFlags;
 use untwist_core::ast_util::readonly::{scan_symbol_uses, SymbolUses};
 use untwist_core::semantic::declaring_block;
 
