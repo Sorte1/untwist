@@ -38,8 +38,15 @@ const result = run(source, '--unsafe', false);
 `run(source, flags, refused)` processes one script and returns a `RunOutput`. `flags` is the CLI's
 flags as one string: `--unsafe`, `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx`,
 `--single-file`, `--keep-human-names`, `--rename none|simple|unique|mangle`, `-m`,
-`--max-iterations N`, `--fuel N` and `--disable PASS[,PASS]`. Pass `false` for `refused`; `true`
-returns the input unchanged.
+`--max-iterations N`, `--fuel N`, `--max-memory SIZE`, `--timeout SECS` and
+`--disable PASS[,PASS]`. Pass `false` for `refused`; `true` returns the input unchanged.
+
+`--max-memory` and `--timeout` stop an input between its passes, keeping the output so far; one
+long pass is not cut short, since nothing can stop wasm code from outside but its host. For input
+you do not trust, call `run` in a Worker you can terminate. After `run` throws a
+`WebAssembly.RuntimeError` or a `RangeError` (a trap, such as running out of stack or memory),
+throw that instance away and load the module again in a new Worker: a trapped instance keeps its
+memory and its budget state as they were at the trap.
 
 | `RunOutput` field | Meaning |
 | --- | --- |

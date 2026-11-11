@@ -34,6 +34,7 @@ fn isolation(refused: bool) -> Isolation {
 }
 
 fn run_with(source: &str, options: Options) -> RunOutput {
+    report::clock::register();
     let before = limits::fired();
     let result = Pipeline::new(options).run(source);
     let fired = limits::fired().since(before);

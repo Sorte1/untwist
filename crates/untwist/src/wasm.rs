@@ -192,7 +192,9 @@ fn safe_stem(name: &str) -> String {
         )
         .collect();
     let stem = stem.trim_start_matches('.');
-    match stem.is_empty() {
+    let refused =
+        stem.is_empty() || untwist_unpack::path::is_unsafe_path(&format!("{WASM_DIR}/{stem}.wasm"));
+    match refused {
         true => "module".to_string(),
         false => stem.to_string(),
     }
@@ -407,7 +409,11 @@ impl Output {
     }
 
     fn file_named(&self, wanted: &str) -> String {
-        let taken = |path: &str| self.wasm.iter().any(|file| file.path == path);
+        let taken = |path: &str| {
+            self.wasm
+                .iter()
+                .any(|file| file.path.to_lowercase() == path.to_lowercase())
+        };
         let first = format!("{WASM_DIR}/{wanted}");
         if !taken(&first) {
             return first;
@@ -660,6 +666,38 @@ mod tests {
 
         assert_eq!(out.codes, before);
         assert!(out.wasm_panicked);
+    }
+
+    fn wasm_at(path: &str) -> WasmFile {
+        WasmFile {
+            path: path.to_string(),
+            origin: WasmOrigin::Supplied,
+            url: None,
+            byte_length: 0,
+            imports: 0,
+            exports: 0,
+            renamed: 0,
+            bytes: Vec::new(),
+            summary: WasmSummary::default(),
+        }
+    }
+
+    #[test]
+    fn a_wasm_name_the_module_path_checks_refuse_becomes_module() {
+        for name in ["aux", "CON", "com1", "nul.tar", "..", ""] {
+            assert_eq!(safe_stem(name), "module", "{name:?}");
+        }
+        assert_eq!(safe_stem("DEOBFU~1"), "DEOBFU_1");
+        assert_eq!(safe_stem("game-v2.min"), "game-v2.min");
+        assert_eq!(safe_stem("auxiliary"), "auxiliary");
+    }
+
+    #[test]
+    fn a_wasm_name_differing_only_in_case_gets_a_suffix() {
+        let mut out = output();
+        out.wasm.push(wasm_at("wasm/aux2.wasm"));
+        assert_eq!(out.file_named("AUX2.wasm"), "wasm/AUX2-2.wasm");
+        assert_eq!(out.file_named("other.wasm"), "wasm/other.wasm");
     }
 
     #[test]
