@@ -12,7 +12,7 @@ real-shapes/game-6.0-7.0.js	safe/*	decoded	xfail	the safe lane refuses and keeps
 real-shapes/game-6.0-7.0-webpack4.js	safe/*	decoded	xfail	the safe lane refuses and keeps the string array (--unsafe decodes it)
 real-shapes/game-7.0-7.2-eval.js	safe/*	decoded	xfail	the safe lane refuses and keeps the string array (--unsafe decodes it)
 real-shapes/game-7.0-7.2-webpack4-eval.js	safe/*	decoded	xfail	the safe lane refuses and keeps the string array (--unsafe decodes it)
-real-shapes/game-7.0-shell-webpack4.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
+real-shapes/game-7.0-shell-webpack4.js	unsafe/*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
 real-shapes/game-9.0-9.2-shell.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
 real-shapes/game-9.2-base64-rc4.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
 real-shapes/loader-6.0-7.2-selfdefending.js	*	decoded	xfail	a refusal keeps the string array or rotator (see warn-summary)
