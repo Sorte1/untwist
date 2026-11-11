@@ -762,6 +762,7 @@ pub fn builtin_aliases<'s>(
         prototypes_written,
         plain_classes,
         function_method_values,
+        parameters,
         ..
     } = scan.flows;
     flows.extend(bound.flows);
@@ -772,6 +773,7 @@ pub fn builtin_aliases<'s>(
     let mut aliases = BuiltinAliases {
         scoping,
         values: seeded.into_iter().map(|symbol| (symbol, LOST)).collect(),
+        parameters: parameters.into_values().flatten().collect(),
         returns: FxHashMap::default(),
         functions,
         sloppy_this,

@@ -111,6 +111,28 @@ enum Woken {
 }
 
 fn merge_flow(aliases: &mut BuiltinAliases<'_>, target: &Target, value: u16) -> Woken {
+    let own = merge_into(aliases, target, value);
+    let exposed = match *target {
+        Target::Symbol(symbol) | Target::Pattern(symbol) => aliases.parameters.contains(&symbol),
+        _ => false,
+    };
+    if exposed {
+        if let Woken::All = merge_into(aliases, &Target::Lost, flow_added(target, value)) {
+            return Woken::All;
+        }
+    }
+    own
+}
+
+fn flow_added(target: &Target, value: u16) -> u16 {
+    if matches!(target, Target::Pattern(_)) {
+        ANY
+    } else {
+        value & !LOST
+    }
+}
+
+fn merge_into(aliases: &mut BuiltinAliases<'_>, target: &Target, value: u16) -> Woken {
     let (slot, woken) = match *target {
         Target::Symbol(symbol) | Target::Pattern(symbol) => (
             aliases.values.entry(symbol).or_insert(0),
@@ -123,11 +145,7 @@ fn merge_flow(aliases: &mut BuiltinAliases<'_>, target: &Target, value: u16) -> 
         ),
         Target::ThisArgument => (&mut aliases.this_bits, Woken::All),
     };
-    let added = if matches!(target, Target::Pattern(_)) {
-        ANY
-    } else {
-        value & !LOST
-    };
+    let added = flow_added(target, value);
     let merged = *slot | added;
     if merged == *slot {
         return Woken::Nothing;

@@ -412,10 +412,16 @@ impl Graph {
                 self.returns(arg(0), result);
             }
             Method::ReflectSet => {
-                let (key, patch_key) = self.arg_key(arg(1));
-                self.patch(index, method, arg(0), patch_key);
-                if let (Some(target), Some(value)) = (arg(0), arg(2)) {
-                    self.store(target, key, value);
+                let receiver = match call.spread {
+                    Some(_) => Some(self.world),
+                    None => arg(3),
+                };
+                for target in [arg(0), receiver].into_iter().flatten() {
+                    let (key, patch_key) = self.arg_key(arg(1));
+                    self.patch(index, method, Some(target), patch_key);
+                    if let Some(value) = arg(2) {
+                        self.store(target, key, value);
+                    }
                 }
                 self.prims(result);
             }
