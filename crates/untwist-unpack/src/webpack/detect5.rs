@@ -9,7 +9,7 @@ use crate::webpack::extract::extract_modules_with;
 use crate::webpack::gate::{routable, Prelude};
 use crate::webpack::helpers::prelude_runtime_skipping;
 use crate::webpack::proof::{deferred_entries, Proving, Shape};
-use crate::webpack::require_fn::{find_assigned_entry_id, Dispatchers};
+use crate::webpack::require_fn::{find_assigned_entry_id, find_required_entry_id, Dispatchers};
 use crate::UnpackOptions;
 
 struct Candidate<'k, 'a> {
@@ -95,11 +95,18 @@ pub fn detect_webpack5_noted<'a>(
     mut proving: Proving<'_>,
 ) -> Option<Bundle<'a>> {
     let (candidate, require_name) = webpack5(body)?;
-    let entry_id = find_assigned_entry_id(body, require_name, Some(candidate.index));
-    let entry = match (&entry_id, options.conservative) {
+    let assigned = find_assigned_entry_id(body, require_name, Some(candidate.index));
+    let entry = match (&assigned, options.conservative) {
         (None, false) => site(source, (body, candidate.container)),
         _ => None,
     };
+    let deferred = deferred_entries(body, require_name);
+    let started = entry.is_none() && deferred.is_empty();
+    let entry_id = assigned.or_else(|| {
+        started
+            .then(|| find_required_entry_id(body, require_name, Some(candidate.index)))
+            .flatten()
+    });
     let skip = entry.as_ref().map(|entry| entry.span);
     let checked = !matches!(bodies, Bodies::Taken(_)) && !options.conservative;
     if checked {
@@ -115,7 +122,7 @@ pub fn detect_webpack5_noted<'a>(
     }
     let mut bundle = Bundle::new(BundleKind::Webpack, entry_id);
     if !options.conservative {
-        bundle.deferred = deferred_entries(body, require_name);
+        bundle.deferred = deferred;
     }
     bundle.runtime = prelude_runtime_skipping(alloc, (None, body), (require_name, skip), bodies);
     if checked {

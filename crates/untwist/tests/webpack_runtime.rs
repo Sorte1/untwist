@@ -333,3 +333,61 @@ fn two_inputs_with_the_same_runtime_still_merge() {
     assert!(unpacked.has("bundle.json"), "{:?}", unpacked.notes());
     assert!(unpacked.has("b0.js"), "{:?}", unpacked.notes());
 }
+
+fn webpack5(startup: &str) -> String {
+    format!(
+        r#"(() => {{
+  var __webpack_modules__ = {{
+    1: (module, exports, __webpack_require__) => {{ console.log("module 1 runs"); module.exports = "one"; }},
+    2: (module, exports, __webpack_require__) => {{ console.log("module 2 runs"); module.exports = "two"; }}
+  }};
+  var __webpack_module_cache__ = {{}};
+  function __webpack_require__(moduleId) {{
+    var cachedModule = __webpack_module_cache__[moduleId];
+    if (cachedModule !== undefined) return cachedModule.exports;
+    var module = __webpack_module_cache__[moduleId] = {{ exports: {{}} }};
+    __webpack_modules__[moduleId](module, module.exports, __webpack_require__);
+    return module.exports;
+  }}
+  __webpack_require__.o = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop);
+  var __webpack_exports__ = {{}};
+{startup}
+}})();
+"#
+    )
+}
+
+#[test]
+fn a_webpack5_prelude_that_starts_more_than_one_entry_is_refused() {
+    refused(
+        &webpack5(
+            r#"  (() => { console.log("first entry", __webpack_require__(1)); })();
+  (() => { console.log("second entry", __webpack_require__(2)); })();"#,
+        ),
+        "module 1 runs\nfirst entry one\nmodule 2 runs\nsecond entry two\n",
+    );
+    refused(
+        &webpack5(
+            r#"  __webpack_require__(1);
+  (() => { console.log("inline entry", __webpack_require__(2)); })();"#,
+        ),
+        "module 1 runs\nmodule 2 runs\ninline entry two\n",
+    );
+}
+
+#[test]
+fn a_webpack5_prelude_with_one_inline_entry_still_unpacks() {
+    unpacked_like_the_bundle(
+        &webpack5(r#"  (() => { console.log("inline entry", __webpack_require__(2)); })();"#),
+        "module 2 runs\ninline entry two\n",
+    );
+}
+
+#[test]
+fn a_webpack5_startup_require_becomes_the_entry() {
+    let unpacked = unpacked_like_the_bundle(
+        &webpack5("  var __webpack_exports__ = __webpack_require__(2);"),
+        "module 2 runs\n",
+    );
+    assert!(unpacked.has("index.js"), "{:?}", unpacked.notes());
+}

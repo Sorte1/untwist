@@ -37,6 +37,7 @@ struct Proof<'k, 'a> {
     entries: FxHashSet<&'k str>,
     definitions: FxHashSet<u32>,
     defined: FxHashMap<&'k str, usize>,
+    startups: usize,
 }
 
 type Proven = Result<(), String>;
@@ -174,6 +175,14 @@ impl<'k, 'a> Proof<'k, 'a> {
     }
 
     fn entry_call(&mut self, expr: &'k Expression<'_>) -> Option<Proven> {
+        let started = self.started(expr)?;
+        if started.is_ok() {
+            self.startups += 1;
+        }
+        Some(started)
+    }
+
+    fn started(&mut self, expr: &'k Expression<'_>) -> Option<Proven> {
         let Expression::CallExpression(call) = expr.without_parentheses() else {
             return None;
         };
@@ -641,8 +650,12 @@ pub fn prove<'k, 'a>(shape: &Shape<'k, 'a>, scoping: &Scoping) -> Proven {
         entries: FxHashSet::default(),
         definitions: FxHashSet::default(),
         defined: FxHashMap::default(),
+        startups: usize::from(shape.skip.is_some()),
     };
     classify(&mut proof, shape, require_at)?;
+    if proof.startups > 1 {
+        return refuse("the prelude starts more than one entry module");
+    }
     uses_proven(&proof, shape, require_at)?;
     closed(&proof, scoping, function)
 }
