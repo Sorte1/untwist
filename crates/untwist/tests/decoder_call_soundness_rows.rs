@@ -51,7 +51,10 @@ fn every_row_has_a_known_prefix() {
     );
     for (label, _) in programs {
         assert!(
-            label.starts_with("dec-") || label.starts_with("ref-") || label.starts_with("guard-"),
+            label.starts_with("dec-")
+                || label.starts_with("ref-")
+                || label.starts_with("guard-")
+                || label.starts_with("probe-"),
             "unexpected row label {label}"
         );
     }
@@ -85,7 +88,7 @@ fn the_decoding_and_guard_rows_print_like_node_in_the_unsafe_lane() {
     };
     let kept: Vec<(String, String)> = rows()
         .into_iter()
-        .filter(|(label, _)| !label.starts_with("ref-"))
+        .filter(|(label, _)| !label.starts_with("ref-") && !label.starts_with("probe-"))
         .collect();
     let aggressive = options(true, false);
     let run_unsafe = |source: &str| transformed(&aggressive, source);
