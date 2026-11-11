@@ -211,6 +211,7 @@ fn composed_stage_wide() -> Vec<(&'static str, String)> {
     vec![
         ("GLOBAL_NOT_EVALUATED", notes::global_not_evaluated("atob")),
         ("GLOBAL_REBOUND", notes::global_rebound("atob")),
+        ("GLOBAL_PATCHED", notes::global_patched("atob")),
         ("INIT_ORDER_BUDGET", notes::init_order_budget("m")),
         (
             "EDIT_PLAN_INCOMPLETE",

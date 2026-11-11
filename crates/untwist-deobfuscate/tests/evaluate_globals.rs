@@ -255,3 +255,55 @@ fn an_assigned_global_still_folds_under_unsafe() {
     "#
     );
 }
+
+#[test]
+fn a_global_replaced_through_global_this_is_left_alone_in_the_default_lane() {
+    let source =
+        "globalThis.atob = function (s) {\n  return \"patched\";\n};\nconsole.log(atob(\"aGk=\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_replaced_through_a_computed_key_on_an_alias_is_left_alone_in_the_default_lane() {
+    let source = "var g = globalThis;\ng[\"unes\" + \"cape\"] = function () {\n  return \"p2\";\n};\nconsole.log(unescape(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_replaced_through_window_with_a_literal_key_is_left_alone_in_the_default_lane() {
+    let source = "window[\"decodeURI\"] = String;\nconsole.log(decodeURI(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_replaced_through_top_level_this_is_left_alone_in_the_default_lane() {
+    let source = "this.decodeURIComponent = String;\nconsole.log(decodeURIComponent(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_defined_on_the_global_object_is_left_alone_in_the_default_lane() {
+    let source =
+        "Object.defineProperty(self, \"atob\", { value: String });\nconsole.log(atob(\"aGk=\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn only_the_global_replaced_through_the_global_object_is_left_alone_in_the_default_lane() {
+    assert_eq!(
+        default_lane("window.atob = String;\nconsole.log(atob(\"aGk=\"), unescape(\"%41\"));"),
+        "window.atob = String;\nconsole.log(atob(\"aGk=\"), \"A\");"
+    );
+}
+
+#[test]
+fn a_global_replaced_through_the_global_object_still_folds_under_unsafe() {
+    assert_transform!(
+        "globalThis.atob = String;\nconsole.log(atob(\"aGk=\"));",
+        [untwist_deobfuscate::evaluate_globals::boxed],
+        @r#"
+    globalThis.atob = String;
+    console.log("hi");
+    "#
+    );
+}

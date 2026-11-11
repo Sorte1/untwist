@@ -885,6 +885,13 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::DefaultLane(
+            "globalThis.atob = function (s) {\n  return s;\n};\nlog(atob(\"aGk=\"));",
+        ),
+        expects: notes::GLOBAL_PATCHED,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Built(a_reachability_chain_past_the_budget),
         expects: notes::INIT_ORDER_BUDGET,
         mode: Match::Contains,

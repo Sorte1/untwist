@@ -90,4 +90,8 @@ impl Unpatched {
         }
         self.verdict == Builtins::Intact
     }
+
+    pub fn decided(&self) -> bool {
+        self.verdict != Builtins::Unknown
+    }
 }
