@@ -101,7 +101,7 @@ pub fn detect_webpack5_noted<'a>(
         _ => None,
     };
     let deferred = deferred_entries(body, require_name);
-    let started = entry.is_none() && deferred.is_empty();
+    let started = !options.conservative && entry.is_none() && deferred.is_empty();
     let entry_id = assigned.or_else(|| {
         started
             .then(|| find_required_entry_id(body, require_name, Some(candidate.index)))

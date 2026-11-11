@@ -119,13 +119,21 @@ fn a_runtime_helper_property_is_never_an_entry_marker() {
     }
 }
 
+fn conservative() -> untwist_unpack::UnpackOptions {
+    untwist_unpack::UnpackOptions {
+        conservative: true,
+        ..untwist_unpack::UnpackOptions::default()
+    }
+}
+
 #[test]
-fn a_bundle_with_several_top_level_requires_picks_the_first_and_says_so() {
+fn a_bundle_with_several_top_level_requires_is_refused_and_the_reference_lane_picks_the_first() {
     let source = read_unpack_gap_fixture("webpack-4-no-canonical-entry.js");
     let alloc = oxc_allocator::Allocator::default();
     let parsed = untwist_core::parse::parse_program(&alloc, &source);
-    let mut bundle =
-        untwist_unpack::unpack_program(&alloc, &parsed.program).expect("a webpack bundle");
+    assert!(untwist_unpack::unpack_program(&alloc, &parsed.program).is_none());
+    let mut bundle = untwist_unpack::unpack_program_with(&alloc, &parsed.program, conservative())
+        .expect("a webpack bundle");
     assert_eq!(bundle.entry_id.as_deref(), Some("9896"));
     assert_eq!(bundle.entry_candidates, 3);
     let notes = untwist_unpack::finish(&alloc, &mut bundle, &[]);
@@ -180,7 +188,11 @@ fn a_bundle_with_no_top_level_require_says_nothing_about_candidates() {
 
 #[test]
 fn a_sparse_module_table_yields_only_its_real_modules() {
-    let source = read_unpack_gap_fixture("webpack-4-no-canonical-entry.js");
+    let source = read_unpack_gap_fixture("webpack-4-no-canonical-entry.js").replacen(
+        "  __webpack_require__(3021);\n  __webpack_require__(775);\n",
+        "",
+        1,
+    );
     let alloc = oxc_allocator::Allocator::default();
     let parsed = untwist_core::parse::parse_program(&alloc, &source);
     let bundle = untwist_unpack::unpack_program(&alloc, &parsed.program).expect("a webpack bundle");
