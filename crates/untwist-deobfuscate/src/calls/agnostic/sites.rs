@@ -402,7 +402,14 @@ impl<'s, 'a> Sites<'s, 'a> {
 
     pub(super) fn mark_test(&mut self, expr: &Expression<'a>) {
         let inner = expr.without_parentheses();
-        self.tests.insert(span_key(inner.span()));
+        let span = inner.span();
+        if !self.tests.insert(span_key(span)) && !span.is_empty() {
+            return;
+        }
+        untwist_eval::stack::maybe_grow(|| self.mark_operands(inner));
+    }
+
+    fn mark_operands(&mut self, inner: &Expression<'a>) {
         match inner {
             Expression::LogicalExpression(logical) => {
                 self.mark_test(&logical.left);
