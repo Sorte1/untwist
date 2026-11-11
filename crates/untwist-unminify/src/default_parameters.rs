@@ -6,6 +6,10 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::pass::{Cx, Interest, Locality, Pass};
 
+mod guards;
+
+use guards::{Host, Moved};
+
 const MAX_PARAMETER_INDEX: usize = 256;
 
 #[derive(Default)]
@@ -33,60 +37,39 @@ impl<'a> Pass<'a> for DefaultParameters {
     }
 
     fn interest(&self) -> Interest {
-        Interest::EXIT_FUNCTION | Interest::EXIT_ARROW_FUNCTION_EXPRESSION
+        Interest::EXIT_FUNCTION
     }
 
     fn exit_function(&mut self, node: &mut Function<'a>, cx: &mut Cx<'a, '_>) {
+        let Some(host) = guards::host(node, cx) else {
+            return;
+        };
         let Function { params, body, .. } = node;
         let Some(body) = body.as_deref_mut() else {
             return;
         };
-        restore_parameters(params, &mut body.statements, cx);
-    }
-
-    fn exit_arrow_function_expression(
-        &mut self,
-        node: &mut ArrowFunctionExpression<'a>,
-        cx: &mut Cx<'a, '_>,
-    ) {
-        let ArrowFunctionExpression { params, body, .. } = node;
-        let ArrowFunctionBody::FunctionBody(body) = body else {
-            return;
-        };
-        restore_parameters(params, &mut body.statements, cx);
+        while restore_one(params, &mut body.statements, &host, cx) {
+            cx.changed();
+        }
     }
 }
 
-fn restore_parameters<'a>(
-    params: &mut FormalParameters<'a>,
-    stmts: &mut AVec<'a, Statement<'a>>,
-    cx: &mut Cx<'a, '_>,
-) {
-    if params.rest.is_some() {
-        return;
-    }
-    while restore_one(params, stmts, cx) {
-        cx.changed();
-    }
+enum Plan {
+    Declared(usize, DefaultForm),
+    Loose(usize),
 }
 
 fn restore_one<'a>(
     params: &mut FormalParameters<'a>,
     stmts: &mut AVec<'a, Statement<'a>>,
+    host: &Host,
     cx: &mut Cx<'a, '_>,
 ) -> bool {
-    let Some(first) = stmts.first_mut() else {
+    let Some(plan) = plan(params, stmts.as_slice(), host, cx) else {
         return false;
     };
-    match first {
-        Statement::VariableDeclaration(declaration) => {
-            let Some((index, form)) = classify_declaration(declaration, cx) else {
-                return false;
-            };
-            let initialised = !matches!(form, DefaultForm::Plain);
-            if cx.opts.extended && !keeps_length(params, index, initialised) {
-                return false;
-            }
+    match (plan, stmts.first_mut()) {
+        (Plan::Declared(index, form), Some(Statement::VariableDeclaration(declaration))) => {
             let Some(parameter) = take_parameter(declaration, form, cx) else {
                 return false;
             };
@@ -94,16 +77,7 @@ fn restore_one<'a>(
             place_parameter(params, index, parameter, cx);
             true
         }
-        Statement::IfStatement(statement) => {
-            let Some(symbol) = loose_default_symbol(statement, cx) else {
-                return false;
-            };
-            let Some(position) = parameter_position(params, symbol) else {
-                return false;
-            };
-            if cx.opts.extended && !keeps_length(params, position, true) {
-                return false;
-            }
+        (Plan::Loose(position), Some(Statement::IfStatement(statement))) => {
             let Some(value) = take_loose_default_value(statement, cx) else {
                 return false;
             };
@@ -113,6 +87,81 @@ fn restore_one<'a>(
         }
         _ => false,
     }
+}
+
+fn plan<'a>(
+    params: &FormalParameters<'a>,
+    stmts: &[Statement<'a>],
+    host: &Host,
+    cx: &Cx<'_, '_>,
+) -> Option<Plan> {
+    let (first, rest) = stmts.split_first()?;
+    match first {
+        Statement::VariableDeclaration(declaration) => {
+            plan_declared(declaration, rest, params, host, cx)
+        }
+        Statement::IfStatement(statement) => plan_loose(statement, rest, params, host, cx),
+        _ => None,
+    }
+}
+
+fn plan_declared<'a>(
+    declaration: &VariableDeclaration<'a>,
+    rest: &[Statement<'a>],
+    params: &FormalParameters<'a>,
+    host: &Host,
+    cx: &Cx<'_, '_>,
+) -> Option<Plan> {
+    let (index, form) = classify_declaration(declaration, cx)?;
+    let initialised = !matches!(form, DefaultForm::Plain);
+    if cx.opts.extended && !keeps_length(params, index, initialised) {
+        return None;
+    }
+    let declarator = declaration.declarations.first()?;
+    let moved = Moved {
+        index,
+        pattern: Some(&declarator.id),
+        default: declared_default(declarator, form),
+        rest,
+    };
+    let fits = guards::declared_slot_fits(declaration, &moved, params, host, cx)
+        && guards::default_fits(&moved, params, host, cx);
+    fits.then_some(Plan::Declared(index, form))
+}
+
+fn declared_default<'r, 'a>(
+    declarator: &'r VariableDeclarator<'a>,
+    form: DefaultForm,
+) -> Option<&'r Expression<'a>> {
+    match (form, declarator.init.as_ref()) {
+        (DefaultForm::Expression, Some(Expression::ConditionalExpression(conditional))) => {
+            Some(&conditional.alternate)
+        }
+        _ => None,
+    }
+}
+
+fn plan_loose<'a>(
+    statement: &IfStatement<'a>,
+    rest: &[Statement<'a>],
+    params: &FormalParameters<'a>,
+    host: &Host,
+    cx: &Cx<'_, '_>,
+) -> Option<Plan> {
+    let symbol = loose_default_symbol(statement, cx)?;
+    let position = parameter_position(params, symbol)?;
+    if cx.opts.extended && !keeps_length(params, position, true) {
+        return None;
+    }
+    let moved = Moved {
+        index: position,
+        pattern: None,
+        default: Some(loose_default_value(statement)?),
+        rest,
+    };
+    let fits = guards::loose_slot_fits(symbol, position, params, cx)
+        && guards::default_fits(&moved, params, host, cx);
+    fits.then_some(Plan::Loose(position))
 }
 
 fn function_length(initialised: impl Iterator<Item = bool>) -> usize {
@@ -379,6 +428,19 @@ fn loose_default_symbol(statement: &IfStatement<'_>, cx: &Cx<'_, '_>) -> Option<
         return None;
     };
     (reference_symbol(target, cx) == Some(symbol)).then_some(symbol)
+}
+
+fn loose_default_value<'r, 'a>(statement: &'r IfStatement<'a>) -> Option<&'r Expression<'a>> {
+    let Statement::BlockStatement(block) = &statement.consequent else {
+        return None;
+    };
+    let Some(Statement::ExpressionStatement(inner)) = block.body.first() else {
+        return None;
+    };
+    match &inner.expression {
+        Expression::AssignmentExpression(assignment) => Some(&assignment.right),
+        _ => None,
+    }
 }
 
 fn take_loose_default_value<'a>(
