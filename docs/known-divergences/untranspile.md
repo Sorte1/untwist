@@ -26,9 +26,15 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   one of their prototypes or the global object (restricted, on `Array`, `String` and `Function`
   and their prototypes, to the members the helpers call) keeps every helper, with one note.
   `String.prototype.escape = …` does not count; `Array.prototype.concat = …` does. If one of
-  those objects escapes into a value (`var root = globalThis`, `var proto = Array.prototype`),
-  only `--unsafe` rewrites, under the assumption that **an aliased built-in object is never
-  modified**. The scan and the rewrites happen in the round after the helpers are recognised;
+  those objects escapes into a value (`var root = globalThis`, `var proto = Array.prototype`,
+  `f([].constructor)`, `var p = x.__proto__`), is written through a value that may reach it (a
+  write through `x.__proto__`, `x.constructor`, `x.constructor.prototype`,
+  `Object.getPrototypeOf(x)`, `Reflect.getPrototypeOf(x)` or `Reflect.get(x, k)`, a write of a
+  relied-on name such as `x.Array = …` on any object, or a definer call on one of those values),
+  or the program runs code from text (`Function(…)`, an indirect `eval`, `setTimeout` with
+  anything but a function, `vm.runInThisContext`),
+  only `--unsafe` rewrites, under the assumption that **an aliased built-in object, or one
+  reached through a value, is never modified, and code run from text modifies none**. The scan and the rewrites happen in the round after the helpers are recognised;
   when nothing else in the program changed, the pass asks the driver for that round itself, so
   a program that is already formatted still converts
   (`fixtures/untranspile/hand/formatted-spread.js`).

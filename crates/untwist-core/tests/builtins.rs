@@ -83,3 +83,143 @@ fn a_local_binding_of_the_same_name_is_not_the_built_in() {
         Builtins::Intact
     );
 }
+
+const ARRAY_CONCAT: Reliance = Reliance {
+    roots: &["Array"],
+    members: &[
+        ("Array", false, &["prototype"]),
+        ("Array", true, &["concat"]),
+    ],
+};
+
+const JSON_PARSE: Reliance = Reliance {
+    roots: &["JSON"],
+    members: &[("JSON", false, &["parse"])],
+};
+
+fn verdict_for(source: &str, reliance: &Reliance) -> Builtins {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    let sem = build_scoping(&parsed.program);
+    let module = has_module_syntax(&parsed.program);
+    scan(&parsed.program, &sem.scoping, module, false, reliance).verdict
+}
+
+#[test]
+fn a_prototype_reached_through_a_value_and_written_is_not_intact() {
+    for source in [
+        "[].__proto__.concat = f;",
+        "[]['__proto__'].concat = f;",
+        "[][`__proto__`].concat = f;",
+        "[].constructor.prototype.concat = f;",
+        "[].constructor['prototype'].concat = f;",
+        "Object.getPrototypeOf([]).concat = f;",
+        "Reflect.getPrototypeOf([]).concat = f;",
+        "Reflect.get([], '__proto__').concat = f;",
+        "Object.getPrototypeOf.call(null, []).concat = f;",
+        "[].__proto__['concat'] = f;",
+        "[].__proto__[key] = f;",
+        "delete [].__proto__.concat;",
+        "[].__proto__.concat += f;",
+        "[].__proto__.concat.call = f;",
+        "Object.defineProperty([].__proto__, 'concat', { value: f });",
+        "Object.assign(Object.getPrototypeOf([]), { concat: f });",
+        "Object.setPrototypeOf([].__proto__, p);",
+        "[].__proto__.__defineGetter__('concat', f);",
+        "function g(a) { a.__proto__.concat = f; }",
+        "if (!Array.prototype.concat) { Array.prototype.concat = 1; } [].__proto__['concat'] = f;",
+        "x.Array = f;",
+    ] {
+        assert_eq!(
+            verdict_for(source, &ARRAY_CONCAT),
+            Builtins::Aliased,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_prototype_reached_through_a_value_that_escapes_is_aliased() {
+    for source in [
+        "(function (A) { A.prototype.concat = f; })([].constructor);",
+        "var p = [].__proto__;",
+        "var p = x.__proto__ || y;",
+        "var g = Object.getPrototypeOf;",
+        "var g = Object.getPrototypeOf.bind();",
+        "var p = x?.__proto__;",
+        "function g() { return x.constructor; }",
+        "var o = { p: [].constructor.prototype };",
+        "var c = x.__lookupGetter__('__proto__').call([]);",
+        "var c = x.constructor('return this')();",
+        "var c = new x.constructor('return this');",
+        "Function('return this')();",
+        "new Function('Array.prototype.concat = f')();",
+        "(0, eval)('Array.prototype.concat = f');",
+        "eval('Array.prototype.concat = f');",
+        "setTimeout('Array.prototype.concat = f');",
+        "window.setTimeout(code, 0);",
+        "require('vm').runInThisContext('Array.prototype.concat = f');",
+        "var A = top.Array;",
+        "(0, x.constructor)('return this');",
+        "(a || Function)('return this');",
+    ] {
+        assert_eq!(
+            verdict_for(source, &ARRAY_CONCAT),
+            Builtins::Aliased,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn reading_through_a_reached_prototype_without_letting_it_go_is_intact() {
+    for source in [
+        "if (x.constructor === Array) {}",
+        "y = x.constructor.name;",
+        "y = typeof x.constructor;",
+        "y = x.constructor && x.constructor.name;",
+        "y = Object.prototype.hasOwnProperty.call(o, k);",
+        "y = x.__proto__.toString.call(o);",
+        "y = o instanceof x.constructor;",
+        "y = Object.getPrototypeOf(x) === Array.prototype;",
+        "setTimeout(function () {}, 1); setTimeout(() => 1); function tick() {} setInterval(tick, 5); setTimeout(o.f.bind(o));",
+        "x.constructor.count = 1;",
+        "\"Object\" === t && r.constructor && (t = r.constructor.name);",
+        "y = (0, x.constructor, 1);",
+        "if (\"Object\" === t && r.constructor) t = r.constructor.name;",
+        "while (!x.constructor) {}",
+        "y = x.__proto__ ? 1 : 2;",
+    ] {
+        assert_eq!(verdict_for(source, &JSON_PARSE), Builtins::Intact, "{source}");
+    }
+    for source in [
+        "if (x.constructor === Array) {}",
+        "y = x.constructor.name;",
+        "y = x.__proto__.toString.call(o);",
+        "y = Object.getPrototypeOf(x) === Array.prototype;",
+    ] {
+        assert_eq!(
+            verdict_for(source, &ARRAY_CONCAT),
+            Builtins::Intact,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn json_reached_through_a_value_and_written_is_not_intact() {
+    for source in [
+        "(function () { return this; })().JSON.parse = f;",
+        "Function('return this')().JSON.parse = f;",
+        "document.defaultView.JSON.parse = f;",
+        "top.JSON.parse = f;",
+        "globalThis[k].parse = f;",
+        "x.constructor.constructor('return this')().JSON = { parse: f };",
+    ] {
+        assert_ne!(
+            verdict_for(source, &JSON_PARSE),
+            Builtins::Intact,
+            "{source}"
+        );
+    }
+}

@@ -187,3 +187,21 @@ fn a_program_that_leaves_json_alone_still_gets_literals_by_default() {
         untwist_testing::node::assert_node_agrees(source, &output);
     }
 }
+
+const PARSE_REACHED_THROUGH_VALUES: [&str; 6] = [
+    r#"(function () { return this; })().JSON.parse = function () { return "patched"; }; console.log(JSON.parse("1"));"#,
+    r#"Function("return this")().JSON.parse = function () { return "patched"; }; console.log(JSON.parse("1"));"#,
+    r#"Function("JSON.parse = function () { return 'patched'; }")(); console.log(JSON.parse("1"));"#,
+    r#"(0, eval)("JSON.parse = function () { return 'patched'; }"); console.log(JSON.parse("1"));"#,
+    r#"var k = "JS" + "ON"; globalThis[k].parse = function () { return "patched"; }; console.log(JSON.parse("1"));"#,
+    r#"({}).constructor.constructor("return this")().JSON = { parse: function () { return "patched"; } }; console.log(JSON.parse("1"));"#,
+];
+
+#[test]
+fn json_parse_patched_through_a_value_keeps_its_calls_by_default() {
+    for source in PARSE_REACHED_THROUGH_VALUES {
+        let output = default_lane(source);
+        assert!(output.contains("JSON.parse(\""), "{source}\n{output}");
+        untwist_testing::node::assert_node_agrees(source, &output);
+    }
+}

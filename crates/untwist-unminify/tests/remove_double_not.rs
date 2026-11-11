@@ -167,3 +167,21 @@ fn a_double_not_in_a_test_position_goes_whatever_the_program_patches() {
     assert!(output.contains("if (globalThis)"), "{output}");
     untwist_testing::node::assert_node_agrees(source, &output);
 }
+
+const FILTER_REACHED_THROUGH_VALUES: [&str; 8] = [
+    "[].__proto__.filter = function (f) { return f(0); }; console.log([0].filter((v) => !!v));",
+    "[].constructor.prototype.filter = function (f) { return f(0); }; console.log([0].filter((v) => !!v));",
+    "Object.getPrototypeOf([]).filter = function (f) { return f(0); }; console.log([0].filter((v) => !!v));",
+    "(function (A) { A.prototype.filter = function (f) { return f(0); }; })([].constructor); console.log([0].filter((v) => !!v));",
+    r#"Object.defineProperty([].__proto__, "filter", { value: function (f) { return f(0); } }); console.log([0].filter((v) => !!v));"#,
+    r#"[]["__proto__"]["filter"] = function (f) { return f(0); }; console.log([0].filter((v) => !!v));"#,
+    "var p = Reflect.getPrototypeOf([]); p.filter = function (f) { return f(0); }; console.log([0].filter((v) => !!v));",
+    r#"Function("Array.prototype.filter = function (f) { return f(0); }")(); console.log([0].filter((v) => !!v));"#,
+];
+
+#[test]
+fn an_array_method_patched_through_a_value_keeps_the_double_not_by_default() {
+    for source in FILTER_REACHED_THROUGH_VALUES {
+        assert_callback_keeps_its_double_not(source);
+    }
+}
