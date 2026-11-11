@@ -27,12 +27,12 @@ fn over_memory() {
 }
 
 #[cfg(unix)]
-fn die(code: u8) -> ! {
+pub fn die(code: u8) -> ! {
     unsafe { libc::_exit(i32::from(code)) }
 }
 
 #[cfg(not(unix))]
-fn die(code: u8) -> ! {
+pub fn die(code: u8) -> ! {
     std::process::exit(i32::from(code))
 }
 
@@ -70,16 +70,19 @@ pub fn arm_hard_memory(limits: &Limits) {
     }
 }
 
+pub fn hard_deadline(timeout: Duration) -> Duration {
+    timeout + (timeout / GRACE_DIVISOR).max(GRACE_FLOOR)
+}
+
 pub fn arm_watchdog(timeout: Option<Duration>) {
     let Some(timeout) = timeout else {
         return;
     };
-    let grace = (timeout / GRACE_DIVISOR).max(GRACE_FLOOR);
     let _ = std::thread::Builder::new()
         .name("untwist-watchdog".to_string())
         .stack_size(64 * 1024)
         .spawn(move || {
-            std::thread::sleep(timeout + grace);
+            std::thread::sleep(hard_deadline(timeout));
             if !PIPELINE_DONE.load(Ordering::SeqCst) {
                 die(EXIT_OVER_TIME);
             }

@@ -5,6 +5,7 @@ pub(crate) mod hooks;
 mod output;
 mod preflight;
 pub(crate) mod reruns;
+mod rescue;
 mod stdout;
 #[cfg(unix)]
 mod supervisor;
@@ -14,6 +15,7 @@ pub(crate) mod worker;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use args::{Args, ReportFormat};
@@ -28,6 +30,7 @@ pub(crate) struct Session<'a> {
     pub(crate) preflight: bool,
     pub(crate) options: untwist::Options,
     pub(crate) emitted: &'a dyn Fn(),
+    pub(crate) inputs_read: &'a dyn Fn(&Arc<[String]>),
 }
 
 fn stdin_text(held: Option<Vec<u8>>) -> io::Result<String> {
@@ -322,7 +325,12 @@ fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
     if session.preflight {
         preflight_warning(args, session.err)?;
     }
-    let sources = read_inputs(args, session.stdin.take())?;
+    let sources: Arc<[String]> = read_inputs(args, session.stdin.take())?.into();
+    (session.inputs_read)(&sources);
+    run_on(args, session, &sources)
+}
+
+fn run_on(args: &Args, session: &mut Session<'_>, sources: &[String]) -> Result<u8> {
     let borrowed: Vec<&str> = sources.iter().map(String::as_str).collect();
     let mut result = Pipeline::new(std::mem::take(&mut session.options)).run_many(&borrowed);
     (session.emitted)();
@@ -357,14 +365,24 @@ fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 const GLIBC_THRESHOLD_RAISING_BLOCK_BYTES: usize = 20 * 1024 * 1024;
 
-pub(crate) fn finish(args: &Args, session: &mut Session<'_>) -> u8 {
-    match run(args, session) {
+fn reported(err: &mut dyn Write, outcome: Result<u8>) -> u8 {
+    match outcome {
         Ok(code) => code,
         Err(error) => {
-            let _ = writeln!(session.err, "error: {error:#}");
+            let _ = writeln!(err, "error: {error:#}");
             1
         }
     }
+}
+
+pub(crate) fn finish(args: &Args, session: &mut Session<'_>) -> u8 {
+    let outcome = run(args, session);
+    reported(session.err, outcome)
+}
+
+pub(crate) fn finish_on(args: &Args, session: &mut Session<'_>, sources: &[String]) -> u8 {
+    let outcome = run_on(args, session, sources);
+    reported(session.err, outcome)
 }
 
 pub(crate) fn in_process(
@@ -373,17 +391,18 @@ pub(crate) fn in_process(
     preflight: bool,
     isolation: Isolation,
 ) -> u8 {
-    let mut options = base_options(args);
-    options.isolation = isolation;
-    let mut session = Session {
-        out: &mut io::stdout(),
-        err: &mut io::stderr(),
-        stdin,
-        preflight,
-        options,
-        emitted: &|| {},
-    };
-    finish(args, &mut session)
+    rescue::guarded(args, isolation, |options, guard| {
+        let mut session = Session {
+            out: &mut io::stdout(),
+            err: &mut io::stderr(),
+            stdin,
+            preflight,
+            options,
+            emitted: guard.emitted,
+            inputs_read: guard.inputs_read,
+        };
+        finish(args, &mut session)
+    })
 }
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]

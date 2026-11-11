@@ -141,8 +141,8 @@ pub struct Args {
         value_parser = untwist::budget_memory_size,
         help = "memory the inputs being processed may use (such as 512MiB or 8G, or unlimited); \
                 the texts the run holds are not counted. At three quarters of it an input stops \
-                its passes and keeps the output so far (note budget-memory); at the full size the \
-                worker process stops and that input is passed through unchanged"
+                its passes and keeps the output so far (note budget-memory); at the full size that \
+                input is stopped and passed through unchanged"
     )]
     pub max_memory: u64,
     #[arg(
