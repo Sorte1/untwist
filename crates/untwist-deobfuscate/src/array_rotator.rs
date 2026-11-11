@@ -128,6 +128,17 @@ fn has_rotator_loop(stmt: &Statement<'_>) -> bool {
         .any(|body| is_rotator_loop(body) || is_guarded_rotator_loop(body))
 }
 
+fn identifiers_in(stmt: &Statement<'_>) -> FxHashSet<String> {
+    let named = std::cell::RefCell::new(FxHashSet::default());
+    contains_expression(stmt, |expr| {
+        if let Some(name) = identifier_name(expr) {
+            named.borrow_mut().insert(name.to_string());
+        }
+        false
+    });
+    named.into_inner()
+}
+
 pub fn is_rotator_statement(stmt: &Statement<'_>, array_name: &str) -> bool {
     has_rotator_loop(stmt)
         && contains_expression(stmt, |expr| identifier_name(expr) == Some(array_name))
@@ -173,10 +184,13 @@ impl<'p> VisitJs<'p> for Search<'p, '_> {
         if let Statement::ExpressionStatement(_) = it {
             let statement: &'p Statement<'p> = self.alloc(it);
             if let Statement::ExpressionStatement(expression) = statement {
-                for (slot, name) in self.found.iter_mut().zip(self.names) {
-                    if slot.is_none() && is_rotator_statement(statement, name) {
-                        *slot = Some((statement.span(), &expression.expression));
-                        self.pending -= 1;
+                if has_rotator_loop(statement) {
+                    let named = identifiers_in(statement);
+                    for (slot, name) in self.found.iter_mut().zip(self.names) {
+                        if slot.is_none() && named.contains(*name) {
+                            *slot = Some((statement.span(), &expression.expression));
+                            self.pending -= 1;
+                        }
                     }
                 }
             }

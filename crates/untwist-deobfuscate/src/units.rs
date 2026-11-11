@@ -54,6 +54,10 @@ impl MachineryDepth {
         self.owners.iter().all(|owner| *owner == Some(unit))
     }
 
+    pub fn names(&self) -> Option<&FxHashSet<String>> {
+        self.names.as_ref()
+    }
+
     pub fn covers(&self, name: &str) -> bool {
         match &self.names {
             Some(names) => names.contains(name),

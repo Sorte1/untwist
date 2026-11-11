@@ -214,7 +214,7 @@ impl<'p> Stamped<'p> {
     }
 
     pub fn owners(&self) -> Vec<Option<usize>> {
-        let units = self.units();
+        let units: FxHashSet<usize> = self.arrays.iter().map(|entry| entry.number).collect();
         self.decoders
             .iter()
             .map(|decoder| owning_unit(decoder.function).filter(|unit| units.contains(unit)))

@@ -6,15 +6,16 @@ use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{GetSpan, Span};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::StmtEdits;
+use untwist_core::ast_util::matcher::var_function_or_declaration;
 use untwist_core::pass::{Cx, Interest, Pass};
 use untwist_core::semantic::{observers, Observers};
 
 use oxc_semantic::Scoping;
 use oxc_syntax::symbol::SymbolId;
 
-use crate::array_rotator::find_rotators;
+use crate::array_rotator::{find_rotators, rotator_unit};
 use crate::calls::agnostic::{global_reach, ReachWatch};
 use crate::mutants::{decoder_name_watch_dropped, unsealed_rotators_removed};
 use crate::notes;
@@ -121,12 +122,54 @@ pub fn machinery_units(program: &Program<'_>) -> Vec<Machinery> {
     units_of(program, &find_stamped(program))
 }
 
+struct Owned<'s, 'p> {
+    arrays: FxHashMap<usize, &'s StampedFn<'p>>,
+    decoders: FxHashMap<usize, Vec<&'s StampedFn<'p>>>,
+}
+
+impl<'s, 'p> Owned<'s, 'p> {
+    fn of(stamped: &'s Stamped<'p>) -> Self {
+        let mut arrays = FxHashMap::default();
+        for array in &stamped.arrays {
+            arrays.entry(array.number).or_insert(array);
+        }
+        let mut decoders: FxHashMap<usize, Vec<&'s StampedFn<'p>>> = FxHashMap::default();
+        for (decoder, owner) in stamped.decoders.iter().zip(stamped.owners()) {
+            if let Some(unit) = owner {
+                decoders.entry(unit).or_default().push(decoder);
+            }
+        }
+        Self { arrays, decoders }
+    }
+
+    fn decoders_of(&self, unit: usize) -> &[&'s StampedFn<'p>] {
+        self.decoders.get(&unit).map_or(&[], Vec::as_slice)
+    }
+
+    fn names_of(&self, unit: usize) -> FxHashSet<String> {
+        let mut names: FxHashSet<String> = self
+            .decoders_of(unit)
+            .iter()
+            .map(|entry| entry.name.to_string())
+            .collect();
+        names.insert(string_array_name(unit));
+        names
+    }
+}
+
 fn units_of(program: &Program<'_>, stamped: &Stamped<'_>) -> Vec<Machinery> {
-    let owners = stamped.owners();
+    units_owned(program, stamped, &Owned::of(stamped))
+}
+
+fn units_owned(
+    program: &Program<'_>,
+    stamped: &Stamped<'_>,
+    owned: &Owned<'_, '_>,
+) -> Vec<Machinery> {
     let arrays: Vec<(usize, &StampedFn<'_>)> = stamped
         .units()
         .into_iter()
-        .filter_map(|unit| Some((unit, stamped.array(unit)?)))
+        .filter_map(|unit| Some((unit, *owned.arrays.get(&unit)?)))
         .collect();
     let names: Vec<&str> = arrays.iter().map(|(_, array)| array.name).collect();
     let rotators = find_rotators(program, &names);
@@ -135,12 +178,10 @@ fn units_of(program: &Program<'_>, stamped: &Stamped<'_>) -> Vec<Machinery> {
         units.push(Machinery {
             unit,
             array: Some(array.statement),
-            decoders: stamped
-                .decoders
+            decoders: owned
+                .decoders_of(unit)
                 .iter()
-                .zip(&owners)
-                .filter(|(_, owner)| **owner == Some(unit))
-                .map(|(entry, _)| entry.statement)
+                .map(|entry| entry.statement)
                 .collect(),
             rotator: rotator.map(|(span, _)| span),
             rotator_sealed: true,
@@ -156,27 +197,57 @@ pub fn machinery(program: &Program<'_>) -> Machinery {
         .unwrap_or_default()
 }
 
-fn names_of(stamped: &Stamped<'_>, unit: usize) -> FxHashSet<String> {
-    let owners = stamped.owners();
-    let mut names: FxHashSet<String> = stamped
-        .decoders
-        .iter()
-        .zip(&owners)
-        .filter(|(_, owner)| **owner == Some(unit))
-        .map(|(entry, _)| entry.name.to_string())
-        .collect();
-    names.insert(string_array_name(unit));
-    names
-}
-
 struct References<'w> {
     units: Vec<MachineryDepth>,
+    by_name: Option<FxHashMap<String, Vec<usize>>>,
     found: Vec<Vec<Span>>,
     listing: Option<&'w FxHashSet<Span>>,
     listed: FxHashSet<Span>,
 }
 
+fn units_by_name(units: &[MachineryDepth]) -> Option<FxHashMap<String, Vec<usize>>> {
+    let mut by_name: FxHashMap<String, Vec<usize>> = FxHashMap::default();
+    for (position, units) in units.iter().enumerate() {
+        for name in units.names()? {
+            by_name.entry(name.clone()).or_default().push(position);
+        }
+    }
+    Some(by_name)
+}
+
 impl References<'_> {
+    fn named(&self, name: &str) -> &[usize] {
+        self.by_name
+            .as_ref()
+            .and_then(|by_name| by_name.get(name))
+            .map_or(&[], Vec::as_slice)
+    }
+
+    fn candidates(&self, it: &Statement<'_>) -> Vec<usize> {
+        let declared = var_function_or_declaration(it).map(|declaration| declaration.name);
+        let rotated = rotator_unit(it).map(string_array_name);
+        let mut candidates: Vec<usize> = declared
+            .into_iter()
+            .chain(rotated.as_deref())
+            .flat_map(|name| self.named(name).iter().copied())
+            .collect();
+        candidates.sort_unstable();
+        candidates.dedup();
+        candidates
+    }
+
+    fn visit_indexed<'a>(&mut self, it: &Statement<'a>) {
+        let candidates = self.candidates(it);
+        let entered: Vec<(usize, bool)> = candidates
+            .into_iter()
+            .map(|position| (position, self.units[position].enter(it)))
+            .collect();
+        walk_js::walk_statement(self, it);
+        for (position, entered) in entered {
+            self.units[position].leave(entered);
+        }
+    }
+
     fn note_listed(&mut self, statements: &[Statement<'_>]) {
         let Some(listing) = self.listing else {
             return;
@@ -205,6 +276,10 @@ impl<'a> VisitJs<'a> for References<'_> {
             }
             return;
         }
+        if self.by_name.is_some() {
+            self.visit_indexed(it);
+            return;
+        }
         let entered: Vec<bool> = self.units.iter_mut().map(|units| units.enter(it)).collect();
         walk_js::walk_statement(self, it);
         for (units, entered) in self.units.iter_mut().zip(entered) {
@@ -214,6 +289,15 @@ impl<'a> VisitJs<'a> for References<'_> {
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         let name = it.name.as_str();
+        if self.by_name.is_some() {
+            for position in self.named(name).to_vec() {
+                if !self.units[position].inside() {
+                    self.found[position].push(it.span);
+                }
+            }
+            walk_js::walk_identifier_reference(self, it);
+            return;
+        }
         for (units, found) in self.units.iter().zip(self.found.iter_mut()) {
             if !units.inside() && units.covers(name) {
                 found.push(it.span);
@@ -228,8 +312,10 @@ fn references_listing(
     units: Vec<MachineryDepth>,
     listing: Option<&FxHashSet<Span>>,
 ) -> (Vec<Vec<Span>>, FxHashSet<Span>) {
+    let by_name = (units.len() > 1).then(|| units_by_name(&units)).flatten();
     let mut references = References {
         found: vec![Vec::new(); units.len()],
+        by_name,
         units,
         listing,
         listed: FxHashSet::default(),
@@ -251,7 +337,8 @@ pub fn outstanding_references(program: &Program<'_>) -> Vec<Span> {
 }
 
 pub fn outstanding_references_for(program: &Program<'_>, unit: usize) -> Vec<Span> {
-    let names = names_of(&find_stamped(program), unit);
+    let stamped = find_stamped(program);
+    let names = Owned::of(&stamped).names_of(unit);
     references(program, MachineryDepth::one_unit(names))
 }
 
@@ -286,31 +373,33 @@ impl Plan {
 fn seal_rotators(
     program: &Program<'_>,
     scoping: &Scoping,
-    stamped: &Stamped<'_>,
+    owned: &Owned<'_, '_>,
     units: &mut [Machinery],
 ) {
     if unsealed_rotators_removed() {
         return;
     }
-    let owners = stamped.owners();
     for machinery in units.iter_mut() {
         let Some(span) = machinery.rotator else {
             continue;
         };
-        let allowed: FxHashSet<SymbolId> = stamped
-            .decoders
+        let allowed: FxHashSet<SymbolId> = owned
+            .decoders_of(machinery.unit)
             .iter()
-            .zip(&owners)
-            .filter(|(_, owner)| **owner == Some(machinery.unit))
-            .filter_map(|(entry, _)| entry.symbol)
-            .chain(stamped.array(machinery.unit).and_then(|array| array.symbol))
+            .filter_map(|entry| entry.symbol)
+            .chain(
+                owned
+                    .arrays
+                    .get(&machinery.unit)
+                    .and_then(|array| array.symbol),
+            )
             .collect();
         machinery.rotator_sealed = statement_at(program, span)
             .is_some_and(|statement| rotator_sealed(statement, scoping, &allowed));
     }
 }
 
-fn plan(program: &Program<'_>, (stamped, units): (&Stamped<'_>, &[Machinery])) -> Plan {
+fn plan(program: &Program<'_>, (owned, units): (&Owned<'_, '_>, &[Machinery])) -> Plan {
     let mut plan = Plan::default();
     let decoding: Vec<&Machinery> = units
         .iter()
@@ -325,7 +414,7 @@ fn plan(program: &Program<'_>, (stamped, units): (&Stamped<'_>, &[Machinery])) -
     }
     let depths: Vec<MachineryDepth> = decoding
         .iter()
-        .map(|machinery| MachineryDepth::one_unit(names_of(stamped, machinery.unit)))
+        .map(|machinery| MachineryDepth::one_unit(owned.names_of(machinery.unit)))
         .collect();
     let (outstanding, members) = references_listing(program, depths, Some(&wanted));
     for (machinery, outstanding) in decoding.into_iter().zip(outstanding) {
@@ -401,9 +490,10 @@ impl RemoveDecoderMachinery {
 
     fn removable(&self, program: &Program<'_>, cx: &mut Cx<'_, '_>) -> Vec<Span> {
         let stamped = find_stamped_named(program, cx.scoping(), is_unedited(cx));
-        let mut units = units_of(program, &stamped);
-        seal_rotators(program, cx.scoping(), &stamped, &mut units);
-        let Plan { kept, spans } = plan(program, (&stamped, &units));
+        let owned = Owned::of(&stamped);
+        let mut units = units_owned(program, &stamped, &owned);
+        seal_rotators(program, cx.scoping(), &owned, &mut units);
+        let Plan { kept, spans } = plan(program, (&owned, &units));
         for (message, span) in kept {
             cx.note(message, Some(span));
         }
