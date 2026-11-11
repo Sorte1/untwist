@@ -124,10 +124,23 @@ pub fn compose(map: OwnedSourceMap, input: OwnedSourceMap) -> OwnedSourceMap {
     if map.get_sources().count() > 1 {
         return map;
     }
-    let mut composed = map.compose(input);
-    let sources: Vec<String> = composed.get_sources().map(as_data).collect();
-    composed.set_sources(sources);
-    composed
+    let mut parts = map.compose(input).into_parts();
+    let root = parts.source_root.take();
+    parts.sources = parts
+        .sources
+        .iter()
+        .map(|source| Cow::Owned(as_data(&rooted(root.as_deref(), source))))
+        .collect();
+    parts.token_chunks = None;
+    OwnedSourceMap::from_parts(parts)
+}
+
+fn rooted(root: Option<&str>, source: &str) -> String {
+    match root.filter(|root| !root.is_empty()) {
+        Some(root) if root.ends_with('/') => format!("{root}{source}"),
+        Some(root) => format!("{root}/{source}"),
+        None => source.to_string(),
+    }
 }
 
 fn is_input_name(name: &str) -> bool {

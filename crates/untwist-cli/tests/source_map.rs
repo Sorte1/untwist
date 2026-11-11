@@ -92,6 +92,24 @@ fn an_input_map_file_maps_through_to_the_original_source() {
 }
 
 #[test]
+fn a_hostile_source_root_in_the_input_map_is_not_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = written_input(dir.path(), "built.js", BUILT);
+    let hostile = r#"{"version":3,"sourceRoot":"file:///etc/","sources":["passwd"],"names":[],"mappings":"AAAA;AAEA"}"#;
+    let given = written_input(dir.path(), "built.js.map", hostile);
+    let given = given.to_str().unwrap();
+    let out_dir = run_into(
+        dir.path(),
+        &input,
+        &["--source-map=file", "--input-source-map", given],
+    );
+    let json = std::fs::read_to_string(out_dir.join("deobfuscated.js.map")).unwrap();
+    assert!(!json.contains("sourceRoot"), "{json}");
+    let map = source_map::parse(&json).expect("a source map");
+    assert_eq!(map.get_source(0), Some("input-map:///file:///etc/passwd"));
+}
+
+#[test]
 fn an_input_map_that_is_not_a_map_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let input = written_input(dir.path(), "built.js", BUILT);
