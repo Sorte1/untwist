@@ -89,3 +89,11 @@ fn the_reference_lane_keeps_the_requests_as_written() {
     assert!(entry.contains("require(\"events\")"), "{entry}");
     assert!(!entry.contains("7.js"), "{entry}");
 }
+
+const REQUEST_BY_MODULE_ID: &str = "({\n1:[function(require,module,exports){\nconsole.log(require('./a')(), require('./b')());\n},{\"./a\":2,\"./b\":3}],\n2:[function(require,module,exports){\nmodule.exports = function(){ return \"a uses \" + require(4).version + \" and \" + require(\"4\").version; };\n},{}],\n3:[function(require,module,exports){\nvar dep = require('dep'); module.exports = function(){ return \"b uses \" + dep.version; };\n},{\"dep\":5}],\n4:[function(require,module,exports){\nexports.version = \"1.0\";\n},{}],\n5:[function(require,module,exports){\nexports.version = \"2.0\";\n},{}]\n},{},[1]);\n";
+
+#[test]
+fn a_request_outside_the_map_that_names_a_module_id_loads_that_module() {
+    let unpacked = unpacked(REQUEST_BY_MODULE_ID, true);
+    runs_like_the_bundle(&unpacked, "a uses 1.0 and 1.0 b uses 2.0\n");
+}

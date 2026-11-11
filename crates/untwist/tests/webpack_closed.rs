@@ -76,3 +76,24 @@ fn the_reference_lane_still_writes_the_modules() {
     assert!(unpacked.has("index.js"));
     assert!(unpacked.has("bundle.json"));
 }
+
+const ARROW_FACTORIES_SHARE_THIS: &str = r#"(function (modules) {
+  var installedModules = {};
+  function __webpack_require__(moduleId) {
+    if (installedModules[moduleId]) return installedModules[moduleId].exports;
+    var module = (installedModules[moduleId] = { i: moduleId, l: false, exports: {} });
+    modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+    module.l = true;
+    return module.exports;
+  }
+  return __webpack_require__((__webpack_require__.s = 0));
+})([
+  (module, exports, __webpack_require__) => { this.tag = "t"; console.log(__webpack_require__(1).read()); },
+  (module, exports) => { exports.read = () => this.tag; },
+]);
+"#;
+
+#[test]
+fn a_webpack_bundle_whose_arrow_factory_uses_the_bundles_this_is_not_unpacked() {
+    refused(ARROW_FACTORIES_SHARE_THIS, "0", "t\n");
+}

@@ -16,6 +16,7 @@ pub enum Captured {
     Arguments,
     Eval,
     With,
+    Outer(&'static str),
 }
 
 impl Captured {
@@ -27,6 +28,9 @@ impl Captured {
             Self::Arguments => "it reads the factory's own arguments".to_string(),
             Self::Eval => "it calls eval directly".to_string(),
             Self::With => "it holds a with statement".to_string(),
+            Self::Outer(what) => {
+                format!("it uses {what}, which an arrow factory takes from the bundle's scope")
+            }
         }
     }
 }
@@ -167,6 +171,7 @@ pub struct Check<'s, 'k, 'a> {
     region: Region<'k, 'a>,
     helpers: &'s FxHashSet<SymbolId>,
     hosts: bool,
+    arrow: bool,
     captured: Option<Captured>,
 }
 
@@ -177,6 +182,7 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             region: Region::factory(factory, allowed.mapped_params),
             helpers: allowed.helpers,
             hosts: false,
+            arrow: factory.arrow,
             captured: None,
         }
     }
@@ -192,6 +198,7 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             region: Region::statement(statement),
             helpers,
             hosts,
+            arrow: false,
             captured: None,
         }
     }
@@ -203,6 +210,12 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
     fn host(&self, reach: Reach, name: &str) -> Option<Captured> {
         let read = self.hosts && reach == Reach::Free && HOST_NAMES.contains(&name);
         read.then(|| Captured::Host(name.to_string()))
+    }
+
+    fn outer(&mut self, frame: Frame, what: &'static str) {
+        if self.arrow && !frame.receiver() {
+            self.captured.get_or_insert(Captured::Outer(what));
+        }
     }
 }
 
@@ -229,6 +242,18 @@ impl<'a> Policy<'a> for Check<'_, '_, 'a> {
 
     fn with(&mut self) {
         self.captured.get_or_insert(Captured::With);
+    }
+
+    fn this(&mut self, frame: Frame) {
+        self.outer(frame, "this");
+    }
+
+    fn super_(&mut self, frame: Frame) {
+        self.outer(frame, "super");
+    }
+
+    fn new_target(&mut self, frame: Frame) {
+        self.outer(frame, "new.target");
     }
 }
 

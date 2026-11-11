@@ -184,6 +184,7 @@ pub fn browserify_factories<'k, 'a>(
             let factory = Factory {
                 params: entry.params,
                 body: entry.body,
+                arrow: false,
             };
             Some((entry.id, factory))
         })

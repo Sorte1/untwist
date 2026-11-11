@@ -93,6 +93,7 @@ fn object_property_factory<'k, 'a>(
             Expression::FunctionExpression(function) if is_valid_method(function) => Factory {
                 params: &function.params,
                 body: function.body.as_deref()?,
+                arrow: false,
             },
             _ => return None,
         }
