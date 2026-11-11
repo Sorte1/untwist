@@ -437,6 +437,7 @@ mod tests {
             panicked: Vec::new(),
             depth_refused: Vec::new(),
             unpack_panicked: false,
+            unpack_budget: None,
             single_file: false,
             heap_peak: 0,
             memory_peak: 0,

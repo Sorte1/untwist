@@ -45,6 +45,7 @@ pub struct Isolation {
     pub refused: Vec<usize>,
     pub over_budget: Vec<(usize, untwist_core::budget::Hit)>,
     pub unpack_lost: bool,
+    pub unpack_over: Option<untwist_core::budget::Hit>,
 }
 
 #[doc(hidden)]

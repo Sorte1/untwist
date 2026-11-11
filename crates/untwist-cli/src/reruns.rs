@@ -54,6 +54,7 @@ pub struct Reruns {
     pub over_budget: BTreeMap<usize, BudgetHit>,
     pub serial: bool,
     pub unpack_lost: bool,
+    pub unpack_over: Option<BudgetHit>,
     pub spawns: usize,
     inputs: usize,
 }
@@ -65,6 +66,7 @@ impl Reruns {
             over_budget: BTreeMap::new(),
             serial: false,
             unpack_lost: false,
+            unpack_over: None,
             spawns: 1,
             inputs,
         }
@@ -157,6 +159,9 @@ pub fn next(state: &Reruns, phase: &Phase, death: Death) -> Action {
         rerun.serial = true;
     } else if phase.unpack && !state.unpack_lost {
         rerun.unpack_lost = true;
+        if let Cause::Budget(hit) = signal {
+            rerun.unpack_over = Some(hit);
+        }
     } else if let Some(served) = served_after_inputs(state, phase) {
         rerun.refused.extend(served);
     } else {
@@ -306,6 +311,19 @@ mod tests {
         };
         let again = next(&rerun, &unpack_alone, Death::Crash(SIGABRT));
         assert!(matches!(again, Action::Fail { code: 1, .. }));
+    }
+
+    #[test]
+    fn a_budget_kill_in_unpack_reruns_without_it_as_a_budget_stop() {
+        let Action::Rerun(rerun) = next(
+            &Reruns::new(2),
+            &phase(&[], true, false),
+            Death::Over(untwist::BudgetHit::Memory),
+        ) else {
+            panic!("a rerun");
+        };
+        assert!(rerun.unpack_lost && rerun.refused.is_empty());
+        assert_eq!(rerun.unpack_over, Some(untwist::BudgetHit::Memory));
     }
 
     #[test]

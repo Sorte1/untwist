@@ -206,12 +206,18 @@ impl Pipeline {
             return bundle;
         }
         parts.notes.push(pipeline_refusal(BUDGET_UNPACK));
+        parts.unpack_budget = spent;
         None
     }
 
     pub(super) fn unpack_admitted(&self, parts: &mut OutputParts) -> Option<BundleOutput> {
         let admitted = parts.codes.len() - parts.depth_refused.len();
         if !self.options.unpack || admitted == 0 {
+            return None;
+        }
+        if let Some(hit) = self.options.isolation.unpack_over {
+            parts.unpack_budget = Some(hit);
+            parts.notes.push(pipeline_refusal(BUDGET_UNPACK));
             return None;
         }
         if self.options.isolation.unpack_lost {
