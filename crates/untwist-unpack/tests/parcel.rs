@@ -969,3 +969,29 @@ fn a_var_helper_read_before_its_definition_stays_in_the_entry() {
         "{files:?}"
     );
 }
+
+#[test]
+fn a_numeric_module_id_is_named_by_its_javascript_key() {
+    for (key, id) in [("1e21", "1e+21"), ("0.5", "0.5"), ("1e-7", "1e-7")] {
+        let modules = format!(
+            "a:[function(e,r,t){{r.exports=e(\"./n.js\").v}},{{\"./n.js\":\"{id}\"}}],{key}:[function(e,r,t){{t.v=2}},{{}}]"
+        );
+        let files = accepted(&registry(&modules));
+        let index = code(&files, "index.js");
+        assert!(
+            index.contains(&format!("require(\"./{id}.js\")")),
+            "{key}: {index}"
+        );
+        assert!(code(&files, &format!("{id}.js")).contains("exports.v = 2"));
+    }
+}
+
+#[test]
+fn a_require_of_a_numeric_id_spelled_otherwise_than_javascript_refuses() {
+    for (key, id) in [("1e21", "1000000000000000000000"), ("1e-7", "0.0000001")] {
+        let modules = format!(
+            "a:[function(e,r,t){{r.exports=e(\"./n.js\").v}},{{\"./n.js\":\"{id}\"}}],{key}:[function(e,r,t){{t.v=2}},{{}}]"
+        );
+        refused(&registry(&modules));
+    }
+}
