@@ -1,8 +1,8 @@
 use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
 use untwist_core::pass::PassOptions;
-use untwist_core::semantic::has_module_syntax;
 use untwist_core::semantic::pins::script_global_symbols;
+use untwist_core::semantic::{has_module_syntax, AnnexBWrites};
 
 use crate::collect::{collect, Collected};
 use crate::function_names::function_names;
@@ -36,6 +36,7 @@ pub fn prepare(
     let mut collected = collect(program, scoping, rule);
     collected.classic_script = setting.classic_script;
     pin_script_globals(&mut collected, scoping, setting);
+    pin_annex_b_targets(&mut collected, program, scoping);
     if setting.safe_lane {
         pin_function_names(&mut collected, program, scoping);
     }
@@ -55,6 +56,17 @@ fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, setting: Set
         );
     } else {
         collected.pinned.extend(script_global_symbols(scoping));
+    }
+}
+
+fn pin_annex_b_targets(collected: &mut Collected, program: &Program<'_>, scoping: &Scoping) {
+    if collected.block_function_names.is_empty() {
+        return;
+    }
+    let writes = AnnexBWrites::of(program, scoping);
+    for function in writes.functions() {
+        collected.pinned.insert(function.function);
+        collected.pinned.extend(function.target);
     }
 }
 

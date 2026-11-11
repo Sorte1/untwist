@@ -255,19 +255,6 @@ impl Collector<'_> {
         }
     }
 
-    fn pin_var_scope_namesakes(&mut self, name: &str) {
-        let scoping = self.scoping;
-        let name = Ident::from(name);
-        for scope in scoping.scope_ancestors(self.current()) {
-            if let Some(symbol) = scoping.get_binding(scope, name) {
-                self.out.pinned.insert(symbol);
-            }
-            if scoping.scope_flags(scope).is_var() {
-                break;
-            }
-        }
-    }
-
     fn observe_through_with(&mut self, symbol: SymbolId) {
         let Some(&with) = self.withs.last() else {
             return;
@@ -343,7 +330,6 @@ impl Collector<'_> {
                 continue;
             };
             self.pin(Some(id));
-            self.pin_var_scope_namesakes(id.name.as_str());
             self.out
                 .block_function_names
                 .insert(id.name.as_str().to_string());
