@@ -39,7 +39,8 @@
   the scan `untranspile` uses (`untwist_core::semantic::builtins`) at its first candidate and
   rewrites in the round after it, only when the program neither writes, deletes nor defines
   `JSON.parse` or one of those `Array.prototype` methods (also through a value such as
-  `[].__proto__`, `x.constructor.prototype`, `Object.getPrototypeOf(x)` or `y.JSON`), nor lets
+  `[].__proto__`, `x.constructor.prototype`, `Object.getPrototypeOf(x)`, `y.JSON` or `this[k]` in a
+  non-strict function, whose `this` is the global object when it is called plainly), nor lets
   `JSON`, `Array`, `Array.prototype`, the global object or a prototype reached that way escape
   into a value, nor runs code from text (`Function(…)`, an indirect `eval`), in default and in the
   conservative comparison mode. `--unsafe` rewrites both without the scan, under the assumption

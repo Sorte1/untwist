@@ -30,7 +30,9 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   `f([].constructor)`, `var p = x.__proto__`), is written through a value that may reach it (a
   write through `x.__proto__`, `x.constructor`, `x.constructor.prototype`,
   `Object.getPrototypeOf(x)`, `Reflect.getPrototypeOf(x)` or `Reflect.get(x, k)`, a write of a
-  relied-on name such as `x.Array = …` on any object, or a definer call on one of those values),
+  relied-on name such as `x.Array = …` on any object, a write of such a name or an unknown key
+  through `this` in a non-strict function, or a definer call on one of those values; `this` there
+  escaping into a value counts as the global object escaping),
   or the program runs code from text (`Function(…)`, an indirect `eval`, `setTimeout` with
   anything but a function, `vm.runInThisContext`),
   only `--unsafe` rewrites, under the assumption that **an aliased built-in object, or one
