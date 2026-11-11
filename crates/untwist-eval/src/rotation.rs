@@ -1,5 +1,6 @@
 use oxc_ast::ast::Function;
 use oxc_span::{GetSpan, Span};
+use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 
 use crate::decode::{DecoderProgram, KeptUnits};
@@ -10,14 +11,9 @@ pub type RotationKey = [u8; 32];
 
 const UNIT_CHUNK: usize = 512;
 
-struct RotationEntry {
-    key: RotationKey,
-    rotation: usize,
-}
-
 #[derive(Default)]
 pub struct RotationMemo {
-    entries: Vec<RotationEntry>,
+    entries: FxHashMap<RotationKey, usize>,
     searches: usize,
     hits: usize,
     pub(crate) units: KeptUnits,
@@ -41,10 +37,7 @@ impl RotationMemo {
     }
 
     pub(crate) fn cached(&self, key: &RotationKey) -> Option<usize> {
-        self.entries
-            .iter()
-            .find(|entry| &entry.key == key)
-            .map(|entry| entry.rotation)
+        self.entries.get(key).copied()
     }
 
     pub(crate) fn record_hit(&mut self) {
@@ -56,9 +49,7 @@ impl RotationMemo {
     }
 
     pub(crate) fn store(&mut self, key: RotationKey, rotation: usize) {
-        if self.cached(&key).is_none() {
-            self.entries.push(RotationEntry { key, rotation });
-        }
+        self.entries.entry(key).or_insert(rotation);
     }
 }
 
@@ -171,4 +162,53 @@ pub(crate) fn machinery_key(
     hash_decoders(&mut hasher, program);
     hash_rotator(&mut hasher, program);
     Some(hasher.finalize().into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RotationKey, RotationMemo};
+    use std::time::{Duration, Instant};
+
+    fn key(index: usize) -> RotationKey {
+        let mut key = [0u8; 32];
+        key[..8].copy_from_slice(&index.to_le_bytes());
+        key
+    }
+
+    fn fill_and_read(count: usize) -> Duration {
+        (0..3)
+            .map(|_| {
+                let started = Instant::now();
+                let mut memo = RotationMemo::default();
+                for index in 0..count {
+                    memo.store(key(index), index);
+                }
+                for index in 0..count {
+                    assert_eq!(memo.cached(&key(index)), Some(index));
+                }
+                started.elapsed()
+            })
+            .min()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn many_kept_rotations_are_found_without_a_scan() {
+        let small = fill_and_read(2_000).max(Duration::from_micros(200));
+        let large = fill_and_read(8_000);
+        let ratio = large.as_secs_f64() / small.as_secs_f64();
+        assert!(
+            ratio < 8.0,
+            "8000 rotations took {large:?}, 2000 took {small:?}"
+        );
+    }
+
+    #[test]
+    fn the_first_stored_rotation_for_a_key_wins() {
+        let mut memo = RotationMemo::default();
+        memo.store(key(1), 3);
+        memo.store(key(1), 5);
+        assert_eq!(memo.cached(&key(1)), Some(3));
+        assert_eq!(memo.stored(), 1);
+    }
 }

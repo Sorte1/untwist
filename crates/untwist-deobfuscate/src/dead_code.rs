@@ -9,7 +9,7 @@ use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
-use untwist_core::ast_util::rename::{is_name_taken, Renames, UNIQUE_NAME_SUFFIX_CAP};
+use untwist_core::ast_util::rename::{is_name_taken, taken_names, Renames, UNIQUE_NAME_SUFFIX_CAP};
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
 };
@@ -70,11 +70,11 @@ fn collides(name: &str, outer: ScopeId, moved: &Moved, cx: &Cx<'_, '_>) -> bool 
 
 fn is_available(
     name: &str,
-    scoping: &Scoping,
+    taken: &FxHashSet<&str>,
     moved: &Moved,
     handed_out: &FxHashSet<String>,
 ) -> bool {
-    !is_name_taken(scoping, name)
+    !taken.contains(name)
         && !handed_out.contains(name)
         && !moved
             .values()
@@ -88,12 +88,15 @@ fn fresh_name(
     handed_out: &FxHashSet<String>,
 ) -> Option<String> {
     let first = format!("_{base}");
-    if is_available(&first, scoping, moved, handed_out) {
+    let first_free = !is_name_taken(scoping, &first);
+    let taken = FxHashSet::default();
+    if first_free && is_available(&first, &taken, moved, handed_out) {
         return Some(first);
     }
+    let taken = taken_names(scoping);
     (2..=UNIQUE_NAME_SUFFIX_CAP)
         .map(|suffix| format!("_{base}{suffix}"))
-        .find(|candidate| is_available(candidate, scoping, moved, handed_out))
+        .find(|candidate| is_available(candidate, &taken, moved, handed_out))
 }
 
 fn relocate<'a>(

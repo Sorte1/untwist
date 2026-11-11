@@ -647,3 +647,46 @@ fn a_requested_round_never_passes_the_iteration_cap() {
     assert_eq!(report.iterations, 3);
     assert!(report.converged());
 }
+
+#[test]
+fn a_long_run_prints_the_program_for_the_cycle_check_a_logarithmic_number_of_times() {
+    let (out, report) = run("4096;", vec![Box::new(Countdown)], PassOptions::default());
+    assert_eq!(out, "0;");
+    let printed = report
+        .iteration_elapsed
+        .iter()
+        .filter(|timing| timing.fingerprint().is_some())
+        .count();
+    assert!(
+        printed <= 32 * 8,
+        "{printed} cycle-check prints over {} iterations",
+        report.iterations
+    );
+}
+
+#[test]
+fn a_cycle_that_starts_late_is_still_found() {
+    struct LateToggle;
+    impl<'a> Pass<'a> for LateToggle {
+        fn name(&self) -> &'static str {
+            "late-toggle"
+        }
+        fn exit_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
+            let Expression::NumericLiteral(n) = expr else {
+                return;
+            };
+            n.value = if n.value > 1.0 {
+                n.value - 1.0
+            } else if n.value == 1.0 {
+                -1.0
+            } else {
+                1.0
+            };
+            n.raw = None;
+            cx.changed();
+        }
+    }
+    let (_, report) = run("300;", vec![Box::new(LateToggle)], PassOptions::default());
+    assert_eq!(report.stop, StopReason::Cycle);
+    assert!(report.iterations < 600, "{}", report.iterations);
+}

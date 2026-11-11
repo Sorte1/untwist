@@ -11,7 +11,7 @@ use super::decoder::decoder_refusal;
 use super::intrinsics::{machinery_unreachable, Machinery};
 use super::rotator::{uninitialised, LiteralBindings, RotatorSite};
 use super::seal::sealed;
-use crate::stamp::{context_is_strict, Stamped, StampedFn};
+use crate::stamp::{context_is_strict_in, Stamped, StampedFn, TopLevel};
 
 const HOST_SINK: &str = "console";
 
@@ -20,10 +20,11 @@ struct ForeignUnit<'r, 'p> {
     decoders: Vec<&'r StampedFn<'p>>,
     rotators: Vec<RotatorSite>,
     proven: OnceCell<bool>,
+    sorted: TopLevel,
 }
 
 impl<'r, 'p> ForeignUnit<'r, 'p> {
-    fn new(array: &'r StampedFn<'p>, rotators: &[(usize, RotatorSite)]) -> Self {
+    fn new(array: &'r StampedFn<'p>, rotators: &[(usize, RotatorSite)], sorted: TopLevel) -> Self {
         Self {
             array,
             decoders: Vec::new(),
@@ -33,6 +34,7 @@ impl<'r, 'p> ForeignUnit<'r, 'p> {
                 .map(|(_, site)| *site)
                 .collect(),
             proven: OnceCell::new(),
+            sorted,
         }
     }
 
@@ -52,11 +54,11 @@ impl<'r, 'p> ForeignUnit<'r, 'p> {
         let functions = std::iter::once(self.array)
             .chain(self.decoders.iter().copied())
             .map(|entry| {
-                let strict = context_is_strict(program, entry.statement);
+                let strict = context_is_strict_in(program, entry.statement, self.sorted);
                 (Machinery::Function(entry.function), strict)
             });
         let statements = rotators.iter().copied().map(|statement| {
-            let strict = context_is_strict(program, statement.span());
+            let strict = context_is_strict_in(program, statement.span(), self.sorted);
             (Machinery::Statement(statement), strict)
         });
         functions.chain(statements).collect()
@@ -131,7 +133,7 @@ impl<'r, 'p> ForeignUnits<'r, 'p> {
         let mut units: Vec<ForeignUnit<'r, 'p>> = stamped
             .arrays
             .iter()
-            .map(|array| ForeignUnit::new(array, rotators))
+            .map(|array| ForeignUnit::new(array, rotators, stamped.top_level))
             .collect();
         let mut decoder_units = Vec::new();
         for decoder in &stamped.decoders {

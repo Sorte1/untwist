@@ -10,7 +10,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::var_function_or_declaration;
-use untwist_core::ast_util::rename::{is_name_taken, Renames};
+use untwist_core::ast_util::rename::{taken_names, Renames};
 use untwist_core::pass::Cx;
 use untwist_core::semantic::program_is_strict;
 
@@ -70,11 +70,15 @@ fn name_unit_counts(unstamp: &[Vec<(SymbolId, String)>]) -> FxHashMap<&str, usiz
 
 pub fn unstamp_blocked(unstamp: &[Vec<(SymbolId, String)>], scoping: &Scoping) -> Vec<bool> {
     let counts = name_unit_counts(unstamp);
+    let taken = std::cell::OnceCell::new();
     unstamp
         .iter()
         .map(|symbols| {
             symbols.iter().any(|(_, name)| {
-                is_name_taken(scoping, name) || counts.get(name.as_str()).is_some_and(|n| *n > 1)
+                taken
+                    .get_or_init(|| taken_names(scoping))
+                    .contains(name.as_str())
+                    || counts.get(name.as_str()).is_some_and(|n| *n > 1)
             })
         })
         .collect()
@@ -187,6 +191,13 @@ pub struct Stamped<'p> {
     pub arrays: Vec<StampedFn<'p>>,
     pub decoders: Vec<StampedFn<'p>>,
     pub incomplete: bool,
+    pub top_level: TopLevel,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TopLevel {
+    pub sorted: bool,
+    pub strict: bool,
 }
 
 impl<'p> Stamped<'p> {
@@ -295,7 +306,22 @@ pub fn find_stamped<'p>(program: &'p Program<'p>) -> Stamped<'p> {
         arrays: ordered(collector.arrays),
         decoders: ordered(collector.decoders),
         incomplete: collector.incomplete,
+        top_level: TopLevel {
+            sorted: top_level_sorted(program),
+            strict: program_is_strict(program),
+        },
     }
+}
+
+fn top_level_sorted(program: &Program<'_>) -> bool {
+    program
+        .body
+        .iter()
+        .all(|statement| statement.span().start < statement.span().end)
+        && program
+            .body
+            .windows(2)
+            .all(|pair| pair[0].span().end <= pair[1].span().start)
 }
 
 #[derive(Default)]
@@ -365,6 +391,25 @@ impl<'a> VisitJs<'a> for StrictAt {
             walk_js::walk_class(self, it);
         }
     }
+}
+
+pub fn context_is_strict_in(program: &Program<'_>, statement: Span, top: TopLevel) -> bool {
+    if !top.sorted || statement.start >= statement.end {
+        return context_is_strict(program, statement);
+    }
+    let after = program
+        .body
+        .partition_point(|candidate| candidate.span().start <= statement.start);
+    let Some(candidate) = after.checked_sub(1).and_then(|at| program.body.get(at)) else {
+        return false;
+    };
+    let mut scan = StrictAt {
+        target: statement,
+        strict: top.strict,
+        found: None,
+    };
+    scan.visit_statement(candidate);
+    scan.found.unwrap_or(false)
 }
 
 pub fn context_is_strict(program: &Program<'_>, statement: Span) -> bool {

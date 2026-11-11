@@ -19,6 +19,7 @@ use super::{Note, NoteKind, PassGroup};
 
 pub const ITERATION_CEILING: u32 = 10_000;
 pub const CYCLE_CHECK_START: u32 = 8;
+const DENSE_CYCLE_CHECKS: u32 = 32;
 const DEFERRABLE_DECODE_PASS: &str = "inline-decoded-strings";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -351,7 +352,7 @@ fn check_stop(
     if budget::check().is_err() {
         return Some(StopReason::Budget);
     }
-    if iterations < CYCLE_CHECK_START {
+    if !fingerprinted(iterations) {
         return None;
     }
     let clock = Instant::now();
@@ -472,6 +473,15 @@ fn finish_report(tally: Tally, stop: StopReason, cap: u32) -> RunReport {
         notes,
         heap_charged: 0,
     }
+}
+
+fn fingerprinted(iterations: u32) -> bool {
+    if iterations < CYCLE_CHECK_START {
+        return false;
+    }
+    let stride = (iterations / DENSE_CYCLE_CHECKS).max(1);
+    let stride = 1 << stride.ilog2();
+    iterations.is_multiple_of(stride)
 }
 
 fn fingerprint_program(program: &Program<'_>) -> u64 {
