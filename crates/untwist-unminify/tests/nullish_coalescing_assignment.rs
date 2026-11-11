@@ -189,3 +189,25 @@ fn transpiler_output_still_converts_by_default() {
         assert!(output.contains(expected), "{output}");
     }
 }
+
+const GETTER_REBINDS_OBJECT: &str = r#"function t() { var other = {}; var a = { get k() { a = other; return null; } }; a.k ?? (a.k = 5); return [other.k]; }
+console.log(JSON.stringify(t()));"#;
+
+const GETTER_REBINDS_KEY: &str = r#"function t() { var i = 0; var a = { get 0() { i = 1; return null; } }; a[i] ?? (a[i] = 5); return [a[1], i]; }
+console.log(JSON.stringify(t()));"#;
+
+const GETTER_REBINDS_KEY_OF_TEMP_OBJECT: &str = r#"function t() { var i = 0; var a = { get 0() { i = 1; return null; } }; var _a; (_a = a)[i] ?? (_a[i] = 5); return [a[1], i]; }
+console.log(JSON.stringify(t()));"#;
+
+#[test]
+fn an_operand_the_first_read_can_rebind_keeps_its_pair_by_default() {
+    for source in [
+        GETTER_REBINDS_OBJECT,
+        GETTER_REBINDS_KEY,
+        GETTER_REBINDS_KEY_OF_TEMP_OBJECT,
+    ] {
+        let output = default_lane(source);
+        assert!(!output.contains("??="), "{output}");
+        untwist_testing::node::assert_node_agrees(source, &output);
+    }
+}

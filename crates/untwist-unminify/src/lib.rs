@@ -20,6 +20,7 @@ pub mod prepare;
 pub mod remove_double_not;
 pub mod sequence;
 mod sequence_hazard;
+mod settled;
 pub mod split_for_loop_vars;
 pub mod split_variable_declarations;
 mod statement_slot;

@@ -3,6 +3,7 @@ use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{ContentEq, Span, SPAN};
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use oxc_traverse::Ancestor;
 use rustc_hash::FxHashSet;
@@ -10,6 +11,9 @@ use untwist_core::ast_util::global::{is_declared_reference, is_global_undefined}
 use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{read_reference_count, write_reference_count};
+
+use crate::settled::is_settled_binding;
+pub use crate::settled::script_root;
 
 pub fn reference_symbol(identifier: &IdentifierReference<'_>, cx: &Cx<'_, '_>) -> Option<SymbolId> {
     let reference_id = identifier.reference_id.get()?;
@@ -191,13 +195,18 @@ pub fn target_parts<'k, 'a>(
     }
 }
 
-pub fn keys_match(left: &MemberKey<'_, '_>, right: &MemberKey<'_, '_>, cx: &Cx<'_, '_>) -> bool {
+pub fn keys_match(
+    left: &MemberKey<'_, '_>,
+    right: &MemberKey<'_, '_>,
+    script_root: Option<ScopeId>,
+    cx: &Cx<'_, '_>,
+) -> bool {
     match (left, right) {
         (MemberKey::Static(left), MemberKey::Static(right)) => {
             left.name.as_str() == right.name.as_str()
         }
         (MemberKey::Computed(left), MemberKey::Computed(right)) => {
-            ContentEq::content_eq(*left, *right) && is_repeatable_key(left, cx)
+            ContentEq::content_eq(*left, *right) && is_repeatable_key(left, script_root, cx)
         }
         _ => false,
     }
@@ -275,19 +284,46 @@ pub fn is_repeatable(expr: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
     }
 }
 
-fn is_repeatable_key(key: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
-    if cx.opts.unsafe_transforms {
-        is_free_of_calls(key)
-    } else {
-        reads_the_same_twice(key, cx)
+fn holds_still(expr: &Expression<'_>, script_root: Option<ScopeId>, cx: &Cx<'_, '_>) -> bool {
+    match expr {
+        Expression::Identifier(identifier) => {
+            reads_the_same_twice(expr, cx)
+                && reference_symbol(identifier, cx)
+                    .is_some_and(|symbol| is_settled_binding(cx.scoping(), symbol, script_root))
+        }
+        _ => reads_the_same_twice(expr, cx),
     }
 }
 
-pub fn is_repeatable_target(expr: &Expression<'_>, cx: &Cx<'_, '_>) -> bool {
+pub fn is_repeatable_object(
+    object: &Expression<'_>,
+    script_root: Option<ScopeId>,
+    cx: &Cx<'_, '_>,
+) -> bool {
+    if cx.opts.unsafe_transforms {
+        is_call_free_chain(object)
+    } else {
+        holds_still(object, script_root, cx)
+    }
+}
+
+fn is_repeatable_key(key: &Expression<'_>, script_root: Option<ScopeId>, cx: &Cx<'_, '_>) -> bool {
+    if cx.opts.unsafe_transforms {
+        is_free_of_calls(key)
+    } else {
+        holds_still(key, script_root, cx)
+    }
+}
+
+pub fn is_repeatable_target(
+    expr: &Expression<'_>,
+    script_root: Option<ScopeId>,
+    cx: &Cx<'_, '_>,
+) -> bool {
     match member_parts(expr) {
-        Some((object, MemberKey::Static(_))) => is_repeatable(object, cx),
+        Some((object, MemberKey::Static(_))) => is_repeatable_object(object, script_root, cx),
         Some((object, MemberKey::Computed(key))) => {
-            is_repeatable(object, cx) && is_repeatable_key(key, cx)
+            is_repeatable_object(object, script_root, cx) && is_repeatable_key(key, script_root, cx)
         }
         None => matches!(expr, Expression::Identifier(_)) && is_repeatable(expr, cx),
     }

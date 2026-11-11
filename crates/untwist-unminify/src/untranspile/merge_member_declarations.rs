@@ -2,11 +2,13 @@ use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
 use oxc_span::Span;
-use oxc_syntax::scope::{ScopeFlags, ScopeId};
-use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use oxc_syntax::scope::ScopeId;
+use oxc_syntax::symbol::SymbolId;
 use untwist_core::ast_util::pattern::object_pattern;
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::{has_module_syntax, is_constant_binding, scope_hazard};
+use untwist_core::semantic::scope_hazard;
+
+use crate::settled::{arguments_can_rebind, is_unwritten_here, script_root};
 
 use super::shapes;
 
@@ -31,31 +33,6 @@ struct Read {
     kind: VariableDeclarationKind,
     base: SymbolId,
     target: SymbolId,
-}
-
-fn function_of(scoping: &Scoping, scope: ScopeId) -> Option<ScopeId> {
-    scoping.scope_ancestors(scope).find(|ancestor| {
-        let flags = scoping.scope_flags(*ancestor);
-        flags.contains(ScopeFlags::Function) && !flags.contains(ScopeFlags::Arrow)
-    })
-}
-
-fn arguments_can_rebind(scoping: &Scoping, base: SymbolId) -> bool {
-    if !scoping
-        .symbol_flags(base)
-        .contains(SymbolFlags::FunctionScopedVariable)
-    {
-        return false;
-    }
-    let scope = scoping.symbol_scope_id(base);
-    scoping
-        .root_unresolved_references()
-        .get("arguments")
-        .into_iter()
-        .flatten()
-        .any(|reference| {
-            function_of(scoping, scoping.get_reference(*reference).scope_id()) == Some(scope)
-        })
 }
 
 fn member_parts<'k, 'a>(init: &'k Expression<'a>) -> Option<&'k IdentifierReference<'a>> {
@@ -93,19 +70,12 @@ impl MergeMemberDeclarations {
             .get_reference(base.reference_id.get()?)
             .symbol_id()?;
         let target = id.symbol_id.get()?;
-        let mergeable = target != base
-            && is_constant_binding(scoping, base)
-            && !self.is_externally_rebindable(scoping, base);
+        let mergeable = target != base && is_unwritten_here(scoping, base, self.script_root);
         mergeable.then_some(Read {
             kind: declaration.kind,
             base,
             target,
         })
-    }
-
-    fn is_externally_rebindable(&self, scoping: &Scoping, base: SymbolId) -> bool {
-        scoping.symbol_flags(base).contains(SymbolFlags::Import)
-            || Some(scoping.symbol_scope_id(base)) == self.script_root
     }
 
     fn repeats(&self, statements: &[Statement<'_>], target: SymbolId, scoping: &Scoping) -> bool {
@@ -219,7 +189,7 @@ impl<'a> Pass<'a> for MergeMemberDeclarations {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.hazard = scope_hazard(cx.scoping()).is_some();
-        self.script_root = (!has_module_syntax(program)).then(|| cx.scoping().root_scope_id());
+        self.script_root = script_root(program, cx.scoping());
     }
 
     fn exit_statements(&mut self, node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
