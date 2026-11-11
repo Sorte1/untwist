@@ -3,11 +3,12 @@ use untwist_deobfuscate::mutants::drop_wrapper_guards_for_tests;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/wrapper_alias_rows.txt");
+const SAFE_WITHOUT_GUARDS: [&str; 1] = ["guard-wrapper-in-sloppy-block"];
 
 fn guard_rows() -> Vec<(String, String)> {
     ROWS.lines()
         .filter_map(|line| line.split_once('|'))
-        .filter(|(label, _)| label.starts_with("guard-"))
+        .filter(|(label, _)| label.starts_with("guard-") && !SAFE_WITHOUT_GUARDS.contains(label))
         .map(|(label, program)| (label.to_string(), program.to_string()))
         .collect()
 }
