@@ -4,6 +4,7 @@ use oxc_allocator::Allocator;
 use untwist_core::parse::parse_program;
 use untwist_core::print::{print, PrintStyle};
 use untwist_deobfuscate::notes::{
+    SWITCH_BINDING_BLOCK_FUNCTION, SWITCH_BINDING_DIRECT_EVAL, SWITCH_BINDING_GLOBAL_REACH,
     SWITCH_CASE_BINDING_SHARED, SWITCH_CASE_EXIT, SWITCH_CASE_SHADOW, SWITCH_FALLTHROUGH,
     SWITCH_SEQUENCE,
 };
@@ -629,4 +630,121 @@ fn a_case_declaration_named_like_a_global_read_in_another_function_is_refused() 
         dispatch("var e = 0;", &cases, "")
     );
     assert_left_alone(&source, Some(SWITCH_CASE_SHADOW));
+}
+
+#[test]
+fn a_block_function_named_like_the_iterator_is_refused() {
+    let cases = cases_with(
+        "        {\n          function e() {}\n        }\n        a();",
+        "        b();",
+    );
+    assert_left_alone(
+        &dispatch("var e = 0;", &cases, ""),
+        Some(SWITCH_BINDING_BLOCK_FUNCTION),
+    );
+}
+
+#[test]
+fn a_block_function_named_like_the_order_array_is_refused() {
+    let cases = cases_with("        if (a()) function d() {}", "        b();");
+    assert_left_alone(
+        &dispatch("var e = 0;", &cases, ""),
+        Some(SWITCH_BINDING_BLOCK_FUNCTION),
+    );
+}
+
+#[test]
+fn a_strict_block_function_named_like_the_iterator_still_flattens() {
+    let cases = cases_with(
+        "        {\n          function e() {}\n        }\n        a();",
+        "        b();",
+    );
+    let source = format!("'use strict';\n{}", dispatch("var e = 0;", &cases, ""));
+    let alloc = Allocator::default();
+    let (code, notes) = run_one(&alloc, &source);
+    assert_eq!(
+        code.trim(),
+        "\"use strict\";\nfunction hi(p) {\n  {\n    function e() {}\n  }\n  a();\n  b();\n  c();\n}"
+    );
+    assert!(notes.is_empty(), "{notes:?}");
+}
+
+#[test]
+fn a_block_function_in_a_nested_function_still_flattens() {
+    let cases = cases_with(
+        "        a(function () {\n          {\n            function e() {}\n          }\n        });",
+        "        b();",
+    );
+    let source = dispatch("var e = 0;", &cases, "");
+    let alloc = Allocator::default();
+    let (code, notes) = run_one(&alloc, &source);
+    assert_eq!(
+        code.trim(),
+        "function hi(p) {\n  a(function () {\n    {\n      function e() {}\n    }\n  });\n  b();\n  c();\n}"
+    );
+    assert!(notes.is_empty(), "{notes:?}");
+}
+
+#[test]
+fn a_direct_eval_in_a_case_is_refused() {
+    let cases = cases_with("        eval(a);", "        b();");
+    assert_left_alone(
+        &dispatch("var e = 0;", &cases, ""),
+        Some(SWITCH_BINDING_DIRECT_EVAL),
+    );
+}
+
+#[test]
+fn a_direct_eval_after_the_loop_is_refused() {
+    let cases = cases_with("        let q = 1;\n        a(q);", "        b();");
+    assert_left_alone(
+        &dispatch("var e = 0;", &cases, "  z(eval('typeof q'));\n"),
+        Some(SWITCH_BINDING_DIRECT_EVAL),
+    );
+}
+
+#[test]
+fn a_direct_eval_in_a_closure_of_a_case_is_refused() {
+    let cases = cases_with("        a(() => eval(b));", "        b();");
+    assert_left_alone(
+        &dispatch("var e = 0;", &cases, ""),
+        Some(SWITCH_BINDING_DIRECT_EVAL),
+    );
+}
+
+#[test]
+fn a_direct_eval_in_another_function_still_flattens() {
+    let source = format!(
+        "{}\nfunction other() {{\n  eval(a);\n}}",
+        dispatch("var e = 0;", PLAIN_CASES, "")
+    );
+    let alloc = Allocator::default();
+    let (code, notes) = run_one(&alloc, &source);
+    assert_eq!(
+        code.trim(),
+        "function hi(p) {\n  a();\n  b();\n  c();\n}\nfunction other() {\n  eval(a);\n}"
+    );
+    assert!(notes.is_empty(), "{notes:?}");
+}
+
+const A_SCRIPT_DISPATCH_PREFIX: &str =
+    "var d = '0|1'.split('|');\nvar e = 0;\nwhile (!![]) {\n  switch (d[e++]) {\n    case '0':\n";
+
+const A_SCRIPT_DISPATCH_SUFFIX: &str =
+    "      continue;\n    case '1':\n      b();\n      continue;\n  }\n  break;\n}";
+
+#[test]
+fn a_script_global_counter_written_through_the_global_object_is_refused() {
+    let source =
+        format!("{A_SCRIPT_DISPATCH_PREFIX}      globalThis.e = 5;\n{A_SCRIPT_DISPATCH_SUFFIX}");
+    assert_left_alone(&source, Some(SWITCH_BINDING_GLOBAL_REACH));
+}
+
+#[test]
+fn a_script_global_counter_no_code_can_reach_still_flattens() {
+    let source = format!("{A_SCRIPT_DISPATCH_PREFIX}      a();\n{A_SCRIPT_DISPATCH_SUFFIX}");
+    let alloc = Allocator::default();
+    let (code, notes) = run_one(&alloc, &source);
+    assert_eq!(code.trim(), "a();\nb();");
+    assert!(notes.is_empty(), "{notes:?}");
 }

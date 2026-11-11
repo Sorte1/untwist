@@ -6,13 +6,15 @@ use oxc_span::{Span, SPAN};
 use oxc_str::Ident;
 use oxc_syntax::operator::UpdateOperator;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::{call_parts, infinite_loop_body};
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
+use untwist_core::semantic::{eval_payload_names, has_module_syntax, AnnexBWrites};
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
+use crate::calls::agnostic::{global_reach, ReachWatch};
 use crate::control_flow_object::single_declarator;
 use crate::notes;
 
@@ -131,6 +133,106 @@ fn bindings_are_private(bindings: &[SymbolId; 2], scoping: &Scoping) -> bool {
         scoping.get_resolved_reference_ids(*symbol).len() == PRELUDE_REFERENCES
             && scoping.symbol_redeclarations(*symbol).is_empty()
     })
+}
+
+#[derive(Default)]
+struct Reach {
+    writes: AnnexBWrites,
+    eval_names: Vec<String>,
+    script_globals: bool,
+    unreached_globals: Vec<SymbolId>,
+}
+
+impl Reach {
+    fn of(program: &Program<'_>, cx: &Cx<'_, '_>) -> Self {
+        let scoping = cx.scoping();
+        let eval_names = if scoping.root_unresolved_references().contains_key("eval") {
+            eval_payload_names(program)
+        } else {
+            Vec::new()
+        };
+        let script_globals = !cx.opts.nested_root && !has_module_syntax(program);
+        let unreached_globals = if script_globals {
+            unreached_root_bindings(program, scoping)
+        } else {
+            Vec::new()
+        };
+        Self {
+            writes: AnnexBWrites::of(program, scoping),
+            eval_names,
+            script_globals,
+            unreached_globals,
+        }
+    }
+
+    fn global_binding_reached(&self, bindings: &[SymbolId; 2], scoping: &Scoping) -> bool {
+        self.script_globals
+            && bindings.iter().any(|symbol| {
+                scoping.symbol_scope_id(*symbol) == scoping.root_scope_id()
+                    && !self.unreached_globals.contains(symbol)
+            })
+    }
+}
+
+fn unreached_root_bindings(program: &Program<'_>, scoping: &Scoping) -> Vec<SymbolId> {
+    let Some(prelude) = prelude_switch(&program.body) else {
+        return Vec::new();
+    };
+    let names: Vec<&str> = prelude
+        .bindings
+        .iter()
+        .map(|symbol| scoping.symbol_name(*symbol))
+        .collect();
+    let props: Vec<&str> = prelude
+        .bindings
+        .iter()
+        .filter(|symbol| {
+            scoping
+                .symbol_flags(**symbol)
+                .contains(SymbolFlags::FunctionScopedVariable)
+        })
+        .map(|symbol| scoping.symbol_name(*symbol))
+        .collect();
+    let watch = ReachWatch {
+        names: &names,
+        props: &props,
+        fns: &[],
+        observe: false,
+    };
+    if global_reach(program, scoping, (None, &[]), watch)
+        .reach
+        .is_some()
+    {
+        return Vec::new();
+    }
+    prelude.bindings.to_vec()
+}
+
+fn binding_hazard(
+    bindings: &[SymbolId; 2],
+    writes: &AnnexBWrites,
+    scoping: &Scoping,
+) -> Option<&'static str> {
+    if bindings.iter().any(|symbol| writes.may_write(*symbol)) {
+        return Some(notes::SWITCH_BINDING_BLOCK_FUNCTION);
+    }
+    bindings
+        .iter()
+        .any(|symbol| {
+            scoping
+                .scope_flags(scoping.symbol_scope_id(*symbol))
+                .contains_direct_eval()
+        })
+        .then_some(notes::SWITCH_BINDING_DIRECT_EVAL)
+}
+
+fn declaration_named_in_eval_text(switch: &SwitchStatement<'_>, names: &[String]) -> Option<Span> {
+    switch
+        .cases
+        .iter()
+        .flat_map(case_bindings)
+        .find(|id| names.iter().any(|name| name == id.name.as_str()))
+        .map(|id| id.span)
 }
 
 fn case_label(case: &SwitchCase<'_>) -> Option<String> {
@@ -386,12 +488,24 @@ fn shared_declaration(switch: &SwitchStatement<'_>, scoping: &Scoping) -> Option
         .find_map(|case| binding_used_outside_its_case(case, scoping))
 }
 
-fn plan(stmts: &[Statement<'_>], cx: &mut Cx<'_, '_>) -> Option<Vec<String>> {
+fn plan(stmts: &[Statement<'_>], reach: &Reach, cx: &mut Cx<'_, '_>) -> Option<Vec<String>> {
     let prelude = prelude_switch(stmts)?;
     let switch = prelude.switch;
     let labels = case_labels(switch)?;
     let scope = switch.scope_id.get()?;
     if !bindings_are_private(&prelude.bindings, cx.scoping()) {
+        return None;
+    }
+    if let Some(note) = binding_hazard(&prelude.bindings, &reach.writes, cx.scoping()) {
+        cx.note(note, Some(switch.span));
+        return None;
+    }
+    if reach.global_binding_reached(&prelude.bindings, cx.scoping()) {
+        cx.note(notes::SWITCH_BINDING_GLOBAL_REACH, Some(switch.span));
+        return None;
+    }
+    if let Some(span) = declaration_named_in_eval_text(switch, &reach.eval_names) {
+        cx.note(notes::SWITCH_BINDING_DIRECT_EVAL, Some(span));
         return None;
     }
     if let Some(case) = exiting_case(switch) {
@@ -517,18 +631,20 @@ fn commit<'a>(
     moved + PRELUDE_STATEMENTS
 }
 
-fn flatten<'a>(stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) -> usize {
-    let Some(sequence) = plan(stmts, cx) else {
+fn flatten<'a>(stmts: &mut AVec<'a, Statement<'a>>, reach: &Reach, cx: &mut Cx<'a, '_>) -> usize {
+    let Some(sequence) = plan(stmts, reach, cx) else {
         return 0;
     };
     commit(stmts, &sequence, cx)
 }
 
 #[derive(Default)]
-pub struct ControlFlowSwitch;
+pub struct ControlFlowSwitch {
+    reach: Reach,
+}
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
-    Box::new(ControlFlowSwitch)
+    Box::new(ControlFlowSwitch::default())
 }
 
 impl<'a> Pass<'a> for ControlFlowSwitch {
@@ -537,11 +653,15 @@ impl<'a> Pass<'a> for ControlFlowSwitch {
     }
 
     fn interest(&self) -> Interest {
-        Interest::EXIT_STATEMENTS
+        Interest::ENTER_PROGRAM | Interest::EXIT_STATEMENTS
+    }
+
+    fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        self.reach = Reach::of(program, cx);
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
-        let changes = flatten(stmts, cx);
+        let changes = flatten(stmts, &self.reach, cx);
         cx.changed_by(changes);
     }
 }
