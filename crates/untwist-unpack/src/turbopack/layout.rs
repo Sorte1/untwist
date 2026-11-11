@@ -341,7 +341,8 @@ pub fn layout<'k, 'a>(source: &'k Program<'a>) -> Option<Layout<'k, 'a>> {
                     return None;
                 }
             }
-            [_, _, ..] => modules(rest, &mut defs)?,
+            [_, _, ..] if entries.is_none() => modules(rest, &mut defs)?,
+            [_, _, ..] => return None,
             [] => return None,
         }
     }

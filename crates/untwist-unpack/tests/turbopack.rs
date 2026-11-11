@@ -379,3 +379,33 @@ fn a_registration_other_than_one_with_no_other_chunks_and_known_ids_refuses() {
         register("\"index\",2")
     ));
 }
+
+#[test]
+fn a_registration_pushed_before_a_module_list_refuses() {
+    refused(&format!(
+        "{}{}",
+        register("1"),
+        push(&format!("1,(e,t,r)=>{{r.a=e.r(2)}},{LEAF}"))
+    ));
+    refused(&format!(
+        "{}{}{}",
+        push(LEAF),
+        register("2"),
+        push("3,(e,t,r)=>{r.c=1}")
+    ));
+}
+
+#[test]
+fn a_browser_chunk_carries_the_runtime_premise_note() {
+    let alloc = Allocator::default();
+    let source = chunk("(e,t,r)=>{r.a=e.r(2).v}");
+    let parsed = parse_program(&alloc, &source);
+    let result = unpack(&alloc, &parsed.program, &[]).expect("a turbopack chunk");
+    assert!(
+        result.notes.iter().any(|note| note
+            .message
+            .contains("Turbopack's standard runtime loads it")),
+        "{:?}",
+        result.notes
+    );
+}

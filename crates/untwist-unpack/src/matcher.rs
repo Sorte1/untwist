@@ -123,6 +123,11 @@ pub fn param_names<'a>(params: &FormalParameters<'a>) -> Vec<&'a str> {
     names
 }
 
+pub fn distinct(names: &[&str]) -> bool {
+    let mut seen = rustc_hash::FxHashSet::default();
+    names.iter().all(|name| seen.insert(*name))
+}
+
 pub fn unreassigned_var(kind: VariableDeclarationKind) -> bool {
     matches!(
         kind,

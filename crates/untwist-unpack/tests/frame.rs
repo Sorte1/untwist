@@ -34,7 +34,7 @@ fn the_frame_finds_one_wrapper_of_each_shape() {
             Some(Shape::Umd),
         ),
         (
-            "(function(exports, require, module, __filename, __dirname) { a(); })",
+            "// @bun @bun-cjs\n(function(exports, require, module, __filename, __dirname) { a(); })",
             Some(Shape::Bun),
         ),
         ("(function(exports, require, module) { a(); })", None),
@@ -100,4 +100,27 @@ fn a_sequence_around_the_wrapper_call_is_not_a_wrapper() {
     ] {
         assert_eq!(shape_of(source).0, None, "{source}");
     }
+}
+
+#[test]
+fn the_bun_wrapper_needs_the_pragma_where_bun_reads_it() {
+    let wrapper = "(function(exports, require, module, __filename, __dirname) { a(); })";
+    for (head, want) in [
+        ("// @bun @bun-cjs\n", Some(Shape::Bun)),
+        ("// @bun @bytecode @bun-cjs\n", Some(Shape::Bun)),
+        ("#!/usr/bin/env bun\n// @bun @bun-cjs\n", Some(Shape::Bun)),
+        ("", None),
+        ("// @bun\n", None),
+        ("// @bun-cjs\n", None),
+        ("// @bun\n// @bun-cjs\n", None),
+        ("\n// @bun @bun-cjs\n", None),
+        (" // @bun @bun-cjs\n", None),
+        ("/* @bun @bun-cjs */\n", None),
+        ("// x\n// @bun @bun-cjs\n", None),
+    ] {
+        let source = format!("{head}{wrapper}");
+        assert_eq!(shape_of(&source).0, want, "{source:?}");
+    }
+    let asynchronous = "// @bun @bun-cjs\n(async function(exports, require, module, __filename, __dirname) { a(); })";
+    assert_eq!(shape_of(asynchronous).0, None);
 }

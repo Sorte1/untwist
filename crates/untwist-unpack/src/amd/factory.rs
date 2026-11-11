@@ -12,7 +12,7 @@ use untwist_core::pass::{Note, NoteKind};
 
 use crate::closed::{Allowed, Check};
 use crate::esbuild::build::has_use_strict;
-use crate::matcher::{anonymous_factory, Factory};
+use crate::matcher::{anonymous_factory, distinct, Factory};
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind};
 use crate::path::{dirname_posix, join_posix};
 use crate::runtime::{js_string, synthetic_statements};
@@ -224,7 +224,8 @@ pub fn sound(
     pairs: &[Dependency],
     host_free: bool,
 ) -> bool {
-    closed_and_shaped(scoping, callback)
+    callback.names().is_some_and(|names| distinct(&names))
+        && closed_and_shaped(scoping, callback)
         && named_only_as_mapped(scoping, callback, pairs)
         && !redeclares_a_parameter(callback)
         && !(host_free && reads_host(scoping, callback))

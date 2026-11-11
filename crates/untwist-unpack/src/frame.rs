@@ -3,6 +3,8 @@ use oxc_ast::ast::*;
 use crate::matcher::{anonymous_factory, unwrap_statement_expression, Factory};
 
 const BUN_PARAMS: [&str; 5] = ["exports", "require", "module", "__filename", "__dirname"];
+const BUN_PRAGMA: &str = "// @bun";
+const BUN_CJS: &str = "@bun-cjs";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Shape {
@@ -42,14 +44,18 @@ pub struct Frame<'k, 'a> {
 
 impl<'k, 'a> Frame<'k, 'a> {
     pub fn of(program: &'k Program<'a>) -> Self {
-        Self::of_statements(&program.body)
+        Self::scan(&program.body, bun_pragma(program))
     }
 
     pub fn of_statements(top: &'k [Statement<'a>]) -> Self {
+        Self::scan(top, false)
+    }
+
+    fn scan(top: &'k [Statement<'a>], bun: bool) -> Self {
         let mut found = top
             .iter()
             .enumerate()
-            .filter_map(|(index, statement)| wrapper_of(index, statement));
+            .filter_map(|(index, statement)| wrapper_of(index, statement, bun));
         let wrapper = match (found.next(), found.next()) {
             (Some(only), None) => Some(only),
             _ => None,
@@ -66,7 +72,33 @@ impl<'k, 'a> Frame<'k, 'a> {
     }
 }
 
-fn wrapper_of<'k, 'a>(index: usize, statement: &'k Statement<'a>) -> Option<Wrapper<'k, 'a>> {
+pub fn bun_pragma(program: &Program<'_>) -> bool {
+    let text = program.source_text;
+    let start = match program.hashbang {
+        Some(_) => text.find('\n').map_or(text.len(), |end| end + 1),
+        None => 0,
+    };
+    let own = program
+        .comments
+        .first()
+        .is_some_and(|comment| comment.span.start as usize == start);
+    let Some(rest) = text
+        .get(start..)
+        .and_then(|rest| rest.strip_prefix(BUN_PRAGMA))
+    else {
+        return false;
+    };
+    own && rest
+        .split('\n')
+        .next()
+        .is_some_and(|line| line.contains(BUN_CJS))
+}
+
+fn wrapper_of<'k, 'a>(
+    index: usize,
+    statement: &'k Statement<'a>,
+    bun: bool,
+) -> Option<Wrapper<'k, 'a>> {
     let expression = match statement {
         Statement::ExpressionStatement(statement) => {
             unwrap_statement_expression(&statement.expression)
@@ -77,7 +109,7 @@ fn wrapper_of<'k, 'a>(index: usize, statement: &'k Statement<'a>) -> Option<Wrap
         _ => return None,
     };
     let expression = expression.without_parentheses();
-    if let Some(function) = bun_function(expression) {
+    if let Some(function) = bun_function(expression).filter(|_| bun) {
         return Some(Wrapper {
             shape: Shape::Bun,
             index,
@@ -128,7 +160,7 @@ fn bun_function<'k, 'a>(expression: &'k Expression<'a>) -> Option<Factory<'k, 'a
         return None;
     };
     let names = crate::matcher::param_names(&function.params);
-    if names != BUN_PARAMS || function.params.rest.is_some() {
+    if names != BUN_PARAMS || function.params.rest.is_some() || function.r#async {
         return None;
     }
     anonymous_factory(expression)
