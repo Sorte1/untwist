@@ -327,8 +327,10 @@
   evaluates `decodeURIComponent('%41')` with the standard behaviour even when the program replaces
   it (`decodeURIComponent = function(){ … }`), as the reference deobfuscator does in both modes; node prints the
   replacement. The default mode leaves the call alone, with a note, when the program assigns to
-  that name or declares a binding of it anywhere; a replacement that goes through the global
-  object (`globalThis.atob = …`) is not seen by that check. `fold-literal-chains` (default mode only) folds a literal chain such as
+  that name or declares a binding of it anywhere, and also when the built-ins scan that gates
+  `json-parse` finds that name, or the global object, possibly written or kept as a value
+  (`globalThis.atob = …`, `var g = globalThis; g["unes" + "cape"] = …`, `this.decodeURI = …`).
+  Each of the four names is checked on its own. `fold-literal-chains` (default mode only) folds a literal chain such as
   `'abc'.charAt(0)` or `[1, 2].join('')` only when no write in the program may change a key the
   chain consults. The check is target-agnostic: every member write,
   `delete` and definer call (`defineProperty`, `defineProperties`, `assign`, `Reflect.set`,

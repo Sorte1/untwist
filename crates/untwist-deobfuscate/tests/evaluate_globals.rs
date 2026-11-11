@@ -307,3 +307,9 @@ fn a_global_replaced_through_the_global_object_still_folds_under_unsafe() {
     "#
     );
 }
+
+#[test]
+fn a_global_replaced_through_this_inside_a_function_is_left_alone_in_the_default_lane() {
+    let source = "(function () {\n  this.decodeURI = function () {\n    return \"p3\";\n  };\n})();\nconsole.log(decodeURI(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
