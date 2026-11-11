@@ -21,6 +21,7 @@ impl<'k, 'a> Def<'k, 'a> {
         Some(Factory {
             params: &self.function.params,
             body: self.function.body.as_deref()?,
+            arrow: false,
         })
     }
 

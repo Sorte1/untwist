@@ -56,7 +56,7 @@ pub fn callback<'k, 'a>(expr: &'k Expression<'a>) -> Option<Callback<'k, 'a>> {
     if asynchronous {
         return None;
     }
-    let Factory { params, body } = anonymous_factory(expr)?;
+    let Factory { params, body, .. } = anonymous_factory(expr)?;
     Some(Callback { expr, params, body })
 }
 
@@ -138,6 +138,7 @@ fn closed_and_shaped(scoping: &Scoping, callback: &Callback<'_, '_>) -> bool {
     let factory = Factory {
         params: callback.params,
         body: callback.body,
+        arrow: matches!(callback.expr, Expression::ArrowFunctionExpression(_)),
     };
     let mut sound = Sound {
         check: Check::factory(scoping, factory, &allowed),

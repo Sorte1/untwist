@@ -264,3 +264,66 @@ fn a_umd_wrapper_with_externals_is_refused() {
     );
     assert!(found.unchanged);
 }
+
+const OUTER_CONTEXT: [(&str, &str); 4] = [
+    ("this.tag", "this"),
+    ("(() => this)()", "this"),
+    ("new.target", "new.target"),
+    ("[1].map((x) => x + typeof new.target)", "new.target"),
+];
+
+const OWN_RECEIVER: [&str; 4] = [
+    "(function () { return this; }).call(1)",
+    "new (class { x = this; })().x",
+    "({ m() { return this; } }).m()",
+    "(function () { return new.target; })()",
+];
+
+fn arrow_factories(shape: &str) -> String {
+    shape
+        .replace(
+            "function (module, exports, __webpack_require__) {",
+            "(module, exports, __webpack_require__) => {",
+        )
+        .replace("function (module) {", "(module) => {")
+}
+
+#[test]
+fn an_arrow_factory_that_uses_the_bundles_this_or_new_target_refuses_the_bundle() {
+    let shape = arrow_factories(WEBPACK_4);
+    for (body, what) in OUTER_CONTEXT {
+        let found = outcome(&shape.replace("BODY", body), UnpackOptions::default());
+        assert_eq!(found.kind, None, "{body}");
+        assert_eq!(
+            found.notes,
+            [format!("module 0 {NOT_CLOSED}: it uses {what}, which an arrow factory takes from the bundle's scope")],
+            "{body}"
+        );
+        assert!(found.unchanged, "{body}");
+    }
+    let found = outcome(
+        &WEBPACK_5.replace("BODY", "this.tag"),
+        UnpackOptions::default(),
+    );
+    assert_eq!(found.kind, None);
+}
+
+#[test]
+fn an_arrow_factory_whose_this_belongs_to_a_nested_function_or_class_is_taken() {
+    for shape in [arrow_factories(WEBPACK_4), WEBPACK_5.to_string()] {
+        for body in OWN_RECEIVER {
+            let found = outcome(&shape.replace("BODY", body), UnpackOptions::default());
+            assert_eq!(found.kind, Some(BundleKind::Webpack), "{body}\n{shape}");
+        }
+    }
+}
+
+#[test]
+fn a_function_factory_has_its_own_this_and_is_taken() {
+    for (shape, kind, _) in [SHAPES[0], SHAPES[2], SHAPES[3]] {
+        for body in ["this", "this.tag", "new.target"] {
+            let found = outcome(&shape.replace("BODY", body), UnpackOptions::default());
+            assert_eq!(found.kind, Some(kind), "{body}\n{shape}");
+        }
+    }
+}

@@ -7,6 +7,7 @@ use oxc_span::GetSpan;
 use oxc_str::{Ident, Str};
 use oxc_syntax::scope::ScopeFlags;
 use rustc_hash::FxHashMap;
+use untwist_core::ast_util::prop::number_key;
 use untwist_core::pass::{Note, NoteKind};
 use untwist_core::semantic::build_scoping;
 
@@ -18,21 +19,49 @@ use crate::specifier::ModulePaths;
 
 const REQUIRE: &str = "require";
 const FALSY_IDS: [&str; 2] = ["", "0"];
+const INHERITED_KEYS: [&str; 12] = [
+    "__proto__",
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+    "constructor",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "toLocaleString",
+    "toString",
+    "valueOf",
+];
 
-type Specifiers = FxHashMap<String, Option<String>>;
+enum Mapped {
+    Linked(String),
+    Missing,
+    Falsy,
+}
+
+type Specifiers = FxHashMap<String, Mapped>;
 
 fn specifiers(module: &Module<'_>, paths: &ModulePaths) -> Specifiers {
     let from = module.path.as_str();
     let mut specifiers = Specifiers::default();
     for (id, request) in &module.dependencies {
-        if FALSY_IDS.contains(&id.as_str()) {
-            specifiers.remove(request);
-        } else {
-            let linked = paths.get(id).map(|path| paths.specifier(from, path));
-            specifiers.insert(request.clone(), linked);
-        }
+        let mapped = match (FALSY_IDS.contains(&id.as_str()), paths.get(id)) {
+            (true, _) => Mapped::Falsy,
+            (false, Some(path)) => Mapped::Linked(paths.specifier(from, path)),
+            (false, None) => Mapped::Missing,
+        };
+        specifiers.insert(request.clone(), mapped);
     }
     specifiers
+}
+
+fn request_key(argument: &Argument<'_>) -> Option<String> {
+    match argument {
+        Argument::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
+        Argument::NumericLiteral(literal) => Some(number_key(literal.value)),
+        _ => None,
+    }
 }
 
 fn binds(scoping: &Scoping, name: &str) -> bool {
@@ -45,6 +74,7 @@ struct Requires<'a, 'r> {
     builder: AstBuilder<'a>,
     scoping: &'r Scoping,
     name: &'r str,
+    from: &'r str,
     specifiers: &'r Specifiers,
     paths: &'r ModulePaths,
     unmapped: Vec<String>,
@@ -53,6 +83,28 @@ struct Requires<'a, 'r> {
 impl<'a> Requires<'a, '_> {
     fn is_the_bundle_require(&self, callee: &IdentifierReference<'a>) -> bool {
         callee.name == self.name && is_free(Some(self.scoping), callee)
+    }
+
+    fn as_module_id(&self, request: &str) -> Option<String> {
+        if INHERITED_KEYS.contains(&request) {
+            return None;
+        }
+        let path = self.paths.get(request)?;
+        Some(self.paths.specifier(self.from, path))
+    }
+
+    fn specifier(&mut self, request: String) -> Option<String> {
+        match self.specifiers.get(&request) {
+            Some(Mapped::Linked(specifier)) => Some(specifier.clone()),
+            Some(Mapped::Missing) => None,
+            Some(Mapped::Falsy) => {
+                if self.paths.contains_key(&request) {
+                    self.unmapped.push(request);
+                }
+                None
+            }
+            None => self.as_module_id(&request),
+        }
     }
 
     fn link(&mut self, it: &mut CallExpression<'a>) {
@@ -65,28 +117,19 @@ impl<'a> Requires<'a, '_> {
         let Some(argument) = it.arguments.first_mut() else {
             return;
         };
-        let Argument::StringLiteral(literal) = &*argument else {
+        let Some(specifier) = request_key(argument).and_then(|request| self.specifier(request))
+        else {
             return;
         };
-        let Some(request) = literal.value.as_str() else {
-            return;
-        };
-        match self.specifiers.get(request) {
-            Some(Some(specifier)) => {
-                let span = argument.span();
-                let text = Str::from_str_in(specifier, &self.builder);
-                *argument = Argument::from(Expression::new_string_literal(
-                    span,
-                    text,
-                    None,
-                    &self.builder,
-                ));
-                callee.name = Ident::from_str_in(REQUIRE, &self.builder);
-            }
-            Some(None) => {}
-            None if self.paths.contains_key(request) => self.unmapped.push(request.to_string()),
-            None => {}
-        }
+        let span = argument.span();
+        let text = Str::from_str_in(&specifier, &self.builder);
+        *argument = Argument::from(Expression::new_string_literal(
+            span,
+            text,
+            None,
+            &self.builder,
+        ));
+        callee.name = Ident::from_str_in(REQUIRE, &self.builder);
     }
 }
 
@@ -116,10 +159,12 @@ fn link_module<'a>(
         };
     }
     let specifiers = specifiers(module, paths);
+    let from = module.path.as_str().to_string();
     let mut requires = Requires {
         builder: AstBuilder::new(alloc),
         scoping: &scoping,
         name,
+        from: &from,
         specifiers: &specifiers,
         paths,
         unmapped: Vec::new(),

@@ -121,9 +121,44 @@ fn a_factory_that_names_its_require_differently_links_through_the_hosts() {
 }
 
 #[test]
-fn an_unmapped_request_that_names_a_module_id_is_noted() {
+fn a_request_outside_the_map_that_names_a_module_id_links_to_that_module() {
     let split = split(
-        "{main:[function(require,module,exports){require(\"helper\")},{}],helper:[function(require,module,exports){},{}]},{},[\"main\"]",
+        "{main:[function(require,module,exports){require(\"helper\");require(4);require(\"4\");require(4.0);require(\"fs\")},{\"other\":4,\"skipped\":undefined}],helper:[function(require,module,exports){require(\"skipped\")},{\"skipped\":undefined}],4:[function(require,module,exports){},{}],skipped:[function(require,module,exports){},{}]},{},[\"main\"]",
+    );
+    assert_eq!(
+        split.code("index.js"),
+        "require(\"./helper.js\");\nrequire(\"other/index.js\");\nrequire(\"other/index.js\");\nrequire(\"other/index.js\");\nrequire(\"fs\");"
+    );
+    assert_eq!(split.code("helper.js"), "require(\"./skipped.js\");");
+    assert!(split.notes.is_empty(), "{:?}", split.notes);
+}
+
+#[test]
+fn a_numeric_request_in_the_map_links_like_its_string_form() {
+    let split = split(
+        "{1:[function(require,module,exports){require(4);require(\"4\")},{\"4\":2}],2:[function(require,module,exports){},{}],4:[function(require,module,exports){},{}]},{},[1]",
+    );
+    assert_eq!(
+        split.code("index.js"),
+        "require(\"4/index.js\");\nrequire(\"4/index.js\");"
+    );
+}
+
+#[test]
+fn a_request_the_map_inherits_from_object_prototype_stays_as_written() {
+    let split = split(
+        "{1:[function(require,module,exports){require(\"toString\");require(\"constructor\");require(\"__proto__\")},{}],toString:[function(require,module,exports){},{}],constructor:[function(require,module,exports){},{}],__proto__:[function(require,module,exports){},{}]},{},[1]",
+    );
+    assert_eq!(
+        split.code("index.js"),
+        "require(\"toString\");\nrequire(\"constructor\");\nrequire(\"__proto__\");"
+    );
+}
+
+#[test]
+fn a_request_mapped_to_a_falsy_id_that_names_a_module_id_is_noted() {
+    let split = split(
+        "{main:[function(require,module,exports){require(\"helper\")},{\"helper\":0}],helper:[function(require,module,exports){},{}]},{},[\"main\"]",
     );
     assert_eq!(split.code("index.js"), "require(\"helper\");");
     assert!(split.notes(UNMAPPED_MODULE_ID), "{:?}", split.notes);

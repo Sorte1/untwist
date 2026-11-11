@@ -7,6 +7,7 @@ use untwist_core::ast_util::prop::{identifier_name, member_parts, number_key};
 pub struct Factory<'k, 'a> {
     pub params: &'k FormalParameters<'a>,
     pub body: &'k FunctionBody<'a>,
+    pub arrow: bool,
 }
 
 #[inline]
@@ -62,6 +63,7 @@ pub fn anonymous_factory<'k, 'a>(expr: &'k Expression<'a>) -> Option<Factory<'k,
             Some(Factory {
                 params: &function.params,
                 body: function.body.as_deref()?,
+                arrow: false,
             })
         }
         Expression::ArrowFunctionExpression(arrow) => {
@@ -71,6 +73,7 @@ pub fn anonymous_factory<'k, 'a>(expr: &'k Expression<'a>) -> Option<Factory<'k,
             Some(Factory {
                 params: &arrow.params,
                 body,
+                arrow: true,
             })
         }
         _ => None,
