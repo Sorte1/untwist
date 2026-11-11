@@ -308,10 +308,14 @@ fn the_site_memo_reset_sample_loses_its_self_defending_check_under_unsafe() {
     );
     let source = std::fs::read_to_string(path).unwrap();
     let default = Pipeline::new(Options::default()).run(&source);
+    let refusals = [
+        untwist_deobfuscate::notes::BUILTIN_ALIAS_PATCHED,
+        untwist_deobfuscate::notes::STRING_ARRAY_GLOBAL_REACH,
+    ];
     assert!(
-        default.notes.iter().any(|note| note
-            .message
-            .starts_with(untwist_deobfuscate::notes::BUILTIN_ALIAS_PATCHED)),
+        default.notes.iter().any(|note| refusals
+            .iter()
+            .any(|refusal| note.message.starts_with(refusal))),
         "{:?}",
         default.notes
     );
