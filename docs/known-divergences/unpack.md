@@ -146,6 +146,14 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   accepted assumption: required as a CommonJS file under node the bundle's `this` is
   `module.exports`, so there a bundle that reaches globals through `var window = this` and its
   output differ.
+- **esbuild.** A bundle is split only when every `__commonJS` factory is declared before any
+  statement at its level can run code: up to the last factory declaration only helpers, function
+  declarations, imports and `var`s whose values are functions or plain literals may stand, so no
+  `require_x()` can run while `require_x` is still `undefined`. The lazy helper may not bind a name
+  that its body reads (`function mod()`, a `catch (mod)`, a parameter named `eval` or `arguments`,
+  the names getter as a parameter); the keyed form needs a free `Object`, and a factory keyed
+  `__proto__` is refused. A factory in method form that uses `super` at its own level is refused,
+  since the written module is no longer a method.
 - **Metro.** Factories with 5 or 6 parameters (Metro < 0.52) are refused. `__d` and `__r` are
   Metro's only when the file shows it: the prelude must hold Metro's `require.js` polyfill, equal
   after α-renaming to a recorded text (`metro/runtimes/`, metro 0.87.2 production, not
@@ -163,7 +171,8 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
 - **SystemJS.** The entry is the first named register (SystemJS's named-register extension never
   instantiates an anonymous register beside named ones). Setters must be plain binding, namespace or
   re-export forms, and static cycles are refused; `_context.meta` is refused rather than mapped to
-  `import.meta`, whose `url` depends on the file's location.
+  `import.meta`, whose `url` depends on the file's location. An `execute() {}` method that uses
+  `super` at its own level is refused.
 - **AMD and UMD.** AMD needs every top-level statement to be a `define`, all anonymous (one) or all named;
   dependency cycles, loader plugins (`!`), the `define(function (require) {…})` sugar and a `module`
   dependency are refused. A UMD wrapper's non-factory arguments must be inert (`this`, a literal,

@@ -232,6 +232,12 @@ impl<'a> Policy<'a> for Check<'_, '_> {
         }
     }
 
+    fn super_(&mut self, frame: Frame) {
+        if matches!(self.mode, Mode::Factory { .. }) {
+            self.ok &= frame.receiver();
+        }
+    }
+
     fn with(&mut self) {
         self.ok = false;
     }

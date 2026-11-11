@@ -238,6 +238,9 @@ fn helpers_unchanged(scoping: &Scoping, layout: &Layout<'_, '_>) -> bool {
 }
 
 fn proven(source: &Program<'_>, plan: &Plan<'_, '_>) -> Option<Vec<usize>> {
+    if plan.layout.unsound {
+        return None;
+    }
     let scoping = build_scoping(source).scoping;
     if !helpers_unchanged(&scoping, &plan.layout) {
         return None;
@@ -253,7 +256,11 @@ fn proven(source: &Program<'_>, plan: &Plan<'_, '_>) -> Option<Vec<usize>> {
         Host::Top => Some(scoping.root_scope_id()),
         Host::Iife | Host::Bun => wrapper_scope(&plan.scope),
     };
-    if !list_scope.is_some_and(|scope| proof.requires_host_at(scope)) {
+    let list_scope = list_scope?;
+    let free_object = scoping
+        .find_binding(list_scope, oxc_str::Ident::from("Object"))
+        .is_none();
+    if !free_object || !proof.requires_host_at(list_scope) {
         return None;
     }
     if first_unclosed_helper(&scoping, plan.scope.list, &moved).is_some() {
