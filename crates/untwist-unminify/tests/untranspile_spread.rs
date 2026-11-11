@@ -349,7 +349,7 @@ fn default_lane(source: &str) -> String {
 }
 
 #[test]
-fn a_shared_helper_in_a_script_is_left_alone_in_every_lane() {
+fn a_shared_helper_in_a_script_whose_this_holds_one_is_left_alone_in_every_lane() {
     let source = format!(
         "this.__assign = function () {{ return {{ evil: 1 }}; }};\n{TSLIB_ASSIGN}function run(v) {{ var r = __assign({{ a: 1 }}, {{ b: v }}); return JSON.stringify(r); }}\nconsole.log(run(2));\n"
     );
@@ -358,6 +358,18 @@ fn a_shared_helper_in_a_script_is_left_alone_in_every_lane() {
         assert!(code.contains("__assign({"), "{code}");
         untwist_testing::node::assert_node_agrees(&source, &code);
     }
+}
+
+#[test]
+fn a_shared_helper_in_a_script_converts_only_under_unsafe() {
+    let source = format!(
+        "{TSLIB_ASSIGN}function run(v) {{ var r = __assign({{ a: 1 }}, {{ b: v }}); return JSON.stringify(r); }}\nconsole.log(run(2));\n"
+    );
+    let code = default_lane(&source);
+    assert!(code.contains("__assign({"), "{code}");
+    let code = run(&source, true);
+    assert!(code.contains("{ a: 1, b: v }"), "{code}");
+    untwist_testing::node::assert_node_agrees(&source, &code);
 }
 
 #[test]

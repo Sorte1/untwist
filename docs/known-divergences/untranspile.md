@@ -9,8 +9,8 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
 ## `untranspile-helpers` (the helper framework and the spread helpers)
 
 - **What counts as a helper.** A function declaration, or a `var` initialised with a function,
-  an arrow, TypeScript's `(this && this.X) || function` (only at the top of the program) or one
-  of esbuild's `Object.*` aliases, is a helper when its body's structural fingerprint (every node,
+  an arrow, TypeScript's `(this && this.X) || function` (only at the top of the program; outside
+  an ES module only with `--unsafe`) or one of esbuild's `Object.*` aliases, is a helper when its body's structural fingerprint (every node,
   operator, property key and literal; names, parentheses and the `!0`/`!1`/`void 0` spellings
   ignored) equals a known version in `crates/untwist-unminify/src/untranspile/shapes/`, every
   helper it calls is itself an identified helper of the expected kind, its binding is written
@@ -25,9 +25,9 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   direct statement of its program or function body and every statement before it in that body
   runs no code (function declarations, literals, plain reads, `exports.x = void 0`, the
   `__esModule` definition, other helpers); otherwise its initialiser may not have run when a call
-  arrives. TypeScript's `var __x = (this && this.__x) || function …` form is recognised only in an
-  ES module, where top-level `this` is undefined; in a script or CommonJS file the left side may
-  hold another value. A `var` or function helper at the top level of a script is a property of
+  arrives. TypeScript's `var __x = (this && this.__x) || function …` form is recognised in the
+  default mode only in an ES module, where top-level `this` is undefined; in a script or CommonJS
+  file the left side may hold another value (`--unsafe` recognises it there too, see below). A `var` or function helper at the top level of a script is a property of
   the global object, so it is recognised only when the program writes no property of that name
   on `globalThis`, `window`, `self`, `global` or `this` (also in a non-strict function, where
   `this` may be the global object), no computed key there and defines nothing there with
@@ -85,6 +85,10 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
     not a literal: **no source is a proxy or has a getter that adds, deletes or changes the
     enumerability of its own properties while it is copied** (the helpers list the keys first;
     spread checks each one as it copies).
+  - TypeScript's `var __x = (this && this.__x) || function …` at the top of a script or CommonJS
+    file is the helper: **top-level `this` has no own or inherited `__x` property when the
+    declaration runs** (no other script, host or wrapper put one on the global object or on
+    `module.exports`). In an ES module `this` is undefined and the default mode recognises it.
   - Removing a helper defined at the top level of a script: **the program never reads a removed
     helper through the global object**. Helpers inside a function or a module are removed in the
     default mode once nothing references them.

@@ -637,7 +637,8 @@ impl UntranspileHelpers {
             if !identify::may_declare_helper(declarator) {
                 continue;
             }
-            match identify::declarator(declarator, cx.scoping(), self.module) {
+            let shared_trusted = self.module || cx.opts.unsafe_transforms;
+            match identify::declarator(declarator, cx.scoping(), shared_trusted) {
                 Some(found) => self.insert_trusted(found, true, cx),
                 None if identify::declarator(declarator, cx.scoping(), true).is_some() => {
                     cx.note(UNTRANSPILE_HELPER_UNTRUSTED, Some(declarator.span));
