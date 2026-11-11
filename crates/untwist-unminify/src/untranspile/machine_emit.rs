@@ -26,6 +26,7 @@ pub struct Emitter<'e, 'a, 'c, 'x> {
     received: FxHashMap<u32, BoundIdentifier<'a>>,
     pub rebound: FxHashMap<u32, BoundIdentifier<'a>>,
     loops: Vec<LabelId>,
+    failed: bool,
 }
 
 struct Replace<'r, 'a> {
@@ -135,7 +136,21 @@ impl<'e, 'a, 'c, 'x> Emitter<'e, 'a, 'c, 'x> {
             received: FxHashMap::default(),
             rebound: FxHashMap::default(),
             loops: Vec::new(),
+            failed: false,
         }
+    }
+
+    pub fn failed(&self) -> bool {
+        self.failed
+    }
+
+    pub fn generated(&self) -> impl Iterator<Item = &BoundIdentifier<'a>> {
+        self.caught.values().chain(self.received.values())
+    }
+
+    fn fail<T>(&mut self) -> Option<T> {
+        self.failed = true;
+        None
     }
 
     pub fn name_labels(&mut self, code: &[Code], taken: &[&str]) {
@@ -183,7 +198,7 @@ impl<'e, 'a, 'c, 'x> Emitter<'e, 'a, 'c, 'x> {
             Fill::Nothing => None,
             Fill::Yield(index) => {
                 let spec = *self.yields.get(index as usize)?;
-                Some(self.yield_expression(&spec))
+                self.yield_expression(&spec)
             }
             Fill::Bound(index) => {
                 let bound = self.received.get(&index)?.clone();
@@ -196,49 +211,57 @@ impl<'e, 'a, 'c, 'x> Emitter<'e, 'a, 'c, 'x> {
         }
     }
 
-    fn filled_slot(&mut self, slot: &Slot, fill: Fill) -> Option<Expression<'a>> {
-        let mut expression = take_slot(&mut self.cases, slot, &*self.cx)?;
-        if let Some(with) = self.fill_expression(fill) {
-            let mut replace = Replace {
-                reads: self.reads,
-                with: Some(with),
-            };
-            replace.visit_expression(&mut expression);
+    fn filling(&mut self, fill: Fill) -> Option<Replace<'e, 'a>> {
+        let with = self.fill_expression(fill);
+        if with.is_none() && fill != Fill::Nothing {
+            return self.fail();
         }
+        Some(Replace {
+            reads: self.reads,
+            with,
+        })
+    }
+
+    fn filled_slot(&mut self, slot: &Slot, fill: Fill) -> Option<Expression<'a>> {
+        let Some(mut expression) = take_slot(&mut self.cases, slot, &*self.cx) else {
+            return self.fail();
+        };
+        self.filling(fill)?.visit_expression(&mut expression);
         Some(expression)
     }
 
-    fn yield_expression(&mut self, spec: &YieldSpec) -> Expression<'a> {
-        let value = spec
-            .value
-            .and_then(|slot| self.filled_slot(&slot, spec.fill));
-        Expression::new_yield_expression(SPAN, spec.delegate, value, &*self.cx)
+    fn yield_expression(&mut self, spec: &YieldSpec) -> Option<Expression<'a>> {
+        let value = match spec.value {
+            Some(slot) => Some(self.filled_slot(&slot, spec.fill)?),
+            None => None,
+        };
+        Some(Expression::new_yield_expression(
+            SPAN,
+            spec.delegate,
+            value,
+            &*self.cx,
+        ))
     }
 
-    fn node(&mut self, node: u32, fill: Fill, out: &mut AVec<'a, Statement<'a>>) {
+    fn node(&mut self, node: u32, fill: Fill, out: &mut AVec<'a, Statement<'a>>) -> Option<()> {
         let Some(current) = self.machine.node(node) else {
-            return;
+            return self.fail();
         };
         let filled = current.received == Received::Statement;
         let skip_first = matches!(fill, Fill::Caught(region) if self.rebound.contains_key(&region));
         for (at, loc) in current.body.iter().enumerate() {
             let Some(mut statement) = take_statement(&mut self.cases, loc, &*self.cx) else {
-                continue;
+                return self.fail();
             };
             if at == 0 && filled && skip_first {
                 continue;
             }
             if at == 0 && filled {
-                if let Some(with) = self.fill_expression(fill) {
-                    let mut replace = Replace {
-                        reads: self.reads,
-                        with: Some(with),
-                    };
-                    replace.visit_statement(&mut statement);
-                }
+                self.filling(fill)?.visit_statement(&mut statement);
             }
             out.push(statement);
         }
+        Some(())
     }
 
     fn jump(&self, label: LabelId, looped: bool) -> Statement<'a> {
@@ -362,7 +385,7 @@ impl<'e, 'a, 'c, 'x> Emitter<'e, 'a, 'c, 'x> {
 
     fn bind(&mut self, index: u32) -> Option<Statement<'a>> {
         let spec = *self.yields.get(index as usize)?;
-        let value = self.yield_expression(&spec);
+        let value = self.yield_expression(&spec)?;
         let bound = self.cx.tcx.generate_uid(
             "t",
             self.scope,
@@ -386,7 +409,7 @@ impl<'e, 'a, 'c, 'x> Emitter<'e, 'a, 'c, 'x> {
             Code::Bind(index) => self.bind(index)?,
             Code::Yield(index) => {
                 let spec = *self.yields.get(index as usize)?;
-                let expression = self.yield_expression(&spec);
+                let expression = self.yield_expression(&spec)?;
                 Statement::new_expression_statement(SPAN, expression, &*self.cx)
             }
             Code::Return(slot, fill) => {
@@ -434,7 +457,7 @@ impl<'e, 'a, 'c, 'x> Emitter<'e, 'a, 'c, 'x> {
 
     fn item(&mut self, item: Code, out: &mut AVec<'a, Statement<'a>>) -> Option<()> {
         match item {
-            Code::Node(node, fill) => self.node(node, fill, out),
+            Code::Node(node, fill) => self.node(node, fill, out)?,
             Code::Stop => {}
             other => out.push(self.statement(other)?),
         }
@@ -445,6 +468,7 @@ impl<'e, 'a, 'c, 'x> Emitter<'e, 'a, 'c, 'x> {
         let mut out = AVec::with_capacity_in(code.len(), &*self.cx);
         for item in code {
             if self.item(item, &mut out).is_none() {
+                self.failed = true;
                 out.clear();
                 break;
             }

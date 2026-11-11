@@ -26,6 +26,22 @@ pub(super) struct Derived {
     pub(super) target: u32,
     pub(super) end: u32,
     pub(super) declared: Option<usize>,
+    pub(super) concat: Option<SymbolId>,
+    pub(super) spread_concat: bool,
+}
+
+struct Found {
+    form: SuperForm,
+    this: Option<SymbolId>,
+    target: u32,
+    end: u32,
+    concat: Option<SymbolId>,
+}
+
+fn concat_symbol(call: &CallExpression<'_>, scoping: &Scoping) -> Option<SymbolId> {
+    argument(call, 2)
+        .and_then(concat_source)
+        .and_then(|source| resolved(source, scoping))
 }
 
 fn is_arguments(expression: &Expression<'_>, scoping: &Scoping) -> bool {
@@ -81,18 +97,18 @@ fn assigned_super(
     symbol: SymbolId,
     table: &Table,
     scoping: &Scoping,
-) -> Option<(SymbolId, u32)> {
+) -> Option<(SymbolId, u32, Option<SymbolId>)> {
     let AssignmentTarget::AssignmentTargetIdentifier(target) = &assign.left else {
         return None;
     };
     if assign.operator != AssignmentOperator::Assign {
         return None;
     }
-    super_call(&assign.right, symbol, table, scoping)?;
+    let call = super_call(&assign.right, symbol, table, scoping)?;
     let this = scoping
         .get_reference(target.reference_id.get()?)
         .symbol_id()?;
-    Some((this, target.span.start))
+    Some((this, target.span.start, concat_symbol(call, scoping)))
 }
 
 const DESCENT: u32 = 8;
@@ -163,12 +179,18 @@ fn nested_super<'k, 'a>(
     symbol: SymbolId,
     table: &Table,
     scoping: &Scoping,
-) -> Option<(SymbolId, u32, u32)> {
+) -> Option<Found> {
     let mut at = first_operand(expression, scoping)?;
     for _ in 0..DESCENT {
         if let Expression::AssignmentExpression(assign) = at {
-            if let Some((this, target)) = assigned_super(assign, symbol, table, scoping) {
-                return Some((this, target, assign.span.end));
+            if let Some((this, target, concat)) = assigned_super(assign, symbol, table, scoping) {
+                return Some(Found {
+                    form: SuperForm::Chained,
+                    this: Some(this),
+                    target,
+                    end: assign.span.end,
+                    concat,
+                });
             }
         }
         at = first_operand(at, scoping)?;
@@ -213,30 +235,45 @@ fn super_statement(
     symbol: SymbolId,
     table: &Table,
     scoping: &Scoping,
-) -> Option<(SuperForm, Option<SymbolId>, u32, u32)> {
+) -> Option<Found> {
     if let Statement::ReturnStatement(ret) = statement {
-        super_call(ret.argument.as_ref()?, symbol, table, scoping)?;
-        return Some((SuperForm::Return, None, 0, ret.span.end));
+        let call = super_call(ret.argument.as_ref()?, symbol, table, scoping)?;
+        return Some(Found {
+            form: SuperForm::Return,
+            this: None,
+            target: 0,
+            end: ret.span.end,
+            concat: concat_symbol(call, scoping),
+        });
     }
     let expression = statement_expression(statement)?;
     if let (Statement::ExpressionStatement(_), Expression::AssignmentExpression(assign)) =
         (statement, expression)
     {
-        if let Some((this, target)) = assigned_super(assign, symbol, table, scoping) {
-            return Some((SuperForm::Assign, Some(this), target, assign.span.end));
+        if let Some((this, target, concat)) = assigned_super(assign, symbol, table, scoping) {
+            return Some(Found {
+                form: SuperForm::Assign,
+                this: Some(this),
+                target,
+                end: assign.span.end,
+                concat,
+            });
         }
     }
-    let wrapped = is_identifier_assignment(expression);
-    let (this, target, end) = if wrapped {
-        let Expression::AssignmentExpression(assign) = expression.without_parentheses() else {
-            return None;
-        };
-        let (this, target) = assigned_super(assign, symbol, table, scoping)?;
-        (this, target, assign.span.end)
-    } else {
-        nested_super(expression, symbol, table, scoping)?
+    if !is_identifier_assignment(expression) {
+        return nested_super(expression, symbol, table, scoping);
+    }
+    let Expression::AssignmentExpression(assign) = expression.without_parentheses() else {
+        return None;
     };
-    Some((SuperForm::Chained, Some(this), target, end))
+    let (this, target, concat) = assigned_super(assign, symbol, table, scoping)?;
+    Some(Found {
+        form: SuperForm::Chained,
+        this: Some(this),
+        target,
+        end: assign.span.end,
+        concat,
+    })
 }
 
 pub(super) fn find_super(
@@ -247,25 +284,30 @@ pub(super) fn find_super(
 ) -> Option<Derived> {
     let mut found = None;
     for (at, statement) in statements.iter().enumerate() {
-        if let Some((form, this, target, end)) = super_statement(statement, symbol, table, scoping)
-        {
+        if let Some(it) = super_statement(statement, symbol, table, scoping) {
             if found.is_some() {
                 return None;
             }
             found = Some(Derived {
-                form,
+                form: it.form,
                 at,
-                this,
-                target,
-                end,
+                this: it.this,
+                target: it.target,
+                end: it.end,
                 declared: None,
+                concat: it.concat,
+                spread_concat: false,
             });
         }
     }
     found
 }
 
-fn super_arguments<'a>(call: Expression<'a>, cx: &Cx<'a, '_>) -> AVec<'a, Argument<'a>> {
+fn super_arguments<'a>(
+    call: Expression<'a>,
+    spread_concat: bool,
+    cx: &Cx<'a, '_>,
+) -> AVec<'a, Argument<'a>> {
     let mut out = AVec::new_in(cx);
     let Expression::CallExpression(call) = into_inner(call) else {
         return out;
@@ -283,7 +325,7 @@ fn super_arguments<'a>(call: Expression<'a>, cx: &Cx<'a, '_>) -> AVec<'a, Argume
         }
         Ok(other) => {
             let source = match other {
-                Expression::CallExpression(call) => call
+                Expression::CallExpression(call) if spread_concat => call
                     .unbox()
                     .arguments
                     .into_iter()
@@ -364,10 +406,14 @@ pub(super) fn split_super<'a>(
 
 pub(super) fn super_statement_of<'a>(
     call: Option<Expression<'a>>,
+    spread_concat: bool,
     cx: &Cx<'a, '_>,
 ) -> (Statement<'a>, bool) {
     let span = call.as_ref().map_or(SPAN, GetSpan::span);
-    let arguments = call.map_or_else(|| AVec::new_in(cx), |call| super_arguments(call, cx));
+    let arguments = call.map_or_else(
+        || AVec::new_in(cx),
+        |call| super_arguments(call, spread_concat, cx),
+    );
     let forwards = matches!(arguments.as_slice(), [Argument::SpreadElement(spread)]
         if matches!(&spread.argument, Expression::Identifier(id) if id.name.as_str() == "arguments"));
     let callee = Expression::new_super(SPAN, cx);
