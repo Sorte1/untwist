@@ -11,7 +11,7 @@ use untwist_eval::fold::{const_from_literal, fold_binary, fold_unary, Const};
 
 use super::shape::{Body, Target, STRING_METHODS};
 
-const MAX_STEPS: u32 = 200_000;
+pub(super) const MAX_STEPS: u32 = 200_000;
 const MAX_CALLS: u32 = 32;
 
 #[derive(Clone)]
@@ -54,6 +54,7 @@ pub(super) struct Machine<'m, 'a> {
     pub(super) storage: &'m FxHashMap<Span, Target<'a>>,
     pub(super) resolved: &'m FxHashMap<Span, String>,
     pub(super) steps: u32,
+    pub(super) limit: u32,
     pub(super) calls: u32,
 }
 
@@ -112,7 +113,7 @@ pub(super) fn literal(expr: &Expression<'_>) -> Option<V> {
 impl<'a> Machine<'_, 'a> {
     fn tick(&mut self) -> Option<()> {
         self.steps += 1;
-        (self.steps <= MAX_STEPS).then_some(())
+        (self.steps <= self.limit).then_some(())
     }
 
     fn symbol(&self, id: &IdentifierReference<'_>) -> Option<SymbolId> {

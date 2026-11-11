@@ -26,7 +26,9 @@ use crate::value_flow::{
     flow_rule_disabled, FILTERED_ENUMERATION, FILTERED_REWRITE_ORDER, STORAGE_CALLS,
     TRUSTED_STORAGE,
 };
-use machine::{is_binary_compare, literal, Machine, V};
+use machine::{is_binary_compare, literal, Machine, MAX_STEPS, V};
+
+const FILTER_BUDGET: u32 = 1_000_000;
 use rewrite::{check_loop, is_rewrite_loop, rewrite_loop, Rewrite};
 use shape::{closed, Sealed, Shape, Target};
 pub(super) use shape::{Body, STRING_METHODS};
@@ -136,6 +138,7 @@ pub(super) struct Filters<'a> {
     preds: FxHashMap<Span, Option<Pred<'a>>>,
     accepted: RefCell<FxHashMap<(Span, String), bool>>,
     open: Cell<bool>,
+    budget: Cell<u32>,
     source: &'a str,
 }
 
@@ -160,6 +163,7 @@ impl<'a> Filters<'a> {
     ) -> Self {
         let mut filters = Self {
             source,
+            budget: Cell::new(FILTER_BUDGET),
             ..Self::default()
         };
         let objects = |symbol: SymbolId| {
@@ -294,12 +298,17 @@ impl<'a> Filters<'a> {
         if let Some(known) = self.accepted.borrow().get(&cached) {
             return *known;
         }
+        let budget = self.budget.get();
+        if budget == 0 {
+            return true;
+        }
         let mut machine = Machine {
             scoping,
             callees: &pred.callees,
             storage: &pred.storage,
             resolved: &pred.resolved,
             steps: 0,
+            limit: budget.min(MAX_STEPS),
             calls: 0,
         };
         let args = pred
@@ -314,6 +323,7 @@ impl<'a> Filters<'a> {
             .call(pred.func, args)
             .and_then(|value| value.truthy())
             == Some(false);
+        self.budget.set(budget.saturating_sub(machine.steps));
         self.accepted.borrow_mut().insert(cached, !rejected);
         !rejected
     }

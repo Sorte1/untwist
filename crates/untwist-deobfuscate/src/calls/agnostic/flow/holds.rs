@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ops::BitOr;
 
 use oxc_ast::ast::*;
@@ -7,12 +7,13 @@ use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::calls::agnostic::bind::{reads_arguments, Bindings};
 use crate::value_flow::{flow_rule_disabled, FUNCTION_VALUES};
 
 const HOLD_DEPTH: u8 = 6;
+const HOLD_WORK: u32 = 400_000;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(in crate::calls::agnostic) struct Tags(u8);
@@ -106,6 +107,8 @@ pub(in crate::calls::agnostic) struct Holds<'s, 'a> {
     open: bool,
     script: bool,
     visiting: RefCell<FxHashSet<SymbolId>>,
+    sites: RefCell<FxHashMap<SymbolId, (u8, Vec<UserFunction<'a, 'a>>)>>,
+    work: Cell<u32>,
 }
 
 impl<'s, 'a> Holds<'s, 'a> {
@@ -123,6 +126,8 @@ impl<'s, 'a> Holds<'s, 'a> {
             open,
             script,
             visiting: RefCell::default(),
+            sites: RefCell::default(),
+            work: Cell::new(0),
         }
     }
 
@@ -157,8 +162,18 @@ impl<'s, 'a> Holds<'s, 'a> {
         self.values(expr, HOLD_DEPTH)
     }
 
+    fn spend(&self) -> Option<()> {
+        let spent = self.work.get();
+        if spent >= HOLD_WORK {
+            return None;
+        }
+        self.work.set(spent + 1);
+        Some(())
+    }
+
     fn values<'k>(&self, expr: &'k Expression<'a>, depth: u8) -> Values<'k, 'a> {
         let next = depth.checked_sub(1)?;
+        self.spend()?;
         match expr.without_parentheses() {
             Expression::FunctionExpression(func) => Some(vec![UserFunction::Function(func)]),
             Expression::ArrowFunctionExpression(arrow) => Some(vec![UserFunction::Arrow(arrow)]),
@@ -275,7 +290,10 @@ impl<'s, 'a> Holds<'s, 'a> {
         }
     }
 
-    fn identifier<'k>(&self, id: &IdentifierReference<'a>, depth: u8) -> Values<'k, 'a> {
+    fn identifier<'k>(&self, id: &IdentifierReference<'a>, depth: u8) -> Values<'k, 'a>
+    where
+        'a: 'k,
+    {
         let Some(symbol) = self.symbol(id) else {
             return (id.name == "undefined").then(Vec::new);
         };
@@ -321,7 +339,10 @@ impl<'s, 'a> Holds<'s, 'a> {
         owner: SymbolId,
         index: usize,
         depth: u8,
-    ) -> Values<'k, 'a> {
+    ) -> Values<'k, 'a>
+    where
+        'a: 'k,
+    {
         if self.outside_callable(owner) {
             return None;
         }
@@ -349,16 +370,35 @@ impl<'s, 'a> Holds<'s, 'a> {
         tracked.then_some(func)
     }
 
-    fn call_site_values<'k>(
+    fn call_site_values(
         &self,
         symbol: SymbolId,
         owner: SymbolId,
         index: usize,
         depth: u8,
-    ) -> Values<'k, 'a> {
+    ) -> Values<'a, 'a> {
+        if let Some((known, values)) = self.sites.borrow().get(&symbol) {
+            if *known <= depth {
+                return Some(values.clone());
+            }
+        }
+        let found = self.site_values(symbol, owner, index, depth)?;
+        self.sites
+            .borrow_mut()
+            .insert(symbol, (depth, found.clone()));
+        Some(found)
+    }
+
+    fn site_values(
+        &self,
+        symbol: SymbolId,
+        owner: SymbolId,
+        index: usize,
+        depth: u8,
+    ) -> Values<'a, 'a> {
         let bindings = self.bindings;
         self.tracked_param(symbol, owner, index)?;
-        let mut found: Values<'k, 'a> = Some(Vec::new());
+        let mut found: Values<'a, 'a> = Some(Vec::new());
         for call in bindings.call_sites(owner) {
             let value = match call.arguments.get(index) {
                 None => Some(Vec::new()),
