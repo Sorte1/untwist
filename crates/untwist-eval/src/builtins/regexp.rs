@@ -10,11 +10,14 @@ use crate::builtins::args::{
     argument, charge_for_length, charge_for_scan, grow_object, live_array, live_slice,
     write_property,
 };
+use crate::builtins::pattern_hooks::{note_exec, note_is_regexp, note_regexp_text};
 use crate::builtins::{regexp_syntax, Globals, NativeFn, NativeTable, Realm};
 use crate::host::Host;
 use crate::ops::to_js_string;
 use crate::unmodelled::throw_or_refuse;
-use crate::value::{Abrupt, Eval, JsString, ObjKind, ObjRef, PropKey, RegExpData, Value};
+use crate::value::{
+    Abrupt, Eval, IntrinsicProto, JsString, ObjKind, ObjRef, PropKey, RegExpData, Value,
+};
 
 pub const PATTERN_LEN_CAP: usize = 4 << 10;
 
@@ -356,7 +359,11 @@ fn native_regexp_ctor<'a>(
     _this: Value<'a>,
     args: &[Value<'a>],
 ) -> Eval<'a, Value<'a>> {
+    note_is_regexp(host, &argument(args, 0))?;
     let existing = args.first().and_then(regexp_data);
+    if existing.is_some() {
+        crate::object::note_intrinsic_constructor(IntrinsicProto::RegExp);
+    }
     let source = match &existing {
         Some(data) => data.source.clone(),
         None => match args.first() {
@@ -392,6 +399,7 @@ fn native_test<'a>(
             &"a generic receiver the evaluator does not model",
         ));
     };
+    note_exec();
     let text = to_js_string(&argument(args, 0), host)?;
     let start = if data.global || is_sticky(&data) {
         data.last_index.get()
@@ -452,6 +460,7 @@ fn native_to_string<'a>(
             &"a generic receiver the evaluator does not model",
         ));
     };
+    note_regexp_text();
     charge_for_length(host, data.source.len() + data.flags.len())?;
     Ok(Value::Str(source_text(&data)))
 }

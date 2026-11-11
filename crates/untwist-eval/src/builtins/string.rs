@@ -4,6 +4,7 @@ use crate::builtins::args::{
     adopt_array, argument, charge_for_length, charge_for_scan, check_array_growth,
     check_string_growth, live_array, live_slice, live_text, reserve_array, reserve_text,
 };
+use crate::builtins::pattern_hooks::{note_is_regexp, note_pattern_hook, note_regexp_split, SPLIT};
 use crate::builtins::regexp::regexp_data;
 use crate::builtins::string_match::{self, split_with_regexp};
 use crate::builtins::{define_builtin, Globals, NativeFn, NativeTable, Realm};
@@ -221,6 +222,7 @@ fn native_includes<'a>(
     this: Value<'a>,
     args: &[Value<'a>],
 ) -> Eval<'a, Value<'a>> {
+    note_is_regexp(host, &argument(args, 0))?;
     let found = index_of_core(host, this, args)?;
     Ok(Value::Bool(found.is_some()))
 }
@@ -231,6 +233,7 @@ fn native_starts_with<'a>(
     args: &[Value<'a>],
 ) -> Eval<'a, Value<'a>> {
     let text = receiver(host, &this)?;
+    note_is_regexp(host, &argument(args, 0))?;
     let search = to_js_string(&argument(args, 0), host)?;
     let pos = plain_clamp(number_argument(host, args, 1, 0.0)?, text.len());
     charge_for_length(host, search.len())?;
@@ -244,6 +247,7 @@ fn native_ends_with<'a>(
     args: &[Value<'a>],
 ) -> Eval<'a, Value<'a>> {
     let text = receiver(host, &this)?;
+    note_is_regexp(host, &argument(args, 0))?;
     let search = to_js_string(&argument(args, 0), host)?;
     let len = text.len();
     let end = plain_clamp(number_argument(host, args, 1, len as f64)?, len);
@@ -360,7 +364,11 @@ fn native_split<'a>(
         None | Some(Value::Undefined) => u32::MAX,
         Some(value) => to_uint32(to_number_value(value, host)?),
     };
+    note_pattern_hook(host, &separator_arg, SPLIT)?;
     let regexp = regexp_data(&separator_arg);
+    if regexp.is_some() {
+        note_regexp_split();
+    }
     let separator = match &regexp {
         Some(_) => JsString::empty(),
         None => to_js_string(&separator_arg, host)?,

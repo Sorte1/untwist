@@ -10,6 +10,7 @@ pub mod json;
 pub mod math;
 pub mod number;
 pub mod object;
+mod pattern_hooks;
 pub mod regexp;
 pub mod regexp_syntax;
 pub mod shape;
