@@ -9,9 +9,12 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::literal::is_safe_literal;
 use untwist_core::pass::Cx;
+use untwist_core::semantic::scope_hazard;
 use untwist_eval::fold::{fold_to_const, FoldOptions};
 
-use crate::mutants::{nested_writes_trusted, write_only_order_trusted};
+use crate::mutants::{
+    nested_writes_trusted, write_only_order_trusted, write_only_scope_hazard_ignored,
+};
 
 fn is_constant_value(expr: &Expression<'_>) -> bool {
     fold_to_const(expr, &FoldOptions::default()).is_some() || is_safe_literal(expr)
@@ -237,6 +240,9 @@ pub(crate) struct Plan {
 }
 
 pub(crate) fn plan(program: &Program<'_>, scoping: &Scoping) -> Option<Plan> {
+    if scope_hazard(scoping).is_some() && !write_only_scope_hazard_ignored() {
+        return None;
+    }
     let mut scan = Scan {
         scoping,
         writes: Writes::default(),

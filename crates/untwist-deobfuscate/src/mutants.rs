@@ -231,6 +231,17 @@ pub(crate) fn write_only_order_trusted() -> bool {
     WRITE_ONLY_ORDER_TRUSTED.load(Ordering::Relaxed)
 }
 
+static WRITE_ONLY_SCOPE_HAZARD_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn ignore_write_only_scope_hazard_for_tests(on: bool) {
+    WRITE_ONLY_SCOPE_HAZARD_IGNORED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn write_only_scope_hazard_ignored() -> bool {
+    WRITE_ONLY_SCOPE_HAZARD_IGNORED.load(Ordering::Relaxed)
+}
+
 static DECLARATOR_WRITES_IGNORED: AtomicBool = AtomicBool::new(false);
 
 #[doc(hidden)]

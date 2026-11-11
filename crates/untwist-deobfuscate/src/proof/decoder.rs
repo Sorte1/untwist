@@ -164,6 +164,18 @@ impl<'a> VisitJs<'a> for DecoderScan<'_> {
         walk_js::walk_simple_assignment_target(self, it);
     }
 
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        if it.operator == UnaryOperator::Delete {
+            if let Some(member) = it.argument.without_parentheses().as_member_expression() {
+                let object = member.object();
+                if self.is_alias(object) || self.array_call(object).is_some() {
+                    self.refuse(notes::DECODER_NOT_READ_ONLY, it.span);
+                }
+            }
+        }
+        walk_js::walk_unary_expression(self, it);
+    }
+
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         if let Some(symbol) = self.resolve(it).flatten() {
             if self.aliases.contains(&symbol) {
@@ -210,11 +222,11 @@ impl<'a> VisitJs<'a> for MentionsArray<'_, '_> {
     }
 }
 
-fn kill_of(
-    expr: &Expression<'_>,
+fn kill_of<'k, 'a>(
+    expr: &'k Expression<'a>,
     scan: &DecoderScan<'_>,
     symbol: SymbolId,
-) -> Option<(Span, Span)> {
+) -> Option<&'k AssignmentExpression<'a>> {
     match expr.without_parentheses() {
         Expression::SequenceExpression(sequence) => sequence
             .expressions
@@ -229,42 +241,159 @@ fn kill_of(
             if scan.resolve(target).flatten() != Some(symbol) {
                 return None;
             }
-            let mut mentions = MentionsArray { scan, found: false };
-            mentions.visit_expression(&assigned.right);
-            (!mentions.found).then_some((assigned.span, target.span))
+            (!mentions_array(scan, &assigned.right)).then_some(&**assigned)
         }
         _ => None,
     }
 }
 
-struct Writes<'d, 's> {
-    scan: &'d DecoderScan<'s>,
-    symbol: SymbolId,
-    found: Vec<(Span, bool)>,
+fn mentions_array(scan: &DecoderScan<'_>, expr: &Expression<'_>) -> bool {
+    let mut mentions = MentionsArray { scan, found: false };
+    mentions.visit_expression(expr);
+    mentions.found
 }
 
-impl<'a> VisitJs<'a> for Writes<'_, '_> {
-    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
-        if let AssignmentTarget::AssignmentTargetIdentifier(target) = &it.left {
-            if self.scan.resolve(target).flatten() == Some(self.symbol) {
-                let mut mentions = MentionsArray {
-                    scan: self.scan,
-                    found: false,
-                };
-                mentions.visit_expression(&it.right);
-                let clean = it.operator == AssignmentOperator::Assign && !mentions.found;
-                self.found.push((it.span, clean));
-            }
-        }
-        walk_js::walk_assignment_expression(self, it);
+#[derive(Clone, Copy, PartialEq)]
+enum AliasUse {
+    Index,
+    Other,
+    Write { clean: bool },
+}
+
+struct AliasOrder<'d, 's, 'k, 'a> {
+    scan: &'d DecoderScan<'s>,
+    symbol: SymbolId,
+    kill: &'k AssignmentExpression<'a>,
+    depth: u32,
+    position: u32,
+    in_target: bool,
+    nested: bool,
+    declared: Option<u32>,
+    killed: Option<u32>,
+    uses: Vec<(u32, AliasUse)>,
+}
+
+impl AliasOrder<'_, '_, '_, '_> {
+    fn is_symbol(&self, expr: &Expression<'_>) -> bool {
+        matches!(expr.without_parentheses(), Expression::Identifier(id)
+            if self.scan.resolve(id).flatten() == Some(self.symbol))
+    }
+
+    fn note(&mut self, kind: AliasUse) {
+        self.nested |= self.depth > 0;
+        self.position += 1;
+        self.uses.push((self.position, kind));
+    }
+
+    fn nest(&mut self, walk: impl FnOnce(&mut Self)) {
+        self.depth += 1;
+        walk(self);
+        self.depth -= 1;
+    }
+
+    fn proves_read_only(&self) -> bool {
+        let (Some(declared), Some(killed)) = (self.declared, self.killed) else {
+            return false;
+        };
+        !self.nested
+            && declared < killed
+            && self.uses.iter().all(|(position, kind)| match kind {
+                AliasUse::Write { clean } => *clean && *position > killed,
+                AliasUse::Index => true,
+                AliasUse::Other => *position > killed,
+            })
     }
 }
 
-fn top_level_kill(
-    function: &Function<'_>,
+impl<'a> VisitJs<'a> for AliasOrder<'_, '_, '_, 'a> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.nest(|order| walk_js::walk_function(order, it, flags));
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.nest(|order| walk_js::walk_arrow_function_expression(order, it));
+    }
+
+    fn visit_class(&mut self, it: &Class<'a>) {
+        self.nest(|order| walk_js::walk_class(order, it));
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        walk_js::walk_variable_declarator(self, it);
+        let BindingPattern::BindingIdentifier(id) = &it.id else {
+            return;
+        };
+        if id.symbol_id.get() == Some(self.symbol) {
+            self.nested |= self.depth > 0;
+            self.position += 1;
+            self.declared.get_or_insert(self.position);
+        }
+    }
+
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        let AssignmentTarget::AssignmentTargetIdentifier(target) = &it.left else {
+            walk_js::walk_assignment_expression(self, it);
+            return;
+        };
+        if self.scan.resolve(target).flatten() != Some(self.symbol) {
+            walk_js::walk_assignment_expression(self, it);
+            return;
+        }
+        self.visit_expression(&it.right);
+        if std::ptr::eq(it, self.kill) && self.depth == 0 {
+            self.position += 1;
+            self.killed.get_or_insert(self.position);
+            return;
+        }
+        let clean =
+            it.operator == AssignmentOperator::Assign && !mentions_array(self.scan, &it.right);
+        self.note(AliasUse::Write { clean });
+    }
+
+    fn visit_simple_assignment_target(&mut self, it: &SimpleAssignmentTarget<'a>) {
+        self.in_target = it.as_member_expression().is_some();
+        walk_js::walk_simple_assignment_target(self, it);
+        self.in_target = false;
+    }
+
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        self.in_target = it.operator == UnaryOperator::Delete;
+        self.visit_expression(&it.argument);
+        self.in_target = false;
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        let target = std::mem::take(&mut self.in_target);
+        if self.is_symbol(&it.object) {
+            self.note(if target {
+                AliasUse::Other
+            } else {
+                AliasUse::Index
+            });
+        } else {
+            self.visit_expression(&it.object);
+        }
+        self.visit_expression(&it.expression);
+    }
+
+    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        self.in_target = false;
+        walk_js::walk_static_member_expression(self, it);
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.in_target = false;
+        if self.scan.resolve(it).flatten() == Some(self.symbol) {
+            self.note(AliasUse::Other);
+        }
+    }
+}
+
+fn top_level_kill<'k, 'a>(
+    function: &'k Function<'a>,
     scan: &DecoderScan<'_>,
     symbol: SymbolId,
-) -> Option<(Span, Span)> {
+) -> Option<&'k AssignmentExpression<'a>> {
     function
         .body
         .as_ref()?
@@ -285,34 +414,39 @@ fn reused_alias_is_read_only(
     if reused_array_aliases_trusted() {
         return true;
     }
-    let Some((kill, target)) = top_level_kill(function, scan, symbol) else {
+    let Some(kill) = top_level_kill(function, scan, symbol) else {
         return false;
     };
-    let mut writes = Writes {
+    let Some(body) = function.body.as_ref() else {
+        return false;
+    };
+    let mut order = AliasOrder {
         scan,
         symbol,
-        found: Vec::new(),
+        kill,
+        depth: 0,
+        position: 0,
+        in_target: false,
+        nested: false,
+        declared: None,
+        killed: None,
+        uses: Vec::new(),
     };
-    writes.visit_function(function, ScopeFlags::Function);
-    let later_and_clean = writes
-        .found
+    order.visit_formal_parameters(&function.params);
+    order.visit_function_body(body);
+    let writes = order
+        .uses
         .iter()
-        .all(|(span, clean)| *clean && (*span == kill || span.start > kill.end));
-    if writes.found.len() != writes_of(scoping, symbol) || !later_and_clean {
-        return false;
-    }
-    let seen: Vec<Span> = scan
+        .filter(|(_, kind)| matches!(kind, AliasUse::Write { .. }))
+        .count();
+    let seen = scan
         .alias_refs
         .iter()
         .filter(|(alias, _)| *alias == symbol)
-        .map(|(_, span)| *span)
-        .collect();
-    seen.len() == scoping.get_resolved_reference_ids(symbol).len()
-        && scoping.symbol_span(symbol).end <= kill.start
-        && seen
-            .iter()
-            .filter(|span| span.start < kill.end && **span != target)
-            .all(|span| scan.alias_reads.contains(span))
+        .count();
+    writes + 1 == writes_of(scoping, symbol)
+        && seen == scoping.get_resolved_reference_ids(symbol).len()
+        && order.proves_read_only()
 }
 
 fn aliases_only_read(scoping: &Scoping, scan: &DecoderScan<'_>, function: &Function<'_>) -> bool {

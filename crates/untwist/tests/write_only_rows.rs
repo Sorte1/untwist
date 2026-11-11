@@ -1,12 +1,15 @@
 use untwist::{Options, Pipeline};
 use untwist_deobfuscate::mutants::{
-    trust_nested_write_targets_for_tests, trust_write_only_order_for_tests,
+    ignore_write_only_scope_hazard_for_tests, trust_nested_write_targets_for_tests,
+    trust_write_only_order_for_tests,
 };
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/write_only_rows.txt");
 
 type Switch = fn(bool);
+
+type Rows = Vec<(String, String)>;
 
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
@@ -25,6 +28,12 @@ fn transformed(unsafe_transforms: bool, source: &str) -> String {
     Pipeline::new(options).run(source).code().to_string()
 }
 
+const SAFE_LANE_ONLY: &str = "direct-eval";
+
+fn in_lane(label: &str, unsafe_transforms: bool) -> bool {
+    !unsafe_transforms || !label.contains(SAFE_LANE_ONLY)
+}
+
 fn dropped(code: &str) -> bool {
     !code.contains("e = 1") && !code.contains("e = -620")
 }
@@ -32,7 +41,7 @@ fn dropped(code: &str) -> bool {
 #[test]
 fn each_rows_drop_decision_matches_its_label_in_both_lanes() {
     for lane in [false, true] {
-        for (label, source) in rows() {
+        for (label, source) in rows().into_iter().filter(|(label, _)| in_lane(label, lane)) {
             let code = transformed(lane, &source);
             assert_eq!(
                 dropped(&code),
@@ -51,12 +60,22 @@ fn the_rows_hold_up_against_node_and_the_kept_ones_need_their_checks() {
     let programs = rows();
     let run_safe = |source: &str| transformed(false, source);
     let run_unsafe = |source: &str| transformed(true, source);
+    let (both, safe_only): (Rows, Rows) = programs
+        .iter()
+        .cloned()
+        .partition(|(label, _)| in_lane(label, true));
     let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];
-    let wrong = node_rows::mismatches(&node, &programs, &modes);
+    let mut wrong = node_rows::mismatches(&node, &both, &modes);
+    let modes: [Mode<'_>; 1] = [("default", &run_safe)];
+    wrong.extend(node_rows::mismatches(&node, &safe_only, &modes));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    let checks: [(&str, Switch); 2] = [
+    let checks: [(&str, Switch); 3] = [
         ("keep-a-let-set-before", trust_write_only_order_for_tests),
         ("keep-a-nested-write", trust_nested_write_targets_for_tests),
+        (
+            "keep-a-var-a-direct-eval",
+            ignore_write_only_scope_hazard_for_tests,
+        ),
     ];
     for (prefix, switch) in checks {
         let guarded: Vec<(String, String)> = programs

@@ -11,6 +11,7 @@ use super::{capacity_hint, record_lengths, with_slack, ScanLengths};
 use super::{Frame, FunctionValue, InitOrder, StatementList, ValueOwner};
 use crate::fused::{Fused, Member, Walk};
 use crate::mutants::inert_statements_unchecked;
+use crate::stamp::reached_outside_its_block;
 
 pub(super) struct Scan<'s> {
     scoping: &'s Scoping,
@@ -121,7 +122,10 @@ impl<'s> Scan<'s> {
             let ValueOwner::Binding { symbol, .. } = value.owner else {
                 continue;
             };
-            if disqualified.contains(symbol) || !is_constant_binding(scoping, symbol) {
+            if disqualified.contains(symbol)
+                || !is_constant_binding(scoping, symbol)
+                || reached_outside_its_block(scoping, symbol).is_some()
+            {
                 value.owner = ValueOwner::Opaque;
             }
         }
@@ -418,11 +422,26 @@ fn expression_cannot_call(expr: &Expression<'_>) -> bool {
         | Expression::ArrowFunctionExpression(_) => true,
         Expression::TemplateLiteral(template) => template.expressions.is_empty(),
         Expression::UnaryExpression(unary) => {
-            unary.operator != UnaryOperator::Delete && expression_cannot_call(&unary.argument)
+            unary.operator != UnaryOperator::Delete && is_primitive(&unary.argument)
         }
         Expression::ParenthesizedExpression(inner) => expression_cannot_call(&inner.expression),
         Expression::ArrayExpression(array) => array.elements.iter().all(element_cannot_call),
         Expression::ObjectExpression(object) => object.properties.iter().all(property_cannot_call),
+        _ => false,
+    }
+}
+
+fn is_primitive(expr: &Expression<'_>) -> bool {
+    match expr.without_parentheses() {
+        Expression::StringLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::BigIntLiteral(_) => true,
+        Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+        Expression::UnaryExpression(unary) => {
+            unary.operator != UnaryOperator::Delete && is_primitive(&unary.argument)
+        }
         _ => false,
     }
 }

@@ -217,7 +217,11 @@ fn shell_parts<'k, 'a>(
         return None;
     };
     let function = shell_function(statement)?;
-    if function.id.as_ref()?.name != ANONYMOUS || function.params.rest.is_some() {
+    if function.id.as_ref()?.name != ANONYMOUS
+        || function.params.rest.is_some()
+        || function.r#async
+        || function.generator
+    {
         return None;
     }
     let plain = function.params.items.iter().all(|param| {

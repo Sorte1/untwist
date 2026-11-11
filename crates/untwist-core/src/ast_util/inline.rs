@@ -108,6 +108,27 @@ pub fn reads_the_callee_receiver(expr: &Expression<'_>) -> bool {
     probe.found
 }
 
+#[derive(Default)]
+struct WriteProbe {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for WriteProbe {
+    fn visit_assignment_expression(&mut self, _: &AssignmentExpression<'a>) {
+        self.found = true;
+    }
+
+    fn visit_update_expression(&mut self, _: &UpdateExpression<'a>) {
+        self.found = true;
+    }
+}
+
+pub fn writes_anything(expr: &Expression<'_>) -> bool {
+    let mut probe = WriteProbe::default();
+    probe.visit_expression(expr);
+    probe.found
+}
+
 struct Substitute<'p, 'a, 's> {
     names: &'s [&'s str],
     arguments: &'s AVec<'p, Argument<'p>>,
@@ -214,7 +235,7 @@ pub fn inline_function_call<'p, 'a>(
 
     let names = param_names(function)?;
     let returned = returned_expression(function)?;
-    if reads_the_callee_receiver(returned) {
+    if reads_the_callee_receiver(returned) || writes_anything(returned) {
         return None;
     }
     let mut clone: Expression<'a> = returned.clone_in(allocator);

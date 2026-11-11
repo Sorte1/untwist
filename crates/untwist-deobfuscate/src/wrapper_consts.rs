@@ -3,9 +3,9 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
-use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::ExprEdits;
 use untwist_core::ast_util::inline::returned_expression;
 use untwist_core::ast_util::matcher::call_parts;
@@ -28,12 +28,13 @@ fn primitive(expr: &Expression<'_>) -> bool {
 
 struct Constant<'p> {
     init: &'p Expression<'p>,
-    declared: Span,
+    position: u32,
+    function: Option<ScopeId>,
 }
 
 struct Wrapper {
     symbol: SymbolId,
-    function: Option<Span>,
+    function: Option<ScopeId>,
     reads: Vec<(Span, SymbolId)>,
 }
 
@@ -62,9 +63,9 @@ struct Search<'s, 'p> {
     scoping: &'s Scoping,
     constants: FxHashMap<SymbolId, Constant<'p>>,
     wrappers: Vec<Wrapper>,
-    functions: Vec<Span>,
+    functions: Vec<ScopeId>,
     call_reads: Vec<CallRead>,
-    functions_of: FxHashMap<SymbolId, Option<Span>>,
+    position: u32,
 }
 
 struct CallRead {
@@ -72,10 +73,21 @@ struct CallRead {
     decoder: bool,
     span: Span,
     symbol: SymbolId,
-    function: Option<Span>,
+    function: Option<ScopeId>,
+    position: u32,
+}
+
+fn binds_at_body_level(scoping: &Scoping, symbol: SymbolId) -> bool {
+    let scope = scoping.symbol_scope_id(symbol);
+    scope == scoping.root_scope_id() || scoping.scope_flags(scope).is_function()
 }
 
 impl<'s, 'p> Search<'s, 'p> {
+    fn advance(&mut self) -> u32 {
+        self.position += 1;
+        self.position
+    }
+
     fn wrapper(&self, function: &Function<'p>) -> Option<Wrapper> {
         let symbol = function.id.as_ref()?.symbol_id.get()?;
         let (callee, arguments) = call_parts(returned_expression(function)?)?;
@@ -113,14 +125,19 @@ impl<'s, 'p> VisitJs<'p> for Search<'s, 'p> {
                 else {
                     continue;
                 };
-                if let (Some(symbol), true) = (id.symbol_id.get(), primitive(init)) {
-                    self.functions_of
-                        .insert(symbol, self.functions.last().copied());
+                let Some(symbol) = id.symbol_id.get() else {
+                    continue;
+                };
+                if primitive(init)
+                    && (wrapper_constants_trusted() || binds_at_body_level(self.scoping, symbol))
+                {
+                    let position = self.advance();
                     self.constants.insert(
                         symbol,
                         Constant {
                             init,
-                            declared: declaration.span,
+                            position,
+                            function: self.functions.last().copied(),
                         },
                     );
                 }
@@ -136,13 +153,19 @@ impl<'s, 'p> VisitJs<'p> for Search<'s, 'p> {
                 self.wrappers.push(wrapper);
             }
         }
-        self.functions.push(it.span);
+        let Some(scope) = it.scope_id.get() else {
+            return;
+        };
+        self.functions.push(scope);
         walk_js::walk_function(self, it, flags);
         self.functions.pop();
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'p>) {
-        self.functions.push(it.span);
+        let Some(scope) = it.scope_id.get() else {
+            return;
+        };
+        self.functions.push(scope);
         walk_js::walk_arrow_function_expression(self, it);
         self.functions.pop();
     }
@@ -168,12 +191,14 @@ impl<'s, 'p> VisitJs<'p> for Search<'s, 'p> {
                         .get()
                         .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
                     if let Some(symbol) = symbol {
+                        let position = self.advance();
                         self.call_reads.push(CallRead {
                             callee: None,
                             decoder: true,
                             span: read.span,
                             symbol,
                             function: self.functions.last().copied(),
+                            position,
                         });
                     }
                 }
@@ -186,21 +211,43 @@ impl<'s, 'p> VisitJs<'p> for Search<'s, 'p> {
 struct Uses<'s> {
     scoping: &'s Scoping,
     wanted: Vec<SymbolId>,
-    functions: Vec<Span>,
-    found: FxHashMap<SymbolId, Vec<(Span, Option<Span>)>>,
+    constants: FxHashSet<SymbolId>,
+    functions: Vec<ScopeId>,
+    position: u32,
+    unscoped: bool,
+    declared_at: FxHashMap<SymbolId, u32>,
+    found: FxHashMap<SymbolId, Vec<(u32, Option<ScopeId>)>>,
 }
 
 impl<'a> VisitJs<'a> for Uses<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        self.functions.push(it.span);
+        let Some(scope) = it.scope_id.get() else {
+            self.unscoped = true;
+            return;
+        };
+        self.functions.push(scope);
         walk_js::walk_function(self, it, flags);
         self.functions.pop();
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
-        self.functions.push(it.span);
+        let Some(scope) = it.scope_id.get() else {
+            self.unscoped = true;
+            return;
+        };
+        self.functions.push(scope);
         walk_js::walk_arrow_function_expression(self, it);
         self.functions.pop();
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        walk_js::walk_variable_declarator(self, it);
+        if let BindingPattern::BindingIdentifier(id) = &it.id {
+            if let Some(symbol) = id.symbol_id.get().filter(|s| self.constants.contains(s)) {
+                self.position += 1;
+                self.declared_at.insert(symbol, self.position);
+            }
+        }
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
@@ -209,10 +256,11 @@ impl<'a> VisitJs<'a> for Uses<'_> {
             .get()
             .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
         if let Some(symbol) = symbol.filter(|symbol| self.wanted.contains(symbol)) {
+            self.position += 1;
             self.found
                 .entry(symbol)
                 .or_default()
-                .push((it.span, self.functions.last().copied()));
+                .push((self.position, self.functions.last().copied()));
         }
     }
 }
@@ -226,18 +274,20 @@ fn settled(scoping: &Scoping, symbol: SymbolId) -> bool {
             .all(|reference| !reference.is_write())
 }
 
-fn runs_after(
-    references: &FxHashMap<SymbolId, Vec<(Span, Option<Span>)>>,
-    wrapper: &Wrapper,
-    declared: Span,
-) -> bool {
+fn runs_after(uses: &Uses<'_>, wrapper: &Wrapper, constant: SymbolId) -> bool {
     if wrapper_constants_trusted() {
         return true;
     }
-    references.get(&wrapper.symbol).is_some_and(|references| {
+    if uses.unscoped {
+        return false;
+    }
+    let Some(declared) = uses.declared_at.get(&constant) else {
+        return false;
+    };
+    uses.found.get(&wrapper.symbol).is_some_and(|references| {
         references
             .iter()
-            .all(|(span, function)| span.start > declared.end && *function == wrapper.function)
+            .all(|(position, function)| position > declared && *function == wrapper.function)
     })
 }
 
@@ -253,7 +303,7 @@ pub(crate) fn inline_wrapper_constants<'a>(
             wrappers: Vec::new(),
             functions: Vec::new(),
             call_reads: Vec::new(),
-            functions_of: FxHashMap::default(),
+            position: 0,
         };
         search.visit_program(view);
         let candidates: Vec<SymbolId> = search
@@ -267,18 +317,19 @@ pub(crate) fn inline_wrapper_constants<'a>(
             })
             .map(|wrapper| wrapper.symbol)
             .collect();
-        let references = if candidates.is_empty() {
-            FxHashMap::default()
-        } else {
-            let mut uses = Uses {
-                scoping: cx.scoping(),
-                wanted: candidates,
-                functions: Vec::new(),
-                found: FxHashMap::default(),
-            };
-            uses.visit_program(view);
-            uses.found
+        let mut uses = Uses {
+            scoping: cx.scoping(),
+            constants: search.constants.keys().copied().collect(),
+            wanted: candidates,
+            functions: Vec::new(),
+            position: 0,
+            unscoped: false,
+            declared_at: FxHashMap::default(),
+            found: FxHashMap::default(),
         };
+        if !uses.wanted.is_empty() {
+            uses.visit_program(view);
+        }
         let mut edits = ExprEdits::new();
         for wrapper in &search.wrappers {
             let scope = cx.scoping().symbol_scope_id(wrapper.symbol);
@@ -290,7 +341,7 @@ pub(crate) fn inline_wrapper_constants<'a>(
                     let same_scope = cx.scoping().symbol_scope_id(*symbol) == scope;
                     (same_scope
                         && settled(cx.scoping(), *symbol)
-                        && runs_after(&references, wrapper, constant.declared))
+                        && runs_after(&uses, wrapper, *symbol))
                     .then_some((*span, constant))
                 })
                 .collect();
@@ -309,9 +360,8 @@ pub(crate) fn inline_wrapper_constants<'a>(
             let Some(constant) = search.constants.get(&read.symbol) else {
                 continue;
             };
-            let declared_in = search.functions_of.get(&read.symbol).copied().flatten();
             let ordered = wrapper_constants_trusted()
-                || (read.span.start > constant.declared.end && read.function == declared_in);
+                || (read.position > constant.position && read.function == constant.function);
             if wanted && ordered && settled(cx.scoping(), read.symbol) {
                 edits.insert(read.span, constant.init.clone_in(cx.allocator()));
             }
