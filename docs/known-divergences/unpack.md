@@ -196,8 +196,17 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   A require that is neither a module of the bundle nor a node builtin is refused: Parcel externals
   are not accepted, which also keeps an `Object.prototype` name (`require("constructor")`, which
   Parcel's runtime resolves through the prototype) from being read as an external. Accepting
-  externals later must exclude those names explicitly. A lazy chunk that the inputs
-  supply is linked into one bundle. The scope-hoisted form is accepted only when the statement that
+  externals later must exclude those names explicitly. The registry call must pass no more
+  arguments than its runtime takes; without the fifth (externals) argument the runtime throws on
+  any name outside the bundle, so a builtin require is refused there. A builtin require and
+  `module.bundle.root(...)` both go through the global `parcelRequire<hash>` slot at run time, so
+  a bundle that uses either is refused when a factory can replace that slot: a write to a property
+  of that name, the global object (`globalThis`, `global`, `self`, `window`, the factory's fourth
+  parameter, `Function`, indirect `eval`) used other than as `G.name`, `G["name"]`, `typeof G` or
+  in an equality test, or a write through a computed key on it or on a nested function's `this`.
+  An alias of a nested function's `this` is not followed. A lazy chunk that the inputs
+  supply is linked into one bundle. A hoisted `var` helper is moved to `_runtime/parcel.js` only
+  when no earlier top-level statement names it; otherwise it stays where it is. The scope-hoisted form is accepted only when the statement that
   defines `parcelRequire` equals a recorded text after α-renaming (Parcel 2.16.4, development
   and minified, each as written and as prepare and unminify leave it), and `$parcel$modules` and `$parcel$inits` are each declared once as
   `{}` and named nowhere else at the top level; another Parcel version's definition is refused

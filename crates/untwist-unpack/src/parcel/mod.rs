@@ -4,11 +4,13 @@ mod link;
 pub mod links;
 pub mod notes;
 mod runtime;
+mod slot;
 mod verify;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
-use rustc_hash::FxHashMap;
+use oxc_ast_visit::VisitJs;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::Note;
 
 use crate::esbuild::mentions::{closure, mentioned};
@@ -150,18 +152,33 @@ fn helper_name<'k>(statement: &'k Statement<'_>, early: bool) -> Option<&'k str>
     }
 }
 
+#[derive(Default)]
+struct Named<'a> {
+    names: FxHashSet<&'a str>,
+}
+
+impl<'a> VisitJs<'a> for Named<'a> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.names.insert(it.name.as_str());
+    }
+}
+
 pub(crate) fn candidates(
     top: &[Statement<'_>],
     layout: &layout::Hoisted<'_, '_>,
 ) -> FxHashMap<String, usize> {
     let mut names = FxHashMap::default();
+    let mut earlier = Named::default();
     for (index, statement) in top.iter().enumerate() {
-        if layout.prelude.contains(&index) || !layout.defs_at(index).is_empty() {
-            continue;
-        }
-        if let Some(name) = helper_name(statement, index < layout.first) {
+        let skipped = layout.prelude.contains(&index) || !layout.defs_at(index).is_empty();
+        let found = (!skipped)
+            .then(|| helper_name(statement, index < layout.first))
+            .flatten();
+        let declared = matches!(statement, Statement::FunctionDeclaration(_));
+        if let Some(name) = found.filter(|name| declared || !earlier.names.contains(name)) {
             names.insert(name.to_string(), index);
         }
+        earlier.visit_statement(statement);
     }
     names
 }

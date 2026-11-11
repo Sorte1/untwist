@@ -37,6 +37,7 @@ pub struct Registry<'k, 'a> {
     pub entries: Vec<String>,
     pub main: Option<String>,
     pub global: String,
+    pub externals: bool,
 }
 
 pub struct Hoisted<'k, 'a> {
@@ -256,6 +257,7 @@ fn registry<'k, 'a>(arguments: &'k [Argument<'a>]) -> Option<Registry<'k, 'a>> {
         entries,
         main,
         global,
+        externals: arguments.len() > 4,
     })
 }
 
@@ -498,7 +500,10 @@ pub fn layout<'k, 'a>(frame: &Frame<'k, 'a>, program: &'k Program<'a>) -> Option
         if !wrapper.function.body.directives.is_empty() {
             return None;
         }
-        if !runtime::proven(runtime_function(frame)?, program.source_text) {
+        let function = runtime_function(frame)?;
+        if arguments.len() > function.params.items.len()
+            || !runtime::proven(function, program.source_text)
+        {
             return None;
         }
         return registry(arguments).map(Layout::Registry);
