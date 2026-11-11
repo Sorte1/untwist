@@ -704,9 +704,10 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         self.scopes.clear();
         self.module = has_module_syntax(program);
         self.strict = program_is_strict(program);
-        self.trust = self
-            .wants_trust
-            .then(|| trust::gather(program, cx.scoping(), self.module));
+        self.trust = self.wants_trust.then(|| {
+            let shared = self.module || cx.opts.unsafe_transforms;
+            trust::gather(program, cx.scoping(), self.module, shared)
+        });
         self.class_pending = 0;
         self.waiting = false;
         self.keys.begin_round();

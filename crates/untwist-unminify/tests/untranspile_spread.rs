@@ -450,3 +450,24 @@ fn a_var_helper_at_the_top_of_a_module_still_converts() {
     let code = default_lane(&source);
     assert!(code.contains("return [a, b].length"), "{code}");
 }
+
+#[test]
+fn a_numeric_key_written_through_a_sloppy_this_does_not_untrust_script_helpers() {
+    let source = format!(
+        "{PATCHED}function Box(v) {{ this[0] = v; }}\nfunction run(a, b) {{ return _toConsumableArray([a, b]).join(\",\") + new Box(a)[0]; }}\nconsole.log(run(1, 2));\n"
+    );
+    let code = default_lane(&source);
+    assert!(code.contains("return [a, b].join"), "{code}");
+    untwist_testing::node::assert_node_agrees(&source, &code);
+}
+
+#[test]
+fn shared_helpers_ahead_of_a_var_helper_keep_it_settled_under_unsafe() {
+    let source = format!(
+        "{TSLIB_ASSIGN}{TSLIB_SPREAD_ARRAY}\nfunction run(a, b) {{ return JSON.stringify(__assign({{ a: a }}, {{ b: b }})) + __spreadArray([a], [b], false).length; }}\nconsole.log(run(1, 2));\n"
+    );
+    let code = run(&source, true);
+    assert!(!code.contains("__assign("), "{code}");
+    assert!(!code.contains("__spreadArray(["), "{code}");
+    untwist_testing::node::assert_node_agrees(&source, &code);
+}

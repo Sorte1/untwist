@@ -50,11 +50,11 @@ impl Trust {
     }
 }
 
-pub fn gather(program: &Program<'_>, scoping: &Scoping, module: bool) -> Trust {
+pub fn gather(program: &Program<'_>, scoping: &Scoping, module: bool, shared: bool) -> Trust {
     let strict = module || program.has_use_strict_directive();
     let mut gather = Gather {
         scoping,
-        module,
+        shared,
         trust: Trust::default(),
         strict: vec![strict],
         this_global: vec![!module],
@@ -66,7 +66,7 @@ pub fn gather(program: &Program<'_>, scoping: &Scoping, module: bool) -> Trust {
 
 struct Gather<'s> {
     scoping: &'s Scoping,
-    module: bool,
+    shared: bool,
     trust: Trust,
     strict: Vec<bool>,
     this_global: Vec<bool>,
@@ -88,14 +88,24 @@ fn is_unresolved(id: &IdentifierReference<'_>, scoping: &Scoping, name: &str) ->
             .is_none_or(|reference| scoping.get_reference(reference).symbol_id().is_none())
 }
 
-fn literal_name<'k>(expression: &'k Expression<'_>) -> Option<&'k str> {
+const LARGEST_PLAIN_INTEGER: f64 = 1e21;
+
+fn literal_name(expression: &Expression<'_>) -> Option<String> {
     match expression.without_parentheses() {
-        Expression::StringLiteral(literal) => literal.value.as_str(),
+        Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
+        Expression::NumericLiteral(literal)
+            if literal.value.fract() == 0.0
+                && literal.value >= 0.0
+                && literal.value < LARGEST_PLAIN_INTEGER =>
+        {
+            Some(format!("{}", literal.value as u128))
+        }
         Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
             .quasis
             .first()
             .and_then(|quasi| quasi.value.cooked)
-            .and_then(|cooked| cooked.as_str()),
+            .and_then(|cooked| cooked.as_str())
+            .map(str::to_string),
         _ => None,
     }
 }
@@ -216,7 +226,7 @@ impl Gather<'_> {
                 }
             }
             let quiet = declarator.init.as_ref().is_none_or(inert)
-                || identify::declarator(declarator, self.scoping, self.module).is_some();
+                || identify::declarator(declarator, self.scoping, self.shared).is_some();
             if !quiet {
                 return false;
             }
@@ -236,10 +246,10 @@ impl Gather<'_> {
         }
     }
 
-    fn written(&mut self, key: Option<&str>) {
+    fn written(&mut self, key: Option<String>) {
         match key {
             Some(name) => {
-                self.trust.global_names.insert(name.to_string());
+                self.trust.global_names.insert(name);
             }
             None => self.trust.global_dynamic = true,
         }
@@ -310,7 +320,7 @@ impl<'a> VisitJs<'a> for Gather<'_> {
             SimpleAssignmentTarget::StaticMemberExpression(member)
                 if self.is_global_object(&member.object) =>
             {
-                self.written(Some(member.property.name.as_str()));
+                self.written(Some(member.property.name.to_string()));
             }
             SimpleAssignmentTarget::ComputedMemberExpression(member)
                 if self.is_global_object(&member.object) =>
