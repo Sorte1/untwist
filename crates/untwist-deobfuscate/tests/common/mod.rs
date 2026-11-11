@@ -235,6 +235,16 @@ pub fn run_all_stages_safe_lane(source: &str) -> (String, Vec<String>) {
     ))
 }
 
+pub fn run_all_stage_notes_fueled(source: &str, fuel: u64) -> (String, Vec<Note>) {
+    run_stages_with(
+        source,
+        PassOptions {
+            fuel: Some(fuel),
+            ..pass_options()
+        },
+    )
+}
+
 pub fn run_all_stage_notes_default_lane(source: &str) -> (String, Vec<Note>) {
     run_stages_with(
         source,

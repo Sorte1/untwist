@@ -5,6 +5,15 @@ use crate::bail::{Bail, EvalResult};
 pub const STEP_BUDGET: u64 = 50_000_000;
 pub const UNSAFE_STEP_BUDGET: u64 = 1_000_000_000;
 pub const SAFE_STEPS_PER_DISTINCT_CALL: u64 = 500_000;
+pub const INPUT_FUEL_UNITS: u64 = 32;
+pub const INPUT_STEPS_PER_BYTE: u64 = 2_000;
+
+pub fn input_fuel(input_len: usize, unit_fuel: u64) -> u64 {
+    let by_size = u64::try_from(input_len)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(INPUT_STEPS_PER_BYTE);
+    unit_fuel.saturating_mul(INPUT_FUEL_UNITS).max(by_size)
+}
 
 pub fn default_fuel(unsafe_transforms: bool) -> u64 {
     if unsafe_transforms {
