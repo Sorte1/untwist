@@ -39,6 +39,10 @@ fn run(source: &str, unsafe_transforms: bool) -> String {
     run_with(source, unsafe_transforms, true).0
 }
 
+fn as_module(source: &str) -> String {
+    format!("{source}\nexport {{}};\n")
+}
+
 fn notes_of(source: &str) -> Vec<String> {
     run_with(source, true, true)
         .1
@@ -123,7 +127,12 @@ fn typescript_spread_array_keeps_holes_and_non_arrays() {
 
 #[test]
 fn typescript_inlines_a_literal_array_in_the_default_mode() {
-    let code = run(&fixture("ts/spread.es5.js"), false);
+    let script = run(&fixture("ts/spread.es5.js"), false);
+    assert!(
+        script.contains("__spreadArray([undefined], [2020, 0, 2], false)"),
+        "{script}"
+    );
+    let code = run(&as_module(&fixture("ts/spread.es5.js")), false);
     assert!(code.contains("[undefined, 2020, 0, 2]"), "{code}");
     assert!(code.contains("__spreadArray([], a, true)"), "{code}");
 }
@@ -175,7 +184,7 @@ fn a_shadowing_local_function_is_not_the_helper() {
 #[test]
 fn a_source_that_may_hold_an_own_proto_is_kept_in_the_default_mode() {
     let source = fixture("hand/assign-proto-source.js");
-    let safe = run(&source, false);
+    let safe = run(&as_module(&source), false);
     assert!(safe.contains("__assign(__assign({}, source)"), "{safe}");
     assert!(
         safe.contains("var plain = {\n  a: 1,\n  b: 2\n};"),
@@ -272,7 +281,7 @@ fn a_safe_site_after_unsafe_ones_still_fires_in_the_default_mode() {
 
 #[test]
 fn a_formatted_program_converts_its_safe_spreads_in_the_default_mode() {
-    let code = run(&fixture("hand/formatted-spread.js"), false);
+    let code = run(&as_module(&fixture("hand/formatted-spread.js")), false);
     assert!(code.contains("var safeArray = [0, 3, 4];"), "{code}");
     assert!(
         code.contains("var safeObject = {\n  a: 1,\n  b: 2\n};"),
@@ -368,7 +377,7 @@ fn a_shared_helper_in_a_script_converts_only_under_unsafe() {
     let code = default_lane(&source);
     assert!(code.contains("__assign({"), "{code}");
     let code = run(&source, true);
-    assert!(code.contains("{ a: 1, b: v }"), "{code}");
+    assert!(code.contains("a: 1,\n    b: v\n"), "{code}");
     untwist_testing::node::assert_node_agrees(&source, &code);
 }
 
@@ -378,7 +387,8 @@ fn a_shared_helper_in_a_module_is_still_recognised() {
         "{TSLIB_ASSIGN}export function run(v) {{ var r = __assign({{ a: 1 }}, {{ b: v }}); return JSON.stringify(r); }}\n"
     );
     let code = default_lane(&source);
-    assert!(code.contains("{ a: 1, b: v }"), "{code}");
+    assert!(code.contains("a: 1,\n    b: v\n"), "{code}");
+    assert!(!code.contains("__assign("), "{code}");
 }
 
 const GLOBAL_REPLACEMENTS: [&str; 5] = [

@@ -1,8 +1,6 @@
 use untwist_core::pass::{Note, PassCtor, PassOptions};
 use untwist_testing::{transform_report, Allocator};
-use untwist_unminify::notes::{
-    UNTRANSPILE_CLASS_PROTOTYPE_OPEN, UNTRANSPILE_HELPER_UNTRUSTED, UNTRANSPILE_UNKNOWN_HELPER,
-};
+use untwist_unminify::notes::{UNTRANSPILE_CLASS_PROTOTYPE_OPEN, UNTRANSPILE_UNKNOWN_HELPER};
 use untwist_unminify::untranspile::PASS;
 use untwist_unminify::{transpile_ctors, unminify_ctors, untranspile_ctors};
 
@@ -190,12 +188,11 @@ fn swc_classes_convert_only_where_nothing_reaches_the_prototype() {
         "{code}"
     );
     let notes = notes_of("untranspile/swc/classes.es5.js");
-    assert!(
-        notes
-            .iter()
-            .any(|note| note.as_str() == UNTRANSPILE_HELPER_UNTRUSTED),
-        "{notes:?}"
-    );
+    let open = notes
+        .iter()
+        .filter(|note| note.as_str() == UNTRANSPILE_CLASS_PROTOTYPE_OPEN)
+        .count();
+    assert_eq!(open, 1, "{notes:?}");
 }
 
 #[test]
@@ -323,10 +320,9 @@ fn tslib_classes_are_kept_with_one_note() {
     let code = unsafe_run("untranspile/ts/classes.es5.js");
     assert!(code.contains("__extends(Child, _super)"), "{code}");
     let notes = notes_of("untranspile/ts/classes.es5.js");
-    assert!(
-        notes
-            .iter()
-            .any(|note| note.as_str() == UNTRANSPILE_HELPER_UNTRUSTED),
-        "{notes:?}"
-    );
+    let open = notes
+        .iter()
+        .filter(|note| note.as_str() == UNTRANSPILE_CLASS_PROTOTYPE_OPEN)
+        .count();
+    assert_eq!(open, 1, "{notes:?}");
 }

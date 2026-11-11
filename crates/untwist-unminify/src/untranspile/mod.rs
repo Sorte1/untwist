@@ -99,6 +99,7 @@ pub struct UntranspileHelpers {
     define_quiet: bool,
     trust: Option<trust::Trust>,
     wants_trust: bool,
+    identified_late: bool,
 }
 
 impl Default for UntranspileHelpers {
@@ -132,6 +133,7 @@ impl Default for UntranspileHelpers {
             define_quiet: false,
             trust: None,
             wants_trust: false,
+            identified_late: false,
         }
     }
 }
@@ -272,6 +274,7 @@ impl UntranspileHelpers {
         let trusted =
             (!declared || trust.settled(symbol)) && trust.global_kept(symbol, self.module, scoping);
         if trusted {
+            self.identified_late |= !self.identified;
             self.insert(found, cx);
         } else {
             cx.note(UNTRANSPILE_HELPER_UNTRUSTED, None);
@@ -748,7 +751,8 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         if !self.sites.is_empty() {
             self.rewrite_sites(&mut node.body, node.span, cx);
         }
-        if self.waits_for_builtins() {
+        let late = std::mem::take(&mut self.identified_late);
+        if self.waits_for_builtins() || (late && self.may_wait(cx)) {
             cx.request_round();
         }
         self.settle_define(node, cx);

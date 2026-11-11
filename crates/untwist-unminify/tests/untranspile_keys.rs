@@ -24,6 +24,10 @@ fn ctors<'a>() -> Vec<PassCtor<'a>> {
 }
 
 fn default_lane(source: &str) -> String {
+    lane(source, false)
+}
+
+fn lane(source: &str, unsafe_transforms: bool) -> String {
     let alloc = Allocator::default();
     transform_with(
         &alloc,
@@ -31,6 +35,7 @@ fn default_lane(source: &str) -> String {
         &ctors(),
         PassOptions {
             extended: true,
+            unsafe_transforms,
             ..PassOptions::default()
         },
     )
@@ -61,11 +66,21 @@ fn a_later_key_with_no_certain_spelling_keeps_the_redefinition_last() {
 
 #[test]
 fn an_anonymous_function_spread_in_through_a_computed_key_keeps_its_empty_name() {
-    for value in ["function () {}", "() => {}", "class {}"] {
+    for (value, converts) in [
+        ("function () {}", true),
+        ("() => {}", true),
+        ("class {}", false),
+    ] {
         let source = format!(
             "{SPREAD_HELPERS}function run(x, k) {{ var o = _objectSpread(_objectSpread({{}}, {{ p: x }}), {{}}, _defineProperty({{}}, k, {value})); return JSON.stringify(o[k].name); }}\nconsole.log(run(1, \"kk\"));\n"
         );
-        let code = agrees(&source);
-        assert!(!code.contains("_objectSpread("), "{value}\n{code}");
+        agrees(&source);
+        let code = lane(&source, true);
+        untwist_testing::node::assert_node_agrees(&source, &code);
+        assert_eq!(
+            !code.contains("_objectSpread("),
+            converts,
+            "{value}\n{code}"
+        );
     }
 }
