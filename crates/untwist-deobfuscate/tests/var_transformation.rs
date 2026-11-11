@@ -197,6 +197,30 @@ fn a_computed_arguments_key_is_the_same_hazard_and_is_noted() {
     );
 }
 
+const ARGUMENTS_READ_THROUGH_A_BUILT_KEY: &str =
+    "var A = [\"argu\", \"ments\"].join(\"\");\nfunction f(c) {\n  c = 2;\n  return f[A][0];\n}";
+
+const ARGUMENTS_READ_THROUGH_REFLECT_GET: &str =
+    "function f(c) {\n  c = 2;\n  return Reflect.get(f, \"argu\" + \"ments\")[0];\n}";
+
+const ARGUMENTS_READ_THROUGH_A_COMPUTED_PATTERN: &str =
+    "var A = k();\nfunction f(c) {\n  c = 2;\n  var { [A]: x } = f;\n  return x[0];\n}";
+
+const ARGUMENTS_READ_THROUGH_A_TEMPLATE_KEY: &str =
+    "function f(c) {\n  c = 2;\n  return f[`arguments`][0];\n}";
+
+#[test]
+fn a_key_that_may_spell_arguments_is_the_same_hazard() {
+    for source in [
+        ARGUMENTS_READ_THROUGH_A_BUILT_KEY,
+        ARGUMENTS_READ_THROUGH_REFLECT_GET,
+        ARGUMENTS_READ_THROUGH_A_COMPUTED_PATTERN,
+        ARGUMENTS_READ_THROUGH_A_TEMPLATE_KEY,
+    ] {
+        left_alone(source);
+    }
+}
+
 #[test]
 fn the_static_arguments_property_hazard_is_noted_as_well() {
     let (_code, all) = common::run_all_stages_extended(ARGUMENTS_READ_THROUGH_THE_FUNCTION);

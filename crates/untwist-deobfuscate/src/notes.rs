@@ -346,9 +346,9 @@ pub const VAR_FUNCTION_READS_ARGUMENTS: &str =
     "the function references arguments, which aliases its simple parameters, so the assignment \
      was left as a parameter";
 pub const VAR_ARGUMENTS_PROPERTY_ALIAS: &str =
-    "a property named arguments or caller is read somewhere in the program, and it may see a \
-     function's simple parameters or its caller, so no assignment was rewritten as a var \
-     declaration";
+    "a property named arguments or caller, or one under a key that is not a known other name, is \
+     read somewhere in the program, and it may see a function's simple parameters or its caller, \
+     so no assignment was rewritten as a var declaration";
 pub const VAR_PARAMETER_WRITTEN_AGAIN: &str =
     "the parameter is written somewhere other than this assignment, so it was left as a parameter";
 pub const VAR_PARAMETER_USED_BEFORE_THE_ASSIGNMENT: &str =

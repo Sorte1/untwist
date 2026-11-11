@@ -72,6 +72,12 @@ impl<'p> Search<'_, 'p> {
         }
     }
 
+    fn read_key(&mut self, computed: bool, key: &PropertyKey<'_>) {
+        if computed && !key.as_expression().is_some_and(names_another_key) {
+            self.facts.aliases_arguments = true;
+        }
+    }
+
     fn record_hoisted_function(&mut self, it: &Function<'p>) {
         if it.r#type != FunctionType::FunctionDeclaration {
             return;
@@ -120,12 +126,69 @@ impl<'p> VisitJs<'p> for Search<'_, 'p> {
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'p>) {
-        if let Expression::StringLiteral(literal) = &it.expression {
-            if literal.value == ARGUMENTS {
-                self.facts.aliases_arguments = true;
-            }
+        if !names_another_key(&it.expression) {
+            self.facts.aliases_arguments = true;
         }
         walk_js::walk_computed_member_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'p>) {
+        let reads_a_property = it
+            .callee
+            .without_parentheses()
+            .as_member_expression()
+            .and_then(MemberExpression::static_property_name)
+            .is_some_and(|name| {
+                matches!(
+                    name.as_str(),
+                    Some("get" | "getOwnPropertyDescriptor" | "getOwnPropertyDescriptors")
+                )
+            });
+        if reads_a_property {
+            self.facts.aliases_arguments = true;
+        }
+        walk_js::walk_call_expression(self, it);
+    }
+
+    fn visit_binding_property(&mut self, it: &BindingProperty<'p>) {
+        self.read_key(it.computed, &it.key);
+        walk_js::walk_binding_property(self, it);
+    }
+
+    fn visit_assignment_target_property_property(
+        &mut self,
+        it: &AssignmentTargetPropertyProperty<'p>,
+    ) {
+        self.read_key(it.computed, &it.name);
+        walk_js::walk_assignment_target_property_property(self, it);
+    }
+
+    fn visit_template_literal(&mut self, it: &TemplateLiteral<'p>) {
+        if it
+            .quasis
+            .iter()
+            .any(|quasi| quasi.value.raw.as_str().contains(ARGUMENTS))
+        {
+            self.facts.aliases_arguments = true;
+        }
+        walk_js::walk_template_literal(self, it);
+    }
+
+    fn visit_string_literal(&mut self, it: &StringLiteral<'p>) {
+        if it.value == ARGUMENTS {
+            self.facts.aliases_arguments = true;
+        }
+    }
+}
+
+fn names_another_key(key: &Expression<'_>) -> bool {
+    match key.without_parentheses() {
+        Expression::StringLiteral(literal) => literal.value != ARGUMENTS,
+        Expression::NumericLiteral(_) => true,
+        Expression::TemplateLiteral(template) => template
+            .single_quasi()
+            .is_some_and(|text| text.as_str() != Some(ARGUMENTS)),
+        _ => false,
     }
 }
 
