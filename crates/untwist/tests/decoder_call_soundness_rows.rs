@@ -111,10 +111,13 @@ fn the_sabotage_rows_diverge_from_node_without_the_soundness_checks() {
         .iter()
         .filter_map(|row| row.split(" (mutant):").next())
         .collect();
-    for (label, _) in &sabotage {
-        assert!(
-            names.contains(&label.as_str()),
-            "{label} did not diverge from node without the checks"
-        );
-    }
+    let held: Vec<&str> = sabotage
+        .iter()
+        .map(|(label, _)| label.as_str())
+        .filter(|label| !names.contains(label))
+        .collect();
+    assert!(
+        held.is_empty(),
+        "did not diverge from node without the checks: {held:?}"
+    );
 }
