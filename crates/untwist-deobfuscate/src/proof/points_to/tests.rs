@@ -296,18 +296,21 @@ fn a_spent_budget_stops_the_work_inside_one_handler() {
     });
 }
 
-const ESCAPED_BEFORE_A_WORLD_SET: &[(&str, &str)] = &[
+const ESCAPED_BEFORE_A_WORLD_SET: &[(&str, &[&str])] = &[
     (
         "var P = Object.create(Object); host(P); var q = host2(); if (c) { q = P; } q.defineProperty(String.prototype, 'x', { value: 1 });",
-        "q.defineProperty(String.prototype, 'x', { value: 1 })",
+        &["q.defineProperty(String.prototype, 'x', { value: 1 })"],
     ),
     (
         "var o = {}; host(o); var q = host2(); if (c) { q = o; } Object.setPrototypeOf(q, Object); o.defineProperty(String.prototype, 'x', { value: 1 });",
-        "o.defineProperty(String.prototype, 'x', { value: 1 })",
+        &[
+            "Object.setPrototypeOf(q, Object)",
+            "o.defineProperty(String.prototype, 'x', { value: 1 })",
+        ],
     ),
     (
         "var o = {}; host(o); var q = host2(); if (c) { q = o; } q.__proto__ = Object; o.defineProperty(String.prototype, 'x', { value: 1 });",
-        "o.defineProperty(String.prototype, 'x', { value: 1 })",
+        &["o.defineProperty(String.prototype, 'x', { value: 1 })"],
     ),
 ];
 
@@ -330,7 +333,7 @@ fn an_object_that_escapes_before_it_reaches_a_world_set_keeps_its_prototype_defi
     for (source, site) in ESCAPED_BEFORE_A_WORLD_SET {
         for shuffle in [None, Some(1), Some(7), Some(2026), Some(99_991)] {
             let sites = shuffled_site_texts(source, shuffle);
-            assert_eq!(sites, [*site], "{source} {shuffle:?}");
+            assert_eq!(sites, *site, "{source} {shuffle:?}");
         }
     }
 }

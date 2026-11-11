@@ -1040,6 +1040,9 @@ impl Graph {
                 let loads = self.world_loads.clone();
                 for object in delta {
                     for (field, to) in &loads {
+                        if self.over_budget() {
+                            return;
+                        }
                         self.wire_load(*object, *field, *to);
                     }
                 }
@@ -1182,6 +1185,9 @@ impl Graph {
                     self.world_loads.push((field, to));
                     let protos = self.pts[self.world_protos.0 as usize].clone();
                     for proto in protos {
+                        if self.over_budget() {
+                            return;
+                        }
                         self.wire_load(proto, field, to);
                     }
                 }
@@ -1586,6 +1592,7 @@ impl Graph {
             + (self.edges.len()
                 + self.wired_loads.len()
                 + self.wired_stores.len()
+                + self.world_loads.len()
                 + self.loads.len()
                 + self.stores.len()
                 + self.calls.len()
