@@ -1,0 +1,8 @@
+ref-unknown-key-in-a-detached-method|var K=host.key();var o={m:function(){this[K]=F;}};var g=o.m;g();
+ref-unknown-key-in-a-timer-callback|var K=host.key();setTimeout(function(){this[K]=F;});
+ref-unknown-key-on-event-target|host.listen(function(e){e.target[host.key()]=F;});
+dec-unknown-key-store-in-a-method-of-a-local-object|var K=host.key();var o={m:function(){this[K]=F;}};o.m();
+dec-unknown-key-store-with-a-fresh-receiver|var K=host.key();var o={m:function(){this[K]=F;}};o.m.call({});
+dec-unknown-key-store-forwarded-with-its-receiver|var K=host.key();var o={m:function(){this[K]=F;},n:function(){return this.m.apply(this,arguments);}};o.n();
+dec-unknown-key-store-in-a-constructor|var K=host.key();function C(){this[K]=F;}var c=new C();
+dec-unknown-key-store-on-element-style|document.body.style[host.key()]=F;

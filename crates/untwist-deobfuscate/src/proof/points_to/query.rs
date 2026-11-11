@@ -11,12 +11,8 @@ const NAME_LIMIT: usize = 64;
 fn targets_builtins(graph: &Graph, target: Node) -> Option<bool> {
     let mut any = false;
     let mut roots = false;
-    for object in graph.points_to(target) {
+    for object in &graph.points_to(target) {
         match graph.objects.get(*object) {
-            Obj::World => {
-                any = true;
-                roots |= graph.esc_has_roots;
-            }
             Obj::Builtin(builtin) if builtin.patchable() => {
                 any = true;
                 roots |= !builtin.is_method();
@@ -48,7 +44,7 @@ fn node_names(graph: &Graph, node: Node) -> AliasKey {
 fn field_names(graph: &Graph, sources: &[Node]) -> AliasKey {
     let mut names = Vec::new();
     for source in sources {
-        for object in graph.points_to(*source) {
+        for object in &graph.points_to(*source) {
             if !graph.objects.is_site(*object) || graph.is_escaped(*object) {
                 return AliasKey::Unknown;
             }

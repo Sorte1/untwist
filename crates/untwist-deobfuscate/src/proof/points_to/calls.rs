@@ -2,10 +2,12 @@ use oxc_span::Span;
 
 use super::object::{Builtin, Each, Method, Obj, ObjectId, SiteKind};
 use super::solve::{BoundInfo, Call, Field, Graph, Key, Node, Patch, PatchKey};
+use crate::mutants::unbound_this_dropped;
 
 const UNKNOWN: Key = Key::Static(Field::UNKNOWN);
 const ACCESSORS: Key = Key::Static(Field::ACCESSORS);
 const ENTRIES: Key = Key::Static(Field::ENTRIES);
+const BOUND_ARGS_LIMIT: usize = 16;
 
 impl Graph {
     pub(super) fn apply_call(&mut self, index: u32, callee: ObjectId) {
@@ -14,10 +16,7 @@ impl Graph {
         }
         let call = self.calls[index as usize].clone();
         match self.objects.get(callee).clone() {
-            Obj::World => {
-                self.generic(&call);
-                self.world_call(index);
-            }
+            Obj::World => self.generic(&call),
             Obj::Str(_) => {}
             Obj::Site(_, SiteKind::Function) => self.bind_function(callee, &call),
             Obj::Site(_, SiteKind::Bound) => self.call_bound(callee, &call),
@@ -25,33 +24,6 @@ impl Graph {
             Obj::Builtin(Builtin::Method(method)) => self.method(index, method, &call),
             Obj::Builtin(builtin) => self.root_call(builtin, &call),
         }
-    }
-
-    pub(super) fn world_apply(&mut self, index: u32, object: ObjectId) {
-        let Some(Builtin::Method(method)) = self.objects.as_builtin(object) else {
-            return;
-        };
-        let reaches = matches!(
-            method,
-            Method::DefineProperty
-                | Method::DefineProperties
-                | Method::Assign
-                | Method::SetPrototypeOf
-                | Method::ReflectSet
-                | Method::ReflectDeleteProperty
-                | Method::DefineGetter
-                | Method::DefineSetter
-                | Method::FnCall
-                | Method::FnApply
-                | Method::ReflectApply
-                | Method::ReflectConstruct
-                | Method::FnBind
-        );
-        if !reaches || !self.first_world_apply(index, object) {
-            return;
-        }
-        let call = self.calls[index as usize].clone();
-        self.method(index, method, &call);
     }
 
     fn generic(&mut self, call: &Call) {
@@ -102,9 +74,18 @@ impl Graph {
                 self.add(this, instance);
                 if let Some(result) = call.result {
                     self.add(result, instance);
+                    if let Some(supers) = info.supers {
+                        self.copy(supers, result);
+                    }
                 }
-            } else if let Some(receiver) = call.this {
-                self.copy(receiver, this);
+            } else {
+                if let Some(receiver) = call.this {
+                    self.copy(receiver, this);
+                }
+                let unbound = call.this.is_none() || call.loose;
+                if info.sloppy && unbound && !unbound_this_dropped() {
+                    self.add_builtin(this, Builtin::Global);
+                }
             }
         }
         if let Some(result) = call.result {
@@ -118,6 +99,20 @@ impl Graph {
         };
         let mut args = info.args.clone();
         args.extend(call.args.iter().copied());
+        let spread = if args.len() > BOUND_ARGS_LIMIT
+            || (call.spread.is_some() && self.spills.contains_key(&bound))
+        {
+            let spill = self.spill(bound);
+            for extra in args.split_off(BOUND_ARGS_LIMIT.min(args.len())) {
+                self.copy(extra, spill);
+            }
+            if let Some(spread) = call.spread {
+                self.copy(spread, spill);
+            }
+            Some(spill)
+        } else {
+            call.spread
+        };
         self.call(Call {
             callee: info.target,
             this: if call.construct {
@@ -126,11 +121,22 @@ impl Graph {
                 Some(info.this)
             },
             args,
-            spread: call.spread,
+            spread,
             result: call.result,
             construct: call.construct,
+            loose: info.loose,
+            firm: false,
             span: call.span,
         });
+    }
+
+    fn spill(&mut self, bound: ObjectId) -> Node {
+        if let Some(node) = self.spills.get(&bound) {
+            return *node;
+        }
+        let node = self.node();
+        self.spills.insert(bound, node);
+        node
     }
 
     fn fresh(&mut self, span: Span, kind: SiteKind, proto: &[Builtin]) -> (ObjectId, Node) {
@@ -159,6 +165,13 @@ impl Graph {
     }
 
     pub(super) fn implicit(&mut self, value: Node) {
+        let value = if self.is_live() {
+            let sink = self.implicit_sink();
+            self.copy(value, sink);
+            sink
+        } else {
+            value
+        };
         if !self.first_implicit(value) {
             return;
         }
@@ -172,12 +185,17 @@ impl Graph {
             spread: None,
             result: None,
             construct: false,
+            loose: false,
+            firm: false,
             span: Span::default(),
         });
     }
 
     pub(super) fn iterate(&mut self, value: Node) -> Node {
-        let elements = self.node();
+        let (elements, fresh) = self.derived(3, vec![value], Span::default());
+        if !fresh {
+            return elements;
+        }
         self.load(value, UNKNOWN, elements);
         let iterator_fn = self.node();
         self.load_named(value, "@@iterator", iterator_fn);
@@ -189,6 +207,8 @@ impl Graph {
             spread: None,
             result: Some(iterator),
             construct: false,
+            loose: false,
+            firm: false,
             span: Span::default(),
         });
         let next = self.node();
@@ -201,9 +221,25 @@ impl Graph {
             spread: None,
             result: Some(step),
             construct: false,
+            loose: false,
+            firm: false,
             span: Span::default(),
         });
         self.load_named(step, "value", elements);
+        let closer = self.node();
+        self.load_named(iterator, "return", closer);
+        self.load_named(iterator, "throw", closer);
+        self.call(Call {
+            callee: closer,
+            this: Some(iterator),
+            args: Vec::new(),
+            spread: None,
+            result: None,
+            construct: false,
+            loose: false,
+            firm: false,
+            span: Span::default(),
+        });
         elements
     }
 
@@ -214,17 +250,15 @@ impl Graph {
         args: Vec<Node>,
         span: Span,
     ) -> Node {
-        let result = self.node();
-        self.call(Call {
-            callee,
-            this,
-            args,
-            spread: None,
-            result: Some(result),
-            construct: false,
-            span,
-        });
-        result
+        let site = self.simple_site(span, args.len());
+        self.copy(callee, site.callee);
+        if let Some(this) = this {
+            self.copy(this, site.this);
+        }
+        for (arg, param) in args.iter().zip(&site.args) {
+            self.copy(*arg, *param);
+        }
+        site.result
     }
 
     fn root_call(&mut self, builtin: Builtin, call: &Call) {
@@ -247,6 +281,9 @@ impl Graph {
             }
             Builtin::StringCtor | Builtin::NumberCtor | Builtin::BooleanCtor => self.pure(call),
             Builtin::SymbolCtor => {
+                if let Some(first) = first {
+                    self.implicit(first);
+                }
                 if let Some(result) = call.result {
                     self.add_builtin(result, Builtin::PrimSymbol);
                 }
@@ -319,7 +356,10 @@ impl Graph {
 
     fn arg_key(&mut self, arg: Option<Node>) -> (Key, PatchKey) {
         match arg {
-            Some(node) => (Key::Dynamic(node), PatchKey::Node(node)),
+            Some(node) => {
+                self.implicit(node);
+                (Key::Dynamic(node), PatchKey::Node(node))
+            }
             None => (Key::Static(self.name("undefined")), PatchKey::Absent),
         }
     }
@@ -356,6 +396,8 @@ impl Graph {
                     }
                     if let Some(spread) = call.spread {
                         let world = self.world;
+                        let fields = self.loaded(spread, Field::UNKNOWN);
+                        self.store(target, UNKNOWN, fields);
                         self.store(target, UNKNOWN, spread);
                         self.store(target, UNKNOWN, world);
                     }
@@ -386,12 +428,14 @@ impl Graph {
                 let (key, patch_key) = self.arg_key(arg(0));
                 self.patch(index, method, this, patch_key);
                 if let (Some(target), Some(function)) = (this, arg(1)) {
-                    let world = self.world;
                     if method == Method::DefineGetter {
-                        let value = self.simple_call(function, Some(target), Vec::new(), call.span);
+                        let (value, fresh) = self.derived(2, vec![target, function], call.span);
+                        if fresh {
+                            self.getter_call(target, function, value, call.span);
+                        }
                         self.store(target, key, value);
                     } else {
-                        self.simple_call(function, Some(target), vec![world], call.span);
+                        self.setter_call(target, key, function, call.span);
                     }
                     self.store(target, ACCESSORS, function);
                 }
@@ -498,11 +542,7 @@ impl Graph {
                     (arg(0), None, arg(1))
                 };
                 if let Some(callee) = callee {
-                    let spread = list.map(|list| {
-                        let items = self.node();
-                        self.load(list, UNKNOWN, items);
-                        items
-                    });
+                    let spread = list.map(|list| self.loaded(list, Field::UNKNOWN));
                     self.live_call(Call {
                         callee,
                         this,
@@ -510,11 +550,16 @@ impl Graph {
                         spread,
                         result,
                         construct: method == Method::ReflectConstruct,
+                        loose: true,
+                        firm: false,
                         span,
                     });
                 }
             }
             Method::LookupAccessor => {
+                if let Some(key) = arg(0) {
+                    self.implicit(key);
+                }
                 if let (Some(target), Some(result)) = (this, result) {
                     self.load(target, ACCESSORS, result);
                 }
@@ -533,11 +578,13 @@ impl Graph {
                 if let Some(target) = this {
                     self.live_call(Call {
                         callee: target,
-                        this: Some(arg(0).unwrap_or(self.empty)),
+                        this: arg(0).or(call.spread),
                         args: call.args.iter().skip(1).copied().collect(),
                         spread: call.spread,
                         result,
                         construct: false,
+                        loose: !call.firm,
+                        firm: false,
                         span,
                     });
                 }
@@ -545,20 +592,18 @@ impl Graph {
             Method::FnApply => {
                 if let Some(target) = this {
                     let spread = match (arg(1), call.spread) {
-                        (Some(list), _) => {
-                            let items = self.node();
-                            self.load(list, UNKNOWN, items);
-                            Some(items)
-                        }
+                        (Some(list), _) => Some(self.loaded(list, Field::UNKNOWN)),
                         (None, spread) => spread,
                     };
                     self.live_call(Call {
                         callee: target,
-                        this: Some(arg(0).unwrap_or(self.empty)),
+                        this: arg(0).or(call.spread),
                         args: Vec::new(),
                         spread,
                         result,
                         construct: false,
+                        loose: !call.firm,
+                        firm: false,
                         span,
                     });
                 }
@@ -577,6 +622,7 @@ impl Graph {
                     target,
                     this: arg(0).unwrap_or(empty),
                     args: call.args.iter().skip(1).copied().collect(),
+                    loose: arg(0).is_none() || !call.firm,
                 });
                 self.returns(Some(node), result);
             }
@@ -627,6 +673,9 @@ impl Graph {
                     self.generic(call);
                     return;
                 }
+                if let Some(text) = arg(0) {
+                    self.implicit(text);
+                }
                 let (object, node) = self.fresh(
                     span,
                     SiteKind::Fresh,
@@ -649,9 +698,7 @@ impl Graph {
         };
         let result = call.result;
         let span = call.span;
-        let elements = self.node();
-        self.load(this, UNKNOWN, elements);
-        let entries = self.node();
+        let elements = self.loaded(this, Field::UNKNOWN);
         let collection = matches!(
             method,
             Method::CollectionSet
@@ -661,10 +708,31 @@ impl Graph {
                 | Method::CollectionIter
                 | Method::IterNext
         );
-        if collection {
-            self.load(this, ENTRIES, entries);
-        }
+        let entries = if collection {
+            self.loaded(this, Field::ENTRIES)
+        } else {
+            self.empty
+        };
         let number = self.builtin_node(Builtin::PrimNumber);
+        let coerced = match method {
+            Method::ArrayTake | Method::ArraySlice | Method::ArraySelf | Method::ArrayJoin => {
+                Some(0..call.args.len())
+            }
+            Method::ArraySplice => Some(0..call.args.len().min(2)),
+            Method::ArrayWith => Some(0..call.args.len().min(2)),
+            Method::ArrayFill => Some(call.args.len().min(1)..call.args.len()),
+            _ => None,
+        };
+        if let Some(range) = coerced {
+            let values: Vec<Node> = call.args[range]
+                .iter()
+                .chain(&call.spread)
+                .copied()
+                .collect();
+            for value in values {
+                self.implicit(value);
+            }
+        }
         match method {
             Method::ArrayPush => {
                 for value in call.args.iter().chain(&call.spread) {
@@ -688,6 +756,18 @@ impl Graph {
                     self.load(*value, UNKNOWN, fields);
                 }
             }
+            Method::ArraySlice => {
+                let fields = self.fresh_array(span, result);
+                self.copy(elements, fields);
+                self.load(elements, UNKNOWN, fields);
+            }
+            Method::ArrayWith => {
+                let fields = self.fresh_array(span, result);
+                self.copy(elements, fields);
+                for value in call.args.iter().skip(1).chain(&call.spread) {
+                    self.copy(*value, fields);
+                }
+            }
             Method::ArraySelf => self.returns(Some(this), result),
             Method::ArrayFill => {
                 if let Some(value) = arg(0) {
@@ -695,15 +775,21 @@ impl Graph {
                 }
                 self.returns(Some(this), result);
             }
-            Method::ArraySort => {
+            Method::ArraySort | Method::ArrayResort => {
+                self.implicit(elements);
                 if let Some(compare) = arg(0) {
                     self.simple_call(compare, None, vec![elements, elements], span);
                 }
-                self.returns(Some(this), result);
+                if method == Method::ArraySort {
+                    self.returns(Some(this), result);
+                } else {
+                    let fields = self.fresh_array(span, result);
+                    self.copy(elements, fields);
+                }
             }
             Method::ArrayEach(each) => self.each(each, call, elements),
             Method::ArrayReduce => {
-                let acc = self.node();
+                let (acc, _) = self.derived(1, vec![this], span);
                 if let Some(initial) = arg(1) {
                     self.copy(initial, acc);
                 }
@@ -764,7 +850,7 @@ impl Graph {
                 let this_arg = call.args.get(1).copied();
                 self.simple_call(*visitor, this_arg, vec![elements, number, this], call.span)
             }
-            None => self.node(),
+            None => self.empty,
         };
         let result = call.result;
         match each {

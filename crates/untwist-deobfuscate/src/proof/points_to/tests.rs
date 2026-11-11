@@ -80,9 +80,48 @@ fn a_definer_called_through_call_is_a_site() {
 }
 
 #[test]
-fn an_escaped_function_parameter_may_hold_a_builtin() {
-    let sites = site_texts("function f(o) { o.push = 1; } window.handler = f;");
+fn an_escaped_function_parameter_may_hold_an_escaped_builtin() {
+    let sites =
+        site_texts("function f(o) { o.push = 1; } window.handler = f; host(Array.prototype);");
     assert_eq!(sites, ["o.push"]);
+}
+
+#[test]
+fn an_escaped_function_parameter_holds_no_builtin_that_stayed_inside() {
+    let sites = site_texts("function f(o) { o.push = 1; } window.handler = f;");
+    assert!(sites.is_empty(), "{sites:?}");
+}
+
+#[test]
+fn a_method_call_binds_this_to_its_receiver_only() {
+    let sites = site_texts(
+        "(function () { var o = { m: function (k) { this[k] = 1; } }; o.m(host()); })();",
+    );
+    assert!(sites.is_empty(), "{sites:?}");
+}
+
+#[test]
+fn a_detached_method_call_binds_this_to_the_global_object() {
+    let sites = site_texts(
+        "(function () { var o = { m: function (k) { this[k] = 1; } }; var g = o.m; g(host()); })();",
+    );
+    assert_eq!(sites, ["this[k]"]);
+}
+
+#[test]
+fn a_getter_runs_with_an_inheriting_receiver() {
+    let sites = site_texts(
+        "(function () { var p = { get g() { this.t.push = 1; } }; var a = Object.create(p); a.t = Array.prototype; a.g; })();",
+    );
+    assert_eq!(sites, ["this.t.push"]);
+}
+
+#[test]
+fn a_parent_constructor_result_becomes_the_derived_this() {
+    let sites = site_texts(
+        "(function () { class A { constructor() { return Array.prototype; } } class B extends A { constructor() { super(); this.push = 1; } } new B(); })();",
+    );
+    assert_eq!(sites, ["this.push"]);
 }
 
 #[test]
@@ -165,4 +204,94 @@ fn code_built_at_run_time_reaches_every_built_in() {
             assert!(crate::proof::alias_refusal(&sites, &used, program.source_text).is_some());
         },
     );
+}
+
+#[test]
+fn joining_arrays_of_arrays_settles_within_the_budget() {
+    let source = "var a = [[1], [[2]]]; var s = '' + a; for (var i = 0; i < a.length; i++) { console.log(a[i] + s); }";
+    let out = dump(source, None);
+    assert!(!out.contains("exhausted"), "{out}");
+}
+
+#[test]
+fn a_prototype_chain_that_loops_settles_within_the_budget() {
+    let source = "function mk(p) { return Object.create(p); } var o = mk(mk({ a: 1 })); for (var k in o) { o[k]; } var c = Object.assign({}, o); Object.keys(o);";
+    let out = dump(source, None);
+    assert!(!out.contains("exhausted"), "{out}");
+}
+
+const SMALL_INPUTS: &[&str] = &[
+    "var s = [new H()].join();",
+    "var s = '' + [x];",
+    "var a = Array.from(iterable);",
+    "var m = new Map(iterable);",
+    "var s = String.raw`${x}`;",
+    "var it = { [Symbol.iterator]: function () { return [][Symbol.iterator](); } }; for (var v of it) { v; }",
+    "var p = Object.getPrototypeOf([][Symbol.iterator]());",
+];
+
+const SMALL_INPUT_STEPS: u64 = 20_000;
+
+#[test]
+fn small_inputs_settle_in_few_steps() {
+    for input in SMALL_INPUTS {
+        let source = format!("function H() {{}} var x = new H(); var iterable = [[x, x]]; {input}");
+        with_program(&source, |program, scoping| {
+            let decoded = FxHashMap::default();
+            let mut generator = super::generate::Gen::new(program, scoping, &decoded, &[]);
+            generator.run(program);
+            generator.g.solve(None);
+            assert!(!generator.g.exhausted(), "{input}");
+            let steps = generator.g.steps();
+            assert!(steps < SMALL_INPUT_STEPS, "{input}: {steps} steps");
+        });
+    }
+}
+
+const SELF_REACHING_BOUND_CALLS: &[&str] = &[
+    "document.defaultView.Object.defineProperty(String.prototype, m, { value: 1 });",
+    "function d(c) { return String.fromCharCode(0x68) + c; } document.defaultView.Object.defineProperty(String.prototype, m, { value: 1 }); d(1);",
+];
+
+const HELD_OVERSHOOT: u64 = 64;
+
+#[test]
+fn a_bound_call_that_reaches_itself_ends_within_the_budget() {
+    for input in SELF_REACHING_BOUND_CALLS {
+        with_program(input, |program, scoping| {
+            let decoded = FxHashMap::default();
+            let mut generator = super::generate::Gen::new(program, scoping, &decoded, &[]);
+            generator.run(program);
+            generator.g.solve(None);
+            let (held, cap) = generator.g.held_and_cap();
+            assert!(
+                held <= cap + HELD_OVERSHOOT,
+                "{input}: held {held} of {cap}"
+            );
+            let sites = generator.sites();
+            if generator.g.exhausted() {
+                assert_eq!(sites.len(), 1, "{input}");
+                assert_eq!(sites[0].span(), Span::default(), "{input}");
+            }
+        });
+    }
+}
+
+#[test]
+fn a_spent_budget_stops_the_work_inside_one_handler() {
+    let args = vec!["1"; 399].join(", ");
+    let source = format!("var a = []; var p = a.push; p.call(a, {args});");
+    with_program(&source, |program, scoping| {
+        let decoded = FxHashMap::default();
+        let mut generator = super::generate::Gen::new(program, scoping, &decoded, &[]);
+        generator.run(program);
+        generator.g.cap_elements_for_tests(300);
+        generator.g.solve(None);
+        assert!(generator.g.exhausted());
+        let stores = generator.g.stores_issued();
+        assert!(
+            stores < 16,
+            "{stores} stores issued after the budget ran out"
+        );
+    });
 }

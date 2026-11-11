@@ -32,6 +32,7 @@ pub(super) struct Frame {
     pub(super) strict: bool,
     pub(super) home: Option<Node>,
     pub(super) heritage: Option<Node>,
+    pub(super) supers: Option<Node>,
 }
 
 pub(super) struct Gen<'s> {
@@ -119,6 +120,7 @@ impl<'s> Gen<'s> {
             strict,
             home: None,
             heritage: None,
+            supers: None,
         });
         for stmt in &program.body {
             self.stmt(stmt);
@@ -510,10 +512,6 @@ impl<'s> Gen<'s> {
                 .as_ref()
                 .is_some_and(|body| has_use_strict(&body.directives));
         let this = self.g.node();
-        if !strict {
-            let global = self.global;
-            self.g.copy(global, this);
-        }
         let ret = self.g.node();
         if it.r#async || it.generator {
             let world = self.world();
@@ -530,6 +528,7 @@ impl<'s> Gen<'s> {
             strict,
             home,
             heritage,
+            supers: None,
         });
         let (params, rest) = self.params(&it.params);
         if let Some(body) = &it.body {
@@ -564,6 +563,8 @@ impl<'s> Gen<'s> {
             this: (!frame.arrow).then_some(frame.this),
             ret: frame.ret,
             arguments,
+            sloppy: !frame.strict && !frame.arrow,
+            supers: frame.supers.filter(|_| !frame.arrow),
         };
         self.g.functions.insert(object, info);
     }
@@ -586,6 +587,7 @@ impl<'s> Gen<'s> {
             strict: parent.strict,
             home: parent.home,
             heritage: parent.heritage,
+            supers: parent.supers,
         };
         self.frames.push(frame);
         let (params, rest) = self.params(&it.params);
@@ -661,6 +663,10 @@ impl<'s> Gen<'s> {
         }
         let this = self.g.node();
         let ret = self.g.node();
+        let supers = heritage.map(|_| self.g.node());
+        if let Some(supers) = supers {
+            self.g.copy(supers, this);
+        }
         let constructor = it.body.body.iter().find_map(|element| match element {
             ClassElement::MethodDefinition(method)
                 if method.kind == MethodDefinitionKind::Constructor =>
@@ -678,6 +684,7 @@ impl<'s> Gen<'s> {
             strict: true,
             home: Some(instance_proto),
             heritage,
+            supers,
         });
         let (params, rest) = match constructor {
             Some(method) => {
@@ -687,7 +694,7 @@ impl<'s> Gen<'s> {
                 }
                 params
             }
-            None => self.default_constructor(heritage, this),
+            None => self.default_constructor(heritage, this, supers),
         };
         let frame = self.frames.pop().expect("pushed above");
         self.finish_function(class, (params, rest), frame);
@@ -706,6 +713,7 @@ impl<'s> Gen<'s> {
         &mut self,
         heritage: Option<Node>,
         this: Node,
+        supers: Option<Node>,
     ) -> (Vec<Node>, Option<Node>) {
         let Some(heritage) = heritage else {
             return (Vec::new(), None);
@@ -716,8 +724,10 @@ impl<'s> Gen<'s> {
             this: Some(this),
             args: Vec::new(),
             spread: Some(rest),
-            result: None,
+            result: supers,
             construct: false,
+            loose: false,
+            firm: false,
             span: Span::default(),
         });
         (Vec::new(), Some(rest))
@@ -799,6 +809,7 @@ impl<'s> Gen<'s> {
             strict: true,
             home: Some(home),
             heritage,
+            supers: None,
         }
     }
 
@@ -813,29 +824,12 @@ impl<'s> Gen<'s> {
             PropertyKind::Init => self.g.store(target, key, value),
             PropertyKind::Get => {
                 let result = self.g.node();
-                self.g.call(Call {
-                    callee: value,
-                    this: Some(target),
-                    args: Vec::new(),
-                    spread: None,
-                    result: Some(result),
-                    construct: false,
-                    span: Span::default(),
-                });
+                self.g.getter_call(target, value, result, Span::default());
                 self.g.store(target, key, result);
                 self.g.store(target, Key::Static(Field::ACCESSORS), value);
             }
             PropertyKind::Set => {
-                let world = self.world();
-                self.g.call(Call {
-                    callee: value,
-                    this: Some(target),
-                    args: vec![world],
-                    spread: None,
-                    result: None,
-                    construct: false,
-                    span: Span::default(),
-                });
+                self.g.setter_call(target, key, value, Span::default());
                 self.g.store(target, Key::Static(Field::ACCESSORS), value);
             }
         }

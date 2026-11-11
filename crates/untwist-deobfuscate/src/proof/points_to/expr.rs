@@ -592,6 +592,8 @@ impl Gen<'_> {
                         spread: None,
                         result: None,
                         construct: false,
+                        loose: false,
+                        firm: false,
                         span: binary.span,
                     });
                 }
@@ -747,6 +749,11 @@ impl Gen<'_> {
             self.g.skip_definers.insert(call.span);
         }
         let (callee, this) = self.callee(&call.callee);
+        let firm = call
+            .arguments
+            .first()
+            .and_then(Argument::as_expression)
+            .is_some_and(|first| self.never_nullish(first));
         let (args, spread) = self.call_args(&call.arguments);
         let callee = callee?;
         let result = self.g.node();
@@ -757,9 +764,35 @@ impl Gen<'_> {
             spread,
             result: Some(result),
             construct: false,
+            loose: false,
+            firm,
             span: call.span,
         });
+        if matches!(call.callee.without_parentheses(), Expression::Super(_)) {
+            if let Some(supers) = self.frame().supers {
+                self.g.copy(result, supers);
+            }
+        }
         Some(result)
+    }
+
+    fn never_nullish(&self, expr: &Expression<'_>) -> bool {
+        match expr.without_parentheses() {
+            Expression::ThisExpression(_) => !self.strict(),
+            Expression::ObjectExpression(_)
+            | Expression::ArrayExpression(_)
+            | Expression::FunctionExpression(_)
+            | Expression::ArrowFunctionExpression(_)
+            | Expression::ClassExpression(_)
+            | Expression::NewExpression(_)
+            | Expression::RegExpLiteral(_)
+            | Expression::TemplateLiteral(_)
+            | Expression::StringLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::BigIntLiteral(_) => true,
+            _ => false,
+        }
     }
 
     fn new_call(&mut self, new: &NewExpression<'_>) -> Option<Node> {
@@ -774,6 +807,8 @@ impl Gen<'_> {
             spread,
             result: Some(result),
             construct: true,
+            loose: false,
+            firm: false,
             span: new.span,
         });
         Some(result)
@@ -804,6 +839,8 @@ impl Gen<'_> {
             spread: None,
             result: Some(result),
             construct: false,
+            loose: false,
+            firm: false,
             span: it.span,
         });
         Some(result)

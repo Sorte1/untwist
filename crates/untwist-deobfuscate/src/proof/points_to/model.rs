@@ -187,9 +187,10 @@ fn array_proto(name: &str) -> Read {
         "push" | "unshift" => one!(Method(ArrayPush)),
         "pop" | "shift" | "at" => one!(Method(ArrayTake)),
         "splice" => one!(Method(ArraySplice)),
-        "slice" | "concat" | "flat" | "toReversed" | "toSorted" | "toSpliced" | "with" => {
-            one!(Method(ArrayCopy))
-        }
+        "concat" | "toReversed" => one!(Method(ArrayCopy)),
+        "slice" | "flat" => one!(Method(ArraySlice)),
+        "with" | "toSpliced" => one!(Method(ArrayWith)),
+        "toSorted" => one!(Method(ArrayResort)),
         "reverse" | "copyWithin" => one!(Method(ArraySelf)),
         "fill" => one!(Method(ArrayFill)),
         "sort" => one!(Method(ArraySort)),
@@ -628,3 +629,53 @@ pub(super) fn protos(builtin: Builtin) -> &'static [Builtin] {
         ObjectProto | Machinery => &[],
     }
 }
+
+pub(super) const PRIMITIVES: &[Builtin] = &[PrimString, PrimNumber, PrimBoolean, PrimSymbol];
+
+const BACK_ROUTE_NAMES: &[&str] = &[
+    "window",
+    "self",
+    "globalThis",
+    "frames",
+    "parent",
+    "top",
+    "opener",
+    "defaultView",
+    "contentWindow",
+    "view",
+    "source",
+    "target",
+    "currentTarget",
+    "srcElement",
+    "relatedTarget",
+    "originalTarget",
+    "explicitOriginalTarget",
+    "ownerGlobal",
+];
+
+pub(super) fn is_back_route(name: &str) -> bool {
+    BACK_ROUTE_NAMES.contains(&name)
+}
+
+pub(super) const WORLD_CONSTRUCTOR_NAMES: &[&str] = &["constructor", "__proto__", "prototype"];
+
+pub(super) const WORLD_CONSTRUCTORS: &[Builtin] = &[
+    ObjectCtor,
+    ObjectProto,
+    FunctionCtor,
+    FunctionProto,
+    ArrayCtor,
+    ArrayProto,
+    StringCtor,
+    StringProto,
+    NumberCtor,
+    NumberProto,
+    BooleanCtor,
+    BooleanProto,
+    SymbolCtor,
+    SymbolProto,
+    CollectionCtor,
+    CollectionProto,
+    IteratorProto,
+    Other,
+];

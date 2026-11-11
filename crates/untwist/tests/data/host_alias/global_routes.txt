@@ -1,0 +1,9 @@
+ref-document-default-view|document.defaultView[k][j]=E;
+ref-created-element-owner-document|document.createElement("iframe").ownerDocument.defaultView[k][j]=E;
+ref-default-parameter|function f(a=window){a[k][j]=E;}f();
+ref-destructuring-default-target|var o={};({a:o.x=window}={});o.x[k][j]=E;
+ref-generator-return-value|function* g(){return window;}g().next().value[k][j]=E;
+ref-awaited-value|async function f(){var w=await window;w[k][j]=E;}f();
+ref-function-constructor-this|var t=Function("return this")();t[k][j]=E;
+ref-bound-without-receiver|var t=(function(){return this;}).bind()();t[k][j]=E;
+ref-tagged-template-this|(function(){return this;})`x`[k][j]=E;

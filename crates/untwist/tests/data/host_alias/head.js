@@ -1,0 +1,1 @@
+function arr0(){var h=['log','hello','world'];arr0=function(){return h;};return arr0();}function dec0(c,d){var e=arr0();return (dec0=function(f,g){f=f-0x0;var i=e[f];return String.fromCharCode(i.charCodeAt(0))+i.slice(1);}),dec0(c,d);}var j=["fromCharCode"][0],k=["String"][0],m=["slice"][0],E=function(){return "X";},F={};F[j]=E;
