@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt;
 use std::io::{self, Write as _};
@@ -270,45 +271,66 @@ fn create_temp_file(parent: &Path) -> io::Result<tempfile::NamedTempFile> {
     tempfile::Builder::new().tempfile_in(parent)
 }
 
-fn write_via_temp_file(path: &Path, contents: &[u8]) -> Result<()> {
+const SAME_FILE_ON_DISK: &str =
+    "a file already has that name on this file system, written earlier in this run or made during it";
+
+enum Outcome {
+    Written,
+    Unsafe,
+    Taken,
+}
+
+fn write_via_temp_file(path: &Path, contents: &[u8]) -> Result<Outcome> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let mut temp = create_temp_file(parent)
         .with_context(|| format!("create temp file in {}", parent.display()))?;
     temp.write_all(contents)
         .with_context(|| format!("write {}", path.display()))?;
-    temp.persist(path)
-        .map(|_| ())
-        .map_err(|err| err.error)
-        .with_context(|| format!("persist {}", path.display()))
+    match temp.persist_noclobber(path) {
+        Ok(_) => Ok(Outcome::Written),
+        Err(err) if err.error.kind() == io::ErrorKind::AlreadyExists => Ok(Outcome::Taken),
+        Err(err) => Err(err.error).with_context(|| format!("persist {}", path.display())),
+    }
 }
 
 struct Target<'a> {
     dir: &'a Path,
     dir_canonical: PathBuf,
+    written: RefCell<HashSet<PathBuf>>,
 }
 
 impl Target<'_> {
-    fn written(&self, file: &PlannedFile, contents: &[u8]) -> Result<bool> {
+    fn written(&self, file: &PlannedFile, contents: &[u8]) -> Result<Outcome> {
+        if self.written.borrow().contains(&file.path) {
+            return Ok(Outcome::Taken);
+        }
         if !symlink_free(self.dir, &file.relative)? {
-            return Ok(false);
+            return Ok(Outcome::Unsafe);
         }
         let contained = is_contained(&self.dir_canonical, &file.path)
             .with_context(|| format!("check {}", file.path.display()))?;
         if !contained {
-            return Ok(false);
+            return Ok(Outcome::Unsafe);
         }
         if let Some(parent) = file.path.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("create {}", parent.display()))?;
         }
-        write_via_temp_file(&file.path, contents)?;
-        Ok(true)
+        let outcome = write_via_temp_file(&file.path, contents)?;
+        if matches!(outcome, Outcome::Written) {
+            self.written.borrow_mut().insert(file.path.clone());
+        }
+        Ok(outcome)
     }
 
     fn refusal(&self, file: &PlannedFile, contents: &[u8]) -> Option<PlanRefusal> {
         match self.written(file, contents) {
-            Ok(true) => None,
-            Ok(false) => Some(PlanRefusal::Unsafe(file.relative.clone())),
+            Ok(Outcome::Written) => None,
+            Ok(Outcome::Unsafe) => Some(PlanRefusal::Unsafe(file.relative.clone())),
+            Ok(Outcome::Taken) => Some(PlanRefusal::Collision {
+                path: file.relative.clone(),
+                owner: SAME_FILE_ON_DISK,
+            }),
             Err(error) => Some(failed(&file.relative, ACTION_WRITE, &error)),
         }
     }
@@ -342,6 +364,7 @@ fn write_all(dir: &Path, plan: &Plan, bundle: Option<&BundleOutput>) -> Result<W
         dir_canonical: dir
             .canonicalize()
             .with_context(|| format!("canonicalize {}", dir.display()))?,
+        written: RefCell::new(HashSet::new()),
     };
     let mut unwritten_modules = plan.unwritten_modules.clone();
     let mut refusals: Vec<Option<PlanRefusal>> = Vec::with_capacity(plan.files.len());
@@ -454,5 +477,62 @@ impl Output {
             first: plan.files.first().map(|file| file.path.clone()),
             unwritten_modules: written.unwritten_modules,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{write_all, Plan, PlanRefusal, PlannedFile, Role};
+    use std::path::Path;
+
+    fn planned(dir: &Path, relative: &str, contents: &str, role: Role) -> PlannedFile {
+        PlannedFile {
+            path: dir.join(relative),
+            relative: relative.to_string(),
+            contents: contents.as_bytes().to_vec(),
+            role,
+        }
+    }
+
+    fn plan_of(files: Vec<PlannedFile>) -> Plan {
+        Plan {
+            files,
+            refused: Vec::new(),
+            unwritten_modules: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_second_write_to_a_path_of_this_run_is_refused_and_keeps_the_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let plan = plan_of(vec![
+            planned(dir.path(), "deobfuscated.js", "first", Role::Output),
+            planned(dir.path(), "deobfuscated.js", "second", Role::Module(4)),
+        ]);
+        let written = write_all(dir.path(), &plan, None).unwrap();
+        assert_eq!(written.files, ["deobfuscated.js"]);
+        assert!(matches!(
+            written.refused.as_slice(),
+            [PlanRefusal::Collision { path, .. }] if path == "deobfuscated.js"
+        ));
+        assert_eq!(written.unwritten_modules, [4]);
+        let kept = std::fs::read_to_string(dir.path().join("deobfuscated.js")).unwrap();
+        assert_eq!(kept, "first");
+    }
+
+    #[test]
+    fn a_file_that_appears_under_a_planned_name_is_never_replaced() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.js"), "already there").unwrap();
+        let plan = plan_of(vec![planned(dir.path(), "a.js", "module", Role::Module(1))]);
+        let written = write_all(dir.path(), &plan, None).unwrap();
+        assert!(written.files.is_empty());
+        assert!(matches!(
+            written.refused.as_slice(),
+            [PlanRefusal::Collision { path, .. }] if path == "a.js"
+        ));
+        assert_eq!(written.unwritten_modules, [1]);
+        let kept = std::fs::read_to_string(dir.path().join("a.js")).unwrap();
+        assert_eq!(kept, "already there");
     }
 }

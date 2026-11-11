@@ -162,14 +162,27 @@ fn is_protected_dir(dir: &Path) -> Result<bool> {
     if canonical == cwd || canonical.parent().is_none() {
         return Ok(true);
     }
-    if let Some(home) = std::env::var_os("HOME") {
-        if let Ok(home) = PathBuf::from(home).canonicalize() {
-            if canonical == home {
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
+    let is_home = homes(|name| std::env::var_os(name))
+        .into_iter()
+        .filter_map(|home| home.canonicalize().ok())
+        .any(|home| home == canonical);
+    Ok(is_home)
+}
+
+fn homes(read: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
+    let drive_and_path = read("HOMEDRIVE")
+        .zip(read("HOMEPATH"))
+        .map(|(drive, path)| {
+            let mut joined = drive;
+            joined.push(path);
+            joined
+        });
+    [read("HOME"), read("USERPROFILE"), drive_and_path]
+        .into_iter()
+        .flatten()
+        .filter(|home| !home.is_empty())
+        .map(PathBuf::from)
+        .collect()
 }
 
 fn report_refusals(err: &mut dyn Write, refused: &[PlanRefusal]) -> io::Result<()> {
@@ -229,7 +242,7 @@ fn resolve_output(err: &mut dyn Write, args: &Args, result: &Output) -> Result<R
     if is_protected_dir(dir)? {
         writeln!(
             err,
-            "error: refusing to write into {} (current directory, filesystem root, or $HOME)",
+            "error: refusing to write into {} (current directory, filesystem root, or the home directory)",
             dir.display()
         )
         .context(STDERR)?;
@@ -423,6 +436,32 @@ pub(crate) fn main_with(parsed: &dyn Fn(), finished: &dyn Fn()) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::exit_code;
+
+    #[test]
+    fn every_home_variable_names_a_protected_directory() {
+        let read = |name: &str| {
+            let value = match name {
+                "HOME" => "/home/u",
+                "USERPROFILE" => "C:\\Users\\u",
+                "HOMEDRIVE" => "D:",
+                "HOMEPATH" => "\\Users\\v",
+                _ => return None,
+            };
+            Some(std::ffi::OsString::from(value))
+        };
+        let homes = super::homes(read);
+        assert_eq!(
+            homes,
+            [
+                std::path::PathBuf::from("/home/u"),
+                std::path::PathBuf::from("C:\\Users\\u"),
+                std::path::PathBuf::from("D:\\Users\\v"),
+            ]
+        );
+        assert!(super::homes(|_| None).is_empty());
+        let drive_only = |name: &str| (name == "HOMEDRIVE").then(|| "D:".into());
+        assert!(super::homes(drive_only).is_empty());
+    }
 
     #[test]
     fn a_panicked_input_makes_the_exit_code_non_zero() {
