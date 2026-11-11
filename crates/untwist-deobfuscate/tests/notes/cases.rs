@@ -219,10 +219,10 @@ const A_PLAIN_ARRAY_READ_BY_A_DECODER_CALLED_FIRST: &str = "console.log(1);\nvar
 const A_BUILT_IN_REPLACED_THROUGH_AN_ALIAS: &str = "var P = Array.prototype;\nvar s = P.shift;\nP.shift = function () { return s.call(this); };\n(function () {\n  var qa = ['s0', 's1'];\n  !function (p, q) { !function (r) { for (; --r;) p.push(p.shift()); }(++q); }(qa, 1);\n  var qb = function (i) { var e = qa[i -= 0]; return e; };\n  console.log(qb('0x0'));\n})();";
 const A_PLAIN_ARRAY_ROTATED_AFTER_CODE: &str = "console.log(1);\nvar qa = ['s0', 's1'];\n!function (p, q) { !function (r) { for (; --r;) p.push(p.shift()); }(++q); }(qa, 1);\nvar qb = function (i) { var e = qa[i -= 0]; return e; };\nconsole.log(qb('0x0'));";
 
-const A_WRAPPER_WITH_A_DEFAULT_PARAMETER: &str = "\
+const A_WRAPPER_WITH_A_REPEATED_PARAMETER: &str = "\
 function a() { var h = ['log', 'Hello World!']; a = function () { return h; }; return a(); }
 function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; return e[f]; }; return b(c, d); }
-function w(p, q = 0x1) { return b(p - 0x0, q); }
+function w(p, p) { return b(p - 0x0, p); }
 console[w(0x0)](w(0x1));";
 
 const AN_INPUT_DECLARING_THE_RESERVED_NAMES: &str = "\
@@ -732,7 +732,7 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
-        source: Source::DefaultLane(A_WRAPPER_WITH_A_DEFAULT_PARAMETER),
+        source: Source::DefaultLane(A_WRAPPER_WITH_A_REPEATED_PARAMETER),
         expects: notes::WRAPPER_SIGNATURE_NOT_PLAIN,
         mode: Match::Contains,
     },
