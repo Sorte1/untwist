@@ -16,6 +16,7 @@ pub mod builtins;
 #[cfg(feature = "test-hooks")]
 pub mod compare;
 mod observers;
+pub mod pins;
 mod refresh;
 mod renamed;
 mod strictness;

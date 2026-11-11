@@ -2,18 +2,19 @@ use oxc_ast::ast::{
     ArrayExpression, ArrayExpressionElement, Expression, PropertyKey, StringLiteral,
 };
 use oxc_ast::AstKind;
-use oxc_semantic::AstNodes;
+use oxc_semantic::{AstNodes, Scoping};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::node::NodeId;
 use oxc_syntax::operator::BinaryOperator;
 
 use super::payload::{
-    base64_holds_module, check_header, check_size, decode_text, wasm_base64, PayloadRefusal,
-    MIN_MODULE_BYTES, WASM_MAGIC,
+    base64_holds_module, check_header, check_size, data_uri_base64, decode_text, wasm_base64,
+    PayloadRefusal, MIN_MODULE_BYTES, WASM_MAGIC,
 };
 
 const HASHED_SUFFIX: &str = ".module.wasm";
 const MIN_HASH_LEN: usize = 8;
+const PATH_SINK: &str = "fetch";
 const URL_CALLEES: &[&str] = &[
     "fetch",
     "locateFile",
@@ -25,6 +26,7 @@ const URL_CALLEES: &[&str] = &[
 pub struct PayloadSite {
     pub span: Span,
     pub bytes: Result<Vec<u8>, PayloadRefusal>,
+    pub path_sink: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -104,6 +106,29 @@ fn is_typed_array_wrapper(kind: AstKind<'_>, array: Span) -> Option<Span> {
     };
     let only_argument = arguments.len() == 1 && arguments[0].span() == array;
     (names_the_type && only_argument).then_some(span)
+}
+
+fn is_global_call_argument(
+    (nodes, scoping): (&AstNodes<'_>, &Scoping),
+    id: NodeId,
+    span: Span,
+    name: &str,
+) -> bool {
+    let AstKind::CallExpression(call) = nodes.parent_kind(id) else {
+        return false;
+    };
+    let Expression::Identifier(callee) = &call.callee else {
+        return false;
+    };
+    callee.name == name
+        && scoping
+            .get_reference(callee.reference_id())
+            .symbol_id()
+            .is_none()
+        && call
+            .arguments
+            .first()
+            .is_some_and(|first| first.span() == span)
 }
 
 fn is_property_key(kind: AstKind<'_>, span: Span) -> bool {
@@ -228,6 +253,22 @@ fn is_hashed_suffix(expression: &Expression<'_>) -> bool {
 
 impl Scan {
     fn string(&mut self, nodes: &AstNodes<'_>, id: NodeId, span: Span, value: &str) {
+        self.text(nodes, id, span, value, false);
+    }
+
+    fn literal(
+        &mut self,
+        (nodes, scoping): (&AstNodes<'_>, &Scoping),
+        id: NodeId,
+        span: Span,
+        value: &str,
+    ) {
+        let path_sink = data_uri_base64(value).is_some()
+            && is_global_call_argument((nodes, scoping), id, span, PATH_SINK);
+        self.text(nodes, id, span, value, path_sink);
+    }
+
+    fn text(&mut self, nodes: &AstNodes<'_>, id: NodeId, span: Span, value: &str, path_sink: bool) {
         if value == HASHED_SUFFIX {
             self.hashed_suffix = true;
             return;
@@ -239,7 +280,11 @@ impl Scan {
             return;
         }
         if let Some(bytes) = decode_text(value) {
-            self.payloads.push(PayloadSite { span, bytes });
+            self.payloads.push(PayloadSite {
+                span,
+                bytes,
+                path_sink,
+            });
             return;
         }
         if is_wasm_url(value) && in_url_context(nodes, id) {
@@ -262,6 +307,7 @@ impl Scan {
         self.payloads.push(PayloadSite {
             span,
             bytes: array_bytes(array),
+            path_sink: false,
         });
     }
 
@@ -281,14 +327,14 @@ impl Scan {
         }
     }
 
-    pub fn of(nodes: &AstNodes<'_>) -> Self {
+    pub fn of(nodes: &AstNodes<'_>, scoping: &Scoping) -> Self {
         let mut scan = Scan::default();
         let mut hashed = Vec::new();
         for node in nodes.iter() {
             match node.kind() {
                 AstKind::StringLiteral(literal) => {
                     if let Some(value) = literal.value.as_str() {
-                        scan.string(nodes, node.id(), literal.span, value);
+                        scan.literal((nodes, scoping), node.id(), literal.span, value);
                     }
                 }
                 AstKind::TemplateLiteral(template) => {

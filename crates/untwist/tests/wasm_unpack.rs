@@ -28,6 +28,10 @@ fn run(source: &str) -> Output {
     run_checked(source, WasmCheck::Auto)
 }
 
+fn es_module(glue: &str) -> String {
+    format!("{glue}\nexport default Module;\n")
+}
+
 fn settled(source: &str) -> Output {
     let mut output = run(source);
     output.settle_wasm(&WasmSupply::default(), true);
@@ -102,8 +106,17 @@ fn a_call_in_a_nested_function_does_not_name_the_outer_one() {
 }
 
 #[test]
+fn emscripten_glue_at_the_top_level_of_a_classic_script_keeps_its_global_names() {
+    for name in ["emscripten.js", "emscripten-nameless.js"] {
+        let out = settled(&fixture(name));
+        assert_eq!(out.wasm.len(), 1, "{name}");
+        assert_eq!(out.wasm[0].renamed, 0, "{name}\n{}", out.code());
+    }
+}
+
+#[test]
 fn emscripten_single_file_names_the_glue_from_the_wasm_name_section() {
-    let out = settled(&fixture("emscripten.js"));
+    let out = settled(&es_module(&fixture("emscripten.js")));
     assert_eq!(out.wasm.len(), 1);
     assert_eq!(out.wasm[0].bytes, wasm_bytes("emscripten.wasm"));
     assert_eq!(out.wasm[0].renamed, 6);
@@ -125,7 +138,7 @@ fn webpack_inline_wasm_is_extracted_per_module_and_the_hashed_async_module_is_li
     assert_eq!(out.wasm.len(), 1);
     assert_eq!(out.wasm[0].path, "wasm/index.wasm");
     assert_eq!(out.wasm[0].bytes, wasm_bytes("webpack.wasm"));
-    assert!(module("src/inline.js").contains("\"../wasm/index.wasm\""));
+    assert!(!module("src/inline.js").contains("../wasm/index.wasm"));
     assert!(module("index.js").contains("function log(e)"));
     assert_eq!(
         out.wasm_unresolved
@@ -509,7 +522,7 @@ fn auto_leaves_a_module_with_no_imports_or_exports_alone_and_on_extracts_it() {
 
 #[test]
 fn emscripten_glue_without_a_name_section_is_named_from_its_export_wrappers_and_kinds() {
-    let out = settled(&fixture("emscripten-nameless.js"));
+    let out = settled(&es_module(&fixture("emscripten-nameless.js")));
     assert_eq!(out.wasm.len(), 1);
     assert_eq!(out.wasm[0].bytes, wasm_bytes("emscripten-nameless.wasm"));
     assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));

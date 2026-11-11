@@ -3,9 +3,11 @@ use oxc_ast::AstKind;
 use oxc_semantic::{AstNodes, Scoping, Semantic};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::node::NodeId;
-use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::semantic::pins::script_global_symbols;
+use untwist_core::semantic::{AnnexBFunction, AnnexBWrites};
 
 const MAX_RENAMED_LEN: usize = 3;
 
@@ -14,11 +16,21 @@ type Pairs = Vec<(String, String)>;
 
 pub(super) struct Renamer<'s> {
     semantic: &'s Semantic<'s>,
+    pinned: FxHashSet<SymbolId>,
 }
 
 impl<'s> Renamer<'s> {
-    pub(super) fn new(semantic: &'s Semantic<'s>) -> Self {
-        Self { semantic }
+    pub(super) fn new(semantic: &'s Semantic<'s>, script: bool) -> Self {
+        let scoping = semantic.scoping();
+        let mut pinned = annex_b_pins(semantic);
+        if script {
+            pinned.extend(script_global_symbols(scoping));
+        }
+        Self { semantic, pinned }
+    }
+
+    fn is_pinned(&self, symbol: SymbolId) -> bool {
+        self.pinned.contains(&symbol)
     }
 
     fn nodes(&self) -> &'s AstNodes<'s> {
@@ -45,6 +57,7 @@ impl<'s> Renamer<'s> {
         let nodes = self.nodes();
         if scoping.symbol_name(symbol).len() > MAX_RENAMED_LEN
             || !scoping.symbol_redeclarations(symbol).is_empty()
+            || self.is_pinned(symbol)
         {
             return false;
         }
@@ -275,6 +288,51 @@ impl<'s> Renamer<'s> {
         }
         count
     }
+}
+
+fn annex_b_pins(semantic: &Semantic<'_>) -> FxHashSet<SymbolId> {
+    let scoping = semantic.scoping();
+    let writes = AnnexBWrites::of(semantic.nodes().program(), scoping);
+    let mut pinned = FxHashSet::default();
+    let mut lone: FxHashMap<&str, Vec<AnnexBFunction>> = FxHashMap::default();
+    for function in writes.functions() {
+        match function.target {
+            Some(target) => {
+                pinned.insert(function.function);
+                pinned.insert(target);
+            }
+            None => lone
+                .entry(scoping.symbol_name(function.function))
+                .or_default()
+                .push(*function),
+        }
+    }
+    if lone.is_empty() {
+        return pinned;
+    }
+    for node in semantic.nodes().iter() {
+        let AstKind::IdentifierReference(reference) = node.kind() else {
+            continue;
+        };
+        let Some(functions) = lone.get(reference.name.as_str()) else {
+            continue;
+        };
+        let reference = scoping.get_reference(reference.reference_id());
+        for function in functions {
+            if reference.symbol_id() != Some(function.function)
+                && within(scoping, reference.scope_id(), function.var_scope)
+            {
+                pinned.insert(function.function);
+            }
+        }
+    }
+    pinned
+}
+
+fn within(scoping: &Scoping, scope: ScopeId, outer: ScopeId) -> bool {
+    scoping
+        .scope_ancestors(scope)
+        .any(|ancestor| ancestor == outer)
 }
 
 fn contains(outer: Span, inner: Span) -> bool {

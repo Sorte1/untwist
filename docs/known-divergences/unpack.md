@@ -231,3 +231,22 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   not the whole program, a load that would have read some other file is resolved to the given
   input with the same ids; a load whose ids no input defines refuses the group. Passing input
   names through to unpack, so the specifiers can be checked, is not in 5e.
+
+### WebAssembly glue
+
+- **An extracted wasm module stays in the code.** With `--wasm-check auto` or `on` and `-o`, a
+  byte array, base64 text or `data:` URI that holds a whole module is written to `wasm/`, and the
+  literal is left where it is: the program may read it as data (its length, a slice, a hash) or
+  hand it to `WebAssembly.Module`, which takes bytes, not a path. The literal is replaced by the
+  relative path of the written file (`"./wasm/<name>.wasm"`) only where its one use is a loader
+  that also takes a URL: a `data:application/wasm` or `data:application/octet-stream` URI that is
+  the first argument of a call of the global `fetch`. That output then fetches the file, so it
+  runs where the written file is served beside it at that path; `fetch` resolves a relative URL
+  against the page, not the script.
+- **Glue names keep the bindings other code can reach.** In a classic script (no `import` or
+  `export`) a top-level `var` or function is a property of the global object that later scripts
+  read by name, so the wasm glue renamer leaves those names alone, as the main renamer does when
+  it keeps script globals. A block-level function declaration in sloppy code and the `var` of the
+  same name that it writes (Annex B) also keep their names, and so does such a function when
+  code outside its block reads the name. Glue inside a function, in an ES module or in an
+  unpacked module file is named as before.

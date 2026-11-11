@@ -3,7 +3,7 @@ source: crates/untwist/tests/wasm_unpack.rs
 expression: out.code()
 ---
 var Module = typeof Module != "undefined" ? Module : {};
-var wasmBinaryFile = "./wasm/deobfuscated.wasm";
+var wasmBinaryFile = "data:application/octet-stream;base64,AGFzbQEAAAABEwRgA39/fwBgAABgAAF/YAF/AX8CDQIBYQFhAAABYQFiAAEDAwICAwUDAQABBw0DAWMCAAFkAAIBZQADCgsCBABBAAsEACAACw==";
 var wasmExports;
 var wasmMemory;
 var HEAPU8;
@@ -41,3 +41,4 @@ Ib().then(() => {
   Xb();
   _malloc(4);
 });
+export default Module;

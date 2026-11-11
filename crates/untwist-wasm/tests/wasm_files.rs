@@ -22,7 +22,7 @@ fn an_embedded_module_comes_back_as_a_downloadable_file() {
         report.wasm_bytes(0).unwrap(),
         std::fs::read(fixture("bindgen.wasm")).unwrap()
     );
-    assert!(report.stdout().contains("\"./wasm/deobfuscated.wasm\""));
+    assert!(!report.stdout().contains("./wasm/deobfuscated.wasm"));
 }
 
 #[test]

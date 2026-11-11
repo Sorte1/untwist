@@ -102,7 +102,7 @@ Common flags:
 | `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx` | Skip a stage. |
 | `--split-hoisted` | Also split Rollup/Vite scope-hoisted bundles, when the split provably keeps behaviour. |
 | `--single-file` | Write every unpacked module into one file, with a banner per module. |
-| `--wasm-check off\|on\|auto` | Look for wasm modules embedded in the output. `off` (default) only prints a note when the output may hold one; `auto` extracts a byte array or base64 text that holds a whole module with imports or exports, writes it to `wasm/` and names its glue (feature-detect probes are left alone); `on` reparses every output to look, which can be slow on large files. |
+| `--wasm-check off\|on\|auto` | Look for wasm modules embedded in the output. `off` (default) only prints a note when the output may hold one; `auto` finds a byte array or base64 text that holds a whole module with imports or exports, writes it to `wasm/` and names its glue (feature-detect probes are left alone); `on` reparses every output to look, which can be slow on large files. |
 | `--wasm-dir DIR`, `--wasm NAME=PATH` | Supply wasm modules the input loads from elsewhere, so their import and export names can name the glue. This works with every `--wasm-check` mode. |
 | `--fetch-wasm`, `--wasm-base URL` | Download the wasm modules nobody supplied. Nothing is fetched without this flag. The URLs come from the input, so each one is printed before it is requested, and one run fetches at most 16 modules, 64 MiB and for 120 seconds. Redirects are followed three times at most. A host that resolves to a loopback, link-local or private address is refused, and no proxy from the environment is used. |
 | `--fetch-wasm-local` | With `--fetch-wasm`, also fetch from loopback, link-local and private addresses, for input that loads its wasm from your own machine or network. |
@@ -121,7 +121,12 @@ untwist never runs or rewrites a wasm module; it reads only its import and expor
 name section, when it has one) to name the JS glue around it. Each name is taken only after a
 check that every import key and export read in the glue exists in the module; a module that does
 not match gives a warning and names nothing. Embedded modules are found with `--wasm-check`, and
-modules loaded from elsewhere are supplied with `--wasm-dir`, `--wasm` or `--fetch-wasm`. In a
+modules loaded from elsewhere are supplied with `--wasm-dir`, `--wasm` or `--fetch-wasm`. An
+embedded module is written to `wasm/` and its literal stays in the code; only a `data:` URI passed
+straight to `fetch(...)` is replaced by the path of the written file. In a classic script the
+glue's top-level `var` and function names keep their names, because other scripts can reach
+them, and so do a sloppy-mode block function and the `var` of the same name that it writes (or
+code outside the block that reads the function's name). In a
 webpack bundle the names reach the module files that import from or export to the wasm module,
 and the same names are applied to the combined `deobfuscated.js`. That includes wasm-bindgen
 glue (bundler target) in webpack 4 and 5 bundles that reaches the module through

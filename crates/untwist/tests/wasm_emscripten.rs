@@ -30,6 +30,10 @@ fn covering_imports() -> Vec<(&'static str, &'static str, Sig<'static>)> {
 }
 
 fn settled(glue: &str, bytes: &[u8]) -> Output {
+    settled_text(&format!("{glue}export default Module;"), bytes)
+}
+
+fn settled_text(glue: &str, bytes: &[u8]) -> Output {
     let source = glue.replace("PAYLOAD", &base64(bytes));
     let mut output = Pipeline::new(Options {
         wasm_check: WasmCheck::Auto,
@@ -81,6 +85,12 @@ fn emscripten_library_imports_are_named_from_their_shape_and_signature_without_a
     }
     assert_eq!(out.wasm[0].renamed, 7);
     insta::assert_snapshot!(code);
+}
+
+#[test]
+fn glue_at_the_top_level_of_a_classic_script_keeps_its_global_names() {
+    let out = settled_text(GLUE, &module_with(covering_imports()));
+    assert_unnamed(&out);
 }
 
 #[test]

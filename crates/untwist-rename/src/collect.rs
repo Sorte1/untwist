@@ -6,7 +6,7 @@ use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_str::Ident;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
-use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::js_text::js_text;
 use untwist_core::ast_util::prop::member_parts;
@@ -135,14 +135,10 @@ pub fn module_export_name<'n>(name: &'n ModuleExportName<'_>) -> Cow<'n, str> {
 }
 
 pub(crate) fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, keep: bool) {
-    if !keep {
-        return;
-    }
-    let declared = SymbolFlags::FunctionScopedVariable.union(SymbolFlags::Function);
-    for (_, symbol) in scoping.get_bindings(scoping.root_scope_id()).iter() {
-        if scoping.symbol_flags(*symbol).intersects(declared) {
-            collected.pinned.insert(*symbol);
-        }
+    if keep {
+        collected
+            .pinned
+            .extend(untwist_core::semantic::pins::script_global_symbols(scoping));
     }
 }
 
