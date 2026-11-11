@@ -17,6 +17,7 @@ pub struct Loader {
     pub runtime: String,
     pub name: String,
     pub entry: Id,
+    pub loads: usize,
 }
 
 pub struct Group {
@@ -80,10 +81,14 @@ pub fn loader(program: &Program<'_>) -> Option<Loader> {
     };
     let (runtime, name) = runtime_spec(declarator.init.as_ref()?)?;
     let object = binding.name.as_str();
-    let chunks = middle.iter().all(|statement| {
-        method_call(statement, object)
-            .is_some_and(|(method, call)| method == "c" && string_argument(call).is_some())
-    });
+    let loads: Option<FxHashSet<String>> = middle
+        .iter()
+        .map(|statement| match method_call(statement, object)? {
+            ("c", call) => string_argument(call),
+            _ => None,
+        })
+        .collect();
+    let loads = loads.filter(|loads| loads.len() == middle.len())?.len();
     let (method, call) = method_call(last, object)?;
     let entry = match call.arguments.as_slice() {
         [argument] => Id::of(argument.as_expression()?)?,
@@ -91,12 +96,12 @@ pub fn loader(program: &Program<'_>) -> Option<Loader> {
     };
     let fits = program.directives.is_empty()
         && declaration.kind == VariableDeclarationKind::Var
-        && chunks
         && method == "m";
     fits.then_some(Loader {
         runtime,
         name,
         entry,
+        loads,
     })
 }
 
@@ -162,8 +167,11 @@ pub fn group(programs: &[Program<'_>]) -> Option<Group> {
     let ([loader_at], [runtime]) = (loaders.as_slice(), runtimes.as_slice()) else {
         return None;
     };
-    let entry = loader(&programs[*loader_at])?.entry;
-    let fits = !chunks.is_empty() && ids.contains(&entry) && !keys.contains(super::ENTRY_ID);
+    let found = loader(&programs[*loader_at])?;
+    let fits = !chunks.is_empty()
+        && found.loads == chunks.len()
+        && ids.contains(&found.entry)
+        && !keys.contains(super::ENTRY_ID);
     fits.then(|| Group {
         chunks,
         loader: *loader_at,

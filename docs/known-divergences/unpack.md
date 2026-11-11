@@ -230,7 +230,12 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   specifier names. This is the premise webpack's JSONP chunk merge already used. If the inputs are
   not the whole program, a load that would have read some other file is resolved to the given
   input with the same ids; a load whose ids no input defines refuses the group. Passing input
-  names through to unpack, so the specifiers can be checked, is not in 5e.
+  names through to unpack, so the specifiers can be checked, is not in 5e. The premise covers only
+  chunks a loader loads: Next's page loader must load exactly as many chunks as are given (each
+  named once), and a module of a Parcel chunk may be required only by the loader that loads its
+  chunk (inside the loader's `.then`); a require of it from anywhere else, which in the bundle
+  could run before the chunk exists, refuses the group. A chunk's own modules may require the
+  root bundle's modules, which exist before any chunk loads.
 
 ### WebAssembly glue
 

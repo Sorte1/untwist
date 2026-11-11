@@ -39,6 +39,7 @@ struct Rules<'s, 'l> {
     deps: &'l [(String, String)],
     inside: Span,
     load: Option<Span>,
+    target: Option<Span>,
     require_param: Option<SymbolId>,
     module_param: Option<SymbolId>,
     require: Option<SymbolId>,
@@ -118,7 +119,8 @@ impl Rules<'_, '_> {
     }
 
     fn internal(&self, call: &CallExpression<'_>, site: Option<ScopeId>) -> bool {
-        single_string(call).is_some_and(|id| self.ids.contains(id))
+        let target = self.mode == Mode::Factory && self.target == Some(call.span);
+        single_string(call).is_some_and(|id| target || self.ids.contains(id))
             && self.require_unbound(site, self.require_param)
     }
 
@@ -327,6 +329,7 @@ impl<'s, 'l> Context<'s, 'l> {
             deps: &[],
             inside: Span::default(),
             load: None,
+            target: None,
             require_param: None,
             module_param: None,
             require,
@@ -354,7 +357,7 @@ impl<'s, 'l> Context<'s, 'l> {
         let mut rules = self.rules(Mode::Factory);
         rules.deps = &def.deps;
         rules.inside = factory_span(def.function);
-        rules.load = self.load(body);
+        (rules.load, rules.target) = self.load(body).unzip();
         rules.require_param = if offset == 0 {
             symbols.first().copied().flatten()
         } else {
@@ -366,11 +369,13 @@ impl<'s, 'l> Context<'s, 'l> {
         rules.ok && (offset == 1 || self.global_unshadowed(def, symbols.len()))
     }
 
-    fn load(&self, body: &FunctionBody<'_>) -> Option<Span> {
+    fn load(&self, body: &FunctionBody<'_>) -> Option<(Span, Span)> {
         let view = self.view?;
         let require = self.hoisted.map(|(_, _, names)| names[0]);
         let found = loader(&body.statements, require)?;
-        view.loadable.contains(found.id).then_some(found.load)
+        view.loadable
+            .contains(found.id)
+            .then_some((found.load, found.target))
     }
 
     fn global_unshadowed(&self, def: &Def<'_, '_>, params: usize) -> bool {
@@ -391,11 +396,11 @@ impl<'s, 'l> Context<'s, 'l> {
 }
 
 fn ids<'l>(defs: &'l [Def<'_, '_>], view: Option<&'l ParcelView>) -> Option<FxHashSet<&'l str>> {
-    let foreign = view.into_iter().flat_map(|view| view.foreign.iter());
+    let ready = view.into_iter().flat_map(|view| view.ready.iter());
     let ids: FxHashSet<&str> = defs
         .iter()
         .map(|def| def.id.as_str())
-        .chain(foreign.map(String::as_str))
+        .chain(ready.map(String::as_str))
         .collect();
     (!ids.iter().any(|id| INHERITED.contains(id))).then_some(ids)
 }

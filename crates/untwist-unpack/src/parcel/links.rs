@@ -18,12 +18,13 @@ pub struct Loader<'k> {
     pub form: Form,
     pub id: &'k str,
     pub load: Span,
+    pub target: Span,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct ParcelView {
     pub namespace: String,
-    pub foreign: FxHashSet<String>,
+    pub ready: FxHashSet<String>,
     pub loadable: FxHashSet<String>,
     pub chunk: bool,
 }
@@ -137,6 +138,7 @@ pub fn loader<'k>(statements: &'k [Statement<'_>], require: Option<&str>) -> Opt
     if load.optional || !relative(load) {
         return None;
     }
+    let call = call_of(target)?.span;
     let (form, id) = match require {
         Some(require) if named(&load.callee, "require") => {
             (Form::Hoisted, hoisted_target(target, require)?)
@@ -150,6 +152,7 @@ pub fn loader<'k>(statements: &'k [Statement<'_>], require: Option<&str>) -> Opt
         form,
         id,
         load: load.span,
+        target: call,
     })
 }
 
@@ -288,19 +291,19 @@ fn views(parts: &[&Part]) -> Option<Vec<(usize, ParcelView)>> {
         return None;
     }
     let namespace = format!("parcel:{}", parts[0].global);
+    let root = parts[roots[0]];
     let views = parts
         .iter()
         .enumerate()
         .map(|(at, part)| {
-            let foreign = owners
-                .iter()
-                .filter(|(_, &owner)| owner != at)
-                .map(|(id, _)| id.clone())
-                .collect();
+            let ready = match loaded[at] {
+                true => root.ids.iter().cloned().collect(),
+                false => FxHashSet::default(),
+            };
             let loadable = part.loads.iter().cloned().collect();
             let view = ParcelView {
                 namespace: namespace.clone(),
-                foreign,
+                ready,
                 loadable,
                 chunk: loaded[at],
             };
