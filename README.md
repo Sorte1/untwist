@@ -113,6 +113,8 @@ Common flags:
 | `--timeout SECS` | Wall-clock seconds processing the inputs may take (default: no limit); writing the output and `--fetch-wasm` are not limited by it. At the limit every input stops its passes and keeps the output so far, with the note `budget-time`; an input still running a while later is passed through unchanged. |
 | `--fuel N` | Interpreter steps a string-array decode may spend before giving up (default 50,000,000 plus 500,000 per distinct decoder call, at most 1,000,000,000; 1,000,000,000 with `--unsafe`). All decodes of one input share a pool of 32 times that per-decode figure or 2,000 steps per input byte, whichever is larger; once it is spent the remaining decodes are left encoded with a note. |
 
+When an input stops its passes at a budget and keeps the output so far, that output still runs like the input: every rewrite in it was proven on its own.
+
 `untwist --help` lists every flag.
 
 ### WebAssembly
