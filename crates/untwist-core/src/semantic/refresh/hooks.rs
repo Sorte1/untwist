@@ -237,7 +237,7 @@ impl<'a> VisitJs<'a> for Walk<'_, 'a> {
     }
 
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
-        if it.operator == UnaryOperator::Delete && it.argument.is_member_expression() {
+        if it.operator == UnaryOperator::Delete && is_delete_member_target(&it.argument) {
             self.flags = ReferenceFlags::Write;
         }
         walk_js::walk_unary_expression(self, it);
@@ -277,5 +277,17 @@ impl<'a> VisitJs<'a> for Walk<'_, 'a> {
         if let Some(init) = &it.init {
             self.visit_expression(init);
         }
+    }
+}
+
+fn is_delete_member_target(expr: &Expression<'_>) -> bool {
+    match expr.get_inner_expression() {
+        Expression::ChainExpression(chain) => matches!(
+            &chain.expression,
+            ChainElement::StaticMemberExpression(_)
+                | ChainElement::ComputedMemberExpression(_)
+                | ChainElement::PrivateFieldExpression(_)
+        ),
+        inner => inner.is_member_expression(),
     }
 }
