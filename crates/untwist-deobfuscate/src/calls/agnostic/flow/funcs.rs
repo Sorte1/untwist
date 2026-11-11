@@ -2,7 +2,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
-use oxc_syntax::operator::UnaryOperator;
+use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -337,7 +337,24 @@ impl<'a> VisitJs<'a> for Prescan<'_> {
         walk_js::walk_assignment_target_property_identifier(self, it);
     }
 
+    fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
+        if it.operator.is_equality()
+            || it.operator.is_compare()
+            || it.operator == BinaryOperator::In
+        {
+            self.globals.note_test(&it.left);
+            self.globals.note_test(&it.right);
+        }
+        walk_js::walk_binary_expression(self, it);
+    }
+
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        if matches!(
+            it.operator,
+            UnaryOperator::Typeof | UnaryOperator::LogicalNot | UnaryOperator::Void
+        ) {
+            self.globals.note_test(&it.argument);
+        }
         if it.operator == UnaryOperator::Delete {
             match it.argument.without_parentheses() {
                 Expression::Identifier(id) => self.globals.note_name_write(self.scoping, id),

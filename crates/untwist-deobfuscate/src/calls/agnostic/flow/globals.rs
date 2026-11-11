@@ -46,6 +46,7 @@ pub(super) struct Globals {
     pub(super) open_eval: bool,
     base_next: Option<u32>,
     closed_evals: FxHashSet<u32>,
+    tested: FxHashSet<u32>,
 }
 
 fn static_key<'k>(member: &MemberExpression<'k>) -> Option<Cow<'k, str>> {
@@ -149,6 +150,16 @@ impl Globals {
         }
     }
 
+    pub(super) fn note_test(&mut self, operand: &Expression<'_>) {
+        if matches!(
+            operand.without_parentheses(),
+            Expression::ThisExpression(_) | Expression::Identifier(_)
+        ) {
+            self.tested
+                .insert(operand.without_parentheses().span().start);
+        }
+    }
+
     pub(super) fn note_closed_eval(&mut self, start: u32) {
         self.closed_evals.insert(start);
     }
@@ -163,7 +174,7 @@ impl Globals {
             self.value = true;
             self.open_eval |= name == "eval";
         }
-        if base {
+        if base || self.tested.contains(&id.span.start) {
             return;
         }
         if GLOBAL_NAMES.contains(&name) {
@@ -176,7 +187,7 @@ impl Globals {
 
     pub(super) fn note_this(&mut self, span: oxc_span::Span, this_global: bool) {
         let base = self.is_base(span.start);
-        if this_global && !base {
+        if this_global && !base && !self.tested.contains(&span.start) {
             self.value = true;
         }
     }
