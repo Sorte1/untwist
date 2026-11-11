@@ -1,6 +1,7 @@
 use oxc_ast::ast::*;
+use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 
-use super::Scan;
+use super::{Scan, This, GLOBAL_OBJECTS};
 
 const REACHING_KEYS: [&str; 4] = [
     "__proto__",
@@ -47,8 +48,22 @@ pub(super) fn key_of<'k>(expression: &'k Expression<'_>) -> Key<'k> {
             .and_then(|cooked| cooked.as_str())
             .map_or(Key::Unknown, Key::Name),
         Expression::NumericLiteral(_) | Expression::BigIntLiteral(_) => Key::Other,
+        Expression::UpdateExpression(_) => Key::Other,
+        Expression::UnaryExpression(unary) if is_numeric_unary(unary.operator) => Key::Other,
+        Expression::BinaryExpression(binary) if is_numeric_binary(binary.operator) => Key::Other,
         _ => Key::Unknown,
     }
+}
+
+fn is_numeric_unary(operator: UnaryOperator) -> bool {
+    matches!(
+        operator,
+        UnaryOperator::UnaryNegation | UnaryOperator::UnaryPlus | UnaryOperator::BitwiseNot
+    )
+}
+
+fn is_numeric_binary(operator: BinaryOperator) -> bool {
+    (operator.is_arithmetic() && operator != BinaryOperator::Addition) || operator.is_bitwise()
 }
 
 pub(super) fn member_of<'e, 'a>(
@@ -99,6 +114,12 @@ impl Scan<'_> {
     }
 
     pub(super) fn is_reached(&self, expression: &Expression<'_>) -> bool {
+        if matches!(
+            expression.without_parentheses(),
+            Expression::ThisExpression(_)
+        ) {
+            return self.this_value() == This::MaybeGlobal;
+        }
         if let Some((object, key)) = member_of(expression) {
             return self.reached_member(object, key);
         }
@@ -111,6 +132,9 @@ impl Scan<'_> {
         match key {
             Key::Name(name) if REACHING_KEYS.contains(&name) => true,
             Key::Name(name) if self.names_a_root(name) => true,
+            Key::Name(name) if GLOBAL_OBJECTS.contains(&name) => {
+                self.is_reached(object) || self.is_root(object)
+            }
             Key::Name("prototype") => self.is_reached(object),
             Key::Name(name) if FORWARDING_KEYS.contains(&name) => {
                 self.is_reached(object) || self.reads_prototypes(object)

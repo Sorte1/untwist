@@ -5,6 +5,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, 
 use oxc_syntax::scope::ScopeFlags;
 
 use super::{Builtins, Reliance, Scanned};
+use crate::semantic::program_is_strict;
 
 mod reach;
 
@@ -138,13 +139,38 @@ fn guarded_install<'k, 'a>(statement: &'k IfStatement<'a>) -> Option<&'k Express
     installed_value(&test.argument, only_expression(&statement.consequent)?)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum This {
+    Global,
+    MaybeGlobal,
+    NotGlobal,
+}
+
+#[derive(Clone, Copy)]
+struct Frame {
+    strict: bool,
+    this: This,
+}
+
+impl Frame {
+    fn of_program(program: &Program<'_>, module: bool) -> Self {
+        Self {
+            strict: module || program_is_strict(program),
+            this: if module {
+                This::NotGlobal
+            } else {
+                This::Global
+            },
+        }
+    }
+}
+
 struct Scan<'s> {
     scoping: &'s Scoping,
     reliance: &'s Reliance,
-    module: bool,
     writes_only: bool,
     first_only: bool,
-    functions: u32,
+    frames: Vec<Frame>,
     verdict: Builtins,
     promise_written: bool,
 }
@@ -159,10 +185,9 @@ pub fn scan(
     let mut scan = Scan {
         scoping,
         reliance,
-        module,
         writes_only,
         first_only: false,
-        functions: 0,
+        frames: vec![Frame::of_program(program, module)],
         verdict: Builtins::Intact,
         promise_written: false,
     };
@@ -177,10 +202,9 @@ pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: 
     let mut scan = Scan {
         scoping,
         reliance,
-        module,
         writes_only: false,
         first_only: true,
-        functions: 0,
+        frames: vec![Frame::of_program(program, module)],
         verdict: Builtins::Intact,
         promise_written: false,
     };
@@ -189,6 +213,23 @@ pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: 
 }
 
 impl Scan<'_> {
+    pub(super) fn this_value(&self) -> This {
+        self.frame().this
+    }
+
+    fn frame(&self) -> Frame {
+        self.frames.last().copied().unwrap_or(Frame {
+            strict: true,
+            this: This::NotGlobal,
+        })
+    }
+
+    fn within(&mut self, frame: Frame, walk: impl FnOnce(&mut Self)) {
+        self.frames.push(frame);
+        walk(self);
+        self.frames.pop();
+    }
+
     fn settled(&self) -> bool {
         self.verdict == Builtins::Written || (self.first_only && self.verdict != Builtins::Intact)
     }
@@ -204,7 +245,7 @@ impl Scan<'_> {
     fn is_global_object(&self, expression: &Expression<'_>) -> bool {
         match expression.without_parentheses() {
             Expression::Identifier(id) => self.global_named(id, &GLOBAL_OBJECTS),
-            Expression::ThisExpression(_) => self.functions == 0 && !self.module,
+            Expression::ThisExpression(_) => self.frame().this == This::Global,
             _ => false,
         }
     }
@@ -287,7 +328,21 @@ impl Scan<'_> {
         self.reaches_builtin(object) || self.global_key(object, key)
     }
 
+    fn is_maybe_global_this(&self, expression: &Expression<'_>) -> bool {
+        matches!(
+            expression.without_parentheses(),
+            Expression::ThisExpression(_)
+        ) && self.this_value() == This::MaybeGlobal
+    }
+
+    fn is_reached_value(&self, expression: &Expression<'_>) -> bool {
+        self.is_reached(expression) && !self.is_maybe_global_this(expression)
+    }
+
     fn writes_reached(&self, object: &Expression<'_>, key: Option<&str>) -> bool {
+        if self.is_maybe_global_this(object) {
+            return key.is_none_or(|key| self.names_a_root(key) || GLOBAL_OBJECTS.contains(&key));
+        }
         if key.is_some_and(|key| self.names_a_root(key))
             || (self.is_reached(object) && self.relies_on_key(key))
         {
@@ -296,7 +351,7 @@ impl Scan<'_> {
         let mut current = object.without_parentheses();
         while let Some((inner, _)) = member_of(current) {
             current = inner.without_parentheses();
-            if self.is_reached(current) {
+            if self.is_reached_value(current) {
                 return true;
             }
         }
@@ -457,6 +512,9 @@ impl Scan<'_> {
 
     fn visit_reached(&mut self, expression: &Expression<'_>) {
         if let Some(call) = call_of(expression) {
+            if self.runs_code(&call.callee, &call.arguments) {
+                self.aliased();
+            }
             if !self.reads_prototypes(&call.callee) {
                 self.visit_callee(&call.callee);
             }
@@ -667,8 +725,34 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        self.functions += 1;
-        walk_js::walk_function(self, it, flags);
-        self.functions -= 1;
+        let strict = self.frame().strict || it.has_use_strict_directive();
+        let frame = Frame {
+            strict,
+            this: if strict {
+                This::NotGlobal
+            } else {
+                This::MaybeGlobal
+            },
+        };
+        self.within(frame, |scan| walk_js::walk_function(scan, it, flags));
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        let outer = self.frame();
+        let frame = Frame {
+            strict: outer.strict || it.has_use_strict_directive(),
+            ..outer
+        };
+        self.within(frame, |scan| {
+            walk_js::walk_arrow_function_expression(scan, it);
+        });
+    }
+
+    fn visit_class(&mut self, it: &Class<'a>) {
+        let frame = Frame {
+            strict: true,
+            ..self.frame()
+        };
+        self.within(frame, |scan| walk_js::walk_class(scan, it));
     }
 }
