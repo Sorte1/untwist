@@ -99,6 +99,27 @@ fn intercepted(scoping: &Scoping, symbol: SymbolId, var: ScopeId) -> bool {
         || (var != declared && within(scoping, var, declared) && read_within(scoping, symbol, var))
 }
 
+fn kept_in_its_block(scoping: &Scoping, function: SymbolId, var: ScopeId) -> bool {
+    let name = scoping.symbol_name(function);
+    let block = scoping.symbol_scope_id(function);
+    let alone = scoping
+        .symbol_ids()
+        .filter(|other| {
+            is_block_function(scoping, *other)
+                && scoping.symbol_name(*other) == name
+                && var_scope(scoping, scoping.symbol_scope_id(*other)) == Some(var)
+        })
+        .count()
+        == 1;
+    alone
+        && !scoping.symbol_is_mutated(function)
+        && scoping.symbol_redeclarations(function).is_empty()
+        && scoping
+            .get_resolved_reference_ids(function)
+            .iter()
+            .all(|reference| within(scoping, scoping.get_reference(*reference).scope_id(), block))
+}
+
 type AnySymbol<'f> = &'f dyn Fn(usize, &mut dyn FnMut(SymbolId) -> bool) -> bool;
 
 fn sharing_candidates(scoping: &Scoping, count: usize, any_symbol: AnySymbol<'_>) -> Vec<usize> {
@@ -124,7 +145,9 @@ fn scope_hits(scoping: &Scoping, sharing: &[usize], any_symbol: AnySymbol<'_>) -
         };
         for &candidate in sharing {
             let reached = any_symbol(candidate, &mut |symbol| {
-                scoping.symbol_name(symbol) == name && intercepted(scoping, symbol, var)
+                scoping.symbol_name(symbol) == name
+                    && !(symbol == function && kept_in_its_block(scoping, function, var))
+                    && intercepted(scoping, symbol, var)
             });
             if reached {
                 hits.push(Hit {
