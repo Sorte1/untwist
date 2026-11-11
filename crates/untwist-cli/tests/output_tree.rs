@@ -324,6 +324,35 @@ fn ids_differing_only_in_case_and_device_names_get_portable_names() {
 }
 
 #[test]
+fn short_names_bidi_controls_and_the_other_device_names_get_generated_names() {
+    let run = prepared(&[
+        ENTRY,
+        ("./DEOBFU~1", "module.exports=1;"),
+        ("./sub/INDEX~1", "module.exports=2;"),
+        ("./git~1/hooks/pre-commit", "module.exports=3;"),
+        ("./x\u{202e}gnp", "module.exports=4;"),
+        ("./COM\u{b9}", "module.exports=5;"),
+        ("./conout$", "module.exports=6;"),
+    ]);
+
+    let out = unpack(&run, &[]);
+
+    assert!(out.status.success(), "{}", stderr_of(&out));
+    assert_every_listed_module_is_a_file(&run.outdir, 7);
+    let listing = listed(&run.outdir);
+    for id in [
+        "./DEOBFU~1",
+        "./sub/INDEX~1",
+        "./git~1/hooks/pre-commit",
+        "./x\u{202e}gnp",
+        "./COM\u{b9}",
+        "./conout$",
+    ] {
+        assert!(path_of(&listing, id).starts_with("_unsafe_"), "{id}");
+    }
+}
+
+#[test]
 fn a_module_id_longer_than_a_file_name_does_not_stop_the_write() {
     let long_id = format!("./{}", "a".repeat(300));
     let run = prepared(&[

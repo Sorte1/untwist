@@ -224,3 +224,52 @@ fn the_names_the_tool_generates_are_safe() {
         assert!(!is_unsafe_path(&path), "{path:?}");
     }
 }
+
+#[test]
+fn the_other_win32_device_names_are_unsafe() {
+    for path in [
+        "COM\u{b9}.js",
+        "com\u{b2}",
+        "Com\u{b3}.txt",
+        "LPT\u{b9}.js",
+        "lpt\u{b2}.js",
+        "lpt\u{b3}",
+        "CONIN$",
+        "conin$.js",
+        "CONOUT$.js",
+        "dir/conout$.js",
+    ] {
+        assert!(is_unsafe_path(path), "{path:?}");
+    }
+    for path in ["com\u{b9}x.js", "conin.js", "conout.js"] {
+        assert!(!is_unsafe_path(path), "{path:?}");
+    }
+}
+
+#[test]
+fn a_segment_shaped_like_an_8_3_short_name_is_unsafe() {
+    for path in [
+        "DEOBFU~1",
+        "DEOBFU~1.js",
+        "longfi~1.js",
+        "sub/INDEX~12.js",
+        "git~1/hooks/pre-commit.js",
+        "x~1.min.js",
+    ] {
+        assert!(is_unsafe_path(path), "{path:?}");
+    }
+    for path in ["a~b.js", "x~.js", "~1x.js", "tilde~/a.js", "a.js~1"] {
+        assert!(!is_unsafe_path(path), "{path:?}");
+    }
+}
+
+#[test]
+fn bidirectional_controls_make_a_path_unsafe() {
+    for ch in ('\u{202a}'..='\u{202e}').chain('\u{2066}'..='\u{2069}') {
+        let path = format!("x{ch}gnp.js");
+        assert!(is_unsafe_path(&path), "{path:?}");
+        let dir = format!("d{ch}/a.js");
+        assert!(is_unsafe_path(&dir), "{dir:?}");
+    }
+    assert!(!is_unsafe_path("x\u{e9}\u{2065}.js"));
+}

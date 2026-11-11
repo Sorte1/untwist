@@ -33,12 +33,50 @@ const TOOL_DIRECTORIES: &[&str] = &[
     ".git", ".hg", ".svn", ".vscode", ".idea", ".husky", ".github",
 ];
 const DEVICE_NAMES: &[&str] = &[
-    "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
-    "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    "com1",
+    "com2",
+    "com3",
+    "com4",
+    "com5",
+    "com6",
+    "com7",
+    "com8",
+    "com9",
+    "lpt1",
+    "lpt2",
+    "lpt3",
+    "lpt4",
+    "lpt5",
+    "lpt6",
+    "lpt7",
+    "lpt8",
+    "lpt9",
+    "com\u{b9}",
+    "com\u{b2}",
+    "com\u{b3}",
+    "lpt\u{b9}",
+    "lpt\u{b2}",
+    "lpt\u{b3}",
+    "conin$",
+    "conout$",
 ];
 
 fn is_unprintable(ch: char) -> bool {
-    ch.is_control() || ch == '\u{2028}' || ch == '\u{2029}'
+    ch.is_control()
+        || matches!(
+            ch,
+            '\u{2028}' | '\u{2029}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
+        )
+}
+
+fn is_short_name(segment: &str) -> bool {
+    let stem = segment.split('.').next().unwrap_or(segment);
+    stem.rsplit_once('~')
+        .is_some_and(|(_, tail)| !tail.is_empty() && tail.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 fn is_device_name(segment: &str) -> bool {
@@ -56,6 +94,7 @@ fn is_unsafe_segment(segment: &str) -> bool {
     segment.len() > MAX_SEGMENT_BYTES
         || segment.ends_with(['.', ' '])
         || is_device_name(segment)
+        || is_short_name(segment)
         || TOOL_DIRECTORIES
             .iter()
             .any(|name| segment.eq_ignore_ascii_case(name))
