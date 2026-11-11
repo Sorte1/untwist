@@ -164,3 +164,23 @@ fn a_base_declared_at_the_top_of_a_module_still_merges() {
     let code = merge("const e = g();\nvar a = e.x;\nvar b = e.y;\nexport { a, b };");
     assert!(code.contains("var { x: a, y: b } = e;"), "{code}");
 }
+
+#[test]
+fn a_const_base_declared_at_the_top_of_a_script_merges() {
+    let code = merge("const e = { x: 1, y: 2 };\nvar a = e.x;\nvar b = e.y;\nconsole.log(a, b);");
+    assert!(code.contains("var { x: a, y: b } = e;"), "{code}");
+}
+
+#[test]
+fn a_let_or_class_base_declared_at_the_top_of_a_script_does_not_merge() {
+    let rows = [
+        "let e = { get x() { (0, eval)(\"e = { y: 2 }\"); return 1; }, y: 1 };\nvar a = e.x;\nvar b = e.y;\nconsole.log(a, b);",
+        "class e { static get x() { (0, eval)(\"e = { y: 2 }\"); return 1; } static y = 1; }\nvar a = e.x;\nvar b = e.y;\nconsole.log(a, b);",
+        "function e() {}\ne.y = 1;\nvar a = e.x;\nvar b = e.y;\nconsole.log(a, b);",
+    ];
+    for source in rows {
+        let code = merge(source);
+        assert!(code.contains("var a = e.x;\nvar b = e.y;"), "{code}");
+        untwist_testing::node::assert_node_agrees(source, &code);
+    }
+}

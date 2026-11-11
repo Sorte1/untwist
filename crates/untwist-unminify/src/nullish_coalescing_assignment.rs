@@ -1,17 +1,19 @@
 use crate::transpile_util::{
     assignment_temp_symbol, identifier_symbol_is, is_repeatable_target, keys_match, member_parts,
-    restore_logical_assignment, take_logical_assignment, take_temp_member_target, target_parts,
-    MemberKey, TempVars,
+    restore_logical_assignment, script_root, take_logical_assignment, take_temp_member_target,
+    target_parts, MemberKey, TempVars,
 };
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::ContentEq;
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct NullishCoalescingAssignment {
     temps: TempVars,
+    script_root: Option<ScopeId>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -38,8 +40,9 @@ impl<'a> Pass<'a> for NullishCoalescingAssignment {
             .on_expressions(ACTED_ON_EXPRESSIONS)
     }
 
-    fn enter_program(&mut self, _node: &mut Program<'a>, _cx: &mut Cx<'a, '_>) {
+    fn enter_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.temps.reset();
+        self.script_root = script_root(node, cx.scoping());
     }
 
     fn exit_variable_declaration(
@@ -57,7 +60,8 @@ impl<'a> Pass<'a> for NullishCoalescingAssignment {
         if logical.operator != LogicalOperator::Coalesce {
             return;
         }
-        if rewrite_temp_member(node, &mut self.temps, cx) || rewrite_simple(node, cx) {
+        let root = self.script_root;
+        if rewrite_temp_member(node, &mut self.temps, root, cx) || rewrite_simple(node, root, cx) {
             cx.changed();
         }
     }
@@ -104,6 +108,7 @@ fn temp_member_symbol(
     logical: &LogicalExpression<'_>,
     assignment: &AssignmentExpression<'_>,
     temps: &TempVars,
+    script_root: Option<ScopeId>,
     cx: &Cx<'_, '_>,
 ) -> Option<SymbolId> {
     let (object, left_key) = member_parts(&logical.left)?;
@@ -119,7 +124,7 @@ fn temp_member_symbol(
     let symbol = assignment_temp_symbol(object, cx)?;
     let (holder, right_key) = target_parts(&assignment.left)?;
     if !identifier_symbol_is(holder, symbol, cx)
-        || !keys_match(&left_key, &right_key, cx)
+        || !keys_match(&left_key, &right_key, script_root, cx)
         || !temps.is_temp(symbol, 1, cx)
     {
         return None;
@@ -130,6 +135,7 @@ fn temp_member_symbol(
 fn rewrite_temp_member<'a>(
     node: &mut Expression<'a>,
     temps: &mut TempVars,
+    script_root: Option<ScopeId>,
     cx: &mut Cx<'a, '_>,
 ) -> bool {
     let Expression::LogicalExpression(logical) = &*node else {
@@ -138,7 +144,7 @@ fn rewrite_temp_member<'a>(
     let Some(assignment) = inner_assignment(logical) else {
         return false;
     };
-    let Some(symbol) = temp_member_symbol(logical, assignment, temps, cx) else {
+    let Some(symbol) = temp_member_symbol(logical, assignment, temps, script_root, cx) else {
         return false;
     };
     let Some((span, logical_operator, left, assignment)) = take_logical_assignment(node, cx) else {
@@ -162,7 +168,11 @@ fn rewrite_temp_member<'a>(
     true
 }
 
-fn rewrite_simple<'a>(node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
+fn rewrite_simple<'a>(
+    node: &mut Expression<'a>,
+    script_root: Option<ScopeId>,
+    cx: &mut Cx<'a, '_>,
+) -> bool {
     let Expression::LogicalExpression(logical) = &*node else {
         return false;
     };
@@ -177,7 +187,8 @@ fn rewrite_simple<'a>(node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
     let Some(assignment) = inner_assignment(logical) else {
         return false;
     };
-    if !target_matches(&assignment.left, &logical.left) || !is_repeatable_target(&logical.left, cx)
+    if !target_matches(&assignment.left, &logical.left)
+        || !is_repeatable_target(&logical.left, script_root, cx)
     {
         return false;
     }

@@ -121,7 +121,9 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   the same keys in the same order and throws a `TypeError` for `null` or `undefined` as the reads
   do. A run stops at a repeated binding or a binding named `e`; `e` must not be a parameter or
   `var` of a function that reads `arguments` (the arguments object can rebind it between the
-  reads), and a program with a direct `eval` or `with` merges nothing.
+  reads), `e` must not be imported or be a `var`, `let`, `class` or function at the top of a
+  script (the global object, another script or an indirect `eval` can replace those; a top-level
+  `const` merges), and a program with a direct `eval` or `with` merges nothing.
 
 ## `inline-object-props`, variable-key reads
 

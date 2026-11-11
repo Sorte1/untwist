@@ -240,3 +240,78 @@ fn transpiler_output_still_converts_by_default() {
         assert!(output.contains(expected), "{output}");
     }
 }
+
+const GETTER_REBINDS_OBJECT: &str = r#"function t() { var other = {}; var a = { get k() { a = other; return 0; } }; var first = a; a.k || (a.k = 5); return [other.k, first === a]; }
+console.log(JSON.stringify(t()));
+function t3() { var other = {}; var a = { get k() { a = other; return 1; } }; a.k && (a.k = 5); return [other.k]; }
+console.log(JSON.stringify(t3()));"#;
+
+const GETTER_REBINDS_KEY: &str = r#"function t() { var i = 0; var a = { get 0() { i = 1; return 0; } }; a[i] || (a[i] = 5); return [a[1], i]; }
+console.log(JSON.stringify(t()));"#;
+
+const GETTER_REBINDS_TEMP_KEY_OBJECT: &str = r#"function t() { var other = {}; var a = { get k() { a = other; return 0; } }; var _k; a[_k = "k"] || (a[_k] = 5); return [other.k]; }
+console.log(JSON.stringify(t()));"#;
+
+const ARROW_ARGUMENTS_REBINDS_PARAMETER: &str = r#"function t(a) { var other = {}; Object.defineProperty(a, "k", { get: () => { arguments[0] = other; return 0; } }); a.k || (a.k = 5); return [other.k]; }
+console.log(JSON.stringify(t({})));"#;
+
+const GLOBAL_OBJECT_REBINDS_SCRIPT_VAR: &str = r#"var other = {};
+var a = { get k() { globalThis.a = other; return 0; } };
+a.k || (a.k = 5);
+console.log(JSON.stringify([other.k]));"#;
+
+const INDIRECT_EVAL_REBINDS_SCRIPT_LET: &str = r#"let other = {};
+let a = { get k() { (0, eval)("a = other"); return 0; } };
+a.k || (a.k = 5);
+console.log(JSON.stringify([other.k]));"#;
+
+const REBINDABLE_OPERANDS: [&str; 6] = [
+    GETTER_REBINDS_OBJECT,
+    GETTER_REBINDS_KEY,
+    GETTER_REBINDS_TEMP_KEY_OBJECT,
+    ARROW_ARGUMENTS_REBINDS_PARAMETER,
+    GLOBAL_OBJECT_REBINDS_SCRIPT_VAR,
+    INDIRECT_EVAL_REBINDS_SCRIPT_LET,
+];
+
+#[test]
+fn an_operand_the_first_read_can_rebind_keeps_its_pair_by_default() {
+    for source in REBINDABLE_OPERANDS {
+        let output = default_lane(source);
+        assert!(!has_logical_assignment(&output), "{output}");
+        untwist_testing::node::assert_node_agrees(source, &output);
+    }
+}
+
+#[test]
+fn an_imported_object_keeps_its_pair_by_default() {
+    let alloc = Allocator::default();
+    let output = untwist_testing::transform_with(
+        &alloc,
+        "import { a } from \"m\"; a.k || (a.k = 5);",
+        &[untwist_unminify::logical_assignments::boxed],
+        PassOptions::default(),
+    );
+    assert!(!has_logical_assignment(&output), "{output}");
+}
+
+#[test]
+fn a_settled_operand_still_converts_by_default() {
+    let rows = [
+        ("const a = {}; a.k || (a.k = 5);", "a.k ||= 5;"),
+        ("const a = {}, i = 0; a[i] || (a[i] = 5);", "a[i] ||= 5;"),
+        (
+            "function h() { var a = {}; a.k || (a.k = 5); }",
+            "a.k ||= 5;",
+        ),
+        (
+            "function h(a) { \"use strict\"; a.k || (a.k = 5); }",
+            "a.k ||= 5;",
+        ),
+        ("{ let a = {}; a.k || (a.k = 5); }", "a.k ||= 5;"),
+    ];
+    for (source, expected) in rows {
+        let output = default_lane(source);
+        assert!(output.contains(expected), "{output}");
+    }
+}

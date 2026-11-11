@@ -1,17 +1,19 @@
 use crate::transpile_util::{
-    assignment_temp_symbol, identifier_symbol_is, is_repeatable, is_repeatable_target, keys_match,
-    member_parts, restore_logical_assignment, take_logical_assignment, take_temp_member_target,
-    target_parts, TempVars,
+    assignment_temp_symbol, identifier_symbol_is, is_repeatable_object, is_repeatable_target,
+    keys_match, member_parts, restore_logical_assignment, script_root, take_logical_assignment,
+    take_temp_member_target, target_parts, TempVars,
 };
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_span::{ContentEq, Span};
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
 
 #[derive(Default)]
 pub struct LogicalAssignments {
     temps: TempVars,
+    script_root: Option<ScopeId>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -38,8 +40,9 @@ impl<'a> Pass<'a> for LogicalAssignments {
             .on_expressions(ACTED_ON_EXPRESSIONS)
     }
 
-    fn enter_program(&mut self, _node: &mut Program<'a>, _cx: &mut Cx<'a, '_>) {
+    fn enter_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.temps.reset();
+        self.script_root = script_root(node, cx.scoping());
     }
 
     fn exit_variable_declaration(
@@ -59,9 +62,10 @@ impl<'a> Pass<'a> for LogicalAssignments {
             LogicalOperator::And => AssignmentOperator::LogicalAnd,
             LogicalOperator::Coalesce => return,
         };
-        let rewritten = rewrite_plain(node, operator, cx)
-            || rewrite_temp_object(node, operator, &mut self.temps, cx)
-            || rewrite_temp_key(node, operator, &mut self.temps, cx)
+        let root = self.script_root;
+        let rewritten = rewrite_plain(node, operator, root, cx)
+            || rewrite_temp_object(node, operator, &mut self.temps, root, cx)
+            || rewrite_temp_key(node, operator, &mut self.temps, root, cx)
             || rewrite_temp_both(node, operator, &mut self.temps, cx);
         if rewritten {
             cx.changed();
@@ -102,6 +106,7 @@ fn target_matches(target: &AssignmentTarget<'_>, expr: &Expression<'_>) -> bool 
 fn rewrite_plain<'a>(
     node: &mut Expression<'a>,
     operator: AssignmentOperator,
+    script_root: Option<ScopeId>,
     cx: &mut Cx<'a, '_>,
 ) -> bool {
     let Expression::LogicalExpression(logical) = &*node else {
@@ -118,7 +123,8 @@ fn rewrite_plain<'a>(
     let Some(assignment) = inner_assignment(logical) else {
         return false;
     };
-    if !target_matches(&assignment.left, &logical.left) || !is_repeatable_target(&logical.left, cx)
+    if !target_matches(&assignment.left, &logical.left)
+        || !is_repeatable_target(&logical.left, script_root, cx)
     {
         return false;
     }
@@ -139,6 +145,7 @@ fn rewrite_temp_object<'a>(
     node: &mut Expression<'a>,
     operator: AssignmentOperator,
     temps: &mut TempVars,
+    script_root: Option<ScopeId>,
     cx: &mut Cx<'a, '_>,
 ) -> bool {
     let Expression::LogicalExpression(logical) = &*node else {
@@ -157,7 +164,7 @@ fn rewrite_temp_object<'a>(
         return false;
     };
     if !identifier_symbol_is(holder, symbol, cx)
-        || !keys_match(&left_key, &right_key, cx)
+        || !keys_match(&left_key, &right_key, script_root, cx)
         || !temps.is_temp(symbol, 1, cx)
     {
         return false;
@@ -181,6 +188,7 @@ fn temp_key_symbol(
     logical: &LogicalExpression<'_>,
     assignment: &AssignmentExpression<'_>,
     temps: &TempVars,
+    script_root: Option<ScopeId>,
     cx: &Cx<'_, '_>,
 ) -> Option<SymbolId> {
     let Expression::ComputedMemberExpression(member) = &logical.left else {
@@ -195,7 +203,7 @@ fn temp_key_symbol(
     };
     if target.optional
         || !ContentEq::content_eq(&target.object, &member.object)
-        || !is_repeatable(&member.object, cx)
+        || !is_repeatable_object(&member.object, script_root, cx)
         || !identifier_symbol_is(&target.expression, symbol, cx)
         || !temps.is_temp(symbol, 1, cx)
     {
@@ -239,6 +247,7 @@ fn rewrite_temp_key<'a>(
     node: &mut Expression<'a>,
     operator: AssignmentOperator,
     temps: &mut TempVars,
+    script_root: Option<ScopeId>,
     cx: &mut Cx<'a, '_>,
 ) -> bool {
     let Expression::LogicalExpression(logical) = &*node else {
@@ -247,7 +256,7 @@ fn rewrite_temp_key<'a>(
     let Some(assignment) = inner_assignment(logical) else {
         return false;
     };
-    let Some(symbol) = temp_key_symbol(logical, assignment, temps, cx) else {
+    let Some(symbol) = temp_key_symbol(logical, assignment, temps, script_root, cx) else {
         return false;
     };
     let Some((span, logical_operator, left, assignment)) = take_logical_assignment(node, cx) else {
