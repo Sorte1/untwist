@@ -328,6 +328,21 @@ fn a_script_global_the_program_observes_is_folded_but_kept_in_both_lanes() {
 }
 
 #[test]
+fn a_script_global_whose_this_is_only_tested_is_folded_in_both_lanes() {
+    let source = "var t = [\"x\"];\nfunction dec(a) { return t[a]; }\nconsole.log(typeof this, this === void 0, dec(0));";
+    assert_eq!(
+        both(source),
+        "console.log(typeof this, this === void 0, \"x\");"
+    );
+}
+
+#[test]
+fn a_script_global_the_held_global_object_may_rewrite_is_left_alone() {
+    let source = "var t = [\"x\"];\nfunction dec(a) { return t[a]; }\nvar g = this;\ng[[\"dec\"][0]] = function () { return \"y\"; };\nconsole.log(\"dec\" in this, dec(0));";
+    assert!(safe(source).contains("dec(0)"), "{}", safe(source));
+}
+
+#[test]
 fn direct_eval_disables_the_pass() {
     kept_in_both("const dec = (a) => [\"x\"][a];\neval(input);\nconsole.log(dec(0));");
 }

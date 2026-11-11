@@ -2,7 +2,7 @@ mod machine;
 mod rewrite;
 mod shape;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
@@ -13,7 +13,9 @@ use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 
+use super::bind::function_uses_this;
 use super::bootstrap::Resolve;
+use super::bound_once::Stable;
 use super::defs::DefTable;
 use super::roles::{
     Origin, BATCH, CONSTRUCTS, DEFINE_KEYED, GETTERS, MARKUP_CALLS, MUTATORS, READERS, RUNNERS,
@@ -26,8 +28,8 @@ use crate::value_flow::{
 };
 use machine::{is_binary_compare, literal, Machine, V};
 use rewrite::{check_loop, is_rewrite_loop, rewrite_loop, Rewrite};
-pub(super) use shape::Body;
 use shape::{closed, Sealed, Shape, Target};
+pub(super) use shape::{Body, STRING_METHODS};
 
 #[derive(Clone, Copy)]
 pub(super) struct Candidate<'a> {
@@ -133,14 +135,26 @@ pub(super) struct Filters<'a> {
     rewritten: FxHashMap<SymbolId, Span>,
     preds: FxHashMap<Span, Option<Pred<'a>>>,
     accepted: RefCell<FxHashMap<(Span, String), bool>>,
+    open: Cell<bool>,
     source: &'a str,
+}
+
+fn rewritten_through_this(object: &ObjectExpression<'_>) -> bool {
+    object.properties.iter().any(|property| match property {
+        ObjectPropertyKind::ObjectProperty(prop) => {
+            !matches!(prop.kind, PropertyKind::Init)
+                || matches!(prop.value.without_parentheses(),
+                    Expression::FunctionExpression(function) if function_uses_this(function))
+        }
+        ObjectPropertyKind::SpreadProperty(_) => true,
+    })
 }
 
 impl<'a> Filters<'a> {
     pub(super) fn new(
         source: &'a str,
         scoping: &Scoping,
-        defs: &DefTable<'a>,
+        (defs, stable): (&DefTable<'a>, &Stable<'_>),
         resolve: Resolve<'_>,
         loops: &[Loop<'a>],
     ) -> Self {
@@ -153,14 +167,20 @@ impl<'a> Filters<'a> {
                 return None;
             }
             let found = defs.get(symbol)?;
-            let untouched = flow_rule_disabled(TRUSTED_STORAGE)
-                || (found.writes.is_empty()
+            let trusted = flow_rule_disabled(TRUSTED_STORAGE);
+            let untouched = trusted
+                || (stable.holds(symbol)
+                    && found.writes.is_empty()
                     && !found.opaque
                     && !found.mutated
                     && !found.fields_written
                     && !found.escapes);
             match (untouched, found.inits) {
-                (true, [Some(Expression::ObjectExpression(object))]) => Some(&**object),
+                (true, [Some(Expression::ObjectExpression(object))])
+                    if trusted || !rewritten_through_this(object) =>
+                {
+                    Some(&**object)
+                }
                 _ => None,
             }
         };
@@ -179,6 +199,9 @@ impl<'a> Filters<'a> {
         let mutant = flow_rule_disabled(FILTERED_ENUMERATION);
         let ordered = !flow_rule_disabled(FILTERED_REWRITE_ORDER);
         let sealed = |symbol: SymbolId| {
+            if !stable.holds(symbol) {
+                return None;
+            }
             let found = defs.get(symbol)?;
             if !found.writes.is_empty() || found.opaque || found.mutated {
                 return None;
@@ -215,8 +238,10 @@ impl<'a> Filters<'a> {
                     None => continue,
                 }
             };
-            filters.keys.insert(candidate.key, candidate.span);
             filters.keys.insert(candidate.found, candidate.span);
+            if mutant {
+                filters.keys.insert(candidate.key, candidate.span);
+            }
             if let Some(rewrite) = rewrite.filter(|rewrite| rewrite.ordered && !mutant) {
                 filters.rewritten.insert(candidate.found, rewrite.span);
             }
@@ -248,6 +273,10 @@ impl<'a> Filters<'a> {
         self.preds.contains_key(&span)
     }
 
+    pub(super) fn open(&self) {
+        self.open.set(true);
+    }
+
     pub(super) fn accepts(&self, scoping: &Scoping, filter: Span, name: &str) -> bool {
         let Some(slot) = self.preds.get(&filter) else {
             return true;
@@ -255,6 +284,9 @@ impl<'a> Filters<'a> {
         let Some(pred) = slot else {
             return false;
         };
+        if self.open.get() {
+            return true;
+        }
         if name == "undefined" {
             return true;
         }

@@ -8,6 +8,7 @@ use oxc_syntax::symbol::SymbolId;
 
 use super::assembled::{assembled_tables, AssembledTables};
 use super::bootstrap::{self, Resolve};
+use super::bound_once::{BoundOnce, Stable};
 use super::bound_this;
 pub(super) use super::defs::Defs;
 use super::defs::{
@@ -232,6 +233,8 @@ pub(super) struct Bindings<'s, 'a> {
     filter_candidates: Vec<Loop<'a>>,
     pub(super) name_keys: FxHashSet<SymbolId>,
     pub(super) filters: std::rc::Rc<Filters<'a>>,
+    pub(super) stable: Stable<'s>,
+    script: bool,
 }
 
 impl<'s, 'a> Bindings<'s, 'a> {
@@ -274,6 +277,8 @@ impl<'s, 'a> Bindings<'s, 'a> {
             filter_candidates: Vec::new(),
             name_keys: FxHashSet::default(),
             filters: std::rc::Rc::default(),
+            stable: BoundOnce::with_judged_eval(scoping).table(),
+            script: !untwist_core::semantic::has_module_syntax(program),
         };
         bindings.visit_program(program);
         bindings.defs.finish();
@@ -293,7 +298,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
         bindings.filters = std::rc::Rc::new(Filters::new(
             program.source_text,
             scoping,
-            &bindings.defs,
+            (&bindings.defs, &bindings.stable),
             resolve,
             &candidates,
         ));
@@ -326,6 +331,9 @@ impl<'s, 'a> Bindings<'s, 'a> {
                 continue;
             }
             for (index, param) in func.params.items.iter().enumerate() {
+                if param.initializer.is_some() {
+                    continue;
+                }
                 if let BindingPattern::BindingIdentifier(id) = &param.pattern {
                     if let Some(psym) = id.symbol_id.get() {
                         params.insert(psym, (symbol, index));
@@ -387,6 +395,14 @@ impl<'s, 'a> Bindings<'s, 'a> {
             .then_some((func, index))
     }
 
+    pub(super) fn every_call_visible(&self, owner: SymbolId) -> bool {
+        self.is_iife_owner(owner) || !self.script_global(owner)
+    }
+
+    fn script_global(&self, symbol: SymbolId) -> bool {
+        self.script && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
+    }
+
     fn note_iife(&mut self, call: &CallExpression<'a>) {
         if call.optional {
             return;
@@ -413,6 +429,9 @@ impl<'s, 'a> Bindings<'s, 'a> {
             let BindingPattern::BindingIdentifier(id) = &param.pattern else {
                 continue;
             };
+            if param.initializer.is_some() {
+                continue;
+            }
             let Some(psym) = id.symbol_id.get() else {
                 continue;
             };
@@ -641,7 +660,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
         if self.enclosing.is_some() {
             self.filter_candidates.push((loop_, self.enclosing));
         }
-        if let Some(key) = super::name_keys::loop_key(self.scoping, &it.left) {
+        if let Some(key) = super::name_keys::loop_key(self.scoping, &self.stable, &it.left) {
             self.name_keys.insert(key);
         }
         self.for_left = true;

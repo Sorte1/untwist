@@ -8,6 +8,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 
 use super::funcs::{Pre, RetFate};
+use super::globals::{GLOBAL_KEYS, GLOBAL_NAMES, NATIVE_HOLDERS, RUNNERS};
 use super::{Graph, UNREACHED};
 use crate::calls::agnostic::sites::span_key;
 use untwist_eval::value::JsString;
@@ -69,6 +70,11 @@ pub(super) struct Collector<'s> {
     edges: Vec<(u32, u32)>,
     sinks: Vec<(u32, Span)>,
     pub(super) fn_stack: Vec<u32>,
+    pub(super) with_depth: u32,
+    pub(super) pattern_depth: u32,
+    global_names: FxHashMap<String, u32>,
+    global_any: Option<u32>,
+    global_object: Option<u32>,
 }
 
 impl<'s> Collector<'s> {
@@ -91,6 +97,11 @@ impl<'s> Collector<'s> {
             edges: Vec::new(),
             sinks: Vec::new(),
             fn_stack: Vec::new(),
+            with_depth: 0,
+            pattern_depth: 0,
+            global_names: FxHashMap::default(),
+            global_any: None,
+            global_object: None,
         }
     }
 
@@ -118,10 +129,136 @@ impl<'s> Collector<'s> {
         }
         let node = self.alloc();
         self.binds[index] = node;
+        if self.pre.exposed.contains(&symbol) {
+            let name = self.scoping.symbol_name(symbol);
+            if let Some(global) = self.global_name_node(name) {
+                self.edge(node, global);
+            }
+            let field = self.field_node(&named(Cow::Borrowed(name)));
+            self.edge(field, node);
+        }
+        let scope = self.scoping.symbol_scope_id(symbol);
+        if self.pre.globals.open_eval && self.scoping.scope_flags(scope).contains_direct_eval() {
+            self.sink(node, self.scoping.symbol_span(symbol));
+        }
         Some(node)
     }
 
-    fn any_node(&mut self) -> u32 {
+    fn global_any_node(&mut self) -> Option<u32> {
+        if self.pre.exposed_names.is_empty() {
+            return None;
+        }
+        if let Some(node) = self.global_any {
+            return Some(node);
+        }
+        let node = self.alloc();
+        self.global_any = Some(node);
+        let object = self.alloc();
+        self.global_object = Some(object);
+        self.edge(node, object);
+        Some(node)
+    }
+
+    fn global_object_node(&mut self) -> Option<u32> {
+        self.global_any_node()?;
+        self.global_object
+    }
+
+    fn with_global_object(&mut self, node: Option<u32>) -> Option<u32> {
+        let Some(object) = self.global_object_node() else {
+            return node;
+        };
+        let joined = self.alloc();
+        self.edge(object, joined);
+        if let Some(node) = node {
+            self.edge(node, joined);
+        }
+        Some(joined)
+    }
+
+    pub(super) fn feed_pattern_target(&mut self, bind: u32) {
+        let any = self.any_node();
+        self.edge(any, bind);
+        if let Some(global) = self.global_any_node() {
+            self.edge(global, bind);
+        }
+    }
+
+    fn runs_code(&self, callee: &Expression<'_>) -> bool {
+        match callee.without_parentheses() {
+            Expression::Identifier(id) => {
+                RUNNERS.contains(&id.name.as_str()) && self.symbol_of(id).is_none()
+            }
+            Expression::SequenceExpression(seq) => {
+                seq.expressions.last().is_some_and(|last| self.runs_code(last))
+            }
+            Expression::CallExpression(call) => self.runs_code(&call.callee),
+            Expression::NewExpression(new) => self.runs_code(&new.callee),
+            other => other.as_member_expression().is_some_and(|member| {
+                matches!(self.key_of_member(member), Key::Named(name) if name == "constructor")
+            }),
+        }
+    }
+
+    fn global_name_node(&mut self, name: &str) -> Option<u32> {
+        if !self.pre.exposed_names.contains(name) {
+            return None;
+        }
+        if let Some(&node) = self.global_names.get(name) {
+            return Some(node);
+        }
+        let node = self.alloc();
+        self.global_names.insert(name.to_string(), node);
+        if let Some(any) = self.global_any_node() {
+            self.edge(node, any);
+        }
+        Some(node)
+    }
+
+    pub(super) fn feed_global_read(&mut self, key: &Key<'_>, read: u32) {
+        if matches!(key, Key::Named(name) if GLOBAL_KEYS.contains(&name.as_ref())) {
+            if let Some(object) = self.global_object_node() {
+                self.edge(object, read);
+            }
+        }
+        let source = match key {
+            Key::Named(name) => self.global_name_node(name),
+            Key::Any => self.global_any_node(),
+            Key::Index => None,
+        };
+        if let Some(source) = source {
+            self.edge(source, read);
+        }
+    }
+
+    fn join_field(&mut self, node: u32, name: &str) {
+        let field = self.field_node(&named(Cow::Borrowed(name)));
+        self.edge(node, field);
+        self.edge(field, node);
+    }
+
+    pub(super) fn ident_node(&mut self, id: &IdentifierReference<'_>) -> u32 {
+        let Some(symbol) = self.symbol_of(id) else {
+            return self.field_node(&named(Cow::Borrowed(id.name.as_str())));
+        };
+        let Some(node) = self.bind_node(symbol) else {
+            return self.any_node();
+        };
+        if self.with_depth > 0 {
+            self.join_field(node, id.name.as_str());
+        }
+        node
+    }
+
+    fn join(&mut self, branches: [&Expression<'_>; 2]) -> Option<u32> {
+        let node = self.alloc();
+        for branch in branches {
+            self.route_into(branch, node);
+        }
+        Some(node)
+    }
+
+    pub(super) fn any_node(&mut self) -> u32 {
         if let Some(node) = self.any {
             return node;
         }
@@ -244,24 +381,95 @@ impl<'s> Collector<'s> {
     }
 
     pub(super) fn node_of(&mut self, expr: &Expression<'_>) -> Option<u32> {
-        let inner = expr.without_parentheses();
-        match inner {
-            Expression::Identifier(id) => self.symbol_of(id).and_then(|s| self.bind_node(s)),
-            Expression::StaticMemberExpression(_) | Expression::ComputedMemberExpression(_) => {
-                Some(self.read_node(inner.span()))
+        match expr {
+            Expression::BooleanLiteral(_)
+            | Expression::NullLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::RegExpLiteral(_)
+            | Expression::StringLiteral(_)
+            | Expression::TemplateLiteral(_)
+            | Expression::Super(_)
+            | Expression::ImportMeta(_)
+            | Expression::NewTarget(_)
+            | Expression::ArrayExpression(_)
+            | Expression::ObjectExpression(_)
+            | Expression::ArrowFunctionExpression(_)
+            | Expression::FunctionExpression(_)
+            | Expression::ClassExpression(_)
+            | Expression::AwaitExpression(_)
+            | Expression::YieldExpression(_)
+            | Expression::BinaryExpression(_)
+            | Expression::UnaryExpression(_)
+            | Expression::UpdateExpression(_)
+            | Expression::PrivateInExpression(_)
+            | Expression::ImportExpression(_)
+            | Expression::NewExpression(_)
+            | Expression::TaggedTemplateExpression(_)
+            | Expression::JSXElement(_)
+            | Expression::JSXFragment(_)
+            | Expression::V8IntrinsicExpression(_) => None,
+            Expression::ThisExpression(_) => self.with_global_object(None),
+            Expression::Identifier(id) => {
+                let node = Some(self.ident_node(id));
+                if GLOBAL_NAMES.contains(&id.name.as_str()) && self.symbol_of(id).is_none() {
+                    self.with_global_object(node)
+                } else {
+                    node
+                }
             }
-            Expression::CallExpression(call) if self.reads_closed_runner(call) => {
-                Some(self.read_node(call.span))
+            Expression::StaticMemberExpression(_)
+            | Expression::ComputedMemberExpression(_)
+            | Expression::PrivateFieldExpression(_) => Some(self.read_node(expr.span())),
+            Expression::CallExpression(call) => self.call_value(call),
+            Expression::ChainExpression(chain) => match &chain.expression {
+                ChainElement::CallExpression(call) => self.call_value(call),
+                ChainElement::TSNonNullExpression(inner) => self.node_of(&inner.expression),
+                member => Some(self.read_node(member.span())),
+            },
+            Expression::AssignmentExpression(assign) => self.assignment_value(assign),
+            Expression::ConditionalExpression(cond) => {
+                self.join([&cond.consequent, &cond.alternate])
             }
-            Expression::CallExpression(call) => self.call_result(call),
-            Expression::AssignmentExpression(assign)
-                if assign.operator == AssignmentOperator::Assign =>
-            {
-                self.node_of(&assign.right)
-            }
+            Expression::LogicalExpression(logical) => self.join([&logical.left, &logical.right]),
             Expression::SequenceExpression(seq) => {
                 seq.expressions.last().and_then(|last| self.node_of(last))
             }
+            Expression::ParenthesizedExpression(inner) => self.node_of(&inner.expression),
+            Expression::TSAsExpression(inner) => self.node_of(&inner.expression),
+            Expression::TSSatisfiesExpression(inner) => self.node_of(&inner.expression),
+            Expression::TSTypeAssertion(inner) => self.node_of(&inner.expression),
+            Expression::TSNonNullExpression(inner) => self.node_of(&inner.expression),
+            Expression::TSInstantiationExpression(inner) => self.node_of(&inner.expression),
+        }
+    }
+
+    fn call_value(&mut self, call: &CallExpression<'_>) -> Option<u32> {
+        if self.reads_closed_runner(call) {
+            return Some(self.read_node(call.span));
+        }
+        let result = self.call_result(call);
+        if self.runs_code(&call.callee) {
+            return self.with_global_object(result);
+        }
+        result
+    }
+
+    fn assignment_value(&mut self, assign: &AssignmentExpression<'_>) -> Option<u32> {
+        match assign.operator {
+            AssignmentOperator::Assign => self.node_of(&assign.right),
+            AssignmentOperator::LogicalOr
+            | AssignmentOperator::LogicalAnd
+            | AssignmentOperator::LogicalNullish => match &assign.left {
+                AssignmentTarget::AssignmentTargetIdentifier(id) => Some(self.ident_node(id)),
+                other => match other.as_member_expression() {
+                    Some(member) => {
+                        let key = self.key_of_member(member);
+                        Some(self.field_node(&key))
+                    }
+                    None => Some(self.any_node()),
+                },
+            },
             _ => None,
         }
     }
@@ -328,7 +536,8 @@ impl<'s> Collector<'s> {
     }
 
     fn native_rebindable(&self, name: &str) -> bool {
-        self.pre.global_unknown_write || self.pre.global_writes.contains(name)
+        let globals = &self.pre.globals;
+        globals.may_write(name) || globals.written_keys.contains(name)
     }
 
     pub(super) fn inert_native(&self, callee: &Expression<'_>) -> bool {
@@ -342,15 +551,18 @@ impl<'s> Collector<'s> {
                 let Expression::Identifier(obj) = member.object().without_parentheses() else {
                     return false;
                 };
-                let base_known = matches!(obj.name.as_str(), "console" | "JSON");
-                if !base_known || self.symbol_of(obj).is_some() || self.native_rebindable(&obj.name)
+                let base_known = NATIVE_HOLDERS.contains(&obj.name.as_str());
+                if !base_known
+                    || self.symbol_of(obj).is_some()
+                    || self.native_rebindable(&obj.name)
+                    || self.pre.globals.holder_values.contains(obj.name.as_str())
                 {
                     return false;
                 }
                 match self.key_of_member(member) {
                     Key::Named(name) => {
                         let known = obj.name != "JSON" || name == "stringify";
-                        known && !self.pre.written_keys.contains(name.as_ref())
+                        known && !self.pre.globals.written_keys.contains(name.as_ref())
                     }
                     _ => false,
                 }

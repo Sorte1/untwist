@@ -4,13 +4,18 @@ use oxc_semantic::Scoping;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
 
+use super::bound_once::Stable;
 use crate::value_flow::{flow_rule_disabled, INERT_NAME_KEYS};
 
 pub(super) fn names_observed() -> bool {
     !flow_rule_disabled(INERT_NAME_KEYS)
 }
 
-pub(super) fn loop_key(scoping: &Scoping, left: &ForStatementLeft<'_>) -> Option<SymbolId> {
+pub(super) fn loop_key(
+    scoping: &Scoping,
+    stable: &Stable<'_>,
+    left: &ForStatementLeft<'_>,
+) -> Option<SymbolId> {
     let ForStatementLeft::VariableDeclaration(declaration) = left else {
         return None;
     };
@@ -25,11 +30,11 @@ pub(super) fn loop_key(scoping: &Scoping, left: &ForStatementLeft<'_>) -> Option
     let written = scoping
         .get_resolved_references(symbol)
         .any(|reference| reference.is_write());
-    (!written).then_some(symbol)
+    (!written && stable.holds(symbol)).then_some(symbol)
 }
 
-pub(super) fn names_only(scoping: &Scoping, it: &ForInStatement<'_>) -> bool {
-    let Some(key) = loop_key(scoping, &it.left) else {
+pub(super) fn names_only(scoping: &Scoping, stable: &Stable<'_>, it: &ForInStatement<'_>) -> bool {
+    let Some(key) = loop_key(scoping, stable, &it.left) else {
         return false;
     };
     let mut uses = Uses {

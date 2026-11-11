@@ -420,7 +420,7 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         if self.fresh.bindings.filters.filters_loop(it.span) {
             return walk_js::walk_for_in_statement(self, it);
         }
-        if super::name_keys::names_only(self.fresh.scoping, it) {
+        if super::name_keys::names_only(self.fresh.scoping, &self.fresh.bindings.stable, it) {
             if super::name_keys::names_observed() {
                 self.observe_enumerated(&it.right, it.span);
             }
