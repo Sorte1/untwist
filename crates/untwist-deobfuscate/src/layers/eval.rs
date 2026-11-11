@@ -1,45 +1,14 @@
 use oxc_ast::ast::{
-    Argument, CallExpression, Expression, ForStatementInit, ForStatementLeft, MemberExpression,
-    Program, Statement, VariableDeclaration, VariableDeclarationKind,
+    CallExpression, Expression, ForStatementInit, ForStatementLeft, Program, Statement,
+    VariableDeclaration, VariableDeclarationKind,
 };
-use oxc_ast_visit::Visit;
 use oxc_semantic::Scoping;
 use untwist_core::semantic::program_is_strict;
 
-use super::decode::{argument_refusal, fold_text, outer_call, refuse, sloppy_script, FreeNames};
+use super::decode::{argument_refusal, fold_text, outer_call, refuse, sloppy_script};
 use super::model::{DecodeCx, Decoded, Layer, LayerForm, Refusal, Refused};
+use super::observe::observes_globals;
 use super::probe::Probe;
-
-const GLOBAL_OBJECTS: [&str; 7] = [
-    "window",
-    "globalThis",
-    "self",
-    "global",
-    "frames",
-    "top",
-    "parent",
-];
-
-pub(super) const DYNAMIC_CODE: [&str; 2] = ["eval", "Function"];
-
-const DESCRIPTOR_READS: [(&str, &str); 4] = [
-    ("Object", "getOwnPropertyDescriptor"),
-    ("Object", "getOwnPropertyDescriptors"),
-    ("Reflect", "getOwnPropertyDescriptor"),
-    ("Reflect", "deleteProperty"),
-];
-
-const GLOBAL_RESHAPES: [(&str, &str); 9] = [
-    ("Object", "defineProperty"),
-    ("Object", "defineProperties"),
-    ("Object", "freeze"),
-    ("Object", "seal"),
-    ("Object", "preventExtensions"),
-    ("Object", "isFrozen"),
-    ("Object", "isSealed"),
-    ("Reflect", "defineProperty"),
-    ("Reflect", "preventExtensions"),
-];
 
 pub fn decode(
     program: &Program<'_>,
@@ -191,78 +160,4 @@ fn declares_lexically(statement: &Statement<'_>) -> bool {
         Statement::ClassDeclaration(_) => true,
         _ => false,
     }
-}
-
-fn observes_globals(program: &Program<'_>) -> bool {
-    let mut scan = FreeNames {
-        observe: true,
-        ..FreeNames::default()
-    };
-    scan.visit_program(program);
-    scan.found
-}
-
-pub(super) fn deletes_a_global(argument: &Expression<'_>) -> bool {
-    match argument.without_parentheses() {
-        Expression::Identifier(_) | Expression::ChainExpression(_) => true,
-        other => other.as_member_expression().is_some(),
-    }
-}
-
-fn fresh_value(expr: &Expression<'_>) -> bool {
-    matches!(
-        expr.without_parentheses(),
-        Expression::ObjectExpression(_)
-            | Expression::ArrayExpression(_)
-            | Expression::FunctionExpression(_)
-            | Expression::ArrowFunctionExpression(_)
-            | Expression::ClassExpression(_)
-    )
-}
-
-fn is_global_object(expr: &Expression<'_>) -> bool {
-    match expr.without_parentheses() {
-        Expression::ThisExpression(_) => true,
-        Expression::Identifier(id) => GLOBAL_OBJECTS.contains(&id.name.as_str()),
-        Expression::StaticMemberExpression(member) => {
-            GLOBAL_OBJECTS.contains(&member.property.name.as_str())
-                && is_global_object(&member.object)
-        }
-        _ => false,
-    }
-}
-
-pub(super) fn reflects_on_globals(call: &CallExpression<'_>) -> bool {
-    let Some((object, method)) = call.callee.as_member_expression().and_then(member_names) else {
-        return false;
-    };
-    let pair = (object, method);
-    if DESCRIPTOR_READS.contains(&pair) {
-        return true;
-    }
-    GLOBAL_RESHAPES.contains(&pair)
-        && call
-            .arguments
-            .first()
-            .and_then(Argument::as_expression)
-            .is_none_or(|first| !fresh_value(first))
-}
-
-fn member_names<'a>(member: &MemberExpression<'a>) -> Option<(&'a str, &'a str)> {
-    let object = match member.object().without_parentheses() {
-        Expression::Identifier(id) => id.name.as_str(),
-        Expression::StaticMemberExpression(inner) if is_global_object(&inner.object) => {
-            inner.property.name.as_str()
-        }
-        _ => return None,
-    };
-    let method = match member {
-        MemberExpression::StaticMemberExpression(node) => node.property.name.as_str(),
-        MemberExpression::ComputedMemberExpression(node) => match &node.expression {
-            Expression::StringLiteral(key) => key.value.as_str()?,
-            _ => return None,
-        },
-        MemberExpression::PrivateFieldExpression(_) => return None,
-    };
-    Some((object, method))
 }
