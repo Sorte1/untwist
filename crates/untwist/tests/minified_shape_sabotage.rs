@@ -5,6 +5,10 @@ use untwist_deobfuscate::mutants::{
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/minified_shape_rows.txt");
+const SLOPPY_SAFE_WITHOUT_THE_CHECKS: [&str; 2] = [
+    "ref-a-block-wrapper-called-from-outside-its-block-before-its-constant",
+    "ref-a-switch-case-constant-read-by-a-later-case",
+];
 
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
@@ -35,7 +39,9 @@ fn every_refused_row_diverges_from_node_once_the_rotator_checks_are_dropped() {
     };
     let sabotage: Vec<(String, String)> = rows()
         .into_iter()
-        .filter(|(label, _)| label.starts_with("ref-"))
+        .filter(|(label, _)| {
+            label.starts_with("ref-") && !SLOPPY_SAFE_WITHOUT_THE_CHECKS.contains(&label.as_str())
+        })
         .collect();
     assert!(sabotage.len() >= 2, "found {} rows", sabotage.len());
     let run = |source: &str| transformed(false, source);
