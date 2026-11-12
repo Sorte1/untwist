@@ -41,6 +41,32 @@ pub(super) fn is_code_key(key: &str) -> bool {
         || GLOBAL_KEYS.contains(&key)
 }
 
+pub(crate) fn function_source(texts: impl IntoIterator<Item = Option<String>>) -> Option<String> {
+    let texts: Vec<String> = texts.into_iter().collect::<Option<_>>()?;
+    let (body, params) = texts
+        .split_last()
+        .map_or(("", &[][..]), |(body, params)| (body.as_str(), params));
+    Some(format!(
+        "(function ({}\n) {{\n{body}\n}});",
+        params.join(",")
+    ))
+}
+
+fn builds_a_function(sink: &str, args: &[Argument<'_>]) -> bool {
+    matches!(sink, "Function" | "constructor")
+        && (args.len() > 1
+            || args
+                .iter()
+                .any(|argument| argument.as_expression().is_none_or(is_function_literal)))
+}
+
+fn is_function_literal(expr: &Expression<'_>) -> bool {
+    matches!(
+        expr.without_parentheses(),
+        Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_)
+    )
+}
+
 struct Escape<'s> {
     scoping: &'s Scoping,
     globals: &'s FxHashSet<&'static str>,
@@ -601,26 +627,43 @@ impl<'s> Escape<'s> {
         args: &[Argument<'_>],
         span: Span,
     ) -> bool {
-        if self.sink_kind(callee, parts).is_none() {
+        let Some(sink) = self.sink_kind(callee, parts) else {
             return false;
+        };
+        if builds_a_function(sink, args) {
+            self.check_built_function(args, span);
         }
         let Some(first) = args.iter().find_map(Argument::as_expression) else {
             return true;
         };
-        if matches!(
-            first.without_parentheses(),
-            Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_)
-        ) {
+        if is_function_literal(first) {
             return true;
         }
         let Some(text) = self.resolve_string_expr(first) else {
             return self.check_sink_pending_fallback(first, span);
         };
+        self.scan_sink_text(&text, span);
+        true
+    }
+
+    fn check_built_function(&mut self, args: &[Argument<'_>], span: Span) {
+        let texts = args.iter().map(|argument| {
+            argument
+                .as_expression()
+                .and_then(|expr| self.resolve_string_expr(expr))
+        });
+        match function_source(texts) {
+            Some(source) => self.scan_sink_text(&source, span),
+            None => self.flag_code(span),
+        }
+    }
+
+    fn scan_sink_text(&mut self, text: &str, span: Span) {
         if self.depth >= MAX_SINK_DEPTH {
             self.flag_code(span);
-            return true;
+            return;
         }
-        match scan_decoded_text(&text, self.globals, self.resolve, self.depth + 1) {
+        match scan_decoded_text(text, self.globals, self.resolve, self.depth + 1) {
             Some((found, matched)) => {
                 if let Some(sub_span) = found {
                     self.flag(sub_span);
@@ -629,7 +672,6 @@ impl<'s> Escape<'s> {
             }
             None => self.flag_code(span),
         }
-        true
     }
 }
 
