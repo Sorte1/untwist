@@ -1,0 +1,1 @@
+exports.ids=[1],exports.modules={26:function(e,t,l){"use strict";l.r(t),l.d(t,"value",(function(){return o})),console.log("eval lazy");const o=42;t.default="lazy-default"}};

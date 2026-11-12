@@ -1,0 +1,1 @@
+base/webpack5-prod-node+obf-rename-properties	original does not run: exit 1: TypeError: Cannot read properties of undefined (reading 'length')

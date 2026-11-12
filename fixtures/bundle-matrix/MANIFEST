@@ -1,0 +1,221 @@
+# app	cell	family	tool	loader	entry	source_modules	flags
+base	webpack5-dev-node	webpack	webpack@5.112.2	node	index.js	28	mode=development devtool=false target=node
+base	webpack5-dev-eval	webpack	webpack@5.112.2	node	index.js	28	mode=development devtool=eval target=node
+base	webpack5-dev-eval-source-map	webpack	webpack@5.112.2	node	index.js	28	mode=development devtool=eval-cheap-module-source-map target=node
+base	webpack5-prod-node	webpack	webpack@5.112.2	node	index.js	28	mode=production minimize=false concatenateModules=false target=node
+base	webpack5-prod-concat	webpack	webpack@5.112.2	node	index.js	28	mode=production minimize=false target=node
+base	webpack5-prod-min	webpack	webpack@5.112.2	node	index.js	28	mode=production target=node (terser default)
+base	webpack5-web-split	webpack	webpack@5.112.2	browser	561.js,index.js	28	mode=production minimize=false target=web splitChunks=all
+base	webpack5-web-runtime-chunk	webpack	webpack@5.112.2	browser	runtime.js,index.js	28	mode=production minimize=false target=web runtimeChunk=single
+base	webpack5-web-min	webpack	webpack@5.112.2	browser	index.js	28	mode=production target=web (terser default)
+base	webpack5-web-noiife	webpack	webpack@5.112.2	browser	index.js	28	mode=production minimize=false target=web output.iife=false maxChunks=1
+base	webpack5-web-es5	webpack	webpack@5.112.2	browser	index.js	28	mode=production minimize=false target=[web,es5] maxChunks=1
+base	webpack5-esm-output	webpack	webpack@5.112.2	node	index.js	28	mode=production minimize=false experiments.outputModule output.module target=node
+base	webpack5-umd	webpack	webpack@5.112.2	node	index.js	28	mode=production minimize=false library.type=umd target=node maxChunks=1
+base	webpack5-amd	webpack	webpack@5.112.2	amd	index.js	28	mode=production minimize=false library.type=amd target=node maxChunks=1
+base	webpack5-system	webpack	webpack@5.112.2	systemjs	index.js	28	mode=production minimize=false library.type=system target=node maxChunks=1
+base	webpack5-federation	webpack	webpack@5.112.2	browser	index.js	28	mode=production minimize=false target=web ModuleFederationPlugin(exposes ./util, shared eager)
+base	webpack4-dev-node	webpack	webpack@4.47.0	node	index.js	28	mode=development devtool=false target=node output.pathinfo=false
+base	webpack4-dev-eval	webpack	webpack@4.47.0	node	index.js	28	mode=development devtool=eval target=node output.pathinfo=false
+base	webpack4-prod-node	webpack	webpack@4.47.0	node	index.js	28	mode=production minimize=false concatenateModules=false target=node
+base	webpack4-prod-concat	webpack	webpack@4.47.0	node	index.js	28	mode=production minimize=false target=node
+base	webpack4-prod-min	webpack	webpack@4.47.0	node	index.js	28	mode=production target=node (terser default)
+base	webpack4-web-split	webpack	webpack@4.47.0	browser	vendors~index.chunk.js,index.js	28	mode=production minimize=false target=web splitChunks=all
+base	webpack4-umd	webpack	webpack@4.47.0	node	index.js	28	mode=production minimize=false libraryTarget=umd target=node maxChunks=1
+base	rollup2-cjs21-iife	rollup	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup2-cjs22-iife	rollup	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup2-cjs22-iife-strict-true	rollup	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	node	index.js	28	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports
+base	rollup3-cjs24-iife	rollup	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup3-cjs25-iife	rollup	rollup@3.30.0 @rollup/plugin-commonjs@25.0.8	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup3-cjs25-cjs-split	rollup	rollup@3.30.0 @rollup/plugin-commonjs@25.0.8	node	index.js	28	--format=cjs node-resolve commonjs(defaults) json chunks
+base	rollup4-cjs25-iife	rollup	rollup@4.68.2 @rollup/plugin-commonjs@25.0.8	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup4-cjs28-iife	rollup	rollup@4.68.2 @rollup/plugin-commonjs@28.0.9	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup4-cjs29-iife	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup4-cjs29-iife-strict-true	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	28	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports
+base	rollup4-cjs29-iife-strict-auto	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	28	--format=iife node-resolve commonjs(strictRequires=auto) json inlineDynamicImports
+base	rollup4-cjs29-iife-strict-false	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	28	--format=iife node-resolve commonjs(strictRequires=false) json inlineDynamicImports
+base	rollup4-cjs29-cjs	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	28	--format=cjs node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup4-cjs29-cjs-split	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	28	--format=cjs node-resolve commonjs(defaults) json chunks
+base	rollup4-cjs29-es-split	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	28	--format=es node-resolve commonjs(defaults) json chunks
+base	rollup4-cjs29-umd	umd	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	28	--format=umd node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup4-cjs29-amd	amd	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	amd	index.js	28	--format=amd node-resolve commonjs(defaults) json inlineDynamicImports
+base	rollup4-cjs29-system	systemjs	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	systemjs	index.js	28	--format=system node-resolve commonjs(defaults) json inlineDynamicImports
+base	vite4-iife	rollup	vite@4.5.14	node	index.js	28	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+base	vite4-es-min	rollup	vite@4.5.14	node	index.js	28	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+base	vite5-iife	rollup	vite@5.4.21	node	index.js	28	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+base	vite5-es-min	rollup	vite@5.4.21	node	index.js	28	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+base	vite6-iife	rollup	vite@6.4.6	node	index.js	28	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+base	vite6-es-min	rollup	vite@6.4.6	node	index.js	28	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+base	vite7-iife	rollup	vite@7.3.8	node	index.js	28	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+base	vite7-es-min	rollup	vite@7.3.8	node	index.js	28	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+base	vite8-iife	rollup	vite@8.3.8	node	index.js	28	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+base	vite8-es-min	rollup	vite@8.3.8	node	index.js	28	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+base	rolldown-iife	rollup	rolldown@1.3.2	node	index.js	28	format=iife platform=node minify=false
+base	rolldown-cjs	rollup	rolldown@1.3.2	node	index.js	28	format=cjs platform=node minify=false
+base	rolldown-esm	rollup	rolldown@1.3.2	node	index.js	28	format=esm platform=node minify=false
+base	rolldown-esm-min	rollup	rolldown@1.3.2	node	index.js	28	format=esm platform=node minify=true
+base	esbuild0.14-iife	esbuild	esbuild@0.14.54	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.14-cjs	esbuild	esbuild@0.14.54	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.14-esm-split	esbuild	esbuild@0.14.54	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.14-iife-min	esbuild	esbuild@0.14.54	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.17-iife	esbuild	esbuild@0.17.19	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.17-cjs	esbuild	esbuild@0.17.19	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.17-esm-split	esbuild	esbuild@0.17.19	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.17-iife-min	esbuild	esbuild@0.17.19	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.19-iife	esbuild	esbuild@0.19.12	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.19-cjs	esbuild	esbuild@0.19.12	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.19-esm-split	esbuild	esbuild@0.19.12	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.19-iife-min	esbuild	esbuild@0.19.12	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.21-iife	esbuild	esbuild@0.21.5	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.21-cjs	esbuild	esbuild@0.21.5	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.21-esm-split	esbuild	esbuild@0.21.5	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.21-iife-min	esbuild	esbuild@0.21.5	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.24-iife	esbuild	esbuild@0.24.2	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.24-cjs	esbuild	esbuild@0.24.2	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.24-esm-split	esbuild	esbuild@0.24.2	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.24-iife-min	esbuild	esbuild@0.24.2	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.25-iife	esbuild	esbuild@0.25.12	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.25-cjs	esbuild	esbuild@0.25.12	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.25-esm-split	esbuild	esbuild@0.25.12	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.25-iife-min	esbuild	esbuild@0.25.12	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.28-iife	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.28-cjs	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.28-esm-split	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.28-iife-min	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.28-iife-keepnames	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife --keep-names
+base	esbuild0.28-iife-min-keepnames	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife --minify --keep-names
+base	esbuild0.28-iife-es2015	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife --target=es2015
+base	esbuild0.28-iife-esnext	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife --target=esnext
+base	esbuild0.28-iife-browser	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=browser --format=iife
+base	bun-cjs	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=cjs
+base	bun-esm	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm
+base	bun-esm-splitting	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm --splitting
+base	bun-iife-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify
+base	parcel-hoist	parcel	parcel@2.16.4	node	index.js	29	context=node outputFormat=commonjs optimize=false scopeHoist=true
+base	parcel-nohoist	parcel	parcel@2.16.4	node	index.js	30	context=node outputFormat=commonjs optimize=false scopeHoist=false
+base	parcel-hoist-min	parcel	parcel@2.16.4	node	index.js	29	context=node outputFormat=commonjs optimize=true scopeHoist=true
+base	parcel-nohoist-min	parcel	parcel@2.16.4	node	index.js	30	context=node outputFormat=commonjs optimize=true scopeHoist=false
+base	browserify	browserify	browserify@17.0.1	node	index.js	28	browserify --node (Babel modules=commonjs source)
+base	browserify-standalone	browserify	browserify@17.0.1	node	index.js	28	browserify --standalone matrix --node (Babel modules=commonjs source)
+base	webpack5-prod-node-cjssrc	webpack	webpack@5.112.2	node	index.js	28	mode=production minimize=false concatenateModules=false target=node (Babel modules=commonjs source)
+base	rollup4-cjs29-iife-cjssrc	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports (Babel modules=commonjs source)
+base	esbuild0.28-iife-cjssrc	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife (Babel modules=commonjs source)
+base	webpack5-prod-node+terser	webpack	webpack@5.112.2 + terser@1.0.0	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | minify compress.passes=2 mangle comments=false
+base	webpack5-prod-node+esbuild-min	webpack	webpack@5.112.2 + esbuild@0.28.2	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | minify transform --minify
+base	webpack5-prod-node+swc-min	webpack	webpack@5.112.2 + @swc/core@1.16.22	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | minify minify compress mangle
+base	webpack5-prod-node+uglify	webpack	webpack@5.112.2 + uglify-js@3.19.3	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | minify compress.passes=2 mangle
+base	webpack4-prod-node+terser	webpack	webpack@4.47.0 + terser@1.0.0	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | minify compress.passes=2 mangle comments=false
+base	webpack4-prod-node+esbuild-min	webpack	webpack@4.47.0 + esbuild@0.28.2	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | minify transform --minify
+base	webpack4-prod-node+swc-min	webpack	webpack@4.47.0 + @swc/core@1.16.22	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | minify minify compress mangle
+base	webpack4-prod-node+uglify	webpack	webpack@4.47.0 + uglify-js@3.19.3	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | minify compress.passes=2 mangle
+base	rollup4-cjs29-iife+terser	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + terser@1.0.0	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | minify compress.passes=2 mangle comments=false
+base	rollup4-cjs29-iife+esbuild-min	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + esbuild@0.28.2	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | minify transform --minify
+base	rollup4-cjs29-iife+swc-min	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + @swc/core@1.16.22	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | minify minify compress mangle
+base	rollup4-cjs29-iife+uglify	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + uglify-js@3.19.3	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | minify compress.passes=2 mangle
+base	esbuild0.28-iife+terser	esbuild	esbuild@0.28.2 + terser@1.0.0	node	index.js	28	--bundle --platform=node --format=iife | minify compress.passes=2 mangle comments=false
+base	esbuild0.28-iife+esbuild-min	esbuild	esbuild@0.28.2 + esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife | minify transform --minify
+base	esbuild0.28-iife+swc-min	esbuild	esbuild@0.28.2 + @swc/core@1.16.22	node	index.js	28	--bundle --platform=node --format=iife | minify minify compress mangle
+base	esbuild0.28-iife+uglify	esbuild	esbuild@0.28.2 + uglify-js@3.19.3	node	index.js	28	--bundle --platform=node --format=iife | minify compress.passes=2 mangle
+base	browserify+terser	browserify	browserify@17.0.1 + terser@1.0.0	node	index.js	28	browserify --node (Babel modules=commonjs source) | minify compress.passes=2 mangle comments=false
+base	browserify+esbuild-min	browserify	browserify@17.0.1 + esbuild@0.28.2	node	index.js	28	browserify --node (Babel modules=commonjs source) | minify transform --minify
+base	browserify+swc-min	browserify	browserify@17.0.1 + @swc/core@1.16.22	node	index.js	28	browserify --node (Babel modules=commonjs source) | minify minify compress mangle
+base	browserify+uglify	browserify	browserify@17.0.1 + uglify-js@3.19.3	node	index.js	28	browserify --node (Babel modules=commonjs source) | minify compress.passes=2 mangle
+base	parcel-nohoist+terser	parcel	parcel@2.16.4 + terser@1.0.0	node	index.js	30	context=node outputFormat=commonjs optimize=false scopeHoist=false | minify compress.passes=2 mangle comments=false
+base	parcel-nohoist+esbuild-min	parcel	parcel@2.16.4 + esbuild@0.28.2	node	index.js	30	context=node outputFormat=commonjs optimize=false scopeHoist=false | minify transform --minify
+base	parcel-nohoist+swc-min	parcel	parcel@2.16.4 + @swc/core@1.16.22	node	index.js	30	context=node outputFormat=commonjs optimize=false scopeHoist=false | minify minify compress mangle
+base	parcel-nohoist+uglify	parcel	parcel@2.16.4 + uglify-js@3.19.3	node	index.js	30	context=node outputFormat=commonjs optimize=false scopeHoist=false | minify compress.passes=2 mangle
+base	rollup4-cjs29-iife+obf-default	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {}
+base	rollup4-cjs29-iife+obf-strings-base64	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["base64"],"stringArrayRotate":true,"stringArrayShuffle":true}
+base	rollup4-cjs29-iife+obf-strings-rc4-wrappers	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["rc4"],"stringArrayWrappersCount":2,"stringArrayWrappersType":"function","stringArrayWrappersChainedCalls":true,"stringArrayWrappersParametersMaxCount":4,"stringArrayIndexShift":true}
+base	rollup4-cjs29-iife+obf-strings-none	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayIndexesType":["hexadecimal-number","hexadecimal-numeric-string"]}
+base	rollup4-cjs29-iife+obf-cff	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.75}
+base	rollup4-cjs29-iife+obf-dead-code	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"deadCodeInjection":true,"deadCodeInjectionThreshold":0.4}
+base	rollup4-cjs29-iife+obf-self-defending	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"selfDefending":true,"compact":true}
+base	rollup4-cjs29-iife+obf-object-keys	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"transformObjectKeys":true}
+base	rollup4-cjs29-iife+obf-unicode	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"unicodeEscapeSequence":true}
+base	rollup4-cjs29-iife+obf-split-strings	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"splitStrings":true,"splitStringsChunkLength":5}
+base	rollup4-cjs29-iife+obf-numbers	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"numbersToExpressions":true,"simplify":true}
+base	rollup4-cjs29-iife+obf-rename-globals	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"renameGlobals":true}
+base	rollup4-cjs29-iife+obf-rename-properties	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"renameProperties":true,"renamePropertiesMode":"safe"}
+base	rollup4-cjs29-iife+obf-dictionary	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayRotate":true,"selfDefending":true,"compact":true,"identifierNamesGenerator":"dictionary","identifiersDictionary":[i+iìíîï x4]}
+base	rollup4-cjs29-iife+obf-heavy	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["base64","rc4"],"stringArrayWrappersCount":1,"stringArrayRotate":true,"stringArrayShuffle":true,"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.5,"deadCodeInjection":true,"deadCodeInjectionThreshold":0.2,"selfDefending":true,"transformObjectKeys":true,"identifierNamesGenerator":"mangled-shuffled"}
+base	rollup4-cjs29-iife+obf4-default	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@4.2.2	node	index.js	28	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {}
+base	webpack5-prod-node+obf-default	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {}
+base	webpack5-prod-node+obf-strings-base64	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["base64"],"stringArrayRotate":true,"stringArrayShuffle":true}
+base	webpack5-prod-node+obf-strings-rc4-wrappers	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["rc4"],"stringArrayWrappersCount":2,"stringArrayWrappersType":"function","stringArrayWrappersChainedCalls":true,"stringArrayWrappersParametersMaxCount":4,"stringArrayIndexShift":true}
+base	webpack5-prod-node+obf-strings-none	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayIndexesType":["hexadecimal-number","hexadecimal-numeric-string"]}
+base	webpack5-prod-node+obf-cff	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.75}
+base	webpack5-prod-node+obf-dead-code	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"deadCodeInjection":true,"deadCodeInjectionThreshold":0.4}
+base	webpack5-prod-node+obf-self-defending	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"selfDefending":true,"compact":true}
+base	webpack5-prod-node+obf-object-keys	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"transformObjectKeys":true}
+base	webpack5-prod-node+obf-unicode	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"unicodeEscapeSequence":true}
+base	webpack5-prod-node+obf-split-strings	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"splitStrings":true,"splitStringsChunkLength":5}
+base	webpack5-prod-node+obf-numbers	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"numbersToExpressions":true,"simplify":true}
+base	webpack5-prod-node+obf-rename-globals	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"renameGlobals":true}
+base	webpack5-prod-node+obf-dictionary	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayRotate":true,"selfDefending":true,"compact":true,"identifierNamesGenerator":"dictionary","identifiersDictionary":[i+iìíîï x4]}
+base	webpack5-prod-node+obf-heavy	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["base64","rc4"],"stringArrayWrappersCount":1,"stringArrayRotate":true,"stringArrayShuffle":true,"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.5,"deadCodeInjection":true,"deadCodeInjectionThreshold":0.2,"selfDefending":true,"transformObjectKeys":true,"identifierNamesGenerator":"mangled-shuffled"}
+base	webpack5-prod-node+obf4-default	webpack	webpack@5.112.2 + javascript-obfuscator@4.2.2	node	index.js	28	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {}
+base	esbuild0.28-iife+obf-default	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {}
+base	esbuild0.28-iife+obf-strings-base64	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["base64"],"stringArrayRotate":true,"stringArrayShuffle":true}
+base	esbuild0.28-iife+obf-strings-rc4-wrappers	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["rc4"],"stringArrayWrappersCount":2,"stringArrayWrappersType":"function","stringArrayWrappersChainedCalls":true,"stringArrayWrappersParametersMaxCount":4,"stringArrayIndexShift":true}
+base	esbuild0.28-iife+obf-strings-none	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayIndexesType":["hexadecimal-number","hexadecimal-numeric-string"]}
+base	esbuild0.28-iife+obf-cff	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.75}
+base	esbuild0.28-iife+obf-dead-code	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"deadCodeInjection":true,"deadCodeInjectionThreshold":0.4}
+base	esbuild0.28-iife+obf-self-defending	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"selfDefending":true,"compact":true}
+base	esbuild0.28-iife+obf-object-keys	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"transformObjectKeys":true}
+base	esbuild0.28-iife+obf-unicode	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"unicodeEscapeSequence":true}
+base	esbuild0.28-iife+obf-split-strings	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"splitStrings":true,"splitStringsChunkLength":5}
+base	esbuild0.28-iife+obf-numbers	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"numbersToExpressions":true,"simplify":true}
+base	esbuild0.28-iife+obf-rename-globals	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"renameGlobals":true}
+base	esbuild0.28-iife+obf-rename-properties	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"renameProperties":true,"renamePropertiesMode":"safe"}
+base	esbuild0.28-iife+obf-dictionary	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayRotate":true,"selfDefending":true,"compact":true,"identifierNamesGenerator":"dictionary","identifiersDictionary":[i+iìíîï x4]}
+base	esbuild0.28-iife+obf-heavy	esbuild	esbuild@0.28.2 + javascript-obfuscator@5.10.1	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["base64","rc4"],"stringArrayWrappersCount":1,"stringArrayRotate":true,"stringArrayShuffle":true,"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.5,"deadCodeInjection":true,"deadCodeInjectionThreshold":0.2,"selfDefending":true,"transformObjectKeys":true,"identifierNamesGenerator":"mangled-shuffled"}
+base	esbuild0.28-iife+obf4-default	esbuild	esbuild@0.28.2 + javascript-obfuscator@4.2.2	node	index.js	28	--bundle --platform=node --format=iife | obfuscate seed=5101 target=node {}
+corejs	webpack5-prod-node	webpack	webpack@5.112.2	node	index.js	85	mode=production minimize=false concatenateModules=false target=node
+corejs	webpack5-web-min	webpack	webpack@5.112.2	browser	index.js	85	mode=production target=web (terser default)
+corejs	webpack4-prod-node	webpack	webpack@4.47.0	node	index.js	85	mode=production minimize=false concatenateModules=false target=node
+corejs	rollup2-cjs21-iife	rollup	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	node	index.js	84	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup2-cjs22-iife	rollup	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	node	index.js	84	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup2-cjs22-iife-strict-true	rollup	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	node	index.js	85	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports
+corejs	rollup3-cjs24-iife	rollup	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	node	index.js	84	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup3-cjs25-iife	rollup	rollup@3.30.0 @rollup/plugin-commonjs@25.0.8	node	index.js	84	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup3-cjs25-cjs-split	rollup	rollup@3.30.0 @rollup/plugin-commonjs@25.0.8	node	index.js	84	--format=cjs node-resolve commonjs(defaults) json chunks
+corejs	rollup4-cjs25-iife	rollup	rollup@4.68.2 @rollup/plugin-commonjs@25.0.8	node	index.js	84	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup4-cjs28-iife	rollup	rollup@4.68.2 @rollup/plugin-commonjs@28.0.9	node	index.js	85	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup4-cjs29-iife	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	85	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup4-cjs29-iife-strict-true	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	85	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports
+corejs	rollup4-cjs29-iife-strict-auto	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	84	--format=iife node-resolve commonjs(strictRequires=auto) json inlineDynamicImports
+corejs	rollup4-cjs29-iife-strict-false	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	84	--format=iife node-resolve commonjs(strictRequires=false) json inlineDynamicImports
+corejs	rollup4-cjs29-cjs	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	85	--format=cjs node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup4-cjs29-cjs-split	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	85	--format=cjs node-resolve commonjs(defaults) json chunks
+corejs	rollup4-cjs29-es-split	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	85	--format=es node-resolve commonjs(defaults) json chunks
+corejs	rollup4-cjs29-umd	umd	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	85	--format=umd node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup4-cjs29-amd	amd	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	amd	index.js	85	--format=amd node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	rollup4-cjs29-system	systemjs	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	systemjs	index.js	85	--format=system node-resolve commonjs(defaults) json inlineDynamicImports
+corejs	vite4-iife	rollup	vite@4.5.14	node	index.js	84	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+corejs	vite5-iife	rollup	vite@5.4.21	node	index.js	84	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+corejs	vite6-iife	rollup	vite@6.4.6	node	index.js	85	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+corejs	vite7-iife	rollup	vite@7.3.8	node	index.js	85	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+corejs	vite8-iife	rollup	vite@8.3.8	node	index.js	85	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+corejs	rolldown-iife	rollup	rolldown@1.3.2	node	index.js	85	format=iife platform=node minify=false
+corejs	esbuild0.28-iife	esbuild	esbuild@0.28.2	node	index.js	85	--bundle --platform=node --format=iife
+corejs	esbuild0.28-cjs	esbuild	esbuild@0.28.2	node	index.js	85	--bundle --platform=node --format=cjs
+corejs	parcel-nohoist	parcel	parcel@2.16.4	node	index.js	86	context=node outputFormat=commonjs optimize=false scopeHoist=false
+corejs	browserify	browserify	browserify@17.0.1	node	index.js	85	browserify --node (Babel modules=commonjs source)
+corejs	rollup4-cjs29-iife-cjssrc	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	85	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports (Babel modules=commonjs source)
+corejs	rollup4-cjs29-iife+terser	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + terser@1.0.0	node	index.js	85	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | minify compress.passes=2 mangle comments=false
+corejs	rollup4-cjs29-iife+obf-default	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {}
+corejs	rollup4-cjs29-iife+obf-strings-rc4-wrappers	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["rc4"],"stringArrayWrappersCount":2,"stringArrayWrappersType":"function","stringArrayWrappersChainedCalls":true,"stringArrayWrappersParametersMaxCount":4,"stringArrayIndexShift":true}
+corejs	rollup4-cjs29-iife+obf-cff	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.75}
+corejs	rollup4-cjs29-iife+obf-self-defending	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"selfDefending":true,"compact":true}
+corejs	rollup4-cjs29-iife+obf-dictionary	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayRotate":true,"selfDefending":true,"compact":true,"identifierNamesGenerator":"dictionary","identifiersDictionary":[i+iìíîï x4]}
+corejs	rollup4-cjs29-iife-strict-true+obf-default	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports | obfuscate seed=5101 target=node {}
+corejs	rollup4-cjs29-iife-strict-true+obf-strings-rc4-wrappers	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["rc4"],"stringArrayWrappersCount":2,"stringArrayWrappersType":"function","stringArrayWrappersChainedCalls":true,"stringArrayWrappersParametersMaxCount":4,"stringArrayIndexShift":true}
+corejs	rollup4-cjs29-iife-strict-true+obf-cff	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports | obfuscate seed=5101 target=node {"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.75}
+corejs	rollup4-cjs29-iife-strict-true+obf-self-defending	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports | obfuscate seed=5101 target=node {"selfDefending":true,"compact":true}
+corejs	rollup4-cjs29-iife-strict-true+obf-dictionary	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + javascript-obfuscator@5.10.1	node	index.js	85	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayRotate":true,"selfDefending":true,"compact":true,"identifierNamesGenerator":"dictionary","identifiersDictionary":[i+iìíîï x4]}
+corejs	webpack5-prod-node+obf-default	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	85	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {}
+corejs	webpack5-prod-node+obf-strings-rc4-wrappers	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	85	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["rc4"],"stringArrayWrappersCount":2,"stringArrayWrappersType":"function","stringArrayWrappersChainedCalls":true,"stringArrayWrappersParametersMaxCount":4,"stringArrayIndexShift":true}
+corejs	webpack5-prod-node+obf-cff	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	85	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.75}
+corejs	webpack5-prod-node+obf-self-defending	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	85	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"selfDefending":true,"compact":true}
+corejs	webpack5-prod-node+obf-dictionary	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	85	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayRotate":true,"selfDefending":true,"compact":true,"identifierNamesGenerator":"dictionary","identifiersDictionary":[i+iìíîï x4]}

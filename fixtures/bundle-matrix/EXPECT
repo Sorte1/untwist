@@ -1,0 +1,75 @@
+# app/cell	lane	check	xfail|allow	reason
+# The first matching line wins. A bm-* reason names a gap in .superpowers/sdd/2026-11-05-v030/review/r51-bundle-gaps.md.
+base/rollup4-cjs29-iife+obf-heavy	*	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
+base/esbuild0.28-iife+obf-heavy	default	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
+base/esbuild0.28-iife+obf-heavy	split	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
+base/browserify+uglify	*	node	xfail	bm-browserify-require-rebound: a module that redeclares its require parameter (var e=e(...)) is written with an unbound call
+*+obf*	default	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
+*+obf*	split	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
+*+obf*	default	clean	xfail	safe-global-names: the default lane keeps the string array when code may hold the global object
+*+obf*	split	clean	xfail	safe-global-names: the default lane keeps the string array when code may hold the global object
+*+obf-heavy	unsafe	clean	xfail	bm-obf-heavy-proxies: CFF dispatchers and proxy objects survive the unsafe lane in a bundle-sized program
+base/rollup4-cjs29-iife+obf-heavy	unsafe	recognised	xfail	bm-obf-heavy-proxies: CFF dispatchers and proxy objects left by the unsafe lane hide the rollup shell
+base/esbuild*+obf-object-keys	unsafe	recognised	xfail	bm-obf-object-keys: transformObjectKeys leaves esbuild's __commonJS/__esm maps as statement sequences the esbuild detector refuses
+*/webpack*-dev-eval*	*	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
+*/webpack5-web-runtime-chunk	default	recognised	xfail	bm-webpack-runtime-chunk: a separate runtime chunk (runtimeChunk single) is refused (chunk start not proven)
+*/webpack5-web-runtime-chunk	*	recognised	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle instead
+*/webpack5-web-runtime-chunk	split	node	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle and needs the browser
+*/webpack5-web-runtime-chunk	unsafe	node	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle and needs the browser
+*/webpack5-web-runtime-chunk	split	modules	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle instead
+*/webpack5-web-runtime-chunk	unsafe	modules	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle instead
+*/webpack5-umd	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
+*/webpack5-system	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
+*/webpack5-web-es5	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
+*/webpack5-amd	*	recognised	xfail	bm-webpack-in-amd: the AMD library wrapper is unpacked as one amd module; the webpack bundle inside is not
+*/webpack5-amd	*	modules	xfail	bm-webpack-in-amd: the AMD library wrapper is unpacked as one amd module; the webpack bundle inside is not
+*/webpack*-web-split	*	node	xfail	bm-webpack-async-chunks: only the split vendors chunk is unpacked; the entry with the chunk-loading runtime is not, so the output has no entry
+*/webpack*-web-split	*	modules	xfail	bm-webpack-async-chunks: only the split vendors chunk is unpacked; the entry with the chunk-loading runtime is not
+base/webpack5-dev-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack5-prod-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack5-prod-node+*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack5-prod-concat*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack5-prod-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack5-web-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack5-esm-output*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack5-federation*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack4-dev-node*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack4-prod-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack4-prod-node+*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack4-prod-concat*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+base/webpack4-prod-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
+*/webpack5-web-noiife	*	modules	xfail	bm-webpack-noiife: output.iife=false leaves one module in the prelude
+corejs/webpack*	*	modules	allow	unpack writes webpack's runtime as a module of its own
+*/rollup*-iife*	default	recognised	allow	rollup-split-opt-in: a scope-hoisted bundle is split only with --split-hoisted
+*/vite*-iife*	default	recognised	allow	rollup-split-opt-in: a scope-hoisted bundle is split only with --split-hoisted
+*/rollup*	*	modules	allow	rollup-split-heuristic: --split-hoisted finds module boundaries by a heuristic, not the bundler's
+*/vite*	*	modules	allow	rollup-split-heuristic: --split-hoisted finds module boundaries by a heuristic, not the bundler's
+*/rollup4-cjs29-umd	*	recognised	allow	bm-wrapped-hoisted: the UMD/AMD/System wrapper is unpacked as one module; the hoisted bundle inside is not split
+*/rollup4-cjs29-amd	*	recognised	allow	bm-wrapped-hoisted: the UMD/AMD/System wrapper is unpacked as one module; the hoisted bundle inside is not split
+*/rollup4-cjs29-system	*	recognised	allow	bm-wrapped-hoisted: the UMD/AMD/System wrapper is unpacked as one module; the hoisted bundle inside is not split
+*/rollup*-cjs	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
+*/rollup*-cjs-split	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
+*/rollup*-es-split	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
+*/vite4-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
+*/vite5-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
+*/vite6-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
+*/vite7-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
+*/rolldown-esm*	*	node	xfail	bm-esm-split-chunks: the entry is unpacked but the code-split chunk it imports is written as deobfuscated.<name>.js
+*/vite8-es-min	*	node	xfail	bm-esm-split-chunks: the entry is unpacked but the code-split chunk it imports is written as deobfuscated.<name>.js
+*/rolldown*	*	recognised	xfail	bm-rolldown: rolldown output (also vite 8) is refused as rollup (shape not proven) or read as esbuild with one module
+*/rolldown-esm*	*	modules	xfail	bm-rolldown: rolldown output (also vite 8) is refused as rollup (shape not proven) or read as esbuild with one module
+*/vite8-*	*	recognised	xfail	bm-rolldown: rolldown output (also vite 8) is refused as rollup (shape not proven) or read as esbuild with one module
+*/rollup*-cjssrc	*	recognised	xfail	bm-rollup-cjs-wrappers: (R51-RC) a bundle of @rollup/plugin-commonjs wrappers is not split
+*/esbuild*-esm-split	*	recognised	xfail	bm-esm-split-chunks: esbuild/bun --splitting output (entry plus shared chunks) is not unpacked
+*/bun-esm-splitting	*	node	xfail	bm-esm-split-chunks: the entry is unpacked but the code-split chunk it imports is written as deobfuscated.<name>.js
+*/bun-iife-minify	*	recognised	xfail	bm-bun-minify: bun build --minify --format=iife is refused (esbuild shape not proven)
+*/esbuild*	*	modules	allow	esbuild-hoisted-esm: esbuild scope-hoists ES modules that nothing requires lazily, so their boundaries are gone
+*/esbuild*-iife+terser	*	recognised	xfail	bm-minified-esbuild: esbuild output minified again by terser, swc or uglify is refused (esbuild shape not proven)
+*/esbuild*-iife+swc-min	*	recognised	xfail	bm-minified-esbuild: esbuild output minified again by terser, swc or uglify is refused (esbuild shape not proven)
+*/esbuild*-iife+uglify	*	recognised	xfail	bm-minified-esbuild: esbuild output minified again by terser, swc or uglify is refused (esbuild shape not proven)
+*/rollup*-iife+uglify	*	recognised	xfail	bm-minified-rollup: uglify output of a rollup IIFE is not split by --split-hoisted
+base/parcel-hoist	unsafe	recognised	xfail	bm-parcel-unsafe-hoist: the scope-hoisted parcel bundle that the default lane unpacks is refused in the unsafe lane (shape not proven)
+*/parcel-hoist	*	modules	allow	parcel-scope-hoist: parcel scope hoisting merges modules
+base/parcel-nohoist*	*	recognised	xfail	bm-parcel-node-modules: parcel output that bundles node_modules or is minified is refused (shape not proven)
+base/parcel-hoist-min*	*	recognised	xfail	bm-parcel-node-modules: parcel output that bundles node_modules or is minified is refused (shape not proven)
+corejs/parcel*	*	recognised	xfail	bm-parcel-node-modules: parcel output that bundles node_modules or is minified is refused (shape not proven)

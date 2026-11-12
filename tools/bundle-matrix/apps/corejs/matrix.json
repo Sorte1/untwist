@@ -1,0 +1,8 @@
+{
+  "polyfills": ["es.array.at", "es.object.has-own", "es.string.replace-all"],
+  "cells": ["rollup*", "vite*-iife", "rolldown-iife", "webpack5-prod-node", "webpack5-web-min", "webpack4-prod-node", "esbuild0.28-iife", "esbuild0.28-cjs", "parcel-nohoist", "browserify"],
+  "minify": ["rollup4-cjs29-iife"],
+  "minifiers": ["terser"],
+  "obfuscate": ["rollup4-cjs29-iife", "rollup4-cjs29-iife-strict-true", "webpack5-prod-node"],
+  "obfuscators": ["obf-default", "obf-strings-rc4-wrappers", "obf-self-defending", "obf-dictionary", "obf-cff"]
+}

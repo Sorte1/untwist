@@ -1,0 +1,14 @@
+exit=0
+eval cycle-a start
+eval cycle-b
+eval cycle-a end
+eval util
+eval index
+last 5 own true
+replace a+b+c
+chunk [[1,2],[3,4],[5]]
+cycle b saw a-early,undefined b later a-late
+label [.fixture] total 15
+eval lazy
+lazy 42 lazy-default
+settled fulfilled,rejected
