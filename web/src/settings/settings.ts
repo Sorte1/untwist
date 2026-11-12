@@ -1,4 +1,4 @@
-export type RenameMode = 'none' | 'simple' | 'unique' | 'mangle';
+export type RenameMode = 'none' | 'simple' | 'smart' | 'unique' | 'mangle';
 export type View = 'output' | 'diff' | 'steps';
 export type ThemeChoice = 'dark' | 'light';
 export type InputVisibility = 'shown' | 'hidden';
@@ -23,7 +23,7 @@ export interface Settings {
   readonly input: InputVisibility;
 }
 
-export const RENAME_MODES: readonly RenameMode[] = ['none', 'simple', 'unique', 'mangle'];
+export const RENAME_MODES: readonly RenameMode[] = ['none', 'simple', 'smart', 'unique', 'mangle'];
 export const WASM_CHECKS: readonly WasmCheck[] = ['off', 'on', 'auto'];
 export const DEFAULT_FUEL = 50_000_000;
 
@@ -51,6 +51,7 @@ export const CLI_DEFAULTS: Settings = { ...DEFAULTS, unsafe: false };
 export const RENAME_HINTS: Readonly<Record<RenameMode, string>> = {
   none: 'Keep identifiers exactly as in the input (the default).',
   simple: 'Per-function a, b, … sequences.',
+  smart: 'Names from evidence: i for loop counters, item and index in callbacks, err in catch, canvas for createElement("canvas"); human-written names stay.',
   unique: 'Program-wide readable names such as fn1, arr2, handler3.',
   mangle: 'Short mangled names (a, b, … aa, ab) chosen program-wide.',
 };
