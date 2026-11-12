@@ -13,6 +13,7 @@ use untwist_core::ast_util::search::{expressions_at, statements_at};
 use untwist_core::semantic::is_constant_binding;
 
 use super::sequenced::block_function_rebinds;
+use crate::call_checks::evaluates_every_operand;
 use crate::init_order::{capacity_hint, with_slack};
 
 #[derive(Clone, Copy, Hash)]
@@ -33,6 +34,7 @@ struct Found {
     init: Option<Span>,
     initialised_in: Vec<Span>,
     rebound: bool,
+    conditional: bool,
     assignments: Vec<Assignment>,
     references: Vec<Reference>,
 }
@@ -43,6 +45,7 @@ pub(super) struct VariableFacts<'v> {
     pub(super) init: Option<Span>,
     pub(super) initialised_in: &'v [Span],
     pub(super) rebound: bool,
+    pub(super) conditional: bool,
     pub(super) assignments: &'v [Assignment],
     pub(super) references: &'v [Reference],
     pub(super) members: &'v FxHashMap<Span, usize>,
@@ -65,6 +68,7 @@ impl Variables {
             init: found.init,
             initialised_in: &found.initialised_in,
             rebound: found.rebound,
+            conditional: found.conditional,
             assignments: &found.assignments,
             references: &found.references,
             members: &self.members,
@@ -123,6 +127,18 @@ struct VariableScan<'s> {
     plain: FxHashSet<Span>,
     top_list: bool,
     top_functions: FxHashSet<Span>,
+    conditional: bool,
+}
+
+fn runs_its_expressions_once(statement: &Statement<'_>) -> bool {
+    matches!(
+        statement,
+        Statement::ExpressionStatement(_)
+            | Statement::VariableDeclaration(_)
+            | Statement::ReturnStatement(_)
+            | Statement::ThrowStatement(_)
+            | Statement::IfStatement(_)
+    )
 }
 
 impl VariableScan<'_> {
@@ -214,10 +230,30 @@ impl<'a> VisitJs<'a> for VariableScan<'_> {
     }
 
     fn visit_statement(&mut self, it: &Statement<'a>) {
-        let outer = self.statement;
+        let outer = (self.statement, self.conditional);
         self.statement = it.span();
+        self.conditional = !runs_its_expressions_once(it);
         walk_js::walk_statement(self, it);
-        self.statement = outer;
+        (self.statement, self.conditional) = outer;
+    }
+
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        let outer = self.conditional;
+        self.conditional = outer || !evaluates_every_operand(it);
+        walk_js::walk_expression(self, it);
+        self.conditional = outer;
+    }
+
+    fn visit_assignment_pattern(&mut self, it: &AssignmentPattern<'a>) {
+        let outer = std::mem::replace(&mut self.conditional, true);
+        walk_js::walk_assignment_pattern(self, it);
+        self.conditional = outer;
+    }
+
+    fn visit_assignment_target_with_default(&mut self, it: &AssignmentTargetWithDefault<'a>) {
+        let outer = std::mem::replace(&mut self.conditional, true);
+        walk_js::walk_assignment_target_with_default(self, it);
+        self.conditional = outer;
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
@@ -262,7 +298,9 @@ impl<'a> VisitJs<'a> for VariableScan<'_> {
             if let AssignmentTarget::AssignmentTargetIdentifier(target) = &it.left {
                 let slot = self.target(target.reference_id.get());
                 let statement = self.statement;
+                let conditional = self.conditional;
                 if let Some(found) = self.found_at(slot) {
+                    found.conditional |= conditional;
                     found.assignments.push(Assignment {
                         statement,
                         expression: it.span,
@@ -320,6 +358,7 @@ fn scan(program: &Program<'_>, scoping: &Scoping, targets: Targets, uses: bool) 
         plain: FxHashSet::default(),
         top_list: false,
         top_functions: FxHashSet::default(),
+        conditional: false,
     };
     scan.visit_program(program);
     let VariableScan {

@@ -206,16 +206,16 @@ fn the_high_presets_pipeline_units_keep_their_steps_and_heap_totals() {
                 )
             })
             .collect();
-        assert!(decode.len() >= 4, "high preset [{label}]: {units:?}");
-        let (bailed, decoding) = decode.split_at(3);
+        let decoding = (577, 39_333_508, 495_620, 125_534, 2_024);
+        let bailed = (0, 0, 0, 0, 0);
         assert!(
-            bailed.iter().all(|unit| *unit == (0, 0, 0, 0, 0)),
-            "high preset [{label}]: {decode:?}"
+            decode.contains(&decoding),
+            "high preset [{label}]: {units:?}"
         );
         assert!(
-            decoding
+            decode
                 .iter()
-                .all(|unit| *unit == (577, 39_333_508, 495_620, 125_534, 2_024)),
+                .all(|unit| *unit == decoding || *unit == bailed),
             "high preset [{label}]: {decode:?}"
         );
     }

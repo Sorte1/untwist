@@ -507,19 +507,19 @@ fn a_settled_replay_that_ignores_edits_diverges_on_a_named_fixture() {
         .map(|(_, source)| source)
         .expect("corpus-npm/case-010.js");
     stale_settled_for_tests(true);
-    let stale = run(&source, MODES[0], false);
+    let stale = run(&source, MODES[2], false);
     stale_settled_for_tests(false);
-    let settled = run(&source, MODES[0], false);
-    let full = run(&source, MODES[0], true);
+    let settled = run(&source, MODES[2], false);
+    let full = run(&source, MODES[2], true);
     assert!(stale != full);
     assert!(settled == full);
-    assert!(replays(&source, false) > 0);
-    assert_eq!(replays(&source, true), 0);
+    assert!(replays(&source, MODES[2], false) > 0);
+    assert_eq!(replays(&source, MODES[2], true), 0);
 }
 
-fn replays(source: &str, full: bool) -> usize {
+fn replays(source: &str, mode: Mode, full: bool) -> usize {
     full_rounds_for_tests(full);
-    let out = Pipeline::new(options(MODES[0])).run(source);
+    let out = Pipeline::new(options(mode)).run(source);
     full_rounds_for_tests(false);
     out.stages
         .iter()

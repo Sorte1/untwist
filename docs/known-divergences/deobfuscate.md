@@ -75,7 +75,11 @@
   `REFERENCE_NOT_DOMINATED`, because a closure can run at a time source order does not predict:
   the reference deobfuscator's `getNearestAssignment` (`ast-utils/inline.ts:45-47`) picks the nearest *textually*
   preceding assignment and so rewrites `var k; k = 1; function g() { return d(k); } k = 0;` to
-  read `1` where the program reads `0`. Effect: Untwist leaves a decodable site behind on a
+  read `1` where the program reads `0`. Without `--unsafe` every write must also be one its
+  statement always performs: a write under `&&`, `||`, `??`, `?:`, a logical assignment, an
+  optional chain, a default value, a loop or any other position that may be skipped or repeated,
+  as in `var k; k = 1; c && (k = 2); d(k)`, makes the variable unknown and refuses it with
+  `NON_LITERAL_WRITE`. Effect: Untwist leaves a decodable site behind on a
   bundle that assigns around a function; the reference deobfuscator miscompiles it.
 - **An optional call to a decoder is decoded; the reference deobfuscator ignores it**. `collect_calls`
   accepts a `ChainExpression` whose element is a call to a stamped decoder (`__DECODE_0__?.(0x1)`)
@@ -200,18 +204,67 @@
   the shared utility is safe for all four callers. Effect: on `function w(x, y) { return d(x + s,
   y); }` inlined into a caller that shadows `s`, the reference deobfuscator prints a different string (or throws);
   Untwist keeps the wrapper.
-- **A wrapper call site is inlined only when every argument can be duplicated, dropped and
-  reordered**. Name-based substitution evaluates an argument once per occurrence of
+- **A wrapper call site is inlined only when substitution keeps what the call evaluates, how
+  often and in which order**. Name-based substitution evaluates an argument once per occurrence of
   its parameter in the body, not at all when the parameter is unused, and in the body's order
-  rather than the call's. Untwist therefore requires each argument to be an identifier, a
-  numeric/string/boolean/null literal, `void 0`, a unary `-`/`+`/`!`/`~` of one of those, a binary
-  expression of those, or a call to a stamped decoder; anything else -- `w(i++, 1)`, `w(f(), 1)`,
-  a member read, an assignment -- keeps that call site with a note, and the wrapper with it. A
-  site whose arguments still contain an unresolved wrapper call is deferred instead, so nested
-  wrappers keep flattening across iterations. The reference deobfuscator substitutes regardless, so `w(i++, 0)`
-  leaves `i` at 2 where the program leaves it at 1. Effect: Untwist decodes fewer sites on
-  hand-written inputs; obfuscator.io passes literals and decoder calls, so its shapes are
-  unaffected.
+  rather than the call's. This entry used to say that an identifier, and any unary or binary
+  expression over identifiers and decoder calls, can be duplicated, dropped and reordered. That
+  was wrong and is withdrawn: an identifier may be undeclared or in its dead zone, so dropping it
+  loses a `ReferenceError`, and it may hold an object whose `valueOf` or `toString` runs once per
+  use and at the place of the use. Without `--unsafe` the rule is now:
+  - an argument built only from numeric/string/boolean/null literals, the global `undefined`,
+    identifiers proven to hold a primitive, `void` and unary `-`/`+`/`!`/`~` of those, and binary
+    expressions of those other than `in` and `instanceof`, may be duplicated, dropped and
+    reordered. An identifier is proven to hold a primitive when its binding is never written
+    after its declaration, is declared with a string or number literal, no direct `eval` can see
+    it, and it cannot be read in its dead zone: it is a `var`, the read follows the declaration in
+    the same function, or the declaration is among the first statements of a function body that
+    only declare literals or functions, so no code of that function, and no closure it creates,
+    runs before it is initialised;
+  - a bare identifier may be dropped when it resolves to a `var`, function or parameter binding,
+    which has no dead zone, and the site is neither under `with` nor inside a parameter list;
+  - an identifier read after assignments to it earlier in the same comma sequence, or in the
+    expression statements right before the statement that makes the call, counts as such a value
+    too when each assigned value is built from literals and proven primitives with unary and
+    arithmetic operators, as in terser's `(e = "0x24d", n = "0x258", w(e - 0x20e, n))`, and no
+    other argument of the call can run code;
+  - a bare identifier that is never written, has no dead zone, is not global, and whose function
+    neither reads `arguments` nor can be reached by a direct `eval`, may be read anywhere among
+    the other arguments when the body only passes it on as a bare argument of its call: reading
+    it has no effect and its value cannot change;
+  - any other argument (an identifier the body uses, a decoder call, an expression over
+    identifiers) is accepted only when the body uses its parameter exactly once, outside `?:`,
+    `&&`, `||` and `??`, and the wrapper's returned expression holds nothing but literals, those
+    operators, its parameters and calls to fixed names. One such argument is then surrounded by
+    effect-free work, so it still runs once and nothing observable moves across it. Several are
+    accepted only when the body reads them in the order the call passes them, makes no call
+    besides the one it forwards to, and every one but the last is a unary or arithmetic
+    expression, whose effects all happen while it is evaluated and whose result is a primitive.
+    `w(o, n)` with `o` an object is refused: `o`'s `valueOf` would run after `n` is read in the
+    program but before it in the inlined body.
+  - through a chain of wrappers, each link is judged on what is already known of the arguments
+    it receives, not on the substituted text;
+  - a function expression called where it is written, whose body only returns a call to an
+    outer binding, is inlined first when every argument is a value of the first kind, so a
+    wrapper it forwards to sees those values.
+
+  Anything else -- `w(x, y)` where the body reads both, `w(o, 1)` where the body reads `o` twice,
+  `w(i++, 1)`, `w(f(), 1)`, a member read -- keeps that call site with a note, and the wrapper
+  with it. An argument that only assigns literal arithmetic to locals, as in `w(t = 5, 1)`, is
+  hoisted in front of the inlined body when each local is a plain `var`, `let` or parameter that
+  is not a top-level `var`, is written once at the site, and every read at the site follows its
+  write; two writes to one name, a write to a `const`, to a function expression's own name, to an
+  undeclared name or under `with` keep the site. A wrapper that is async, a generator, or has a
+  default, rest, destructured or repeated parameter is never inlined, as a declaration or called
+  where it is written, because calling it does more than evaluate the expression it returns. A
+  wrapper that forwards to another wrapper is inlined at its own call sites through the whole
+  chain at once, under the same rule at every link, instead of first into the wrapper it
+  forwards to. A site whose arguments still contain an unresolved wrapper call is deferred, so
+  nested wrappers keep flattening across iterations. The reference deobfuscator substitutes
+  regardless, so `w(i++, 0)` leaves `i` at 2 where the program leaves it at 1. `--unsafe` keeps
+  the earlier rule. Effect: Untwist decodes fewer sites on hand-written inputs; obfuscator.io
+  passes literals and `const` string literals, which the rule accepts. Pinned by
+  `crates/untwist/tests/decoder_call_soundness_rows.rs`.
 - **Nothing is inlined into a position that can run before its declaration**.
   One helper (`untwist_deobfuscate::init_order`) answers, for a declaration and a reference,
   whether the reference can only run after the declaration's initialiser: the reference must be a
@@ -821,9 +874,13 @@
   refuses there although node reads the outer binding.
   `control-flow-object`'s declared form keeps the name-wide rule, so a name any block function
   shares is refused there in strict code too, and the call judgement still treats such a name as
-  opaque. Pinned by `crates/untwist/tests/annex_b_rows.rs` and
+  opaque. Without `--unsafe` the same per-binding refusal covers the three other places that
+  replace a name by what it was declared with: a constant used as a decoder argument, a decoder
+  alias, and a decoder wrapper. `var k = 1; { function k() {} } dec(k)` passes the function, not
+  1, so the call keeps its variable; an alias or wrapper a block function may overwrite stays in
+  place with its call sites. Pinned by `crates/untwist/tests/annex_b_rows.rs`,
   `crates/untwist-deobfuscate/tests/annex_b_scope.rs` (node rows in both modes, and the rows that
-  must still inline in both).
+  must still inline in both) and `crates/untwist/tests/decoder_call_soundness_rows.rs`.
 - **The call-substitution walk has a depth limit and a size budget**. Where it walks a
   helper's body again at a call, with the call's arguments substituted, it stops at 64 nested
   helpers or once the bodies it has walked add up to four times the input's size (at least
@@ -1152,7 +1209,11 @@
   where no site may observe global names. `--rename` leaves the stamped names alone, and machinery
   that survives the final sweep is unstamped and then renamed by the same renamer, so renamed output
   stays idempotent. A stamp never takes a name the input already spells, as a binding or as a free
-  reference, so `typeof __STRING_ARRAY__` in the input keeps node's value, and a
+  reference, so `typeof __STRING_ARRAY__` in the input keeps node's value. The spelling alone
+  carries no trust either: an input that itself declares a binding spelled `__STRING_ARRAY__` or
+  `__DECODE_n__` could have its own functions taken for marked machinery by the stages that find
+  machinery by name, so without `--unsafe` nothing is decoded in such an input and a note says
+  so. A
   `--report` note that the machinery was kept is dropped when a later sweep removes it. A site observes global names when it is an enumeration or name test of a base
   that may be the global object, or an unknown or printing call taking such a base as an argument.
   A base is proven not to be the global object when it is a primitive, a template literal, a fresh

@@ -17,6 +17,7 @@ use untwist_core::semantic::{
     AnnexBWrites,
 };
 
+use crate::call_checks::call_checks_apply;
 use crate::init_order::{scan_init_order, DeclarationSlot, InitOrder};
 use crate::mutants::external_write_order_trusted;
 use crate::notes;
@@ -273,6 +274,10 @@ fn inline_constant_variable<'a>(
         cx.note(notes::NO_LITERAL_INITIALISER, facts.declaration);
         return;
     };
+    if facts.rebound && call_checks_apply(cx.opts) {
+        cx.note(notes::BLOCK_FUNCTION_NAME, facts.statement);
+        return;
+    }
     let mark = order.budget_exhausted();
     if references_run_after_the_initialiser(facts, order).is_none() {
         cx.note(notes::USE_BEFORE_INITIALISATION, facts.statement);
@@ -449,13 +454,14 @@ fn assigned_refusal(
     facts: &VariableFacts<'_>,
     assignments: &[Assignment],
     symbol: SymbolId,
-    scoping: &Scoping,
+    cx: &Cx<'_, '_>,
 ) -> Option<&'static str> {
     if !shares_the_declaration_list(facts, assignments) {
         return Some(notes::ASSIGNMENT_NOT_BESIDE_THE_DECLARATION);
     }
-    if assignments.len() != write_reference_count(scoping, symbol)
+    if assignments.len() != write_reference_count(cx.scoping(), symbol)
         || initialised_beside_an_assignment(facts, assignments)
+        || (facts.conditional && call_checks_apply(cx.opts))
     {
         return Some(notes::NON_LITERAL_WRITE);
     }
@@ -503,7 +509,7 @@ fn inline_assigned_variable<'a>(
     if assignments.is_empty() {
         return;
     }
-    let refusal = assigned_refusal(facts, &assignments, symbol, cx.scoping());
+    let refusal = assigned_refusal(facts, &assignments, symbol, cx);
     let rewritten = inline_assigned_references(
         view,
         (facts, symbol),

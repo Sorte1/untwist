@@ -5,9 +5,8 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::UnaryOperator;
-use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
 use untwist_core::ast_util::inline::{inline_function_call, param_names, returned_expression};
 use untwist_core::ast_util::literal::is_undefined_like;
@@ -16,26 +15,33 @@ use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{is_constant_binding, AnnexBWrites};
 
+use crate::call_checks::{call_checks_apply, is_plain_function};
 use crate::init_order::try_scan_init_order;
 use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
+use crate::primitive_names::PrimitiveNames;
 use crate::probe::{expression_contains, holds_own_scope};
+use crate::proof::refuse_annex_b_bindings;
 use crate::stamp::{declaration_symbol, decoder_index, is_machinery_name};
 use crate::units::MachineryDepth;
-use crate::wrapper_effects::inline_keeping_effects;
+use crate::wrapper_args::{kinds_fit, SiteView};
+use crate::wrapper_chain::{drop_broken_chains, promote_forwarders, Candidate, Chain, Fits};
+use crate::wrapper_effects::{inline_keeping_effects, inline_local_writes};
+use crate::wrapper_sites::{called_expression, collect_sites, CallSite, FunctionsAt, Sites};
 
 pub const WRAPPER_ROUND_CAP: usize = 16;
 
 pub const WRAPPER_EFFECT_CHECKS: &str = "inline-decoder-wrappers/effect-checks";
 
-struct WrapperShape {
-    statement: Span,
-    symbol: SymbolId,
-    function: Span,
-    bound_by_var: bool,
+pub(crate) struct WrapperShape {
+    pub(crate) statement: Span,
+    pub(crate) symbol: SymbolId,
+    pub(crate) function: Span,
+    pub(crate) bound_by_var: bool,
+    pub(crate) forwards_to: Option<SymbolId>,
 }
 
-fn uses_any_param(arguments: &AVec<'_, Argument<'_>>, names: &[&str]) -> bool {
+pub(crate) fn uses_any_param(arguments: &AVec<'_, Argument<'_>>, names: &[&str]) -> bool {
     arguments.iter().any(|argument| {
         argument.as_expression().is_some_and(|expr| {
             expression_contains(expr, |inner| {
@@ -45,7 +51,10 @@ fn uses_any_param(arguments: &AVec<'_, Argument<'_>>, names: &[&str]) -> bool {
     })
 }
 
-fn is_wrapper(stmt: &Statement<'_>) -> Option<WrapperShape> {
+fn wrapper_shape<'k, 'a>(
+    stmt: &'k Statement<'a>,
+    target: impl Fn(&IdentifierReference<'a>) -> Option<Option<SymbolId>>,
+) -> Option<(WrapperShape, &'k Function<'a>)> {
     let declaration = var_function_or_declaration(stmt)?;
     if decoder_index(declaration.name).is_some() {
         return None;
@@ -59,26 +68,26 @@ fn is_wrapper(stmt: &Statement<'_>) -> Option<WrapperShape> {
     if arguments.is_empty() {
         return None;
     }
-    decoder_index(identifier_name(callee)?)?;
+    let Expression::Identifier(callee) = callee else {
+        return None;
+    };
+    let forwards_to = target(callee)?;
     if !uses_any_param(arguments, &names) {
         return None;
     }
-    Some(WrapperShape {
+    let shape = WrapperShape {
         statement: stmt.span(),
         symbol: declaration_symbol(stmt)?,
         function: declaration.function.span,
         bound_by_var: matches!(stmt, Statement::VariableDeclaration(_)),
-    })
+        forwards_to,
+    };
+    Some((shape, declaration.function))
 }
 
-fn returns_nested_function(stmt: &Statement<'_>) -> bool {
-    let Some(declaration) = var_function_or_declaration(stmt) else {
-        return false;
-    };
-    let Some(returned) = returned_expression(declaration.function) else {
-        return false;
-    };
-    expression_contains(returned, holds_own_scope)
+pub(crate) fn returns_nested_function(function: &Function<'_>) -> bool {
+    returned_expression(function)
+        .is_some_and(|returned| expression_contains(returned, holds_own_scope))
 }
 
 pub(crate) fn is_substitutable_argument(expr: &Expression<'_>) -> bool {
@@ -133,6 +142,8 @@ pub(crate) fn arguments_are_substitutable(arguments: &AVec<'_, Argument<'_>>) ->
 struct BodyScan<'s> {
     scoping: &'s Scoping,
     params: FxHashSet<SymbolId>,
+    forwards_to: Option<SymbolId>,
+    forwards: usize,
     escapes: bool,
 }
 
@@ -145,6 +156,10 @@ impl<'a> VisitJs<'a> for BodyScan<'_> {
             .reference_id
             .get()
             .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        if symbol.is_some() && symbol == self.forwards_to {
+            self.forwards += 1;
+            return;
+        }
         if !symbol.is_some_and(|symbol| self.params.contains(&symbol)) {
             self.escapes = true;
         }
@@ -162,7 +177,11 @@ impl<'a> VisitJs<'a> for BodyScan<'_> {
     }
 }
 
-fn body_is_self_contained(function: &Function<'_>, scoping: &Scoping) -> bool {
+pub(crate) fn body_is_self_contained(
+    function: &Function<'_>,
+    scoping: &Scoping,
+    forwards_to: Option<SymbolId>,
+) -> bool {
     let Some(returned) = returned_expression(function) else {
         return false;
     };
@@ -179,13 +198,15 @@ fn body_is_self_contained(function: &Function<'_>, scoping: &Scoping) -> bool {
     let mut scan = BodyScan {
         scoping,
         params,
+        forwards_to,
+        forwards: 0,
         escapes: false,
     };
     scan.visit_expression(returned);
-    !scan.escapes
+    !scan.escapes && scan.forwards == usize::from(forwards_to.is_some())
 }
 
-fn binding_is_stable(scoping: &Scoping, symbol: SymbolId) -> bool {
+pub(crate) fn binding_is_stable(scoping: &Scoping, symbol: SymbolId) -> bool {
     if wrapper_guards_dropped() {
         return true;
     }
@@ -207,7 +228,7 @@ fn binding_is_stable(scoping: &Scoping, symbol: SymbolId) -> bool {
             == 1
 }
 
-fn arguments_hold_a_scope(arguments: &AVec<'_, Argument<'_>>) -> bool {
+pub(crate) fn arguments_hold_a_scope(arguments: &AVec<'_, Argument<'_>>) -> bool {
     arguments.iter().any(|argument| {
         argument
             .as_expression()
@@ -215,206 +236,68 @@ fn arguments_hold_a_scope(arguments: &AVec<'_, Argument<'_>>) -> bool {
     })
 }
 
-struct WrapperSearch<'s> {
+struct WrapperSearch<'p, 's> {
     scoping: &'s Scoping,
     units: MachineryDepth,
+    checked: bool,
     found: Vec<WrapperShape>,
+    forwarders: Vec<Candidate<'p>>,
     rejected: Vec<(Span, &'static str)>,
 }
 
-impl<'a> VisitJs<'a> for WrapperSearch<'_> {
-    fn visit_statement(&mut self, it: &Statement<'a>) {
-        let entered = self.units.enter(it);
-        if !self.units.inside() {
-            if let Some(shape) = is_wrapper(it) {
-                if returns_nested_function(it) {
-                    self.rejected
-                        .push((shape.statement, notes::WRAPPER_NESTED_FUNCTION));
-                } else if !binding_is_stable(self.scoping, shape.symbol) {
-                    self.rejected
-                        .push((shape.statement, notes::WRAPPER_BINDING_UNSTABLE));
-                } else if !var_function_or_declaration(it).is_some_and(|declaration| {
-                    body_is_self_contained(declaration.function, self.scoping)
-                }) {
-                    self.rejected
-                        .push((shape.statement, notes::WRAPPER_BODY_NOT_SELF_CONTAINED));
-                } else {
-                    self.found.push(shape);
-                }
-            }
+impl<'p> WrapperSearch<'p, '_> {
+    fn target(&self, callee: &IdentifierReference<'_>) -> Option<Option<SymbolId>> {
+        let name = callee.name.as_str();
+        if decoder_index(name).is_some() {
+            return Some(None);
         }
-        walk_js::walk_statement(self, it);
-        self.units.leave(entered);
-    }
-}
-
-fn called_expression<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k CallExpression<'a>> {
-    match expr {
-        Expression::CallExpression(call) => Some(call),
-        Expression::ChainExpression(chain) => match &chain.expression {
-            ChainElement::CallExpression(call) => Some(call),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-struct CallSite<'p> {
-    wrapper: SymbolId,
-    span: Span,
-    arguments: &'p AVec<'p, Argument<'p>>,
-    ancestors: Vec<usize>,
-    in_a_wrapper_body: bool,
-}
-
-struct SiteSearch<'p, 's> {
-    scoping: &'s Scoping,
-    wrappers: FxHashSet<SymbolId>,
-    units: MachineryDepth,
-    machinery_functions: usize,
-    bodies: usize,
-    stack: Vec<usize>,
-    found: Vec<CallSite<'p>>,
-}
-
-impl SiteSearch<'_, '_> {
-    fn called_wrapper(&self, expr: &Expression<'_>) -> Option<SymbolId> {
-        let call = called_expression(expr)?;
-        let Expression::Identifier(id) = &call.callee else {
+        if !self.checked || is_machinery_name(name) {
             return None;
-        };
-        let symbol = id
-            .reference_id
-            .get()
-            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())?;
-        self.wrappers.contains(&symbol).then_some(symbol)
+        }
+        let reference = callee.reference_id.get()?;
+        self.scoping.get_reference(reference).symbol_id().map(Some)
     }
 
-    fn declares_a_wrapper(&self, stmt: &Statement<'_>) -> bool {
-        declaration_symbol(stmt).is_some_and(|symbol| self.wrappers.contains(&symbol))
+    fn refusal(&self, shape: &WrapperShape, function: &Function<'_>) -> Option<&'static str> {
+        if returns_nested_function(function) {
+            return Some(notes::WRAPPER_NESTED_FUNCTION);
+        }
+        if !binding_is_stable(self.scoping, shape.symbol) {
+            return Some(notes::WRAPPER_BINDING_UNSTABLE);
+        }
+        if !body_is_self_contained(function, self.scoping, None) {
+            return Some(notes::WRAPPER_BODY_NOT_SELF_CONTAINED);
+        }
+        if self.checked && !is_plain_function(function) {
+            return Some(notes::WRAPPER_SIGNATURE_NOT_PLAIN);
+        }
+        None
+    }
+
+    fn consider(&mut self, it: &Statement<'p>) {
+        let statement: &'p Statement<'p> = self.alloc(it);
+        let Some((shape, function)) = wrapper_shape(statement, |callee| self.target(callee)) else {
+            return;
+        };
+        if shape.forwards_to.is_some() {
+            self.forwarders.push(Candidate { shape, function });
+            return;
+        }
+        match self.refusal(&shape, function) {
+            Some(reason) => self.rejected.push((shape.statement, reason)),
+            None => self.found.push(shape),
+        }
     }
 }
 
-impl<'p> VisitJs<'p> for SiteSearch<'p, '_> {
+impl<'p> VisitJs<'p> for WrapperSearch<'p, '_> {
     fn visit_statement(&mut self, it: &Statement<'p>) {
         let entered = self.units.enter(it);
-        let function = entered && var_function_or_declaration(it).is_some();
-        let body = self.declares_a_wrapper(it);
-        self.machinery_functions += usize::from(function);
-        self.bodies += usize::from(body);
+        if !self.units.inside() {
+            self.consider(it);
+        }
         walk_js::walk_statement(self, it);
-        self.bodies -= usize::from(body);
-        self.machinery_functions -= usize::from(function);
         self.units.leave(entered);
-    }
-
-    fn visit_expression(&mut self, it: &Expression<'p>) {
-        let wrapper = if self.machinery_functions > 0 {
-            None
-        } else {
-            self.called_wrapper(it)
-        };
-        let Some(wrapper) = wrapper else {
-            walk_js::walk_expression(self, it);
-            return;
-        };
-        let expression: &'p Expression<'p> = self.alloc(it);
-        let Some(call) = called_expression(expression) else {
-            walk_js::walk_expression(self, it);
-            return;
-        };
-        let id = self.found.len();
-        self.found.push(CallSite {
-            wrapper,
-            span: expression.span(),
-            arguments: &call.arguments,
-            ancestors: self.stack.clone(),
-            in_a_wrapper_body: self.bodies > 0,
-        });
-        self.stack.push(id);
-        walk_js::walk_expression(self, it);
-        self.stack.pop();
-    }
-}
-
-struct Sites<'p> {
-    all: Vec<CallSite<'p>>,
-    by_wrapper: FxHashMap<SymbolId, Vec<usize>>,
-    nested: FxHashSet<usize>,
-}
-
-impl Sites<'_> {
-    fn of(&self, wrapper: SymbolId) -> &[usize] {
-        self.by_wrapper
-            .get(&wrapper)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    fn holds_another_site(&self, id: usize) -> bool {
-        self.nested.contains(&id)
-    }
-}
-
-fn collect_sites<'p>(view: &Program<'p>, scoping: &Scoping, shapes: &[WrapperShape]) -> Sites<'p> {
-    let mut search = SiteSearch {
-        scoping,
-        wrappers: shapes.iter().map(|shape| shape.symbol).collect(),
-        units: MachineryDepth::every_unit(),
-        machinery_functions: 0,
-        bodies: 0,
-        stack: Vec::new(),
-        found: Vec::new(),
-    };
-    search.visit_program(view);
-    let mut by_wrapper: FxHashMap<SymbolId, Vec<usize>> = FxHashMap::default();
-    let mut nested: FxHashSet<usize> = FxHashSet::default();
-    for (id, site) in search.found.iter().enumerate() {
-        by_wrapper.entry(site.wrapper).or_default().push(id);
-        nested.extend(site.ancestors.iter().copied());
-    }
-    Sites {
-        all: search.found,
-        by_wrapper,
-        nested,
-    }
-}
-
-struct FunctionsAt<'p> {
-    wanted: FxHashMap<Span, Option<&'p Function<'p>>>,
-    missing: usize,
-}
-
-impl<'p> FunctionsAt<'p> {
-    fn search(view: &Program<'p>, shapes: &[WrapperShape]) -> Self {
-        let wanted: FxHashMap<Span, Option<&'p Function<'p>>> =
-            shapes.iter().map(|shape| (shape.function, None)).collect();
-        let mut search = FunctionsAt {
-            missing: wanted.len(),
-            wanted,
-        };
-        if search.missing > 0 {
-            search.visit_program(view);
-        }
-        search
-    }
-
-    fn get(&self, span: Span) -> Option<&'p Function<'p>> {
-        self.wanted.get(&span).copied().flatten()
-    }
-}
-
-impl<'p> VisitJs<'p> for FunctionsAt<'p> {
-    fn visit_function(&mut self, it: &Function<'p>, flags: ScopeFlags) {
-        if self.missing == 0 {
-            return;
-        }
-        if matches!(self.wanted.get(&it.span), Some(None)) {
-            let found: &'p Function<'p> = self.alloc(it);
-            self.wanted.insert(it.span, Some(found));
-            self.missing -= 1;
-        }
-        walk_js::walk_function(self, it, flags);
     }
 }
 
@@ -425,12 +308,13 @@ struct RoundPlan<'a> {
     notes: Vec<(String, Option<Span>)>,
     claimed: FxHashSet<usize>,
     blocked: FxHashSet<usize>,
+    removed: FxHashSet<SymbolId>,
     kept: Vec<SymbolId>,
 }
 
 impl RoundPlan<'_> {
-    fn defers(&self, id: usize, site: &CallSite<'_>) -> bool {
-        site.in_a_wrapper_body
+    fn defers(&self, id: usize, site: &CallSite<'_>, checked: bool) -> bool {
+        (!checked && site.body_of.is_some())
             || self.blocked.contains(&id)
             || site
                 .ancestors
@@ -455,78 +339,143 @@ struct SiteCounts {
     deferred: usize,
 }
 
-fn rewrite_sites<'p, 'a>(
-    function: &Function<'p>,
-    sites: &Sites<'p>,
-    ids: &[usize],
-    cx: &Cx<'a, '_>,
-    plan: &mut RoundPlan<'a>,
-) -> SiteCounts {
-    let mut counts = SiteCounts::default();
-    for id in ids.iter().copied() {
-        let Some(site) = sites.all.get(id) else {
-            continue;
-        };
-        if plan.defers(id, site) {
-            counts.deferred += 1;
-            plan.keep(site.span, notes::WRAPPER_SITE_KEPT);
-            continue;
-        }
-        if arguments_hold_a_scope(site.arguments) {
-            plan.keep(site.span, &notes::wrapper_site_scoped_argument());
-            continue;
-        }
-        if !arguments_are_substitutable(site.arguments) {
-            if sites.holds_another_site(id) {
-                counts.deferred += 1;
-                plan.keep(site.span, notes::WRAPPER_SITE_KEPT);
-                continue;
-            }
-            let checked = !cx.opts.rule_disabled(WRAPPER_EFFECT_CHECKS);
-            let inlined = inline_keeping_effects(function, site.arguments, site.span, checked, cx);
-            if inlined.is_some_and(|inlined| plan.edits.insert(site.span, inlined)) {
-                plan.claim(id, site);
-                counts.rewritten += 1;
-            } else {
-                plan.keep(site.span, &notes::wrapper_site_impure_argument());
-            }
-            continue;
-        }
-        let Some(inlined) = inline_function_call(function, site.arguments, cx) else {
-            plan.keep(site.span, notes::WRAPPER_SITE_KEPT);
-            continue;
-        };
-        if plan.edits.insert(site.span, inlined) {
-            plan.claim(id, site);
-            counts.rewritten += 1;
-        } else {
-            plan.keep(site.span, notes::WRAPPER_SITE_KEPT);
-        }
-    }
-    counts
+enum Outcome {
+    Rewritten,
+    Deferred,
+    Kept(String),
 }
 
-fn rewrite_wrapper<'p, 'a>(
-    functions: &FunctionsAt<'p>,
-    shape: &WrapperShape,
-    sites: &Sites<'p>,
-    cx: &Cx<'a, '_>,
-    plan: &mut RoundPlan<'a>,
-    poisoned: &mut FxHashSet<SymbolId>,
-) {
-    let Some(function) = functions.get(shape.function) else {
-        plan.notes.push((
-            notes::WRAPPER_BODY_MISSING.to_string(),
-            Some(shape.function),
-        ));
-        return;
-    };
-    let counts = rewrite_sites(function, sites, sites.of(shape.symbol), cx, plan);
-    if counts.deferred > 0 {
-        poisoned.insert(shape.symbol);
+struct Wrapper<'r, 'p> {
+    shape: &'r WrapperShape,
+    function: &'r Function<'p>,
+}
+
+struct Round<'r, 'p, 'a, 'x> {
+    sites: &'r Sites<'p>,
+    chain: &'r Chain<'p>,
+    view: SiteView<'r>,
+    checked: bool,
+    cx: &'r Cx<'a, 'x>,
+}
+
+type Attempt<'a> = (Option<Expression<'a>>, fn() -> String);
+
+fn site_kept() -> String {
+    notes::WRAPPER_SITE_KEPT.to_string()
+}
+
+impl<'p, 'a> Round<'_, 'p, 'a, '_> {
+    fn plain(&self, wrapper: &Wrapper<'_, 'p>, site: &CallSite<'p>) -> Attempt<'a> {
+        if !self.checked {
+            let inlined = inline_function_call(wrapper.function, site.arguments, self.cx);
+            return (inlined, site_kept);
+        }
+        let fits: Fits<'_> = &kinds_fit;
+        let inlined = self.chain.inline_through(
+            (site.wrapper, site.arguments, site.in_parameters),
+            &self.view,
+            fits,
+            self.cx,
+        );
+        (inlined, notes::wrapper_site_impure_argument)
     }
-    let references = cx.scoping().get_resolved_reference_ids(shape.symbol).len();
-    settle_wrapper(shape, counts.rewritten, references, plan, poisoned);
+
+    fn keeping_effects(&self, wrapper: &Wrapper<'_, 'p>, site: &CallSite<'p>) -> Attempt<'a> {
+        let effect_checks = !self.cx.opts.rule_disabled(WRAPPER_EFFECT_CHECKS);
+        let inlined = if self.checked && effect_checks {
+            inline_local_writes(
+                self.chain,
+                &self.view,
+                site.wrapper,
+                site.arguments,
+                site.span,
+                self.cx,
+            )
+        } else if self.checked && wrapper.shape.forwards_to.is_some() {
+            None
+        } else {
+            let function = wrapper.function;
+            inline_keeping_effects(function, site.arguments, site.span, effect_checks, self.cx)
+        };
+        (inlined, notes::wrapper_site_impure_argument)
+    }
+
+    fn rewrite_site(
+        &self,
+        wrapper: &Wrapper<'_, 'p>,
+        id: usize,
+        site: &CallSite<'p>,
+        plan: &mut RoundPlan<'a>,
+    ) -> Outcome {
+        let body_is_gone = site
+            .body_of
+            .is_some_and(|body| plan.removed.contains(&body));
+        if self.checked && body_is_gone {
+            return Outcome::Rewritten;
+        }
+        if plan.defers(id, site, self.checked) {
+            return Outcome::Deferred;
+        }
+        if arguments_hold_a_scope(site.arguments) {
+            return Outcome::Kept(notes::wrapper_site_scoped_argument());
+        }
+        let (inlined, refusal) = if arguments_are_substitutable(site.arguments) {
+            self.plain(wrapper, site)
+        } else if self.sites.holds_another_site(id) {
+            return Outcome::Deferred;
+        } else {
+            self.keeping_effects(wrapper, site)
+        };
+        if inlined.is_some_and(|inlined| plan.edits.insert(site.span, inlined)) {
+            plan.claim(id, site);
+            return Outcome::Rewritten;
+        }
+        Outcome::Kept(refusal())
+    }
+
+    fn rewrite_sites(&self, wrapper: &Wrapper<'_, 'p>, plan: &mut RoundPlan<'a>) -> SiteCounts {
+        let mut counts = SiteCounts::default();
+        for id in self.sites.of(wrapper.shape.symbol).iter().copied() {
+            let Some(site) = self.sites.all.get(id) else {
+                continue;
+            };
+            match self.rewrite_site(wrapper, id, site, plan) {
+                Outcome::Rewritten => counts.rewritten += 1,
+                Outcome::Deferred => {
+                    counts.deferred += 1;
+                    plan.keep(site.span, notes::WRAPPER_SITE_KEPT);
+                }
+                Outcome::Kept(reason) => plan.keep(site.span, &reason),
+            }
+        }
+        counts
+    }
+
+    fn rewrite_wrapper(
+        &self,
+        functions: &FunctionsAt<'p>,
+        shape: &WrapperShape,
+        plan: &mut RoundPlan<'a>,
+        poisoned: &mut FxHashSet<SymbolId>,
+    ) {
+        let Some(function) = functions.get(shape.function) else {
+            plan.notes.push((
+                notes::WRAPPER_BODY_MISSING.to_string(),
+                Some(shape.function),
+            ));
+            return;
+        };
+        let counts = self.rewrite_sites(&Wrapper { shape, function }, plan);
+        if counts.deferred > 0 {
+            poisoned.insert(shape.symbol);
+        }
+        let references = self
+            .cx
+            .scoping()
+            .get_resolved_reference_ids(shape.symbol)
+            .len();
+        settle_wrapper(shape, counts.rewritten, references, plan, poisoned);
+    }
 }
 
 fn settle_wrapper(
@@ -542,7 +491,9 @@ fn settle_wrapper(
         return;
     }
     if rewritten == references {
-        plan.removals.remove(shape.statement);
+        if plan.removals.remove(shape.statement) {
+            plan.removed.insert(shape.symbol);
+        }
         return;
     }
     plan.kept.push(shape.symbol);
@@ -552,19 +503,21 @@ fn settle_wrapper(
     ));
 }
 
+type Rejected = Vec<(Span, &'static str)>;
+
 fn refuse_var_wrappers_read_early(
     program: &Program<'_>,
     scoping: &Scoping,
-    search: &mut WrapperSearch<'_>,
+    found: &mut Vec<WrapperShape>,
+    rejected: &mut Rejected,
 ) {
-    if wrapper_guards_dropped() || !search.found.iter().any(|shape| shape.bound_by_var) {
+    if wrapper_guards_dropped() || !found.iter().any(|shape| shape.bound_by_var) {
         return;
     }
     let order = try_scan_init_order(program, scoping);
     let ignored = FxHashSet::default();
-    let (kept, early): (Vec<WrapperShape>, Vec<WrapperShape>) = std::mem::take(&mut search.found)
-        .into_iter()
-        .partition(|shape| {
+    let (kept, early): (Vec<WrapperShape>, Vec<WrapperShape>) =
+        std::mem::take(found).into_iter().partition(|shape| {
             !shape.bound_by_var
                 || order.as_ref().is_some_and(|order| {
                     order.declaration_slot(shape.statement).is_some_and(|slot| {
@@ -572,8 +525,8 @@ fn refuse_var_wrappers_read_early(
                     })
                 })
         });
-    search.found = kept;
-    search.rejected.extend(
+    *found = kept;
+    rejected.extend(
         early
             .into_iter()
             .map(|shape| (shape.statement, notes::WRAPPER_READ_BEFORE_DECLARATION)),
@@ -583,58 +536,103 @@ fn refuse_var_wrappers_read_early(
 fn refuse_annex_b_wrappers(
     program: &Program<'_>,
     scoping: &Scoping,
-    search: &mut WrapperSearch<'_>,
+    found: &mut Vec<WrapperShape>,
+    rejected: &mut Rejected,
 ) {
-    if search.found.is_empty()
-        || wrapper_guards_dropped()
-        || crate::mutants::annex_b_writes_trusted()
-    {
+    if found.is_empty() || wrapper_guards_dropped() || crate::mutants::annex_b_writes_trusted() {
         return;
     }
     let writes = AnnexBWrites::of(program, scoping);
     if writes.is_empty() {
         return;
     }
-    let (written, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut search.found)
+    let (written, kept): (Vec<_>, Vec<_>) = std::mem::take(found)
         .into_iter()
         .partition(|shape| writes.may_write(shape.symbol));
-    search.found = kept;
-    search.rejected.extend(
+    *found = kept;
+    rejected.extend(
         written
             .into_iter()
             .map(|shape| (shape.statement, notes::WRAPPER_BINDING_UNSTABLE)),
     );
 }
 
-fn plan_round<'p, 'a>(
-    program: &Program<'p>,
-    cx: &Cx<'a, '_>,
-    poisoned: &mut FxHashSet<SymbolId>,
-) -> Option<RoundPlan<'a>> {
+fn find_wrappers(
+    program: &Program<'_>,
+    cx: &mut Cx<'_, '_>,
+) -> Option<(Vec<WrapperShape>, Rejected)> {
+    let checked = call_checks_apply(cx.opts);
     let mut search = WrapperSearch {
         scoping: cx.scoping(),
         units: MachineryDepth::every_unit(),
+        checked,
         found: Vec::new(),
+        forwarders: Vec::new(),
         rejected: Vec::new(),
     };
     search.visit_program(program);
-    if search.found.is_empty() && search.rejected.is_empty() {
+    let WrapperSearch {
+        mut found,
+        forwarders,
+        mut rejected,
+        ..
+    } = search;
+    if found.is_empty() && rejected.is_empty() {
         return None;
     }
-    refuse_annex_b_wrappers(program, cx.scoping(), &mut search);
-    refuse_var_wrappers_read_early(program, cx.scoping(), &mut search);
-    let sites = collect_sites(program, cx.scoping(), &search.found);
+    promote_forwarders(forwarders, &mut found, cx.scoping());
+    refuse_annex_b_wrappers(program, cx.scoping(), &mut found, &mut rejected);
+    refuse_var_wrappers_read_early(program, cx.scoping(), &mut found, &mut rejected);
+    if checked {
+        let site = |shape: &WrapperShape| (shape.statement, [shape.symbol]);
+        refuse_annex_b_bindings(&mut found, site, program, cx);
+        drop_broken_chains(&mut found);
+    }
+    Some((found, rejected))
+}
+
+fn plan_round<'p, 'a>(
+    program: &Program<'p>,
+    cx: &mut Cx<'a, '_>,
+    poisoned: &mut FxHashSet<SymbolId>,
+) -> Option<RoundPlan<'a>> {
+    let (found, rejected) = find_wrappers(program, cx)?;
+    let cx = &*cx;
+    let checked = call_checks_apply(cx.opts);
+    let sites = collect_sites(program, cx.scoping(), &found);
+    let primitives = if checked {
+        PrimitiveNames::collect(program, cx.scoping())
+    } else {
+        PrimitiveNames::default()
+    };
+    let functions = FunctionsAt::search(program, &found);
+    let mut chain = Chain::default();
+    for shape in found.iter().filter(|_| checked) {
+        if let Some(function) = functions.get(shape.function) {
+            chain.add(shape, function);
+        }
+    }
+    let round = Round {
+        sites: &sites,
+        chain: &chain,
+        view: SiteView::new(cx.scoping(), &primitives),
+        checked,
+        cx,
+    };
     let mut plan = RoundPlan {
-        notes: search
-            .rejected
+        notes: rejected
             .iter()
             .map(|(span, reason)| (reason.to_string(), Some(*span)))
             .collect(),
         ..RoundPlan::default()
     };
-    let functions = FunctionsAt::search(program, &search.found);
-    for shape in &search.found {
-        rewrite_wrapper(&functions, shape, &sites, cx, &mut plan, poisoned);
+    let forwarders = found
+        .iter()
+        .rev()
+        .filter(|shape| shape.forwards_to.is_some());
+    let bases = found.iter().filter(|shape| shape.forwards_to.is_none());
+    for shape in forwarders.chain(bases) {
+        round.rewrite_wrapper(&functions, shape, &mut plan, poisoned);
     }
     Some(plan)
 }
@@ -679,70 +677,4 @@ pub fn inline_function_wrappers<'a>(
         }
     }
     rounds
-}
-
-fn immediate_wrapper<'k, 'p>(
-    expr: &'k Expression<'p>,
-    scoping: &Scoping,
-) -> Option<(&'k Function<'p>, &'k AVec<'p, Argument<'p>>)> {
-    immediate_call(called_expression(expr)?, scoping)
-}
-
-fn immediate_call<'k, 'p>(
-    call: &'k CallExpression<'p>,
-    scoping: &Scoping,
-) -> Option<(&'k Function<'p>, &'k AVec<'p, Argument<'p>>)> {
-    let Expression::FunctionExpression(function) = call.callee.without_parentheses() else {
-        return None;
-    };
-    let names = param_names(function)?;
-    let returned = returned_expression(function)?;
-    let (callee, arguments) = call_parts(returned)?;
-    let wraps = function.id.is_none()
-        && !function.r#async
-        && !function.generator
-        && names.len() >= 2
-        && !arguments.is_empty()
-        && identifier_name(callee).and_then(decoder_index).is_some()
-        && uses_any_param(arguments, &names)
-        && body_is_self_contained(function, scoping)
-        && arguments_are_substitutable(&call.arguments)
-        && !arguments_hold_a_scope(&call.arguments);
-    wraps.then_some((&**function, &call.arguments))
-}
-
-struct ImmediateSearch<'s, 'c, 'a, 'x> {
-    scoping: &'s Scoping,
-    cx: &'c Cx<'a, 'x>,
-    edits: ExprEdits<'a>,
-}
-
-impl<'p> VisitJs<'p> for ImmediateSearch<'_, '_, '_, '_> {
-    fn visit_expression(&mut self, it: &Expression<'p>) {
-        if let Some((function, arguments)) = immediate_wrapper(it, self.scoping) {
-            if let Some(inlined) = inline_function_call(function, arguments, self.cx) {
-                if self.edits.insert(it.span(), inlined) {
-                    return;
-                }
-            }
-        }
-        walk_js::walk_expression(self, it);
-    }
-}
-
-pub fn inline_immediate_wrappers<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) -> usize {
-    let edits = {
-        let view: &Program<'_> = program;
-        let mut search = ImmediateSearch {
-            scoping: cx.scoping(),
-            cx: &*cx,
-            edits: ExprEdits::new(),
-        };
-        search.visit_program(view);
-        search.edits
-    };
-    if edits.is_empty() {
-        return 0;
-    }
-    edits.apply(program, cx.allocator(), cx.scoping_mut())
 }
