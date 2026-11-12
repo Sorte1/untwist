@@ -690,7 +690,10 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     }
 
     fn exit_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let edits = std::mem::take(&mut self.edits);
+        let mut edits = std::mem::take(&mut self.edits);
+        if edits.forget_renamed_since_refresh(program) > 0 {
+            cx.note(notes::CONTROL_FLOW_RENAMED_BEFORE_INSERTION, None);
+        }
         let wanted = edits.len();
         let applied = edits.apply(program, cx.allocator(), cx.scoping_mut());
         cx.changed_by(applied);

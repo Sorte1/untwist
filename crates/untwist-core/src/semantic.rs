@@ -21,6 +21,7 @@ mod refresh;
 mod renamed;
 mod shared;
 mod strictness;
+pub mod unbound;
 
 pub use annex_b::{
     block_function_symbols, declared_in_block, declaring_block, is_constant_binding_in,
@@ -39,6 +40,7 @@ pub use refresh::{
 pub use refresh::{forget_failures, refresh_scoping, Round, Shape};
 pub(crate) use renamed::forget_program as forget_renames;
 pub(crate) use renamed::note_renames;
+pub use renamed::renamed_since_refresh;
 pub use shared::{assume_shared_globals, is_shared_global, SharedGlobals, SharedGlobalsGuard};
 pub use strictness::Strictness;
 
@@ -71,10 +73,12 @@ pub struct Semantics {
 
 pub fn build_scoping(program: &Program<'_>) -> Semantics {
     refresh::count_build();
+    unbound::forget();
     settled(program, finish(SemanticBuilder::new().build(program)))
 }
 
 pub fn rebuild_scoping(program: &Program<'_>, previous: Stats) -> Semantics {
+    unbound::forget();
     settled(
         program,
         finish(SemanticBuilder::new().with_stats(previous).build(program)),
@@ -215,6 +219,16 @@ struct UseScan<'s> {
 }
 
 impl UseScan<'_> {
+    fn unresolved_use(&mut self, name: &str) {
+        let scoping = self.scoping;
+        for (symbol, state) in &mut self.states {
+            if !state.found && scoping.symbol_name(*symbol) == name {
+                state.found = true;
+                self.remaining -= 1;
+            }
+        }
+    }
+
     fn enter_owner_scope(&mut self, scope_id: Option<ScopeId>) -> Vec<SymbolId> {
         self.depth += 1;
         let Some(owned) = scope_id.and_then(|scope_id| self.owners.get(&scope_id)) else {
@@ -338,6 +352,7 @@ impl<'a> VisitJs<'a> for UseScan<'_> {
             return;
         }
         let Some(reference_id) = it.reference_id.get() else {
+            self.unresolved_use(it.name.as_str());
             return;
         };
         let reference = self.scoping.get_reference(reference_id);

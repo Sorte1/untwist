@@ -38,6 +38,15 @@ pub(crate) fn note_renames<'n>(
     });
 }
 
+pub fn renamed_since_refresh(program: &Program<'_>, name: &str) -> bool {
+    let program = address(program);
+    JOURNAL.with(|journal| {
+        journal.borrow().iter().any(|renamed| {
+            renamed.program == program && (renamed.from == name || renamed.to == name)
+        })
+    })
+}
+
 pub(crate) fn forget_program(program: &Program<'_>) {
     let program = address(program);
     JOURNAL.with(|journal| {

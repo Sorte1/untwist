@@ -6,6 +6,8 @@ use oxc_str::Ident;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::semantic::unbound::is_unbound_name;
+
 #[derive(Default)]
 pub struct Renames<'a> {
     map: FxHashMap<SymbolId, Ident<'a>>,
@@ -41,7 +43,17 @@ impl<'a> Renames<'a> {
         self.map.insert(symbol, name);
     }
 
+    pub fn meets_an_unbound_reference(&self, scoping: &Scoping) -> bool {
+        self.map
+            .keys()
+            .filter(|symbol| symbol.index() < scoping.symbols_len())
+            .any(|symbol| is_unbound_name(scoping.symbol_name(*symbol)))
+    }
+
     pub fn apply(&self, program: &mut Program<'a>, scoping: &Scoping) -> usize {
+        if self.meets_an_unbound_reference(scoping) {
+            return 0;
+        }
         let count = self.run(scoping, |applier| applier.visit_program(program));
         if count > 0 {
             let renames = self

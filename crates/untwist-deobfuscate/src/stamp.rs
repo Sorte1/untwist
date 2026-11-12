@@ -445,6 +445,9 @@ pub fn apply_stamps<'a>(
     }
     let count = renames.apply(program, cx.scoping());
     cx.changed_by(count);
+    if count == 0 {
+        return;
+    }
     for (length, statement) in stamped_now {
         cx.progress(notes::string_array_found(length), Some(statement));
     }

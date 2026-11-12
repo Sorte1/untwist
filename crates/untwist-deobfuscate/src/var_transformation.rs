@@ -210,9 +210,10 @@ impl<'a> VisitJs<'a> for SelfRead<'_> {
         if self.found {
             return;
         }
-        if reference_symbol(it, self.scoping) == Some(self.symbol) {
-            self.found = true;
-        }
+        self.found = match it.reference_id.get() {
+            Some(_) => reference_symbol(it, self.scoping) == Some(self.symbol),
+            None => self.scoping.symbol_name(self.symbol) == it.name.as_str(),
+        };
     }
 }
 

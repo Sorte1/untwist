@@ -818,6 +818,13 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Whole(
+            "function outer(y) {\n  if (\"a\" === \"a\") {\n    let y = 1;\n    console.log(({ abcde: function (a, b) { return a + b; } }).abcde(y, 1));\n  }\n  return y;\n}\nconsole.log(outer(10));",
+        ),
+        expects: notes::CONTROL_FLOW_RENAMED_BEFORE_INSERTION,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Superset(A_DISPATCH_OBJECT_WRITTEN_OUTSIDE_ITS_DEAD_BRANCH),
         expects: notes::CONTROL_FLOW_LIVE_MUTATION,
         mode: Match::Contains,

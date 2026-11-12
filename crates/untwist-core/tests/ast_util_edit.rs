@@ -259,3 +259,97 @@ fn a_scoping_rebuild_resolves_the_inserted_functions_inner_references() {
         assert_eq!(read_reference_count(&rebuilt.scoping, symbol), 1);
     }
 }
+
+fn call_argument_span(program: &oxc_ast::ast::Program<'_>) -> Span {
+    use oxc_ast_visit::Visit;
+    #[derive(Default)]
+    struct First(Option<Span>);
+    impl<'a> Visit<'a> for First {
+        fn visit_call_expression(&mut self, it: &oxc_ast::ast::CallExpression<'a>) {
+            if self.0.is_none() {
+                self.0 = it.arguments.first().map(GetSpan::span);
+            }
+        }
+    }
+    let mut first = First::default();
+    first.visit_program(program);
+    first.0.expect("a call with an argument")
+}
+
+fn symbol_named(
+    scoping: &oxc_semantic::Scoping,
+    name: &str,
+    nth: usize,
+) -> oxc_syntax::symbol::SymbolId {
+    scoping
+        .symbol_ids()
+        .filter(|symbol| scoping.symbol_name(*symbol) == name)
+        .nth(nth)
+        .expect("a symbol of that name")
+}
+
+#[test]
+fn an_inserted_read_is_bound_to_the_binding_visible_where_it_lands() {
+    let alloc = Allocator::default();
+    let builder = AstBuilder::new(&alloc);
+    let source = "var x = 1;\nfunction f(x) { g(0); }\nf(x);";
+    let mut parsed = parse_program(&alloc, source);
+    let mut sem = build_scoping(&parsed.program);
+    let inner = symbol_named(&sem.scoping, "x", 1);
+    let before = read_reference_count(&sem.scoping, inner);
+    let span = call_argument_span(&parsed.program);
+    let read = Expression::new_identifier(SPAN, oxc_str::Ident::from("x"), &builder);
+    let mut edits = ExprEdits::new();
+    assert!(edits.insert(span, read));
+    assert_eq!(
+        edits.apply(&mut parsed.program, &alloc, &mut sem.scoping),
+        1
+    );
+    assert_eq!(read_reference_count(&sem.scoping, inner), before + 1);
+}
+
+#[test]
+fn an_inserted_function_hangs_its_scope_under_the_scope_where_it_lands() {
+    let alloc = Allocator::default();
+    let source = "function f(atob) { g(0); }";
+    let mut parsed = parse_program(&alloc, source);
+    let mut sem = build_scoping(&parsed.program);
+    let span = call_argument_span(&parsed.program);
+    let template = parse_program(&alloc, "(function () { return atob; });");
+    let Statement::ExpressionStatement(stmt) = &template.program.body[0] else {
+        panic!("expression statement");
+    };
+    let function = stmt.expression.clone_in(&alloc);
+    let mut edits = ExprEdits::new();
+    assert!(edits.insert(span, function));
+    edits.apply(&mut parsed.program, &alloc, &mut sem.scoping);
+    let parameter = symbol_named(&sem.scoping, "atob", 0);
+    assert_eq!(read_reference_count(&sem.scoping, parameter), 1);
+}
+
+#[test]
+fn a_rename_refuses_while_an_inserted_read_of_the_name_is_unbound() {
+    use untwist_core::ast_util::rename::Renames;
+    let alloc = Allocator::default();
+    let source = "function f(y) { g(0); }\nf(1);";
+    let mut parsed = parse_program(&alloc, source);
+    let mut sem = build_scoping(&parsed.program);
+    let span = call_argument_span(&parsed.program);
+    let template = parse_program(&alloc, "(function (y) { return y; });");
+    let Statement::ExpressionStatement(stmt) = &template.program.body[0] else {
+        panic!("expression statement");
+    };
+    let mut edits = ExprEdits::new();
+    assert!(edits.insert(span, stmt.expression.clone_in(&alloc)));
+    edits.apply(&mut parsed.program, &alloc, &mut sem.scoping);
+    let parameter = symbol_named(&sem.scoping, "y", 0);
+    let mut renames = Renames::new();
+    renames.insert(parameter, oxc_str::Ident::from("z"));
+    assert!(renames.meets_an_unbound_reference(&sem.scoping));
+    assert_eq!(renames.apply(&mut parsed.program, &sem.scoping), 0);
+    let sem = build_scoping(&parsed.program);
+    let parameter = symbol_named(&sem.scoping, "y", 0);
+    let mut renames = Renames::new();
+    renames.insert(parameter, oxc_str::Ident::from("z"));
+    assert!(!renames.meets_an_unbound_reference(&sem.scoping));
+}
