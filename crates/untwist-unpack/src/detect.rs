@@ -5,13 +5,15 @@ use oxc_semantic::Scoping;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
 
-use crate::browserify::detect::{browserify_factories, detect_browserify_with, is_browserify};
+use crate::browserify::detect::{
+    browserify_factories, detect_browserify_with, is_browserify, rebound_require,
+};
 use crate::closed::first_open;
 use crate::frame::Frame;
 use crate::links::Links;
 use crate::matcher::Factory;
 use crate::model::{body_key, Bodies, BodyKey, Bundle, BundleKind};
-use crate::notes::factory_not_closed;
+use crate::notes::{factory_not_closed, require_not_shared};
 use crate::webpack::chunk::{chunk_factories, detect_webpack_chunk_noted, is_webpack_chunk};
 use crate::webpack::detect4::{detect_webpack4_noted, is_webpack4, webpack4_factories};
 use crate::webpack::detect5::{detect_webpack5_noted, is_webpack5, webpack5_factories};
@@ -55,6 +57,19 @@ impl<'a> Extract<'a, '_, '_> {
             .get_or_insert_with(|| factory_not_closed(id, captured.describe()));
         false
     }
+
+    fn require_kept(&mut self, factories: Option<Vec<(String, Factory<'_, 'a>)>>) -> bool {
+        let (Some(factories), Some(scoping)) = (factories, self.scoping.as_ref()) else {
+            return true;
+        };
+        let Some(id) = rebound_require(scoping, factories) else {
+            return true;
+        };
+        self.unproven.get_or_insert_with(|| {
+            require_not_shared(id, "it declares or assigns its require parameter again")
+        });
+        false
+    }
 }
 
 impl<'a> Finder<'a> for Extract<'a, '_, '_> {
@@ -86,7 +101,10 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
                 detect_webpack_chunk_noted(alloc, source, expr, bodies, options, proving)
             });
         }
-        if self.bundle.is_none() && self.closed(browserify_factories(expr)) {
+        if self.bundle.is_none()
+            && self.closed(browserify_factories(expr))
+            && self.require_kept(browserify_factories(expr))
+        {
             self.bundle = attempt(self.bodies, |bodies| {
                 detect_browserify_with(alloc, source, expr, bodies, options)
             });
