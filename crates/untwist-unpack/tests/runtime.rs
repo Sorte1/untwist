@@ -124,3 +124,94 @@ fn a_helper_that_binds_a_host_name_itself_still_moves() {
 
     assert_eq!(found, None);
 }
+
+fn method_body_captures(method: &str) -> Vec<Option<String>> {
+    let alloc = Allocator::default();
+    let source = format!("({{ {method} }});");
+    let program = parse(&alloc, &source);
+    let scoping = build_scoping(&program).scoping;
+    let oxc_ast::ast::Statement::ExpressionStatement(statement) = &program.body[0] else {
+        panic!("an expression statement");
+    };
+    let oxc_ast::ast::Expression::ObjectExpression(object) =
+        statement.expression.without_parentheses()
+    else {
+        panic!("an object");
+    };
+    let oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property) = &object.properties[0] else {
+        panic!("a method");
+    };
+    let oxc_ast::ast::Expression::FunctionExpression(function) = &property.value else {
+        panic!("a method function");
+    };
+    let body = &function.body.as_ref().expect("a body").statements;
+    (0..body.len())
+        .map(|index| {
+            first_unclosed_helper(&scoping, body, &[index]).map(|(_, captured)| captured.describe())
+        })
+        .collect()
+}
+
+#[test]
+fn a_helper_that_uses_its_surrounding_function_context_stays_in_the_bundle() {
+    let found = method_body_captures(
+        "async *m() { var a = () => this; var b = () => new.target; var c = () => super.x; var d = await 1; var e = yield 1; for await (var f of []) {} var g = () => typeof import.meta; var h = () => import(\"./x.js\"); var i = () => arguments; }",
+    );
+    let expected = [
+        "this",
+        "new.target",
+        "super",
+        "await",
+        "yield",
+        "await",
+        "import.meta",
+        "import()",
+    ];
+    for (found, what) in found.iter().zip(expected) {
+        assert_eq!(
+            found.as_deref(),
+            Some(
+                format!("it uses {what} of the bundle, which the runtime module does not share")
+                    .as_str()
+            )
+        );
+    }
+    assert_eq!(
+        found[8].as_deref(),
+        Some("it reads the factory's own arguments")
+    );
+}
+
+#[test]
+fn a_helper_whose_context_belongs_to_its_own_function_still_moves() {
+    let found = method_body_captures(
+        "async *m() { var a = function () { return this; }; function b() { return new.target; } var c = { n() { return super.x; } }; var d = async () => await 1; function* e() { yield 1; } var f = class { x = this; static { this.y = 1; } }; }",
+    );
+    assert_eq!(found, vec![None; 6]);
+}
+
+#[test]
+fn the_global_fallback_reads_this_only_where_no_global_exists() {
+    let fallback = "typeof globalThis !== 'undefined' ? globalThis : typeof global !== 'undefined' ? global : typeof window !== 'undefined' ? window : this";
+    for (source, captured) in [
+        (format!("var g = () => {fallback};"), None),
+        (
+            format!("var global = 1;\nvar g = () => {fallback};"),
+            Some("it reads global, a binding of the bundle's scope".to_string()),
+        ),
+        (
+            "var g = () => typeof window !== 'undefined' ? window : this;".to_string(),
+            Some("it uses this of the bundle, which the runtime module does not share".to_string()),
+        ),
+    ] {
+        let alloc = Allocator::default();
+        let program = parse(&alloc, &source);
+        let scoping = build_scoping(&program).scoping;
+        let last = program.body.len() - 1;
+
+        let found = first_unclosed_helper(&scoping, &program.body, &[last])
+            .map(|(_, captured)| captured.describe());
+
+        assert_eq!(found, captured, "{source}");
+    }
+}

@@ -373,7 +373,30 @@ fn effect_free(init: Option<&Expression<'_>>, lazy_callees: &FxHashSet<&str>) ->
     match init.without_parentheses() {
         Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => true,
         other if is_object_member_chain(other) || is_require_shim(other) => true,
-        other => callee_of(other).is_some_and(|(callee, _)| lazy_callees.contains(&callee)),
+        other => callee_of(other).is_some_and(|(callee, argument)| {
+            lazy_callees.contains(&callee) && is_function_literal(argument)
+        }),
+    }
+}
+
+fn is_function(expression: &Expression<'_>) -> bool {
+    matches!(
+        expression.without_parentheses(),
+        Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_)
+    )
+}
+
+fn is_function_literal(argument: &Argument<'_>) -> bool {
+    let Some(expression) = argument.as_expression() else {
+        return false;
+    };
+    match expression.without_parentheses() {
+        Expression::ObjectExpression(object) => matches!(&object.properties[..],
+            [ObjectPropertyKind::ObjectProperty(property)]
+                if !property.computed
+                    && property.kind == PropertyKind::Init
+                    && is_function(&property.value)),
+        other => is_function(other),
     }
 }
 

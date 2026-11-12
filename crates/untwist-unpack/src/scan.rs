@@ -20,6 +20,12 @@ impl Frame {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Suspend {
+    Await,
+    Yield,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     Walk,
@@ -76,6 +82,12 @@ pub trait Policy<'a> {
     fn new_target(&mut self, _frame: Frame) {}
 
     fn import_meta(&mut self) {}
+
+    fn conditional(&mut self, _frame: Frame, _it: &ConditionalExpression<'a>) -> Step {
+        Step::Walk
+    }
+
+    fn suspends(&mut self, _frame: Frame, _what: Suspend) {}
 
     fn returns(&mut self, _frame: Frame) {}
 
@@ -217,6 +229,9 @@ impl<'a, P: Policy<'a> + ?Sized> VisitJs<'a> for Scan<'_, P> {
     }
 
     fn visit_conditional_expression(&mut self, it: &ConditionalExpression<'a>) {
+        if self.policy.conditional(self.frame, it) == Step::Skip {
+            return;
+        }
         self.operand(&it.test);
         walk_js::walk_conditional_expression(self, it);
     }
@@ -240,6 +255,30 @@ impl<'a, P: Policy<'a> + ?Sized> VisitJs<'a> for Scan<'_, P> {
 
     fn visit_import_meta(&mut self, _it: &ImportMeta) {
         self.policy.import_meta();
+    }
+
+    fn visit_await_expression(&mut self, it: &AwaitExpression<'a>) {
+        self.policy.suspends(self.frame, Suspend::Await);
+        walk_js::walk_await_expression(self, it);
+    }
+
+    fn visit_yield_expression(&mut self, it: &YieldExpression<'a>) {
+        self.policy.suspends(self.frame, Suspend::Yield);
+        walk_js::walk_yield_expression(self, it);
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        if it.r#await {
+            self.policy.suspends(self.frame, Suspend::Await);
+        }
+        walk_js::walk_for_of_statement(self, it);
+    }
+
+    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
+        if it.kind == VariableDeclarationKind::AwaitUsing {
+            self.policy.suspends(self.frame, Suspend::Await);
+        }
+        walk_js::walk_variable_declaration(self, it);
     }
 
     fn visit_return_statement(&mut self, it: &ReturnStatement<'a>) {

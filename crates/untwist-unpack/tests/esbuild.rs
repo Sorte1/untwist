@@ -895,3 +895,64 @@ fn entry_code_between_factory_declarations_refuses() {
     ))
     .is_some());
 }
+
+#[test]
+fn a_lazy_helper_whose_argument_has_an_effect_is_not_moved_out_of_order() {
+    let tail = "var require_lib = __commonJS((exports, module) => { init_b(); module.exports = globalThis.b; });\nconsole.log(\"entry start\");\ninit_a();\nconsole.log(require_lib());\n";
+    for (a, b) in [
+        (
+            "(console.log(\"effect 1\"), () => {})",
+            "(console.log(\"effect 2\"), () => { globalThis.b = \"b ready\"; })",
+        ),
+        ("...[() => {}]", "...[() => { globalThis.b = 1; }]"),
+        ("make()", "make()"),
+        ("require_b()", "require_b()"),
+        ("{ [key()]() {} }", "{ [key()]() { globalThis.b = 1; } }"),
+    ] {
+        refused(&format!(
+            "{DIRECT}{ESM}var init_a = __esm({a});\nvar init_b = __esm({b});\n{tail}"
+        ));
+    }
+    for (a, b) in [
+        ("() => {}", "() => { globalThis.b = 1; }"),
+        ("function () {}", "function () { globalThis.b = 1; }"),
+        ("{ \"a.js\"() {} }", "{ \"b.js\"() { globalThis.b = 1; } }"),
+    ] {
+        let files = split(&format!(
+            "{DIRECT}{ESM}var init_a = __esm({a});\nvar init_b = __esm({b});\n{tail}"
+        ))
+        .unwrap_or_else(|| panic!("a lazy helper of a function literal moves: {b}"));
+        assert!(code(&files, "_runtime/esbuild.js").contains("init_b"));
+    }
+}
+
+#[test]
+fn a_moved_helper_that_reads_the_bundle_context_refuses() {
+    let tail = "var require_lib = __commonJS((exports, module) => { module.exports = top(); });\nconsole.log(require_lib());\n";
+    for helper in [
+        "var top = () => this;",
+        "var top = () => this.tag;",
+        "var top = () => class { [this]() {} };",
+        "var top = () => typeof import.meta.url;",
+        "var top = () => import(\"./chunk.js\");",
+        "var top = () => arguments.length;",
+    ] {
+        refused(&format!("{DIRECT}{helper}\n{tail}"));
+        refused(&format!(
+            "import {{ sep }} from \"node:path\";\n{DIRECT}{helper}\n{tail}console.log(sep);\n"
+        ));
+    }
+    for helper in [
+        "var top = function () { return this; };",
+        "function top() { return new.target; }",
+        "var top = () => ({ m() { return super.toString; } });",
+        "var top = () => class { x = this; };",
+        "var top = async () => await 1;",
+        "function* top() { yield 1; }",
+    ] {
+        assert!(
+            split(&format!("{DIRECT}{helper}\n{tail}")).is_some(),
+            "{helper}"
+        );
+    }
+}
