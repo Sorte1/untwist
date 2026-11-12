@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::maps::{link, MapLink, Target};
 use crate::pipeline::Output;
@@ -52,6 +52,62 @@ fn deobfuscated_name(index: usize, total: usize, input: Option<&Path>) -> String
         .map(|stem| format!("deobfuscated.{stem}.js"))
         .filter(|name| is_safe_relative(name))
         .unwrap_or_else(|| format!("deobfuscated.input{index}.js"))
+}
+
+fn absolute_parts(input: &Path) -> Option<Vec<String>> {
+    let absolute = std::path::absolute(input).ok()?;
+    let mut parts: Vec<String> = Vec::new();
+    for component in absolute.components() {
+        match component {
+            Component::Normal(part) => parts.push(part.to_str()?.to_string()),
+            Component::ParentDir => {
+                parts.pop()?;
+            }
+            Component::CurDir => {}
+            Component::RootDir | Component::Prefix(_) => parts.clear(),
+        }
+    }
+    Some(parts)
+}
+
+fn shared_directory_len(paths: &[Vec<String>]) -> usize {
+    let Some((first, rest)) = paths.split_first() else {
+        return 0;
+    };
+    let directory = first.len().saturating_sub(1);
+    (0..directory)
+        .take_while(|&at| {
+            rest.iter()
+                .all(|path| at + 1 < path.len() && path[at] == first[at])
+        })
+        .count()
+}
+
+pub fn input_names(inputs: &[PathBuf]) -> Vec<String> {
+    if inputs.len() < 2 {
+        return Vec::new();
+    }
+    let Some(paths) = inputs
+        .iter()
+        .map(|input| absolute_parts(input))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Vec::new();
+    };
+    let shared = shared_directory_len(&paths);
+    let names: Vec<String> = paths.iter().map(|path| path[shared..].join("/")).collect();
+    match names.iter().all(|name| is_safe_relative(name)) {
+        true => names,
+        false => Vec::new(),
+    }
+}
+
+fn mirrored_name(result: &Output, index: usize) -> Option<&str> {
+    let names = &result.bundle.as_ref()?.mirrored_inputs;
+    (names.len() == result.codes.len())
+        .then(|| names.get(index))
+        .flatten()
+        .map(String::as_str)
 }
 
 const OWNER_OUTPUT: &str = "the deobfuscated output is already planned at that path";
@@ -262,13 +318,23 @@ impl Planner<'_> {
             .find(|name| self.claims.owner_of(&claim_key(name)).is_none())
     }
 
-    fn outputs(&mut self, dir: &Path, result: &Output, inputs: &[PathBuf]) -> Vec<PlannedFile> {
+    fn output_name(&mut self, index: usize, result: &Output, inputs: &[PathBuf]) -> Option<String> {
+        if let Some(name) = mirrored_name(result, index) {
+            return Some(name.to_string());
+        }
         let total = result.codes.len();
-        let mut planned = Vec::with_capacity(total);
+        let base = deobfuscated_name(index, total, inputs.get(index).map(PathBuf::as_path));
+        let name = self.free_output_name(&base);
+        if name.is_none() {
+            self.refused.push(PlanRefusal::SuffixesExhausted(base));
+        }
+        name
+    }
+
+    fn outputs(&mut self, dir: &Path, result: &Output, inputs: &[PathBuf]) -> Vec<PlannedFile> {
+        let mut planned = Vec::with_capacity(result.codes.len());
         for (index, code) in result.codes.iter().enumerate() {
-            let base = deobfuscated_name(index, total, inputs.get(index).map(PathBuf::as_path));
-            let Some(relative) = self.free_output_name(&base) else {
-                self.refused.push(PlanRefusal::SuffixesExhausted(base));
+            let Some(relative) = self.output_name(index, result, inputs) else {
                 continue;
             };
             let map = result.source_maps.get(index).and_then(Option::as_ref);
@@ -464,6 +530,7 @@ mod tests {
             kind: "webpack".to_string(),
             entry_id: None,
             chunk_ids: Vec::new(),
+            mirrored_inputs: Vec::new(),
             modules: paths
                 .iter()
                 .enumerate()
@@ -693,6 +760,86 @@ mod tests {
             relative_paths(&plan),
             vec!["deobfuscated.a.js", "deobfuscated.input1.js"]
         );
+    }
+
+    fn mirrored(names: &[&str], modules: &[&str]) -> Plan {
+        let mut bundle = bundle_with(modules);
+        bundle.mirrored_inputs = names.iter().map(|name| (*name).to_string()).collect();
+        let codes = names.iter().map(|name| format!("input {name}")).collect();
+        plan(Path::new("/out"), &output_with(codes, Some(bundle)), &[])
+    }
+
+    #[test]
+    fn a_partial_bundle_writes_every_input_under_its_own_name() {
+        let plan = mirrored(&["index.js", "chunks/lazy.js"], &["4NXGQ.js"]);
+
+        assert!(plan.refused.is_empty(), "{:?}", plan.refused);
+        assert_eq!(
+            relative_paths(&plan),
+            ["index.js", "chunks/lazy.js", BUNDLE_JSON, "4NXGQ.js"]
+        );
+        let lazy = plan
+            .files
+            .iter()
+            .find(|file| file.relative == "chunks/lazy.js")
+            .unwrap();
+        assert_eq!(lazy.contents, b"input chunks/lazy.js");
+    }
+
+    #[test]
+    fn a_mirrored_input_name_that_is_taken_is_refused_not_renamed() {
+        let plan = mirrored(&["a.js", "A.js"], &["b.js"]);
+
+        assert_eq!(plan.refused, vec![collision("A.js", OWNER_OUTPUT)]);
+        assert_eq!(relative_paths(&plan), ["a.js", BUNDLE_JSON, "b.js"]);
+    }
+
+    #[test]
+    fn mirrored_names_are_used_only_when_they_name_every_output() {
+        let mut bundle = bundle_with(&["m.js"]);
+        bundle.mirrored_inputs = vec!["a.js".to_string()];
+        let result = output_with(vec!["one".to_string(), "two".to_string()], Some(bundle));
+        let inputs = vec![PathBuf::from("a.js"), PathBuf::from("b.js")];
+
+        let plan = plan(Path::new("/out"), &result, &inputs);
+
+        assert_eq!(
+            relative_paths(&plan),
+            [
+                "deobfuscated.a.js",
+                "deobfuscated.b.js",
+                BUNDLE_JSON,
+                "m.js"
+            ]
+        );
+    }
+
+    fn named(inputs: &[&str]) -> Vec<String> {
+        input_names(&inputs.iter().map(PathBuf::from).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn input_names_are_relative_to_the_directory_the_inputs_share() {
+        assert_eq!(
+            named(&["/w/dist/index.js", "/w/dist/chunks/a.js"]),
+            ["index.js", "chunks/a.js"]
+        );
+        assert_eq!(named(&["/w/a/x.js", "/w/b/x.js"]), ["a/x.js", "b/x.js"]);
+        assert_eq!(
+            named(&["/w/dist/../dist/index.js", "/w/dist/./lazy.js"]),
+            ["index.js", "lazy.js"]
+        );
+    }
+
+    #[test]
+    fn a_single_input_has_no_input_names() {
+        assert!(named(&["/w/index.js"]).is_empty());
+        assert!(named(&[]).is_empty());
+    }
+
+    #[test]
+    fn an_input_that_is_a_parent_of_another_keeps_its_file_name() {
+        assert_eq!(named(&["/w/a", "/w/a/b.js"]), ["a", "a/b.js"]);
     }
 
     #[test]

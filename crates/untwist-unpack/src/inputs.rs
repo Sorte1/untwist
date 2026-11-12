@@ -37,7 +37,10 @@ fn detected<'a>(
             }
             let links = groups.views.get(input).unwrap_or(&none);
             let mut unproven = None;
-            let bundle = unpack_program_linked(alloc, program, options, links, &mut unproven);
+            let mut bundle = unpack_program_linked(alloc, program, options, links, &mut unproven);
+            if let Some(bundle) = bundle.as_mut() {
+                bundle.inputs = vec![input];
+            }
             if bundle.is_none() {
                 let refused = unproven.or_else(|| {
                     refused_kind(program, options).map(|kind| notes::shape_refused(kind.as_str()))
@@ -69,7 +72,10 @@ fn complete<'a>(
             (_, false) => None,
         };
         match root {
-            Some(root) => extra.push(root),
+            Some(mut root) => {
+                root.inputs = group.inputs.clone();
+                extra.push(root);
+            }
             None => {
                 notes.push(note(notes::group_refused(&group.namespace)));
                 for &input in &group.inputs {
@@ -104,6 +110,30 @@ pub fn unpack_inputs<'a>(
     mappings: &[Mapping],
     options: UnpackOptions,
 ) -> (Option<Bundle<'a>>, Vec<Note>) {
+    unpack_named_inputs(alloc, programs, mappings, options, &[])
+}
+
+fn mirrored_inputs(bundle: &mut Bundle<'_>, names: &[String]) -> Vec<String> {
+    bundle.inputs.sort_unstable();
+    bundle.inputs.dedup();
+    let partial = names.len() > 1 && bundle.inputs.len() < names.len();
+    match partial {
+        true => names.to_vec(),
+        false => Vec::new(),
+    }
+}
+
+pub fn unpack_named_inputs<'a>(
+    alloc: &'a Allocator,
+    programs: &mut [Program<'a>],
+    mappings: &[Mapping],
+    options: UnpackOptions,
+    names: &[String],
+) -> (Option<Bundle<'a>>, Vec<Note>) {
+    let names = match names.len() == programs.len() {
+        true => names,
+        false => &[],
+    };
     let groups = groups(programs);
     let mut notes = Vec::new();
     let mut found = detected(alloc, programs, &groups, options, &mut notes);
@@ -113,6 +143,7 @@ pub fn unpack_inputs<'a>(
     let Some(mut bundle) = merged else {
         return (None, notes);
     };
+    bundle.mirrored_inputs = mirrored_inputs(&mut bundle, names);
     notes.extend(finish_with(alloc, &mut bundle, mappings, options));
     if let Some(moved) = moved_fixed_path(&bundle) {
         notes.push(note(notes::group_refused(moved)));

@@ -98,6 +98,7 @@ fn linked_merge<'a>(alloc: &'a Allocator, merged: &mut Bundle<'a>, mut bundle: B
     merged.fresh_requires.extend(bundle.fresh_requires);
     merged.fixed_paths.extend(bundle.fixed_paths);
     merged.modules.extend(bundle.modules);
+    merged.inputs.extend(bundle.inputs);
     true
 }
 
@@ -204,6 +205,7 @@ fn merge_webpack<'a>(merged: &mut Bundle<'a>, bundle: Bundle<'a>, notes: &mut Ve
     if merged.runtime.is_none() {
         merged.runtime = bundle.runtime;
     }
+    merged.inputs.extend(bundle.inputs.iter().copied());
     for id in bundle.chunk_ids {
         if !merged.chunk_ids.contains(&id) {
             merged.chunk_ids.push(id);

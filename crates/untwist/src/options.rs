@@ -94,6 +94,7 @@ pub struct Options {
     pub wasm_check: WasmCheck,
     pub source_map: bool,
     pub input_source_maps: Vec<Option<String>>,
+    pub input_names: Vec<String>,
 }
 
 impl Default for Options {
@@ -128,6 +129,7 @@ impl Default for Options {
             wasm_check: WasmCheck::Off,
             source_map: false,
             input_source_maps: Vec::new(),
+            input_names: Vec::new(),
         }
     }
 }

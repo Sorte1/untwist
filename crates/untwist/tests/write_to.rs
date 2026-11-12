@@ -219,6 +219,7 @@ fn a_module_colliding_with_the_deobfuscated_output_is_refused_not_overwritten() 
         kind: "webpack".to_string(),
         entry_id: None,
         chunk_ids: Vec::new(),
+        mirrored_inputs: Vec::new(),
         modules: vec![ModuleOutput {
             id: "./deobfuscated".to_string(),
             path: untwist::DEOBFUSCATED.to_string(),
@@ -457,6 +458,7 @@ fn bundle_of(paths: &[&str]) -> BundleOutput {
         kind: "webpack".to_string(),
         entry_id: None,
         chunk_ids: Vec::new(),
+        mirrored_inputs: Vec::new(),
         modules: paths
             .iter()
             .enumerate()

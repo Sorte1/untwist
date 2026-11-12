@@ -38,6 +38,8 @@ pub struct BundleOutput {
     #[serde(rename = "chunkIds", skip_serializing_if = "Vec::is_empty")]
     pub chunk_ids: Vec<String>,
     pub modules: Vec<ModuleOutput>,
+    #[serde(skip)]
+    pub mirrored_inputs: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -75,6 +77,7 @@ impl BundleOutput {
             kind: bundle.kind.as_str().to_string(),
             entry_id: bundle.entry_id.clone(),
             chunk_ids: bundle.chunk_ids.clone(),
+            mirrored_inputs: bundle.mirrored_inputs.clone(),
             modules: bundle
                 .modules
                 .values()

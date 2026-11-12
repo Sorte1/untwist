@@ -123,11 +123,12 @@ impl Pipeline {
         notes: &mut Vec<Note>,
     ) -> Option<untwist_unpack::Bundle<'a>> {
         let started = Instant::now();
-        let (bundle, unpack_notes) = untwist_unpack::unpack_inputs(
+        let (bundle, unpack_notes) = untwist_unpack::unpack_named_inputs(
             alloc,
             programs,
             &self.options.mappings,
             self.unpack_options(),
+            &self.options.input_names,
         );
         notes.extend(unpack_notes);
         let modules = bundle.as_ref().map_or(0, |bundle| bundle.modules.len()) as u32;

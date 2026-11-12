@@ -27,9 +27,10 @@ own observables, so node must print the same thing before and after Untwist.
 | `unpack-bundlers/` | Bundler output from `tools/bundlers/` plus hand-written `min-*` and `neg-*` shapes; `MANIFEST` lists each | `cargo xtask diff-unpack-behaviour`, `crates/untwist-unpack/tests/` |
 | `unpack-gaps/` | Hand-written bundles for known unpacking gaps | `crates/untwist-unpack/tests/` |
 | `untranspile/` | TypeScript, swc, Babel, esbuild and terser output from `tools/untranspile/gen.mjs` (`params/` from `tools/untranspile-params/gen.mjs`), as programs that print | `cargo xtask diff-behaviour`, `crates/untwist-unminify/tests/` |
+| `write-tree/` | Multi-file bundler output (an entry with a lazy chunk) copied from the `bundle-matrix/` cells of the same name, `tools/bundle-matrix/`; `expected/` holds what the original prints | `crates/untwist-cli/tests/write_tree.rs`, which runs the `-o` tree in node |
 
 Third-party inputs keep their licence beside them: `LICENSE-reference`,
-`LICENSE-javascript-obfuscator`, `obfuscators/licenses/` and `unpack-bundlers/licenses/`.
+`LICENSE-javascript-obfuscator`, `obfuscators/licenses/`, `unpack-bundlers/licenses/` and `write-tree/licenses/`.
 
 Not every sample in `reference/deobfuscate/` comes from the reference deobfuscator.
 `obfuscator.io-site-memo-reset.js` is the obfuscator.io website's output for `console.log("")`.

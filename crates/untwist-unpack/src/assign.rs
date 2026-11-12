@@ -38,7 +38,7 @@ struct Taken {
 }
 
 impl Taken {
-    fn reserved(has_entry: bool) -> Self {
+    fn reserved(has_entry: bool, inputs: &[String]) -> Self {
         let mut taken = Self::default();
         taken
             .files
@@ -46,6 +46,9 @@ impl Taken {
         taken
             .directories
             .extend(RESERVED_DIRECTORIES.iter().map(|name| folded(name)));
+        for input in inputs {
+            taken.claim(folded(input));
+        }
         if has_entry {
             taken.files.insert(folded(ENTRY_PATH));
         }
@@ -114,9 +117,19 @@ impl Taken {
 }
 
 pub fn assign_paths(bundle: &mut Bundle<'_>) -> Vec<Note> {
+    assign_paths_around(bundle, &[])
+}
+
+fn is_input_name(inputs: &[String], path: &str) -> bool {
+    inputs.iter().any(|input| folded(input) == folded(path))
+}
+
+pub fn assign_paths_around(bundle: &mut Bundle<'_>, inputs: &[String]) -> Vec<Note> {
     let mut notes = Vec::new();
-    let mut entry_reserved = bundle.modules.values().any(|module| module.is_entry);
-    let mut taken = Taken::reserved(entry_reserved);
+    let entry_is_input = is_input_name(inputs, ENTRY_PATH);
+    let mut entry_reserved =
+        !entry_is_input && bundle.modules.values().any(|module| module.is_entry);
+    let mut taken = Taken::reserved(entry_reserved, inputs);
     for module in bundle.modules.values_mut() {
         if let Some(source) = &module.unsafe_path_source {
             notes.push(note(crate::notes::unsafe_path_replaced(
@@ -125,7 +138,11 @@ pub fn assign_paths(bundle: &mut Bundle<'_>) -> Vec<Note> {
                 module.path.as_str(),
             )));
         }
-        let base = match PosixPath::parse(module.path.as_str()) {
+        let parsed = match entry_is_input && module.is_entry && module.path.as_str() == ENTRY_PATH {
+            true => PosixPath::from_module_id(&module.id, false),
+            false => PosixPath::parse(module.path.as_str()),
+        };
+        let base = match parsed {
             Some(path) => path,
             None => {
                 notes.push(note(crate::notes::unsafe_output_path_replaced(

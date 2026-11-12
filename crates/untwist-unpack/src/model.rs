@@ -146,6 +146,8 @@ pub struct Bundle<'a> {
     pub fixed_paths: Vec<String>,
     pub numeric_ids: bool,
     pub deferred: Vec<String>,
+    pub inputs: Vec<usize>,
+    pub mirrored_inputs: Vec<String>,
 }
 
 impl<'a> Bundle<'a> {
@@ -163,6 +165,8 @@ impl<'a> Bundle<'a> {
             fixed_paths: Vec::new(),
             numeric_ids: false,
             deferred: Vec::new(),
+            inputs: Vec::new(),
+            mirrored_inputs: Vec::new(),
         }
     }
 

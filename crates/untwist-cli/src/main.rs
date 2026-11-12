@@ -373,6 +373,7 @@ fn run_on(args: &Args, session: &mut Session<'_>, sources: &[String]) -> Result<
     let borrowed: Vec<&str> = sources.iter().map(String::as_str).collect();
     let mut options = std::mem::take(&mut session.options);
     options.input_source_maps = input_source_maps(args, sources)?;
+    options.input_names = untwist::input_names(&args.files);
     let mut result = Pipeline::new(options).run_many(&borrowed);
     result.source_map_link = args.source_map;
     if args.source_map.is_some() && args.output.is_none() {
