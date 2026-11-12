@@ -31,6 +31,8 @@ fn every_production_pass<'a>() -> Vec<(String, Box<dyn untwist_core::pass::Pass<
     }
     let shorthand = untwist_rename::shorthand::boxed();
     passes.push((shorthand.name().to_string(), shorthand));
+    let wrappers = untwist_rename::commonjs::boxed();
+    passes.push((wrappers.name().to_string(), wrappers));
     passes
 }
 
@@ -270,7 +272,7 @@ fn every_pass_impl_names_exactly_the_hooks_it_overrides() {
         }
     }
     assert_eq!(
-        blocks, 59,
+        blocks, 60,
         "the production pass census moved; re-count and update"
     );
 }
