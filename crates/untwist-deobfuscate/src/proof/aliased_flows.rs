@@ -326,7 +326,9 @@ impl<'s, 'p> VisitJs<'p> for FlowScan<'s, 'p> {
     }
 
     fn visit_for_of_statement(&mut self, it: &ForOfStatement<'p>) {
-        self.for_left(&it.left);
+        for symbol in self.for_left(&it.left) {
+            self.flow(Target::Pattern(symbol), &it.right);
+        }
         self.escape(&it.right);
         walk_js::walk_for_of_statement(self, it);
     }
@@ -627,24 +629,27 @@ impl FlowScan<'_, '_> {
         }
     }
 
-    fn for_left(&mut self, left: &ForStatementLeft<'_>) {
-        match left {
-            ForStatementLeft::VariableDeclaration(declaration) => {
-                for declarator in &declaration.declarations {
-                    self.flows.seed_pattern(&declarator.id);
-                }
-            }
-            other => {
-                if let Some(target) = other.as_assignment_target() {
+    fn for_left(&mut self, left: &ForStatementLeft<'_>) -> Vec<SymbolId> {
+        let symbols: Vec<SymbolId> = match left {
+            ForStatementLeft::VariableDeclaration(declaration) => declaration
+                .declarations
+                .iter()
+                .flat_map(|declarator| pattern_symbols(&declarator.id))
+                .collect(),
+            other => match other.as_assignment_target() {
+                Some(target) => {
                     let mut identifiers = TargetIdentifiers {
                         scoping: self.scoping,
                         found: Vec::new(),
                     };
                     identifiers.visit_assignment_target(target);
-                    self.flows.seeded.extend(identifiers.found);
+                    identifiers.found
                 }
-            }
-        }
+                None => Vec::new(),
+            },
+        };
+        self.flows.seeded.extend(symbols.iter().copied());
+        symbols
     }
 }
 

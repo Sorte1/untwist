@@ -1,32 +1,8 @@
-use untwist::{Options, Pipeline};
+#[path = "common/filtered_rows.rs"]
+mod filtered_rows;
+
+use filtered_rows::{options, rows, transformed};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
-
-const ROWS: &str = include_str!("data/filtered_enumeration_rows.txt");
-
-fn rows() -> Vec<(String, String)> {
-    ROWS.lines()
-        .filter(|line| !line.trim().is_empty())
-        .filter_map(|line| line.split_once('|'))
-        .map(|(label, program)| (label.to_string(), program.to_string()))
-        .collect()
-}
-
-fn options(unsafe_transforms: bool, mutant: Option<&'static str>) -> Options {
-    Options {
-        unsafe_transforms,
-        unpack: false,
-        jsx: false,
-        disabled_passes: mutant.into_iter().collect(),
-        ..Options::default()
-    }
-}
-
-fn transformed(options: &Options, source: &str) -> String {
-    Pipeline::new(options.clone())
-        .run(source)
-        .code()
-        .to_string()
-}
 
 fn decoded(source: &str) -> bool {
     !transformed(&options(false, None), source).contains("bQ(")
@@ -83,41 +59,6 @@ fn the_decoding_rows_also_run_like_node_in_the_unsafe_lane() {
     let modes: [Mode<'_>; 1] = [("unsafe", &run_unsafe)];
     let wrong = node_rows::mismatches(&node, &decoding, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-}
-
-fn assert_rows_diverge_under(mutant: &'static str, prefix: &str) {
-    let Some(node) = node_or_skip() else {
-        return;
-    };
-    let sabotage: Vec<(String, String)> = rows()
-        .into_iter()
-        .filter(|(label, _)| label.starts_with(prefix))
-        .collect();
-    assert!(!sabotage.is_empty(), "no {prefix} rows");
-    let mutated = options(false, Some(mutant));
-    let run_mutant = |source: &str| transformed(&mutated, source);
-    let modes: [Mode<'_>; 1] = [("mutant", &run_mutant)];
-    let diverged = node_rows::mismatches(&node, &sabotage, &modes);
-    let names: Vec<&str> = diverged
-        .iter()
-        .filter_map(|row| row.split(" (mutant):").next())
-        .collect();
-    for (label, _) in &sabotage {
-        assert!(
-            names.contains(&label.as_str()),
-            "{label} did not diverge from node under the {mutant} mutant"
-        );
-    }
-}
-
-#[test]
-fn the_sabotage_rows_diverge_from_node_under_the_filtered_enumeration_mutant() {
-    assert_rows_diverge_under("filtered-enumeration", "ref-");
-}
-
-#[test]
-fn the_rewrite_order_rows_diverge_from_node_under_the_rewrite_order_mutant() {
-    assert_rows_diverge_under("filtered-rewrite-order", "ref-order-");
 }
 
 const LOOPING_FILTER: &str = "(function () { var that = {}; var pred = function (s) { for (var i = 0; i < 1e9; i++) {} return s.charCodeAt(0) == 122; }; var b; for (var k in that) { if (pred(k)) { b = k; break; } } var r = that[b]; r(); })();\n";

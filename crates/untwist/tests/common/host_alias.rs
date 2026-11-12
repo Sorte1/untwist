@@ -11,6 +11,8 @@ const ROWS: &str = include_str!("../data/host_alias/rows.txt");
 const KEYED_ROWS: &str = include_str!("../data/host_alias/keyed_rows.txt");
 const BARE_ROWS: &str = include_str!("../data/host_alias/bare_rows.txt");
 const GLOBAL_ROUTES: &str = include_str!("../data/host_alias/global_routes.txt");
+const FOREIGN_REACH_ROWS: &str = include_str!("../data/host_alias/foreign_reach_rows.txt");
+const GLOBAL_HELD: &str = "var t=this;var Z=t[k];";
 const TAIL: &str = "console.log(dec0(0x1),dec0(0x2));";
 
 fn framed(head: &str, rows: &str) -> Vec<(String, String)> {
@@ -31,6 +33,13 @@ pub fn rows() -> Vec<(String, String)> {
     rows.extend(framed(PLAIN_HEAD, KEYED_ROWS));
     rows.extend(framed(BARE_HEAD, BARE_ROWS));
     rows
+}
+
+pub fn foreign_reach_rows() -> Vec<(String, String)> {
+    framed(
+        &format!("{}{GLOBAL_HELD}", PLAIN_HEAD.trim_end()),
+        FOREIGN_REACH_ROWS,
+    )
 }
 
 pub fn global_routes() -> Vec<(String, String)> {

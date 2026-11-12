@@ -1176,7 +1176,16 @@
   leaves the text unknown. A call of such an object's `function (a, b) { return a(b); }` member
   with `Function` or `eval` first is judged as that runner called with the rest. Any other part,
   such as a parameter or a method call, leaves the key unknown. Code inside a class body is strict, so
-  its `this` is never taken for the global object.
+  its `this` is never taken for the global object. A write through a value that may hold a built-in
+  or the global object also counts. A call is of host code when its callee is reached from an
+  undeclared name that is not a standard global or from another host value, or when an argument
+  is a host value; the value such a call returns is taken to hold only what the program handed to
+  host code, but any member or element read off it, by key,
+  index, optional chain, `Reflect.get`, destructuring or `for…of` (`host.list()[0]`), may be the
+  global object. A function the `Function` constructor builds from text that may reach the global
+  object, the constructor reached by name or through `.constructor` (`({}).constructor.constructor("return this")`),
+  may return anything when called, directly, by `.call`, `.apply`, `.bind`, `new` or as a tag
+  (`crates/untwist/tests/foreign_reach_rows.rs`, node-checked).
   Pinned by `crates/untwist/tests/decode_behaviour.rs` (node-checked, both modes, as a module and
   as a script), `crates/untwist/tests/alias_resolver.rs`, `crates/untwist/tests/realm_shapes.rs`,
   `crates/untwist-deobfuscate/tests/instanceof_object.rs` and the files of `fixtures/behaviour/` in

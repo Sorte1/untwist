@@ -6,14 +6,10 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
     "ref-document-default-view",
-    "ref-created-element-owner-document",
     "ref-default-parameter",
     "ref-destructuring-default-target",
     "ref-generator-return-value",
-    "ref-awaited-value",
-    "ref-function-constructor-this",
     "ref-bound-without-receiver",
-    "ref-tagged-template-this",
     "ref-route-store-through-owner-document",
     "ref-route-resolved-key-on-event-target",
     "ref-route-store-through-event-view",

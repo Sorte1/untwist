@@ -28,7 +28,12 @@ pub(super) const OBJECT_CONSTRUCTOR: u16 = 64;
 pub(super) const GLOBAL: u16 = 128;
 pub(super) const FUNCTION_CONSTRUCTOR: u16 = 256;
 pub(super) const CONSTRUCTOR: u16 = 512;
-pub(super) const ANY: u16 = 1023;
+pub(super) const FOREIGN: u16 = 1024;
+pub(super) const HOSTILE: u16 = 2048;
+pub(super) const CODE_MADE: u16 = 4096;
+pub(super) const HOST_CODE: u16 = 8192;
+pub(super) const ANY: u16 = 16383;
+const FROM_HOST: u16 = FOREIGN | HOSTILE | HOST_CODE;
 const FUNCTION_LIKE: u16 = FUNCTION | DEFINER | CONSOLE | FUNCTION_CONSTRUCTOR;
 const CONSTRUCTOR_READ: u16 =
     DANGER | OBJECT_CONSTRUCTOR | FUNCTION | FUNCTION_CONSTRUCTOR | CONSTRUCTOR;
@@ -49,7 +54,7 @@ const CODE_REACHING_BUILTINS: &[&str] = &[
     "__proto__",
     "=",
 ];
-const CODE_RESULT: u16 = DANGER | GLOBAL | FUNCTION_CONSTRUCTOR;
+const CODE_RESULT: u16 = DANGER | GLOBAL | FUNCTION_CONSTRUCTOR | CODE_MADE;
 
 const OBJECT_GLOBALS: &[&str] = &[
     "Object",
@@ -112,6 +117,14 @@ const PROTOTYPE_GETTERS: &[&str] = &[
 const FRESH_NATIVES: &[&str] = &["Map", "WeakMap", "Set", "WeakSet", "Date", "Error"];
 
 const FUNCTION_OWN_KEYS: &[&str] = &["call", "apply", "bind", "toString"];
+
+pub(super) fn widened(bits: u16) -> u16 {
+    if bits & HOSTILE != 0 {
+        bits | DANGER | GLOBAL
+    } else {
+        bits
+    }
+}
 
 pub(super) fn member_name<'k>(member: &'k MemberExpression<'_>) -> Option<&'k str> {
     member.static_property_name().and_then(|name| name.as_str())
@@ -254,7 +267,7 @@ impl<'s> BuiltinAliases<'s> {
                 self.note(Read::Value(symbol));
                 self.expand(self.values.get(&symbol).copied().unwrap_or(0))
             }
-            None => global_value(id.name.as_str()).unwrap_or(self.lost),
+            None => global_value(id.name.as_str()).unwrap_or(self.lost | HOST_CODE),
         }
     }
 
@@ -447,6 +460,30 @@ impl<'s> BuiltinAliases<'s> {
     }
 
     fn named_read(&self, name: &str, object: u16) -> u16 {
+        let plain = self.named_read_plain(name, object & !FROM_HOST);
+        plain | self.hostile_read(object, || self.named_read_plain(name, DANGER | GLOBAL))
+    }
+
+    fn hostile_read(&self, object: u16, on_global: impl FnOnce() -> u16) -> u16 {
+        let mut bits = 0;
+        if object & FROM_HOST != 0 {
+            bits |= HOST_CODE;
+        }
+        if object & (FOREIGN | HOSTILE) != 0 {
+            bits |= HOSTILE;
+        }
+        if object & HOSTILE != 0 {
+            let read = on_global();
+            bits |= if read & GLOBAL != 0 {
+                (read & !GLOBAL) | HOSTILE
+            } else {
+                read
+            };
+        }
+        bits
+    }
+
+    fn named_read_plain(&self, name: &str, object: u16) -> u16 {
         match name {
             "__proto__" => return DANGER,
             "constructor" => return CONSTRUCTOR_READ,
@@ -459,7 +496,8 @@ impl<'s> BuiltinAliases<'s> {
         if object & FUNCTION_LIKE != 0 {
             bits |= match name {
                 "bind" | "call" | "apply" => {
-                    object & (FUNCTION | DEFINER | GETTER_DEFINER | FUNCTION_CONSTRUCTOR)
+                    object
+                        & (FUNCTION | DEFINER | GETTER_DEFINER | FUNCTION_CONSTRUCTOR | CODE_MADE)
                 }
                 _ => FUNCTION,
             };
@@ -468,7 +506,12 @@ impl<'s> BuiltinAliases<'s> {
     }
 
     fn computed_on(&self, object: u16) -> u16 {
-        let mut bits = 0;
+        let plain = Self::computed_on_plain(object & !FROM_HOST);
+        plain | self.hostile_read(object, || Self::computed_on_plain(DANGER | GLOBAL))
+    }
+
+    fn computed_on_plain(object: u16) -> u16 {
+        let mut bits = object & CODE_MADE;
         if object & DANGER != 0 {
             bits |= DANGER | FUNCTION | CONSOLE | CONSTRUCTOR;
         }
@@ -504,17 +547,44 @@ impl<'s> BuiltinAliases<'s> {
         self.named_read(name, object) | self.lost
     }
 
+    fn runs_made_code(&self, callee: &Expression<'_>) -> bool {
+        self.value(callee) & CODE_MADE != 0
+    }
+
+    fn foreign_result(&self) -> u16 {
+        self.lost | FOREIGN
+    }
+
+    fn unresolved_result(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> u16 {
+        let handed = arguments
+            .iter()
+            .filter_map(Argument::as_expression)
+            .any(|argument| self.value(argument) & FROM_HOST != 0);
+        if handed || self.value(callee) & FROM_HOST != 0 {
+            self.foreign_result()
+        } else {
+            self.lost
+        }
+    }
+
+    fn made_code_result(&self) -> u16 {
+        CODE_RESULT | self.lost
+    }
+
     fn call(&self, call: &CallExpression<'_>) -> u16 {
         if self.decoded.contains_key(&call.span) {
             return 0;
         }
         let callee = call.callee.without_parentheses();
+        if self.runs_made_code(callee) {
+            return self.made_code_result();
+        }
         if let Some(member) = callee.as_member_expression() {
             let name = member_name(member);
             if name.is_some_and(|name| PROTOTYPE_GETTERS.contains(&name)) {
                 return DANGER | self.lost;
             }
-            if name == Some("get") && self.value(member.object()) & DANGER != 0 {
+            if name == Some("get") && widened(self.value(member.object())) & DANGER != 0 {
                 let target = call.arguments.first().and_then(Argument::as_expression);
                 let target = target.map_or(ANY & !LOST, |t| self.value(t));
                 return self.computed_on(target) | self.lost;
@@ -530,7 +600,7 @@ impl<'s> BuiltinAliases<'s> {
                     return self.returned(function);
                 }
             }
-            return self.lost;
+            return self.unresolved_result(callee, &call.arguments);
         }
         if let Some(function) = self.function_span(callee) {
             return self.returned(function);
@@ -538,7 +608,7 @@ impl<'s> BuiltinAliases<'s> {
         if self.value(callee) & FUNCTION_CONSTRUCTOR != 0 {
             return self.code_result(call) | self.lost;
         }
-        self.lost
+        self.unresolved_result(callee, &call.arguments)
     }
 
     pub(super) fn value(&self, expr: &Expression<'_>) -> u16 {
@@ -554,12 +624,15 @@ impl<'s> BuiltinAliases<'s> {
             }
             Expression::CallExpression(call) => self.call(call),
             Expression::NewExpression(new) if self.fresh_native(&new.callee) => 0,
+            Expression::NewExpression(new) if self.runs_made_code(&new.callee) => {
+                self.made_code_result()
+            }
             Expression::NewExpression(new) => match self.function_span(&new.callee) {
                 Some(function) => self.returned(function),
                 None if self.value(&new.callee) & FUNCTION_CONSTRUCTOR != 0 => {
                     CODE_RESULT | self.lost
                 }
-                None => self.lost,
+                None => self.unresolved_result(&new.callee, &new.arguments),
             },
             Expression::ChainExpression(chain) => match &chain.expression {
                 ChainElement::CallExpression(call) => self.call(call),
@@ -578,10 +651,13 @@ impl<'s> BuiltinAliases<'s> {
                 self.value(&logical.left) | self.value(&logical.right)
             }
             Expression::AssignmentExpression(assignment) => self.value(&assignment.right),
+            Expression::TaggedTemplateExpression(tagged) if self.runs_made_code(&tagged.tag) => {
+                self.made_code_result()
+            }
             Expression::AwaitExpression(_)
             | Expression::YieldExpression(_)
             | Expression::TaggedTemplateExpression(_)
-            | Expression::ImportExpression(_) => self.lost,
+            | Expression::ImportExpression(_) => self.foreign_result(),
             other => other
                 .as_member_expression()
                 .map_or(0, |member| self.member(member)),
@@ -645,7 +721,8 @@ impl<'s> BuiltinAliases<'s> {
             match name {
                 Some(name) if is_getter_definer(name) => sites.push((object, key_at(0))),
                 Some(name)
-                    if is_owned_definer(name) && object & (OBJECT_CONSTRUCTOR | GLOBAL) != 0 =>
+                    if is_owned_definer(name)
+                        && widened(object) & (OBJECT_CONSTRUCTOR | GLOBAL) != 0 =>
                 {
                     let key = match name {
                         "defineProperty" | "set" | "deleteProperty" => key_at(1),
@@ -702,9 +779,10 @@ impl<'s> BuiltinAliases<'s> {
     }
 
     fn functions_only(&self, bits: u16) -> Option<bool> {
-        if builtin_aliases_trusted() || bits & !LOST == 0 {
+        if builtin_aliases_trusted() || bits & !(LOST | FOREIGN | HOST_CODE) == 0 {
             return None;
         }
+        let bits = widened(bits);
         Some(bits & (DANGER | GETTER_DEFINER | OBJECT_CONSTRUCTOR | GLOBAL) == 0)
     }
 }
