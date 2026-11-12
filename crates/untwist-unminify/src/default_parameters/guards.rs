@@ -15,6 +15,7 @@ pub struct Host {
     own_name: Option<SymbolId>,
     starts_lazily: bool,
     has_fixed_arity: bool,
+    is_constructor: bool,
     is_safe_lane: bool,
 }
 
@@ -37,8 +38,30 @@ pub fn host(function: &Function<'_>, cx: &Cx<'_, '_>) -> Option<Host> {
         own_name: own_name(function, cx.scoping()),
         starts_lazily: function.generator,
         has_fixed_arity: is_accessor(cx),
+        is_constructor: is_constructor(cx),
         is_safe_lane: !cx.opts.unsafe_transforms,
     })
+}
+
+impl Host {
+    pub fn may_precede_defaults(&self, init: Option<&Expression<'_>>) -> bool {
+        match init.map(Expression::without_parentheses) {
+            None => true,
+            Some(Expression::ThisExpression(_)) => !self.is_constructor,
+            Some(Expression::Identifier(id)) => {
+                !self.is_safe_lane && id.name.as_str() == "arguments"
+            }
+            Some(_) => false,
+        }
+    }
+}
+
+fn is_constructor(cx: &Cx<'_, '_>) -> bool {
+    matches!(
+        cx.tcx.parent(),
+        Ancestor::MethodDefinitionValue(method)
+            if *method.kind() == MethodDefinitionKind::Constructor
+    )
 }
 
 fn own_name(function: &Function<'_>, scoping: &Scoping) -> Option<SymbolId> {

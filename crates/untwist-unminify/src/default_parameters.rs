@@ -75,7 +75,7 @@ fn restore_one<'a>(
     host: &Host,
     cx: &mut Cx<'a, '_>,
 ) -> bool {
-    let skipped = bare_declarations(stmts.as_slice());
+    let skipped = leading_declarations(stmts.as_slice(), host);
     let Some(plan) = plan(params, &stmts[skipped..], host, cx) else {
         return false;
     };
@@ -100,14 +100,14 @@ fn restore_one<'a>(
     }
 }
 
-fn bare_declarations(stmts: &[Statement<'_>]) -> usize {
+fn leading_declarations(stmts: &[Statement<'_>], host: &Host) -> usize {
     stmts
         .iter()
-        .take_while(|statement| is_bare_declaration(statement))
+        .take_while(|statement| may_precede_defaults(statement, host))
         .count()
 }
 
-fn is_bare_declaration(statement: &Statement<'_>) -> bool {
+fn may_precede_defaults(statement: &Statement<'_>, host: &Host) -> bool {
     let Statement::VariableDeclaration(declaration) = statement else {
         return false;
     };
@@ -115,7 +115,8 @@ fn is_bare_declaration(statement: &Statement<'_>) -> bool {
         declaration.kind,
         VariableDeclarationKind::Var | VariableDeclarationKind::Let
     ) && declaration.declarations.iter().all(|declarator| {
-        declarator.init.is_none() && matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+        matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+            && host.may_precede_defaults(declarator.init.as_ref())
     })
 }
 

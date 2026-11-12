@@ -710,17 +710,17 @@ console.log(String(f()), String(f(3)));"#,
     }
 }
 
-fn params_fixture(variant: &str) -> String {
+fn params_fixture(variant: &str, name: &str) -> String {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/untranspile/params")
         .join(variant)
-        .join("derived-defaults.js");
+        .join(name);
     std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
 }
 
 #[test]
 fn babel_derived_constructors_get_their_default_parameters_back_under_unsafe() {
-    let source = params_fixture("babel-7.29");
+    let source = params_fixture("babel-7.29", "derived-defaults.js");
     let output = unsafe_lane(&source);
     assert!(
         output.contains("function Box(width = 1, height = width * 2, label) {\n    var _this;"),
@@ -741,9 +741,78 @@ fn transpiled_parameter_fixtures_agree_with_node_in_both_lanes() {
         "ts-5.9-es5",
         "swc-1.16-es5",
     ] {
-        let source = params_fixture(variant);
-        for output in [default_lane(&source), unsafe_lane(&source)] {
-            untwist_testing::node::assert_node_agrees(&source, &output);
+        for name in ["derived-defaults.js", "this-capture-defaults.js"] {
+            let source = params_fixture(variant, name);
+            for output in [default_lane(&source), unsafe_lane(&source)] {
+                untwist_testing::node::assert_node_agrees(&source, &output);
+            }
         }
+    }
+}
+
+#[test]
+fn babel_this_and_arguments_captures_keep_their_place_above_the_defaults_under_unsafe() {
+    let source = params_fixture("babel-7.29", "this-capture-defaults.js");
+    let output = unsafe_lane(&source);
+    assert!(
+        output.contains(
+            "function stepper(by = 1, label = \"n\" + this.count) {\n      var _this = this;"
+        ),
+        "{output}"
+    );
+    assert!(
+        output.contains("function tally(seed = 10, extra) {\n  var _arguments = arguments,"),
+        "{output}"
+    );
+    untwist_testing::node::assert_node_agrees(&source, &output);
+}
+
+#[test]
+fn a_guard_after_a_this_capture_becomes_a_default_parameter_by_default() {
+    let source = r#"function f() {
+  var self = this;
+  var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : this.d;
+  return () => self.d + a;
+}
+console.log(f.call({ d: 1 })(), f.call({ d: 1 }, 5)(), f.length);"#;
+    let output = default_lane(source);
+    assert!(
+        output.contains("function f(a = this.d) {\n  var self = this;"),
+        "{output}"
+    );
+    untwist_testing::node::assert_node_agrees(source, &output);
+}
+
+#[test]
+fn a_guard_after_an_arguments_capture_stays_by_default() {
+    let source = r#"function f() {
+  var all = arguments;
+  var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 1;
+  a = 7;
+  return [a, all[0], all.length];
+}
+console.log(String(f()), String(f(2)), String(f(undefined, 3)));"#;
+    assert_declaration_stays(source, &default_lane(source));
+}
+
+#[test]
+fn a_guard_after_this_in_a_derived_constructor_stays() {
+    let source = r#"var log = [];
+class B {}
+class C extends B {
+  constructor() {
+    var self = this;
+    var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : log.push("a");
+    super();
+    this.a = a;
+  }
+}
+try {
+  new C();
+} catch (err) {
+  console.log(err.constructor.name, log.length);
+}"#;
+    for output in [default_lane(source), unsafe_lane(source)] {
+        assert_declaration_stays(source, &output);
     }
 }
