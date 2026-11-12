@@ -5,6 +5,8 @@ use super::model::{self, Read};
 use super::object::{Builtin, Method, Obj, ObjectId, Objects, SiteKind};
 use crate::mutants::{back_routes_dropped, unbound_this_dropped, world_constructors_dropped};
 
+const CHECK_EVERY: u32 = 4096;
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub(super) struct Node(u32);
 
@@ -15,9 +17,18 @@ impl Field {
     pub(super) const UNKNOWN: Field = Field(u32::MAX);
     pub(super) const ACCESSORS: Field = Field(u32::MAX - 1);
     pub(super) const ENTRIES: Field = Field(u32::MAX - 2);
+    pub(super) const ELEMENTS: Field = Field(u32::MAX - 3);
+    pub(super) const OWN: Field = Field(u32::MAX - 4);
 
     fn internal(self) -> bool {
-        self == Field::ACCESSORS || self == Field::ENTRIES
+        matches!(
+            self,
+            Field::ACCESSORS | Field::ENTRIES | Field::ELEMENTS | Field::OWN
+        )
+    }
+
+    fn element_like(self, name: Option<&str>) -> bool {
+        self == Field::UNKNOWN || name.is_some_and(|name| name.parse::<u32>().is_ok())
     }
 }
 
@@ -44,6 +55,7 @@ pub(super) struct BoundInfo {
     pub(super) this: Node,
     pub(super) args: Vec<Node>,
     pub(super) loose: bool,
+    pub(super) merged: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -110,11 +122,13 @@ enum Watch {
     EscapeSites,
     Child(ObjectId),
     Heirs(u32),
+    ExtraHeir(u32),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Sub {
     CopyTo(Node),
+    ElementsTo(Node),
     KeysTo(Node),
     StoreInto(Node),
     DefineInto(Node),
@@ -172,6 +186,7 @@ pub(super) struct Graph {
     escaped: FxHashSet<ObjectId>,
     pub(super) functions: FxHashMap<ObjectId, FnInfo>,
     pub(super) bound: FxHashMap<ObjectId, BoundInfo>,
+    pub(super) bound_calls: FxHashMap<ObjectId, Vec<u32>>,
     pub(super) spills: FxHashMap<ObjectId, Node>,
     wired_loads: FxHashSet<(ObjectId, Field, Node)>,
     wired_stores: FxHashSet<(ObjectId, Field, Node)>,
@@ -196,10 +211,12 @@ pub(super) struct Graph {
     adopted: FxHashSet<(ObjectId, ObjectId)>,
     heirs: FxHashMap<ObjectId, Node>,
     heir_copies: Vec<Node>,
+    extra_heirs: Vec<Node>,
     receivers: FxHashMap<Node, Node>,
     world_fields: Option<Node>,
     budget: Budget,
     exhausted: bool,
+    pub(super) gave_up: Option<&'static str>,
 }
 
 impl Graph {
@@ -235,6 +252,7 @@ impl Graph {
             escaped: FxHashSet::default(),
             functions: FxHashMap::default(),
             bound: FxHashMap::default(),
+            bound_calls: FxHashMap::default(),
             spills: FxHashMap::default(),
             wired_loads: FxHashSet::default(),
             wired_stores: FxHashSet::default(),
@@ -259,6 +277,7 @@ impl Graph {
             adopted: FxHashSet::default(),
             heirs: FxHashMap::default(),
             heir_copies: Vec::new(),
+            extra_heirs: Vec::new(),
             receivers: FxHashMap::default(),
             world_fields: None,
             budget: Budget {
@@ -267,6 +286,7 @@ impl Graph {
                 ..Budget::default()
             },
             exhausted: false,
+            gave_up: None,
         };
         graph.esc = graph.node();
         graph.world = graph.node();
@@ -418,6 +438,7 @@ impl Graph {
         if self.defer(Init::Load(base, key, to)) || self.exhausted {
             return;
         }
+        self.add_builtin(to, Builtin::PrimUndefined);
         let index = self.loads.len() as u32;
         self.loads.push((base, key, to));
         self.watch(base, Watch::LoadBase(index));
@@ -670,6 +691,11 @@ impl Graph {
     fn apply_sub(&mut self, sub: Sub, field: Field, node: Node) {
         match sub {
             Sub::CopyTo(to) => self.copy(node, to),
+            Sub::ElementsTo(to) => {
+                if field.element_like(self.field_name(field)) {
+                    self.copy(node, to);
+                }
+            }
             Sub::KeysTo(to) => match field {
                 Field::ACCESSORS | Field::ENTRIES => {}
                 Field::UNKNOWN => self.add_builtin(to, Builtin::PrimString),
@@ -741,6 +767,12 @@ impl Graph {
         });
     }
 
+    pub(super) fn add_receiver(&mut self, target: Node, receiver: Node) {
+        let index = self.extra_heirs.len() as u32;
+        self.extra_heirs.push(receiver);
+        self.watch(target, Watch::ExtraHeir(index));
+    }
+
     fn receivers(&mut self, target: Node) -> Node {
         if let Some(node) = self.receivers.get(&target) {
             return *node;
@@ -804,6 +836,7 @@ impl Graph {
             Obj::Str(_) => {}
             Obj::Builtin(builtin) if builtin.is_primitive() => {}
             Obj::Builtin(builtin) => {
+                self.insert(to, ObjectId::WORLD);
                 for prim in model::PRIMITIVES {
                     if builtin == Builtin::ObjectProto || model::protos(*prim).contains(&builtin) {
                         let id = self.builtin(*prim);
@@ -830,7 +863,7 @@ impl Graph {
                 };
                 let mut found = Vec::new();
                 for object in objects {
-                    let field = match self.objects.as_str(object).map(str::to_string) {
+                    let field = match self.objects.key_text(object).map(str::to_string) {
                         Some(text) => self.name(&text),
                         None => Field::UNKNOWN,
                     };
@@ -924,6 +957,19 @@ impl Graph {
                     self.heirs_into(*object, to);
                 }
             }
+            Watch::ExtraHeir(index) => {
+                let receiver = self.extra_heirs[index as usize];
+                for object in delta {
+                    match self.objects.get(*object) {
+                        Obj::World | Obj::Str(_) => {}
+                        Obj::Builtin(builtin) if builtin.is_primitive() => {}
+                        _ => {
+                            let heirs = self.heirs_node(*object);
+                            self.copy(receiver, heirs);
+                        }
+                    }
+                }
+            }
             Watch::ProtoSet(index) => {
                 let (_, from) = self.proto_sets[index as usize];
                 for object in delta {
@@ -949,6 +995,17 @@ impl Graph {
             }
             Obj::Str(_) => {}
             Obj::Builtin(builtin) if builtin.is_primitive() => {}
+            Obj::Builtin(_) => {
+                self.subscribe(object, sub);
+                let members = self.node();
+                self.wire_load(object, Field::UNKNOWN, members);
+                match sub {
+                    Sub::DefineInto(_) => {
+                        self.define_one(target, Key::Static(Field::UNKNOWN), members, Span::default())
+                    }
+                    _ => self.store(target, Key::Static(Field::UNKNOWN), members),
+                }
+            }
             _ => self.subscribe(object, sub),
         }
     }
@@ -993,7 +1050,7 @@ impl Graph {
             let mut texts = Vec::new();
             let mut other = false;
             for object in &graph.pts[node.0 as usize] {
-                match graph.objects.as_str(*object) {
+                match graph.objects.key_text(*object) {
                     Some(text) => texts.push(text.to_string()),
                     None => other = true,
                 }
@@ -1033,6 +1090,10 @@ impl Graph {
         if !self.wired_loads.insert((object, field, to)) {
             return;
         }
+        if field == Field::ELEMENTS || field == Field::OWN {
+            self.wire_elements(object, field, to);
+            return;
+        }
         let builtin = match self.objects.get(object) {
             Obj::World => {
                 self.insert(to, ObjectId::WORLD);
@@ -1044,11 +1105,19 @@ impl Graph {
             Obj::Site(..) => None,
         };
         if let Some(prim) = builtin.filter(|builtin| builtin.is_primitive()) {
+            let reads_proto = field == self.proto_name();
             for proto in model::protos(prim) {
                 let id = self.builtin(*proto);
-                self.wire_load(id, field, to);
+                if reads_proto {
+                    self.insert(to, id);
+                } else {
+                    self.wire_load(id, field, to);
+                }
             }
             return;
+        }
+        if matches!(self.objects.get(object), Obj::Site(_, SiteKind::Function)) {
+            self.frame_read(object, field, to);
         }
         let proto = self.proto_node(object);
         if field == self.proto_name() {
@@ -1084,6 +1153,68 @@ impl Graph {
         self.live = live;
     }
 
+    fn wire_elements(&mut self, object: ObjectId, field: Field, to: Node) {
+        match self.objects.get(object).clone() {
+            Obj::Str(_) => self.add_builtin(to, Builtin::PrimString),
+            Obj::Builtin(Builtin::PrimString) => self.add_builtin(to, Builtin::PrimString),
+            Obj::Builtin(builtin) if builtin.is_primitive() => {}
+            Obj::Site(..) => {
+                let unknown = self.field_node(object, Field::UNKNOWN);
+                self.copy(unknown, to);
+                if field == Field::OWN {
+                    self.subscribe(object, Sub::CopyTo(to));
+                    return;
+                }
+                self.subscribe(object, Sub::ElementsTo(to));
+                let proto = self.proto_node(object);
+                let live = self.live;
+                self.live = true;
+                self.load(proto, Key::Static(Field::ELEMENTS), to);
+                self.live = live;
+            }
+            Obj::World | Obj::Builtin(_) if field == Field::OWN => {
+                self.wire_load(object, Field::UNKNOWN, to);
+            }
+            Obj::World => {
+                self.insert(to, ObjectId::WORLD);
+                self.world_read(Field::UNKNOWN, to);
+            }
+            Obj::Builtin(builtin) => {
+                if builtin == Builtin::Global {
+                    self.insert(to, ObjectId::WORLD);
+                    self.world_read(Field::UNKNOWN, to);
+                }
+                let unknown = self.field_node(object, Field::UNKNOWN);
+                self.copy(unknown, to);
+                self.subscribe(object, Sub::ElementsTo(to));
+                let proto = self.proto_node(object);
+                let live = self.live;
+                self.live = true;
+                self.load(proto, Key::Static(Field::ELEMENTS), to);
+                self.live = live;
+            }
+        }
+    }
+
+    fn frame_read(&mut self, function: ObjectId, field: Field, to: Node) {
+        let any = field == Field::UNKNOWN;
+        let caller = self.field_name(field) == Some("caller");
+        let arguments = self.field_name(field) == Some("arguments");
+        if any || caller {
+            self.gave_up = Some("a function's caller is read");
+        }
+        if !(any || arguments) {
+            return;
+        }
+        self.insert(to, ObjectId::WORLD);
+        let Some(info) = self.functions.get(&function).cloned() else {
+            return;
+        };
+        for node in info.params.iter().chain(&info.rest).chain(&info.arguments) {
+            self.escape(*node);
+        }
+    }
+
     fn world_read(&mut self, field: Field, to: Node) {
         if field.internal() {
             return;
@@ -1114,7 +1245,10 @@ impl Graph {
         let is_proto = field == self.proto_name();
         match self.objects.get(object) {
             Obj::World => self.escape(from),
-            Obj::Str(_) => {}
+            Obj::Str(_) => self.store_on_primitive(Builtin::PrimString, field, from),
+            Obj::Builtin(builtin) if builtin.is_primitive() => {
+                self.store_on_primitive(*builtin, field, from)
+            }
             Obj::Builtin(builtin) if !builtin.patchable() => {}
             Obj::Builtin(_) => {
                 let proto = self.proto_node(object);
@@ -1139,6 +1273,13 @@ impl Graph {
                     self.copy(from, proto);
                 }
             }
+        }
+    }
+
+    fn store_on_primitive(&mut self, primitive: Builtin, field: Field, from: Node) {
+        for proto in model::protos(primitive) {
+            let id = self.builtin(*proto);
+            self.wire_store(id, field, from);
         }
     }
 
@@ -1190,6 +1331,10 @@ impl Graph {
                     for arg in info.args {
                         self.copy(arg, esc);
                     }
+                    let spill = self.spills.get(&object).copied();
+                    if let Some(spill) = spill {
+                        self.copy(spill, esc);
+                    }
                 }
             }
             Obj::Builtin(builtin) => {
@@ -1240,7 +1385,12 @@ impl Graph {
                 return;
             }
         }
+        let mut pops: u32 = 0;
         loop {
+            pops = pops.wrapping_add(1);
+            if pops % CHECK_EVERY == 0 && untwist_core::budget::check().is_err() {
+                self.give_up();
+            }
             if self.over_budget() {
                 return;
             }
@@ -1262,6 +1412,8 @@ impl Graph {
                 continue;
             }
             let targets = self.copies[node.0 as usize].clone();
+            let fan = (targets.len() + self.watches[node.0 as usize].len()) as u64;
+            self.budget.steps += fan.saturating_mul(delta.len() as u64);
             for target in targets {
                 for object in &delta {
                     self.insert(target, *object);
@@ -1303,6 +1455,12 @@ impl Graph {
                 self.handle(watch, &[object]);
             }
         }
+    }
+
+    fn give_up(&mut self) {
+        self.exhausted = true;
+        self.queue.clear();
+        self.replays.clear();
     }
 
     fn over_budget(&mut self) -> bool {

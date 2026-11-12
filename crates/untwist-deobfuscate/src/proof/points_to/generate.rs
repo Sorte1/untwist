@@ -197,6 +197,8 @@ impl<'s> Gen<'s> {
             let slot = self.g.field_node(self.global_object, field);
             self.g.copy(node, slot);
             self.g.copy(slot, node);
+            self.g.add(slot, ObjectId::WORLD);
+            self.g.escape(node);
         }
         node
     }
@@ -274,6 +276,7 @@ impl<'s> Gen<'s> {
             Statement::FunctionDeclaration(it) => {
                 let node = self.function(it, false);
                 self.bind_id(it.id.as_ref(), node);
+                self.hoist_block_function(it.id.as_ref(), node);
             }
             Statement::ClassDeclaration(it) => {
                 self.class(it);
@@ -407,6 +410,9 @@ impl<'s> Gen<'s> {
                 || !matches!(declarator.id, BindingPattern::BindingIdentifier(_))
             {
                 self.bind_pattern(&declarator.id, value);
+            } else {
+                let undefined = self.prim(Builtin::PrimUndefined);
+                self.bind_pattern(&declarator.id, Some(undefined));
             }
         }
     }
@@ -468,6 +474,38 @@ impl<'s> Gen<'s> {
             other => other.as_expression().and_then(|expr| self.expr(expr)),
         };
         self.escape(value);
+    }
+
+    fn hoist_block_function(&mut self, id: Option<&BindingIdentifier<'_>>, value: Node) {
+        let Some(id) = id else {
+            return;
+        };
+        let Some(symbol) = id.symbol_id.get() else {
+            return;
+        };
+        if self.frame().strict {
+            return;
+        }
+        let mut scope = self.scoping.symbol_scope_id(symbol);
+        if self.scoping.scope_flags(scope).is_var() {
+            return;
+        }
+        while let Some(parent) = self.scoping.scope_parent_id(scope) {
+            scope = parent;
+            if self.scoping.scope_flags(scope).is_var() {
+                break;
+            }
+        }
+        match self.scoping.find_binding(scope, id.name) {
+            Some(outer) if outer != symbol => {
+                let node = self.binding(outer);
+                self.g.copy(value, node);
+            }
+            _ => {
+                let global = self.global;
+                self.g.store_named(global, &id.name, value);
+            }
+        }
     }
 
     pub(super) fn bind_id(&mut self, id: Option<&BindingIdentifier<'_>>, value: Node) {
@@ -552,12 +590,15 @@ impl<'s> Gen<'s> {
             if !frame.strict {
                 let node = self.g.singleton(arguments);
                 for param in &params {
-                    self.g.load(node, Key::Static(Field::UNKNOWN), *param);
+                    self.g.load(node, Key::Static(Field::ELEMENTS), *param);
                     self.g.copy(*param, fields);
                 }
             }
             fields
         });
+        for node in params.iter().chain([&frame.ret]) {
+            self.g.add_builtin(*node, Builtin::PrimUndefined);
+        }
         let info = FnInfo {
             params,
             rest,

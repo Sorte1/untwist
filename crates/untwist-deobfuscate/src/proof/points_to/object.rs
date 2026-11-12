@@ -37,6 +37,8 @@ pub(super) enum Builtin {
     PrimNumber,
     PrimBoolean,
     PrimSymbol,
+    PrimUndefined,
+    PrimNull,
     Machinery,
     Method(Method),
 }
@@ -73,6 +75,8 @@ pub(super) enum Method {
     DefineGetter,
     DefineSetter,
     LookupAccessor,
+    ProtoGetter,
+    ProtoSetter,
     FnCall,
     FnApply,
     FnBind,
@@ -96,6 +100,7 @@ pub(super) enum Method {
     ArrayJoin,
     ArrayIter,
     StringReplace,
+    StringPattern,
     CollectionSet,
     CollectionAdd,
     CollectionGet,
@@ -109,7 +114,12 @@ impl Builtin {
     pub(super) fn is_primitive(self) -> bool {
         matches!(
             self,
-            Builtin::PrimString | Builtin::PrimNumber | Builtin::PrimBoolean | Builtin::PrimSymbol
+            Builtin::PrimString
+                | Builtin::PrimNumber
+                | Builtin::PrimBoolean
+                | Builtin::PrimSymbol
+                | Builtin::PrimUndefined
+                | Builtin::PrimNull
         )
     }
 
@@ -207,9 +217,11 @@ impl Objects {
         }
     }
 
-    pub(super) fn as_str(&self, id: ObjectId) -> Option<&str> {
+    pub(super) fn key_text(&self, id: ObjectId) -> Option<&str> {
         match self.get(id) {
             Obj::Str(text) => Some(text),
+            Obj::Builtin(Builtin::PrimUndefined) => Some("undefined"),
+            Obj::Builtin(Builtin::PrimNull) => Some("null"),
             _ => None,
         }
     }

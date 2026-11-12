@@ -97,7 +97,7 @@ fn global(name: &str) -> Read {
         "Math" => one!(MathNs),
         "JSON" => one!(Json),
         "Map" | "Set" | "WeakMap" | "WeakSet" => one!(CollectionCtor),
-        "undefined" => NOTHING,
+        "undefined" => one!(PrimUndefined),
         "NaN" | "Infinity" => NUMBER,
         _ if GLOBAL_OBJECT_NAMES.contains(&name) => one!(Global),
         _ if GLOBAL_PURE.contains(&name) => PURE,
@@ -175,6 +175,7 @@ fn array_ctor(name: &str) -> Read {
         "isArray" => PURE,
         "from" => one!(Method(ArrayFrom)),
         "of" => one!(Method(ArrayOf)),
+        "fromAsync" => one!(Other),
         "prototype" => one!(ArrayProto),
         "length" => NUMBER,
         "name" => STRING,
@@ -275,6 +276,7 @@ fn string_ctor(name: &str) -> Read {
 fn string_proto(name: &str) -> Read {
     match name {
         "replace" | "replaceAll" => one!(Method(StringReplace)),
+        "split" | "match" | "matchAll" | "search" => one!(Method(StringPattern)),
         "constructor" => one!(StringCtor),
         "length" => NUMBER,
         "@@iterator" => one!(Method(ArrayIter)),
@@ -326,7 +328,7 @@ fn symbol_ctor(name: &str) -> Read {
         "for" | "keyFor" => PURE,
         "iterator" | "asyncIterator" | "hasInstance" | "isConcatSpreadable" | "match"
         | "matchAll" | "replace" | "search" | "species" | "split" | "toPrimitive"
-        | "toStringTag" | "unscopables" => SYMBOL,
+        | "toStringTag" | "unscopables" | "asyncDispose" | "dispose" => SYMBOL,
         "prototype" => one!(SymbolProto),
         "length" => NUMBER,
         "name" => STRING,
@@ -389,7 +391,7 @@ fn console(name: &str) -> Read {
     if CONSOLE_METHODS.contains(&name) {
         PURE
     } else {
-        NOTHING
+        Read::World
     }
 }
 
@@ -397,7 +399,7 @@ const MATH_FUNCTIONS: &[&str] = &[
     "abs", "acos", "acosh", "asin", "asinh", "atan", "atanh", "atan2", "cbrt", "ceil", "clz32",
     "cos", "cosh", "exp", "expm1", "floor", "fround", "hypot", "imul", "log", "log1p", "log10",
     "log2", "max", "min", "pow", "random", "round", "sign", "sin", "sinh", "sqrt", "tan", "tanh",
-    "trunc",
+    "trunc", "f16round", "sumPrecise",
 ];
 
 const MATH_CONSTANTS: &[&str] = &[
@@ -417,7 +419,7 @@ fn math(name: &str) -> Read {
 fn json(name: &str) -> Read {
     match name {
         "parse" => one!(Method(JsonParse)),
-        "stringify" => one!(Other),
+        "stringify" | "rawJSON" | "isRawJSON" => one!(Other),
         _ => NOTHING,
     }
 }
@@ -442,6 +444,15 @@ fn collection_proto(name: &str) -> Read {
         "keys" | "values" | "entries" | "@@iterator" => one!(Method(CollectionIter)),
         "size" => NUMBER,
         "constructor" => one!(CollectionCtor),
+        "union"
+        | "intersection"
+        | "difference"
+        | "symmetricDifference"
+        | "isSubsetOf"
+        | "isSupersetOf"
+        | "isDisjointFrom"
+        | "getOrInsert"
+        | "getOrInsertComputed" => one!(Other),
         _ => NOTHING,
     }
 }
@@ -449,6 +460,9 @@ fn collection_proto(name: &str) -> Read {
 fn iterator_proto(name: &str) -> Read {
     match name {
         "next" => one!(Method(IterNext)),
+        "@@iterator" => one!(Method(ReturnsThis)),
+        "map" | "filter" | "take" | "drop" | "flatMap" | "reduce" | "toArray" | "forEach"
+        | "some" | "every" | "find" | "constructor" => one!(Other),
         _ => NOTHING,
     }
 }
@@ -481,7 +495,8 @@ pub(super) fn read(builtin: Builtin, name: &str) -> Read {
         IteratorProto => iterator_proto(name),
         Other => Read::Values(OTHER_READ),
         Machinery => Read::Values(&[Machinery, PrimString, PrimNumber]),
-        PrimString | PrimNumber | PrimBoolean | PrimSymbol | Method(_) => NOTHING,
+        PrimString | PrimNumber | PrimBoolean | PrimSymbol | PrimUndefined | PrimNull
+        | Method(_) => NOTHING,
     }
 }
 
@@ -522,7 +537,8 @@ pub(super) fn read_any(builtin: Builtin) -> (Vec<Builtin>, bool) {
             Read::Values(values) => (values.to_vec(), false),
             Read::World => (Vec::new(), true),
         },
-        PrimString | PrimNumber | PrimBoolean | PrimSymbol | Method(_) => (Vec::new(), false),
+        PrimString | PrimNumber | PrimBoolean | PrimSymbol | PrimUndefined | PrimNull
+        | Method(_) => (Vec::new(), false),
         _ => (methods_of(builtin), false),
     }
 }
@@ -601,7 +617,7 @@ const PROBE_NAMES: &[&str] = &[
 ];
 
 fn methods_of(builtin: Builtin) -> Vec<Builtin> {
-    let mut found = Vec::new();
+    let mut found = vec![Other];
     for name in PROBE_NAMES {
         if let Read::Values(values) = read(builtin, name) {
             for value in values {
@@ -626,7 +642,7 @@ pub(super) fn protos(builtin: Builtin) -> &'static [Builtin] {
         PrimNumber => &[NumberProto],
         PrimBoolean => &[BooleanProto],
         PrimSymbol => &[SymbolProto],
-        ObjectProto | Machinery => &[],
+        ObjectProto | Machinery | PrimUndefined | PrimNull => &[],
     }
 }
 

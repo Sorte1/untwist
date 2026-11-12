@@ -36,7 +36,7 @@ fn node_names(graph: &Graph, node: Node) -> AliasKey {
     }
     let names: Option<Vec<String>> = objects
         .iter()
-        .map(|object| graph.objects.as_str(*object).map(str::to_string))
+        .map(|object| graph.objects.key_text(*object).map(str::to_string))
         .collect();
     names.map_or(AliasKey::Unknown, sorted_names)
 }
@@ -74,7 +74,7 @@ impl Gen<'_> {
         if builtin_aliases_trusted() {
             return Vec::new();
         }
-        if let Some(reason) = self.fallback {
+        if let Some(reason) = self.fallback.or(self.g.gave_up) {
             return vec![AliasSite::new(
                 Span::default(),
                 AliasKey::Fallback(reason),
