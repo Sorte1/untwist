@@ -73,7 +73,7 @@ pub struct Args {
         long,
         value_enum,
         value_name = "MODE",
-        help = "rename identifiers: none, mangle, simple or unique"
+        help = "rename identifiers: none, mangle, simple, smart or unique; smart names machine-made bindings from evidence (loop counters, callback parameters, require and import names, destructured keys, catch, constructors and DOM calls, the property a binding is stored under) and leaves human-written names alone"
     )]
     pub rename: Option<RenameArg>,
     #[arg(
@@ -294,6 +294,7 @@ pub enum RenameArg {
     None,
     Mangle,
     Simple,
+    Smart,
     Unique,
 }
 
@@ -320,6 +321,7 @@ impl RenameArg {
             RenameArg::None => untwist::RenameMode::None,
             RenameArg::Mangle => untwist::RenameMode::Mangle,
             RenameArg::Simple => untwist::RenameMode::Simple,
+            RenameArg::Smart => untwist::RenameMode::Smart,
             RenameArg::Unique => untwist::RenameMode::Unique,
         }
     }

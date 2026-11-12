@@ -25,6 +25,7 @@ fn rename_mode(word: &str) -> Result<RenameMode, String> {
         "none" => Ok(RenameMode::None),
         "mangle" => Ok(RenameMode::Mangle),
         "simple" => Ok(RenameMode::Simple),
+        "smart" => Ok(RenameMode::Smart),
         "unique" => Ok(RenameMode::Unique),
         other => Err(format!("unknown rename mode {other}")),
     }

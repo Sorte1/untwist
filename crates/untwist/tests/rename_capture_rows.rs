@@ -1,7 +1,12 @@
 use untwist::{Options, Pipeline, RenameMode};
 use untwist_testing::node_rows::{mismatches, node_or_skip, Mode};
 
-const MODES: [RenameMode; 3] = [RenameMode::Mangle, RenameMode::Simple, RenameMode::Unique];
+const MODES: [RenameMode; 4] = [
+    RenameMode::Mangle,
+    RenameMode::Simple,
+    RenameMode::Unique,
+    RenameMode::Smart,
+];
 
 const ANNEX_B_VAR: &str =
     "function g() { var f = 1; { function f() { return 2; } } return typeof f; }
@@ -87,10 +92,12 @@ fn rows(programs: &[(&str, &str)], rename_all: bool) -> Vec<String> {
     let mangle = |source: &str| renamed(source, RenameMode::Mangle, rename_all);
     let simple = |source: &str| renamed(source, RenameMode::Simple, rename_all);
     let unique = |source: &str| renamed(source, RenameMode::Unique, rename_all);
-    let modes: [Mode<'_>; 3] = [
+    let smart = |source: &str| renamed(source, RenameMode::Smart, rename_all);
+    let modes: [Mode<'_>; 4] = [
         ("mangle", &mangle),
         ("simple", &simple),
         ("unique", &unique),
+        ("smart", &smart),
     ];
     mismatches(&node, &programs, &modes)
 }

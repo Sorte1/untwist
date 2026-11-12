@@ -12,12 +12,16 @@ const DEFAULT_FLAGS: [&str; 3] = ["--unsafe", "--no-unpack", "--no-jsx"];
 const SAFE_FLAGS: [&str; 2] = ["--no-unpack", "--no-jsx"];
 const UNIQUE_FLAGS: [&str; 5] = ["--unsafe", "--no-unpack", "--no-jsx", "--rename", "unique"];
 const SIMPLE_FLAGS: [&str; 5] = ["--unsafe", "--no-unpack", "--no-jsx", "--rename", "simple"];
-const LANES: [(&str, &[&str]); 5] = [
+const SMART_FLAGS: [&str; 5] = ["--unsafe", "--no-unpack", "--no-jsx", "--rename", "smart"];
+const SAFE_SMART_FLAGS: [&str; 4] = ["--no-unpack", "--no-jsx", "--rename", "smart"];
+const LANES: [(&str, &[&str]); 7] = [
     ("conservative", &CONSERVATIVE_FLAGS),
     ("default", &DEFAULT_FLAGS),
     ("safe", &SAFE_FLAGS),
     ("rename-unique", &UNIQUE_FLAGS),
     ("rename-simple", &SIMPLE_FLAGS),
+    ("rename-smart", &SMART_FLAGS),
+    ("safe-rename-smart", &SAFE_SMART_FLAGS),
 ];
 
 pub struct LaneMismatch {

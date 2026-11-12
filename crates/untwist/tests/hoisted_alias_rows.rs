@@ -24,11 +24,12 @@ const LANES: [(&str, Lane); 3] = [
     ("unsafe", Lane::Unsafe),
 ];
 
-const RENAMES: [(&str, RenameMode); 4] = [
+const RENAMES: [(&str, RenameMode); 5] = [
     ("none", RenameMode::None),
     ("mangle", RenameMode::Mangle),
     ("simple", RenameMode::Simple),
     ("unique", RenameMode::Unique),
+    ("smart", RenameMode::Smart),
 ];
 
 fn fixture(name: &str) -> String {

@@ -280,6 +280,11 @@
     "unsafe": false
   },
   {
+    "name": "rename-smart",
+    "stage": "rename",
+    "unsafe": false
+  },
+  {
     "name": "rename-unique",
     "stage": "rename",
     "unsafe": false

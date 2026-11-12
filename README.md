@@ -37,8 +37,12 @@ engine as WebAssembly, and your code never leaves the page.
   split on request. Several input files can be unpacked together. The unpacked tree is untrusted
   code: its file names and contents come from the bundle. Do not open it with an editor or tool
   that runs project configuration on its own.
-- **Rename.** Optional: `mangle` (short names, compatible with webcrack's `-m`), `simple` (short names per function) or
-  `unique` (readable, program-wide names such as `fn1`, `arr2`, `handler3`).
+- **Rename.** Optional: `mangle` (short names, compatible with webcrack's `-m`), `simple` (short names per function),
+  `unique` (readable, program-wide names such as `fn1`, `arr2`, `handler3`) or `smart` (names from evidence: `i`/`j`
+  for loop counters, `item`/`index` and `acc` for array callbacks, `err` in `catch`, `fs` for `require("fs")`,
+  `canvas` for `document.createElement("canvas")`, `ctx`, `data`, destructured keys and the property a function is
+  exported or stored under; a name is reused in sibling scopes and numbered only where it would clash, and human-written
+  names are left alone).
 - **JSX.** Rebuilds JSX from `React.createElement` and the automatic `jsx`/`jsxs` runtime.
 
 ## Install
@@ -98,7 +102,7 @@ Common flags:
 | `-o, --output DIR` | Write `deobfuscated.js`, and, when a bundle is found, `bundle.json` and one file per module. |
 | `-f, --force` | Overwrite the files in `DIR` that this run writes and remove the ones a previous run left there. Input files are never overwritten. |
 | `--unsafe` | Use the unsafe lane (see below). |
-| `--rename MODE` | `none` (default), `mangle`, `simple` or `unique`. `-m` is short for `--rename mangle`. |
+| `--rename MODE` | `none` (default), `mangle`, `simple`, `smart` or `unique`. `-m` is short for `--rename mangle`. |
 | `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx` | Skip a stage. |
 | `--split-hoisted` | Also split Rollup/Vite scope-hoisted bundles, when the split provably keeps behaviour. |
 | `--single-file` | Write every unpacked module into one file, with a banner per module. |

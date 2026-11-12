@@ -7,7 +7,7 @@ use untwist_rename::fingerprint::alpha_fingerprint;
 use untwist_rename::generate::title_case;
 use untwist_rename::reserved::{PSEUDO_GLOBALS, RESERVED_WORDS};
 
-const MODES: [&str; 3] = ["mangle", "simple", "unique"];
+const MODES: [&str; 4] = ["mangle", "simple", "unique", "smart"];
 const RENAMING_FIXTURE: &str = "ternary-logical-if.js";
 const MANGLE_CORPORA: [&str; 3] = [
     "fixtures/unminify",

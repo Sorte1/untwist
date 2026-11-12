@@ -52,12 +52,14 @@ fn sloppy_block_functions_run_like_node_in_every_lane() {
     let simple = |source: &str| renamed(RenameMode::Simple, source);
     let unique = |source: &str| renamed(RenameMode::Unique, source);
     let mangle = |source: &str| renamed(RenameMode::Mangle, source);
-    let modes: [Mode<'_>; 5] = [
+    let smart = |source: &str| renamed(RenameMode::Smart, source);
+    let modes: [Mode<'_>; 6] = [
         ("default", &default),
         ("unsafe", &unsafe_lane),
         ("rename simple", &simple),
         ("rename unique", &unique),
         ("rename mangle", &mangle),
+        ("rename smart", &smart),
     ];
     let wrong = node_rows::mismatches(&node, &rows(), &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
