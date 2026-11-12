@@ -296,7 +296,10 @@ fn annex_b_pins(semantic: &Semantic<'_>) -> FxHashSet<SymbolId> {
     let mut pinned = FxHashSet::default();
     let mut lone: FxHashMap<&str, Vec<AnnexBFunction>> = FxHashMap::default();
     for function in writes.functions() {
-        match function.target {
+        match function
+            .target
+            .filter(|target| *target != function.function)
+        {
             Some(target) => {
                 pinned.insert(function.function);
                 pinned.insert(target);
