@@ -294,6 +294,16 @@ pub const SWITCH_CASE_SHADOW: &str =
 pub const SWITCH_CASE_BINDING_SHARED: &str =
     "control-flow switch not flattened: a case declares a binding that code outside that case \
      refers to, where the switch leaves it uninitialised";
+pub const SWITCH_BINDING_BLOCK_FUNCTION: &str =
+    "control-flow switch not flattened: a function declared in a block shares the name of the \
+     counter or the order array, and sloppy code assigns it to that binding when the block runs \
+     (Annex B.3.3)";
+pub const SWITCH_BINDING_GLOBAL_REACH: &str =
+    "control-flow switch not flattened: the counter or the order array is a script global, and \
+     code that may hold the global object, or code from text, may write it";
+pub const SWITCH_BINDING_DIRECT_EVAL: &str =
+    "control-flow switch not flattened: a direct eval can reach the counter, the order array or a \
+     case declaration the flattening would lift";
 
 pub const DEAD_CODE_UNMERGEABLE: &str =
     "the taken branch declares a binding that cannot be merged; the conditional is kept";
@@ -640,6 +650,9 @@ catalogue!(
     SWITCH_CASE_EXIT,
     SWITCH_CASE_SHADOW,
     SWITCH_CASE_BINDING_SHARED,
+    SWITCH_BINDING_BLOCK_FUNCTION,
+    SWITCH_BINDING_DIRECT_EVAL,
+    SWITCH_BINDING_GLOBAL_REACH,
     MERGE_USE_BEFORE_INIT,
     MERGE_ADOPTED_DYNAMIC_KEY,
     DEAD_CODE_DISCARDED_FUNCTION,

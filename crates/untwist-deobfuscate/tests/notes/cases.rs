@@ -834,6 +834,27 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Whole(
+            "function hi() {\n  var d = '0|1'.split('|');\n  var e = 0;\n  while (!![]) {\n    switch (d[e++]) {\n      case '0':\n        {\n          function e() {}\n        }\n        a();\n        continue;\n      case '1':\n        b();\n        continue;\n    }\n    break;\n  }\n}",
+        ),
+        expects: notes::SWITCH_BINDING_BLOCK_FUNCTION,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(
+            "function hi() {\n  var d = '0|1'.split('|');\n  var e = 0;\n  while (!![]) {\n    switch (d[e++]) {\n      case '0':\n        eval(a);\n        continue;\n      case '1':\n        b();\n        continue;\n    }\n    break;\n  }\n}",
+        ),
+        expects: notes::SWITCH_BINDING_DIRECT_EVAL,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(
+            "var d = '0|1'.split('|');\nvar e = 0;\nwhile (!![]) {\n  switch (d[e++]) {\n    case '0':\n      globalThis.e = 5;\n      continue;\n    case '1':\n      b();\n      continue;\n  }\n  break;\n}",
+        ),
+        expects: notes::SWITCH_BINDING_GLOBAL_REACH,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Whole("log(o);\nconst o = {};\no.a = 1;"),
         expects: notes::MERGE_USE_BEFORE_INIT,
         mode: Match::Contains,
