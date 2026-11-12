@@ -9,6 +9,7 @@ use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::ast_util::rename::Renames;
 use untwist_core::pass::{Cx, Interest, Pass};
 
+use crate::decoder_encoding::decoder_encodings;
 use crate::init_order::{early_or_written, pass_done, read_before_declaration};
 use crate::notes;
 use crate::probe::contains_expression;
@@ -234,6 +235,7 @@ impl<'a> Pass<'a> for FindDecoders {
         let early = read_before_declaration(program, cx.scoping(), &bound);
         let mut indices = IndexAllocator::decoders(cx.scoping());
         let mut renames = Renames::new();
+        let mut renamed_statements = Vec::new();
         for (index, shape) in unstamped.iter().enumerate() {
             if refused.contains(&shape.statement) {
                 continue;
@@ -248,15 +250,21 @@ impl<'a> Pass<'a> for FindDecoders {
             }
             let name = decoder_name(indices.allocate());
             renames.insert(shape.symbol, Ident::from_str_in(&name, &*cx));
+            renamed_statements.push(shape.statement);
         }
         drop(refused);
         if renames.is_empty() {
             return;
         }
+        let encodings = decoder_encodings(program, &renamed_statements);
         let count = renames.apply(program, cx.scoping());
         cx.changed_by(count);
         pass_done(cx.opts.shares_init_order, count > 0);
         cx.progress(notes::decoders_found(total), None);
+        let names = encodings.names();
+        if !names.is_empty() {
+            cx.progress(notes::decoder_encoding(&names), None);
+        }
     }
 }
 

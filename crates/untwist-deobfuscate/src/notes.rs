@@ -21,6 +21,7 @@ pub const ROTATOR_FOUND: &str = "string array rotator found";
 pub const ROTATOR_NONE: &str = "string array rotator: none";
 
 pub const DECODERS_FOUND: &str = "string array decoders found:";
+pub const DECODER_ENCODING: &str = "string array decoder encoding:";
 
 pub const OBJECT_MISSING_PROP: &str = "object not inlined: property";
 pub const OBJECT_PROP_VALUE_MISSING: &str = "the value of property";
@@ -432,6 +433,10 @@ pub fn decoders_found(count: usize) -> String {
     format!("{DECODERS_FOUND} {count}")
 }
 
+pub fn decoder_encoding(names: &[&str]) -> String {
+    format!("{DECODER_ENCODING} {}", names.join(", "))
+}
+
 pub fn object_missing_prop(name: &str) -> String {
     format!("{OBJECT_MISSING_PROP} {name} is not defined")
 }
@@ -588,6 +593,7 @@ catalogue!(
     ROTATOR_FOUND,
     ROTATOR_NONE,
     DECODERS_FOUND,
+    DECODER_ENCODING,
     OBJECT_MISSING_PROP,
     OBJECT_AMBIGUOUS_KEY,
     OBJECT_READ_BEFORE_DECLARATION,

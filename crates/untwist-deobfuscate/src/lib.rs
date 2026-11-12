@@ -13,6 +13,7 @@ pub mod debug_protection;
 pub mod decoded;
 pub mod decoded_strings;
 pub mod decoder;
+pub mod decoder_encoding;
 pub mod directives;
 pub mod driver;
 pub mod evaluate_globals;

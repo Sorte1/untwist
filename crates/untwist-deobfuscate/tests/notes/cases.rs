@@ -314,6 +314,13 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Whole(include_str!(
+            "../../../../fixtures/obfuscator-io/encoding-rc4--empty-log-1.js"
+        )),
+        expects: notes::DECODER_ENCODING,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Whole("var s = ['a'];\nconsole.log(s[5]);"),
         expects: notes::SIMPLE_ARRAY_ACCESS,
         mode: Match::Contains,

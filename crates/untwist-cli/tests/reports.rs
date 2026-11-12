@@ -111,3 +111,40 @@ fn the_deobfuscate_stage_times_prepare_then_every_round_in_order() {
         [false, false, true, false, false, false, false]
     );
 }
+
+#[test]
+fn the_reports_name_the_obfuscator_techniques_that_were_undone() {
+    let out = stdin_output(SPLIT_STRINGS_BEHIND_A_DECODER, &["--report", "json"]);
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let names: Vec<&str> = v["obfuscation"]["techniques"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|technique| technique["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"string-array"), "{v}");
+    for technique in v["obfuscation"]["techniques"].as_array().unwrap() {
+        let state = technique["state"].as_str().unwrap();
+        assert!(["undone", "partly", "kept"].contains(&state), "{technique}");
+    }
+    let text = stdin_output(SPLIT_STRINGS_BEHIND_A_DECODER, &["--report", "text"]);
+    let report = String::from_utf8_lossy(&text.stderr).into_owned();
+    assert!(
+        report
+            .lines()
+            .any(|line| line.starts_with("obfuscation: ") && line.contains("string-array")),
+        "{report}"
+    );
+}
+
+#[test]
+fn plain_code_reports_no_obfuscation() {
+    let out = stdin_output("console.log(1 + 2);\n", &["--report", "json"]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["obfuscation"]["families"], serde_json::json!([]));
+    assert_eq!(v["obfuscation"]["techniques"], serde_json::json!([]));
+    let text = stdin_output("console.log(1 + 2);\n", &["--report", "text"]);
+    let report = String::from_utf8_lossy(&text.stderr).into_owned();
+    assert!(!report.contains("obfuscation:"), "{report}");
+}
