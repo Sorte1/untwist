@@ -24,6 +24,7 @@ pub struct RunOutput {
     pub stderr: String,
     pub code: u8,
     pub limits: String,
+    pub source_map: String,
 }
 
 fn isolation(refused: bool) -> Isolation {
@@ -31,6 +32,13 @@ fn isolation(refused: bool) -> Isolation {
         refused: if refused { vec![0] } else { Vec::new() },
         ..Isolation::default()
     }
+}
+
+fn source_map_of(result: &untwist::Output) -> String {
+    if result.single_file && result.bundle.is_some() {
+        return String::new();
+    }
+    result.source_map_json(0).unwrap_or_default()
 }
 
 fn run_with(source: &str, options: Options) -> RunOutput {
@@ -43,6 +51,7 @@ fn run_with(source: &str, options: Options) -> RunOutput {
         stderr: stderr_of(&result),
         code: exit_code(&result),
         limits: limits_of(&result, fired),
+        source_map: source_map_of(&result),
     }
 }
 
@@ -102,6 +111,7 @@ pub fn run(source: &str, flags: &str, refused: bool) -> RunOutput {
             stderr: format!("error: {message}\n"),
             code: USAGE_ERROR,
             limits: String::new(),
+            source_map: String::new(),
         },
     }
 }
@@ -132,6 +142,17 @@ mod tests {
         );
         assert_eq!(out.code, 3);
         assert_eq!(out.limits, "refused");
+    }
+
+    #[test]
+    fn a_source_map_run_hands_back_the_map_and_leaves_the_code_alone() {
+        let plain = run("var a = !0;", "--no-unpack", false);
+        let mapped = run("var a = !0;", "--no-unpack --source-map", false);
+        assert_eq!(plain.stdout, mapped.stdout);
+        assert_eq!(plain.source_map, "");
+        let map = untwist::source_map::parse(&mapped.source_map).expect("a source map");
+        assert!(map.get_tokens().count() > 0);
+        assert_eq!(map.get_source(0), Some(untwist::source_map::SOURCE_NAME));
     }
 
     #[test]

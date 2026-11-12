@@ -252,6 +252,34 @@ fn a_map_composes_through_the_map_of_its_input() {
 }
 
 #[test]
+fn a_source_root_of_the_input_map_stays_under_the_input_map_scheme() {
+    let built = "var a=1;";
+    let earlier = source_map::parse(
+        r#"{"version":3,"sourceRoot":"file:///etc/","sources":["passwd"],"names":[],"mappings":"AAAA"}"#,
+    )
+    .expect("the earlier map parses");
+
+    let map = source_map::compose(source_map::identity(built), earlier);
+
+    assert_eq!(map.get_source_root(), None);
+    assert_eq!(map.get_source(0), Some("input-map:///file:///etc/passwd"));
+    assert!(!map.to_json_string().contains("sourceRoot"));
+}
+
+#[test]
+fn a_relative_source_root_is_joined_to_its_sources() {
+    let earlier = source_map::parse(
+        r#"{"version":3,"sourceRoot":"src","sources":["app.ts"],"names":[],"mappings":"AAAA"}"#,
+    )
+    .expect("the earlier map parses");
+
+    let map = source_map::compose(source_map::identity("a();"), earlier);
+
+    assert_eq!(map.get_source_root(), None);
+    assert_eq!(map.get_source(0), Some("src/app.ts"));
+}
+
+#[test]
 fn a_map_of_a_part_goes_through_the_map_of_the_whole() {
     let original = "skip();keep(\"\u{1F600}\",inner());";
     let alloc = Allocator::default();
