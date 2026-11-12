@@ -8,18 +8,32 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
 
 ## `untranspile-helpers` (the helper framework and the spread helpers)
 
-- **What counts as a helper.** A function declaration, or a `var` initialised with a function,
-  an arrow, TypeScript's `(this && this.X) || function` (only at the top of the program) or one
-  of esbuild's `Object.*` aliases, is a helper when its body's structural fingerprint (every node,
-  operator, property key and literal; names, parentheses and the `!0`/`!1`/`void 0` spellings
-  ignored) equals a known version in `crates/untwist-unminify/src/untranspile/shapes/`, every
-  helper it calls is itself an identified helper of the expected kind, its binding is written
-  only by its own body and not redeclared, and the program has no direct `eval` or `with`. Call
-  sites resolve by symbol, so a shadowing local of the same name is never the helper. Each known
-  version names the fixture that produces it. A helper named like a known one whose body matches
-  no version is left in place with one note. Helpers are recognised in the traversal that reaches
-  their definition, so a call site that runs before the definition in program order stays as it
-  is.
+- **What counts as a helper.** A function declaration, or a `var` initialised with a function, an
+  arrow, TypeScript's `(this && this.X) || function` (only at the top of the program; outside an
+  ES module only with `--unsafe`) or one of esbuild's `Object.*` aliases, is a helper when its
+  body's structural fingerprint (every node, operator, property key and literal; names,
+  parentheses and the `!0`/`!1`/`void 0` spellings ignored) equals a known version in
+  `crates/untwist-unminify/src/untranspile/shapes/`, every helper it calls is itself an identified
+  helper of the expected kind, its binding is written only by its own body and not redeclared, and
+  the program has no direct `eval` or `with`. Call sites resolve by symbol, so a shadowing local
+  of the same name is never the helper. Each known version names the fixture that produces it. A
+  helper named like a known one whose body matches no version is left in place with one note.
+  Helpers are recognised in the traversal that reaches their definition, so a call site that runs
+  before the definition in program order stays as it is. Identity is a 128-bit SHA-256 prefix of
+  the normalised token stream (string and number literals included), so a file cannot pass a
+  different body off as a known helper. A helper stored in a `var` (TypeScript's and esbuild's) is
+  recognised only when its declaration is a direct statement of its program or function body and
+  every statement before it in that body runs no code (function declarations, literals, plain
+  reads, `exports.x = void 0`, the `__esModule` definition, other helpers); otherwise its
+  initialiser may not have run when a call arrives. TypeScript's `var __x = (this && this.__x) ||
+  function …` form is recognised in the default mode only in an ES module, where top-level `this`
+  is undefined; in a script or CommonJS file the left side may hold another value (`--unsafe`
+  recognises it there too, see below). A `var` or function helper at the top level of a script is
+  a property of the global object, so it is recognised only when the program writes no property of
+  that name on `globalThis`, `window`, `self`, `global` or `this` (also in a non-strict function,
+  where `this` may be the global object), no computed key there other than a string or integer
+  literal, and defines nothing there with `Object.defineProperty`/`defineProperties`/`assign` or
+  `Reflect.set`/`defineProperty`. Each refusal leaves the helper in place with one note.
 - **Built-ins.** Every rewrite relies on the built-ins the helpers and the spread syntax use.
   The first round after a helper is recognised scans the program once: a write, `delete` or
   `Object.defineProperty`-style definition on `Object`, `Array`, `Symbol`, `Function`, `String`,
@@ -72,6 +86,10 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
     not a literal: **no source is a proxy or has a getter that adds, deletes or changes the
     enumerability of its own properties while it is copied** (the helpers list the keys first;
     spread checks each one as it copies).
+  - TypeScript's `var __x = (this && this.__x) || function …` at the top of a script or CommonJS
+    file is the helper: **top-level `this` has no own or inherited `__x` property when the
+    declaration runs** (no other script, host or wrapper put one on the global object or on
+    `module.exports`). In an ES module `this` is undefined and the default mode recognises it.
   - Removing a helper defined at the top level of a script: **the program never reads a removed
     helper through the global object**. Helpers inside a function or a module are removed in the
     default mode once nothing references them.

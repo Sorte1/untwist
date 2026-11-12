@@ -89,7 +89,7 @@ pub const ALIASES: [(&str, Alias); 6] = [
 #[derive(Clone, Copy, Debug)]
 pub struct Variant {
     pub kind: Kind,
-    pub hash: u64,
+    pub hash: u128,
     pub params: u8,
     pub statements: u8,
     pub lead: u8,
@@ -156,7 +156,7 @@ pub fn sized_cap(size: Size) -> Option<u32> {
         .max()
 }
 
-pub fn known(hash: u64, size: Size) -> Option<&'static Variant> {
+pub fn known(hash: u128, size: Size) -> Option<&'static Variant> {
     variants().find(|variant| variant.hash == hash && sized(variant, size))
 }
 

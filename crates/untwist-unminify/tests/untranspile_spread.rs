@@ -39,6 +39,10 @@ fn run(source: &str, unsafe_transforms: bool) -> String {
     run_with(source, unsafe_transforms, true).0
 }
 
+fn as_module(source: &str) -> String {
+    format!("{source}\nexport {{}};\n")
+}
+
 fn notes_of(source: &str) -> Vec<String> {
     run_with(source, true, true)
         .1
@@ -123,7 +127,12 @@ fn typescript_spread_array_keeps_holes_and_non_arrays() {
 
 #[test]
 fn typescript_inlines_a_literal_array_in_the_default_mode() {
-    let code = run(&fixture("ts/spread.es5.js"), false);
+    let script = run(&fixture("ts/spread.es5.js"), false);
+    assert!(
+        script.contains("__spreadArray([undefined], [2020, 0, 2], false)"),
+        "{script}"
+    );
+    let code = run(&as_module(&fixture("ts/spread.es5.js")), false);
     assert!(code.contains("[undefined, 2020, 0, 2]"), "{code}");
     assert!(code.contains("__spreadArray([], a, true)"), "{code}");
 }
@@ -175,7 +184,7 @@ fn a_shadowing_local_function_is_not_the_helper() {
 #[test]
 fn a_source_that_may_hold_an_own_proto_is_kept_in_the_default_mode() {
     let source = fixture("hand/assign-proto-source.js");
-    let safe = run(&source, false);
+    let safe = run(&as_module(&source), false);
     assert!(safe.contains("__assign(__assign({}, source)"), "{safe}");
     assert!(
         safe.contains("var plain = {\n  a: 1,\n  b: 2\n};"),
@@ -272,7 +281,7 @@ fn a_safe_site_after_unsafe_ones_still_fires_in_the_default_mode() {
 
 #[test]
 fn a_formatted_program_converts_its_safe_spreads_in_the_default_mode() {
-    let code = run(&fixture("hand/formatted-spread.js"), false);
+    let code = run(&as_module(&fixture("hand/formatted-spread.js")), false);
     assert!(code.contains("var safeArray = [0, 3, 4];"), "{code}");
     assert!(
         code.contains("var safeObject = {\n  a: 1,\n  b: 2\n};"),
@@ -319,4 +328,151 @@ fn a_prototype_patched_through_a_value_keeps_the_helpers_in_the_default_mode() {
         assert!(code.contains("[a].concat([b])"), "{patch}\n{code}");
         untwist_testing::node::assert_node_agrees(&source, &code);
     }
+}
+
+const TSLIB_ASSIGN: &str = r#"var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
+"#;
+
+const TSLIB_SPREAD_ARRAY: &str = r#"var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};"#;
+
+fn default_lane(source: &str) -> String {
+    run(source, false)
+}
+
+#[test]
+fn a_shared_helper_in_a_script_whose_this_holds_one_is_left_alone_in_every_lane() {
+    let source = format!(
+        "this.__assign = function () {{ return {{ evil: 1 }}; }};\n{TSLIB_ASSIGN}function run(v) {{ var r = __assign({{ a: 1 }}, {{ b: v }}); return JSON.stringify(r); }}\nconsole.log(run(2));\n"
+    );
+    for unsafe_transforms in [false, true] {
+        let code = run(&source, unsafe_transforms);
+        assert!(code.contains("__assign({"), "{code}");
+        untwist_testing::node::assert_node_agrees(&source, &code);
+    }
+}
+
+#[test]
+fn a_shared_helper_in_a_script_converts_only_under_unsafe() {
+    let source = format!(
+        "{TSLIB_ASSIGN}function run(v) {{ var r = __assign({{ a: 1 }}, {{ b: v }}); return JSON.stringify(r); }}\nconsole.log(run(2));\n"
+    );
+    let code = default_lane(&source);
+    assert!(code.contains("__assign({"), "{code}");
+    let code = run(&source, true);
+    assert!(code.contains("a: 1,\n    b: v\n"), "{code}");
+    untwist_testing::node::assert_node_agrees(&source, &code);
+}
+
+#[test]
+fn a_shared_helper_in_a_module_is_still_recognised() {
+    let source = format!(
+        "{TSLIB_ASSIGN}export function run(v) {{ var r = __assign({{ a: 1 }}, {{ b: v }}); return JSON.stringify(r); }}\n"
+    );
+    let code = default_lane(&source);
+    assert!(code.contains("a: 1,\n    b: v\n"), "{code}");
+    assert!(!code.contains("__assign("), "{code}");
+}
+
+const GLOBAL_REPLACEMENTS: [&str; 5] = [
+    "globalThis._toConsumableArray = function () { return [\"evil\"]; };",
+    "window._toConsumableArray = function () { return [\"evil\"]; };",
+    "this[\"_toConsumableArray\"] = function () { return [\"evil\"]; };",
+    "var k = \"_toConsumable\" + \"Array\"; globalThis[k] = function () { return [\"evil\"]; };",
+    "Object.defineProperty(globalThis, \"_toConsumableArray\", { value: function () { return [\"evil\"]; } });",
+];
+
+#[test]
+fn a_script_helper_the_global_object_can_replace_is_left_alone() {
+    for patch in GLOBAL_REPLACEMENTS {
+        let source = format!(
+            "{PATCHED}{patch}\nfunction run(a, b) {{ return _toConsumableArray([a, b]).join(\",\"); }}\n"
+        );
+        for unsafe_transforms in [false, true] {
+            let code = run(&source, unsafe_transforms);
+            assert!(
+                code.contains("_toConsumableArray([a, b])"),
+                "{patch}\n{code}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_script_helper_nothing_replaces_still_converts() {
+    let source = format!(
+        "{PATCHED}globalThis.other = 1;\nfunction run(a, b) {{ return _toConsumableArray([a, b]).join(\",\"); }}\n"
+    );
+    let code = default_lane(&source);
+    assert!(code.contains("return [a, b].join"), "{code}");
+}
+
+#[test]
+fn a_var_helper_declared_in_a_branch_is_left_alone() {
+    let source = format!(
+        "if (typeof nope !== \"undefined\") {{\n{TSLIB_SPREAD_ARRAY}\n}}\nexport function run(a, b) {{ return __spreadArray([a], [b], false).length; }}\n"
+    );
+    let code = default_lane(&source);
+    assert!(code.contains("__spreadArray([a], [b], false)"), "{code}");
+}
+
+#[test]
+fn a_var_helper_a_call_can_reach_before_it_runs_is_left_alone() {
+    let source = format!(
+        "console.log(run(1, 2));\n{TSLIB_SPREAD_ARRAY}\nexport function run(a, b) {{ return __spreadArray([a], [b], false).length; }}\n"
+    );
+    let code = default_lane(&source);
+    assert!(code.contains("__spreadArray([a], [b], false)"), "{code}");
+}
+
+#[test]
+fn a_var_helper_at_the_top_of_a_module_still_converts() {
+    let source = format!(
+        "import x from \"x\";\nvar a = 1, b = {{ c: [2] }};\n{TSLIB_SPREAD_ARRAY}\nexport function run(a, b) {{ return __spreadArray([a], [b], false).length + x; }}\n"
+    );
+    let code = default_lane(&source);
+    assert!(code.contains("return [a, b].length"), "{code}");
+}
+
+#[test]
+fn a_numeric_key_written_through_a_sloppy_this_does_not_untrust_script_helpers() {
+    let source = format!(
+        "{PATCHED}function Box(v) {{ this[0] = v; }}\nfunction run(a, b) {{ return _toConsumableArray([a, b]).join(\",\") + new Box(a)[0]; }}\nconsole.log(run(1, 2));\n"
+    );
+    let (code, notes) = run_with(&source, true, true);
+    assert!(
+        notes
+            .iter()
+            .all(|note| !note.message.contains(notes::UNTRANSPILE_HELPER_UNTRUSTED)),
+        "{notes:?}"
+    );
+    untwist_testing::node::assert_node_agrees(&source, &code);
+}
+
+#[test]
+fn shared_helpers_ahead_of_a_var_helper_keep_it_settled_under_unsafe() {
+    let source = format!(
+        "{TSLIB_ASSIGN}{TSLIB_SPREAD_ARRAY}\nfunction run(a, b) {{ return JSON.stringify(__assign({{ a: a }}, {{ b: b }})) + __spreadArray([a], [b], false).length; }}\nconsole.log(run(1, 2));\n"
+    );
+    let code = run(&source, true);
+    assert!(!code.contains("__assign("), "{code}");
+    assert!(!code.contains("__spreadArray(["), "{code}");
+    untwist_testing::node::assert_node_agrees(&source, &code);
 }

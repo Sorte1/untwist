@@ -37,12 +37,13 @@ mod spread_object;
 mod structure;
 mod structure_tidy;
 mod sweep;
+mod trust;
 mod values;
 
 use crate::notes::{
     UNTRANSPILE_ASYNC_KEPT, UNTRANSPILE_BUILTINS_WRITTEN, UNTRANSPILE_CLASS_PROTOTYPE_OPEN,
-    UNTRANSPILE_MACHINE_KEPT, UNTRANSPILE_OBJECT_REST_KEPT, UNTRANSPILE_SCOPE_HAZARD,
-    UNTRANSPILE_UNKNOWN_HELPER,
+    UNTRANSPILE_HELPER_UNTRUSTED, UNTRANSPILE_MACHINE_KEPT, UNTRANSPILE_OBJECT_REST_KEPT,
+    UNTRANSPILE_SCOPE_HAZARD, UNTRANSPILE_UNKNOWN_HELPER,
 };
 use builtins::Builtins;
 use destructure::Site;
@@ -96,6 +97,9 @@ pub struct UntranspileHelpers {
     root_run: bool,
     define_fired: usize,
     define_quiet: bool,
+    trust: Option<trust::Trust>,
+    wants_trust: bool,
+    identified_late: bool,
 }
 
 impl Default for UntranspileHelpers {
@@ -127,6 +131,9 @@ impl Default for UntranspileHelpers {
             root_run: false,
             define_fired: 0,
             define_quiet: false,
+            trust: None,
+            wants_trust: false,
+            identified_late: false,
         }
     }
 }
@@ -182,7 +189,7 @@ fn note_named_declarators(node: &VariableDeclaration<'_>, cx: &mut Cx<'_, '_>) {
         if !is_named_helper(&id.name) || !identify::may_declare_helper(declarator) {
             continue;
         }
-        let unknown = identify::declarator(declarator, cx.scoping()).is_none();
+        let unknown = identify::declarator(declarator, cx.scoping(), true).is_none();
         if unknown && declarator.init.as_ref().is_some_and(is_function_like) {
             unknown_helper(id.name.as_str(), declarator.span, cx);
         }
@@ -248,6 +255,29 @@ impl UntranspileHelpers {
         self.promise_written = scanned.promise_written;
         if self.builtins == Builtins::Written {
             cx.note(UNTRANSPILE_BUILTINS_WRITTEN, None);
+        }
+    }
+
+    fn insert_trusted(&mut self, found: (SymbolId, Helper), declared: bool, cx: &mut Cx<'_, '_>) {
+        let symbol = found.0;
+        let scoping = cx.scoping();
+        let global = !self.module && scoping.symbol_scope_id(symbol) == scoping.root_scope_id();
+        if !declared && !global {
+            self.insert(found, cx);
+            return;
+        }
+        let Some(trust) = self.trust.as_ref() else {
+            self.wants_trust = true;
+            cx.request_round();
+            return;
+        };
+        let trusted =
+            (!declared || trust.settled(symbol)) && trust.global_kept(symbol, self.module, scoping);
+        if trusted {
+            self.identified_late |= !self.identified;
+            self.insert(found, cx);
+        } else {
+            cx.note(UNTRANSPILE_HELPER_UNTRUSTED, None);
         }
     }
 
@@ -610,8 +640,12 @@ impl UntranspileHelpers {
             if !identify::may_declare_helper(declarator) {
                 continue;
             }
-            match identify::declarator(declarator, cx.scoping()) {
-                Some(found) => self.insert(found, cx),
+            let shared_trusted = self.module || cx.opts.unsafe_transforms;
+            match identify::declarator(declarator, cx.scoping(), shared_trusted) {
+                Some(found) => self.insert_trusted(found, true, cx),
+                None if identify::declarator(declarator, cx.scoping(), true).is_some() => {
+                    cx.note(UNTRANSPILE_HELPER_UNTRUSTED, None);
+                }
                 None => {
                     if let (BindingPattern::BindingIdentifier(id), Some(init)) =
                         (&declarator.id, &declarator.init)
@@ -670,6 +704,10 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         self.scopes.clear();
         self.module = has_module_syntax(program);
         self.strict = program_is_strict(program);
+        self.trust = self.wants_trust.then(|| {
+            let shared = self.module || cx.opts.unsafe_transforms;
+            trust::gather(program, cx.scoping(), self.module, shared)
+        });
         self.class_pending = 0;
         self.waiting = false;
         self.keys.begin_round();
@@ -714,7 +752,8 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         if !self.sites.is_empty() {
             self.rewrite_sites(&mut node.body, node.span, cx);
         }
-        if self.waits_for_builtins() {
+        let late = std::mem::take(&mut self.identified_late);
+        if self.waits_for_builtins() || (late && self.may_wait(cx)) {
             cx.request_round();
         }
         self.settle_define(node, cx);
@@ -750,7 +789,7 @@ impl<'a> Pass<'a> for UntranspileHelpers {
             return;
         }
         match identify::function_declaration(node, cx.scoping()) {
-            Some(found) => self.insert(found, cx),
+            Some(found) => self.insert_trusted(found, false, cx),
             None => {
                 if let Some(id) = node.id.as_ref().filter(|id| may_be_helper_name(&id.name)) {
                     unknown_helper(id.name.as_str(), node.span, cx);

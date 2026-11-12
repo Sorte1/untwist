@@ -24,7 +24,7 @@ const NO_FOCUS: u8 = u8::MAX;
 
 const fn variant(
     kind: Kind,
-    hash: u64,
+    hash: u128,
     (params, statements): (u8, u8),
     (lead, focus): (u8, u8),
     cap: u32,
@@ -46,7 +46,7 @@ const fn variant(
 pub const VARIANTS: &[Variant] = &[
     variant(
         Kind::Generator,
-        0x5260_13cb_8aae_e9f6,
+        0xf6ca_29ea_f826_2579_8a37_62fc_f84e_4fa4,
         (2, 12),
         (DECLARATION, OBJECT),
         MACHINE_CAP,
@@ -54,7 +54,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Generator,
-        0x18da_f655_d5ec_6b71,
+        0x0ea8_07b2_eba3_0b8b_4dc0_db12_173a_e7f6,
         (2, 12),
         (DECLARATION, OBJECT),
         MACHINE_CAP,
@@ -62,7 +62,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Generator,
-        0xdce4_57bc_e328_0e16,
+        0x0a89_df6c_4e1f_2ee4_2dca_f599_363f_6929,
         (2, 13),
         (DECLARATION, NO_FOCUS),
         MACHINE_CAP,
@@ -70,7 +70,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Generator,
-        0xbf52_24a3_cd5b_e1a3,
+        0x290a_da09_7513_84ad_cf05_c1b0_12bf_5556,
         (2, 13),
         (DECLARATION, NO_FOCUS),
         MACHINE_CAP,
@@ -78,7 +78,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Values,
-        0x9509_191f_a2f7_2087,
+        0xf4ef_28f5_dbb4_e7f1_624f_ba3f_3915_cc0c,
         (1, 6),
         (DECLARATION, LOGICAL),
         TOKEN_CAP,
@@ -86,7 +86,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Values,
-        0x4cab_915f_8019_b093,
+        0xecfa_fe6f_13ec_d8e2_ed45_6626_b086_97f6,
         (1, 6),
         (DECLARATION, LOGICAL),
         TOKEN_CAP,
@@ -94,7 +94,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Values,
-        0x6179_ecdd_374d_f083,
+        0x42ba_0d59_e284_36ef_331f_002d_7467_aa04,
         (1, 6),
         (DECLARATION, LOGICAL),
         TOKEN_CAP,
@@ -102,7 +102,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Values,
-        0x6be7_5c94_b271_be47,
+        0xbf11_5373_99a4_8789_fa5c_6c20_344b_aff4,
         (1, 6),
         (DECLARATION, LOGICAL),
         TOKEN_CAP,
@@ -110,7 +110,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Awaiter,
-        0x299b_70ef_aede_5472,
+        0x50a9_aa1e_a802_84c4_e40e_ad0d_a5d0_d4c1,
         (4, 2),
         (FUNCTION, NO_FOCUS),
         TOKEN_CAP,
@@ -118,7 +118,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Async,
-        0xf430_4cf8_c3b4_ce1c,
+        0xf9c6_035f_d144_e3ad_6586_00ed_1ae2_9419,
         (3, 1),
         (RETURN, NEW),
         TOKEN_CAP,
@@ -126,7 +126,7 @@ pub const VARIANTS: &[Variant] = &[
     ),
     variant(
         Kind::Async,
-        0xfc5c_48b4_7d3e_488d,
+        0x5940_bc0b_377f_d284_9248_898f_4aa8_60ba,
         (3, 1),
         (EXPRESSION_BODY, NEW),
         TOKEN_CAP,

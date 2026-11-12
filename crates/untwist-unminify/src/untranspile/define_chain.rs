@@ -382,7 +382,7 @@ fn property<'a>(
     )
 }
 
-fn unnamed<'a>(value: Expression<'a>, cx: &Cx<'a, '_>) -> Expression<'a> {
+pub(super) fn unnamed<'a>(value: Expression<'a>, cx: &Cx<'a, '_>) -> Expression<'a> {
     if !value.is_anonymous_function_definition() {
         return value;
     }
@@ -483,11 +483,8 @@ fn collapse_slot(
         let ObjectPropertyKind::ObjectProperty(property) = member else {
             return None;
         };
-        let known = property_name(property);
-        if property.computed && known.is_none() {
-            return None;
-        }
-        if known.as_deref() != Some(name) {
+        let known = property_name(property)?;
+        if known != name {
             continue;
         }
         if property.kind != PropertyKind::Init || property.method || property.shorthand {

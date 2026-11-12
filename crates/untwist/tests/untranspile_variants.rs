@@ -56,7 +56,7 @@ fn every_known_variant_is_seen_in_the_fixture_it_names() {
                     && print.statements == variant.statements
                     && print.lead == variant.lead
                     && print.focus == variant.focus),
-                "{:?} {:#018x} is not seen in {fixture}; seen: {seen:#?}",
+                "{:?} {:#034x} is not seen in {fixture}; seen: {seen:#?}",
                 variant.kind,
                 variant.hash
             );
@@ -74,7 +74,7 @@ fn print_the_candidate_fingerprints_of_a_fixture() {
         let mut lines = BTreeSet::new();
         for print in prints_of(fixture) {
             lines.insert(format!(
-                "{} {:#018x} params {} statements {} lead {} focus {} tokens {} external {:?}",
+                "{} {:#034x} params {} statements {} lead {} focus {} tokens {} external {:?}",
                 print.name,
                 print.hash,
                 print.params,
