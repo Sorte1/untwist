@@ -616,23 +616,56 @@ impl<'a> DeadCode<'a> {
         let taken: Vec<Statement<'a>> = stmts.drain(..).collect();
         let mut changes = 0usize;
         for statement in taken {
-            let Some(decision) = self.decision_of_statement(&statement, cx) else {
-                stmts.push(statement);
-                continue;
-            };
-            let folded = match statement {
-                Statement::WhileStatement(node) => self.fold_dead_loop(node, stmts, cx),
-                Statement::IfStatement(node) => self.fold_branch(node, decision, outer, stmts, cx),
-                other => {
-                    stmts.push(other);
-                    false
+            let mut next = Some(statement);
+            while let Some(statement) = next.take() {
+                let Some(decision) = self.decision_of_statement(&statement, cx) else {
+                    stmts.push(statement);
+                    break;
+                };
+                let before = stmts.len();
+                let folded = match statement {
+                    Statement::WhileStatement(node) => self.fold_dead_loop(node, stmts, cx),
+                    Statement::IfStatement(node) => {
+                        self.fold_branch(node, decision, outer, stmts, cx)
+                    }
+                    other => {
+                        stmts.push(other);
+                        false
+                    }
+                };
+                if folded {
+                    changes += 1;
+                    next = (stmts.len() > before)
+                        .then(|| self.next_link(stmts, cx))
+                        .flatten();
                 }
-            };
-            if folded {
-                changes += 1;
             }
         }
         changes
+    }
+
+    fn next_link(
+        &mut self,
+        stmts: &mut AVec<'a, Statement<'a>>,
+        cx: &Cx<'a, '_>,
+    ) -> Option<Statement<'a>> {
+        let Some(Statement::IfStatement(node)) = stmts.last() else {
+            return None;
+        };
+        let decision = self.decide(&node.test, cx)?;
+        if cx.opts.unsafe_transforms && !decision.literal {
+            return None;
+        }
+        let dropped = if decision.value {
+            node.alternate.as_ref()
+        } else {
+            Some(&node.consequent)
+        };
+        let hoisted = hoisted_by(dropped);
+        if hoisted.function || !hoisted.names.is_empty() {
+            return None;
+        }
+        stmts.pop()
     }
 
     fn drop_settled_right(&mut self, test: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {

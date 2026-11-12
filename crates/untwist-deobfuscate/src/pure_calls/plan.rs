@@ -1,16 +1,20 @@
+use oxc_allocator::Allocator;
 use oxc_ast::ast::{Expression, Program};
+use oxc_ast::builder::AstBuilder;
 use oxc_semantic::Scoping;
 use oxc_span::Span;
+use oxc_span::SPAN;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::{has_module_syntax, is_constant_binding};
-use untwist_eval::fold::Const;
+use untwist_eval::fold::{const_to_expression, Const};
 use untwist_eval::value::JsString;
 
+use super::eval::literal_argument;
 use super::eval::{Machine, Shape};
 use super::scan::{declared, Declared, Func};
-use super::uses::{uses, Role, Site, Uses};
+use super::uses::{uses, Arg, Role, Site, Uses};
 use crate::bindings::block_function_names;
 use crate::calls::agnostic::{global_reach, ReachWatch};
 
@@ -43,11 +47,13 @@ pub(super) fn plan<'p>(
     }
     let found = uses(program, scoping, &tracked(&candidates, &declared));
     let candidates = contained(candidates, &found, opts);
-    let folds = folds(&candidates, &declared, &found, scoping);
+    let (folds, parents) = folds(&candidates, &declared, &found, scoping);
     if folds.is_empty() {
         return None;
     }
-    let screened = unreached(candidates, folds, (program, scoping), opts);
+    let all: Vec<Span> = folds.iter().map(|(span, _, _)| *span).collect();
+    let mut screened = unreached(candidates, folds, (program, scoping), opts);
+    let kept = kept_nests(&all, &mut screened, &parents);
     if screened.folds.is_empty() {
         return None;
     }
@@ -56,10 +62,35 @@ pub(super) fn plan<'p>(
     Some(Plan {
         folds: folds
             .into_iter()
+            .filter(|(span, _, _)| {
+                parents
+                    .get(span)
+                    .is_none_or(|parent| !kept.contains(parent))
+            })
             .map(|(span, value, _)| (span, value))
             .collect(),
         removals,
     })
+}
+
+fn kept_nests(
+    all: &[Span],
+    screened: &mut Screened<'_, '_>,
+    parents: &FxHashMap<Span, Span>,
+) -> FxHashSet<Span> {
+    let mut kept: FxHashSet<Span> = screened.folds.iter().map(|(span, _, _)| *span).collect();
+    let mut lost: Vec<Span> = all
+        .iter()
+        .filter(|span| !kept.contains(span))
+        .copied()
+        .collect();
+    while let Some(span) = lost.pop() {
+        if let Some(parent) = parents.get(&span).filter(|parent| kept.remove(parent)) {
+            lost.push(*parent);
+        }
+    }
+    screened.folds.retain(|(span, _, _)| kept.contains(span));
+    kept
 }
 
 fn candidates<'d, 'p>(declared: &'d Declared<'p>, scoping: &Scoping) -> Vec<Candidate<'d, 'p>> {
@@ -295,12 +326,11 @@ fn ordered(
 }
 
 fn evaluate<'p>(
-    site: &Site,
+    args: &[Const],
     func: &Func<'p>,
     declared: &Declared<'p>,
     scoping: &Scoping,
 ) -> Option<Const> {
-    let args = site.args.as_ref()?;
     let bound: FxHashMap<SymbolId, Const> = func
         .params
         .iter()
@@ -316,28 +346,84 @@ fn evaluate<'p>(
     Machine::new(scoping, &func.params, bound, &lookup).result(func.body)
 }
 
+fn folded_literal(value: &Const, builder: &AstBuilder<'_>) -> Option<Const> {
+    literal_argument(&const_to_expression(value, SPAN, builder)?)
+}
+
+fn nested_values(
+    nested: &[Arg],
+    index: &FxHashMap<Span, usize>,
+    values: &[Option<Const>],
+    builder: &AstBuilder<'_>,
+) -> Option<Vec<Const>> {
+    nested
+        .iter()
+        .map(|arg| match arg {
+            Arg::Literal(value) => Some(value.clone()),
+            Arg::Call(span) if span.start < span.end => {
+                folded_literal(values.get(*index.get(span)?)?.as_ref()?, builder)
+            }
+            Arg::Call(_) => None,
+        })
+        .collect()
+}
+
 fn folds(
     candidates: &[Candidate<'_, '_>],
     declared: &Declared<'_>,
     found: &Uses,
     scoping: &Scoping,
-) -> Vec<Fold> {
+) -> (Vec<Fold>, FxHashMap<Span, Span>) {
     let by_symbol: FxHashMap<SymbolId, &Candidate<'_, '_>> = candidates
         .iter()
         .map(|candidate| (candidate.func.symbol, candidate))
         .collect();
-    found
+    let index: FxHashMap<Span, usize> = found
         .sites
         .iter()
-        .filter_map(|site| {
-            let candidate = by_symbol.get(&site.symbol)?;
-            if !ordered(site, candidate, (declared, found), scoping) {
-                return None;
-            }
-            let value = evaluate(site, candidate.func, declared, scoping)?;
-            Some((site.span, value, site.symbol))
-        })
-        .collect()
+        .enumerate()
+        .map(|(at, site)| (site.span, at))
+        .collect();
+    let allocator = Allocator::default();
+    let builder = AstBuilder::new(&allocator);
+    let mut values: Vec<Option<Const>> = vec![None; found.sites.len()];
+    let mut parents = FxHashMap::default();
+    for at in (0..found.sites.len()).rev() {
+        let site = &found.sites[at];
+        let Some(candidate) = by_symbol.get(&site.symbol) else {
+            continue;
+        };
+        if !ordered(site, candidate, (declared, found), scoping) {
+            continue;
+        }
+        let args = match (&site.args, &site.nested) {
+            (Some(args), _) => args.clone(),
+            (None, Some(nested)) => match nested_values(nested, &index, &values, &builder) {
+                Some(args) => args,
+                None => continue,
+            },
+            (None, None) => continue,
+        };
+        values[at] = evaluate(&args, candidate.func, declared, scoping);
+        if values[at].is_some() {
+            record_parents(site, &mut parents);
+        }
+    }
+    let folds = found
+        .sites
+        .iter()
+        .zip(values)
+        .filter_map(|(site, value)| Some((site.span, value?, site.symbol)))
+        .collect();
+    (folds, parents)
+}
+
+fn record_parents(site: &Site, parents: &mut FxHashMap<Span, Span>) {
+    for arg in site.nested.iter().flatten() {
+        if let Arg::Call(span) = arg {
+            parents.insert(*span, site.span);
+        }
+    }
 }
 
 fn inside(spans: &[Span], span: Span) -> bool {

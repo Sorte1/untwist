@@ -18,11 +18,17 @@ pub(super) enum Role {
     Primitive,
 }
 
+pub(super) enum Arg {
+    Literal(Const),
+    Call(Span),
+}
+
 pub(super) struct Site {
     pub(super) span: Span,
     pub(super) position: u32,
     pub(super) symbol: SymbolId,
     pub(super) args: Option<Vec<Const>>,
+    pub(super) nested: Option<Vec<Arg>>,
     pub(super) hoisted: Vec<ScopeId>,
 }
 
@@ -62,6 +68,19 @@ fn literal_arguments(arguments: &[Argument<'_>]) -> Option<Vec<Const>> {
     arguments
         .iter()
         .map(|argument| literal_argument(argument.as_expression()?))
+        .collect()
+}
+
+fn nested_arguments(arguments: &[Argument<'_>]) -> Option<Vec<Arg>> {
+    arguments
+        .iter()
+        .map(|argument| {
+            let expr = argument.as_expression()?;
+            match expr {
+                Expression::CallExpression(call) => Some(Arg::Call(call.span)),
+                other => literal_argument(other).map(Arg::Literal),
+            }
+        })
         .collect()
 }
 
@@ -131,11 +150,17 @@ impl Walk<'_> {
         };
         self.record(symbol, callee.span, false);
         let position = self.advance();
+        let args = literal_arguments(&it.arguments);
+        let nested = args
+            .is_none()
+            .then(|| nested_arguments(&it.arguments))
+            .flatten();
         self.found.sites.push(Site {
             span: it.span,
             position,
             symbol,
-            args: literal_arguments(&it.arguments),
+            args,
+            nested,
             hoisted: self.hoisted.clone(),
         });
         true
