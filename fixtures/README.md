@@ -21,6 +21,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `real-shapes/` | Obfuscator and webpack machinery reduced from real bundles by `tools/real-shapes/reduce.mjs` | `cargo xtask obf-matrix` |
 | `real-world/` | Optional local `game.js` and its reference snapshot, not committed; `game-truth.mjs` prints its array truth | the `real_world` tests, which skip when it is absent |
 | `reference/` | Samples and expected output from the reference deobfuscator (MIT, `LICENSE-reference`) | `cargo xtask diff-deobfuscate`, `diff-unpack`, `crates/untwist-deobfuscate/tests/fixtures.rs` |
+| `rollup-commonjs/` | `@rollup/plugin-commonjs` 11 to 29, Vite 5 to 8 and rolldown output over synthetic CommonJS apps, core-js and npm packages, plain, minified (terser, esbuild, swc) and obfuscated (javascript-obfuscator), from `tools/rollup-commonjs/gen.mjs`; `MANIFEST` lists each, `EXPECT` the wrappers found per lane | `crates/untwist/tests/rollup_commonjs.rs` |
 | `spelled-name/` | Programs that print, whose machinery names are also spelled as property keys | `crates/untwist/tests/spelled_name_behaviour.rs` |
 | `unsafe-parity/` | javascript-obfuscator output that the reference deobfuscator decodes and the safe lane refuses; `MANIFEST` names each source under `sources/` and the options | `crates/untwist/tests/unsafe_parity.rs` |
 | `unminify/` | Minified programs for the unminify passes | `cargo xtask diff-unminify`, `diff-mangle` |
@@ -43,6 +44,6 @@ javascript-obfuscator 5 emits. Their `.snap` files hold the program before obfus
 
 Put the file in the folder whose test should pick it up, name it after the shape it covers, and make
 it print what it computes so node can check it. Generated folders (`eval/`, `corpus-npm/`,
-`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `unpack-bundlers/`, `untranspile/`) are rewritten by their generator, so change the
+`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `rollup-commonjs/`, `unpack-bundlers/`, `untranspile/`) are rewritten by their generator, so change the
 generator instead. Run the folder's test or differential; add an allowlist entry only for a
 divergence documented in `docs/known-divergences/`.

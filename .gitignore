@@ -41,3 +41,4 @@ AGENTS.md
 /fixtures/real-world/game.js.snap
 /fixtures/corpus-export/
 /tools/untranspile-params/node_modules/
+/tools/rollup-commonjs/node_modules/

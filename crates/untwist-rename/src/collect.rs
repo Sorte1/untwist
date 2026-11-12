@@ -103,6 +103,7 @@ pub struct Collected {
     pub sites: Vec<BindingSite>,
     pub free: FxHashMap<ScopeId, FxHashSet<SymbolId>>,
     pub pinned: FxHashSet<SymbolId>,
+    pub name_pinned: FxHashSet<SymbolId>,
     pub loop_counters: FxHashMap<SymbolId, usize>,
     pub labels: FxHashSet<String>,
     pub program_references: FxHashSet<String>,

@@ -1,0 +1,1 @@
+var app=function(){"use strict";var a=0,e=function(e){a+=1,console.log(a+" "+e)};e("esm-lib eval");var l,n={};const r=e;return r("lib string d"),r("late "+(l||(l=1,e("lazy-inner eval"),n.value=42),n).value),{}}();

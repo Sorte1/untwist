@@ -1,0 +1,368 @@
+# path	tool	options	post	app	node	stdout-sha256-16
+formats/cjs-corejs--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=cjs	obf-strings	corejs	ran	07c12d18c263d855
+formats/cjs-corejs--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=cjs	plain	corejs	ran	07c12d18c263d855
+formats/cjs-corejs--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=cjs	terser	corejs	ran	07c12d18c263d855
+formats/cjs-synthetic--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=cjs	obf-strings	synthetic	ran	4a1358b08d0e9e58
+formats/cjs-synthetic--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=cjs	plain	synthetic	ran	4a1358b08d0e9e58
+formats/cjs-synthetic--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=cjs	terser	synthetic	ran	4a1358b08d0e9e58
+formats/es-corejs--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=es	obf-strings	corejs	ran	07c12d18c263d855
+formats/es-corejs--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=es	plain	corejs	ran	07c12d18c263d855
+formats/es-corejs--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=es	terser	corejs	ran	07c12d18c263d855
+formats/es-synthetic--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=es	obf-strings	synthetic	ran	4a1358b08d0e9e58
+formats/es-synthetic--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=es	plain	synthetic	ran	4a1358b08d0e9e58
+formats/es-synthetic--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=es	terser	synthetic	ran	4a1358b08d0e9e58
+majors/v11-corejs--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v11-corejs--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v11-corejs--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v11-corejs--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v11-corejs--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v11-corejs--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v11-corejs--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v11-npm--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v11-npm--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v11-npm--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v11-synthetic--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	esbuild	synthetic	threw	ce8256365a903ec4
+majors/v11-synthetic--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	obf-default	synthetic	threw	ce8256365a903ec4
+majors/v11-synthetic--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	obf-globals	synthetic	threw	ce8256365a903ec4
+majors/v11-synthetic--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	obf-strings	synthetic	threw	ce8256365a903ec4
+majors/v11-synthetic--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	plain	synthetic	threw	ce8256365a903ec4
+majors/v11-synthetic--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	swc	synthetic	threw	ce8256365a903ec4
+majors/v11-synthetic--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@11.1.0	defaults format=iife	terser	synthetic	threw	ce8256365a903ec4
+majors/v15-corejs--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v15-corejs--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v15-corejs--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v15-corejs--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v15-corejs--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v15-corejs--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v15-corejs--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v15-npm--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v15-npm--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v15-npm--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v15-synthetic--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	esbuild	synthetic	threw	ce8256365a903ec4
+majors/v15-synthetic--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	obf-default	synthetic	threw	ce8256365a903ec4
+majors/v15-synthetic--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	obf-globals	synthetic	threw	ce8256365a903ec4
+majors/v15-synthetic--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	obf-strings	synthetic	threw	ce8256365a903ec4
+majors/v15-synthetic--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	plain	synthetic	threw	ce8256365a903ec4
+majors/v15-synthetic--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	swc	synthetic	threw	ce8256365a903ec4
+majors/v15-synthetic--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@15.1.0	defaults format=iife	terser	synthetic	threw	ce8256365a903ec4
+majors/v17-corejs--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v17-corejs--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v17-corejs--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v17-corejs--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v17-corejs--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v17-corejs--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v17-corejs--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v17-npm--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v17-npm--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v17-npm--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v17-synthetic--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	esbuild	synthetic	threw	ce8256365a903ec4
+majors/v17-synthetic--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	obf-default	synthetic	threw	ce8256365a903ec4
+majors/v17-synthetic--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	obf-globals	synthetic	threw	ce8256365a903ec4
+majors/v17-synthetic--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	obf-strings	synthetic	threw	ce8256365a903ec4
+majors/v17-synthetic--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	plain	synthetic	threw	ce8256365a903ec4
+majors/v17-synthetic--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	swc	synthetic	threw	ce8256365a903ec4
+majors/v17-synthetic--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@17.1.0	defaults format=iife	terser	synthetic	threw	ce8256365a903ec4
+majors/v20-corejs--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v20-corejs--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v20-corejs--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v20-corejs--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v20-corejs--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v20-corejs--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v20-corejs--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v20-npm--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v20-npm--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v20-npm--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v20-synthetic--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	esbuild	synthetic	ran	4a97c961fe121a2b
+majors/v20-synthetic--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	obf-default	synthetic	ran	4a97c961fe121a2b
+majors/v20-synthetic--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	obf-globals	synthetic	ran	4a97c961fe121a2b
+majors/v20-synthetic--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	obf-strings	synthetic	ran	4a97c961fe121a2b
+majors/v20-synthetic--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	plain	synthetic	ran	4a97c961fe121a2b
+majors/v20-synthetic--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	swc	synthetic	ran	4a97c961fe121a2b
+majors/v20-synthetic--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@20.0.0	defaults format=iife	terser	synthetic	ran	4a97c961fe121a2b
+majors/v21-corejs--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v21-corejs--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v21-corejs--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v21-corejs--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v21-corejs--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v21-corejs--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v21-corejs--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v21-npm--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v21-npm--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v21-npm--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v21-synthetic--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	esbuild	synthetic	ran	4a97c961fe121a2b
+majors/v21-synthetic--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	obf-default	synthetic	ran	4a97c961fe121a2b
+majors/v21-synthetic--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	obf-globals	synthetic	ran	4a97c961fe121a2b
+majors/v21-synthetic--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	obf-strings	synthetic	ran	4a97c961fe121a2b
+majors/v21-synthetic--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	plain	synthetic	ran	4a97c961fe121a2b
+majors/v21-synthetic--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	swc	synthetic	ran	4a97c961fe121a2b
+majors/v21-synthetic--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	defaults format=iife	terser	synthetic	ran	4a97c961fe121a2b
+majors/v22-corejs--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v22-corejs--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v22-corejs--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v22-corejs--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v22-corejs--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v22-corejs--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v22-corejs--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v22-npm--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v22-npm--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v22-npm--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v22-synthetic--esbuild.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	esbuild	synthetic	ran	e28146cb56744ed2
+majors/v22-synthetic--obf-default.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	obf-default	synthetic	ran	e28146cb56744ed2
+majors/v22-synthetic--obf-globals.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	obf-globals	synthetic	ran	e28146cb56744ed2
+majors/v22-synthetic--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	obf-strings	synthetic	ran	e28146cb56744ed2
+majors/v22-synthetic--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	plain	synthetic	ran	e28146cb56744ed2
+majors/v22-synthetic--swc.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	swc	synthetic	ran	e28146cb56744ed2
+majors/v22-synthetic--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaults format=iife	terser	synthetic	ran	e28146cb56744ed2
+majors/v24-corejs--esbuild.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v24-corejs--obf-default.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v24-corejs--obf-globals.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v24-corejs--obf-strings.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v24-corejs--plain.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v24-corejs--swc.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v24-corejs--terser.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v24-npm--obf-strings.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v24-npm--plain.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v24-npm--terser.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v24-synthetic--esbuild.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	esbuild	synthetic	ran	e28146cb56744ed2
+majors/v24-synthetic--obf-default.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	obf-default	synthetic	ran	e28146cb56744ed2
+majors/v24-synthetic--obf-globals.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	obf-globals	synthetic	ran	e28146cb56744ed2
+majors/v24-synthetic--obf-strings.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	obf-strings	synthetic	ran	e28146cb56744ed2
+majors/v24-synthetic--plain.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	plain	synthetic	ran	e28146cb56744ed2
+majors/v24-synthetic--swc.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	swc	synthetic	ran	e28146cb56744ed2
+majors/v24-synthetic--terser.js	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	defaults format=iife	terser	synthetic	ran	e28146cb56744ed2
+majors/v25-corejs--esbuild.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v25-corejs--obf-default.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v25-corejs--obf-globals.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v25-corejs--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v25-corejs--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v25-corejs--swc.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v25-corejs--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v25-npm--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v25-npm--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v25-npm--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v25-synthetic--esbuild.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	esbuild	synthetic	ran	e28146cb56744ed2
+majors/v25-synthetic--obf-default.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	obf-default	synthetic	ran	e28146cb56744ed2
+majors/v25-synthetic--obf-globals.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	obf-globals	synthetic	ran	e28146cb56744ed2
+majors/v25-synthetic--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	obf-strings	synthetic	ran	e28146cb56744ed2
+majors/v25-synthetic--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	plain	synthetic	ran	e28146cb56744ed2
+majors/v25-synthetic--swc.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	swc	synthetic	ran	e28146cb56744ed2
+majors/v25-synthetic--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@25.0.8	defaults format=iife	terser	synthetic	ran	e28146cb56744ed2
+majors/v26-corejs--esbuild.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v26-corejs--obf-default.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v26-corejs--obf-globals.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v26-corejs--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v26-corejs--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v26-corejs--swc.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v26-corejs--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v26-npm--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v26-npm--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v26-npm--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v26-synthetic--esbuild.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	esbuild	synthetic	ran	e28146cb56744ed2
+majors/v26-synthetic--obf-default.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	obf-default	synthetic	ran	e28146cb56744ed2
+majors/v26-synthetic--obf-globals.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	obf-globals	synthetic	ran	e28146cb56744ed2
+majors/v26-synthetic--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	obf-strings	synthetic	ran	e28146cb56744ed2
+majors/v26-synthetic--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	plain	synthetic	ran	e28146cb56744ed2
+majors/v26-synthetic--swc.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	swc	synthetic	ran	e28146cb56744ed2
+majors/v26-synthetic--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@26.0.3	defaults format=iife	terser	synthetic	ran	e28146cb56744ed2
+majors/v28-corejs--esbuild.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v28-corejs--obf-default.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v28-corejs--obf-globals.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v28-corejs--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v28-corejs--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v28-corejs--swc.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v28-corejs--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v28-npm--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v28-npm--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v28-npm--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v28-synthetic--esbuild.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	esbuild	synthetic	ran	4a1358b08d0e9e58
+majors/v28-synthetic--obf-default.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	obf-default	synthetic	ran	4a1358b08d0e9e58
+majors/v28-synthetic--obf-globals.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	obf-globals	synthetic	ran	4a1358b08d0e9e58
+majors/v28-synthetic--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	obf-strings	synthetic	ran	4a1358b08d0e9e58
+majors/v28-synthetic--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	plain	synthetic	ran	4a1358b08d0e9e58
+majors/v28-synthetic--swc.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	swc	synthetic	ran	4a1358b08d0e9e58
+majors/v28-synthetic--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@28.0.9	defaults format=iife	terser	synthetic	ran	4a1358b08d0e9e58
+majors/v29-corejs--esbuild.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	esbuild	corejs	ran	07c12d18c263d855
+majors/v29-corejs--obf-default.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	obf-default	corejs	ran	07c12d18c263d855
+majors/v29-corejs--obf-globals.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	obf-globals	corejs	ran	07c12d18c263d855
+majors/v29-corejs--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	obf-strings	corejs	ran	07c12d18c263d855
+majors/v29-corejs--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	plain	corejs	ran	07c12d18c263d855
+majors/v29-corejs--swc.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	swc	corejs	ran	07c12d18c263d855
+majors/v29-corejs--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	terser	corejs	ran	07c12d18c263d855
+majors/v29-npm--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	obf-strings	npm	ran	cb1fc7db993c45ba
+majors/v29-npm--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	plain	npm	ran	cb1fc7db993c45ba
+majors/v29-npm--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	terser	npm	ran	cb1fc7db993c45ba
+majors/v29-synthetic--esbuild.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	esbuild	synthetic	ran	4a1358b08d0e9e58
+majors/v29-synthetic--obf-default.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	obf-default	synthetic	ran	4a1358b08d0e9e58
+majors/v29-synthetic--obf-globals.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	obf-globals	synthetic	ran	4a1358b08d0e9e58
+majors/v29-synthetic--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	obf-strings	synthetic	ran	4a1358b08d0e9e58
+majors/v29-synthetic--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	plain	synthetic	ran	4a1358b08d0e9e58
+majors/v29-synthetic--swc.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	swc	synthetic	ran	4a1358b08d0e9e58
+majors/v29-synthetic--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaults format=iife	terser	synthetic	ran	4a1358b08d0e9e58
+options/v22-default-auto--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaultIsModuleExports="auto" format=iife	obf-strings	esm	ran	a8b0ad3416005796
+options/v22-default-auto--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaultIsModuleExports="auto" format=iife	plain	esm	ran	a8b0ad3416005796
+options/v22-default-auto--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaultIsModuleExports="auto" format=iife	terser	esm	ran	a8b0ad3416005796
+options/v22-default-false--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaultIsModuleExports=false format=iife	obf-strings	esm	threw	905bf122e905f59a
+options/v22-default-false--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaultIsModuleExports=false format=iife	plain	esm	threw	905bf122e905f59a
+options/v22-default-false--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaultIsModuleExports=false format=iife	terser	esm	threw	905bf122e905f59a
+options/v22-default-true--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaultIsModuleExports=true format=iife	obf-strings	esm	ran	a8b0ad3416005796
+options/v22-default-true--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaultIsModuleExports=true format=iife	plain	esm	ran	a8b0ad3416005796
+options/v22-default-true--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	defaultIsModuleExports=true format=iife	terser	esm	ran	a8b0ad3416005796
+options/v22-dynamic-ignored--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	ignoreDynamicRequires=true format=iife	obf-strings	synthetic	ran	e28146cb56744ed2
+options/v22-dynamic-ignored--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	ignoreDynamicRequires=true format=iife	plain	synthetic	ran	e28146cb56744ed2
+options/v22-dynamic-ignored--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	ignoreDynamicRequires=true format=iife	terser	synthetic	ran	e28146cb56744ed2
+options/v22-esm-externals-false--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	esmExternals=false external=ms format=cjs	plain	npm	ran	cb1fc7db993c45ba
+options/v22-esm-externals-true--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	esmExternals=true external=ms format=cjs	plain	npm	ran	cb1fc7db993c45ba
+options/v22-mixed--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	transformMixedEsModules=true format=iife	obf-strings	mixed	ran	3930c9f81fb60d3d
+options/v22-mixed--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	transformMixedEsModules=true format=iife	plain	mixed	ran	3930c9f81fb60d3d
+options/v22-mixed--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	transformMixedEsModules=true format=iife	terser	mixed	ran	3930c9f81fb60d3d
+options/v22-returns-auto--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault="auto" format=iife	obf-strings	require-esm	ran	123b8a872c6d86e2
+options/v22-returns-auto--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault="auto" format=iife	plain	require-esm	ran	123b8a872c6d86e2
+options/v22-returns-auto--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault="auto" format=iife	terser	require-esm	ran	123b8a872c6d86e2
+options/v22-returns-false--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault=false format=iife	obf-strings	require-esm	ran	123b8a872c6d86e2
+options/v22-returns-false--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault=false format=iife	plain	require-esm	ran	123b8a872c6d86e2
+options/v22-returns-false--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault=false format=iife	terser	require-esm	ran	123b8a872c6d86e2
+options/v22-returns-namespace--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault="namespace" format=iife	obf-strings	require-esm	ran	123b8a872c6d86e2
+options/v22-returns-namespace--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault="namespace" format=iife	plain	require-esm	ran	123b8a872c6d86e2
+options/v22-returns-namespace--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault="namespace" format=iife	terser	require-esm	ran	123b8a872c6d86e2
+options/v22-returns-preferred--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault="preferred" format=iife	obf-strings	require-esm	ran	a2b11e97a817b386
+options/v22-returns-preferred--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault="preferred" format=iife	plain	require-esm	ran	a2b11e97a817b386
+options/v22-returns-preferred--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault="preferred" format=iife	terser	require-esm	ran	a2b11e97a817b386
+options/v22-returns-true--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault=true format=iife	obf-strings	require-esm	ran	a2b11e97a817b386
+options/v22-returns-true--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault=true format=iife	plain	require-esm	ran	a2b11e97a817b386
+options/v22-returns-true--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	requireReturnsDefault=true format=iife	terser	require-esm	ran	a2b11e97a817b386
+options/v22-strict-auto--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires="auto" format=iife	obf-strings	synthetic	ran	e28146cb56744ed2
+options/v22-strict-auto--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires="auto" format=iife	plain	synthetic	ran	e28146cb56744ed2
+options/v22-strict-auto--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires="auto" format=iife	terser	synthetic	ran	e28146cb56744ed2
+options/v22-strict-auto-polyfill--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires="auto" format=iife	obf-strings	polyfill	ran	d1b8bf4c602abdb1
+options/v22-strict-auto-polyfill--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires="auto" format=iife	plain	polyfill	ran	d1b8bf4c602abdb1
+options/v22-strict-auto-polyfill--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires="auto" format=iife	terser	polyfill	ran	d1b8bf4c602abdb1
+options/v22-strict-debug--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires="debug" format=iife	obf-strings	synthetic	ran	e28146cb56744ed2
+options/v22-strict-debug--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires="debug" format=iife	plain	synthetic	ran	e28146cb56744ed2
+options/v22-strict-debug--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires="debug" format=iife	terser	synthetic	ran	e28146cb56744ed2
+options/v22-strict-false--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=false format=iife	obf-strings	synthetic	ran	4a97c961fe121a2b
+options/v22-strict-false--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=false format=iife	plain	synthetic	ran	4a97c961fe121a2b
+options/v22-strict-false--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=false format=iife	terser	synthetic	ran	4a97c961fe121a2b
+options/v22-strict-false-corejs--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=false format=iife	obf-strings	corejs	ran	07c12d18c263d855
+options/v22-strict-false-corejs--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=false format=iife	plain	corejs	ran	07c12d18c263d855
+options/v22-strict-false-corejs--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=false format=iife	terser	corejs	ran	07c12d18c263d855
+options/v22-strict-list--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=["**/cycle-*.js","**/lazy-*.js"] format=iife	obf-strings	synthetic	ran	9db25a43aeb33885
+options/v22-strict-list--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=["**/cycle-*.js","**/lazy-*.js"] format=iife	plain	synthetic	ran	9db25a43aeb33885
+options/v22-strict-list--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=["**/cycle-*.js","**/lazy-*.js"] format=iife	terser	synthetic	ran	9db25a43aeb33885
+options/v22-strict-true--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=true format=iife	obf-strings	synthetic	ran	e28146cb56744ed2
+options/v22-strict-true--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=true format=iife	plain	synthetic	ran	e28146cb56744ed2
+options/v22-strict-true--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=true format=iife	terser	synthetic	ran	e28146cb56744ed2
+options/v22-strict-true-corejs--obf-strings.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=true format=iife	obf-strings	corejs	ran	07c12d18c263d855
+options/v22-strict-true-corejs--plain.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=true format=iife	plain	corejs	ran	07c12d18c263d855
+options/v22-strict-true-corejs--terser.js	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	strictRequires=true format=iife	terser	corejs	ran	07c12d18c263d855
+options/v29-default-auto--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaultIsModuleExports="auto" format=iife	obf-strings	esm	ran	a8b0ad3416005796
+options/v29-default-auto--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaultIsModuleExports="auto" format=iife	plain	esm	ran	a8b0ad3416005796
+options/v29-default-auto--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaultIsModuleExports="auto" format=iife	terser	esm	ran	a8b0ad3416005796
+options/v29-default-false--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaultIsModuleExports=false format=iife	obf-strings	esm	threw	905bf122e905f59a
+options/v29-default-false--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaultIsModuleExports=false format=iife	plain	esm	threw	905bf122e905f59a
+options/v29-default-false--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaultIsModuleExports=false format=iife	terser	esm	threw	905bf122e905f59a
+options/v29-default-true--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaultIsModuleExports=true format=iife	obf-strings	esm	ran	a8b0ad3416005796
+options/v29-default-true--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaultIsModuleExports=true format=iife	plain	esm	ran	a8b0ad3416005796
+options/v29-default-true--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	defaultIsModuleExports=true format=iife	terser	esm	ran	a8b0ad3416005796
+options/v29-dynamic-ignored--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	ignoreDynamicRequires=true format=iife	obf-strings	synthetic	ran	4a1358b08d0e9e58
+options/v29-dynamic-ignored--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	ignoreDynamicRequires=true format=iife	plain	synthetic	ran	4a1358b08d0e9e58
+options/v29-dynamic-ignored--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	ignoreDynamicRequires=true format=iife	terser	synthetic	ran	4a1358b08d0e9e58
+options/v29-esm-externals-false--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	esmExternals=false external=ms format=cjs	plain	npm	ran	cb1fc7db993c45ba
+options/v29-esm-externals-true--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	esmExternals=true external=ms format=cjs	plain	npm	ran	cb1fc7db993c45ba
+options/v29-mixed--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	transformMixedEsModules=true format=iife	obf-strings	mixed	ran	3930c9f81fb60d3d
+options/v29-mixed--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	transformMixedEsModules=true format=iife	plain	mixed	ran	3930c9f81fb60d3d
+options/v29-mixed--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	transformMixedEsModules=true format=iife	terser	mixed	ran	3930c9f81fb60d3d
+options/v29-returns-auto--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault="auto" format=iife	obf-strings	require-esm	ran	123b8a872c6d86e2
+options/v29-returns-auto--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault="auto" format=iife	plain	require-esm	ran	123b8a872c6d86e2
+options/v29-returns-auto--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault="auto" format=iife	terser	require-esm	ran	123b8a872c6d86e2
+options/v29-returns-false--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault=false format=iife	obf-strings	require-esm	ran	123b8a872c6d86e2
+options/v29-returns-false--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault=false format=iife	plain	require-esm	ran	123b8a872c6d86e2
+options/v29-returns-false--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault=false format=iife	terser	require-esm	ran	123b8a872c6d86e2
+options/v29-returns-namespace--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault="namespace" format=iife	obf-strings	require-esm	ran	123b8a872c6d86e2
+options/v29-returns-namespace--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault="namespace" format=iife	plain	require-esm	ran	123b8a872c6d86e2
+options/v29-returns-namespace--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault="namespace" format=iife	terser	require-esm	ran	123b8a872c6d86e2
+options/v29-returns-preferred--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault="preferred" format=iife	obf-strings	require-esm	ran	a2b11e97a817b386
+options/v29-returns-preferred--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault="preferred" format=iife	plain	require-esm	ran	a2b11e97a817b386
+options/v29-returns-preferred--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault="preferred" format=iife	terser	require-esm	ran	a2b11e97a817b386
+options/v29-returns-true--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault=true format=iife	obf-strings	require-esm	ran	a2b11e97a817b386
+options/v29-returns-true--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault=true format=iife	plain	require-esm	ran	a2b11e97a817b386
+options/v29-returns-true--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	requireReturnsDefault=true format=iife	terser	require-esm	ran	a2b11e97a817b386
+options/v29-strict-auto--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires="auto" format=iife	obf-strings	synthetic	ran	4a1358b08d0e9e58
+options/v29-strict-auto--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires="auto" format=iife	plain	synthetic	ran	4a1358b08d0e9e58
+options/v29-strict-auto--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires="auto" format=iife	terser	synthetic	ran	4a1358b08d0e9e58
+options/v29-strict-auto-polyfill--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires="auto" format=iife	obf-strings	polyfill	ran	d1b8bf4c602abdb1
+options/v29-strict-auto-polyfill--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires="auto" format=iife	plain	polyfill	ran	d1b8bf4c602abdb1
+options/v29-strict-auto-polyfill--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires="auto" format=iife	terser	polyfill	ran	d1b8bf4c602abdb1
+options/v29-strict-debug--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires="debug" format=iife	obf-strings	synthetic	ran	4a1358b08d0e9e58
+options/v29-strict-debug--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires="debug" format=iife	plain	synthetic	ran	4a1358b08d0e9e58
+options/v29-strict-debug--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires="debug" format=iife	terser	synthetic	ran	4a1358b08d0e9e58
+options/v29-strict-false--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=false format=iife	obf-strings	synthetic	ran	1300c39d7ed7089a
+options/v29-strict-false--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=false format=iife	plain	synthetic	ran	1300c39d7ed7089a
+options/v29-strict-false--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=false format=iife	terser	synthetic	ran	1300c39d7ed7089a
+options/v29-strict-false-corejs--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=false format=iife	obf-strings	corejs	ran	07c12d18c263d855
+options/v29-strict-false-corejs--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=false format=iife	plain	corejs	ran	07c12d18c263d855
+options/v29-strict-false-corejs--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=false format=iife	terser	corejs	ran	07c12d18c263d855
+options/v29-strict-list--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=["**/cycle-*.js","**/lazy-*.js"] format=iife	obf-strings	synthetic	ran	a15a229325fc71ed
+options/v29-strict-list--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=["**/cycle-*.js","**/lazy-*.js"] format=iife	plain	synthetic	ran	a15a229325fc71ed
+options/v29-strict-list--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=["**/cycle-*.js","**/lazy-*.js"] format=iife	terser	synthetic	ran	a15a229325fc71ed
+options/v29-strict-true--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=true format=iife	obf-strings	synthetic	ran	4a1358b08d0e9e58
+options/v29-strict-true--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=true format=iife	plain	synthetic	ran	4a1358b08d0e9e58
+options/v29-strict-true--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=true format=iife	terser	synthetic	ran	4a1358b08d0e9e58
+options/v29-strict-true-corejs--obf-strings.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=true format=iife	obf-strings	corejs	ran	07c12d18c263d855
+options/v29-strict-true-corejs--plain.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=true format=iife	plain	corejs	ran	07c12d18c263d855
+options/v29-strict-true-corejs--terser.js	rollup@4.66.0 @rollup/plugin-commonjs@29.0.3	strictRequires=true format=iife	terser	corejs	ran	07c12d18c263d855
+rolldown/cjs-corejs--obf-strings.js	rolldown@1.2.16	format=cjs minify=false	obf-strings	corejs	ran	07c12d18c263d855
+rolldown/cjs-corejs--plain.js	rolldown@1.2.16	format=cjs minify=false	plain	corejs	ran	07c12d18c263d855
+rolldown/cjs-corejs--terser.js	rolldown@1.2.16	format=cjs minify=false	terser	corejs	ran	07c12d18c263d855
+rolldown/cjs-corejs-min--plain.js	rolldown@1.2.16	format=cjs minify=true	plain	corejs	ran	07c12d18c263d855
+rolldown/cjs-synthetic--obf-strings.js	rolldown@1.2.16	format=cjs minify=false	obf-strings	synthetic	ran	4a1358b08d0e9e58
+rolldown/cjs-synthetic--plain.js	rolldown@1.2.16	format=cjs minify=false	plain	synthetic	ran	4a1358b08d0e9e58
+rolldown/cjs-synthetic--terser.js	rolldown@1.2.16	format=cjs minify=false	terser	synthetic	ran	4a1358b08d0e9e58
+rolldown/cjs-synthetic-min--plain.js	rolldown@1.2.16	format=cjs minify=true	plain	synthetic	ran	4a1358b08d0e9e58
+rolldown/esm-corejs--obf-strings.js	rolldown@1.2.16	format=esm minify=false	obf-strings	corejs	ran	07c12d18c263d855
+rolldown/esm-corejs--plain.js	rolldown@1.2.16	format=esm minify=false	plain	corejs	ran	07c12d18c263d855
+rolldown/esm-corejs--terser.js	rolldown@1.2.16	format=esm minify=false	terser	corejs	ran	07c12d18c263d855
+rolldown/esm-corejs-min--plain.js	rolldown@1.2.16	format=esm minify=true	plain	corejs	ran	07c12d18c263d855
+rolldown/esm-synthetic--obf-strings.js	rolldown@1.2.16	format=esm minify=false	obf-strings	synthetic	ran	4a1358b08d0e9e58
+rolldown/esm-synthetic--plain.js	rolldown@1.2.16	format=esm minify=false	plain	synthetic	ran	4a1358b08d0e9e58
+rolldown/esm-synthetic--terser.js	rolldown@1.2.16	format=esm minify=false	terser	synthetic	ran	4a1358b08d0e9e58
+rolldown/esm-synthetic-min--plain.js	rolldown@1.2.16	format=esm minify=true	plain	synthetic	ran	4a1358b08d0e9e58
+rolldown/iife-corejs--obf-strings.js	rolldown@1.2.16	format=iife minify=false	obf-strings	corejs	ran	07c12d18c263d855
+rolldown/iife-corejs--plain.js	rolldown@1.2.16	format=iife minify=false	plain	corejs	ran	07c12d18c263d855
+rolldown/iife-corejs--terser.js	rolldown@1.2.16	format=iife minify=false	terser	corejs	ran	07c12d18c263d855
+rolldown/iife-corejs-min--plain.js	rolldown@1.2.16	format=iife minify=true	plain	corejs	ran	07c12d18c263d855
+rolldown/iife-synthetic--obf-strings.js	rolldown@1.2.16	format=iife minify=false	obf-strings	synthetic	ran	4a1358b08d0e9e58
+rolldown/iife-synthetic--plain.js	rolldown@1.2.16	format=iife minify=false	plain	synthetic	ran	4a1358b08d0e9e58
+rolldown/iife-synthetic--terser.js	rolldown@1.2.16	format=iife minify=false	terser	synthetic	ran	4a1358b08d0e9e58
+rolldown/iife-synthetic-min--plain.js	rolldown@1.2.16	format=iife minify=true	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite5-app-corejs--plain.js	vite@5.4.21	build app index.html minify=false commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite5-app-corejs-min--plain.js	vite@5.4.21	build app index.html minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite5-app-synthetic--plain.js	vite@5.4.21	build app index.html minify=false commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	e28146cb56744ed2
+vite/vite5-app-synthetic-min--plain.js	vite@5.4.21	build app index.html minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	e28146cb56744ed2
+vite/vite5-lib-corejs--plain.js	vite@5.4.21	build lib formats=[iife] minify=false commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite5-lib-corejs-min--plain.js	vite@5.4.21	build lib formats=[iife] minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite5-lib-synthetic--plain.js	vite@5.4.21	build lib formats=[iife] minify=false commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	e28146cb56744ed2
+vite/vite5-lib-synthetic-min--plain.js	vite@5.4.21	build lib formats=[iife] minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	e28146cb56744ed2
+vite/vite6-app-corejs--plain.js	vite@6.4.6	build app index.html minify=false commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite6-app-corejs-min--plain.js	vite@6.4.6	build app index.html minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite6-app-synthetic--plain.js	vite@6.4.6	build app index.html minify=false commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite6-app-synthetic-min--plain.js	vite@6.4.6	build app index.html minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite6-lib-corejs--plain.js	vite@6.4.6	build lib formats=[iife] minify=false commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite6-lib-corejs-min--plain.js	vite@6.4.6	build lib formats=[iife] minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite6-lib-synthetic--plain.js	vite@6.4.6	build lib formats=[iife] minify=false commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite6-lib-synthetic-min--plain.js	vite@6.4.6	build lib formats=[iife] minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite7-app-corejs--plain.js	vite@7.3.8	build app index.html minify=false commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite7-app-corejs-min--plain.js	vite@7.3.8	build app index.html minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite7-app-synthetic--plain.js	vite@7.3.8	build app index.html minify=false commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite7-app-synthetic-min--plain.js	vite@7.3.8	build app index.html minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite7-lib-corejs--plain.js	vite@7.3.8	build lib formats=[iife] minify=false commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite7-lib-corejs-min--plain.js	vite@7.3.8	build lib formats=[iife] minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite7-lib-synthetic--plain.js	vite@7.3.8	build lib formats=[iife] minify=false commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite7-lib-synthetic-min--plain.js	vite@7.3.8	build lib formats=[iife] minify=esbuild commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite8-app-corejs--plain.js	vite@8.3.5	build app index.html minify=false commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite8-app-corejs-min--plain.js	vite@8.3.5	build app index.html minify=oxc commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite8-app-synthetic--plain.js	vite@8.3.5	build app index.html minify=false commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite8-app-synthetic-min--plain.js	vite@8.3.5	build app index.html minify=oxc commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite8-lib-corejs--plain.js	vite@8.3.5	build lib formats=[iife] minify=false commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite8-lib-corejs-min--plain.js	vite@8.3.5	build lib formats=[iife] minify=oxc commonjsOptions.include=[apps,node_modules]	plain	corejs	ran	07c12d18c263d855
+vite/vite8-lib-synthetic--plain.js	vite@8.3.5	build lib formats=[iife] minify=false commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58
+vite/vite8-lib-synthetic-min--plain.js	vite@8.3.5	build lib formats=[iife] minify=oxc commonjsOptions.include=[apps,node_modules]	plain	synthetic	ran	4a1358b08d0e9e58

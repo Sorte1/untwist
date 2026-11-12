@@ -3,6 +3,7 @@ use untwist_core::pass::Pass;
 pub mod base_name;
 pub mod collect;
 pub mod collisions;
+pub mod commonjs;
 pub mod evidence;
 pub mod fingerprint;
 #[cfg(feature = "test-hooks")]

@@ -1,0 +1,1 @@
+var app=function(){"use strict";function e(e){return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,"default")?e.default:e}var n,t,r,o={};function u(){if(t)return n;t=1;var e=0;return n=function(n){e+=1,console.log(e+" "+n)}}e(u())("mixed "+(r||(r=1,u()("props eval"),o.one=1,o.two=function(){return 2}),o).one);return"mixed"}();

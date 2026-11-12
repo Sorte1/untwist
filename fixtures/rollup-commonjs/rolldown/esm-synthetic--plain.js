@@ -1,0 +1,101 @@
+// \0rolldown/runtime.js
+var __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod, mod.exports), cb = null), mod.exports);
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, { get: (a, b) => (typeof require !== "undefined" ? require : a)[b] }) : x)(function(x) {
+	if (typeof require !== "undefined") return require.apply(this, arguments);
+	throw Error("Calling `require` for \"" + x + "\" in an environment that doesn't expose the `require` function. See https://rolldown.rs/in-depth/bundling-cjs#require-external-modules for more details.");
+});
+
+// apps/synthetic/log.js
+var require_log = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var count = 0;
+	module.exports = function log(line) {
+		count += 1;
+		console.log(count + " " + line);
+	};
+}));
+
+// apps/synthetic/cycle-b.js
+var require_cycle_b = /* @__PURE__ */ __commonJSMin(((exports) => {
+	const log = require_log();
+	log("b start");
+	const a = require_cycle_a();
+	exports.name = "b";
+	exports.sawA = String(a.name) + "/" + String(a.fromB);
+	log("b end");
+}));
+
+// apps/synthetic/cycle-a.js
+var require_cycle_a = /* @__PURE__ */ __commonJSMin(((exports) => {
+	const log = require_log();
+	log("a start");
+	exports.name = "a";
+	const b = require_cycle_b();
+	exports.fromB = b.name + ":" + b.sawA;
+	log("a end");
+}));
+
+// apps/synthetic/reassign.js
+var require_reassign = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	require_log()("reassign eval");
+	module.exports = function shout(text) {
+		return text + "!";
+	};
+	module.exports.extra = 7;
+}));
+
+// apps/synthetic/props.js
+var require_props = /* @__PURE__ */ __commonJSMin(((exports) => {
+	require_log()("props eval");
+	exports.one = 1;
+	exports.two = function() {
+		return 2;
+	};
+}));
+
+// apps/synthetic/this-top.js
+var require_this_top = /* @__PURE__ */ __commonJSMin(((exports, module, this$1) => {
+	this$1.viaThis = 5;
+	exports.same = String(this$1 === exports) + ":" + String(exports.viaThis);
+}));
+
+// apps/synthetic/lazy-inner.js
+var require_lazy_inner = /* @__PURE__ */ __commonJSMin(((exports) => {
+	require_log()("lazy-inner eval");
+	exports.value = 42;
+}));
+
+// apps/synthetic/lazy-twice.js
+var require_lazy_twice = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var calls = 0;
+	module.exports = function() {
+		calls += 1;
+		return calls;
+	};
+	require_log()("lazy-twice eval");
+}));
+
+// apps/synthetic/index.js
+const log = require_log();
+log("index start");
+log("a.fromB " + require_cycle_a().fromB);
+const shout = require_reassign();
+log("reassign " + shout("x") + " " + shout.extra);
+const props = require_props();
+log("props " + props.one + props.two());
+log("this " + require_this_top().same);
+function later() {
+	return require_lazy_inner().value;
+}
+log("before lazy");
+log("lazy " + later() + " " + later());
+function counter() {
+	return require_lazy_twice()();
+}
+log("twice " + counter() + counter());
+const name = "./dyn-target";
+try {
+	log("dynamic " + __require(name).v);
+} catch (error) {
+	log("dynamic threw");
+}
+log("index end");

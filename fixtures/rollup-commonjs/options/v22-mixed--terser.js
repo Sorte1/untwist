@@ -1,0 +1,1 @@
+var app=function(){"use strict";var n={},o=0,e=function(n){o+=1,console.log(o+" "+n)};e("props eval"),n.one=1,n.two=function(){return 2};e("mixed "+n.one);return"mixed"}();

@@ -220,6 +220,17 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   property (`status`, `location`, `top`, `name`, `onload`, ...). When code built from text can
   reach the script's globals, top-level `let`, `const` and `class` keep their names too, since
   indirect `eval` and `Function` resolve them.
+- **CommonJS wrapper names** (`name-commonjs-wrappers`, on in every mode and both lanes). It
+  renames only the bindings of a recognised wrapper and only when no code can see the old
+  name: every function whose text holds one of them is an IIFE, a discarded function
+  expression, a function declared or held by a `var` that is only ever called directly (in a
+  classic script, not at the top level), or a callback handed to a recognised
+  `__commonJSMin`; none of those functions reads its own `arguments`; and in sloppy code no
+  `.caller` read exists other than one compared with `==`/`===`. A direct `eval` or `with`
+  anywhere turns it off. The wrapper function itself is renamed past the safe lane's `.name`
+  guard only on those terms, since its value never leaves its call sites. Error stack traces
+  show the new names, and a read through a computed key that is not a literal (`f[key]` that
+  is `caller` at run time) is not seen, as for the rename modes.
 - A program containing a direct `eval` call or a `with` statement is renamed anyway, with a
   diagnostic note naming the hazard. Static scope analysis cannot see what those constructs
   resolve; the reference deobfuscator reports nothing at all.
