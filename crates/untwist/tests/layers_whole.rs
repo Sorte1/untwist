@@ -260,6 +260,24 @@ fn each_scanned_form_keeps_a_declaring_payload_for_unsafe() {
         "with (o) {}",
         "eval('delete x')",
         "Function('delete x')()",
+        "var O = Object; O.defineProperty(globalThis, 'x', {})",
+        "var R = Reflect; R.deleteProperty(globalThis, 'x')",
+        "var d = Object.defineProperty; d(globalThis, 'x', {})",
+        "Object.defineProperty.call(null, globalThis, 'x', {})",
+        "(0, Object.defineProperty)(globalThis, 'x', {})",
+        "var { defineProperty: d } = Object; d(globalThis, 'x', {})",
+        "var O = window.Object; O.freeze(this)",
+        "var C = ({}).constructor; C['define' + 'Property'](globalThis, 'x', {})",
+        "Object['define' + 'Property'](globalThis, 'x', {})",
+        "var k = 'defineProperty'; globalThis.Object[k](globalThis, 'x', {})",
+        "var g = globalThis; g[k](g, 'x', {})",
+        "var { constructor: C } = {}; C[k](globalThis, 'x', {})",
+        "o.getOwnPropertyDescriptor(globalThis, 'x')",
+        "var g = this; g[k](g, 'x', {})",
+        "var g = (function () { return this; })(); g[k](g, 'x', {})",
+        "var { [k]: C } = {}; C[j](globalThis, 'x', {})",
+        "setTimeout('delete x')",
+        "Object.defineProperty.length",
     ];
     for observer in observers {
         let source = format!("eval({:?});", format!("var x = 1; {observer};"));
@@ -278,6 +296,13 @@ fn each_scanned_form_keeps_a_declaring_payload_for_unsafe() {
         "{ function g() {} }",
         "Object.defineProperty({}, 'x', {});",
         "delete f();",
+        "var o = Object.keys({}); console.log(o.length, Object.prototype.toString.call(o));",
+        "if (typeof window !== 'undefined' && 'x' in window) { window.y = 1; }",
+        "var e = new Error('a'); console.log(e.constructor.name);",
+        "function C() { this.a = 1; } C.prototype.constructor = C; new C();",
+        "setTimeout(function () {}, 0);",
+        "var o = {}; if (o.constructor === Object && o instanceof Object) {}",
+        "var t = typeof globalThis;",
     ];
     for payload in clean {
         let source = format!("eval({payload:?});");
@@ -343,7 +368,7 @@ fn a_function_layer_is_the_create_dynamic_function_source_called_with_the_argume
     }
 }
 
-const GLOBAL_OBSERVERS: [(&str, &str); 4] = [
+const GLOBAL_OBSERVERS: [(&str, &str); 7] = [
     (
         "a delete through an alias of the global object",
         "eval(\"var x = 1; var g = globalThis; console.log(delete g.x, typeof x);\");",
@@ -359,6 +384,18 @@ const GLOBAL_OBSERVERS: [(&str, &str); 4] = [
     (
         "a redefinition through an alias of the global object",
         "eval(\"var x = 1; var g = globalThis; try { Object.defineProperty(g, 'x', { get: function () { return 2; } }); console.log(x); } catch (e) { console.log('threw ' + e.constructor.name); }\");",
+    ),
+    (
+        "a redefinition through an alias of Object",
+        "eval(\"var x = 1; var O = Object; try { O.defineProperty(globalThis, 'x', { get: function () { return 2; } }); console.log(x); } catch (e) { console.log('threw ' + e.constructor.name); }\");",
+    ),
+    (
+        "a redefinition through a stored defineProperty",
+        "eval(\"var x = 1; var d = Object.defineProperty; try { d(globalThis, 'x', { get: function () { return 2; } }); console.log(x); } catch (e) { console.log('threw ' + e.constructor.name); }\");",
+    ),
+    (
+        "a redefinition through a computed key on the this of a plain call",
+        "eval(\"var x = 1; var g = (function () { return this; })(); var k = 'define' + 'Property'; try { g.Object[k](g, 'x', { get: function () { return 2; } }); console.log(x); } catch (e) { console.log('threw ' + e.constructor.name); }\");",
     ),
 ];
 

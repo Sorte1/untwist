@@ -1,15 +1,12 @@
 use oxc_ast::ast::{
-    Argument, CallExpression, Expression, IdentifierReference, Program, Statement, StringLiteral,
-    UnaryExpression, WithStatement,
+    Argument, CallExpression, Expression, IdentifierReference, Program, StringLiteral,
 };
-use oxc_ast_visit::{walk, Visit};
-use oxc_syntax::operator::UnaryOperator;
+use oxc_ast_visit::Visit;
 use untwist_core::ast_util::js_text::js_text;
 use untwist_core::semantic::program_is_strict;
 use untwist_eval::budget::STRING_LEN_CAP;
 use untwist_eval::fold::{fold_layer_text, LayerText};
 
-use super::eval::{deletes_a_global, reflects_on_globals, DYNAMIC_CODE};
 use oxc_semantic::Scoping;
 
 use super::model::{DecodeCx, Layer, LayerForm, Refusal, Refused};
@@ -70,60 +67,20 @@ pub fn fold_texts(
 pub struct FreeNames<'a> {
     pub names: Vec<&'a str>,
     pub over_cap: bool,
-    pub observe: bool,
-    pub found: bool,
 }
 
 impl<'a> Visit<'a> for FreeNames<'a> {
-    fn visit_expression(&mut self, it: &Expression<'a>) {
-        if !self.found {
-            walk::walk_expression(self, it);
-        }
-    }
-
-    fn visit_statement(&mut self, it: &Statement<'a>) {
-        if !self.found {
-            walk::walk_statement(self, it);
-        }
-    }
-
-    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
-        match self.observe {
-            true => self.found = true,
-            false => walk::walk_with_statement(self, it),
-        }
-    }
-
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         let name = it.name.as_str();
-        if self.observe {
-            self.found |= DYNAMIC_CODE.contains(&name);
-        } else if !self.names.contains(&name) {
+        if !self.names.contains(&name) {
             self.names.push(name);
         }
     }
 
     fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
         let text = js_text(it.value);
-        self.over_cap |= !self.observe
-            && text.len() > STRING_LEN_CAP
-            && text.encode_utf16().count() > STRING_LEN_CAP;
-    }
-
-    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
-        if self.observe && it.operator == UnaryOperator::Delete && deletes_a_global(&it.argument) {
-            self.found = true;
-            return;
-        }
-        walk::walk_unary_expression(self, it);
-    }
-
-    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if self.observe && reflects_on_globals(it) {
-            self.found = true;
-            return;
-        }
-        walk::walk_call_expression(self, it);
+        self.over_cap |=
+            text.len() > STRING_LEN_CAP && text.encode_utf16().count() > STRING_LEN_CAP;
     }
 }
 

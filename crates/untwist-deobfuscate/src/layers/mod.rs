@@ -4,6 +4,7 @@ pub mod function;
 pub mod inline;
 pub mod model;
 pub mod notes;
+mod observe;
 pub mod packer;
 pub mod probe;
 
