@@ -59,7 +59,7 @@ the prompt. See [`DEPLOY.md`](DEPLOY.md#offline).
 |---|---|---|
 | Input editor | 1 MiB, longest line 20,000 characters | the text still runs; the editor shows a read-only preview |
 | Diff | 2 MiB or 50,000 lines per side | the diff is off, with a note |
-| Language features | 12 MiB of output | off, with a note |
+| Language features | 16 MiB of output | off, with a note |
 | Run time | none | Cancel stops the worker |
 
 ## Layout

@@ -17,7 +17,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use index::{Index, NONE};
 pub use rename::Outcome;
 
-pub const ANALYSIS_CAP_BYTES: u32 = 12 << 20;
+pub const ANALYSIS_CAP_BYTES: u32 = 16 << 20;
 
 #[wasm_bindgen]
 pub struct Analysis {
