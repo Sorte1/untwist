@@ -42,24 +42,35 @@ function firstCodeLine(doc: Text): number {
   return 0;
 }
 
+function commentLines(doc: Text, known: ReadonlySet<string>): Map<number, string> {
+  const found = new Map<number, string>();
+  let number = 0;
+  for (const line of doc.iterLines()) {
+    number += 1;
+    if (line.includes('// ')) {
+      const comment = libraryComment(line, known);
+      if (comment !== null) {
+        found.set(number, comment.library);
+      }
+    }
+  }
+  return found;
+}
+
 export function libraryFolds(doc: Text, known: ReadonlySet<string>, wholeFile: boolean): LibraryFold[] {
   if (known.size === 0) {
     return [];
   }
   const folds: LibraryFold[] = [];
   const top = wholeFile ? firstCodeLine(doc) : 0;
-  let number = 1;
-  while (number < doc.lines) {
-    const line = doc.line(number);
-    const comment = line.text.trimStart().startsWith('// ') ? libraryComment(line.text, known) : null;
-    const next = doc.line(number + 1);
-    if (comment === null || next.text.trim() === '') {
-      number += 1;
+  let after = 0;
+  for (const [number, library] of commentLines(doc, known)) {
+    if (number <= after || number >= doc.lines || doc.line(number + 1).text.trim() === '') {
       continue;
     }
     const end = number === top ? doc.lines : statementEnd(doc, number + 1);
-    folds.push({ from: line.to, to: doc.line(end).to, lines: end - number, library: comment.library });
-    number = end + 1;
+    folds.push({ from: doc.line(number).to, to: doc.line(end).to, lines: end - number, library });
+    after = end;
   }
   return folds;
 }
