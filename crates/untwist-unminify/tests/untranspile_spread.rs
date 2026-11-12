@@ -456,8 +456,13 @@ fn a_numeric_key_written_through_a_sloppy_this_does_not_untrust_script_helpers()
     let source = format!(
         "{PATCHED}function Box(v) {{ this[0] = v; }}\nfunction run(a, b) {{ return _toConsumableArray([a, b]).join(\",\") + new Box(a)[0]; }}\nconsole.log(run(1, 2));\n"
     );
-    let code = default_lane(&source);
-    assert!(code.contains("return [a, b].join"), "{code}");
+    let (code, notes) = run_with(&source, true, true);
+    assert!(
+        notes
+            .iter()
+            .all(|note| !note.message.contains(notes::UNTRANSPILE_HELPER_UNTRUSTED)),
+        "{notes:?}"
+    );
     untwist_testing::node::assert_node_agrees(&source, &code);
 }
 
