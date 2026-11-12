@@ -21,7 +21,7 @@ export const PARTIAL_LIMITS: readonly string[] = ['refused'];
 export const FIXED_LIMITS: readonly string[] = Object.keys(WORDS);
 
 export function explainLimit(name: string): ExplainedLimit {
-  return WORDS[name] ?? { name, why: '' };
+  return Object.hasOwn(WORDS, name) ? (WORDS[name] as ExplainedLimit) : { name, why: '' };
 }
 
 export function firedLimits(limits: string, trap: string | null): ExplainedLimit[] {

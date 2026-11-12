@@ -1,4 +1,5 @@
 import { modeFromFlags } from './settings/mode';
+import { reportField } from './report-json';
 
 export const BANNER_TEXT = 'Strings were not decoded in Safe mode. Unsafe mode decodes them.';
 
@@ -6,12 +7,8 @@ const MACHINERY_PASS = 'remove-decoder-machinery';
 const UNDECODED = /^decoder machinery kept: (\d+) reference\(s\) to the string array or its decoders did not decode/;
 
 function notesOf(report: string): ReadonlyArray<{ readonly pass?: unknown; readonly message?: unknown }> {
-  try {
-    const value = JSON.parse(report) as { notes?: unknown };
-    return Array.isArray(value.notes) ? value.notes : [];
-  } catch {
-    return [];
-  }
+  const notes = reportField(report, 'notes');
+  return Array.isArray(notes) ? notes.filter((note): note is { readonly pass?: unknown; readonly message?: unknown } => typeof note === 'object' && note !== null) : [];
 }
 
 export function undecodedInSafe(report: string, outputFlags: string | null): number | null {

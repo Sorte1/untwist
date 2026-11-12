@@ -5,7 +5,9 @@ import { seconds, type AppState, type InputState, type RunState } from '../state
 import type { Store } from '../store';
 import { virtualList } from './details/virtual-list';
 import { showInput } from './focus-mode';
+import { MAX_PROBLEMS } from '../settings/hash';
 import {
+  cappedProblems,
   diagnosticsOf,
   docPosition,
   levelLabel,
@@ -20,6 +22,7 @@ import {
 
 const ROW_HEIGHT = 27;
 const VISIBLE_ROWS = 8;
+const SETTINGS_ROWS = MAX_PROBLEMS + 4;
 
 interface Shown {
   readonly row: DiagnosticRow;
@@ -151,7 +154,7 @@ export function mountDiagnostics(store: Store<AppState>, input: EditorView): voi
     const label = stripLabel(finished ? rows : null, state.settingsProblems.length);
     setText(strip, label.text);
     strip.dataset['tone'] = label.tone;
-    const problems = state.settingsProblems.map(settingsRow);
+    const problems = cappedProblems(state.settingsProblems, SETTINGS_ROWS).map(settingsRow);
     if (note !== null || rows.length === 0) {
       holder.replaceChildren(...problems, noteElement(note ?? 'No diagnostics.'));
       return;

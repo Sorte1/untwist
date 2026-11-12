@@ -14,6 +14,8 @@ describe('the limits in plain words', () => {
 
   it('keeps an unknown limit by its own name', () => {
     expect(explainLimit('new-cap')).toEqual({ name: 'new-cap', why: '' });
+    expect(explainLimit('constructor')).toEqual({ name: 'constructor', why: '' });
+    expect(explainLimit('toString')).toEqual({ name: 'toString', why: '' });
   });
 
   it('splits the fired list and the trap into explained limits, without empties', () => {

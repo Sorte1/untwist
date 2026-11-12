@@ -68,3 +68,35 @@ test('a reload during a run starts clean', async ({ page }) => {
   await runAndWait(page);
   expect(await outputText(page)).toBe('var a = true;\n');
 });
+
+test('a link whose setting names are Object.prototype names still starts and lists them as unknown', async ({ page }) => {
+  await openApp(page, '#toString=1&constructor=1&__proto__=1');
+  await expect(page.locator('#diag-list .diag-info')).toHaveCount(3);
+  for (const name of ['toString', 'constructor', '__proto__']) {
+    await expect(page.locator('#diag-list')).toContainText(`Unknown setting "${name}"`);
+  }
+  await paste(page, 'var a = !0;');
+  await runAndWait(page);
+  expect(await outputText(page)).toBe('var a = true;\n');
+});
+
+test('a link with 200,000 unknown settings starts and lists only a few of them', async ({ page }) => {
+  await openApp(page, `#${'a&'.repeat(200_000)}`);
+  await expect(page.locator('#diag-list .diag-info')).toHaveCount(22);
+  await expect(page.locator('#diag-list')).toContainText(/And [\d,]+ more problems with the settings in the link/);
+  await expect(page.locator('#diag-list')).toContainText(/The link is longer than [\d,]+ characters/);
+});
+
+test('a bundle with thousands of modules lists one page of them and shows more on request', async ({ page }) => {
+  const modules = Array.from({ length: 1_200 }, (_, at) => `${at}:function(a,b,c){}`).join(',');
+  await openApp(page);
+  await paste(page, `(self.webpackChunkx=self.webpackChunkx||[]).push([[15],{${modules}}]);`);
+  await runAndWait(page);
+  await expect(page.locator('#module-count')).toHaveText('bundle · 1200 modules');
+  await expect(page.locator('#module-list .tree-name')).toHaveCount(501);
+  await page.locator('#module-list .tree-more').click();
+  await expect(page.locator('#module-list .tree-name')).toHaveCount(1_001);
+  await page.locator('#module-list .tree-more').click();
+  await expect(page.locator('#module-list .tree-name')).toHaveCount(1_201);
+  await expect(page.locator('#module-list .tree-more')).toHaveCount(0);
+});

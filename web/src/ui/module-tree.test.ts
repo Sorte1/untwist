@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isSafeRelative, zipPlan } from './download';
-import { bundleOf, treeOrder } from './module-tree';
+import { bundleOf, limitFor, shownModules, TREE_PAGE, treeOrder } from './module-tree';
 
 describe('the module tree', () => {
   it('puts the entry first, then sorts by path', () => {
@@ -10,6 +10,21 @@ describe('the module tree', () => {
       { id: '1', path: 'a.js', isEntry: false },
     ];
     expect(treeOrder(modules)).toEqual([1, 2, 0]);
+  });
+
+  it('shows one page of modules and counts the rest', () => {
+    const order = Array.from({ length: TREE_PAGE * 2 + 5 }, (_, at) => at);
+    expect(shownModules(order, TREE_PAGE)).toEqual({ shown: order.slice(0, TREE_PAGE), more: TREE_PAGE + 5 });
+    expect(shownModules(order, TREE_PAGE * 3)).toEqual({ shown: order, more: 0 });
+  });
+
+  it('grows the page to reach a module picked from outside it', () => {
+    const order = Array.from({ length: TREE_PAGE * 3 }, (_, at) => TREE_PAGE * 3 - 1 - at);
+    expect(limitFor(order, null, TREE_PAGE)).toBe(TREE_PAGE);
+    expect(limitFor(order, order[10] ?? 0, TREE_PAGE)).toBe(TREE_PAGE);
+    expect(limitFor(order, order[TREE_PAGE] ?? 0, TREE_PAGE)).toBe(TREE_PAGE * 2);
+    expect(limitFor(order, order[TREE_PAGE * 2 + 7] ?? 0, TREE_PAGE)).toBe(TREE_PAGE * 3);
+    expect(limitFor(order, 99_999, TREE_PAGE)).toBe(TREE_PAGE);
   });
 
   it('reads the bundle section of a report, and nothing from a report without one', () => {
@@ -31,5 +46,21 @@ describe('the zip download', () => {
     const plan = zipPlan('{}', bundle, ['a();', 'b();'], 'all();\n');
     expect(Object.keys(plan.files).sort()).toEqual(['a.js', 'bundle.json', 'deobfuscated.js']);
     expect(plan.refused).toEqual(['../b.js']);
+  });
+
+  it('writes modules whose paths are Object.prototype names, and refuses a second module at a taken path', () => {
+    const bundle = {
+      kind: 'webpack',
+      modules: [
+        { id: '0', path: 'toString', isEntry: true },
+        { id: '1', path: 'constructor', isEntry: false },
+        { id: '2', path: 'toString', isEntry: false },
+        { id: '3', path: '__proto__', isEntry: false },
+      ],
+    };
+    const plan = zipPlan('{}', bundle, ['a();', 'b();', 'c();', 'd();'], '');
+    expect(Object.keys(plan.files).sort()).toEqual(['__proto__', 'bundle.json', 'constructor', 'deobfuscated.js', 'toString']);
+    expect(Object.getPrototypeOf(plan.files)).toBeNull();
+    expect(plan.refused).toEqual(['toString']);
   });
 });

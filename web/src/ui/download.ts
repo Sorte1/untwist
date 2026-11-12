@@ -28,13 +28,13 @@ const withoutFinalNewline = (text: string): string => (text.endsWith('\n') ? tex
 const DEOBFUSCATED = 'deobfuscated.js';
 
 export function zipPlan(bundleJson: string, bundle: BundleInfo, codes: readonly string[], stdout: string): ZipPlan {
-  const files: Zippable = {
+  const files: Zippable = Object.assign(Object.create(null) as Zippable, {
     [BUNDLE_JSON]: strToU8(bundleJson),
     [DEOBFUSCATED]: strToU8(withoutFinalNewline(stdout)),
-  };
+  });
   const refused: string[] = [];
   bundle.modules.forEach((module, index) => {
-    if (isSafeRelative(module.path) && !(module.path in files)) {
+    if (isSafeRelative(module.path) && !Object.hasOwn(files, module.path)) {
       files[module.path] = strToU8(codes[index] ?? '');
     } else {
       refused.push(module.path);

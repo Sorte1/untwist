@@ -98,5 +98,7 @@ describe('the refusal explanations', () => {
     expect(sentenceFor("a folded chain's assumed key may be written")).toMatch(/^may write a key/);
     expect(sentenceFor('write by an unknown key')).toMatch(/^writes a property by a key/);
     expect(sentenceFor('something new')).toBe('something new.');
+    expect(sentenceFor('constructor')).toBe('constructor.');
+    expect(sentenceFor('toString')).toBe('toString.');
   });
 });

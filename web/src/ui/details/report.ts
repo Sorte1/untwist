@@ -1,3 +1,5 @@
+import { reportValue } from '../../report-json';
+
 export type IterationMs = readonly [number, number | null, number | null];
 
 export interface StageRow {
@@ -59,12 +61,12 @@ export interface RunStats {
 }
 
 export function parseReport(json: string): Report | null {
-  try {
-    const value = JSON.parse(json) as Partial<Report>;
-    return Array.isArray(value.stages) && value.engine !== undefined ? (value as Report) : null;
-  } catch {
+  const value = reportValue(json);
+  if (typeof value !== 'object' || value === null) {
     return null;
   }
+  const report = value as Partial<Report>;
+  return Array.isArray(report.stages) && report.engine !== undefined ? (report as Report) : null;
 }
 
 export function stageTotalMs(report: Report): number {
