@@ -199,6 +199,12 @@ fn renameable(collected: &Collected, wanted: &Wanted) -> bool {
     is_renameable(info, collected, config()) || (name_only && !looks_human_written(&info.name))
 }
 
+pub fn may_hold_wrappers(program: &Program<'_>) -> bool {
+    let mut helpers = HelperFinder::default();
+    helpers.visit_program(program);
+    !helpers.found.is_empty() || shape::may_hold_wrappers(program)
+}
+
 fn helper_wanted(helper: &Helper, calls: &dyn Fn(Option<ScopeId>) -> bool) -> Option<Wanted> {
     let function = helper.scope.is_some();
     (!function || calls(helper.scope)).then(|| Wanted {

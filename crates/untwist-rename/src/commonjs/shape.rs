@@ -42,11 +42,6 @@ struct Guarded<'k, 'a> {
 fn is_one(expression: &Expression<'_>) -> bool {
     match expression.without_parentheses() {
         Expression::NumericLiteral(literal) => literal.value == 1.0,
-        Expression::BooleanLiteral(literal) => literal.value,
-        Expression::UnaryExpression(unary) => {
-            unary.operator == UnaryOperator::LogicalNot
-                && matches!(unary.argument.without_parentheses(), Expression::NumericLiteral(zero) if zero.value == 0.0)
-        }
         _ => false,
     }
 }
@@ -67,20 +62,38 @@ fn hidden_exports_key(key: &Expression<'_>) -> bool {
 }
 
 struct Matcher<'s> {
-    scoping: &'s Scoping,
+    scoping: Option<&'s Scoping>,
+    names: std::cell::RefCell<rustc_hash::FxHashMap<String, usize>>,
 }
 
-impl Matcher<'_> {
+impl<'s> Matcher<'s> {
+    fn new(scoping: Option<&'s Scoping>) -> Self {
+        Self {
+            scoping,
+            names: std::cell::RefCell::default(),
+        }
+    }
+
+    fn key(&self, id: &IdentifierReference<'_>) -> Option<SymbolId> {
+        if let Some(scoping) = self.scoping {
+            return reference_symbol(id, scoping);
+        }
+        let mut names = self.names.borrow_mut();
+        let next = names.len();
+        let index = *names.entry(id.name.to_string()).or_insert(next);
+        Some(SymbolId::from_usize(index))
+    }
+
     fn identifier(&self, expression: &Expression<'_>) -> Option<SymbolId> {
         match expression.without_parentheses() {
-            Expression::Identifier(id) => reference_symbol(id, self.scoping),
+            Expression::Identifier(id) => self.key(id),
             _ => None,
         }
     }
 
     fn holder(&self, expression: &Expression<'_>) -> Option<Holder> {
         match expression.without_parentheses() {
-            Expression::Identifier(id) => reference_symbol(id, self.scoping).map(Holder::Value),
+            Expression::Identifier(id) => self.key(id).map(Holder::Value),
             Expression::StaticMemberExpression(member)
                 if member.property.name == "exports" && !member.optional =>
             {
@@ -97,9 +110,7 @@ impl Matcher<'_> {
 
     fn holder_target(&self, target: &AssignmentTarget<'_>) -> Option<Holder> {
         match target {
-            AssignmentTarget::AssignmentTargetIdentifier(id) => {
-                reference_symbol(id, self.scoping).map(Holder::Value)
-            }
+            AssignmentTarget::AssignmentTargetIdentifier(id) => self.key(id).map(Holder::Value),
             AssignmentTarget::StaticMemberExpression(member)
                 if member.property.name == "exports" =>
             {
@@ -124,7 +135,7 @@ impl Matcher<'_> {
         let AssignmentTarget::AssignmentTargetIdentifier(id) = &assign.left else {
             return None;
         };
-        reference_symbol(id, self.scoping)
+        self.key(id)
     }
 
     fn sets_flag_statement(&self, statement: &Statement<'_>) -> Option<SymbolId> {
@@ -400,7 +411,7 @@ impl<'a> VisitJs<'a> for Finder<'_> {
             it.init.as_ref().map(Expression::without_parentheses)
         {
             let helper = match &call.callee {
-                Expression::Identifier(callee) => reference_symbol(callee, self.matcher.scoping),
+                Expression::Identifier(callee) => self.matcher.key(callee),
                 _ => None,
             };
             let made = helper.is_some_and(|helper| self.factories.contains(&helper));
@@ -489,7 +500,7 @@ pub fn wrappers(
     factories: FxHashSet<SymbolId>,
 ) -> Vec<Wrapper> {
     let mut finder = Finder {
-        matcher: Matcher { scoping },
+        matcher: Matcher::new(Some(scoping)),
         found: Vec::new(),
         factories,
     };
@@ -505,4 +516,14 @@ pub fn wrappers(
         .collect();
     wrappers.sort_by_key(|wrapper| wrapper.start);
     wrappers
+}
+
+pub fn may_hold_wrappers(program: &Program<'_>) -> bool {
+    let mut finder = Finder {
+        matcher: Matcher::new(None),
+        found: Vec::new(),
+        factories: FxHashSet::default(),
+    };
+    finder.visit_program(program);
+    !finder.found.is_empty()
 }

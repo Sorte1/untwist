@@ -251,6 +251,7 @@ impl Pipeline {
 
     fn names_wanted(&self, site: &StageCx<'_, '_>) -> bool {
         !site.pass_opts.rule_disabled(untwist_rename::commonjs::PASS)
+            && untwist_rename::commonjs::may_hold_wrappers(site.program)
     }
 
     fn names_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {
