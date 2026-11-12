@@ -239,3 +239,194 @@ fn a_var_named_let_stays() {
 fn a_later_declarator_read_by_an_earlier_one_keeps_both() {
     assert_stays("  var a = b, b = g();\n  use(a, b);");
 }
+
+#[test]
+fn a_trailing_var_written_once_in_a_block_moves_to_that_write() {
+    assert_converts(
+        "  if (c) {\n    a = g();\n    use(a);\n  }\n  return;\n  var a;",
+        "  if (c) {\n    const a = g();\n    use(a);\n  }\n  return;",
+    );
+}
+
+#[test]
+fn a_trailing_var_written_again_after_its_first_write_becomes_let() {
+    assert_converts(
+        "  a = g();\n  a = h(a);\n  return a;\n  var a;",
+        "  let a = g();\n  a = h(a);\n  return a;",
+    );
+}
+
+#[test]
+fn the_core_js_get_built_in_shape_moves_into_its_branch() {
+    let source = "var f = function (k, n) {\n  if (arguments.length < 2) {\n    v = m[k];\n    if (ok(v)) {\n      return v;\n    } else {\n      return undefined;\n    }\n  } else {\n    return m[k] && m[k][n];\n  }\n  var v;\n};";
+    let expected = "var f = function (k, n) {\n  if (arguments.length < 2) {\n    const v = m[k];\n    if (ok(v)) {\n      return v;\n    } else {\n      return undefined;\n    }\n  } else {\n    return m[k] && m[k][n];\n  }\n};";
+    assert_eq!(run(source), expected);
+}
+
+#[test]
+fn a_trailing_var_assigned_in_two_branches_moves_to_the_top() {
+    assert_converts(
+        "  if (c) {\n    a = 1;\n  } else {\n    a = 2;\n  }\n  return a;\n  var a;",
+        "  let a;\n  if (c) {\n    a = 1;\n  } else {\n    a = 2;\n  }\n  return a;",
+    );
+}
+
+#[test]
+fn a_trailing_var_read_before_its_first_write_moves_to_the_top() {
+    assert_converts(
+        "  use(a);\n  a = 1;\n  return a;\n  var a;",
+        "  let a;\n  use(a);\n  a = 1;\n  return a;",
+    );
+}
+
+#[test]
+fn a_trailing_var_typeof_before_its_write_moves_to_the_top() {
+    assert_converts(
+        "  use(typeof a);\n  a = 1;\n  return a;\n  var a;",
+        "  let a;\n  use(typeof a);\n  a = 1;\n  return a;",
+    );
+}
+
+#[test]
+fn a_trailing_var_read_by_its_own_write_moves_to_the_top() {
+    assert_converts(
+        "  a = a || {};\n  return a;\n  var a;",
+        "  let a;\n  a = a || {};\n  return a;",
+    );
+}
+
+#[test]
+fn a_trailing_var_captured_by_a_closure_in_a_loop_moves_to_the_top_as_var() {
+    assert_converts(
+        "  for (i = 0; i < 3; i++) {\n    a = i;\n    fs.push(() => a);\n  }\n  return fs;\n  var a;",
+        "  var a;\n  for (i = 0; i < 3; i++) {\n    a = i;\n    fs.push(() => a);\n  }\n  return fs;",
+    );
+}
+
+#[test]
+fn a_trailing_var_written_in_a_loop_body_becomes_a_body_const() {
+    assert_converts(
+        "  while (c()) {\n    a = g();\n    use(a);\n  }\n  var a;",
+        "  while (c()) {\n    const a = g();\n    use(a);\n  }",
+    );
+}
+
+#[test]
+fn a_trailing_var_read_after_its_loop_moves_to_the_top() {
+    assert_converts(
+        "  while (c()) {\n    a = g();\n  }\n  use(a);\n  var a;",
+        "  let a;\n  while (c()) {\n    a = g();\n  }\n  use(a);",
+    );
+}
+
+#[test]
+fn a_trailing_var_used_across_switch_cases_moves_to_the_top() {
+    assert_converts(
+        "  switch (k) {\n    case 0:\n      a = 1;\n    case 1:\n      use(a);\n  }\n  var a;",
+        "  let a;\n  switch (k) {\n    case 0: a = 1;\n    case 1: use(a);\n  }",
+    );
+}
+
+#[test]
+fn a_trailing_var_within_one_switch_case_moves_to_the_top() {
+    assert_converts(
+        "  switch (k) {\n    case 0:\n      a = 1;\n      use(a);\n  }\n  var a;",
+        "  let a;\n  switch (k) {\n    case 0:\n      a = 1;\n      use(a);\n  }",
+    );
+}
+
+#[test]
+fn a_trailing_var_that_is_also_a_parameter_stays() {
+    let source = "function f(a) {\n  a = 1;\n  return arguments[0];\n  var a;\n}";
+    assert_eq!(run(source), source);
+}
+
+#[test]
+fn a_trailing_var_redeclared_stays() {
+    assert_stays("  a = 1;\n  var a;\n  use(a);\n  var a;");
+}
+
+#[test]
+fn a_trailing_var_with_a_direct_eval_stays() {
+    assert_stays("  a = 1;\n  eval(\"use(a)\");\n  var a;");
+}
+
+#[test]
+fn a_trailing_var_named_like_a_block_function_stays() {
+    assert_stays("  a = 1;\n  {\n    function a() {}\n  }\n  use(a);\n  var a;");
+}
+
+#[test]
+fn a_trailing_var_written_in_a_try_and_read_in_its_finally_moves_to_the_top() {
+    assert_converts(
+        "  try {\n    a = g();\n  } finally {\n    use(a);\n  }\n  var a;",
+        "  let a;\n  try {\n    a = g();\n  } finally {\n    use(a);\n  }",
+    );
+}
+
+#[test]
+fn a_trailing_var_inside_a_generator_moves_to_its_write() {
+    let source = "function* f() {\n  if (c) {\n    a = yield 1;\n    yield a;\n  }\n  var a;\n}";
+    let expected = "function* f() {\n  if (c) {\n    const a = yield 1;\n    yield a;\n  }\n}";
+    assert_eq!(run(source), expected);
+}
+
+#[test]
+fn a_trailing_var_in_a_text_read_function_stays() {
+    let source = "var F = function (s) {\n  A = \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=\";\n  var a = \"\";\n  var c = a + F;\n  return c + A + s;\n  var A;\n};";
+    assert_eq!(run(source), source);
+}
+
+#[test]
+fn a_script_level_trailing_var_stays() {
+    let source = "a = 1;\nuse(a);\nvar a;";
+    assert_eq!(run(source), source);
+}
+
+#[test]
+fn a_catch_parameter_of_the_same_name_does_not_block_a_later_write() {
+    assert_converts(
+        "  try {} catch (a) {\n    b = a;\n  }\n  a = 1;\n  use(a, b);\n  var a, b;",
+        "  let b;\n  try {} catch (a) {\n    b = a;\n  }\n  const a = 1;\n  use(a, b);",
+    );
+}
+
+#[test]
+fn a_leading_bare_var_is_left_to_the_ordinary_conversion() {
+    assert_converts(
+        "  var a;\n  if (c) {\n    a = 1;\n  }\n  use(a);",
+        "  let a;\n  if (c) {\n    a = 1;\n  }\n  use(a);",
+    );
+}
+
+#[test]
+fn a_trailing_var_captured_by_a_closure_made_after_its_write_moves_to_the_write() {
+    assert_converts(
+        "  i = (n) => n * 2;\n  const u = function (n) {\n    return i(n);\n  };\n  return u;\n  var i;",
+        "  const i = (n) => n * 2;\n  const u = function (n) {\n    return i(n);\n  };\n  return u;",
+    );
+}
+
+#[test]
+fn a_trailing_var_captured_by_a_hoisted_function_moves_to_the_top() {
+    assert_converts(
+        "  a = 1;\n  return h;\n  function h() {\n    return a;\n  }\n  var a;",
+        "  var a;\n  a = 1;\n  return h;\n  function h() {\n    return a;\n  }",
+    );
+}
+
+#[test]
+fn a_trailing_var_captured_inside_a_loop_body_block_moves_to_the_top() {
+    assert_converts(
+        "  while (c()) {\n    if (d) {\n      a = g();\n      fs.push(() => a);\n    }\n  }\n  var a;",
+        "  var a;\n  while (c()) {\n    if (d) {\n      a = g();\n      fs.push(() => a);\n    }\n  }",
+    );
+}
+
+#[test]
+fn a_trailing_var_captured_by_a_closure_in_a_loop_after_its_write_moves_to_the_write() {
+    assert_converts(
+        "  a = g();\n  for (const k of ks) {\n    fs.push(() => a + k);\n  }\n  var a;",
+        "  const a = g();\n  for (const k of ks) {\n    fs.push(() => a + k);\n  }",
+    );
+}
