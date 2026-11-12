@@ -31,7 +31,12 @@ fn renamed(
 
 #[test]
 fn script_globals_reached_by_key_keep_their_names_in_every_safe_rename_mode() {
-    for rename in [RenameMode::Mangle, RenameMode::Simple, RenameMode::Unique] {
+    for rename in [
+        RenameMode::Mangle,
+        RenameMode::Simple,
+        RenameMode::Unique,
+        RenameMode::Smart,
+    ] {
         let code = renamed(READ_BY_KEY, rename, false, Vec::new());
         assert!(code.contains("var total = 5"), "{rename:?}: {code}");
         assert!(code.contains("function pick("), "{rename:?}: {code}");
@@ -56,10 +61,12 @@ fn node_agrees_in_every_safe_rename_mode_and_the_guard_is_load_bearing() {
     let mangle = |source: &str| renamed(source, RenameMode::Mangle, false, Vec::new());
     let simple = |source: &str| renamed(source, RenameMode::Simple, false, Vec::new());
     let unique = |source: &str| renamed(source, RenameMode::Unique, false, Vec::new());
-    let modes: [Mode<'_>; 3] = [
+    let smart = |source: &str| renamed(source, RenameMode::Smart, false, Vec::new());
+    let modes: [Mode<'_>; 4] = [
         ("mangle", &mangle),
         ("simple", &simple),
         ("unique", &unique),
+        ("smart", &smart),
     ];
     let wrong = mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{wrong:#?}");

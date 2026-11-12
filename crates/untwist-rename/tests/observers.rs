@@ -4,7 +4,12 @@ use common::{assert_scope_safe, rename_compact};
 use untwist_core::semantic::{assume_observers, Observers};
 use untwist_rename::{RenameConfig, RenameMode};
 
-const MODES: [RenameMode; 3] = [RenameMode::Mangle, RenameMode::Simple, RenameMode::Unique];
+const MODES: [RenameMode; 4] = [
+    RenameMode::Mangle,
+    RenameMode::Simple,
+    RenameMode::Unique,
+    RenameMode::Smart,
+];
 
 fn renamed(source: &str, mode: RenameMode) -> String {
     let output = rename_compact(

@@ -3,6 +3,7 @@ use untwist_core::pass::Pass;
 pub mod base_name;
 pub mod collect;
 pub mod collisions;
+pub mod evidence;
 pub mod fingerprint;
 #[cfg(feature = "test-hooks")]
 pub mod fresh;
@@ -19,6 +20,8 @@ pub mod plan;
 pub mod reserved;
 pub mod shorthand;
 pub mod simple;
+pub mod smart;
+pub mod text_reads;
 pub mod unique;
 pub mod usage;
 
@@ -28,6 +31,7 @@ pub enum RenameMode {
     None,
     Mangle,
     Simple,
+    Smart,
     Unique,
 }
 
@@ -52,6 +56,7 @@ fn stateless_passes<'a>(config: RenameConfig) -> Vec<Box<dyn Pass<'a> + 'a>> {
     match config.mode {
         RenameMode::Mangle => vec![mangle::boxed(config)],
         RenameMode::Simple => vec![simple::boxed(config)],
+        RenameMode::Smart => vec![smart::boxed(config)],
         RenameMode::None | RenameMode::Unique => Vec::new(),
     }
 }

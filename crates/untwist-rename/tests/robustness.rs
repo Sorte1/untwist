@@ -5,7 +5,12 @@ use untwist_core::pass::Note;
 use untwist_core::print::PrintStyle;
 use untwist_rename::{RenameConfig, RenameMode};
 
-const MODES: [RenameMode; 3] = [RenameMode::Mangle, RenameMode::Simple, RenameMode::Unique];
+const MODES: [RenameMode; 4] = [
+    RenameMode::Mangle,
+    RenameMode::Simple,
+    RenameMode::Unique,
+    RenameMode::Smart,
+];
 
 fn run(source: &str, mode: RenameMode, rename_all: bool) -> String {
     let output = rename_compact(

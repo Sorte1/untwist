@@ -301,7 +301,7 @@ fn role_word(info: &BindingInfo, cx: &Context<'_>) -> Option<&'static str> {
     Some("fn")
 }
 
-fn structural_base(info: &BindingInfo) -> Option<String> {
+pub fn structural_base(info: &BindingInfo) -> Option<String> {
     match &info.role {
         BindingRole::Function => Some("fn".to_string()),
         BindingRole::Class => Some("cls".to_string()),

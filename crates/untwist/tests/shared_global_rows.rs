@@ -58,12 +58,14 @@ fn several_classic_scripts_share_their_top_level_bindings() {
     let simple = |source: &str| run(lane(false, RenameMode::Simple), &split(source));
     let unique = |source: &str| run(lane(false, RenameMode::Unique), &split(source));
     let mangle = |source: &str| run(lane(false, RenameMode::Mangle), &split(source));
-    let modes: [Mode<'_>; 5] = [
+    let smart = |source: &str| run(lane(false, RenameMode::Smart), &split(source));
+    let modes: [Mode<'_>; 6] = [
         ("default", &default),
         ("unsafe", &unsafe_lane),
         ("rename simple", &simple),
         ("rename unique", &unique),
         ("rename mangle", &mangle),
+        ("rename smart", &smart),
     ];
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
