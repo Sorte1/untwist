@@ -724,14 +724,15 @@ fn finalize_unresolved_machinery<'a>(
 }
 
 fn undone_at_cap<'a>(
+    alloc: &'a Allocator,
     program: &mut Program<'a>,
-    (sem, before): (Semantics, Program<'a>),
+    (sem, before): (Semantics, &Program<'_>),
     aggregate: &mut Aggregate,
 ) -> Semantics {
     if !aggregate.capped || aggregate.per_pass[0] == 0 {
         return sem;
     }
-    *program = before;
+    *program = before.clone_in(alloc);
     aggregate.undone = true;
     rebuild_scoping(program, sem.stats)
 }
@@ -864,9 +865,11 @@ fn deobfuscate_with<'a>(
         defer_disabled: opts.defer_disabled.get(),
     };
     clear_kept_order();
-    let before = program.clone_in(alloc);
+    let snapshot = Allocator::default();
+    let before = program.clone_in(&snapshot);
     let sem = run_rounds(alloc, program, sem, opts, &shared, &mut aggregate);
-    let sem = undone_at_cap(program, (sem, before), &mut aggregate);
+    let sem = undone_at_cap(alloc, program, (sem, &before), &mut aggregate);
+    drop(snapshot);
     clear_kept_order();
     let sem = finalize_unresolved_machinery(alloc, program, sem, (opts, &shared), &mut aggregate);
 
