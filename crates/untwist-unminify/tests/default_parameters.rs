@@ -595,3 +595,34 @@ console.log(String(u()), String(u(1, 2, 3)));"#,
         untwist_testing::node::assert_node_agrees(source, &output);
     }
 }
+
+#[test]
+fn a_frame_key_built_at_run_time_keeps_the_guards() {
+    let sources = [
+        "function f(a) {\n  var b = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 2;\n  return f[[\"argu\", \"ments\"].join(\"\")][0] + b;\n}\n",
+        "function f(a) {\n  var b = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 2;\n  return Reflect.get(f, k) + b;\n}\n",
+        "function f(a) {\n  var b = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 2;\n  return (0, eval)(\"f.call\" + \"er\") + b;\n}\n",
+    ];
+    for source in sources {
+        let alloc = Allocator::default();
+        let out = transform_with(
+            &alloc,
+            source,
+            &[untwist_unminify::default_parameters::boxed],
+            PassOptions::default(),
+        );
+        assert!(out.contains("arguments.length"), "{out}");
+    }
+}
+
+#[test]
+fn a_key_that_names_another_property_still_restores_the_default() {
+    let alloc = Allocator::default();
+    let out = transform_with(
+        &alloc,
+        "function f(a) {\n  var b = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 2;\n  return f[0] + m.get(k) + b;\n}\n",
+        &[untwist_unminify::default_parameters::boxed],
+        PassOptions::default(),
+    );
+    assert!(out.contains("b = 2"), "{out}");
+}

@@ -9,7 +9,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::edit::StmtEdits;
-use untwist_core::ast_util::frame_reads::reads_function_frame;
+use untwist_core::ast_util::frame_reads::{reads_arguments_property, reads_function_frame};
 use untwist_core::ast_util::rename::{unique_name, Renames};
 use untwist_core::ast_util::search::statement_at;
 use untwist_core::pass::{Cx, Interest, Pass};
@@ -36,7 +36,6 @@ struct Facts<'p> {
     found: Vec<Candidate<'p>>,
     reads_arguments: FxHashSet<ScopeId>,
     shadowed: FxHashSet<(ScopeId, Ident<'p>)>,
-    aliases_arguments: bool,
 }
 
 struct Frame<'p> {
@@ -69,12 +68,6 @@ impl<'p> Search<'_, 'p> {
     fn leave(&mut self, scope_id: Option<ScopeId>) {
         if scope_id.is_some() {
             self.open.pop();
-        }
-    }
-
-    fn read_key(&mut self, computed: bool, key: &PropertyKey<'_>) {
-        if computed && !key.as_expression().is_some_and(names_another_key) {
-            self.facts.aliases_arguments = true;
         }
     }
 
@@ -116,79 +109,6 @@ impl<'p> VisitJs<'p> for Search<'_, 'p> {
                 .extend(self.open.iter().map(|frame| frame.scope_id));
         }
         walk_js::walk_identifier_reference(self, it);
-    }
-
-    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'p>) {
-        if it.property.name.as_str() == ARGUMENTS {
-            self.facts.aliases_arguments = true;
-        }
-        walk_js::walk_static_member_expression(self, it);
-    }
-
-    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'p>) {
-        if !names_another_key(&it.expression) {
-            self.facts.aliases_arguments = true;
-        }
-        walk_js::walk_computed_member_expression(self, it);
-    }
-
-    fn visit_call_expression(&mut self, it: &CallExpression<'p>) {
-        let reads_a_property = it
-            .callee
-            .without_parentheses()
-            .as_member_expression()
-            .and_then(MemberExpression::static_property_name)
-            .is_some_and(|name| {
-                matches!(
-                    name.as_str(),
-                    Some("get" | "getOwnPropertyDescriptor" | "getOwnPropertyDescriptors")
-                )
-            });
-        if reads_a_property {
-            self.facts.aliases_arguments = true;
-        }
-        walk_js::walk_call_expression(self, it);
-    }
-
-    fn visit_binding_property(&mut self, it: &BindingProperty<'p>) {
-        self.read_key(it.computed, &it.key);
-        walk_js::walk_binding_property(self, it);
-    }
-
-    fn visit_assignment_target_property_property(
-        &mut self,
-        it: &AssignmentTargetPropertyProperty<'p>,
-    ) {
-        self.read_key(it.computed, &it.name);
-        walk_js::walk_assignment_target_property_property(self, it);
-    }
-
-    fn visit_template_literal(&mut self, it: &TemplateLiteral<'p>) {
-        if it
-            .quasis
-            .iter()
-            .any(|quasi| quasi.value.raw.as_str().contains(ARGUMENTS))
-        {
-            self.facts.aliases_arguments = true;
-        }
-        walk_js::walk_template_literal(self, it);
-    }
-
-    fn visit_string_literal(&mut self, it: &StringLiteral<'p>) {
-        if it.value == ARGUMENTS {
-            self.facts.aliases_arguments = true;
-        }
-    }
-}
-
-fn names_another_key(key: &Expression<'_>) -> bool {
-    match key.without_parentheses() {
-        Expression::StringLiteral(literal) => literal.value != ARGUMENTS,
-        Expression::NumericLiteral(_) => true,
-        Expression::TemplateLiteral(template) => template
-            .single_quasi()
-            .is_some_and(|text| text.as_str() != Some(ARGUMENTS)),
-        _ => false,
     }
 }
 
@@ -386,8 +306,12 @@ impl<'a> Pass<'a> for VarTransformation {
             return;
         }
         let facts = collect(program, cx.scoping());
-        if facts.aliases_arguments || (!cx.opts.unsafe_transforms && reads_function_frame(program))
-        {
+        let frame_read = if cx.opts.unsafe_transforms {
+            reads_arguments_property(program, cx.scoping())
+        } else {
+            reads_function_frame(program, cx.scoping())
+        };
+        if frame_read {
             cx.note(notes::VAR_ARGUMENTS_PROPERTY_ALIAS, None);
             return;
         }

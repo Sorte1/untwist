@@ -792,13 +792,21 @@
   or `.caller` member access anywhere in the program can see some function's parameters or caller. A note for work the
   pass never claimed is noise — one Rollup bundle produces hundreds of them. The reference deobfuscator has no such
   pass and reports nothing either way.
-- **`Function#arguments` and `Function#caller` read through a key built at run time are a limit.**
+- **`Function#arguments` and `Function#caller` reads leave the function passes off in the safe lane.**
   In sloppy code `f.arguments` holds the parameter values of `f`'s active call and `f.caller` the
-  function that called it. When the program reads `.arguments` or `.caller` (with a dot, a
-  string-literal key or a destructuring key) on anything that is not the `arguments` object or a
-  literal, `var-transformation`, `function-to-arrow` and `default-parameters` leave every function
-  alone in the safe lane; under `--unsafe` they do not look for such reads. A read through a key that is not a literal at that point (`f[k]` with `k` equal to
-  `"arguments"`) is not seen; it is the same class of limit as `fn.toString()`.
+  function that called it. `var-transformation`, `function-to-arrow` and `default-parameters` leave
+  every function alone in the safe lane when the program may read either property on anything that
+  is not the `arguments` object or a literal: with a dot, a string or template key, a destructuring
+  key, a computed key that is not a literal naming another property (`f[k]`, `` f[`${p}ler`] ``,
+  `var { [k]: c } = f`), a `get`, `getOwnPropertyDescriptor`, `getOwnPropertyDescriptors` or
+  `__lookupGetter__` call that may name it (or any other use of those, such as `Reflect.get.call`
+  or `var get = Reflect.get`), or code built from text (`eval`, `Function`, `execScript`,
+  `.constructor`, the `vm` runners, a timer given a string, `import()` of a computed or `data:`
+  specifier). The check is on the program text and cannot tell what `f` or `k` holds, so programs
+  that index objects with computed keys (most bundles) keep their `function` expressions and
+  `arguments.length` defaults in the safe lane. Under `--unsafe`, `function-to-arrow` and
+  `default-parameters` do not look for such reads, and `var-transformation` looks only for an
+  `arguments` property read by the same key rules (code text excluded).
 - **`dead-assignment-elimination` collapses only a declaration and an assignment that sit in the
   binding's own statement list.** The empty `var` and its single write must both be members of the
   owner list — the owning function's body statements, or the program's top level — and never of a

@@ -1,0 +1,2 @@
+keeps-arrow-numeric-key|function g(p, q) { return typeof g[0] + p + q; } function main() { var h = function () { return g("cal", "ler"); }; return h(); } console.log(main());
+keeps-arrow-map-get|var m = new Map([["k", 1]]); function g(p, q) { return m.get(p + q) === undefined ? "none" : "some"; } function main() { var h = function () { return g("cal", "ler"); }; return h(); } console.log(main());

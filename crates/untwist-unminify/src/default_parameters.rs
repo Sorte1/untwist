@@ -44,7 +44,7 @@ impl<'a> Pass<'a> for DefaultParameters {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        self.frame_read = !cx.opts.unsafe_transforms && reads_function_frame(program);
+        self.frame_read = !cx.opts.unsafe_transforms && reads_function_frame(program, cx.scoping());
     }
 
     fn exit_function(&mut self, node: &mut Function<'a>, cx: &mut Cx<'a, '_>) {
