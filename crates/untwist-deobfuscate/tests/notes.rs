@@ -15,6 +15,7 @@ const PROGRESS: &[&str] = &[
     notes::ROTATOR_FOUND,
     notes::ROTATOR_NONE,
     notes::DECODERS_FOUND,
+    notes::DECODER_ENCODING,
     notes::DECODED_CALL_SITES,
     notes::DECODE_ERROR,
     notes::MERGE_ADOPTED_DYNAMIC_KEY,
@@ -130,6 +131,7 @@ fn composed_string_array() -> Vec<(&'static str, String)> {
             notes::planned_and_applied_alias_removals(2, 1),
         ),
         ("DECODERS_FOUND", notes::decoders_found(1)),
+        ("DECODER_ENCODING", notes::decoder_encoding(&["rc4", "base64"])),
     ]
 }
 

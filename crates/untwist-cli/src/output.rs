@@ -18,6 +18,7 @@ struct OutputJson<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     bundle: Option<untwist::BundleListing<'a>>,
     stages: Vec<untwist::StageRow<'a>>,
+    obfuscation: untwist::Obfuscation,
     notes: Vec<String>,
     parse_diagnostics: &'a [String],
     parse_errors: usize,
@@ -115,6 +116,7 @@ pub fn to_json(output: &Output, written: &Written, limits: Limits) -> serde_json
             .as_ref()
             .map(|bundle| bundle.listing_without(&written.unwritten_modules)),
         stages,
+        obfuscation: untwist::detect_obfuscation(output),
         notes,
         parse_diagnostics: &output.parse_diagnostics,
         parse_errors: output.parse_errors,
@@ -184,6 +186,10 @@ pub fn text_report(output: &Output, limits: Limits) -> String {
             bundle.modules.len(),
             printable(bundle.entry_id.as_deref().unwrap_or("none"))
         ));
+    }
+    let obfuscation = untwist::detect_obfuscation(output);
+    if !obfuscation.is_empty() {
+        text.push_str(&format!("obfuscation: {}\n", obfuscation.summary()));
     }
     text.push_str(&format!("parse_errors: {}\n", output.parse_errors));
     if !output.depth_refused.is_empty() {

@@ -1,6 +1,7 @@
 mod bundle;
 mod diagnostics;
 mod maps;
+mod obfuscation;
 mod options;
 mod passes;
 mod pipeline;
@@ -15,6 +16,10 @@ mod write;
 
 pub use bundle::{BundleListing, BundleOutput, FileOutput, ModuleOutput};
 pub use maps::{MapLink, MAP_SUFFIX};
+pub use obfuscation::{
+    detect as detect_obfuscation, Obfuscation, State as TechniqueState, Technique,
+    JAVASCRIPT_OBFUSCATOR, PACKER,
+};
 pub use options::{Isolation, Options, Progress, ProgressSink, TestHooks, TEST_HOOKS};
 pub use passes::{pass_named, PassInfo, PASSES};
 pub use pipeline::{
