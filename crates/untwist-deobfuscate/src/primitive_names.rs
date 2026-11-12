@@ -152,7 +152,7 @@ impl Sequences<'_> {
                 written.push(symbol);
                 continue;
             }
-            if let Expression::CallExpression(call) = expression.without_parentheses() {
+            if let Some(call) = first_evaluated_call(expression) {
                 self.settle_call(call, &written);
             }
             return;
@@ -181,6 +181,14 @@ impl Sequences<'_> {
             }
             written.clear();
         }
+    }
+}
+
+fn first_evaluated_call<'s>(expression: &'s Expression<'s>) -> Option<&'s CallExpression<'s>> {
+    match expression.without_parentheses() {
+        Expression::CallExpression(call) => Some(call),
+        Expression::BinaryExpression(binary) => first_evaluated_call(&binary.left),
+        _ => None,
     }
 }
 
