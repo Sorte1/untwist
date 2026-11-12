@@ -57,6 +57,11 @@ const SHAPE_FIXTURES: &[(&str, &str, &str)] = &[
     ),
     (
         "untranspile-helpers",
+        "object/object-spread-each/safe",
+        "fixtures/untranspile/matrix/swc-1.16/es2015/object-spread-rest.js",
+    ),
+    (
+        "untranspile-helpers",
         "object/object-spread-each/unsafe",
         "fixtures/untranspile/swc/spread.es2015.js",
     ),

@@ -6,6 +6,7 @@ mod destructure;
 #[cfg(feature = "test-hooks")]
 mod fired;
 mod generator;
+mod matrix;
 mod object;
 
 #[cfg(feature = "test-hooks")]
@@ -99,12 +100,13 @@ pub struct Variant {
     pub cap: u32,
 }
 
-pub const FAMILIES: [&[Variant]; 5] = [
+pub const FAMILIES: [&[Variant]; 6] = [
     array::VARIANTS,
     object::VARIANTS,
     destructure::VARIANTS,
     class::VARIANTS,
     generator::VARIANTS,
+    matrix::VARIANTS,
 ];
 
 pub fn variants() -> impl Iterator<Item = &'static Variant> {
