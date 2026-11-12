@@ -15,6 +15,7 @@ pub struct Proof<'s> {
     pub scoping: &'s Scoping,
     pub requires: FxHashMap<SymbolId, Span>,
     pub shim: Option<SymbolId>,
+    pub shim_loads: bool,
     pub hosts: FxHashSet<SymbolId>,
     pub host_params: FxHashSet<SymbolId>,
     pub shim_init: Option<Span>,
@@ -176,7 +177,9 @@ impl Check<'_, '_> {
                 let after = factory || deferred || call.span.start >= declared.end;
                 call.arguments.is_empty() && after && self.proof.site(callee)
             }
-            Callee::Shim => bare_specifier(call) && self.proof.site(callee),
+            Callee::Shim => {
+                self.proof.shim_loads && bare_specifier(call) && self.proof.site(callee)
+            }
             Callee::Host => bare_specifier(call),
             Callee::Other => return None,
         };

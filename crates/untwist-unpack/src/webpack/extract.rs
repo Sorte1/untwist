@@ -5,7 +5,7 @@ use oxc_span::GetSpan;
 
 use crate::matcher::param_names;
 use crate::model::{module_from_body_with, Bodies, Module, RequireParam};
-use crate::rename::rename_factory_parameters;
+use crate::rename::{rename_factory_parameters, rename_wrapper_bindings};
 use crate::webpack::container::module_factories;
 use crate::UnpackOptions;
 
@@ -61,6 +61,7 @@ pub fn extract_modules_with<'a>(
             (&params, &WEBPACK_PARAMS),
             options.conservative,
         );
+        rename_wrapper_bindings(alloc, &mut program, &params);
         let fresh = fresh
             .into_iter()
             .find_map(|(index, name)| (index == REQUIRE_PARAM).then_some(name));

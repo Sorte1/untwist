@@ -10,7 +10,7 @@ use untwist_core::semantic::build_scoping;
 use crate::frame::Frame;
 use crate::matcher::{argument_expression, literal_id, param_names};
 use crate::model::{module_from_body_with, Bodies, Bundle, Module, RequireParam, Runtime};
-use crate::rename::rename_factory_parameters;
+use crate::rename::{rename_factory_parameters, rename_wrapper_bindings};
 use crate::webpack::container::module_factories;
 use crate::webpack::extract::WEBPACK_PARAMS;
 use crate::webpack::helpers::{declared_in, pattern_names};
@@ -482,15 +482,9 @@ pub fn attach<'a>(
             exports
         }
     };
-    rename_factory_parameters(
-        alloc,
-        &mut program,
-        (
-            &[NO_MODULE, exports.unwrap_or(NO_EXPORTS), require],
-            &WEBPACK_PARAMS,
-        ),
-        false,
-    );
+    let params = [NO_MODULE, exports.unwrap_or(NO_EXPORTS), require];
+    rename_factory_parameters(alloc, &mut program, (&params, &WEBPACK_PARAMS), false);
+    rename_wrapper_bindings(alloc, &mut program, &params);
     let id = entry_id(bundle, &program);
     let mut module = Module::new(id.clone(), program, true);
     module.runtime_require = RequireParam::Default;

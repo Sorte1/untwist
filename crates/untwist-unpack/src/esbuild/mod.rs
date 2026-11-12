@@ -42,6 +42,7 @@ fn found<'k, 'a>(source: &'k Program<'a>, frame: &Frame<'k, 'a>) -> Option<Plan<
         scope,
         layout,
         strict,
+        module: module_code,
     })
 }
 
@@ -177,6 +178,7 @@ fn proof<'s>(scoping: &'s Scoping, plan: &Plan<'_, '_>, moved: &[usize]) -> Proo
         scoping,
         requires,
         shim: plan.layout.shim.and_then(|shim| shim.symbol_id.get()),
+        shim_loads: !plan.module || plan.layout.banner.is_some(),
         hosts: hosts(plan),
         host_params: host_params(plan),
         shim_init: shim_init(plan),

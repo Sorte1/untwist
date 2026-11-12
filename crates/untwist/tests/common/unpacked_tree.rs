@@ -24,6 +24,14 @@ impl Unpacked {
             unminify: false,
             ..Options::default()
         };
+        Self::with_many(inputs, options)
+    }
+
+    pub fn with(bundle: &str, options: Options) -> Self {
+        Self::with_many(&[bundle], options)
+    }
+
+    fn with_many(inputs: &[&str], options: Options) -> Self {
         let bundle = inputs.first().copied().unwrap_or_default();
         let out = Pipeline::new(options).run_many(inputs);
         let dir = tempfile::tempdir().expect("temp dir");
