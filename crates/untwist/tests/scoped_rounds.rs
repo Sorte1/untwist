@@ -499,7 +499,7 @@ fn a_settle_chain_equals_forced_full_rounds() {
 }
 
 const STALE_REPLAY_FIXTURE: &str =
-    "2.15.6--rc4-rot-noshuf-noshift-istr-w3f-t1-split--iife--terser--functions-1.js";
+    "4.2.2--b64-rot-shuf-noshift-istr-w2f5-calls-t1-cff--top--uglify--greeting-1.js";
 
 #[test]
 fn a_settled_replay_that_ignores_edits_diverges_on_a_named_fixture() {
