@@ -23,6 +23,10 @@ the rewrites webcrack makes.
   file or inline, one per unpacked module; `--input-source-map` maps through the input's own
   map. The library has `Options::source_map`, the wasm build `RunOutput.source_map`. The code
   is byte-identical with and without it (#186, #194, #261).
+- `--rename smart`, evidence-based names that keep program behaviour: machine-made bindings are
+  named from what the code shows (loop counters, callback parameters, `catch`, `require` and
+  `import`, destructured keys, the `createElement` tag and the like), under the same soundness
+  guards as the other rename modes. The playground offers it too (#279).
 - One step pool per input for string-array decoding (32 times the per-decode fuel, or 2,000
   steps per input byte if larger). Once it is spent the remaining decoders stay encoded with a
   note, so a file of many spinning decoders no longer runs for hours (#225).
