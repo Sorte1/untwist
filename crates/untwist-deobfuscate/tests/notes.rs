@@ -131,7 +131,10 @@ fn composed_string_array() -> Vec<(&'static str, String)> {
             notes::planned_and_applied_alias_removals(2, 1),
         ),
         ("DECODERS_FOUND", notes::decoders_found(1)),
-        ("DECODER_ENCODING", notes::decoder_encoding(&["rc4", "base64"])),
+        (
+            "DECODER_ENCODING",
+            notes::decoder_encoding(&["rc4", "base64"]),
+        ),
     ]
 }
 
