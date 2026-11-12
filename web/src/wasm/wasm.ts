@@ -63,6 +63,37 @@ export function checkedWasm(name: string, bytes: Uint8Array): string | null {
   return hasWasmHeader(bytes) ? null : `${name} is not a wasm module (no \\0asm version 1 header)`;
 }
 
+export async function limitedBody(response: Response, limit: number): Promise<Uint8Array<ArrayBuffer> | null> {
+  const declared = Number(response.headers.get('content-length') ?? '');
+  if (declared > limit) {
+    return null;
+  }
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    return new Uint8Array(0);
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  chunks.reduce((offset, chunk) => {
+    bytes.set(chunk, offset);
+    return offset + chunk.byteLength;
+  }, 0);
+  return bytes;
+}
+
 export function withSupplied(current: readonly SuppliedWasm[], added: readonly SuppliedWasm[]): SuppliedWasm[] {
   const names = new Set(added.map((file) => file.name));
   return [...current.filter((file) => !names.has(file.name)), ...added];
