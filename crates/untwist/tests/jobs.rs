@@ -109,11 +109,6 @@ fn a_webpack_bundle_and_a_jsonp_chunk_agree_between_one_and_four_jobs() {
     assert_jobs_agree(&[bundle.as_str(), chunk.as_str()], Options::default());
 }
 
-fn wrapped(lines: &[&str]) -> String {
-    let body: Vec<String> = lines.iter().map(|line| format!("  {line}")).collect();
-    format!("(function () {{\n{}\n}})();", body.join("\n"))
-}
-
 #[test]
 fn unique_renaming_numbers_inputs_in_order_under_four_jobs() {
     let base = Options {
@@ -123,19 +118,16 @@ fn unique_renaming_numbers_inputs_in_order_under_four_jobs() {
         ..Options::default()
     };
     let sources = [
-        "(function () { function _0xa() {} })();",
+        "function _0xa() {}",
         "",
-        "(function () { function _0xb() {} function _0xc() {} })();",
-        "(function () { function _0xd() {} })();",
+        "function _0xb() {} function _0xc() {}",
+        "function _0xd() {}",
     ];
     assert_jobs_agree(&sources, base.clone());
     let out = Pipeline::new(with_jobs(4, base)).run_many(&sources);
-    assert_eq!(out.codes[0], wrapped(&["function fn1() {}"]));
-    assert_eq!(
-        out.codes[2],
-        wrapped(&["function fn2() {}", "function fn3() {}"])
-    );
-    assert_eq!(out.codes[3], wrapped(&["function fn4() {}"]));
+    assert_eq!(out.codes[0], "function fn1() {}");
+    assert_eq!(out.codes[2], "function fn2() {}\nfunction fn3() {}");
+    assert_eq!(out.codes[3], "function fn4() {}");
 }
 
 const DEADLOCK_GRACE: Duration = Duration::from_secs(30);
@@ -161,18 +153,18 @@ fn six_unique_inputs_on_two_workers_agree_with_one_and_finish() {
         ..Options::default()
     };
     let sources = [
-        "(function () { function _0xa() {} })();",
-        "(function () { function _0xb() {} })();",
-        "(function () { function _0xc() {} })();",
-        "(function () { function _0xd() {} })();",
-        "(function () { function _0xe() {} })();",
-        "(function () { function _0xf() {} })();",
+        "function _0xa() {}",
+        "function _0xb() {}",
+        "function _0xc() {}",
+        "function _0xd() {}",
+        "function _0xe() {}",
+        "function _0xf() {}",
     ];
     let sequential = Pipeline::new(with_jobs(1, base.clone())).run_many(&sources);
     let parallel = run_many_within(with_jobs(2, base), &sources, DEADLOCK_GRACE);
     assert_eq!(comparable(&sequential), comparable(&parallel));
     let expected: Vec<String> = (1..=6)
-        .map(|number| wrapped(&[&format!("function fn{number}() {{}}")]))
+        .map(|number| format!("function fn{number}() {{}}"))
         .collect();
     assert_eq!(parallel.codes, expected);
 }
@@ -191,12 +183,12 @@ fn a_panicking_input_is_reported_at_the_same_index_under_four_jobs() {
         "f(\"ok\");",
         "g(\"boom\");",
         "h(\"fine\");",
-        "(function () { function _0xa() {} })();",
+        "function _0xa() {}",
     ];
     assert_jobs_agree(&sources, base.clone());
     let out = Pipeline::new(with_jobs(4, base)).run_many(&sources);
     assert_eq!(out.panicked, vec![1]);
-    assert_eq!(out.codes[3], wrapped(&["function fn1() {}"]));
+    assert_eq!(out.codes[3], "function fn1() {}");
 }
 
 #[test]
