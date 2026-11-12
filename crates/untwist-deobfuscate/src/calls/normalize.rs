@@ -1,16 +1,15 @@
-use oxc_allocator::{CloneIn, GetAllocator, Vec as AVec};
+use oxc_allocator::{CloneIn, GetAllocator};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
-use oxc_str::Ident;
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
 use untwist_core::ast_util::matcher::is_literal_argument;
 use untwist_core::ast_util::prop::identifier_name;
-use untwist_core::ast_util::search::{expression_at, statement_at};
+use untwist_core::ast_util::search::{expression_at, expressions_at, statement_at};
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{
     is_constant_binding, is_constant_binding_in, read_reference_count, write_reference_count,
@@ -22,7 +21,7 @@ use crate::init_order::{scan_init_order, DeclarationSlot, InitOrder};
 use crate::mutants::external_write_order_trusted;
 use crate::notes;
 use crate::probe::{expression_contains, holds_own_scope};
-use crate::stamp::{decoder_index, decoder_name};
+use crate::stamp::decoder_index;
 use crate::units::MachineryDepth;
 
 use super::global_bindings::global_bindings;
@@ -147,45 +146,13 @@ impl<'a> VisitJs<'a> for SymbolProbe<'_> {
     }
 }
 
-fn decoder_call_of<'a>(index: usize, argument: &Expression<'_>, cx: &Cx<'a, '_>) -> Expression<'a> {
-    let span = argument.span();
-    let callee = Expression::new_identifier(span, Ident::from_str_in(&decoder_name(index), cx), cx);
-    let arguments = AVec::from_iter_in([Argument::from(argument.clone_in(cx.allocator()))], cx);
-    Expression::new_call_expression(span, callee, None, arguments, false, cx)
-}
-
-fn split_ternaries<'a>(program: &mut Program<'a>, pending: &Pending, cx: &mut Cx<'a, '_>) -> usize {
-    let mut edits = ExprEdits::new();
-    for (call_span, test, consequent, alternate, index) in pending.ternaries.iter().copied() {
-        let view: &Program<'_> = program;
-        let (Some(test), Some(consequent), Some(alternate)) = (
-            expression_at(view, test),
-            expression_at(view, consequent),
-            expression_at(view, alternate),
-        ) else {
-            cx.note(notes::TERNARY_NOT_FOUND, Some(call_span));
-            continue;
-        };
-        if [test, consequent, alternate]
-            .iter()
-            .any(|expr| expression_contains(expr, holds_own_scope))
-        {
-            cx.note(notes::TERNARY_HOLDS_A_SCOPE, Some(call_span));
-            continue;
+fn note_scoped_ternaries(program: &Program<'_>, pending: &Pending, cx: &mut Cx<'_, '_>) {
+    let calls: Vec<Span> = pending.ternaries.iter().map(|ternary| ternary.0).collect();
+    for (span, call) in calls.iter().zip(expressions_at(program, &calls)) {
+        if call.is_some_and(|call| expression_contains(call, holds_own_scope)) {
+            cx.note(notes::TERNARY_HOLDS_A_SCOPE, Some(*span));
         }
-        if !is_splittable_branch(consequent) || !is_splittable_branch(alternate) {
-            continue;
-        }
-        let replacement = Expression::new_conditional_expression(
-            call_span,
-            test.clone_in(cx.allocator()),
-            decoder_call_of(index, consequent, cx),
-            decoder_call_of(index, alternate, cx),
-            &*cx,
-        );
-        edits.insert(call_span, replacement);
     }
-    edits.apply(program, cx.allocator(), cx.scoping_mut())
 }
 
 #[cfg(debug_assertions)]
@@ -681,10 +648,10 @@ fn remove_bare_references<'a>(
 pub fn normalize_calls<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) -> usize {
     let first = scan_pending(program, cx.scoping());
     let pending = pending_after(0, first, program, cx.scoping());
-    let ternaries = split_ternaries(program, &pending, cx);
-    let pending = pending_after(ternaries, pending, program, cx.scoping());
+    note_scoped_ternaries(program, &pending, cx);
+    let pending = pending_after(0, pending, program, cx.scoping());
     let externals = inline_external_variables(program, &pending, cx);
     let pending = pending_after(externals, pending, program, cx.scoping());
     let bare = remove_bare_references(program, &pending, cx);
-    ternaries + externals + bare
+    externals + bare
 }

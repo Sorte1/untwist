@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 
 use oxc_allocator::GetAllocator;
-use oxc_ast::ast::{IdentifierReference, Program, ThisExpression};
+use oxc_ast::ast::{Expression, IdentifierReference, Program, ThisExpression};
 use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::Span;
@@ -21,7 +21,7 @@ use untwist_eval::value::JsString;
 use crate::bridge::{
     build_requests_named, decoded_expression, primitive_value, DecodePlan, DecodeRequest,
 };
-use crate::calls::normalize_calls;
+use crate::calls::{group_ternaries, normalize_calls};
 use crate::mutants::unsafe_names_trusted;
 use crate::notes;
 use crate::proof::{
@@ -855,25 +855,47 @@ impl InlineDecodedStrings {
 
     fn apply_substitutions<'p>(decoded: &Decoded, program: &mut Program<'p>, cx: &mut Cx<'p, '_>) {
         let wanted = decoded.substitutions.len();
-        let mut edits = ExprEdits::new();
-        let mut planned = 0usize;
+        let mut built: FxHashMap<Span, Expression<'p>> = FxHashMap::default();
+        let mut values: FxHashMap<Span, &DecodedValue> = FxHashMap::default();
         for (span, value) in &decoded.substitutions {
-            let built = value
+            let expression = value
                 .as_ref()
-                .and_then(|value| decoded_expression(value, *span, &*cx));
-            let Some(expression) = built else {
+                .and_then(|value| Some((value, decoded_expression(value, *span, &*cx)?)));
+            let Some((value, expression)) = expression else {
                 cx.note(notes::NON_PRIMITIVE_RESULT, Some(*span));
                 continue;
             };
-            if edits.insert(*span, expression) {
-                planned += 1;
-                crate::decoded_strings::record(*span, || match value {
-                    Some(DecodedValue::Str(text)) => Some(text.to_lossy_string()),
-                    _ => None,
-                });
+            if !built.contains_key(span) {
+                built.insert(*span, expression);
+                values.insert(*span, value);
             }
         }
-        let applied = edits.apply(program, cx.allocator(), cx.scoping_mut());
+        let grouped = {
+            let view: &Program<'p> = program;
+            group_ternaries(view, built, cx.allocator())
+        };
+        let mut edits = ExprEdits::new();
+        let mut planned = 0usize;
+        let mut inserted = 0usize;
+        let mut planned_spans = Vec::new();
+        for (span, expression) in grouped.built {
+            if edits.insert(span, expression) {
+                inserted += 1;
+                planned_spans.push(span);
+            }
+        }
+        for span in planned_spans.into_iter().chain(grouped.leaves) {
+            let Some(value) = values.get(&span) else {
+                continue;
+            };
+            planned += 1;
+            crate::decoded_strings::record(span, || match value {
+                DecodedValue::Str(text) => Some(text.to_lossy_string()),
+                _ => None,
+            });
+        }
+        let applied_edits = edits.apply(program, cx.allocator(), cx.scoping_mut());
+        let applied = planned.saturating_sub(inserted - applied_edits);
         cx.changed_by(applied);
         if planned != wanted || applied != planned {
             cx.progress(notes::decoded_call_sites(planned, applied, wanted), None);

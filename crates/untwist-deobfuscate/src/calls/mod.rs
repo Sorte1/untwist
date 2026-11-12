@@ -2,6 +2,7 @@ pub mod agnostic;
 mod global_bindings;
 mod normalize;
 mod sequenced;
+mod ternary;
 mod variables;
 
 use oxc_ast::ast::*;
@@ -19,6 +20,7 @@ use crate::stamp::{decoder_index, may_name_machinery, string_array_unit};
 use crate::units::MachineryDepth;
 
 pub use normalize::normalize_calls;
+pub(crate) use ternary::group_ternaries;
 pub use untwist_eval::decode::Call;
 pub(crate) use variables::constant_initialisers;
 #[cfg(all(debug_assertions, feature = "test-hooks"))]
@@ -92,7 +94,28 @@ impl<'p> Collector<'p> {
         }
     }
 
+    fn note_ternary_call(&mut self, index: usize, call: &CallExpression<'p>) -> bool {
+        let Some(parts) = ternary::ternary_parts(call) else {
+            return false;
+        };
+        for test in parts.tests {
+            self.visit_expression(test);
+        }
+        for leaf in parts.leaves {
+            let leaf: &'p Expression<'p> = self.alloc(leaf);
+            self.found.push(Call {
+                decoder: index,
+                span: leaf.span(),
+                arguments: vec![leaf],
+            });
+        }
+        true
+    }
+
     fn note_decoder_call(&mut self, it: &Expression<'p>, index: usize, call: &CallExpression<'p>) {
+        if self.note_ternary_call(index, call) {
+            return;
+        }
         let literal = !call.arguments.is_empty()
             && call
                 .arguments
