@@ -24,6 +24,7 @@ describe('settingCommands', () => {
       'Setting|No fuel limit|off',
       'Rename|Rename: none|current',
       'Rename|Rename: simple|',
+      'Rename|Rename: smart|',
       'Rename|Rename: unique|',
       'Rename|Rename: mangle|',
     ]);
