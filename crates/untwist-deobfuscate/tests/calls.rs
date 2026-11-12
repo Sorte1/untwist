@@ -64,12 +64,13 @@ fn normalize_and_collect(body: &str) -> (String, Vec<Span>) {
 }
 
 #[test]
-fn a_ternary_argument_is_split_into_two_calls() {
-    let out = normalize("console.log(__DECODE_0__(p ? 0xc7 : 0xc8));");
+fn a_ternary_argument_stays_whole_and_each_branch_is_collected() {
+    let (out, spans) = normalize_and_collect("console.log(__DECODE_0__(p ? 0xc7 : 0xc8));");
     assert!(
-        out.contains("console.log(p?__DECODE_0__(199):__DECODE_0__(200));"),
+        out.contains("console.log(__DECODE_0__(p?199:200));"),
         "{out}"
     );
+    assert_eq!(spans.len(), 2, "{out}");
 }
 
 #[test]
@@ -137,10 +138,7 @@ fn a_second_normalisation_pass_changes_nothing() {
     assert!(report.converged(), "{:?}", report.stop);
     assert_eq!(report.iterations, 2, "{out}");
     assert!(out.contains("__DECODE_0__(214)"), "{out}");
-    assert!(
-        out.contains("q?__DECODE_0__(199):__DECODE_0__(200)"),
-        "{out}"
-    );
+    assert!(out.contains("__DECODE_0__(q?199:200)"), "{out}");
 }
 
 #[test]
@@ -165,13 +163,10 @@ fn a_scoped_ternary_argument_is_left_alone() {
 }
 
 #[test]
-fn a_nested_ternary_argument_is_split_without_losing_a_branch() {
+fn a_nested_ternary_argument_collects_every_branch() {
     let (out, spans) =
         normalize_and_collect("console.log(__DECODE_0__(p ? (q ? 0x1 : 0x2) : 0x3));");
-    assert!(
-        out.contains("p?q?__DECODE_0__(1):__DECODE_0__(2):__DECODE_0__(3)"),
-        "{out}"
-    );
+    assert!(out.contains("__DECODE_0__(p?q?1:2:3)"), "{out}");
     assert_eq!(spans.len(), 3, "{out}");
     let starts: HashSet<u32> = spans.iter().map(|span| span.start).collect();
     assert_eq!(starts.len(), 3, "{spans:?}");
@@ -225,14 +220,11 @@ fn a_decoder_call_branch_leaves_the_ternary_unsplit_this_iteration() {
 }
 
 #[test]
-fn an_identifier_branch_is_split_once_the_fixpoint_has_inlined_it() {
+fn an_identifier_branch_is_inlined_by_the_fixpoint() {
     let (out, report) =
         normalize_to_fixpoint("const y = 0xd3;\nconsole.log(__DECODE_0__(p ? y : 0xc8));");
     assert!(report.converged(), "{:?}", report.stop);
-    assert!(
-        out.contains("p?__DECODE_0__(211):__DECODE_0__(200)"),
-        "{out}"
-    );
+    assert!(out.contains("__DECODE_0__(p?211:200)"), "{out}");
 }
 
 #[test]
