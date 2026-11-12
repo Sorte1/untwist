@@ -509,6 +509,17 @@ pub(crate) fn deobfuscate_round_limit(rounds: u32) -> u32 {
     }
 }
 
+static CAP_UNDO_BY_SNAPSHOT: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn undo_round_cap_by_snapshot_for_tests(on: bool) {
+    CAP_UNDO_BY_SNAPSHOT.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn round_cap_undone_by_snapshot() -> bool {
+    CAP_UNDO_BY_SNAPSHOT.load(Ordering::Relaxed)
+}
+
 static ANNEX_B_WRITES_TRUSTED: AtomicBool = AtomicBool::new(false);
 
 #[doc(hidden)]

@@ -3,7 +3,7 @@ use oxc_ast::ast::Program;
 use untwist_core::clock::StageInstant as Instant;
 use untwist_core::pass::{
     run_to_fixpoint, run_to_fixpoint_noting_last, Note, NoteKind, Pass, PassCtor, PassGroup,
-    PassOptions, RunReport,
+    PassOptions, RoundCapUndo, RunReport,
 };
 use untwist_core::semantic::Semantics;
 use untwist_deobfuscate::driver::{run_cleanup_settling, CleanupSlot, PreparedSlot};
@@ -70,6 +70,9 @@ impl Pipeline {
         let (sem, prepared) = self.prepare_stage(site, sem);
         let sem = self.plugin_stage(Stage::AfterPrepare, site, sem);
         let sem = self.deobfuscate_stage(site, (sem, prepared));
+        if site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested {
+            return sem;
+        }
         self.plugin_stage(Stage::AfterDeobfuscate, site, sem)
     }
 

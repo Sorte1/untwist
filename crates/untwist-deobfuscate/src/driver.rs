@@ -8,7 +8,8 @@ use oxc_semantic::Scoping;
 use untwist_core::ast_util::respan::synthetic_spans_exhausted;
 use untwist_core::pass::{
     edits, replay_allowed, replayed_report, run_once, run_to_fixpoint, run_to_fixpoint_noting_last,
-    IterationTiming, Note, NoteKind, PassCtor, PassGroup, PassOptions, RunReport, StopReason,
+    IterationTiming, Note, NoteKind, PassCtor, PassGroup, PassOptions, RoundCapUndo, RunReport,
+    StopReason,
 };
 use untwist_core::semantic::{assumed_hazard, rebuild_scoping, scope_hazard, Semantics};
 use untwist_eval::rotation::RotationMemo;
@@ -723,13 +724,53 @@ fn finalize_unresolved_machinery<'a>(
     next
 }
 
+fn run_undoable_rounds<'a>(
+    alloc: &'a Allocator,
+    program: &mut Program<'a>,
+    sem: Semantics,
+    (opts, shared): (&PassOptions, &Shared),
+    aggregate: &mut Aggregate,
+) -> Semantics {
+    let mode = match opts.round_cap_undo.get() {
+        RoundCapUndo::Replay if crate::mutants::round_cap_undone_by_snapshot() => {
+            RoundCapUndo::Snapshot
+        }
+        mode => mode,
+    };
+    match mode {
+        RoundCapUndo::Replaying => {
+            aggregate.capped = true;
+            aggregate.undone = true;
+            sem
+        }
+        RoundCapUndo::Snapshot => {
+            let snapshot = Allocator::default();
+            let before = program.clone_in(&snapshot);
+            let sem = run_rounds(alloc, program, sem, opts, shared, aggregate);
+            undone_at_cap(alloc, program, (sem, &before), aggregate)
+        }
+        RoundCapUndo::Replay | RoundCapUndo::Requested => {
+            let sem = run_rounds(alloc, program, sem, opts, shared, aggregate);
+            if undo_due(aggregate) {
+                aggregate.undone = true;
+                opts.round_cap_undo.set(RoundCapUndo::Requested);
+            }
+            sem
+        }
+    }
+}
+
+fn undo_due(aggregate: &Aggregate) -> bool {
+    aggregate.capped && aggregate.per_pass[0] > 0
+}
+
 fn undone_at_cap<'a>(
     alloc: &'a Allocator,
     program: &mut Program<'a>,
     (sem, before): (Semantics, &Program<'_>),
     aggregate: &mut Aggregate,
 ) -> Semantics {
-    if !aggregate.capped || aggregate.per_pass[0] == 0 {
+    if !undo_due(aggregate) {
         return sem;
     }
     *program = before.clone_in(alloc);
@@ -865,12 +906,11 @@ fn deobfuscate_with<'a>(
         defer_disabled: opts.defer_disabled.get(),
     };
     clear_kept_order();
-    let snapshot = Allocator::default();
-    let before = program.clone_in(&snapshot);
-    let sem = run_rounds(alloc, program, sem, opts, &shared, &mut aggregate);
-    let sem = undone_at_cap(alloc, program, (sem, &before), &mut aggregate);
-    drop(snapshot);
+    let sem = run_undoable_rounds(alloc, program, sem, (opts, &shared), &mut aggregate);
     clear_kept_order();
+    if opts.round_cap_undo.get() == RoundCapUndo::Requested {
+        return (sem, aggregate.finish());
+    }
     let sem = finalize_unresolved_machinery(alloc, program, sem, (opts, &shared), &mut aggregate);
 
     let mut report = aggregate.finish();
