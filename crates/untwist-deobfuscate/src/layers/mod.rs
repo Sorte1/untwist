@@ -1,3 +1,4 @@
+mod constructor;
 pub mod decode;
 pub mod eval;
 pub mod function;

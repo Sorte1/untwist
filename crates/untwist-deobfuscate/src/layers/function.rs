@@ -5,6 +5,7 @@ use oxc_semantic::{Scoping, SemanticBuilder};
 use oxc_span::GetSpan;
 use untwist_core::parse::{has_error, parse_with, SourceType};
 
+use super::constructor::is_function_constructor;
 use super::decode::{
     argument_refusal, fold_texts, outer_call, plain_arguments, refuse, sloppy_script, FreeNames,
 };
@@ -64,8 +65,7 @@ fn constructor_arguments<'p, 'a>(callee: &'p Expression<'a>) -> Option<&'p [Argu
         Expression::NewExpression(inner) => (&inner.callee, &inner.arguments),
         _ => return None,
     };
-    matches!(constructor.without_parentheses(), Expression::Identifier(id) if id.name == "Function")
-        .then_some(arguments.as_slice())
+    is_function_constructor(constructor).then_some(arguments.as_slice())
 }
 
 fn arguments_text<'s>(source: &'s str, arguments: &[Argument<'_>]) -> &'s str {

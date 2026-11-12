@@ -1,5 +1,6 @@
 use oxc_ast::ast::{Argument, Expression, Program, Statement};
 
+use super::constructor::is_function_constructor;
 use super::model::LayerForm;
 
 const PACKER_ARITY: usize = 6;
@@ -79,7 +80,7 @@ fn is_function_constructor_call(callee: &Expression<'_>) -> bool {
         Expression::NewExpression(inner) => &inner.callee,
         _ => return false,
     };
-    matches!(inner.without_parentheses(), Expression::Identifier(id) if id.name == "Function")
+    is_function_constructor(inner)
 }
 
 fn is_packer_call(argument: &Argument<'_>) -> bool {
@@ -122,6 +123,30 @@ mod tests {
             ("Function('x')()", Some(LayerForm::Function)),
             ("new Function('a', 'x')(1)", Some(LayerForm::Function)),
             (
+                "[]['filter']['constructor']('x')()",
+                Some(LayerForm::Function),
+            ),
+            (
+                "[].constructor.constructor('x')()",
+                Some(LayerForm::Function),
+            ),
+            (
+                "(0)['constructor']['constructor']('x')()",
+                Some(LayerForm::Function),
+            ),
+            (
+                "''.constructor.constructor('x')()",
+                Some(LayerForm::Function),
+            ),
+            (
+                "({}).constructor.constructor('x')()",
+                Some(LayerForm::Function),
+            ),
+            (
+                "[][(!1+[])[0]+'ilter'].constructor('x')()",
+                Some(LayerForm::Function),
+            ),
+            (
                 "eval(function(p,a,c,k,e,d){return p}('x',2,1,'x'.split('|'),0,{}))",
                 Some(LayerForm::Packer),
             ),
@@ -146,6 +171,15 @@ mod tests {
             "(function(){ eval('x') })()",
             "evil('x')",
             "eval`x`",
+            "[1]['filter']['constructor']('x')()",
+            "[f()]['filter']['constructor']('x')()",
+            "({a: 1}).constructor.constructor('x')()",
+            "[]['nope']['constructor']('x')()",
+            "[]['filter']['call']('x')()",
+            "x['filter']['constructor']('x')()",
+            "[][f()]['constructor']('x')()",
+            "[]?.filter.constructor('x')()",
+            "[].constructor('x')()",
         ];
         for source in rows {
             assert_eq!(form_of(source), None, "{source}");

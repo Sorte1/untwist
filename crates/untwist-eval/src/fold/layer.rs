@@ -5,7 +5,11 @@ use rustc_hash::FxHashMap;
 use super::{fold_with, FoldOptions, PureHost};
 use crate::budget::Budget;
 use crate::heap::HeapLedger;
-use crate::value::Value;
+use crate::object::lookup_property;
+use crate::value::{JsString, PropKey, Value};
+
+const CONVERSION_MEMBERS: [(bool, &str); 3] =
+    [(true, "toString"), (false, "toString"), (false, "valueOf")];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LayerText {
@@ -29,6 +33,7 @@ pub fn fold_layer_text(expr: &Expression<'_>, fuel: u64, heap: u64) -> LayerFold
     host.allow_local_mutation = true;
     host.heap = Some(ledger.clone());
     host.realm.set_heap(Some(ledger.clone()));
+    mark_conversions_locally_pure(&mut host);
     let options = FoldOptions {
         allow_pure_calls: true,
         allow_local_mutation: true,
@@ -47,5 +52,19 @@ pub fn fold_layer_text(expr: &Expression<'_>, fuel: u64, heap: u64) -> LayerFold
         text,
         steps,
         heap: ledger.peak(),
+    }
+}
+
+fn mark_conversions_locally_pure(host: &mut PureHost) {
+    for (on_array, name) in CONVERSION_MEMBERS {
+        let proto = match on_array {
+            true => host.realm.array_prototype(),
+            false => host.realm.object_prototype(),
+        };
+        let key = PropKey::Name(JsString::from_str(name));
+        let member = proto.and_then(|proto| lookup_property(&proto, &key).ok().flatten());
+        if let Some(member) = member {
+            host.realm.mark_locally_pure_value(&member);
+        }
     }
 }
