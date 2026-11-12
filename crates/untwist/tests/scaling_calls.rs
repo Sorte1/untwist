@@ -80,3 +80,57 @@ fn every_require_of_a_webpack_bundle_finds_its_module_id_by_lookup() {
         Options::default,
     );
 }
+
+const DECODER_HEAD: &str = "function arr(){var h=['gol','olleh','dlrow','cba','fed'];arr=function(){return h};return arr()}\
+function dec(a,b){a=a-100;var e=arr();return e[a]}console.log(dec(101));";
+
+#[test]
+fn one_variable_given_a_new_object_in_every_block_is_judged_once() {
+    assert_scales_linearly(
+        "o={};o.a=1;list.push(o);",
+        2_000,
+        |count| format!("var o;{}", "o={};o.a=1;o.b=2;list.push(o);".repeat(count)),
+        Options::default,
+    );
+}
+
+#[test]
+fn fresh_writes_with_computed_keys_beside_a_decoder_are_judged_once() {
+    assert_scales_linearly(
+        "v={};v[w]=1;",
+        2_000,
+        |count| format!("{DECODER_HEAD}var v={{}};{}", "v={};v[w]=1;".repeat(count)),
+        Options::default,
+    );
+}
+
+#[test]
+fn method_calls_on_one_binding_beside_a_decoder_look_its_writes_up_once() {
+    assert_scales_linearly(
+        "list.push(1);",
+        2_000,
+        |count| {
+            format!(
+                "{DECODER_HEAD}var list=[];{}",
+                "list.push(1);".repeat(count)
+            )
+        },
+        Options::default,
+    );
+}
+
+#[test]
+fn a_parameter_called_at_many_sites_beside_a_decoder_looks_its_writes_up_once() {
+    assert_scales_linearly(
+        "p.call(1);",
+        1_000,
+        |count| {
+            format!(
+                "{DECODER_HEAD}function f(p){{{}}}{}",
+                "p.call(1);".repeat(count),
+                "f(function(){});".repeat(count)
+            )
+        },
+        Options::default,
+    );
+}
