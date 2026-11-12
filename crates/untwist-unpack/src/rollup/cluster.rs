@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use super::scan::Facts;
+use super::wrappers::Group;
 
 const WINDOW: usize = 3;
 const MIN_DECLARATIONS: u32 = 2;
@@ -30,13 +31,36 @@ fn graph(facts: &Facts) -> Graph {
 struct Union {
     parent: Vec<u32>,
     members: Vec<Vec<u32>>,
+    group: Vec<Option<u32>>,
 }
 
 impl Union {
-    fn new(n: usize) -> Self {
+    fn new(n: usize, groups: &[Group]) -> Self {
+        let mut group = vec![None; n];
+        for (index, found) in groups.iter().enumerate() {
+            for &member in &found.members {
+                group[member as usize] = Some(index as u32);
+            }
+        }
         Self {
             parent: (0..n as u32).collect(),
             members: (0..n as u32).map(|i| vec![i]).collect(),
+            group,
+        }
+    }
+
+    fn join(&mut self, a: u32, b: u32) {
+        let (left, right) = (self.group[a as usize], self.group[b as usize]);
+        if left == right || (left.is_none() && right.is_none()) {
+            self.union(a, b);
+        }
+    }
+
+    fn join_groups(&mut self, groups: &[Group]) {
+        for found in groups {
+            for pair in found.members.windows(2) {
+                self.union(pair[0], pair[1]);
+            }
         }
     }
 
@@ -80,7 +104,7 @@ fn mutual(g: &Graph, uf: &mut Union) {
     for (i, targets) in g.refs.iter().enumerate() {
         for &j in targets {
             if g.refs[j as usize].binary_search(&(i as u32)).is_ok() {
-                uf.union(i as u32, j);
+                uf.join(i as u32, j);
             }
         }
     }
@@ -94,7 +118,7 @@ fn chain(g: &Graph, uf: &mut Union) {
         }
         let root = uf.find(prev);
         if g.refs[i].iter().all(|&t| uf.find(t) == root) {
-            uf.union(prev, i as u32);
+            uf.join(prev, i as u32);
         }
     }
 }
@@ -106,7 +130,7 @@ fn inert_helpers(g: &Graph, facts: &Facts, uf: &mut Union) {
         }
         if let [consumer] = g.by[b][..] {
             if (consumer as usize).abs_diff(b) <= WINDOW {
-                uf.union(b as u32, consumer);
+                uf.join(b as u32, consumer);
             }
         }
     }
@@ -123,7 +147,7 @@ fn adjacent_shared(g: &Graph, facts: &Facts, uf: &mut Union) {
                 continue;
             }
             if shares(&g.refs[i], &g.refs[j]) {
-                uf.union(i as u32, j as u32);
+                uf.join(i as u32, j as u32);
             }
         }
     }
@@ -163,7 +187,7 @@ fn exclusive_consumers(g: &Graph, facts: &Facts, uf: &mut Union) {
             continue;
         }
         if narrow_cluster(g, uf, root, other) {
-            uf.union(b as u32, consumer);
+            uf.join(b as u32, consumer);
         }
     }
 }
@@ -270,10 +294,11 @@ fn fold_small(segments: Vec<Range<usize>>, facts: &Facts) -> Vec<Range<usize>> {
     out
 }
 
-pub fn plan(facts: &Facts) -> Option<Vec<Range<usize>>> {
+pub fn plan(facts: &Facts, groups: &[Group]) -> Option<Vec<Range<usize>>> {
     let g = graph(facts);
     let n = g.refs.len();
-    let mut uf = Union::new(n);
+    let mut uf = Union::new(n, groups);
+    uf.join_groups(groups);
     mutual(&g, &mut uf);
     chain(&g, &mut uf);
     inert_helpers(&g, facts, &mut uf);

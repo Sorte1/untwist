@@ -3,6 +3,7 @@ pub mod cluster;
 pub mod notes;
 pub mod scan;
 pub mod shell;
+pub mod wrappers;
 
 use std::ops::Range;
 
@@ -31,8 +32,9 @@ pub fn probe(frame: &Frame<'_, '_>) -> bool {
 
 fn planned(scoping: &Scoping, items: &[Statement<'_>], context: &Context) -> Option<Plan> {
     let facts = scan(scoping, items, context)?;
-    let segments = cluster::plan(&facts)?;
-    let links = links(scoping, &facts, &segments);
+    let groups = wrappers::groups(scoping, items, &facts);
+    let segments = cluster::plan(&facts, &groups)?;
+    let links = links(scoping, &facts, &segments, &groups);
     Some((segments, links))
 }
 
