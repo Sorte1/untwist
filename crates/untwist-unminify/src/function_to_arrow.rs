@@ -388,7 +388,7 @@ impl<'a> Pass<'a> for FunctionToArrow<'a> {
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         let scoping = cx.scoping();
         self.active = scope_hazard(scoping).is_none()
-            && (cx.opts.unsafe_transforms || !reads_function_frame(program));
+            && (cx.opts.unsafe_transforms || !reads_function_frame(program, scoping));
         self.callees.clear();
         self.pending.clear();
         self.frozen.clear();
