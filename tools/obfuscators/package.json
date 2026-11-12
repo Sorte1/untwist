@@ -1,0 +1,20 @@
+{
+  "name": "untwist-other-obfuscator-fixtures",
+  "private": true,
+  "description": "Pinned obfuscators, encoders and minifiers outside the javascript-obfuscator matrix (Closure Compiler, JSFuck, aaencode/jjencode, js-confuser, js-virtualizer, terser/uglify property mangling, webpack eval devtool), used by tools/obfuscators/gen.mjs to generate fixtures/obfuscators.",
+  "dependencies": {
+    "acorn": "8.15.0",
+    "acorn-walk": "8.3.4",
+    "google-closure-compiler": "20251001.0.0",
+    "javascript-obfuscator": "4.2.2",
+    "js-confuser": "2.0.0",
+    "js-confuser-1": "npm:js-confuser@1.7.3",
+    "js-confuser-2.1": "npm:js-confuser@2.1.3",
+    "js-virtualizer": "1.0.2",
+    "jsfuck": "0.4.0",
+    "mangle-js-webpack-plugin": "0.1.4",
+    "terser": "5.36.0",
+    "uglify-js": "3.19.3",
+    "webpack": "5.98.0"
+  }
+}

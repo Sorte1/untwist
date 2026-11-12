@@ -1,0 +1,3 @@
+js-virtualizer 1.0.2 (https://github.com/aesthetic0001/js-virtualizer) is published under the MIT
+licence (package.json "license": "MIT"); the package ships no licence text. The vm/ fixtures hold
+its VM module (src/vm_dist.js) as the transpiler emits it.
