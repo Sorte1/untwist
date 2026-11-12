@@ -893,7 +893,10 @@
   replace a name by what it was declared with: a constant used as a decoder argument, a decoder
   alias, and a decoder wrapper. `var k = 1; { function k() {} } dec(k)` passes the function, not
   1, so the call keeps its variable; an alias or wrapper a block function may overwrite stays in
-  place with its call sites. Pinned by `crates/untwist/tests/annex_b_rows.rs`,
+  place with its call sites. The block function itself is the exception: when it is the only
+  block function of its name in that `var` scope, is never written or redeclared, and every
+  reference to it lies inside its own block, those reads see the block binding, which Annex B
+  never assigns, so it is inlined like any other binding. Pinned by `crates/untwist/tests/annex_b_rows.rs`,
   `crates/untwist-deobfuscate/tests/annex_b_scope.rs` (node rows in both modes, and the rows that
   must still inline in both) and `crates/untwist/tests/decoder_call_soundness_rows.rs`.
 - **The call-substitution walk has a depth limit and a size budget**. Where it walks a

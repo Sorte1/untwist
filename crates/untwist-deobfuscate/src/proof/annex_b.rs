@@ -4,10 +4,11 @@ use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::program_is_strict;
 
-use untwist_core::semantic::block_function_symbols;
+use untwist_core::semantic::{block_function_symbols, declaring_block};
 
 use crate::bindings::block_function_names;
 
@@ -99,6 +100,35 @@ fn intercepted(scoping: &Scoping, symbol: SymbolId, var: ScopeId) -> bool {
         || (var != declared && within(scoping, var, declared) && read_within(scoping, symbol, var))
 }
 
+pub fn kept_in_its_block(
+    scoping: &Scoping,
+    functions: &FxHashSet<SymbolId>,
+    function: SymbolId,
+) -> bool {
+    let Some(block) = declaring_block(scoping, function) else {
+        return false;
+    };
+    let var = var_scope(scoping, block);
+    let name = scoping.symbol_name(function);
+    let alone = functions
+        .iter()
+        .filter(|other| {
+            scoping.symbol_name(**other) == name
+                && declaring_block(scoping, **other)
+                    .and_then(|declared| var_scope(scoping, declared))
+                    == var
+        })
+        .count()
+        == 1;
+    alone
+        && !scoping.symbol_is_mutated(function)
+        && scoping.symbol_redeclarations(function).is_empty()
+        && scoping
+            .get_resolved_reference_ids(function)
+            .iter()
+            .all(|reference| within(scoping, scoping.get_reference(*reference).scope_id(), block))
+}
+
 type AnySymbol<'f> = &'f dyn Fn(usize, &mut dyn FnMut(SymbolId) -> bool) -> bool;
 
 fn sharing_candidates(scoping: &Scoping, count: usize, any_symbol: AnySymbol<'_>) -> Vec<usize> {
@@ -117,14 +147,17 @@ fn sharing_candidates(scoping: &Scoping, count: usize, any_symbol: AnySymbol<'_>
 
 fn scope_hits(scoping: &Scoping, sharing: &[usize], any_symbol: AnySymbol<'_>) -> Vec<Hit> {
     let mut hits = Vec::new();
-    for function in block_function_symbols(scoping) {
+    let functions = block_function_symbols(scoping);
+    for &function in &functions {
         let name = scoping.symbol_name(function);
         let Some(var) = var_scope(scoping, scoping.symbol_scope_id(function)) else {
             continue;
         };
         for &candidate in sharing {
             let reached = any_symbol(candidate, &mut |symbol| {
-                scoping.symbol_name(symbol) == name && intercepted(scoping, symbol, var)
+                scoping.symbol_name(symbol) == name
+                    && !(symbol == function && kept_in_its_block(scoping, &functions, function))
+                    && intercepted(scoping, symbol, var)
             });
             if reached {
                 hits.push(Hit {

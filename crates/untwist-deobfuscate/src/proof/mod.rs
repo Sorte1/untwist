@@ -29,7 +29,7 @@ mod written;
 
 pub use aliased::{alias_refusal, alias_sites, pending_member_keys, AliasSite, BuiltinAliases};
 pub use aliased_flows::builtin_aliases;
-pub use annex_b::refuse_annex_b_bindings;
+pub use annex_b::{kept_in_its_block, refuse_annex_b_bindings};
 pub use decoded_name::{encode_names, names_machinery, EncodedName};
 pub use decoder::{decoder_refusal, statement_used_names, used_names, UsedNames};
 pub(crate) use escape::function_source;

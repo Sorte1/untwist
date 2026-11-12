@@ -13,7 +13,9 @@ use untwist_core::ast_util::literal::is_undefined_like;
 use untwist_core::ast_util::matcher::{call_parts, var_function_or_declaration};
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
-use untwist_core::semantic::{is_constant_binding, AnnexBWrites};
+use untwist_core::semantic::{
+    block_function_symbols, is_constant_binding, is_hoisted_block_function, AnnexBWrites,
+};
 
 use crate::call_checks::{call_checks_apply, is_plain_function};
 use crate::init_order::try_scan_init_order;
@@ -21,6 +23,7 @@ use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
 use crate::primitive_names::PrimitiveNames;
 use crate::probe::{expression_contains, holds_own_scope};
+use crate::proof::kept_in_its_block;
 use crate::proof::refuse_annex_b_bindings;
 use crate::stamp::{declaration_symbol, decoder_index, is_machinery_name};
 use crate::units::MachineryDepth;
@@ -206,11 +209,16 @@ pub(crate) fn body_is_self_contained(
     !scan.escapes && scan.forwards == usize::from(forwards_to.is_some())
 }
 
+fn hoisted_and_kept_in_its_block(scoping: &Scoping, symbol: SymbolId) -> bool {
+    is_hoisted_block_function(scoping, symbol)
+        && kept_in_its_block(scoping, &block_function_symbols(scoping), symbol)
+}
+
 pub(crate) fn binding_is_stable(scoping: &Scoping, symbol: SymbolId) -> bool {
     if wrapper_guards_dropped() {
         return true;
     }
-    if !is_constant_binding(scoping, symbol) {
+    if !is_constant_binding(scoping, symbol) && !hoisted_and_kept_in_its_block(scoping, symbol) {
         return false;
     }
     if scoping
@@ -546,15 +554,33 @@ fn refuse_annex_b_wrappers(
     if writes.is_empty() {
         return;
     }
-    let (written, kept): (Vec<_>, Vec<_>) = std::mem::take(found)
-        .into_iter()
-        .partition(|shape| writes.may_write(shape.symbol));
+    let functions = block_function_symbols(scoping);
+    let (written, kept): (Vec<_>, Vec<_>) = std::mem::take(found).into_iter().partition(|shape| {
+        writes.may_write(shape.symbol)
+            && !is_own_block_function(&writes, &functions, scoping, shape.symbol)
+    });
     *found = kept;
     rejected.extend(
         written
             .into_iter()
             .map(|shape| (shape.statement, notes::WRAPPER_BINDING_UNSTABLE)),
     );
+}
+
+fn is_own_block_function(
+    writes: &AnnexBWrites,
+    functions: &FxHashSet<SymbolId>,
+    scoping: &Scoping,
+    symbol: SymbolId,
+) -> bool {
+    writes
+        .functions()
+        .iter()
+        .find(|function| function.function == symbol)
+        .is_some_and(|function| {
+            function.target.is_none_or(|target| target == symbol)
+                && kept_in_its_block(scoping, functions, symbol)
+        })
 }
 
 fn find_wrappers(
