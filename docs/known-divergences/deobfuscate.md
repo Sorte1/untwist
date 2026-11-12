@@ -1185,7 +1185,19 @@
   global object. A function the `Function` constructor builds from text that may reach the global
   object, the constructor reached by name or through `.constructor` (`({}).constructor.constructor("return this")`),
   may return anything when called, directly, by `.call`, `.apply`, `.bind`, `new` or as a tag
-  (`crates/untwist/tests/foreign_reach_rows.rs`, node-checked).
+  (`crates/untwist/tests/foreign_reach_rows.rs`, node-checked). **Still decoded:** the default lane
+  does not take these values for the global object, so a write through them to a built-in the
+  decoders use is not seen and the decode can be wrong:
+  - a property read off an undeclared host name (`document.defaultView`,
+    `document.createElement(…).ownerDocument`);
+  - a parameter of a callback that host code calls (`host.listen(function (e) { e.view… })`);
+  - a default parameter or destructuring default (`function f(a = window)`);
+  - a generator's return value (`g().next().value`);
+  - a function bound with no receiver and then called (`(function () { return this; }).bind()()`);
+  - the value of `super()` or of a default constructor when the parent constructor returns the
+    global object.
+  These shapes are pinned in `ROWS_THE_DEFAULT_LANE_STILL_DECODES` in
+  `crates/untwist/tests/host_alias_rows.rs`; the points-to proof (v0.6.0) is meant to close them.
   Pinned by `crates/untwist/tests/decode_behaviour.rs` (node-checked, both modes, as a module and
   as a script), `crates/untwist/tests/alias_resolver.rs`, `crates/untwist/tests/realm_shapes.rs`,
   `crates/untwist-deobfuscate/tests/instanceof_object.rs` and the files of `fixtures/behaviour/` in
