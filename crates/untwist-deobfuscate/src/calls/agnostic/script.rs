@@ -188,7 +188,7 @@ impl<'a> Sites<'_, 'a> {
         }
         for sink in sinks {
             if sink.reaches {
-                self.hit(sink.span);
+                self.hit_text(sink.span);
             }
             if sink.writes {
                 self.mark_source(sink.span, "script text");

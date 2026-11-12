@@ -42,8 +42,19 @@ fn an_aliased_import_specifier_collapses_to_shorthand() {
 #[test]
 fn an_object_literal_value_takes_its_key() {
     assert_eq!(
+        shorthand(
+            "function f() { var t = 1; send({ videoRef: t }); }",
+            RenameMode::None
+        ),
+        "function f(){var videoRef=1;send({videoRef})}"
+    );
+}
+
+#[test]
+fn a_top_level_script_var_keeps_its_name_for_the_global_object() {
+    assert_eq!(
         shorthand("var t = 1; send({ videoRef: t });", RenameMode::None),
-        "var videoRef=1;send({videoRef});"
+        "var t=1;send({videoRef:t});"
     );
 }
 

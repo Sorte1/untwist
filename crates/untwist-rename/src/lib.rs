@@ -6,6 +6,7 @@ pub mod collisions;
 pub mod fingerprint;
 #[cfg(feature = "test-hooks")]
 pub mod fresh;
+pub mod function_names;
 pub mod generate;
 mod hazards;
 pub mod holders;
@@ -13,6 +14,7 @@ pub mod human;
 pub mod import_path;
 pub mod mangle;
 pub mod oracle;
+pub mod pins;
 pub mod plan;
 pub mod reserved;
 pub mod shorthand;

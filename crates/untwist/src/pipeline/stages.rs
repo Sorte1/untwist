@@ -236,8 +236,10 @@ impl Pipeline {
             });
             return sem;
         };
+        let (keep_script_globals, keep_script_lexicals) = keeps_script_globals(site, &sem);
         let opts = PassOptions {
-            keep_script_globals: keeps_script_globals(site, &sem),
+            keep_script_globals,
+            keep_script_lexicals,
             ..site.pass_opts.clone()
         };
         let passes = rename_passes_with_state(config, reservation.state, slot);
@@ -385,12 +387,20 @@ impl Pipeline {
 
 const RENAME_KEEPS_GLOBALS: &str = "rename-keeps-globals";
 
-fn keeps_script_globals(site: &StageCx<'_, '_>, sem: &Semantics) -> bool {
+fn keeps_script_globals(site: &StageCx<'_, '_>, sem: &Semantics) -> (bool, bool) {
     let program: &Program<'_> = site.program;
-    site.pass_opts.extended
+    let guarded = site.pass_opts.extended
         && !site.pass_opts.unsafe_transforms
         && !site.pass_opts.nested_root
         && !site.pass_opts.rule_disabled(RENAME_KEEPS_GLOBALS)
-        && !untwist_core::semantic::has_module_syntax(program)
-        && untwist_deobfuscate::calls::agnostic::globals_reachable_by_key(program, &sem.scoping)
+        && !untwist_core::semantic::has_module_syntax(program);
+    if !guarded {
+        return (false, false);
+    }
+    let agnostic = untwist_deobfuscate::calls::agnostic::globals_reachable_by_key;
+    let lexicals = untwist_deobfuscate::calls::agnostic::script_lexicals_reachable_by_code;
+    (
+        agnostic(program, &sem.scoping),
+        lexicals(program, &sem.scoping),
+    )
 }

@@ -194,6 +194,24 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   CommonJS/AMD wrapper names `require`, `module`, `exports` and `define` are exempt from
   `rename_all` in `Simple` and `Unique`: renaming a wrapper's `require` to `cb1`
   turned every `require("./sum")` base into a callee-derived `cb2` on the next run.
+- **Function and class names.** Renaming a binding that gives a function or class its name
+  changes what `.name` returns. So in the safe lane, when the file reads `name` with a static key
+  (`f.name`, `f["name"]`, `const { name } = f`, `({ name } = f)`) on a value that is not an
+  object, array or literal, every such binding keeps its name in every mode: function and class
+  declarations, named function and class expressions, and a variable, parameter default or
+  assignment whose value is an anonymous function, arrow or class. A file with no such read is
+  renamed as before, and `--unsafe` renames them anyway. The limit, like `fn.toString()`: a read
+  through a key that is not a literal (`f[key]`) or through reflection (`Reflect.get(f, "name")`,
+  `Object.getOwnPropertyDescriptor`) is not seen.
+- **Hoisting and the host's global object.** A sloppy block function and a `var` or parameter
+  of the same name in its function are one binding to Annex B, so both keep their names. A `var`
+  written inside a block or catch body counts where it hoists to, so no block-scoped binding in
+  that body takes its name and it takes none of theirs. In a classic script, shorthand
+  restoration leaves top-level `var` and function bindings alone (each is a property of the
+  global object), and no mode gives a top-level binding the name of a browser or Node global
+  property (`status`, `location`, `top`, `name`, `onload`, ...). When code built from text can
+  reach the script's globals, top-level `let`, `const` and `class` keep their names too, since
+  indirect `eval` and `Function` resolve them.
 - A program containing a direct `eval` call or a `with` statement is renamed anyway, with a
   diagnostic note naming the hazard. Static scope analysis cannot see what those constructs
   resolve; the reference deobfuscator reports nothing at all.

@@ -7,13 +7,13 @@ use oxc_syntax::operator::BinaryOperator;
 use super::forward::{forwarding_call, passing_call};
 use super::fresh::array_element;
 use super::holds::Hold;
-use super::hosts::is_host_global;
 use super::reach::VALUE_DEPTH;
 use super::roles::KEY_DEPTH;
 use super::sites::Sites;
 use super::source::is_ambient_intrinsic;
 use super::AKey;
 use crate::value_flow::{flow_rule_disabled, OBSERVER_LIST};
+use untwist_core::host_globals::is_host_global;
 
 const ALIAS_DEPTH: u8 = 4;
 const FORWARD_DEPTH: u8 = 8;

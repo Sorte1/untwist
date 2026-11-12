@@ -11,7 +11,6 @@ mod flow;
 mod forward;
 mod fresh;
 mod holds;
-mod hosts;
 mod instance;
 mod judge;
 mod keys;
@@ -104,6 +103,7 @@ pub struct Agnostic<'a> {
     pub realm_rebound: bool,
     pub reach: Option<Span>,
     pub reach_code: Option<Span>,
+    pub reach_text: Option<Span>,
     pub observed: Option<Span>,
     pub(super) outside_premise: Option<Span>,
     pub(super) observe_keyed: Vec<(Span, Cow<'a, str>)>,
@@ -145,6 +145,7 @@ pub struct ReachWatch<'k> {
 #[derive(Default)]
 pub struct GlobalReach {
     pub reach: Option<Span>,
+    pub reach_by_code: Option<Span>,
     pub observed: Option<Span>,
     pub outside_premise: Option<Span>,
     pub bootstrap: Option<&'static str>,
@@ -171,6 +172,7 @@ fn reach_of(found: &Agnostic<'_>) -> GlobalReach {
     }
     GlobalReach {
         reach: found.reach.or(found.reach_code),
+        reach_by_code: found.reach_text.or(found.reach_code),
         observed: found.observed,
         outside_premise: found.outside_premise,
         bootstrap: found.bootstrap,
@@ -215,6 +217,27 @@ pub fn globals_reachable_by_key<'a>(program: &'a Program<'a>, scoping: &Scoping)
     };
     global_reach(program, scoping, (None, &[]), watch)
         .reach
+        .is_some()
+}
+
+pub fn script_lexicals_reachable_by_code<'a>(program: &'a Program<'a>, scoping: &Scoping) -> bool {
+    let mut names = settle::script_lexicals(program, scoping)
+        .into_iter()
+        .map(|symbol| scoping.symbol_name(symbol))
+        .collect::<Vec<&str>>();
+    if names.is_empty() {
+        return false;
+    }
+    names.sort_unstable();
+    names.dedup();
+    let watch = ReachWatch {
+        names: &names,
+        props: &[],
+        fns: &[],
+        observe: false,
+    };
+    global_reach(program, scoping, (None, &[]), watch)
+        .reach_by_code
         .is_some()
 }
 

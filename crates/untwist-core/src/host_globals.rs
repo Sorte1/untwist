@@ -1,4 +1,4 @@
-pub(super) const HOST_GLOBALS: [&str; 285] = [
+pub const HOST_GLOBALS: [&str; 285] = [
     "AbortController",
     "AbortSignal",
     "ActiveXObject",
@@ -286,6 +286,103 @@ pub(super) const HOST_GLOBALS: [&str; 285] = [
     "zlib",
 ];
 
-pub(super) fn is_host_global(name: &str) -> bool {
+pub fn is_host_global(name: &str) -> bool {
     HOST_GLOBALS.binary_search(&name).is_ok()
+}
+
+pub const WINDOW_PROPERTIES: [&str; 41] = [
+    "AsyncDisposableStack",
+    "DisposableStack",
+    "Float16Array",
+    "SuppressedError",
+    "Temporal",
+    "addEventListener",
+    "applicationCache",
+    "captureEvents",
+    "content",
+    "credentialless",
+    "defaultStatus",
+    "defaultstatus",
+    "dispatchEvent",
+    "documentPictureInPicture",
+    "fence",
+    "fetchLater",
+    "find",
+    "frameElement",
+    "fullScreen",
+    "getScreenDetails",
+    "launchQueue",
+    "moveBy",
+    "moveTo",
+    "navigation",
+    "orientation",
+    "originAgentCluster",
+    "releaseEvents",
+    "removeEventListener",
+    "resizeBy",
+    "resizeTo",
+    "screenLeft",
+    "screenTop",
+    "screenX",
+    "screenY",
+    "scroll",
+    "sharedStorage",
+    "showDirectoryPicker",
+    "showOpenFilePicker",
+    "showSaveFilePicker",
+    "sidebar",
+    "webkitCancelAnimationFrame",
+];
+
+pub const NODE_BUILTIN_MODULES: [&str; 38] = [
+    "assert",
+    "async_hooks",
+    "buffer",
+    "child_process",
+    "cluster",
+    "constants",
+    "dgram",
+    "diagnostics_channel",
+    "dns",
+    "domain",
+    "events",
+    "fs",
+    "http",
+    "http2",
+    "https",
+    "inspector",
+    "net",
+    "os",
+    "path",
+    "perf_hooks",
+    "punycode",
+    "querystring",
+    "readline",
+    "repl",
+    "stream",
+    "string_decoder",
+    "sys",
+    "timers",
+    "tls",
+    "trace_events",
+    "tty",
+    "url",
+    "util",
+    "v8",
+    "vm",
+    "wasi",
+    "worker_threads",
+    "zlib",
+];
+
+const EVENT_HANDLER_PREFIX: &str = "on";
+
+pub fn is_host_global_property(name: &str) -> bool {
+    (is_host_global(name) && NODE_BUILTIN_MODULES.binary_search(&name).is_err())
+        || WINDOW_PROPERTIES.binary_search(&name).is_ok()
+        || name
+            .strip_prefix(EVENT_HANDLER_PREFIX)
+            .is_some_and(|event| {
+                !event.is_empty() && event.bytes().all(|byte| byte.is_ascii_lowercase())
+            })
 }

@@ -96,6 +96,11 @@ impl<'a> Sites<'_, 'a> {
         self.out.reach.get_or_insert(span);
     }
 
+    pub(super) fn hit_text(&mut self, span: Span) {
+        self.hit(span);
+        self.out.reach_text.get_or_insert(span);
+    }
+
     fn hit_dynamic(&mut self, span: Span) {
         if dynamic_paths() {
             self.hit(span);

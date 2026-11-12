@@ -8,8 +8,9 @@ use untwist_core::machinery_name::is_machinery_name;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::build_scoping;
 
-use crate::collect::{collect, Collected};
+use crate::collect::Collected;
 use crate::oracle::OuterRule;
+use crate::pins::{prepare, Setting};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct RenamePlan {
@@ -44,7 +45,8 @@ impl RenamePlan {
         let mut changed = 0usize;
         for (symbol, name) in &self.names {
             let current = scoping.symbol_name(*symbol);
-            if current == name || is_machinery_name(current) {
+            debug_assert!(!is_machinery_name(current), "planned a rename of {current}");
+            if current == name {
                 continue;
             }
             renames.insert(*symbol, Ident::from_str_in(name, alloc));
@@ -87,7 +89,7 @@ pub fn run_mode<'a, F>(
     F: Fn(&Program<'a>, &Collected, &Scoping) -> RenamePlan,
 {
     #[cfg(feature = "test-hooks")]
-    let keep = cx.opts.keep_script_globals;
+    let setting = crate::pins::Setting::of(program, cx.opts);
     run_mode_once(
         done,
         program,
@@ -97,7 +99,7 @@ pub fn run_mode<'a, F>(
         |program, collected, scoping| {
             let plan = decide(program, collected, scoping);
             #[cfg(feature = "test-hooks")]
-            crate::fresh::assert_same_plan(program, (rule, keep), &plan, &decide);
+            crate::fresh::assert_same_plan(program, (rule, setting), &plan, &decide);
             plan
         },
     );
@@ -126,8 +128,7 @@ pub fn run_mode_once<'a, F>(
     if rebuilt.is_none() {
         crate::fresh::assert_fresh(program, scoping);
     }
-    let mut collected = collect(program, scoping, rule);
-    crate::collect::pin_script_globals(&mut collected, scoping, cx.opts.keep_script_globals);
+    let collected = prepare(program, scoping, rule, Setting::of(program, cx.opts));
     let hazard = match hazard_note {
         HazardNote::Report => collected.hazard,
         HazardNote::Suppress => None,

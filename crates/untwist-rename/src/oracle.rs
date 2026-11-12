@@ -2,6 +2,7 @@ use oxc_semantic::Scoping;
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::host_globals::is_host_global_property;
 
 use crate::collect::Collected;
 use crate::collisions::{Reason, Tally};
@@ -128,7 +129,7 @@ impl<'s> NameOracle<'s> {
     fn available(&self, name: &str, symbol: SymbolId, by_climb: bool) -> bool {
         let capital = self.jsx_capital(symbol, name);
         let name = capital.as_deref().unwrap_or(name);
-        if self.excluded.contains(name) {
+        if self.excluded.contains(name) || self.lands_on_host_property(name, symbol) {
             self.tally.note(Reason::Excluded);
             return false;
         }
@@ -154,6 +155,13 @@ impl<'s> NameOracle<'s> {
             }
             None => true,
         }
+    }
+
+    fn lands_on_host_property(&self, name: &str, symbol: SymbolId) -> bool {
+        self.collected.classic_script
+            && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
+            && self.scoping.symbol_name(symbol) != name
+            && is_host_global_property(name)
     }
 
     fn uid_refusal(&self, name: &str, symbol: SymbolId) -> Option<Reason> {

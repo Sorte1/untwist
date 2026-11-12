@@ -102,6 +102,8 @@ pub struct PassOptions {
     #[doc(hidden)]
     pub keep_script_globals: bool,
     #[doc(hidden)]
+    pub keep_script_lexicals: bool,
+    #[doc(hidden)]
     pub scoping_patched: Cell<bool>,
     #[doc(hidden)]
     pub scoping_canonical: Cell<bool>,
@@ -182,6 +184,7 @@ impl Default for PassOptions {
             code_text: CodeTextSeen::default(),
             nested_root: false,
             keep_script_globals: false,
+            keep_script_lexicals: false,
             scoping_patched: Cell::new(false),
             scoping_canonical: Cell::new(true),
             shares_init_order: false,

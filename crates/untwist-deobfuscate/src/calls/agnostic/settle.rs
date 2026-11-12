@@ -272,6 +272,14 @@ pub(super) fn analyse<'s, 'a>(
 }
 
 pub(super) fn script_globals(program: &Program<'_>, scoping: &Scoping) -> Vec<SymbolId> {
+    root_bindings(program, scoping, false)
+}
+
+pub(super) fn script_lexicals(program: &Program<'_>, scoping: &Scoping) -> Vec<SymbolId> {
+    root_bindings(program, scoping, true)
+}
+
+fn root_bindings(program: &Program<'_>, scoping: &Scoping, lexical: bool) -> Vec<SymbolId> {
     if untwist_core::semantic::has_module_syntax(program) {
         return Vec::new();
     }
@@ -279,7 +287,7 @@ pub(super) fn script_globals(program: &Program<'_>, scoping: &Scoping) -> Vec<Sy
     scoping
         .get_bindings(scoping.root_scope_id())
         .iter()
-        .filter(|(_, symbol)| scoping.symbol_flags(**symbol).intersects(declared))
+        .filter(|(_, symbol)| scoping.symbol_flags(**symbol).intersects(declared) != lexical)
         .map(|(_, symbol)| *symbol)
         .collect()
 }

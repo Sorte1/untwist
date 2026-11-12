@@ -10,6 +10,7 @@ pub mod budget;
 pub mod clock;
 pub mod depth;
 pub mod guard_shape;
+pub mod host_globals;
 pub mod machinery_name;
 pub mod parse;
 pub mod pass;
