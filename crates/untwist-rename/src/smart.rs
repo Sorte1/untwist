@@ -8,7 +8,7 @@ use untwist_core::pass::{Cx, Interest, Pass};
 use crate::base_name::{base_name, structural_base, Context, FALLBACK_BASE};
 use crate::collect::{BindingInfo, BindingRole, Collected, InitKind};
 use crate::evidence::{collect_evidence, Evidence};
-use crate::generate::{to_identifier, uid_candidates};
+use crate::generate::{lower_camel, to_identifier, uid_candidates};
 use crate::human::looks_human_written;
 use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
@@ -110,17 +110,38 @@ pub fn smart_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> 
         .flatten()
         .map(to_identifier)
         .filter(|name| !name.is_empty() && name != "_");
-    let base = evidenced.unwrap_or_else(|| {
-        let derived = derived_base(info, cx);
-        let unnamed_constructor =
-            evidence.is_constructor(info.symbol) && UNNAMED_CALLABLES.contains(&derived.as_str());
-        if unnamed_constructor {
-            return CONSTRUCTOR.to_string();
-        }
-        derived
-    });
+    let base = evidenced
+        .or_else(|| instance_base(info, cx, evidence))
+        .unwrap_or_else(|| {
+            let derived = derived_base(info, cx);
+            let unnamed_constructor = evidence.is_constructor(info.symbol)
+                && UNNAMED_CALLABLES.contains(&derived.as_str());
+            if unnamed_constructor {
+                return CONSTRUCTOR.to_string();
+            }
+            derived
+        });
     let unevidenced_short = base == FALLBACK_BASE && info.name.chars().count() <= SHORT_NAME;
     (!unevidenced_short).then_some(base)
+}
+
+fn instance_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> Option<String> {
+    let BindingRole::Variable(shape) = &info.role else {
+        return None;
+    };
+    if shape.kind != InitKind::New {
+        return None;
+    }
+    let callee = shape.symbol?;
+    let binding = cx
+        .collected
+        .bindings
+        .get(*cx.collected.by_symbol.get(&callee)?)?;
+    if !is_renameable(binding, cx.collected, cx.config) {
+        return None;
+    }
+    let name = to_identifier(&lower_camel(evidence.name(callee)?));
+    (!name.is_empty() && name != "_").then_some(name)
 }
 
 fn derived_base(info: &BindingInfo, cx: &Context<'_>) -> String {
