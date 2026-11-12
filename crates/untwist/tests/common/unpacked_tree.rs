@@ -14,13 +14,18 @@ pub struct Unpacked {
 
 impl Unpacked {
     pub fn of(bundle: &str, conservative: bool) -> Self {
+        Self::of_many(&[bundle], conservative)
+    }
+
+    pub fn of_many(inputs: &[&str], conservative: bool) -> Self {
         let options = Options {
             extended: !conservative,
             deobfuscate: false,
             unminify: false,
             ..Options::default()
         };
-        let out = Pipeline::new(options).run(bundle);
+        let bundle = inputs.first().copied().unwrap_or_default();
+        let out = Pipeline::new(options).run_many(inputs);
         let dir = tempfile::tempdir().expect("temp dir");
         out.write_to(dir.path()).expect("write");
         Self {

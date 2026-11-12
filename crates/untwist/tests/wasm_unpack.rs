@@ -126,7 +126,7 @@ fn webpack_inline_wasm_is_extracted_per_module_and_the_hashed_async_module_is_li
     assert_eq!(out.wasm[0].path, "wasm/index.wasm");
     assert_eq!(out.wasm[0].bytes, wasm_bytes("webpack.wasm"));
     assert!(module("src/inline.js").contains("\"../wasm/index.wasm\""));
-    assert!(module("src/index.js").contains("function log(e)"));
+    assert!(module("index.js").contains("function log(e)"));
     assert_eq!(
         out.wasm_unresolved
             .iter()
@@ -134,7 +134,7 @@ fn webpack_inline_wasm_is_extracted_per_module_and_the_hashed_async_module_is_li
             .collect::<Vec<_>>(),
         ["3f2a91c0d1e2b3a4.module.wasm"]
     );
-    insta::assert_snapshot!(module("src/index.js"));
+    insta::assert_snapshot!(module("index.js"));
 }
 
 #[test]
@@ -349,7 +349,7 @@ fn webpack_async_wasm_names_the_glue_in_the_modules_it_imports_from_and_exports_
     let env = module_code(&out, "src/env.js");
     assert!(env.contains("function log(e)"), "{env}");
     assert!(env.contains("Z: () => log"), "{env}");
-    assert!(module_code(&out, "src/index.js").contains("const add = o.add;"));
+    assert!(module_code(&out, "index.js").contains("const add = o.add;"));
     assert!(out.code().contains("function log(e)"), "{}", out.code());
     assert!(out.code().contains("Z: () => log"));
     assert!(out.code().contains("const add = o.add;"));
@@ -408,7 +408,7 @@ fn a_bundle_module_that_does_not_cover_the_cross_module_glue_names_nothing() {
     let out = settled_with(&fixture("webpack-async.js"), &supply);
     assert_eq!(out.wasm[0].renamed, 0);
     assert!(module_code(&out, "src/env.js").contains("function o(e)"));
-    assert!(module_code(&out, "src/index.js").contains("const a = o.add;"));
+    assert!(module_code(&out, "index.js").contains("const a = o.add;"));
     assert!(wasm_notes(&out)
         .iter()
         .any(|note| note.contains("does not match the glue around src/add.wasm.js")));
@@ -590,16 +590,19 @@ fn emscripten_three_glue_given_another_module_reports_the_mismatch_and_names_not
 }
 
 fn webpack_bundle(modules: &[(&str, &str)]) -> String {
-    let table: Vec<String> = modules
-        .iter()
-        .map(|(path, code)| format!("\"./src/{path}\":(e,t,n)=>{{{code}}}"))
-        .collect();
-    let requires: String = modules
+    let starts: String = modules
         .iter()
         .map(|(path, _)| format!("n(\"./src/{path}\");"))
         .collect();
+    let table: Vec<String> = modules
+        .iter()
+        .map(|(path, code)| format!("\"./src/{path}\":(e,t,n)=>{{{code}}}"))
+        .chain(std::iter::once(format!(
+            "\"./src/main.js\":(e,t,n)=>{{{starts}}}"
+        )))
+        .collect();
     format!(
-        "(()=>{{var e={{{}}},t={{}};function n(r){{var o=t[r];if(void 0!==o)return o.exports;var s=t[r]={{id:r,exports:{{}}}};return e[r](s,s.exports,n),s.exports}}{requires}}})();",
+        "(()=>{{var e={{{}}},t={{}};function n(r){{var o=t[r];if(void 0!==o)return o.exports;var s=t[r]={{id:r,exports:{{}}}};return e[r](s,s.exports,n),s.exports}}n(\"./src/main.js\");}})();",
         table.join(",")
     )
 }

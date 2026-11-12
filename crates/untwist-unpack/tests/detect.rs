@@ -25,7 +25,6 @@ fn every_webpack_shape_is_found_through_its_wrapper() {
         ("webpack-var-injection.js", Some("0")),
         ("webpack-5.js", Some("2")),
         ("webpack-5-method.js", Some("2")),
-        ("webpack-5-no-entry.js", None),
         ("webpack-jsonp-chunk.js", None),
         ("webpack-5-json.js", None),
         ("webpack-chunk-no-entries.js", None),
@@ -51,6 +50,13 @@ fn a_bundle_whose_factory_holds_a_with_statement_is_found_only_by_the_reference_
         untwist_unpack::unpack_program_with(&alloc, &program, conservative).expect("a bundle");
     assert_eq!(bundle.kind, BundleKind::Webpack);
     assert_eq!(bundle.entry_id.as_deref(), Some("0"));
+}
+
+#[test]
+fn a_runtime_that_loads_other_chunk_files_at_startup_is_not_proven() {
+    let source = fixture("webpack-5-no-entry.js");
+    let alloc = Allocator::default();
+    assert!(bundle_from(&alloc, &source).is_none());
 }
 
 #[test]
@@ -104,7 +110,7 @@ fn the_outermost_bundle_wins() {
 
 #[test]
 fn an_unwrapped_top_level_webpack_5_bundle_is_found() {
-    let source = "var __webpack_modules__ = { 2: (module, exports, require) => {\n  x();\n} };\nfunction __webpack_require__(id) {\n  __webpack_modules__[id]();\n}\n__webpack_require__(__webpack_require__.s = 2);\n".to_string();
+    let source = "var __webpack_modules__ = { 2: (module, exports, require) => {\n  x();\n} };\nvar __webpack_module_cache__ = {};\nfunction __webpack_require__(id) {\n  var cached = __webpack_module_cache__[id];\n  if (cached !== undefined) return cached.exports;\n  var module = __webpack_module_cache__[id] = { exports: {} };\n  __webpack_modules__[id](module, module.exports, __webpack_require__);\n  return module.exports;\n}\n__webpack_require__(__webpack_require__.s = 2);\n".to_string();
     let alloc = Allocator::default();
     let bundle = bundle_from(&alloc, &source).expect("top-level webpack 5 bundle");
     assert_eq!(bundle.entry_id.as_deref(), Some("2"));

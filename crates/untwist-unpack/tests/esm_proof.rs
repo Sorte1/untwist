@@ -6,7 +6,7 @@ use untwist_core::print::{print, PrintStyle};
 use untwist_unpack::{finish_with, unpack_program_taking_with, unpack_program_with, UnpackOptions};
 
 const HEAD: &str = "(function (modules) {\n  var installed = {};\n  function r(id) {\n    if (installed[id]) return installed[id].exports;\n    var m = (installed[id] = { exports: {} });\n    modules[id].call(m.exports, m, m.exports, r);\n    return m.exports;\n  }\n";
-const HELPERS: &str = "  r.o = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };\n  r.d = function (e, n, g) { if (!r.o(e, n)) Object.defineProperty(e, n, { enumerable: true, get: g }); };\n  r.r = function (e) { Object.defineProperty(e, \"__esModule\", { value: true }); };\n  r.n = function (m) { var g = m && m.__esModule ? function () { return m[\"default\"]; } : function () { return m; }; r.d(g, \"a\", g); return g; };\n  r.t = function (v, mode) { if (mode & 1) v = r(v); if (mode & 8) return v; var ns = Object.create(null); r.r(ns); Object.defineProperty(ns, \"default\", { enumerable: true, value: v }); return ns; };\n";
+const HELPERS: &str = "  r.o = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };\n  r.d = function (e, n, g) { if (!r.o(e, n)) Object.defineProperty(e, n, { enumerable: true, get: g }); };\n  r.r = function (e) { if (typeof Symbol !== \"undefined\" && Symbol.toStringTag) { Object.defineProperty(e, Symbol.toStringTag, { value: \"Module\" }); } Object.defineProperty(e, \"__esModule\", { value: true }); };\n  r.n = function (m) { var g = m && m.__esModule ? function () { return m[\"default\"]; } : function () { return m; }; r.d(g, \"a\", g); return g; };\n  r.t = function (v, mode) { if (mode & 1) v = r(v); if (mode & 8) return v; if (mode & 4 && typeof v === \"object\" && v && v.__esModule) return v; var ns = Object.create(null); r.r(ns); Object.defineProperty(ns, \"default\", { enumerable: true, value: v }); if (mode & 2 && typeof v != \"string\") for (var key in v) r.d(ns, key, function (key) { return v[key]; }.bind(null, key)); return ns; };\n  r.e = function () { return Promise.resolve(); };\n";
 const TAIL: &str = "  return r(r.s = 0);\n})([\n";
 const TARGET: &str =
     "\"use strict\"; n.r(t); n.d(t, \"a\", function () { return a; }); function a() { return 1; }";
@@ -363,7 +363,8 @@ fn refuses_the_bundle_on_a_non_literal_require() {
 
 #[test]
 fn refuses_the_bundle_on_an_escaping_require() {
-    stays_commonjs(&consumed("var q = n; console.log(q(1).a);"));
+    let text = source(HELPERS, &["var q = n; console.log(q(1).a);", TARGET]);
+    assert!(printed_with(&text, UnpackOptions::default()).is_none());
 }
 
 #[test]
@@ -399,7 +400,7 @@ fn a_prelude_less_chunk_with_a_harmony_module_is_refused_and_left_intact() {
 #[test]
 fn a_harmony_module_whose_helper_is_missing_refuses_the_bundle() {
     let helpers =
-        "  r.r = function (e) { Object.defineProperty(e, \"__esModule\", { value: true }); };\n";
+        "  r.r = function (e) { if (typeof Symbol !== \"undefined\" && Symbol.toStringTag) { Object.defineProperty(e, Symbol.toStringTag, { value: \"Module\" }); } Object.defineProperty(e, \"__esModule\", { value: true }); };\n";
     let text = source(helpers, &["var m = n(1); console.log(m.a);", TARGET]);
     assert!(printed_with(&text, UnpackOptions::default()).is_none());
 }
@@ -427,7 +428,7 @@ fn a_helper_reading_a_nested_prelude_var_is_not_movable() {
 
 #[test]
 fn webpack_5_arrow_helpers_route_a_refused_module() {
-    let text = "(() => {\n  var __webpack_modules__ = {\n    1: (module, exports, require) => { \"use strict\"; require.r(exports); var ns = {}; require.d(ns, { z: () => z }); function z() {} console.log(ns.z); },\n  };\n  var cache = {};\n  function __webpack_require__(id) {\n    if (cache[id]) return cache[id].exports;\n    var module = (cache[id] = { exports: {} });\n    __webpack_modules__[id](module, module.exports, __webpack_require__);\n    return module.exports;\n  }\n  (() => {\n    __webpack_require__.d = (exports, definition) => { for (var key in definition) { if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) Object.defineProperty(exports, key, { enumerable: true, get: definition[key] }); } };\n  })();\n  (() => {\n    __webpack_require__.o = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop);\n  })();\n  (() => {\n    __webpack_require__.r = (exports) => { Object.defineProperty(exports, \"__esModule\", { value: true }); };\n  })();\n  __webpack_require__(1);\n})();\n";
+    let text = "(() => {\n  var __webpack_modules__ = {\n    1: (module, exports, require) => { \"use strict\"; require.r(exports); var ns = {}; require.d(ns, { z: () => z }); function z() {} console.log(ns.z); },\n  };\n  var cache = {};\n  function __webpack_require__(id) {\n    if (cache[id]) return cache[id].exports;\n    var module = (cache[id] = { exports: {} });\n    __webpack_modules__[id](module, module.exports, __webpack_require__);\n    return module.exports;\n  }\n  (() => {\n    __webpack_require__.d = (exports, definition) => { for (var key in definition) { if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) Object.defineProperty(exports, key, { enumerable: true, get: definition[key] }); } };\n  })();\n  (() => {\n    __webpack_require__.o = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop);\n  })();\n  (() => {\n    __webpack_require__.r = (exports) => { if (typeof Symbol !== \"undefined\" && Symbol.toStringTag) { Object.defineProperty(exports, Symbol.toStringTag, { value: \"Module\" }); } Object.defineProperty(exports, \"__esModule\", { value: true }); };\n  })();\n  __webpack_require__(1);\n})();\n";
     let out = printed_with(text, UnpackOptions::default()).expect("a bundle");
     stays_commonjs(&out[0]);
     assert!(
@@ -552,13 +553,9 @@ fn a_member_the_runtime_cannot_move_refuses_the_bundle() {
 }
 
 #[test]
-fn a_member_the_prelude_never_defines_stays_on_require() {
-    let out = printed_with(
-        &source(HELPERS, &["console.log(n.g);"]),
-        UnpackOptions::default(),
-    )
-    .expect("a bundle");
-    assert!(out[0].contains("console.log(require.g)"), "{}", out[0]);
+fn a_member_the_prelude_never_defines_refuses_the_bundle() {
+    let text = source(HELPERS, &["console.log(n.g);"]);
+    assert!(printed_with(&text, UnpackOptions::default()).is_none());
 }
 
 #[test]
@@ -582,7 +579,7 @@ const WEBPACK5_HEAD: &str = "(() => {\n  var __webpack_modules__ = {\n    1: (mo
 
 #[test]
 fn an_iife_local_require_t_moves_with_its_locals() {
-    let text = format!("{WEBPACK5_HEAD}  (() => {{\n    var getProto = Object.getPrototypeOf ? (obj) => Object.getPrototypeOf(obj) : (obj) => obj.__proto__;\n    var leafPrototypes;\n    __webpack_require__.t = function (value, mode) {{ if (mode & 1) value = this(value); if (mode & 8) return value; var ns = Object.create(null); __webpack_require__.r(ns); var def = {{}}; leafPrototypes = leafPrototypes || [null, getProto({{}}), getProto([]), getProto(getProto)]; for (var current = mode & 2 && value; typeof current == \"object\" && !~leafPrototypes.indexOf(current); current = getProto(current)) {{ Object.getOwnPropertyNames(current).forEach((key) => (def[key] = () => value[key])); }} def[\"default\"] = () => value; __webpack_require__.d(ns, def); return ns; }};\n  }})();\n  (() => {{\n    __webpack_require__.d = (exports, definition) => {{ for (var key in definition) {{ if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) Object.defineProperty(exports, key, {{ enumerable: true, get: definition[key] }}); }} }};\n  }})();\n  (() => {{\n    __webpack_require__.o = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop);\n  }})();\n  (() => {{\n    __webpack_require__.r = (exports) => {{ Object.defineProperty(exports, \"__esModule\", {{ value: true }}); }};\n  }})();\n  __webpack_require__(1);\n}})();\n");
+    let text = format!("{WEBPACK5_HEAD}  (() => {{\n    var getProto = Object.getPrototypeOf ? (obj) => Object.getPrototypeOf(obj) : (obj) => obj.__proto__;\n    var leafPrototypes;\n    __webpack_require__.t = function (value, mode) {{ if (mode & 1) value = this(value); if (mode & 8) return value; var ns = Object.create(null); __webpack_require__.r(ns); var def = {{}}; leafPrototypes = leafPrototypes || [null, getProto({{}}), getProto([]), getProto(getProto)]; for (var current = mode & 2 && value; typeof current == \"object\" && !~leafPrototypes.indexOf(current); current = getProto(current)) {{ Object.getOwnPropertyNames(current).forEach((key) => (def[key] = () => value[key])); }} def[\"default\"] = () => value; __webpack_require__.d(ns, def); return ns; }};\n  }})();\n  (() => {{\n    __webpack_require__.d = (exports, definition) => {{ for (var key in definition) {{ if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) Object.defineProperty(exports, key, {{ enumerable: true, get: definition[key] }}); }} }};\n  }})();\n  (() => {{\n    __webpack_require__.o = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop);\n  }})();\n  (() => {{\n    __webpack_require__.r = (exports) => {{ if (typeof Symbol !== \"undefined\" && Symbol.toStringTag) {{ Object.defineProperty(exports, Symbol.toStringTag, {{ value: \"Module\" }}); }} Object.defineProperty(exports, \"__esModule\", {{ value: true }}); }};\n  }})();\n  __webpack_require__(1);\n}})();\n");
     let out = printed_with(&text, UnpackOptions::default()).expect("a bundle");
     assert!(
         out[0].contains("__webpack_require__.t({ q: 1 }, 2)"),
@@ -596,7 +593,7 @@ fn an_iife_local_require_t_moves_with_its_locals() {
 
 #[test]
 fn an_iife_local_require_t_reading_an_outer_name_is_not_movable() {
-    let text = format!("{WEBPACK5_HEAD}  var outer = 1;\n  (() => {{\n    var local = outer;\n    __webpack_require__.t = function (value) {{ return local; }};\n  }})();\n  (() => {{\n    __webpack_require__.d = (exports, definition) => {{ for (var key in definition) Object.defineProperty(exports, key, {{ enumerable: true, get: definition[key] }}); }};\n  }})();\n  (() => {{\n    __webpack_require__.r = (exports) => {{ Object.defineProperty(exports, \"__esModule\", {{ value: true }}); }};\n  }})();\n  __webpack_require__(1);\n}})();\n");
+    let text = format!("{WEBPACK5_HEAD}  var outer = 1;\n  (() => {{\n    var local = outer;\n    __webpack_require__.t = function (value) {{ return local; }};\n  }})();\n  (() => {{\n    __webpack_require__.d = (exports, definition) => {{ for (var key in definition) {{ if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) Object.defineProperty(exports, key, {{ enumerable: true, get: definition[key] }}); }} }};\n  }})();\n  (() => {{\n    __webpack_require__.o = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop);\n  }})();\n  (() => {{\n    __webpack_require__.r = (exports) => {{ if (typeof Symbol !== \"undefined\" && Symbol.toStringTag) {{ Object.defineProperty(exports, Symbol.toStringTag, {{ value: \"Module\" }}); }} Object.defineProperty(exports, \"__esModule\", {{ value: true }}); }};\n  }})();\n  __webpack_require__(1);\n}})();\n");
     assert!(printed_with(&text, UnpackOptions::default()).is_none());
 }
 
@@ -657,7 +654,7 @@ fn unpacked_raw(factories: &[&str]) -> Vec<String> {
 
 #[test]
 fn an_iife_local_require_t_moves_with_its_locals_when_taken() {
-    let text = format!("{WEBPACK5_HEAD}  (() => {{\n    var getProto = (obj) => Object.getPrototypeOf(obj);\n    __webpack_require__.t = function (value, mode) {{ var ns = Object.create(null); __webpack_require__.r(ns); __webpack_require__.d(ns, {{ default: () => getProto(value) }}); return ns; }};\n  }})();\n  (() => {{\n    __webpack_require__.d = (exports, definition) => {{ for (var key in definition) Object.defineProperty(exports, key, {{ enumerable: true, get: definition[key] }}); }};\n  }})();\n  (() => {{\n    __webpack_require__.r = (exports) => {{ Object.defineProperty(exports, \"__esModule\", {{ value: true }}); }};\n  }})();\n  __webpack_require__(1);\n}})();\n");
+    let text = format!("{WEBPACK5_HEAD}  (() => {{\n    var getProto = (obj) => Object.getPrototypeOf(obj);\n    __webpack_require__.t = function (value, mode) {{ var ns = Object.create(null); __webpack_require__.r(ns); __webpack_require__.d(ns, {{ default: () => getProto(value) }}); return ns; }};\n  }})();\n  (() => {{\n    __webpack_require__.d = (exports, definition) => {{ for (var key in definition) {{ if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) Object.defineProperty(exports, key, {{ enumerable: true, get: definition[key] }}); }} }};\n  }})();\n  (() => {{\n    __webpack_require__.o = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop);\n  }})();\n  (() => {{\n    __webpack_require__.r = (exports) => {{ if (typeof Symbol !== \"undefined\" && Symbol.toStringTag) {{ Object.defineProperty(exports, Symbol.toStringTag, {{ value: \"Module\" }}); }} Object.defineProperty(exports, \"__esModule\", {{ value: true }}); }};\n  }})();\n  __webpack_require__(1);\n}})();\n");
     let alloc = Allocator::default();
     let mut program = prepared(&alloc, &text);
     let options = UnpackOptions::default();
@@ -804,8 +801,15 @@ fn a_shadowed_promise_refuses_the_dynamic_import_target() {
     stays_commonjs(&out[1]);
 }
 
+fn helpers_without_t() -> String {
+    HELPERS
+        .split_inclusive('\n')
+        .filter(|line| !line.trim_start().starts_with("r.t ="))
+        .collect()
+}
+
 fn runtime_of(extra: &str, consumer: &str) -> Option<String> {
-    let helpers = format!("{HELPERS}{extra}");
+    let helpers = format!("{}{extra}", helpers_without_t());
     let out = printed_with(&source(&helpers, &[consumer]), UnpackOptions::default())?;
     out.last().cloned()
 }
@@ -956,18 +960,18 @@ fn a_literal_runtime_member_read_keeps_conversions() {
 
 #[test]
 fn a_function_runtime_member_read_refuses_conversions() {
-    for extra in [
+    let out = with_member(
         "  r.g = function () { return 1; };\n",
-        "  r.q = \"/assets/\";\n  r.q = function () { return 1; };\n",
-    ] {
-        let name = if extra.contains("r.g") { "g" } else { "q" };
-        let out = with_member(extra, &format!("var m = n(1); console.log(m.a, n.{name});"));
-        assert!(!converted(&out[1]), "{extra}\n{}", out[1]);
-    }
+        "var m = n(1); console.log(m.a, n.g);",
+    );
+    assert!(!converted(&out[1]), "{}", out[1]);
+    let helpers = format!("{HELPERS}  r.q = \"/assets/\";\n  r.q = function () {{ return 1; }};\n");
+    let text = source(&helpers, &["var m = n(1); console.log(m.a, n.q);", TARGET]);
+    assert!(printed_with(&text, UnpackOptions::default()).is_none());
 }
 
 fn local_t_raw(prelude: &str) -> Option<String> {
-    let helpers = format!("{HELPERS}{prelude}");
+    let helpers = format!("{}{prelude}", helpers_without_t());
     let text = source(&helpers, &["console.log(n.t({}, 2));"]);
     let alloc = Allocator::default();
     let program = common::parse(&alloc, &text);

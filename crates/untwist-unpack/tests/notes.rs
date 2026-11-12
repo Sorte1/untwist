@@ -58,8 +58,32 @@ fn every_builder_spells_the_text_it_replaced() {
         "entry 9 from a later chunk ignored; keeping 1"
     );
     assert_eq!(
-        notes::duplicate_module("7"),
-        "chunk merge: duplicate module 7, keeping the first"
+        notes::duplicate_differs("7"),
+        "chunk merge: module 7 is defined differently by two inputs and the load order is unknown; no bundle is written"
+    );
+    assert_eq!(
+        notes::runtime_not_proven("why"),
+        "the prelude is not proven to be webpack's runtime; no bundle is written: why"
+    );
+    assert_eq!(
+        notes::require_not_shared("4", "why"),
+        "module 4 uses its require function in a way the unpacked files cannot share; no bundle is written: why"
+    );
+    assert_eq!(
+        notes::runtimes_differ(),
+        "chunk merge: two webpack runtimes differ; no bundle is written; the inputs carry their own helpers"
+    );
+    assert_eq!(
+        notes::chunk_start_unproven("1"),
+        "chunk 1 runs code on arrival that is not webpack's deferred-entry list; no bundle is written"
+    );
+    assert_eq!(
+        notes::deferred_with_runtime("5"),
+        "chunk merge: a chunk starts modules once the runtime loads, which the written files cannot order; no bundle is written (5)"
+    );
+    assert_eq!(
+        notes::deferred_not_run("5"),
+        "the bundle starts these modules only after webpack's runtime loads other files: 5; the written modules do not start them"
     );
     assert_eq!(
         notes::entry_candidates("1", 3),

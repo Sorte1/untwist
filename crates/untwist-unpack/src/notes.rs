@@ -9,7 +9,6 @@ pub const MAPPING_UNSAFE_PATH: &str = "unsafe path, ignored";
 pub const MAPPING_UNMATCHED: &str = "no module matched";
 pub const MERGE_KIND_MISMATCH: &str = "chunk merge: ignoring a";
 pub const LATER_ENTRY_IGNORED: &str = "from a later chunk ignored; keeping";
-pub const DUPLICATE_MODULE: &str = "chunk merge: duplicate module";
 pub const SECOND_SELF_CONTAINED: &str = "chunk merge: skipped a second self-contained";
 pub const ENTRY_CANDIDATES: &str = "top-level require calls and no entry marker is assigned";
 pub const REQUIRE_MISSING: &str = "has no module in this bundle";
@@ -18,6 +17,18 @@ pub const FACTORY_NOT_CLOSED: &str = "is not closed over its own scope; no bundl
 pub const RUNTIME_HELPER_NOT_CLOSED: &str = "cannot move to a runtime module";
 pub const SHAPE_REFUSED: &str = "bundle shape found but not proven; no bundle is written";
 pub const GROUP_REFUSED: &str = "linked inputs refused as a whole; no bundle is written for";
+pub const RUNTIME_NOT_PROVEN: &str = "is not proven to be webpack's runtime; no bundle is written";
+pub const REQUIRE_NOT_SHARED: &str =
+    "uses its require function in a way the unpacked files cannot share; no bundle is written";
+pub const RUNTIMES_DIFFER: &str = "two webpack runtimes differ; no bundle is written";
+pub const CHUNK_START_UNPROVEN: &str =
+    "runs code on arrival that is not webpack's deferred-entry list; no bundle is written";
+pub const DEFERRED_WITH_RUNTIME: &str =
+    "starts modules once the runtime loads, which the written files cannot order; no bundle is written";
+pub const DEFERRED_NOT_RUN: &str =
+    "starts these modules only after webpack's runtime loads other files";
+pub const DUPLICATE_DIFFERS: &str =
+    "is defined differently by two inputs and the load order is unknown; no bundle is written";
 
 catalogue!(
     ALL_NOTES,
@@ -28,7 +39,6 @@ catalogue!(
     MAPPING_UNMATCHED,
     MERGE_KIND_MISMATCH,
     LATER_ENTRY_IGNORED,
-    DUPLICATE_MODULE,
     SECOND_SELF_CONTAINED,
     ENTRY_CANDIDATES,
     REQUIRE_MISSING,
@@ -37,6 +47,13 @@ catalogue!(
     RUNTIME_HELPER_NOT_CLOSED,
     SHAPE_REFUSED,
     GROUP_REFUSED,
+    RUNTIME_NOT_PROVEN,
+    REQUIRE_NOT_SHARED,
+    RUNTIMES_DIFFER,
+    CHUNK_START_UNPROVEN,
+    DEFERRED_WITH_RUNTIME,
+    DEFERRED_NOT_RUN,
+    DUPLICATE_DIFFERS,
 );
 
 macro_rules! kind_notes {
@@ -93,10 +110,6 @@ pub fn second_self_contained(kind: &str) -> String {
     format!("{SECOND_SELF_CONTAINED} {kind} bundle; it has its own entry and runtime")
 }
 
-pub fn duplicate_module(id: impl Display) -> String {
-    format!("{DUPLICATE_MODULE} {id}, keeping the first")
-}
-
 pub fn entry_candidates(id: impl Display, count: usize) -> String {
     format!(
         "entry {id} is the first of {count} {ENTRY_CANDIDATES}; the others are modules the \
@@ -130,4 +143,32 @@ pub fn shape_refused(kind: impl Display) -> String {
 
 pub fn group_refused(namespace: impl Display) -> String {
     format!("{GROUP_REFUSED} {namespace}")
+}
+
+pub fn runtime_not_proven(why: impl Display) -> String {
+    format!("the prelude {RUNTIME_NOT_PROVEN}: {why}")
+}
+
+pub fn require_not_shared(id: impl Display, why: impl Display) -> String {
+    format!("module {id} {REQUIRE_NOT_SHARED}: {why}")
+}
+
+pub fn runtimes_differ() -> String {
+    format!("chunk merge: {RUNTIMES_DIFFER}; the inputs carry their own helpers")
+}
+
+pub fn chunk_start_unproven(ids: impl Display) -> String {
+    format!("chunk {ids} {CHUNK_START_UNPROVEN}")
+}
+
+pub fn deferred_with_runtime(ids: impl Display) -> String {
+    format!("chunk merge: a chunk {DEFERRED_WITH_RUNTIME} ({ids})")
+}
+
+pub fn deferred_not_run(ids: impl Display) -> String {
+    format!("the bundle {DEFERRED_NOT_RUN}: {ids}; the written modules do not start them")
+}
+
+pub fn duplicate_differs(id: impl Display) -> String {
+    format!("chunk merge: module {id} {DUPLICATE_DIFFERS}")
 }

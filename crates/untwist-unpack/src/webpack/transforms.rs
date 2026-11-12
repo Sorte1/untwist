@@ -7,12 +7,13 @@ use crate::matcher::named_const_member;
 use crate::model::RequireParam;
 use crate::model::{Bundle, BundleKind, Module};
 use crate::runtime::{runtime_binding_import, runtime_id, runtime_path, synthetic_statements};
+use crate::webpack::canon::standard_helpers;
 use crate::webpack::default_require::convert_default_require;
 use crate::webpack::esm::convert_esm;
 use crate::webpack::esm_proof::convert_proven;
 use crate::webpack::interop::convert_interop;
 use crate::webpack::require_paths::{replace_require_paths_with, rewritten, Converted, Routing};
-use crate::webpack::runtime_module::{needed, prepend, runtime_module};
+use crate::webpack::runtime_module::{prepend, runtime_module, Needs};
 use crate::webpack::shield::{restore, shield, Shield};
 use crate::webpack::var_injection::{inline_proven_injection, inline_var_injections};
 use rustc_hash::FxHashSet;
@@ -137,13 +138,13 @@ fn routing(bundle: &Bundle<'_>, conservative: bool) -> Option<Routing> {
         return None;
     }
     let runtime = bundle.runtime.as_ref()?;
-    let mut available: Vec<String> = Vec::new();
-    for helper in &runtime.helpers {
-        let routable = !available.contains(&helper.name) && needed(runtime, &helper.name).is_some();
-        if routable {
-            available.push(helper.name.clone());
-        }
-    }
+    let needs = Needs::of(runtime);
+    let available: FxHashSet<String> = runtime
+        .helpers
+        .iter()
+        .filter(|helper| needs.routes(&helper.name))
+        .map(|helper| helper.name.clone())
+        .collect();
     if available.is_empty() {
         return None;
     }
@@ -176,18 +177,12 @@ fn routing(bundle: &Bundle<'_>, conservative: bool) -> Option<Routing> {
 
 fn runtime_plan(bundle: &Bundle<'_>, converted: &Converted) -> Option<Vec<usize>> {
     let runtime = bundle.runtime.as_ref()?;
-    let mut indices: FxHashSet<usize> = FxHashSet::default();
-    for (_, rewritten) in converted {
-        for helper in &rewritten.helpers {
-            indices.extend(needed(runtime, helper)?);
-        }
-    }
-    if indices.is_empty() {
-        return None;
-    }
-    let mut indices: Vec<usize> = indices.into_iter().collect();
-    indices.sort_unstable();
-    Some(indices)
+    let roots = converted
+        .iter()
+        .flat_map(|(_, rewritten)| &rewritten.helpers)
+        .map(String::as_str);
+    let indices = Needs::of(runtime).closure(roots)?;
+    (!indices.is_empty()).then_some(indices)
 }
 
 fn attach_runtime<'a>(
@@ -265,8 +260,10 @@ fn convert_modules<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>, conservati
         convert_default_require(alloc, bundle);
         return;
     }
-    convert_interop(alloc, bundle);
-    convert_proven(alloc, bundle);
+    if bundle.runtime.as_ref().is_none_or(standard_helpers) {
+        convert_interop(alloc, bundle);
+        convert_proven(alloc, bundle);
+    }
 }
 
 pub fn apply_transforms_with<'a>(

@@ -32,7 +32,7 @@ struct Rewrite<'a, 'r> {
     converted: FxHashSet<u32>,
     bind: bool,
     track: bool,
-    route: Option<(&'r str, &'r [String])>,
+    route: Option<(&'r str, &'r FxHashSet<String>)>,
     scoping: Option<Scoping>,
     shadowed: u32,
     sloppy: bool,
@@ -40,7 +40,7 @@ struct Rewrite<'a, 'r> {
 }
 
 pub struct Routing {
-    pub available: Vec<String>,
+    pub available: FxHashSet<String>,
     pub bindings: Vec<String>,
 }
 
@@ -104,7 +104,9 @@ impl<'a, 'r> Rewrite<'a, 'r> {
             return None;
         }
         let name = it.property.name.as_str();
-        available.iter().find(|helper| helper.as_str() == name)?;
+        if !available.contains(name) {
+            return None;
+        }
         if !self.helpers.iter().any(|helper| helper == name) {
             self.helpers.push(name.to_string());
         }
@@ -120,7 +122,7 @@ impl<'a, 'r> Rewrite<'a, 'r> {
         };
         let routed = matches!(member, Expression::StaticMemberExpression(inner)
             if self.free_require(&inner.object)
-                && available.iter().any(|h| h == inner.property.name.as_str()));
+                && available.contains(inner.property.name.as_str()));
         let this = matches!(it.arguments.first(), Some(Argument::Identifier(this)) if self.free_reference(this));
         if !routed || !this {
             return;
@@ -376,10 +378,7 @@ pub fn replace_require_paths_with<'a>(
             bind,
             track: tracked.get(index).copied().unwrap_or(false),
             route: routing.and_then(|routing| {
-                Some((
-                    routing.bindings.get(index)?.as_str(),
-                    routing.available.as_slice(),
-                ))
+                Some((routing.bindings.get(index)?.as_str(), &routing.available))
             }),
             scoping,
             shadowed: 0,

@@ -17,7 +17,7 @@ type Wrapped<'k, 'a> = (
     Option<(String, bool)>,
 );
 
-const HOST_LOCALS: [&str; 4] = ["__dirname", "__filename", "module", "exports"];
+const HOST_LOCALS: [&str; 5] = ["__dirname", "__filename", "module", "exports", "require"];
 
 struct Prelude<'k> {
     require_name: &'k str,

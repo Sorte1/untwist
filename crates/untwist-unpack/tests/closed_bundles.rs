@@ -46,7 +46,7 @@ var greeting = "hello";
     __webpack_modules__[moduleId](module, module.exports, __webpack_require__);
     return module.exports;
   }
-  console.log(__webpack_require__(__webpack_require__.s = 2));
+  var __webpack_exports__ = __webpack_require__(__webpack_require__.s = 2);
 })();
 "#;
 
