@@ -183,7 +183,7 @@ pub(super) struct Graph {
     pub(super) world: Node,
     pub(super) empty: Node,
     pub(super) patches: Vec<Patch>,
-    patch_seen: FxHashSet<(u32, Method)>,
+    patch_seen: FxHashSet<(u32, Method, Node)>,
     pub(super) skip_definers: FxHashSet<Span>,
     pub(super) global_declared: FxHashSet<Field>,
     loaded: FxHashMap<(Node, Field), Node>,
@@ -1146,7 +1146,7 @@ impl Graph {
         if self.skip_definers.contains(&patch.span) {
             return;
         }
-        if self.patch_seen.insert((index, method)) {
+        if self.patch_seen.insert((index, method, patch.target)) {
             self.patches.push(patch);
         }
     }

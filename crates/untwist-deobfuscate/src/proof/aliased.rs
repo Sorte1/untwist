@@ -197,6 +197,7 @@ fn named_on_builtin(name: &str) -> u16 {
 pub struct BuiltinAliases<'s> {
     pub(super) scoping: &'s Scoping,
     pub(super) values: FxHashMap<SymbolId, u16>,
+    pub(super) parameters: FxHashSet<SymbolId>,
     pub(super) returns: FxHashMap<Span, u16>,
     pub(super) functions: FxHashMap<SymbolId, Span>,
     pub(super) sloppy_this: FxHashSet<Span>,
@@ -628,6 +629,7 @@ impl<'s> BuiltinAliases<'s> {
             .map_while(Argument::as_expression)
             .collect();
         let value_at = |index: usize| arguments.get(index).map_or(0, |e| self.value(e));
+        let target_at = |index: usize| value_at(index) | value_at(index + 3);
         let key_at = |index: usize| match arguments.get(index) {
             Some(e) => self.site_key(key_of(e), Some(e)),
             None => AliasKey::Names(vec!["undefined".to_string()]),
@@ -651,10 +653,10 @@ impl<'s> BuiltinAliases<'s> {
                         "defineProperties" => literal_keys(arguments.get(1..2).unwrap_or_default()),
                         _ => AliasKey::Unknown,
                     };
-                    sites.push((value_at(0), key));
+                    sites.push((target_at(0), key));
                 }
                 Some("call") if object & DEFINER != 0 => {
-                    sites.push((value_at(1), key_at(2)));
+                    sites.push((target_at(1), key_at(2)));
                     if object & GETTER_DEFINER != 0 {
                         sites.push((value_at(0) | GLOBAL | DANGER, key_at(1)));
                     }
@@ -665,7 +667,7 @@ impl<'s> BuiltinAliases<'s> {
                 _ => {
                     let value = self.member(member);
                     if value & DEFINER != 0 {
-                        sites.push((value_at(0), key_at(1)));
+                        sites.push((target_at(0), key_at(1)));
                     }
                     if value & GETTER_DEFINER != 0 {
                         sites.push((object, key_at(0)));
@@ -675,7 +677,13 @@ impl<'s> BuiltinAliases<'s> {
         } else {
             let value = self.value(callee);
             if value & DEFINER != 0 {
-                sites.push((value_at(0), key_at(1)));
+                let target = match callee {
+                    Expression::CallExpression(_) => {
+                        (0..arguments.len()).fold(0, |bits, index| bits | value_at(index))
+                    }
+                    _ => target_at(0),
+                };
+                sites.push((target, key_at(1)));
             }
             if value & GETTER_DEFINER != 0 {
                 sites.push((GLOBAL | DANGER, key_at(0)));

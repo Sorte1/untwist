@@ -6,6 +6,20 @@ const ROWS: &str = include_str!("data/builtin_alias_rows.txt");
 const REFUSED_ELSEWHERE: &[&str] = &[
     "ref-shift-replaced-through-proto",
     "ref-split-replaced-through-an-alias",
+    "ref-reflect-set-spread-arguments",
+    "ref-reflect-set-spread-receiver",
+    "ref-reflect-set-through-reflect-apply",
+    "ref-reflect-set-through-call",
+    "ref-reflect-set-through-apply",
+    "ref-reflect-set-bound-target",
+    "ref-reflect-set-destructured",
+    "ref-reflect-set-bound-receiver",
+    "ref-reflect-set-literal-receiver",
+    "ref-reflect-set-bound-key-shifts-the-receiver",
+    "ref-reflect-set-bound-target-shifts-the-receiver",
+    "ref-reflect-set-call-receiver",
+    "ref-reflect-set-aliased-definer-receiver",
+    "ref-mapped-arguments-write-reaches-the-parameter",
 ];
 
 fn transformed(source: &str) -> String {

@@ -553,6 +553,7 @@ impl<'s> Gen<'s> {
                 let node = self.g.singleton(arguments);
                 for param in &params {
                     self.g.load(node, Key::Static(Field::UNKNOWN), *param);
+                    self.g.copy(*param, fields);
                 }
             }
             fields
