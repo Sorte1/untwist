@@ -11,6 +11,9 @@ inputs:
   binaryen-sha256:
     description: SHA-256 of the binaryen x86_64-linux tarball
     default: "c55b74f3109cdae97490faf089b0286d3bba926bb6ea5ed00c8c784fc53718fd"
+  cache:
+    description: Restore and save the cargo and wasm target cache; a release passes false so it builds only from the tagged sources
+    default: "true"
 
 runs:
   using: composite
@@ -22,6 +25,7 @@ runs:
         rustup target add wasm32-unknown-unknown
 
     - name: Cache cargo registry, wasm-bindgen and the wasm target
+      if: inputs.cache == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |

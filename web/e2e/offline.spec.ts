@@ -46,6 +46,20 @@ test('under the deployed headers the page is cross-origin isolated and a service
   expect(paths).not.toContain('/sw.js');
 });
 
+test('the deployed headers carry the content security policy to the page and to its workers', async ({ page, request }) => {
+  const directives = ["frame-ancestors 'none'", "base-uri 'none'", "form-action 'none'", "object-src 'none'", "script-src 'self' 'wasm-unsafe-eval'"];
+  const response = await page.goto(`${server.url}#unsafe=0`);
+  await expect(page.locator('#run')).toBeEnabled({ timeout: 30_000 });
+  const workers = await page.evaluate(() => performance.getEntriesByType('resource').map((entry) => entry.name).filter((name) => /\/assets\/run\.worker-.*\.js$/.test(name)));
+  expect(workers).not.toHaveLength(0);
+  for (const headers of [response?.headers() ?? {}, (await request.get(workers[0] ?? '')).headers()]) {
+    for (const directive of directives) {
+      expect(headers['content-security-policy']).toContain(directive);
+    }
+    expect(headers['x-frame-options']).toBe('DENY');
+  }
+});
+
 test('offline, a reload comes from the cache, stays isolated and runs an example', async ({ page, context }) => {
   await openControlled(page);
   await context.setOffline(true);
