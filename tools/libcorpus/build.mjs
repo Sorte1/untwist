@@ -12,6 +12,7 @@ const BUILTINS = [...builtinModules, ...builtinModules.map((name) => `node:${nam
 const args = process.argv.slice(2);
 const option = (flag, fallback) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : fallback);
 const only = new RegExp(option("--only", "."));
+const [shard, shards] = option("--shard", "0/1").split("/").map(Number);
 const bundlers = option("--bundlers", "webpack,rollup,esbuild,vite").split(",");
 
 function writeTruth(dir, bundler, ids) {
@@ -36,7 +37,7 @@ async function webpack(app, dir, entry) {
     performance: { hints: false },
     resolve: { alias: { ...app.aliases }, fallback: Object.fromEntries(builtinModules.map((m) => [m, false])) },
     plugins: [new webpackLib.optimize.LimitChunkCountPlugin({ maxChunks: 1 })],
-    module: { parser: { javascript: { importMeta: false } } },
+    module: { parser: { javascript: { importMeta: false } }, rules: [{ test: /\.m?js$/, resolve: { fullySpecified: false } }] },
   };
   const stats = await new Promise((resolve, reject) => webpackLib(config, (err, result) => (err ? reject(err) : resolve(result))));
   if (stats.hasErrors()) throw new Error(stats.toString({ all: false, errors: true }));
@@ -64,7 +65,7 @@ async function rollup(app, dir, entry) {
     input: entry, external: BUILTINS, onwarn: () => {},
     plugins: [
       alias({ entries: Object.entries(app.aliases).map(([find, to]) => ({ find, replacement: to })) }),
-      replace({ preventAssignment: true, values: define(app.env) }),
+      replace({ preventAssignment: true, delimiters: ["(?<![\\w'\"`])", "(?![\\w'\"`])"], values: define(app.env) }),
       nodeResolve({ browser: true, preferBuiltins: false }),
       commonjs(), json(),
     ],
@@ -101,8 +102,8 @@ async function vite(app, dir, entry) {
 
 const RUNNERS = { webpack, rollup, esbuild, vite };
 const report = [];
-for (const app of apps()) {
-  if (!only.test(app.id)) continue;
+for (const [index, app] of apps().entries()) {
+  if (!only.test(app.id) || index % shards !== shard) continue;
   const dir = join(OUT, "bundles", app.id);
   mkdirSync(dir, { recursive: true });
   const appDir = join(HERE, app.root, "node_modules", ".apps", app.id);
