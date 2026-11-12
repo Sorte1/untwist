@@ -6,365 +6,185 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-12
+
+There is no 0.4.0: its planned scope ships in this release. Most of the work is a soundness
+review of the default lane, so some inputs that decoded in 0.3.1 now keep their decoder calls
+(with a note) where the rewrite could have changed what the program does. `--unsafe` keeps
+the rewrites webcrack makes.
+
 ### Added
 
-- Memory and time budgets: `--max-memory` (default 4 GiB) and `--timeout`, also as library
-  options and in the wasm build (1 GiB by default). An input that reaches a budget stops its passes
-  and keeps the output so far (`budget-memory`, `budget-time`); one that goes past the memory cap
-  before its passes can stop is passed through unchanged instead of exhausting the machine.
-  `--report` shows the budget and the memory peak. Only the memory an input works with counts
-  against the cap, not the other inputs and outputs the run holds, and the time limit covers
-  processing only: a slow reader of the output and `--fetch-wasm` (which keeps its own limits)
-  are never cut off by it.
-
-- Emscripten glue whose wasm module has no name section gets its imports named when the bound
-  function has the shape of an Emscripten library function and the module's import has its
-  signature: `_emscripten_memcpy_big`, `_emscripten_resize_heap`, `_emscripten_date_now`,
-  `_emscripten_get_now` and `_emscripten_get_heap_max`. Such a module must match the glue's import
-  object both ways, and a library function whose import has another signature names nothing; each
-  gives a warning that says what differs.
-- A wasm file loaded through an ES module `import`, `import()` or `export ... from`, as in the
-  wasm-bindgen bundler target, is listed among the wasm modules to supply.
-- A minified wasm-bindgen wrapper such as `function x(e,t){K.greet(e,t)}` takes the name of the
-  wasm export it calls, when it calls only that export and no other function calls it.
-  Calls to `__wbindgen_*` helpers do not count.
-- wasm-bindgen glue in a webpack 4 or 5 bundle that reaches its wasm module through
-  `import * as wasm` is named from the module: wrappers after the export they call, the
-  `__wbg_set_wasm` setter and the binding it fills, when the namespace is the only value the
-  setter is ever given. Every export the glue reads through the namespace must be in the module,
-  or nothing is named. Webpack bundles with numeric module ids are linked too.
-
-### Fixed
-
-- The constant folder no longer reads a property it does not model as `undefined`: `true.toString`,
-  `Math.SQRT2`, `Math.abs.length`, `({}).constructor` and the like are left unfolded, so an `eval`
-  layer built from them is no longer peeled to the wrong text.
-- Unminify no longer changes meaning in five shapes: a `null`/`undefined` check used as a callee,
-  a template tag or a `delete` operand stays a conditional instead of becoming `a?.b`; a labelled
-  loop whose head is split keeps its label on the loop (the moved statements go in front of the
-  label), so `continue L` still parses; `typeof x;` stays when `x` is not declared; member reads of
-  a script's top-level binding or an import are not merged into one destructuring; and an
-  assignment inside `with` keeps its comma sequence. JSX reconstruction leaves an automatic-runtime
-  call alone when `children` is not the last prop, appears twice or holds an array with holes.
-- Stateful decoders are no longer decoded wrongly when the self-rewriting template is not a plain
-  forwarder (the rewritten decoder reads a template parameter, declares more parameters than the
-  template forwards, or the template's leading declaration does more than fetch the array), when an
-  `flag === undefined && (flag = true)` gate is used as a value, when a memo miss returns something
-  other than what it stores, or when an init gate leaves behind a helper with its own mutable state.
-  Each such decoder is refused, or bails in the monitor, instead. A rotator's local helper is judged
-  by its declared body only when nothing else binds or writes its name, so a later
-  `var w = function () {...}` no longer makes the checksum skip calls and pick the wrong rotation.
-
-- An unpacked browserify bundle now loads the modules the bundle loads. Each `require` whose
-  request is in the module's dependency map names the file of the mapped module, so two versions
-  of one package, a bundled `events` or `buffer` shim and a module reached from two directories
-  link right. Every entry of a bundle with several entries runs from `index.js`, in order.
-- The string-array recognisers no longer rewrite programs they cannot prove equal. A rotator loop
-  moves into a function only when it is closed (no `return`, outer label, function declaration,
-  `eval`, `this` or `arguments`, and its `for` head stays as written); an arrow rotator that calls
-  `eval` stays an arrow; a single-use index that `arguments` can alias stays; a self-reassigning
-  decoder that reads the array in a parameter default is not lifted; the cookie rotator is
-  recognised only in its full template with unshadowed globals; `a["01"]` and `a["+1"]` are no
-  longer read as `a[1]`; and an `eval` layer that deletes or redefines through a value that may be
-  the global object is kept for `--unsafe`.
-- Many string arrays in one file no longer cost a pass run each: the string-array rewrites of
-  separate functions and the legacy lifts now happen in the same run, and a rotator loop beside
-  many function declarations is checked in linear time. 2,000 single-use arrays now decode in 1.2 s
-  and 31 MB instead of stopping at the round cap after 3 s and 405 MB. When the deobfuscate round
-  cap is reached after the string-array rewrites began, the program is kept as it was before
-  deobfuscation instead of in a half-rewritten form.
-- An unpacked esbuild bundle no longer hands a module a stale copy of a binding. A binding that
-  an `__esm` init assigns is now exported from `_runtime/esbuild.js` through a getter and read as
-  `runtime.name`; before, a module that read it after the init ran still saw `undefined`. A bundle
-  is left unpacked when `__commonJS`, `__esm` or another trusted helper is declared twice or
-  assigned, when a factory holds a `with` statement (AMD, UMD and Rollup too), and a helper that
-  reads `require`, `module`, `exports`, `__filename` or `__dirname` is no longer moved into the
-  runtime module.
-
-- Files written without semicolons are no longer refused as nesting too deep: the depth scan
-  now ends a statement at a line break or closing brace followed by a token that starts a new
-  statement, so 40,000 lines of `a = b.c(d)` or 40,000 `function f(){}` are processed. A chain
-  of tagged templates (a name followed by many empty template literals) costs nesting like a
-  call chain and is refused when it is too deep, instead of taking the worker to gigabytes of
-  memory.
-- `--rename` (every mode) keeps the names of the bindings a direct `eval` or a `with` body can
-  see: the names a string-literal `eval` payload reads, every binding on the scope chain of any
-  other direct `eval`, and every outer binding a `with` body reads, writes or declares. The report
-  note says how many bindings were kept. Before, those bindings were renamed and the note said
-  "renaming anyway". With `--unsafe`, which assumes that nothing observes scopes, they are still
-  renamed, and the note says so.
-
-- An unpacked module no longer loads the wrong file through a bare specifier. A require of a file
-  under the root `node_modules/` is written bare (`require("lib/index.js")`) only when node would
-  resolve it to that file; when a nearer `node_modules` directory in the output holds the same
-  name, or the name is that of a node core module, the relative path is written instead. A
-  sibling path starting with a dot (`.config/a.js`) is written with its `./`.
-- An AMD or UMD factory that declares a function named like one of its parameters is left as it
-  is. Unpacking it bound the dependency where the factory saw the function.
-- `JSON.parse("…")` is no longer replaced by its literal, and `!!` is no longer removed from an
-  array-method callback such as `xs.filter((v) => !!v)`, in a program that replaces `JSON.parse`
-  or that array method, or passes `JSON`, `Array`, `Array.prototype` or the global object around
-  as a value. The replaced function could return something else, so the rewrite changed what
-  the program did. `--unsafe` keeps both rewrites.
-- `-o DIR` without `--force` stops with exit code 2 when any file the run would write already
-  exists in `DIR`, and names it. Before, only `deobfuscated.js` and `bundle.json` were checked, so
-  a module path could replace an unrelated file. The current directory, the file system root and
-  `$HOME` are refused as output directories with and without `--force`, and an input file is
-  never overwritten or removed, also with `--force`.
-- A module file that cannot be written (a NUL byte in the name, a path segment over 255 bytes, a
-  path under another module's file, a directory that is not writable) is reported and skipped,
-  and the rest of the tree is written. Before, the first such file ended the run with part of the
-  tree on disk. `bundle.json` and the JSON report list only the modules that were written. A
-  write that fails on disk gives exit code 1.
-- A module id no longer becomes a file name that is unsafe to keep on disk: one with a control
-  character, one of `: < > " | ? *` or a backslash, a segment ending in a dot or a space, a
-  Windows device name (`CON`, `NUL`, `COM1`, ...), a `.git`, `.hg`, `.svn`, `.vscode`, `.idea`,
-  `.husky` or `.github` directory, or a dot-leading file name such as `.npmrc`. Such a module
-  gets a generated name and keeps its id in `bundle.json`. Module paths that differ only in case,
-  or where one is a directory of another, get distinct names, and `deobfuscated.js`,
-  `bundle.json` and `wasm/` are never used for a module.
-- Any number of module ids that normalise to one path get distinct names. Before, the 1001st
-  shared a name with another module, and naming them took quadratic time.
-- `a.b != null ? a.b : c`, `a.b && a.b.c`, `a.b || (a.b = c)` and `a.b ?? (a.b = c)` are no longer
-  merged into `??`, `?.`, `||=` and `??=` when the repeated operand is a property read or an
-  undeclared global: a getter or proxy ran twice before and once after. The merge now needs
-  `this`, a literal or a declared variable (for an assignment target, such an object and key).
-  `--unsafe` still merges call-free member chains, and the temporary-variable forms Babel,
-  TypeScript and terser emit convert as before.
-- A stripped `function anonymous(...)` shell no longer turns its body's declarations into script
-  globals. When the body still declares a `var`, function, class, `let` or `const` at its own
-  level, or calls `eval` directly, it is printed inside `(function () { ... })();`, so code that
-  reads the global object (such as `globalThis[name]`) sees what the called shell saw. Before,
-  a decoder the deobfuscator kept (or every function with `--no-deobfuscate`) became reachable
-  as a global. Shell parameters the body never reads are dropped instead of hoisted as `var`.
-- The safe lane proves a minified webpack 4 bootstrap like the plain one: an arrow function
-  bootstrap `(e => { ... })([...])`, a module cache read as `(cache[id] || (m = cache[id] = {...},
-  table[id].call(...), m)).exports`, module objects passed from a record assigned in that
-  sequence, and bootstrap keys split into concatenations of strings and decoded strings. A whole bundle obfuscated with uglify-js or terser therefore no longer refuses for a
-  bootstrap the check could not see.
-- The safe lane keeps trusting `Object.create` and `bind` when the program defines own properties,
-  under any key, on objects those natives made: `Object.create` called on the unshadowed `Object`
-  and `bind` called on a function literal. Such a definition cannot be the first patch of the
-  natives that made the object, so webpack's `require.d` descriptors (`{enumerable: !0, get: r}`)
-  and computed keys no longer refute them. A `bind` called on any other object, and any write to
-  `Object`, its definers or a built-in, still refuses as before.
-- When the safe lane proves a webpack 4 bootstrap, an object that `require.d` or `require.r`
-  defines on counts as fresh if every call the proof names passes a fresh object: a module's
-  `exports`, an `Object.create(null)` namespace or a function literal. Whole bundles whose only
-  unknown keys were the export names `require.d` defines therefore lose their string array,
-  decoders and rotator in the safe lane too.
-- Under `--unsafe`, the self-defending states class that old javascript-obfuscator releases put
-  inside rc4 and base64 decoders (`this.states = [1, 0, 0]`, `newState`, `checkState`, `runState`,
-  `getState`, run once as `new o(dec).checkState()`) is dropped when its variable is read nowhere
-  else and its own state test passes on the printed source, so the decoder decodes. The version
-  matrix decodes 18 more cells under `--unsafe`.
-- The safe lane decodes a program whose `for (const key in globalThis)` loop only reads the
-  names (comparisons, `typeof`, `.length`, a string method call in a test), instead of refusing
-  the unit as a global reach; the machinery is kept, since the program observes the global
-  names. A key that is concatenated, stored, passed on or used as a property key still refuses.
-- A domain lock whose predicate reads `s["len" + "gth"]` from split decoded strings, or whose
-  arguments are folded number expressions (`0x2 * 0x2`), is recognised like the plain lock.
-- A domain lock that dead-code injection has wrapped in opaque tests between two decoded strings
-  (`if (dec(1) !== dec(2)) { ... } else { ... }`) in its loops and predicate is recognised: the
-  branch the decoded strings pick is the one checked, the other never runs.
-- The obfuscator fuzz files a domain-lock sample that also patches a built-in by a computed key
-  under that sound key-reach refusal.
-- A domain lock that control-flow flattening has routed through a local storage object
-  (`st.aBcDe(pred, key, 4, [...])`, `st.nEqQx(s.length, n)`, `st.sAmEx(st.kQx, st.kQy)`) is
-  recognised: calls into an untouched object literal run the stored function, and stored string
-  fields and comparisons settle the opaque tests. A storage object that is written, reassigned or
-  passed on still refuses.
-- The same holds when the storage function forwards to another storage forwarder
-  (`sub.vW = function (f, a, b, c) { return st.aBcDe(f, a, b, c); }`), as control-flow flattening
-  emits inside a nested callback. Each step must pass every parameter on in order; one that
-  reorders or drops them still refuses.
-- A webpack `require.n` getter is replaced by `x.default` only when the required module is proven
-  to be a harmony module, and at each use rather than once at the declaration. Before, the
-  unpacked tree read `undefined` for a CommonJS module that set `__esModule` late or replaced
-  `module.exports`, for a circular import, and left `g()` calls with no helper behind them on
-  string module ids. An unproven getter keeps `require.n`, served by `_runtime/webpack.js`.
-- A parameter or local named `require` inside a webpack module is no longer rewritten as the
-  bundle's require: its arguments stay as written and it is not renamed to the runtime.
-- Control-flow unflattening no longer changes what a program does in these cases; each is now
-  left as written, with a note. A dispatcher whose counter does not start at zero
-  (`var i = 1; while (true) { switch (order[i++]) ... }`) was laid out from its first case. A
-  dispatcher whose counter or order array is declared a second time was read from the first
-  declaration. A `let`, `const`, class or function declared in one case and used in another, or
-  one that would become a script global, was lifted out of the switch, which removed the
-  "before initialization" error the program threw or let it shadow an outer name.
-- A flattened storage object that is declared twice (`var o = {...}; var o = {...};`) is no longer
-  inlined from the first declaration.
-- A storage object key that is not an identifier name, such as `o["a-b"] = 1`, is folded into the
-  object literal as a quoted key instead of the invalid `a-b: 1`.
-- An indirect `eval` stays indirect. A storage forwarder `function (f, x) { return f(x); }` called
-  with `eval` was inlined to `eval(x)`, and `(true ? eval : y)(x)` was folded to `eval(x)`; both
-  turned a global eval into one that reads and writes the caller's local variables.
-- A statement that control-flow unflattening moved ahead of the `var` assignment it depends on is
-  no longer treated as running after it. A call to a small pure function is not folded with a
-  constant that is assigned later, and `var x; ... x = 1;` is not merged into `var x = 1` past a
-  read that now comes first. The order of two statements is taken from where they stand in the
-  tree, not from their positions in the input. A call moved behind its constant now folds.
-- A script without `"use strict"` is no longer treated as strict by the built-in alias proofs.
-  In such a script `this` at the top level and in a plainly called function is the global
-  object, so a write through it can replace a built-in the decoder uses; a program that does
-  this, or writes an unknown key through such a `this`, keeps its decoder calls instead
-  of getting strings decoded with the original built-in. The call wrappers obfuscator.io emits
-  for self-defending and debug protection pass such a `this` along, so some of those outputs now
-  keep the decoder in the default lane (`--unsafe` decodes them).
-- A webpack var injection (`(function (a) { ... }).call(this, x)`) is spliced into its module only
-  when that cannot change the program: the call is the whole module, the counts match, and the
-  body has no `return`, `arguments`, directive or declaration that collides with a parameter or a
-  module-scope name. Before, any such call was spliced, so a hoisted function declaration could
-  lose to the new `var`, a `return` ended the module and locals leaked into it.
-- A webpack or browserify bundle whose module factory reads a binding of the code around it (a
-  variable beside a nested bundle, a UMD wrapper's external parameter), its own `arguments`,
-  calls `eval` directly or holds a `with` statement is no longer split into module files that cannot see those names. No
-  bundle is written and a note names the module and what it reads.
-- Webpack 5 detection scans a statement list for the require function once. Before, a file with
-  many object-literal declarations and no bundle took quadratic time.
-
-- Program text handed to the DOM keeps the decoder calls it may reach, as `eval` of unknown text
-  does: `document.write`/`writeln`, `insertAdjacentHTML`, `createContextualFragment` and
-  assignments to `innerHTML`, `outerHTML` or `srcdoc`, and, when the program can create a script
-  element, assignments to `text`, `textContent`, `innerText` or `src` and text nodes appended to
-  it. Before, markup such as `<img onerror=...>` built from decoded strings was inlined and could
-  run different code than the input.
+- Memory and time budgets: `--max-memory` (default 4 GiB; 1 GiB in the wasm build) and
+  `--timeout`, also as library options. An input that reaches a budget keeps the output so far
+  or is passed through unchanged, and `--report` shows the budget and the memory peak. Only
+  processing counts, not a slow reader of the output or `--fetch-wasm` (#182, #204, #236).
+- `--source-map` writes a source map from the output back to the input, beside every written
+  file or inline, one per unpacked module; `--input-source-map` maps through the input's own
+  map. The library has `Options::source_map`, the wasm build `RunOutput.source_map`. The code
+  is byte-identical with and without it (#186, #194, #261).
+- `--rename smart`, evidence-based names that keep program behaviour: machine-made bindings are
+  named from what the code shows (loop counters, callback parameters, `catch`, `require` and
+  `import`, destructured keys, the `createElement` tag and the like), under the same soundness
+  guards as the other rename modes. The playground offers it too (#279).
+- One step pool per input for string-array decoding (32 times the per-decode fuel, or 2,000
+  steps per input byte if larger). Once it is spent the remaining decoders stay encoded with a
+  note, so a file of many spinning decoders no longer runs for hours (#225).
+- Wasm glue naming: Emscripten imports of a module without a name section are named from the
+  library shape and signature (#153); wasm files loaded through ES module `import`, `import()`
+  or `export ... from` are listed (#160); a minified wasm-bindgen wrapper takes the name of the
+  export it calls (#161); bindgen glue in a webpack 4 or 5 bundle that reaches its module
+  through `import * as wasm` is named (#170).
 
 ### Changed
 
-- The checks that keep folding away from patched built-ins judge each variable once instead of once
-  per use: a counter used as a key after every write (`i=i+1;q[i];`), a reused loop variable, or two
-  variables written from each other no longer make the cleanup stage quadratic or worse. Writes to a
-  free global are looked up in a set built once, and a webpack 4 bootstrap finds each module id by
-  hash, so a 7.7 MB bundle of 80,000 modules no longer spends 14 s there. Output is unchanged.
-
-- Unminify drops empty statements (`;`) from statement lists, such as the one left behind once a
-  dead `if (false)` block is removed. An empty statement that keeps a string out of a function's
-  directive prologue stays.
-
 - Large string-array bundles deobfuscate about five times faster under `--unsafe` (a 6 MB
-  Krunker build: 98 s to 20 s) with the same output. Decoder wrappers find their function bodies
-  in one walk instead of one walk per wrapper, nested control-flow forwarder calls such as
-  `o.add(o.add(a, b), c)` are inlined in one pass instead of one level per pass, every
-  `var o = {}; o.k = v;` run in a statement list is folded in one pass, and the rotator searches
-  for several string arrays share a walk.
-
-- A program with many flattened storage objects that are written after their declaration no
-  longer walks the whole program once per object to find the branches each one decides; one
-  walk serves all of them. 2000 such objects: 12.8 s to 1.2 s in a debug build.
-
-- An RC4 string decoder whose base64 step is an inline function (javascript-obfuscator 0.x after
-  uglify, as in Krunker) runs its key schedule and keystream loops natively, with the same steps
-  charged and the same output: a 6 MB Krunker build spends 54 % fewer instructions under
-  `--unsafe`.
-
-- The decoder interpreter appends array elements without a resize, and the init-order check
-  sorts its reference sites by value: a 6 MB Krunker build spends 2 % fewer instructions under
-  `--unsafe`, with the same output.
-
-- While the decoder wrappers of a lifted string array unwrap one layer per round, those rounds
-  run only the wrapper and decode passes and skip the stages that have nothing to do: a 6 MB
-  Krunker build spends 10 % fewer instructions under `--unsafe`, with the same output.
-
-- The native RC4 decoder fills its 256-entry state array in one batch when the step budget
-  covers the whole loop, with the same steps and heap charged and each element written as
-  before: a 6 MB Krunker build spends 5 % fewer instructions under `--unsafe`, with the same
-  output.
+  Krunker build: 98 s to 20 s), with the same output (#144). Running the inline-atob RC4
+  decoder natively (#156, #169), interpreter tweaks (#162) and wrapper-only rounds (#168) take
+  further instructions off.
+- Costs that grew quadratically or worse are gone, with the same output: patch checks per use
+  and webpack 4 module ids (#203), many flattened storage objects (#179), alias flows (#212),
+  fresh names, kept rotations and strictness lookups (#218), array alias chains (#221), the
+  memo monitor (#222), else-if ladders, pure-call nests and method chains (#239), decoder
+  machinery removal (#251), method calls on one variable (#264) and many string arrays in one
+  file (#205). The alias check holds one copy of each decoded text (#253).
+- Unminify drops empty statements from statement lists (#141).
+- The playground's language features work on outputs up to 16 MiB, up from 12 MiB (#241).
+- `docs/known-divergences/deobfuscate.md` lists the shapes where the default lane still does
+  not take a value for the global object (#281).
+- `docs/known-divergences/limits.md` says that regex backtracking memory is outside the heap
+  budget (#272).
+- CI runs the test suite in four parallel shards (#278). A release runs only from a commit on
+  `main` whose CI passed, and every workflow action is pinned to a commit (#172).
 
 ### Fixed
 
-- Wasm glue names found in a bundle module now also apply to that module's function in the
-  combined `deobfuscated.js`. Before, the combined file was checked against the module on its own
-  and kept the minified names when another module held an object like `{ a: { z: 1 } }`, or when
-  two modules each loaded a wasm module.
-- Under `--unsafe`, the minified atob set-up of old decoders
-  (`try { var t = Function(...)() } catch (e) { t = window }`) is dropped when the decoder later
-  reuses `t` only after overwriting it, as in `return void 0 === (t = memo[k]) ? ... : t`. A
-  write on one branch of a conditional or one side of `&&`/`||` does not count. A control-flow
-  proxy object assigned inside a sequence (`f((x = 13, d = { ... }, g(d.k(a, b))))`) moves to its
-  empty `var d;` declaration when every other use of `d` comes later in that sequence. The version
-  matrix decodes 5 more cells under `--unsafe`.
-- A decoder whose local alias of a function string array is later reused as a temporary
-  (uglify-js output of javascript-obfuscator 4.x and 5.x: `x += t[0], t = memo[x]` or
-  `e = e[0], ..., e = memo[k]`) decodes. The first write must be a top-level statement of the
-  decoder, every earlier use of the alias must read one entry, and no write may assign the array
-  itself.
+#### Default lane soundness
 
-- A function string array's rotator loop that uglify-js left inline in a function body
-  (`for (var u = arr(); ;) try { ... } catch (e) { ... }` beside the module code) is wrapped back
-  into its own IIFE, with the decoder wrappers used only by the loop, when nothing else reads the
-  loop's variables or wrappers and the loop uses no `this`, `arguments`, labels, `return`, `yield`
-  or `await`. The version matrix decodes 2 more cells in each lane.
+- The checks for a patched built-in or a reach of the global object see more: a script without
+  `"use strict"` (#187), a sloppy function's `this` (#231), a built-in reached through a value
+  or code run from text (#220), the string and RegExp hooks such as `Symbol.split` (#214),
+  `Reflect.set` receivers and parameter writes visible through `arguments` (#247), arrays or
+  spreads as keys, object fields, `create`, `bind` and `import()` of an unknown URL (#250),
+  the whole function a `Function` call builds (#210), names bound more than once (#230), a
+  sloppy block function as a write to its `var` (#209, #259), program text handed to the DOM
+  (#206), a `delete` through an optional chain (#219), and frame keys built at run time,
+  reflective reads and code text (#270). Such programs keep their decoder calls.
+- A string array is no longer decoded when the program may replace a built-in through an
+  element of a host call's result or through a function the `Function` constructor builds
+  from code text (#280).
+- Decoder calls are not rewritten when an argument is written conditionally or twice, a sloppy
+  block function shares a name, or the wrapper is async, a generator or has non-plain
+  parameters; this fixes a wrong RC4 key on uglify output (#235). A call with a ternary
+  argument is decoded only when every branch decodes (#276).
+- Memo decoders that read another call's memo entry are refused (#143). Self-rewriting
+  templates, init gates and rotator helpers are proven instead of assumed (#193).
+- The string-array recognisers rewrite only shapes they can prove (#191), and six passes order
+  their decisions by tree position instead of source position (#197).
+- Control-flow unflattening leaves a dispatcher as written when its counter does not start at
+  zero, its counter or order array is declared again, shares a name with a block function, can
+  be reached by a direct `eval` or is a script global. Block-scoped declarations are not
+  lifted across cases, an indirect `eval` stays indirect, a storage object declared twice is
+  not inlined and statement order comes from the tree (#179, #245).
+- The self-defending call controller and debug protection are removed only when the code is
+  the obfuscator's own; `merge-object-assignments` folds only values that cannot throw or run
+  code; `evaluate-globals` leaves `atob`, `unescape` and `decodeURI(Component)` alone when the
+  program may replace them (#202).
+- An `eval` layer is not peeled when its code can reach `Object.defineProperty`, `Reflect` or
+  the global object (#233), and the constant folder no longer reads properties it does not
+  model as `undefined` (#198).
+- Code a pass copies into the program is resolved where it lands, so later passes no longer
+  misread or misrename it (#256).
+- When several scripts are processed together, a top-level binding another input uses or
+  redeclares is not inlined, removed or renamed (#268).
+- Functions are not turned into arrows or given default parameters when the program may read
+  their `.arguments` or `.caller` (#232, #270).
+- A stripped `function anonymous(...)` shell whose body declares names is printed inside a
+  called function instead of making them globals (#163); async and generator shells are kept
+  (#197).
+- Control-flow object calls nested more than 256 deep are left in place with a note (#252);
+  hostile parameter and domain-lock shapes no longer make the global-reach check run for
+  minutes (#234); a long `!` or `typeof` chain is linear (#215).
+- game.js no longer needs about 100 MB more memory than in 0.3.1 (#260).
 
-- A function holding an inline rotator loop beside other code (javascript-obfuscator's IIFE
-  wrapper after uglify-js, holding the string array, its decoder and the whole program) was taken
-  for the rotator and removed as decoder machinery, so the output was empty, in both lanes.
-  remove-decoder-machinery now keeps a unit whose rotator reads or writes anything other than its
-  own bindings, the string array and its decoders.
+#### Decoding coverage
 
-- Plain string arrays of javascript-obfuscator 0.x to 2.18 (`var _0x1234 = [...]` at the top of a
-  script) decode in the default lane when code such as `words[_0x5678('0x8')](' ')` only looks
-  like it may reach the array by name through the global object. The check now runs again with the
-  decoded keys once the unit is decoded; when it still finds a reach, or the unit does not decode,
-  the input is processed again with the array left as written. The version matrix decodes 74 more
-  cells in the default lane.
+- More javascript-obfuscator output decodes: plain arrays of 0.x to 2.18 that only look
+  reachable through the global object (74 more version-matrix cells in the default lane)
+  (#165); `arguments`-memo decoders (#147, #148, #150); arrow rotators inside declarations
+  (#151); inline rotator loops (#152); an array alias reused as a temporary (#164); minified
+  webpack 4 bootstraps in the safe lane (#171, #195, #199); domain locks with split strings,
+  opaque tests, storage objects, chained forwarders or a reused key variable (#142, #145,
+  #154, #157, #166); a for-in over the global object that only reads names (#145). Under
+  `--unsafe`, the minified atob set-up (#155) and the self-defending states class (#167).
+- A function holding an inline rotator loop beside other code is no longer removed as decoder
+  machinery, which left the output empty (#146).
+- Wrapper calls terser folded into a sequence before a concatenation (#274), a wrapper declared
+  as a block function (#267) and member reads into a function-local object (#265) decode or
+  merge again.
+- The evaluator follows the language for loop variables after `for-in`/`for-of`, `const`
+  assignment, `lastIndex`, `"@@toPrimitive"` and `toJSON`, and refuses parameter defaults that
+  read their own or later parameters (#184). Replace expansions, key enumeration, `switch`
+  comparisons and regexp work are charged to the budgets (#229).
 
-- uglify-js output of javascript-obfuscator 2.19 and later decodes when the rotator of a function
-  string array is an arrow IIFE that uglify moved into a declaration
-  (`let a = dec, b = ((() => { for (var e = dec, a = arr();;) ... })(), {})`) or to the head of a
-  comma sequence: the declaration is split at the rotator and the arrow becomes a function when it
-  uses no `this`, `arguments`, `super` or `new.target`. The version matrix decodes 7 more cells
-  with `--unsafe` and 1 more in the default lane; 12 more cells now name the refusal that really
-  blocks them instead of "array reached outside".
+#### Unpack
 
-- The memo proof now sees `let`/`const` in blocks and loop heads and `catch` parameters as their
-  own bindings (`for (let e = 0, n, t, r = 0; ...)` in a minified base64 helper no longer counts as
-  a read of the decoder's parameters), and the write-only local sweep also drops nested literal
-  writes such as `n = (n = -1048) - -688` and `t = t = -1013` left in webpack's
-  `__webpack_require__.n` once its proxy key is decoded. The version matrix decodes 10 more cells
-  with `--unsafe` and 3 more in the default lane.
+- Bundles are unpacked only when their runtime is proven: webpack (#185, #249), Parcel and
+  Metro (#192, #200, #227, #240), esbuild (#174, #211), UMD, Bun, Turbopack and Closure
+  (#223). Otherwise nothing is written and a note says why.
+- browserify requires link through each module's dependency map (#190, #226); a bare
+  specifier is written only where node resolves it to the target (#181); esbuild runtime
+  bindings stay live (#174); webpack's `require.n` becomes `x.default` only for a proven
+  harmony module, and a local `require` is left alone (#178); Parcel and Turbopack chunks link
+  only where their loader loads them (#237).
+- Statements that read the bundle's `this`, `new.target`, `import.meta` and the like stay out
+  of `_runtime/*.js` (#201); a module that declares `require`, `module` or `exports` itself
+  gets that binding renamed (#238); `--split-hoisted` uses linear memory and stops cleanly on
+  a budget (#216); an arrow factory that uses the bundle's `this` is refused (#226).
 
-- The same `arguments`-memo decoders also decode when their wrappers pass a varying second
-  argument the decoder never reads: the memo proof judged every argument as read because the
-  decoder captures `arguments`, and it counted a helper's own `for (var r ...)` as a read of the
-  decoder's parameter `r`. The version matrix decodes 12 more cells with `--unsafe` and 3 more in
-  the default lane.
+#### Unminify, untranspile and rename
 
-- Minified javascript-obfuscator 2.x and 3.x decoders that keep their memo in the `arguments`
-  object (`n = arguments` ... `n[key] = value`) decode again when a helper inside the decoder has a
-  parameter or local of the same name (`function (n) { ... n.charAt(i) ... }`). The check for other
-  uses of the memo matched by name, so the helper's own `n` counted as a use of the memo. The
-  version matrix decodes 33 more cells with `--unsafe` and 12 more in the default lane.
+- Unminify no longer changes meaning in five positions (#176), merges a repeated operand into
+  `??`, `?.`, `||=` or `??=` only when one read is the same (#188, #228), rewrites
+  `JSON.parse` and array-callback `!!` only while the built-ins are intact (#183), keeps
+  default-parameter guards that mean something else (#189), keeps merged template text valid
+  (#207) and keeps spans, inlining and numeric keys right (#213).
+- Untranspile identifies a helper by a SHA-256 digest and trusts it only where its binding
+  provably holds it (#257). `--unsafe` class and async recovery is fixed in several shapes,
+  and TypeScript's `__awaiter(void 0, …)` converts (#246). With `--unsafe`, JSX hoists keep
+  evaluation order (#262).
+- `--rename` keeps the bindings a direct `eval` or a `with` body can see (#177) and those that
+  hoisting, function names, `.name` reads or host globals such as `status` depend on (#208),
+  and no longer slows down quadratically (#266).
 
-- The safe lane follows a domain lock that reuses the variable holding a found key for the domain
-  list in a later loop (`var x = list[i]` as the loop body's first statement): reads inside that
-  loop see the list entry, not the found key, so the lock's scan of the global object is bounded
-  again. A read after the loop, before the rewrite or in a closure still keeps the unit refused.
-  The obfuscator option matrix now files those cells, and the debug-protection cells whose only
-  failure is the global-names refusal, under the refusal that actually blocks them.
+#### Output, CLI and wasm
 
-- A memoising string decoder that reads a memo entry other than its own call's key (`m[t - 1]`,
-  `memo[1 + arr[0]]`) is no longer decoded, in both lanes. Its result depends on which calls ran
-  before it, and untwist does not evaluate the calls in run order, so the decoded strings could
-  differ from what the program prints. The memo monitor now also records missed reads, and every
-  read of the memo must use the key the decoder writes.
+- `-o DIR` never replaces an existing file or an input, refuses `$HOME` (and the Windows home
+  directory), the root and the current directory, gives unsafe module ids generated names and
+  reports a module file it cannot write instead of stopping (#173, #224, #244).
+- Text from the input is printed with control and text-direction characters escaped in
+  diagnostics, reports and banners (#255); printed code writes hidden characters in literals
+  and comments as escapes (#217).
+- Files without semicolons are no longer refused as nesting too deep, and chains of tagged
+  templates count as nesting (#175).
+- Wasm glue names found in a bundle module also apply to the combined output (#158); script
+  globals and Annex B names in the glue are kept and a wasm literal is replaced by its path only
+  where it is passed to `fetch` (#242); the wasm `run()` entry starts the budget clock (#244).
+- Playground: hostile link fragments no longer stop the page and big results stay responsive
+  (#248); budget and unpack diagnostics are labelled (#254); a fetched wasm body is capped while
+  it is read, and a wasm panic gives exit code 1 (#269).
 
 ### Security
 
-- `--fetch-wasm` is bounded, since the URLs it requests come from the input. One run fetches at
-  most 16 modules and 64 MiB within 120 seconds; a reference past a limit is named in a note and
-  the run goes on. Each URL is printed to stderr, with control characters escaped, before it is
-  requested. A redirect is followed at most three times and each target is checked like the
-  first URL. A host that resolves to a loopback, link-local, private, shared, unspecified,
-  multicast or reserved address (IPv4-mapped and other embedded forms included) is not
-  contacted, the connection goes to the address that was checked, and no proxy from the
-  environment is used. The new `--fetch-wasm-local` lifts the address check for input that
-  loads its wasm from your own machine or network.
-- `--wasm-base` is joined to a relative reference the way a browser does it, so a base without a
-  path (`https://x.dev`) no longer gives `https:/pkg/a.wasm`.
-- An internal error while wasm modules are supplied, fetched or named no longer ends the run
-  after the code was produced: the output is written without that step, a warning names it, the
-  exit code is 1 and `--json` carries `"wasm_panicked": true`.
+- `--fetch-wasm` is bounded (16 modules, 64 MiB, 120 s, three redirects) and contacts no
+  loopback, private or reserved address unless `--fetch-wasm-local` is given; each URL is
+  printed first. `--wasm-base` is joined like a browser joins it, and an internal error in the
+  wasm step no longer ends the run (#180).
+- `--input-source-map` cannot point the written map outside `input-map:///` through its
+  `sourceRoot` (#261).
+- The playground sends its Content-Security-Policy as a header with `frame-ancestors 'none'`
+  and related directives, and checks a wasm URL the way the CLI does before fetching it (#258,
+  #273). Release builds no longer restore the cache ordinary pushes write (#258).
 
 ## [0.3.1] - 2026-11-09
 

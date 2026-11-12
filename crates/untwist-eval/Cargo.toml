@@ -17,7 +17,7 @@ value-api = []
 test-hooks = ["value-api"]
 
 [dependencies]
-untwist-core = { path = "../untwist-core", version = "0.3.1" }
+untwist-core = { path = "../untwist-core", version = "0.5.0" }
 oxc_allocator.workspace = true
 oxc_ast.workspace = true
 oxc_ast_visit.workspace = true
