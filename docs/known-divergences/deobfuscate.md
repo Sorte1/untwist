@@ -412,7 +412,9 @@
   `Object.prototype`. Three premises bound the check. **1. Code from outside the file** (`require`
   of a relative path or of a built-in module such as `util` or `vm`, `import()`, other scripts on
   the page) is taken as writing nothing, so a host API that writes a realm prototype
-  (`require('util').inherits`) is not seen.
+  (`require('util').inherits`) is not seen. This covers `import()` only when its specifier is a
+  string naming another file: an `import()` of a computed specifier or of a `data:`, `blob:` or
+  `javascript:` URL runs code the file itself carries and is judged like `eval` of unknown text.
   **2. Classic-script globals and the global object:** a top-level `var` or function is a property of
   the global object in a script, and code that holds the global object can read, call or overwrite
   it, or a built-in, at any time. The check does not follow where the global object flows. It asks one flow-insensitive question, whether any code may hold the

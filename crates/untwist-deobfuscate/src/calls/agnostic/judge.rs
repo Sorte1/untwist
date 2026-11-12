@@ -441,7 +441,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                 self.check_template(template.span, &template.quasi, self.unbounded_text());
             }
         }
-        if saturated_while_watching {
+        if saturated_while_watching || !self.element_bounds_hold() {
             return self.into_saturated();
         }
         let (chains, natives) = self.assumptions_hold();
@@ -454,6 +454,21 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
         self.out.pending_texts = self.pending_texts.take();
         (self.out, chains, natives)
+    }
+
+    fn element_bounds_hold(&self) -> bool {
+        !self.bounds_used.get()
+            || !self.out.sites.iter().any(|site| {
+                matches!(
+                    site.root,
+                    ProtoRoot::Array | ProtoRoot::Object | ProtoRoot::Either
+                ) && match &site.key {
+                    AKey::Named(name) => {
+                        !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit())
+                    }
+                    AKey::Index | AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
+                }
+            })
     }
 
     pub(super) fn assumptions_hold(&self) -> (bool, bool) {
@@ -486,7 +501,10 @@ impl<'s, 'a> Sites<'s, 'a> {
             return true;
         }
         let refutes = |key: &AKey<'a>| match key {
-            AKey::Named(name) => FRESH_REFUTERS.contains(&name.as_ref()),
+            AKey::Named(name) => {
+                FRESH_REFUTERS.contains(&name.as_ref())
+                    || (self.constructor_used.get() && name == "constructor")
+            }
             AKey::Index => false,
             AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
         };

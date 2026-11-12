@@ -5,6 +5,7 @@ use oxc_span::GetSpan;
 use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::assembled::{assembled_tables, AssembledTables};
 use super::bootstrap::{self, Resolve};
@@ -90,6 +91,28 @@ pub(super) fn reads_arguments(function: &Function<'_>) -> bool {
         }
     }
     scan.found
+}
+
+const INLINE_SCHEMES: [&str; 3] = ["data:", "blob:", "javascript:"];
+
+pub(super) fn imports_another_file(source: &Expression<'_>) -> bool {
+    let text = match source.without_parentheses() {
+        Expression::StringLiteral(text) => js_text(text.value),
+        Expression::TemplateLiteral(template) if template.expressions.is_empty() => {
+            match template.quasis.first().and_then(|quasi| quasi.value.cooked) {
+                Some(cooked) => js_text(cooked),
+                None => return false,
+            }
+        }
+        _ => return false,
+    };
+    let url: String = text
+        .trim_start_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect::<String>()
+        .to_ascii_lowercase();
+    !INLINE_SCHEMES.iter().any(|scheme| url.starts_with(scheme))
 }
 
 pub(super) fn function_uses_this(function: &Function<'_>) -> bool {
@@ -235,6 +258,11 @@ pub(super) struct Bindings<'s, 'a> {
     pub(super) filters: std::rc::Rc<Filters<'a>>,
     pub(super) stable: Stable<'s>,
     script: bool,
+    plain_element_writes: FxHashSet<u32>,
+    pub(super) element_values: FxHashMap<SymbolId, Vec<&'a Expression<'a>>>,
+    pub(super) other_fields_written: FxHashSet<SymbolId>,
+    pub(super) accessed: FxHashMap<SymbolId, Vec<&'a MemberExpression<'a>>>,
+    pub(super) called: FxHashSet<u32>,
 }
 
 impl<'s, 'a> Bindings<'s, 'a> {
@@ -279,6 +307,11 @@ impl<'s, 'a> Bindings<'s, 'a> {
             filters: std::rc::Rc::default(),
             stable: BoundOnce::with_judged_eval(scoping).table(),
             script: !untwist_core::semantic::has_module_syntax(program),
+            plain_element_writes: FxHashSet::default(),
+            element_values: FxHashMap::default(),
+            other_fields_written: FxHashSet::default(),
+            accessed: FxHashMap::default(),
+            called: FxHashSet::default(),
         };
         bindings.visit_program(program);
         bindings.defs.finish();
@@ -596,8 +629,35 @@ impl<'s, 'a> Bindings<'s, 'a> {
         if let Expression::Identifier(id) = member.object().without_parentheses() {
             if let Some(symbol) = self.reference_symbol(id) {
                 self.entry(symbol).set(FIELDS_WRITTEN);
+                if !self.plain_element_writes.contains(&member.span().start) {
+                    self.other_fields_written.insert(symbol);
+                }
             }
         }
+    }
+
+    fn note_element_write(&mut self, it: &AssignmentExpression<'a>) {
+        let AssignmentTarget::ComputedMemberExpression(member) = &it.left else {
+            return;
+        };
+        let Expression::Identifier(id) = member.object.without_parentheses() else {
+            return;
+        };
+        let plain = it.operator == AssignmentOperator::Assign
+            && matches!(
+                member.expression.without_parentheses(),
+                Expression::NumericLiteral(_)
+            )
+            && matches!(
+                it.right.without_parentheses(),
+                Expression::StringLiteral(_) | Expression::NumericLiteral(_)
+            );
+        let Some(symbol) = self.reference_symbol(id).filter(|_| plain) else {
+            return;
+        };
+        self.plain_element_writes.insert(member.span.start);
+        let value = self.alloc(&it.right);
+        self.element_values.entry(symbol).or_default().push(value);
     }
 
     fn note_read_through(&mut self, expr: &Expression<'_>) {
@@ -733,6 +793,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
         if matches!(it.left, AssignmentTarget::ObjectAssignmentTarget(_)) {
             self.note_read_through(&it.right);
         }
+        self.note_element_write(it);
         if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
             if let Some(symbol) = self.reference_symbol(id) {
                 self.plain_targets.insert(id.span.start);
@@ -791,6 +852,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
             if let Expression::Identifier(id) = member.object().without_parentheses() {
                 if let Some(symbol) = self.reference_symbol(id) {
                     self.entry(symbol).set(METHOD_CALLED);
+                    self.called.insert(member.span().start);
                 }
             }
         }
@@ -821,6 +883,7 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
             if let Expression::Identifier(id) = member.object().without_parentheses() {
                 if let Some(symbol) = self.reference_symbol(id) {
                     self.entry(symbol).set(METHOD_CALLED);
+                    self.called.insert(member.span().start);
                 }
             }
         }
@@ -846,6 +909,8 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
             }
             if let Some(symbol) = self.reference_symbol(id) {
                 self.entry(symbol).set(ESCAPING_REF);
+                let member = self.alloc(it);
+                self.accessed.entry(symbol).or_default().push(member);
             }
             return;
         }

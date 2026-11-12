@@ -1,9 +1,11 @@
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
+use oxc_span::GetSpan;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 use std::borrow::Cow;
+use untwist_core::ast_util::js_text::js_text;
 
 use super::assembled::literal_fields;
 use super::bind::{
@@ -17,6 +19,7 @@ pub(super) struct Fresh<'s, 'a> {
     pub(super) bindings: &'s Bindings<'s, 'a>,
     pub(super) sealed: std::cell::RefCell<FxHashMap<SymbolId, Fields<'a>>>,
     pub(super) memo: Memo,
+    pub(super) resolve: super::bootstrap::Resolve<'s>,
 }
 
 type AssumedKey = [Option<SymbolId>; ASSUMED_KEY_LEN];
@@ -46,7 +49,7 @@ pub(super) fn array_element<'k, 'a>(
     elements.last()?.as_expression()
 }
 
-impl<'a> Fresh<'_, 'a> {
+impl<'s, 'a> Fresh<'s, 'a> {
     pub(super) fn symbol(&self, id: &IdentifierReference<'_>) -> Option<SymbolId> {
         id.reference_id
             .get()
@@ -209,6 +212,23 @@ impl<'a> Fresh<'_, 'a> {
         }
     }
 
+    pub(super) fn holds_function_or_primitive(&self, id: &IdentifierReference<'_>) -> bool {
+        self.defs(id).is_some_and(|defs| {
+            !defs.fields_written
+                && match defs.inits {
+                    [] => defs.callable,
+                    [Some(init)] => {
+                        function_valued(init)
+                            || super::live::iife_returns_only(init, |value| {
+                                function_valued(value)
+                                    || super::holds::primitive_result(value.without_parentheses())
+                            })
+                    }
+                    _ => false,
+                }
+        })
+    }
+
     pub(super) fn callee_function<'k>(
         &self,
         callee: &'k Expression<'a>,
@@ -362,8 +382,34 @@ impl<'a> Fresh<'_, 'a> {
         id: &IdentifierReference<'_>,
         index: f64,
     ) -> Option<&'a Expression<'a>> {
+        array_element(self.sealed_array(id)?, index)
+    }
+
+    fn sealed_array(&self, id: &IdentifierReference<'_>) -> Option<&'a ArrayExpression<'a>> {
         let defs = self.defs(id)?;
         if defs.escapes || defs.fields_written || defs.method_called || defs.callable {
+            return None;
+        }
+        let [Some(init)] = defs.inits else {
+            return None;
+        };
+        match init.without_parentheses() {
+            Expression::ArrayExpression(array) => Some(array),
+            _ => None,
+        }
+    }
+
+    pub(super) fn written_array(
+        &self,
+        id: &IdentifierReference<'_>,
+    ) -> Option<(&'a ArrayExpression<'a>, &'s [&'a Expression<'a>])> {
+        let symbol = self.symbol(id)?;
+        let defs = self.defs(id)?;
+        if defs.escapes
+            || defs.method_called
+            || defs.callable
+            || self.bindings.other_fields_written.contains(&symbol)
+        {
             return None;
         }
         let [Some(init)] = defs.inits else {
@@ -372,19 +418,30 @@ impl<'a> Fresh<'_, 'a> {
         let Expression::ArrayExpression(array) = init.without_parentheses() else {
             return None;
         };
-        array_element(array, index)
+        let written = self
+            .bindings
+            .element_values
+            .get(&symbol)
+            .map_or(&[][..], Vec::as_slice);
+        Some((array, written))
     }
 
-    fn field_mutates_this(&self, value: &Expression<'_>) -> bool {
+    fn field_keeps_this(&self, value: &Expression<'_>) -> bool {
         match value.without_parentheses() {
-            Expression::FunctionExpression(function) => function_uses_this(function),
-            Expression::ArrowFunctionExpression(_) => false,
-            Expression::Identifier(id) => self
-                .symbol(id)
-                .and_then(|symbol| self.bindings.defs.get(symbol))
-                .and_then(|defs| defs.func)
-                .is_some_and(function_uses_this),
-            _ => false,
+            Expression::Identifier(id) => match self.defs(id) {
+                Some(defs) if defs.callable => {
+                    defs.inits.is_empty() && defs.func.is_some_and(|func| !function_uses_this(func))
+                }
+                Some(defs) => {
+                    !defs.inits.is_empty()
+                        && defs.inits.iter().all(|init| init.is_some_and(inert_field))
+                }
+                None => self.symbol(id).is_none() && PRIMITIVE_GLOBALS.contains(&id.name.as_str()),
+            },
+            Expression::CallExpression(call) => self
+                .resolve
+                .is_some_and(|resolved| resolved.contains_key(&call.span)),
+            other => inert_field(other),
         }
     }
 
@@ -405,14 +462,49 @@ impl<'a> Fresh<'_, 'a> {
             Expression::Identifier(_) => self.bindings.assembled.get(&symbol)?.fields.clone(),
             _ => return None,
         };
-        let mut fields = FxHashMap::default();
-        for (name, value) in entries {
-            if defs.method_called && self.field_mutates_this(value) {
-                return None;
+        let fields: FxHashMap<Cow<'a, str>, &'a Expression<'a>> = entries.into_iter().collect();
+        let own = |member: &&MemberExpression<'_>| {
+            let Some(value) = self
+                .accessed_key(member)
+                .and_then(|key| fields.get(key.as_ref()).copied())
+            else {
+                return false;
+            };
+            !self.bindings.called.contains(&member.span().start) || self.field_keeps_this(value)
+        };
+        let accessed = self.bindings.accessed.get(&symbol);
+        accessed
+            .is_none_or(|members| members.iter().all(own))
+            .then_some(fields)
+    }
+
+    fn accessed_key(&self, member: &MemberExpression<'_>) -> Option<Cow<'a, str>> {
+        match member {
+            MemberExpression::StaticMemberExpression(m) => {
+                Some(Cow::Owned(m.property.name.to_string()))
             }
-            fields.insert(name, value);
+            MemberExpression::ComputedMemberExpression(m) => {
+                self.key_text(&m.expression, DEPTH).map(Cow::Owned)
+            }
+            MemberExpression::PrivateFieldExpression(_) => None,
         }
-        Some(fields)
+    }
+
+    fn key_text(&self, expr: &Expression<'_>, depth: u8) -> Option<String> {
+        let next = depth.checked_sub(1)?;
+        match expr.without_parentheses() {
+            Expression::StringLiteral(text) => Some(js_text(text.value).into_owned()),
+            Expression::TemplateLiteral(template) if template.expressions.is_empty() => {
+                let cooked = template.quasis.first()?.value.cooked?;
+                Some(js_text(cooked).into_owned())
+            }
+            Expression::CallExpression(call) => self.resolve?.get(&call.span)?.as_string(),
+            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+                Some(self.key_text(&binary.left, next)? + &self.key_text(&binary.right, next)?)
+            }
+            Expression::Identifier(id) => self.key_text(self.literal_init(id)?, next),
+            _ => None,
+        }
     }
 
     pub(super) fn is_numeric_identifier(&self, id: &IdentifierReference<'_>) -> bool {
@@ -551,6 +643,17 @@ fn function_valued(expr: &Expression<'_>) -> bool {
             function_valued(&cond.consequent) && function_valued(&cond.alternate)
         }
         _ => false,
+    }
+}
+
+fn inert_field(value: &Expression<'_>) -> bool {
+    match value.without_parentheses() {
+        Expression::FunctionExpression(function) => !function_uses_this(function),
+        Expression::ArrowFunctionExpression(_)
+        | Expression::ObjectExpression(_)
+        | Expression::ArrayExpression(_)
+        | Expression::RegExpLiteral(_) => true,
+        other => super::holds::primitive_result(other),
     }
 }
 
