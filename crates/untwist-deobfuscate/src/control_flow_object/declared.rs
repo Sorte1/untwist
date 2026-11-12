@@ -24,8 +24,8 @@ use crate::notes;
 use super::dead::{dead_branch_spans, dead_write_statements, predicate_branches, Branches};
 use super::nested::{insert_nested, PlannedEdit, Recipe};
 use super::{
-    call_site_is_safe, cff_props, emit_logical_refusals, inline_site, object_declaration, CffValue,
-    Refusal, SiteSafety, PASS,
+    call_site_is_safe, cff_props, emit_logical_refusals, inline_site, nested_past_the_limit,
+    object_declaration, CffValue, Refusal, SiteSafety, PASS,
 };
 
 pub struct DeclaredObject {
@@ -224,6 +224,16 @@ fn plan_candidate<'a, 'p>(
     let mut by_key = FxHashMap::default();
     for (key, value) in &props {
         by_key.entry(key.as_ref()).or_insert(value);
+    }
+    let nested = uses.reads.iter().filter_map(|read| {
+        let value = by_key.get(read.name.as_str())?;
+        matches!(value, CffValue::Function(_))
+            .then(|| calls.get(&read.member_span).map(|(span, _)| *span))
+            .flatten()
+    });
+    if nested_past_the_limit(nested) {
+        cx.note(notes::CONTROL_FLOW_NEST_TOO_DEEP, Some(candidate.statement));
+        return None;
     }
     let mut edits = Vec::with_capacity(uses.reads.len());
     let mut refusals = ReadRefusals::default();
