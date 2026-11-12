@@ -5,7 +5,7 @@ use crate::maps::{link, MapLink, Target};
 use crate::pipeline::Output;
 use crate::write::{BUNDLE_JSON, DEOBFUSCATED};
 use untwist_core::source_map::OwnedSourceMap;
-use untwist_unpack::path::{MAX_PATH_BYTES, MAX_SEGMENT_BYTES};
+use untwist_unpack::path::{is_unsafe_path, MAX_PATH_BYTES, MAX_SEGMENT_BYTES};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Role {
@@ -233,7 +233,12 @@ impl Planner<'_> {
 
     fn admit(&mut self, dir: &Path, candidate: Candidate) -> Option<PlannedFile> {
         let key = claim_key(&candidate.relative);
-        if let Some(refusal) = self.refusal_of(&candidate.relative, &key) {
+        let unsafe_wasm = candidate.role == Role::Wasm && is_unsafe_path(&candidate.relative);
+        let refusal = match unsafe_wasm {
+            true => Some(PlanRefusal::Unsafe(candidate.relative.clone())),
+            false => self.refusal_of(&candidate.relative, &key),
+        };
+        if let Some(refusal) = refusal {
             self.refused.push(refusal);
             if let Role::Module(index) = candidate.role {
                 self.unwritten_modules.push(index);
@@ -333,15 +338,12 @@ impl Planner<'_> {
 
 pub(crate) fn plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
     if result.single_file {
-        return Plan {
-            files: single_file_plan(dir, result, inputs),
-            ..Plan::default()
-        };
+        return single_file_plan(dir, result, inputs);
     }
     plan_per_module(dir, result, inputs)
 }
 
-fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Vec<PlannedFile> {
+fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
     let concatenated = result.concatenated();
     let map = match (result.bundle.as_ref(), result.source_maps.as_slice()) {
         (None, [Some(map)]) => Some(map),
@@ -354,33 +356,30 @@ fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Vec<Plan
         Some(linked) => linked,
         None => (concatenated.into_owned().into_bytes(), None),
     };
-    let mut planned = vec![PlannedFile {
-        path: dir.join(DEOBFUSCATED),
+    let mut planner = Planner::default();
+    let output = Candidate {
         relative: DEOBFUSCATED.to_string(),
         contents,
         role: Role::Output,
-    }];
-    planned.extend(map_file.map(|file| PlannedFile {
-        path: dir.join(&file.relative),
-        relative: file.relative,
-        contents: file.contents,
-        role: file.role,
-    }));
+        owner: OWNER_OUTPUT,
+    };
+    let mut files: Vec<PlannedFile> = planner.admit(dir, output).into_iter().collect();
+    files.extend(map_file.and_then(|file| planner.admit(dir, file)));
     if let Some(bundle) = result.bundle.as_ref() {
-        planned.push(PlannedFile {
-            path: dir.join(BUNDLE_JSON),
+        let listing = Candidate {
             relative: BUNDLE_JSON.to_string(),
             contents: bundle.bundle_json().into_bytes(),
             role: Role::Listing,
-        });
+            owner: OWNER_LISTING,
+        };
+        files.extend(planner.admit(dir, listing));
     }
-    planned.extend(result.wasm.iter().map(|file| PlannedFile {
-        path: dir.join(&file.path),
-        relative: file.path.clone(),
-        contents: file.bytes.clone(),
-        role: Role::Wasm,
-    }));
-    planned
+    files.extend(planner.wasm(dir, result));
+    Plan {
+        files,
+        refused: planner.refused,
+        unwritten_modules: planner.unwritten_modules,
+    }
 }
 
 fn listing_contents(result: &Output, unwritten_modules: &[usize]) -> Vec<u8> {
@@ -500,6 +499,45 @@ mod tests {
             path: path.to_string(),
             owner,
         }
+    }
+
+    fn wasm_at(path: &str) -> crate::WasmFile {
+        crate::WasmFile {
+            path: path.to_string(),
+            origin: crate::wasm::WasmOrigin::Supplied,
+            url: None,
+            byte_length: 1,
+            imports: 0,
+            exports: 0,
+            renamed: 0,
+            bytes: path.as_bytes().to_vec(),
+            summary: Default::default(),
+        }
+    }
+
+    #[test]
+    fn a_single_file_plan_refuses_colliding_and_unsafe_wasm_names() {
+        let mut result = output_with(vec!["code".to_string()], None);
+        result.single_file = true;
+        result.wasm = vec![
+            wasm_at("wasm/a.wasm"),
+            wasm_at("wasm/A.wasm"),
+            wasm_at("wasm/../../x.wasm"),
+            wasm_at("wasm/nul.wasm"),
+        ];
+        let plan = plan(Path::new("/out"), &result, &[]);
+        assert_eq!(relative_paths(&plan), [DEOBFUSCATED, "wasm/a.wasm"]);
+        assert_eq!(plan.refused.len(), 3, "{:?}", plan.refused);
+        assert!(plan.refused.contains(&collision("wasm/A.wasm", OWNER_WASM)));
+    }
+
+    #[test]
+    fn a_per_module_plan_refuses_a_wasm_name_the_module_checks_refuse() {
+        let mut result = output_with(vec!["code".to_string()], None);
+        result.wasm = vec![wasm_at("wasm/aux.wasm"), wasm_at("wasm/b~1.wasm")];
+        let plan = plan(Path::new("/out"), &result, &[]);
+        assert_eq!(relative_paths(&plan), [DEOBFUSCATED]);
+        assert_eq!(plan.refused.len(), 2, "{:?}", plan.refused);
     }
 
     #[test]

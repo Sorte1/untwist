@@ -1,4 +1,4 @@
-mod clock;
+pub(crate) mod clock;
 mod detect;
 mod diagnostics;
 mod extras;
