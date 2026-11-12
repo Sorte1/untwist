@@ -59,7 +59,7 @@ fn reads_a_hoisted_block_function(source: &str) -> bool {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, source);
     let scoping = build_scoping(&parsed.program).scoping;
-    scoping
+    let reaches = scoping
         .symbol_ids()
         .filter(|symbol| is_hoisted_block_function(&scoping, *symbol))
         .any(|symbol| {
@@ -67,7 +67,8 @@ fn reads_a_hoisted_block_function(source: &str) -> bool {
                 .get_resolved_reference_ids(symbol)
                 .iter()
                 .any(|reference| scoping.get_reference(*reference).is_read())
-        })
+        });
+    reaches
 }
 
 #[test]
