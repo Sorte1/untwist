@@ -734,7 +734,7 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         self.dormant = self.inert(cx.opts.unsafe_transforms);
         self.parent_calls = self.gate.unsafe_
             && std::mem::take(&mut self.class_seen)
-            && class_parent::calls_parent_as_function(program);
+            && class_parent::calls_parent_as_function(program, cx.scoping());
         self.prototypes = if self.gate.unsafe_ && std::mem::take(&mut self.open_waiting) {
             class_proto::gather(program, cx.scoping())
         } else {

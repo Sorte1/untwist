@@ -363,3 +363,26 @@ fn a_parent_called_as_a_function_keeps_every_class_of_the_program() {
         );
     }
 }
+
+fn with_ts_child(parent: &str) -> String {
+    let base = read("untranspile/matrix/babel-7.28/ie11/class-extends.js");
+    let child = format!(
+        "var Child = (function (_super) {{\n  function Child(m) {{\n    var _this = _super.call(this, m) || this;\n    return _this;\n  }}\n  return Child;\n}})({parent});\nconsole.log(new Child(\"c\") instanceof {parent});\n"
+    );
+    run_with(&format!("{base}{child}"), true, true).0
+}
+
+#[test]
+fn a_typescript_child_of_a_global_keeps_the_program_converting() {
+    let code = with_ts_child("Error");
+    assert!(
+        code.contains("var Dog = class Dog extends Animal {"),
+        "{code}"
+    );
+}
+
+#[test]
+fn a_typescript_child_of_a_program_class_keeps_every_class() {
+    let code = with_ts_child("Animal");
+    assert!(!code.contains(" = class "), "{code}");
+}

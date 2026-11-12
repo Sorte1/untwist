@@ -1,9 +1,12 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_semantic::Scoping;
 use oxc_syntax::operator::LogicalOperator;
+use oxc_syntax::symbol::SymbolId;
 
-#[derive(Default)]
-struct ParentCalls {
+struct ParentCalls<'s> {
+    scoping: &'s Scoping,
+    builtin_parents: Vec<SymbolId>,
     found: bool,
 }
 
@@ -53,19 +56,91 @@ fn forwarded<'k, 'a>(expression: &'k Expression<'a>) -> Option<&'k CallExpressio
     forwarding(member.property.name.as_str()).then_some(call)
 }
 
-impl<'a> VisitJs<'a> for ParentCalls {
+fn parent_forwarding(call: &CallExpression<'_>) -> bool {
+    if call.optional {
+        return false;
+    }
+    let Expression::StaticMemberExpression(member) = call.callee.without_parentheses() else {
+        return false;
+    };
+    let nested = matches!(member.object.without_parentheses(),
+        Expression::StaticMemberExpression(inner) if forwarding(inner.property.name.as_str()));
+    !member.optional
+        && forwarding(member.property.name.as_str())
+        && (this_first(call) || nested)
+        && computed_parent(&member.object)
+}
+
+fn wrapped_parent_call(call: &CallExpression<'_>) -> bool {
+    let [first, second, ..] = call.arguments.as_slice() else {
+        return false;
+    };
+    matches!(first, Argument::ThisExpression(_))
+        && second
+            .as_expression()
+            .and_then(forwarded)
+            .is_some_and(parent_forwarding)
+}
+
+fn forwarded_object<'k, 'a>(call: &'k CallExpression<'a>) -> Option<&'k Expression<'a>> {
+    match call.callee.without_parentheses() {
+        Expression::StaticMemberExpression(member) => Some(&member.object),
+        _ => None,
+    }
+}
+
+impl ParentCalls<'_> {
+    fn global_argument(&self, argument: &Argument<'_>) -> bool {
+        let Argument::Identifier(id) = argument else {
+            return false;
+        };
+        id.reference_id
+            .get()
+            .is_some_and(|reference| self.scoping.get_reference(reference).symbol_id().is_none())
+    }
+
+    fn builtin_parent(&self, expression: &Expression<'_>) -> bool {
+        let Expression::Identifier(id) = expression.without_parentheses() else {
+            return false;
+        };
+        id.reference_id.get().is_some_and(|reference| {
+            self.scoping
+                .get_reference(reference)
+                .symbol_id()
+                .is_some_and(|symbol| self.builtin_parents.contains(&symbol))
+        })
+    }
+
+    fn global_parameters(&self, call: &CallExpression<'_>) -> Vec<SymbolId> {
+        let Expression::FunctionExpression(function) = call.callee.without_parentheses() else {
+            return Vec::new();
+        };
+        function
+            .params
+            .items
+            .iter()
+            .zip(call.arguments.iter())
+            .filter(|(_, argument)| self.global_argument(argument))
+            .filter_map(|(param, _)| match &param.pattern {
+                BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+impl<'a> VisitJs<'a> for ParentCalls<'_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if let Expression::StaticMemberExpression(member) = it.callee.without_parentheses() {
-            let property = member.property.name.as_str();
-            let nested = matches!(member.object.without_parentheses(),
-                Expression::StaticMemberExpression(inner) if forwarding(inner.property.name.as_str()));
-            self.found |= forwarding(property)
-                && (this_first(it) || nested)
-                && computed_parent(&member.object);
+        self.found |= wrapped_parent_call(it);
+        if self.found {
+            return;
         }
-        if !self.found {
-            walk_js::walk_call_expression(self, it);
-        }
+        let parameters = self.global_parameters(it);
+        let pushed = parameters.len();
+        self.builtin_parents.extend(parameters);
+        walk_js::walk_call_expression(self, it);
+        let kept = self.builtin_parents.len() - pushed;
+        self.builtin_parents.truncate(kept);
     }
 
     fn visit_logical_expression(&mut self, it: &LogicalExpression<'a>) {
@@ -81,7 +156,10 @@ impl<'a> VisitJs<'a> for ParentCalls {
                 }
                 other => other,
             };
-            self.found |= forwarded(left).is_some_and(this_first);
+            self.found |= forwarded(left).is_some_and(|call| {
+                this_first(call)
+                    && !forwarded_object(call).is_some_and(|object| self.builtin_parent(object))
+            });
         }
         if !self.found {
             walk_js::walk_logical_expression(self, it);
@@ -89,8 +167,12 @@ impl<'a> VisitJs<'a> for ParentCalls {
     }
 }
 
-pub fn calls_parent_as_function(program: &Program<'_>) -> bool {
-    let mut calls = ParentCalls::default();
+pub fn calls_parent_as_function(program: &Program<'_>, scoping: &Scoping) -> bool {
+    let mut calls = ParentCalls {
+        scoping,
+        builtin_parents: Vec::new(),
+        found: false,
+    };
     calls.visit_program(program);
     calls.found
 }
