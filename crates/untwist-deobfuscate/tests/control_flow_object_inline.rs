@@ -328,3 +328,51 @@ fn a_forwarded_callee_merely_named_like_eval_is_still_inlined() {
         @"evaluate(s);"
     );
 }
+
+const ADD: &str = "({abcde:function(a,b){return a+b}})";
+
+fn literal_nest(depth: usize) -> String {
+    format!(
+        "{}1{}",
+        format!("{ADD}.abcde(").repeat(depth),
+        ",1)".repeat(depth)
+    )
+}
+
+#[test]
+fn a_literal_nest_past_the_limit_is_kept_whole() {
+    let source = format!("x = {};", literal_nest(300));
+    let alloc = Allocator::default();
+    let out = untwist_testing::transform(
+        &alloc,
+        &source,
+        &[untwist_deobfuscate::control_flow_object::boxed],
+    );
+    assert_eq!(out.matches(".abcde(").count(), 300, "{out}");
+}
+
+#[test]
+fn a_call_beside_a_literal_nest_past_the_limit_is_still_inlined() {
+    let source = format!("x = {ADD}.abcde({ADD}.abcde(1, 2), {});", literal_nest(300));
+    let alloc = Allocator::default();
+    let out = untwist_testing::transform(
+        &alloc,
+        &source,
+        &[untwist_deobfuscate::control_flow_object::boxed],
+    );
+    assert!(out.contains(".abcde(1 + 2, "), "{out}");
+    assert_eq!(out.matches(".abcde(").count(), 301, "{out}");
+}
+
+#[test]
+fn a_literal_nest_inside_the_limit_beside_a_deep_one_is_inlined() {
+    let source = format!("x = [{}, {}];", literal_nest(3), literal_nest(300));
+    let alloc = Allocator::default();
+    let out = untwist_testing::transform(
+        &alloc,
+        &source,
+        &[untwist_deobfuscate::control_flow_object::boxed],
+    );
+    assert!(out.starts_with("x = [1 + 1 + 1 + 1, "), "{out}");
+    assert_eq!(out.matches(".abcde(").count(), 300, "{out}");
+}
