@@ -4,6 +4,7 @@ use serde::Serialize;
 use untwist_core::print::pretty_codegen;
 use untwist_core::reflow::{GuardRecord, GuardTally, Reflower};
 use untwist_core::source_map::OwnedSourceMap;
+use untwist_core::visible::visible_literals;
 use untwist_unpack::model::Bundle;
 
 use crate::write::BUNDLE_JSON;
@@ -98,7 +99,10 @@ impl BundleOutput {
             .map(|module| {
                 let (code, record) = reflower.reflow_recorded(module.code);
                 found.absorb(record);
-                ModuleOutput { code, ..module }
+                ModuleOutput {
+                    code: visible_literals(code),
+                    ..module
+                }
             })
             .collect();
         (Self { modules, ..self }, found.tally_beyond(earlier))
