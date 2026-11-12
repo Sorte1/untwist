@@ -5,6 +5,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::rc::Rc;
 
 use super::aliased_flows::{is_function_method, is_machinery};
 use super::aliased_solve::Read;
@@ -201,7 +202,7 @@ pub struct BuiltinAliases<'s> {
     pub(super) sloppy_this: FxHashSet<Span>,
     pub(super) this_bits: u16,
     pub(super) lost: u16,
-    pub(super) decoded: FxHashMap<Span, String>,
+    pub(super) decoded: FxHashMap<Span, Rc<str>>,
     pub(super) object_functions: FxHashMap<SymbolId, FxHashMap<String, Span>>,
     pub(super) function_methods_written: bool,
     pub(super) prototypes_written: bool,
@@ -275,7 +276,7 @@ impl<'s> BuiltinAliases<'s> {
                                 text.value.as_str().map(str::to_string)
                             }
                             Expression::CallExpression(call) => {
-                                self.decoded.get(&call.span).cloned()
+                                self.decoded.get(&call.span).map(|text| text.to_string())
                             }
                             _ => None,
                         }
@@ -302,7 +303,9 @@ impl<'s> BuiltinAliases<'s> {
                 let cooked = template.quasis.first()?.value.cooked.as_ref()?;
                 Some(vec![cooked.as_str()?.to_string()])
             }
-            Expression::CallExpression(call) => Some(vec![self.decoded.get(&call.span)?.clone()]),
+            Expression::CallExpression(call) => {
+                Some(vec![self.decoded.get(&call.span)?.to_string()])
+            }
             Expression::BinaryExpression(binary)
                 if binary.operator == oxc_syntax::operator::BinaryOperator::Addition =>
             {
@@ -588,7 +591,7 @@ impl<'s> BuiltinAliases<'s> {
         match key {
             PatchKey::Named(name) => AliasKey::Names(vec![name.to_string()]),
             PatchKey::Pending(span) => match self.decoded.get(&span) {
-                Some(name) => AliasKey::Names(vec![name.clone()]),
+                Some(name) => AliasKey::Names(vec![name.to_string()]),
                 None => AliasKey::Unknown,
             },
             PatchKey::Dynamic => match expr.and_then(|expr| self.key_set(expr)) {

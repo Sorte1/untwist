@@ -611,14 +611,15 @@ fn aliased_writes(
     runs: &[UnitRun<'_, '_>],
     points_to: bool,
 ) -> Option<Vec<AliasSite>> {
-    let mut decoded = FxHashMap::default();
+    let mut decoded: FxHashMap<Span, Rc<str>> = FxHashMap::default();
+    let mut shared: FxHashMap<(usize, usize), Rc<str>> = FxHashMap::default();
     for run in runs.iter().filter(|run| run.request.reliance.is_none()) {
         let Ok(values) = &run.result else {
             continue;
         };
         for (call, value) in run.request.calls.iter().zip(values) {
             if let Some(DecodedValue::Str(text)) = value {
-                if let Some(text) = text.as_string() {
+                if let Some(text) = shared_text(text, &mut shared) {
                     decoded.insert(call.span, text);
                 }
             }
@@ -628,6 +629,10 @@ fn aliased_writes(
         }
     }
     if points_to {
+        let decoded = decoded
+            .into_iter()
+            .map(|(span, text)| (span, text.to_string()))
+            .collect();
         return Some(points_to_sites(program, scoping, &decoded, &[]));
     }
     Some(alias_sites(
@@ -635,6 +640,20 @@ fn aliased_writes(
         &builtin_aliases(program, scoping, decoded),
         &[],
     ))
+}
+
+fn shared_text(
+    text: &untwist_eval::value::JsString,
+    shared: &mut FxHashMap<(usize, usize), Rc<str>>,
+) -> Option<Rc<str>> {
+    let units = text.units();
+    let identity = (units.as_ptr() as usize, units.len());
+    if let Some(known) = shared.get(&identity) {
+        return Some(known.clone());
+    }
+    let text: Rc<str> = text.as_string()?.into();
+    shared.insert(identity, text.clone());
+    Some(text)
 }
 
 fn budget_refusal() -> String {

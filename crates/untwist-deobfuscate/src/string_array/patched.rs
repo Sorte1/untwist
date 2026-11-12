@@ -89,7 +89,13 @@ pub(super) fn rotator_builtins_patched(
     } else {
         alias_sites(
             program,
-            &builtin_aliases(program, scoping, keys),
+            &builtin_aliases(
+                program,
+                scoping,
+                keys.into_iter()
+                    .map(|(span, text)| (span, text.into()))
+                    .collect(),
+            ),
             &[rotator],
         )
     };
