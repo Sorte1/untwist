@@ -182,22 +182,22 @@ fn runtime_import<'a>(
     Some(())
 }
 
-fn used(program: &Program<'_>, runtime: &[String], is_entry: bool) -> Vec<String> {
+struct Helpers {
+    names: Vec<String>,
+    index: FxHashMap<String, usize>,
+}
+
+fn used(program: &Program<'_>, runtime: &Helpers, is_entry: bool) -> Vec<String> {
     if is_entry {
-        return runtime.to_vec();
+        return runtime.names.clone();
     }
-    let wanted: FxHashMap<String, usize> = runtime
-        .iter()
-        .enumerate()
-        .map(|(index, name)| (name.clone(), index))
-        .collect();
-    let mut found: Vec<usize> = mentioned(&wanted, program.body.iter())
+    let mut found: Vec<usize> = mentioned(&runtime.index, program.body.iter())
         .into_iter()
         .collect();
     found.sort_unstable();
     found
         .into_iter()
-        .map(|index| runtime[index].clone())
+        .map(|index| runtime.names[index].clone())
         .collect()
 }
 
@@ -206,7 +206,7 @@ fn link_module<'a>(
     module: &mut Module<'a>,
     (callee, hoisted): (&str, bool),
     paths: &ModulePaths,
-    runtime: &[String],
+    runtime: &Helpers,
 ) -> Option<()> {
     let from = module.path.as_str().to_string();
     let deps = std::mem::take(&mut module.dependencies);
@@ -244,11 +244,17 @@ pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) {
         .into_iter()
         .collect();
     let runtime_key = runtime_id(BundleKind::Parcel);
-    let runtime = bundle
+    let names = bundle
         .modules
         .get(&runtime_key)
         .map(|module| declared_names(&module.program().body))
         .unwrap_or_default();
+    let index = names
+        .iter()
+        .enumerate()
+        .map(|(at, name)| (name.clone(), at))
+        .collect();
+    let runtime = Helpers { names, index };
     for (id, module) in bundle.modules.iter_mut() {
         if *id == runtime_key {
             continue;

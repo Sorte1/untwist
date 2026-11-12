@@ -4,11 +4,11 @@ use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::VisitMut;
 use oxc_semantic::Scoping;
 use oxc_str::Ident;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::{Note, NoteKind};
 use untwist_core::semantic::build_scoping;
 
-use super::edit::{Edit, Used};
+use super::edit::{Edit, Prelude, Used};
 use super::{
     DEPENDENCY_MAP_NAME, ENTRY_ID, GLOBAL_NAME, IMPORT_ALL_NAME, IMPORT_DEFAULT_NAME, IMPORT_PREFIX,
 };
@@ -90,7 +90,7 @@ fn prologue_text(module: &Module<'_>, used: &Used) -> String {
     text
 }
 
-type Context<'r> = (&'r ModulePaths, &'r [String], &'r [(String, String)], bool);
+type Context<'r> = (&'r ModulePaths, &'r Prelude, &'r [(String, String)], bool);
 
 const SHADOWABLE: [&str; 2] = [GLOBAL_NAME, IMPORT_PREFIX];
 
@@ -146,8 +146,8 @@ fn edited<'a>(
 ) -> (Used, Vec<String>) {
     let prelude = context.1;
     let text = body_text(module);
-    let unshadowable = !SHADOWABLE.iter().any(|name| text.contains(name))
-        && !prelude.iter().any(|name| text.contains(name.as_str()));
+    let unshadowable =
+        !SHADOWABLE.iter().any(|name| text.contains(name)) && !prelude.named_in(text);
     if unshadowable {
         let (used, missing, _) = edit_with(alloc, module, context, (None, false, None));
         return (used, missing);
@@ -169,7 +169,7 @@ fn edited<'a>(
 fn rewrite<'a>(
     alloc: &'a Allocator,
     module: &mut Module<'a>,
-    (paths, prelude, numeric): (&ModulePaths, &[String], bool),
+    (paths, prelude, numeric): (&ModulePaths, &Prelude, bool),
     notes: &mut Vec<Note>,
 ) -> Used {
     let deps = std::mem::take(&mut module.dependencies);
@@ -228,7 +228,7 @@ fn paths_text(bundle: &Bundle<'_>) -> String {
     )
 }
 
-fn bindings(used: &Used, prelude: &[String]) -> Vec<String> {
+fn bindings(used: &Used, order: &FxHashMap<&str, usize>) -> Vec<String> {
     let mut list = Vec::new();
     if let Some(fresh) = &used.require {
         list.push(format!("metroRequire: {fresh}"));
@@ -239,24 +239,26 @@ fn bindings(used: &Used, prelude: &[String]) -> Vec<String> {
     if used.import_all {
         list.push(format!("metroImportAll: {IMPORT_ALL_NAME}"));
     }
-    list.extend(
-        prelude
-            .iter()
-            .filter(|n| used.prelude.contains(*n))
-            .cloned(),
-    );
+    let mut names: Vec<&String> = used.prelude.iter().collect();
+    names.sort_unstable_by_key(|name| order.get(name.as_str()).copied());
+    list.extend(names.into_iter().cloned());
     list
 }
 
-fn runtime_exports(helpers: bool, prelude: &[String], used: &[Used]) -> String {
+fn runtime_exports(helpers: bool, prelude: &Prelude, used: &[Used]) -> String {
+    let wanted: FxHashSet<&str> = used
+        .iter()
+        .flat_map(|used| used.prelude.iter().map(String::as_str))
+        .collect();
     let mut names: Vec<String> = Vec::new();
     if helpers {
         names.extend(["metroRequire", "metroImportDefault", "metroImportAll"].map(String::from));
     }
     names.extend(
         prelude
+            .names
             .iter()
-            .filter(|name| used.iter().any(|u| u.prelude.contains(*name)))
+            .filter(|name| wanted.contains(name.as_str()))
             .cloned(),
     );
     format!("module.exports = {{ {} }};", names.join(", "))
@@ -266,7 +268,7 @@ fn runtime<'a>(
     alloc: &'a Allocator,
     bundle: &Bundle<'a>,
     mut statements: AVec<'a, Statement<'a>>,
-    (prelude, used): (&[String], &[Used]),
+    (prelude, used): (&Prelude, &[Used]),
 ) -> Option<Module<'a>> {
     let helpers = used.iter().any(Used::helpers);
     let mut text = String::new();
@@ -299,7 +301,7 @@ pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
     if let Some(runtime) = bundle.runtime.take() {
         statements.extend(runtime.helpers.into_iter().map(|helper| helper.statement));
     }
-    let prelude = declarator_names(&statements);
+    let prelude = Prelude::new(declarator_names(&statements));
     let paths = ModulePaths::of(bundle);
     let numeric = bundle.numeric_ids;
     let mut notes = Vec::new();
@@ -307,7 +309,7 @@ pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
         .modules
         .values_mut()
         .map(|module| {
-            let context = (&paths, prelude.as_slice(), numeric);
+            let context = (&paths, &prelude, numeric);
             rewrite(alloc, module, context, &mut notes)
         })
         .collect();
@@ -317,8 +319,14 @@ pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
     let Some(runtime) = runtime(alloc, bundle, statements, (&prelude, &used)) else {
         return notes;
     };
+    let order: FxHashMap<&str, usize> = prelude
+        .names
+        .iter()
+        .enumerate()
+        .map(|(at, name)| (name.as_str(), at))
+        .collect();
     for (module, used) in bundle.modules.values_mut().zip(&used) {
-        let names = bindings(used, &prelude);
+        let names = bindings(used, &order);
         if !names.is_empty() || module.is_entry {
             import_runtime(alloc, module, &names);
         }

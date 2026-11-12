@@ -4,6 +4,7 @@ use oxc_ast_visit::{walk_mut, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_str::{Ident, Str};
+use oxc_syntax::identifier::is_identifier_part;
 use oxc_syntax::number::NumberBase;
 use rustc_hash::FxHashSet;
 
@@ -28,13 +29,44 @@ impl Used {
     }
 }
 
-pub fn text_fresh(text: &str, prelude: &[String]) -> String {
+pub struct Prelude {
+    pub names: Vec<String>,
+    set: FxHashSet<String>,
+}
+
+impl Prelude {
+    pub fn new(names: Vec<String>) -> Self {
+        let set = names.iter().cloned().collect();
+        Self { names, set }
+    }
+
+    pub fn has(&self, name: &str) -> bool {
+        self.set.contains(name)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.names.is_empty()
+    }
+
+    pub fn named_in(&self, text: &str) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+        if text.contains("\\u") {
+            return true;
+        }
+        text.split(|c: char| !is_identifier_part(c))
+            .any(|word| self.has(word))
+    }
+}
+
+pub fn text_fresh(text: &str, prelude: &Prelude) -> String {
     (1..)
         .map(|index| match index {
             1 => String::from("_require"),
             index => format!("_require{index}"),
         })
-        .find(|name| !text.contains(name.as_str()) && !prelude.contains(name))
+        .find(|name| !text.contains(name.as_str()) && !prelude.has(name))
         .unwrap_or_default()
 }
 
@@ -48,7 +80,7 @@ pub struct Edit<'a, 'r> {
     pub numeric: bool,
     pub paths: &'r ModulePaths,
     pub from: &'r str,
-    pub prelude: &'r [String],
+    pub prelude: &'r Prelude,
     pub fresh: Option<Ident<'a>>,
     pub text: &'r str,
     pub used: Used,
@@ -64,7 +96,7 @@ impl<'a> Edit<'a, '_> {
         matches!(
             name,
             "require" | IMPORT_DEFAULT_NAME | IMPORT_ALL_NAME | GLOBAL_NAME | DEPENDENCY_MAP_NAME
-        ) || self.prelude.iter().any(|p| p == name)
+        ) || self.prelude.has(name)
     }
 
     fn direct_require(&self, call: &CallExpression<'_>) -> bool {
@@ -230,7 +262,7 @@ impl<'a> VisitMut<'a> for Edit<'a, '_> {
             IMPORT_ALL_NAME => self.used.import_all = true,
             GLOBAL_NAME => self.used.global = true,
             DEPENDENCY_MAP_NAME => self.used.dependency_map = true,
-            name if self.prelude.iter().any(|p| p == name) => {
+            name if self.prelude.has(name) => {
                 self.used.prelude.insert(name.to_string());
             }
             _ => {}
