@@ -114,12 +114,9 @@ fn a_reused_pipeline_runs_each_input_as_a_fresh_pipeline_does() {
         assert!(reused == fresh, "{source}");
     }
     let sources: Vec<&str> = inputs.iter().map(String::as_str).collect();
-    let together = pipeline.run_many(&sources).codes;
-    let apart: Vec<String> = sources
-        .iter()
-        .flat_map(|source| Pipeline::new(Options::default()).run(source).codes)
-        .collect();
-    assert_eq!(together, apart);
+    let reused = pipeline.run_many(&sources).codes;
+    let fresh = Pipeline::new(Options::default()).run_many(&sources).codes;
+    assert_eq!(reused, fresh);
 }
 
 #[test]

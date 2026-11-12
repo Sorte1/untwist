@@ -389,9 +389,6 @@ const RENAME_KEEPS_GLOBALS: &str = "rename-keeps-globals";
 
 fn keeps_script_globals(site: &StageCx<'_, '_>, sem: &Semantics) -> (bool, bool) {
     let program: &Program<'_> = site.program;
-    if untwist_core::semantic::shares_globals() {
-        return (true, true);
-    }
     let guarded = site.pass_opts.extended
         && !site.pass_opts.unsafe_transforms
         && !site.pass_opts.nested_root

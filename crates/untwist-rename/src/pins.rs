@@ -2,7 +2,7 @@ use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::pins::script_global_symbols;
-use untwist_core::semantic::{has_module_syntax, AnnexBWrites};
+use untwist_core::semantic::{has_module_syntax, is_shared_global, AnnexBWrites};
 
 use crate::collect::{collect, Collected};
 use crate::function_names::function_names;
@@ -44,6 +44,7 @@ pub fn prepare(
 }
 
 fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, setting: Setting) {
+    pin_shared_globals(collected, scoping);
     if !setting.keep_globals && !setting.keep_lexicals {
         return;
     }
@@ -57,6 +58,16 @@ fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, setting: Set
     } else {
         collected.pinned.extend(script_global_symbols(scoping));
     }
+}
+
+fn pin_shared_globals(collected: &mut Collected, scoping: &Scoping) {
+    collected.pinned.extend(
+        scoping
+            .get_bindings(scoping.root_scope_id())
+            .iter()
+            .filter(|(name, _)| is_shared_global(name.as_str()))
+            .map(|(_, symbol)| *symbol),
+    );
 }
 
 fn pin_annex_b_targets(collected: &mut Collected, program: &Program<'_>, scoping: &Scoping) {

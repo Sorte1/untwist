@@ -220,6 +220,24 @@ pub fn globals_reachable_by_key<'a>(program: &'a Program<'a>, scoping: &Scoping)
         .is_some()
 }
 
+pub fn names_reachable_from<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    names: &[&str],
+) -> bool {
+    if names.is_empty() {
+        return false;
+    }
+    let watch = ReachWatch {
+        names,
+        props: names,
+        fns: &[],
+        observe: false,
+    };
+    let found = global_reach(program, scoping, (None, &[]), watch);
+    found.reach.is_some() || found.reach_by_code.is_some()
+}
+
 pub fn script_lexicals_reachable_by_code<'a>(program: &'a Program<'a>, scoping: &Scoping) -> bool {
     let mut names = settle::script_lexicals(program, scoping)
         .into_iter()

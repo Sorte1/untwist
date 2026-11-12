@@ -446,7 +446,10 @@ impl Pipeline {
             heap_peak: &mut result.heap_peak,
             snapshots: &mut result.snapshots,
         };
-        let shared = reservation.shared && !nested_root && !site.program.source_type.is_module();
+        let shared = reservation
+            .shared
+            .filter(|_| !nested_root && !site.program.source_type.is_module())
+            .cloned();
         let _shared = assume_shared_globals(shared);
         let sem = build_scoping(site.program);
         if checked && declares_an_interface(&sem.scoping) {
@@ -652,7 +655,7 @@ mod tests {
             stack: &stack,
             stats: &stats,
             limits: untwist_core::budget::Limits::default(),
-            shared: false,
+            shared: None,
         };
         let printed = pipeline
             .process(

@@ -68,3 +68,20 @@ fn several_classic_scripts_share_their_top_level_bindings() {
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+#[test]
+fn inputs_that_share_no_names_come_out_as_they_do_alone() {
+    let options = lane(false, RenameMode::None);
+    for (label, program) in rows() {
+        if !label.starts_with("apart-") {
+            continue;
+        }
+        let inputs: Vec<&str> = program.split(INPUT_BREAK).collect();
+        let together = Pipeline::new(options.clone()).run_many(&inputs).codes;
+        let apart: Vec<String> = inputs
+            .iter()
+            .flat_map(|input| Pipeline::new(options.clone()).run(input).codes)
+            .collect();
+        assert_eq!(together, apart, "{label}");
+    }
+}

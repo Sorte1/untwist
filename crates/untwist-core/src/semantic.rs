@@ -39,7 +39,7 @@ pub use refresh::{
 pub use refresh::{forget_failures, refresh_scoping, Round, Shape};
 pub(crate) use renamed::forget_program as forget_renames;
 pub(crate) use renamed::note_renames;
-pub use shared::{assume_shared_globals, shares_globals, SharedGlobalsGuard};
+pub use shared::{assume_shared_globals, is_shared_global, SharedGlobals, SharedGlobalsGuard};
 pub use strictness::Strictness;
 
 pub fn has_module_syntax(program: &Program<'_>) -> bool {
@@ -114,7 +114,8 @@ pub fn is_constant_binding(scoping: &Scoping, symbol: SymbolId) -> bool {
     !scoping.symbol_is_mutated(symbol)
         && scoping.symbol_redeclarations(symbol).is_empty()
         && !is_hoisted_block_function(scoping, symbol)
-        && !(shares_globals() && scoping.symbol_scope_id(symbol) == scoping.root_scope_id())
+        && !(scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
+            && is_shared_global(scoping.symbol_name(symbol)))
 }
 
 #[derive(Default)]

@@ -164,8 +164,10 @@ input.
 
 The safe lane rests on a few stated premises about code it cannot see. One input file is a closed
 program. Several classic scripts given in one run share one global scope, as scripts on one page
-do: every top-level `var`, function, `let`, `const` and `class` of each is read and written by the
-others, so none is inlined away, removed or renamed. A module (a file with `import`, `export`,
+do: a top-level `var`, function, `let`, `const` or `class` of one is treated as read and written by
+the others when another input names it (a free reference or a top-level declaration of its own) or
+reaches globals through a computed key or code text, and is then not inlined away, removed or
+renamed. Inputs that share no names come out as they would alone. A module (a file with `import`, `export`,
 `import.meta` or top-level `await`) is closed apart from its exports. Code from outside the file
 (`require` results, host functions, other scripts) writes no built-in. It also does not depend on
 the names the obfuscator picked for the string array and its decoders, because that code was
