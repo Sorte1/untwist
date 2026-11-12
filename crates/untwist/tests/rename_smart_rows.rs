@@ -261,7 +261,7 @@ fn a_self_read_through_callee_leaves_the_program_unrenamed() {
 }
 
 #[test]
-fn property_names_name_a_binding_only_on_this_exports_or_a_prototype() {
+fn a_random_property_name_on_a_plain_object_names_nothing() {
     let code = smart(PROPERTY_ON_A_PLAIN_OBJECT);
     assert!(!code.contains("xhqXeD"), "{code}");
 }

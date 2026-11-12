@@ -41,8 +41,12 @@ engine as WebAssembly, and your code never leaves the page.
   `unique` (readable, program-wide names such as `fn1`, `arr2`, `handler3`) or `smart` (names from evidence: `i`/`j`
   for loop counters, `item`/`index` and `acc` for array callbacks, `err` in `catch`, `fs` for `require("fs")`,
   `canvas` for `document.createElement("canvas")`, `ctx`, `data`, destructured keys and the property a function is
-  exported or stored under; a name is reused in sibling scopes and numbered only where it would clash, and human-written
-  names are left alone).
+  exported or stored under; also the property a value is read from or written to, constructors (`socket` for
+  `new WebSocket`, `vector3`, `floats`), element ids and storage keys (`chatList` for `getElementById("chatList")`),
+  event handlers and their events (`onKeydown(keyEvent)`), timer and frame callbacks, `fetch` responses and bodies,
+  setter values, export aliases, `is*` names for functions that return booleans, PascalCase for functions only used
+  with `new`, and a parameter's name when every call passes the same named value; a name is reused in sibling scopes
+  and numbered only where it would clash, and human-written names are left alone).
 - **JSX.** Rebuilds JSX from `React.createElement` and the automatic `jsx`/`jsxs` runtime.
 
 ## Install

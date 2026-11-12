@@ -29,14 +29,33 @@ const TEXT_TAKING_FUNCTIONS: [&str; 2] = ["String", "RegExp"];
 
 const ALIAS_DEPTH: usize = 8;
 
+const FUNCTION_PROTOTYPES: [&str; 2] = ["Function", "Object"];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelfReads {
+    Unknown,
+    InstanceMethodsReadInstances,
+}
+
 pub enum TextReads {
     Bindings(FxHashSet<SymbolId>),
     Unknown,
 }
 
 pub fn text_read_bindings(program: &Program<'_>, scoping: &Scoping) -> TextReads {
+    text_read_bindings_with(program, scoping, SelfReads::Unknown)
+}
+
+pub fn text_read_bindings_with(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    self_reads: SelfReads,
+) -> TextReads {
     let mut sinks = SinkFinder {
         scoping,
+        self_reads,
+        value_methods: FxHashSet::default(),
+        receivers: Vec::new(),
         unknown: false,
         functions: FxHashSet::default(),
         symbols: FxHashSet::default(),
@@ -60,6 +79,9 @@ pub fn text_read_bindings(program: &Program<'_>, scoping: &Scoping) -> TextReads
 
 struct SinkFinder<'s> {
     scoping: &'s Scoping,
+    self_reads: SelfReads,
+    value_methods: FxHashSet<Span>,
+    receivers: Vec<bool>,
     unknown: bool,
     functions: FxHashSet<Span>,
     symbols: FxHashSet<SymbolId>,
@@ -91,12 +113,58 @@ fn is_text_method_member(expr: &Expression<'_>) -> bool {
         .is_some_and(|(_, name)| TEXT_METHODS.contains(&name.as_ref()))
 }
 
+fn is_this(expr: &Expression<'_>) -> bool {
+    matches!(expr.without_parentheses(), Expression::ThisExpression(_))
+}
+
 impl SinkFinder<'_> {
     fn text_method_object(&mut self, object: &Expression<'_>) {
-        if is_self_reference(object) {
+        if is_self_reference(object) && !self.reads_a_value_receiver(object) {
             self.unknown = true;
         }
         self.sink(object);
+    }
+
+    fn reads_a_value_receiver(&self, object: &Expression<'_>) -> bool {
+        is_this(object) && self.receivers.last().copied().unwrap_or(false)
+    }
+
+    fn is_instance_prototype(&self, expr: &Expression<'_>) -> bool {
+        let Expression::StaticMemberExpression(member) = expr.without_parentheses() else {
+            return false;
+        };
+        if member.property.name != "prototype" {
+            return false;
+        }
+        match member.object.without_parentheses() {
+            Expression::Identifier(id) => {
+                !FUNCTION_PROTOTYPES.contains(&id.name.as_str())
+                    || reference_symbol(id, self.scoping).is_some()
+            }
+            Expression::StaticMemberExpression(outer) => {
+                !FUNCTION_PROTOTYPES.contains(&outer.property.name.as_str())
+            }
+            _ => false,
+        }
+    }
+
+    fn reads_instances(&self) -> bool {
+        self.self_reads == SelfReads::InstanceMethodsReadInstances
+    }
+
+    fn note_value_method(&mut self, it: &AssignmentExpression<'_>) {
+        if !self.reads_instances() {
+            return;
+        }
+        let AssignmentTarget::StaticMemberExpression(member) = &it.left else {
+            return;
+        };
+        if !self.is_instance_prototype(&member.object) {
+            return;
+        }
+        if let Expression::FunctionExpression(function) = it.right.without_parentheses() {
+            self.value_methods.insert(function.span);
+        }
     }
 
     fn sink(&mut self, expr: &Expression<'_>) {
@@ -193,6 +261,7 @@ impl<'a> VisitJs<'a> for SinkFinder<'_> {
     }
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        self.note_value_method(it);
         if it.operator == oxc_syntax::operator::AssignmentOperator::Addition {
             self.sink(&it.right);
         }
@@ -244,6 +313,14 @@ impl<'a> VisitJs<'a> for SinkFinder<'_> {
         walk_js::walk_static_member_expression(self, it);
     }
 
+    fn visit_method_definition(&mut self, it: &MethodDefinition<'a>) {
+        let instance_method = !it.r#static && it.kind != MethodDefinitionKind::Constructor;
+        if instance_method && self.reads_instances() {
+            self.value_methods.insert(it.value.span);
+        }
+        walk_js::walk_method_definition(self, it);
+    }
+
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
         if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
             self.bind(id.symbol_id.get(), init);
@@ -257,7 +334,9 @@ impl<'a> VisitJs<'a> for SinkFinder<'_> {
                 self.function_symbols.insert(symbol, it.span);
             }
         }
+        self.receivers.push(self.value_methods.contains(&it.span));
         walk_js::walk_function(self, it, flags);
+        self.receivers.pop();
     }
 
     fn visit_class(&mut self, it: &Class<'a>) {
@@ -266,7 +345,9 @@ impl<'a> VisitJs<'a> for SinkFinder<'_> {
                 self.function_symbols.insert(symbol, it.span);
             }
         }
+        self.receivers.push(false);
         walk_js::walk_class(self, it);
+        self.receivers.pop();
     }
 }
 

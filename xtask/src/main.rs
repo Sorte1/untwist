@@ -76,6 +76,7 @@ enum Cmd {
     CheckVersion {
         tag: String,
     },
+    NameShare(xtask::name_share::Request),
 }
 
 fn repo_root() -> PathBuf {
@@ -521,6 +522,7 @@ fn main() -> Result<()> {
         Cmd::DepthOracleChild(child) => xtask::depth_oracle::run_child(&child),
         Cmd::Layers(command) => command.run(&repo_root()),
         Cmd::Bump { version } => bump(&version),
+        Cmd::NameShare(request) => xtask::name_share::run(&request),
         Cmd::CheckVersion { tag } => {
             xtask::release::check_version(&repo_root(), &tag)?;
             println!("{tag} matches every version");

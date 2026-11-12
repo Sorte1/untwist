@@ -16,6 +16,7 @@ untwist-core = { path = "../crates/untwist-core" }
 untwist-eval = { path = "../crates/untwist-eval", features = ["value-api"] }
 oxc_ast.workspace = true
 untwist-testing = { path = "../crates/untwist-testing" }
+untwist-rename = { path = "../crates/untwist-rename" }
 oxc_allocator.workspace = true
 oxc_ast_visit.workspace = true
 oxc_syntax.workspace = true
