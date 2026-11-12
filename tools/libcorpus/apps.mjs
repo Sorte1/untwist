@@ -5,10 +5,14 @@ const SIDE_EFFECT = new Set([
 ]);
 const CORPUS_ONLY = new Set(["node-libs-browser"]);
 const DEV_VARIANTS = new Set(["react", "react-dom", "vue", "mobx"]);
-const PEERS = { "react-dom": [["react", null]], zustand: [["react", "18.3.1"]] };
+const PEERS = { "react-dom": [["react", "same-minor"]], zustand: [["react", "18.3.1"]] };
 
-const whole = (name) =>
-  SIDE_EFFECT.has(name)
+const SUBPATH = { svelte: (version) => (version.startsWith("5.") ? "svelte/internal/client" : "svelte/internal") };
+
+const whole = (name, version) =>
+  SUBPATH[name]
+    ? `import * as lib from ${JSON.stringify(SUBPATH[name](version))};\nglobalThis.__lib = lib;\n`
+    : SIDE_EFFECT.has(name)
     ? `import ${JSON.stringify(name)};\nglobalThis.__loaded = true;\n`
     : `import * as lib from ${JSON.stringify(name)};\nglobalThis.__lib = lib;\n`;
 
@@ -30,7 +34,10 @@ export function apps() {
   const aliasesFor = (entry) => {
     const map = { [entry.name]: entry.alias };
     for (const [peer, pinned] of PEERS[entry.name] ?? []) {
-      const match = byKey.get(`${peer}@${pinned ?? entry.version}`);
+      const minor = entry.version.split(".").slice(0, 2).join(".");
+      const match = pinned === "same-minor"
+        ? [...byKey.values()].find((candidate) => candidate.name === peer && candidate.version.startsWith(`${minor}.`))
+        : byKey.get(`${peer}@${pinned}`);
       if (match) map[peer] = match.alias;
     }
     return map;
@@ -38,8 +45,8 @@ export function apps() {
   for (const entry of entries()) {
     if (CORPUS_ONLY.has(entry.name)) continue;
     const base = { lib: entry.name, version: entry.version, root: entry.root, aliases: aliasesFor(entry) };
-    out.push({ ...base, id: `${entry.slug}--whole`, env: "production", source: whole(entry.name) });
-    if (DEV_VARIANTS.has(entry.name)) out.push({ ...base, id: `${entry.slug}--whole-dev`, env: "development", source: whole(entry.name) });
+    out.push({ ...base, id: `${entry.slug}--whole`, env: "production", source: whole(entry.name, entry.version) });
+    if (DEV_VARIANTS.has(entry.name)) out.push({ ...base, id: `${entry.slug}--whole-dev`, env: "development", source: whole(entry.name, entry.version) });
   }
   for (const [name, version, kind, source] of SELECTIVE) {
     const entry = byKey.get(`${name}@${version}`);

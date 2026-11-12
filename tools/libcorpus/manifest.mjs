@@ -11,7 +11,7 @@ for (const { name, version, alias, root } of entries()) {
     continue;
   }
   mkdirSync(join(HERE, root), { recursive: true });
-  const isolated = { name: `untwist-libcorpus-${alias.replace(/[^a-z0-9-]/g, "-")}-${version}`, private: true, dependencies: { [name]: version } };
+  const isolated = { name: `untwist-libcorpus-${alias.replace(/[^a-z0-9-]/g, "-")}-${version}`, private: true, dependencies: { [alias]: `npm:${name}@${version}` } };
   writeFileSync(join(HERE, root, "package.json"), `${JSON.stringify(isolated, null, 2)}\n`);
 }
 const sorted = Object.fromEntries(Object.entries(dependencies).sort(([a], [b]) => a.localeCompare(b)));

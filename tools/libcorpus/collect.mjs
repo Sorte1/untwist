@@ -1,20 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, extname, join, relative } from "node:path";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { entries } from "./libs.mjs";
 import { ROOTS, packageName } from "./roots.mjs";
+import { form, walk } from "./files.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = process.env.UNTWIST_LIBCORPUS_OUT ?? join(process.env.HOME, ".cache/untwist-libcorpus");
-const SKIP_DIRS = new Set([
-  "test", "tests", "__tests__", "spec", "specs", "example", "examples", "docs", "doc", "bench", "benchmark",
-  "benchmarks", "scripts", "bin", "typings", "types", "node_modules", "coverage", "fixtures", "perf", "demo",
-  "demos", "website", "editor", "manual", "playground", "devtools", "flow-typed", "__mocks__",
-]);
-const KEEP_EXAMPLES = new Map([["three", "examples/jsm"]]);
-const SKIP_UNDER = new Map([["three", ["examples/jsm/libs"]]]);
-const SOURCE_EXT = new Set([".js", ".mjs", ".cjs"]);
 
 function resolveDep(LOCK, fromPath, dep) {
   let base = fromPath;
@@ -42,34 +35,6 @@ function closure(roots) {
     }
   }
   return seen;
-}
-
-function form(file, text) {
-  if (/\.min\.(c|m)?js$/.test(file) || /[.-]min[.-]/.test(file)) return "min";
-  const head = text.slice(0, 4000);
-  if (/typeof\s+define\s*===?\s*['"]function['"]\s*&&\s*define\.amd/.test(head) && /typeof\s+(exports|module)\b/.test(head)) return "umd";
-  if (file.endsWith(".mjs") || /^\s*(import\s*[\w{*'"]|export\s+[\w{*])/m.test(text)) return "esm";
-  if (file.endsWith(".cjs") || /\brequire\s*\(|\bmodule\.exports\b|\bexports\.\w+\s*=/.test(text)) return "cjs";
-  return "script";
-}
-
-function* walk(root, dir, name) {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const abs = join(dir, entry.name);
-    const rel = relative(root, abs);
-    if (entry.isDirectory()) {
-      if ((SKIP_UNDER.get(name) ?? []).some((prefix) => rel === prefix)) continue;
-      const keep = KEEP_EXAMPLES.get(name);
-      if (keep && (keep === rel || keep.startsWith(`${rel}/`) || rel.startsWith(`${keep}/`))) {
-        yield* walk(root, abs, name);
-        continue;
-      }
-      if (SKIP_DIRS.has(entry.name.toLowerCase())) continue;
-      yield* walk(root, abs, name);
-    } else if (entry.isFile() && SOURCE_EXT.has(extname(entry.name)) && !entry.name.endsWith(".d.ts")) {
-      yield [abs, rel];
-    }
-  }
 }
 
 const roots = entries().map((entry) => ({ ...entry, path: `node_modules/${entry.alias}` }));
