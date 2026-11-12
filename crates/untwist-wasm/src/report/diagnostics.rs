@@ -114,11 +114,13 @@ fn slots(output: &Output, source: &str) -> Vec<Slot> {
         .depth_refusals()
         .into_iter()
         .map(|_| warning("pipeline"));
+    let budgets = output.budget_hits.iter().map(|_| warning("budget"));
     let unpack = output.unpack_panicked.then(|| warning("unpack"));
     parse
         .chain(stops)
         .chain(panics)
         .chain(refusals)
+        .chain(budgets)
         .chain(unpack)
         .collect()
 }
@@ -230,6 +232,23 @@ mod tests {
         );
         assert!(rows.len() >= 2);
         assert_covers("var a = !0;", "--no-unpack", false);
+    }
+
+    #[test]
+    fn a_budget_hit_and_an_unpack_panic_each_get_a_row_of_their_own() {
+        let mut out = untwist::Pipeline::new(untwist::Options::default()).run("x;");
+        out.budget_hits.push((0, untwist::BudgetHit::Time));
+        out.unpack_panicked = true;
+        let stderr = crate::stderr_of(&out);
+
+        let rows = super::stderr_diagnostics(&out, "x;", &stderr);
+
+        let labelled: Vec<(&str, &str)> = rows.iter().map(|row| (row.pass, row.message)).collect();
+        assert_eq!(labelled.len(), 2, "{labelled:?}");
+        assert_eq!(labelled[0].0, "budget");
+        assert!(labelled[0].1.contains("reached its budget (budget-time)"));
+        assert_eq!(labelled[1].0, "unpack");
+        assert!(labelled[1].1.contains("unpacking hit an internal error"));
     }
 
     #[test]
