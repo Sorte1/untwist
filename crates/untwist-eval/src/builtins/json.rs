@@ -385,6 +385,14 @@ fn write_json_composite<'a>(
     obj: &ObjRef<'a>,
     stack: &mut Vec<ObjRef<'a>>,
 ) -> Eval<'a, Option<JsString>> {
+    let to_json_key = string_key(JsString::from_str("toJSON"));
+    if crate::object::decoding() {
+        host.note_protocol_member(value, &to_json_key)?;
+    }
+    let to_json = host.get_property(value, &to_json_key)?;
+    if to_json.is_callable() {
+        return Err(Bail::Unsupported(&"toJSON").into());
+    }
     if value.is_callable() {
         return Ok(None);
     }
@@ -393,14 +401,6 @@ fn write_json_composite<'a>(
             ErrorKind::TypeError,
             "Converting circular structure to JSON",
         ));
-    }
-    let to_json_key = string_key(JsString::from_str("toJSON"));
-    if crate::object::decoding() {
-        host.note_protocol_member(value, &to_json_key)?;
-    }
-    let to_json = host.get_property(value, &to_json_key)?;
-    if to_json.is_callable() {
-        return Err(Bail::Unsupported(&"toJSON").into());
     }
     stack.push(obj.clone());
     let is_array = matches!(obj.borrow().kind, ObjKind::Array(_));

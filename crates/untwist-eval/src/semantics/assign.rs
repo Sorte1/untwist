@@ -2,6 +2,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator};
 
 use crate::bail::{Bail, ErrorKind};
 use crate::builtins::args::write_property;
+use crate::compile::scope::CONSTANT_ASSIGNMENT;
 use crate::env::{declare, outermost, Assigned};
 use crate::frame::FrameRef;
 use crate::host::Host;
@@ -19,12 +20,16 @@ impl<'a> Interp<'a> {
         text: &str,
         value: Value<'a>,
     ) -> Eval<'a, ()> {
+        if self.has_root_constants() && self.writes_root_constant(env, name)? {
+            return Err(self.throw(ErrorKind::TypeError, CONSTANT_ASSIGNMENT));
+        }
         match crate::env::assign(env, name, value.clone())? {
             Assigned::Written => return Ok(()),
             Assigned::Immutable if self.strict => {
-                return Err(self.throw(ErrorKind::TypeError, "Assignment to constant variable."))
+                return Err(self.throw(ErrorKind::TypeError, CONSTANT_ASSIGNMENT))
             }
             Assigned::Immutable => return Ok(()),
+            Assigned::Constant => return Err(self.throw(ErrorKind::TypeError, CONSTANT_ASSIGNMENT)),
             Assigned::Unbound if self.strict => {
                 return Err(self.throw(ErrorKind::ReferenceError, &format!("{text} is not defined")))
             }

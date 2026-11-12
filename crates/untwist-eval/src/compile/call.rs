@@ -1,22 +1,35 @@
 use std::rc::Rc;
 
-use oxc_ast::ast::{ArrowFunctionBody, BindingIdentifier, FormalParameters, Statement};
+use oxc_ast::ast::{ArrowFunctionBody, BindingIdentifier, Expression, FormalParameters, Statement};
 
 use crate::bail::Bail;
 use crate::builtins::WIDE_SCOPE_BINDINGS;
+use crate::compile::defaults::{self, Unbound, UNSOUND_DEFAULT};
 use crate::compile::lexical::{pending, progressive};
 use crate::compile::scope::{self, Hoisted, Provable, ScopeChain};
 use crate::compile::{depth, Lazy, LazyExpr, Reach};
 use crate::frame::{Frame, FrameLayout, FrameRef};
 use crate::interp::Interp;
+use crate::names::Name;
 use crate::value::{Closure, Completion, Eval, FnCode, ObjRef, Value};
 
 const SHADOWED_PARAMETER: &str =
     "a body var or function that shadows a parameter beside parameter defaults, whose separate var scope the evaluator does not model";
 
+struct Fallback<'a> {
+    value: LazyExpr<'a>,
+    sound: bool,
+}
+
 struct Param<'a> {
     slot: Option<u32>,
-    default: Option<LazyExpr<'a>>,
+    default: Option<Fallback<'a>>,
+}
+
+struct Shape<'s, 'a> {
+    layout: &'s scope::FunctionLayout<'a>,
+    arguments_name: Option<Name>,
+    arguments_slot: Option<u32>,
 }
 
 enum Body<'a> {
@@ -116,8 +129,12 @@ impl<'a> Interp<'a> {
             .filter(|_| uses_arguments)
             .and_then(|name| shape.layout.slot(name))
             .and_then(|slot| u32::try_from(slot).ok());
-        let params =
-            self.compiled_params(signature.params, (&shape, arguments_slot), parent.as_ref())?;
+        let outline = Shape {
+            layout: &shape,
+            arguments_name,
+            arguments_slot,
+        };
+        let params = self.compiled_params(signature.params, &outline, parent.as_ref())?;
         let has_defaults = signature
             .params
             .items
@@ -162,24 +179,61 @@ impl<'a> Interp<'a> {
     fn compiled_params(
         &mut self,
         params: &'a FormalParameters<'a>,
-        (shape, arguments_slot): (&scope::FunctionLayout<'a>, Option<u32>),
+        outline: &Shape<'_, 'a>,
         parent: Option<&Rc<ScopeChain>>,
     ) -> Option<Box<[Param<'a>]>> {
+        let shape = outline.layout;
         let mut order = None;
         let mut out = Vec::with_capacity(params.items.len());
         for (index, param) in params.items.iter().enumerate() {
             let slot = shape.params.get(index).copied().flatten();
             let default = match param.initializer.as_deref() {
                 Some(initializer) => {
-                    let provable = earlier_parameters((shape, arguments_slot), &mut order, index)?;
+                    let provable =
+                        earlier_parameters((shape, outline.arguments_slot), &mut order, index)?;
                     let scope = ScopeChain::new(shape.layout.clone(), provable, parent.cloned());
-                    Some(LazyExpr::new(initializer, scope))
+                    Some(Fallback {
+                        value: LazyExpr::new(initializer, scope),
+                        sound: self.is_sound_default(initializer, outline, index),
+                    })
                 }
                 None => None,
             };
             out.push(Param { slot, default });
         }
         Some(out.into_boxed_slice())
+    }
+
+    fn is_sound_default(
+        &mut self,
+        initializer: &Expression<'a>,
+        outline: &Shape<'_, 'a>,
+        index: usize,
+    ) -> bool {
+        let shape = outline.layout;
+        let mut unbound = Unbound {
+            parameters: Vec::new(),
+            body: Vec::new(),
+        };
+        for text in defaults::mentions(initializer) {
+            let name = self.names.intern(text);
+            if Some(name) == outline.arguments_name {
+                continue;
+            }
+            let Some(slot) = shape.layout.slot(name) else {
+                continue;
+            };
+            let slot = u32::try_from(slot).ok();
+            let is_parameter = |bound: &Option<u32>| bound.is_some() && *bound == slot;
+            let earlier = shape.params.iter().take(index).any(is_parameter);
+            let later = shape.params.iter().skip(index).any(is_parameter);
+            match (earlier, later) {
+                (_, true) => unbound.parameters.push(text),
+                (true, false) => {}
+                (false, false) => unbound.body.push(text),
+            }
+        }
+        !defaults::reads_unbound(initializer, &unbound)
     }
 }
 
@@ -328,7 +382,10 @@ impl<'a> Interp<'a> {
             let mut value = args.get(index).cloned().unwrap_or(Value::Undefined);
             if matches!(value, Value::Undefined) {
                 if let Some(default) = &param.default {
-                    value = default.eval(self, env, reach)?;
+                    if !default.sound {
+                        return Err(Bail::Unsupported(&UNSOUND_DEFAULT).into());
+                    }
+                    value = default.value.eval(self, env, reach)?;
                 }
             }
             Frame::declare_slot(env, slot, value);

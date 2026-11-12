@@ -1,15 +1,6 @@
 mod common;
 
 use common::{eval, eval_with_notes};
-use untwist_eval::fold::is_pure;
-
-fn pure(source: &str) -> bool {
-    common::with_program(source, |program| {
-        let expression =
-            common::nth_expression_statement(program, 0).expect("one expression statement");
-        is_pure(expression)
-    })
-}
 
 #[test]
 fn bind_to_string_bails_where_node_prints_native_code() {
@@ -118,13 +109,6 @@ fn typeof_a_hostile_global_still_works_although_every_access_bails() {
         eval("window['foo']"),
         Err("hostile global window reached".to_string())
     );
-}
-
-#[test]
-fn purity_does_not_promise_that_an_expression_cannot_throw() {
-    assert!(pure("null.x"));
-    assert!(pure("decodeURIComponent('%')"));
-    assert!(!pure("JSON.parse('x')"));
 }
 
 #[test]

@@ -29,6 +29,7 @@ enum Target {
     VarNamed(Name),
     Slot(u32),
     Named(Name),
+    Constant(Name),
     Destructuring,
 }
 
@@ -59,9 +60,13 @@ fn var_target(scope: &Rc<ScopeChain>, name: Name) -> Target {
     }
 }
 
-fn lexical_target(scope: &Rc<ScopeChain>, name: Name) -> Target {
+fn lexical_target(scope: &Rc<ScopeChain>, name: Name, kind: VariableDeclarationKind) -> Target {
+    let named = match kind {
+        VariableDeclarationKind::Const => Target::Constant(name),
+        _ => Target::Named(name),
+    };
     if scope.is_root() {
-        return Target::Named(name);
+        return named;
     }
     match scope
         .layout
@@ -69,7 +74,7 @@ fn lexical_target(scope: &Rc<ScopeChain>, name: Name) -> Target {
         .and_then(|slot| u32::try_from(slot).ok())
     {
         Some(slot) => Target::Slot(slot),
-        None => Target::Named(name),
+        None => named,
     }
 }
 
@@ -95,7 +100,7 @@ pub(crate) fn compile_declaration<'a>(
         let name = cx.names.intern(id.name.as_str());
         let target = match kind {
             Kind::Var => var_target(scope, name),
-            Kind::Lexical | Kind::Using => lexical_target(scope, name),
+            Kind::Lexical | Kind::Using => lexical_target(scope, name, declaration.kind),
         };
         declarators.push(Declarator { target, init });
     }
@@ -149,6 +154,11 @@ impl<'a> Declarator<'a> {
             }
             (Target::Named(name), value) => {
                 declare(frame, *name, value.unwrap_or(Value::Undefined));
+                Ok(())
+            }
+            (Target::Constant(name), value) => {
+                declare(frame, *name, value.unwrap_or(Value::Undefined));
+                interp.note_root_constant(frame, *name);
                 Ok(())
             }
             (Target::Destructuring, _) => Err(Bail::Unsupported(&DESTRUCTURING).into()),

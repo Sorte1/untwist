@@ -9,6 +9,13 @@ use crate::frame::{FrameLayout, SlotKind};
 use crate::names::Name;
 use crate::names::Names;
 
+pub(crate) fn slot_kind(kind: VariableDeclarationKind) -> SlotKind {
+    match kind {
+        VariableDeclarationKind::Const => SlotKind::Constant,
+        _ => SlotKind::Mutable,
+    }
+}
+
 pub(crate) fn is_lexical(kind: VariableDeclarationKind) -> bool {
     matches!(
         kind,
@@ -29,9 +36,11 @@ pub(crate) fn scan<'a>(
         if !is_lexical(declaration.kind) {
             continue;
         }
+        let kind = slot_kind(declaration.kind);
         for declarator in &declaration.declarations {
             if let BindingPattern::BindingIdentifier(id) = &declarator.id {
-                declared.push((index, builder.slot_for(names.intern(id.name.as_str()))?));
+                let name = names.intern(id.name.as_str());
+                declared.push((index, builder.slot_of_kind(name, kind)?));
             }
         }
     }
@@ -122,8 +131,8 @@ pub(crate) fn lexical_layout<'a>(
         return Some((block_layout(base)?, Box::default()));
     }
     let mut builder = LayoutBuilder::new();
-    for (name, _) in base {
-        builder.slot_for(name)?;
+    for (name, kind) in base {
+        builder.slot_of_kind(name, kind)?;
     }
     let declared = scan(names, &mut builder, statements)?;
     Some((builder.finish()?, declared))

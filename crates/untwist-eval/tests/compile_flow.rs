@@ -110,6 +110,24 @@ const ROWS: &[Row] = &[
         "f()",
         "d",
     ),
+    row(
+        "a_var_for_in_binding_read_after_the_loop",
+        "function f() { var k = 'kept'; for (var k in {a: 1}) {} return k; }",
+        "f()",
+        "a",
+    ),
+    row(
+        "a_var_for_of_binding_read_after_the_loop",
+        "function f() { for (var v of ['x', 'y']) {} return v; }",
+        "f()",
+        "y",
+    ),
+    row(
+        "a_const_assignment_that_throws",
+        "function f() { const c = 1; try { c = 2; } catch (e) { return 'T' + c; } return c; }",
+        "f()",
+        "T1",
+    ),
 ];
 
 fn parse_and<R>(source: &str, body: impl FnOnce(&Program<'_>) -> R) -> R {
@@ -272,10 +290,6 @@ fn every_statement_form_matches_the_walker_at_every_fuel_cap() {
 
 const WALKER_ONLY_SHAPES: &[(&str, &str)] = &[
     (
-        "a var for-in binding declared in the loop's own scope",
-        "function f() { var k = 'kept'; for (var k in {a: 1}) {} return k; } f();",
-    ),
-    (
         "a nested label continuing the outer loop",
         "function f() { var n = 0; a: b: while (n < 3) { n++; continue a; } return n; } f();",
     ),
@@ -290,10 +304,6 @@ const WALKER_ONLY_SHAPES: &[(&str, &str)] = &[
     (
         "a let read across switch cases it skipped",
         "var a = 'outer'; function f(x) { switch (x) { case 0: let a = 'zero'; case 1: return typeof a + a; } } f(1);",
-    ),
-    (
-        "a const reassigned",
-        "function f() { const c = 1; c = 2; return c; } f();",
     ),
     (
         "a for-let head read in its own initialiser",

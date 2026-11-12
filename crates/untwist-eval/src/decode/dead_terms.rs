@@ -39,6 +39,7 @@ const NO_STATS: MemoRecipeStats = MemoRecipeStats {
 };
 
 #[doc(hidden)]
+#[cfg_attr(not(feature = "test-hooks"), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RecipeMode {
     Default,
@@ -48,18 +49,33 @@ pub enum RecipeMode {
 
 thread_local! {
     static STATS: Cell<MemoRecipeStats> = const { Cell::new(NO_STATS) };
-    static MODE: Cell<RecipeMode> = const { Cell::new(RecipeMode::Default) };
     static OUTCOMES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
+#[cfg(feature = "test-hooks")]
+thread_local! {
+    static MODE: Cell<RecipeMode> = const { Cell::new(RecipeMode::Default) };
+}
+
+#[cfg(feature = "test-hooks")]
+fn recipe_mode() -> RecipeMode {
+    MODE.with(Cell::get)
+}
+
+#[cfg(not(feature = "test-hooks"))]
+const fn recipe_mode() -> RecipeMode {
+    RecipeMode::Default
+}
+
 pub(crate) fn recipe_mode_tag() -> u8 {
-    match MODE.with(Cell::get) {
+    match recipe_mode() {
         RecipeMode::Default => 0,
         RecipeMode::Commit => 1,
         RecipeMode::ProbeOnly => 2,
     }
 }
 
+#[cfg(feature = "test-hooks")]
 #[doc(hidden)]
 pub fn set_recipe_mode_for_tests(mode: RecipeMode) {
     MODE.with(|cell| cell.set(mode));
@@ -122,7 +138,7 @@ impl<'a> Session<'a> {
     }
 
     pub(super) fn note_rotation_outcome(&self, applied: &EvalResult<Option<usize>>) {
-        if MODE.with(Cell::get) == RecipeMode::Default {
+        if recipe_mode() == RecipeMode::Default {
             return;
         }
         let items: Vec<String> = self
@@ -143,7 +159,7 @@ impl<'a> Session<'a> {
         index: usize,
         scope: &FrameRef<'a>,
     ) -> EvalResult<()> {
-        let mode = MODE.with(Cell::get);
+        let mode = recipe_mode();
         let term = prepared.terms.get(index).copied();
         let plan = match term {
             Some(term) if self.dead_tail_proven && mode != RecipeMode::ProbeOnly => {

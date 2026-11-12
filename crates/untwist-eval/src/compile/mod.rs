@@ -2,6 +2,7 @@ mod assign;
 mod block;
 mod call;
 mod declare;
+mod defaults;
 pub(crate) mod depth;
 pub(crate) mod eligible;
 pub(crate) mod entry;

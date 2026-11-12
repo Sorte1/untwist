@@ -27,8 +27,8 @@ use crate::unmodelled::{
     refuse_boolean_member, refuse_inherited_miss, refuse_own_undefined, refuse_primitive_miss,
 };
 use crate::value::{
-    js_string_from_js_str, js_string_from_literal, Abrupt, Eval, JsString, NativeId, ObjKind,
-    ObjRef, PropKey, Value,
+    js_string_from_js_str, js_string_from_literal, Abrupt, Eval, JsString, ObjKind, ObjRef,
+    PropKey, Value,
 };
 
 mod budget_host;
@@ -684,124 +684,4 @@ fn fold_call(
     }
     let (callee, this) = resolve_callee(node, options, host)?;
     host.call_value(&callee, this, &args).ok()
-}
-
-fn native_id(value: &Value<'_>) -> Option<NativeId> {
-    let obj = value.as_object()?;
-    match obj.borrow().kind {
-        ObjKind::Native(id, _) => Some(id),
-        _ => None,
-    }
-}
-
-pub fn is_pure(expr: &Expression<'_>) -> bool {
-    let mut budget = Budget::new(FOLD_STEP_BUDGET);
-    is_pure_with(expr, &mut budget)
-}
-
-fn is_pure_with(expr: &Expression<'_>, budget: &mut Budget) -> bool {
-    if budget.spend(1).is_err() || budget.enter_nesting().is_err() {
-        return false;
-    }
-    let result = stack::maybe_grow(|| is_pure_inner(expr, budget));
-    budget.leave_nesting();
-    result
-}
-
-fn is_pure_inner(expr: &Expression<'_>, budget: &mut Budget) -> bool {
-    match expr {
-        Expression::NumericLiteral(_)
-        | Expression::StringLiteral(_)
-        | Expression::BooleanLiteral(_)
-        | Expression::NullLiteral(_)
-        | Expression::RegExpLiteral(_)
-        | Expression::ThisExpression(_)
-        | Expression::FunctionExpression(_)
-        | Expression::ArrowFunctionExpression(_) => true,
-        Expression::Identifier(node) => {
-            matches!(node.name.as_str(), "undefined" | "NaN" | "Infinity")
-        }
-        Expression::ParenthesizedExpression(node) => is_pure_with(&node.expression, budget),
-        Expression::UnaryExpression(node) => {
-            node.operator != UnaryOperator::Delete && is_pure_with(&node.argument, budget)
-        }
-        Expression::BinaryExpression(node) => {
-            is_pure_with(&node.left, budget) && is_pure_with(&node.right, budget)
-        }
-        Expression::LogicalExpression(node) => {
-            is_pure_with(&node.left, budget) && is_pure_with(&node.right, budget)
-        }
-        Expression::ConditionalExpression(node) => {
-            is_pure_with(&node.test, budget)
-                && is_pure_with(&node.consequent, budget)
-                && is_pure_with(&node.alternate, budget)
-        }
-        Expression::SequenceExpression(node) => node
-            .expressions
-            .iter()
-            .all(|part| is_pure_with(part, budget)),
-        Expression::TemplateLiteral(node) => node
-            .expressions
-            .iter()
-            .all(|part| is_pure_with(part, budget)),
-        Expression::ArrayExpression(node) => is_pure_array(node.as_ref(), budget),
-        Expression::ObjectExpression(node) => is_pure_object(node.as_ref(), budget),
-        Expression::StaticMemberExpression(_) | Expression::ComputedMemberExpression(_) => expr
-            .as_member_expression()
-            .is_some_and(|member| is_pure_member(member, budget)),
-        Expression::CallExpression(node) => is_pure_call(node.as_ref(), budget),
-        _ => false,
-    }
-}
-
-fn is_pure_array(node: &ArrayExpression<'_>, budget: &mut Budget) -> bool {
-    node.elements.iter().all(|element| match element {
-        ArrayExpressionElement::SpreadElement(_) => false,
-        ArrayExpressionElement::Elision(_) => true,
-        other => other
-            .as_expression()
-            .is_some_and(|inner| is_pure_with(inner, budget)),
-    })
-}
-
-fn is_pure_object(node: &ObjectExpression<'_>, budget: &mut Budget) -> bool {
-    node.properties.iter().all(|property| {
-        let ObjectPropertyKind::ObjectProperty(entry) = property else {
-            return false;
-        };
-        !entry.computed && is_pure_with(&entry.value, budget)
-    })
-}
-
-fn is_pure_member(member: &MemberExpression<'_>, budget: &mut Budget) -> bool {
-    match member {
-        MemberExpression::StaticMemberExpression(node) => is_pure_with(&node.object, budget),
-        MemberExpression::ComputedMemberExpression(node) => {
-            is_pure_with(&node.object, budget) && is_pure_with(&node.expression, budget)
-        }
-        MemberExpression::PrivateFieldExpression(_) => false,
-    }
-}
-
-fn is_pure_call(node: &CallExpression<'_>, budget: &mut Budget) -> bool {
-    let arguments_pure = node.arguments.iter().all(|argument| {
-        argument
-            .as_expression()
-            .is_some_and(|inner| is_pure_with(inner, budget))
-    });
-    if node.optional || !arguments_pure {
-        return false;
-    }
-    if let Some(member) = node.callee.as_member_expression() {
-        if !is_pure_member(member, budget) {
-            return false;
-        }
-    }
-    let options = FoldOptions::default();
-    with_pure_host(|host| {
-        let Some((callee, _)) = resolve_callee(node, &options, host) else {
-            return false;
-        };
-        native_id(&callee).is_some_and(|id| host.realm().is_pure_native(id))
-    })
 }

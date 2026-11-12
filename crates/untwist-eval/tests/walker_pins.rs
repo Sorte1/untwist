@@ -264,11 +264,11 @@ fn walker_and_node(label: &str, source: &str, walker: Pin, node: &str, divergenc
 }
 
 #[test]
-fn a_default_that_reads_a_later_parameter_reads_the_outer_binding() {
+fn a_default_that_reads_a_later_parameter_is_refused() {
     let walker = Pin {
-        values: &["string:outer"],
-        bail: None,
-        steps: 9,
+        values: &[],
+        bail: Some("unsupported construct: a parameter default that reads its own parameter, a later one or a binding of the function body"),
+        steps: 5,
         heap: NO_HEAP,
     };
     walker_and_node(
@@ -276,7 +276,7 @@ fn a_default_that_reads_a_later_parameter_reads_the_outer_binding() {
         DEFAULT_READS_LATER_PARAMETER,
         walker,
         "ReferenceError: Cannot access 'b' before initialization",
-        Some("the walker has no parameter TDZ: the later parameter is not yet declared, so the read resolves outward"),
+        Some("parameters have no dead zone, so a default that reads a later parameter is refused where node throws"),
     );
 }
 
@@ -446,7 +446,7 @@ const INVENTORY: [(&str, &str, usize, &str); 76] = [
     ("compile/call.rs", "make_closure(", 1, COMPILED),
     ("compile/declare.rs", "FrameRef<'", 3, COMPILED),
     ("compile/depth.rs", "FrameRef<'", 2, COMPILED),
-    ("compile/declare.rs", "declare(", 3, ROOT_DECLARATIONS),
+    ("compile/declare.rs", "declare(", 4, ROOT_DECLARATIONS),
     ("compile/entry.rs", "FrameRef<'", 14, COMPILED_ENTRIES_ROLE),
     ("compile/entry.rs", "compile_in(", 1, COMPILED_ENTRIES_ROLE),
     ("compile/entry.rs", "declare(", 2, DIRECT_ENTRIES),
@@ -464,7 +464,7 @@ const INVENTORY: [(&str, &str, usize, &str); 76] = [
     ("compile/expr.rs", "lookup(", 1, COMPILED),
     ("compile/expr.rs", "make_closure(", 2, COMPILED),
     ("compile/literal.rs", "FrameRef<'", 1, COMPILED),
-    ("compile/loops.rs", "FrameRef<'", 18, COMPILED),
+    ("compile/loops.rs", "FrameRef<'", 20, COMPILED),
     ("compile/mod.rs", "FrameRef<'", 19, COMPILED),
     ("compile/program.rs", "FrameRef<'", 1, COMPILED),
     ("compile/program.rs", "global_env(", 2, ROOT_RUNNERS),
@@ -497,7 +497,7 @@ const INVENTORY: [(&str, &str, usize, &str); 76] = [
     ("interp/call.rs", "FrameRef<'", 3, CALL_PATH),
     ("interp/call.rs", "declare(", 2, CALL_PATH),
     ("interp/call.rs", "declare_if_absent(", 1, CALL_PATH),
-    ("interp/mod.rs", "FrameRef<'", 7, INTERPRETER),
+    ("interp/mod.rs", "FrameRef<'", 9, INTERPRETER),
     ("interp/mod.rs", "declare(", 1, INTERPRETER),
     ("interp/mod.rs", "declare_if_absent(", 1, INTERPRETER),
     ("interp/mod.rs", "global_env(", 2, INTERPRETER),

@@ -72,6 +72,8 @@ pub fn number_to_js_string(n: f64) -> JsString {
     JsString::from_str(&number_to_string(n))
 }
 
+const EXACT_INTEGER_LIMIT: f64 = 9_007_199_254_740_992.0;
+
 pub fn number_to_radix_string(n: f64, radix: u32) -> String {
     if !(2..=36).contains(&radix) || n.is_nan() || n.is_infinite() {
         return number_to_string(n);
@@ -82,19 +84,12 @@ pub fn number_to_radix_string(n: f64, radix: u32) -> String {
     if n == 0.0 {
         return "0".to_string();
     }
-    let negative = n < 0.0;
-    let magnitude = n.abs();
-    let mut out = String::new();
-    if negative {
-        out.push('-');
+    debug_assert!(n.fract() == 0.0 && n.abs() < EXACT_INTEGER_LIMIT);
+    let digits = integer_digits(n.abs(), radix);
+    match n < 0.0 {
+        true => format!("-{digits}"),
+        false => digits,
     }
-    out.push_str(&integer_digits(magnitude.trunc(), radix));
-    let fraction = magnitude.fract();
-    if fraction > 0.0 {
-        out.push('.');
-        out.push_str(&fraction_digits(fraction, radix));
-    }
-    out
 }
 
 fn integer_digits(mut value: f64, radix: u32) -> String {
@@ -109,21 +104,6 @@ fn integer_digits(mut value: f64, radix: u32) -> String {
         value = (value / base).trunc();
     }
     digits.iter().rev().collect()
-}
-
-fn fraction_digits(mut value: f64, radix: u32) -> String {
-    let base = f64::from(radix);
-    let mut out = String::new();
-    for _ in 0..52 {
-        if value == 0.0 {
-            break;
-        }
-        value *= base;
-        let digit = value.trunc() as u32;
-        out.push(digit_char(digit));
-        value -= value.trunc();
-    }
-    out
 }
 
 fn digit_char(digit: u32) -> char {

@@ -33,9 +33,10 @@ pub use checksum::{checksum_from_rotator, Checksum};
 use checksum::{checksum_step, rotator_body_is_strict, NATIVE_ROTATE_STEP_COST};
 pub(crate) use dead_terms::recipe_mode_tag;
 pub use dead_terms::{
-    memo_recipe_stats_for_tests, set_recipe_mode_for_tests, take_rotation_outcomes_for_tests,
-    MemoRecipeStats, RecipeMode,
+    memo_recipe_stats_for_tests, take_rotation_outcomes_for_tests, MemoRecipeStats,
 };
+#[cfg(feature = "test-hooks")]
+pub use dead_terms::{set_recipe_mode_for_tests, RecipeMode};
 use entries::Prepared;
 pub(crate) use kept::KeptUnits;
 #[cfg(feature = "test-hooks")]

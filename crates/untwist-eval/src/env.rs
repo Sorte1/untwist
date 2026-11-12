@@ -209,6 +209,7 @@ fn read_here<'a>(frame: &FrameRef<'a>, name: Name) -> Result<Value<'a>, Option<F
 pub enum Assigned {
     Written,
     Immutable,
+    Constant,
     Unbound,
 }
 
@@ -233,6 +234,7 @@ fn assign_from<'a>(
                 return Ok(Assigned::Written);
             }
             WriteSlot::Immutable => return Ok(Assigned::Immutable),
+            WriteSlot::Constant => return Ok(Assigned::Constant),
             WriteSlot::Absent => {}
         }
         scope.parent.clone()
@@ -241,6 +243,24 @@ fn assign_from<'a>(
         Some(parent) => assign_from(&parent, name, value, depth + 1),
         None => Ok(Assigned::Unbound),
     }
+}
+
+pub fn binds_outermost(env: &FrameRef<'_>, name: Name) -> EvalResult<bool> {
+    let mut frame = env.clone();
+    for _ in 0..SCOPE_CHAIN_CAP {
+        let parent = {
+            let scope = frame.borrow();
+            if scope.body.contains_key(name) {
+                return Ok(scope.parent.is_none());
+            }
+            scope.parent.clone()
+        };
+        match parent {
+            Some(parent) => frame = parent,
+            None => return Ok(false),
+        }
+    }
+    too_deep()
 }
 
 pub fn has_binding(env: &FrameRef<'_>, name: Name) -> EvalResult<bool> {

@@ -7,7 +7,7 @@ use oxc_ast::builder::AstBuilder;
 use oxc_span::SPAN;
 use untwist_core::parse::parse_program;
 use untwist_eval::env::hoist_var_names;
-use untwist_eval::fold::{fold_to_const, is_pure, Const, FoldOptions};
+use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 fn nested_blocks_source(depth: usize) -> String {
     let mut source = String::from("function f() {\n");
@@ -57,11 +57,6 @@ fn folding_a_left_deep_chain_does_not_overflow_the_stack() {
     let depth = 10_000;
     let folded = with_left_deep_chain(depth, |expr| fold_to_const(expr, &FoldOptions::default()));
     assert_eq!(folded, Some(Const::Num(depth as f64)));
-}
-
-#[test]
-fn purity_of_a_left_deep_chain_does_not_overflow_the_stack() {
-    assert!(with_left_deep_chain(10_000, is_pure));
 }
 
 #[test]

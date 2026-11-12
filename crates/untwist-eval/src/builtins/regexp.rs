@@ -136,7 +136,7 @@ impl Subject {
     }
 }
 
-fn is_sticky(data: &RegExpData) -> bool {
+pub(crate) fn is_sticky(data: &RegExpData) -> bool {
     data.flags
         .as_string()
         .is_some_and(|text| text.contains('y'))

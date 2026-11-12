@@ -93,7 +93,6 @@ fn radix_strings_match_js() {
     assert_eq!(number_to_radix_string(255.0, 16), "ff");
     assert_eq!(number_to_radix_string(10.0, 16), "a");
     assert_eq!(number_to_radix_string(-255.0, 16), "-ff");
-    assert_eq!(number_to_radix_string(0.5, 2), "0.1");
     assert_eq!(number_to_radix_string(0.0, 16), "0");
     assert_eq!(number_to_radix_string(f64::NAN, 16), "NaN");
     assert_eq!(number_to_radix_string(1234.0, 10), "1234");
