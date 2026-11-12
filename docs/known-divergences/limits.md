@@ -100,7 +100,11 @@ Beyond what the pipeline holds for an input of the same length:
   credited when freed, and decoding stops partway, leaving the remaining call sites encoded, when
   the live total passes it. One operation can overshoot by what it builds before its check, at
   most one string at the 16 Mi-unit cap or one array at the 1 Mi-slot cap, and while a large array
-  or object grows its old and new storage are held together, so peak RSS can reach 1.5 × the charge;
+  or object grows its old and new storage are held together, so peak RSS can reach 1.5 × the charge.
+  The regex engine's backtracking memory is not charged: `/(x+)/.test(s)` on a string of 8 Mi
+  units can hold more than 256 MB outside the heap budget. Output is not affected, and the
+  process-level `--max-memory` hard stop still applies, in the worker and in-process alike.
+  Charging it is planned for v0.6.0;
 - the decoded text inlined into the output ≤ the smaller of a quarter of the heap budget and the
   print room the input's estimate leaves, counted at its printed size (6 B per unit for strings of
   32 units or fewer, the escaped size above that). The pipeline holds that text about four times
