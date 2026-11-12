@@ -62,6 +62,15 @@ pub enum Locality {
     Neutral,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RoundCapUndo {
+    #[default]
+    Snapshot,
+    Replay,
+    Requested,
+    Replaying,
+}
+
 #[derive(Clone, Debug)]
 pub struct PassOptions {
     pub unsafe_transforms: bool,
@@ -98,6 +107,8 @@ pub struct PassOptions {
     pub scoping_canonical: Cell<bool>,
     #[doc(hidden)]
     pub shares_init_order: bool,
+    #[doc(hidden)]
+    pub round_cap_undo: Cell<RoundCapUndo>,
     pub disabled_rules: Vec<&'static str>,
 }
 
@@ -174,6 +185,7 @@ impl Default for PassOptions {
             scoping_patched: Cell::new(false),
             scoping_canonical: Cell::new(true),
             shares_init_order: false,
+            round_cap_undo: Cell::new(RoundCapUndo::Snapshot),
             disabled_rules: Vec::new(),
         }
     }

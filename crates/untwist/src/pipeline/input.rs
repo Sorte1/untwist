@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::Cell;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
@@ -6,7 +7,7 @@ use untwist_core::ast_util::respan::reset_synthetic_spans;
 use untwist_core::ast_util::statements::statement_spans;
 use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{has_error, parse_program, parse_with, Parsed, SourceType};
-use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions};
+use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions, RoundCapUndo};
 use untwist_core::print::pretty_codegen;
 use untwist_core::reflow::{print_placing, Check, GuardRecord, Printed};
 use untwist_core::semantic::{
@@ -270,11 +271,28 @@ impl Pipeline {
         let mut form = None;
         let mut scoped = false;
         let mut fallback: Option<Fallback<'_>> = None;
+        let mut replaying = false;
         loop {
             let marks = Marks::of(result, &layering, room.as_ref());
             let layer = (reservation, room.take(), form, scoped);
-            match self.process_layer(&current, layer, &mut layering, &mut fallback, result) {
+            let undo = match std::mem::take(&mut replaying) {
+                true => RoundCapUndo::Replaying,
+                false => RoundCapUndo::Replay,
+            };
+            let step = self.process_layer(
+                &current,
+                (layer, undo),
+                &mut layering,
+                &mut fallback,
+                result,
+            );
+            match step {
                 Step::Done(code) => return code,
+                Step::Replay => {
+                    marks.restore(result, &mut layering);
+                    room = marks.room.map(RoomSeed::room);
+                    replaying = true;
+                }
                 Step::Peel(peeled) => {
                     room = Some(peeled.room.room());
                     let text = std::mem::replace(&mut current, Cow::Owned(peeled.text));
@@ -316,11 +334,9 @@ impl Pipeline {
     fn process_layer(
         &self,
         text: &str,
-        (reservation, room, form, scoped): (
-            Reservation<'_>,
-            Option<InputRoom>,
-            Option<LayerForm>,
-            bool,
+        ((reservation, room, form, scoped), undo): (
+            (Reservation<'_>, Option<InputRoom>, Option<LayerForm>, bool),
+            RoundCapUndo,
         ),
         layering: &mut Layering,
         fallback: &mut Option<Fallback<'_>>,
@@ -364,18 +380,21 @@ impl Pipeline {
         let staged = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let tree = (&alloc, &mut parsed.program);
             let checked = first && errors == 0;
-            self.stage_layer(tree, (reservation, room, checked, scoped), layering, result)
+            let layer = (reservation, room, checked, scoped);
+            self.stage_layer(tree, (layer, undo), layering, result)
         }));
+        let replay = matches!(staged, Ok(Staged::Replay));
         #[cfg(feature = "refusal-spans")]
-        if let Some((layer, recorder)) = recorder {
+        if let Some((layer, recorder)) = recorder.filter(|_| !replay) {
             let sites = super::refusal_spans::located(text, layer, recorder.finish());
             result.refusal_sites.extend(sites);
         }
-        if let Some((layer, recorder)) = decoding {
+        if let Some((layer, recorder)) = decoding.filter(|_| !replay) {
             let found = super::decoded::sited(text.len(), layer, recorder.finish());
             result.decoded_strings.extend(found);
         }
         match staged {
+            Ok(Staged::Replay) => Step::Replay,
             Ok(Staged::TypeScript) => Step::Done(None),
             Ok(Staged::Peeled(peeled)) => Step::Peel(peeled),
             Ok(Staged::Done) => {
@@ -403,7 +422,10 @@ impl Pipeline {
     fn stage_layer<'a>(
         &self,
         (alloc, program): (&'a Allocator, &mut Program<'a>),
-        (reservation, room, checked, scoped): (Reservation<'_>, Option<InputRoom>, bool, bool),
+        ((reservation, room, checked, scoped), undo): (
+            (Reservation<'_>, Option<InputRoom>, bool, bool),
+            RoundCapUndo,
+        ),
         layering: &mut Layering,
         result: &mut InputResult,
     ) -> Staged {
@@ -412,6 +434,7 @@ impl Pipeline {
         let pass_opts = PassOptions {
             room,
             nested_root,
+            round_cap_undo: Cell::new(undo),
             ..self.pass_options()
         };
         let mut site = StageCx {
@@ -445,6 +468,9 @@ impl Pipeline {
             return Staged::Peeled(peeled);
         }
         let sem = self.front_stages(site, sem);
+        if site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested {
+            return Staged::Replay;
+        }
         if let Some(peeled) = self.peel(site, &sem, layering) {
             return Staged::Peeled(peeled);
         }
@@ -487,6 +513,7 @@ fn parse_outcome(
 enum Staged {
     TypeScript,
     Peeled(Peeled),
+    Replay,
     Done,
 }
 
@@ -494,6 +521,7 @@ enum Step {
     Done(Option<Printed>),
     Peel(Peeled),
     Kept(Refusal),
+    Replay,
 }
 
 struct Marks {

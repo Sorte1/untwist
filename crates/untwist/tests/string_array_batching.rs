@@ -1,5 +1,7 @@
 use untwist::{Options, Output, Pipeline};
-use untwist_deobfuscate::mutants::limit_deobfuscate_rounds_for_tests;
+use untwist_deobfuscate::mutants::{
+    limit_deobfuscate_rounds_for_tests, undo_round_cap_by_snapshot_for_tests,
+};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 static ROUNDS: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -97,4 +99,40 @@ fn a_run_stopped_by_the_round_cap_keeps_the_units_as_written() {
     let modes: [Mode<'_>; 1] = [("capped", &capped)];
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+fn capped_run(source: &str, by_snapshot: bool) -> Output {
+    limit_deobfuscate_rounds_for_tests(2);
+    undo_round_cap_by_snapshot_for_tests(by_snapshot);
+    let out = run(source);
+    undo_round_cap_by_snapshot_for_tests(false);
+    limit_deobfuscate_rounds_for_tests(0);
+    out
+}
+
+#[test]
+fn a_replayed_round_cap_undo_prints_what_the_snapshot_undo_prints() {
+    let _rounds = ROUNDS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let source = nested_units(NESTED);
+    let replayed = capped_run(&source, false);
+    let restored = capped_run(&source, true);
+    assert_eq!(replayed.code(), restored.code());
+    let undone = |out: &Output| {
+        out.notes
+            .iter()
+            .filter(|note| note.message.contains("kept as it was before deobfuscation"))
+            .count()
+    };
+    assert_eq!(undone(&replayed), 1, "{:?}", replayed.notes);
+    assert_eq!(undone(&restored), 1, "{:?}", restored.notes);
+    assert_eq!(deobfuscate_stages(&replayed), deobfuscate_stages(&restored));
+}
+
+fn deobfuscate_stages(out: &Output) -> usize {
+    out.stages
+        .iter()
+        .filter(|stage| stage.stage == "deobfuscate")
+        .count()
 }
