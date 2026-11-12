@@ -122,7 +122,7 @@ impl<'p> Scan<'_, 'p> {
         let Some(symbol) = function.id.as_ref().and_then(|id| id.symbol_id.get()) else {
             return;
         };
-        if is_block_function(self.scoping, symbol) {
+        if is_block_function(self.scoping, function) {
             return;
         }
         let (Some(body), Some(params)) = (function_body(function), simple_params(&function.params))

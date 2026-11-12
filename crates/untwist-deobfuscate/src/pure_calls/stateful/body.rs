@@ -195,7 +195,7 @@ pub(super) fn parse<'p>(
     let (symbol, hoisted, (code, params)) = match statement {
         Statement::FunctionDeclaration(function) => {
             let symbol = function.id.as_ref()?.symbol_id.get()?;
-            if is_block_function(scoping, symbol) {
+            if is_block_function(scoping, function) {
                 return None;
             }
             (symbol, true, function_code(function)?)

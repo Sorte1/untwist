@@ -12,7 +12,7 @@ use untwist_core::guard_shape::{may_be_a_guard, read_target};
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
 };
-use untwist_core::semantic::{is_constant_binding, scope_hazard};
+use untwist_core::semantic::{block_function_symbols, is_constant_binding, scope_hazard};
 
 pub const PASS: &str = "var-to-let";
 
@@ -119,21 +119,10 @@ fn name_hash(name: &str) -> u64 {
 }
 
 fn block_function_names(scoping: &Scoping) -> FxHashSet<u64> {
-    let mut names = FxHashSet::default();
-    for symbol in scoping.symbol_ids() {
-        let flags = scoping.symbol_flags(symbol);
-        if !flags.contains(SymbolFlags::Function) || flags.contains(SymbolFlags::FunctionExpression)
-        {
-            continue;
-        }
-        if !scoping
-            .scope_flags(scoping.symbol_scope_id(symbol))
-            .is_var()
-        {
-            names.insert(name_hash(scoping.symbol_name(symbol)));
-        }
-    }
-    names
+    block_function_symbols(scoping)
+        .into_iter()
+        .map(|symbol| name_hash(scoping.symbol_name(symbol)))
+        .collect()
 }
 
 fn set_bit(bits: &mut [u64], index: usize) {

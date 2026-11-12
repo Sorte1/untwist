@@ -126,8 +126,11 @@ fn plan_merge<'a>(
     cx: &Cx<'a, '_>,
 ) -> Option<Vec<(SymbolId, String)>> {
     let Statement::BlockStatement(block) = statement else {
-        return Some(Vec::new());
+        return (!declares_function(statement)).then(Vec::new);
     };
+    if block.body.iter().any(declares_function) {
+        return None;
+    }
     let scope_id = block.scope_id.get()?;
     let mut introduced = Vec::new();
     for (symbol, name) in declared_in(scope_id, cx.scoping()) {
@@ -275,6 +278,34 @@ fn var_statement<'a>(names: &[(Ident<'a>, Option<SymbolId>)], cx: &Cx<'a, '_>) -
         cx,
     );
     Statement::new_variable_declaration(SPAN, VariableDeclarationKind::Var, declarators, false, cx)
+}
+
+fn declares_function(statement: &Statement<'_>) -> bool {
+    match statement {
+        Statement::FunctionDeclaration(_) => true,
+        Statement::LabeledStatement(labeled) => declares_function(&labeled.body),
+        _ => false,
+    }
+}
+
+fn branch_declares_function(statement: &Statement<'_>) -> bool {
+    match statement {
+        Statement::BlockStatement(block) => block.body.iter().any(declares_function),
+        other => declares_function(other),
+    }
+}
+
+fn keep_braced<'a>(
+    branch: Statement<'a>,
+    stmts: &mut AVec<'a, Statement<'a>>,
+    cx: &mut Cx<'a, '_>,
+) -> bool {
+    let braced = match branch {
+        block @ Statement::BlockStatement(_) => block,
+        other => cx.block_of(other),
+    };
+    stmts.push(braced);
+    true
 }
 
 fn has_with(scoping: &Scoping) -> bool {
@@ -481,6 +512,9 @@ impl<'a> DeadCode<'a> {
         if value {
             match self.try_merge(consequent, outer, stmts, cx) {
                 Ok(()) => true,
+                Err(consequent) if branch_declares_function(&consequent) => {
+                    keep_braced(consequent, stmts, cx)
+                }
                 Err(consequent) => refuse(span, test, consequent, alternate, stmts, cx),
             }
         } else {
@@ -489,6 +523,7 @@ impl<'a> DeadCode<'a> {
             };
             match self.try_merge(branch, outer, stmts, cx) {
                 Ok(()) => true,
+                Err(branch) if branch_declares_function(&branch) => keep_braced(branch, stmts, cx),
                 Err(branch) => refuse(span, test, consequent, Some(branch), stmts, cx),
             }
         }

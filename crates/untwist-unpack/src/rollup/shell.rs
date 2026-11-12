@@ -95,9 +95,6 @@ fn reads_current_script(program: &Program<'_>, body: &FunctionBody<'_>) -> bool 
 }
 
 pub fn shell<'k, 'a>(program: &'k Program<'a>) -> Option<Shell<'k, 'a>> {
-    if !program.source_type.is_module() {
-        return None;
-    }
     let found = wrapper(&program.body)?;
     let strict =
         found.wrapper.body.has_use_strict_directive() || program.has_use_strict_directive();

@@ -1,5 +1,6 @@
 use oxc_allocator::Allocator;
 use untwist_core::parse::{parse_program, strip_bookmarklet};
+use untwist_core::semantic::build_scoping;
 
 #[test]
 fn parses_module_syntax() {
@@ -41,4 +42,68 @@ fn strips_bookmarklet_prefix_and_decodes() {
     );
     assert_eq!(strip_bookmarklet("javascript:v%F"), "v%F");
     assert_eq!(strip_bookmarklet("plain()"), "plain()");
+}
+
+#[test]
+fn a_file_without_module_syntax_is_a_classic_script() {
+    let alloc = Allocator::default();
+    let p = parse_program(&alloc, "var a = 1; function f() { return this; }");
+    assert!(p.diagnostics.is_empty());
+    assert!(!p.source_type.is_module());
+    assert!(!p.program.source_type.is_module());
+}
+
+#[test]
+fn import_meta_and_top_level_await_make_a_module() {
+    for source in [
+        "console.log(import.meta.url);",
+        "function f() { return import.meta; }",
+        "await Promise.resolve(1);",
+        "for await (const x of xs) {}",
+        "export {};",
+    ] {
+        let alloc = Allocator::default();
+        let p = parse_program(&alloc, source);
+        assert!(p.diagnostics.is_empty(), "{source}: {:?}", p.diagnostics);
+        assert!(p.source_type.is_module(), "{source}");
+        assert!(p.program.source_type.is_module(), "{source}");
+    }
+}
+
+#[test]
+fn await_inside_an_async_function_does_not_make_a_module() {
+    let alloc = Allocator::default();
+    let p = parse_program(
+        &alloc,
+        "async function f() { await g(); for await (const x of y) {} }",
+    );
+    assert!(!p.source_type.is_module());
+}
+
+#[test]
+fn a_sloppy_script_hoists_a_block_function_to_its_function() {
+    let alloc = Allocator::default();
+    let p = parse_program(
+        &alloc,
+        "function outer() { { function atob(s) { return s; } } return atob(\"x\"); }",
+    );
+    let sem = build_scoping(&p.program);
+    assert!(!sem
+        .scoping
+        .root_unresolved_references()
+        .contains_key("atob"));
+}
+
+#[test]
+fn a_strict_script_keeps_a_block_function_in_its_block() {
+    let alloc = Allocator::default();
+    let p = parse_program(
+        &alloc,
+        "\"use strict\"; function outer() { { function atob(s) { return s; } } return atob(\"x\"); }",
+    );
+    let sem = build_scoping(&p.program);
+    assert!(sem
+        .scoping
+        .root_unresolved_references()
+        .contains_key("atob"));
 }

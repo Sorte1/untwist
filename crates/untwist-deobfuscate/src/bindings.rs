@@ -2,10 +2,10 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
-use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
-use untwist_core::semantic::AnnexBWrites;
+use untwist_core::semantic::{block_function_symbols, declared_in_block, AnnexBWrites};
 
 pub fn resolved_symbol(reference: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
     scoping
@@ -13,19 +13,13 @@ pub fn resolved_symbol(reference: &IdentifierReference<'_>, scoping: &Scoping) -
         .symbol_id()
 }
 
-pub fn is_block_function(scoping: &Scoping, symbol: SymbolId) -> bool {
-    let flags = scoping.symbol_flags(symbol);
-    if !flags.contains(SymbolFlags::Function) || flags.contains(SymbolFlags::FunctionExpression) {
-        return false;
-    }
-    let scope = scoping.scope_flags(scoping.symbol_scope_id(symbol));
-    !(scope.is_top() || scope.is_function())
+pub fn is_block_function(scoping: &Scoping, function: &Function<'_>) -> bool {
+    function.is_declaration() && declared_in_block(scoping, function.scope_id.get())
 }
 
 pub fn block_function_names(scoping: &Scoping) -> FxHashSet<&str> {
-    scoping
-        .symbol_ids()
-        .filter(|symbol| is_block_function(scoping, *symbol))
+    block_function_symbols(scoping)
+        .into_iter()
         .map(|symbol| scoping.symbol_name(symbol))
         .collect()
 }

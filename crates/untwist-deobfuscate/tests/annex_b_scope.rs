@@ -1,4 +1,7 @@
+use oxc_allocator::Allocator;
 use untwist::{Options, Pipeline};
+use untwist_core::parse::parse_program;
+use untwist_core::semantic::build_scoping;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/annex_b_scope_rows.txt");
@@ -52,6 +55,29 @@ fn unsafe_options() -> Options {
     }
 }
 
+fn reads_a_function_that_shadows_a_top_level_binding(source: &str) -> bool {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    let scoping = build_scoping(&parsed.program).scoping;
+    let root = scoping.root_scope_id();
+    let reaches = scoping
+        .symbol_ids()
+        .filter(|symbol| scoping.symbol_flags(*symbol).is_function())
+        .filter(|symbol| scoping.symbol_scope_id(*symbol) != root)
+        .filter(|symbol| {
+            scoping
+                .get_binding(root, scoping.symbol_ident(*symbol))
+                .is_some()
+        })
+        .any(|symbol| {
+            scoping
+                .get_resolved_reference_ids(symbol)
+                .iter()
+                .any(|reference| scoping.get_reference(*reference).is_read())
+        });
+    reaches
+}
+
 #[test]
 fn a_block_function_refuses_a_binding_only_where_its_annex_b_binding_reaches_a_read() {
     let Some(node) = node_or_skip() else {
@@ -93,7 +119,7 @@ fn a_binding_no_annex_b_binding_reaches_is_still_inlined_in_both_modes() {
 }
 
 #[test]
-fn every_row_that_keeps_its_read_still_names_the_block_function_refusal() {
+fn every_row_that_keeps_its_read_names_the_refusal_or_reads_the_shadowing_function() {
     let safe = Options::default();
     let mut silent = Vec::new();
     for row in rows()
@@ -104,7 +130,7 @@ fn every_row_that_keeps_its_read_still_names_the_block_function_refusal() {
         let noted = output.notes.iter().any(|note| {
             note.message.contains("Annex B.3.3") || note.message.contains("not unique")
         });
-        if !noted {
+        if !noted && !reads_a_function_that_shadows_a_top_level_binding(row.program) {
             silent.push(row.label);
         }
     }

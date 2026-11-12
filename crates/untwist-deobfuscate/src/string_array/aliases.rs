@@ -1,6 +1,6 @@
 use super::*;
-use oxc_syntax::symbol::SymbolFlags;
 use untwist_core::ast_util::readonly::{scan_symbol_uses, SymbolUses};
+use untwist_core::semantic::declaring_block;
 
 pub struct ArrayAlias {
     pub symbol: SymbolId,
@@ -150,10 +150,7 @@ fn root_name_reaches(scoping: &Scoping, alias: SymbolId, root: SymbolId) -> bool
     let block_function_alike = scoping.symbol_ids().any(|symbol| {
         symbol != root
             && scoping.symbol_name(symbol) == name
-            && scoping.symbol_flags(symbol).contains(SymbolFlags::Function)
-            && !scoping
-                .scope_flags(scoping.symbol_scope_id(symbol))
-                .is_var()
+            && declaring_block(scoping, symbol).is_some()
     });
     if block_function_alike {
         return false;

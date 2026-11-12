@@ -7,6 +7,7 @@ use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use untwist_core::ast_util::matcher::{infinite_loop_body, is_plain_declaration};
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
+use untwist_core::semantic::is_hoisted_block_function;
 
 use super::checksum::{parsed_statement, sees_its_parameters, unused_name};
 use super::inlined::used_only_in_with;
@@ -178,6 +179,7 @@ fn loop_helper(
     if !scoping
         .scope_flags(scoping.symbol_scope_id(symbol))
         .is_function()
+        || is_hoisted_block_function(scoping, symbol)
     {
         return false;
     }

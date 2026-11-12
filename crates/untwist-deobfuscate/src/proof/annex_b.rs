@@ -7,7 +7,9 @@ use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::program_is_strict;
 
-use crate::bindings::{block_function_names, is_block_function};
+use untwist_core::semantic::block_function_symbols;
+
+use crate::bindings::block_function_names;
 
 #[derive(Clone, Copy)]
 struct Hit {
@@ -115,10 +117,7 @@ fn sharing_candidates(scoping: &Scoping, count: usize, any_symbol: AnySymbol<'_>
 
 fn scope_hits(scoping: &Scoping, sharing: &[usize], any_symbol: AnySymbol<'_>) -> Vec<Hit> {
     let mut hits = Vec::new();
-    for function in scoping.symbol_ids() {
-        if !is_block_function(scoping, function) {
-            continue;
-        }
+    for function in block_function_symbols(scoping) {
         let name = scoping.symbol_name(function);
         let Some(var) = var_scope(scoping, scoping.symbol_scope_id(function)) else {
             continue;

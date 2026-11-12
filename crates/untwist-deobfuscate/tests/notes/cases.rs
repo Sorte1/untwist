@@ -350,7 +350,7 @@ pub const CASES: &[Case] = &[
     },
     Case {
         source: Source::Whole(
-            "var s = ['a', 'b'];\n(function () {\n  console.log(s[0]);\n  {\n    function s() {}\n  }\n})();",
+            "function f() {\n  var s = ['a', 'b'];\n  {\n    function s() {}\n  }\n  console.log(s[0]);\n}\nf();",
         ),
         expects: notes::BLOCK_FUNCTION_NAME,
         mode: Match::Contains,
