@@ -219,3 +219,119 @@ corejs	webpack5-prod-node+obf-strings-rc4-wrappers	webpack	webpack@5.112.2 + jav
 corejs	webpack5-prod-node+obf-cff	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	85	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"controlFlowFlattening":true,"controlFlowFlatteningThreshold":0.75}
 corejs	webpack5-prod-node+obf-self-defending	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	85	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"selfDefending":true,"compact":true}
 corejs	webpack5-prod-node+obf-dictionary	webpack	webpack@5.112.2 + javascript-obfuscator@5.10.1	node	index.js	85	mode=production minimize=false concatenateModules=false target=node | obfuscate seed=5101 target=node {"stringArray":true,"stringArrayThreshold":1,"stringArrayEncoding":["none"],"stringArrayRotate":true,"selfDefending":true,"compact":true,"identifierNamesGenerator":"dictionary","identifiersDictionary":[i+iìíîï x4]}
+mini	webpack5-dev-node	webpack	webpack@5.112.2	node	index.js	3	mode=development devtool=false target=node
+mini	webpack5-dev-eval	webpack	webpack@5.112.2	node	index.js	3	mode=development devtool=eval target=node
+mini	webpack5-dev-eval-source-map	webpack	webpack@5.112.2	node	index.js	3	mode=development devtool=eval-cheap-module-source-map target=node
+mini	webpack5-prod-node	webpack	webpack@5.112.2	node	index.js	3	mode=production minimize=false concatenateModules=false target=node
+mini	webpack5-prod-concat	webpack	webpack@5.112.2	node	index.js	3	mode=production minimize=false target=node
+mini	webpack5-prod-min	webpack	webpack@5.112.2	node	index.js	3	mode=production target=node (terser default)
+mini	webpack5-web-split	webpack	webpack@5.112.2	browser	index.js	3	mode=production minimize=false target=web splitChunks=all
+mini	webpack5-web-runtime-chunk	webpack	webpack@5.112.2	browser	runtime.js,index.js	3	mode=production minimize=false target=web runtimeChunk=single
+mini	webpack5-web-min	webpack	webpack@5.112.2	browser	index.js	3	mode=production target=web (terser default)
+mini	webpack5-web-noiife	webpack	webpack@5.112.2	browser	index.js	3	mode=production minimize=false target=web output.iife=false maxChunks=1
+mini	webpack5-web-es5	webpack	webpack@5.112.2	browser	index.js	3	mode=production minimize=false target=[web,es5] maxChunks=1
+mini	webpack5-esm-output	webpack	webpack@5.112.2	node	index.js	3	mode=production minimize=false experiments.outputModule output.module target=node
+mini	webpack5-umd	webpack	webpack@5.112.2	node	index.js	3	mode=production minimize=false library.type=umd target=node maxChunks=1
+mini	webpack5-amd	webpack	webpack@5.112.2	amd	index.js	3	mode=production minimize=false library.type=amd target=node maxChunks=1
+mini	webpack5-system	webpack	webpack@5.112.2	systemjs	index.js	3	mode=production minimize=false library.type=system target=node maxChunks=1
+mini	webpack4-dev-node	webpack	webpack@4.47.0	node	index.js	3	mode=development devtool=false target=node output.pathinfo=false
+mini	webpack4-dev-eval	webpack	webpack@4.47.0	node	index.js	3	mode=development devtool=eval target=node output.pathinfo=false
+mini	webpack4-prod-node	webpack	webpack@4.47.0	node	index.js	3	mode=production minimize=false concatenateModules=false target=node
+mini	webpack4-prod-concat	webpack	webpack@4.47.0	node	index.js	3	mode=production minimize=false target=node
+mini	webpack4-prod-min	webpack	webpack@4.47.0	node	index.js	3	mode=production target=node (terser default)
+mini	webpack4-web-split	webpack	webpack@4.47.0	browser	index.js	3	mode=production minimize=false target=web splitChunks=all
+mini	webpack4-umd	webpack	webpack@4.47.0	node	index.js	3	mode=production minimize=false libraryTarget=umd target=node maxChunks=1
+mini	rollup2-cjs21-iife	rollup	rollup@2.80.0 @rollup/plugin-commonjs@21.1.0	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup2-cjs22-iife	rollup	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup2-cjs22-iife-strict-true	rollup	rollup@2.80.0 @rollup/plugin-commonjs@22.0.2	node	index.js	3	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports
+mini	rollup3-cjs24-iife	rollup	rollup@3.30.0 @rollup/plugin-commonjs@24.1.0	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup3-cjs25-iife	rollup	rollup@3.30.0 @rollup/plugin-commonjs@25.0.8	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup3-cjs25-cjs-split	rollup	rollup@3.30.0 @rollup/plugin-commonjs@25.0.8	node	index.js	3	--format=cjs node-resolve commonjs(defaults) json chunks
+mini	rollup4-cjs25-iife	rollup	rollup@4.68.2 @rollup/plugin-commonjs@25.0.8	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup4-cjs28-iife	rollup	rollup@4.68.2 @rollup/plugin-commonjs@28.0.9	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup4-cjs29-iife	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup4-cjs29-iife-strict-true	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	3	--format=iife node-resolve commonjs(strictRequires=true) json inlineDynamicImports
+mini	rollup4-cjs29-iife-strict-auto	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	3	--format=iife node-resolve commonjs(strictRequires=auto) json inlineDynamicImports
+mini	rollup4-cjs29-iife-strict-false	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	3	--format=iife node-resolve commonjs(strictRequires=false) json inlineDynamicImports
+mini	rollup4-cjs29-cjs	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	3	--format=cjs node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup4-cjs29-cjs-split	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	3	--format=cjs node-resolve commonjs(defaults) json chunks
+mini	rollup4-cjs29-es-split	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	3	--format=es node-resolve commonjs(defaults) json chunks
+mini	rollup4-cjs29-umd	umd	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	3	--format=umd node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup4-cjs29-amd	amd	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	amd	index.js	3	--format=amd node-resolve commonjs(defaults) json inlineDynamicImports
+mini	rollup4-cjs29-system	systemjs	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	systemjs	index.js	3	--format=system node-resolve commonjs(defaults) json inlineDynamicImports
+mini	vite4-iife	rollup	vite@4.5.14	node	index.js	3	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+mini	vite4-es-min	rollup	vite@4.5.14	node	index.js	3	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+mini	vite5-iife	rollup	vite@5.4.21	node	index.js	3	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+mini	vite5-es-min	rollup	vite@5.4.21	node	index.js	3	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+mini	vite6-iife	rollup	vite@6.4.6	node	index.js	3	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+mini	vite6-es-min	rollup	vite@6.4.6	node	index.js	3	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+mini	vite7-iife	rollup	vite@7.3.8	node	index.js	3	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+mini	vite7-es-min	rollup	vite@7.3.8	node	index.js	3	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+mini	vite8-iife	rollup	vite@8.3.8	node	index.js	3	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
+mini	vite8-es-min	rollup	vite@8.3.8	node	index.js	3	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
+mini	rolldown-iife	rollup	rolldown@1.3.2	node	index.js	3	format=iife platform=node minify=false
+mini	rolldown-cjs	rollup	rolldown@1.3.2	node	index.js	3	format=cjs platform=node minify=false
+mini	rolldown-esm	rollup	rolldown@1.3.2	node	index.js	3	format=esm platform=node minify=false
+mini	rolldown-esm-min	rollup	rolldown@1.3.2	node	index.js	3	format=esm platform=node minify=true
+mini	esbuild0.14-iife	esbuild	esbuild@0.14.54	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.14-cjs	esbuild	esbuild@0.14.54	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.14-esm-split	esbuild	esbuild@0.14.54	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.14-iife-min	esbuild	esbuild@0.14.54	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.17-iife	esbuild	esbuild@0.17.19	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.17-cjs	esbuild	esbuild@0.17.19	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.17-esm-split	esbuild	esbuild@0.17.19	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.17-iife-min	esbuild	esbuild@0.17.19	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.19-iife	esbuild	esbuild@0.19.12	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.19-cjs	esbuild	esbuild@0.19.12	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.19-esm-split	esbuild	esbuild@0.19.12	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.19-iife-min	esbuild	esbuild@0.19.12	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.21-iife	esbuild	esbuild@0.21.5	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.21-cjs	esbuild	esbuild@0.21.5	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.21-esm-split	esbuild	esbuild@0.21.5	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.21-iife-min	esbuild	esbuild@0.21.5	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.24-iife	esbuild	esbuild@0.24.2	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.24-cjs	esbuild	esbuild@0.24.2	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.24-esm-split	esbuild	esbuild@0.24.2	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.24-iife-min	esbuild	esbuild@0.24.2	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.25-iife	esbuild	esbuild@0.25.12	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.25-cjs	esbuild	esbuild@0.25.12	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.25-esm-split	esbuild	esbuild@0.25.12	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.25-iife-min	esbuild	esbuild@0.25.12	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.28-iife	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.28-cjs	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.28-esm-split	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.28-iife-min	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.28-iife-keepnames	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife --keep-names
+mini	esbuild0.28-iife-min-keepnames	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife --minify --keep-names
+mini	esbuild0.28-iife-es2015	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife --target=es2015
+mini	esbuild0.28-iife-esnext	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife --target=esnext
+mini	esbuild0.28-iife-browser	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=browser --format=iife
+mini	bun-cjs	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=cjs
+mini	bun-esm	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm
+mini	bun-esm-splitting	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm --splitting
+mini	bun-iife-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify
+mini	parcel-hoist	parcel	parcel@2.16.4	node	index.js	4	context=node outputFormat=commonjs optimize=false scopeHoist=true
+mini	parcel-nohoist	parcel	parcel@2.16.4	node	index.js	5	context=node outputFormat=commonjs optimize=false scopeHoist=false
+mini	parcel-hoist-min	parcel	parcel@2.16.4	node	index.js	4	context=node outputFormat=commonjs optimize=true scopeHoist=true
+mini	parcel-nohoist-min	parcel	parcel@2.16.4	node	index.js	5	context=node outputFormat=commonjs optimize=true scopeHoist=false
+mini	browserify	browserify	browserify@17.0.1	node	index.js	3	browserify --node (Babel modules=commonjs source)
+mini	browserify-standalone	browserify	browserify@17.0.1	node	index.js	3	browserify --standalone matrix --node (Babel modules=commonjs source)
+mini	webpack5-prod-node-cjssrc	webpack	webpack@5.112.2	node	index.js	3	mode=production minimize=false concatenateModules=false target=node (Babel modules=commonjs source)
+mini	rollup4-cjs29-iife-cjssrc	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports (Babel modules=commonjs source)
+mini	esbuild0.28-iife-cjssrc	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife (Babel modules=commonjs source)
+mini	webpack5-prod-node+terser	webpack	webpack@5.112.2 + terser@1.0.0	node	index.js	3	mode=production minimize=false concatenateModules=false target=node | minify compress.passes=2 mangle comments=false
+mini	webpack5-prod-node+esbuild-min	webpack	webpack@5.112.2 + esbuild@0.28.2	node	index.js	3	mode=production minimize=false concatenateModules=false target=node | minify transform --minify
+mini	webpack5-prod-node+swc-min	webpack	webpack@5.112.2 + @swc/core@1.16.22	node	index.js	3	mode=production minimize=false concatenateModules=false target=node | minify minify compress mangle
+mini	webpack5-prod-node+uglify	webpack	webpack@5.112.2 + uglify-js@3.19.3	node	index.js	3	mode=production minimize=false concatenateModules=false target=node | minify compress.passes=2 mangle
+mini	esbuild0.28-iife+terser	esbuild	esbuild@0.28.2 + terser@1.0.0	node	index.js	3	--bundle --platform=node --format=iife | minify compress.passes=2 mangle comments=false
+mini	esbuild0.28-iife+esbuild-min	esbuild	esbuild@0.28.2 + esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife | minify transform --minify
+mini	esbuild0.28-iife+swc-min	esbuild	esbuild@0.28.2 + @swc/core@1.16.22	node	index.js	3	--bundle --platform=node --format=iife | minify minify compress mangle
+mini	esbuild0.28-iife+uglify	esbuild	esbuild@0.28.2 + uglify-js@3.19.3	node	index.js	3	--bundle --platform=node --format=iife | minify compress.passes=2 mangle
+mini	rollup4-cjs29-iife+terser	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + terser@1.0.0	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | minify compress.passes=2 mangle comments=false
+mini	rollup4-cjs29-iife+esbuild-min	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + esbuild@0.28.2	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | minify transform --minify
+mini	rollup4-cjs29-iife+swc-min	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + @swc/core@1.16.22	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | minify minify compress mangle
+mini	rollup4-cjs29-iife+uglify	rollup	rollup@4.68.2 @rollup/plugin-commonjs@29.0.3 + uglify-js@3.19.3	node	index.js	3	--format=iife node-resolve commonjs(defaults) json inlineDynamicImports | minify compress.passes=2 mangle
+mini	browserify+terser	browserify	browserify@17.0.1 + terser@1.0.0	node	index.js	3	browserify --node (Babel modules=commonjs source) | minify compress.passes=2 mangle comments=false
+mini	browserify+esbuild-min	browserify	browserify@17.0.1 + esbuild@0.28.2	node	index.js	3	browserify --node (Babel modules=commonjs source) | minify transform --minify
+mini	browserify+swc-min	browserify	browserify@17.0.1 + @swc/core@1.16.22	node	index.js	3	browserify --node (Babel modules=commonjs source) | minify minify compress mangle
+mini	browserify+uglify	browserify	browserify@17.0.1 + uglify-js@3.19.3	node	index.js	3	browserify --node (Babel modules=commonjs source) | minify compress.passes=2 mangle

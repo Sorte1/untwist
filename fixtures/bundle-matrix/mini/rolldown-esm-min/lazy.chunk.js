@@ -1,0 +1,1 @@
+console.log(`eval lazy`);const e=42;export{e as value};

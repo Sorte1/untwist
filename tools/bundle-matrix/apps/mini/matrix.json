@@ -1,0 +1,1 @@
+{ "obfuscate": [], "minify": ["webpack5-prod-node", "esbuild0.28-iife", "rollup4-cjs29-iife", "browserify"] }

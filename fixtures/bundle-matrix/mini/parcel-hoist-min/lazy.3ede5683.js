@@ -1,0 +1,1 @@
+function $parcel$export(e,l,r,a){Object.defineProperty(e,l,{get:r,set:a,enumerable:!0,configurable:!0})}var $parcel$global=globalThis,parcelRequire=$parcel$global.parcelRequire9d85,parcelRegister=parcelRequire.register;parcelRegister("9wClJ",function(e,l){$parcel$export(e.exports,"value",()=>r),console.log("eval lazy");let r=42});

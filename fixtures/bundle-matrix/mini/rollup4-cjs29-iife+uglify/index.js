@@ -1,0 +1,1 @@
+(()=>{var e={},l=(console.log("eval cjs"),e.twice=function(e){return 2*e},console.log("eval index "+e.twice(21)),Promise.resolve().then(function(){return l}).then(e=>console.log("lazy "+e.value)),console.log("eval lazy"),Object.freeze({__proto__:null,value:42}))})();
