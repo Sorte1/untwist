@@ -45,14 +45,21 @@ pub struct Usage {
     pub props_read: FxHashMap<SymbolId, Vec<String>>,
     pub hints: Vec<ShorthandHint>,
     pub class_hints: FxHashMap<SymbolId, ClassHint>,
+    literal_keys: FxHashMap<SymbolId, usize>,
 }
 
 impl Usage {
     pub fn object_literal_key(&self, symbol: SymbolId) -> Option<&str> {
-        self.hints
-            .iter()
-            .find(|hint| hint.symbol == symbol && hint.kind == ShorthandKind::ObjectLiteralValue)
-            .map(|hint| hint.key.as_str())
+        let index = *self.literal_keys.get(&symbol)?;
+        self.hints.get(index).map(|hint| hint.key.as_str())
+    }
+
+    fn index_literal_keys(&mut self) {
+        for (index, hint) in self.hints.iter().enumerate() {
+            if hint.kind == ShorthandKind::ObjectLiteralValue {
+                self.literal_keys.entry(hint.symbol).or_insert(index);
+            }
+        }
     }
 
     pub fn class_hint(&self, symbol: SymbolId) -> Option<&str> {
@@ -84,7 +91,9 @@ fn walk_usage<const CLASS_HINTS: bool>(program: &Program<'_>, scoping: &Scoping)
         out: Usage::default(),
     };
     walker.visit_program(program);
-    walker.out
+    let mut usage = walker.out;
+    usage.index_literal_keys();
+    usage
 }
 
 struct UsageWalker<'s, const CLASS_HINTS: bool> {

@@ -265,6 +265,10 @@ fn assign(
             oracle.take(info.symbol, std::iter::once(name))
         }
         None => {
+            let start = state.counters.get(base).copied().unwrap_or(1);
+            state
+                .counters
+                .insert(base.to_string(), start.saturating_add(limit));
             let current = oracle.current_name(info.symbol).to_string();
             let already_taken = &state.taken;
             oracle.take(
