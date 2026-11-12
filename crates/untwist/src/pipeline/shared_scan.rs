@@ -1,8 +1,10 @@
 use oxc_allocator::Allocator;
 use std::collections::HashSet;
+use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{has_error, parse_program};
 use untwist_core::semantic::{build_scoping, SharedGlobals};
 use untwist_deobfuscate::calls::agnostic::names_reachable_from;
+use untwist_eval::stack;
 
 struct Seen {
     script: bool,
@@ -17,7 +19,23 @@ impl Seen {
     }
 }
 
+fn fits_this_stack(source: &str) -> bool {
+    scan(source, &limits_for(stack::room(), source.len())).is_ok()
+}
+
+fn unreadable() -> Seen {
+    Seen {
+        script: true,
+        bound: HashSet::new(),
+        free: HashSet::new(),
+        readable: false,
+    }
+}
+
 fn seen(source: &str) -> Seen {
+    if !fits_this_stack(source) {
+        return unreadable();
+    }
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, source);
     let scoping = build_scoping(&parsed.program).scoping;
@@ -81,7 +99,7 @@ fn shared_for(all: &[Seen], dynamic: &[bool], own: usize) -> SharedGlobals {
             .enumerate()
             .filter(move |(index, _)| *index != own)
     };
-    let every_name = others().any(|(index, _)| dynamic[index]);
+    let every_name = !all[own].readable || others().any(|(index, _)| dynamic[index]);
     let names = all[own]
         .bound
         .iter()
