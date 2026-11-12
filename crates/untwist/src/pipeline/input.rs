@@ -24,7 +24,7 @@ use untwist_unpack::holds_a_bundle_with;
 
 use super::boundary::Boundary;
 use super::layer::{Counters, Layering, Peeled, RoomSeed};
-use super::notes::{consolidate_reach, dedupe_spanned, guard_notes};
+use super::notes::{consolidate_reach, dedupe_spanned, guard_notes, unsafe_lane_hint};
 use super::shell::{scope_shell_body, strip_shell};
 use super::snapshots::Snapshots;
 use super::stages::StageCx;
@@ -224,6 +224,9 @@ impl Pipeline {
             result.source_map = Some(final_map(source, &mut result));
         }
         result.notes = consolidate_reach(dedupe_spanned(std::mem::take(&mut result.notes)));
+        if !self.options.unsafe_transforms {
+            result.notes.extend(unsafe_lane_hint(&result.notes));
+        }
         #[cfg(feature = "refusal-spans")]
         {
             let sites = std::mem::take(&mut result.refusal_sites);
