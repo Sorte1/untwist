@@ -190,6 +190,12 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   keys count, they see the constructor's `this`), or when a constructor-level `return` returns
   anything but `_this`. A constructor that only forwards `arguments`, or a base constructor left
   empty with no parameters, is dropped (the default constructor does the same).
+- **A parent called as a function keeps every class.** Babel 7.0–7.8 and Babel 6 constructors
+  run their parent with `_getPrototypeOf(C).call(this, …)` (or `.call.apply(…)`), and
+  TypeScript's with `_super.call(this, …) || this`; a class there throws. When the program holds
+  such a call (`.call(this, …)` or `.apply(this, …)` on a computed value, or the `|| this` form),
+  no class of the program converts. `fixtures/untranspile/matrix/babel-7.0/ie11/class-extends.js`
+  is the witness.
 - **Fields.** The run of `_defineProperty(this, k, v)` / `__publicField(this, k, v)` calls that
   starts right after `_classCallCheck` (base) or right after `super(…)` (derived, plain
   assignment form only) becomes class fields `k = v`, in order; both sides define the property
