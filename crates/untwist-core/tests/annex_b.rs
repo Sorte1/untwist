@@ -1,8 +1,11 @@
 use oxc_allocator::Allocator;
+use oxc_syntax::node::NodeId;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use untwist_core::parse::parse_program;
 use untwist_core::semantic::{
-    block_function_symbols, build_scoping, is_constant_binding_in, AnnexBWrites, Semantics,
+    block_function_symbols, build_scoping, declaring_block, is_constant_binding,
+    is_constant_binding_in, AnnexBWrites, ScopeOwners, Semantics,
 };
 
 fn outer_binding(sem: &Semantics, name: &str) -> SymbolId {
@@ -200,4 +203,56 @@ fn a_hoisted_block_function_is_written_where_its_block_runs() {
     let p = outer_binding(&sem, "p");
     assert!(writes.may_write(p));
     assert!(!is_constant_binding_in(&sem.scoping, &writes, p));
+}
+
+const BLOCK_FUNCTIONS: &str =
+    "function f(c) { var x; if (c) { function x() {} } { function y() {} } \
+     function z() { { function w() {} } } return x; } { function v() {} } function u() {}";
+
+fn assert_owners_agree(scoping: &oxc_semantic::Scoping) {
+    let owners = ScopeOwners::new(scoping);
+    for symbol in scoping.symbol_ids() {
+        assert_eq!(
+            owners.declaring_block(symbol),
+            declaring_block(scoping, symbol),
+            "{}",
+            scoping.symbol_name(symbol)
+        );
+        assert_eq!(
+            owners.is_constant_binding(symbol),
+            is_constant_binding(scoping, symbol),
+            "{}",
+            scoping.symbol_name(symbol)
+        );
+    }
+}
+
+#[test]
+fn the_scope_owner_index_finds_the_declaring_blocks_a_lookup_finds() {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, BLOCK_FUNCTIONS);
+    let sem = build_scoping(&parsed.program);
+    assert!(sem
+        .scoping
+        .symbol_ids()
+        .any(|symbol| declaring_block(&sem.scoping, symbol).is_some()));
+    assert_owners_agree(&sem.scoping);
+}
+
+#[test]
+fn the_scope_owner_index_agrees_when_scope_nodes_are_out_of_order() {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, BLOCK_FUNCTIONS);
+    let mut sem = build_scoping(&parsed.program);
+    let root = sem.scoping.root_scope_id();
+    let first = sem.scoping.get_node_id(ScopeId::new(1));
+    let last = sem
+        .scoping
+        .get_node_id(ScopeId::new(sem.scoping.scopes_len() - 1));
+    let built = sem.scoping.scopes_len();
+    let trailing = std::iter::repeat_n(NodeId::new(0), built).chain([first, last, first]);
+    for node in trailing {
+        sem.scoping.add_scope(Some(root), node, ScopeFlags::empty());
+    }
+    assert_owners_agree(&sem.scoping);
 }

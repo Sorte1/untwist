@@ -25,7 +25,7 @@ pub mod unbound;
 
 pub use annex_b::{
     block_function_symbols, declared_in_block, declaring_block, is_constant_binding_in,
-    is_hoisted_block_function, AnnexBFunction, AnnexBWrites,
+    is_hoisted_block_function, AnnexBFunction, AnnexBWrites, ScopeOwners,
 };
 pub use observers::{
     assume_observers, assumed_hazard, closed_eval_names, eval_payload_names, observers,
@@ -115,9 +115,19 @@ pub fn write_reference_count(scoping: &Scoping, symbol: SymbolId) -> usize {
 }
 
 pub fn is_constant_binding(scoping: &Scoping, symbol: SymbolId) -> bool {
+    is_constant_binding_by(scoping, symbol, |symbol| {
+        is_hoisted_block_function(scoping, symbol)
+    })
+}
+
+fn is_constant_binding_by(
+    scoping: &Scoping,
+    symbol: SymbolId,
+    hoisted_from_a_block: impl Fn(SymbolId) -> bool,
+) -> bool {
     !scoping.symbol_is_mutated(symbol)
         && scoping.symbol_redeclarations(symbol).is_empty()
-        && !is_hoisted_block_function(scoping, symbol)
+        && !hoisted_from_a_block(symbol)
         && !(scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
             && is_shared_global(scoping.symbol_name(symbol)))
 }

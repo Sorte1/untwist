@@ -12,7 +12,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::var_function_or_declaration;
 use untwist_core::ast_util::rename::{taken_names, Renames};
 use untwist_core::pass::Cx;
-use untwist_core::semantic::{declaring_block, program_is_strict};
+use untwist_core::semantic::{declaring_block, program_is_strict, ScopeOwners};
 
 use crate::notes;
 
@@ -474,10 +474,26 @@ fn spelled_outside(scoping: &Scoping, block: ScopeId, name: &str) -> bool {
 }
 
 pub fn reached_outside_its_block(scoping: &Scoping, symbol: SymbolId) -> Option<&'static str> {
+    reached_outside_by(scoping, symbol, |symbol| declaring_block(scoping, symbol))
+}
+
+pub fn reached_outside_its_block_by(
+    owners: &ScopeOwners<'_>,
+    scoping: &Scoping,
+    symbol: SymbolId,
+) -> Option<&'static str> {
+    reached_outside_by(scoping, symbol, |symbol| owners.declaring_block(symbol))
+}
+
+fn reached_outside_by(
+    scoping: &Scoping,
+    symbol: SymbolId,
+    declaring: impl Fn(SymbolId) -> Option<ScopeId>,
+) -> Option<&'static str> {
     let block = scoping.symbol_scope_id(symbol);
     let flags = scoping.scope_flags(block);
     let block = if flags.is_top() || flags.is_function() {
-        declaring_block(scoping, symbol)?
+        declaring(symbol)?
     } else {
         block
     };

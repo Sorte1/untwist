@@ -4,14 +4,14 @@ use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::GetSpan;
 use oxc_syntax::symbol::SymbolId;
-use untwist_core::semantic::{is_constant_binding, scope_hazard};
+use untwist_core::semantic::{scope_hazard, ScopeOwners};
 
 use super::tables::{at, id, some, Sites, SpanSlots, SymbolSet, NONE};
 use super::{capacity_hint, record_lengths, with_slack, ScanLengths};
 use super::{Frame, FunctionValue, InitOrder, StatementList, ValueOwner};
 use crate::fused::{Fused, Member, Walk};
 use crate::mutants::inert_statements_unchecked;
-use crate::stamp::reached_outside_its_block;
+use crate::stamp::reached_outside_its_block_by;
 
 pub(super) struct Scan<'s> {
     scoping: &'s Scoping,
@@ -118,13 +118,14 @@ impl<'s> Scan<'s> {
             return None;
         }
         order.hazard = scope_hazard(scoping).is_some();
+        let owners = ScopeOwners::new(scoping);
         for value in &mut order.values {
             let ValueOwner::Binding { symbol, .. } = value.owner else {
                 continue;
             };
             if disqualified.contains(symbol)
-                || !is_constant_binding(scoping, symbol)
-                || reached_outside_its_block(scoping, symbol).is_some()
+                || !owners.is_constant_binding(symbol)
+                || reached_outside_its_block_by(&owners, scoping, symbol).is_some()
             {
                 value.owner = ValueOwner::Opaque;
             }
