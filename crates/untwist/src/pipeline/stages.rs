@@ -17,7 +17,9 @@ use untwist_unminify::{
     untranspile_ctors,
 };
 
-use super::notes::{retain_last_spanned, StageRun, SLOT_NOT_RESERVED};
+use super::notes::{
+    retain_last_spanned, retain_latest_protection_notes, StageRun, SLOT_NOT_RESERVED,
+};
 use super::snapshots::Snapshots;
 use super::{Pipeline, Reservation};
 use crate::options::Progress;
@@ -57,6 +59,15 @@ pub(super) fn round_of(stages: &[StageReport], name: &str) -> u32 {
 fn record_sweep(site: &mut StageCx<'_, '_>, started: Instant, report: RunReport) {
     drop_cleared_observation(site.notes, &report);
     site.record("deobfuscate", started, report);
+}
+
+fn settle_notes(site: &mut StageCx<'_, '_>, runs: &[StageRun], latest: Option<usize>) {
+    if runs.len() > 2 {
+        *site.notes = retain_last_spanned(std::mem::take(site.notes), runs);
+    }
+    if let Some(latest) = latest {
+        retain_latest_protection_notes(site.notes, latest);
+    }
 }
 
 impl Pipeline {
@@ -101,13 +112,16 @@ impl Pipeline {
         let sem = self.jsx_stage(site, sem);
         let started = site.notes.len();
         let mut slot = CleanupSlot::default();
-        let (sem, changes) = self.cleanup_stage(site, sem, &mut slot);
+        let cleaned = self.cleanup_stage(site, sem, &mut slot);
         runs.push(("cleanup", started, site.notes.len()));
+        let (sem, changes, latest) =
+            self.late_protections_stage(site, cleaned, &mut slot, &mut runs);
         if !extended {
             let (sem, changed) = self.final_machinery_stage(site, sem);
             if changed {
                 self.rename_stage(site, sem, reservation);
             }
+            settle_notes(site, &runs, latest);
             return;
         }
         let settle_from = (changes, slot);
@@ -116,9 +130,30 @@ impl Pipeline {
         if let Some(sem) = self.lexical_stage(site, sem) {
             self.rename_stage(site, sem, reservation);
         }
-        if runs.len() > 2 {
-            *site.notes = retain_last_spanned(std::mem::take(site.notes), &runs);
+        settle_notes(site, &runs, latest);
+    }
+
+    fn late_protections_stage<'a>(
+        &self,
+        site: &mut StageCx<'a, '_>,
+        (sem, changes): (Semantics, u32),
+        slot: &mut CleanupSlot,
+        runs: &mut Vec<StageRun>,
+    ) -> (Semantics, u32, Option<usize>) {
+        if changes == 0 {
+            return (sem, changes, None);
         }
+        let started = Instant::now();
+        let (sem, report) = run_protections(site.alloc, site.program, sem, site.pass_opts);
+        if report.total_changes == 0 {
+            return (sem, changes, None);
+        }
+        let latest = report.notes.len();
+        site.record("protections", started, report);
+        let noted = site.notes.len();
+        let (sem, cleaned) = self.cleanup_stage(site, sem, slot);
+        runs.push(("cleanup", noted, site.notes.len()));
+        (sem, changes.saturating_add(cleaned), Some(latest))
     }
 
     fn unminify_passes<'a>(&self) -> Option<Vec<PassCtor<'a>>> {

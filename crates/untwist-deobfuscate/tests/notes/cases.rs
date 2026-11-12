@@ -155,7 +155,7 @@ const A_LOGICAL_FORWARDER_GIVEN_AN_UNRESOLVED_ARGUMENT: &str = "function hi() {\
 
 const A_SELF_DEFENDING_CONTROLLER_THAT_ESCAPES: &str = "var e = (function () {\n  var f = !![];\n  return function (g, h) {\n    var i = f ? function () {\n      if (h) {\n        var j = h['apply'](g, arguments);\n        h = null;\n        return j;\n      }\n    } : function () {};\n    f = ![];\n    return i;\n  };\n})();\nconsole.log(typeof e);";
 
-const A_DEBUG_PROTECTION_THAT_ESCAPES: &str = "function dpf(ret) {\n  function debuggerProtection(counter) {\n    if (typeof counter === 'string') {\n      return function (arg) {}['constructor']('while (true) {}')['apply']('counter');\n    } else {\n      debugger;\n    }\n    debuggerProtection(++counter);\n  }\n  try {\n    if (ret) {\n      return debuggerProtection;\n    } else {\n      debuggerProtection(0);\n    }\n  } catch (y) {}\n}\nconsole.log(typeof dpf);";
+const A_DEBUG_PROTECTION_THAT_ESCAPES: &str = "function dpf(ret) {\n  function debuggerProtection(counter) {\n    if (typeof counter === \"string\") {\n      return function (arg) {}.constructor(\"while (true) {}\").apply(\"counter\");\n    } else if ((\"\" + counter / counter).length !== 1 || counter % 20 === 0) {\n      (function () {\n        return true;\n      }).constructor(\"debugger\").call(\"action\");\n    } else {\n      (function () {\n        return false;\n      }).constructor(\"debugger\").apply(\"stateObject\");\n    }\n    debuggerProtection(++counter);\n  }\n  try {\n    if (ret) {\n      return debuggerProtection;\n    } else {\n      debuggerProtection(0);\n    }\n  } catch (y) {}\n}\nconsole.log(typeof dpf);";
 
 macro_rules! behaviour_unit {
     ($line:literal) => {
@@ -875,6 +875,20 @@ pub const CASES: &[Case] = &[
     Case {
         source: Source::Whole("atob(\"-\");"),
         expects: notes::GLOBAL_NOT_EVALUATED,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::DefaultLane(
+            "unescape = function (s) {\n  return s;\n};\nlog(unescape(\"%41\"));",
+        ),
+        expects: notes::GLOBAL_REBOUND,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::DefaultLane(
+            "globalThis.atob = function (s) {\n  return s;\n};\nlog(atob(\"aGk=\"));",
+        ),
+        expects: notes::GLOBAL_PATCHED,
         mode: Match::Contains,
     },
     Case {

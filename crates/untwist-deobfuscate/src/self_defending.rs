@@ -15,6 +15,7 @@ use crate::bindings::{has_stray_reference, reference_symbol};
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
 use crate::notes;
+use crate::protection_shape::{is_protection_callback, Roles};
 
 pub const PASS: &str = "self-defending";
 
@@ -426,6 +427,20 @@ struct Removals<'k> {
     spans: Vec<Span>,
     variables: FxHashSet<SymbolId>,
     returner_calls: &'k [Span],
+    proof: Option<&'k FxHashSet<SymbolId>>,
+    unproven: FxHashSet<SymbolId>,
+    kept: bool,
+}
+
+fn registration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<(Option<SymbolId>, &'k Expression<'a>)> {
+    if let Some((id, init)) = single_declarator(stmt) {
+        return Some((id.symbol_id.get(), init?));
+    }
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return None;
+    };
+    let (outer, _) = call_parts(&stmt.expression)?;
+    Some((None, outer.without_parentheses()))
 }
 
 fn is_inline_returner_call(stmt: &Statement<'_>, flags: &[&str]) -> bool {
@@ -452,30 +467,65 @@ impl Removals<'_> {
         let Some(body) = shell_statements(stmt) else {
             return false;
         };
-        body.iter()
-            .all(|inner| is_immediate_controller_call(inner, self.controllers, self.scoping))
+        body.iter().all(|inner| {
+            is_immediate_controller_call(inner, self.controllers, self.scoping)
+                && self.runs_only_protection(inner)
+        })
+    }
+
+    fn runs_only_protection(&self, stmt: &Statement<'_>) -> bool {
+        let Some(protections) = self.proof else {
+            return true;
+        };
+        let Some((own, call)) = registration(stmt) else {
+            return false;
+        };
+        let Some((callee, arguments)) = call_parts(call.without_parentheses()) else {
+            return false;
+        };
+        let [_, callback] = arguments.as_slice() else {
+            return false;
+        };
+        let Some(callback) = callback.as_expression() else {
+            return false;
+        };
+        let roles = Roles {
+            own,
+            controller: reference_symbol(callee, self.scoping),
+            protections: Some(protections),
+        };
+        is_protection_callback(callback, roles, self.scoping)
     }
 
     fn record(&mut self, stmt: &Statement<'_>) -> bool {
         let declared = single_declarator(stmt)
             .and_then(|(id, _)| id.symbol_id.get())
             .is_some_and(|symbol| self.controllers.contains(&symbol));
-        if self.is_shell(stmt) || controller_declaration(stmt).is_some() || declared {
+        if self.is_shell(stmt) || declared {
             self.spans.push(stmt.span());
             return true;
         }
-        if is_immediate_controller_call(stmt, self.controllers, self.scoping)
-            || self.returner_calls.contains(&stmt.span())
-        {
-            self.spans.push(stmt.span());
-            return true;
+        let registers = is_immediate_controller_call(stmt, self.controllers, self.scoping)
+            || self.returner_calls.contains(&stmt.span());
+        let variable = controller_variable(stmt, self.controllers, self.scoping);
+        if !(registers || variable.is_some()) {
+            return false;
         }
-        if let Some(variable) = controller_variable(stmt, self.controllers, self.scoping) {
-            self.spans.push(stmt.span());
-            self.variables.insert(variable);
-            return true;
+        if !self.runs_only_protection(stmt) {
+            self.keep(stmt);
+            return false;
         }
-        false
+        self.spans.push(stmt.span());
+        self.variables.extend(variable);
+        true
+    }
+
+    fn keep(&mut self, stmt: &Statement<'_>) {
+        let controller = registration(stmt)
+            .and_then(|(_, call)| call_parts(call.without_parentheses()))
+            .and_then(|(callee, _)| reference_symbol(callee, self.scoping));
+        self.unproven.extend(controller);
+        self.kept = true;
     }
 }
 
@@ -512,26 +562,66 @@ enum Plan {
     Remove(Vec<Span>),
 }
 
-fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
+fn removals<'k>(
+    program: &Program<'_>,
+    scoping: &'k Scoping,
+    controllers: &'k FxHashSet<SymbolId>,
+    returner_calls: &'k [Span],
+    proof: Option<&'k FxHashSet<SymbolId>>,
+) -> Removals<'k> {
+    let mut removals = Removals {
+        controllers,
+        scoping,
+        spans: Vec::new(),
+        variables: FxHashSet::default(),
+        returner_calls,
+        proof,
+        unproven: FxHashSet::default(),
+        kept: false,
+    };
+    removals.visit_program(program);
+    removals
+}
+
+fn removed_declaration(spans: &[Span], declared: Span) -> bool {
+    spans
+        .iter()
+        .any(|span| span.start <= declared.start && declared.end <= span.end)
+}
+
+fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     let mut controllers = Controllers::default();
     controllers.visit_program(program);
     if controllers.found.is_empty() && !controllers.inline {
         return Plan::Nothing;
     }
-    let mut removals = Removals {
-        controllers: &controllers.found,
-        scoping,
-        spans: Vec::new(),
-        variables: FxHashSet::default(),
-        returner_calls: &controllers.returner_calls,
-    };
-    removals.visit_program(program);
+    let protections =
+        (!unsafe_lane).then(|| crate::debug_protection::protection_symbols(program, scoping));
+    let proof = protections.as_ref();
+    let calls = controllers.returner_calls.as_slice();
+    let first = removals(program, scoping, &controllers.found, calls, proof);
+    let kept = first.kept;
+    let proven: FxHashSet<SymbolId> = controllers
+        .found
+        .difference(&first.unproven)
+        .copied()
+        .collect();
     let Removals {
         mut spans,
         mut variables,
         ..
-    } = removals;
-    variables.extend(controllers.returner_variables.iter().copied());
+    } = if first.unproven.is_empty() {
+        first
+    } else {
+        removals(program, scoping, &proven, calls, proof)
+    };
+    variables.extend(
+        controllers
+            .returner_variables
+            .iter()
+            .copied()
+            .filter(|&variable| removed_declaration(&spans, scoping.symbol_span(variable))),
+    );
     let mut bare = BareCalls {
         variables: &variables,
         scoping,
@@ -539,12 +629,16 @@ fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
     };
     bare.visit_program(program);
     spans.extend(bare.spans);
-    let mut tracked = controllers.found;
+    let mut tracked = proven.clone();
     tracked.extend(variables);
     if has_stray_reference(program, &tracked, &spans, scoping) {
         return Plan::Refused;
     }
-    Plan::Remove(spans)
+    match (spans.is_empty(), kept) {
+        (false, _) => Plan::Remove(spans),
+        (true, true) => Plan::Refused,
+        (true, false) => Plan::Nothing,
+    }
 }
 
 #[derive(Default)]
@@ -564,7 +658,7 @@ impl<'a> Pass<'a> for SelfDefending {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let spans = match plan(program, cx.scoping()) {
+        let spans = match plan(program, cx.scoping(), cx.opts.unsafe_transforms) {
             Plan::Nothing => return,
             Plan::Refused => {
                 cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);

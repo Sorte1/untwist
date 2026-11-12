@@ -322,11 +322,15 @@
   escapes the two characters that actually break a JS re-parse — U+2028 and U+2029 — and the
   lone-surrogate marker, verified against `oxc_codegen-0.148.0/src/str.rs`'s `ESCAPES` table; the
   round-trip is pinned by `crates/untwist-deobfuscate/tests/evaluate_globals.rs`.
-- **`evaluate-globals` assumes pristine global functions; `fold-literal-chains` reads the
-  decoder's write record.** `evaluate-globals`
+- **`evaluate-globals` assumes pristine global functions under `--unsafe`; `fold-literal-chains`
+  reads the decoder's write record.** Under `--unsafe`, `evaluate-globals`
   evaluates `decodeURIComponent('%41')` with the standard behaviour even when the program replaces
   it (`decodeURIComponent = function(){ … }`), as the reference deobfuscator does in both modes; node prints the
-  replacement. `fold-literal-chains` (default mode only) folds a literal chain such as
+  replacement. The default mode leaves the call alone, with a note, when the program assigns to
+  that name or declares a binding of it anywhere, and also when the built-ins scan that gates
+  `json-parse` finds that name, or the global object, possibly written or kept as a value
+  (`globalThis.atob = …`, `var g = globalThis; g["unes" + "cape"] = …`, `this.decodeURI = …`).
+  Each of the four names is checked on its own. `fold-literal-chains` (default mode only) folds a literal chain such as
   `'abc'.charAt(0)` or `[1, 2].join('')` only when no write in the program may change a key the
   chain consults. The check is target-agnostic: every member write,
   `delete` and definer call (`defineProperty`, `defineProperties`, `assign`, `Reflect.set`,
@@ -574,12 +578,41 @@
   `colours[1]`. Default mode decides eligibility again once the decoding has run and inlines the
   array, leaving `console["log"]("#fff", "Hello World!")`. Both are pinned in
   `crates/untwist-deobfuscate/tests/order.rs`.
-- **`merge-object-assignments` refuses a value that can execute.** Folding `obj.k = v;` back into
-  the object literal moves `v`'s evaluation up to the declaration, so a value carrying a call, a
-  `new`, a tagged template, a dynamic `import`, an `await` or a `yield` anywhere inside it is
-  refused: after the fold it would run while the binding is still uninitialised. A plain member
-  read is accepted, so a getter on some *other* object does move with the fold — a documented
-  residual, and one the reference deobfuscator shares, since it refuses nothing on this path at all.
+- **`merge-object-assignments` folds only a value that cannot throw or run code.** Folding
+  `obj.k = v;` back into the object literal moves `v`'s evaluation up to the declaration, so the
+  assignments in front of it no longer happen when `v` throws, and code `v` runs sees the binding
+  still uninitialised. The fold therefore takes a literal, a function or arrow expression, an
+  array or object literal built from such values, `!`, `void`, `typeof`, `===`, `!==`, `&&`,
+  `||`, `??` and `? :` over them, and a name that is certain to be initialised: a function
+  declaration, a parameter or `var` declared in front of the read, or a `let`, `const` or class
+  that an earlier statement of the same statement list declares. Everything else stops the run:
+  a member read (it may reach a getter), a name the program does not declare (it may throw),
+  `this`, a `let` or `const` of an enclosing scope (the function may run before it is
+  initialised), arithmetic on anything but literals, a template with substitutions, a spread, a
+  class expression, and any call, `new`, tagged template, dynamic `import`, `await` or `yield`
+  anywhere inside the value. The reference deobfuscator refuses nothing on this path, so
+  `try { var o = {}; o.a = 1; o.b = missing; } catch (e) { use(o.a); }` loses `o.a` there.
+- **The default mode removes self-defending and debug-protection code only when the body is
+  obfuscator.io's own.** A call controller (`var c = (function () { var first = true; return
+  function (ctx, fn) { … }; })();`) runs any callback once, so its shape says nothing about the
+  callback. The default mode removes a callback run through one only when the callback is, node
+  for node, one of the bodies obfuscator.io emits: the source check
+  (`return f.toString().search("(((.+)+)+)+$")…`), the format check, the console disable or the
+  debug-protection start. Local names are free, and a local function the body only ever calls
+  may be a function expression or an arrow with a block body; everything else has to match. The
+  templates are in `crates/untwist-deobfuscate/src/protection_shapes.js`. One callback that does not match
+  keeps every call of its controller and the controller itself, with the note `self-defending:
+  a call controller was found but a reference to it survives …`; other controllers of the same
+  program are judged on their own. A callback whose strings are still encoded when the
+  protections stage runs (`atob(…)`, a split string) only matches after cleanup has folded
+  them, so the stage runs a second time after cleanup when cleanup changed the program.
+  `--unsafe` trusts the controller shape, as the reference deobfuscator does, so a domain lock
+  or a hand-written function run through such a helper is removed there. `debug-protection`
+  removes, in both modes, a function only when its body is the protection template, and an
+  interval only as a statement `setInterval(f, n)` on the unwritten global (bare, or through
+  `window`, `globalThis` or `self`) or as obfuscator.io's whole interval IIFE. An IIFE that
+  holds other statements loses the interval call and keeps the rest; a `setInterval` of an
+  object the program built keeps the protection, with a note.
 - **A decoder-argument ternary the split cannot take apart reports nothing of its own.**
   `find-decoders` rewrites a decoder whose argument is a ternary into one declaration per branch;
   a branch it cannot split hands its symbols to the external-variable inlining that runs next,

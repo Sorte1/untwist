@@ -6,7 +6,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
-use untwist_core::ast_util::global::is_global_reference;
+use untwist_core::ast_util::global::{global_is_written, is_global_reference};
 use untwist_core::ast_util::literal::is_safe_literal;
 use untwist_core::ast_util::prop::prop_name;
 use untwist_core::ast_util::readonly::{scan_symbol_uses, PropRead, SymbolUses};
@@ -26,6 +26,7 @@ use crate::notes;
 use crate::string_array::bare_template_text;
 
 mod fold;
+mod inert;
 
 use fold::{
     dynamic_key_symbol, empty_object_binding, fold_assignments, plain_assignment, property_target,
@@ -87,6 +88,13 @@ impl<'s> RepeatedScan<'s> {
         entered
     }
 
+    #[cold]
+    fn refuse_a_deleted_binding(&mut self, operand: &Expression<'_>) {
+        if let Some(symbol) = reference_symbol(operand.without_parentheses(), self.scoping) {
+            self.repeated.insert(symbol);
+        }
+    }
+
     fn deeper(&mut self) -> Vec<SymbolId> {
         self.depth += 1;
         Vec::new()
@@ -120,6 +128,11 @@ impl<'a> Member<'a> for RepeatedScan<'_> {
 
     #[inline(always)]
     fn enter_expression(&mut self, it: &Expression<'a>) -> Option<Vec<SymbolId>> {
+        if let Expression::UnaryExpression(unary) = it {
+            if unary.operator == UnaryOperator::Delete {
+                self.refuse_a_deleted_binding(&unary.argument);
+            }
+        }
         if let Expression::Identifier(id) = it {
             if let Some(symbol) = resolved_symbol(id, self.scoping) {
                 if self
@@ -431,37 +444,51 @@ fn plan_inline(
     plans
 }
 
-struct TakeLiteral<'a> {
-    statement: Span,
-    literal: Option<Expression<'a>>,
+struct TakeLiterals<'a> {
+    wanted: FxHashMap<Span, Span>,
+    taken: Vec<(InlinePlan, Expression<'a>)>,
 }
 
-impl<'a> VisitMut<'a> for TakeLiteral<'a> {
+impl<'a> VisitMut<'a> for TakeLiterals<'a> {
     fn visit_statement(&mut self, it: &mut Statement<'a>) {
-        if self.literal.is_some() {
+        if self.wanted.is_empty() {
             return;
         }
-        if it.span() != self.statement {
+        let statement = it.span();
+        let Some(reference) = self.wanted.remove(&statement) else {
             walk_mut::walk_statement(self, it);
             return;
-        }
+        };
         let Statement::VariableDeclaration(declaration) = it else {
             return;
         };
-        let Some(declarator) = declaration.declarations.first_mut() else {
-            return;
-        };
-        self.literal = declarator.init.take();
+        let literal = declaration
+            .declarations
+            .first_mut()
+            .and_then(|declarator| declarator.init.take());
+        if let Some(literal) = literal {
+            let plan = InlinePlan {
+                statement,
+                reference,
+            };
+            self.taken.push((plan, literal));
+        }
     }
 }
 
-fn take_literal<'a>(program: &mut Program<'a>, statement: Span) -> Option<Expression<'a>> {
-    let mut take = TakeLiteral {
-        statement,
-        literal: None,
+fn take_literals<'a>(
+    program: &mut Program<'a>,
+    plans: &[InlinePlan],
+) -> Vec<(InlinePlan, Expression<'a>)> {
+    let mut take = TakeLiterals {
+        wanted: plans
+            .iter()
+            .map(|plan| (plan.statement, plan.reference))
+            .collect(),
+        taken: Vec::with_capacity(plans.len()),
     };
     take.visit_program(program);
-    take.literal
+    take.taken
 }
 
 fn inline_literals<'a>(
@@ -471,10 +498,7 @@ fn inline_literals<'a>(
 ) -> usize {
     let mut edits = ExprEdits::new();
     let mut removals = StmtEdits::new();
-    for plan in plans {
-        let Some(literal) = take_literal(program, plan.statement) else {
-            continue;
-        };
+    for (plan, literal) in take_literals(program, plans) {
         if edits.insert(plan.reference, literal) {
             removals.remove(plan.statement);
         }
@@ -563,14 +587,6 @@ fn resolvable_dynamic_keys(
         .copied()
         .filter(|symbol| memo.get(symbol).copied().unwrap_or(false))
         .collect()
-}
-
-fn global_is_written(scoping: &Scoping, name: &str) -> bool {
-    scoping
-        .root_unresolved_references()
-        .iter()
-        .filter(|(unresolved, _)| unresolved.as_str() == name)
-        .any(|(_, ids)| ids.iter().any(|id| scoping.get_reference(*id).is_write()))
 }
 
 fn is_a_symbol(init: &Expression<'_>, scoping: &Scoping) -> bool {

@@ -103,7 +103,7 @@ console.log(b(0x0));";
     assert!(on.stages.iter().any(|stage| stage.stage == "deobfuscate"));
 }
 
-const SELF_DEFENDING: &str = "function hi() {\n  var e = (function () {\n    var f = !![];\n    return function (g, h) {\n      var i = f ? function () {\n        if (h) {\n          var j = h['apply'](g, arguments);\n          h = null;\n          return j;\n        }\n      } : function () {};\n      f = ![];\n      return i;\n    };\n  })();\n  (function () {\n    e(this, function () {\n      return 1;\n    })();\n  })();\n  console.log('x');\n}\nhi();";
+const SELF_DEFENDING: &str = "function hi() {\n  var e = (function () {\n    var f = !![];\n    return function (g, h) {\n      var i = f ? function () {\n        if (h) {\n          var j = h['apply'](g, arguments);\n          h = null;\n          return j;\n        }\n      } : function () {};\n      f = ![];\n      return i;\n    };\n  })();\n  var sd = e(this, function () {\n    return sd['toString']()['search']('(((.+)+)+)+$')['toString']()['constructor'](sd)['search']('(((.+)+)+)+$');\n  });\n  sd();\n  console.log('x');\n}\nhi();";
 
 fn stage_index(out: &untwist::Output, name: &str, round: u32) -> usize {
     out.stages
@@ -120,13 +120,39 @@ fn the_protections_stage_runs_after_rename_and_removes_the_self_defending_block(
         "function hi() {\n  console.log(\"x\");\n}\nhi();"
     );
     let protections = &out.stages[stage_index(&out, "protections", 1)];
-    assert_eq!(protections.changes, 2);
+    assert_eq!(protections.changes, 3);
     assert_eq!(
         protections.per_pass,
-        vec![("self-defending", 2), ("debug-protection", 0)]
+        vec![("self-defending", 3), ("debug-protection", 0)]
     );
     assert!(stage_index(&out, "protections", 1) > stage_index(&out, "deobfuscate", 1));
     assert!(stage_index(&out, "protections", 1) > stage_index(&out, "unminify", 1));
+}
+
+const A_SELF_DEFENDING_BLOCK_ONLY_CLEANUP_UNCOVERS: &str = "function hi() {\n  var e = (function () {\n    var f = !![];\n    return function (g, h) {\n      var i = f ? function () {\n        if (h) {\n          var j = h['apply'](g, arguments);\n          h = null;\n          return j;\n        }\n      } : function () {};\n      f = ![];\n      return i;\n    };\n  })();\n  var sd = e(this, function () {\n    return sd['toString']()['search'](atob('KCgoLispKykrKSsk'))['toString']()['constructor'](sd)['search'](atob('KCgoLispKykrKSsk'));\n  });\n  sd();\n  console.log('x');\n}\nhi();";
+
+#[test]
+fn a_protection_whose_atob_a_constructor_read_may_replace_keeps_its_controller_by_default() {
+    let out = Pipeline::new(Options::default()).run(A_SELF_DEFENDING_BLOCK_ONLY_CLEANUP_UNCOVERS);
+    let code = out.code();
+    assert!(code.contains("atob(\"KCgoLispKykrKSsk\")"), "{code}");
+    assert!(code.contains("var sd = e(this, function"), "{code}");
+    assert!(
+        out.notes.iter().any(|note| note
+            .message
+            .contains(untwist_deobfuscate::notes::GLOBAL_PATCHED)),
+        "{:?}",
+        out.notes
+    );
+}
+
+#[test]
+fn a_program_with_no_late_protection_runs_the_protections_stage_once() {
+    let out = Pipeline::new(Options::default()).run(SELF_DEFENDING);
+    assert!(out
+        .stages
+        .iter()
+        .all(|stage| stage.stage != "protections" || stage.round == 1));
 }
 
 #[test]

@@ -54,7 +54,7 @@ pair-dead+self	10	9/10	10/10	10/10	0	builtin-alias-patched (1)
 pair-dead+split	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-dead+unicode	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-dead+wrap	10	9/10	10/10	10/10	0	safe-global-names (1)
-pair-keys+debug	10	8/10	10/10	10/10	0	object-keys-computed-key (1), safe-global-names (1)
+pair-keys+debug	10	8/10	10/10	10/10	0	object-keys-not-merged (1), safe-global-names (1)
 pair-keys+self	10	8/10	10/10	10/10	0	safe-global-key-reach (1), safe-global-names (1)
 pair-keys+unicode	10	9/10	10/10	10/10	0	safe-global-names (1)
 pair-num+debug	10	9/10	10/10	10/10	0	safe-global-names (1)
@@ -118,4 +118,4 @@ safe-global-names	91	94	94	0	safe lane, premise 2: code may observe the global o
 builtin-replaced-decoded-key	11	12	12	0	the global-object getter's code text (Function("return (function() " + ...)) is built through a proxy object whose keys are themselves decoder calls, so the text cannot be resolved before the decode and a stateful base64 or rc4 unit is refused as a possible built-in patch
 builtin-alias-patched	9	42	42	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
 safe-global-key-reach	3	7	7	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve (an object spread or rest enumerates values, a Symbol-valued computed key), so the unit's call sites are left alone
-object-keys-computed-key	1	1	1	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)
+object-keys-not-merged	1	1	1	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)

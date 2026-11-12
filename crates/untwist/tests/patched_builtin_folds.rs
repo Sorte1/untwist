@@ -18,6 +18,7 @@ struct Row {
     node: &'static str,
     default: &'static str,
     conservative: &'static str,
+    unsafe_lane: &'static str,
 }
 
 fn modes(row: &Row) -> [(Options, &'static str); 3] {
@@ -36,7 +37,7 @@ fn modes(row: &Row) -> [(Options, &'static str); 3] {
                 unsafe_transforms: true,
                 ..Options::default()
             },
-            row.conservative,
+            row.unsafe_lane,
         ),
     ]
 }
@@ -69,6 +70,7 @@ fn a_replaced_char_at_is_not_folded() {
         node: "s0|X\ns1|X\ns2|X\n",
         default: "s0|X\ns1|X\ns2|X\n",
         conservative: "s0|X\ns1|X\ns2|X\n",
+        unsafe_lane: "s0|X\ns1|X\ns2|X\n",
     });
 }
 
@@ -84,6 +86,7 @@ fn a_replaced_index_of_is_not_folded() {
         node: "s0|7\ns1|7\ns2|7\n",
         default: "s0|7\ns1|7\ns2|7\n",
         conservative: "s0|7\ns1|7\ns2|7\n",
+        unsafe_lane: "s0|7\ns1|7\ns2|7\n",
     });
 }
 
@@ -93,12 +96,13 @@ const A_REPLACED_DECODE_URI_COMPONENT: &str = unit!(
 );
 
 #[test]
-fn a_replaced_decode_uri_component_is_still_evaluated_in_every_mode_as_reference_does() {
+fn a_replaced_decode_uri_component_is_evaluated_only_under_unsafe() {
     check(&Row {
         source: A_REPLACED_DECODE_URI_COMPONENT,
         node: "s0|X\ns1|X\ns2|X\n",
-        default: "s0|A\ns1|A\ns2|A\n",
-        conservative: "s0|A\ns1|A\ns2|A\n",
+        default: "s0|X\ns1|X\ns2|X\n",
+        conservative: "s0|X\ns1|X\ns2|X\n",
+        unsafe_lane: "s0|A\ns1|A\ns2|A\n",
     });
 }
 
@@ -114,5 +118,6 @@ fn a_dynamic_key_write_on_the_string_prototype_stops_the_fold() {
         node: "s0|X\ns1|X\ns2|X\n",
         default: "s0|X\ns1|X\ns2|X\n",
         conservative: "s0|X\ns1|X\ns2|X\n",
+        unsafe_lane: "s0|X\ns1|X\ns2|X\n",
     });
 }

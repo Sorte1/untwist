@@ -22,7 +22,7 @@ const STEP_BUDGET: &str = "safe-decode-step-budget";
 const DOMAIN_LOCK: &str = "safe-domain-lock-reach";
 const DEBUG_KEPT: &str = "safe-debug-protection-kept";
 const DEAD_VARS: &str = "safe-dead-code-vars";
-const OBJECT_KEYS: &str = "object-keys-computed-key";
+const OBJECT_KEYS: &str = "object-keys-not-merged";
 const DECODE_MISS: &str = "unexplained-decode-miss";
 const STATEFUL_ESCAPE: &str = "stateful-decoder-escape";
 const ESCAPE_NOTE: &str = "a stateful decoder is referenced outside the calls untwist proves";
@@ -78,7 +78,7 @@ const DEFAULT_REASONS: [(&str, &str); 13] = [
     ),
     (
         OBJECT_KEYS,
-        "transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...)",
+        "transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...) or a value may throw or run code (a member read, arithmetic on a binding)",
     ),
     (
         SPELLED,

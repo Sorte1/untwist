@@ -5,107 +5,20 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
-use untwist_core::ast_util::matcher::{call_parts, iife, var_function_or_declaration};
-use untwist_core::ast_util::prop::{identifier_name, member_parts};
+use untwist_core::ast_util::global::{global_is_written, is_global_reference};
+use untwist_core::ast_util::matcher::{call_parts, statement_iife, var_function_or_declaration};
 use untwist_core::pass::{Cx, Interest, Pass};
 
 use crate::bindings::{has_stray_reference, reference_symbol};
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
 use crate::notes;
-use crate::probe::contains_expression;
+use crate::protection_shape::{is_interval_function, is_protection_function};
 
 pub const PASS: &str = "debug-protection";
 
-fn is_constructed_debugger(expr: &Expression<'_>) -> bool {
-    let Some((callee, arguments)) = call_parts(expr) else {
-        return false;
-    };
-    let Some((_, name)) = member_parts(callee) else {
-        return false;
-    };
-    name == "constructor"
-        && arguments.len() == 1
-        && matches!(
-            arguments[0].as_expression(),
-            Some(Expression::StringLiteral(literal)) if literal.value == "debugger"
-        )
-}
-
-fn is_debugger_marker(stmt: &Statement<'_>) -> bool {
-    if matches!(stmt, Statement::DebuggerStatement(_)) {
-        return true;
-    }
-    match stmt {
-        Statement::BlockStatement(block) if block.body.iter().any(is_debugger_marker) => {
-            return true
-        }
-        Statement::IfStatement(branch) => {
-            if is_debugger_marker(&branch.consequent) {
-                return true;
-            }
-            if branch.alternate.as_ref().is_some_and(is_debugger_marker) {
-                return true;
-            }
-        }
-        _ => {}
-    }
-    contains_expression(stmt, is_constructed_debugger)
-}
-
-fn is_protection_guard(body: &[Statement<'_>], inner: &str, outer: &Function<'_>) -> Option<()> {
-    let [Statement::IfStatement(branch)] = body else {
-        return None;
-    };
-    let BindingPattern::BindingIdentifier(parameter) = &outer.params.items.first()?.pattern else {
-        return None;
-    };
-    if identifier_name(&branch.test) != Some(parameter.name.as_str()) {
-        return None;
-    }
-    let Statement::BlockStatement(consequent) = &branch.consequent else {
-        return None;
-    };
-    let [Statement::ReturnStatement(returned)] = consequent.body.as_slice() else {
-        return None;
-    };
-    if returned.argument.as_ref().and_then(identifier_name) != Some(inner) {
-        return None;
-    }
-    let Some(Statement::BlockStatement(alternate)) = branch.alternate.as_ref() else {
-        return None;
-    };
-    let [Statement::ExpressionStatement(call)] = alternate.body.as_slice() else {
-        return None;
-    };
-    let (callee, arguments) = call_parts(&call.expression)?;
-    (identifier_name(callee) == Some(inner) && arguments.len() == 1).then_some(())
-}
-
-fn is_protection_body<'k, 'a>(function: &'k Function<'a>) -> Option<&'k str> {
-    let body = function.body.as_ref()?;
-    let [inner, Statement::TryStatement(guard)] = body.statements.as_slice() else {
-        return None;
-    };
-    let declaration = var_function_or_declaration(inner)?;
-    let inner_body = declaration.function.body.as_ref()?;
-    let [Statement::IfStatement(branch), Statement::ExpressionStatement(recurse)] =
-        inner_body.statements.as_slice()
-    else {
-        return None;
-    };
-    let alternate = branch.alternate.as_ref()?;
-    if !is_debugger_marker(alternate) {
-        return None;
-    }
-    let (callee, arguments) = call_parts(&recurse.expression)?;
-    if identifier_name(callee) != Some(declaration.name) || arguments.len() != 1 {
-        return None;
-    }
-    guard.handler.as_ref()?;
-    is_protection_guard(&guard.block.body, declaration.name, function)?;
-    Some(declaration.name)
-}
+const TIMER: &str = "setInterval";
+const GLOBAL_OBJECTS: [&str; 3] = ["window", "globalThis", "self"];
 
 fn declared_symbol(stmt: &Statement<'_>) -> Option<SymbolId> {
     match stmt {
@@ -115,75 +28,41 @@ fn declared_symbol(stmt: &Statement<'_>) -> Option<SymbolId> {
     }
 }
 
-fn debug_protection_declaration(stmt: &Statement<'_>) -> Option<SymbolId> {
+fn has_protection_outline(function: &Function<'_>) -> bool {
+    function
+        .body
+        .as_ref()
+        .is_some_and(|body| matches!(body.statements.as_slice(), [_, Statement::TryStatement(_)]))
+}
+
+fn debug_protection_declaration(stmt: &Statement<'_>, scoping: &Scoping) -> Option<SymbolId> {
     let declaration = var_function_or_declaration(stmt)?;
-    if declaration.function.params.items.len() != 1 {
+    if declaration.function.params.items.len() != 1 || !has_protection_outline(declaration.function)
+    {
         return None;
     }
-    is_protection_body(declaration.function)?;
+    if !is_protection_function(declaration.function, scoping) {
+        return None;
+    }
     declared_symbol(stmt)
 }
 
-fn is_interval_call(
-    expr: &Expression<'_>,
-    protections: &FxHashSet<SymbolId>,
-    scoping: &Scoping,
-) -> bool {
-    let Some((callee, arguments)) = call_parts(expr) else {
+fn is_intact_global(expr: &Expression<'_>, names: &[&str], scoping: &Scoping) -> bool {
+    let Expression::Identifier(id) = expr else {
         return false;
     };
-    let Some((_, property)) = member_parts(callee) else {
-        return false;
-    };
-    property == "setInterval"
-        && arguments.len() == 2
-        && arguments[0]
-            .as_expression()
-            .and_then(|argument| reference_symbol(argument, scoping))
-            .is_some_and(|symbol| protections.contains(&symbol))
-        && matches!(
-            arguments[1].as_expression(),
-            Some(Expression::NumericLiteral(_))
-        )
+    let name = id.name.as_str();
+    names.contains(&name) && is_global_reference(scoping, id) && !global_is_written(scoping, name)
 }
 
-fn is_interval_iife(
-    stmt: &Statement<'_>,
-    protections: &FxHashSet<SymbolId>,
-    scoping: &Scoping,
-) -> bool {
-    let Statement::ExpressionStatement(statement) = stmt else {
-        return false;
-    };
-    let Some((function, arguments)) = iife(&statement.expression) else {
-        return false;
-    };
-    if !arguments.is_empty() {
-        return false;
-    }
-    let Some(body) = function.body.as_ref() else {
-        return false;
-    };
-    body.statements.iter().any(|inner| {
-        contains_expression(inner, |expr| is_interval_call(expr, protections, scoping))
-    })
-}
-
-#[derive(Default)]
-struct Declarations {
-    spans: Vec<Span>,
-    symbols: FxHashSet<SymbolId>,
-}
-
-impl<'a> VisitJs<'a> for Declarations {
-    fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
-        for stmt in it {
-            if let Some(symbol) = debug_protection_declaration(stmt) {
-                self.spans.push(stmt.span());
-                self.symbols.insert(symbol);
-            }
+fn is_global_timer(callee: &Expression<'_>, scoping: &Scoping) -> bool {
+    match callee {
+        Expression::StaticMemberExpression(member) => {
+            !member.optional
+                && member.property.name == TIMER
+                && is_intact_global(&member.object, &GLOBAL_OBJECTS, scoping)
         }
-        walk_js::walk_statements(self, it);
+        other => is_intact_global(other, &[TIMER], scoping),
     }
 }
 
@@ -193,15 +72,88 @@ struct Intervals<'k> {
     spans: Vec<Span>,
 }
 
+impl Intervals<'_> {
+    fn is_interval_statement(&self, stmt: &Statement<'_>) -> bool {
+        let Statement::ExpressionStatement(stmt) = stmt else {
+            return false;
+        };
+        let Some((callee, arguments)) = call_parts(&stmt.expression) else {
+            return false;
+        };
+        let [protection, Argument::NumericLiteral(_)] = arguments.as_slice() else {
+            return false;
+        };
+        protection
+            .as_expression()
+            .and_then(|argument| reference_symbol(argument, self.scoping))
+            .is_some_and(|symbol| self.protections.contains(&symbol))
+            && is_global_timer(callee, self.scoping)
+    }
+
+    fn is_interval_shell(&self, stmt: &Statement<'_>) -> bool {
+        let Some((function, arguments)) = statement_iife(stmt) else {
+            return false;
+        };
+        if !arguments.is_empty() || !function.params.items.is_empty() {
+            return false;
+        }
+        if is_interval_function(function, self.protections, self.scoping) {
+            return true;
+        }
+        function.body.as_ref().is_some_and(|body| {
+            !function.r#async
+                && !function.generator
+                && !body.statements.is_empty()
+                && body
+                    .statements
+                    .iter()
+                    .all(|inner| self.is_interval_statement(inner))
+        })
+    }
+}
+
 impl<'a> VisitJs<'a> for Intervals<'_> {
     fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
         for stmt in it {
-            if is_interval_iife(stmt, self.protections, self.scoping) {
+            if self.is_interval_shell(stmt) || self.is_interval_statement(stmt) {
                 self.spans.push(stmt.span());
+            } else {
+                walk_js::walk_statement(self, stmt);
+            }
+        }
+    }
+}
+
+struct Declarations<'k> {
+    scoping: &'k Scoping,
+    spans: Vec<Span>,
+    symbols: FxHashSet<SymbolId>,
+}
+
+impl<'a> VisitJs<'a> for Declarations<'_> {
+    fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
+        for stmt in it {
+            if let Some(symbol) = debug_protection_declaration(stmt, self.scoping) {
+                self.spans.push(stmt.span());
+                self.symbols.insert(symbol);
             }
         }
         walk_js::walk_statements(self, it);
     }
+}
+
+fn declarations<'k>(program: &Program<'_>, scoping: &'k Scoping) -> Declarations<'k> {
+    let mut declarations = Declarations {
+        scoping,
+        spans: Vec::new(),
+        symbols: FxHashSet::default(),
+    };
+    declarations.visit_program(program);
+    declarations
+}
+
+pub(crate) fn protection_symbols(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
+    declarations(program, scoping).symbols
 }
 
 enum Plan {
@@ -211,8 +163,7 @@ enum Plan {
 }
 
 fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
-    let mut declarations = Declarations::default();
-    declarations.visit_program(program);
+    let declarations = declarations(program, scoping);
     if declarations.symbols.is_empty() {
         return Plan::Nothing;
     }

@@ -191,3 +191,131 @@ fn issue_157_the_js_line_terminators_are_escaped_rather_than_written_raw() {
     );
     assert!(!printed.contains('\u{2028}'), "{printed}");
 }
+
+fn default_lane(source: &str) -> String {
+    let alloc = untwist_testing::Allocator::default();
+    untwist_testing::transform_with(
+        &alloc,
+        source,
+        &[untwist_deobfuscate::evaluate_globals::boxed],
+        untwist_core::pass::PassOptions::default(),
+    )
+}
+
+#[test]
+fn an_untouched_global_still_folds_in_the_default_lane() {
+    assert_eq!(
+        default_lane("console.log(atob(\"aGk=\"));"),
+        "console.log(\"hi\");"
+    );
+}
+
+#[test]
+fn a_global_the_program_assigns_is_left_alone_in_the_default_lane() {
+    let source =
+        "atob = function (s) {\n  return \"patched:\" + s;\n};\nconsole.log(atob(\"aGk=\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_assigned_inside_a_function_is_left_alone_in_the_default_lane() {
+    let source = "function patch() {\n  decodeURIComponent = String;\n}\npatch();\nconsole.log(decodeURIComponent(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_assigned_after_the_call_is_left_alone_in_the_default_lane() {
+    let source =
+        "function show() {\n  console.log(unescape(\"%41\"));\n}\nunescape = String;\nshow();";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_a_block_function_declares_is_left_alone_in_the_default_lane() {
+    let source = "{\n  function decodeURI(s) {\n    return \"mine:\" + s;\n  }\n}\nconsole.log(decodeURI(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn only_the_assigned_global_is_left_alone_in_the_default_lane() {
+    assert_eq!(
+        default_lane("atob = String;\nconsole.log(atob(\"aGk=\"), unescape(\"%41\"));"),
+        "atob = String;\nconsole.log(atob(\"aGk=\"), \"A\");"
+    );
+}
+
+#[test]
+fn an_assigned_global_still_folds_under_unsafe() {
+    assert_transform!(
+        "atob = String;\nconsole.log(atob(\"aGk=\"));",
+        [untwist_deobfuscate::evaluate_globals::boxed],
+        @r#"
+    atob = String;
+    console.log("hi");
+    "#
+    );
+}
+
+#[test]
+fn a_global_replaced_through_global_this_is_left_alone_in_the_default_lane() {
+    let source =
+        "globalThis.atob = function (s) {\n  return \"patched\";\n};\nconsole.log(atob(\"aGk=\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_replaced_through_a_computed_key_on_an_alias_is_left_alone_in_the_default_lane() {
+    let source = "var g = globalThis;\ng[\"unes\" + \"cape\"] = function () {\n  return \"p2\";\n};\nconsole.log(unescape(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_replaced_through_window_with_a_literal_key_is_left_alone_in_the_default_lane() {
+    let source = "window[\"decodeURI\"] = String;\nconsole.log(decodeURI(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_replaced_through_top_level_this_is_left_alone_in_the_default_lane() {
+    let source = "this.decodeURIComponent = String;\nconsole.log(decodeURIComponent(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_defined_on_the_global_object_is_left_alone_in_the_default_lane() {
+    let source =
+        "Object.defineProperty(self, \"atob\", { value: String });\nconsole.log(atob(\"aGk=\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn only_the_global_replaced_through_the_global_object_is_left_alone_in_the_default_lane() {
+    assert_eq!(
+        default_lane("window.atob = String;\nconsole.log(atob(\"aGk=\"), unescape(\"%41\"));"),
+        "window.atob = String;\nconsole.log(atob(\"aGk=\"), \"A\");"
+    );
+}
+
+#[test]
+fn a_global_replaced_through_the_global_object_still_folds_under_unsafe() {
+    assert_transform!(
+        "globalThis.atob = String;\nconsole.log(atob(\"aGk=\"));",
+        [untwist_deobfuscate::evaluate_globals::boxed],
+        @r#"
+    globalThis.atob = String;
+    console.log("hi");
+    "#
+    );
+}
+
+#[test]
+fn a_global_replaced_through_this_inside_a_function_is_left_alone_in_the_default_lane() {
+    let source = "(function () {\n  this.decodeURI = function () {\n    return \"p3\";\n  };\n})();\nconsole.log(decodeURI(\"%41\"));";
+    assert_eq!(default_lane(source), source);
+}
+
+#[test]
+fn a_global_whose_sloppy_this_is_handed_to_other_code_is_left_alone_in_the_default_lane() {
+    let source = "function hi() {\n  keep(this);\n  return atob(\"aGk=\");\n}";
+    assert_eq!(default_lane(source), source);
+}

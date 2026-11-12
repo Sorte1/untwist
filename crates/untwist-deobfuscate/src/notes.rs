@@ -328,6 +328,12 @@ pub const MERGE_SPANS_EXHAUSTED: &str =
      be moved to its single reference";
 
 pub const GLOBAL_NOT_EVALUATED: &str = "was not evaluated: the folder could not prove a result";
+pub const GLOBAL_REBOUND: &str =
+    "was left as a call: the program assigns to that name or declares a binding of it, so the \
+     call may not reach the built-in";
+pub const GLOBAL_PATCHED: &str =
+    "was left as a call: the program may replace it through the global object or keeps a \
+     reference to it, so the call may not reach the built-in";
 
 pub const VAR_FUNCTION_READS_ARGUMENTS: &str =
     "the function references arguments, which aliases its simple parameters, so the assignment \
@@ -515,6 +521,14 @@ pub fn global_not_evaluated(name: &str) -> String {
     format!("{name} {GLOBAL_NOT_EVALUATED}")
 }
 
+pub fn global_rebound(name: &str) -> String {
+    format!("{name} {GLOBAL_REBOUND}")
+}
+
+pub fn global_patched(name: &str) -> String {
+    format!("{name} {GLOBAL_PATCHED}")
+}
+
 pub fn init_order_budget(name: &str) -> String {
     format!("{INIT_ORDER_BUDGET}: a value that reads {name} was treated as running first")
 }
@@ -661,6 +675,8 @@ catalogue!(
     MERGE_ADOPTED_DYNAMIC_KEY,
     DEAD_CODE_DISCARDED_FUNCTION,
     GLOBAL_NOT_EVALUATED,
+    GLOBAL_REBOUND,
+    GLOBAL_PATCHED,
     VAR_FUNCTION_READS_ARGUMENTS,
     VAR_ARGUMENTS_PROPERTY_ALIAS,
     VAR_PARAMETER_WRITTEN_AGAIN,

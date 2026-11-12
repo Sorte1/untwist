@@ -28,6 +28,18 @@ pub fn is_global_name_at(scoping: &Scoping, scope: ScopeId, name: &str) -> bool 
         && !object_environment_may_bind(scoping, scope)
 }
 
+pub fn global_is_written(scoping: &Scoping, name: &str) -> bool {
+    scoping
+        .root_unresolved_references()
+        .iter()
+        .filter(|(unresolved, _)| unresolved.as_str() == name)
+        .any(|(_, ids)| ids.iter().any(|id| scoping.get_reference(*id).is_write()))
+}
+
+pub fn program_rebinds_global(scoping: &Scoping, name: &str) -> bool {
+    global_is_written(scoping, name) || scoping.symbol_names().any(|declared| declared == name)
+}
+
 pub fn is_global_reference_id(scoping: &Scoping, reference: Option<ReferenceId>) -> bool {
     let Some(reference) = reference else {
         return false;
