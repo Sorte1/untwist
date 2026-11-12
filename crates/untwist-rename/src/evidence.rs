@@ -65,6 +65,8 @@ const NAMED_GLOBAL_CALLS: [(&str, &str); 3] = [
 
 const MAX_TAG_LENGTH: usize = 24;
 
+const MIN_SEGMENT: usize = 2;
+
 const NAMING_HOLDERS: [&str; 5] = ["exports", "window", "self", "globalThis", "global"];
 
 const IGNORED_PROPERTIES: [&str; 4] = ["prototype", "exports", "default", "__proto__"];
@@ -194,8 +196,34 @@ fn property_name(target: &AssignmentTarget<'_>) -> Option<String> {
     let name = member.property.name.as_str();
     let usable = is_naming_holder(&member.object)
         && !IGNORED_PROPERTIES.contains(&name)
-        && looks_human_written(name);
+        && looks_human_written(name)
+        && is_word_like(name);
     usable.then(|| lower_camel(name))
+}
+
+pub fn is_word_like(name: &str) -> bool {
+    let mut segments: Vec<String> = Vec::new();
+    for ch in name.chars() {
+        if !ch.is_ascii_alphabetic() {
+            return false;
+        }
+        match segments.last_mut() {
+            Some(segment) if !ch.is_ascii_uppercase() => segment.push(ch),
+            _ => segments.push(ch.to_string()),
+        }
+    }
+    let Some(first) = segments.first() else {
+        return false;
+    };
+    first.starts_with(|ch: char| ch.is_ascii_lowercase())
+        && segments.iter().all(|segment| is_word_segment(segment))
+}
+
+fn is_word_segment(segment: &str) -> bool {
+    segment.len() >= MIN_SEGMENT
+        && segment
+            .chars()
+            .any(|ch| matches!(ch.to_ascii_lowercase(), 'a' | 'e' | 'i' | 'o' | 'u' | 'y'))
 }
 
 impl EvidenceWalker<'_> {

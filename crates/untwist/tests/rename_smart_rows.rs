@@ -345,3 +345,18 @@ fn obfuscator_samples_behave_the_same_after_smart_renaming() {
     let wrong = renaming_changes_behaviour(&node, &programs, &[("safe", false), ("unsafe", true)]);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+#[test]
+fn a_random_property_name_names_nothing() {
+    let source =
+        "function F(_0x1) { this.rpGpQJ = _0x1; this.label = _0x1; }\nconsole.log(new F(1).label);";
+    let code = smart(source);
+    assert!(!code.contains("rpGpQJ = rpGpQJ"), "{code}");
+    let source =
+        "function Widget(_0x1) { this.onLoad = _0x1; }\nconsole.log(typeof new Widget(1).onLoad);";
+    assert!(
+        smart(source).contains("function Widget(onLoad)"),
+        "{}",
+        smart(source)
+    );
+}
