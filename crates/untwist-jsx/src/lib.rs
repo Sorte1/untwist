@@ -3,6 +3,7 @@ pub(crate) mod build;
 pub mod classic;
 mod common;
 pub mod notes;
+mod order;
 pub(crate) mod pragma;
 pub(crate) mod uid;
 

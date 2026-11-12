@@ -15,6 +15,7 @@ use untwist_core::pass::{Cx, Interest, NoteKind, Pass, RepeatedSites, Safety};
 use crate::build;
 use crate::common::{self, Convert};
 use crate::notes;
+use crate::order;
 use crate::pragma::{react_bindings, ReactBindings};
 use crate::uid::{component_name, COMPONENT};
 
@@ -53,6 +54,10 @@ fn indirect_pragma<'k>(callee: &'k Expression<'_>) -> Option<&'k str> {
     direct_pragma(member)
 }
 
+pub(crate) fn is_pragma_callee(callee: &Expression<'_>) -> bool {
+    pragma_of(callee).is_some()
+}
+
 fn plural(pragma: &str) -> bool {
     pragma.contains(PLURAL)
 }
@@ -70,6 +75,8 @@ pub struct JsxNew<'a> {
     hoists: Vec<(Span, Statement<'a>)>,
     statement_spans: Vec<Span>,
     list_marks: Vec<(usize, ScopeId)>,
+    first_calls: FxHashSet<Span>,
+    hoist_order: RepeatedSites,
     attribute_shape: RepeatedSites,
     element_name_shape: RepeatedSites,
     component_looking_string: RepeatedSites,
@@ -152,12 +159,17 @@ impl<'a> Convert<'a> for JsxNew<'a> {
             self.attribute_shape.record(expr.span(), shape);
             return None;
         }
-        if let Some(shape) = children_shape(props, pragma) {
+        let conservative = !cx.opts.extended;
+        if !conservative && arguments.len() == KEY_ARITY && has_prop(props, KEY) {
+            self.key_shape
+                .record(expr.span(), "key in the props and as an argument");
+            return None;
+        }
+        if let Some(shape) = children_shape(props, pragma, conservative) {
             self.children_shape.record(expr.span(), shape);
             return None;
         }
         let fragment = self.bindings.names_member(type_expr, build::FRAGMENT, cx);
-        let conservative = !cx.opts.extended;
         let renamed = common::plan_rename(
             conservative,
             type_expr,
@@ -232,6 +244,10 @@ impl<'a> JsxNew<'a> {
         if cx.opts.extended {
             if let Some(name) = unresolved_at(type_expr, scope, cx.scoping()) {
                 self.hoist_anchor_unresolved.record(type_expr.span(), &name);
+                return None;
+            }
+            if !self.first_calls.contains(&span) {
+                self.hoist_order.record(type_expr.span(), "type");
                 return None;
             }
         }
@@ -328,6 +344,7 @@ impl<'a> JsxNew<'a> {
                     NoteKind::Refusal,
                 ),
                 (&mut self.key_shape, notes::KEY_SHAPE, NoteKind::Refusal),
+                (&mut self.hoist_order, notes::HOIST_ORDER, NoteKind::Refusal),
                 (
                     &mut self.children_shape,
                     notes::CHILDREN_SHAPE,
@@ -344,11 +361,32 @@ impl<'a> JsxNew<'a> {
     }
 }
 
-fn is_children_prop(property: &ObjectPropertyKind<'_>) -> bool {
+const KEY: &str = "key";
+
+fn is_prop(property: &ObjectPropertyKind<'_>, wanted: &str) -> bool {
     let ObjectPropertyKind::ObjectProperty(property) = property else {
         return false;
     };
-    prop_name(&property.key).is_some_and(|name| name == build::CHILDREN)
+    prop_name(&property.key).is_some_and(|name| name == wanted)
+}
+
+fn is_children_prop(property: &ObjectPropertyKind<'_>) -> bool {
+    is_prop(property, build::CHILDREN)
+}
+
+fn has_prop(props: &Expression<'_>, wanted: &str) -> bool {
+    matches!(props, Expression::ObjectExpression(object)
+        if object.properties.iter().any(|property| is_prop(property, wanted)))
+}
+
+fn has_spread(value: &Expression<'_>) -> bool {
+    let Expression::ArrayExpression(array) = value else {
+        return false;
+    };
+    array
+        .elements
+        .iter()
+        .any(|element| matches!(element, ArrayExpressionElement::SpreadElement(_)))
 }
 
 fn has_elision(value: &Expression<'_>) -> bool {
@@ -361,7 +399,11 @@ fn has_elision(value: &Expression<'_>) -> bool {
         .any(|element| matches!(element, ArrayExpressionElement::Elision(_)))
 }
 
-fn children_shape(props: &Expression<'_>, pragma: &str) -> Option<&'static str> {
+fn children_shape(
+    props: &Expression<'_>,
+    pragma: &str,
+    conservative: bool,
+) -> Option<&'static str> {
     let Expression::ObjectExpression(object) = props else {
         return None;
     };
@@ -382,6 +424,9 @@ fn children_shape(props: &Expression<'_>, pragma: &str) -> Option<&'static str> 
     let ObjectPropertyKind::ObjectProperty(last) = last else {
         return None;
     };
+    if !conservative && plural(pragma) && has_spread(&last.value) {
+        return Some("children array has a spread");
+    }
     (plural(pragma) && has_elision(&last.value)).then_some("children array has holes")
 }
 
@@ -471,6 +516,7 @@ impl<'a> Pass<'a> for JsxNew<'a> {
         };
         self.statement_spans.clear();
         self.list_marks.clear();
+        self.first_calls.clear();
     }
 
     fn enter_statements(&mut self, _node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
@@ -479,6 +525,13 @@ impl<'a> Pass<'a> for JsxNew<'a> {
     }
 
     fn enter_statement(&mut self, node: &mut Statement<'a>, _cx: &mut Cx<'a, '_>) {
+        let listed = self
+            .list_marks
+            .last()
+            .is_some_and(|(member, _)| *member == self.statement_spans.len());
+        if listed {
+            order::first_calls(node, &mut self.first_calls);
+        }
         self.statement_spans.push(node.span());
     }
 

@@ -569,7 +569,8 @@ pub(super) fn field_of<'a>(statement: Statement<'a>, cx: &Cx<'a, '_>) -> Option<
     let value = arguments
         .next()
         .map(into_inner)
-        .filter(|value| !(value.is_void_0() || is_global_undefined(value, cx.scoping())));
+        .filter(|value| !(value.is_void_0() || is_global_undefined(value, cx.scoping())))
+        .map(|value| super::define_chain::unnamed(value, cx));
     Some(ClassElement::new_property_definition(
         SPAN,
         PropertyDefinitionType::PropertyDefinition,

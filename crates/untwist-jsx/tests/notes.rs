@@ -65,6 +65,7 @@ const CASES: &[(Source, &str)] = &[
         Source::Whole("for (let i = 0; g(jsx(w[i], {})); i++) h();"),
         notes::HOIST_ANCHOR_UNRESOLVED,
     ),
+    (Source::Whole("x && jsx(w[i], {});"), notes::HOIST_ORDER),
     (
         Source::Whole("jsx(\"div\", {}, k, extra);"),
         notes::KEY_SHAPE,

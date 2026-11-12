@@ -198,7 +198,9 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   `Symbol.*` member. A base class moves fields only when its parameters are plain identifiers
   and nothing but declarations of `this` aliases or of uninitialised bindings precedes
   `_classCallCheck` (fields are initialised before the parameters and the body run). The alias
-  (`var _this = this`) becomes `this` inside a moved value. Static fields stay after the class.
+  (`var _this = this`) becomes `this` inside a moved value. Static fields stay after the class. An
+  anonymous function, arrow or class moved into a field is wrapped as `f = (0, () => {})`, so its
+  `name` stays `""` as it was when passed to the helper.
 - **Every class rewrite is `--unsafe` only**, under these assumptions:
   - **Methods and accessors are never constructed, and their `prototype` and `name` are never
     read.** A function in a `_createClass` descriptor is constructible and has a `prototype`; a
