@@ -1,0 +1,7 @@
+[profile.default]
+default-filter = "not binary(stack_main_thread)"
+
+[profile.ci]
+default-filter = "not (binary(stack_main_thread) | (package(untwist) & binary(/^scaling/)))"
+fail-fast = false
+failure-output = "immediate-final"
