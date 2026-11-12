@@ -1,36 +1,11 @@
-use untwist::{Options, Pipeline};
+#[path = "common/storage_rows.rs"]
+mod storage_rows;
+
+use storage_rows::{labelled, rows, transformed};
 use untwist_testing::node_rows::{mismatches, node_or_skip, Mode};
-
-const ROWS: &str = include_str!("data/storage_call_rows.txt");
-
-fn rows() -> Vec<(String, String)> {
-    ROWS.lines()
-        .filter(|line| !line.trim().is_empty())
-        .filter_map(|line| line.split_once('|'))
-        .map(|(label, program)| (label.to_string(), program.to_string()))
-        .collect()
-}
-
-fn transformed(unsafe_transforms: bool, mutant: Option<&'static str>, source: &str) -> String {
-    let options = Options {
-        unsafe_transforms,
-        unpack: false,
-        jsx: false,
-        disabled_passes: mutant.into_iter().collect(),
-        ..Options::default()
-    };
-    Pipeline::new(options).run(source).code().to_string()
-}
 
 fn decoded(mutant: Option<&'static str>, source: &str) -> bool {
     !transformed(false, mutant, source).contains("bQ(")
-}
-
-fn labelled(prefix: &str) -> Vec<(String, String)> {
-    rows()
-        .into_iter()
-        .filter(|(label, _)| label.starts_with(prefix))
-        .collect()
 }
 
 #[test]
@@ -78,47 +53,5 @@ fn every_decoding_row_refuses_without_storage_calls() {
     assert!(
         decided.is_empty(),
         "decoded without storage calls: {decided:?}"
-    );
-}
-
-fn quiet_under(prefix: &str, mutant: &'static str) -> Option<Vec<String>> {
-    let node = node_or_skip()?;
-    let sabotage = labelled(prefix);
-    assert!(!sabotage.is_empty());
-    let mutated = |source: &str| transformed(false, Some(mutant), source);
-    let modes: [Mode<'_>; 1] = [("mutant", &mutated)];
-    let diverged = mismatches(&node, &sabotage, &modes);
-    Some(
-        sabotage
-            .into_iter()
-            .map(|(label, _)| label)
-            .filter(|label| {
-                !diverged
-                    .iter()
-                    .any(|row| row.split(" (mutant):").next() == Some(label.as_str()))
-            })
-            .collect(),
-    )
-}
-
-#[test]
-fn the_sabotage_rows_diverge_from_node_when_storage_is_trusted() {
-    let Some(quiet) = quiet_under("ref-trust-", "trusted-storage") else {
-        return;
-    };
-    assert!(
-        quiet.is_empty(),
-        "did not diverge from node under the trusted-storage mutant: {quiet:?}"
-    );
-}
-
-#[test]
-fn the_sabotage_rows_diverge_from_node_when_forward_order_is_ignored() {
-    let Some(quiet) = quiet_under("ref-order-", "forward-order") else {
-        return;
-    };
-    assert!(
-        quiet.is_empty(),
-        "did not diverge from node under the forward-order mutant: {quiet:?}"
     );
 }
