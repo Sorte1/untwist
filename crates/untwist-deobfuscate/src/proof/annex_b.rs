@@ -8,7 +8,7 @@ use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::program_is_strict;
 
-use untwist_core::semantic::block_function_symbols;
+use untwist_core::semantic::{block_function_symbols, declaring_block};
 
 use crate::bindings::block_function_names;
 
@@ -100,19 +100,23 @@ fn intercepted(scoping: &Scoping, symbol: SymbolId, var: ScopeId) -> bool {
         || (var != declared && within(scoping, var, declared) && read_within(scoping, symbol, var))
 }
 
-fn kept_in_its_block(
+pub fn kept_in_its_block(
     scoping: &Scoping,
     functions: &FxHashSet<SymbolId>,
     function: SymbolId,
-    var: ScopeId,
 ) -> bool {
+    let Some(block) = declaring_block(scoping, function) else {
+        return false;
+    };
+    let var = var_scope(scoping, block);
     let name = scoping.symbol_name(function);
-    let block = scoping.symbol_scope_id(function);
     let alone = functions
         .iter()
         .filter(|other| {
             scoping.symbol_name(**other) == name
-                && var_scope(scoping, scoping.symbol_scope_id(**other)) == Some(var)
+                && declaring_block(scoping, **other)
+                    .and_then(|declared| var_scope(scoping, declared))
+                    == var
         })
         .count()
         == 1;
@@ -152,8 +156,7 @@ fn scope_hits(scoping: &Scoping, sharing: &[usize], any_symbol: AnySymbol<'_>) -
         for &candidate in sharing {
             let reached = any_symbol(candidate, &mut |symbol| {
                 scoping.symbol_name(symbol) == name
-                    && !(symbol == function
-                        && kept_in_its_block(scoping, &functions, function, var))
+                    && !(symbol == function && kept_in_its_block(scoping, &functions, function))
                     && intercepted(scoping, symbol, var)
             });
             if reached {
