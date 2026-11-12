@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use oxc_allocator::Allocator;
 use serde::Serialize;
 use untwist_core::pass::{Note, NoteKind};
@@ -156,20 +158,32 @@ struct Text {
     host: Host,
     path: String,
     scan: Scan,
+    mentioned: HashSet<String>,
     files: Vec<usize>,
     replacements: Vec<(Span, String)>,
 }
 
 impl Text {
     fn new(host: Host, path: String, scan: Scan) -> Self {
+        let mentioned = scan
+            .remotes
+            .iter()
+            .map(|remote| remote.name.clone())
+            .chain(scan.hashes.iter().map(|hash| hashed_name(hash)))
+            .collect();
         Self {
             host,
             path,
             scan,
+            mentioned,
             files: Vec::new(),
             replacements: Vec::new(),
         }
     }
+}
+
+fn hashed_name(hash: &str) -> String {
+    format!("{hash}{HASHED_SUFFIX}")
 }
 
 fn note(kind: NoteKind, message: String) -> Note {
@@ -335,7 +349,10 @@ impl Output {
             .into_iter()
             .zip(sources.iter().zip(&allocs))
             .filter_map(|((host, path), (source, alloc))| {
-                let glue = Glue::parse(alloc, source)?;
+                let glue = match host {
+                    Host::Module(_) => Glue::parse(alloc, source)?.in_module_file(),
+                    Host::Code(_) => Glue::parse(alloc, source)?,
+                };
                 let mut scan = glue.scan();
                 if check == WasmCheck::Off {
                     scan.payloads.clear();
@@ -468,7 +485,7 @@ impl Output {
             let wanted = format!("{}.wasm", safe_stem(file_stem(&text.path)));
             let index = self.add_file(&wanted, bytes, summary, (WasmOrigin::Embedded, None));
             text.files.push(index);
-            if extract {
+            if extract && site.path_sink {
                 let reference = relative_to(&text.path, &self.wasm[index].path);
                 text.replacements.push((site.span, quoted(&reference)));
             }
@@ -592,21 +609,15 @@ fn refused_payload(path: &str, refusal: &PayloadRefusal) -> Note {
 }
 
 fn text_mentions(text: &Text, reference: &WasmReference) -> bool {
-    text.scan
-        .remotes
-        .iter()
-        .any(|remote| remote.name == reference.name)
-        || reference
-            .name
-            .strip_suffix(HASHED_SUFFIX)
-            .is_some_and(|hash| text.scan.hashes.iter().any(|seen| seen == hash))
+    text.mentioned.contains(&reference.name)
 }
 
 fn references_of(texts: &[Text]) -> Vec<WasmReference> {
     let hashed = texts.iter().any(|text| text.scan.hashed_suffix);
+    let mut seen: HashSet<String> = HashSet::new();
     let mut references: Vec<WasmReference> = Vec::new();
     let mut push = |name: String, url: String| {
-        if !references.iter().any(|known| known.name == name) {
+        if seen.insert(name.clone()) {
             references.push(WasmReference { name, url });
         }
     };
@@ -616,7 +627,7 @@ fn references_of(texts: &[Text]) -> Vec<WasmReference> {
         }
         if hashed {
             for hash in &text.scan.hashes {
-                let name = format!("{hash}{HASHED_SUFFIX}");
+                let name = hashed_name(hash);
                 push(name.clone(), name);
             }
         }

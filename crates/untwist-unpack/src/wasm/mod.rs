@@ -10,6 +10,7 @@ pub mod sites;
 use oxc_allocator::Allocator;
 use oxc_semantic::{Semantic, SemanticBuilder};
 use untwist_core::parse::{has_error, parse_program};
+use untwist_core::semantic::has_module_syntax;
 
 pub use graph::{GlueImport, ImportValue, ModuleFacts};
 pub use module::{
@@ -131,6 +132,7 @@ fn loadable(bytes: &[u8]) -> bool {
 pub struct Glue<'a> {
     text: &'a str,
     semantic: Semantic<'a>,
+    script: bool,
 }
 
 impl<'a> Glue<'a> {
@@ -140,15 +142,27 @@ impl<'a> Glue<'a> {
             return None;
         }
         let program = alloc.alloc(parsed.program);
+        let script = !has_module_syntax(program);
         let semantic = SemanticBuilder::new()
             .with_build_nodes(true)
             .build(program)
             .semantic;
-        Some(Self { text, semantic })
+        Some(Self {
+            text,
+            semantic,
+            script,
+        })
+    }
+
+    pub fn in_module_file(self) -> Self {
+        Self {
+            script: false,
+            ..self
+        }
     }
 
     pub fn scan(&self) -> Scan {
-        Scan::of(self.semantic.nodes())
+        Scan::of(self.semantic.nodes(), self.semantic.scoping())
     }
 
     pub fn rewrite(
@@ -159,7 +173,7 @@ impl<'a> Glue<'a> {
     ) -> Rewritten {
         let mut claimed = rename::Claimed::default();
         let naming = module.map_or_else(glue::Naming::default, |summary| {
-            glue::name_glue(&self.semantic, summary, &mut claimed)
+            glue::name_glue(&self.semantic, self.script, summary, &mut claimed)
         });
         let mut edits = replacements.to_vec();
         edits.extend(naming.edits);
@@ -181,7 +195,7 @@ impl<'a> Glue<'a> {
         claimed: &mut rename::Claimed,
         edits: &mut Vec<(Span, String)>,
     ) -> Result<usize, String> {
-        let renamer = rename::Renamer::new(&self.semantic);
+        let renamer = rename::Renamer::new(&self.semantic, self.script);
         let planned = copy
             .functions
             .iter()
@@ -228,7 +242,7 @@ pub fn rename_names(
         .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
-    let (edits, applied) = rename::Renamer::new(&semantic).apply_by_name(wanted);
+    let (edits, applied) = rename::Renamer::new(&semantic, false).apply_by_name(wanted);
     Some((splice(text, edits), applied))
 }
 

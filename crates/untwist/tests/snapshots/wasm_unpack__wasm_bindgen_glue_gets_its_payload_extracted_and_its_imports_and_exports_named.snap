@@ -56,4 +56,4 @@ export function greet(e, t) {
 export function alloc(e) {
   return wasmExports.__wbindgen_malloc(e, 1);
 }
-initSync(B("./wasm/deobfuscated.wasm"));
+initSync(B("AGFzbQEAAAABDAJgAn9/AGACf38BfwIvAgN3YmcQX193YmdfbG9nXzlhMWIyYwAAA3diZxBfX3diaW5kZ2VuX3Rocm93AAADAwIAAQUDAQABByYDBm1lbW9yeQIABWdyZWV0AAIRX193YmluZGdlbl9tYWxsb2MAAwoPAggAIAAgARAACwQAIAALAC4EbmFtZQEcBAADbG9nAQV0aHJvdwIFZ3JlZXQDBm1hbGxvYwIJBAAAAQACAAMA"));

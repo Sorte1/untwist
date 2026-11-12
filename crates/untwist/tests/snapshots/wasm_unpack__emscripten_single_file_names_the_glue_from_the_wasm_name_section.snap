@@ -3,7 +3,7 @@ source: crates/untwist/tests/wasm_unpack.rs
 expression: out.code()
 ---
 var Module = typeof Module != "undefined" ? Module : {};
-var wasmBinaryFile = "./wasm/deobfuscated.wasm";
+var wasmBinaryFile = "data:application/octet-stream;base64,AGFzbQEAAAABEwRgA39/fwBgAABgAAF/YAF/AX8CDQIBYQFhAAABYQFiAAEDAwICAwUDAQABBw0DAWMCAAFkAAIBZQADCgsCBABBAAsEACAACwA/BG5hbWUBLQQAFWVtc2NyaXB0ZW5fbWVtY3B5X2JpZwEFYWJvcnQCBG1haW4DBm1hbGxvYwIJBAAAAQACAAMA";
 var wasmExports;
 var HEAPU8;
 function emscripten_memcpy_big(e, t, n) {
@@ -45,3 +45,4 @@ var malloc = Module._malloc = function () {
 Ib().then(function () {
   main();
 });
+export default Module;

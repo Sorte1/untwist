@@ -26,7 +26,7 @@ fn an_embedded_wasm_payload_is_written_as_its_own_file_and_reported() {
     let written = std::fs::read(out_dir.join("wasm/deobfuscated.wasm")).unwrap();
     assert_eq!(written, std::fs::read(fixture("bindgen.wasm")).unwrap());
     let code = std::fs::read_to_string(out_dir.join("deobfuscated.js")).unwrap();
-    assert!(code.contains("B(\"./wasm/deobfuscated.wasm\")"));
+    assert!(!code.contains("./wasm/deobfuscated.wasm"));
     let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(json["wasm"][0]["path"], "wasm/deobfuscated.wasm");
     assert_eq!(json["wasm"][0]["origin"], "embedded");

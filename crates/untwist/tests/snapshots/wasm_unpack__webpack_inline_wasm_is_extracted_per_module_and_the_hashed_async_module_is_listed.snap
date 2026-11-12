@@ -5,7 +5,7 @@ expression: "module(\"index.js\")"
 "use strict";
 const r = require("./src/add.wasm.js");
 const s = require("./src/inline.js");
-const m = new WebAssembly.Module("./wasm/index.wasm");
+const m = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 11, 2, 96, 1, 127, 0, 96, 2, 127, 127, 1, 127, 2, 16, 1, 8, 46, 47, 101, 110, 118, 46, 106, 115, 3, 108, 111, 103, 0, 0, 3, 2, 1, 1, 7, 7, 1, 3, 97, 100, 100, 0, 1, 10, 9, 1, 7, 0, 32, 0, 32, 1, 106, 11, 0, 25, 4, 110, 97, 109, 101, 1, 11, 2, 0, 3, 108, 111, 103, 1, 3, 97, 100, 100, 2, 5, 2, 0, 0, 1, 0]));
 const i = new WebAssembly.Instance(m, { "./env.js": { log: log } });
 console.log(i.exports.add(1, 2), s);
 function log(e) {

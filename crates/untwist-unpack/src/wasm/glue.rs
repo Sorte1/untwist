@@ -49,6 +49,7 @@ struct Provided {
 
 struct Glue<'s, 'm> {
     semantic: &'s Semantic<'s>,
+    script: bool,
     modules: FxHashSet<&'m str>,
     holders: FxHashSet<SymbolId>,
     exports_owners: FxHashSet<SymbolId>,
@@ -776,7 +777,8 @@ impl<'s> Glue<'s, '_> {
                 ..Naming::default()
             };
         }
-        let (edits, applied) = Renamer::new(self.semantic).apply(self.wanted(summary), claimed);
+        let (edits, applied) =
+            Renamer::new(self.semantic, self.script).apply(self.wanted(summary), claimed);
         Naming {
             edits,
             applied,
@@ -787,11 +789,13 @@ impl<'s> Glue<'s, '_> {
 
 pub(super) fn name_glue<'s>(
     semantic: &'s Semantic<'s>,
+    script: bool,
     summary: &WasmSummary,
     claimed: &mut Claimed,
 ) -> Naming {
     let mut glue = Glue {
         semantic,
+        script,
         modules: summary.import_modules().into_iter().collect(),
         holders: FxHashSet::default(),
         exports_owners: FxHashSet::default(),
