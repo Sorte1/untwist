@@ -6,6 +6,8 @@
 /tools/corpus/node_modules/
 /tools/bundlers/node_modules/
 /tools/gap-sweep/node_modules/
+/tools/libcorpus/node_modules/
+/tools/libcorpus/isolated/*/node_modules/
 **/*.snap.new
 **/*.pending-snap
 web/node_modules
