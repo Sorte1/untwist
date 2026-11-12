@@ -218,7 +218,58 @@ fn a_value_that_is_not_provably_inert_refuses_the_fold() {
         "void other.b",
     ] {
         let source = format!(
-            "const outer = 1;\nfunction f(other, text, count, key, items, flag) {{\n  const obj = {{}};\n  obj.a = {value};\n  return [obj, obj];\n}}"
+            "const outer = 1;\nfunction f(other, text, count, key, items, flag) {{\n  try {{\n    const obj = {{}};\n    obj.a = {value};\n    return [obj, obj];\n  }} finally {{}}\n}}"
+        );
+        for extended in [true, false] {
+            let code = run_mode(&source, extended);
+            assert_eq!(code, printed(&source), "extended={extended}: {value}");
+        }
+    }
+}
+
+#[test]
+fn a_member_read_or_arithmetic_folds_when_nothing_can_see_the_object() {
+    for value in [
+        "other.b",
+        "other[0]",
+        "missing",
+        "this",
+        "`${text}`",
+        "-count",
+        "count + 1",
+        "count == 1",
+        "{ a: other.b }",
+        "[other.b]",
+        "outer",
+        "flag ? other.b : 1",
+        "flag || other.b",
+        "typeof other.b",
+        "void other.b",
+    ] {
+        let source = format!(
+            "const outer = 1;\nfunction f(other, text, count, flag) {{\n  const obj = {{}};\n  obj.a = {value};\n  return [obj, obj];\n}}"
+        );
+        for extended in [true, false] {
+            let code = run_mode(&source, extended);
+            assert!(!code.contains("obj.a ="), "extended={extended}: {code}");
+        }
+    }
+}
+
+#[test]
+fn a_value_that_may_run_code_another_way_still_refuses_the_fold() {
+    for value in [
+        "key in other",
+        "[...items]",
+        "{ ...other }",
+        "{ [missing]: 1 }",
+        "class {}",
+        "other?.b",
+        "(count = 2)",
+        "count++",
+    ] {
+        let source = format!(
+            "function f(other, count, key, items) {{\n  const obj = {{}};\n  obj.a = {value};\n  return [obj, obj];\n}}"
         );
         for extended in [true, false] {
             let code = run_mode(&source, extended);
@@ -292,8 +343,12 @@ fn a_lexical_binding_counts_as_initialised_only_after_an_earlier_statement_of_th
             false,
         ),
         (
-            "let k = 1;\nfunction f() {\n  const obj = {};\n  obj.a = k;\n  return [obj, obj];\n}",
+            "let k = 1;\nfunction f() {\n  try {\n    const obj = {};\n    obj.a = k;\n    return [obj, obj];\n  } finally {\n  }\n}",
             false,
+        ),
+        (
+            "let k = 1;\nfunction f() {\n  const obj = {};\n  obj.a = k;\n  return [obj, obj];\n}",
+            true,
         ),
     ] {
         for extended in [true, false] {
