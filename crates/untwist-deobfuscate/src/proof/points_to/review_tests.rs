@@ -33,7 +33,10 @@ fn unseen(rows: &[(&str, &str)]) -> Vec<String> {
 
 #[test]
 fn a_program_object_that_never_meets_a_built_in_is_not_a_site() {
-    assert_eq!(site_count(&framed("var o = {}; o[j] = E;"), SourceType::cjs()), 0);
+    assert_eq!(
+        site_count(&framed("var o = {}; o[j] = E;"), SourceType::cjs()),
+        0
+    );
 }
 
 #[test]
@@ -47,12 +50,30 @@ fn a_root_function_of_a_script_runs_with_the_global_object_as_this() {
 const SPREAD_AND_APPLY: &[(&str, &str)] = &[
     ("seal-spread", "var s = Object.seal; s(...[Z])[j] = E;"),
     ("object-spread", "Object(...[Z])[j] = E;"),
-    ("create-spread", "var c = Object.create; Object.getPrototypeOf(c(...[Z]))[j] = E;"),
-    ("definer-apply", "var d = Object.defineProperty; var a = [Z, j, { value: E }]; d.apply(null, a);"),
-    ("definer-spread", "var d = Object.defineProperty; var a = [Z, j, { value: E }]; d(...a);"),
-    ("definer-reflect-apply", "var d = Object.defineProperty; var a = [Z, j, { value: E }]; Reflect.apply(d, null, a);"),
-    ("assign-apply", "var d = Object.assign; d.apply(null, [Z, F]);"),
-    ("apply-of-a-spread-list", "var f = function (q) { q[j] = E; }; f.apply(...[null, [Z]]);"),
+    (
+        "create-spread",
+        "var c = Object.create; Object.getPrototypeOf(c(...[Z]))[j] = E;",
+    ),
+    (
+        "definer-apply",
+        "var d = Object.defineProperty; var a = [Z, j, { value: E }]; d.apply(null, a);",
+    ),
+    (
+        "definer-spread",
+        "var d = Object.defineProperty; var a = [Z, j, { value: E }]; d(...a);",
+    ),
+    (
+        "definer-reflect-apply",
+        "var d = Object.defineProperty; var a = [Z, j, { value: E }]; Reflect.apply(d, null, a);",
+    ),
+    (
+        "assign-apply",
+        "var d = Object.assign; d.apply(null, [Z, F]);",
+    ),
+    (
+        "apply-of-a-spread-list",
+        "var f = function (q) { q[j] = E; }; f.apply(...[null, [Z]]);",
+    ),
 ];
 
 #[test]
@@ -65,7 +86,10 @@ fn a_partly_spread_definer_has_an_unknown_key() {
     let source = framed("var d = Object.defineProperty; var a = [j, { value: E }]; d(Z, ...a);");
     let alloc = Allocator::default();
     let parsed = Parser::new(&alloc, &source, SourceType::cjs()).parse();
-    let scoping = SemanticBuilder::new().build(&parsed.program).semantic.into_scoping();
+    let scoping = SemanticBuilder::new()
+        .build(&parsed.program)
+        .semantic
+        .into_scoping();
     let sites = points_to_sites(&parsed.program, &scoping, &FxHashMap::default(), &[]);
     assert_eq!(sites.len(), 1);
     let used = crate::proof::UsedNames::default();
@@ -73,11 +97,23 @@ fn a_partly_spread_definer_has_an_unknown_key() {
 }
 
 const UNDEFINED_KEYS: &[(&str, &str)] = &[
-    ("undefined-key", "var o = { undefined: Z }; var u; o[u][j] = E;"),
-    ("undefined-in-a-concat", "var u; var o = {}; o['aundefined'] = Z; o['a' + u][j] = E;"),
-    ("missing-argument-key", "var o = { undefined: Z }; function g(n) { return o[n]; } g()[j] = E;"),
+    (
+        "undefined-key",
+        "var o = { undefined: Z }; var u; o[u][j] = E;",
+    ),
+    (
+        "undefined-in-a-concat",
+        "var u; var o = {}; o['aundefined'] = Z; o['a' + u][j] = E;",
+    ),
+    (
+        "missing-argument-key",
+        "var o = { undefined: Z }; function g(n) { return o[n]; } g()[j] = E;",
+    ),
     ("null-key", "var o = { null: Z }; o[null][j] = E;"),
-    ("no-return-key", "var o = { undefined: Z }; function h() {} o[h()][j] = E;"),
+    (
+        "no-return-key",
+        "var o = { undefined: Z }; function h() {} o[h()][j] = E;",
+    ),
 ];
 
 #[test]
@@ -111,18 +147,39 @@ fn reflect_construct_takes_the_prototype_of_new_target() {
 #[test]
 fn copying_a_built_in_copies_every_member_it_may_have() {
     let rows = [
-        ("assign-window", "var o = Object.assign({}, window); o.document.defaultView.String[j] = E;"),
-        ("spread-window", "var o = { ...window }; o.document.defaultView.String[j] = E;"),
+        (
+            "assign-window",
+            "var o = Object.assign({}, window); o.document.defaultView.String[j] = E;",
+        ),
+        (
+            "spread-window",
+            "var o = { ...window }; o.document.defaultView.String[j] = E;",
+        ),
     ];
     assert_eq!(unseen(&rows), Vec::<String>::new());
 }
 
 const UNLISTED_METHODS: &[(&str, &str)] = &[
-    ("set-union", "var st = new Set([{ S: Z }]); var un = st.union(new Set()); for (var v of un) v.S[j] = E;"),
-    ("iterator-for-each", "[{ S: Z }].values().forEach(function (v) { v.S[j] = E; });"),
-    ("iterator-map", "[{ S: Z }].values().map(function (v) { v.S[j] = E; }).next();"),
-    ("array-from-async", "Array.fromAsync([{ S: Z }]).then(function (a) { a[0].S[j] = E; });"),
-    ("map-get-or-insert", "var mp = new Map(); mp.getOrInsert(1, { S: Z }).S[j] = E;"),
+    (
+        "set-union",
+        "var st = new Set([{ S: Z }]); var un = st.union(new Set()); for (var v of un) v.S[j] = E;",
+    ),
+    (
+        "iterator-for-each",
+        "[{ S: Z }].values().forEach(function (v) { v.S[j] = E; });",
+    ),
+    (
+        "iterator-map",
+        "[{ S: Z }].values().map(function (v) { v.S[j] = E; }).next();",
+    ),
+    (
+        "array-from-async",
+        "Array.fromAsync([{ S: Z }]).then(function (a) { a[0].S[j] = E; });",
+    ),
+    (
+        "map-get-or-insert",
+        "var mp = new Map(); mp.getOrInsert(1, { S: Z }).S[j] = E;",
+    ),
 ];
 
 #[test]
@@ -131,11 +188,26 @@ fn a_standard_method_the_tables_do_not_list_keeps_its_flows() {
 }
 
 const NATIVE_FLOWS: &[(&str, &str)] = &[
-    ("symbol-replace-hook", "var pt = {}; pt[Symbol.replace] = function (s, r) { r[j] = E; }; 'a'.replace(pt, Z);"),
-    ("symbol-split-hook", "var pt = {}; pt[Symbol.split] = function (s, r) { r[j] = E; }; 'a'.split(pt, Z);"),
-    ("concat-on-an-object", "[].concat.call({ S: Z })[0].S[j] = E;"),
-    ("map-entry-pairs", "var mp = new Map(); mp.set(1, { S: Z }); for (var [a, v] of mp) v.S[j] = E;"),
-    ("array-entry-pairs", "for (var [a, v] of [{ S: Z }].entries()) v.S[j] = E;"),
+    (
+        "symbol-replace-hook",
+        "var pt = {}; pt[Symbol.replace] = function (s, r) { r[j] = E; }; 'a'.replace(pt, Z);",
+    ),
+    (
+        "symbol-split-hook",
+        "var pt = {}; pt[Symbol.split] = function (s, r) { r[j] = E; }; 'a'.split(pt, Z);",
+    ),
+    (
+        "concat-on-an-object",
+        "[].concat.call({ S: Z })[0].S[j] = E;",
+    ),
+    (
+        "map-entry-pairs",
+        "var mp = new Map(); mp.set(1, { S: Z }); for (var [a, v] of mp) v.S[j] = E;",
+    ),
+    (
+        "array-entry-pairs",
+        "for (var [a, v] of [{ S: Z }].entries()) v.S[j] = E;",
+    ),
 ];
 
 #[test]
@@ -170,7 +242,7 @@ fn built_in_accessors_and_function_arguments_return_what_they_hold() {
     assert_eq!(unseen(BUILT_IN_ACCESSORS), Vec::<String>::new());
 }
 
-const ELEMENT_READ_STEPS: u64 = 10_000;
+const ELEMENT_READ_STEPS: u64 = 20_000;
 
 #[test]
 fn applying_push_to_an_array_reads_only_its_elements() {
@@ -181,7 +253,10 @@ fn applying_push_to_an_array_reads_only_its_elements() {
     ] {
         let alloc = Allocator::default();
         let parsed = Parser::new(&alloc, source, SourceType::cjs()).parse();
-        let scoping = SemanticBuilder::new().build(&parsed.program).semantic.into_scoping();
+        let scoping = SemanticBuilder::new()
+            .build(&parsed.program)
+            .semantic
+            .into_scoping();
         let decoded = FxHashMap::default();
         let mut generator = super::generate::Gen::new(&parsed.program, &scoping, &decoded, &[]);
         generator.run(&parsed.program);
@@ -193,20 +268,329 @@ fn applying_push_to_an_array_reads_only_its_elements() {
 }
 
 const STANDARD_MEMBERS: &[(Builtin, &[&str])] = &[
-    (Builtin::ObjectCtor, &["assign", "create", "defineProperties", "defineProperty", "entries", "freeze", "fromEntries", "getOwnPropertyDescriptor", "getOwnPropertyDescriptors", "getOwnPropertyNames", "getOwnPropertySymbols", "getPrototypeOf", "groupBy", "hasOwn", "is", "isExtensible", "isFrozen", "isSealed", "keys", "preventExtensions", "prototype", "seal", "setPrototypeOf", "values", "length", "name"]),
-    (Builtin::ObjectProto, &["constructor", "hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable", "toLocaleString", "toString", "valueOf", "__defineGetter__", "__defineSetter__", "__lookupGetter__", "__lookupSetter__"]),
-    (Builtin::FunctionProto, &["apply", "bind", "call", "constructor", "toString", "@@hasInstance", "length", "name", "arguments", "caller"]),
-    (Builtin::ArrayCtor, &["from", "fromAsync", "isArray", "of", "prototype", "length", "name"]),
-    (Builtin::ArrayProto, &["at", "concat", "copyWithin", "entries", "every", "fill", "filter", "find", "findIndex", "findLast", "findLastIndex", "flat", "flatMap", "forEach", "includes", "indexOf", "join", "keys", "lastIndexOf", "map", "pop", "push", "reduce", "reduceRight", "reverse", "shift", "slice", "some", "sort", "splice", "toLocaleString", "toReversed", "toSorted", "toSpliced", "toString", "unshift", "values", "with", "@@iterator", "constructor", "length"]),
-    (Builtin::StringCtor, &["fromCharCode", "fromCodePoint", "raw", "prototype", "length", "name"]),
-    (Builtin::StringProto, &["at", "charAt", "charCodeAt", "codePointAt", "concat", "endsWith", "includes", "indexOf", "isWellFormed", "lastIndexOf", "localeCompare", "match", "matchAll", "normalize", "padEnd", "padStart", "repeat", "replace", "replaceAll", "search", "slice", "split", "startsWith", "substring", "substr", "toLocaleLowerCase", "toLocaleUpperCase", "toLowerCase", "toString", "toUpperCase", "toWellFormed", "trim", "trimEnd", "trimStart", "trimLeft", "trimRight", "valueOf", "@@iterator", "constructor", "length"]),
-    (Builtin::SymbolCtor, &["asyncDispose", "asyncIterator", "dispose", "for", "hasInstance", "isConcatSpreadable", "iterator", "keyFor", "match", "matchAll", "replace", "search", "species", "split", "toPrimitive", "toStringTag", "unscopables", "prototype", "length", "name"]),
-    (Builtin::Reflect, &["apply", "construct", "defineProperty", "deleteProperty", "get", "getOwnPropertyDescriptor", "getPrototypeOf", "has", "isExtensible", "ownKeys", "preventExtensions", "set", "setPrototypeOf"]),
-    (Builtin::MathNs, &["abs", "acos", "acosh", "asin", "asinh", "atan", "atanh", "atan2", "cbrt", "ceil", "clz32", "cos", "cosh", "exp", "expm1", "f16round", "floor", "fround", "hypot", "imul", "log", "log1p", "log10", "log2", "max", "min", "pow", "random", "round", "sign", "sin", "sinh", "sqrt", "sumPrecise", "tan", "tanh", "trunc", "E", "LN10", "LN2", "LOG10E", "LOG2E", "PI", "SQRT1_2", "SQRT2"]),
-    (Builtin::Json, &["parse", "stringify", "rawJSON", "isRawJSON"]),
-    (Builtin::CollectionCtor, &["groupBy", "prototype", "length", "name"]),
-    (Builtin::CollectionProto, &["add", "clear", "delete", "difference", "entries", "forEach", "get", "getOrInsert", "getOrInsertComputed", "has", "intersection", "isDisjointFrom", "isSubsetOf", "isSupersetOf", "keys", "set", "size", "symmetricDifference", "union", "values", "@@iterator", "constructor"]),
-    (Builtin::IteratorProto, &["next", "drop", "every", "filter", "find", "flatMap", "forEach", "map", "reduce", "some", "take", "toArray", "@@iterator", "constructor"]),
+    (
+        Builtin::ObjectCtor,
+        &[
+            "assign",
+            "create",
+            "defineProperties",
+            "defineProperty",
+            "entries",
+            "freeze",
+            "fromEntries",
+            "getOwnPropertyDescriptor",
+            "getOwnPropertyDescriptors",
+            "getOwnPropertyNames",
+            "getOwnPropertySymbols",
+            "getPrototypeOf",
+            "groupBy",
+            "hasOwn",
+            "is",
+            "isExtensible",
+            "isFrozen",
+            "isSealed",
+            "keys",
+            "preventExtensions",
+            "prototype",
+            "seal",
+            "setPrototypeOf",
+            "values",
+            "length",
+            "name",
+        ],
+    ),
+    (
+        Builtin::ObjectProto,
+        &[
+            "constructor",
+            "hasOwnProperty",
+            "isPrototypeOf",
+            "propertyIsEnumerable",
+            "toLocaleString",
+            "toString",
+            "valueOf",
+            "__defineGetter__",
+            "__defineSetter__",
+            "__lookupGetter__",
+            "__lookupSetter__",
+        ],
+    ),
+    (
+        Builtin::FunctionProto,
+        &[
+            "apply",
+            "bind",
+            "call",
+            "constructor",
+            "toString",
+            "@@hasInstance",
+            "length",
+            "name",
+            "arguments",
+            "caller",
+        ],
+    ),
+    (
+        Builtin::ArrayCtor,
+        &[
+            "from",
+            "fromAsync",
+            "isArray",
+            "of",
+            "prototype",
+            "length",
+            "name",
+        ],
+    ),
+    (
+        Builtin::ArrayProto,
+        &[
+            "at",
+            "concat",
+            "copyWithin",
+            "entries",
+            "every",
+            "fill",
+            "filter",
+            "find",
+            "findIndex",
+            "findLast",
+            "findLastIndex",
+            "flat",
+            "flatMap",
+            "forEach",
+            "includes",
+            "indexOf",
+            "join",
+            "keys",
+            "lastIndexOf",
+            "map",
+            "pop",
+            "push",
+            "reduce",
+            "reduceRight",
+            "reverse",
+            "shift",
+            "slice",
+            "some",
+            "sort",
+            "splice",
+            "toLocaleString",
+            "toReversed",
+            "toSorted",
+            "toSpliced",
+            "toString",
+            "unshift",
+            "values",
+            "with",
+            "@@iterator",
+            "constructor",
+            "length",
+        ],
+    ),
+    (
+        Builtin::StringCtor,
+        &[
+            "fromCharCode",
+            "fromCodePoint",
+            "raw",
+            "prototype",
+            "length",
+            "name",
+        ],
+    ),
+    (
+        Builtin::StringProto,
+        &[
+            "at",
+            "charAt",
+            "charCodeAt",
+            "codePointAt",
+            "concat",
+            "endsWith",
+            "includes",
+            "indexOf",
+            "isWellFormed",
+            "lastIndexOf",
+            "localeCompare",
+            "match",
+            "matchAll",
+            "normalize",
+            "padEnd",
+            "padStart",
+            "repeat",
+            "replace",
+            "replaceAll",
+            "search",
+            "slice",
+            "split",
+            "startsWith",
+            "substring",
+            "substr",
+            "toLocaleLowerCase",
+            "toLocaleUpperCase",
+            "toLowerCase",
+            "toString",
+            "toUpperCase",
+            "toWellFormed",
+            "trim",
+            "trimEnd",
+            "trimStart",
+            "trimLeft",
+            "trimRight",
+            "valueOf",
+            "@@iterator",
+            "constructor",
+            "length",
+        ],
+    ),
+    (
+        Builtin::SymbolCtor,
+        &[
+            "asyncDispose",
+            "asyncIterator",
+            "dispose",
+            "for",
+            "hasInstance",
+            "isConcatSpreadable",
+            "iterator",
+            "keyFor",
+            "match",
+            "matchAll",
+            "replace",
+            "search",
+            "species",
+            "split",
+            "toPrimitive",
+            "toStringTag",
+            "unscopables",
+            "prototype",
+            "length",
+            "name",
+        ],
+    ),
+    (
+        Builtin::Reflect,
+        &[
+            "apply",
+            "construct",
+            "defineProperty",
+            "deleteProperty",
+            "get",
+            "getOwnPropertyDescriptor",
+            "getPrototypeOf",
+            "has",
+            "isExtensible",
+            "ownKeys",
+            "preventExtensions",
+            "set",
+            "setPrototypeOf",
+        ],
+    ),
+    (
+        Builtin::MathNs,
+        &[
+            "abs",
+            "acos",
+            "acosh",
+            "asin",
+            "asinh",
+            "atan",
+            "atanh",
+            "atan2",
+            "cbrt",
+            "ceil",
+            "clz32",
+            "cos",
+            "cosh",
+            "exp",
+            "expm1",
+            "f16round",
+            "floor",
+            "fround",
+            "hypot",
+            "imul",
+            "log",
+            "log1p",
+            "log10",
+            "log2",
+            "max",
+            "min",
+            "pow",
+            "random",
+            "round",
+            "sign",
+            "sin",
+            "sinh",
+            "sqrt",
+            "sumPrecise",
+            "tan",
+            "tanh",
+            "trunc",
+            "E",
+            "LN10",
+            "LN2",
+            "LOG10E",
+            "LOG2E",
+            "PI",
+            "SQRT1_2",
+            "SQRT2",
+        ],
+    ),
+    (
+        Builtin::Json,
+        &["parse", "stringify", "rawJSON", "isRawJSON"],
+    ),
+    (
+        Builtin::CollectionCtor,
+        &["groupBy", "prototype", "length", "name"],
+    ),
+    (
+        Builtin::CollectionProto,
+        &[
+            "add",
+            "clear",
+            "delete",
+            "difference",
+            "entries",
+            "forEach",
+            "get",
+            "getOrInsert",
+            "getOrInsertComputed",
+            "has",
+            "intersection",
+            "isDisjointFrom",
+            "isSubsetOf",
+            "isSupersetOf",
+            "keys",
+            "set",
+            "size",
+            "symmetricDifference",
+            "union",
+            "values",
+            "@@iterator",
+            "constructor",
+        ],
+    ),
+    (
+        Builtin::IteratorProto,
+        &[
+            "next",
+            "drop",
+            "every",
+            "filter",
+            "find",
+            "flatMap",
+            "forEach",
+            "map",
+            "reduce",
+            "some",
+            "take",
+            "toArray",
+            "@@iterator",
+            "constructor",
+        ],
+    ),
 ];
 
 #[test]
@@ -239,4 +623,47 @@ fn a_solve_past_the_deadline_gives_up_through_one_fallback_site() {
     let count = site_count(&source, SourceType::cjs());
     drop(scope);
     assert_eq!(count, 1);
+}
+
+const CALLER_REACH: &[(&str, &str)] = &[
+    (
+        "host-reads-a-caller-argument",
+        "function f(a) { host.peek(); } f(Z); var w = host.back(); w[j] = E;",
+    ),
+    (
+        "host-writes-a-caller-argument",
+        "host.keep(Z); function f(a) { host.swap(); a[j] = E; } f({});",
+    ),
+    (
+        "host-reads-a-caller-argument-without-parameters",
+        "function f() { host.peek(); } f(Z); host.back()[j] = E;",
+    ),
+];
+
+#[test]
+fn a_foreign_callee_reaches_the_arguments_of_a_sloppy_caller() {
+    assert_eq!(unseen(CALLER_REACH), Vec::<String>::new());
+}
+
+#[test]
+fn an_index_read_off_a_foreign_value_may_be_the_global_object() {
+    let rows = [("index-of-a-host-list", "host.list()[0].String[j] = E;")];
+    assert_eq!(unseen(&rows), Vec::<String>::new());
+}
+
+#[test]
+fn a_strict_caller_keeps_its_arguments() {
+    let source = "(function () { 'use strict'; var o = {}; function f(a) { host.peek(); a[j] = E; } f(o); })();";
+    assert_eq!(site_count(source, SourceType::cjs()), 0);
+}
+
+const CALLER_READS: &[(&str, &str)] = &[
+    ("caller-called-back", "function p(o) { if (o) { o[j] = E; return; } g()(Z); } function g() { return g.caller; } p();"),
+    ("caller-arguments", "function f() { return f.caller; } function h(q) { var c = f(); c.arguments[0][j] = E; } h(Z);"),
+    ("caller-under-an-unknown-key", "function p(o) { if (o) { o[j] = E; return; } g()(Z); } function g() { return g[host.key()]; } p();"),
+];
+
+#[test]
+fn a_caller_read_on_a_program_function_may_be_any_program_function() {
+    assert_eq!(unseen(CALLER_READS), Vec::<String>::new());
 }

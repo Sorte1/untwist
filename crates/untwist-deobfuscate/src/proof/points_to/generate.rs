@@ -520,6 +520,8 @@ impl<'s> Gen<'s> {
             .g
             .new_site(span, SiteKind::Function, &[Builtin::FunctionProto]);
         let node = self.g.singleton(object);
+        let callers = self.g.callers;
+        self.g.copy(node, callers);
         if prototype {
             let proto = self
                 .g
@@ -572,6 +574,9 @@ impl<'s> Gen<'s> {
         if let Some(body) = &it.body {
             self.stmts(&body.statements);
         }
+        if !strict {
+            self.arguments_node();
+        }
         let frame = self.frames.pop().expect("pushed above");
         self.finish_function(object, (params, rest), frame);
         if it.r#type == FunctionType::FunctionExpression {
@@ -593,6 +598,8 @@ impl<'s> Gen<'s> {
                     self.g.load(node, Key::Static(Field::ELEMENTS), *param);
                     self.g.copy(*param, fields);
                 }
+                self.g.add(fields, ObjectId::WORLD);
+                self.g.escape(fields);
             }
             fields
         });

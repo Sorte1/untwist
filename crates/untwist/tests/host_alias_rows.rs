@@ -20,8 +20,8 @@ const ROWS_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
     "ref-unknown-key-on-event-target",
     "ref-super-returns-the-global-object",
     "ref-default-constructor-returns-the-global-object",
-    "ref-reflect-set-receiver",
-    "ref-reflect-set-receiver-alias",
+    "ref-index-read-of-a-host-list",
+    "ref-function-constructor-off-a-host-object",
 ];
 
 #[test]

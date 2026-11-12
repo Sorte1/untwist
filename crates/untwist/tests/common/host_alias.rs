@@ -34,7 +34,10 @@ pub fn rows() -> Vec<(String, String)> {
     let mut rows = framed(HEAD, ROWS);
     rows.extend(framed(PLAIN_HEAD, KEYED_ROWS));
     rows.extend(framed(BARE_HEAD, BARE_ROWS));
-    rows.extend(framed(&format!("{}{STRING_HELD}", PLAIN_HEAD.trim_end()), REVIEW_ROWS));
+    rows.extend(framed(
+        &format!("{}{STRING_HELD}", PLAIN_HEAD.trim_end()),
+        REVIEW_ROWS,
+    ));
     rows
 }
 

@@ -123,6 +123,7 @@ enum Watch {
     Child(ObjectId),
     Heirs(u32),
     ExtraHeir(u32),
+    Convert,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -166,6 +167,8 @@ pub(super) struct Graph {
     queue: Vec<Node>,
     replays: Vec<(Node, Watch)>,
     implicit_done: FxHashSet<Node>,
+    converted: FxHashSet<ObjectId>,
+    pub(super) builtin_conversions: FxHashSet<Node>,
     init: Vec<Init>,
     live: bool,
     loads: Vec<(Node, Key, Node)>,
@@ -196,6 +199,7 @@ pub(super) struct Graph {
     name_list: Vec<Box<str>>,
     pub(super) esc: Node,
     pub(super) world: Node,
+    pub(super) callers: Node,
     pub(super) empty: Node,
     pub(super) patches: Vec<Patch>,
     patch_seen: FxHashSet<(u32, Method, Node)>,
@@ -204,7 +208,6 @@ pub(super) struct Graph {
     loaded: FxHashMap<(Node, Field), Node>,
     derived: FxHashMap<(u8, Vec<Node>, Span), Node>,
     simple_sites: FxHashMap<(Span, usize), SimpleSite>,
-    sink: Option<Node>,
     returning: Vec<ObjectId>,
     returned: Vec<ObjectId>,
     children: FxHashMap<ObjectId, Vec<ObjectId>>,
@@ -216,7 +219,6 @@ pub(super) struct Graph {
     world_fields: Option<Node>,
     budget: Budget,
     exhausted: bool,
-    pub(super) gave_up: Option<&'static str>,
 }
 
 impl Graph {
@@ -232,6 +234,8 @@ impl Graph {
             queue: Vec::new(),
             replays: Vec::new(),
             implicit_done: FxHashSet::default(),
+            converted: FxHashSet::default(),
+            builtin_conversions: FxHashSet::default(),
             init: Vec::new(),
             live: false,
             loads: Vec::new(),
@@ -262,6 +266,7 @@ impl Graph {
             name_list: Vec::new(),
             esc: Node(0),
             world: Node(0),
+            callers: Node(0),
             empty: Node(0),
             patches: Vec::new(),
             patch_seen: FxHashSet::default(),
@@ -270,7 +275,6 @@ impl Graph {
             loaded: FxHashMap::default(),
             derived: FxHashMap::default(),
             simple_sites: FxHashMap::default(),
-            sink: None,
             returning: Vec::new(),
             returned: Vec::new(),
             children: FxHashMap::default(),
@@ -286,10 +290,10 @@ impl Graph {
                 ..Budget::default()
             },
             exhausted: false,
-            gave_up: None,
         };
         graph.esc = graph.node();
         graph.world = graph.node();
+        graph.callers = graph.node();
         graph.empty = graph.node();
         graph.insert(graph.world, ObjectId::WORLD);
         graph
@@ -363,6 +367,9 @@ impl Graph {
         };
         set.insert(at, object);
         self.budget.elements += 1;
+        if self.spent(0) {
+            return false;
+        }
         let pending = &mut self.pending[node.0 as usize];
         pending.push(object);
         if pending.len() == 1 {
@@ -957,6 +964,17 @@ impl Graph {
                     self.heirs_into(*object, to);
                 }
             }
+            Watch::Convert => {
+                for object in delta {
+                    let object = match self.objects.get(*object) {
+                        Obj::Str(_) => self.builtin(Builtin::PrimString),
+                        _ => *object,
+                    };
+                    if self.converted.insert(object) {
+                        self.convert(object);
+                    }
+                }
+            }
             Watch::ExtraHeir(index) => {
                 let receiver = self.extra_heirs[index as usize];
                 for object in delta {
@@ -1000,9 +1018,12 @@ impl Graph {
                 let members = self.node();
                 self.wire_load(object, Field::UNKNOWN, members);
                 match sub {
-                    Sub::DefineInto(_) => {
-                        self.define_one(target, Key::Static(Field::UNKNOWN), members, Span::default())
-                    }
+                    Sub::DefineInto(_) => self.define_one(
+                        target,
+                        Key::Static(Field::UNKNOWN),
+                        members,
+                        Span::default(),
+                    ),
                     _ => self.store(target, Key::Static(Field::UNKNOWN), members),
                 }
             }
@@ -1087,6 +1108,9 @@ impl Graph {
     }
 
     fn wire_load(&mut self, object: ObjectId, field: Field, to: Node) {
+        if self.exhausted {
+            return;
+        }
         if !self.wired_loads.insert((object, field, to)) {
             return;
         }
@@ -1201,7 +1225,9 @@ impl Graph {
         let caller = self.field_name(field) == Some("caller");
         let arguments = self.field_name(field) == Some("arguments");
         if any || caller {
-            self.gave_up = Some("a function's caller is read");
+            let callers = self.callers;
+            self.copy(callers, to);
+            self.add_builtin(to, Builtin::PrimNull);
         }
         if !(any || arguments) {
             return;
@@ -1221,7 +1247,10 @@ impl Graph {
         }
         let name = self.field_name(field).map(str::to_string);
         let any = field == Field::UNKNOWN;
-        let route = any || name.as_deref().is_some_and(model::is_back_route);
+        let route = any
+            || name
+                .as_deref()
+                .is_some_and(|name| model::is_back_route(name) || model::is_index(name));
         if route && !back_routes_dropped() {
             let global = self.builtin(Builtin::Global);
             self.insert(to, global);
@@ -1239,6 +1268,9 @@ impl Graph {
     }
 
     fn wire_store(&mut self, object: ObjectId, field: Field, from: Node) {
+        if self.exhausted {
+            return;
+        }
         if !self.wired_stores.insert((object, field, from)) {
             return;
         }
@@ -1345,17 +1377,8 @@ impl Graph {
         }
     }
 
-    pub(super) fn is_live(&self) -> bool {
-        self.live
-    }
-
-    pub(super) fn implicit_sink(&mut self) -> Node {
-        if let Some(sink) = self.sink {
-            return sink;
-        }
-        let sink = self.node();
-        self.sink = Some(sink);
-        sink
+    pub(super) fn watch_conversions(&mut self, value: Node) {
+        self.watch(value, Watch::Convert);
     }
 
     pub(super) fn first_implicit(&mut self, value: Node) -> bool {
@@ -1388,7 +1411,7 @@ impl Graph {
         let mut pops: u32 = 0;
         loop {
             pops = pops.wrapping_add(1);
-            if pops % CHECK_EVERY == 0 && untwist_core::budget::check().is_err() {
+            if pops.is_multiple_of(CHECK_EVERY) && untwist_core::budget::check().is_err() {
                 self.give_up();
             }
             if self.over_budget() {

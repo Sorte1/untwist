@@ -18,3 +18,7 @@ ref-setter-on-a-primitive|Object.defineProperty(Z.prototype,"zz",{set:function(v
 ref-reflect-get-receiver|var o={get zz(){return this;}};Reflect.get(o,"zz",Z)[j]=E;
 ref-reflect-set-receiver|Reflect.set({},j,E,Z);
 ref-reflect-set-receiver-alias|var R=Reflect;R.set({},j,E,Z);
+ref-host-reads-a-caller-argument|function f(a){host.peek();}f(Z);var w=host.back();w[j]=E;
+ref-index-read-of-a-host-list|host.list()[0].String[j]=E;
+ref-function-arguments-value|function f(){f.arguments[0][j]=E;}f(Z);
+ref-function-constructor-off-a-host-object|host.box().constructor.constructor("return this")().String[j]=E;

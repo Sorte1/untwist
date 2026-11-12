@@ -396,10 +396,43 @@ fn console(name: &str) -> Read {
 }
 
 const MATH_FUNCTIONS: &[&str] = &[
-    "abs", "acos", "acosh", "asin", "asinh", "atan", "atanh", "atan2", "cbrt", "ceil", "clz32",
-    "cos", "cosh", "exp", "expm1", "floor", "fround", "hypot", "imul", "log", "log1p", "log10",
-    "log2", "max", "min", "pow", "random", "round", "sign", "sin", "sinh", "sqrt", "tan", "tanh",
-    "trunc", "f16round", "sumPrecise",
+    "abs",
+    "acos",
+    "acosh",
+    "asin",
+    "asinh",
+    "atan",
+    "atanh",
+    "atan2",
+    "cbrt",
+    "ceil",
+    "clz32",
+    "cos",
+    "cosh",
+    "exp",
+    "expm1",
+    "floor",
+    "fround",
+    "hypot",
+    "imul",
+    "log",
+    "log1p",
+    "log10",
+    "log2",
+    "max",
+    "min",
+    "pow",
+    "random",
+    "round",
+    "sign",
+    "sin",
+    "sinh",
+    "sqrt",
+    "tan",
+    "tanh",
+    "trunc",
+    "f16round",
+    "sumPrecise",
 ];
 
 const MATH_CONSTANTS: &[&str] = &[
@@ -671,6 +704,10 @@ const BACK_ROUTE_NAMES: &[&str] = &[
 
 pub(super) fn is_back_route(name: &str) -> bool {
     BACK_ROUTE_NAMES.contains(&name)
+}
+
+pub(super) fn is_index(name: &str) -> bool {
+    !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 pub(super) const WORLD_CONSTRUCTOR_NAMES: &[&str] = &["constructor", "__proto__", "prototype"];

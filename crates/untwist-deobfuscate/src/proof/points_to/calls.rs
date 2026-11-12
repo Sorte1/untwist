@@ -17,7 +17,9 @@ impl Graph {
             return;
         }
         let call = self.calls[index as usize].clone();
+        let standard_conversion = self.builtin_conversions.contains(&call.callee);
         match self.objects.get(callee).clone() {
+            Obj::World | Obj::Builtin(Builtin::Other) if standard_conversion => {}
             Obj::World => self.generic(&call),
             Obj::Str(_) => {}
             Obj::Site(_, SiteKind::Function) => self.bind_function(callee, &call),
@@ -270,17 +272,17 @@ impl Graph {
     }
 
     pub(super) fn implicit(&mut self, value: Node) {
-        let value = if self.is_live() {
-            let sink = self.implicit_sink();
-            self.copy(value, sink);
-            sink
-        } else {
-            value
-        };
-        if !self.first_implicit(value) {
-            return;
+        if self.first_implicit(value) {
+            self.watch_conversions(value);
         }
+    }
+
+    pub(super) fn convert(&mut self, object: ObjectId) {
+        let value = self.singleton(object);
         let callee = self.node();
+        if matches!(self.objects.get(object), Obj::Builtin(_)) {
+            self.builtin_conversions.insert(callee);
+        }
         self.load_named(value, "toString", callee);
         self.load_named(value, "valueOf", callee);
         self.call(Call {

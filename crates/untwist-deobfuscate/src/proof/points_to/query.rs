@@ -74,7 +74,7 @@ impl Gen<'_> {
         if builtin_aliases_trusted() {
             return Vec::new();
         }
-        if let Some(reason) = self.fallback.or(self.g.gave_up) {
+        if let Some(reason) = self.fallback {
             return vec![AliasSite::new(
                 Span::default(),
                 AliasKey::Fallback(reason),
