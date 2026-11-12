@@ -3,20 +3,20 @@ behaviour p 3397 fd85e7e87f262fa8
 behaviour u 3171 21347c74d5e15708
 behaviour up 3245 1ee0e3cd999b8804
 corpora 2142 838f0982ae1c2fbf
-corpus-npm d 232 1506bf691076ffb5
-corpus-npm p 216 fa78b45346a06435
+corpus-npm d 210 02d89444e28a8634
+corpus-npm p 194 b35d3666cb9916b0
 corpus-npm u 220 fda7f6a4311f0832
 corpus-npm up 216 fa78b45346a06435
-deobfuscate d 557 24bdc34861fc761d
-deobfuscate p 556 895ff255de56d63a
+deobfuscate d 285 07d1722c15c5acb2
+deobfuscate p 284 68d9fcc0b9881cff
 deobfuscate u 540 e90a03fee733833c
 deobfuscate up 546 4c4f97c3494a730a
 game d 59 6f3a2ff209e83049
 game p 28 272df210f67dbc60
 game u 70 b6346b8625f4bdec
 game up 19 29e403c6a4771322
-high d 292 c895852b20aebf76
-high p 292 1bbb31e0b8d104ed
+high d 20 fef381d6fab75425
+high p 20 022b0cb7c62796fe
 high u 288 386cab3ece6614ce
 high up 289 448e2917366d1415
 jsx d 12 97a258ff4ae349b6
