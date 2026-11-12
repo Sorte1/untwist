@@ -158,13 +158,18 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   nothing but those statements. Property keys must be string or numeric literals or a
   `Symbol.*` member: anything else (a key that reads the class, a computed expression) keeps the
   class. An instance key `constructor` and a static `prototype`, `name`, `length`, `caller` or
-  `arguments` keep it too.
+  `arguments` keep it too. In sloppy code the IIFE's argument becomes the (strict) `extends`
+  expression only when strictness cannot change it: identifiers, literals, member reads and
+  calls of those; a function, arrow, class or direct `eval` there keeps the class.
 - **Constructors.** `_classCallCheck` goes. A derived constructor's `_this = _callSuper(this, C,
-  [args])` becomes `super(args)` (`arguments` and Babel's `[].concat(rest)` are spread), and every
+  [args])` becomes `super(args)` (`arguments` is spread, and so is Babel's `[].concat(x)` when `x`
+  is the rest parameter or a never-written local initialised with an array literal or
+  `new Array(n)`; any other `x` gives `super(...[].concat(x))`), and every
   later `_this` becomes `this`; it may also stand first in a member read, a call or a declaration
   (`(_this = _callSuper(…)).x = 1` becomes `super(…); this.x = 1;`). The class is kept when
   `_this` is read before the super call or inside a nested `function`, when `this` is used
-  directly anywhere but the two helper calls, or when a constructor-level `return` returns
+  directly anywhere but the two helper calls (a nested class's `extends` expression and computed
+  keys count, they see the constructor's `this`), or when a constructor-level `return` returns
   anything but `_this`. A constructor that only forwards `arguments`, or a base constructor left
   empty with no parameters, is dropped (the default constructor does the same).
 - **Fields.** The run of `_defineProperty(this, k, v)` / `__publicField(this, k, v)` calls that
@@ -204,6 +209,10 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
     keys, `_inherits` once as the child and freely as the parent, `_call_super`,
     `_get_prototype_of`, `_type_of`, or a field definer with a literal key;
   - an IIFE argument whose parameter follows the same rules.
+
+  The fact follows the class value only out of `var X = function () { …; return C; }()` and
+  `var X = _create_class(function C() { … }, …)`; an SWC class in any other position
+  (`return _create_class(C, …)` in the IIFE, the direct form as an argument) is kept.
 
   Anything else keeps the class, with the note: a write or `delete` of `C.prototype` or
   `C["prototype"]`, a computed write `C[k] = v`, or `C` stored, returned, spread or passed to any
@@ -253,7 +262,8 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   `[7]` ends a `finally`, and `_a.trys.push([try, catch, finally, end])` opens a `try`. The
   cases are then structured (dominator-tree based, after Ramsey's "Beyond Relooper"): loops
   from back edges, `if`/`else` from branches, labelled `break`/`continue` where a jump crosses
-  more than the innermost loop, and `try`/`catch`/`finally` from the try entries; a caught
+  more than the innermost loop, and `try`/`catch`/`finally` from the try entries (a jump from
+  inside a `try` back to its own first case re-enters the `try`, so it is kept); a caught
   error read as `e = _a.sent()` becomes `catch (e)` when `e` is used nowhere else. A machine
   whose control flow is irreducible, that jumps into the middle of a `try`, reads the state
   object any other way, declares bindings in a split block, or sits in a getter or setter is
@@ -264,8 +274,10 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   `return __async(this, null, function* () { … })` become an `async` function (or an `async`
   arrow) whose body is the generator's, with each of its own `yield` turned into `await`. The
   outer function's parameters must be plain identifiers (an async function rejects where the
-  wrapper throws). The receiver may be something other than `this` (TypeScript's `_this`,
-  esbuild's `null`) only when the generator does not use `this`. When the wrapper forwards
+  wrapper throws). The receiver may be something other than `this` (TypeScript's `_this` and
+  the `void 0` of a module-level arrow, esbuild's `null`) only when the generator, its
+  parameters included, does not use `this`. An outer function or arrow that binds `await` (or,
+  for a generator, `yield`) keeps the helper, since the name is reserved in the result. When the wrapper forwards
   `arguments`, the generator's parameters replace the outer ones, which must be unread
   placeholders of the same count (`.length` stays). A generator binding whose name the outer
   function already binds, or a program that writes `Promise`, keeps the helper, with one note

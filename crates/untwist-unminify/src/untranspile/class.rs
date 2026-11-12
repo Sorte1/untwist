@@ -35,6 +35,8 @@ struct Parts<'k, 'a> {
     symbol: SymbolId,
     define: Option<&'k CallExpression<'a>>,
     parent: Option<SymbolId>,
+    heritage: Option<&'k Expression<'a>>,
+    returns_class: bool,
 }
 
 fn kind_of(callee: &Expression<'_>, table: &Table, scoping: &Scoping) -> Option<Kind> {
@@ -126,6 +128,8 @@ fn direct<'k, 'a>(
         ctor,
         define: Some(define),
         parent: None,
+        heritage: None,
+        returns_class: false,
     })
 }
 
@@ -278,7 +282,17 @@ fn iife<'k, 'a>(
         symbol,
         define: call_of(statements.get(tail.define)?),
         parent,
+        heritage: argument(call, 0),
+        returns_class: tail.returns_class,
     })
+}
+
+fn value_followed(parts: &Parts<'_, '_>, cx: &Cx<'_, '_>) -> bool {
+    match parts.form {
+        Form::Iife => parts.returns_class,
+        Form::Direct => matches!(cx.tcx.parent(), Ancestor::VariableDeclaratorInit(declarator)
+            if matches!(declarator.id(), BindingPattern::BindingIdentifier(_))),
+    }
 }
 
 fn open(parts: &Parts<'_, '_>, table: &Table, scoping: &Scoping) -> bool {
@@ -309,10 +323,51 @@ pub fn context_strict(cx: &Cx<'_, '_>) -> bool {
     })
 }
 
+const HERITAGE_DEPTH: u32 = 16;
+
+fn same_when_strict(expression: &Expression<'_>, depth: u32) -> bool {
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    match expression.without_parentheses() {
+        Expression::Identifier(_)
+        | Expression::ThisExpression(_)
+        | Expression::NullLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::StringLiteral(_) => true,
+        Expression::StaticMemberExpression(member) => same_when_strict(&member.object, depth),
+        Expression::ComputedMemberExpression(member) => {
+            same_when_strict(&member.object, depth) && same_when_strict(&member.expression, depth)
+        }
+        Expression::CallExpression(call) => {
+            let direct_eval = matches!(call.callee.without_parentheses(),
+                Expression::Identifier(id) if id.name.as_str() == "eval");
+            !direct_eval
+                && same_when_strict(&call.callee, depth)
+                && call.arguments.iter().all(|argument| match argument {
+                    Argument::SpreadElement(spread) => same_when_strict(&spread.argument, depth),
+                    other => other
+                        .as_expression()
+                        .is_some_and(|it| same_when_strict(it, depth)),
+                })
+        }
+        _ => false,
+    }
+}
+
 fn check(parts: &Parts<'_, '_>, strict: bool, table: &Table, cx: &Cx<'_, '_>) -> Option<Checked> {
     let scoping = cx.scoping();
     let ctor = parts.ctor;
-    let strict = strict || parts.strict || context_strict(cx);
+    let outer = strict || context_strict(cx);
+    if !outer
+        && parts
+            .heritage
+            .is_some_and(|heritage| !same_when_strict(heritage, HERITAGE_DEPTH))
+    {
+        return None;
+    }
+    let strict = outer || parts.strict;
     let ctor_strict = strict || ctor.has_use_strict_directive();
     if !ctor_strict || ctor.r#async || ctor.generator || !constant_symbol(parts.symbol, scoping) {
         return None;
@@ -374,8 +429,13 @@ pub fn rewrite<'a>(
         }
         _ => return None,
     };
-    if open(&parts, table, cx.scoping()) && !prototypes.closed(parts.symbol, table) {
-        return Some(Outcome::RefusedOpen);
+    if open(&parts, table, cx.scoping()) {
+        if !value_followed(&parts, cx) {
+            return Some(Outcome::Refused);
+        }
+        if !prototypes.closed(parts.symbol, table) {
+            return Some(Outcome::RefusedOpen);
+        }
     }
     let Some(checked) = check(&parts, strict, table, cx) else {
         return Some(Outcome::Refused);

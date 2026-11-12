@@ -17,7 +17,7 @@ use super::class_super::{find_super, split_super, super_statement_of, Derived, S
 use super::identify::{resolved, Table};
 use super::shapes::{is_field_definer, Kind};
 use super::values::into_inner;
-use untwist_core::ast_util::global::is_global_undefined;
+use untwist_core::ast_util::global::{is_global_reference, is_global_undefined};
 
 #[derive(Clone, Copy)]
 pub struct CtorPlan {
@@ -187,11 +187,28 @@ impl<'a> VisitJs<'a> for ScanCtx<'_> {
     }
 
     fn visit_class(&mut self, it: &Class<'a>) {
+        if let Some(heritage) = &it.heritage {
+            self.visit_expression(&heritage.expression);
+        }
+        for element in &it.body.body {
+            if let Some(key) = computed_key(element) {
+                self.visit_property_key(key);
+            }
+        }
         frame::walk_class(self, it);
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
         frame::walk_arrow(self, it);
+    }
+}
+
+fn computed_key<'k, 'a>(element: &'k ClassElement<'a>) -> Option<&'k PropertyKey<'a>> {
+    match element {
+        ClassElement::MethodDefinition(it) if it.computed => Some(&it.key),
+        ClassElement::PropertyDefinition(it) if it.computed => Some(&it.key),
+        ClassElement::AccessorProperty(it) if it.computed => Some(&it.key),
+        _ => None,
     }
 }
 
@@ -415,6 +432,50 @@ pub(super) fn simple_params(function: &Function<'_>) -> bool {
             .is_none_or(|rest| plain(&rest.rest.argument))
 }
 
+fn is_array_value(init: Option<&Expression<'_>>, scoping: &Scoping) -> bool {
+    match init.map(Expression::without_parentheses) {
+        Some(Expression::ArrayExpression(_)) => true,
+        Some(Expression::NewExpression(new)) => matches!(new.callee.without_parentheses(),
+            Expression::Identifier(id) if id.name.as_str() == "Array" && is_global_reference(scoping, id)),
+        _ => false,
+    }
+}
+
+fn declares_array(
+    declaration: &VariableDeclaration<'_>,
+    source: SymbolId,
+    scoping: &Scoping,
+) -> bool {
+    declaration.declarations.iter().any(|declarator| {
+        matches!(&declarator.id, BindingPattern::BindingIdentifier(id) if id.symbol_id.get() == Some(source))
+            && is_array_value(declarator.init.as_ref(), scoping)
+    })
+}
+
+fn holds_array(ctor: &Function<'_>, source: SymbolId, scoping: &Scoping) -> bool {
+    let constant = scoping.symbol_redeclarations(source).is_empty()
+        && !scoping
+            .get_resolved_references(source)
+            .any(|reference| reference.is_write());
+    if !constant {
+        return false;
+    }
+    let rest = ctor.params.rest.as_ref().is_some_and(|rest| {
+        matches!(&rest.rest.argument, BindingPattern::BindingIdentifier(id) if id.symbol_id.get() == Some(source))
+    });
+    rest || ctor.body.as_ref().is_some_and(|body| {
+        body.statements.iter().any(|statement| match statement {
+            Statement::VariableDeclaration(declaration) => {
+                declares_array(declaration, source, scoping)
+            }
+            Statement::ForStatement(it) => matches!(&it.init,
+                Some(ForStatementInit::VariableDeclaration(declaration))
+                    if declares_array(declaration, source, scoping)),
+            _ => false,
+        })
+    })
+}
+
 pub fn plan(
     ctor: &Function<'_>,
     symbol: SymbolId,
@@ -451,6 +512,9 @@ pub fn plan(
         return None;
     }
     derived_ok(statements, &mut found, scoping)?;
+    found.spread_concat = found
+        .concat
+        .is_some_and(|source| holds_array(ctor, source, scoping));
     let start = found.at + 1;
     let fields = match found.form {
         SuperForm::Assign => field_run(
@@ -567,7 +631,8 @@ pub fn rewrite<'a>(
         if derived.is_some_and(|it| it.at == index) {
             let form = derived.map_or(SuperForm::Return, |it| it.form);
             let (call, rest) = split_super(statement, form, cx);
-            let (statement, forward) = super_statement_of(call, cx);
+            let spread_concat = derived.is_some_and(|it| it.spread_concat);
+            let (statement, forward) = super_statement_of(call, spread_concat, cx);
             forwards = forward && rest.is_none();
             body.statements.push(statement);
             if let Some(mut rest) = rest {

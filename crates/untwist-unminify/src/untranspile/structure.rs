@@ -641,10 +641,11 @@ impl<'m> Structurer<'m> {
         index: u32,
         region: &TryRegion,
     ) -> Option<(Vec<Code>, Option<Vec<Code>>, Option<Vec<Code>>)> {
-        let block = self.region(
+        let block = self.region_from(
             region.start,
             (region.start, region.body_end()),
             Fill::Nothing,
+            false,
         )?;
         let handler = match region.catch {
             Some(catch) => {
@@ -666,12 +667,22 @@ impl<'m> Structurer<'m> {
     }
 
     fn region(&mut self, start: u32, range: (u32, u32), fill: Fill) -> Option<Vec<Code>> {
+        self.region_from(start, range, fill, true)
+    }
+
+    fn region_from(
+        &mut self,
+        start: u32,
+        range: (u32, u32),
+        fill: Fill,
+        may_loop: bool,
+    ) -> Option<Vec<Code>> {
         let entry = self.machine.entry(start)?;
         let Mapped::Inside(r) = self.map(entry, range)? else {
             return None;
         };
         let graph = self.graph(r, range)?;
-        if *graph.header.first()? && fill != Fill::Nothing {
+        if *graph.header.first()? && (fill != Fill::Nothing || !may_loop) {
             return None;
         }
         self.tree(&graph, 0, range, fill)

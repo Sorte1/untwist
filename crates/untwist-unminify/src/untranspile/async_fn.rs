@@ -3,6 +3,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_span::SPAN;
+use oxc_str::Ident;
 use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolFlags;
@@ -151,7 +152,7 @@ fn receiver(expression: &Expression<'_>, scoping: &Scoping) -> Option<Receiver> 
     match expression.without_parentheses() {
         Expression::ThisExpression(_) => Some(Receiver::This),
         Expression::NullLiteral(_) => Some(Receiver::Inert),
-        Expression::Identifier(id) => {
+        Expression::Identifier(id) if !is_undefined(expression, scoping) => {
             let symbol = scoping.get_reference(id.reference_id.get()?).symbol_id()?;
             scoping
                 .symbol_flags(symbol)
@@ -237,12 +238,17 @@ fn names_disjoint(inner: ScopeId, outer: ScopeId, scoping: &Scoping) -> bool {
         .all(|name| !outer.contains_key(name))
 }
 
+pub(super) fn binds_name(scope: ScopeId, name: &str, scoping: &Scoping) -> bool {
+    scoping.get_binding(scope, Ident::from(name)).is_some()
+}
+
 fn generator_clean(found: &Runner<'_, '_>, outer: ScopeId, scoping: &Scoping) -> bool {
     let generator = found.generator;
     let Some(inner) = generator.scope_id.get() else {
         return false;
     };
     let mut scan = Scan::default();
+    scan.visit_formal_parameters(&generator.params);
     if let Some(body) = &generator.body {
         for statement in &body.statements {
             scan.visit_statement(statement);
@@ -330,6 +336,13 @@ pub fn rewrite_function<'a>(
     }
     let outer = function.scope_id.get()?;
     let scoping = cx.scoping();
+    let named_await = function
+        .id
+        .as_ref()
+        .is_some_and(|id| id.name.as_str() == "await");
+    if named_await || binds_name(outer, "await", scoping) {
+        return None;
+    }
     let found = runner(returned_call(function)?, table, scoping)?;
     let forwarded = found.args == Args::Forwarded;
     if !generator_clean(&found, outer, scoping)
@@ -375,6 +388,9 @@ pub fn rewrite_arrow<'a>(
     }
     let outer = arrow.scope_id.get()?;
     let scoping = cx.scoping();
+    if binds_name(outer, "await", scoping) {
+        return None;
+    }
     let found = runner(arrow_call(arrow)?, table, scoping)?;
     if found.args == Args::Forwarded || !generator_clean(&found, outer, scoping) {
         return None;

@@ -1,4 +1,4 @@
-use oxc_allocator::{TakeIn, Vec as AVec};
+use oxc_allocator::{CloneIn, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
@@ -151,44 +151,35 @@ pub fn is_site(function: &Function<'_>, table: &Table, scoping: &Scoping) -> boo
         })
 }
 
-fn take_cases<'a>(
-    call: &mut CallExpression<'a>,
+fn copy_cases<'a>(
+    call: &CallExpression<'a>,
     cx: &Cx<'a, '_>,
 ) -> Option<Vec<AVec<'a, Statement<'a>>>> {
+    let allocator = GetAllocator::allocator(cx);
     let statements = match call
         .arguments
-        .get_mut(1)?
-        .as_expression_mut()?
-        .without_parentheses_mut()
+        .get(1)?
+        .as_expression()?
+        .without_parentheses()
     {
-        Expression::FunctionExpression(function) => &mut function.body.as_mut()?.statements,
-        Expression::ArrowFunctionExpression(arrow) => match &mut arrow.body {
-            ArrowFunctionBody::FunctionBody(body) => &mut body.statements,
+        Expression::FunctionExpression(function) => &function.body.as_ref()?.statements,
+        Expression::ArrowFunctionExpression(arrow) => match &arrow.body {
+            ArrowFunctionBody::FunctionBody(body) => &body.statements,
             _ => return None,
         },
         _ => return None,
     };
-    if let [Statement::SwitchStatement(switch)] = statements.as_mut_slice() {
+    let copy = |list: &AVec<'a, Statement<'a>>| list.clone_in_with_semantic_ids(allocator);
+    if let [Statement::SwitchStatement(switch)] = statements.as_slice() {
         return Some(
             switch
                 .cases
-                .iter_mut()
-                .map(|case| case.consequent.take_in(cx))
+                .iter()
+                .map(|case| copy(&case.consequent))
                 .collect(),
         );
     }
-    Some(vec![statements.take_in(cx)])
-}
-
-fn returned_call_mut<'k, 'a>(function: &'k mut Function<'a>) -> Option<&'k mut CallExpression<'a>> {
-    let body = function.body.as_mut()?;
-    let Statement::ReturnStatement(it) = body.statements.last_mut()? else {
-        return None;
-    };
-    match it.argument.as_mut()?.without_parentheses_mut() {
-        Expression::CallExpression(call) => Some(call),
-        _ => None,
-    }
+    Some(vec![copy(statements)])
 }
 
 fn term_slot(term: &Term) -> Option<Slot> {
@@ -304,6 +295,13 @@ fn drop_declarators(statements: &mut AVec<'_, Statement<'_>>, symbols: &[SymbolI
     });
 }
 
+fn unbind(generated: &[BoundIdentifier<'_>], cx: &mut Cx<'_, '_>) {
+    for bound in generated {
+        let scope = cx.scoping().symbol_scope_id(bound.symbol_id);
+        cx.scoping_mut().remove_binding(scope, bound.name);
+    }
+}
+
 fn drop_final_return(statements: &mut AVec<'_, Statement<'_>>) {
     if matches!(statements.last(), Some(Statement::ReturnStatement(it)) if it.argument.is_none()) {
         statements.pop();
@@ -320,6 +318,13 @@ pub fn rewrite<'a>(
     }
     let scope = function.scope_id.get()?;
     let scoping = cx.scoping();
+    let named_yield = function
+        .id
+        .as_ref()
+        .is_some_and(|id| id.name.as_str() == "yield");
+    if named_yield || super::async_fn::binds_name(scope, "yield", scoping) {
+        return None;
+    }
     let call = returned_call(function)?;
     let body = generator_body(call, table, scoping)?;
     if !scopes_free(&body, scoping) {
@@ -343,17 +348,20 @@ pub fn rewrite<'a>(
     let rebound = rebinds(&loaded.machine, &loaded.cases, prefix, &reads, scoping);
     let labels: Vec<&'a str> = loaded.labels;
     let machine = loaded.machine;
-    let cases = take_cases(returned_call_mut(function)?, cx)?;
-    let mut statements = {
-        let mut emitter = Emitter::new(cases, (&machine, &structured.yields), &reads, scope, cx);
-        for (region, symbol, name) in &rebound {
-            emitter
-                .rebound
-                .insert(*region, BoundIdentifier::new((*name).into(), *symbol));
-        }
-        emitter.name_labels(&structured.code, &labels);
-        emitter.sequence(std::mem::take(&mut structured.code))
-    };
+    let cases = copy_cases(returned_call(function)?, cx)?;
+    let mut emitter = Emitter::new(cases, (&machine, &structured.yields), &reads, scope, cx);
+    for (region, symbol, name) in &rebound {
+        emitter
+            .rebound
+            .insert(*region, BoundIdentifier::new((*name).into(), *symbol));
+    }
+    emitter.name_labels(&structured.code, &labels);
+    let mut statements = emitter.sequence(std::mem::take(&mut structured.code));
+    if emitter.failed() {
+        let generated: Vec<BoundIdentifier<'a>> = emitter.generated().cloned().collect();
+        unbind(&generated, cx);
+        return None;
+    }
     drop_final_return(&mut statements);
     let body = function.body.as_mut()?;
     body.statements.pop();
