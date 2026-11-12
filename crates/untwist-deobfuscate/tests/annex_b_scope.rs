@@ -1,4 +1,7 @@
+use oxc_allocator::Allocator;
 use untwist::{Options, Pipeline};
+use untwist_core::parse::parse_program;
+use untwist_core::semantic::{build_scoping, is_hoisted_block_function};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/annex_b_scope_rows.txt");
@@ -52,6 +55,21 @@ fn unsafe_options() -> Options {
     }
 }
 
+fn reads_a_hoisted_block_function(source: &str) -> bool {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    let scoping = build_scoping(&parsed.program).scoping;
+    scoping
+        .symbol_ids()
+        .filter(|symbol| is_hoisted_block_function(&scoping, *symbol))
+        .any(|symbol| {
+            scoping
+                .get_resolved_reference_ids(symbol)
+                .iter()
+                .any(|reference| scoping.get_reference(*reference).is_read())
+        })
+}
+
 #[test]
 fn a_block_function_refuses_a_binding_only_where_its_annex_b_binding_reaches_a_read() {
     let Some(node) = node_or_skip() else {
@@ -93,7 +111,7 @@ fn a_binding_no_annex_b_binding_reaches_is_still_inlined_in_both_modes() {
 }
 
 #[test]
-fn every_row_that_keeps_its_read_still_names_the_block_function_refusal() {
+fn every_row_that_keeps_its_read_names_the_refusal_or_reads_the_hoisted_function() {
     let safe = Options::default();
     let mut silent = Vec::new();
     for row in rows()
@@ -104,7 +122,7 @@ fn every_row_that_keeps_its_read_still_names_the_block_function_refusal() {
         let noted = output.notes.iter().any(|note| {
             note.message.contains("Annex B.3.3") || note.message.contains("not unique")
         });
-        if !noted {
+        if !noted && !reads_a_hoisted_block_function(row.program) {
             silent.push(row.label);
         }
     }
