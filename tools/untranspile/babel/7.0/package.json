@@ -1,0 +1,12 @@
+{
+  "name": "untwist-untranspile-babel-7.0",
+  "private": true,
+  "description": "Babel 7.0 as installed on 2018-09-12: npm install --before 2018-09-12, so every @babel package, helper and regenerator-transform is the one that line shipped with.",
+  "dependencies": {
+    "@babel/core": "7.0.1",
+    "@babel/plugin-proposal-class-properties": "7.0.0",
+    "@babel/plugin-transform-runtime": "7.0.0",
+    "@babel/preset-env": "7.0.0",
+    "@babel/runtime": "7.0.0"
+  }
+}

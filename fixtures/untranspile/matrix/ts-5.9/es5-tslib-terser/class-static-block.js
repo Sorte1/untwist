@@ -1,0 +1,1 @@
+!function(){"use strict";var e=function(){function e(){}var t;return t=e,e.defaults={mode:"fast"},t.ready=Object.keys(t.defaults).length>0,t.loaded="yes",t.triple=9,e}();console.log(e.ready,e.loaded,e.triple,typeof local)}();

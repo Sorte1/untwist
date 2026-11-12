@@ -1,0 +1,1 @@
+class Config{}Config.defaults={mode:"fast"};Config.ready=void 0;Config.ready=Object.keys(Config.defaults).length>0;Config.loaded="yes";Config.triple=9;console.log(Config.ready,Config.loaded,Config.triple,typeof local);

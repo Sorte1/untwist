@@ -1,0 +1,11 @@
+{
+  "name": "untwist-untranspile-babel-8",
+  "private": true,
+  "description": "Babel 8, current release.",
+  "dependencies": {
+    "@babel/core": "8.1.2",
+    "@babel/plugin-transform-runtime": "8.1.2",
+    "@babel/preset-env": "8.0.7",
+    "@babel/runtime": "8.1.2"
+  }
+}

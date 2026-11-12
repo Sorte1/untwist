@@ -1,0 +1,14 @@
+{
+  "name": "untwist-untranspile-babel-7.12",
+  "private": true,
+  "description": "Babel 7.12 as installed on 2021-02-19: npm install --before 2021-02-19, so every @babel package, helper and regenerator-transform is the one that line shipped with.",
+  "dependencies": {
+    "@babel/core": "7.12.17",
+    "@babel/plugin-proposal-class-properties": "7.12.13",
+    "@babel/plugin-proposal-class-static-block": "7.12.13",
+    "@babel/plugin-proposal-private-methods": "7.12.13",
+    "@babel/plugin-transform-runtime": "7.12.17",
+    "@babel/preset-env": "7.12.17",
+    "@babel/runtime": "7.12.18"
+  }
+}

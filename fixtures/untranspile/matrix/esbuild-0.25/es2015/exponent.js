@@ -1,0 +1,10 @@
+var __pow = Math.pow;
+let x = 2;
+console.log(__pow(2, 10), __pow(-2, 3), __pow(2, -1), __pow(2, __pow(3, 2)));
+x = __pow(x, 3);
+console.log(x);
+const o = { v: 3 };
+o.v = __pow(o.v, 2);
+const arr = [4];
+arr[0] = __pow(arr[0], 0.5);
+console.log(o.v, arr[0], __pow(/* @__PURE__ */ BigInt("10"), /* @__PURE__ */ BigInt("3")) === /* @__PURE__ */ BigInt("1000"));
