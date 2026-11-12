@@ -10,6 +10,7 @@ mod plugins;
 mod refusal;
 #[cfg(feature = "refusal-spans")]
 mod refusal_spans;
+mod shared_scan;
 mod shell;
 mod snapshots;
 mod stages;
@@ -110,6 +111,7 @@ struct Reservation<'r> {
     stack: &'r StackReserve<'static>,
     stats: &'r std::sync::Mutex<crate::stats::RunStats>,
     limits: Limits,
+    shared: Option<&'r untwist_core::semantic::SharedGlobals>,
 }
 
 struct Batch<'s> {
@@ -119,6 +121,7 @@ struct Batch<'s> {
     stack: StackReserve<'static>,
     stats: std::sync::Mutex<crate::stats::RunStats>,
     limits: Limits,
+    shared: Vec<Option<untwist_core::semantic::SharedGlobals>>,
 }
 
 impl<'s> Batch<'s> {
@@ -134,6 +137,7 @@ impl<'s> Batch<'s> {
             stack: StackReserve::default(),
             stats: std::sync::Mutex::default(),
             limits,
+            shared: shared_scan::shared_globals(sources),
         }
     }
 
@@ -144,6 +148,7 @@ impl<'s> Batch<'s> {
             stack: &self.stack,
             stats: &self.stats,
             limits: self.limits,
+            shared: self.shared.get(index).and_then(Option::as_ref),
         }
     }
 }

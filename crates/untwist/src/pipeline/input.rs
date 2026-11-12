@@ -11,7 +11,7 @@ use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions, RoundCapUndo};
 use untwist_core::print::pretty_codegen;
 use untwist_core::reflow::{print_placing, Check, GuardRecord, Printed};
 use untwist_core::semantic::{
-    assume_observers, build_scoping, forget_failures, Observers, Semantics,
+    assume_observers, assume_shared_globals, build_scoping, forget_failures, Observers, Semantics,
 };
 use untwist_core::source_map::{self, Mapped, OwnedSourceMap, Recording};
 use untwist_core::type_space::{declares_an_interface, holds_type_space};
@@ -446,6 +446,11 @@ impl Pipeline {
             heap_peak: &mut result.heap_peak,
             snapshots: &mut result.snapshots,
         };
+        let shared = reservation
+            .shared
+            .filter(|_| !nested_root && !site.program.source_type.is_module())
+            .cloned();
+        let _shared = assume_shared_globals(shared);
         let sem = build_scoping(site.program);
         if checked && declares_an_interface(&sem.scoping) {
             return Staged::TypeScript;
@@ -650,6 +655,7 @@ mod tests {
             stack: &stack,
             stats: &stats,
             limits: untwist_core::budget::Limits::default(),
+            shared: None,
         };
         let printed = pipeline
             .process(

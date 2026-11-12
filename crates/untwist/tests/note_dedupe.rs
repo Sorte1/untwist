@@ -42,11 +42,9 @@ fn under_conservative_the_single_registration_still_reports_it_once() {
 }
 
 #[test]
-fn two_identical_inputs_keep_their_own_copies() {
-    let out = Pipeline::new(options()).run_many(&[
-        A_STRING_ARRAY_AND_A_MISSING_PROPERTY,
-        A_STRING_ARRAY_AND_A_MISSING_PROPERTY,
-    ]);
+fn two_identical_modules_keep_their_own_copies() {
+    let module = format!("{A_STRING_ARRAY_AND_A_MISSING_PROPERTY}export {{}};\n");
+    let out = Pipeline::new(options()).run_many(&[module.as_str(), module.as_str()]);
     let missing = out
         .notes
         .iter()
