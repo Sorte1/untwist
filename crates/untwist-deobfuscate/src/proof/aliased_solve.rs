@@ -5,7 +5,9 @@ use oxc_span::Span;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::aliased::{BuiltinAliases, ANY, DANGER, GLOBAL, LOST, OBJECT_CONSTRUCTOR};
+use super::aliased::{
+    widened, BuiltinAliases, ANY, DANGER, FOREIGN, GLOBAL, HOSTILE, LOST, OBJECT_CONSTRUCTOR,
+};
 use super::aliased_flows::{merge_names, string_array, string_object, written_after_init, Target};
 
 const BUDGET_STRIDE: usize = 1 << 10;
@@ -125,10 +127,10 @@ fn merge_flow(aliases: &mut BuiltinAliases<'_>, target: &Target, value: u16) -> 
 }
 
 fn flow_added(target: &Target, value: u16) -> u16 {
-    if matches!(target, Target::Pattern(_)) {
-        ANY
-    } else {
-        value & !LOST
+    match target {
+        Target::Pattern(_) => ANY,
+        Target::Lost => value & !(LOST | FOREIGN | HOSTILE),
+        _ => value & !LOST,
     }
 }
 
@@ -158,7 +160,7 @@ fn install_this(aliases: &mut BuiltinAliases<'_>, installs: &[Install<'_>]) -> b
     let mut changed = false;
     for (object, value) in installs {
         let installs_code = value.is_none_or(|value| aliases.function_span(value).is_some());
-        let bits = aliases.value(object) & (DANGER | OBJECT_CONSTRUCTOR | GLOBAL);
+        let bits = widened(aliases.value(object)) & (DANGER | OBJECT_CONSTRUCTOR | GLOBAL);
         if installs_code && bits & !aliases.this_bits != 0 {
             aliases.this_bits |= bits;
             changed = true;
