@@ -40,7 +40,6 @@ mini/webpack5-web-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whos
 base/webpack5-esm-output*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 mini/webpack5-esm-output*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 base/webpack5-federation*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack5-federation*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 base/webpack4-dev-node*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 mini/webpack4-dev-node*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 base/webpack4-prod-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
