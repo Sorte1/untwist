@@ -4,12 +4,7 @@ use common::{assert_scope_safe, rename_compact};
 use untwist_core::semantic::{assume_observers, Observers};
 use untwist_rename::{RenameConfig, RenameMode};
 
-const MODES: [RenameMode; 4] = [
-    RenameMode::Mangle,
-    RenameMode::Simple,
-    RenameMode::Unique,
-    RenameMode::Smart,
-];
+const MODES: [RenameMode; 3] = [RenameMode::Mangle, RenameMode::Simple, RenameMode::Unique];
 
 fn renamed(source: &str, mode: RenameMode) -> String {
     let output = rename_compact(
@@ -123,4 +118,22 @@ fn assuming_no_observers_renames_what_an_eval_could_see() {
         &[],
         &["alpha", "source"],
     );
+}
+
+#[test]
+fn smart_keeps_what_an_eval_or_a_with_body_can_see() {
+    let config = RenameConfig {
+        mode: RenameMode::Smart,
+        rename_all: true,
+        extended: true,
+    };
+    let source = "function outer(_0xa, _0xb) { try { return eval('_0xa') + _0xb; } catch (_0xc) { return _0xc; } }";
+    let output = rename_compact(source, config);
+    assert_scope_safe(source, &output);
+    assert!(output.contains("_0xa"), "{output}");
+    assert!(!output.contains("_0xc"), "{output}");
+    let source = "var o = {}; function w(_0xd) { with (o) { return [_0xd].map(function (_0xe) { return _0xe + _0xd; }); } }";
+    let output = rename_compact(source, config);
+    assert_scope_safe(source, &output);
+    assert!(output.contains("_0xd"), "{output}");
 }

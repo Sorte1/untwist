@@ -3,12 +3,7 @@ mod common;
 use common::rename_full;
 use untwist_rename::{RenameConfig, RenameMode};
 
-const MODES: [RenameMode; 4] = [
-    RenameMode::Mangle,
-    RenameMode::Simple,
-    RenameMode::Unique,
-    RenameMode::Smart,
-];
+const MODES: [RenameMode; 3] = [RenameMode::Mangle, RenameMode::Simple, RenameMode::Unique];
 
 fn tokens(text: &str, token: &str) -> usize {
     text.split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '$'))

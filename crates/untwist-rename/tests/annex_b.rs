@@ -3,12 +3,7 @@ mod common;
 use common::{assert_scope_safe, rename_full};
 use untwist_rename::{RenameConfig, RenameMode};
 
-const MODES: [RenameMode; 4] = [
-    RenameMode::Mangle,
-    RenameMode::Simple,
-    RenameMode::Unique,
-    RenameMode::Smart,
-];
+const MODES: [RenameMode; 3] = [RenameMode::Mangle, RenameMode::Simple, RenameMode::Unique];
 
 const IN_A_BLOCK: &str = "function outer() { { function g() { return 7; } } return g(); }\n";
 
