@@ -25,12 +25,18 @@ const STRUCTURAL_FUNCTION: &str = "fn";
 
 const CALL_RESULT: &str = "result";
 
+const CONSTRUCTED: &str = "instance";
+
 const CONSTRUCTOR: &str = "Ctor";
 
 const UNNAMED_CALLABLES: [&str; 2] = ["fn", "cb"];
 
 fn is_call_result(info: &BindingInfo) -> bool {
     matches!(&info.role, BindingRole::Variable(shape) if shape.kind == InitKind::Call)
+}
+
+fn is_constructed(info: &BindingInfo) -> bool {
+    matches!(&info.role, BindingRole::Variable(shape) if shape.kind == InitKind::New)
 }
 
 pub struct Smart {
@@ -121,6 +127,9 @@ fn derived_base(info: &BindingInfo, cx: &Context<'_>) -> String {
     let base = base_name(info, cx);
     if base == STRUCTURAL_FUNCTION && is_call_result(info) {
         return CALL_RESULT.to_string();
+    }
+    if base == STRUCTURAL_FUNCTION && is_constructed(info) {
+        return CONSTRUCTED.to_string();
     }
     let counter = cx.collected.loop_counters.contains_key(&info.symbol);
     if counter || looks_human_written(&base) {

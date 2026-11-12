@@ -86,7 +86,8 @@ game.Player = _0x1;
 var _0x3 = function () { this.hp = 100; };
 _0x3.prototype.hit = function () { this.hp--; return this.hp; };
 var p = new _0x1('a');
-console.log(p.label, new _0x3().hit(), new game.Player('b').label);";
+var _0xc = new _0x3();
+console.log(p.label, _0xc.hit(), new game.Player('b').label);";
 
 const BOOLEAN_RETURNERS: &str = "function Player() {}
 function _0x1(_0x2) { return _0x2 instanceof Player; }
@@ -295,7 +296,11 @@ fn constructor_functions_get_pascal_case_names() {
     let code = smart(CONSTRUCTOR_FUNCTIONS);
     assert_has(
         &code,
-        &["function Player(label)", "Ctor = function", "new Ctor()"],
+        &[
+            "function Player(label)",
+            "Ctor = function",
+            "instance = new Ctor()",
+        ],
     );
 }
 
