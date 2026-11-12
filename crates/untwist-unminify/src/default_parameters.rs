@@ -75,15 +75,16 @@ fn restore_one<'a>(
     host: &Host,
     cx: &mut Cx<'a, '_>,
 ) -> bool {
-    let Some(plan) = plan(params, stmts.as_slice(), host, cx) else {
+    let skipped = bare_declarations(stmts.as_slice());
+    let Some(plan) = plan(params, &stmts[skipped..], host, cx) else {
         return false;
     };
-    match (plan, stmts.first_mut()) {
+    match (plan, stmts.get_mut(skipped)) {
         (Plan::Declared(index, form), Some(Statement::VariableDeclaration(declaration))) => {
             let Some(parameter) = take_parameter(declaration, form, cx) else {
                 return false;
             };
-            stmts.remove(0);
+            stmts.remove(skipped);
             place_parameter(params, index, parameter, cx);
             true
         }
@@ -91,12 +92,31 @@ fn restore_one<'a>(
             let Some(value) = take_loose_default_value(statement, cx) else {
                 return false;
             };
-            stmts.remove(0);
+            stmts.remove(skipped);
             params.items[position].initializer = Some(ABox::new_in(value, cx));
             true
         }
         _ => false,
     }
+}
+
+fn bare_declarations(stmts: &[Statement<'_>]) -> usize {
+    stmts
+        .iter()
+        .take_while(|statement| is_bare_declaration(statement))
+        .count()
+}
+
+fn is_bare_declaration(statement: &Statement<'_>) -> bool {
+    let Statement::VariableDeclaration(declaration) = statement else {
+        return false;
+    };
+    matches!(
+        declaration.kind,
+        VariableDeclarationKind::Var | VariableDeclarationKind::Let
+    ) && declaration.declarations.iter().all(|declarator| {
+        declarator.init.is_none() && matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+    })
 }
 
 fn plan<'a>(

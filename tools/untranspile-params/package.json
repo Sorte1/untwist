@@ -1,0 +1,11 @@
+{
+  "name": "untwist-untranspile-params",
+  "private": true,
+  "description": "Pinned Babel, TypeScript and swc used by gen.mjs to write fixtures/untranspile/params.",
+  "dependencies": {
+    "@babel/core": "7.29.0",
+    "@babel/preset-env": "7.29.0",
+    "@swc/core": "1.16.22",
+    "typescript": "5.9.3"
+  }
+}

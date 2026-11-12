@@ -25,7 +25,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `unminify/` | Minified programs for the unminify passes | `cargo xtask diff-unminify`, `diff-mangle` |
 | `unpack-bundlers/` | Bundler output from `tools/bundlers/` plus hand-written `min-*` and `neg-*` shapes; `MANIFEST` lists each | `cargo xtask diff-unpack-behaviour`, `crates/untwist-unpack/tests/` |
 | `unpack-gaps/` | Hand-written bundles for known unpacking gaps | `crates/untwist-unpack/tests/` |
-| `untranspile/` | TypeScript, swc, Babel, esbuild and terser output from `tools/untranspile/gen.mjs`, as programs that print | `cargo xtask diff-behaviour`, `crates/untwist-unminify/tests/` |
+| `untranspile/` | TypeScript, swc, Babel, esbuild and terser output from `tools/untranspile/gen.mjs` (`params/` from `tools/untranspile-params/gen.mjs`), as programs that print | `cargo xtask diff-behaviour`, `crates/untwist-unminify/tests/` |
 
 Third-party inputs keep their licence beside them: `LICENSE-reference`,
 `LICENSE-javascript-obfuscator` and `unpack-bundlers/licenses/`.
