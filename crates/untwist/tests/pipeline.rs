@@ -132,24 +132,15 @@ fn the_protections_stage_runs_after_rename_and_removes_the_self_defending_block(
 const A_SELF_DEFENDING_BLOCK_ONLY_CLEANUP_UNCOVERS: &str = "function hi() {\n  var e = (function () {\n    var f = !![];\n    return function (g, h) {\n      var i = f ? function () {\n        if (h) {\n          var j = h['apply'](g, arguments);\n          h = null;\n          return j;\n        }\n      } : function () {};\n      f = ![];\n      return i;\n    };\n  })();\n  var sd = e(this, function () {\n    return sd['toString']()['search'](atob('KCgoLispKykrKSsk'))['toString']()['constructor'](sd)['search'](atob('KCgoLispKykrKSsk'));\n  });\n  sd();\n  console.log('x');\n}\nhi();";
 
 #[test]
-fn a_protection_only_cleanup_uncovers_is_removed_by_a_second_protections_round() {
+fn a_protection_whose_atob_a_constructor_read_may_replace_keeps_its_controller_by_default() {
     let out = Pipeline::new(Options::default()).run(A_SELF_DEFENDING_BLOCK_ONLY_CLEANUP_UNCOVERS);
-    assert_eq!(
-        out.code().trim(),
-        "function hi() {\n  console.log(\"x\");\n}\nhi();"
-    );
-    assert_eq!(out.stages[stage_index(&out, "protections", 1)].changes, 0);
-    let late = stage_index(&out, "protections", 2);
-    assert_eq!(
-        out.stages[late].per_pass,
-        vec![("self-defending", 3), ("debug-protection", 0)]
-    );
-    assert!(late > stage_index(&out, "cleanup", 1));
-    assert!(stage_index(&out, "cleanup", 2) > late);
+    let code = out.code();
+    assert!(code.contains("atob(\"KCgoLispKykrKSsk\")"), "{code}");
+    assert!(code.contains("var sd = e(this, function"), "{code}");
     assert!(
-        out.notes
-            .iter()
-            .all(|note| note.message != untwist_deobfuscate::notes::SELF_DEFENDING_REFERENCE_KEPT),
+        out.notes.iter().any(|note| note
+            .message
+            .contains(untwist_deobfuscate::notes::GLOBAL_PATCHED)),
         "{:?}",
         out.notes
     );

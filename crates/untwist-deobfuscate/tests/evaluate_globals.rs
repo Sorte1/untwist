@@ -313,3 +313,9 @@ fn a_global_replaced_through_this_inside_a_function_is_left_alone_in_the_default
     let source = "(function () {\n  this.decodeURI = function () {\n    return \"p3\";\n  };\n})();\nconsole.log(decodeURI(\"%41\"));";
     assert_eq!(default_lane(source), source);
 }
+
+#[test]
+fn a_global_whose_sloppy_this_is_handed_to_other_code_is_left_alone_in_the_default_lane() {
+    let source = "function hi() {\n  keep(this);\n  return atob(\"aGk=\");\n}";
+    assert_eq!(default_lane(source), source);
+}
