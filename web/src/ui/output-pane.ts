@@ -8,6 +8,7 @@ import { codeEditing } from './editing';
 import { mountLanguage } from './language-mount';
 import { baseExtensions, makeEditor, outputLook } from './editor';
 import { outputEdits } from './output-edits';
+import { libraryFolding } from './library-folds';
 
 const COPIED_MS = 1200;
 
@@ -40,6 +41,7 @@ function mountCopy(view: EditorView): void {
 export function mountOutputPane(store: Store<AppState>, module: Promise<WebAssembly.Module>): EditorView {
   const gate = new Compartment();
   const edits = outputEdits();
+  const folding = libraryFolding();
   const editing = codeEditing(module);
   const view = makeEditor(byId('output-editor'), 'Output code', [baseExtensions(true), editing.extension, gate.of([]), outputLook, edits.extension]);
   editing.attach(view, byId('output-editor'));
@@ -54,6 +56,7 @@ export function mountOutputPane(store: Store<AppState>, module: Promise<WebAssem
     if (result !== previous.run.result || state.selectedModule !== previous.selectedModule) {
       const shown = shownText(state);
       edits.replace(view, shown.text);
+      folding.refresh(view, state);
       requestAnimationFrame(() => performance.mark('untwist:output-shown'));
       setText(byId('output-meta'), `${shown.name} · ${linesLabel(result === null ? 0 : view.state.doc.lines)}`);
     }

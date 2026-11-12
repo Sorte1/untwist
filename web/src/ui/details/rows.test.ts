@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Report } from './report';
-import { limitPairs, NOT_RECORDED, passesOf, renamePairs, warningClassPairs } from './rows';
+import { libraryPairs, limitPairs, NOT_RECORDED, passesOf, renamePairs, warningClassPairs } from './rows';
 
 const report: Report = {
   schema: 'untwist.report/1',
@@ -69,5 +69,13 @@ describe('the details rows', () => {
       { label: 'unsafe', value: '1' },
     ]);
     expect(warningClassPairs([])).toEqual([{ label: 'Warnings', value: 'none' }]);
+  });
+
+  it('lists each detected library with its version range and module count', () => {
+    expect(libraryPairs([])).toEqual([{ label: 'Libraries', value: 'none detected' }]);
+    expect(libraryPairs([{ library: 'core-js', range: '3.30.0 - 3.38.1', modules: 412 }, { library: 'tslib', range: '', modules: 1 }])).toEqual([
+      { label: 'core-js', value: '3.30.0 - 3.38.1 · 412 modules' },
+      { label: 'tslib', value: '1 module' },
+    ]);
   });
 });
