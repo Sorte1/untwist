@@ -8,6 +8,8 @@ const ROWS_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
     "ref-document-default-view",
     "ref-default-parameter",
     "ref-destructuring-default-target",
+    "ref-generator-return-value",
+    "ref-bound-without-receiver",
     "ref-route-store-through-owner-document",
     "ref-route-resolved-key-on-event-target",
     "ref-route-store-through-event-view",
@@ -15,6 +17,7 @@ const ROWS_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
     "ref-route-literal-store-through-event-view-alias",
     "ref-unknown-key-on-event-target",
     "ref-super-returns-the-global-object",
+    "ref-default-constructor-returns-the-global-object",
 ];
 
 #[test]

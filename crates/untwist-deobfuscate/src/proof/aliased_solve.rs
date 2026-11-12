@@ -6,7 +6,8 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::aliased::{
-    widened, BuiltinAliases, ANY, DANGER, FOREIGN, GLOBAL, HOSTILE, LOST, OBJECT_CONSTRUCTOR,
+    widened, BuiltinAliases, ANY, DANGER, FOREIGN, GLOBAL, HOSTILE, HOST_CODE, LOST,
+    OBJECT_CONSTRUCTOR,
 };
 use super::aliased_flows::{merge_names, string_array, string_object, written_after_init, Target};
 
@@ -129,7 +130,7 @@ fn merge_flow(aliases: &mut BuiltinAliases<'_>, target: &Target, value: u16) -> 
 fn flow_added(target: &Target, value: u16) -> u16 {
     match target {
         Target::Pattern(_) => ANY,
-        Target::Lost => value & !(LOST | FOREIGN | HOSTILE),
+        Target::Lost => value & !(LOST | FOREIGN | HOSTILE | HOST_CODE),
         _ => value & !LOST,
     }
 }

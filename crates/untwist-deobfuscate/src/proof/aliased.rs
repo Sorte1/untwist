@@ -31,7 +31,9 @@ pub(super) const CONSTRUCTOR: u16 = 512;
 pub(super) const FOREIGN: u16 = 1024;
 pub(super) const HOSTILE: u16 = 2048;
 pub(super) const CODE_MADE: u16 = 4096;
-pub(super) const ANY: u16 = 8191;
+pub(super) const HOST_CODE: u16 = 8192;
+pub(super) const ANY: u16 = 16383;
+const FROM_HOST: u16 = FOREIGN | HOSTILE | HOST_CODE;
 const FUNCTION_LIKE: u16 = FUNCTION | DEFINER | CONSOLE | FUNCTION_CONSTRUCTOR;
 const CONSTRUCTOR_READ: u16 =
     DANGER | OBJECT_CONSTRUCTOR | FUNCTION | FUNCTION_CONSTRUCTOR | CONSTRUCTOR;
@@ -265,7 +267,7 @@ impl<'s> BuiltinAliases<'s> {
                 self.note(Read::Value(symbol));
                 self.expand(self.values.get(&symbol).copied().unwrap_or(0))
             }
-            None => global_value(id.name.as_str()).unwrap_or(self.lost),
+            None => global_value(id.name.as_str()).unwrap_or(self.lost | HOST_CODE),
         }
     }
 
@@ -458,12 +460,15 @@ impl<'s> BuiltinAliases<'s> {
     }
 
     fn named_read(&self, name: &str, object: u16) -> u16 {
-        let plain = self.named_read_plain(name, object & !(FOREIGN | HOSTILE));
+        let plain = self.named_read_plain(name, object & !FROM_HOST);
         plain | self.hostile_read(object, || self.named_read_plain(name, DANGER | GLOBAL))
     }
 
     fn hostile_read(&self, object: u16, on_global: impl FnOnce() -> u16) -> u16 {
         let mut bits = 0;
+        if object & FROM_HOST != 0 {
+            bits |= HOST_CODE;
+        }
         if object & (FOREIGN | HOSTILE) != 0 {
             bits |= HOSTILE;
         }
@@ -501,7 +506,7 @@ impl<'s> BuiltinAliases<'s> {
     }
 
     fn computed_on(&self, object: u16) -> u16 {
-        let plain = Self::computed_on_plain(object & !(FOREIGN | HOSTILE));
+        let plain = Self::computed_on_plain(object & !FROM_HOST);
         plain | self.hostile_read(object, || Self::computed_on_plain(DANGER | GLOBAL))
     }
 
@@ -550,6 +555,18 @@ impl<'s> BuiltinAliases<'s> {
         self.lost | FOREIGN
     }
 
+    fn unresolved_result(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> u16 {
+        let handed = arguments
+            .iter()
+            .filter_map(Argument::as_expression)
+            .any(|argument| self.value(argument) & FROM_HOST != 0);
+        if handed || self.value(callee) & FROM_HOST != 0 {
+            self.foreign_result()
+        } else {
+            self.lost
+        }
+    }
+
     fn made_code_result(&self) -> u16 {
         CODE_RESULT | self.lost
     }
@@ -583,7 +600,7 @@ impl<'s> BuiltinAliases<'s> {
                     return self.returned(function);
                 }
             }
-            return self.foreign_result();
+            return self.unresolved_result(callee, &call.arguments);
         }
         if let Some(function) = self.function_span(callee) {
             return self.returned(function);
@@ -591,7 +608,7 @@ impl<'s> BuiltinAliases<'s> {
         if self.value(callee) & FUNCTION_CONSTRUCTOR != 0 {
             return self.code_result(call) | self.lost;
         }
-        self.foreign_result()
+        self.unresolved_result(callee, &call.arguments)
     }
 
     pub(super) fn value(&self, expr: &Expression<'_>) -> u16 {
@@ -615,7 +632,7 @@ impl<'s> BuiltinAliases<'s> {
                 None if self.value(&new.callee) & FUNCTION_CONSTRUCTOR != 0 => {
                     CODE_RESULT | self.lost
                 }
-                None => self.foreign_result(),
+                None => self.unresolved_result(&new.callee, &new.arguments),
             },
             Expression::ChainExpression(chain) => match &chain.expression {
                 ChainElement::CallExpression(call) => self.call(call),
@@ -762,7 +779,7 @@ impl<'s> BuiltinAliases<'s> {
     }
 
     fn functions_only(&self, bits: u16) -> Option<bool> {
-        if builtin_aliases_trusted() || bits & !(LOST | FOREIGN) == 0 {
+        if builtin_aliases_trusted() || bits & !(LOST | FOREIGN | HOST_CODE) == 0 {
             return None;
         }
         let bits = widened(bits);

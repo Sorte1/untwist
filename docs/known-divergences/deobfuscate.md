@@ -1177,8 +1177,10 @@
   with `Function` or `eval` first is judged as that runner called with the rest. Any other part,
   such as a parameter or a method call, leaves the key unknown. Code inside a class body is strict, so
   its `this` is never taken for the global object. A write through a value that may hold a built-in
-  or the global object also counts. The value a call of host or unknown code returns is taken to
-  hold only what the program handed to such code, but any member or element read off it, by key,
+  or the global object also counts. A call is of host code when its callee is reached from an
+  undeclared name that is not a standard global or from another host value, or when an argument
+  is a host value; the value such a call returns is taken to hold only what the program handed to
+  host code, but any member or element read off it, by key,
   index, optional chain, `Reflect.get`, destructuring or `for…of` (`host.list()[0]`), may be the
   global object. A function the `Function` constructor builds from text that may reach the global
   object, the constructor reached by name or through `.constructor` (`({}).constructor.constructor("return this")`),
