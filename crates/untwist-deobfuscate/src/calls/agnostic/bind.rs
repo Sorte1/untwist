@@ -536,11 +536,10 @@ impl<'s, 'a> Bindings<'s, 'a> {
     }
 
     pub(super) fn never_reassigned(&self, symbol: SymbolId) -> bool {
-        !self.scoping.symbol_is_mutated(symbol)
-            && self
-                .defs
-                .get(symbol)
-                .is_none_or(|defs| defs.writes.is_empty())
+        match self.defs.get(symbol) {
+            Some(defs) => !defs.mutated && defs.writes.is_empty(),
+            None => !self.scoping.symbol_is_mutated(symbol),
+        }
     }
 
     fn entry(&mut self, symbol: SymbolId) -> &mut Def {

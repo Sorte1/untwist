@@ -256,9 +256,6 @@ impl<'a> Sites<'_, 'a> {
     }
 
     fn sealed_class(&self, symbol: SymbolId) -> bool {
-        if self.fresh.scoping.symbol_is_mutated(symbol) {
-            return false;
-        }
         let Some(defs) = self.fresh.bindings.defs.get(symbol) else {
             return false;
         };

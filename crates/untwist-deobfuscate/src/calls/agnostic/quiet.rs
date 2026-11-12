@@ -108,15 +108,10 @@ impl<'a> Sites<'_, 'a> {
         let Expression::Identifier(id) = base.without_parentheses() else {
             return false;
         };
-        let Some(symbol) = self.fresh.symbol(id) else {
-            return false;
-        };
-        !self.fresh.scoping.symbol_is_mutated(symbol)
-            && self
-                .fresh
-                .literal_init(id)
-                .and_then(required_module)
-                .is_some_and(|module| QUIET_MODULES.contains(&module))
+        self.fresh
+            .literal_init(id)
+            .and_then(required_module)
+            .is_some_and(|module| QUIET_MODULES.contains(&module))
     }
 
     pub(super) fn quiet_callee(&self, callee: &Expression<'a>) -> Option<Quiet<'a>> {
