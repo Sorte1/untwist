@@ -60,13 +60,72 @@ test('an accepted fetch prompt fetches that one url and names the glue', async (
   await paste(page, remoteGlue(REMOTE));
   await runAndWait(page);
   page.once('dialog', (dialog) => {
-    expect(dialog.message()).toContain(REMOTE);
+    expect(dialog.message()).toContain(`Fetch ${REMOTE}?\nHost: wasm.example.test\n`);
     void dialog.accept();
   });
   await page.locator(`#wasm-bar [data-wasm-url="${REMOTE}"]`).click();
   await expect(page.locator('#wasm-bar')).toContainText('fetched');
   expect(seen).toEqual([REMOTE]);
   await expect.poll(() => outputText(page)).toContain('function __wbg_log_9a1b2c(e, t)');
+});
+
+async function countRequests(page: Page, pattern: string): Promise<string[]> {
+  const seen: string[] = [];
+  await page.route(pattern, async (route) => {
+    seen.push(route.request().url());
+    await route.fulfill({ status: 200, contentType: 'application/wasm', body: wasmBytes('bindgen.wasm'), headers: { 'access-control-allow-origin': '*' } });
+  });
+  return seen;
+}
+
+for (const [label, url, why] of [
+  ['a user name and password', 'https://user:pw@wasm.example.test/pkg/app_bg.wasm', 'carries a user name or password'],
+  ['a private address', 'https://10.0.0.1/pkg/app_bg.wasm', 'the host is the private address 10.0.0.1'],
+  ['a loopback name', 'https://localhost/pkg/app_bg.wasm', 'the host localhost is a loopback name'],
+] as const) {
+  test(`a url with ${label} is refused without a prompt or a request`, async ({ page }) => {
+    const seen = await countRequests(page, '**/pkg/app_bg.wasm');
+    let dialogs = 0;
+    page.on('dialog', (dialog) => {
+      dialogs += 1;
+      void dialog.dismiss();
+    });
+    await openApp(page);
+    await paste(page, remoteGlue(url));
+    await runAndWait(page);
+    await page.locator('#wasm-bar [data-wasm-url]').click();
+    await expect(page.locator('#wasm-bar')).toContainText(why);
+    expect(dialogs).toBe(0);
+    expect(seen).toEqual([]);
+  });
+}
+
+test('always fetch wasm does not fetch a refused url either', async ({ page }) => {
+  const seen = await countRequests(page, 'https://10.0.0.1/**');
+  await openApp(page);
+  await page.evaluate(() => window.localStorage.setItem('untwist.alwaysFetchWasm', '1'));
+  await page.reload();
+  await expect(page.locator('#run')).toBeEnabled({ timeout: 30_000 });
+  await paste(page, remoteGlue('https://10.0.0.1/pkg/app_bg.wasm'));
+  await runAndWait(page);
+  await expect(page.locator('#wasm-bar')).toContainText('private address 10.0.0.1');
+  expect(seen).toEqual([]);
+});
+
+test('a redirect is not followed, so its target gets no request', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit', 'Playwright cannot fulfill a redirect status in WebKit');
+  const landed = await countRequests(page, 'https://10.0.0.1/**');
+  await page.route('https://wasm.example.test/**', (route) =>
+    route.fulfill({ status: 302, headers: { location: 'https://10.0.0.1/a.wasm', 'access-control-allow-origin': '*' } }),
+  );
+  await openApp(page);
+  await paste(page, remoteGlue(REMOTE));
+  await runAndWait(page);
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.locator(`#wasm-bar [data-wasm-url="${REMOTE}"]`).click();
+  await expect(page.locator('#wasm-bar')).toContainText('the playground does not follow redirects');
+  expect(landed).toEqual([]);
+  expect(await outputText(page)).toContain('function Q(e, t)');
 });
 
 test('nothing is fetched on its own unless always fetch wasm is on', async ({ page }) => {

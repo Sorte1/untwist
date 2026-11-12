@@ -4,11 +4,11 @@ import type { Store } from '../store';
 import {
   alwaysFetchWasm,
   checkedWasm,
-  isAbsoluteUrl,
+  fetchTarget,
+  hasScheme,
   limitedBody,
   MAX_WASM_BYTES,
   parseWasmReport,
-  resolvedUrl,
   setAlwaysFetchWasm,
   withSupplied,
   UNCHECKED_WARNING,
@@ -47,7 +47,10 @@ function fileName(path: string): string {
 }
 
 async function fetchWasm(url: string): Promise<Uint8Array<ArrayBuffer>> {
-  const response = await fetch(url);
+  const response = await fetch(url, { credentials: 'omit', redirect: 'manual', referrerPolicy: 'no-referrer' });
+  if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+    throw new Error(`${url} redirects; the playground does not follow redirects because it cannot check where they go, download the file and drop it here`);
+  }
   if (!response.ok) {
     throw new Error(`${url} answered ${response.status}`);
   }
@@ -58,22 +61,24 @@ async function fetchWasm(url: string): Promise<Uint8Array<ArrayBuffer>> {
   return bytes;
 }
 
-function consentedUrl(reference: WasmReferenceInfo, asking: boolean): string | null {
+type Consent = { readonly url: string } | { readonly refused: string } | null;
+
+function consentedUrl(reference: WasmReferenceInfo, asking: boolean): Consent {
   let base: string | null = null;
-  if (!isAbsoluteUrl(reference.url)) {
+  if (!hasScheme(reference.url)) {
     base = window.prompt(`${reference.url} is relative. Enter the page or script URL it is loaded from to fetch it:`, '');
     if (base === null || base.trim() === '') {
       return null;
     }
   }
-  const url = resolvedUrl(reference.url, base);
-  if (url === null) {
+  const target = fetchTarget(reference.url, base);
+  if (!target.ok) {
+    return { refused: target.reason };
+  }
+  if (asking && !window.confirm(`Fetch ${target.href}?\nHost: ${target.host}\nThe request goes from your browser to that server.`)) {
     return null;
   }
-  if (asking && !window.confirm(`Fetch ${url}? The request goes from your browser to that server.`)) {
-    return null;
-  }
-  return url;
+  return { url: target.href };
 }
 
 export function mountWasmBar(store: Store<AppState>, rerun: () => void): WasmAdder {
@@ -104,10 +109,16 @@ export function mountWasmBar(store: Store<AppState>, rerun: () => void): WasmAdd
   };
 
   const fetchReference = async (reference: WasmReferenceInfo, asking: boolean) => {
-    const url = consentedUrl(reference, asking);
-    if (url === null) {
+    const consent = consentedUrl(reference, asking);
+    if (consent === null) {
       return;
     }
+    if ('refused' in consent) {
+      attempted.add(reference.url);
+      note(`Not fetching ${reference.name}: ${consent.refused}`);
+      return;
+    }
+    const url = consent.url;
     attempted.add(reference.url);
     try {
       const bytes = await fetchWasm(url);
@@ -171,7 +182,7 @@ export function mountWasmBar(store: Store<AppState>, rerun: () => void): WasmAdd
       return;
     }
     for (const reference of parseWasmReport(result.wasm ?? '').unresolved) {
-      if (isAbsoluteUrl(reference.url) && !attempted.has(reference.url)) {
+      if (hasScheme(reference.url) && !attempted.has(reference.url)) {
         void fetchReference(reference, false);
       }
     }

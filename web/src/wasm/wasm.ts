@@ -1,3 +1,5 @@
+import { hostRefusal } from './address';
+
 export const MAX_WASM_BYTES = 32 * 1024 * 1024;
 export const ALWAYS_FETCH_KEY = 'untwist.alwaysFetchWasm';
 
@@ -99,22 +101,60 @@ export function withSupplied(current: readonly SuppliedWasm[], added: readonly S
   return [...current.filter((file) => !names.has(file.name)), ...added];
 }
 
-export function isAbsoluteUrl(url: string): boolean {
-  return /^https?:\/\//i.test(url);
+export type FetchTarget =
+  | { readonly ok: true; readonly href: string; readonly host: string }
+  | { readonly ok: false; readonly reason: string };
+
+const UNREQUESTABLE = /[^\x21-\x7e]|\\/;
+const WITH_AUTHORITY = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]/i;
+
+export function hasScheme(text: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(text);
 }
 
-export function resolvedUrl(url: string, base: string | null): string | null {
-  if (isAbsoluteUrl(url)) {
-    return url;
-  }
-  if (base === null || !isAbsoluteUrl(base.trim())) {
-    return null;
-  }
+function refused(reason: string): FetchTarget {
+  return { ok: false, reason };
+}
+
+function parsed(text: string, base?: string): URL | null {
   try {
-    return new URL(url, base.trim()).href;
+    return new URL(text, base);
   } catch {
     return null;
   }
+}
+
+export function checkedUrl(text: string, base?: string): FetchTarget {
+  const shown = base === undefined ? text : `${text} against ${base}`;
+  const malformed = UNREQUESTABLE.test(text) || (hasScheme(text) && !WITH_AUTHORITY.test(text));
+  const url = malformed ? null : parsed(text, base);
+  if (url === null || (url.protocol !== 'http:' && url.protocol !== 'https:') || url.hostname === '') {
+    return refused(`${shown} is not an http(s) URL that can be requested`);
+  }
+  if (url.username !== '' || url.password !== '') {
+    return refused(`${shown} carries a user name or password`);
+  }
+  const host = hostRefusal(url.hostname);
+  if (host !== null) {
+    return refused(`${host}; the playground does not fetch from local or private addresses, download the file and drop it here`);
+  }
+  url.hash = '';
+  return { ok: true, href: url.href, host: url.host };
+}
+
+export function fetchTarget(reference: string, base: string | null): FetchTarget {
+  if (hasScheme(reference)) {
+    return checkedUrl(reference);
+  }
+  if (base === null) {
+    return refused(`${reference} is relative; enter the page or script URL it is loaded from`);
+  }
+  const trimmed = base.trim();
+  const checkedBase = checkedUrl(trimmed);
+  if (!checkedBase.ok) {
+    return checkedBase;
+  }
+  return checkedUrl(reference, checkedBase.href);
 }
 
 function storage(): Storage | null {
