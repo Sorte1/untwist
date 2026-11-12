@@ -4,6 +4,7 @@ use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::program_is_strict;
 
@@ -99,15 +100,19 @@ fn intercepted(scoping: &Scoping, symbol: SymbolId, var: ScopeId) -> bool {
         || (var != declared && within(scoping, var, declared) && read_within(scoping, symbol, var))
 }
 
-fn kept_in_its_block(scoping: &Scoping, function: SymbolId, var: ScopeId) -> bool {
+fn kept_in_its_block(
+    scoping: &Scoping,
+    functions: &FxHashSet<SymbolId>,
+    function: SymbolId,
+    var: ScopeId,
+) -> bool {
     let name = scoping.symbol_name(function);
     let block = scoping.symbol_scope_id(function);
-    let alone = scoping
-        .symbol_ids()
+    let alone = functions
+        .iter()
         .filter(|other| {
-            is_block_function(scoping, *other)
-                && scoping.symbol_name(*other) == name
-                && var_scope(scoping, scoping.symbol_scope_id(*other)) == Some(var)
+            scoping.symbol_name(**other) == name
+                && var_scope(scoping, scoping.symbol_scope_id(**other)) == Some(var)
         })
         .count()
         == 1;
@@ -138,7 +143,8 @@ fn sharing_candidates(scoping: &Scoping, count: usize, any_symbol: AnySymbol<'_>
 
 fn scope_hits(scoping: &Scoping, sharing: &[usize], any_symbol: AnySymbol<'_>) -> Vec<Hit> {
     let mut hits = Vec::new();
-    for function in block_function_symbols(scoping) {
+    let functions = block_function_symbols(scoping);
+    for &function in &functions {
         let name = scoping.symbol_name(function);
         let Some(var) = var_scope(scoping, scoping.symbol_scope_id(function)) else {
             continue;
@@ -146,7 +152,8 @@ fn scope_hits(scoping: &Scoping, sharing: &[usize], any_symbol: AnySymbol<'_>) -
         for &candidate in sharing {
             let reached = any_symbol(candidate, &mut |symbol| {
                 scoping.symbol_name(symbol) == name
-                    && !(symbol == function && kept_in_its_block(scoping, function, var))
+                    && !(symbol == function
+                        && kept_in_its_block(scoping, &functions, function, var))
                     && intercepted(scoping, symbol, var)
             });
             if reached {
