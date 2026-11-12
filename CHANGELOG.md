@@ -50,6 +50,8 @@ the rewrites webcrack makes.
   file (#205). The alias check holds one copy of each decoded text (#253).
 - Unminify drops empty statements from statement lists (#141).
 - The playground's language features work on outputs up to 16 MiB, up from 12 MiB (#241).
+- `docs/known-divergences/deobfuscate.md` lists the shapes where the default lane still does
+  not take a value for the global object (#281).
 - `docs/known-divergences/limits.md` says that regex backtracking memory is outside the heap
   budget (#272).
 - CI runs the test suite in four parallel shards (#278). A release runs only from a commit on
@@ -68,6 +70,9 @@ the rewrites webcrack makes.
   sloppy block function as a write to its `var` (#209, #259), program text handed to the DOM
   (#206), a `delete` through an optional chain (#219), and frame keys built at run time,
   reflective reads and code text (#270). Such programs keep their decoder calls.
+- A string array is no longer decoded when the program may replace a built-in through an
+  element of a host call's result or through a function the `Function` constructor builds
+  from code text (#280).
 - Decoder calls are not rewritten when an argument is written conditionally or twice, a sloppy
   block function shares a name, or the wrapper is async, a generator or has non-plain
   parameters; this fixes a wrong RC4 key on uglify output (#235). A call with a ternary
