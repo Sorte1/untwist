@@ -27,6 +27,7 @@ use crate::string_array::bare_template_text;
 
 mod fold;
 mod inert;
+mod local;
 
 use fold::{
     dynamic_key_symbol, empty_object_binding, fold_assignments, plain_assignment, property_target,

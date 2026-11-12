@@ -645,6 +645,21 @@
   class expression, and any call, `new`, tagged template, dynamic `import`, `await` or `yield`
   anywhere inside the value. The reference deobfuscator refuses nothing on this path, so
   `try { var o = {}; o.a = 1; o.b = missing; } catch (e) { use(o.a); }` loses `o.a` there.
+  One proof lets member reads and arithmetic in: when nothing but the run itself can name the
+  object, a throw leaves the function with the object dead and code a getter or `valueOf` runs
+  has no way to reach it. The object must be a `let` or `const` of a function body or of a block
+  inside a function, or a `var` of a function body or of such a block when every reference to it
+  is inside that block; the binding is written only by its declaration; no `try`, `catch`,
+  `finally` or `with` sits between the statement list and the function, and the list is not a
+  `switch` case or a class static block; and no function, arrow or class in the list names the
+  object. The value may then be built from names (other than the object's own), `this`, literals,
+  function and arrow expressions, member reads that are not optional, unary operators other than
+  `delete`, binary operators other than `in` and `instanceof`, `&&`, `||`, `??`, `? :`,
+  templates, and array and object literals without spreads, getters or computed keys, and the key
+  must be a name or a literal. Script-level bindings stay out (an indirect `eval` or another script
+  run by a getter can name them), and so does an object a closure names even when the closure is
+  created after the run. A getter that installs an `Object.prototype` setter for a later key of
+  the run is the prototype-accessor case of the entry above.
 - **The default mode removes self-defending and debug-protection code only when the body is
   obfuscator.io's own.** A call controller (`var c = (function () { var first = true; return
   function (ctx, fn) { … }; })();`) runs any callback once, so its shape says nothing about the

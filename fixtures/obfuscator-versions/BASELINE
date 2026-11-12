@@ -621,7 +621,7 @@
 3.2.7--b64-norot-noshuf-shift-istr-w2f5-nocalls-t75--wp4-bundle--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 3.2.7--b64-norot-noshuf-shift-istr-w3f-nocalls-t75-numbers--iife--none	1	1/1	1/1	-	0	-
 3.2.7--b64-norot-shuf-shift-inum-w2f5-calls-t75-cff--top--none	1	1/1	1/1	-	0	-
-3.2.7--b64-norot-shuf-shift-istr-w2u-calls-t1-keys--wp4-bundle--none	1	0/1	0/1	-	0	object-keys-not-merged (1), safe-global-key-reach (1)
+3.2.7--b64-norot-shuf-shift-istr-w2u-calls-t1-keys--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-key-reach (1)
 3.2.7--b64-rot-noshuf-noshift-inum-w1-nocalls-t75-keys--top--terser	1	1/1	1/1	-	0	-
 3.2.7--b64-rot-noshuf-noshift-istr-w0-calls-t75-dead--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-key-reach (1)
 3.2.7--b64-rot-noshuf-noshift-istr-w2u-calls-t75-mangled--top--uglify	1	0/1	1/1	-	0	safe-global-names (1)
@@ -732,7 +732,7 @@ decoder-reads-outer-binding	60	60	61	0	a decoder reads a binding outside itself 
 safe-global-names	20	20	20	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
 safe-global-key-reach	13	13	13	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 array-reached-outside	11	11	22	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
-object-keys-not-merged	7	7	8	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...) or a value may throw or run code (a member read, arithmetic on a binding)
+object-keys-not-merged	6	6	7	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...) or a value may throw or run code (a member read, arithmetic on a binding)
 stateful-decoder-state	6	6	9	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
 rotator-reads-outside	4	4	8	0	the rotator reads or writes something other than its own bindings, the string array and its decoders, so its effect is not proven
 decoder-used-as-value	3	3	6	0	a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's calls are left alone

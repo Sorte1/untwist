@@ -11,6 +11,7 @@ use untwist_core::pass::Cx;
 use untwist_core::semantic::{is_constant_binding, write_reference_count};
 
 use super::inert::{Inert, Settled};
+use super::local::{function_local_site, Captured, Local, Site};
 use crate::bindings::{reference_symbol, resolved_symbol};
 use crate::control_flow_object::single_declarator;
 use crate::notes;
@@ -133,6 +134,7 @@ fn folds_into_object(
     symbol: SymbolId,
     rule: &KeyRule<'_>,
     inert: &mut Inert<'_, '_>,
+    local: &mut Local<'_, '_>,
 ) -> Option<bool> {
     let scoping = inert.scoping;
     let assignment = plain_assignment(stmt)?;
@@ -144,7 +146,10 @@ fn folds_into_object(
     if reorders_key_conversion(&key, &assignment.right) {
         return None;
     }
-    if is_unsafe_value(&assignment.right, symbol, scoping) || !inert.accepts(&assignment.right) {
+    if is_unsafe_value(&assignment.right, symbol, scoping) {
+        return None;
+    }
+    if !inert.accepts(&assignment.right) && !local.admits(symbol, &key, &assignment.right) {
         return None;
     }
     Some(adopted)
@@ -219,12 +224,18 @@ struct Fold {
     adopted: bool,
 }
 
+struct Memo {
+    settled: Settled,
+    site: Option<Site>,
+    captured: Option<Captured>,
+}
+
 fn plan_at(
     stmts: &[Statement<'_>],
     index: usize,
     scoping: &Scoping,
     rule: &KeyRule<'_>,
-    settled: &mut Settled,
+    memo: &mut Memo,
 ) -> Option<Fold> {
     let (symbol, constant) = empty_object_binding(stmts.get(index)?, scoping)?;
     let mut count = 0usize;
@@ -233,11 +244,18 @@ fn plan_at(
         stmts,
         before: index,
         scoping,
-        settled,
+        settled: &mut memo.settled,
+    };
+    let mut local = Local {
+        stmts,
+        index,
+        scoping,
+        site: memo.site,
+        captured: &mut memo.captured,
     };
     while let Some(taken) = stmts
         .get(index + 1 + count)
-        .and_then(|stmt| folds_into_object(stmt, symbol, rule, &mut inert))
+        .and_then(|stmt| folds_into_object(stmt, symbol, rule, &mut inert, &mut local))
     {
         adopted |= taken;
         count += 1;
@@ -259,9 +277,9 @@ fn plan_fold(
     from: usize,
     scoping: &Scoping,
     rule: &KeyRule<'_>,
-    settled: &mut Settled,
+    memo: &mut Memo,
 ) -> Option<Fold> {
-    (from..stmts.len()).find_map(|index| plan_at(stmts, index, scoping, rule, settled))
+    (from..stmts.len()).find_map(|index| plan_at(stmts, index, scoping, rule, memo))
 }
 
 fn merged_key<'a>(
@@ -404,8 +422,12 @@ pub(super) fn fold_assignments<'a>(
     };
     let mut from = 0usize;
     let mut total = 0usize;
-    let mut settled = Settled::default();
-    while let Some(plan) = plan_fold(stmts, from, cx.scoping(), &rule, &mut settled) {
+    let mut memo = Memo {
+        settled: Settled::default(),
+        site: function_local_site(cx),
+        captured: None,
+    };
+    while let Some(plan) = plan_fold(stmts, from, cx.scoping(), &rule, &mut memo) {
         let Some(count) = fold_one(stmts, &plan, folded, cx) else {
             break;
         };
