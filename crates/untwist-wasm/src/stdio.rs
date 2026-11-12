@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 
-use untwist::{Output, StopReason};
+use untwist::{printable, Output, StopReason};
 
 pub fn stdout_of(result: &Output) -> String {
     let body = if result.single_file {
@@ -29,7 +29,7 @@ fn stop_warning(stage: &str, iterations: u32, stop: StopReason) -> Option<String
 pub fn stderr_of(result: &Output) -> String {
     let mut err = String::new();
     for diagnostic in &result.parse_diagnostics {
-        let _ = writeln!(err, "{diagnostic}");
+        let _ = writeln!(err, "{}", printable(diagnostic));
     }
     for stage in &result.stages {
         if let Some(line) = stop_warning(stage.stage, stage.iterations, stage.stop) {

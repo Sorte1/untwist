@@ -21,7 +21,7 @@ fn push_section(text: &mut String, banner: &str, code: &str) {
     if !text.is_empty() {
         text.push('\n');
     }
-    text.push_str(&format!("// ==== {banner} ====\n"));
+    text.push_str(&format!("// ==== {} ====\n", crate::printable(banner)));
     text.push_str(code);
     if !code.ends_with('\n') {
         text.push('\n');

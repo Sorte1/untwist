@@ -6,7 +6,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use untwist::{Output, SuppliedWasm, WasmOrigin, WasmReference, WasmSupply};
+use untwist::{printable, Output, SuppliedWasm, WasmOrigin, WasmReference, WasmSupply};
 
 use crate::args::Args;
 use crate::{hooks, STDERR};
@@ -61,27 +61,15 @@ pub fn supply(args: &Args, err: &mut dyn Write) -> anyhow::Result<WasmSupply> {
             };
             match read_limited(&path) {
                 Ok(bytes) => files.push(supplied(name.to_string(), bytes)),
-                Err(error) => writeln!(err, "warning: read {}: {error}", path.display())?,
+                Err(error) => writeln!(
+                    err,
+                    "warning: {}",
+                    printable(&format!("read {}: {error}", path.display()))
+                )?,
             }
         }
     }
     Ok(WasmSupply { files })
-}
-
-fn hidden(c: char) -> bool {
-    let invisible = matches!(c, '\u{61c}' | '\u{200b}'..='\u{200f}' | '\u{feff}');
-    let separator_or_direction = matches!(c, '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{2069}');
-    c.is_control() || invisible || separator_or_direction
-}
-
-fn printable(text: &str) -> String {
-    text.chars().fold(String::new(), |mut shown, c| {
-        match hidden(c) {
-            true => shown.push_str(&format!("\\u{{{:x}}}", u32::from(c))),
-            false => shown.push(c),
-        }
-        shown
-    })
 }
 
 pub fn fetch_url(reference: &WasmReference, base: Option<&str>) -> Result<String, String> {
