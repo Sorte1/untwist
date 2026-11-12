@@ -13,9 +13,9 @@ categories = ["development-tools", "parser-implementations"]
 description = "Passes that undo javascript-obfuscator string arrays, decoders, control-flow flattening and protections"
 
 [dependencies]
-untwist-core = { path = "../untwist-core", version = "0.3.1" }
-untwist-eval = { path = "../untwist-eval", version = "0.3.1" }
-untwist-unminify = { path = "../untwist-unminify", version = "0.3.1" }
+untwist-core = { path = "../untwist-core", version = "0.5.0" }
+untwist-eval = { path = "../untwist-eval", version = "0.5.0" }
+untwist-unminify = { path = "../untwist-unminify", version = "0.5.0" }
 oxc_allocator.workspace = true
 oxc_ast.workspace = true
 oxc_ast_visit.workspace = true
