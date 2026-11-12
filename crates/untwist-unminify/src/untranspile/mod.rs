@@ -644,7 +644,7 @@ impl UntranspileHelpers {
             match identify::declarator(declarator, cx.scoping(), shared_trusted) {
                 Some(found) => self.insert_trusted(found, true, cx),
                 None if identify::declarator(declarator, cx.scoping(), true).is_some() => {
-                    cx.note(UNTRANSPILE_HELPER_UNTRUSTED, Some(declarator.span));
+                    cx.note(UNTRANSPILE_HELPER_UNTRUSTED, None);
                 }
                 None => {
                     if let (BindingPattern::BindingIdentifier(id), Some(init)) =
