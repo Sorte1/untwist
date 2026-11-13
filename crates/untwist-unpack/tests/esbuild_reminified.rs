@@ -113,14 +113,20 @@ console.log(b());
 }
 
 #[test]
-fn a_destructure_of_something_else_than_object_stops_the_proof() {
+fn a_destructure_of_something_else_than_object_stays_in_the_entry() {
     let source = "var { defineProperty: r } = makeObject();
 var h = (o, l) => () => (l || o((l = { exports: {} }).exports, l), l.exports);
 var a = h((e, m) => { m.exports = 1; });
 var b = h((e, m) => { m.exports = a() + 1; });
 console.log(b());
 ";
-    assert_eq!(split(source), None);
+    let files = split(source).expect("the factories are defined before they run");
+    let entry = code(&files, "index.js");
+    assert!(entry.contains("makeObject()"), "{entry}");
+    assert!(
+        !files.iter().any(|(path, _)| path.starts_with("_runtime")),
+        "{files:?}"
+    );
 }
 
 fn object_keys(extra: &str) -> String {
