@@ -45,7 +45,6 @@ mini/webpack4-dev-node*	*	recognised	xfail	bm-webpack-async-chunks: an entry who
 base/webpack4-prod-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 mini/webpack4-prod-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 base/webpack4-prod-node+*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack4-prod-node+*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 base/webpack4-prod-concat*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 mini/webpack4-prod-concat*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
 base/webpack4-prod-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
