@@ -235,7 +235,7 @@ fn the_driver_settles_after_a_single_renaming_iteration() {
     let (output, report) = run_report("let x = 1; function abc(q) { return q; eval('x'); }");
     assert_eq!(report.iterations, 2);
     assert!(report.converged(), "stop={:?}", report.stop);
-    assert_eq!(report.per_pass, vec![("mangle", 2)]);
+    assert_eq!(report.per_pass, vec![("library-rename", 0), ("mangle", 2)]);
     assert_eq!(hazard_notes(&report.notes).len(), 1);
     assert!(output.starts_with("let x = 1;"), "{output}");
 }

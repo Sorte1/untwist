@@ -54,6 +54,12 @@ engine as WebAssembly, and your code never leaves the page.
   `getAugmentedNamespace`, `commonjsRequire`) get their names back when minification or obfuscation took them:
   `requireModule3`, `hasRequiredModule3`, `module3`, or the module's own name when one survives. Only names change;
   every wrapper still runs on its first call. `--disable name-commonjs-wrappers` turns it off.
+- **Libraries.** Recognises core-js 3 (`internals/*` and `modules/*`, every minor 3.0 to 3.51),
+  regenerator-runtime, tslib, Babel helpers (`@babel/runtime` and inlined) and `@swc/helpers` by the exact shape
+  of their functions, minified, mangled or obfuscated, and puts `// core-js 3.38–3.51: internals/global-this.js`
+  above each matched module. With any `--rename` mode the matched bindings get the library's own names
+  (`requireGetBuiltIn`, `getBuiltIn`, `isCallable`, ...); the report lists each library with its version range.
+  `--disable library-names,library-rename` turns this off.
 - **JSX.** Rebuilds JSX from `React.createElement` and the automatic `jsx`/`jsxs` runtime.
 
 ## Install

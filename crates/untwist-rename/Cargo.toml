@@ -26,6 +26,7 @@ oxc_span.workspace = true
 oxc_str.workspace = true
 oxc_syntax.workspace = true
 rustc-hash.workspace = true
+miniz_oxide = "0.9.1"
 
 [dev-dependencies]
 untwist-rename = { path = ".", features = ["test-hooks"] }

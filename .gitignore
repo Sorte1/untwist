@@ -20,6 +20,7 @@ web/src/engine/pkg
 /.wrangler/
 /tools/obfuscated/node_modules/
 /tools/obfuscators/node_modules/
+/tools/library-fingerprints/node_modules/
 /tools/webcrack/node_modules/
 /tools/webpack-eval/node_modules/
 

@@ -118,19 +118,33 @@ impl Pipeline {
             self.late_protections_stage(site, cleaned, &mut slot, &mut runs);
         if !extended {
             let (sem, changed) = self.final_machinery_stage(site, sem);
-            if changed {
-                self.rename_stage(site, sem, reservation);
-            }
+            let sem = match changed {
+                true => self.rename_stage(site, sem, reservation),
+                false => sem,
+            };
+            self.library_stage(site, sem);
             settle_notes(site, &runs, latest);
             return;
         }
         let settle_from = (changes, slot);
         let sem = self.settle(site, sem, unminify.as_deref(), settle_from, &mut runs);
         let (sem, _) = self.final_machinery_stage(site, sem);
-        if let Some(sem) = self.lexical_stage(site, sem) {
-            self.rename_stage(site, sem, reservation);
+        match self.lexical_stage(site, sem) {
+            Some(sem) => {
+                let sem = self.rename_stage(site, sem, reservation);
+                self.library_stage(site, sem);
+            }
+            None => {
+                let sem = untwist_core::semantic::build_scoping(site.program);
+                self.library_stage(site, sem);
+            }
         }
         settle_notes(site, &runs, latest);
+    }
+
+    fn library_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {
+        let passes = vec![untwist_rename::library::pass::boxed()];
+        self.stage_group("library", passes, site, (sem, site.pass_opts.clone()))
     }
 
     fn late_protections_stage<'a>(

@@ -19,6 +19,8 @@ struct OutputJson<'a> {
     bundle: Option<untwist::BundleListing<'a>>,
     stages: Vec<untwist::StageRow<'a>>,
     notes: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    libraries: Vec<LibraryJson>,
     parse_diagnostics: &'a [String],
     parse_errors: usize,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
@@ -38,6 +40,25 @@ struct OutputJson<'a> {
     #[cfg(feature = "test-hooks")]
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     refusal_span: &'a [String],
+}
+
+#[derive(Serialize)]
+struct LibraryJson {
+    library: String,
+    range: String,
+    modules: usize,
+}
+
+fn libraries_json(output: &Output) -> Vec<LibraryJson> {
+    output
+        .libraries()
+        .into_iter()
+        .map(|summary| LibraryJson {
+            library: summary.library,
+            range: summary.range,
+            modules: summary.modules,
+        })
+        .collect()
 }
 
 #[derive(Serialize)]
@@ -116,6 +137,7 @@ pub fn to_json(output: &Output, written: &Written, limits: Limits) -> serde_json
             .map(|bundle| bundle.listing_without(&written.unwritten_modules)),
         stages,
         notes,
+        libraries: libraries_json(output),
         parse_diagnostics: &output.parse_diagnostics,
         parse_errors: output.parse_errors,
         panicked: &output.panicked,
