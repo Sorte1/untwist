@@ -1,0 +1,7 @@
+{
+  "name": "untwist-libcorpus-zone-js--0-16-3",
+  "private": true,
+  "dependencies": {
+    "zone.js": "0.16.3"
+  }
+}

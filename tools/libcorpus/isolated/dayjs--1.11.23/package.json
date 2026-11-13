@@ -1,0 +1,7 @@
+{
+  "name": "untwist-libcorpus-dayjs--1-11-23",
+  "private": true,
+  "dependencies": {
+    "dayjs": "1.11.23"
+  }
+}

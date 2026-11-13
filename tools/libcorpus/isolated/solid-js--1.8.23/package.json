@@ -1,0 +1,7 @@
+{
+  "name": "untwist-libcorpus-solid-js--1-8-23",
+  "private": true,
+  "dependencies": {
+    "solid-js": "1.8.23"
+  }
+}

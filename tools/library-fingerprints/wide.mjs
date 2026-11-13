@@ -17,7 +17,7 @@ export function packageDir(entry) {
 
 export function files(entry, { include, exclude }) {
   const dir = packageDir(entry);
-  const skipped = new Set(EXCLUDES[entry.alias] ?? []);
+  const skipped = new Set(EXCLUDES[entry.slug] ?? []);
   const out = [];
   for (const [abs, rel] of walk(dir, dir, entry.name)) {
     if (skipped.has(rel) || (exclude && exclude.test(rel))) continue;
@@ -54,14 +54,18 @@ const DIST = (rel, kind) => kind === "min" || kind === "umd" || /^(dist|build|um
 export function wide({ id, name, label = name, include = DIST, exclude = null, main = true, ...rest }) {
   const versions = entries().filter((entry) => entry.name === name);
   if (!versions.length) throw new Error(`no corpus versions for ${name}`);
-  const byDir = new Map(versions.map((entry) => [entry.alias, entry]));
+  const find = (dir, version) => {
+    const matches = versions.filter((entry) => entry.alias === dir && (version === undefined || entry.version === (version.version ?? version)));
+    if (matches.length !== 1) throw new Error(`${id}: entry(${dir}) needs the version (${matches.length} candidates)`);
+    return matches[0];
+  };
   return {
     id,
     label,
     versions: versions.map((entry) => ({ dir: entry.alias, version: entry.version, root: join("tools/libcorpus", entry.root) })),
-    entry(dir) {
-      const entry = byDir.get(dir);
-      const mainExcluded = (EXCLUDES[entry.alias] ?? []).includes("<main>");
+    entry(dir, version) {
+      const entry = find(dir, version);
+      const mainExcluded = (EXCLUDES[entry.slug] ?? []).includes("<main>");
       return entrySource(entry, files(entry, { include, exclude }), { main: main && !mainExcluded });
     },
     module(rel) {

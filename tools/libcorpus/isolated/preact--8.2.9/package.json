@@ -1,0 +1,7 @@
+{
+  "name": "untwist-libcorpus-preact--8-2-9",
+  "private": true,
+  "dependencies": {
+    "preact": "8.2.9"
+  }
+}

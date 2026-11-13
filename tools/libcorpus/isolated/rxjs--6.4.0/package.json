@@ -1,0 +1,7 @@
+{
+  "name": "untwist-libcorpus-rxjs--6-4-0",
+  "private": true,
+  "dependencies": {
+    "rxjs": "6.4.0"
+  }
+}
