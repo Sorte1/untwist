@@ -63,10 +63,31 @@ pub(super) fn settle(candidates: Vec<Candidate>, units: &[Unit<'_, '_>]) -> Vec<
         }
         dropped.extend(failing);
     }
-    candidates
+    let kept: Vec<Candidate> = candidates
         .into_iter()
         .enumerate()
         .filter(|(index, _)| !dropped.contains(index))
         .map(|(_, candidate)| unnamed(candidate))
-        .collect()
+        .collect();
+    vouched(kept, units)
+}
+
+fn vouched(mut candidates: Vec<Candidate>, units: &[Unit<'_, '_>]) -> Vec<Candidate> {
+    loop {
+        let spans: Vec<Span> = candidates
+            .iter()
+            .filter(|candidate| candidate.strong)
+            .flat_map(|candidate| candidate.shape.inlined.iter().map(|(_, span)| *span))
+            .collect();
+        let mut changed = false;
+        for candidate in candidates.iter_mut().filter(|candidate| !candidate.strong) {
+            if spans.contains(&units[candidate.unit_index].span) {
+                candidate.strong = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            return candidates;
+        }
+    }
 }

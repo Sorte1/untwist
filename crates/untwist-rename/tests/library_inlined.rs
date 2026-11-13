@@ -142,3 +142,21 @@ fn an_inlined_caller_whose_inlined_wrapper_differs_is_not_a_match() {
     let (found, _) = matched(&table(), &changed);
     assert!(found.hits.is_empty(), "{:?}", found.hits);
 }
+
+#[test]
+fn the_comment_for_an_inlined_wrapper_sits_above_its_statement() {
+    let alloc = Allocator::default();
+    let source = OUTER_INLINED.replace("hasA", "x").replace("hasB", "y");
+    let mut parsed = parse_program(&alloc, &source);
+    let sem = build_scoping(&parsed.program);
+    let found = match_with(&table(), &parsed.program, &sem.scoping);
+    let hits: Vec<&untwist_rename::library::Hit> = found.hits.iter().collect();
+    untwist_rename::library::annotate::annotate(&mut parsed.program, &hits, &alloc);
+    let printed = untwist_core::print::print(&parsed.program, untwist_core::print::PrintStyle::Pretty);
+    let comment = printed
+        .find("// core-js 3.39: internals/a.js")
+        .expect("the inlined caller is commented");
+    let call = printed.find("(function").expect("the call is printed");
+    assert!(comment < call, "{printed}");
+    assert!(!printed[comment..call].contains("if (x)"), "{printed}");
+}
