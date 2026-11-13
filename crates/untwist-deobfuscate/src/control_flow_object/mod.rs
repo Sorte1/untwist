@@ -30,6 +30,7 @@ mod hoisted;
 mod inner_first;
 mod keys;
 mod nested;
+mod reach;
 mod sequenced;
 
 pub use declared::DeclaredObject;

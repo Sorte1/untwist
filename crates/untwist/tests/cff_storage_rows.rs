@@ -3,6 +3,8 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/cff_storage_rows.txt");
 
+const UNSAFE_DYNAMIC_CODE: &[&str] = &["reach-w1", "reach-w2", "reach-ev4", "reach-ev5"];
+
 struct Row<'r> {
     label: &'r str,
     absent: Option<&'r str>,
@@ -45,7 +47,9 @@ fn every_storage_row_prints_what_node_prints_in_both_lanes() {
     let unsafe_lane = |source: &str| run(true, source);
     let modes: [Mode<'_>; 2] = [("default", &default), ("unsafe", &unsafe_lane)];
     let wrong = node_rows::mismatches(&node, &programs, &modes);
+    let (wrong, witnesses) = node_rows::listed_unsafe_witnesses(wrong, UNSAFE_DYNAMIC_CODE);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    assert_eq!(witnesses.len(), UNSAFE_DYNAMIC_CODE.len(), "{witnesses:?}");
 }
 
 #[test]

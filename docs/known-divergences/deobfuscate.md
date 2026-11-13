@@ -744,6 +744,11 @@
   gets no branch removal. A write inside a statement that is not itself wholly
   dead is left in place and noted, and a write or escape outside every dead branch refuses
   the candidate with a note of its own. The conservative comparison mode never takes this route.
+- **A declared control-flow object that code can reach by name is kept, in every mode.** A direct
+  eval anywhere in the object's scope, a `with` statement inside that scope, or, for a script's
+  top-level `var`, code that may hold the global object or run code from text (the global reach
+  check `find-string-array` uses) can read or replace the binding where its references do not
+  show it, so the object is neither inlined nor used to decide a branch, and a note says which.
 - **The default mode recognises a dispatch object by its shape, not by its name.** The reference deobfuscator
   requires the obfuscator's own five-character `[a-zA-Z]{5}` key and binding names. Untwist's
   default also accepts a naturally named object with two or more properties where at least
@@ -899,9 +904,12 @@
   per read: a binding whose reads all lie outside such a function, in a sibling function, or under
   a nested function's own binding of the name is inlined, but one read inside it keeps every read,
   those outside included. Annex B also skips the hoisting when a block between the function and
-  the block function declares the name with `let` or `const`, as in
-  `{ let arr = 1; { function arr() {} } }`. The check does not look for such a declaration, so it
-  refuses there although node reads the outer binding.
+  the block function declares the name lexically, as in `{ let arr = 1; { function arr() {} } }`
+  (also `const`, `class`, a `for (let …)` head, a destructured `catch` parameter or another block
+  function). oxc hoists such a function anyway, so Untwist repairs every scoping it builds: the
+  function goes back to its block, its own reads resolve to it, and reads past the blocking
+  declaration resolve to the outer binding, as node runs them. The refusal above still counts
+  such a function, so it refuses there although node reads the outer binding.
   `control-flow-object`'s declared form keeps the name-wide rule, so a name any block function
   shares is refused there in strict code too, and the call judgement still treats such a name as
   opaque. Without `--unsafe` the same per-binding refusal covers the three other places that
