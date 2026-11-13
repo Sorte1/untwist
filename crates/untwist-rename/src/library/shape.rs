@@ -1,12 +1,13 @@
 use oxc_ast::ast::*;
 use oxc_ast::AstKind;
 use oxc_ast::AstType;
-use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_ast_visit::{walk, walk_js, Visit, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::js_text::js_text;
 
 use super::hash::{fnv, mix, Exact, PolyHash};
@@ -26,6 +27,9 @@ const LABEL: u64 = 0x5bd1_e995_0000_0005;
 const COMPUTED: u64 = 0x5bd1_e995_0000_0006;
 const INNER: u64 = 0x5bd1_e995_0000_0007;
 const OUTER: u64 = 0x5bd1_e995_0000_0008;
+const ABSENT: u64 = 0x5bd1_e995_0000_0009;
+const FINALLY: u64 = 0x5bd1_e995_0000_000a;
+const LEXICAL_THIS: u64 = 0x5bd1_e995_0000_000b;
 
 fn tagged(tag: u8, text: &str) -> u64 {
     fnv(tag, text.as_bytes())
@@ -103,7 +107,9 @@ pub struct Shaped<'n, 'a> {
 }
 
 pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> Shaped<'n, 'a> {
-    let mut emitter = Emitter::new(scoping, Sink::Prefix(PolyHash::new()));
+    let mut scan = DefScan::new(scoping);
+    scan.visit_program(program);
+    let mut emitter = Emitter::new(scoping, Sink::Prefix(PolyHash::new()), scan.single_definitions());
     emitter.collect_units = true;
     emitter.visit_program_body(program);
     let len = emitter.count;
@@ -139,9 +145,17 @@ pub fn exact_shape(unit: &Unit<'_, '_>, scoping: &Scoping) -> ExactShape {
         scope: unit.scope,
         inner: Vec::new(),
         outer: Vec::new(),
+        placeholders: FxHashMap::default(),
+        labels: FxHashMap::default(),
         specific: 0,
     });
-    let mut emitter = Emitter::new(scoping, sink);
+    let mut scan = DefScan::new(scoping);
+    match unit.node {
+        UnitNode::Function(function) => scan.visit_function(function, ScopeFlags::Function),
+        UnitNode::Arrow(arrow) => scan.visit_arrow_function_expression(arrow),
+        UnitNode::Program(program) => scan.visit_program(program),
+    }
+    let mut emitter = Emitter::new(scoping, sink, scan.single_definitions());
     match unit.node {
         UnitNode::Function(function) => emitter.function_unit(function),
         UnitNode::Arrow(arrow) => emitter.arrow_unit(arrow),
@@ -166,6 +180,8 @@ struct ExactSink {
     scope: Option<ScopeId>,
     inner: Vec<SymbolId>,
     outer: Vec<SymbolId>,
+    placeholders: FxHashMap<SymbolId, u64>,
+    labels: FxHashMap<String, u64>,
     specific: u32,
 }
 
@@ -190,19 +206,26 @@ fn is_within(scoping: &Scoping, symbol: SymbolId, root: Option<ScopeId>) -> bool
 
 impl ExactSink {
     fn placeholder(&mut self, scoping: &Scoping, symbol: SymbolId) -> u64 {
-        if let Some(index) = self.inner.iter().position(|&known| known == symbol) {
-            return mix(INNER ^ index as u64);
+        if let Some(&known) = self.placeholders.get(&symbol) {
+            return known;
         }
-        if let Some(index) = self.outer.iter().position(|&known| known == symbol) {
-            return mix(OUTER ^ index as u64);
-        }
-        if is_within(scoping, symbol, self.scope) {
+        let token = if is_within(scoping, symbol, self.scope) {
             self.inner.push(symbol);
             mix(INNER ^ (self.inner.len() - 1) as u64)
         } else {
             self.outer.push(symbol);
             mix(OUTER ^ (self.outer.len() - 1) as u64)
-        }
+        };
+        self.placeholders.insert(symbol, token);
+        token
+    }
+
+    fn label(&mut self, name: &str) -> u64 {
+        let next = self.labels.len() as u64;
+        *self
+            .labels
+            .entry(name.to_string())
+            .or_insert_with(|| mix(LABEL ^ next.rotate_left(32)))
     }
 }
 
@@ -213,6 +236,14 @@ struct Emitter<'n, 'a> {
     collect_units: bool,
     units: Vec<Unit<'n, 'a>>,
     pending: Option<(Span, SymbolId)>,
+    single: FxHashSet<SymbolId>,
+    frames: Vec<Frame>,
+}
+
+#[derive(Clone, Copy)]
+struct Frame {
+    arrow: bool,
+    lexical_this: bool,
 }
 
 fn function_value_span(expr: &Expression<'_>) -> Option<Span> {
@@ -249,6 +280,10 @@ fn is_literal(expr: &Expression<'_>) -> bool {
         }
         _ => false,
     }
+}
+
+fn is_string(expr: &Expression<'_>) -> bool {
+    matches!(expr.without_parentheses(), Expression::StringLiteral(_))
 }
 
 fn is_typeof(expr: &Expression<'_>) -> bool {
@@ -301,12 +336,15 @@ fn declared_value<'d, 'a>(
 
 fn single_declared_value<'d, 'a>(
     statement: &'d Statement<'a>,
-) -> Option<(SymbolId, &'d Expression<'a>)> {
+) -> Option<(VariableDeclarationKind, SymbolId, &'d Expression<'a>)> {
     let Statement::VariableDeclaration(declaration) = statement else {
         return None;
     };
     match declaration.declarations.as_slice() {
-        [declarator] => declared_value(declarator),
+        [declarator] => {
+            let (symbol, init) = declared_value(declarator)?;
+            Some((declaration.kind, symbol, init))
+        }
         _ => None,
     }
 }
@@ -324,7 +362,7 @@ fn returned_symbol(statement: &Statement<'_>, scoping: &Scoping) -> Option<Symbo
 }
 
 impl<'n, 'a: 'n> Emitter<'n, 'a> {
-    fn new(scoping: &'n Scoping, sink: Sink) -> Self {
+    fn new(scoping: &'n Scoping, sink: Sink, single: FxHashSet<SymbolId>) -> Self {
         Self {
             scoping,
             sink,
@@ -332,7 +370,34 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
             collect_units: false,
             units: Vec::new(),
             pending: None,
+            single,
+            frames: Vec::new(),
         }
+    }
+
+    fn push_label(&mut self, name: &str) {
+        self.count += 1;
+        match &mut self.sink {
+            Sink::Prefix(prefix) => prefix.push(LABEL),
+            Sink::Exact(sink) => {
+                let token = sink.label(name);
+                sink.hash.push(token);
+                sink.loose.push(LABEL);
+            }
+        }
+    }
+
+    fn uses_lexical_this(&mut self) {
+        for frame in self.frames.iter_mut().rev() {
+            if !frame.arrow || frame.lexical_this {
+                break;
+            }
+            frame.lexical_this = true;
+        }
+    }
+
+    fn is_single_definition(&self, kind: VariableDeclarationKind, symbol: SymbolId) -> bool {
+        kind == VariableDeclarationKind::Var || self.single.contains(&symbol)
     }
 
     fn push(&mut self, token: u64) {
@@ -393,8 +458,10 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
     }
 
     fn emit_assign_return(&mut self, statement: &Statement<'a>, next: &Statement<'a>) -> bool {
-        if let Some((symbol, init)) = single_declared_value(statement) {
-            if returned_symbol(next, self.scoping) != Some(symbol) {
+        if let Some((kind, symbol, init)) = single_declared_value(statement) {
+            if returned_symbol(next, self.scoping) != Some(symbol)
+                || !self.is_single_definition(kind, symbol)
+            {
                 return false;
             }
             self.open(AstType::ReturnStatement);
@@ -454,15 +521,22 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
     }
 
     fn emit_declaration(&mut self, declaration: &VariableDeclaration<'a>) {
+        let var = declaration.kind == VariableDeclarationKind::Var;
         for declarator in &declaration.declarations {
             if let Some((symbol, init)) = declared_value(declarator) {
-                self.emit_initialiser(symbol, init);
-                continue;
+                if self.is_single_definition(declaration.kind, symbol) {
+                    self.emit_initialiser(symbol, init);
+                    continue;
+                }
             }
-            if declarator.init.is_none() && declarator.id.is_binding_identifier() {
+            let bare = declarator.init.is_none() && declarator.id.is_binding_identifier();
+            let single = declared_symbol(declarator)
+                .is_some_and(|symbol| self.is_single_definition(declaration.kind, symbol));
+            if bare && (var || single) {
                 continue;
             }
             self.open(AstType::VariableDeclaration);
+            self.push(flag(declaration.kind.as_str()));
             self.visit_variable_declarator(declarator);
             self.close();
         }
@@ -536,6 +610,10 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
     }
 
     fn function_unit(&mut self, function: &Function<'a>) {
+        self.frames.push(Frame {
+            arrow: false,
+            lexical_this: false,
+        });
         self.open(AstType::Function);
         if function.r#async {
             self.push(flag("async"));
@@ -548,9 +626,14 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
             self.emit_list(&body.statements);
         }
         self.close();
+        self.frames.pop();
     }
 
     fn arrow_unit(&mut self, arrow: &ArrowFunctionExpression<'a>) {
+        self.frames.push(Frame {
+            arrow: true,
+            lexical_this: false,
+        });
         self.open(AstType::Function);
         if arrow.r#async {
             self.push(flag("async"));
@@ -565,13 +648,21 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
                 self.close();
             }
         }
+        if self.frames.pop().is_some_and(|frame| frame.lexical_this) {
+            self.push(LEXICAL_THIS);
+        }
         self.close();
     }
 
     fn identifier_reference(&mut self, id: &IdentifierReference<'a>) {
         match crate::collect::reference_symbol(id, self.scoping) {
             Some(symbol) => self.push_symbol(symbol),
-            None => self.push_specific(tagged(TAG_GLOBAL, id.name.as_str())),
+            None => {
+                if matches!(id.name.as_str(), "arguments" | "eval") {
+                    self.uses_lexical_this();
+                }
+                self.push_specific(tagged(TAG_GLOBAL, id.name.as_str()))
+            }
         }
     }
 
@@ -588,7 +679,13 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
             AstKind::PrivateIdentifier(name) => {
                 self.push_specific(tagged(TAG_STR, &format!("#{}", name.name)))
             }
-            AstKind::LabelIdentifier(_) => self.push(LABEL),
+            AstKind::LabelIdentifier(label) => self.push_label(label.name.as_str()),
+            AstKind::ThisExpression(_) | AstKind::Super(_) | AstKind::MetaProperty(_) => {
+                self.uses_lexical_this()
+            }
+            AstKind::VariableDeclaration(declaration) => {
+                self.push(flag(declaration.kind.as_str()))
+            }
             AstKind::StringLiteral(literal) => {
                 self.push_specific(tagged(TAG_STR, &js_text(literal.value)))
             }
@@ -623,8 +720,16 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
             }
             AstKind::ObjectProperty(property) => {
                 self.push(flag(property_kind(property.kind)));
-                if property.computed && !matches!(property.key, PropertyKey::StringLiteral(_)) {
+                let proto = property.key.static_name().as_deref() == Some("__proto__");
+                let string_key = matches!(property.key, PropertyKey::StringLiteral(_));
+                if property.computed && (!string_key || proto) {
                     self.push(COMPUTED);
+                }
+                if property.method {
+                    self.push(flag("method"));
+                }
+                if property.shorthand && proto {
+                    self.push(flag("shorthand"));
                 }
             }
             AstKind::MethodDefinition(method) => {
@@ -799,7 +904,7 @@ impl<'n, 'a: 'n> VisitJs<'a> for Emitter<'n, 'a> {
             if is_literal(left) && !is_literal(right) {
                 std::mem::swap(&mut left, &mut right);
             }
-            if is_typeof(left) || is_typeof(right) {
+            if (is_typeof(left) && is_string(right)) || (is_string(left) && is_typeof(right)) {
                 operator = loose_operator(operator);
             }
         }
@@ -814,5 +919,225 @@ impl<'n, 'a: 'n> VisitJs<'a> for Emitter<'n, 'a> {
         walk_js::walk_computed_member_expression(self, it);
     }
 
+    fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
+        let kind = AstKind::ForStatement(self.alloc(it));
+        self.enter_node(kind);
+        match &it.init {
+            Some(init) => self.visit_for_statement_init(init),
+            None => self.push(ABSENT),
+        }
+        match &it.test {
+            Some(test) => self.visit_expression(test),
+            None => self.push(ABSENT),
+        }
+        match &it.update {
+            Some(update) => self.visit_expression(update),
+            None => self.push(ABSENT),
+        }
+        self.visit_statement(&it.body);
+        self.leave_node(kind);
+    }
+
+    fn visit_try_statement(&mut self, it: &TryStatement<'a>) {
+        let kind = AstKind::TryStatement(self.alloc(it));
+        self.enter_node(kind);
+        self.visit_block_statement(&it.block);
+        if let Some(handler) = &it.handler {
+            self.visit_catch_clause(handler);
+        }
+        if let Some(finalizer) = &it.finalizer {
+            self.push(FINALLY);
+            self.visit_block_statement(finalizer);
+        }
+        self.leave_node(kind);
+    }
+
     fn visit_span(&mut self, _it: &Span) {}
+}
+
+#[derive(Default)]
+struct DefState {
+    defined_in: Option<u32>,
+    early: bool,
+    captured: bool,
+    written: bool,
+    constant: bool,
+    definitions: u32,
+}
+
+impl DefState {
+    fn single(&self) -> bool {
+        self.defined_in.is_some()
+            && self.definitions == 1
+            && !self.early
+            && !self.captured
+            && !(self.constant && self.written)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ScanFrame {
+    id: u32,
+    loops: u32,
+}
+
+struct DefScan<'s> {
+    scoping: &'s Scoping,
+    frames: Vec<ScanFrame>,
+    next_frame: u32,
+    states: FxHashMap<SymbolId, DefState>,
+}
+
+fn declared_symbol(declarator: &VariableDeclarator<'_>) -> Option<SymbolId> {
+    match &declarator.id {
+        BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
+        _ => None,
+    }
+}
+
+impl<'s> DefScan<'s> {
+    fn new(scoping: &'s Scoping) -> Self {
+        Self {
+            scoping,
+            frames: vec![ScanFrame { id: 0, loops: 0 }],
+            next_frame: 1,
+            states: FxHashMap::default(),
+        }
+    }
+
+    fn frame(&self) -> ScanFrame {
+        self.frames
+            .last()
+            .copied()
+            .unwrap_or(ScanFrame { id: 0, loops: 0 })
+    }
+
+    fn in_frame(&mut self, walk: impl FnOnce(&mut Self)) {
+        self.frames.push(ScanFrame {
+            id: self.next_frame,
+            loops: 0,
+        });
+        self.next_frame += 1;
+        walk(self);
+        self.frames.pop();
+    }
+
+    fn in_loop(&mut self, walk: impl FnOnce(&mut Self)) {
+        if let Some(frame) = self.frames.last_mut() {
+            frame.loops += 1;
+        }
+        walk(self);
+        if let Some(frame) = self.frames.last_mut() {
+            frame.loops -= 1;
+        }
+    }
+
+    fn lexical_declaration(&mut self, declaration: &VariableDeclaration<'_>, definite: bool) {
+        let constant = declaration.kind != VariableDeclarationKind::Let;
+        for declarator in &declaration.declarations {
+            self.visit_variable_declarator(declarator);
+            let Some(symbol) = declared_symbol(declarator) else {
+                continue;
+            };
+            let frame = self.frame();
+            let resets = declarator.init.is_none() && frame.loops > 0;
+            let state = self.states.entry(symbol).or_default();
+            state.definitions += 1;
+            state.constant |= constant;
+            if definite && !resets {
+                state.defined_in = Some(frame.id);
+            }
+        }
+    }
+
+    fn single_definitions(self) -> FxHashSet<SymbolId> {
+        self.states
+            .into_iter()
+            .filter(|(_, state)| state.single())
+            .map(|(symbol, _)| symbol)
+            .collect()
+    }
+}
+
+fn lexical(statement: &Statement<'_>) -> Option<&VariableDeclaration<'_>> {
+    match statement {
+        Statement::VariableDeclaration(declaration)
+            if declaration.kind != VariableDeclarationKind::Var =>
+        {
+            Some(declaration)
+        }
+        _ => None,
+    }
+}
+
+impl<'a> Visit<'a> for DefScan<'_> {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        match lexical(it) {
+            Some(declaration) => self.lexical_declaration(declaration, true),
+            None => walk::walk_statement(self, it),
+        }
+    }
+
+    fn visit_switch_case(&mut self, it: &SwitchCase<'a>) {
+        if let Some(test) = &it.test {
+            self.visit_expression(test);
+        }
+        for statement in &it.consequent {
+            match lexical(statement) {
+                Some(declaration) => self.lexical_declaration(declaration, false),
+                None => self.visit_statement(statement),
+            }
+        }
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.in_frame(|scan| walk::walk_function(scan, it, flags));
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.in_frame(|scan| walk::walk_arrow_function_expression(scan, it));
+    }
+
+    fn visit_class(&mut self, it: &Class<'a>) {
+        self.in_frame(|scan| walk::walk_class(scan, it));
+    }
+
+    fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
+        self.in_loop(|scan| walk::walk_for_statement(scan, it));
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        self.in_loop(|scan| walk::walk_for_in_statement(scan, it));
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.in_loop(|scan| walk::walk_for_of_statement(scan, it));
+    }
+
+    fn visit_while_statement(&mut self, it: &WhileStatement<'a>) {
+        self.in_loop(|scan| walk::walk_while_statement(scan, it));
+    }
+
+    fn visit_do_while_statement(&mut self, it: &DoWhileStatement<'a>) {
+        self.in_loop(|scan| walk::walk_do_while_statement(scan, it));
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let Some(reference) = it.reference_id.get() else {
+            return;
+        };
+        let reference = self.scoping.get_reference(reference);
+        let Some(symbol) = reference.symbol_id() else {
+            return;
+        };
+        let written = reference.is_write();
+        let frame = self.frame().id;
+        let state = self.states.entry(symbol).or_default();
+        state.written |= written;
+        match state.defined_in {
+            None => state.early = true,
+            Some(defined) if defined != frame => state.captured = true,
+            Some(_) => {}
+        }
+    }
 }

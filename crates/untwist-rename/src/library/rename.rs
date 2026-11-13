@@ -7,6 +7,8 @@ use crate::generate::to_identifier;
 use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
 use crate::simple::is_renameable;
+use crate::unique::{await_turn, is_taken, next_number, take_names, SharedUniqueState};
+use std::cell::RefCell;
 use crate::text_reads::{text_read_bindings, TextReads};
 use crate::RenameConfig;
 
@@ -20,12 +22,17 @@ pub const TEXT_READ_UNKNOWN: &str =
 pub struct LibraryRename {
     config: RenameConfig,
     done: bool,
+    unique: Option<(SharedUniqueState, usize)>,
 }
 
-pub fn boxed<'a>(config: RenameConfig) -> Box<dyn Pass<'a> + 'a> {
+pub fn boxed<'a>(
+    config: RenameConfig,
+    unique: Option<(SharedUniqueState, usize)>,
+) -> Box<dyn Pass<'a> + 'a> {
     Box::new(LibraryRename {
         config,
         done: false,
+        unique,
     })
 }
 
@@ -43,20 +50,53 @@ impl<'a> Pass<'a> for LibraryRename {
             rename_all: true,
             ..self.config
         };
+        if self.done {
+            return;
+        }
+        let shared = self.unique.as_ref().map(|(state, index)| {
+            await_turn(state, *index);
+            state
+        });
+        let chosen: RefCell<Vec<(String, String, u32)>> = RefCell::new(Vec::new());
         run_mode(
             &mut self.done,
             program,
             cx,
             HazardNote::Suppress,
             OuterRule::UsedEnclosing,
-            move |program, collected, scoping| decide(program, collected, scoping, config),
+            |program, collected, scoping| {
+                let (plan, names) = decide_names(program, collected, scoping, config, shared);
+                *chosen.borrow_mut() = names;
+                plan
+            },
         );
+        if let Some(state) = shared {
+            take_names(state, &chosen.into_inner());
+        }
     }
 }
 
-fn candidates(base: &str) -> impl Iterator<Item = String> + '_ {
-    std::iter::once(base.to_string())
-        .chain((2..=NUMBERED).map(move |number| format!("{base}{number}")))
+fn numbered(base: &str, number: u32) -> String {
+    match number {
+        1 => base.to_string(),
+        _ => format!("{base}{number}"),
+    }
+}
+
+fn candidates<'s>(
+    base: &'s str,
+    shared: Option<&'s SharedUniqueState>,
+) -> impl Iterator<Item = (u32, String)> + 's {
+    let first = shared
+        .and_then(|state| next_number(state, base))
+        .unwrap_or(1)
+        .max(1);
+    let numbers = std::iter::once(first)
+        .filter(|&number| number == 1)
+        .chain((first.max(2)..).take(NUMBERED as usize));
+    numbers
+        .map(move |number| (number, numbered(base, number)))
+        .filter(move |(_, name)| !shared.is_some_and(|state| is_taken(state, name)))
 }
 
 pub fn decide(
@@ -65,16 +105,26 @@ pub fn decide(
     scoping: &Scoping,
     config: RenameConfig,
 ) -> RenamePlan {
+    decide_names(program, collected, scoping, config, None).0
+}
+
+fn decide_names(
+    program: &Program<'_>,
+    collected: &Collected,
+    scoping: &Scoping,
+    config: RenameConfig,
+    shared: Option<&SharedUniqueState>,
+) -> (RenamePlan, Vec<(String, String, u32)>) {
     let found = &collected.library;
     if found.names.is_empty() {
-        return RenamePlan::new();
+        return (RenamePlan::new(), Vec::new());
     }
     let text_read = match text_read_bindings(program, scoping) {
         TextReads::Bindings(pinned) => pinned,
         TextReads::Unknown => {
             let mut plan = RenamePlan::new();
             plan.notes.push(TEXT_READ_UNKNOWN.to_string());
-            return plan;
+            return (plan, Vec::new());
         }
     };
     let planned: Vec<(&BindingInfo, String)> = collected
@@ -88,8 +138,18 @@ pub fn decide(
         })
         .collect();
     let mut oracle = NameOracle::new(scoping, collected);
+    let mut chosen = Vec::new();
     for (info, base) in &planned {
-        let _ = oracle.take(info.symbol, candidates(base));
+        let numbers: Vec<(u32, String)> = candidates(base, shared).collect();
+        let taken = oracle.take(info.symbol, numbers.iter().map(|(_, name)| name.clone()));
+        let Some(name) = taken else {
+            continue;
+        };
+        let number = numbers
+            .iter()
+            .find(|(_, known)| *known == name)
+            .map_or(1, |(number, _)| *number);
+        chosen.push((base.clone(), name, number));
     }
-    oracle.into_plan()
+    (oracle.into_plan(), chosen)
 }

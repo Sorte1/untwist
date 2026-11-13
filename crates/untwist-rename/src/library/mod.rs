@@ -1,4 +1,5 @@
 pub mod annotate;
+mod cache;
 pub mod hash;
 pub mod pass;
 pub mod rename;
@@ -10,6 +11,7 @@ use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
+use std::sync::Arc;
 
 use shape::{exact_shape, shape_program, ExactShape, Unit, UnitKind};
 use table::{Role, Table};
@@ -17,26 +19,34 @@ use table::{Role, Table};
 pub const STRONG_LENGTH: u32 = 60;
 pub const STRONG_SPECIFIC: u32 = 2;
 
+pub type Ranges = Vec<(String, String)>;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Hit {
     pub label: String,
     pub versions: (String, String),
+    pub ranges: Ranges,
     pub modules: Vec<String>,
     pub role: Role,
     pub span: Span,
     pub kind: UnitKind,
     pub outermost: bool,
     pub reported: bool,
+    pub shared: bool,
     pub also: Vec<SameCode>,
 }
 
 impl Hit {
     pub fn range(&self) -> String {
-        version_range(&self.versions.0, &self.versions.1)
+        ranges_text(&self.ranges)
     }
 
     pub fn module_text(&self) -> String {
         self.modules.join(" | ")
+    }
+
+    pub fn labels(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.label.as_str()).chain(self.also.iter().map(|same| same.label.as_str()))
     }
 }
 
@@ -57,20 +67,36 @@ impl LibraryNames {
 pub struct SameCode {
     pub label: String,
     pub versions: (String, String),
+    pub ranges: Ranges,
     pub modules: Vec<String>,
 }
 
 impl SameCode {
     pub fn range(&self) -> String {
-        version_range(&self.versions.0, &self.versions.1)
+        ranges_text(&self.ranges)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Group {
+    label: String,
+    ranges: Ranges,
+    modules: Vec<String>,
+}
+
+impl Group {
+    fn same_code(&self) -> SameCode {
+        SameCode {
+            label: self.label.clone(),
+            versions: hull(&self.ranges),
+            ranges: self.ranges.clone(),
+            modules: self.modules.clone(),
+        }
     }
 }
 
 struct Merged {
-    also: Vec<SameCode>,
-    label: String,
-    versions: (String, String),
-    modules: Vec<String>,
+    groups: Vec<Group>,
     role: Role,
     own: Slot,
     inner: Vec<Slot>,
@@ -85,12 +111,12 @@ enum Slot {
 }
 
 impl Slot {
-    fn merge(&mut self, name: Option<&String>) {
+    fn merge(&mut self, name: Option<&str>) {
         let Some(name) = name else {
             return;
         };
         match self {
-            Slot::Unknown => *self = Slot::Name(name.clone()),
+            Slot::Unknown => *self = Slot::Name(name.to_string()),
             Slot::Name(existing) if existing != name => *self = Slot::Conflict,
             _ => {}
         }
@@ -111,16 +137,6 @@ pub(crate) fn version_key(version: &str) -> Vec<u64> {
         .collect()
 }
 
-fn bounds(versions: &str) -> Option<(String, String)> {
-    let mut all: Vec<&str> = versions
-        .split(',')
-        .flat_map(|range| range.split('~'))
-        .filter(|version| !version.is_empty())
-        .collect();
-    all.sort_by_key(|version| version_key(version));
-    Some((all.first()?.to_string(), all.last()?.to_string()))
-}
-
 fn short_version(version: &str) -> String {
     let parts: Vec<&str> = version.split('.').collect();
     match parts.as_slice() {
@@ -137,6 +153,102 @@ pub fn version_range(low: &str, high: &str) -> String {
     format!("{low}\u{2013}{high}")
 }
 
+pub const VERSIONS_DISAGREE: &str = "versions disagree";
+
+pub fn ranges_text(ranges: &[(String, String)]) -> String {
+    let mut short: Vec<(String, String)> = Vec::new();
+    for (low, high) in ranges {
+        let (low, high) = (short_version(low), short_version(high));
+        match short.last_mut() {
+            Some(last) if version_key(&last.1) >= version_key(&low) => {
+                if version_key(&high) > version_key(&last.1) {
+                    last.1 = high;
+                }
+            }
+            _ => short.push((low, high)),
+        }
+    }
+    if short.is_empty() {
+        return VERSIONS_DISAGREE.to_string();
+    }
+    short
+        .iter()
+        .map(|(low, high)| version_range(low, high))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub fn parse_ranges(versions: &str) -> Ranges {
+    let mut ranges: Ranges = versions
+        .split(',')
+        .map(str::trim)
+        .filter(|range| !range.is_empty())
+        .map(|range| {
+            let (low, high) = range
+                .split_once('~')
+                .or_else(|| range.split_once('\u{2013}'))
+                .unwrap_or((range, range));
+            (low.trim().to_string(), high.trim().to_string())
+        })
+        .filter(|(low, high)| version_key(low) <= version_key(high))
+        .collect();
+    normalise(&mut ranges);
+    ranges
+}
+
+fn normalise(ranges: &mut Ranges) {
+    ranges.sort_by(|a, b| version_key(&a.0).cmp(&version_key(&b.0)));
+    let mut merged: Ranges = Vec::with_capacity(ranges.len());
+    for (low, high) in ranges.drain(..) {
+        match merged.last_mut() {
+            Some(last) if version_key(&low) <= version_key(&last.1) => {
+                if version_key(&high) > version_key(&last.1) {
+                    last.1 = high;
+                }
+            }
+            _ => merged.push((low, high)),
+        }
+    }
+    *ranges = merged;
+}
+
+pub fn union_ranges(left: &[(String, String)], right: &[(String, String)]) -> Ranges {
+    let mut all: Ranges = left.iter().chain(right).cloned().collect();
+    normalise(&mut all);
+    all
+}
+
+pub fn intersect_ranges(left: &[(String, String)], right: &[(String, String)]) -> Ranges {
+    let mut out = Vec::new();
+    let (mut i, mut j) = (0, 0);
+    while i < left.len() && j < right.len() {
+        let (a, b) = (&left[i], &right[j]);
+        let low = if version_key(&a.0) >= version_key(&b.0) {
+            &a.0
+        } else {
+            &b.0
+        };
+        let a_ends_first = version_key(&a.1) <= version_key(&b.1);
+        let high = if a_ends_first { &a.1 } else { &b.1 };
+        if version_key(low) <= version_key(high) {
+            out.push((low.clone(), high.clone()));
+        }
+        if a_ends_first {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    out
+}
+
+fn hull(ranges: &[(String, String)]) -> (String, String) {
+    match (ranges.first(), ranges.last()) {
+        (Some(first), Some(last)) => (first.0.clone(), last.1.clone()),
+        _ => (String::new(), String::new()),
+    }
+}
+
 fn slot_of(name: Option<&str>) -> Slot {
     name.map_or(Slot::Unknown, |name| Slot::Name(name.to_string()))
 }
@@ -146,43 +258,25 @@ fn merge_slots(into: &mut Vec<Slot>, from: &[Option<&str>]) {
         into.resize(from.len(), Slot::Unknown);
     }
     for (slot, name) in into.iter_mut().zip(from) {
-        slot.merge(name.map(str::to_string).as_ref());
+        slot.merge(*name);
     }
 }
 
-type Windows = FxHashMap<String, (String, String)>;
+type Windows = FxHashMap<String, Ranges>;
 
-fn ranges(versions: &str) -> impl Iterator<Item = (&str, &str)> {
-    versions
-        .split(',')
-        .filter(|range| !range.is_empty())
-        .map(|range| range.split_once('~').unwrap_or((range, range)))
-}
-
-fn overlaps(versions: &str, window: &(String, String)) -> bool {
-    let (low, high) = (version_key(&window.0), version_key(&window.1));
-    ranges(versions).any(|(from, to)| version_key(from) <= high && version_key(to) >= low)
-}
-
-fn note_same_code(also: &mut Vec<SameCode>, label: &str, bounds: (String, String), module: String) {
-    let Some(entry) = also.iter_mut().find(|entry| entry.label == label) else {
-        also.push(SameCode {
+fn add_to_group(groups: &mut Vec<Group>, label: &str, ranges: Ranges, module: String) {
+    let Some(group) = groups.iter_mut().find(|group| group.label == label) else {
+        groups.push(Group {
             label: label.to_string(),
-            versions: bounds,
+            ranges,
             modules: vec![module],
         });
         return;
     };
-    if !entry.modules.contains(&module) {
-        entry.modules.push(module);
-        entry.modules.sort();
+    if !group.modules.contains(&module) {
+        group.modules.push(module);
     }
-    if version_key(&bounds.0) < version_key(&entry.versions.0) {
-        entry.versions.0 = bounds.0;
-    }
-    if version_key(&bounds.1) > version_key(&entry.versions.1) {
-        entry.versions.1 = bounds.1;
-    }
+    group.ranges = union_ranges(&group.ranges, &ranges);
 }
 
 fn merge_rows(table: &Table, shape: &ExactShape, windows: Option<&Windows>) -> Option<Merged> {
@@ -192,56 +286,36 @@ fn merge_rows(table: &Table, shape: &ExactShape, windows: Option<&Windows>) -> O
         if row.loose != loose {
             continue;
         }
-        let window = windows.and_then(|windows| windows.get(table.label(row)));
-        if window.is_some_and(|window| !overlaps(table.versions(row), window)) {
-            continue;
-        }
-        let row_bounds = bounds(table.versions(row))?;
         let label = table.label(row);
+        let mut ranges = parse_ranges(table.versions(row));
+        if let Some(window) = windows.and_then(|windows| windows.get(label)) {
+            ranges = intersect_ranges(&ranges, window);
+        }
+        if ranges.is_empty() {
+            continue;
+        }
         let module = table.module(row).to_string();
-        let Some(current) = merged.as_mut() else {
-            merged = Some(Merged {
-                also: Vec::new(),
-                label: label.to_string(),
-                versions: row_bounds,
-                modules: vec![module],
-                role: row.role,
-                own: slot_of(table.own(row)),
-                inner: table.inner(row).into_iter().map(slot_of).collect(),
-                outer: table.outer(row).into_iter().map(slot_of).collect(),
-            });
-            continue;
-        };
-        if current.label != label {
-            current
-                .own
-                .merge(table.own(row).map(str::to_string).as_ref());
-            merge_slots(&mut current.inner, &table.inner(row));
-            merge_slots(&mut current.outer, &table.outer(row));
-            note_same_code(&mut current.also, label, row_bounds, module);
-            continue;
-        }
-        current
-            .own
-            .merge(table.own(row).map(str::to_string).as_ref());
-        if current.own == Slot::Conflict && current.also.is_empty() {
-            return None;
-        }
-        if !current.modules.contains(&module) {
-            current.modules.push(module);
-        }
-        if version_key(&row_bounds.0) < version_key(&current.versions.0) {
-            current.versions.0 = row_bounds.0;
-        }
-        if version_key(&row_bounds.1) > version_key(&current.versions.1) {
-            current.versions.1 = row_bounds.1;
-        }
+        let current = merged.get_or_insert_with(|| Merged {
+            groups: Vec::new(),
+            role: row.role,
+            own: Slot::Unknown,
+            inner: Vec::new(),
+            outer: Vec::new(),
+        });
+        add_to_group(&mut current.groups, label, ranges, module);
         current.role = current.role.min(row.role);
+        current.own.merge(table.own(row));
         merge_slots(&mut current.inner, &table.inner(row));
         merge_slots(&mut current.outer, &table.outer(row));
     }
     let mut merged = merged?;
-    merged.modules.sort();
+    if merged.own == Slot::Conflict && merged.groups.len() == 1 {
+        return None;
+    }
+    for group in &mut merged.groups {
+        group.modules.sort();
+    }
+    merged.groups.sort_by(|a, b| a.label.cmp(&b.label));
     Some(merged)
 }
 
@@ -256,6 +330,13 @@ struct Candidate {
 struct Offers {
     names: FxHashMap<SymbolId, Option<String>>,
     seen: FxHashMap<SymbolId, Vec<String>>,
+    votes: FxHashMap<SymbolId, Option<String>>,
+}
+
+fn agree(entry: &mut Option<String>, name: &str) {
+    if entry.as_deref() != Some(name) {
+        *entry = None;
+    }
 }
 
 impl Offers {
@@ -264,36 +345,53 @@ impl Offers {
         if !seen.iter().any(|known| known == name) {
             seen.push(name.to_string());
         }
-        let entry = self
-            .names
-            .entry(symbol)
-            .or_insert_with(|| Some(name.to_string()));
-        if entry.as_deref() != Some(name) {
-            *entry = None;
-        }
+        agree(
+            self.names
+                .entry(symbol)
+                .or_insert_with(|| Some(name.to_string())),
+            name,
+        );
     }
 
-    fn has(&self, symbol: SymbolId, name: &str) -> bool {
-        self.names
-            .get(&symbol)
-            .is_some_and(|offered| offered.as_deref() == Some(name))
+    fn vote(&mut self, symbol: SymbolId, name: &str) {
+        agree(
+            self.votes
+                .entry(symbol)
+                .or_insert_with(|| Some(name.to_string())),
+            name,
+        );
     }
 
-    fn offer_candidate(&mut self, unit: &Unit<'_, '_>, candidate: &Candidate) {
-        if let (Some(binding), Some(own)) = (unit.binding, candidate.merged.own.name()) {
-            self.offer(binding, own);
-        }
-        let slots = [
-            (&candidate.shape.inner, &candidate.merged.inner),
-            (&candidate.shape.outer, &candidate.merged.outer),
-        ];
-        for (symbols, names) in slots {
-            for (symbol, name) in symbols.iter().zip(names) {
-                if let Some(name) = name.name() {
-                    self.offer(*symbol, name);
-                }
+    fn vouches(&self, symbol: SymbolId, name: &str) -> bool {
+        let agreed = |map: &FxHashMap<SymbolId, Option<String>>| {
+            map.get(&symbol)
+                .is_some_and(|offered| offered.as_deref() == Some(name))
+        };
+        agreed(&self.names) || agreed(&self.votes)
+    }
+}
+
+struct Bound {
+    spans: FxHashMap<SymbolId, Vec<Span>>,
+}
+
+impl Bound {
+    fn new(units: &[Unit<'_, '_>]) -> Self {
+        let mut spans: FxHashMap<SymbolId, Vec<Span>> = FxHashMap::default();
+        for unit in units.iter().filter(|unit| unit.kind == UnitKind::Function) {
+            if let Some(binding) = unit.binding {
+                spans.entry(binding).or_default().push(unit.span);
             }
         }
+        Self { spans }
+    }
+
+    fn defined_outside(&self, symbol: SymbolId, within: Span) -> bool {
+        self.spans.get(&symbol).is_some_and(|spans| {
+            spans
+                .iter()
+                .any(|span| !(within.start <= span.start && span.end <= within.end))
+        })
     }
 }
 
@@ -331,101 +429,230 @@ fn candidates(
         .collect()
 }
 
+fn single_group(candidate: &Candidate) -> Option<&Group> {
+    match candidate.merged.groups.as_slice() {
+        [group] => Some(group),
+        _ => None,
+    }
+}
+
 fn windows(candidates: &[Candidate]) -> Windows {
-    let mut windows: FxHashMap<String, Option<(String, String)>> = FxHashMap::default();
-    for candidate in candidates
+    let mut windows: Windows = FxHashMap::default();
+    let mut empty: rustc_hash::FxHashSet<String> = rustc_hash::FxHashSet::default();
+    for group in candidates
         .iter()
-        .filter(|candidate| candidate.strong && candidate.merged.modules.len() == 1)
+        .filter(|candidate| candidate.strong)
+        .filter_map(single_group)
+        .filter(|group| group.modules.len() == 1)
     {
-        let (low, high) = &candidate.merged.versions;
-        let entry = windows
-            .entry(candidate.merged.label.clone())
-            .or_insert_with(|| Some((low.clone(), high.clone())));
-        let Some(window) = entry else {
+        if empty.contains(&group.label) {
             continue;
+        }
+        let window = match windows.get(&group.label) {
+            Some(window) => intersect_ranges(window, &group.ranges),
+            None => group.ranges.clone(),
         };
-        if version_key(low) > version_key(&window.0) {
-            window.0 = low.clone();
+        if window.is_empty() {
+            windows.remove(&group.label);
+            empty.insert(group.label.clone());
+            continue;
         }
-        if version_key(high) < version_key(&window.1) {
-            window.1 = high.clone();
-        }
-        if version_key(&window.0) > version_key(&window.1) {
-            *entry = None;
-        }
+        windows.insert(group.label.clone(), window);
     }
     windows
-        .into_iter()
-        .filter_map(|(label, window)| Some((label, window?)))
-        .collect()
+}
+
+struct Acceptance<'u, 'n, 'a> {
+    units: &'u [Unit<'n, 'a>],
+    candidates: &'u [Candidate],
+    bound: Bound,
+    offers: Offers,
+    accepted: Vec<Option<bool>>,
+    waiting: FxHashMap<SymbolId, Vec<usize>>,
+    queue: Vec<usize>,
+}
+
+fn binding_and_own<'c>(
+    units: &[Unit<'_, '_>],
+    candidates: &'c [Candidate],
+    index: usize,
+) -> Option<(SymbolId, &'c str)> {
+    let candidate = &candidates[index];
+    units[candidate.unit_index]
+        .binding
+        .zip(candidate.merged.own.name())
+}
+
+impl Acceptance<'_, '_, '_> {
+    fn give(&mut self, index: usize) {
+        let (units, candidates) = (self.units, self.candidates);
+        let candidate = &candidates[index];
+        let unit = &units[candidate.unit_index];
+        let mut touched: Vec<SymbolId> = Vec::new();
+        if let Some((binding, own)) = binding_and_own(units, candidates, index) {
+            self.offers.offer(binding, own);
+            touched.push(binding);
+        }
+        for (symbol, name) in candidate.shape.inner.iter().zip(&candidate.merged.inner) {
+            if let Some(name) = name.name() {
+                self.offers.offer(*symbol, name);
+                touched.push(*symbol);
+            }
+        }
+        for (symbol, name) in candidate.shape.outer.iter().zip(&candidate.merged.outer) {
+            let Some(name) = name.name() else {
+                continue;
+            };
+            match self.bound.defined_outside(*symbol, unit.span) {
+                true => self.offers.vote(*symbol, name),
+                false => self.offers.offer(*symbol, name),
+            }
+            touched.push(*symbol);
+        }
+        for symbol in touched {
+            self.wake(symbol);
+        }
+    }
+
+    fn wake(&mut self, symbol: SymbolId) {
+        let Some(waiting) = self.waiting.get(&symbol) else {
+            return;
+        };
+        for &index in waiting {
+            if self.accepted[index].is_some() {
+                continue;
+            }
+            let vouched = binding_and_own(self.units, self.candidates, index)
+                .is_some_and(|(binding, own)| self.offers.vouches(binding, own));
+            if vouched {
+                self.accepted[index] = Some(false);
+                self.queue.push(index);
+            }
+        }
+    }
+
+    fn run(mut self) -> (Vec<(usize, bool)>, Offers) {
+        for index in 0..self.candidates.len() {
+            if self.candidates[index].strong {
+                self.accepted[index] = Some(true);
+                continue;
+            }
+            if let Some((binding, _)) = binding_and_own(self.units, self.candidates, index) {
+                self.waiting.entry(binding).or_default().push(index);
+            }
+        }
+        for index in 0..self.candidates.len() {
+            if self.accepted[index] == Some(true) {
+                self.give(index);
+            }
+        }
+        while let Some(index) = self.queue.pop() {
+            self.give(index);
+        }
+        let accepted = self
+            .accepted
+            .iter()
+            .enumerate()
+            .filter_map(|(index, strong)| Some((index, (*strong)?)))
+            .collect();
+        (accepted, self.offers)
+    }
 }
 
 fn accept(units: &[Unit<'_, '_>], candidates: &[Candidate]) -> (Vec<(usize, bool)>, Offers) {
-    let mut offers = Offers::default();
-    let mut accepted: Vec<(usize, bool)> = Vec::new();
-    for (index, candidate) in candidates.iter().enumerate() {
-        if candidate.strong {
-            offers.offer_candidate(&units[candidate.unit_index], candidate);
-            accepted.push((index, true));
-        }
+    Acceptance {
+        units,
+        candidates,
+        bound: Bound::new(units),
+        offers: Offers::default(),
+        accepted: vec![None; candidates.len()],
+        waiting: FxHashMap::default(),
+        queue: Vec::new(),
     }
-    loop {
-        let before = accepted.len();
-        for (index, candidate) in candidates.iter().enumerate() {
-            if accepted.iter().any(|(known, _)| *known == index) {
-                continue;
-            }
-            let unit = &units[candidate.unit_index];
-            let corroborated = unit
-                .binding
-                .zip(candidate.merged.own.name())
-                .is_some_and(|(binding, own)| offers.has(binding, own));
-            if corroborated {
-                offers.offer_candidate(unit, candidate);
-                accepted.push((index, false));
-            }
-        }
-        if accepted.len() == before {
-            break;
-        }
-    }
-    accepted.sort_unstable();
-    (accepted, offers)
+    .run()
 }
 
-fn contains(outer: Span, inner: Span) -> bool {
-    outer != inner && outer.start <= inner.start && inner.end <= outer.end
+fn context(candidates: &[Candidate], accepted: &[(usize, bool)]) -> FxHashMap<String, usize> {
+    let mut counts: FxHashMap<String, usize> = FxHashMap::default();
+    for group in accepted
+        .iter()
+        .filter(|(_, strong)| *strong)
+        .filter_map(|(index, _)| single_group(&candidates[*index]))
+    {
+        *counts.entry(group.label.clone()).or_default() += 1;
+    }
+    counts
+}
+
+fn primary(groups: &[Group], counts: &FxHashMap<String, usize>) -> (usize, bool) {
+    let score = |group: &Group| counts.get(&group.label).copied().unwrap_or(0);
+    let best = groups.iter().map(score).max().unwrap_or(0);
+    let leaders: Vec<usize> = (0..groups.len())
+        .filter(|&index| score(&groups[index]) == best)
+        .collect();
+    (leaders[0], leaders.len() > 1)
+}
+
+fn mark_outermost(hits: &mut [Hit]) {
+    let mut open: Vec<usize> = Vec::new();
+    let mut labels: FxHashMap<String, usize> = FxHashMap::default();
+    for index in 0..hits.len() {
+        let span = hits[index].span;
+        while let Some(&top) = open.last() {
+            let outer = hits[top].span;
+            if outer != span && outer.start <= span.start && span.end <= outer.end {
+                break;
+            }
+            open.pop();
+            for label in hits[top].labels() {
+                if let Some(count) = labels.get_mut(label) {
+                    *count -= 1;
+                }
+            }
+        }
+        let nested = hits[index]
+            .labels()
+            .any(|label| labels.get(label).is_some_and(|count| *count > 0));
+        hits[index].outermost = !nested;
+        for label in hits[index].labels() {
+            *labels.entry(label.to_string()).or_default() += 1;
+        }
+        open.push(index);
+    }
 }
 
 fn hits(units: &[Unit<'_, '_>], candidates: &[Candidate], accepted: &[(usize, bool)]) -> Vec<Hit> {
+    let counts = context(candidates, accepted);
     let mut hits: Vec<Hit> = accepted
         .iter()
         .map(|&(index, strong)| {
             let candidate = &candidates[index];
             let unit = &units[candidate.unit_index];
+            let groups = &candidate.merged.groups;
+            let (chosen, shared) = primary(groups, &counts);
+            let main = &groups[chosen];
             Hit {
-                label: candidate.merged.label.clone(),
-                versions: candidate.merged.versions.clone(),
-                modules: candidate.merged.modules.clone(),
+                label: main.label.clone(),
+                versions: hull(&main.ranges),
+                ranges: main.ranges.clone(),
+                modules: main.modules.clone(),
                 role: candidate.merged.role,
                 span: unit.span,
                 kind: unit.kind,
                 outermost: true,
                 reported: strong || candidate.merged.role != Role::Function,
-                also: candidate.merged.also.clone(),
+                shared,
+                also: groups
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != chosen)
+                    .map(|(_, group)| group.same_code())
+                    .collect(),
             }
         })
         .collect();
-    let snapshot: Vec<(Span, String)> = hits
-        .iter()
-        .map(|hit| (hit.span, hit.label.clone()))
-        .collect();
-    for hit in &mut hits {
-        hit.outermost = !snapshot
-            .iter()
-            .any(|(span, label)| contains(*span, hit.span) && *label == hit.label);
-    }
     hits.sort_by_key(|hit| (hit.span.start, std::cmp::Reverse(hit.span.end)));
+    mark_outermost(&mut hits);
     hits
 }
 
@@ -434,7 +661,11 @@ pub fn match_with(table: &Table, program: &Program<'_>, scoping: &Scoping) -> Li
         return LibraryNames::default();
     }
     let shaped = shape_program(program, scoping);
-    let probes = probes(table, &shaped.units, &shaped, scoping);
+    match_shaped(table, &shaped, scoping)
+}
+
+fn match_shaped(table: &Table, shaped: &shape::Shaped<'_, '_>, scoping: &Scoping) -> LibraryNames {
+    let probes = probes(table, &shaped.units, shaped, scoping);
     let first = candidates(table, &probes, None);
     if first.is_empty() {
         return LibraryNames::default();
@@ -469,8 +700,8 @@ pub fn match_with(table: &Table, program: &Program<'_>, scoping: &Scoping) -> Li
     }
 }
 
-pub fn match_program(program: &Program<'_>, scoping: &Scoping) -> LibraryNames {
-    match_with(&table::current(), program, scoping)
+pub fn match_program(program: &Program<'_>, scoping: &Scoping) -> Arc<LibraryNames> {
+    cache::matched(&table::current(), program, scoping, match_shaped)
 }
 
 pub struct UnitRecord {

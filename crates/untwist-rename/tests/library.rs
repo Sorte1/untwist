@@ -435,3 +435,486 @@ fn a_shape_two_libraries_share_names_both_and_keeps_only_agreed_names() {
         "{names:?}"
     );
 }
+
+fn program_shape(source: &str) -> (u128, (u32, u64)) {
+    records(source)
+        .into_iter()
+        .find(|record| record.kind == untwist_rename::library::shape::UnitKind::Program)
+        .map(|record| (record.exact, record.loose))
+        .expect("the program is a unit")
+}
+
+#[test]
+fn an_arrow_that_reads_this_arguments_super_or_new_target_is_not_a_function() {
+    for body in ["this", "arguments", "eval(\"this\")"] {
+        assert!(
+            !same_shape(
+                &format!("const a = function () {{ return {body}; }};"),
+                &format!("const a = () => {body};"),
+            ),
+            "{body}"
+        );
+    }
+    assert!(!same_shape(
+        "const a = function () { return () => this; };",
+        "const a = () => () => this;",
+    ));
+    assert!(!same_shape(
+        "class A extends B { m() { const f = function () { return new.target; }; } }",
+        "class A extends B { m() { const f = () => new.target; } }",
+    ));
+    assert!(same_shape(
+        "const a = function (b) { return b.c; };",
+        "const a = (b) => b.c;"
+    ));
+}
+
+#[test]
+fn absent_for_slots_keep_their_position() {
+    let shapes = [
+        "function f(a, b) { for (; a; b) {} }",
+        "function f(a, b) { for (a; b;) {} }",
+        "function f(a, b) { for (a;; b) {} }",
+    ];
+    for (index, left) in shapes.iter().enumerate() {
+        for right in &shapes[index + 1..] {
+            assert!(!same_shape(left, right), "{left} = {right}");
+        }
+    }
+}
+
+#[test]
+fn labels_are_told_apart_by_first_use_not_by_name() {
+    let jump = |target: &str| {
+        format!("function f(c) {{ outer: for (;;) {{ inner: for (;;) {{ if (c) continue {target}; c(); }} }} }}")
+    };
+    assert!(!same_shape(&jump("outer"), &jump("inner")));
+    assert!(same_shape(
+        &jump("outer"),
+        &jump("outer").replace("outer", "x").replace("inner", "y")
+    ));
+}
+
+#[test]
+fn the_try_block_and_the_finally_block_stay_apart() {
+    assert!(!same_shape(
+        "function f(a, b) { try { a(); } finally { b(); } }",
+        "function f(a, b) { try { a(); b(); } finally {} }",
+    ));
+}
+
+#[test]
+fn declaration_kinds_stay_apart_where_they_change_behaviour() {
+    let pairs = [
+        (
+            "function f(a, s) { for (const i of a) { var x = i; s.push(() => x); } }",
+            "function f(a, s) { for (const i of a) { let x = i; s.push(() => x); } }",
+        ),
+        (
+            "function f(a, s) { for (const i of a) { var x; if (i) x = i; s(x); } }",
+            "function f(a, s) { for (const i of a) { let x; if (i) x = i; s(x); } }",
+        ),
+        (
+            "function f(a) { var x = a; x = 2; return x; }",
+            "function f(a) { const x = a; x = 2; return x; }",
+        ),
+        (
+            "function f(a) { g(); var x = a; function g() { return x; } return x; }",
+            "function f(a) { g(); const x = a; function g() { return x; } return x; }",
+        ),
+        (
+            "function f(a, k) { switch (k) { case 1: var x = a; case 2: return x; } }",
+            "function f(a, k) { switch (k) { case 1: let x = a; case 2: return x; } }",
+        ),
+        (
+            "function f(a) { var x = x + a; return x; }",
+            "function f(a) { const x = x + a; return x; }",
+        ),
+        (
+            "function f(a) { for (var i = 0; i < a.length; i++) a[i] = () => i; }",
+            "function f(a) { for (let i = 0; i < a.length; i++) a[i] = () => i; }",
+        ),
+    ];
+    for (left, right) in pairs {
+        assert!(!same_shape(left, right), "{left} = {right}");
+    }
+}
+
+#[test]
+fn a_single_definition_before_every_use_is_one_shape_whatever_its_kind() {
+    assert!(same_shape(
+        "function f(a) { if (a) { var x; x = a.b; return x.c; } }",
+        "function f(a) { if (a) { const x = a.b; return x.c; } }",
+    ));
+    assert!(same_shape(
+        "function f(a) { let x; x = a.b; x = x.c; return x; }",
+        "function f(a) { var x = a.b; x = x.c; return x; }",
+    ));
+}
+
+#[test]
+fn a_computed_or_shorthand_proto_key_is_not_the_prototype_setter() {
+    assert!(!same_shape(
+        "function f() { return { [\"__proto__\"]: [] }; }",
+        "function f() { return { __proto__: [] }; }",
+    ));
+    assert!(!same_shape(
+        "function f(__proto__) { return { __proto__ }; }",
+        "function f(__proto__) { return { __proto__: __proto__ }; }",
+    ));
+    assert!(same_shape(
+        "function f() { return { \"__proto__\": [] }; }",
+        "function f() { return { __proto__: [] }; }",
+    ));
+    assert!(same_shape(
+        "function f() { return { [\"a\"]: [] }; }",
+        "function f() { return { a: [] }; }",
+    ));
+}
+
+#[test]
+fn typeof_equality_is_loosened_only_against_a_string_literal() {
+    assert!(!same_shape(
+        "function f(a, b) { return typeof a === b; }",
+        "function f(a, b) { return typeof a == b; }",
+    ));
+    assert!(same_shape(
+        "function f(a) { return typeof a === \"object\"; }",
+        "function f(a) { return typeof a == \"object\"; }",
+    ));
+}
+
+#[test]
+fn the_whole_program_shape_tells_the_canonical_forms_apart_too() {
+    assert_ne!(
+        program_shape("for (; a; b) {}"),
+        program_shape("for (a; b;) {}")
+    );
+}
+
+const CALLER: &str = "function inherit(d, b) {
+  record(d, b);
+  function __() { this.constructor = d; }
+  d.prototype = b === null ? Object.create(b) : ((__.prototype = b.prototype), new __());
+}
+var log = [];
+function record(d, b) { log.push(typeof d + \"<\" + typeof b); }
+";
+
+fn caller_row(outer: &[&str]) -> RowData {
+    let record = records(CALLER)
+        .into_iter()
+        .find(|record| record.binding.as_deref() == Some("inherit"))
+        .expect("the caller is a unit");
+    RowData {
+        loose: loose_key(record.loose),
+        exact: exact_key(record.exact),
+        label: "tslib".to_string(),
+        versions: "2.0.0".to_string(),
+        module: "tslib".to_string(),
+        role: Role::Function,
+        own: Some("__extends".to_string()),
+        inner: Vec::new(),
+        outer: outer.iter().map(|name| Some(name.to_string())).collect(),
+        specific: record.specific.max(2),
+    }
+}
+
+#[test]
+fn an_outer_function_is_named_only_when_its_own_code_matched() {
+    let table = Table::from_rows(&[caller_row(&["extendStatics"])]);
+    let names = names_after(&table, CALLER);
+    assert!(
+        names.contains(&("inherit".to_string(), "__extends".to_string())),
+        "{names:?}"
+    );
+    assert!(!names.iter().any(|(old, _)| old == "record"), "{names:?}");
+}
+
+#[test]
+fn an_outer_function_whose_own_code_matched_takes_the_callers_name() {
+    let callee = records(CALLER)
+        .into_iter()
+        .find(|record| record.binding.as_deref() == Some("record"))
+        .expect("the callee is a unit");
+    let callee_row = RowData {
+        loose: loose_key(callee.loose),
+        exact: exact_key(callee.exact),
+        label: "tslib".to_string(),
+        versions: "2.0.0".to_string(),
+        module: "tslib".to_string(),
+        role: Role::Function,
+        own: Some("extendStatics".to_string()),
+        inner: Vec::new(),
+        outer: Vec::new(),
+        specific: callee.specific,
+    };
+    let table = Table::from_rows(&[caller_row(&["extendStatics"]), callee_row]);
+    let names = names_after(&table, CALLER);
+    assert!(
+        names.contains(&("record".to_string(), "extendStatics".to_string())),
+        "{names:?}"
+    );
+}
+
+#[test]
+fn an_outer_plain_variable_keeps_its_library_name() {
+    let source = "var store = {};
+function wrapper(key) {
+  if (typeof key != \"string\") { throw new TypeError(\"shared-key wants a string key, got \" + typeof key); }
+  return store[key] || (store[key] = { id: key, kind: \"shared-key\", made: Date.now(), tag: Symbol(key) });
+}";
+    let record = records(source)
+        .into_iter()
+        .find(|record| record.binding.as_deref() == Some("wrapper"))
+        .expect("unit");
+    let row = RowData {
+        loose: loose_key(record.loose),
+        exact: exact_key(record.exact),
+        label: "core-js".to_string(),
+        versions: "3.39.0".to_string(),
+        module: "internals/shared-key".to_string(),
+        role: Role::Function,
+        own: Some("sharedKey".to_string()),
+        inner: vec![Some("key".to_string())],
+        outer: vec![Some("keys".to_string())],
+        specific: record.specific.max(2),
+    };
+    let names = names_after(&Table::from_rows(&[row]), source);
+    assert!(
+        names.contains(&("store".to_string(), "keys".to_string())),
+        "{names:?}"
+    );
+}
+
+fn shared_rows(source: &str, labels: &[(&str, &str)]) -> Vec<RowData> {
+    labels
+        .iter()
+        .map(|(label, module)| {
+            let mut row = row_for(source, module, "requireGetBuiltIn", &INNER[..4], &OUTER);
+            row.label = label.to_string();
+            row
+        })
+        .collect()
+}
+
+#[test]
+fn a_shared_shape_takes_the_label_the_rest_of_the_program_agrees_with() {
+    let other = GET_BUILT_IN.replace("arguments.length < 2", "arguments.length < 5");
+    let mut rows = shared_rows(
+        GET_BUILT_IN,
+        &[("aaa-helpers", "helpers/x"), ("core-js", "internals/get-built-in")],
+    );
+    rows.extend(shared_rows(&other, &[("core-js", "internals/other")]));
+    let table = Table::from_rows(&rows);
+    let source = format!("{GET_BUILT_IN}\n{}", other.replace("wrapper", "wrapper2"));
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, &source);
+    let sem = build_scoping(&parsed.program);
+    let found = match_with(&table, &parsed.program, &sem.scoping);
+    let shared = found
+        .hits
+        .iter()
+        .find(|hit| !hit.also.is_empty())
+        .expect("the shared shape is a hit");
+    assert_eq!(shared.label, "core-js");
+    assert!(!shared.shared);
+    assert_eq!(shared.also[0].label, "aaa-helpers");
+}
+
+#[test]
+fn a_shared_shape_without_context_names_both_and_counts_for_neither() {
+    let rows = shared_rows(
+        GET_BUILT_IN,
+        &[("zzz-helpers", "helpers/x"), ("core-js", "internals/get-built-in")],
+    );
+    let table = Table::from_rows(&rows);
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, GET_BUILT_IN);
+    let sem = build_scoping(&parsed.program);
+    let found = match_with(&table, &parsed.program, &sem.scoping);
+    let hit = found.hits.iter().find(|hit| hit.outermost).expect("hit");
+    assert!(hit.shared);
+    let reported: Vec<&untwist_rename::library::Hit> = found.hits.iter().collect();
+    assert!(untwist_rename::library::pass::summary_notes(&reported).is_empty());
+    let text = untwist_rename::library::annotate::comment_text(hit);
+    assert!(text.contains("core-js") && text.contains("zzz-helpers"), "{text}");
+}
+
+#[test]
+fn a_unit_inside_a_hit_of_any_of_its_labels_gets_no_comment_of_its_own() {
+    let inner_source = "function (n, m) {
+    return arguments.length < 2 ? (c(g[n]) ? g[n] : undefined) : g[n] && g[n][m];
+  }";
+    let inner = records(GET_BUILT_IN)
+        .into_iter()
+        .find(|record| record.binding.as_deref() == Some("value"))
+        .expect("the inner function is a unit");
+    assert!(GET_BUILT_IN.contains(inner_source));
+    let mut rows = shared_rows(GET_BUILT_IN, &[("core-js", "internals/get-built-in")]);
+    for label in ["aaa-helpers", "core-js"] {
+        rows.push(RowData {
+            loose: loose_key(inner.loose),
+            exact: exact_key(inner.exact),
+            label: label.to_string(),
+            versions: "3.39.0".to_string(),
+            module: "helpers/get".to_string(),
+            role: Role::Export,
+            own: Some("getBuiltIn".to_string()),
+            inner: Vec::new(),
+            outer: Vec::new(),
+            specific: inner.specific,
+        });
+    }
+    let table = Table::from_rows(&rows);
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, GET_BUILT_IN);
+    let sem = build_scoping(&parsed.program);
+    let found = match_with(&table, &parsed.program, &sem.scoping);
+    let outermost: Vec<&str> = found
+        .hits
+        .iter()
+        .filter(|hit| hit.outermost)
+        .flat_map(|hit| hit.modules.iter().map(String::as_str))
+        .collect();
+    assert_eq!(outermost, ["internals/get-built-in"]);
+}
+
+mod summaries {
+    use untwist_rename::library::pass::{summaries, summary_notes};
+    use untwist_rename::library::shape::UnitKind;
+    use untwist_rename::library::table::Role;
+    use untwist_rename::library::{intersect_ranges, parse_ranges, ranges_text, Hit};
+
+    fn hit(modules: &[&str], versions: &str, start: u32) -> Hit {
+        let ranges = parse_ranges(versions);
+        Hit {
+            label: "tslib".to_string(),
+            versions: (ranges[0].0.clone(), ranges[ranges.len() - 1].1.clone()),
+            ranges,
+            modules: modules.iter().map(|module| module.to_string()).collect(),
+            role: Role::Function,
+            span: oxc_span::Span::new(start, start + 10),
+            kind: UnitKind::Function,
+            outermost: true,
+            reported: true,
+            shared: false,
+            also: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_unit_found_in_several_modules_counts_once() {
+        let one = hit(&["tslib", "tslib.es6"], "1.10.0~2.9.0", 0);
+        let notes = summary_notes(&[&one]);
+        assert_eq!(notes, ["library: tslib@1.10\u{2013}2.9, 1 module recognised"]);
+        let twice = hit(&["tslib", "tslib.es6"], "1.10.0~2.9.0", 20);
+        assert!(summary_notes(&[&one, &twice])[0].ends_with(", 1 module recognised"));
+    }
+
+    #[test]
+    fn the_range_is_the_intersection_of_the_version_sets() {
+        let gap = hit(&["a"], "3.0.0~3.5.0,3.30.0~3.39.0", 0);
+        let middle = hit(&["b"], "3.10.0~3.20.0", 20);
+        assert_eq!(
+            summary_notes(&[&gap, &middle]),
+            ["library: tslib@versions disagree, 2 modules recognised"]
+        );
+        let late = hit(&["c"], "3.35.0~3.50.0", 40);
+        assert_eq!(
+            summary_notes(&[&gap, &late]),
+            ["library: tslib@3.35\u{2013}3.39, 2 modules recognised"]
+        );
+        assert_eq!(ranges_text(&parse_ranges("3.0.0~3.5.0,3.30.0~3.39.0")), "3.0\u{2013}3.5, 3.30\u{2013}3.39");
+        assert!(intersect_ranges(&parse_ranges("1.0.0~1.2.0"), &parse_ranges("1.3.0~1.4.0")).is_empty());
+    }
+
+    #[test]
+    fn programs_that_disagree_on_versions_say_so() {
+        let merged = summaries([
+            "library: tslib@1.10\u{2013}1.14, 2 modules recognised",
+            "library: tslib@2.0\u{2013}2.9, 3 modules recognised",
+        ]);
+        assert_eq!(merged[0].range, "versions disagree");
+        assert_eq!(merged[0].modules, 5);
+        let gap = summaries(["library: tslib@1.0\u{2013}1.5, 1.8\u{2013}2.1, 1 module recognised"]);
+        assert_eq!(gap[0].range, "1.0\u{2013}1.5, 1.8\u{2013}2.1");
+    }
+}
+
+#[test]
+fn a_label_with_a_line_terminator_stays_inside_its_comment() {
+    let mut row = row_for(GET_BUILT_IN, "internals/a\u{2028}b\nc", "requireGetBuiltIn", &INNER[..4], &OUTER);
+    row.label = "evil\u{2029}lib\r".to_string();
+    let table = Table::from_rows(&[row]);
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, GET_BUILT_IN);
+    let sem = build_scoping(&parsed.program);
+    let found = match_with(&table, &parsed.program, &sem.scoping);
+    let hit = found.hits.iter().find(|hit| hit.outermost).expect("hit");
+    let text = untwist_rename::library::annotate::comment_text(hit);
+    assert!(
+        !text.contains(['\n', '\r', '\u{2028}', '\u{2029}']),
+        "{text:?}"
+    );
+    assert!(text.contains("evil\\u2029lib\\r") && text.contains("a\\u2028b\\nc"), "{text}");
+}
+
+#[test]
+fn a_table_that_claims_too_many_rows_is_refused_without_allocating_them() {
+    let text = "#untwist-library-table\tv2\tx\n#strings\t1\n-\n#lists\t0\n#rows\t18446744073709551615\n";
+    assert!(Table::parse(text).is_some_and(|table| table.rows.is_empty()));
+}
+
+#[test]
+fn an_inflated_table_over_the_limit_is_refused() {
+    let big = "a".repeat(4096);
+    let data = gzip(&big);
+    assert!(untwist_rename::library::table::inflate_with_limit(&data, 1024).is_none());
+    assert_eq!(
+        untwist_rename::library::table::inflate_with_limit(&data, 8192).as_deref(),
+        Some(big.as_str())
+    );
+}
+
+#[test]
+fn matching_grows_linearly_with_the_number_of_matched_copies() {
+    let row = row_for(GET_BUILT_IN, "internals/get-built-in", "requireGetBuiltIn", &INNER[..4], &OUTER);
+    let table = Table::from_rows(&[row]);
+    let copies = |count: usize| {
+        (0..count)
+            .map(|index| GET_BUILT_IN.replace("wrapper", &format!("wrapper{index}")))
+            .collect::<String>()
+    };
+    let time = |source: &str| {
+        let alloc = Allocator::default();
+        let parsed = parse_program(&alloc, source);
+        let sem = build_scoping(&parsed.program);
+        (0..3)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                let found = match_with(&table, &parsed.program, &sem.scoping);
+                assert!(!found.hits.is_empty());
+                started.elapsed()
+            })
+            .min()
+            .expect("three runs")
+    };
+    let (small, large) = (copies(500), copies(4000));
+    let ratio = time(&large).as_secs_f64() / time(&small).as_secs_f64().max(1e-6);
+    assert!(ratio < 24.0, "8x the copies took {ratio:.1}x the time");
+}
+
+#[test]
+fn a_program_is_matched_once_while_only_names_change() {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, "function __rest(s, e) { var t = {}; for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0) t[p] = s[p]; return t; }");
+    let sem = build_scoping(&parsed.program);
+    let first = untwist_rename::library::match_program(&parsed.program, &sem.scoping);
+    let again = untwist_rename::library::match_program(&parsed.program, &sem.scoping);
+    assert!(std::sync::Arc::ptr_eq(&first, &again));
+    let other = parse_program(&alloc, "function __rest(s, e) { return s; }");
+    let other_sem = build_scoping(&other.program);
+    let different = untwist_rename::library::match_program(&other.program, &other_sem.scoping);
+    assert!(!std::sync::Arc::ptr_eq(&first, &different));
+}
