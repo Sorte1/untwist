@@ -13,17 +13,18 @@ const BUILTINS = [...builtinModules, ...builtinModules.map((name) => `node:${nam
 const args = process.argv.slice(2);
 const only = new RegExp(args[0] ?? ".");
 
-async function bundles(entry, source) {
+async function bundles(entry, source, which = "both") {
   const dir = join(CORPUS, entry.root, "node_modules", ".wide-check", entry.alias);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, "index.js");
   writeFileSync(file, source);
   const { build } = require("esbuild");
-  try {
+  if (which !== "rollup") try {
     await build({ entryPoints: [file], bundle: true, write: false, platform: "browser", format: "iife", logLevel: "silent", external: BUILTINS, absWorkingDir: dir });
   } catch (error) {
     return `esbuild: ${String(error.message).split("\n").slice(0, 2).join(" ")}`;
   }
+  if (which === "esbuild") return null;
   const { rollup } = await import(pathToFileURL(require.resolve("rollup")).href);
   const commonjs = (await import(pathToFileURL(join(CORPUS, "node_modules/@rollup/plugin-commonjs/dist/es/index.js")).href)).default;
   const nodeResolve = (await import(pathToFileURL(join(CORPUS, "node_modules/@rollup/plugin-node-resolve/dist/es/index.js")).href)).default;
@@ -44,8 +45,8 @@ const log = [];
 for (const name of specs) {
   const spec = (await import(pathToFileURL(join(HERE, "libraries", name)).href)).default;
   for (const version of spec.versions) {
-    const entry = entries().find((candidate) => candidate.alias === version.dir);
-    const source = spec.entry(version.dir);
+    const entry = entries().find((candidate) => candidate.alias === version.dir && candidate.version === version.version);
+    const source = spec.entry(version.dir, version);
     const failure = await bundles(entry, source);
     if (!failure) {
       log.push([spec.id, version.version, "ok", source.split("\n").length - 2].join("\t"));
@@ -56,9 +57,14 @@ for (const name of specs) {
       .map((specifier) => specifier.replace(`${packageDir(entry)}/`, "").replace(`${entry.alias}/`, ""));
     const mainFails = await bundles(entry, `import * as m0 from ${JSON.stringify(entry.alias)};\nglobalThis.k = m0;\n`);
     for (const rel of rels) {
-      if (await bundles(entry, entrySource(entry, [rel], { main: false }))) bad.push(rel);
+      if (await bundles(entry, entrySource(entry, [rel], { main: false }), "esbuild")) bad.push(rel);
     }
-    excludes[entry.alias] = mainFails ? ["<main>", ...bad] : bad;
+    if (await bundles(entry, entrySource(entry, rels.filter((rel) => !bad.includes(rel)), { main: !mainFails }), "rollup")) {
+      for (const rel of rels) {
+        if (!bad.includes(rel) && await bundles(entry, entrySource(entry, [rel], { main: false }), "rollup")) bad.push(rel);
+      }
+    }
+    excludes[entry.slug] = mainFails ? ["<main>", ...bad] : bad;
     const kept = rels.filter((rel) => !bad.includes(rel));
     const again = await bundles(entry, entrySource(entry, kept, { main: !mainFails }));
     log.push([spec.id, version.version, again ? `still failing: ${again}` : "fixed", kept.length, bad.length, mainFails ? "main-fails" : "", failure.slice(0, 160)].join("\t"));

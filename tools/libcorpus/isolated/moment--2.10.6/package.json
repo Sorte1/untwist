@@ -1,0 +1,7 @@
+{
+  "name": "untwist-libcorpus-moment--2-10-6",
+  "private": true,
+  "dependencies": {
+    "moment": "2.10.6"
+  }
+}

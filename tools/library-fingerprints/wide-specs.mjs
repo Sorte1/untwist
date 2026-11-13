@@ -5,7 +5,7 @@ import { LIBS, ISOLATED } from "../libcorpus/libs.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OWNED_ELSEWHERE = new Set(["regenerator-runtime", "node-libs-browser"]);
-const IDS = { "@babel/polyfill": "babel-polyfill-7" };
+const IDS = { "@babel/polyfill": "babel-polyfill-7", "core-js": "core-js-2" };
 const OPTIONS = {
   three: "exclude: /^src\\//",
   svelte: 'exclude: /(^|\\/)compiler[^/]*$|^compiler\\//',

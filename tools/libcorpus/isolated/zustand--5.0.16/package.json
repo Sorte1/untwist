@@ -1,0 +1,7 @@
+{
+  "name": "untwist-libcorpus-zustand--5-0-16",
+  "private": true,
+  "dependencies": {
+    "zustand": "5.0.16"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "untwist-libcorpus-three--0-143-0",
+  "private": true,
+  "dependencies": {
+    "three": "0.143.0"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "untwist-libcorpus-react-dom--16-8-6",
+  "private": true,
+  "dependencies": {
+    "react-dom": "16.8.6"
+  }
+}
