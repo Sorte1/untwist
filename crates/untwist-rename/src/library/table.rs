@@ -405,6 +405,12 @@ fn builtin_sources() -> Vec<(&'static str, &'static [u8])> {
     sources.extend_from_slice(untwist_libraries_pixi::TABLES);
     #[cfg(feature = "libraries-three")]
     sources.extend_from_slice(untwist_libraries_three::TABLES);
+    #[cfg(feature = "libraries-pixi-legacy")]
+    sources.extend_from_slice(untwist_libraries_pixi_legacy::TABLES);
+    #[cfg(feature = "libraries-three-r100")]
+    sources.extend_from_slice(untwist_libraries_three_r100::TABLES);
+    #[cfg(feature = "libraries-three-r130")]
+    sources.extend_from_slice(untwist_libraries_three_r130::TABLES);
     sources
 }
 

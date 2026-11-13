@@ -10,7 +10,7 @@ readme.workspace = true
 rust-version.workspace = true
 keywords = ["javascript", "deobfuscator", "fingerprint"]
 categories = ["development-tools"]
-description = "Library fingerprint tables for untwist: PixiJS"
+description = "Library fingerprint tables for untwist: PixiJS 7 and 8"
 include = ["build.rs", "src/**", "data/*.table.gz", "data/*.keys.json"]
 
 [dependencies]

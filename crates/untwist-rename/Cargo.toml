@@ -27,7 +27,10 @@ libraries-data = ["dep:untwist-libraries-data"]
 libraries-game = ["dep:untwist-libraries-game"]
 libraries-pixi = ["dep:untwist-libraries-pixi"]
 libraries-three = ["dep:untwist-libraries-three"]
-libraries-all = ["libraries-core", "libraries-corejs", "libraries-polyfills", "libraries-react", "libraries-frameworks", "libraries-lodash", "libraries-dates", "libraries-state", "libraries-data", "libraries-game", "libraries-pixi", "libraries-three"]
+libraries-pixi-legacy = ["dep:untwist-libraries-pixi-legacy"]
+libraries-three-r100 = ["dep:untwist-libraries-three-r100"]
+libraries-three-r130 = ["dep:untwist-libraries-three-r130"]
+libraries-all = ["libraries-core", "libraries-corejs", "libraries-polyfills", "libraries-react", "libraries-frameworks", "libraries-lodash", "libraries-dates", "libraries-state", "libraries-data", "libraries-game", "libraries-pixi-legacy", "libraries-pixi", "libraries-three-r100", "libraries-three-r130", "libraries-three"]
 modern = []
 
 [dependencies]
@@ -54,6 +57,9 @@ untwist-libraries-data = { path = "../untwist-libraries-data", version = "0.5.0"
 untwist-libraries-game = { path = "../untwist-libraries-game", version = "0.5.0", optional = true }
 untwist-libraries-pixi = { path = "../untwist-libraries-pixi", version = "0.5.0", optional = true }
 untwist-libraries-three = { path = "../untwist-libraries-three", version = "0.5.0", optional = true }
+untwist-libraries-pixi-legacy = { path = "../untwist-libraries-pixi-legacy", version = "0.5.0", optional = true }
+untwist-libraries-three-r100 = { path = "../untwist-libraries-three-r100", version = "0.5.0", optional = true }
+untwist-libraries-three-r130 = { path = "../untwist-libraries-three-r130", version = "0.5.0", optional = true }
 
 [dev-dependencies]
 untwist-rename = { path = ".", features = ["test-hooks", "modern"] }

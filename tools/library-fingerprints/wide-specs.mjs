@@ -7,8 +7,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const OWNED_ELSEWHERE = new Set(["regenerator-runtime", "node-libs-browser"]);
 const IDS = { "@babel/polyfill": "babel-polyfill-7", "core-js": "core-js-2" };
 const OPTIONS = {
-  three: { keepConcatenations: true, include: String.raw`/^build\/three\.(module|min|module\.min)\.js$|^examples\/jsm\/(controls|loaders|postprocessing|shaders|math|utils|geometries|objects|lines|exporters|environments|curves|modifiers|interactive|csm|effects|animation|misc)\//`, exclude: String.raw`/^examples\/jsm\/libs\//` },
-  "pixi.js": { keepConcatenations: true, include: String.raw`/^dist\/(browser\/)?pixi\.min\.js$/` },
+  three: { minifiers: '["none", "terser"]', main: false, keepConcatenations: true, include: String.raw`/^build\/three\.(module|min|module\.min)\.js$|^examples\/jsm\/(controls|postprocessing|shaders|objects|utils|geometries|lines|math|curves|modifiers|effects|animation|csm|interactive|environments)\/|^examples\/jsm\/loaders\/(GLTF|OBJ|MTL|FBX|DRACO|RGBE|KTX2|Font|SVG|STL|TGA|EXR|HDR|Collada|PLY)Loader\.js$/`, exclude: String.raw`/^examples\/jsm\/(libs|nodes)\//`, skipModules: String.raw`/^examples\/jsm\/(libs|nodes)\/|^build\/three\.(cjs|js)$/` },
+  "pixi.js": { minifiers: '["none", "terser"]', keepConcatenations: true, include: String.raw`/^dist\/(browser\/)?pixi\.min\.js$/` },
   svelte: { include: String.raw`/^(internal|src\/internal|src\/runtime)\//`, exclude: String.raw`/(^|\/)(compiler|server)(\/|\.|$)/` },
   react: { include: String.raw`/^(cjs|umd)\/react(-jsx-runtime)?\.(production\.min|development|production)\.js$/` },
   "react-dom": { include: String.raw`/^cjs\/react-dom(-client)?\.(production\.min|development|production)\.js$/` },
@@ -42,7 +42,8 @@ const GROUPS = {
   three: ["three"],
 };
 const SPLITS = {
-  "pixi.js": [["pixi-js-4-6", String.raw`/^[456]\./`], ["pixi-js", String.raw`/^[78]\./`]],
+  "pixi.js": [["pixi-js-4-6", String.raw`/^[456]\./`, "pixi-legacy"], ["pixi-js", String.raw`/^[78]\./`]],
+  three: [["three-r100", String.raw`/^0\.1[0-2]\d\./`, "three-r100"], ["three-r130", String.raw`/^0\.1[3-5]\d\./`, "three-r130"], ["three", String.raw`/^0\.1[6-9]\d\./`]],
 };
 const groupOf = (name) => Object.entries(GROUPS).find(([, names]) => names.includes(name))?.[0];
 
@@ -55,16 +56,19 @@ for (const name of [...names].sort()) {
   const extra = OPTIONS[name] ?? {};
   const group = groupOf(name);
   if (!group) throw new Error(`no group for ${name}`);
-  for (const [id, versions] of SPLITS[name] ?? [[specId(name), null]]) {
+  for (const [id, versions, splitGroup] of SPLITS[name] ?? [[specId(name), null]]) {
   const options = [
     `id: ${JSON.stringify(id)}`,
-    `group: ${JSON.stringify(group)}`,
+    `group: ${JSON.stringify(splitGroup ?? group)}`,
     versions ? `versions: ${versions}` : null,
     `name: ${JSON.stringify(name)}`,
     `include: ${extra.include ?? "ALL"}`,
     extra.exclude ? `exclude: ${extra.exclude}` : null,
     extra.label ? `label: ${JSON.stringify(extra.label)}` : null,
     extra.keepConcatenations ? "keepConcatenations: true" : null,
+    extra.minifiers ? `minifiers: ${extra.minifiers}` : null,
+    extra.main === false ? "main: false" : null,
+    extra.skipModules ? `skipModules: ${extra.skipModules}` : null,
   ].filter(Boolean);
   const source = `import { ALL, wide } from "../wide.mjs";\n\nexport default wide({ ${options.join(", ")} });\n`;
   writeFileSync(join(HERE, "libraries", `${id}.mjs`), source);

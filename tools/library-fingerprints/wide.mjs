@@ -59,7 +59,7 @@ export function entrySource(entry, rels, { main }) {
 
 const DIST = (rel, kind) => kind === "min" || kind === "umd" || /^(dist|build|umd|bundles|lib)\//.test(rel) || !rel.includes("/");
 
-export function wide({ id, name, label = name, include: wanted = DIST, exclude = null, main = true, keepConcatenations = false, versions: only = null, ...rest }) {
+export function wide({ id, name, label = name, include: wanted = DIST, exclude = null, main = true, keepConcatenations = false, versions: only = null, skipModules = null, ...rest }) {
   const include = wanted instanceof RegExp ? (rel) => wanted.test(rel) : wanted;
   const versions = entries().filter((entry) => entry.name === name && (!only || only.test(entry.version)));
   if (!versions.length) throw new Error(`no corpus versions for ${name}`);
@@ -78,6 +78,7 @@ export function wide({ id, name, label = name, include: wanted = DIST, exclude =
       return entrySource(entry, files(entry, { include, exclude, keepConcatenations }), { main: main && !mainExcluded });
     },
     module(rel) {
+      if (skipModules && skipModules.test(rel)) return null;
       const match = /^(.*)\.(c|m)?js$/.exec(rel);
       return match ? match[1] : null;
     },

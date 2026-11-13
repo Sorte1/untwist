@@ -1,0 +1,3 @@
+import { ALL, wide } from "../wide.mjs";
+
+export default wide({ id: "three-r100", group: "three-r100", versions: /^0\.1[0-2]\d\./, name: "three", include: /^build\/three\.(module|min|module\.min)\.js$|^examples\/jsm\/(controls|postprocessing|shaders|objects|utils|geometries|lines|math|curves|modifiers|effects|animation|csm|interactive|environments)\/|^examples\/jsm\/loaders\/(GLTF|OBJ|MTL|FBX|DRACO|RGBE|KTX2|Font|SVG|STL|TGA|EXR|HDR|Collada|PLY)Loader\.js$/, exclude: /^examples\/jsm\/(libs|nodes)\//, keepConcatenations: true, minifiers: ["none", "terser"], main: false, skipModules: /^examples\/jsm\/(libs|nodes)\/|^build\/three\.(cjs|js)$/ });
