@@ -255,3 +255,62 @@ fn transpiler_output_still_converts_by_default() {
         assert!(output.contains(expected), "{output}");
     }
 }
+
+#[test]
+fn member_expression_esbuild_loose_test() {
+    assert_transform!(
+        r#"var _a, _b;
+    console.log((_a = data.user) == null ? undefined : _a.name, (_b = data.list) == null ? undefined : _b[0]);"#,
+        [untwist_unminify::optional_chaining::boxed],
+        @"console.log(data.user?.name, data.list?.[0]);"
+    );
+}
+
+#[test]
+fn nested_chain_esbuild_loose_test() {
+    assert_transform!(
+        r#"var _a, _b;
+    (_b = (_a = data.missing) == null ? undefined : _a.deep) == null ? undefined : _b.deeper;"#,
+        [untwist_unminify::optional_chaining::boxed],
+        @"data.missing?.deep?.deeper;"
+    );
+}
+
+#[test]
+fn a_loose_test_of_a_binding_converts() {
+    assert_transform!(
+        "function f(arr) { return arr == null ? undefined : arr[0]; }",
+        [untwist_unminify::optional_chaining::boxed],
+        @r"
+    function f(arr) {
+      return arr?.[0];
+    }
+    "
+    );
+}
+
+#[test]
+fn a_loose_temp_read_twice_keeps_its_conditional() {
+    assert_transform!(
+        r#"var _a;
+    (_a = a.b) == null ? undefined : _a.c + _a.d;"#,
+        [untwist_unminify::optional_chaining::boxed],
+        @r"
+    var _a;
+    (_a = a.b) == null ? undefined : _a.c + _a.d;
+    "
+    );
+}
+
+#[test]
+fn a_loose_test_against_undefined_keeps_its_conditional() {
+    assert_transform!(
+        r#"var _a;
+    (_a = a.b) == undefined ? undefined : _a.c;"#,
+        [untwist_unminify::optional_chaining::boxed],
+        @r"
+    var _a;
+    (_a = a.b) == undefined ? undefined : _a.c;
+    "
+    );
+}

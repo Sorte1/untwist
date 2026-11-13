@@ -96,3 +96,7 @@
   `g` and `document.all ?? g` gives `document.all`. Untwist assumes no tested value is
   `document.all`; the strict pair carries no such assumption. TypeScript emits the strict pair for
   this reason, and Babel's loose mode emits `!= null` under the same assumption.
+- **`(_a = x) == null ? void 0 : _a.y` becomes `x?.y`, in every mode.** esbuild and Babel's loose
+  mode lower optional chains with the loose test (`x == null ? void 0 : x.y` for a repeatable `x`
+  too). It differs from `x?.y` for `document.all` only, which `?.` reads through; the same
+  assumption as `x != null ? x : y` above.

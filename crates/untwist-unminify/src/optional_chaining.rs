@@ -1,6 +1,6 @@
 use crate::transpile_util::{
     assignment_temp_symbol, identifier_symbol_is, is_repeatable, is_undefined_identifier,
-    take_logical_left_assignment_value, TempVars,
+    take_binary_left_assignment_value, take_logical_left_assignment_value, TempVars,
 };
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
@@ -104,6 +104,22 @@ fn nullish_or_test<'k, 'a>(
         return None;
     }
     Some((&first.left, &second.left))
+}
+
+fn loose_null_test<'k, 'a>(test: &'k Expression<'a>) -> Option<&'k Expression<'a>> {
+    let Expression::BinaryExpression(binary) = test else {
+        return None;
+    };
+    (binary.operator == BinaryOperator::Equality
+        && matches!(binary.right, Expression::NullLiteral(_)))
+    .then_some(&binary.left)
+}
+
+fn tested<'k, 'a>(
+    test: &'k Expression<'a>,
+    cx: &Cx<'_, '_>,
+) -> Option<(&'k Expression<'a>, &'k Expression<'a>)> {
+    nullish_or_test(test, cx).or_else(|| loose_null_test(test).map(|left| (left, left)))
 }
 
 fn member_object<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k Expression<'a>> {
@@ -223,7 +239,7 @@ fn rewrite_simple<'a>(node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
     let Expression::ConditionalExpression(conditional) = &*node else {
         return false;
     };
-    let Some((first, second)) = nullish_or_test(&conditional.test, cx) else {
+    let Some((first, second)) = tested(&conditional.test, cx) else {
         return false;
     };
     if !ContentEq::content_eq(first, second)
@@ -252,13 +268,14 @@ fn rewrite_temp<'a>(node: &mut Expression<'a>, temps: &mut TempVars, cx: &mut Cx
     let Expression::ConditionalExpression(conditional) = &*node else {
         return false;
     };
-    let Some((first, second)) = nullish_or_test(&conditional.test, cx) else {
+    let loose = loose_null_test(&conditional.test).is_some();
+    let Some((first, second)) = tested(&conditional.test, cx) else {
         return false;
     };
     let Some(symbol) = assignment_temp_symbol(first, cx) else {
         return false;
     };
-    if !identifier_symbol_is(second, symbol, cx)
+    if !(loose || identifier_symbol_is(second, symbol, cx))
         || !is_undefined_identifier(&conditional.consequent, cx)
     {
         return false;
@@ -266,7 +283,8 @@ fn rewrite_temp<'a>(node: &mut Expression<'a>, temps: &mut TempVars, cx: &mut Cx
     let Some(object) = member_object(&conditional.alternate) else {
         return false;
     };
-    if !identifier_symbol_is(object, symbol, cx) || !temps.is_temp(symbol, 2, cx) {
+    let reads = if loose { 1 } else { 2 };
+    if !identifier_symbol_is(object, symbol, cx) || !temps.is_temp(symbol, reads, cx) {
         return false;
     }
     let span = conditional.span;
@@ -278,7 +296,12 @@ fn rewrite_temp<'a>(node: &mut Expression<'a>, temps: &mut TempVars, cx: &mut Cx
     else {
         return false;
     };
-    let object = match take_logical_left_assignment_value(test, cx) {
+    let taken = if loose {
+        take_binary_left_assignment_value(test, cx)
+    } else {
+        take_logical_left_assignment_value(test, cx)
+    };
+    let object = match taken {
         Ok(object) => object,
         Err(test) => {
             let alternate = rebuild_chain_member(member, cx);
@@ -292,7 +315,8 @@ fn rewrite_temp<'a>(node: &mut Expression<'a>, temps: &mut TempVars, cx: &mut Cx
 }
 
 pub fn would_rewrite(conditional: &ConditionalExpression<'_>, cx: &Cx<'_, '_>) -> bool {
-    let Some((first, second)) = nullish_or_test(&conditional.test, cx) else {
+    let loose = loose_null_test(&conditional.test).is_some();
+    let Some((first, second)) = tested(&conditional.test, cx) else {
         return false;
     };
     if !is_undefined_identifier(&conditional.consequent, cx) {
@@ -306,6 +330,7 @@ pub fn would_rewrite(conditional: &ConditionalExpression<'_>, cx: &Cx<'_, '_>) -
         && is_repeatable(first, cx);
     simple
         || assignment_temp_symbol(first, cx).is_some_and(|symbol| {
-            identifier_symbol_is(second, symbol, cx) && identifier_symbol_is(object, symbol, cx)
+            (loose || identifier_symbol_is(second, symbol, cx))
+                && identifier_symbol_is(object, symbol, cx)
         })
 }
