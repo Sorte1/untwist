@@ -81,7 +81,9 @@ fn a_script_level_bare_var_stays() {
 
 #[test]
 fn a_bare_var_beside_a_direct_eval_stays() {
-    assert_stays("  var a;\n  g();\n  eval(\"a = 1\");\n  return h;\n  function h() {\n    return a;\n  }");
+    assert_stays(
+        "  var a;\n  g();\n  eval(\"a = 1\");\n  return h;\n  function h() {\n    return a;\n  }",
+    );
 }
 
 #[test]
@@ -91,7 +93,8 @@ fn a_bare_var_named_like_a_block_function_stays() {
 
 #[test]
 fn a_bare_var_naming_a_parameter_stays() {
-    let source = "function f(a) {\n  var a;\n  g();\n  return h;\n  function h() {\n    return a;\n  }\n}";
+    let source =
+        "function f(a) {\n  var a;\n  g();\n  return h;\n  function h() {\n    return a;\n  }\n}";
     assert_eq!(run(source), source);
 }
 

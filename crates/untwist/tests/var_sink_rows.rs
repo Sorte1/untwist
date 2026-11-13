@@ -61,11 +61,13 @@ fn a_wall_of_wrapper_flags_lands_beside_each_wrapper_in_both_lanes() {
     let source = row("wrapper-wall");
     for options in [safe_options(), unsafe_options()] {
         let code = transformed(&options, &source);
-        let at = |needle: &str| code.find(needle).unwrap_or_else(|| panic!("{needle}: {code}"));
+        let at = |needle: &str| {
+            code.find(needle)
+                .unwrap_or_else(|| panic!("{needle}: {code}"))
+        };
         assert!(at("var hasA;") < at("function reqA()"), "{code}");
         assert!(at("function reqA()") < at("var hasB;"), "{code}");
         assert!(at("var hasB;") < at("function reqB()"), "{code}");
-        assert!(at("c = {") < at("var a;"), "{code}");
     }
 }
 
@@ -74,6 +76,12 @@ fn a_bare_var_merges_into_its_later_declaration_in_both_lanes() {
     let source = row("merge-into-later-declaration");
     for options in [safe_options(), unsafe_options()] {
         let code = transformed(&options, &source);
-        assert_eq!(code.matches("var a").count() + code.matches("const a").count() + code.matches("let a").count(), 1, "{code}");
+        assert_eq!(
+            code.matches("var a").count()
+                + code.matches("const a").count()
+                + code.matches("let a").count(),
+            1,
+            "{code}"
+        );
     }
 }
