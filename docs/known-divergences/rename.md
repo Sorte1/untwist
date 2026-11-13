@@ -212,8 +212,8 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   whose source the program reads (`'' + f`, `` `${f}` ``, `String(f)`, `f.toString()`), and leaves
   the whole program unrenamed when a function may read its own source through `this`,
   `arguments.callee` or `.caller`. With `--unsafe`, `this.toString()` inside an instance method (a
-  function stored on `X.prototype`, other than `Function.prototype` and `Object.prototype`, or a
-  non-static class method) is taken to read the instance, not a function, so it does not stop
+  function stored on `X.prototype`, other than `Function.prototype` and `Object.prototype`, a
+  function declaration whose every use stores it on such a prototype, or a non-static class method) is taken to read the instance, not a function, so it does not stop
   renaming: a call that hands such a method a function as its receiver
   (`Number.prototype.m.call(f)`) would see renamed source.
 - **Hoisting and the host's global object.** A sloppy block function and a `var` or parameter

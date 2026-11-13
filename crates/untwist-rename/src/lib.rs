@@ -21,6 +21,7 @@ pub mod modern;
 pub mod oracle;
 pub mod pins;
 pub mod plan;
+mod prototype_methods;
 pub mod reserved;
 pub mod shorthand;
 pub mod simple;

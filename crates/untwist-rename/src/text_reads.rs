@@ -9,6 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::prop::member_parts;
 
 use crate::collect::reference_symbol;
+use crate::prototype_methods::{declared_methods, is_instance_prototype};
 
 const TEXT_METHODS: [&str; 2] = ["toString", "toSource"];
 
@@ -28,8 +29,6 @@ const TEXT_TAKING_METHODS: [&str; 10] = [
 const TEXT_TAKING_FUNCTIONS: [&str; 2] = ["String", "RegExp"];
 
 const ALIAS_DEPTH: usize = 8;
-
-const FUNCTION_PROTOTYPES: [&str; 2] = ["Function", "Object"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SelfReads {
@@ -51,10 +50,14 @@ pub fn text_read_bindings_with(
     scoping: &Scoping,
     self_reads: SelfReads,
 ) -> TextReads {
+    let value_methods = match self_reads {
+        SelfReads::InstanceMethodsReadInstances => declared_methods(program, scoping),
+        SelfReads::Unknown => FxHashSet::default(),
+    };
     let mut sinks = SinkFinder {
         scoping,
         self_reads,
-        value_methods: FxHashSet::default(),
+        value_methods,
         receivers: Vec::new(),
         unknown: false,
         functions: FxHashSet::default(),
@@ -129,25 +132,6 @@ impl SinkFinder<'_> {
         is_this(object) && self.receivers.last().copied().unwrap_or(false)
     }
 
-    fn is_instance_prototype(&self, expr: &Expression<'_>) -> bool {
-        let Expression::StaticMemberExpression(member) = expr.without_parentheses() else {
-            return false;
-        };
-        if member.property.name != "prototype" {
-            return false;
-        }
-        match member.object.without_parentheses() {
-            Expression::Identifier(id) => {
-                !FUNCTION_PROTOTYPES.contains(&id.name.as_str())
-                    || reference_symbol(id, self.scoping).is_some()
-            }
-            Expression::StaticMemberExpression(outer) => {
-                !FUNCTION_PROTOTYPES.contains(&outer.property.name.as_str())
-            }
-            _ => false,
-        }
-    }
-
     fn reads_instances(&self) -> bool {
         self.self_reads == SelfReads::InstanceMethodsReadInstances
     }
@@ -159,7 +143,7 @@ impl SinkFinder<'_> {
         let AssignmentTarget::StaticMemberExpression(member) = &it.left else {
             return;
         };
-        if !self.is_instance_prototype(&member.object) {
+        if !is_instance_prototype(self.scoping, &member.object) {
             return;
         }
         if let Expression::FunctionExpression(function) = it.right.without_parentheses() {

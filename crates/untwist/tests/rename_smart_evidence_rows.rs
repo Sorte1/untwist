@@ -143,6 +143,20 @@ const VALUE_METHOD_SELF_READ: &str = "Number.prototype.countDecimals = function 
 var _0x1 = [1.25, 3].map(function (_0x2) { return _0x2.countDecimals(); });
 console.log(_0x1.join());";
 
+const DECLARED_METHOD_SELF_READ: &str = "function Big(_0x1) { this.words = [_0x1]; }
+function _0x5() { return '<Big ' + this.toString(16) + '>'; }
+Big.prototype.toString = function (_0x2) { return this.words[0].toString(_0x2); };
+Big.prototype.inspect = _0x5;
+Big.prototype[Symbol.for('inspect')] = _0x5;
+var _0x3 = [255, 16].map(function (_0x4) { return new Big(_0x4).inspect(); });
+console.log(_0x3.join());";
+
+const DECLARED_METHOD_ALSO_CALLED: &str = "function Big(_0x1) { this.words = [_0x1]; }
+function _0x5() { return String(this.toString().indexOf('_0x6') >= 0); }
+Big.prototype.inspect = _0x5;
+var _0x3 = [255].map(function (_0x4) { return _0x5.call(function (_0x6) { return _0x6; }); });
+console.log(_0x3.join());";
+
 const WITH_SEES_EVIDENCE: &str = "var o = { keyEvent: 'from with', chatList: 'list' };
 var el = { addEventListener: function (k, f) { f({ key: k }); } };
 function w() { with (o) { el.addEventListener('keydown', function (_0x1) { console.log(keyEvent, _0x1.key); }); } }
@@ -381,6 +395,20 @@ fn a_value_method_reading_its_own_text_blocks_renaming_only_in_the_safe_lane() {
 }
 
 #[test]
+fn a_declared_function_installed_only_as_an_instance_method_reads_instances_in_the_unsafe_lane() {
+    let safe = smart(DECLARED_METHOD_SELF_READ);
+    assert!(safe.contains("_0x4"), "{safe}");
+    let unsafe_lane = unsafe_smart(DECLARED_METHOD_SELF_READ);
+    assert!(!unsafe_lane.contains("_0x4"), "{unsafe_lane}");
+}
+
+#[test]
+fn a_declared_method_that_is_also_called_on_its_own_keeps_the_program_unrenamed() {
+    let unsafe_lane = unsafe_smart(DECLARED_METHOD_ALSO_CALLED);
+    assert!(unsafe_lane.contains("_0x4"), "{unsafe_lane}");
+}
+
+#[test]
 fn an_exported_alias_names_its_local_binding() {
     let code =
         smart("var _0x1 = [1].map(function (_0x2) { return _0x2; });\nexport { _0x1 as values };");
@@ -464,6 +492,8 @@ fn node_agrees_on_every_new_evidence_kind_in_both_lanes() {
         ("setter param computed", SETTER_PARAM_COMPUTED),
         ("evidence name captured", EVIDENCE_NAME_CAPTURED),
         ("value method self read", VALUE_METHOD_SELF_READ),
+        ("declared method self read", DECLARED_METHOD_SELF_READ),
+        ("declared method also called", DECLARED_METHOD_ALSO_CALLED),
         ("with sees evidence", WITH_SEES_EVIDENCE),
         ("element evidence", ELEMENT_EVIDENCE),
         ("method call sites", METHOD_CALL_SITES),
