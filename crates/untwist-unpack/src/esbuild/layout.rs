@@ -259,6 +259,61 @@ fn lazies<'a>(list: &[Statement<'a>]) -> Lazies<'a> {
     found
 }
 
+pub struct Exported<'k, 'a> {
+    pub helpers: FxHashMap<String, CallForm>,
+    pub trusted: Vec<&'k BindingIdentifier<'a>>,
+}
+
+fn export_names<'a>(list: &[Statement<'a>]) -> Vec<(&'a str, String)> {
+    list.iter()
+        .filter_map(|statement| match statement {
+            Statement::ExportNamedDeclaration(export) => Some(&export.specifiers),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|specifier| match &specifier.local {
+            ModuleExportName::IdentifierReference(local) => {
+                Some((local.name.as_str(), specifier.exported.name().to_string()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+pub fn exported_helpers<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Exported<'k, 'a>> {
+    let lazies = lazies(list);
+    if lazies.shadowed || lazies.commonjs.is_empty() {
+        return None;
+    }
+    let helpers: FxHashMap<String, CallForm> = export_names(list)
+        .into_iter()
+        .filter_map(|(local, exported)| Some((exported, *lazies.commonjs.get(local)?)))
+        .collect();
+    let trusted = trusted(list, &lazies);
+    (!helpers.is_empty()).then_some(Exported { helpers, trusted })
+}
+
+fn imported_helpers<'a>(
+    list: &[Statement<'a>],
+    view: &FxHashMap<String, CallForm>,
+    found: &mut Lazies<'a>,
+) {
+    for statement in list {
+        let Statement::ImportDeclaration(import) = statement else {
+            continue;
+        };
+        for specifier in import.specifiers.iter().flatten() {
+            let ImportDeclarationSpecifier::ImportSpecifier(named) = specifier else {
+                continue;
+            };
+            let local = named.local.name.as_str();
+            if let Some(&form) = view.get(local) {
+                found.commonjs.insert(local, form);
+            }
+        }
+    }
+}
+
 fn callee_of<'k, 'a>(init: &'k Expression<'a>) -> Option<(&'a str, &'k Argument<'a>)> {
     let Expression::CallExpression(call) = init.without_parentheses() else {
         return None;
@@ -779,7 +834,17 @@ fn inline_factories<'k, 'a>(
 }
 
 pub fn layout<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
-    let lazies = lazies(list);
+    layout_linked(list, None)
+}
+
+pub fn layout_linked<'k, 'a>(
+    list: &'k [Statement<'a>],
+    view: Option<&FxHashMap<String, CallForm>>,
+) -> Option<Layout<'k, 'a>> {
+    let mut lazies = lazies(list);
+    if let Some(view) = view {
+        imported_helpers(list, view, &mut lazies);
+    }
     let direct: FxHashSet<&str> = lazies
         .commonjs
         .iter()

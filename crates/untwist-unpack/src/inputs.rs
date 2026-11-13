@@ -134,7 +134,7 @@ pub fn unpack_named_inputs<'a>(
         true => names,
         false => &[],
     };
-    let groups = groups(programs);
+    let groups = groups(programs, names);
     let mut notes = Vec::new();
     let mut found = detected(alloc, programs, &groups, options, &mut notes);
     let bundles = complete(alloc, programs, &groups, &mut found, &mut notes);

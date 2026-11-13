@@ -236,7 +236,6 @@ macro_rules! unlinked {
 
 unlinked!(closure_detect, crate::closure::detect_with);
 unlinked!(systemjs_detect, crate::systemjs::detect_with);
-unlinked!(esbuild_detect, crate::esbuild::detect_with);
 unlinked!(metro_detect, crate::metro::detect_with);
 unlinked!(metro_trusting_detect, crate::metro::detect_trusting_with);
 unlinked!(amd_detect, crate::amd::detect_with);
@@ -340,7 +339,11 @@ const KINDS: [Kind; 8] = [
         crate::systemjs::probe,
         systemjs_detect,
     ),
-    (BundleKind::Esbuild, crate::esbuild::probe, esbuild_detect),
+    (
+        BundleKind::Esbuild,
+        crate::esbuild::probe,
+        crate::esbuild::detect_with,
+    ),
     (BundleKind::Metro, crate::metro::probe, metro_detect),
     (
         BundleKind::Parcel,
