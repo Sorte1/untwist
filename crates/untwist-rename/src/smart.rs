@@ -14,7 +14,7 @@ use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
 use crate::simple::{is_renameable, unit_roots};
 use crate::text_reads::{text_read_bindings_with, SelfReads, TextReads};
-use crate::usage::collect_naming_usage;
+use crate::usage::{collect_naming_usage, Usage};
 use crate::RenameConfig;
 
 pub const NUMBER_LIMIT: u32 = 4096;
@@ -220,7 +220,7 @@ fn decide_with_limit(
         .iter()
         .filter_map(|info| smart_base(info, &cx, &evidence).map(|base| (*info, base)))
         .collect();
-    let flowed = flowed_hex_tokens(&candidates, &planned, (collected, &evidence));
+    let flowed = flowed_hex_tokens(&candidates, &planned, (collected, &evidence, &usage));
     planned.extend(flowed);
     let mut oracle = NameOracle::new(scoping, collected);
     oracle.defer(planned.iter().map(|(info, _)| info.symbol));
@@ -238,13 +238,16 @@ fn decide_with_limit(
 fn flowed_hex_tokens<'c>(
     candidates: &[&'c BindingInfo],
     planned: &[(&BindingInfo, String)],
-    (collected, evidence): (&Collected, &Evidence),
+    (collected, evidence, usage): (&Collected, &Evidence, &Usage),
 ) -> Vec<(&'c BindingInfo, String)> {
     let bases: FxHashMap<SymbolId, &str> = planned
         .iter()
         .map(|(info, base)| (info.symbol, base.as_str()))
         .collect();
     let target_base = |target: SymbolId| -> Option<String> {
+        if let Some(key) = usage.object_literal_key(target) {
+            return Some(to_identifier(key));
+        }
         if let Some(base) = bases.get(&target) {
             return Some((*base).to_string());
         }

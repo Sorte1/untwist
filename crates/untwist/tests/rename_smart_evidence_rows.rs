@@ -176,8 +176,8 @@ const HEX_TOKENS: &str = "(function () {
   var a1b2c3d4e5f6a7b8c9d0;
   if (Math.random() < 2) { a1b2c3d4e5f6a7b8c9d0 = 'second'; }
   var hasToken = typeof b475796ed633d5fd0485 != 'undefined';
-  Promise.resolve(1).then(function (_0x9) {
-    _0x9 = hasToken ? a1b2c3d4e5f6a7b8c9d0 : undefined;
+  Promise.resolve(0).then(function (_0x9) {
+    if (!_0x9) { _0x9 = hasToken ? a1b2c3d4e5f6a7b8c9d0 : undefined; }
     console.log(JSON.stringify({ bypassToken: _0x9 }));
   });
   var validationToken;
@@ -420,8 +420,8 @@ fn long_hex_tokens_are_machine_names_only_under_smart() {
             "validationToken2 = \"token\"",
             "callback = function",
             "typeof callback == \"function\"",
-            "bypassToken2 = \"second\"",
-            "hasToken ? bypassToken2 : undefined",
+            "bypassToken = \"second\"",
+            "hasToken ? bypassToken : undefined",
             "function (item)",
             "(c0ffee00c0ffee00c0ff) => {",
         ],
