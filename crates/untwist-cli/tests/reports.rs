@@ -111,3 +111,28 @@ fn the_deobfuscate_stage_times_prepare_then_every_round_in_order() {
         [false, false, true, false, false, false, false]
     );
 }
+
+#[test]
+fn a_default_lane_alias_refusal_prints_the_unsafe_hint_on_stderr() {
+    let high = include_str!("../../../fixtures/reference/deobfuscate/obfuscator.io-high.js");
+    let hint = untwist::UNSAFE_LANE_DECODES;
+    let out = stdin_output(high, &[]);
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    let line = stderr
+        .lines()
+        .find(|line| line.ends_with(hint))
+        .unwrap_or_else(|| panic!("no hint in {stderr}"));
+    assert!(line.starts_with("warning: "), "{line}");
+    let unsafe_out = stdin_output(high, &["--unsafe"]);
+    let unsafe_stderr = String::from_utf8_lossy(&unsafe_out.stderr).into_owned();
+    assert!(!unsafe_stderr.contains(hint), "{unsafe_stderr}");
+    let json = stdin_output(high, &["--report", "json"]);
+    let report: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    let noted = report["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|note| note.as_str().is_some_and(|text| text.ends_with(hint)));
+    assert!(noted, "{}", report["notes"]);
+}

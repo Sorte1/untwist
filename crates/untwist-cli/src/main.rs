@@ -85,6 +85,9 @@ fn report_diagnostics(err: &mut dyn Write, result: &Output) -> io::Result<()> {
             StopReason::Converged => {}
         }
     }
+    for note in result.notes.iter().filter(|note| is_unsafe_lane_hint(note)) {
+        writeln!(err, "warning: {}", printable(&note.message))?;
+    }
     for index in &result.panicked {
         writeln!(
             err,
@@ -121,6 +124,10 @@ fn report_diagnostics(err: &mut dyn Write, result: &Output) -> io::Result<()> {
         )?;
     }
     Ok(())
+}
+
+fn is_unsafe_lane_hint(note: &untwist::Note) -> bool {
+    note.pass == "pipeline" && note.message.ends_with(untwist::UNSAFE_LANE_DECODES)
 }
 
 const STDERR: &str = "write to stderr";

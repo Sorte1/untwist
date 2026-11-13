@@ -65,6 +65,11 @@ pub(super) fn budget_note(hit: Hit) -> &'static str {
     }
 }
 
+pub const UNSAFE_LANE_DECODES: &str = "references to the string array or its decoders are still \
+     in the output: the default lane left the string array undecoded because the program may \
+     replace a standard built-in the decoder uses; rerun with --unsafe to decode it (that lane \
+     assumes the program patches no standard built-in)";
+
 pub const REACH_REASON: &str = ": code that may hold the global object, or code from text, may \
      reach the string array's function by a key that may be its name or by an enumeration that \
      yields values, so the decoder calls were left alone; the report lists the details";
@@ -72,6 +77,7 @@ pub const REACH_REASON: &str = ": code that may hold the global object, or code 
 catalogue!(
     PIPELINE_NOTES,
     REACH_REASON,
+    UNSAFE_LANE_DECODES,
     BUDGET_MEMORY_REACHED,
     BUDGET_TIME_REACHED,
     BUDGET_UNPACK,
@@ -171,6 +177,22 @@ fn reach_detail(note: &Note) -> bool {
     note.kind == NoteKind::Refusal
         && (note.message == notes::STRING_ARRAY_GLOBAL_REACH
             || note.message.starts_with(notes::WEBPACK_BOOTSTRAP_UNPROVEN))
+}
+
+pub(super) fn unsafe_lane_hint(notes: &[Note]) -> Option<Note> {
+    let aliased = notes.iter().any(|note| {
+        note.kind == NoteKind::Refusal && note.message.starts_with(notes::BUILTIN_ALIAS_PATCHED)
+    });
+    if !aliased {
+        return None;
+    }
+    let kept = notes.iter().filter_map(kept_count).max()?;
+    Some(Note {
+        pass: "pipeline",
+        kind: NoteKind::Refusal,
+        message: format!("{kept} {UNSAFE_LANE_DECODES}"),
+        span: None,
+    })
 }
 
 pub(super) fn consolidate_reach(mut notes: Vec<Note>) -> Vec<Note> {
