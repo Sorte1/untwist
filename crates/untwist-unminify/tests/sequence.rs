@@ -282,3 +282,54 @@ function w(o) {
 }
 ");
 }
+
+fn safe(source: &str) -> String {
+    let alloc = untwist_testing::Allocator::default();
+    let ctors: [untwist_core::pass::PassCtor<'_>; 1] = [untwist_unminify::sequence::boxed];
+    let opts = untwist_core::pass::PassOptions::default();
+    untwist_testing::transform_with(&alloc, source, &ctors, opts)
+}
+
+#[test]
+fn a_declarator_keeps_the_sequence_that_hides_an_anonymous_function_when_a_name_is_read() {
+    let source =
+        "let h = (a(), () => 1); var f = (b(), function () {}); console.log(f.name, h.name);";
+    assert_eq!(
+        safe(source),
+        "let h = (a(), () => 1);\nvar f = (b(), function () {});\nconsole.log(f.name, h.name);"
+    );
+}
+
+#[test]
+fn an_assignment_keeps_the_sequence_that_hides_an_anonymous_class_when_a_name_is_read() {
+    assert_eq!(
+        safe("f = (a(), class {}); const { name } = f;"),
+        "f = (a(), class {});\nconst { name } = f;"
+    );
+}
+
+#[test]
+fn an_anonymous_function_moves_out_of_the_sequence_when_no_name_is_read() {
+    assert_eq!(
+        safe("var f = (a(), function () {}); g = (b(), () => 1);"),
+        "a();\nvar f = function () {};\nb();\ng = () => 1;"
+    );
+}
+
+#[test]
+fn under_unsafe_an_anonymous_function_moves_out_of_the_sequence_even_when_a_name_is_read() {
+    assert_transform!("var f = (a(), function () {}); console.log(f.name);", [untwist_unminify::sequence::boxed], @r"
+a();
+var f = function () {};
+console.log(f.name);
+");
+}
+
+#[test]
+fn a_named_function_expression_still_moves_out_of_the_sequence() {
+    assert_transform!("var f = (a(), function named() {}); console.log(f.name);", [untwist_unminify::sequence::boxed], @r"
+a();
+var f = function named() {};
+console.log(f.name);
+");
+}
