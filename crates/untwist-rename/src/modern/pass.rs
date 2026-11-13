@@ -12,7 +12,7 @@ use super::lookalike::lookalikes;
 use super::plan::{module_hits, plan, units, Inputs, Installer, Plan, LABEL};
 use super::report;
 use crate::library::match_program;
-use crate::text_reads::{text_read_bindings, TextReads};
+use crate::text_reads::{text_read_bindings_with, SelfReads, TextReads};
 use oxc_semantic::Scoping;
 use untwist_core::semantic::build_scoping;
 
@@ -86,7 +86,12 @@ impl ModernPass {
             refuse(cx, DYNAMIC_SCOPE);
             return None;
         }
-        let TextReads::Bindings(pinned) = text_read_bindings(program, scoping) else {
+        let self_reads = match cx.opts.unsafe_transforms {
+            true => SelfReads::InstanceMethodsReadInstances,
+            false => SelfReads::Unknown,
+        };
+        let TextReads::Bindings(pinned) = text_read_bindings_with(program, scoping, self_reads)
+        else {
             refuse(cx, TEXT_READ_UNKNOWN);
             return None;
         };
