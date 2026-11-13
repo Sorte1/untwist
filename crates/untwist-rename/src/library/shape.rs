@@ -11,6 +11,7 @@ use untwist_core::ast_util::js_text::js_text;
 
 use super::hash::{fnv, mix, Exact, PolyHash};
 
+mod chain;
 mod inline;
 
 const TAG_TYPE: u8 = 1;
@@ -817,6 +818,10 @@ impl<'n, 'a: 'n> VisitJs<'a> for Emitter<'n, 'a> {
         self.visit_expression(left);
         self.visit_expression(right);
         self.close();
+    }
+
+    fn visit_logical_expression(&mut self, it: &LogicalExpression<'a>) {
+        self.emit_logical(it);
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {

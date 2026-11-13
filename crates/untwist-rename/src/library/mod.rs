@@ -86,6 +86,17 @@ enum Slot {
     Conflict,
 }
 
+fn name_key(name: &str) -> String {
+    name.chars()
+        .filter(|c| *c != '_' && *c != '$')
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn same_name(left: &str, right: &str) -> bool {
+    left == right || name_key(left) == name_key(right)
+}
+
 impl Slot {
     fn merge(&mut self, name: Option<&String>) {
         let Some(name) = name else {
@@ -93,7 +104,7 @@ impl Slot {
         };
         match self {
             Slot::Unknown => *self = Slot::Name(name.clone()),
-            Slot::Name(existing) if existing != name => *self = Slot::Conflict,
+            Slot::Name(existing) if !same_name(existing, name) => *self = Slot::Conflict,
             _ => {}
         }
     }

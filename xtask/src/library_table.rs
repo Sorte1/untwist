@@ -50,6 +50,7 @@ struct Build {
     dir: String,
     bundler: String,
     obfuscated: bool,
+    minified: bool,
     names: BTreeMap<String, String>,
 }
 
@@ -85,6 +86,7 @@ fn read_manifest(path: &Path) -> Result<Manifest> {
             dir: text(&build["dir"]),
             bundler: text(&build["bundler"]),
             obfuscated: text(&build["obfuscator"]) != "none",
+            minified: text(&build["minifier"]) != "none",
             names: string_map(&build["names"]),
         })
         .collect();
@@ -436,8 +438,7 @@ fn observe_file(
         .filter(|(record, _, _)| record.loose.0 >= MIN_UNIT_TOKENS)
         .filter(|(record, _, _)| is_strong(record) || record.binding.is_some())
         .map(|(record, module, role)| {
-            let known = !build.obfuscated;
-            let own_known = known || role == Role::Wrapper;
+            let known = !build.obfuscated && !build.minified;
             Observed {
                 known,
                 row: Row {
@@ -450,7 +451,7 @@ fn observe_file(
                     own: record
                         .binding
                         .as_deref()
-                        .filter(|_| own_known)
+                        .filter(|_| known)
                         .and_then(|name| clean_name(name, rollup, words)),
                     inner: names(&record.inner, known, rollup, words),
                     outer: names(&record.outer, known, rollup, words),
