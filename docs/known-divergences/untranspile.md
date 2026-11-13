@@ -275,6 +275,16 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   (`var _this = this`) becomes `this` inside a moved value. Static fields stay after the class. An
   anonymous function, arrow or class moved into a field is wrapped as `f = (0, () => {})`, so its
   `name` stays `""` as it was when passed to the helper.
+- **Super property helpers become `super`.** Inside a converted class, Babel's
+  `_superPropGet(C, "k", this, flags)` (identified by structure with its `_get`,
+  `_superPropBase` and `_getPrototypeOf`) becomes `super.k`, and with the call flag
+  `_superPropGet(C, "k", this, 3)([a, ...b])` becomes `super.k(a, ...b)`. This applies only when
+  `C` is the class's own name, the call sits in one of its methods (through arrows, not other
+  functions), the method's `static` matches the prototype flag, and the argument list is an
+  array literal without holes. Both forms read `k` from the prototype of `C.prototype` (or of
+  `C`) with `this` as receiver, as `super` does from the method's home object, which is
+  `C.prototype` (or `C`) for a class method. Calls in class fields, static blocks and object
+  literals (`_superPropGet(_obj, …)`) stay.
 - **Every class rewrite is `--unsafe` only**, under these assumptions:
   - **Methods and accessors are never constructed, and their `prototype` and `name` are never
     read.** A function in a `_createClass` descriptor is constructible and has a `prototype`; a

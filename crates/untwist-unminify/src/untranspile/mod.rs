@@ -21,6 +21,7 @@ mod class_native;
 mod class_parent;
 mod class_proto;
 mod class_super;
+mod class_super_prop;
 mod define_chain;
 mod destructure;
 mod fingerprint;
@@ -983,6 +984,15 @@ impl<'a> Pass<'a> for UntranspileHelpers {
             && async_pair::rewrite_closure(node, &self.table, cx)
         {
             shapes::fire(PASS, async_pair::CLOSURE);
+            cx.changed();
+            return;
+        }
+        if self.gate.unsafe_
+            && self.table.has_super_props()
+            && class_super_prop::may_be_site(node)
+            && class_super_prop::rewrite(node, &self.table, cx)
+        {
+            shapes::fire(PASS, class_super_prop::SHAPE);
             cx.changed();
             return;
         }

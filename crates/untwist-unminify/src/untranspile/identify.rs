@@ -49,6 +49,7 @@ pub struct Table {
     runners: bool,
     iterators: bool,
     regenerators: bool,
+    super_props: bool,
 }
 
 impl Table {
@@ -62,6 +63,7 @@ impl Table {
         self.runners = false;
         self.iterators = false;
         self.regenerators = false;
+        self.super_props = false;
     }
 
     pub fn is_empty(&self) -> bool {
@@ -100,6 +102,10 @@ impl Table {
         self.regenerators
     }
 
+    pub fn has_super_props(&self) -> bool {
+        self.super_props
+    }
+
     pub fn kinds(&self) -> impl Iterator<Item = Kind> + '_ {
         self.helpers.values().map(|helper| helper.kind)
     }
@@ -113,6 +119,7 @@ impl Table {
         self.runners |= shapes::is_async_runner(helper.kind);
         self.iterators |= shapes::is_iterator_helper(helper.kind);
         self.regenerators |= shapes::is_regenerator(helper.kind);
+        self.super_props |= helper.kind == shapes::Kind::SuperPropGet;
         self.helpers.insert(symbol, helper);
     }
 

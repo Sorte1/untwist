@@ -182,6 +182,11 @@ const SHAPE_FIXTURES: &[(&str, &str, &str)] = &[
     ),
     (
         "untranspile-helpers",
+        "class/super-property/unsafe",
+        "fixtures/untranspile/matrix/babel-7.29/ie11/class-extends.js",
+    ),
+    (
+        "untranspile-helpers",
         "generator/regenerator/unsafe",
         "fixtures/untranspile/matrix/babel-7.29/ie11/generators.js",
     ),
