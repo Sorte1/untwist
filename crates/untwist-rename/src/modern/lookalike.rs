@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use super::baseline::Version;
 use super::plan::LABEL;
 use crate::library::shape::{exact_shape, shape_program, UnitKind};
-use crate::library::table::{builtin, exact_key, loose_key, Role, Row, Table};
+use crate::library::table::{current, exact_key, loose_key, Role, Row, Table};
 
 pub struct Lookalike {
     pub span: Span,
@@ -34,7 +34,8 @@ pub fn lookalikes(
     scoping: &Scoping,
     known: &FxHashSet<Span>,
 ) -> Vec<Lookalike> {
-    let table = builtin();
+    let shared = current();
+    let table: &Table = &shared;
     let shaped = shape_program(program, scoping);
     let mut found = Vec::new();
     for unit in &shaped.units {
