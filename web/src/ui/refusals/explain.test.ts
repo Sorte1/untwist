@@ -98,8 +98,8 @@ describe('the refusal explanations', () => {
     const rows = explainRefusals(capped, 'x'.repeat(SHOWN_SITES + 10));
     expect(rows.shown).toHaveLength(SHOWN_SITES);
     expect(rows.more).toBe(84_000);
-    expect(rows.reasons.map((reason) => reason.places)).toEqual([1, 83_000, 1_002]);
-    expect(rows.reasons[1]?.sentence).toMatch(/^may run code built from text/);
+    expect(rows.reasons.map((reason) => reason.places)).toEqual([83_000, 1_002, 1]);
+    expect(rows.reasons[0]?.sentence).toMatch(/^may run code built from text/);
   });
 
   it('read nothing from a broken report', () => {

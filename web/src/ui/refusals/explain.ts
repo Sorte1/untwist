@@ -107,7 +107,7 @@ function reasonCounts(report: string): ReasonCount[] {
     const sentence = sentenceFor(row.what);
     counts.set(sentence, (counts.get(sentence) ?? 0) + row.places);
   }
-  return [...counts].map(([sentence, places]) => ({ sentence, places }));
+  return [...counts].map(([sentence, places]) => ({ sentence, places })).sort((a, b) => b.places - a.places);
 }
 
 function quoted(text: string, span: readonly [number, number]): string {

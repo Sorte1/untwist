@@ -1,5 +1,4 @@
-use std::collections::{HashMap, HashSet};
-
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serialize;
 use untwist::{stage_rows, Output, RefusalSite, Snapshot, SnapshotCode, StageRow};
 use untwist_core::ast_util::respan::SYNTHETIC_BASE;
@@ -227,7 +226,7 @@ fn place<'a>(row: &SiteRow<'a>) -> Place<'a> {
 
 fn reason_rows<'a>(rows: &[SiteRow<'a>]) -> Vec<ReasonRow<'a>> {
     let mut reasons: Vec<ReasonRow<'a>> = Vec::new();
-    let mut at: HashMap<&str, usize> = HashMap::new();
+    let mut at: FxHashMap<&str, usize> = FxHashMap::default();
     for row in rows {
         let index = *at.entry(row.what).or_insert_with(|| {
             reasons.push(ReasonRow {
@@ -238,8 +237,21 @@ fn reason_rows<'a>(rows: &[SiteRow<'a>]) -> Vec<ReasonRow<'a>> {
         });
         reasons[index].places += 1;
     }
-    reasons.sort_by_key(|reason| (rank(reason.what), std::cmp::Reverse(reason.places)));
     reasons
+}
+
+fn in_input_order<'a>(rows: Vec<SiteRow<'a>>) -> Vec<SiteRow<'a>> {
+    let mut order: Vec<(u32, u32)> = rows
+        .iter()
+        .zip(0u32..)
+        .map(|(row, index)| (row.input_span.map_or(u32::MAX, |span| span[0]), index))
+        .collect();
+    order.sort_unstable();
+    let mut slots: Vec<Option<SiteRow<'a>>> = rows.into_iter().map(Some).collect();
+    order
+        .into_iter()
+        .filter_map(|(_, index)| slots.get_mut(index as usize)?.take())
+        .collect()
 }
 
 fn site_rows<'a>(sites: &'a [RefusalSite], source: &str) -> Sites<'a> {
@@ -247,18 +259,17 @@ fn site_rows<'a>(sites: &'a [RefusalSite], source: &str) -> Sites<'a> {
         return Sites::default();
     }
     let index = Utf16Index::new(source, true);
-    let mut rows: Vec<SiteRow<'a>> = sites
-        .iter()
+    let mut seen = FxHashSet::default();
+    let ranked: Vec<SiteRow<'a>> = (0..=2)
+        .flat_map(|wanted| sites.iter().filter(move |site| rank(&site.what) == wanted))
         .map(|site| SiteRow {
             what: &site.what,
             layer: site.layer,
             input_span: site_span(site, source, &index),
         })
+        .filter(|row| seen.insert(place(row)))
         .collect();
-    rows.sort_by_key(|row| rank(row.what));
-    let mut seen = HashSet::new();
-    rows.retain(|row| seen.insert(place(row)));
-    rows.sort_by_key(|row| row.input_span.map_or(u32::MAX, |span| span[0]));
+    let mut rows = in_input_order(ranked);
     let total = rows.len();
     let reasons = reason_rows(&rows);
     rows.truncate(SITE_ROWS);
@@ -483,8 +494,8 @@ mod tests {
         assert_eq!(
             reasons,
             [
-                ("GLOBAL_REACH", 1),
-                ("code from text", SITE_ROWS + extra - 1)
+                ("code from text", SITE_ROWS + extra - 1),
+                ("GLOBAL_REACH", 1)
             ]
         );
     }
