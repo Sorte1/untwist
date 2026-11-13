@@ -1308,6 +1308,22 @@ button.diag-row:hover .diag-loc {
   display: inline-flex;
 }
 
+.diff-mode .library-code {
+  display: none;
+}
+
+.pane-foot .library-code {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+}
+
+.library-code[aria-pressed='true'] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 .diff-wrap[aria-pressed='true'] {
   color: var(--text);
   background: var(--diff-add-tint);

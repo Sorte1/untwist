@@ -51,7 +51,7 @@ export const CLI_DEFAULTS: Settings = { ...DEFAULTS, unsafe: false };
 export const RENAME_HINTS: Readonly<Record<RenameMode, string>> = {
   none: 'Keep identifiers exactly as in the input (the default).',
   simple: 'Per-function a, b, … sequences.',
-  smart: 'Names from evidence: i for loop counters, item and index in callbacks, err in catch, canvas for createElement("canvas"); human-written names stay.',
+  smart: 'Names from evidence: the original names of matched library code such as core-js, i for loop counters, item and index in callbacks, err in catch, canvas for createElement("canvas"); human-written names stay.',
   unique: 'Program-wide readable names such as fn1, arr2, handler3.',
   mangle: 'Short mangled names (a, b, … aa, ab) chosen program-wide.',
 };

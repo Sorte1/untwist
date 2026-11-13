@@ -55,6 +55,14 @@ test('the drawer shows the stage rows and exports the CLI stages', async ({ page
   expect(masked(report.stages)).toEqual(masked(cliStages(FIXTURE)));
 });
 
+test('a run without library code lists no libraries and offers no library toggle', async ({ page }) => {
+  await runFixture(page, readRepo(FIXTURE));
+  await page.locator('#details-tab').click();
+  const libraries = page.locator('#details .details-section').filter({ has: page.locator('h3', { hasText: /^Libraries$/ }) });
+  await expect(libraries.locator('dd')).toHaveText('none detected');
+  await expect(page.locator('#library-code')).toBeHidden();
+});
+
 test('the debug bundle carries settings, report and engine, never the input', async ({ page }) => {
   const marker = 'untwist_input_marker_42';
   await runFixture(page, `var ${marker} = !0;`);

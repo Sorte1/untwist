@@ -1,5 +1,7 @@
 import { bracketMatching, codeFolding, foldGutter, foldKeymap, indentOnInput } from '@codemirror/language';
 import { search } from '@codemirror/search';
+import { linesLabel } from '../dom';
+import { commentShape } from '../libraries/libraries';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap, rectangularSelection } from '@codemirror/view';
 import { CHEVRON_PATH, CLOSE_PATH, maskOf, strokeIcon } from './icon';
@@ -47,6 +49,7 @@ const editingLook = EditorView.theme({
     color: 'var(--muted)',
     cursor: 'pointer',
   },
+  '.cm-foldPlaceholder.cm-library-fold': { fontFamily: 'var(--sans)', fontSize: '11.5px' },
   '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': {
     backgroundColor: 'var(--selection)',
     outline: '1px solid var(--faint)',
@@ -119,10 +122,20 @@ export interface Editing {
   attach(view: EditorView, host: HTMLElement): void;
 }
 
-function foldPlaceholder(view: EditorView, unfold: (event: Event) => void): HTMLElement {
+export function libraryPlaceholder(state: EditorState, range: { readonly from: number; readonly to: number }): string | null {
+  const line = state.doc.lineAt(range.from);
+  const comment = line.to === range.from ? commentShape(line.text) : null;
+  if (comment === null) {
+    return null;
+  }
+  return `${linesLabel(state.doc.lineAt(range.to).number - line.number)} of ${comment.library}`;
+}
+
+function foldPlaceholder(view: EditorView, unfold: (event: Event) => void, prepared: unknown): HTMLElement {
   const element = document.createElement('span');
-  element.textContent = '…';
-  element.className = 'cm-foldPlaceholder';
+  const library = typeof prepared === 'string' ? prepared : null;
+  element.textContent = library ?? '…';
+  element.className = library === null ? 'cm-foldPlaceholder' : 'cm-foldPlaceholder cm-library-fold';
   element.setAttribute('aria-label', view.state.phrase('folded code'));
   element.title = view.state.phrase('unfold');
   element.addEventListener('mousedown', unfold);
@@ -137,7 +150,7 @@ export function codeEditing(module: Promise<WebAssembly.Module>): Editing {
       EditorState.phrases.of(PHRASES),
       EditorView.clickAddsSelectionRange.of((event) => event.altKey),
       rectangularSelection({ eventFilter: (event) => event.altKey && event.shiftKey }),
-      codeFolding({ placeholderText: '…', placeholderDOM: foldPlaceholder }),
+      codeFolding({ placeholderText: '…', placeholderDOM: foldPlaceholder, preparePlaceholder: libraryPlaceholder }),
       foldGutter({ markerDOM: foldMarker }),
       bracketMatching(),
       indentOnInput(),

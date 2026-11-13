@@ -3,7 +3,8 @@ import type { RunResult } from '../../engine/types';
 import { debugBundle, downloadText } from './export';
 import { parseReport, stageTotalMs, type NoteRow, type Report, type StageRow } from './report';
 import { diagnosticsOf } from '../diagnostics-model';
-import { detectionPairs, limitPairs, ms, passesOf, renamePairs, resourcePairs, warningClassPairs, type Pair } from './rows';
+import { librariesOf } from '../../libraries/libraries';
+import { detectionPairs, libraryPairs, limitPairs, ms, passesOf, renamePairs, resourcePairs, warningClassPairs, type Pair } from './rows';
 import { virtualList } from './virtual-list';
 
 const ROW_HEIGHT = 26;
@@ -123,6 +124,7 @@ export function renderDrawer(container: HTMLElement, result: RunResult | null, f
   );
   container.lastElementChild?.append(
     section('Detection', pairs(detectionPairs(report))),
+    section('Libraries', pairs(libraryPairs(librariesOf(result.report)))),
     section('Limits', pairs(limitPairs(report))),
     section('Rename', pairs(renamePairs(report))),
     section('Warnings by class', pairs(warningClassPairs(diagnosticsOf(result.report, result.stderr)))),

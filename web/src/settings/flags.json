@@ -4,6 +4,7 @@
   { "settings": { "jsx": false }, "flags": "--no-jsx" },
   { "settings": { "unsafe": true }, "flags": "--unsafe" },
   { "settings": { "rename": "simple" }, "flags": "--rename simple" },
+  { "settings": { "rename": "smart" }, "flags": "--rename smart" },
   { "settings": { "rename": "unique" }, "flags": "--rename unique" },
   { "settings": { "rename": "mangle" }, "flags": "--rename mangle" },
   { "settings": { "fuel": 1000 }, "flags": "--fuel 1000" },

@@ -1,5 +1,6 @@
 import { explainLimit } from '../../limits';
 import type { DiagnosticRow } from '../diagnostics-model';
+import { moduleLabel, type LibraryRow } from '../../libraries/libraries';
 import type { Report, RunStats, StageRow } from './report';
 
 export interface Pair {
@@ -36,6 +37,13 @@ export function detectionPairs(report: Report): Pair[] {
     },
     ...families.map((row) => ({ label: `  ${row.pass}`, value: `${row.changes} changes` })),
   ];
+}
+
+export function libraryPairs(rows: readonly LibraryRow[]): Pair[] {
+  if (rows.length === 0) {
+    return [{ label: 'Libraries', value: 'none detected' }];
+  }
+  return rows.map((row) => ({ label: row.library, value: row.range === '' ? moduleLabel(row.modules) : `${row.range} · ${moduleLabel(row.modules)}` }));
 }
 
 export function limitPairs(report: Report): Pair[] {

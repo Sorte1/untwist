@@ -5,7 +5,9 @@ open a script, or pick an example, and press Run. Ctrl+K (⌘K) opens a command 
 examples, settings, modules and actions. The WebAssembly build (`crates/untwist-wasm`)
 works in a Web Worker and reports each stage it reaches, so a long run shows where it is. You
 can read, edit and download the output and the unpacked modules, compare before and after, and
-read the diagnostics and the run report. For the same flags the output is
+read the diagnostics and the run report. Library modules untwist recognises are listed in the
+report and folded under their `// <library> <range>: <path>` comment; Show library code unfolds
+them, and copy and download always keep the full text. For the same flags the output is
 byte for byte the `untwist` CLI's.
 
 ## Build

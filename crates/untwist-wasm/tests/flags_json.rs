@@ -34,6 +34,7 @@ fn disabled(settings: &Value) -> Vec<&str> {
 fn rename(settings: &Value) -> RenameMode {
     match settings.get("rename").and_then(Value::as_str) {
         Some("simple") => RenameMode::Simple,
+        Some("smart") => RenameMode::Smart,
         Some("unique") => RenameMode::Unique,
         Some("mangle") => RenameMode::Mangle,
         _ => RenameMode::None,
