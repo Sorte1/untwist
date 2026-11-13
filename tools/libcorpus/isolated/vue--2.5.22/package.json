@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-vue--2-5-22",
   "private": true,
   "dependencies": {
-    "vue": "2.5.22"
+    "vue": "2.5.22",
+    "vue--2.5.22": "npm:vue@2.5.22"
   }
 }

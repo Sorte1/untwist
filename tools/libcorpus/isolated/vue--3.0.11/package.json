@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-vue--3-0-11",
   "private": true,
   "dependencies": {
-    "vue": "3.0.11"
+    "vue": "3.0.11",
+    "vue--3.0.11": "npm:vue@3.0.11"
   }
 }

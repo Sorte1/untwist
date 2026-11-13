@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-three--0-128-0",
   "private": true,
   "dependencies": {
-    "three": "0.128.0"
+    "three": "0.128.0",
+    "three--0.128.0": "npm:three@0.128.0"
   }
 }

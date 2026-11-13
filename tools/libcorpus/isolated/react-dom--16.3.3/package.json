@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-react-dom--16-3-3",
   "private": true,
   "dependencies": {
-    "react-dom": "16.3.3"
+    "react-dom": "16.3.3",
+    "react-dom--16.3.3": "npm:react-dom@16.3.3"
   }
 }

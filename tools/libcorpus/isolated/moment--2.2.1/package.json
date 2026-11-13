@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-moment--2-2-1",
   "private": true,
   "dependencies": {
-    "moment": "2.2.1"
+    "moment": "2.2.1",
+    "moment--2.2.1": "npm:moment@2.2.1"
   }
 }

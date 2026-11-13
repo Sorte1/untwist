@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-solid-js--1-2-6",
   "private": true,
   "dependencies": {
-    "solid-js": "1.2.6"
+    "solid-js": "1.2.6",
+    "solid-js--1.2.6": "npm:solid-js@1.2.6"
   }
 }

@@ -45,6 +45,7 @@ enum Cmd {
     BundleMatrix(xtask::bundle_matrix::Request),
     LibraryTable(xtask::library_table::Request),
     LibraryScan(xtask::library_scan::Request),
+    LibraryDeny(xtask::library_deny::Request),
     LibraryFalsePositives(xtask::library_false_positives::Request),
     ModernTable(xtask::modern_table::Request),
     ObfOptions(xtask::obf_options::Request),
@@ -496,6 +497,7 @@ fn main() -> Result<()> {
         Cmd::LibraryTable(request) => xtask::library_table::run(&repo_root(), &request),
         Cmd::ModernTable(request) => xtask::modern_table::run(&repo_root(), &request),
         Cmd::LibraryScan(request) => xtask::library_scan::run(&request),
+        Cmd::LibraryDeny(request) => xtask::library_deny::run(&request),
         Cmd::LibraryFalsePositives(request) => {
             xtask::library_false_positives::run(&repo_root(), &request)
         }

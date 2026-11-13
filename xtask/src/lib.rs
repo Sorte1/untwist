@@ -14,6 +14,7 @@ pub mod freeze_records;
 pub mod layers;
 pub mod library_false_positives;
 pub mod library_gz;
+pub mod library_deny;
 pub mod library_scan;
 pub mod library_table;
 pub mod modern_table;

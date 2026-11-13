@@ -15,12 +15,12 @@ export function packageDir(entry) {
   return join(CORPUS, entry.root, "node_modules", entry.alias);
 }
 
-const MODULAR = /^(lib|es|esm|src|modules|internals|cjs|internal)\//;
-const CONCATENATED = /^(dist|build|bundles|umd)\//;
+const CONCATENATED = /^((dist|bundles|umd|build)\/[^/]+|[^/]+)\.(c|m)?js$/;
+const MINIFIED = /[.-]min\.(c|m)?js$/;
 
 function dropConcatenations(rels) {
-  if (rels.filter((rel) => MODULAR.test(rel)).length < 5) return rels;
-  return rels.filter((rel) => !CONCATENATED.test(rel) || /[.-]min\.(c|m)?js$/.test(rel));
+  if (rels.filter((rel) => !CONCATENATED.test(rel)).length < 5) return rels;
+  return rels.filter((rel) => !CONCATENATED.test(rel) || !/^(dist|bundles|umd|build)\//.test(rel) || MINIFIED.test(rel));
 }
 
 export function files(entry, { include, exclude, keepConcatenations = false }) {

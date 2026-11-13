@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-preact--8-4-2",
   "private": true,
   "dependencies": {
-    "preact": "8.4.2"
+    "preact": "8.4.2",
+    "preact--8.4.2": "npm:preact@8.4.2"
   }
 }
