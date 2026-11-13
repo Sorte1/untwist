@@ -9,7 +9,8 @@ use oxc_traverse::BoundIdentifier;
 use untwist_core::pass::Cx;
 
 use super::generator::{
-    aliases_arguments, body_of, drop_final_return, returned_call, unbind, Body,
+    aliases_arguments, body_of, drop_declarators, drop_final_return, rebinds, returned_call,
+    unbind, Body,
 };
 use super::identify::Table;
 use super::machine_emit::Emitter;
@@ -46,11 +47,21 @@ fn wrapped<'k, 'a>(
     if call.optional || !runtime_call(&call.callee, "w", table, scoping) {
         return None;
     }
-    let [Argument::FunctionExpression(_) | Argument::ArrowFunctionExpression(_), Argument::Identifier(marked)] =
-        call.arguments.as_slice()
+    let (
+        Some(Argument::FunctionExpression(_) | Argument::ArrowFunctionExpression(_)),
+        Some(Argument::Identifier(marked)),
+    ) = (call.arguments.first(), call.arguments.get(1))
     else {
         return None;
     };
+    let extra_fits = match call.arguments.as_slice() {
+        [_, _] => true,
+        [_, _, Argument::NullLiteral(_), Argument::ArrayExpression(_)] => true,
+        _ => false,
+    };
+    if !extra_fits {
+        return None;
+    }
     let marked = scoping
         .get_reference(marked.reference_id.get()?)
         .symbol_id()?;
@@ -168,24 +179,32 @@ pub fn rewrite<'a>(function: &mut Function<'a>, table: &Table, cx: &mut Cx<'a, '
         return None;
     }
     let prefix = function.body.as_ref()?.statements.split_last()?.1;
+    let context = Context {
+        scoping,
+        state: body.state,
+    };
+    let list = call.arguments.get(3).and_then(Argument::as_expression);
+    let regions = machine_regenerator::regions(list, body.statements, &context)?;
     let regenerator = Regenerator {
-        context: Context {
-            scoping,
-            state: body.state,
-        },
+        context,
         home: (!prefix.iter().any(aliases_arguments)).then_some(scope),
+        regions,
     };
     let loaded = machine_regenerator::read(body.statements, &regenerator)?;
-    if !loaded.machine.trys.is_empty() {
-        return None;
-    }
     let mut structured = structure::structure(&loaded.machine)?;
     tidy(&mut structured.code, &loaded.machine);
     let reads = ValueReads::of(scoping, body.state);
+    let (cases_ref, _) = machine_regenerator::cases(body.statements, &regenerator.context)?;
+    let rebound = rebinds(&loaded.machine, &cases_ref, prefix, &reads, scoping);
     let labels: Vec<&'a str> = loaded.labels;
     let machine = loaded.machine;
     let cases = copy_cases(returned_call(function)?, cx)?;
     let mut emitter = Emitter::new(cases, (&machine, &structured.yields), &reads, scope, cx);
+    for (region, symbol, name) in &rebound {
+        emitter
+            .rebound
+            .insert(*region, BoundIdentifier::new((*name).into(), *symbol));
+    }
     emitter.name_labels(&structured.code, &labels);
     let mut statements = emitter.sequence(std::mem::take(&mut structured.code));
     if emitter.failed() {
@@ -196,6 +215,8 @@ pub fn rewrite<'a>(function: &mut Function<'a>, table: &Table, cx: &mut Cx<'a, '
     drop_final_return(&mut statements);
     let body = function.body.as_mut()?;
     body.statements.pop();
+    let symbols: Vec<SymbolId> = rebound.iter().map(|(_, symbol, _)| *symbol).collect();
+    drop_declarators(&mut body.statements, &symbols);
     body.statements.extend(statements.drain(..));
     function.generator = true;
     Some(())

@@ -250,7 +250,7 @@ fn confined(
     Some(())
 }
 
-fn rebinds<'a>(
+pub fn rebinds<'a>(
     machine: &Machine,
     cases: &[&[Statement<'a>]],
     prefix: &[Statement<'a>],
@@ -281,7 +281,7 @@ fn rebinds<'a>(
     out
 }
 
-fn drop_declarators(statements: &mut AVec<'_, Statement<'_>>, symbols: &[SymbolId]) {
+pub fn drop_declarators(statements: &mut AVec<'_, Statement<'_>>, symbols: &[SymbolId]) {
     for statement in statements.iter_mut() {
         if let Statement::VariableDeclaration(declaration) = statement {
             declaration.declarations.retain(|declarator| {
