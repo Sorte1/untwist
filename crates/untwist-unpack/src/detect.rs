@@ -242,16 +242,27 @@ fn dispatched_containers<'k>(statement: &'k Statement<'_>) -> Vec<&'k str> {
     let Some(body) = function.body.as_deref() else {
         return Vec::new();
     };
+    let param = param.name.as_str();
     body.statements
         .iter()
         .filter_map(|statement| match statement {
-            Statement::ExpressionStatement(statement) => match statement
-                .expression
-                .without_parentheses()
-            {
-                Expression::CallExpression(call) => indexed_by(&call.callee, param.name.as_str()),
-                _ => None,
-            },
+            Statement::ExpressionStatement(statement) => Some(&statement.expression),
+            Statement::ReturnStatement(statement) => {
+                statement.argument.as_ref().filter(|argument| {
+                    matches!(
+                        argument.without_parentheses(),
+                        Expression::SequenceExpression(_)
+                    )
+                })
+            }
+            _ => None,
+        })
+        .flat_map(|expression| match expression.without_parentheses() {
+            Expression::SequenceExpression(sequence) => sequence.expressions.iter().collect(),
+            other => vec![other],
+        })
+        .filter_map(|expression| match expression.without_parentheses() {
+            Expression::CallExpression(call) => indexed_by(&call.callee, param),
             _ => None,
         })
         .collect()

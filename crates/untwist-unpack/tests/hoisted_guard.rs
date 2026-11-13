@@ -28,6 +28,9 @@ const RUNTIME: &str = r#"(() => {
 })();
 "#;
 
+const RUNTIME_MIN: &str = r#"(()=>{"use strict";var e={},r={};function o(t){var n=r[t];if(void 0!==n)return n.exports;var a=r[t]={exports:{}};return e[t](a,a.exports,o),a.exports}o.m=e;const l="runtime",u=()=>l;self.webpackReport=u})();
+"#;
+
 const HOISTED: &str = r#"(function () {
   "use strict";
   const handlers = { a: () => 1 };
@@ -49,6 +52,7 @@ fn split_count(source: &str) -> Option<usize> {
 #[test]
 fn a_webpack_runtime_is_not_split_as_a_scope_hoisted_bundle() {
     assert_eq!(split_count(RUNTIME), None);
+    assert_eq!(split_count(RUNTIME_MIN), None);
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, RUNTIME);
     assert!(!holds_a_bundle_with(&parsed.program, ON));
