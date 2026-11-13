@@ -6,6 +6,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::baseline::Baseline;
 use super::collect::{Callee, DeclKind, Facts};
 use super::compat::{Compat, Verdict};
+use super::dead::{Dead, Origin};
 use super::lookalike::Lookalike;
 use super::regions::Regions;
 use crate::library::shape::UnitKind;
@@ -28,6 +29,7 @@ pub enum Keep {
     NotRun,
     SharedState,
     TextRead,
+    RunsKept,
 }
 
 #[derive(Clone, Debug)]
@@ -156,15 +158,26 @@ pub fn units(
             ));
         }
     }
+    let named: FxHashSet<SymbolId> = out
+        .iter()
+        .flat_map(|unit| unit.outer.iter().copied())
+        .collect();
     for span in &facts.trivial {
-        if known.insert(*span) {
-            out.push(unit(
-                *span,
-                Vec::new(),
-                (String::new(), String::new()),
-                Source::Trivial,
-                cx,
-            ));
+        if !known.insert(*span) {
+            continue;
+        }
+        let candidate = unit(
+            *span,
+            Vec::new(),
+            (String::new(), String::new()),
+            Source::Trivial,
+            cx,
+        );
+        if candidate
+            .binding
+            .is_some_and(|binding| named.contains(&binding))
+        {
+            out.push(candidate);
         }
     }
     out
@@ -172,13 +185,13 @@ pub fn units(
 
 pub struct Graph<'u> {
     units: &'u [Unit],
-    by_binding: FxHashMap<SymbolId, usize>,
+    pub by_binding: FxHashMap<SymbolId, usize>,
     refs: FxHashMap<SymbolId, Vec<usize>>,
-    coverage: Vec<Span>,
+    state: FxHashMap<SymbolId, bool>,
 }
 
-fn coverage(units: &[Unit]) -> Vec<Span> {
-    let mut spans: Vec<Span> = units.iter().map(|unit| unit.span).collect();
+fn coverage(spans: impl Iterator<Item = Span>) -> Vec<Span> {
+    let mut spans: Vec<Span> = spans.collect();
     spans.sort_by_key(|span| (span.start, std::cmp::Reverse(span.end)));
     let mut out: Vec<Span> = Vec::new();
     for span in spans {
@@ -195,9 +208,14 @@ fn covered(coverage: &[Span], at: u32) -> bool {
     index > 0 && at < coverage[index - 1].end
 }
 
+fn inside(coverage: &[Span], span: Span) -> bool {
+    let index = coverage.partition_point(|outer| outer.start <= span.start);
+    index > 0 && span.end <= coverage[index - 1].end
+}
+
 impl<'u> Graph<'u> {
     pub fn new(units: &'u [Unit], facts: &Facts) -> Self {
-        let by_binding = units
+        let by_binding: FxHashMap<SymbolId, usize> = units
             .iter()
             .enumerate()
             .filter_map(|(index, unit)| unit.binding.map(|symbol| (symbol, index)))
@@ -206,11 +224,28 @@ impl<'u> Graph<'u> {
         for (index, site) in facts.refs.iter().enumerate() {
             refs.entry(site.symbol).or_default().push(index);
         }
+        let spans = coverage(units.iter().map(|unit| unit.span));
+        let mut state = FxHashMap::default();
+        for symbol in units.iter().flat_map(|unit| unit.outer.iter()) {
+            if by_binding.contains_key(symbol) || state.contains_key(symbol) {
+                continue;
+            }
+            let is_var = facts
+                .decls
+                .get(symbol)
+                .is_some_and(|decl| matches!(decl.kind, DeclKind::Var { .. }));
+            let inside = refs
+                .get(symbol)
+                .map_or(&[][..], Vec::as_slice)
+                .iter()
+                .all(|&at| covered(&spans, facts.refs[at].start));
+            state.insert(*symbol, is_var && inside);
+        }
         Graph {
             units,
             by_binding,
             refs,
-            coverage: coverage(units),
+            state,
         }
     }
 
@@ -218,42 +253,35 @@ impl<'u> Graph<'u> {
         self.refs.get(&symbol).map_or(&[], Vec::as_slice)
     }
 
-    fn state_var(&self, symbol: SymbolId, facts: &Facts) -> bool {
-        let is_var = facts
-            .decls
-            .get(&symbol)
-            .is_some_and(|decl| matches!(decl.kind, DeclKind::Var { .. }));
-        is_var
-            && self
-                .refs_of(symbol)
-                .iter()
-                .all(|&at| covered(&self.coverage, facts.refs[at].start))
+    fn state_var(&self, symbol: SymbolId) -> bool {
+        self.state.get(&symbol).copied().unwrap_or(false)
     }
 
-    pub fn closed(&self, facts: &Facts) -> Vec<bool> {
+    pub fn closed(&self) -> Vec<bool> {
         let mut closed = vec![true; self.units.len()];
-        loop {
-            let mut changed = false;
-            for index in 0..self.units.len() {
-                if closed[index] && !self.outer_ok(index, &closed, facts) {
-                    closed[index] = false;
-                    changed = true;
+        let mut users: Vec<Vec<usize>> = vec![Vec::new(); self.units.len()];
+        let mut queue = Vec::new();
+        for (index, unit) in self.units.iter().enumerate() {
+            for symbol in &unit.outer {
+                match self.by_binding.get(symbol) {
+                    Some(&dep) => users[dep].push(index),
+                    None if !self.state_var(*symbol) && closed[index] => {
+                        closed[index] = false;
+                        queue.push(index);
+                    }
+                    None => {}
                 }
             }
-            if !changed {
-                return closed;
+        }
+        while let Some(dep) = queue.pop() {
+            for &user in &users[dep] {
+                if closed[user] {
+                    closed[user] = false;
+                    queue.push(user);
+                }
             }
         }
-    }
-
-    fn outer_ok(&self, index: usize, closed: &[bool], facts: &Facts) -> bool {
-        self.units[index]
-            .outer
-            .iter()
-            .all(|symbol| match self.by_binding.get(symbol) {
-                Some(&unit) => closed[unit],
-                None => self.state_var(*symbol, facts),
-            })
+        closed
     }
 
     fn uses_outside(&self, symbol: SymbolId, span: Span, facts: &Facts) -> Vec<u32> {
@@ -338,15 +366,16 @@ fn run_sites(unit: &Unit, graph: &Graph<'_>, facts: &Facts) -> Result<Vec<Span>,
 }
 
 fn shares_state(unit: &Unit, graph: &Graph<'_>, facts: &Facts) -> bool {
+    let written: FxHashSet<SymbolId> = facts
+        .refs_in(unit.span)
+        .iter()
+        .filter(|site| site.write)
+        .map(|site| site.symbol)
+        .collect();
     unit.outer
         .iter()
         .filter(|symbol| !graph.by_binding.contains_key(symbol))
-        .filter(|symbol| {
-            facts
-                .refs_in(unit.span)
-                .iter()
-                .any(|site| site.symbol == **symbol && site.write)
-        })
+        .filter(|symbol| written.contains(symbol))
         .any(|symbol| !graph.uses_outside(*symbol, unit.span, facts).is_empty())
 }
 
@@ -357,16 +386,13 @@ fn text_read(spans: &[Span], unit: &Unit, inputs: &Inputs<'_>) -> bool {
         .any(|site| inputs.pinned.contains(&site.symbol))
 }
 
-fn judge(
+fn checks(
     index: usize,
     closed: &[bool],
     graph: &Graph<'_>,
     inputs: &Inputs<'_>,
 ) -> Result<Vec<Span>, Keep> {
     let unit = &graph.units[index];
-    if let Some(keep) = verdict(unit, inputs) {
-        return Err(keep);
-    }
     if !closed[index] {
         return Err(Keep::Foreign);
     }
@@ -380,77 +406,233 @@ fn judge(
     Ok(sites)
 }
 
-pub fn plan(units: &[Unit], inputs: &Inputs<'_>) -> Plan {
-    let graph = Graph::new(units, inputs.facts);
-    let closed = graph.closed(inputs.facts);
-    let mut plan = Plan::default();
+#[derive(Clone, Debug)]
+enum Judged {
+    Remove(Vec<Span>),
+    Cascade,
+    Keep(Keep),
+}
+
+fn judge_all(
+    installers: &[usize],
+    closed: &[bool],
+    graph: &Graph<'_>,
+    inputs: &Inputs<'_>,
+) -> Vec<Judged> {
+    let first: Vec<(Option<Keep>, Result<Vec<Span>, Keep>)> = installers
+        .iter()
+        .map(|&index| {
+            (
+                verdict(&graph.units[index], inputs),
+                checks(index, closed, graph, inputs),
+            )
+        })
+        .collect();
+    let removable = coverage(
+        installers
+            .iter()
+            .zip(&first)
+            .filter(|(_, (own, rest))| own.is_none() && rest.is_ok())
+            .map(|(&index, _)| graph.units[index].span),
+    );
+    first
+        .into_iter()
+        .map(|judged| match judged {
+            (None, Ok(sites)) => Judged::Remove(sites),
+            (None, Err(keep)) => Judged::Keep(keep),
+            (Some(Keep::Unlisted), Ok(sites))
+                if sites.iter().all(|site| inside(&removable, *site)) =>
+            {
+                Judged::Cascade
+            }
+            (Some(keep), _) => Judged::Keep(keep),
+        })
+        .collect()
+}
+
+const MAX_SWEEPS: usize = 32;
+
+struct Sets {
+    eligible: FxHashSet<SymbolId>,
+    helpers: FxHashSet<SymbolId>,
+}
+
+fn sets(
+    units: &[Unit],
+    closed: &[bool],
+    graph: &Graph<'_>,
+    inputs: &Inputs<'_>,
+    judged: &FxHashMap<usize, Judged>,
+) -> Sets {
     let mut eligible: FxHashSet<SymbolId> = FxHashSet::default();
+    let mut helpers: FxHashSet<SymbolId> = FxHashSet::default();
     for (index, unit) in units.iter().enumerate() {
-        if let Some(binding) = unit.binding {
-            if closed[index] {
-                eligible.insert(binding);
+        if let (Some(binding), true) = (unit.binding, closed[index]) {
+            match judged.get(&index) {
+                None => {
+                    helpers.insert(binding);
+                    eligible.insert(binding);
+                }
+                Some(Judged::Remove(_) | Judged::Cascade) => {
+                    eligible.insert(binding);
+                }
+                Some(Judged::Keep(_)) => {}
             }
         }
         for symbol in &unit.outer {
-            if !graph.by_binding.contains_key(symbol) && graph.state_var(*symbol, inputs.facts) {
+            if !graph.by_binding.contains_key(symbol) && graph.state_var(*symbol) {
                 eligible.insert(*symbol);
             }
         }
     }
-    for (index, unit) in units.iter().enumerate() {
-        if let (Some(binding), true, Source::Matched) = (unit.binding, closed[index], unit.source) {
-            plan.helpers
-                .insert(binding, (unit.modules.clone(), unit.versions.clone()));
-        }
-    }
-    let closed_bindings: FxHashSet<SymbolId> = units
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| closed[*index])
-        .filter_map(|(_, unit)| unit.binding)
-        .collect();
+    let library = coverage(
+        units
+            .iter()
+            .filter(|unit| unit.source != Source::Trivial)
+            .map(|unit| unit.span),
+    );
     for (symbol, decl) in &inputs.facts.decls {
         if let DeclKind::Var {
             call_of: Some(callee),
             ..
         } = decl.kind
         {
-            if closed_bindings.contains(&callee) {
+            if helpers.contains(&callee) && inside(&library, decl.region) {
                 eligible.insert(*symbol);
             }
         }
     }
-    let mut seeds: Vec<Span> = Vec::new();
-    for (index, unit) in units
-        .iter()
-        .enumerate()
-        .filter(|(_, unit)| is_installer(unit))
-    {
-        let judged = judge(index, &closed, &graph, inputs);
-        if let Ok(sites) = &judged {
-            seeds.extend(sites.iter().copied());
+    Sets { eligible, helpers }
+}
+
+struct Sweep {
+    regions: Regions,
+    blame: Vec<Origin>,
+}
+
+fn sweep(
+    units: &[Unit],
+    graph: &Graph<'_>,
+    inputs: &Inputs<'_>,
+    judged: &FxHashMap<usize, Judged>,
+    sets: &Sets,
+) -> Sweep {
+    let mut dead = Dead::new(inputs.facts, inputs.pinned, &sets.eligible, &sets.helpers);
+    let mut order: Vec<&usize> = judged.keys().collect();
+    order.sort_unstable();
+    for &index in order {
+        if let Some(Judged::Remove(sites)) = judged.get(&index) {
+            for site in sites {
+                dead.remove(*site, Origin::Installer(index));
+            }
         }
+    }
+    dead.drain();
+    dead.seed_unused();
+    dead.drain();
+    let mut blame = Vec::new();
+    for (&index, judged) in judged {
+        let unit = &units[index];
+        let removed = dead.regions.covers(unit.span);
+        match judged {
+            Judged::Remove(_) => continue,
+            Judged::Cascade if removed => continue,
+            Judged::Keep(_) if removed => {
+                blame.extend(dead.origin_over(unit.span));
+                continue;
+            }
+            _ => {}
+        }
+        let Some(binding) = unit.binding else {
+            continue;
+        };
+        for &at in graph.refs_of(binding) {
+            blame.extend(dead.origin_at(inputs.facts.refs[at].start));
+        }
+    }
+    Sweep {
+        regions: dead.regions,
+        blame,
+    }
+}
+
+fn settle(
+    units: &[Unit],
+    closed: &[bool],
+    graph: &Graph<'_>,
+    inputs: &Inputs<'_>,
+    judged: &mut FxHashMap<usize, Judged>,
+) -> Regions {
+    let mut blocked: FxHashSet<SymbolId> = FxHashSet::default();
+    for _ in 0..MAX_SWEEPS {
+        let mut sets = sets(units, closed, graph, inputs, judged);
+        sets.eligible.retain(|symbol| !blocked.contains(symbol));
+        let found = sweep(units, graph, inputs, judged, &sets);
+        if found.blame.is_empty() {
+            return found.regions;
+        }
+        for origin in found.blame {
+            match origin {
+                Origin::Installer(index) => {
+                    judged.insert(index, Judged::Keep(Keep::RunsKept));
+                }
+                Origin::Unused(symbol) => {
+                    blocked.insert(symbol);
+                }
+            }
+        }
+    }
+    for judged in judged.values_mut() {
+        if matches!(judged, Judged::Remove(_) | Judged::Cascade) {
+            *judged = Judged::Keep(Keep::RunsKept);
+        }
+    }
+    Regions::default()
+}
+
+pub fn plan(units: &[Unit], inputs: &Inputs<'_>) -> Plan {
+    let graph = Graph::new(units, inputs.facts);
+    let closed = graph.closed();
+    let mut plan = Plan::default();
+    for (index, unit) in units.iter().enumerate() {
+        let library_only = unit.outer.iter().all(|symbol| {
+            graph
+                .by_binding
+                .get(symbol)
+                .is_none_or(|&dep| units[dep].source == Source::Matched)
+        });
+        if let (Some(binding), true, Source::Matched, true) =
+            (unit.binding, closed[index], unit.source, library_only)
+        {
+            plan.helpers
+                .insert(binding, (unit.modules.clone(), unit.versions.clone()));
+        }
+    }
+    let installers: Vec<usize> = (0..units.len())
+        .filter(|&index| is_installer(&units[index]))
+        .collect();
+    let mut judged: FxHashMap<usize, Judged> = installers
+        .iter()
+        .copied()
+        .zip(judge_all(&installers, &closed, &graph, inputs))
+        .collect();
+    plan.regions = settle(units, &closed, &graph, inputs, &mut judged);
+    for &index in &installers {
+        let unit = &units[index];
+        let removed = plan.regions.covers(unit.span);
+        let kept = match &judged[&index] {
+            Judged::Remove(_) => None,
+            Judged::Cascade if removed => None,
+            Judged::Cascade => Some(Keep::Unlisted),
+            Judged::Keep(keep) => Some(keep.clone()),
+        };
         plan.installers.push(Installer {
             modules: unit.modules.clone(),
             range: unit.range.clone(),
             span: unit.span,
-            kept: judged.err(),
-            with_others: false,
+            with_others: kept.is_none() && matches!(judged[&index], Judged::Cascade),
+            kept,
         });
-    }
-    let mut dead = Dead::new(&graph, inputs, eligible);
-    dead.helpers = closed_bindings;
-    for seed in seeds {
-        dead.remove(seed);
-    }
-    dead.seed_unused();
-    dead.drain();
-    plan.regions = dead.regions;
-    for installer in &mut plan.installers {
-        if installer.kept.is_some() && plan.regions.covers(installer.span) {
-            installer.kept = None;
-            installer.with_others = true;
-        }
     }
     let (removed, kept) = helper_counts(units, &plan.regions);
     plan.removed_helpers = removed;
@@ -466,89 +648,4 @@ fn helper_counts(units: &[Unit], regions: &Regions) -> (usize, usize) {
     };
     let removed = helpers().filter(|unit| regions.covers(unit.span)).count();
     (removed, helpers().count() - removed)
-}
-
-struct Dead<'g, 'i> {
-    helpers: FxHashSet<SymbolId>,
-    inputs: &'g Inputs<'i>,
-    eligible: FxHashSet<SymbolId>,
-    counts: FxHashMap<SymbolId, usize>,
-    queue: Vec<Span>,
-    regions: Regions,
-}
-
-impl<'g, 'i> Dead<'g, 'i> {
-    fn new(graph: &'g Graph<'g>, inputs: &'g Inputs<'i>, eligible: FxHashSet<SymbolId>) -> Self {
-        let counts = graph
-            .refs
-            .iter()
-            .map(|(symbol, refs)| (*symbol, refs.len()))
-            .collect();
-        Dead {
-            helpers: FxHashSet::default(),
-            inputs,
-            eligible,
-            counts,
-            queue: Vec::new(),
-            regions: Regions::default(),
-        }
-    }
-
-    fn remove(&mut self, span: Span) {
-        self.queue.push(span);
-    }
-
-    fn drain(&mut self) {
-        while let Some(span) = self.queue.pop() {
-            let Some(subsumed) = self.regions.insert(span) else {
-                continue;
-            };
-            let facts = self.inputs.facts;
-            for site in facts.refs_in(span) {
-                if subsumed
-                    .iter()
-                    .any(|inner| inner.start <= site.start && site.start < inner.end)
-                {
-                    continue;
-                }
-                self.release(site.symbol);
-            }
-        }
-    }
-
-    fn seed_unused(&mut self) {
-        let unused: Vec<SymbolId> = self
-            .eligible
-            .iter()
-            .filter(|symbol| self.counts.get(symbol).is_none_or(|count| *count == 0))
-            .copied()
-            .collect();
-        for symbol in unused {
-            self.counts.insert(symbol, 1);
-            self.release(symbol);
-        }
-    }
-
-    fn release(&mut self, symbol: SymbolId) {
-        let Some(count) = self.counts.get_mut(&symbol) else {
-            return;
-        };
-        *count = count.saturating_sub(1);
-        if *count > 0 || !self.eligible.contains(&symbol) {
-            return;
-        }
-        let Some(decl) = self.inputs.facts.decls.get(&symbol) else {
-            return;
-        };
-        let removable = !decl.global
-            && match decl.kind {
-                DeclKind::Function => true,
-                DeclKind::Var { pure, call_of } => {
-                    pure || call_of.is_some_and(|callee| self.helpers.contains(&callee))
-                }
-            };
-        if removable && !self.inputs.pinned.contains(&symbol) {
-            self.queue.push(decl.region);
-        }
-    }
 }

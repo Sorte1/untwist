@@ -2,6 +2,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -219,6 +220,8 @@ pub fn plan(program: &Program<'_>, inputs: &Inputs<'_>) -> FxHashMap<Span, Site>
         aliases: FxHashMap::default(),
         sites: FxHashMap::default(),
         callees: FxHashSet::default(),
+        deleted: FxHashSet::default(),
+        dominating: FxHashMap::default(),
     };
     planner.visit_program(program);
     let callees = std::mem::take(&mut planner.callees);
@@ -235,9 +238,17 @@ struct Planner<'p, 'i> {
     inputs: &'p Inputs<'i>,
     scopes: Vec<oxc_syntax::scope::ScopeId>,
     written: FxHashSet<SymbolId>,
-    aliases: FxHashMap<SymbolId, Alias>,
+    aliases: FxHashMap<SymbolId, (Alias, Set)>,
     sites: FxHashMap<Span, Site>,
     callees: FxHashSet<Span>,
+    deleted: FxHashSet<Span>,
+    dominating: FxHashMap<Span, Set>,
+}
+
+#[derive(Clone, Copy)]
+struct Set {
+    scope: ScopeId,
+    end: u32,
 }
 
 fn string_argument<'a>(argument: &'a Argument<'_>) -> Option<&'a str> {
@@ -288,7 +299,23 @@ impl Planner<'_, '_> {
     }
 
     fn usable(&self, symbol: SymbolId) -> bool {
-        !self.written.contains(&symbol) && !self.inputs.pinned.contains(&symbol)
+        !self.written.contains(&symbol)
+            && !self.inputs.pinned.contains(&symbol)
+            && self.inputs.scoping.symbol_redeclarations(symbol).is_empty()
+    }
+
+    fn var_scope(&self) -> ScopeId {
+        let scoping = self.inputs.scoping;
+        self.scopes
+            .iter()
+            .rev()
+            .copied()
+            .find(|scope| scoping.scope_flags(*scope).is_var())
+            .unwrap_or(scoping.root_scope_id())
+    }
+
+    fn initialised(&self, set: Set, call: &CallExpression<'_>) -> bool {
+        set.scope != self.var_scope() || call.span.start >= set.end
     }
 
     fn receiver(&self, expr: &Expression<'_>, versions: &Versions) -> Option<(String, String)> {
@@ -339,6 +366,9 @@ impl Planner<'_, '_> {
         if !self.usable(symbol) {
             return;
         }
+        let Some(set) = self.dominating.get(&declarator.span).copied() else {
+            return;
+        };
         let Some(decl) = self.inputs.facts.decls.get(&symbol) else {
             return;
         };
@@ -350,7 +380,7 @@ impl Planner<'_, '_> {
             if let Some((modules, versions)) = self.inputs.helpers.get(&callee) {
                 if let Some(module) = helper_module(modules) {
                     self.aliases
-                        .insert(symbol, Alias::Module(module, versions.clone()));
+                        .insert(symbol, (Alias::Module(module, versions.clone()), set));
                 }
             }
             return;
@@ -365,7 +395,7 @@ impl Planner<'_, '_> {
         let versions = match identifier_symbol(&call.callee, self.inputs.scoping)
             .and_then(|callee| self.aliases.get(&callee))
         {
-            Some(Alias::Module(UNCURRY, versions)) => versions.clone(),
+            Some((Alias::Module(UNCURRY, versions), _)) => versions.clone(),
             _ => return,
         };
         let [argument] = call.arguments.as_slice() else {
@@ -379,16 +409,20 @@ impl Planner<'_, '_> {
             .and_then(|expr| self.receiver(expr, &versions))
         {
             self.aliases
-                .insert(symbol, Alias::Uncurried { object, method });
+                .insert(symbol, (Alias::Uncurried { object, method }, set));
         }
     }
 
     fn site(&self, call: &CallExpression<'_>) -> Option<Site> {
-        if call.optional {
+        if call.optional || self.deleted.contains(&call.span) {
             return None;
         }
         let symbol = identifier_symbol(&call.callee, self.inputs.scoping)?;
-        match self.aliases.get(&symbol)? {
+        let (alias, set) = self.aliases.get(&symbol)?;
+        if !self.initialised(*set, call) {
+            return None;
+        }
+        match alias {
             Alias::Module(WELL_KNOWN, versions) => self.well_known(call, versions),
             Alias::Module(GET_BUILT_IN, versions) => self.built_in(call, versions),
             Alias::Module(HAS_OWN, versions) => {
@@ -397,7 +431,7 @@ impl Planner<'_, '_> {
             }
             Alias::Module(IS_CALLABLE, _) => self.is_callable(call),
             Alias::Module(..) => None,
-            Alias::Uncurried { object, method } => Some(Site::Method {
+            Alias::Uncurried { object, method } => self.free(object).then(|| Site::Method {
                 object: object.clone(),
                 method: method.clone(),
             }),
@@ -463,7 +497,17 @@ impl Planner<'_, '_> {
         let [argument] = call.arguments.as_slice() else {
             return None;
         };
-        argument.as_expression()?;
+        let argument = argument.as_expression()?;
+        if let Expression::Identifier(id) = argument.without_parentheses() {
+            let unresolved = id
+                .reference_id
+                .get()
+                .and_then(|reference| self.inputs.scoping.get_reference(reference).symbol_id())
+                .is_none();
+            if unresolved {
+                return None;
+            }
+        }
         let servers = self
             .inputs
             .baseline
@@ -502,6 +546,39 @@ impl<'a> Visit<'a> for Planner<'_, '_> {
         if self.scopes.len() > 1 {
             self.scopes.pop();
         }
+    }
+
+    fn visit_function_body(&mut self, it: &FunctionBody<'a>) {
+        let scope = self.var_scope();
+        let mut inert = true;
+        let scoping = self.inputs.scoping;
+        for statement in &it.statements {
+            if !inert {
+                break;
+            }
+            let Statement::VariableDeclaration(declaration) = statement else {
+                inert = super::inert::statement(statement, it.span, scoping);
+                continue;
+            };
+            for declarator in &declaration.declarations {
+                if !inert {
+                    break;
+                }
+                let end = declarator.span.end;
+                self.dominating.insert(declarator.span, Set { scope, end });
+                inert = super::inert::declarator(declarator, it.span, scoping);
+            }
+        }
+        walk::walk_function_body(self, it);
+    }
+
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        if it.operator == oxc_syntax::operator::UnaryOperator::Delete {
+            if let Expression::CallExpression(call) = it.argument.without_parentheses() {
+                self.deleted.insert(call.span);
+            }
+        }
+        walk::walk_unary_expression(self, it);
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
