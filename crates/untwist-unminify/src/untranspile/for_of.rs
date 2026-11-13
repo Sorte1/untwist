@@ -199,6 +199,9 @@ fn leads(expression: &Expression<'_>, step: SymbolId, scoping: &Scoping) -> bool
         }
         Expression::ComputedMemberExpression(member) => &member.object,
         Expression::CallExpression(call) if !call.optional => {
+            if is_step_value(&call.callee, step, scoping) {
+                return false;
+            }
             match call.callee.without_parentheses() {
                 Expression::Identifier(_) => match first_argument(&call.arguments) {
                     Some(argument) => argument,
@@ -210,6 +213,9 @@ fn leads(expression: &Expression<'_>, step: SymbolId, scoping: &Scoping) -> bool
         Expression::AssignmentExpression(assign) => match &assign.left {
             AssignmentTarget::AssignmentTargetIdentifier(_) => &assign.right,
             AssignmentTarget::StaticMemberExpression(member) if trivial(&member.object) => {
+                if assign.operator != AssignmentOperator::Assign {
+                    return false;
+                }
                 &assign.right
             }
             AssignmentTarget::StaticMemberExpression(member) => &member.object,
@@ -223,6 +229,12 @@ fn leads(expression: &Expression<'_>, step: SymbolId, scoping: &Scoping) -> bool
         Expression::BinaryExpression(binary) => &binary.left,
         Expression::LogicalExpression(logical) => &logical.left,
         Expression::ConditionalExpression(conditional) => &conditional.test,
+        Expression::UnaryExpression(unary)
+            if unary.operator == UnaryOperator::Delete
+                && is_step_value(&unary.argument, step, scoping) =>
+        {
+            return false;
+        }
         Expression::UnaryExpression(unary) => &unary.argument,
         Expression::SequenceExpression(sequence) => match first_of(sequence.expressions.iter()) {
             Some(first) => first,

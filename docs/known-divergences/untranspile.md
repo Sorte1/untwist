@@ -151,12 +151,16 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   statement that is not a `var`/`let` declaration without initialisers reads `step.value`
   before anything else that can run code (plain names and literals may be evaluated first, as
   in `(0, step.value)()`, `obj[step.value]` or `for (const x of step.value.list)`), `step`
-  itself becomes the head's `const` binding and the read becomes `step`. A head binding whose name `x` mentions keeps the helper (it would
+  itself becomes the head's `const` binding and the read becomes `step`. A call of the read
+  itself (`step.value()`, which passes `step` as `this`), `delete step.value` and a compound
+  assignment to a property (`obj.p += step.value` reads `obj.p` first) keep the helper. A head binding whose name `x` mentions keeps the helper (it would
   read the binding in its dead zone). The declarations of `it` and of `step` (when it has no
   initialiser and sits in the same statement list) go; a label stays on the loop. Assumptions:
   - **Iterators follow the protocol.** They keep their `next` method (the helper reads `next`
     at every step, the loop once), `next()` returns an object and does not throw, the result's
-    `value` read does not throw, and `return()` returns an object. The helper ignores what
+    `value` read does not throw and runs no code that the loop body can observe (the loop reads
+    `value` before the body starts, the helper form where the body reads it), and `return()`
+    returns an object. The helper ignores what
     `return()` returns, where the loop throws a `TypeError` for a non-object; and it calls
     `return()` when `next()` or the `value` read throws after the first step, where the loop
     does not.
@@ -174,6 +178,9 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   __values(x))`, as nested loops reset it), with `__values` identified (TypeScript and tslib copies),
   and `it`, `step`, `e_1`, `e_1_1` and `_a` used only there, takes the same heads
   as the Babel loop; init-free declarations of `e_1` and `_a` in the same statement list go.
+  `e_1` must be declared by a `var` or `let` without initialiser (a parameter or a preset
+  record keeps the code), and without the reset the `try` must sit in the function that
+  declares `e_1` with no loop between them, so the record is empty whenever the loop starts.
   The same assumptions hold; for the second one, `__values` also walks any object with a
   numeric `length` that has no `Symbol.iterator`, which the loop rejects with a `TypeError`.
 - **SWC's and Babel 6's inline iterator protocol becomes a `for … of` loop too (`--unsafe`
@@ -422,7 +429,9 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   returns, a case without either falls into the next, and `_context.v` at the start of a resumed
   case is the received value; `return _context.d(_regeneratorValues(x), L)` delegates (`yield*
   x`, under the delegate assumption below). The try list (`.w(…, _marked, null, [[try, catch,
-  finally, after]])`) gives the `try` regions (`_context.p = L` at a region's start, catch or
+  finally, after]])`, read by the runtime from its first entry, so an inner region must be
+  listed before the region that holds it; another order keeps the machine) gives the `try`
+  regions (`_context.p = L` at a region's start, catch or
   finally is bookkeeping, `return _context.f(L)` ends a finally, the caught value is
   `_context.v`); a catch-only entry has no `after`, so its end is the one label the try body
   leaves to, kept only when the catch cases reach nothing outside it. A `finally` that the try

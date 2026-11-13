@@ -201,6 +201,14 @@ fn head_mut<'s, 'a>(
     is_plain_var(declaration).then_some((site, &mut **declaration))
 }
 
+fn init_free_for_var(stmt: &Statement<'_>) -> bool {
+    let Statement::ForStatement(node) = stmt else {
+        return false;
+    };
+    matches!(&node.init, Some(ForStatementInit::VariableDeclaration(declaration))
+        if is_plain_var(declaration) && declaration.declarations.iter().any(|d| d.init.is_none()))
+}
+
 fn loop_scope(stmt: &Statement<'_>) -> Option<ScopeId> {
     match stmt {
         Statement::ForStatement(node) => node.scope_id.get(),
@@ -269,13 +277,13 @@ impl Facts<'_> {
         declarator: &VariableDeclarator<'_>,
         symbol: SymbolId,
         site: Site,
-        list_scope: ScopeId,
+        list_scope: Option<ScopeId>,
     ) -> bool {
         match site {
             Site::ForInOfHead => declarator.init.is_none(),
             Site::Statement | Site::ForHead => {
                 declarator.init.is_some()
-                    || (self.scoping.symbol_scope_id(symbol) == list_scope
+                    || (list_scope == Some(self.scoping.symbol_scope_id(symbol))
                         && !is_constant_binding(self.scoping, symbol))
             }
         }
@@ -286,7 +294,7 @@ impl Facts<'_> {
         declaration: &VariableDeclaration<'a>,
         site: Site,
         scope: ScopeId,
-        list_scope: ScopeId,
+        list_scope: Option<ScopeId>,
         captures: bool,
     ) -> Option<Bindings<'a>> {
         let exact = |declarator: &VariableDeclarator<'a>| {
@@ -335,7 +343,7 @@ impl Facts<'_> {
                     declaration,
                     Site::Statement,
                     list_scope,
-                    list_scope,
+                    Some(list_scope),
                     captures,
                 )
                 .filter(|bindings| self.one_kind(declaration, bindings))
@@ -562,6 +570,21 @@ impl VarToLet {
         }
     }
 
+    fn convert_list_heads<'a>(
+        &mut self,
+        stmts: &mut AVec<'a, Statement<'a>>,
+        scope: ScopeId,
+        cx: &mut Cx<'a, '_>,
+    ) -> usize {
+        let mut converted = 0;
+        for stmt in stmts.iter_mut() {
+            if init_free_for_var(stmt) && self.convert_head(stmt, Some(scope), cx) {
+                converted += 1;
+            }
+        }
+        converted
+    }
+
     fn convert_statements<'a>(
         &mut self,
         stmts: &mut AVec<'a, Statement<'a>>,
@@ -616,11 +639,15 @@ impl VarToLet {
         hoisted
     }
 
-    fn convert_head<'a>(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
+    fn convert_head<'a>(
+        &mut self,
+        stmt: &mut Statement<'a>,
+        list_scope: Option<ScopeId>,
+        cx: &mut Cx<'a, '_>,
+    ) -> bool {
         let Some(scope) = loop_scope(stmt) else {
             return false;
         };
-        let list_scope = cx.current_scope_id();
         let Some((site, declaration)) = head_mut(stmt) else {
             return false;
         };
@@ -734,7 +761,7 @@ impl<'a> Pass<'a> for VarToLet {
     }
 
     fn exit_statement(&mut self, node: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
-        if self.active && !self.frozen.is_open() && self.convert_head(node, cx) {
+        if self.active && !self.frozen.is_open() && self.convert_head(node, None, cx) {
             cx.changed();
         }
     }
@@ -746,7 +773,12 @@ impl<'a> Pass<'a> for VarToLet {
         let scope = cx.current_scope_id();
         let pending = take_bit(&mut self.pending, scope.index());
         let bare = take_bit(&mut self.bare, scope.index());
-        if (!pending && !bare) || self.frozen.is_open() {
+        if self.frozen.is_open() {
+            return;
+        }
+        let heads = self.convert_list_heads(stmts, scope, cx);
+        cx.changed_by(heads);
+        if !pending && !bare {
             return;
         }
         let hoisted = bare && self.place(stmts, cx);

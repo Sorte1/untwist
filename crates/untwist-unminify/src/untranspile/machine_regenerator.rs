@@ -476,5 +476,14 @@ pub fn regions(
             end,
         });
     }
-    Some(out)
+    listed_inner_first(&out).then_some(out)
+}
+
+fn listed_inner_first(regions: &[TryRegion]) -> bool {
+    regions.iter().enumerate().all(|(index, outer)| {
+        regions
+            .iter()
+            .skip(index + 1)
+            .all(|later| !later.within(outer))
+    })
 }

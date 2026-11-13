@@ -623,7 +623,10 @@
   `undefined`. Default mode keeps the string inert, printed as `("use strict");`, so the output
   stays sloppy. `--unsafe` promotes them as the conservative mode does, under the assumption that
   **the program is the strict source the obfuscator wrapped**: only the removed protection code
-  stood before the string, and nothing in the program relies on running sloppy. Krunker 10.0.7 is
+  stood before the string, and nothing in the program relies on running sloppy. A `"use strict"`
+  string is never promoted into a function with a default, rest or destructured parameter, or
+  into a body that holds a `with` statement (strict code rejects both); it stays inert there in
+  every mode. Krunker 10.0.7 is
   this shape (its self-defending call sits before the bundle's `'use strict'`).
   `fixtures/untranspile/hand/demoted-prologue-self-defending.js` (in a function body, game.js's
   shape) and `demoted-prologue-debug-protection.js` (at the program head) are the witnesses; their

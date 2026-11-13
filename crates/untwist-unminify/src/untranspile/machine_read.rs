@@ -424,20 +424,12 @@ fn region_order(region: &TryRegion, cases: u32) -> bool {
         && region.end < cases
 }
 
-fn nests(inner: &TryRegion, outer: &TryRegion) -> bool {
-    outer
-        .parts()
-        .iter()
-        .flatten()
-        .any(|(start, end)| *start <= inner.start && inner.end <= *end)
-}
-
 fn regions_nest(trys: &[TryRegion], cases: u32) -> bool {
     trys.iter().all(|region| region_order(region, cases))
         && trys.iter().enumerate().all(|(index, a)| {
             trys.iter().skip(index + 1).all(|b| {
                 let disjoint = a.end <= b.start || b.end <= a.start;
-                disjoint || nests(a, b) || nests(b, a)
+                disjoint || a.within(b) || b.within(a)
             })
         })
 }

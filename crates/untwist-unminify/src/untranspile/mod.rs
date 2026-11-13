@@ -114,6 +114,7 @@ pub struct UntranspileHelpers {
     identified_late: bool,
     iterators_seen: bool,
     inline_seen: bool,
+    fresh_records: rustc_hash::FxHashSet<SymbolId>,
 }
 
 impl Default for UntranspileHelpers {
@@ -152,6 +153,7 @@ impl Default for UntranspileHelpers {
             identified_late: false,
             iterators_seen: false,
             inline_seen: false,
+            fresh_records: rustc_hash::FxHashSet::default(),
         }
     }
 }
@@ -551,7 +553,7 @@ impl UntranspileHelpers {
         for _ in 0..fired {
             shapes::fire(PASS, for_of::SHAPE);
         }
-        let values = for_of_tsc::rewrite_statements(node, &self.table, cx);
+        let values = for_of_tsc::rewrite_statements(node, &self.table, &self.fresh_records, cx);
         for _ in 0..values {
             shapes::fire(PASS, for_of_tsc::SHAPE);
         }
@@ -811,6 +813,7 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         self.keys.begin_round();
         self.define_ready = false;
         self.run_lists.clear();
+        self.fresh_records.clear();
         self.root_run = false;
         self.define_fired = 0;
         if self.hazard.is_none() {
@@ -916,6 +919,9 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         if self.dormant {
             note_named_declarators(node, cx);
             return;
+        }
+        if self.gate.unsafe_ {
+            for_of_tsc::note_fresh_records(node, cx.scoping(), &mut self.fresh_records);
         }
         if node.declarations.iter().any(identify::may_declare_helper) {
             self.identify_declarators(node, cx);
