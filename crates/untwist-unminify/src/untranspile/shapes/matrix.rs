@@ -33,6 +33,10 @@ const BABEL_7_20_IE11_GENERATORS: &str =
     "fixtures/untranspile/matrix/babel-7.20/ie11/generators.js";
 const BABEL_7_24_IE11_GENERATORS: &str =
     "fixtures/untranspile/matrix/babel-7.24/ie11/generators.js";
+const BABEL_7_29_IE11_CLASS_EXTENDS: &str =
+    "fixtures/untranspile/matrix/babel-7.29/ie11/class-extends.js";
+const BABEL_7_28_IE11_RUNTIME_IIFE_TERSER_CLASS_EXTENDS: &str =
+    "fixtures/untranspile/matrix/babel-7.28/ie11-runtime-iife-terser/class-extends.js";
 const BABEL_8_IE11_FOR_OF: &str = "fixtures/untranspile/matrix/babel-8/ie11/for-of.js";
 const BABEL_8_IE11_RUNTIME_FOR_OF: &str =
     "fixtures/untranspile/matrix/babel-8/ie11-runtime/for-of.js";
@@ -134,6 +138,7 @@ const OBJECT_EXPRESSION_FOCUS: u8 = ExpressionKind::ObjectExpression as u8;
 const UNARY_EXPRESSION_FOCUS: u8 = ExpressionKind::UnaryExpression as u8;
 const DECLARED_FOCUS: u8 = u8::MAX - 1;
 const NO_FOCUS: u8 = u8::MAX;
+const WHILE_STATEMENT: u8 = StatementKind::WhileStatement as u8;
 const VALUES_FOCUS: u8 = ExpressionKind::BinaryExpression as u8;
 const ARROW_OR_FUNCTION_FOCUS: u8 = ExpressionKind::FunctionExpression as u8;
 const TRY_STATEMENT: u8 = StatementKind::TryStatement as u8;
@@ -865,5 +870,37 @@ pub const VARIANTS: &[Variant] = &[
         (EXPRESSION_STATEMENT, ASSIGNMENT_EXPRESSION_FOCUS),
         (&[Kind::Typeof], 2390),
         BABEL_7_24_IE11_GENERATORS,
+    ),
+    variant(
+        Kind::SuperPropGet,
+        0x767f_0ad7_29aa_86a2_4a12_420d_f941_4973,
+        (4, 2),
+        (VARIABLE_DECLARATION, CALL_EXPRESSION_FOCUS),
+        (&[Kind::Get, Kind::GetPrototypeOf], 55),
+        BABEL_7_29_IE11_CLASS_EXTENDS,
+    ),
+    variant(
+        Kind::Get,
+        0xe0c9_52d4_e073_590a_fd9a_3cc4_e501_f38a,
+        (0, 2),
+        (EXPRESSION_STATEMENT, ASSIGNMENT_EXPRESSION_FOCUS),
+        (&[Kind::SuperPropBase], 82),
+        BABEL_7_29_IE11_CLASS_EXTENDS,
+    ),
+    variant(
+        Kind::Get,
+        0xb4da_2acd_ef31_c8d7_45d2_adf2_768d_0fa6,
+        (0, 2),
+        (EXPRESSION_STATEMENT, ASSIGNMENT_EXPRESSION_FOCUS),
+        (&[Kind::GetPrototypeOf], 109),
+        BABEL_7_28_IE11_RUNTIME_IIFE_TERSER_CLASS_EXTENDS,
+    ),
+    variant(
+        Kind::SuperPropBase,
+        0x87b2_28e2_d974_405f_edda_203d_37f6_bf56,
+        (2, 2),
+        (WHILE_STATEMENT, NO_FOCUS),
+        (&[Kind::GetPrototypeOf], 29),
+        BABEL_7_29_IE11_CLASS_EXTENDS,
     ),
 ];

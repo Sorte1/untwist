@@ -124,3 +124,43 @@ fn typescript_values_loops_stay_in_the_default_lane() {
     let code = run("matrix/ts-3.9/es5-iter/for-of.js", false);
     assert!(code.contains("__values(\"héllo\")"), "{code}");
 }
+
+#[test]
+fn inline_protocol_loops_become_for_of() {
+    for path in [
+        "matrix/swc-1.16/es5/for-of-exits.js",
+        "matrix/babel6-6/ie11/for-of.js",
+    ] {
+        let code = run(path, true);
+        assert!(
+            !code.contains("_iteratorNormalCompletion"),
+            "{path}:\n{code}"
+        );
+    }
+    let code = run("matrix/swc-1.16/es5/for-of-exits.js", false);
+    assert!(code.contains("_iteratorNormalCompletion"), "{code}");
+}
+
+#[test]
+fn a_loop_closure_is_inlined_with_per_iteration_bindings() {
+    let code = run("matrix/babel-7.24/ie11/for-of-closures.js", true);
+    assert!(!code.contains("_loop"), "{code}");
+    assert_has(
+        &code,
+        &[" of new Set([1, 2, 3])) {", "let note = \"n\" + v;"],
+    );
+}
+
+#[test]
+fn a_step_read_after_plain_names_still_heads_the_loop() {
+    let code = run("hand/for-of-inlined-heads.js", true);
+    assert!(!code.contains(".s();"), "{code}");
+    assert_has(
+        &code,
+        &[
+            "  _step();",
+            "delete removed[_step4];",
+            "total += weights[_step5] || 0;",
+        ],
+    );
+}

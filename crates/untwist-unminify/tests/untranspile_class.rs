@@ -386,3 +386,22 @@ fn a_typescript_child_of_a_program_class_keeps_every_class() {
     let code = with_ts_child("Animal");
     assert!(!code.contains(" = class "), "{code}");
 }
+
+#[test]
+fn super_property_helpers_become_super_inside_converted_classes() {
+    let code = unsafe_run("untranspile/matrix/babel-7.29/ie11/class-extends.js");
+    for part in [
+        "return super.speak() + \" (woof)\";",
+        "return \"dog:\" + super.kind;",
+        "var d = super.create(name);",
+    ] {
+        assert!(code.contains(part), "missing {part:?} in:\n{code}");
+    }
+    assert!(!code.contains("_superPropGet(Dog"), "{code}");
+}
+
+#[test]
+fn object_literal_super_helpers_stay() {
+    let code = unsafe_run("untranspile/matrix/babel-7.29/ie11/object-literals.js");
+    assert!(code.contains("_superPropGet("), "{code}");
+}

@@ -67,6 +67,9 @@ pub enum Kind {
     RegeneratorDefine,
     RegeneratorValues,
     RegeneratorRuntime,
+    SuperPropGet,
+    Get,
+    SuperPropBase,
     AsyncToGenerator,
     AsyncGeneratorStep,
     Alias(Alias),
@@ -169,7 +172,7 @@ pub fn known(hash: u128, size: Size) -> Option<&'static Variant> {
     variants().find(|variant| variant.hash == hash && sized(variant, size))
 }
 
-pub const HELPER_NAMES: [(&str, Kind); 70] = [
+pub const HELPER_NAMES: [(&str, Kind); 73] = [
     ("_toConsumableArray", Kind::ToConsumableArray),
     ("_to_consumable_array", Kind::ToConsumableArray),
     ("_arrayWithoutHoles", Kind::ArrayWithoutHoles),
@@ -259,6 +262,9 @@ pub const HELPER_NAMES: [(&str, Kind); 70] = [
     ("_regeneratorDefine2", Kind::RegeneratorDefine),
     ("_regeneratorValues", Kind::RegeneratorValues),
     ("_regeneratorRuntime", Kind::RegeneratorRuntime),
+    ("_superPropGet", Kind::SuperPropGet),
+    ("_get", Kind::Get),
+    ("_superPropBase", Kind::SuperPropBase),
     ("_asyncToGenerator", Kind::AsyncToGenerator),
     ("asyncGeneratorStep", Kind::AsyncGeneratorStep),
 ];

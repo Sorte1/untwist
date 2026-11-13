@@ -21,10 +21,13 @@ mod class_native;
 mod class_parent;
 mod class_proto;
 mod class_super;
+mod class_super_prop;
 mod define_chain;
 mod destructure;
 mod fingerprint;
 mod for_of;
+mod for_of_inline;
+mod for_of_loop;
 mod for_of_tsc;
 mod generator;
 mod generator_regen;
@@ -110,6 +113,7 @@ pub struct UntranspileHelpers {
     wants_trust: bool,
     identified_late: bool,
     iterators_seen: bool,
+    inline_seen: bool,
 }
 
 impl Default for UntranspileHelpers {
@@ -147,6 +151,7 @@ impl Default for UntranspileHelpers {
             wants_trust: false,
             identified_late: false,
             iterators_seen: false,
+            inline_seen: false,
         }
     }
 }
@@ -535,6 +540,13 @@ impl UntranspileHelpers {
             }
             return;
         }
+        if for_of_loop::may_hold_site(node) {
+            let inlined = for_of_loop::rewrite_statements(node, cx);
+            for _ in 0..inlined {
+                shapes::fire(PASS, for_of_loop::SHAPE);
+            }
+            cx.changed_by(inlined);
+        }
         let fired = for_of::rewrite_statements(node, &self.table, cx);
         for _ in 0..fired {
             shapes::fire(PASS, for_of::SHAPE);
@@ -570,6 +582,24 @@ impl UntranspileHelpers {
             shapes::fire(PASS, async_pair::SHAPE);
         }
         cx.changed_by(paired);
+    }
+
+    #[inline(never)]
+    fn inline_site<'a>(&mut self, node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        if !self.gate.unsafe_ {
+            if cx.opts.unsafe_transforms && for_of_inline::has_site(node, cx.scoping()) {
+                self.inline_seen = true;
+                if self.may_wait(cx) {
+                    self.waiting = true;
+                }
+            }
+            return;
+        }
+        let fired = for_of_inline::rewrite_statements(node, cx);
+        for _ in 0..fired {
+            shapes::fire(PASS, for_of_inline::SHAPE);
+        }
+        cx.changed_by(fired);
     }
 
     #[inline(never)]
@@ -759,6 +789,7 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         } else if self.identified
             && (self.define_quiet || !self.define_live())
             && !self.iterators_seen
+            && !self.inline_seen
         {
             Interest::EXIT_STATEMENTS
         } else {
@@ -901,6 +932,9 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         if self.table.has_iterators() {
             self.for_of_site(node, cx);
         }
+        if !self.dormant && for_of_inline::may_hold_site(node) {
+            self.inline_site(node, cx);
+        }
         if self.table.has_regenerators() {
             self.regenerator_site(node, cx);
         }
@@ -950,6 +984,15 @@ impl<'a> Pass<'a> for UntranspileHelpers {
             && async_pair::rewrite_closure(node, &self.table, cx)
         {
             shapes::fire(PASS, async_pair::CLOSURE);
+            cx.changed();
+            return;
+        }
+        if self.gate.unsafe_
+            && self.table.has_super_props()
+            && class_super_prop::may_be_site(node)
+            && class_super_prop::rewrite(node, &self.table, cx)
+        {
+            shapes::fire(PASS, class_super_prop::SHAPE);
             cx.changed();
             return;
         }

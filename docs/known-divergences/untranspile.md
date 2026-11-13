@@ -147,9 +147,11 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   helper is a known version (Babel 7.9 to 8, inline, `@babel/runtime`, Rollup-bundled and
   terser-minified copies), the call has exactly one argument (`allowArrayLike` keeps the
   helper), and `it`, `step` and `err` are used only there. A first loop statement `var v =
-  step.value` (any declaration kind) or `v = step.value` becomes the head; otherwise, when that
-  statement starts by reading `step.value`, `step` itself becomes the head's `const` binding and
-  the read becomes `step`. A head binding whose name `x` mentions keeps the helper (it would
+  step.value` (any declaration kind) or `v = step.value` becomes the head; otherwise, when the first
+  statement that is not a `var`/`let` declaration without initialisers reads `step.value`
+  before anything else that can run code (plain names and literals may be evaluated first, as
+  in `(0, step.value)()`, `obj[step.value]` or `for (const x of step.value.list)`), `step`
+  itself becomes the head's `const` binding and the read becomes `step`. A head binding whose name `x` mentions keeps the helper (it would
   read the binding in its dead zone). The declarations of `it` and of `step` (when it has no
   initialiser and sits in the same statement list) go; a label stays on the loop. Assumptions:
   - **Iterators follow the protocol.** They keep their `next` method (the helper reads `next`
@@ -174,6 +176,27 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   as the Babel loop; init-free declarations of `e_1` and `_a` in the same statement list go.
   The same assumptions hold; for the second one, `__values` also walks any object with a
   numeric `length` that has no `Symbol.iterator`, which the loop rejects with a `TypeError`.
+- **SWC's and Babel 6's inline iterator protocol becomes a `for … of` loop too (`--unsafe`
+  only).** `var normal = true, failed = false, error = undefined; try { for (var it =
+  x[Symbol.iterator](), step; !(normal = (step = it.next()).done); normal = true) { … } }
+  catch (err) { failed = true; error = err; } finally { try { if (!normal && it.return != null)
+  it.return(); } finally { if (failed) throw error; } }` (Babel 6 tests `it.return` for
+  truthiness), with the three flags declared with those values in the same statement list and
+  every name used only there, takes the same heads as the Babel loop; the flag declarations
+  go. It needs no helper, but runs only once the program's built-ins are known (another helper
+  was identified). The protocol assumption covers its differences (`next` read per step,
+  `return()`'s result ignored, `return()` called after a throwing `value` read, Babel 6
+  skipping a falsy non-callable `return`).
+- **Babel's per-iteration closure around a helper loop is inlined first (`--unsafe` only).**
+  When a body captures its loop bindings, Babel moves it into `var _loop = function () { … }`
+  inside the `try` and the loop body becomes `_loop();`. When `_loop` is called only there,
+  takes no parameters, and its body has no `return`, no function or class declaration and no
+  `var` except at its top level (and, for a `function` rather than an arrow, no `this`,
+  `arguments` or `new.target`), the body moves into the loop, its top-level `var`s become `let`
+  (each iteration's block gets its own binding, as each call did). This needs every reference
+  to such a `var` to come after its declaration, since `let` has a dead zone. The loop then
+  converts as above. Babel's control-flow codes (`return 0`/`return 1`, `_ret`) keep the
+  closure.
 - **Babel's loose helper stays.** `_createForOfIteratorHelperLoose` never calls `return()`, so
   a loop left early does not close its iterator; a native loop does.
 
@@ -254,6 +277,16 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   (`var _this = this`) becomes `this` inside a moved value. Static fields stay after the class. An
   anonymous function, arrow or class moved into a field is wrapped as `f = (0, () => {})`, so its
   `name` stays `""` as it was when passed to the helper.
+- **Super property helpers become `super`.** Inside a converted class, Babel's
+  `_superPropGet(C, "k", this, flags)` (identified by structure with its `_get`,
+  `_superPropBase` and `_getPrototypeOf`) becomes `super.k`, and with the call flag
+  `_superPropGet(C, "k", this, 3)([a, ...b])` becomes `super.k(a, ...b)`. This applies only when
+  `C` is the class's own name, the call sits in one of its methods (through arrows, not other
+  functions), the method's `static` matches the prototype flag, and the argument list is an
+  array literal without holes. Both forms read `k` from the prototype of `C.prototype` (or of
+  `C`) with `this` as receiver, as `super` does from the method's home object, which is
+  `C.prototype` (or `C`) for a class method. Calls in class fields, static blocks and object
+  literals (`_superPropGet(_obj, …)`) stay.
 - **Every class rewrite is `--unsafe` only**, under these assumptions:
   - **Methods and accessors are never constructed, and their `prototype` and `name` are never
     read.** A function in a `_createClass` descriptor is constructible and has a `prototype`; a
