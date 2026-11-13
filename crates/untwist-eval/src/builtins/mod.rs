@@ -224,6 +224,9 @@ impl<'a> Globals<'a> {
 
     pub fn install(self, env: &FrameRef<'a>, names: &mut Names<'a>) {
         for (text, value) in self.values {
+            if untwist_core::semantic::is_foreign_global(text) {
+                continue;
+            }
             declare(env, names.intern(text), value);
         }
     }

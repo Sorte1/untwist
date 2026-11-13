@@ -41,7 +41,9 @@ pub use refresh::{forget_failures, refresh_scoping, Round, Shape};
 pub(crate) use renamed::forget_program as forget_renames;
 pub(crate) use renamed::note_renames;
 pub use renamed::renamed_since_refresh;
-pub use shared::{assume_shared_globals, is_shared_global, SharedGlobals, SharedGlobalsGuard};
+pub use shared::{
+    assume_shared_globals, is_foreign_global, is_shared_global, SharedGlobals, SharedGlobalsGuard,
+};
 pub use strictness::Strictness;
 
 pub fn has_module_syntax(program: &Program<'_>) -> bool {

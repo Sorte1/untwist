@@ -18,7 +18,7 @@ const PROTOTYPE_READERS: [(&str, &str); 3] = [
     ("Reflect", "get"),
 ];
 
-const CODE_RUNNERS: [&str; 3] = ["eval", "Function", "execScript"];
+pub(super) const CODE_RUNNERS: [&str; 3] = ["eval", "Function", "execScript"];
 
 const CONTEXT_RUNNERS: [&str; 4] = [
     "runInThisContext",

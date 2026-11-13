@@ -12,6 +12,7 @@ use untwist_core::print::pretty_codegen;
 use untwist_core::reflow::{print_placing, Check, GuardRecord, PendingReaders, Printed};
 use untwist_core::semantic::{
     assume_observers, assume_shared_globals, build_scoping, forget_failures, Observers, Semantics,
+    SharedGlobals,
 };
 use untwist_core::source_map::{self, Mapped, OwnedSourceMap, Recording};
 use untwist_core::type_space::{declares_an_interface, holds_type_space};
@@ -352,6 +353,8 @@ impl Pipeline {
         fallback: &mut Option<Fallback<'_>>,
         result: &mut InputResult,
     ) -> Step {
+        let foreign = reservation.shared.cloned().map(SharedGlobals::foreign_only);
+        let _foreign = assume_shared_globals(foreign);
         let first = layering.peeled() == 0;
         if layering.start_run() {
             fresh_tree_state(room.as_ref());
@@ -472,10 +475,11 @@ impl Pipeline {
             heap_peak: &mut result.heap_peak,
             snapshots: &mut result.snapshots,
         };
-        let shared = reservation
-            .shared
-            .filter(|_| !nested_root && !site.program.source_type.is_module())
-            .cloned();
+        let own_globals = !nested_root && !site.program.source_type.is_module();
+        let shared = reservation.shared.cloned().map(|shared| match own_globals {
+            true => shared,
+            false => shared.foreign_only(),
+        });
         let _shared = assume_shared_globals(shared);
         let sem = build_scoping(site.program);
         if checked && declares_an_interface(&sem.scoping) {

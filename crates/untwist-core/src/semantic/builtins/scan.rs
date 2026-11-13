@@ -5,7 +5,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, 
 use oxc_syntax::scope::ScopeFlags;
 
 use super::{Builtins, Reliance, Scanned};
-use crate::semantic::program_is_strict;
+use crate::semantic::{is_foreign_global, program_is_strict};
 
 mod reach;
 
@@ -175,6 +175,23 @@ struct Scan<'s> {
     promise_written: bool,
 }
 
+fn names_a_foreign_root(scoping: &Scoping, reliance: &Reliance) -> bool {
+    scoping.root_unresolved_references().keys().any(|name| {
+        let name = name.as_str();
+        let relied = reliance.roots.contains(&name)
+            || GLOBAL_OBJECTS.contains(&name)
+            || reach::CODE_RUNNERS.contains(&name);
+        relied && is_foreign_global(name)
+    })
+}
+
+fn first_verdict(scoping: &Scoping, reliance: &Reliance) -> Builtins {
+    match names_a_foreign_root(scoping, reliance) {
+        true => Builtins::Written,
+        false => Builtins::Intact,
+    }
+}
+
 pub fn scan(
     program: &Program<'_>,
     scoping: &Scoping,
@@ -188,7 +205,7 @@ pub fn scan(
         writes_only,
         first_only: false,
         frames: vec![Frame::of_program(program, module)],
-        verdict: Builtins::Intact,
+        verdict: first_verdict(scoping, reliance),
         promise_written: false,
     };
     scan.visit_program(program);
@@ -205,7 +222,7 @@ pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: 
         writes_only: false,
         first_only: true,
         frames: vec![Frame::of_program(program, module)],
-        verdict: Builtins::Intact,
+        verdict: first_verdict(scoping, reliance),
         promise_written: false,
     };
     scan.visit_program(program);

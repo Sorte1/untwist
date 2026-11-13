@@ -3,7 +3,7 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::Visit;
 use untwist_core::ast_util::js_text::js_text;
-use untwist_core::semantic::program_is_strict;
+use untwist_core::semantic::{is_foreign_global, program_is_strict};
 use untwist_eval::budget::STRING_LEN_CAP;
 use untwist_eval::fold::{fold_layer_text, LayerText};
 
@@ -101,6 +101,9 @@ pub fn argument_refusal<'a>(
 }
 
 pub fn names_hold(scoping: &Scoping, names: &[&str]) -> bool {
+    if names.iter().any(|name| is_foreign_global(name)) {
+        return false;
+    }
     if scoping.symbol_names().any(|name| names.contains(&name)) {
         return false;
     }

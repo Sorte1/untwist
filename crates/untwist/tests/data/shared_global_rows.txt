@@ -3,3 +3,8 @@ ref-later-script-reads-earlier-bindings|var counter = 41; function helper(n) { r
 ref-later-script-reaches-earlier-bindings-through-eval|var cfg = { a: 1 }; function show() { return cfg.a; } console.log(show()); @@ eval("cf" + "g").a = 5; console.log(show());
 apart-independent-scripts-inline-as-they-do-alone|function f() { return "abc"; } console.log(f()); var arr = ["p", "q"]; console.log(arr[1]); @@ function g() { return "xyz"; } console.log(g()); let n = 3; console.log(n + 1);
 ref-later-script-redeclares-an-earlier-binding|var cfg = { a: 1 }; function show() { return cfg.a; } console.log(show()); @@ var cfg = { a: 5 }; console.log(show());
+ref-other-script-declares-function-eval|function eval(s) { return "shadowed " + s; } @@ (function () { console.log(eval("1 + 1")); })();
+ref-other-script-declares-atob-and-string|function atob(s) { return "shadowed"; } var String = { fromCharCode: function () { return "shadowed"; } }; @@ console.log(String.fromCharCode(97), atob("YQ=="));
+ref-later-script-declares-a-builtin-an-earlier-callback-reads|function f() { console.log(String.fromCharCode(97), JSON.stringify([1])); } setTimeout(f, 0); @@ var String = { fromCharCode: function () { return "later"; } }; let JSON = { stringify: function () { return "later json"; } };
+ref-other-script-assigns-a-builtin-name|JSON = { parse: function () { return "written"; } }; @@ console.log(JSON.parse("[1]"), [1, 2].join("-"));
+apart-builtins-fold-when-the-other-script-names-none-of-them|var cfg = 1; console.log(cfg); @@ (function () { console.log(eval("1 + 1"), String.fromCharCode(97)); })();
