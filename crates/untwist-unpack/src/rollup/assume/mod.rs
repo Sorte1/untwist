@@ -1,6 +1,9 @@
 pub mod build;
 pub mod outer;
 pub mod plan;
+pub mod rewrite;
+pub mod runs;
+pub mod setters;
 pub mod shared;
 
 use oxc_allocator::{Allocator, Vec as AVec};

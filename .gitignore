@@ -50,3 +50,4 @@ AGENTS.md
 /tools/webpack-variants/node_modules/
 /tools/core-js-compat/node_modules/
 /tools/modern-fixtures/node_modules/
+/tools/rollup-boundaries/node_modules/

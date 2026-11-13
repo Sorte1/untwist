@@ -1,0 +1,21 @@
+import { Vector3 } from "three/src/math/Vector3.js";
+import { Quaternion } from "three/src/math/Quaternion.js";
+import { Matrix4 } from "three/src/math/Matrix4.js";
+import { Box3 } from "three/src/math/Box3.js";
+import { Color } from "three/src/math/Color.js";
+import { MathUtils } from "three/src/math/MathUtils.js";
+import { buildWorld } from "./world.js";
+import { pick } from "./picking.js";
+
+const fixed = (v) => [v.x, v.y, v.z].map((n) => n.toFixed(3)).join(",");
+const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), MathUtils.degToRad(90));
+const v = new Vector3(1, 2, 3).applyQuaternion(q);
+console.log("rotated", fixed(v));
+const m = new Matrix4().makeTranslation(1, 2, 3).multiply(new Matrix4().makeScale(2, 2, 2));
+console.log("transformed", fixed(new Vector3(1, 1, 1).applyMatrix4(m)));
+const world = buildWorld();
+const bounds = new Box3().setFromObject(world.scene);
+console.log("bounds", fixed(bounds.min), fixed(bounds.max));
+console.log("picked", pick(world, 0, 0).join(" "));
+console.log("color", new Color(0x336699).getHexString(), new Color("hsl(120, 50%, 50%)").getHexString());
+console.log("children", world.group.children.map((child) => child.name).join(","));

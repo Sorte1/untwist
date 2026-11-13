@@ -1,0 +1,16 @@
+{
+  "name": "untwist-rollup-boundaries-fixtures",
+  "private": true,
+  "description": "Pinned rollup, terser and app libraries that tools/rollup-boundaries/gen.mjs runs to generate fixtures/unpack-rollup-boundaries.",
+  "dependencies": {
+    "rollup3": "npm:rollup@3.30.0",
+    "rollup4": "npm:rollup@4.66.0",
+    "node-resolve": "npm:@rollup/plugin-node-resolve@16.0.3",
+    "rollup-plugin-svelte": "7.2.3",
+    "svelte": "5.40.0",
+    "three": "0.180.0",
+    "solid-js": "1.9.9",
+    "terser": "5.51.2",
+    "@jridgewell/trace-mapping": "0.3.31"
+  }
+}

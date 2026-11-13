@@ -1,0 +1,36 @@
+synthetic-rollup3-plain	modules 10	true 12	cuts 9	hits 6	P 0.67	R 0.50
+synthetic-rollup3-wrapped	modules 10	true 12	cuts 9	hits 6	P 0.67	R 0.50
+synthetic-rollup3-wrapped-strict	modules 10	true 12	cuts 9	hits 6	P 0.67	R 0.50
+synthetic-rollup3-min-plain	modules 1	true 19	cuts 0	hits 0	P -	R 0.00
+synthetic-rollup3-min-wrapped	modules 1	true 19	cuts 0	hits 0	P -	R 0.00
+synthetic-rollup3-min-wrapped-strict	modules 1	true 19	cuts 0	hits 0	P -	R 0.00
+three-rollup3-plain	modules 30	true 34	cuts 29	hits 23	P 0.79	R 0.68
+three-rollup3-wrapped	modules 30	true 34	cuts 29	hits 23	P 0.79	R 0.68
+three-rollup3-wrapped-strict	modules 30	true 34	cuts 29	hits 23	P 0.79	R 0.68
+three-rollup3-min-plain	modules 25	true 35	cuts 24	hits 23	P 0.96	R 0.66
+three-rollup3-min-wrapped	modules 25	true 35	cuts 24	hits 23	P 0.96	R 0.66
+three-rollup3-min-wrapped-strict	modules 25	true 35	cuts 24	hits 23	P 0.96	R 0.66
+three-rollup4-plain	modules 30	true 34	cuts 29	hits 23	P 0.79	R 0.68
+three-rollup4-wrapped	modules 30	true 34	cuts 29	hits 23	P 0.79	R 0.68
+three-rollup4-wrapped-strict	modules 30	true 34	cuts 29	hits 23	P 0.79	R 0.68
+solid-rollup3-plain	modules 3	true 4	cuts 2	hits 1	P 0.50	R 0.25
+solid-rollup3-wrapped	modules 3	true 4	cuts 2	hits 1	P 0.50	R 0.25
+solid-rollup3-wrapped-strict	modules 3	true 4	cuts 2	hits 1	P 0.50	R 0.25
+solid-rollup3-min-plain	modules 3	true 5	cuts 2	hits 0	P 0.00	R 0.00
+solid-rollup3-min-wrapped	modules 3	true 5	cuts 2	hits 0	P 0.00	R 0.00
+solid-rollup3-min-wrapped-strict	modules 3	true 5	cuts 2	hits 0	P 0.00	R 0.00
+solid-rollup4-plain	modules 3	true 4	cuts 2	hits 1	P 0.50	R 0.25
+solid-rollup4-wrapped	modules 3	true 4	cuts 2	hits 1	P 0.50	R 0.25
+solid-rollup4-wrapped-strict	modules 3	true 4	cuts 2	hits 1	P 0.50	R 0.25
+solid-rollup4-min-plain	modules 3	true 5	cuts 2	hits 0	P 0.00	R 0.00
+solid-rollup4-min-wrapped	modules 3	true 5	cuts 2	hits 0	P 0.00	R 0.00
+solid-rollup4-min-wrapped-strict	modules 3	true 5	cuts 2	hits 0	P 0.00	R 0.00
+svelte-rollup3-plain	modules 10	true 16	cuts 9	hits 6	P 0.67	R 0.38
+svelte-rollup3-wrapped	modules 10	true 16	cuts 9	hits 6	P 0.67	R 0.38
+svelte-rollup3-wrapped-strict	modules 10	true 16	cuts 9	hits 6	P 0.67	R 0.38
+svelte-rollup3-min-plain	modules 6	true 16	cuts 5	hits 5	P 1.00	R 0.31
+svelte-rollup3-min-wrapped	modules 6	true 16	cuts 5	hits 5	P 1.00	R 0.31
+svelte-rollup3-min-wrapped-strict	modules 6	true 16	cuts 5	hits 5	P 1.00	R 0.31
+total all	true 552	cuts 339	hits 264	P 0.78	R 0.48
+total minified	true 240	cuts 99	hits 84	P 0.85	R 0.35
+total plain	true 312	cuts 240	hits 180	P 0.75	R 0.58

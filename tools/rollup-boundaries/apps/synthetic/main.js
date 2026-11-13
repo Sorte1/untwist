@@ -1,0 +1,23 @@
+import { log, lines } from "./log.js";
+import { lerp, EPS } from "./math.js";
+import { pad, SEPARATOR } from "./strings.js";
+import { count, increment, reset } from "./counter.js";
+import * as colors from "./colors.js";
+import { isEven } from "./cycle-a.js";
+import { Circle } from "./circle.js";
+import Square from "./square.js";
+import { createdShapes } from "./shape.js";
+import registry from "./registry.js";
+import { on, emit } from "./events.js";
+
+const pick = (name) => colors[name];
+const shapes = [new Circle(1), new Square(2)];
+registry.add("circle", shapes[0]).add("square", shapes[1]);
+increment(5);
+log("count", count, "shapes", createdShapes(), "even", isEven(10));
+log("colors", Object.keys(colors).join(","), pick("green"), colors.mix(colors.red, colors.blue));
+log(shapes.map(String).join(SEPARATOR), pad(lerp(0, 10, 0.5), 6), EPS);
+on("boot", () => log("main boot"));
+emit("boot", "app");
+reset();
+log("after reset", count, registry.keys().join(","), lines.length);

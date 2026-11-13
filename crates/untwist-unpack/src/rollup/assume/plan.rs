@@ -4,6 +4,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::literal::is_pure_value;
 
 use super::outer::Outer;
+use super::runs::{runs, Input, Run};
+use super::setters::writes;
 use super::shared::{prefix_end, Absorb, Free};
 use crate::rollup::scan::Facts;
 use crate::rollup::wrappers::Group;
@@ -20,8 +22,17 @@ pub struct Boundary {
 pub struct Plan {
     pub parts: Vec<Boundary>,
     pub part_of: Vec<Option<usize>>,
+    pub runs: Vec<Run>,
+    pub run_of: Vec<Option<usize>>,
+    pub run_setters: Vec<RunSetter>,
     pub shell: Vec<String>,
     pub setters: Vec<String>,
+}
+
+pub struct RunSetter {
+    pub name: String,
+    pub run: usize,
+    pub writes: Vec<(u32, u32, bool)>,
 }
 
 pub fn boundaries(groups: Vec<Group>, libraries: Vec<Boundary>) -> Vec<Boundary> {
@@ -254,6 +265,63 @@ fn settle(facts: &Facts, part_of: &mut [Option<usize>], alive: &mut [bool]) {
     }
 }
 
+type Runs = (Vec<Run>, Vec<Option<usize>>, Vec<RunSetter>);
+
+fn entry_runs(
+    scoping: &Scoping,
+    items: &[Statement<'_>],
+    facts: &Facts,
+    (refs, part_of): (&[Vec<u32>], &[Option<usize>]),
+    clashing: &[bool],
+) -> Runs {
+    let mut held: Vec<bool> = (0..items.len())
+        .map(|at| facts.pinned[at] || clashing[at])
+        .collect();
+    for (item, _, _) in &facts.shell {
+        held[*item as usize] = true;
+    }
+    let entry = (0..items.len() as u32)
+        .filter(|&at| part_of[at as usize].is_none() && !facts.dropped[at as usize])
+        .collect();
+    let found_writes = writes(scoping, items, facts);
+    let input = Input {
+        entry,
+        fixed: &found_writes.fixed,
+        refs,
+        held: &held,
+    };
+    let found = runs(scoping, items, facts, &input);
+    let mut run_of = vec![None; items.len()];
+    for (index, run) in found.iter().enumerate() {
+        for &member in &run.members {
+            run_of[member as usize] = Some(index);
+        }
+    }
+    let module = |item: u32| (part_of[item as usize], run_of[item as usize]);
+    let mut setters: Vec<RunSetter> = Vec::new();
+    let mut by_symbol: FxHashMap<oxc_syntax::symbol::SymbolId, usize> = FxHashMap::default();
+    for write in &found_writes.plain {
+        if module(write.item) == module(write.owner) {
+            continue;
+        }
+        let (None, Some(run)) = module(write.owner) else {
+            return (Vec::new(), vec![None; items.len()], Vec::new());
+        };
+        let slot = *by_symbol.entry(write.symbol).or_insert_with(|| {
+            setters.push(RunSetter {
+                name: scoping.symbol_name(write.symbol).to_string(),
+                run,
+                writes: Vec::new(),
+            });
+            setters.len() - 1
+        });
+        setters[slot]
+            .writes
+            .push((write.item, write.at, write.named));
+    }
+    (found, run_of, setters)
+}
+
 pub fn plan(
     scoping: &Scoping,
     items: &[Statement<'_>],
@@ -307,14 +375,16 @@ pub fn plan(
             parts.push(boundary);
         }
     }
-    if parts.is_empty() {
-        return None;
-    }
     let part_of: Vec<Option<usize>> = checks
         .part_of
         .iter()
         .map(|slot| slot.and_then(|part| renumber[part]))
         .collect();
+    let (runs, run_of, run_setters) =
+        entry_runs(scoping, items, facts, (&refs, &part_of), &checks.clashing);
+    if parts.is_empty() && runs.is_empty() {
+        return None;
+    }
     let shell: Vec<String> = facts
         .shell
         .iter()
@@ -331,6 +401,9 @@ pub fn plan(
     Some(Plan {
         parts,
         part_of,
+        runs,
+        run_of,
+        run_setters,
         shell,
         setters,
     })

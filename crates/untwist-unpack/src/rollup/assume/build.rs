@@ -3,10 +3,11 @@ use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_semantic::Scoping;
 use oxc_span::SPAN;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::outer::assigned_names;
 use super::plan::Plan;
+use super::rewrite::route;
 use crate::model::{Bundle, BundleKind, Module};
 use crate::rollup::build::{
     comments_of, entry_statements, fresh_creator, head_text, parsed, program, rebuilt_wrapper,
@@ -32,6 +33,14 @@ pub struct Layout {
     pub shell: Option<usize>,
     pub entry: usize,
     pub setters: Vec<(String, String)>,
+    pub definitions: Vec<String>,
+    pub rewrites: FxHashMap<u32, Rewrite>,
+}
+
+pub struct Rewrite {
+    pub setter: String,
+    pub binding: String,
+    pub named: bool,
 }
 
 fn ids(plan: &Plan, shell: bool) -> Vec<String> {
@@ -52,6 +61,16 @@ fn ids(plan: &Plan, shell: bool) -> Vec<String> {
     }
     if shell {
         ids.push(SHELL_ID.to_string());
+    }
+    for run in plan.runs.iter().rev() {
+        let base = sanitized(&run.stem);
+        let mut id = base.clone();
+        let mut suffix = 2usize;
+        while !taken.insert(id.to_ascii_lowercase()) {
+            id = format!("{base}-{suffix}");
+            suffix += 1;
+        }
+        ids.push(id);
     }
     ids.push(ENTRY_ID.to_string());
     ids
@@ -74,11 +93,21 @@ fn grouped(mut edges: Vec<(usize, usize, String)>, count: usize) -> Vec<Vec<(usi
     imports
 }
 
+fn run_slot(first: usize, count: usize, run: usize) -> usize {
+    first + count - 1 - run
+}
+
 pub fn layout(scoping: &Scoping, facts: &Facts, plan: &Plan, text: &str) -> Layout {
     let shell = (!plan.shell.is_empty()).then_some(plan.parts.len());
     let ids = ids(plan, shell.is_some());
     let entry = ids.len() - 1;
-    let at = |item: u32| plan.part_of[item as usize].unwrap_or(entry);
+    let first_run = entry - plan.runs.len();
+    let at = |item: u32| {
+        let item = item as usize;
+        plan.part_of[item]
+            .or_else(|| plan.run_of[item].map(|run| run_slot(first_run, plan.runs.len(), run)))
+            .unwrap_or(entry)
+    };
     let mut edges = Vec::new();
     let mut exports: Vec<Vec<String>> = vec![Vec::new(); ids.len()];
     for &(item, symbol) in &facts.uses {
@@ -97,22 +126,55 @@ pub fn layout(scoping: &Scoping, facts: &Facts, plan: &Plan, text: &str) -> Layo
             }
         }
     }
-    let taken: FxHashSet<String> = FxHashSet::default();
+    let mut taken: FxHashSet<String> = FxHashSet::default();
     let setters: Vec<(String, String)> = plan
         .setters
         .iter()
         .map(|name| {
-            (
-                name.clone(),
-                fresh(text, format!("{SETTER_PREFIX}{name}"), &taken),
-            )
+            let setter = fresh(text, format!("{SETTER_PREFIX}{name}"), &taken);
+            taken.insert(setter.clone());
+            (name.clone(), setter)
         })
         .collect();
+    let mut definitions = vec![String::new(); ids.len()];
+    let mut rewrites = FxHashMap::default();
+    for found in &plan.run_setters {
+        let owner = run_slot(first_run, plan.runs.len(), found.run);
+        let setter = fresh(text, format!("{SETTER_PREFIX}{}", found.name), &taken);
+        taken.insert(setter.clone());
+        definitions[owner].push_str(&format!(
+            "function {setter}(value) {{\n  return {} = value;\n}}\n",
+            found.name
+        ));
+        exports[owner].push(setter.clone());
+        for &(item, at_start, named) in &found.writes {
+            edges.push((at(item), owner, setter.clone()));
+            rewrites.insert(
+                at_start,
+                Rewrite {
+                    setter: setter.clone(),
+                    binding: found.name.clone(),
+                    named,
+                },
+            );
+        }
+    }
     for (_, setter) in &setters {
         edges.push((entry, shell.unwrap_or(entry), setter.clone()));
     }
     for part in 0..plan.parts.len() {
         edges.push((entry, part, String::new()));
+    }
+    for run in first_run..entry {
+        edges.push((entry, run, String::new()));
+    }
+    for run in 1..plan.runs.len() {
+        let count = plan.runs.len();
+        edges.push((
+            run_slot(first_run, count, run),
+            run_slot(first_run, count, run - 1),
+            String::new(),
+        ));
     }
     for names in &mut exports {
         names.sort_unstable();
@@ -133,6 +195,8 @@ pub fn layout(scoping: &Scoping, facts: &Facts, plan: &Plan, text: &str) -> Layo
         shell,
         entry,
         setters,
+        definitions,
+        rewrites,
     }
 }
 
@@ -257,22 +321,27 @@ fn nested_entry<'a>(
 
 struct Pieces<'a> {
     parts: Vec<Vec<Statement<'a>>>,
+    runs: Vec<Vec<Statement<'a>>>,
     entry: Vec<Statement<'a>>,
 }
 
 fn pieces<'a>(plan: &Plan, layout: &Layout, owned: AVec<'a, Statement<'a>>) -> Pieces<'a> {
     let mut parts: Vec<Vec<Statement<'a>>> = (0..plan.parts.len()).map(|_| Vec::new()).collect();
+    let mut runs: Vec<Vec<Statement<'a>>> = (0..plan.runs.len()).map(|_| Vec::new()).collect();
     let mut entry = Vec::new();
     for (index, statement) in owned.into_iter().enumerate() {
         if layout.links.dropped.get(index).copied().unwrap_or(false) {
             continue;
         }
-        match plan.part_of.get(index).copied().flatten() {
-            Some(part) => parts[part].push(statement),
-            None => entry.push(statement),
+        let part = plan.part_of.get(index).copied().flatten();
+        let run = plan.run_of.get(index).copied().flatten();
+        match (part, run) {
+            (Some(part), _) => parts[part].push(statement),
+            (None, Some(run)) => runs[run].push(statement),
+            (None, None) => entry.push(statement),
         }
     }
-    Pieces { parts, entry }
+    Pieces { parts, runs, entry }
 }
 
 fn module_of<'a>(
@@ -321,7 +390,11 @@ fn prepared<'a>(
     let mut tails = Vec::with_capacity(links.ids.len());
     for at in 0..links.ids.len() {
         heads.push(parsed(alloc, head_text(links, at, &creator))?);
-        tails.push(parsed(alloc, tail_text(links, at))?);
+        let definitions = layout.definitions.get(at).map_or("", String::as_str);
+        tails.push(parsed(
+            alloc,
+            format!("{definitions}{}", tail_text(links, at)),
+        )?);
     }
     let shell_module = match layout.shell {
         Some(_) => Some(parsed(alloc, shell_text(&plan.shell, &layout.setters))?),
@@ -364,21 +437,48 @@ pub fn assemble<'a>(
         shell: shell_module,
         mut inner,
     } = prepared;
+    let mut owned = owned;
+    if !route(alloc, &layout.rewrites, &mut owned) {
+        return Err(owned);
+    }
     let mut heads = heads.into_iter();
     let mut tails = tails.into_iter();
-    let Pieces { parts, entry } = pieces(plan, layout, owned);
+    let Pieces { parts, runs, entry } = pieces(plan, layout, owned);
     let mut bundle = Bundle::new(BundleKind::Rollup, Some(ENTRY_ID.to_string()));
-    for (at, body) in parts.into_iter().enumerate() {
+    let mut emit = |at: usize,
+                    body: Vec<Statement<'a>>,
+                    heads: &mut std::vec::IntoIter<_>,
+                    tails: &mut std::vec::IntoIter<_>| {
         let comments = comments_of(source, &body);
         let mut statements = heads.next().unwrap_or_else(|| AVec::new_in(&alloc));
         statements.extend(body);
         statements.extend(tails.next().unwrap_or_else(|| AVec::new_in(&alloc)));
         let module = module_of(alloc, source, layout, at, statements, comments);
         bundle.modules.insert(module.id.clone(), module);
+    };
+    for (at, body) in parts.into_iter().enumerate() {
+        emit(at, body, &mut heads, &mut tails);
     }
-    if let (Some(at), Some(statements)) = (layout.shell, shell_module) {
-        heads.next();
-        let module = module_of(alloc, source, layout, at, statements, Vec::new());
+    let shell_module = match (layout.shell, shell_module) {
+        (Some(at), Some(statements)) => {
+            heads.next();
+            tails.next();
+            Some(module_of(alloc, source, layout, at, statements, Vec::new()))
+        }
+        _ => None,
+    };
+    let first_run = layout.entry - runs.len();
+    let count = runs.len();
+    let mut ordered: Vec<(usize, Vec<Statement<'a>>)> = runs
+        .into_iter()
+        .enumerate()
+        .map(|(index, body)| (run_slot(first_run, count, index), body))
+        .collect();
+    ordered.sort_by_key(|(slot, _)| *slot);
+    for (slot, body) in ordered {
+        emit(slot, body, &mut heads, &mut tails);
+    }
+    if let Some(module) = shell_module {
         bundle.modules.insert(module.id.clone(), module);
     }
     let comments = comments_of(source, &entry);

@@ -172,6 +172,24 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   once the bundle is split, `var`-to-`let`/`const` runs again on each written module, where each
   module is its own scope; `deobfuscated.js`, written beside the tree, keeps those `var`s. Without
   the flag nothing changes.
+- **Inferred ES-module boundaries under `--split-assume-modules`.** What stays in the entry is cut
+  into contiguous runs of statements, one file per run, at points where Rollup's module order
+  shows through: a frozen namespace object (`Object.freeze({ __proto__: null, ... })`) ends a run
+  and holds the declarations it lists; a run boundary needs the earlier run to be read from later
+  code while the two runs neither share most of their readers nor most of the earlier bindings
+  they read, or a later run declaring a name the earlier one also declares up to Rollup's `$N`
+  suffix. The boundaries are a guess and only change the layout: the runs keep the bundle's
+  statement order (the entry imports the last run first and every run imports the one before it
+  first, so the module graph evaluates them in bundle order), a statement that reads a later
+  binding stays in one run with it, and everything from the first statement that needs the
+  wrapper function (`this`, `arguments`, `return`, an outer-wrapper name, a name the outer wrapper
+  also declares) to the end stays in the entry. A binding assigned from another run with a plain
+  `x = e` is exported with a setter (`set_x(e)`, or `set_x({ x: e }.x)` when `e` is an anonymous
+  function or class, which keeps its inferred name); any other write from another run (`+=`,
+  `++`, destructuring, `for (x in ...)`) keeps the writer and the declaration in one run. A run is
+  named after the first class or function another module imports from it, else `module<N>`. An
+  outer wrapper may now also declare `let`/`const` names; those are never exported through
+  `shell.js`, so a wrapper module that reads them stays in the entry.
 - **Closure.** Only the module manager's `try {…} catch (e) { X._DumpException(e) }` segments
   are split (ids from `/*_M:id*/` markers or begin/end loader calls checked against the
   `_ModuleManager_initialize` graph). The namespace object is read once, in

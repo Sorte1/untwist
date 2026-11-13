@@ -1,0 +1,17 @@
+eval log
+eval math num(1.500)
+eval strings [  x]
+eval counter 0
+eval cycle-b function
+eval cycle-a true
+eval shape
+eval circle
+eval square
+eval registry
+eval events
+count 7 shapes 2 even true
+colors blue,green,mix,red #0f0 #f00+#00f
+circle num(3.142) | square num(4.000) [     5] 0.000001
+boot handler app
+main boot
+after reset 0 circle,square 16
