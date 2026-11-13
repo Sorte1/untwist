@@ -172,6 +172,26 @@ const SHAPE_FIXTURES: &[(&str, &str, &str)] = &[
     ),
     (
         "untranspile-helpers",
+        "generator/regenerator/unsafe",
+        "fixtures/untranspile/matrix/babel-7.29/ie11/generators.js",
+    ),
+    (
+        "untranspile-helpers",
+        "async/babel/unsafe",
+        "fixtures/untranspile/matrix/babel-7.29/ie11/async-await.js",
+    ),
+    (
+        "untranspile-helpers",
+        "async/babel-pair/unsafe",
+        "fixtures/untranspile/matrix/babel-7.29/ie11/async-await.js",
+    ),
+    (
+        "untranspile-helpers",
+        "async/babel-closure/unsafe",
+        "fixtures/untranspile/matrix/babel-7.29/ie11/async-await.js",
+    ),
+    (
+        "untranspile-helpers",
         "async/awaiter/unsafe",
         "fixtures/untranspile/ts/async.es2015.js",
     ),

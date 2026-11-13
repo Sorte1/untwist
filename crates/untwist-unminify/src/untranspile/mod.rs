@@ -12,6 +12,7 @@ use untwist_core::pass::{
 use untwist_core::semantic::{has_module_syntax, program_is_strict, scope_hazard};
 
 mod async_fn;
+mod async_pair;
 mod builtins;
 mod class;
 mod class_ctor;
@@ -26,11 +27,13 @@ mod fingerprint;
 mod for_of;
 mod for_of_tsc;
 mod generator;
+mod generator_regen;
 pub mod identify;
 mod machine;
 mod machine_check;
 mod machine_emit;
 mod machine_read;
+mod machine_regenerator;
 mod machine_tslib;
 pub mod merge_member_declarations;
 pub mod shapes;
@@ -543,6 +546,32 @@ impl UntranspileHelpers {
     }
 
     #[inline(never)]
+    fn regenerator_site<'a>(&mut self, node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        if !self.gate.unsafe_ {
+            if self.may_wait(cx)
+                && (generator_regen::has_site(node, &self.table, cx.scoping())
+                    || async_pair::has_site(node, &self.table, cx.scoping()))
+            {
+                self.waiting = true;
+            }
+            return;
+        }
+        let fired = generator_regen::rewrite_statements(node, &self.table, cx);
+        for _ in 0..fired {
+            shapes::fire(PASS, generator_regen::SHAPE);
+        }
+        cx.changed_by(fired);
+        if self.promise_written {
+            return;
+        }
+        let paired = async_pair::rewrite_statements(node, &self.table, cx);
+        for _ in 0..paired {
+            shapes::fire(PASS, async_pair::SHAPE);
+        }
+        cx.changed_by(paired);
+    }
+
+    #[inline(never)]
     fn arrow_site<'a>(&mut self, node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
         let Expression::ArrowFunctionExpression(arrow) = node else {
             return;
@@ -781,7 +810,7 @@ impl<'a> Pass<'a> for UntranspileHelpers {
             self.open_classes = true;
         }
         self.class_seen = self.table.has_classes();
-        self.iterators_seen = self.table.has_iterators();
+        self.iterators_seen = self.table.has_iterators() || self.table.has_regenerators();
         let refused_open = std::mem::take(&mut self.open_classes);
         if refused_open {
             cx.note(UNTRANSPILE_CLASS_PROTOTYPE_OPEN, None);
@@ -864,6 +893,9 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         if self.table.has_iterators() {
             self.for_of_site(node, cx);
         }
+        if self.table.has_regenerators() {
+            self.regenerator_site(node, cx);
+        }
         if self.run_lists.is_empty() {
             return;
         }
@@ -894,6 +926,23 @@ impl<'a> Pass<'a> for UntranspileHelpers {
             if self.table.has_field_definers() {
                 self.native_site(class, cx);
             }
+            return;
+        }
+        if self.gate.unsafe_
+            && self.table.has_regenerators()
+            && generator_regen::rewrite_expression(node, &self.table, cx)
+        {
+            shapes::fire(PASS, generator_regen::SHAPE);
+            cx.changed();
+            return;
+        }
+        if self.gate.unsafe_
+            && self.table.has_runners()
+            && !self.promise_written
+            && async_pair::rewrite_closure(node, &self.table, cx)
+        {
+            shapes::fire(PASS, async_pair::CLOSURE);
+            cx.changed();
             return;
         }
         if self.class_pending > 0 && class::may_be_class(node) && self.class_site(node, cx) {

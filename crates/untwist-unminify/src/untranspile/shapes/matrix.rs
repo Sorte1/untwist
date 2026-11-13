@@ -19,6 +19,16 @@ const BABEL_7_28_IE11_RUNTIME_IIFE_TERSER_FOR_OF: &str =
     "fixtures/untranspile/matrix/babel-7.28/ie11-runtime-iife-terser/for-of.js";
 const BABEL_7_29_IE11_ROLLUP_TERSER_FOR_OF: &str =
     "fixtures/untranspile/matrix/babel-7.29/ie11-rollup-terser/for-of.js";
+const BABEL_7_28_IE11_GENERATORS: &str =
+    "fixtures/untranspile/matrix/babel-7.28/ie11/generators.js";
+const BABEL_7_28_IE11_TERSER_GENERATORS: &str =
+    "fixtures/untranspile/matrix/babel-7.28/ie11-terser/generators.js";
+const BABEL_7_29_IE11_GENERATORS: &str =
+    "fixtures/untranspile/matrix/babel-7.29/ie11/generators.js";
+const BABEL_7_29_IE11_TERSER_GENERATORS: &str =
+    "fixtures/untranspile/matrix/babel-7.29/ie11-terser/generators.js";
+const BABEL_7_29_IE11_ASYNC_AWAIT: &str =
+    "fixtures/untranspile/matrix/babel-7.29/ie11/async-await.js";
 const BABEL_8_IE11_FOR_OF: &str = "fixtures/untranspile/matrix/babel-8/ie11/for-of.js";
 const BABEL_8_IE11_RUNTIME_FOR_OF: &str =
     "fixtures/untranspile/matrix/babel-8/ie11-runtime/for-of.js";
@@ -120,6 +130,9 @@ const OBJECT_EXPRESSION_FOCUS: u8 = ExpressionKind::ObjectExpression as u8;
 const UNARY_EXPRESSION_FOCUS: u8 = ExpressionKind::UnaryExpression as u8;
 const DECLARED_FOCUS: u8 = u8::MAX - 1;
 const NO_FOCUS: u8 = u8::MAX;
+const ARROW_OR_FUNCTION_FOCUS: u8 = ExpressionKind::FunctionExpression as u8;
+const TRY_STATEMENT: u8 = StatementKind::TryStatement as u8;
+const STATIC_MEMBER_FOCUS: u8 = ExpressionKind::StaticMemberExpression as u8;
 
 const fn variant(
     kind: Kind,
@@ -751,5 +764,69 @@ pub const VARIANTS: &[Variant] = &[
         (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
         (&[Kind::UnsupportedIterableToArray], 200),
         BABEL_7_29_IE11_ROLLUP_TERSER_FOR_OF,
+    ),
+    variant(
+        Kind::Regenerator,
+        0x967c_1291_eeda_e607_470a_84d7_7bf0_7d57,
+        (0, 24),
+        (VARIABLE_DECLARATION, NO_FOCUS),
+        (&[Kind::RegeneratorDefine], 796),
+        BABEL_7_28_IE11_GENERATORS,
+    ),
+    variant(
+        Kind::Regenerator,
+        0x448e_4e0f_264b_279a_aeb3_737a_ce3a_18a4,
+        (0, 24),
+        (VARIABLE_DECLARATION, NO_FOCUS),
+        (&[Kind::RegeneratorDefine], 789),
+        BABEL_7_29_IE11_GENERATORS,
+    ),
+    variant(
+        Kind::Regenerator,
+        0x74ec_85ed_dd1c_da45_2d05_90f5_e365_702b,
+        (0, 24),
+        (VARIABLE_DECLARATION, NO_FOCUS),
+        (&[Kind::RegeneratorDefine], 794),
+        BABEL_7_28_IE11_TERSER_GENERATORS,
+    ),
+    variant(
+        Kind::Regenerator,
+        0xb6e9_2040_8e33_1e47_2b51_9b17_1b65_a530,
+        (0, 24),
+        (VARIABLE_DECLARATION, NO_FOCUS),
+        (&[Kind::RegeneratorDefine], 787),
+        BABEL_7_29_IE11_TERSER_GENERATORS,
+    ),
+    variant(
+        Kind::RegeneratorDefine,
+        0xc11d_f564_ff3e_2b04_c8e0_adf6_1182_ca5a,
+        (4, 4),
+        (VARIABLE_DECLARATION, STATIC_MEMBER_FOCUS),
+        (&[], 132),
+        BABEL_7_29_IE11_GENERATORS,
+    ),
+    variant(
+        Kind::RegeneratorDefine,
+        0xc4d5_b2fe_7af5_7057_a90a_ca63_e0e2_5bdb,
+        (4, 4),
+        (VARIABLE_DECLARATION, STATIC_MEMBER_FOCUS),
+        (&[], 131),
+        BABEL_7_29_IE11_TERSER_GENERATORS,
+    ),
+    variant(
+        Kind::AsyncToGenerator,
+        0x31fe_a126_9765_5ce2_a156_181e_a7c0_5b9e,
+        (1, 1),
+        (RETURN_STATEMENT, ARROW_OR_FUNCTION_FOCUS),
+        (&[Kind::AsyncGeneratorStep], 73),
+        BABEL_7_29_IE11_ASYNC_AWAIT,
+    ),
+    variant(
+        Kind::AsyncGeneratorStep,
+        0x27e9_f47b_e830_ea4d_e8bd_3cd9_749c_18ff,
+        (7, 2),
+        (TRY_STATEMENT, NO_FOCUS),
+        (&[], 64),
+        BABEL_7_29_IE11_ASYNC_AWAIT,
     ),
 ];
