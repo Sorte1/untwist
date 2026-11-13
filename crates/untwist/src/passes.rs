@@ -71,11 +71,13 @@ pub const PASSES: &[PassInfo] = &[
     pass("function-to-arrow", "lexical", false),
     pass("merge-member-declarations", "lexical", false),
     pass("name-commonjs-wrappers", "rename", false),
+    pass("library-rename", "rename", false),
     pass("rename-simple", "rename", false),
     pass("rename-smart", "rename", false),
     pass("rename-unique", "rename", false),
     pass("mangle", "rename", false),
     pass("rename-shorthand", "rename", false),
+    pass("library-names", "library", false),
 ];
 
 pub fn pass_named(name: &str) -> Option<&'static str> {

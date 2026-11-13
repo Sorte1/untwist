@@ -42,6 +42,10 @@ pub use untwist_core::budget::{
 pub use untwist_core::pass::{IterationTiming, Note, NoteKind, PassCtor, StopReason};
 pub use untwist_core::source_map::{self, Coverage, OwnedSourceMap};
 pub use untwist_rename::RenameMode;
+
+pub mod libraries {
+    pub use untwist_rename::library::table::{load, loaded_ids, LibraryTables};
+}
 pub use untwist_unpack::{Mapping, MappingMatcher};
 pub use wasm::{
     SuppliedWasm, WasmCheck, WasmFile, WasmOrigin, WasmReference, WasmSupply, MAX_WASM_BYTES,
