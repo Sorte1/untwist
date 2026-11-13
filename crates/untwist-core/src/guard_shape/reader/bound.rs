@@ -67,7 +67,7 @@ fn with_scopes(scoping: &Scoping) -> bool {
         .any(|scope| scoping.scope_flags(scope).contains(ScopeFlags::With))
 }
 
-fn eval_text<'k>(call: &'k CallExpression<'_>) -> Option<Option<&'k str>> {
+fn eval_text(call: &CallExpression<'_>) -> Option<Option<String>> {
     let Expression::Identifier(callee) = call.callee.without_parentheses() else {
         return None;
     };
@@ -75,7 +75,11 @@ fn eval_text<'k>(call: &'k CallExpression<'_>) -> Option<Option<&'k str>> {
         return None;
     }
     let text = match call.arguments.as_slice() {
-        [Argument::StringLiteral(text)] if !text.value.contains('\\') => Some(text.value.as_str()),
+        [Argument::StringLiteral(text)] => text
+            .value
+            .as_str()
+            .filter(|text| !text.contains('\\'))
+            .map(str::to_string),
         _ => None,
     };
     Some(text)
@@ -114,7 +118,7 @@ pub(super) fn settle_bound(
         .collect();
     for text in &targets.evals {
         for (symbol, name) in &names {
-            if text.is_none_or(|text| text.contains(name)) {
+            if text.as_deref().is_none_or(|text| text.contains(name)) {
                 if let Some(found) = targets.wanted.get_mut(symbol) {
                     found.poisoned = true;
                 }
@@ -169,7 +173,7 @@ impl<'a> VisitJs<'a> for Targets<'_, '_> {
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if let Some(text) = eval_text(it) {
-            self.evals.push(text.map(str::to_string));
+            self.evals.push(text);
         }
         walk_js::walk_call_expression(self, it);
     }
