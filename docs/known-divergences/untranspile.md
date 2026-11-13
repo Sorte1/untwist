@@ -378,7 +378,7 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   the statement follows with `_t` in its place, so every read keeps the machine's order (the
   spread-around-`await` lowering of TypeScript and SWC takes this form;
   `fixtures/untranspile/hand/machine-resume-order.js`). Neither form needs an assumption.
-- **Generators (Babel's inline regenerator, Babel 7.28 to 8).** A function declaration `g`
+- **Generators (Babel's inline regenerator, Babel 7.18 to 8).** A function declaration `g`
   whose body is `return _regenerator().w(function (_context) { while (1) switch (_context.n) {
   … } }, _marked)`, after only `var` declarations initialised with nothing, `this` or
   `arguments`, where `var _marked = _regenerator().m(g)` sits in the same statement list and
@@ -395,9 +395,14 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   leaves to, kept only when the catch cases reach nothing outside it. A `finally` that the try
   or catch cases enter by a jump, a resumption or falling through (the normal completion of
   the `try`) keeps the machine, since the structurer's `finally` is entered by the region's
-  exit, not by an edge. Any other use of `_context`, `this` in the state function,
-  `@babel/runtime`'s `_regeneratorRuntime()` or the classic `regeneratorRuntime.mark/wrap`
-  keeps it too. The expression form `_regenerator().m(function _callee() { return
+  exit, not by an edge. Babel 7.18 to 7.27's inline `_regeneratorRuntime()` (identified by
+  structure) is read the same way from its classic protocol: `.mark(g)`/`.wrap(function g$
+  (_context) { while (1) switch (_context.prev = _context.next) { case 0: … case "end": return
+  _context.stop(); } }, _marked)`, numbered cases mapped in order, `_context.next = L`,
+  `_context.sent`, `return _context.abrupt("return", v)`; its try lists, `_context.t0 =
+  _context["catch"](L)`, `finish` and `delegateYield` keep the machine. Any other use of
+  `_context`, `this` in the state function, `@babel/runtime`'s module copy or the global
+  `regeneratorRuntime` keeps it too. The expression form `_regenerator().m(function _callee() { return
   _regenerator().w(…, _callee); })` becomes that `function*` in place. The rewrite
   is `--unsafe` only, under the generator assumptions above (a regenerator generator object is
   `Object.create(g.prototype)` with the runtime's `next`/`throw`/`return`; `_regenerator().m(g)`

@@ -115,3 +115,18 @@ fn async_handlers_become_try_statements() {
         ],
     );
 }
+
+#[test]
+fn the_classic_runtime_machines_convert_too() {
+    let code = run("matrix/babel-7.24/ie11/generators.js", true);
+    assert_has(
+        &code,
+        &[
+            "function* inner() {",
+            "got = yield \"first\";",
+            "return \"inner-done\";",
+        ],
+    );
+    let code = run("matrix/babel-7.20/ie11/async-await.js", true);
+    assert_has(&code, &["async function fetchTwice(x) {"]);
+}

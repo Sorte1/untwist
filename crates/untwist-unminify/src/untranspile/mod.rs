@@ -31,6 +31,7 @@ mod generator_regen;
 pub mod identify;
 mod machine;
 mod machine_check;
+mod machine_classic;
 mod machine_emit;
 mod machine_read;
 mod machine_regenerator;

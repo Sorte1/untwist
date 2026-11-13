@@ -29,6 +29,10 @@ const BABEL_7_29_IE11_TERSER_GENERATORS: &str =
     "fixtures/untranspile/matrix/babel-7.29/ie11-terser/generators.js";
 const BABEL_7_29_IE11_ASYNC_AWAIT: &str =
     "fixtures/untranspile/matrix/babel-7.29/ie11/async-await.js";
+const BABEL_7_20_IE11_GENERATORS: &str =
+    "fixtures/untranspile/matrix/babel-7.20/ie11/generators.js";
+const BABEL_7_24_IE11_GENERATORS: &str =
+    "fixtures/untranspile/matrix/babel-7.24/ie11/generators.js";
 const BABEL_8_IE11_FOR_OF: &str = "fixtures/untranspile/matrix/babel-8/ie11/for-of.js";
 const BABEL_8_IE11_RUNTIME_FOR_OF: &str =
     "fixtures/untranspile/matrix/babel-8/ie11-runtime/for-of.js";
@@ -845,5 +849,21 @@ pub const VARIANTS: &[Variant] = &[
         (IF_STATEMENT, VALUES_FOCUS),
         (&[Kind::Typeof], 99),
         BABEL_7_28_IE11_TERSER_GENERATORS,
+    ),
+    variant(
+        Kind::RegeneratorRuntime,
+        0x581a_590a_bb3b_366e_57fa_da91_ef6d_2e3a,
+        (0, 52),
+        (EXPRESSION_STATEMENT, ASSIGNMENT_EXPRESSION_FOCUS),
+        (&[Kind::Typeof], 2371),
+        BABEL_7_20_IE11_GENERATORS,
+    ),
+    variant(
+        Kind::RegeneratorRuntime,
+        0xac7e_5913_bd3f_00ec_f7ff_00a9_498e_076e,
+        (0, 56),
+        (EXPRESSION_STATEMENT, ASSIGNMENT_EXPRESSION_FOCUS),
+        (&[Kind::Typeof], 2390),
+        BABEL_7_24_IE11_GENERATORS,
     ),
 ];

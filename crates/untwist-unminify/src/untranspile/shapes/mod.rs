@@ -66,6 +66,7 @@ pub enum Kind {
     Regenerator,
     RegeneratorDefine,
     RegeneratorValues,
+    RegeneratorRuntime,
     AsyncToGenerator,
     AsyncGeneratorStep,
     Alias(Alias),
@@ -130,15 +131,15 @@ fn sized(variant: &Variant, size: Size) -> bool {
 
 const MASKED_PARAMS: usize = 8;
 
-const fn size_masks() -> [u32; MASKED_PARAMS] {
-    let mut masks = [0u32; MASKED_PARAMS];
+const fn size_masks() -> [u64; MASKED_PARAMS] {
+    let mut masks = [0u64; MASKED_PARAMS];
     let mut family = 0;
     while family < FAMILIES.len() {
         let variants = FAMILIES[family];
         let mut at = 0;
         while at < variants.len() {
             let variant = &variants[at];
-            if (variant.params as usize) < MASKED_PARAMS && variant.statements < 32 {
+            if (variant.params as usize) < MASKED_PARAMS && variant.statements < 64 {
                 masks[variant.params as usize] |= 1 << variant.statements;
             }
             at += 1;
@@ -148,10 +149,10 @@ const fn size_masks() -> [u32; MASKED_PARAMS] {
     masks
 }
 
-const SIZE_MASKS: [u32; MASKED_PARAMS] = size_masks();
+const SIZE_MASKS: [u64; MASKED_PARAMS] = size_masks();
 
 pub fn sized_cap(size: Size) -> Option<u32> {
-    let sized_like_one = size.statements < 32
+    let sized_like_one = size.statements < 64
         && SIZE_MASKS
             .get(usize::from(size.params))
             .is_some_and(|mask| mask & (1 << size.statements) != 0);
@@ -168,7 +169,7 @@ pub fn known(hash: u128, size: Size) -> Option<&'static Variant> {
     variants().find(|variant| variant.hash == hash && sized(variant, size))
 }
 
-pub const HELPER_NAMES: [(&str, Kind); 69] = [
+pub const HELPER_NAMES: [(&str, Kind); 70] = [
     ("_toConsumableArray", Kind::ToConsumableArray),
     ("_to_consumable_array", Kind::ToConsumableArray),
     ("_arrayWithoutHoles", Kind::ArrayWithoutHoles),
@@ -257,6 +258,7 @@ pub const HELPER_NAMES: [(&str, Kind); 69] = [
     ("_regenerator", Kind::Regenerator),
     ("_regeneratorDefine2", Kind::RegeneratorDefine),
     ("_regeneratorValues", Kind::RegeneratorValues),
+    ("_regeneratorRuntime", Kind::RegeneratorRuntime),
     ("_asyncToGenerator", Kind::AsyncToGenerator),
     ("asyncGeneratorStep", Kind::AsyncGeneratorStep),
 ];
@@ -303,7 +305,7 @@ pub fn is_iterator_helper(kind: Kind) -> bool {
 }
 
 pub fn is_regenerator(kind: Kind) -> bool {
-    matches!(kind, Kind::Regenerator)
+    matches!(kind, Kind::Regenerator | Kind::RegeneratorRuntime)
 }
 
 pub fn is_object_rest(kind: Kind) -> bool {

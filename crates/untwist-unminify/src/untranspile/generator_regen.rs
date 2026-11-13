@@ -13,26 +13,106 @@ use super::generator::{
     unbind, Body,
 };
 use super::identify::Table;
+use super::machine_check::Reads;
+use super::machine_classic;
 use super::machine_emit::Emitter;
 use super::machine_regenerator::{self, Context, Regenerator, ValueReads};
+
+struct Loaded<'a> {
+    machine: super::machine::Machine,
+    labels: Vec<&'a str>,
+}
 use super::shapes::Kind;
 use super::structure;
 use super::structure_tidy::tidy;
 
 pub const SHAPE: &str = "generator/regenerator/unsafe";
 
-fn runtime_call(expression: &Expression<'_>, method: &str, table: &Table, s: &Scoping) -> bool {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Flavor {
+    Inline,
+    Classic,
+}
+
+impl Flavor {
+    fn wrap(self) -> &'static str {
+        match self {
+            Flavor::Inline => "w",
+            Flavor::Classic => "wrap",
+        }
+    }
+
+    fn mark(self) -> &'static str {
+        match self {
+            Flavor::Inline => "m",
+            Flavor::Classic => "mark",
+        }
+    }
+}
+
+fn runtime_of(
+    expression: &Expression<'_>,
+    table: &Table,
+    s: &Scoping,
+) -> Option<(Flavor, &'static str)> {
     let Expression::StaticMemberExpression(member) = expression.without_parentheses() else {
-        return false;
+        return None;
     };
     let Expression::CallExpression(runtime) = member.object.without_parentheses() else {
-        return false;
+        return None;
     };
-    !member.optional
-        && member.property.name.as_str() == method
-        && runtime.arguments.is_empty()
-        && !runtime.optional
-        && table.kind_of_callee(&runtime.callee, s) == Some(Kind::Regenerator)
+    if member.optional || !runtime.arguments.is_empty() || runtime.optional {
+        return None;
+    }
+    let flavor = match table.kind_of_callee(&runtime.callee, s)? {
+        Kind::Regenerator => Flavor::Inline,
+        Kind::RegeneratorRuntime => Flavor::Classic,
+        _ => return None,
+    };
+    let name = member.property.name.as_str();
+    [flavor.wrap(), flavor.mark()]
+        .into_iter()
+        .find(|method| *method == name)
+        .map(|method| (flavor, method))
+}
+
+fn runtime_call(expression: &Expression<'_>, method: &str, table: &Table, s: &Scoping) -> bool {
+    runtime_of(expression, table, s).is_some_and(|(flavor, found)| {
+        found == method
+            || (method == "w" && found == flavor.wrap())
+            || (method == "m" && found == flavor.mark())
+    })
+}
+
+fn flavor_of(call: &CallExpression<'_>, table: &Table, s: &Scoping) -> Option<Flavor> {
+    runtime_of(&call.callee, table, s).map(|(flavor, _)| flavor)
+}
+
+fn state_body<'k, 'a>(
+    expression: &'k Expression<'a>,
+    scoping: &Scoping,
+) -> Option<(Body<'k, 'a>, Option<SymbolId>)> {
+    if let Some(body) = body_of(expression) {
+        return Some((body, None));
+    }
+    let Expression::FunctionExpression(function) = expression.without_parentheses() else {
+        return None;
+    };
+    let own = function.id.as_ref()?.symbol_id.get()?;
+    if function.generator || function.r#async || !scoping.get_resolved_reference_ids(own).is_empty()
+    {
+        return None;
+    }
+    let body = function.body.as_ref()?;
+    body.directives.is_empty().then_some(())?;
+    Some((
+        Body {
+            state: super::generator::simple_param(&function.params)?,
+            scope: function.scope_id.get()?,
+            statements: &body.statements,
+        },
+        Some(own),
+    ))
 }
 
 fn wrapped<'k, 'a>(
@@ -96,9 +176,12 @@ fn this_free(statements: &[Statement<'_>]) -> bool {
     !scan.found
 }
 
-fn switch_scopes_free(body: &Body<'_, '_>, scoping: &Scoping) -> bool {
+fn switch_scopes_free(body: &Body<'_, '_>, named: Option<SymbolId>, scoping: &Scoping) -> bool {
     let own = scoping.get_bindings(body.scope);
-    let only_state = own.len() == 1 && own.values().all(|symbol| *symbol == body.state);
+    let only_state = own
+        .values()
+        .all(|symbol| *symbol == body.state || Some(*symbol) == named)
+        && own.values().any(|symbol| *symbol == body.state);
     let [Statement::WhileStatement(looped)] = body.statements else {
         return false;
     };
@@ -174,36 +257,76 @@ pub fn rewrite<'a>(function: &mut Function<'a>, table: &Table, cx: &mut Cx<'a, '
         return None;
     }
     let (call, _) = wrapped(function, table, scoping)?;
-    let body = body_of(call.arguments.first()?.as_expression()?)?;
-    if !switch_scopes_free(&body, scoping) || !this_free(body.statements) {
+    let flavor = flavor_of(call, table, scoping)?;
+    let (body, named) = state_body(call.arguments.first()?.as_expression()?, scoping)?;
+    if !switch_scopes_free(&body, named, scoping) || !this_free(body.statements) {
         return None;
     }
     let prefix = function.body.as_ref()?.statements.split_last()?.1;
-    let context = Context {
-        scoping,
-        state: body.state,
+    let home = (!prefix.iter().any(aliases_arguments)).then_some(scope);
+    let (machine, labels, cases_ref, reads): (_, Vec<&'a str>, _, Box<dyn Reads>) = match flavor {
+        Flavor::Inline => {
+            let context = Context {
+                scoping,
+                state: body.state,
+            };
+            let list = call.arguments.get(3).and_then(Argument::as_expression);
+            let regions = machine_regenerator::regions(list, body.statements, &context)?;
+            let values = |callee: &Expression<'_>| {
+                table.kind_of_callee(callee, scoping) == Some(Kind::RegeneratorValues)
+            };
+            let regenerator = Regenerator {
+                context,
+                home,
+                regions,
+                values: &values,
+            };
+            let loaded = machine_regenerator::read(body.statements, &regenerator)?;
+            let (cases_ref, _) = machine_regenerator::cases(body.statements, &regenerator.context)?;
+            (
+                loaded.machine,
+                loaded.labels,
+                cases_ref,
+                Box::new(ValueReads::of(scoping, body.state)),
+            )
+        }
+        Flavor::Classic => {
+            if call.arguments.len() != 2 {
+                return None;
+            }
+            let context = machine_classic::Context {
+                scoping,
+                state: body.state,
+            };
+            let found = machine_classic::cases(body.statements, &context)?;
+            let classic = machine_classic::Classic {
+                context,
+                home,
+                labels: found.labels.clone(),
+            };
+            let (machine, labels) = machine_classic::read(body.statements, &classic)?;
+            (
+                machine,
+                labels,
+                found.cases,
+                Box::new(machine_classic::SentReads::of(scoping, body.state)),
+            )
+        }
     };
-    let list = call.arguments.get(3).and_then(Argument::as_expression);
-    let regions = machine_regenerator::regions(list, body.statements, &context)?;
-    let values = |callee: &Expression<'_>| {
-        table.kind_of_callee(callee, scoping) == Some(Kind::RegeneratorValues)
-    };
-    let regenerator = Regenerator {
-        context,
-        home: (!prefix.iter().any(aliases_arguments)).then_some(scope),
-        regions,
-        values: &values,
-    };
-    let loaded = machine_regenerator::read(body.statements, &regenerator)?;
+    let loaded = Loaded { machine, labels };
     let mut structured = structure::structure(&loaded.machine)?;
     tidy(&mut structured.code, &loaded.machine);
-    let reads = ValueReads::of(scoping, body.state);
-    let (cases_ref, _) = machine_regenerator::cases(body.statements, &regenerator.context)?;
-    let rebound = rebinds(&loaded.machine, &cases_ref, prefix, &reads, scoping);
+    let rebound = rebinds(&loaded.machine, &cases_ref, prefix, reads.as_ref(), scoping);
     let labels: Vec<&'a str> = loaded.labels;
     let machine = loaded.machine;
     let cases = copy_cases(returned_call(function)?, cx)?;
-    let mut emitter = Emitter::new(cases, (&machine, &structured.yields), &reads, scope, cx);
+    let mut emitter = Emitter::new(
+        cases,
+        (&machine, &structured.yields),
+        reads.as_ref(),
+        scope,
+        cx,
+    );
     for (region, symbol, name) in &rebound {
         emitter
             .rebound
