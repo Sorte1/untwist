@@ -41,7 +41,7 @@ fn names_constructor(expression: &Expression<'_>) -> bool {
         MemberExpression::StaticMemberExpression(it) => it.property.name == CONSTRUCTOR,
         MemberExpression::ComputedMemberExpression(it) => match &it.expression {
             Expression::StringLiteral(literal) => literal.value.as_str() == Some(CONSTRUCTOR),
-            _ => true,
+            _ => false,
         },
         MemberExpression::PrivateFieldExpression(_) => false,
     }
