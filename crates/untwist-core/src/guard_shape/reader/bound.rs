@@ -3,7 +3,7 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::reference::ReferenceId;
-use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 
@@ -56,7 +56,7 @@ struct Targets<'s, 't> {
     scoping: &'s Scoping,
     printed: Printed<'t>,
     wanted: FxHashMap<SymbolId, Definitions>,
-    evals: Vec<Option<String>>,
+    evals: Vec<DirectEval>,
 }
 
 const EVAL: &str = "eval";
@@ -67,13 +67,21 @@ fn with_scopes(scoping: &Scoping) -> bool {
         .any(|scope| scoping.scope_flags(scope).contains(ScopeFlags::With))
 }
 
-fn eval_text(call: &CallExpression<'_>) -> Option<Option<String>> {
+fn eval_text(call: &CallExpression<'_>, scoping: &Scoping) -> Option<DirectEval> {
     let Expression::Identifier(callee) = call.callee.without_parentheses() else {
         return None;
     };
     if callee.name != EVAL {
         return None;
     }
+    let reference = callee
+        .reference_id
+        .get()
+        .map(|id| scoping.get_reference(id));
+    if reference.is_some_and(|reference| reference.symbol_id().is_some()) {
+        return None;
+    }
+    let scope = reference.map(|reference| reference.scope_id());
     let text = match call.arguments.as_slice() {
         [Argument::StringLiteral(text)] => text
             .value
@@ -82,7 +90,30 @@ fn eval_text(call: &CallExpression<'_>) -> Option<Option<String>> {
             .map(str::to_string),
         _ => None,
     };
-    Some(text)
+    Some(DirectEval { text, scope })
+}
+
+struct DirectEval {
+    text: Option<String>,
+    scope: Option<ScopeId>,
+}
+
+impl DirectEval {
+    fn may_write(&self, scoping: &Scoping, symbol: SymbolId) -> bool {
+        if scoping.symbol_flags(symbol).is_const_variable() {
+            return false;
+        }
+        let spelled = self
+            .text
+            .as_deref()
+            .is_none_or(|text| text.contains(scoping.symbol_name(symbol)));
+        let inside = self.scope.is_none_or(|scope| {
+            scoping
+                .scope_ancestors(scope)
+                .any(|ancestor| ancestor == scoping.symbol_scope_id(symbol))
+        });
+        spelled && inside
+    }
 }
 
 pub(super) fn settle_bound(
@@ -111,18 +142,20 @@ pub(super) fn settle_bound(
         evals: Vec::new(),
     };
     targets.visit_program(program);
-    let names: Vec<(SymbolId, &str)> = targets
+    let written: Vec<SymbolId> = targets
         .wanted
         .keys()
-        .map(|symbol| (*symbol, scoping.symbol_name(*symbol)))
+        .copied()
+        .filter(|symbol| {
+            targets
+                .evals
+                .iter()
+                .any(|eval| eval.may_write(scoping, *symbol))
+        })
         .collect();
-    for text in &targets.evals {
-        for (symbol, name) in &names {
-            if text.as_deref().is_none_or(|text| text.contains(name)) {
-                if let Some(found) = targets.wanted.get_mut(symbol) {
-                    found.poisoned = true;
-                }
-            }
+    for symbol in written {
+        if let Some(found) = targets.wanted.get_mut(&symbol) {
+            found.poisoned = true;
         }
     }
     targets.wanted.iter().all(|(symbol, found)| {
@@ -172,8 +205,8 @@ impl<'a> VisitJs<'a> for Targets<'_, '_> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if let Some(text) = eval_text(it) {
-            self.evals.push(text);
+        if let Some(eval) = eval_text(it, self.scoping) {
+            self.evals.push(eval);
         }
         walk_js::walk_call_expression(self, it);
     }

@@ -285,3 +285,15 @@ fn a_direct_eval_that_may_name_the_controller_unguards_it() {
     let with = format!("{CONTROLLER_ONE_LINE}with (o) {{\n  x;\n}}\n{READER}");
     assert_eq!(source_readers(&with), SourceReaders::Unguarded);
 }
+
+#[test]
+fn a_direct_eval_cannot_rewrite_a_const_controller_or_one_outside_its_scope() {
+    let constant = CONTROLLER_ONE_LINE.replacen("var c = ", "const c = ", 1);
+    let code = format!("{constant}eval(text);\n{READER}");
+    assert_eq!(source_readers(&code), SourceReaders::Guarded);
+    let elsewhere =
+        format!("{CONTROLLER_ONE_LINE}function f(text) {{\n  return eval(text);\n}}\n{READER}");
+    assert_eq!(source_readers(&elsewhere), SourceReaders::Unguarded);
+    let walled = format!("function f(text) {{\n  return eval(text);\n}}\nfunction g() {{\n{CONTROLLER_ONE_LINE}{READER}}}\n");
+    assert_eq!(source_readers(&walled), SourceReaders::Guarded);
+}

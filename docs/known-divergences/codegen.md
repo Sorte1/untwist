@@ -149,8 +149,9 @@ fixture that then joins the differential.
   is resolved by binding, not by name. It must be a `var`/`let`/`const` binding (no parameter,
   function, class, catch or import binding of it, no destructuring) with exactly one value, its
   initialiser or one plain `c = …` assignment, and no other write; a program with a `with`
-  statement, or a direct `eval` whose argument is not a string literal without escapes or whose
-  text spells the controller's name, has no resolved controller. A write through the global
+  statement has no resolved controller, and neither does a `var`/`let` controller when a direct
+  `eval` inside its scope takes an argument that is not a string literal without escapes, or
+  whose text spells the controller's name (a `const` cannot be rewritten that way). A write through the global
   object (`window.c = …`, an indirect `eval`) is not seen. When `c` is not a name, the callee itself is
   the controller. Every two-parameter controller target inside that value, in every branch the
   template matches, must be printed without a line break in the output. If the binding does not
