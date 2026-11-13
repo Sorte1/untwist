@@ -10,6 +10,7 @@ use super::compat;
 use super::edit::{apply, reachable};
 use super::lookalike::lookalikes;
 use super::plan::{module_hits, plan, units, Inputs, Installer, Plan, LABEL};
+use super::pure::looks_pure;
 use super::report;
 use super::rewrite::{self, Site};
 use super::rewrite_apply;
@@ -26,6 +27,8 @@ const TEXT_READ_UNKNOWN: &str =
     "code may read function text through a computed key, so no core-js module was removed";
 const DYNAMIC_SCOPE: &str =
     "the program uses direct eval or with, so no core-js module was removed";
+const PURE: &str =
+    "the core-js code reads a path object of its own (core-js-pure), so no core-js module was removed or rewritten";
 const EDIT_MISMATCH: &str =
     "some planned removals are not in a statement list, so no core-js module was removed";
 
@@ -74,6 +77,7 @@ struct Rounds {
     kept: Option<Vec<Installer>>,
     rewritten: bool,
     last: Option<Plan>,
+    library: Vec<Span>,
 }
 
 impl ModernPass {
@@ -82,6 +86,7 @@ impl ModernPass {
         program: &Program<'_>,
         scoping: &Scoping,
         cx: &mut Cx<'_, '_>,
+        library: &[Span],
     ) -> Option<(Plan, FxHashMap<Span, Site>)> {
         let found = match_program(program, scoping);
         if !found.hits.iter().any(|hit| hit.label == LABEL) {
@@ -106,12 +111,17 @@ impl ModernPass {
         let known = hits.iter().map(|hit| hit.span).collect();
         let lookalikes = lookalikes(program, scoping, &known);
         let units = units(&hits, lookalikes, &facts, scoping);
+        if looks_pure(&units, &facts) {
+            refuse(cx, PURE);
+            return None;
+        }
         let inputs = Inputs {
             facts: &facts,
             scoping,
             compat: compat::builtin(),
             baseline: &self.baseline,
             pinned: &pinned,
+            library,
         };
         let plan = plan(&units, &inputs);
         let rewrites = rewrite::Inputs {
@@ -135,7 +145,7 @@ impl ModernPass {
         rewrite: bool,
     ) -> bool {
         let alloc = cx.allocator();
-        let Some((mut plan, sites)) = self.planned(program, scoping, cx) else {
+        let Some((mut plan, sites)) = self.planned(program, scoping, cx, &rounds.library) else {
             return false;
         };
         let removing = !plan.regions.is_empty();
@@ -166,6 +176,7 @@ impl ModernPass {
             rounds.kept = Some(plan.installers.clone());
         }
         rounds.rewritten |= rewrite;
+        rounds.library.extend(plan.library.iter().copied());
         rounds.last = Some(plan);
         removing || !rewritten.is_empty()
     }

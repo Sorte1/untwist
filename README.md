@@ -254,8 +254,12 @@ polyfill module (`modules/es.*`, `modules/web.*`) is removed when core-js-compat
 recognised core-js version, says no engine in the baseline needs it, which also covers the
 engines where core-js replaces a buggy native. Proposals (`esnext.*`), modules core-js still
 replaces in one of the engines, modules whose exports other code reads, and modules that call
-code not recognised as core-js are kept. Helper modules (`internals/*`) that nothing uses any
-more are removed after them.
+code not recognised as core-js are kept. A module that runs a module that is kept is kept as
+well, so a polyfill the baseline needs never loses the call that ran it. Helper modules
+(`internals/*`) that nothing uses any more are removed after them. Only core-js code is
+removed: the module wrappers, their own variables and the statements that run a removed
+module; code around them is never touched. core-js-pure (whose `path` object holds the
+polyfills instead of the global object) is detected and left as it is.
 
 In the core-js code that stays, calls of exactly matched helpers become the native form where
 it behaves the same in every baseline engine: `wellKnownSymbol("iterator")` becomes
@@ -264,7 +268,15 @@ becomes `Object.hasOwn(it, key)`, an uncurried method `stringSlice(s, 1)` become
 `String.prototype.slice.call(s, 1)` (only when core-js does not replace that method in the
 baseline), and `isCallable(it)` becomes `typeof it == "function"` only when no browser is in the
 baseline (in browsers core-js also accepts `document.all`). `requireObjectCoercible` is left as
-it is, since no native form throws the same error.
+it is, since no native form throws the same error. A call is rewritten only where it is used as
+a value (not under `delete`), where the built-in's name is not shadowed, and where the helper's
+variable is certainly set before the call runs.
+
+The rewritten calls read the engine's built-ins when they run, where core-js read them once when
+it loaded (`hasOwn` keeps the `Object.hasOwn` it saw then, an uncurried method keeps the method).
+So the output assumes that the program does not replace built-ins after core-js loaded. Removing
+a module can also move the first run of a helper module it used to run, which matters only to
+code that changes built-ins between the two points.
 
 The report lists every removed and kept module with the reason and every rewritten call
 kind, and says that the output assumes such an engine with its own built-ins; the output starts with
