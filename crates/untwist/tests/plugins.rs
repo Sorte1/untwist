@@ -161,6 +161,7 @@ fn every_hook_is_reported_where_it_runs() {
             "jsx",
             "cleanup",
             "lexical",
+            "library",
             "unpack",
             "plugin:after-unpack",
         ]

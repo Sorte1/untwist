@@ -1,0 +1,43 @@
+prepare      2 iter    870 changes     1.66 ms
+  block-statements                    346       0.00 ms
+  sequence                            219       0.00 ms
+  split-variable-declarations         305       0.00 ms
+deobfuscate   1 iter      0 changes     1.82 ms
+unminify     2 iter    862 changes     2.87 ms
+  logical-assignments                   9       0.00 ms
+  for-to-while                          3       0.00 ms
+  infinity                              1       0.00 ms
+  invert-boolean-logic                 24       0.00 ms
+  logical-to-if                       166       0.00 ms
+  merge-else-if                        19       0.00 ms
+  sequence                             80       0.00 ms
+  split-for-loop-vars                  12       0.00 ms
+  ternary-to-if                       110       0.00 ms
+  unary-expressions                     1       0.00 ms
+  unminify-booleans                   221       0.00 ms
+  void-to-undefined                    59       0.00 ms
+  yoda                                157       0.00 ms
+protections   1 iter      0 changes     0.41 ms
+jsx          1 iter      0 changes     0.80 ms
+cleanup      2 iter      3 changes     9.31 ms
+  fold-pure-calls                       3       1.06 ms
+unminify (round 2)   2 iter      0 changes     2.04 ms
+cleanup (round 2)   1 iter      0 changes     0.00 ms
+lexical      1 iter    778 changes     1.16 ms
+  var-to-let                          645       0.00 ms
+  function-to-arrow                   111       0.00 ms
+  merge-member-declarations            22       0.00 ms
+rename       2 iter   2309 changes   112.69 ms
+  library-rename                     1964     106.83 ms
+  rename-smart                        345       5.27 ms
+rename-shorthand   2 iter      2 changes     5.13 ms
+  rename-shorthand                      2       4.82 ms
+library      1 iter      0 changes     2.73 ms
+parse_errors: 0
+budget: max-memory 4.0 GiB, timeout none, memory peak 36.6 MiB
+note: deobfuscate: find-string-array: no string array found; deobfuscation skipped
+note: untranspile-helpers: a transpiler helper was left in place: its binding may hold something else when a call runs (a script-level helper the global object can replace, a shared `this && this.x` definition outside a module, or a var helper whose initialiser may not have run first)
+note: var-transformation: a property named arguments or caller, or one under a key that is not a known other name, is read somewhere in the program (directly, through a reflective read or from code text), and it may see a function's simple parameters or its caller, so no assignment was rewritten as a var declaration
+note: untranspile-helpers: a transpiler helper was left in place: its binding may hold something else when a call runs (a script-level helper the global object can replace, a shared `this && this.x` definition outside a module, or a var helper whose initialiser may not have run first)
+note: var-transformation: a property named arguments or caller, or one under a key that is not a known other name, is read somewhere in the program (directly, through a reflective read or from code text), and it may see a function's simple parameters or its caller, so no assignment was rewritten as a var declaration
+note: library-names: library: core-js@3.39, 172 modules recognised
