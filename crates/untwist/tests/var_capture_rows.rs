@@ -47,7 +47,7 @@ fn a_var_read_by_later_closures_becomes_lexical_only_as_node_runs_it() {
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     let (wrong, witnesses) = node_rows::unsafe_dynamic_code_witnesses(wrong, &programs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    assert_eq!(witnesses, ["direct-eval-captured"]);
+    assert!(witnesses.is_empty(), "{witnesses:?}");
 }
 
 #[test]
