@@ -13,6 +13,11 @@ const HELPER_UNMINIFIED: &str = "const __commonJSMin = (cb, mod) => () => {
   return mod.exports;
 };
 ";
+const HELPER_HALF_UNMINIFIED: &str = "var __commonJSMin = (cb, mod) => () => {
+  mod || (cb((mod = { exports: {} }).exports, mod, mod.exports), cb = null);
+  return mod.exports;
+};
+";
 const NOT_A_HELPER: &str = "var __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod, mod.exports), cb = 1), mod.exports);\n";
 
 type Files = Vec<(String, String)>;
@@ -49,7 +54,12 @@ fn two_factories(helper: &str) -> String {
 
 #[test]
 fn every_rolldown_commonjs_helper_form_splits_its_factories() {
-    for helper in [HELPER_1_3, HELPER_1_0, HELPER_UNMINIFIED] {
+    for helper in [
+        HELPER_1_3,
+        HELPER_1_0,
+        HELPER_UNMINIFIED,
+        HELPER_HALF_UNMINIFIED,
+    ] {
         let source = two_factories(helper);
         let (kind, files) = modules(&source).expect("a bundle");
         assert_eq!(kind, BundleKind::Rolldown, "{helper}");

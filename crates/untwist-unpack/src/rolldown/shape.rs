@@ -27,6 +27,13 @@ pub fn commonjs_min(params: &[&str], inner: &Inner<'_, '_>) -> bool {
                     .as_ref()
                     .is_some_and(|value| names.is_exports(value))
         }
+        Inner::Block([Statement::ExpressionStatement(first), Statement::ReturnStatement(ret)]) => {
+            names.or_run(&first.expression)
+                && ret
+                    .argument
+                    .as_ref()
+                    .is_some_and(|value| names.is_exports(value))
+        }
         Inner::Block(_) => false,
     }
 }
