@@ -30,21 +30,13 @@ use crate::model::{body_key, Bodies, Bundle, BundleKind};
 use crate::rolldown;
 use crate::runtime::{first_unclosed_helper, helper_symbols};
 
-pub fn probe_kind(frame: &Frame<'_, '_>, marked: bool) -> Option<BundleKind> {
-    scopes(frame, &[]).find_map(|scope| layout(scope.list, marked).map(|layout| layout.kind))
-}
-
 pub fn probe(frame: &Frame<'_, '_>) -> bool {
-    probe_kind(frame, false) == Some(BundleKind::Esbuild)
+    scopes(frame, &[]).any(|scope| layout(scope.list).is_some())
 }
 
-pub fn found<'k, 'a>(
-    source: &'k Program<'a>,
-    frame: &Frame<'k, 'a>,
-    marked: bool,
-) -> Option<Plan<'k, 'a>> {
+fn found<'k, 'a>(source: &'k Program<'a>, frame: &Frame<'k, 'a>) -> Option<Plan<'k, 'a>> {
     let (scope, mut layout) = scopes(frame, &source.directives)
-        .find_map(|scope| layout(scope.list, marked).map(|layout| (scope, layout)))?;
+        .find_map(|scope| layout(scope.list).map(|layout| (scope, layout)))?;
     if source.source_text.contains(INLINE_PREFIX) {
         layout.inline.clear();
     }
@@ -395,12 +387,14 @@ pub fn detect_with<'k, 'a>(
     frame: &Frame<'k, 'a>,
     bodies: &mut Bodies<'a>,
 ) -> Option<Bundle<'a>> {
-    let plan = found(source, frame, false)?;
-    (plan.layout.kind == BundleKind::Esbuild).then_some(())?;
+    let mut plan = found(source, frame)?;
+    if plan.layout.kind == BundleKind::Esbuild && rolldown::marked(source) {
+        plan.layout.kind = BundleKind::Rolldown;
+    }
     detect_plan(alloc, source, plan, bodies)
 }
 
-pub fn detect_plan<'k, 'a>(
+fn detect_plan<'k, 'a>(
     alloc: &'a Allocator,
     source: &'k Program<'a>,
     mut plan: Plan<'k, 'a>,
