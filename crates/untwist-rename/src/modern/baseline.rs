@@ -102,7 +102,7 @@ fn engine_name(name: &str) -> Option<&'static str> {
 
 fn engine_item(item: &str) -> Result<(String, Version), String> {
     let (name, version) = item
-        .split_once(|c: char| c == ' ' || c == '@')
+        .split_once([' ', '@'])
         .ok_or_else(|| format!("`{item}` is neither an ES year (such as es2022) nor an engine and version (such as chrome 120)"))?;
     let engine = engine_name(name.trim()).ok_or_else(|| {
         format!(
