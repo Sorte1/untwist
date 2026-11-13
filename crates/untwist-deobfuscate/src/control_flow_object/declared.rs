@@ -8,20 +8,21 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
-use untwist_core::ast_util::readonly::{
-    is_readonly_object_outside, scan_symbol_uses, ObjectUses, PropRead,
-};
+use untwist_core::ast_util::readonly::{scan_symbol_uses, ObjectUses, PropRead};
 use untwist_core::ast_util::search::expressions_at;
 use untwist_core::pass::{Cx, NoteKind, RepeatedSites};
 use untwist_core::semantic::is_constant_binding;
 
-use crate::bindings::refuse_block_function_names;
 use crate::init_order::{
     reads_are_initialised, refuse_read_before_declaration, scan_init_order, InitOrder,
 };
 use crate::notes;
+use crate::proof::refuse_annex_b_bindings;
 
-use super::dead::{dead_branch_spans, dead_write_statements, predicate_branches, Branches};
+use super::dead::{
+    dead_branch_parts, dead_write_statements, mutations_only_in_dead_parts, predicate_branches,
+    Branches,
+};
 use super::nested::{insert_nested, PlannedEdit, Recipe};
 use super::{
     call_site_is_safe, cff_props, emit_logical_refusals, inline_site, nested_past_the_limit,
@@ -294,14 +295,27 @@ fn substitutable_uses<'u>(
         .get(&candidate.object)
         .and_then(|object| cff_props(object, cx.opts.extended))?;
     let branches = located.branches(cx.scoping());
-    let dead = dead_branch_spans(branches, candidate.symbol, &props, &*cx);
+    let dead = dead_branch_parts(branches, candidate.symbol, &props, &*cx);
     if dead.is_empty() {
         return None;
     }
-    if !is_readonly_object_outside(uses, &dead) {
+    let only_dead = !uses.reads.is_empty()
+        && mutations_only_in_dead_parts(
+            located.program,
+            candidate.symbol,
+            &dead,
+            &mutation_spans(uses),
+            cx.scoping(),
+        );
+    if !only_dead {
         cx.note(notes::CONTROL_FLOW_LIVE_MUTATION, Some(candidate.statement));
         return None;
     }
+    let dead = dead
+        .iter()
+        .map(|part| part.span)
+        .filter(|span| !span.is_empty())
+        .collect();
     Some(Substitutable { uses, dead })
 }
 
@@ -402,9 +416,10 @@ pub(super) fn inline_declared_objects<'a>(program: &mut Program<'a>, cx: &mut Cx
     #[cfg(debug_assertions)]
     crate::fused::check::record_order_and_uses("declared-objects", &order, &scanned);
     candidates.retain(|candidate| scanned.contains_key(&candidate.symbol));
-    refuse_block_function_names(
+    refuse_annex_b_bindings(
         &mut candidates,
         |found| (found.statement, [found.symbol]),
+        program,
         cx,
     );
     let calls = calls_at(program, &candidates, &scanned);

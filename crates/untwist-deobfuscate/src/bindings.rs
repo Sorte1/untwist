@@ -24,36 +24,6 @@ pub fn block_function_names(scoping: &Scoping) -> FxHashSet<&str> {
         .collect()
 }
 
-pub fn refuse_block_function_names<T, const N: usize>(
-    candidates: &mut Vec<T>,
-    site: impl Fn(&T) -> (Span, [SymbolId; N]),
-    cx: &mut Cx<'_, '_>,
-) {
-    if candidates.is_empty() {
-        return;
-    }
-    let scoping = cx.scoping();
-    let names = block_function_names(scoping);
-    if names.is_empty() {
-        return;
-    }
-    let mut refused = Vec::new();
-    candidates.retain(|candidate| {
-        let (span, symbols) = site(candidate);
-        let shared = symbols
-            .iter()
-            .any(|symbol| names.contains(scoping.symbol_name(*symbol)));
-        if shared {
-            refused.push(span);
-        }
-        !shared
-    });
-    drop(names);
-    for span in refused {
-        cx.note(crate::notes::BLOCK_FUNCTION_NAME, Some(span));
-    }
-}
-
 pub fn refuse_annex_b_writes<T>(
     candidates: &mut Vec<T>,
     site: impl Fn(&T) -> (Span, SymbolId),

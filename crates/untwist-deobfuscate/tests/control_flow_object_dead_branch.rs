@@ -216,3 +216,62 @@ fn an_object_declared_twice_never_answers_from_its_first_declaration() {
         );
     }
 }
+
+const A_DEAD_TEXT_COMPARISON: &str = "function hi() {\n  var obj = {\n    rLxJs: \"6|0|4\",\n    qWert: \"abcde\"\n  };\n  if (obj.qWert !== \"abcde\") {\n    sink(obj);\n  }\n  console.log(obj.rLxJs);\n}";
+
+const A_DEAD_CALL_ON_A_TEXT_PROPERTY: &str = "function hi() {\n  var obj = {\n    rLxJs: \"6|0|4\",\n    qWert: \"abcde\",\n    aokfw: function (a, b) {\n      return a !== b;\n    }\n  };\n  if (obj.aokfw(obj.qWert, \"abcde\")) {\n    sink(obj);\n  }\n  console.log(obj.rLxJs);\n}";
+
+const A_DEAD_COMPARISON_OF_TWO_PROPERTIES: &str = "function hi() {\n  var obj = {\n    rLxJs: \"6|0|4\",\n    qWert: \"abcde\",\n    yUiop: \"fghij\"\n  };\n  if (obj.qWert === obj.yUiop) {\n    sink(obj);\n  }\n  console.log(obj.rLxJs);\n}";
+
+const A_TEXT_COMPARISON_WITH_AN_UNKNOWN: &str = "function hi() {\n  var obj = {\n    rLxJs: \"6|0|4\",\n    qWert: \"abcde\"\n  };\n  if (obj.qWert !== q) {\n    sink(obj);\n  }\n  console.log(obj.rLxJs);\n}";
+
+const A_TAKEN_TEXT_COMPARISON: &str = "function hi() {\n  var obj = {\n    rLxJs: \"6|0|4\",\n    qWert: \"abcde\"\n  };\n  if (obj.qWert === \"abcde\") {\n    sink(obj);\n  }\n  console.log(obj.rLxJs);\n}";
+
+const A_COMPARISON_OF_A_MISSING_PROPERTY: &str = "function hi() {\n  var obj = {\n    rLxJs: \"6|0|4\",\n    qWert: \"abcde\"\n  };\n  if (obj.toString !== \"abcde\") {\n    sink(obj);\n  }\n  console.log(obj.rLxJs);\n}";
+
+const A_PREDICATE_ON_ANOTHER_OBJECTS_PROPERTY: &str = "function hi() {\n  var other = { qWert: \"abcde\" };\n  var obj = {\n    rLxJs: \"6|0|4\",\n    aokfw: function (a, b) {\n      return a !== b;\n    }\n  };\n  if (obj.aokfw(other.qWert, \"abcde\")) {\n    sink(obj);\n  }\n  other.qWert = \"zzzzz\";\n  console.log(obj.rLxJs, other.qWert);\n}";
+
+fn substituted_and_dropped(source: &str) {
+    let alloc = Allocator::default();
+    let code = default_run(&alloc, source, boxed);
+    assert!(code.contains(r#"console.log("6|0|4")"#), "{code}");
+    assert!(!code.contains("sink(obj)"), "{code}");
+    assert!(!code.contains("var obj"), "{code}");
+}
+
+#[test]
+fn a_comparison_of_a_text_property_with_a_literal_decides_the_branch() {
+    substituted_and_dropped(A_DEAD_TEXT_COMPARISON);
+}
+
+#[test]
+fn a_predicate_called_on_a_text_property_decides_the_branch() {
+    substituted_and_dropped(A_DEAD_CALL_ON_A_TEXT_PROPERTY);
+}
+
+#[test]
+fn a_comparison_of_two_text_properties_decides_the_branch() {
+    substituted_and_dropped(A_DEAD_COMPARISON_OF_TWO_PROPERTIES);
+}
+
+#[test]
+fn a_text_comparison_with_an_unknown_value_decides_nothing() {
+    left_alone(A_TEXT_COMPARISON_WITH_AN_UNKNOWN);
+}
+
+#[test]
+fn a_taken_text_comparison_still_refuses() {
+    left_alone(A_TAKEN_TEXT_COMPARISON);
+}
+
+#[test]
+fn a_comparison_of_a_property_the_object_does_not_own_decides_nothing() {
+    left_alone(A_COMPARISON_OF_A_MISSING_PROPERTY);
+}
+
+#[test]
+fn a_predicate_on_another_objects_property_decides_nothing() {
+    let alloc = Allocator::default();
+    let code = default_run(&alloc, A_PREDICATE_ON_ANOTHER_OBJECTS_PROPERTY, boxed);
+    assert!(code.contains("sink(obj)"), "{code}");
+}
