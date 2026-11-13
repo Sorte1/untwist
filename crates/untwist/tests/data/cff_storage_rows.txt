@@ -37,3 +37,12 @@ reach-gl4|-|var o = {abcde: "x", fghij: "q"}; function w() { if (o.abcde !== "x"
 reach-eval-in-scope|-|(function(){ var o = {abcde: "x", fghij: "q"}; eval("o = {abcde: 'e'}"); console.log(o.abcde); })();
 reach-with-declares|-|(function(){ var w = {o: 1}; with (w) { var o = {abcde: "x", fghij: "q"}; } console.log(typeof w.o, typeof o); })();
 reach-window-key|-|var o = {abcde: "x", fghij: "q"}; var k = "o"; globalThis[k] = {abcde: "z"}; console.log(o.abcde);
+reach-eval-payload-blocked-hoist|-|(function(){ var o = {abcde: "x", fghij: "q"}; console.log(eval("1; (function(){ { let o; { function o(){} } } return o.abcde })()"), o.fghij); })();
+reach-eval-payload-strict-caller|-|(function(){ "use strict"; var o = {abcde: "x", fghij: "q"}; console.log(eval("1; (function(){ { function o(){} } return o.abcde })()"), o.fghij); })();
+reach-eval-payload-class-member|-|(function(){ var o = {abcde: "x", fghij: "q"}; class K { static m(){ return eval("1; (function(){ { function o(){} } return o.abcde })()"); } } console.log(K.m(), o.fghij); })();
+reach-indirect-eval-reads|-|var o = {abcde: "x", fghij: "q"}; console.log((0, eval)("o.abcde"), o.fghij);
+reach-new-function-reads|-|var o = {abcde: "x", fghij: "q"}; console.log(new Function("return o.abcde")(), o.fghij);
+reach-function-call-reads|-|var o = {abcde: "x", fghij: "q"}; console.log(Function("return o.abcde")(), o.fghij);
+reach-string-timer-reads|-|var o = {abcde: "x", fghij: "q"}; setTimeout("console.log(o.abcde)"); console.log(o.fghij);
+reach-direct-and-indirect-eval|-|var o = {abcde: "x", fghij: "q"}; console.log(eval("o.abcde"), o.fghij); console.log((0, eval)("o.fghij"));
+reach-with-declares-and-replaces|-|(function(){ var p = {}; with (p) { var o = {abcde: "x", fghij: "q"}; p.o = {abcde: "P", fghij: "Q"}; console.log(o.abcde, o.fghij); } })();

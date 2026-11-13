@@ -28,10 +28,10 @@ pub use annex_b::{
     block_function_symbols, declared_in_block, declaring_block, is_constant_binding_in,
     is_hoisted_block_function, AnnexBFunction, AnnexBWrites, ScopeOwners,
 };
-pub use blocked_hoists::repair_blocked_hoists;
+pub use blocked_hoists::{hoist_blockers, repair_blocked_hoists};
 pub use observers::{
     assume_observers, assumed_hazard, closed_eval_names, eval_payload_names, observers,
-    with_observes, Observers, ObserversGuard,
+    observing_open, open_eval_sites, with_observes, Observers, ObserversGuard,
 };
 #[cfg(feature = "test-hooks")]
 pub use refresh::{

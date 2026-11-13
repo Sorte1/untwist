@@ -146,3 +146,82 @@ fn a_block_function_in_a_block_between_blocks_only_the_inner_one() {
         assert_eq!(found, [binding(source, "function o() { return 2", 9)], "{source}");
     }
 }
+
+#[test]
+fn a_parameter_default_skips_the_body_bindings_the_repair_moves() {
+    for (source, body) in [
+        (
+            "var o = 0; function f(a = () => o) { { function o() {} } let o = 5; return o; }",
+            "let o",
+        ),
+        (
+            "var o = 0; function f(a = o) { { let o = 1; { function o() {} } } { function o() { return 2; } } return o; }",
+            "function o() { return 2",
+        ),
+        (
+            "var o = 0; var g = (a = o) => { { function o() {} } const o = 1; return o; };",
+            "const o",
+        ),
+        (
+            "var o = 0; function f() { try {} catch ({ a = () => o }) { { function o() {} } let o = 5; return o; } }",
+            "let o",
+        ),
+    ] {
+        let offset = if body.starts_with("function") { 9 } else { body.len() - 1 };
+        assert_eq!(
+            targets(source, "o"),
+            [outer(source), binding(source, body, offset)],
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_named_function_expression_parameter_default_sees_its_own_name() {
+    let source = "var o = 0; (function o(a = o) { { function o() {} } let o = 1; return o; });";
+    let found = targets(source, "o");
+    assert_eq!(
+        found,
+        [
+            binding(source, "function o(a", 9),
+            binding(source, "let o", 4)
+        ]
+    );
+}
+
+#[test]
+fn arguments_stays_with_the_nearest_ordinary_function() {
+    for source in [
+        "function f() { { function arguments() {} } let arguments = 5; return function () { return arguments; }; }",
+        "function f(a = () => arguments) { { function arguments() {} } let arguments = 5; }",
+        "function f() { { function arguments() {} } let arguments = 5; function g(a = arguments) {} }",
+    ] {
+        assert_eq!(targets(source, "arguments"), [None], "{source}");
+    }
+}
+
+#[test]
+fn a_block_function_declared_twice_keeps_both_declarations_in_its_block() {
+    let source = "var o = 0; function f() { { let o = 1; { function o() {} function o() { return 2; } o; } } return o; }";
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    let sem = build_scoping(&parsed.program);
+    let named: Vec<_> = sem
+        .scoping
+        .symbol_ids()
+        .filter(|symbol| sem.scoping.symbol_name(*symbol) == "o")
+        .collect();
+    assert_eq!(named.len(), 3, "outer var, let and one block function");
+    let function = named
+        .iter()
+        .copied()
+        .find(|symbol| {
+            sem.scoping.symbol_span(*symbol).start == binding(source, "function o", 9).unwrap()
+        })
+        .expect("block function symbol");
+    assert_eq!(sem.scoping.symbol_redeclarations(function).len(), 2);
+    assert_eq!(
+        targets(source, "o"),
+        [binding(source, "function o", 9), outer(source)]
+    );
+}

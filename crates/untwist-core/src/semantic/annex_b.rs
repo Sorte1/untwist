@@ -108,7 +108,7 @@ impl<'s> ScopeOwners<'s> {
         }
     }
 
-    fn owner(&self, node: NodeId) -> Option<ScopeId> {
+    pub(super) fn owner(&self, node: NodeId) -> Option<ScopeId> {
         bisected_owner(self.scoping, node).or_else(|| {
             self.index
                 .get_or_init(|| first_owners(self.scoping))
