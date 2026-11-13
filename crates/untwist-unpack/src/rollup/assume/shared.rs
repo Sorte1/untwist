@@ -14,7 +14,7 @@ pub struct Free<'s> {
 }
 
 impl Free<'_> {
-    fn global(&self, id: &IdentifierReference<'_>) -> bool {
+    pub(super) fn global(&self, id: &IdentifierReference<'_>) -> bool {
         let free = id
             .reference_id
             .get()
@@ -32,7 +32,7 @@ impl Free<'_> {
                 UnaryOperator::LogicalNot | UnaryOperator::Void => {
                     self.probe(&unary.argument, script)
                 }
-                _ => quiet_value(expr),
+                _ => quiet_value(expr, self),
             },
             Expression::BinaryExpression(binary) => {
                 let equality = matches!(
@@ -58,7 +58,7 @@ impl Free<'_> {
                 *script |= current;
                 current
             }
-            other => quiet_value(other),
+            other => quiet_value(other, self),
         }
     }
 
@@ -88,7 +88,7 @@ pub struct Absorb<'f> {
 pub fn prefix_end(items: &[Statement<'_>], free: &Free<'_>) -> usize {
     items
         .iter()
-        .position(|item| initialised(item).is_none() && free.probe_var(item).is_none())
+        .position(|item| initialised(item, free).is_none() && free.probe_var(item).is_none())
         .unwrap_or(items.len())
 }
 

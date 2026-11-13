@@ -1,7 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
+use oxc_syntax::operator::UnaryOperator;
 use rustc_hash::{FxHashMap, FxHashSet};
-use untwist_core::ast_util::literal::is_pure_value;
 
 use super::outer::Outer;
 #[cfg(feature = "boundaries")]
@@ -76,7 +76,11 @@ pub fn boundaries(groups: Vec<Group>, libraries: Vec<Boundary>) -> Vec<Boundary>
     found
 }
 
-pub(super) fn quiet_value(expr: &Expression<'_>) -> bool {
+fn global_value(id: &IdentifierReference<'_>, free: &Free<'_>) -> bool {
+    matches!(id.name.as_str(), "undefined" | "NaN" | "Infinity") && free.global(id)
+}
+
+pub(super) fn quiet_value(expr: &Expression<'_>, free: &Free<'_>) -> bool {
     match expr.without_parentheses() {
         Expression::ObjectExpression(object) => object.properties.iter().all(|property| {
             let ObjectPropertyKind::ObjectProperty(property) = property else {
@@ -88,19 +92,31 @@ pub(super) fn quiet_value(expr: &Expression<'_>) -> bool {
                 && !property.method
                 && !property.shorthand
                 && named
-                && quiet_value(&property.value)
+                && quiet_value(&property.value, free)
         }),
         Expression::ArrayExpression(array) => array.elements.iter().all(|element| {
             element.as_expression().map_or(
                 matches!(element, ArrayExpressionElement::Elision(_)),
-                quiet_value,
+                |value| quiet_value(value, free),
             )
         }),
-        other => is_pure_value(other),
+        Expression::StringLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_) => true,
+        Expression::Identifier(id) => global_value(id, free),
+        Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::UnaryNegation => {
+            match &unary.argument {
+                Expression::NumericLiteral(_) => true,
+                Expression::Identifier(id) => id.name == "Infinity" && free.global(id),
+                _ => false,
+            }
+        }
+        _ => false,
     }
 }
 
-pub(super) fn initialised(item: &Statement<'_>) -> Option<bool> {
+pub(super) fn initialised(item: &Statement<'_>, free: &Free<'_>) -> Option<bool> {
     match item {
         Statement::FunctionDeclaration(function) => function.body.is_some().then_some(false),
         Statement::VariableDeclaration(declaration)
@@ -110,7 +126,7 @@ pub(super) fn initialised(item: &Statement<'_>) -> Option<bool> {
             for declarator in &declaration.declarations {
                 declarator.id.get_binding_identifier()?;
                 if let Some(value) = &declarator.init {
-                    quiet_value(value).then_some(())?;
+                    quiet_value(value, free).then_some(())?;
                     init = true;
                 }
             }
@@ -132,11 +148,11 @@ fn references(facts: &Facts, n: usize) -> Vec<Vec<u32>> {
     refs
 }
 
-fn earliest(refs: &[Vec<u32>], items: &[Statement<'_>]) -> Vec<usize> {
+fn earliest(refs: &[Vec<u32>], items: &[Statement<'_>], free: &Free<'_>) -> Vec<usize> {
     let mut time = vec![LATE; items.len()];
     let mut stack = Vec::new();
     for (start, item) in items.iter().enumerate() {
-        if initialised(item).is_some() {
+        if initialised(item, free).is_some() {
             continue;
         }
         stack.push(start);
@@ -161,7 +177,8 @@ struct Checks<'f> {
 
 fn clashing(scoping: &Scoping, facts: &Facts, n: usize, outer: Option<&Outer>) -> Vec<bool> {
     let mut found = vec![false; n];
-    let Some(outer) = outer.filter(|outer| !outer.names.is_empty()) else {
+    let Some(outer) = outer.filter(|outer| !outer.names.is_empty() || !outer.free.is_empty())
+    else {
         return found;
     };
     for (symbol, &owner) in facts.owner.iter().enumerate() {
@@ -169,7 +186,8 @@ fn clashing(scoping: &Scoping, facts: &Facts, n: usize, outer: Option<&Outer>) -
             continue;
         };
         let symbol = oxc_syntax::symbol::SymbolId::from_usize(symbol);
-        *slot |= outer.names.contains(scoping.symbol_name(symbol));
+        let name = scoping.symbol_name(symbol);
+        *slot |= outer.names.contains(name) || outer.free.contains(name);
     }
     found
 }
@@ -200,7 +218,7 @@ impl Checks<'_> {
         (0..items.len())
             .map(|at| {
                 let untouched = time[at] == LATE || time[at] > at;
-                let shape = match initialised(&items[at]) {
+                let shape = match initialised(&items[at], free) {
                     Some(init) => !init || untouched,
                     None => free.probe_var(&items[at]) == Some(false) && at < prefix && untouched,
                 };
@@ -209,11 +227,16 @@ impl Checks<'_> {
             .collect()
     }
 
-    fn static_ok(&self, items: &[Statement<'_>], time: &[usize], boundary: &Boundary) -> bool {
+    fn static_ok(
+        &self,
+        (items, free): (&[Statement<'_>], &Free<'_>),
+        time: &[usize],
+        boundary: &Boundary,
+    ) -> bool {
         let inside = |item: u32| boundary.members.contains(&item);
         let members_ok = boundary.members.iter().all(|&member| {
             let at = member as usize;
-            let Some(init) = initialised(&items[at]) else {
+            let Some(init) = initialised(&items[at], free) else {
                 return false;
             };
             let untouched = !init || time[at] == LATE || time[at] > at;
@@ -348,8 +371,13 @@ pub fn plan(
     mut found: Vec<Boundary>,
     outer: Option<&Outer>,
 ) -> Option<Plan> {
+    let names = outer.map(|outer| outer.names.clone()).unwrap_or_default();
+    let free = Free {
+        scoping,
+        outer: &names,
+    };
     let refs = references(facts, items.len());
-    let time = earliest(&refs, items);
+    let time = earliest(&refs, items, &free);
     let mut checks = Checks {
         facts,
         part_of: vec![None; items.len()],
@@ -358,18 +386,13 @@ pub fn plan(
     };
     let mut alive: Vec<bool> = found
         .iter()
-        .map(|boundary| checks.static_ok(items, &time, boundary))
+        .map(|boundary| checks.static_ok((items, &free), &time, boundary))
         .collect();
     for (index, boundary) in found.iter().enumerate() {
         for &member in &boundary.members {
             checks.part_of[member as usize] = alive[index].then_some(index);
         }
     }
-    let names = outer.map(|outer| outer.names.clone()).unwrap_or_default();
-    let free = Free {
-        scoping,
-        outer: &names,
-    };
     let absorb = Absorb {
         refs: &refs,
         eligible: checks.eligible(items, &time, &free),
