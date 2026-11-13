@@ -358,6 +358,9 @@ impl Pipeline {
             Ok(errors) => errors,
             Err(step) => return step,
         };
+        result
+            .notes
+            .extend(super::notes::vm_interpreter_notes(&parsed.program));
         let unsafe_transforms = self.options.unsafe_transforms;
         if let Some(Err(reason)) =
             form.map(|form| verdict(form, &parsed.program, unsafe_transforms))

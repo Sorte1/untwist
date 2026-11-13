@@ -42,6 +42,7 @@ pub mod units;
 pub mod unstamp;
 pub mod value_flow;
 pub mod var_transformation;
+pub mod vm_interpreter;
 mod wrapper_args;
 pub mod wrapper_calls;
 mod wrapper_chain;

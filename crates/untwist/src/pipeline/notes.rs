@@ -74,8 +74,35 @@ pub const REACH_REASON: &str = ": code that may hold the global object, or code 
      reach the string array's function by a key that may be its name or by an enumeration that \
      yields values, so the decoder calls were left alone; the report lists the details";
 
+pub const VM_INTERPRETER_KEPT: &str = "a bytecode interpreter (a virtual machine obfuscation) \
+     was found and left as written, with the bytecode it runs: untwist does not translate bytecode \
+     back to JavaScript;";
+
+pub(super) fn vm_interpreter_notes(program: &oxc_ast::ast::Program<'_>) -> Vec<Note> {
+    use untwist_deobfuscate::vm_interpreter::{vm_interpreters, Dispatch};
+    vm_interpreters(program)
+        .into_iter()
+        .map(|found| {
+            let dispatch = match found.dispatch {
+                Dispatch::Switch(cases) => format!("a switch of {cases} opcodes"),
+                Dispatch::Table => "a table of handlers".to_string(),
+            };
+            Note {
+                pass: "pipeline",
+                kind: NoteKind::Refusal,
+                message: format!(
+                    "{VM_INTERPRETER_KEPT} its loop dispatches through {dispatch}; the largest bytecode literal has length {}",
+                    found.bytecode
+                ),
+                span: Some(found.span),
+            }
+        })
+        .collect()
+}
+
 catalogue!(
     PIPELINE_NOTES,
+    VM_INTERPRETER_KEPT,
     REACH_REASON,
     UNSAFE_LANE_DECODES,
     BUDGET_MEMORY_REACHED,
