@@ -43,19 +43,47 @@ impl<'t> Lines<'t> {
         Self { text, starts }
     }
 
-    fn locate(&self, offset: usize) -> Option<(usize, usize)> {
+    fn locate(&self, offset: usize, after: Option<Located>) -> Option<Located> {
         if offset > self.text.len() {
             return None;
         }
         let line = self.starts.partition_point(|start| *start <= offset);
-        let start = self.starts[line - 1];
-        let column = self.text.get(start..offset)?.chars().count() + 1;
-        Some((line, column))
+        let (from, column) = match after {
+            Some(known) if known.line == line && known.offset <= offset => {
+                (known.offset, known.column)
+            }
+            _ => (self.starts[line - 1], 1),
+        };
+        let column = column + self.text.get(from..offset)?.chars().count();
+        Some(Located {
+            offset,
+            line,
+            column,
+        })
+    }
+
+    fn locate_all(&self, offsets: &[usize]) -> Vec<Option<Located>> {
+        let mut order: Vec<usize> = (0..offsets.len()).collect();
+        order.sort_by_key(|&index| offsets[index]);
+        let mut found = vec![None; offsets.len()];
+        let mut last = None;
+        for index in order {
+            found[index] = self.locate(offsets[index], last);
+            last = found[index].or(last);
+        }
+        found
     }
 }
 
-fn site_at(lines: &Lines<'_>, span: &RefusalSpan) -> Option<SiteAt> {
-    let (line, column) = lines.locate(span.span.start as usize)?;
+#[derive(Clone, Copy)]
+struct Located {
+    offset: usize,
+    line: usize,
+    column: usize,
+}
+
+fn site_at(lines: &Lines<'_>, span: &RefusalSpan, located: Option<Located>) -> Option<SiteAt> {
+    let Located { line, column, .. } = located?;
     let end = span.span.end.max(span.span.start);
     let end = if end as usize <= lines.text.len() {
         end
@@ -74,13 +102,20 @@ pub(super) fn located(text: &str, layer: u32, spans: Vec<RefusalSpan>) -> Vec<Re
     if spans.is_empty() {
         return Vec::new();
     }
+    let mut seen = HashSet::new();
+    let spans: Vec<RefusalSpan> = spans
+        .into_iter()
+        .filter(|span| seen.insert((span.span, span.what.clone())))
+        .collect();
     let lines = Lines::of(text);
+    let offsets: Vec<usize> = spans.iter().map(|span| span.span.start as usize).collect();
     spans
         .into_iter()
-        .map(|span| RefusalSite {
+        .zip(lines.locate_all(&offsets))
+        .map(|(span, located)| RefusalSite {
             input: 0,
             layer,
-            at: site_at(&lines, &span),
+            at: site_at(&lines, &span, located),
             what: span.what,
         })
         .collect()
@@ -144,6 +179,28 @@ mod tests {
         let text = "a;\nb\u{e9}c[k];\nd";
         let found = strings(text, vec![span("x", 0), span("y", 7), span("z", 12)]);
         assert_eq!(found, ["1:1 x", "2:4 y", "3:1 z"]);
+    }
+
+    #[test]
+    fn spans_in_any_order_get_the_columns_of_a_fresh_count() {
+        let text = "\u{e9}a\u{e9}b;\nc\u{e9}d;\n\u{e9}";
+        let starts: [u32; 11] = [9, 0, 3, 13, 2, 6, 99, 1, 4, 10, 6];
+        let found = located(text, 0, starts.iter().map(|&at| span("x", at)).collect());
+        let fresh = |offset: usize| {
+            let before = text.get(..offset)?;
+            let start = before.rfind('\n').map_or(0, |at| at + 1);
+            let line = before[..start].matches('\n').count() + 1;
+            Some((line, before[start..].chars().count() + 1))
+        };
+        for (site, &start) in found.iter().zip(&starts) {
+            let offset = start as usize;
+            let expected = (offset <= text.len()).then(|| fresh(offset)).flatten();
+            assert_eq!(
+                site.at.map(|at| (at.line, at.column)),
+                expected,
+                "offset {offset}"
+            );
+        }
     }
 
     #[test]
