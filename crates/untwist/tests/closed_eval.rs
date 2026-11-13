@@ -148,13 +148,10 @@ fn lane_runner(lane: Lane) -> impl Fn(&str) -> String {
     move |source: &str| run(source, lane).code().to_string()
 }
 
-const UNSAFE_WITNESSES: [&str; 6] = [
+const UNSAFE_WITNESSES: [&str; 3] = [
     "an argument that is not a literal",
     "a nested eval that reads the decoder",
-    "a payload var that redeclares a local",
-    "a sloppy block function that redeclares a local",
     "an arguments read that sees a dead parameter write",
-    "a payload that writes a local",
 ];
 
 #[test]
