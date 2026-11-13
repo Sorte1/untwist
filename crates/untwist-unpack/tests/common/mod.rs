@@ -42,8 +42,11 @@ pub fn prepared<'a>(alloc: &'a Allocator, source: &'a str) -> Program<'a> {
     ctors.extend(untwist_unminify::unminify_ctors());
     let mut group = PassGroup::from_ctors(&ctors, PassOptions::default());
     let (sem, _) = run_to_fixpoint(alloc, &mut program, sem, &mut group);
-    let mut group =
-        PassGroup::from_ctors(&untwist_unminify::lexical_ctors(), PassOptions::default());
+    let opts = PassOptions {
+        keep_captured_vars: untwist_unpack::detect::holds_a_bundle(&program),
+        ..PassOptions::default()
+    };
+    let mut group = PassGroup::from_ctors(&untwist_unminify::lexical_ctors(), opts);
     untwist_unminify::run_last_traversal(alloc, &mut program, sem, &mut group, false);
     program
 }

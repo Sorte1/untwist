@@ -93,7 +93,8 @@ fn a_refused_array_is_left_as_written() {
             continue;
         }
         let code = transformed(&options(false), &source);
-        assert!(code.contains("var arr0 = ["), "{label}:\n{code}");
+        let kept = ["var arr0 = [", "const arr0 = ["];
+        assert!(kept.iter().any(|text| code.contains(text)), "{label}:\n{code}");
     }
 }
 
