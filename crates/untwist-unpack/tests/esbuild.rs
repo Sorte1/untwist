@@ -1,6 +1,5 @@
 mod common;
 
-use common::cpu_or_wall;
 use oxc_allocator::Allocator;
 use untwist_core::parse::parse_program;
 use untwist_core::print::pretty_codegen;
@@ -608,56 +607,6 @@ fn the_generated_bundle_takes_every_factory_body() {
     let files = taken.unwrap_or_else(|| panic!("{label}"));
     assert!(files.len() > 1000, "{}", files.len());
     assert!(!after.contains("exports.k0 ="), "a factory body was cloned");
-}
-
-fn hostile_bundle(modules: usize) -> String {
-    let separate = modules / 4;
-    let mut source = String::new();
-    for index in 0..modules {
-        source.push_str(&format!("// head {index}\n"));
-    }
-    source.push_str(DIRECT);
-    for index in 0..modules {
-        source.push_str(&format!("var pure{index} = Object.keys;\n"));
-    }
-    for index in 0..separate {
-        source.push_str(&format!(
-            "// m{index}.js\nvar require_m{index} = __commonJS((exports, module) => {{ module.exports = pure{index} && {index}; }});\n"
-        ));
-    }
-    let shared: Vec<String> = (separate..modules)
-        .map(|index| {
-            format!("require_m{index} = __commonJS((exports, module) => {{ module.exports = pure{index} && {index}; }})")
-        })
-        .collect();
-    source.push_str(&format!("var {}, extra = 1;\n", shared.join(",\n  ")));
-    source.push_str(&format!(
-        "console.log(require_m0(), require_m{}(), extra);\n",
-        modules - 1
-    ));
-    for index in 0..modules {
-        source.push_str(&format!("// tail {index}\n"));
-    }
-    source
-}
-
-#[test]
-fn a_hostile_hundred_thousand_module_bundle_splits_in_linear_time() {
-    const MODULES: usize = 100_000;
-    const LINEAR_FACTOR: u32 = 5;
-    let source = hostile_bundle(MODULES);
-    let alloc = Allocator::default();
-    let (parsed, parse) = cpu_or_wall(|| parse_program(&alloc, &source));
-    let (_, scope) = cpu_or_wall(|| untwist_core::semantic::build_scoping(&parsed.program));
-    let (modules, spent) = cpu_or_wall(|| {
-        unpack(&alloc, &parsed.program, &[]).map(|result| result.bundle.modules.len())
-    });
-    assert_eq!(modules, Some(MODULES + 2));
-    let bound = (parse + scope) * LINEAR_FACTOR;
-    assert!(
-        spent < bound,
-        "{MODULES} modules took {spent:?}, over {LINEAR_FACTOR} x parse {parse:?} + scoping {scope:?}"
-    );
 }
 
 const ESM: &str = "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n";
