@@ -17,7 +17,7 @@ js-confuser/v2.0-medium.js	js-confuser@2.0.0	preset=medium	"FizzBuzz"	kept	kept	
 js-confuser/v2.1-medium.js	js-confuser@2.1.3	preset=medium	"FizzBuzz"	kept	kept	54d7159d440b657806603d37187a9061bb88bd8bf6605facdc360f5814f9d9d0
 js-confuser/v2.1-strings-only.js	js-confuser@2.1.3	stringConcealing stringEncoding stringSplitting	"FizzBuzz"	kept	kept	f4846e2d6762978a2ceab4091c53d722c3f003d5b7245e3608a83b953f60d6c7
 krunker-like/obfuscator-4.js	javascript-obfuscator@4.2.2	dictionary i+6 of iíìîï, selfDefending, stringArray rotate shuffle indexShift threshold=0.75 encoding=none wrappers=1 variable chained, seed=1007	"FizzBuzz"	undone	undone	8157c13839d1c2da92a85763db715da27f8d5c90e1845d9bf6e80ab40e1be85c
-loader/constructor-chain.js	gen.mjs	loader form	"packed"	kept	kept	0214fe56a14146b324bf0ec96f727516a65326d416c3c0deb767e79effd96ac2
+loader/constructor-chain.js	gen.mjs	loader form	"packed"	undone	undone	0214fe56a14146b324bf0ec96f727516a65326d416c3c0deb767e79effd96ac2
 loader/eval-decodeuri.js	gen.mjs	loader form	"packed"	undone	undone	89bbb40e67d16fd541d4df2fc007c0f63ce754cf2d0901a2a56e92907657ae7d
 loader/eval-split-reverse.js	gen.mjs	loader form	"packed"	undone	undone	abb03fe5c75b3d116e47d86725276c6625740b0bb86c3d7129f41ec9845c9041
 loader/eval-xor.js	gen.mjs	loader form	"packed"	kept	kept	b9e27cbce5ceb02b4ddcef6503a02989e888c92605224c4fbff217748b8f4393
