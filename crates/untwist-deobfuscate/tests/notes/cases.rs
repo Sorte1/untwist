@@ -825,6 +825,27 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Whole(
+            "function hi(s) {\n  var obj = { rLxJs: 'x', aokfw: function (a, b) { return a + b; } };\n  (function () { eval(s); })();\n  console.log(obj.aokfw(obj.rLxJs, 1));\n}",
+        ),
+        expects: notes::CONTROL_FLOW_DIRECT_EVAL,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(
+            "function hi(w) {\n  var obj = { rLxJs: 'x', aokfw: function (a, b) { return a + b; } };\n  with (w) {\n    console.log(obj.aokfw(obj.rLxJs, 1));\n  }\n}",
+        ),
+        expects: notes::CONTROL_FLOW_WITH,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(
+            "var obj = { rLxJs: 'x', aokfw: function (a, b) { return a + b; } };\nglobalThis.obj.rLxJs = 'y';\nconsole.log(obj.aokfw(obj.rLxJs, 1));",
+        ),
+        expects: notes::CONTROL_FLOW_GLOBAL_REACH,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Superset(A_DISPATCH_OBJECT_WRITTEN_OUTSIDE_ITS_DEAD_BRANCH),
         expects: notes::CONTROL_FLOW_LIVE_MUTATION,
         mode: Match::Contains,

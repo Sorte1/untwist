@@ -288,6 +288,15 @@ pub const CONTROL_FLOW_DEAD_WRITE_KEPT: &str =
     "a write to the control-flow object inside a statically dead branch sits in a statement that \
      is not itself wholly dead, so the write was left in place; it never runs, but the binding it \
      assigns is no longer declared";
+pub const CONTROL_FLOW_DIRECT_EVAL: &str =
+    "control-flow object kept: a direct eval can see the object's scope and may read or replace \
+     it by name at run time";
+pub const CONTROL_FLOW_WITH: &str =
+    "control-flow object kept: a with statement inside the object's scope may make its name \
+     resolve to a property of the with object";
+pub const CONTROL_FLOW_GLOBAL_REACH: &str =
+    "control-flow object kept: it is a script global, and code that may hold the global object, \
+     or code from text, may read or replace it by name";
 pub const LOGICAL_FORWARDER_ARGUMENT: &str =
     "control-flow object kept: the property forwards to a logical operator, which evaluates its \
      right operand only when the left is falsy, and an argument is neither a literal nor a \
@@ -674,6 +683,9 @@ catalogue!(
     CONTROL_FLOW_NEST_TOO_DEEP,
     CONTROL_FLOW_LIVE_MUTATION,
     CONTROL_FLOW_DEAD_WRITE_KEPT,
+    CONTROL_FLOW_DIRECT_EVAL,
+    CONTROL_FLOW_WITH,
+    CONTROL_FLOW_GLOBAL_REACH,
     CONTROL_FLOW_RENAMED_BEFORE_INSERTION,
     LOGICAL_FORWARDER_ARGUMENT,
     SWITCH_SEQUENCE,

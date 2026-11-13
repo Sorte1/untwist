@@ -143,10 +143,11 @@ impl<'a> Glue<'a> {
         }
         let program = alloc.alloc(parsed.program);
         let script = !has_module_syntax(program);
-        let semantic = SemanticBuilder::new()
+        let mut semantic = SemanticBuilder::new()
             .with_build_nodes(true)
             .build(program)
             .semantic;
+        untwist_core::semantic::repair_blocked_hoists(program, semantic.scoping_mut());
         Some(Self {
             text,
             semantic,
@@ -222,10 +223,11 @@ pub fn module_facts(text: &str) -> Option<ModuleFacts> {
     if has_error(&parsed.diagnostics) {
         return None;
     }
-    let semantic = SemanticBuilder::new()
+    let mut semantic = SemanticBuilder::new()
         .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
+    untwist_core::semantic::repair_blocked_hoists(&parsed.program, semantic.scoping_mut());
     Some(graph::facts_of(&semantic))
 }
 
@@ -238,10 +240,11 @@ pub fn rename_names(
     if has_error(&parsed.diagnostics) {
         return None;
     }
-    let semantic = SemanticBuilder::new()
+    let mut semantic = SemanticBuilder::new()
         .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
+    untwist_core::semantic::repair_blocked_hoists(&parsed.program, semantic.scoping_mut());
     let (edits, applied) = rename::Renamer::new(&semantic, false).apply_by_name(wanted);
     Some((splice(text, edits), applied))
 }

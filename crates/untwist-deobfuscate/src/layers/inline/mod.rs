@@ -15,6 +15,7 @@ use super::decode::names_hold;
 use super::model::{DecodeCx, LayerForm, Refusal, Refused};
 use untwist_core::parse::{has_error, parse_with, SourceType};
 use untwist_core::semantic::builtins::{scan, Reliance};
+use untwist_core::semantic::repair_blocked_hoists;
 
 pub use super::INLINE_LAYER_PASS;
 
@@ -96,10 +97,11 @@ pub fn plan(program: &Program<'_>, cx: &InlineCx<'_>) -> Plan {
         return Plan::Nothing;
     }
     let (steps, heap) = (finder.steps, finder.heap);
-    let scoping = SemanticBuilder::new()
+    let mut scoping = SemanticBuilder::new()
         .build(program)
         .semantic
         .into_scoping();
+    repair_blocked_hoists(program, &mut scoping);
     let mut refused: Vec<(Span, Refused)> = Vec::new();
     let mut pending: Vec<Pending> = Vec::new();
     for site in &finder.sites {
@@ -161,10 +163,11 @@ fn builtins_hold(text: &str, unsafe_transforms: bool) -> Result<(), Refusal> {
         return Err(Refusal::Unparsable);
     }
     let program = &parsed.program;
-    let scoping = SemanticBuilder::new()
+    let mut scoping = SemanticBuilder::new()
         .build(program)
         .semantic
         .into_scoping();
+    repair_blocked_hoists(program, &mut scoping);
     let verdict = scan(program, &scoping, false, false, &RELIED_ON).verdict;
     match verdict.allows_safe(unsafe_transforms) {
         true => Ok(()),

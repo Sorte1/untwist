@@ -12,6 +12,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 mod annex_b;
+mod blocked_hoists;
 pub mod builtins;
 #[cfg(feature = "test-hooks")]
 pub mod compare;
@@ -27,6 +28,7 @@ pub use annex_b::{
     block_function_symbols, declared_in_block, declaring_block, is_constant_binding_in,
     is_hoisted_block_function, AnnexBFunction, AnnexBWrites, ScopeOwners,
 };
+pub use blocked_hoists::repair_blocked_hoists;
 pub use observers::{
     assume_observers, assumed_hazard, closed_eval_names, eval_payload_names, observers,
     with_observes, Observers, ObserversGuard,
@@ -86,6 +88,7 @@ pub fn rebuild_scoping(program: &Program<'_>, previous: Stats) -> Semantics {
 }
 
 fn settled(program: &Program<'_>, mut sem: Semantics) -> Semantics {
+    blocked_hoists::repair_blocked_hoists(program, &mut sem.scoping);
     observers::settle_eval_scopes(program, &mut sem.scoping);
     sem
 }

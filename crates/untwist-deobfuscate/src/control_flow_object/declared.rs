@@ -24,6 +24,7 @@ use super::dead::{
     Branches,
 };
 use super::nested::{insert_nested, PlannedEdit, Recipe};
+use super::reach::refuse_dynamic_reach;
 use super::{
     call_site_is_safe, cff_props, emit_logical_refusals, inline_site, nested_past_the_limit,
     object_declaration, CffValue, Refusal, SiteSafety, PASS,
@@ -422,6 +423,7 @@ pub(super) fn inline_declared_objects<'a>(program: &mut Program<'a>, cx: &mut Cx
         program,
         cx,
     );
+    refuse_dynamic_reach(&mut candidates, program, cx);
     let calls = calls_at(program, &candidates, &scanned);
     let objects = objects_at(program, &candidates);
     let located = Located {
