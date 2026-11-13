@@ -13,6 +13,7 @@ babel6	6	ie11	class-private	refused:unknown: Unexpected character '#' (2:2)	-	-
 babel6	6	ie11	class-static-block	refused:unknown: Unexpected token (4:9)	-	-
 babel6	6	ie11	destructuring	written	babel6-6/ie11/destructuring.js	faithful
 babel6	6	ie11	exponent	refused:unknown: Identifier directly after number (9:27)	-	-
+babel6	6	ie11	for-of-closures	written	babel6-6/ie11/for-of-closures.js	faithful
 babel6	6	ie11	for-of-exits	written	babel6-6/ie11/for-of-exits.js	faithful
 babel6	6	ie11	for-of	written	babel6-6/ie11/for-of.js	faithful
 babel6	6	ie11	generators	written	babel6-6/ie11/generators.js	faithful
@@ -39,6 +40,7 @@ babel6	6	ie11-loose	class-private	refused:unknown: Unexpected character '#' (2:2
 babel6	6	ie11-loose	class-static-block	refused:unknown: Unexpected token (4:9)	-	-
 babel6	6	ie11-loose	destructuring	written	babel6-6/ie11-loose/destructuring.js	differs
 babel6	6	ie11-loose	exponent	refused:unknown: Identifier directly after number (9:27)	-	-
+babel6	6	ie11-loose	for-of-closures	written	babel6-6/ie11-loose/for-of-closures.js	faithful
 babel6	6	ie11-loose	for-of-exits	written	babel6-6/ie11-loose/for-of-exits.js	differs
 babel6	6	ie11-loose	for-of	written	babel6-6/ie11-loose/for-of.js	differs
 babel6	6	ie11-loose	generators	written	babel6-6/ie11-loose/generators.js	differs
@@ -65,6 +67,7 @@ babel	7.0	ie11	class-private	refused:unknown: Support for the experimental synta
 babel	7.0	ie11	class-static-block	refused:unknown: Unexpected token (4:9)	-	-
 babel	7.0	ie11	destructuring	written	babel-7.0/ie11/destructuring.js	faithful
 babel	7.0	ie11	exponent	refused:unknown: Identifier directly after number (9:27)	-	-
+babel	7.0	ie11	for-of-closures	written	babel-7.0/ie11/for-of-closures.js	faithful
 babel	7.0	ie11	for-of-exits	written	babel-7.0/ie11/for-of-exits.js	faithful
 babel	7.0	ie11	for-of	written	babel-7.0/ie11/for-of.js	faithful
 babel	7.0	ie11	generators	written	babel-7.0/ie11/generators.js	faithful
@@ -91,6 +94,7 @@ babel	7.0	ie11-loose	class-private	refused:unknown: Support for the experimental
 babel	7.0	ie11-loose	class-static-block	refused:unknown: Unexpected token (4:9)	-	-
 babel	7.0	ie11-loose	destructuring	written	babel-7.0/ie11-loose/destructuring.js	differs
 babel	7.0	ie11-loose	exponent	refused:unknown: Identifier directly after number (9:27)	-	-
+babel	7.0	ie11-loose	for-of-closures	written	babel-7.0/ie11-loose/for-of-closures.js	faithful
 babel	7.0	ie11-loose	for-of-exits	written	babel-7.0/ie11-loose/for-of-exits.js	differs
 babel	7.0	ie11-loose	for-of	written	babel-7.0/ie11-loose/for-of.js	differs
 babel	7.0	ie11-loose	generators	written	babel-7.0/ie11-loose/generators.js	differs
@@ -117,6 +121,7 @@ babel	7.0	ie11-runtime	class-private	refused:unknown: Support for the experiment
 babel	7.0	ie11-runtime	class-static-block	refused:unknown: Unexpected token (4:9)	-	-
 babel	7.0	ie11-runtime	destructuring	written	babel-7.0/ie11-runtime/destructuring.js	faithful
 babel	7.0	ie11-runtime	exponent	refused:unknown: Identifier directly after number (9:27)	-	-
+babel	7.0	ie11-runtime	for-of-closures	written	babel-7.0/ie11-runtime/for-of-closures.js	faithful
 babel	7.0	ie11-runtime	for-of-exits	written	babel-7.0/ie11-runtime/for-of-exits.js	faithful
 babel	7.0	ie11-runtime	for-of	written	babel-7.0/ie11-runtime/for-of.js	faithful
 babel	7.0	ie11-runtime	generators	written	babel-7.0/ie11-runtime/generators.js	faithful
@@ -143,6 +148,7 @@ babel	7.12	ie11	class-private	refused:unknown: Support for the experimental synt
 babel	7.12	ie11	class-static-block	refused:unknown: Duplicate static block in the same class (8:2)	-	-
 babel	7.12	ie11	destructuring	written	babel-7.12/ie11/destructuring.js	faithful
 babel	7.12	ie11	exponent	written	babel-7.12/ie11/exponent.js	differs
+babel	7.12	ie11	for-of-closures	written	babel-7.12/ie11/for-of-closures.js	faithful
 babel	7.12	ie11	for-of-exits	written	babel-7.12/ie11/for-of-exits.js	faithful
 babel	7.12	ie11	for-of	written	babel-7.12/ie11/for-of.js	faithful
 babel	7.12	ie11	generators	written	babel-7.12/ie11/generators.js	faithful
@@ -169,6 +175,7 @@ babel	7.12	ie11-loose	class-private	refused:unknown: Support for the experimenta
 babel	7.12	ie11-loose	class-static-block	refused:unknown: Duplicate static block in the same class (8:2)	-	-
 babel	7.12	ie11-loose	destructuring	written	babel-7.12/ie11-loose/destructuring.js	differs
 babel	7.12	ie11-loose	exponent	same	babel-7.12/ie11/exponent.js	differs
+babel	7.12	ie11-loose	for-of-closures	written	babel-7.12/ie11-loose/for-of-closures.js	faithful
 babel	7.12	ie11-loose	for-of-exits	written	babel-7.12/ie11-loose/for-of-exits.js	differs
 babel	7.12	ie11-loose	for-of	written	babel-7.12/ie11-loose/for-of.js	differs
 babel	7.12	ie11-loose	generators	written	babel-7.12/ie11-loose/generators.js	differs
@@ -195,6 +202,7 @@ babel	7.12	ie11-runtime	class-private	refused:unknown: Support for the experimen
 babel	7.12	ie11-runtime	class-static-block	refused:unknown: Duplicate static block in the same class (8:2)	-	-
 babel	7.12	ie11-runtime	destructuring	written	babel-7.12/ie11-runtime/destructuring.js	faithful
 babel	7.12	ie11-runtime	exponent	written	babel-7.12/ie11-runtime/exponent.js	differs
+babel	7.12	ie11-runtime	for-of-closures	written	babel-7.12/ie11-runtime/for-of-closures.js	faithful
 babel	7.12	ie11-runtime	for-of-exits	written	babel-7.12/ie11-runtime/for-of-exits.js	faithful
 babel	7.12	ie11-runtime	for-of	written	babel-7.12/ie11-runtime/for-of.js	faithful
 babel	7.12	ie11-runtime	generators	written	babel-7.12/ie11-runtime/generators.js	faithful
@@ -221,6 +229,7 @@ babel	7.20	ie11	class-private	written	babel-7.20/ie11/class-private.js	faithful
 babel	7.20	ie11	class-static-block	written	babel-7.20/ie11/class-static-block.js	faithful
 babel	7.20	ie11	destructuring	written	babel-7.20/ie11/destructuring.js	faithful
 babel	7.20	ie11	exponent	same	babel-7.12/ie11/exponent.js	differs
+babel	7.20	ie11	for-of-closures	written	babel-7.20/ie11/for-of-closures.js	faithful
 babel	7.20	ie11	for-of-exits	written	babel-7.20/ie11/for-of-exits.js	faithful
 babel	7.20	ie11	for-of	written	babel-7.20/ie11/for-of.js	faithful
 babel	7.20	ie11	generators	written	babel-7.20/ie11/generators.js	faithful
@@ -247,6 +256,7 @@ babel	7.20	ie11-loose	class-private	written	babel-7.20/ie11-loose/class-private.
 babel	7.20	ie11-loose	class-static-block	written	babel-7.20/ie11-loose/class-static-block.js	faithful
 babel	7.20	ie11-loose	destructuring	written	babel-7.20/ie11-loose/destructuring.js	differs
 babel	7.20	ie11-loose	exponent	same	babel-7.12/ie11/exponent.js	differs
+babel	7.20	ie11-loose	for-of-closures	written	babel-7.20/ie11-loose/for-of-closures.js	faithful
 babel	7.20	ie11-loose	for-of-exits	written	babel-7.20/ie11-loose/for-of-exits.js	differs
 babel	7.20	ie11-loose	for-of	written	babel-7.20/ie11-loose/for-of.js	differs
 babel	7.20	ie11-loose	generators	written	babel-7.20/ie11-loose/generators.js	differs
@@ -273,6 +283,7 @@ babel	7.20	ie11-runtime	class-private	written	babel-7.20/ie11-runtime/class-priv
 babel	7.20	ie11-runtime	class-static-block	written	babel-7.20/ie11-runtime/class-static-block.js	faithful
 babel	7.20	ie11-runtime	destructuring	written	babel-7.20/ie11-runtime/destructuring.js	faithful
 babel	7.20	ie11-runtime	exponent	same	babel-7.12/ie11-runtime/exponent.js	differs
+babel	7.20	ie11-runtime	for-of-closures	written	babel-7.20/ie11-runtime/for-of-closures.js	faithful
 babel	7.20	ie11-runtime	for-of-exits	written	babel-7.20/ie11-runtime/for-of-exits.js	faithful
 babel	7.20	ie11-runtime	for-of	written	babel-7.20/ie11-runtime/for-of.js	faithful
 babel	7.20	ie11-runtime	generators	written	babel-7.20/ie11-runtime/generators.js	faithful
@@ -299,6 +310,7 @@ babel	7.24	ie11	class-private	written	babel-7.24/ie11/class-private.js	faithful
 babel	7.24	ie11	class-static-block	written	babel-7.24/ie11/class-static-block.js	faithful
 babel	7.24	ie11	destructuring	written	babel-7.24/ie11/destructuring.js	faithful
 babel	7.24	ie11	exponent	same	babel-7.12/ie11/exponent.js	differs
+babel	7.24	ie11	for-of-closures	written	babel-7.24/ie11/for-of-closures.js	faithful
 babel	7.24	ie11	for-of-exits	written	babel-7.24/ie11/for-of-exits.js	faithful
 babel	7.24	ie11	for-of	written	babel-7.24/ie11/for-of.js	faithful
 babel	7.24	ie11	generators	written	babel-7.24/ie11/generators.js	faithful
@@ -325,6 +337,7 @@ babel	7.24	ie11-loose	class-private	written	babel-7.24/ie11-loose/class-private.
 babel	7.24	ie11-loose	class-static-block	written	babel-7.24/ie11-loose/class-static-block.js	faithful
 babel	7.24	ie11-loose	destructuring	written	babel-7.24/ie11-loose/destructuring.js	differs
 babel	7.24	ie11-loose	exponent	same	babel-7.12/ie11/exponent.js	differs
+babel	7.24	ie11-loose	for-of-closures	written	babel-7.24/ie11-loose/for-of-closures.js	faithful
 babel	7.24	ie11-loose	for-of-exits	written	babel-7.24/ie11-loose/for-of-exits.js	differs
 babel	7.24	ie11-loose	for-of	written	babel-7.24/ie11-loose/for-of.js	differs
 babel	7.24	ie11-loose	generators	written	babel-7.24/ie11-loose/generators.js	differs
@@ -351,6 +364,7 @@ babel	7.24	ie11-runtime	class-private	written	babel-7.24/ie11-runtime/class-priv
 babel	7.24	ie11-runtime	class-static-block	written	babel-7.24/ie11-runtime/class-static-block.js	faithful
 babel	7.24	ie11-runtime	destructuring	written	babel-7.24/ie11-runtime/destructuring.js	faithful
 babel	7.24	ie11-runtime	exponent	same	babel-7.12/ie11-runtime/exponent.js	differs
+babel	7.24	ie11-runtime	for-of-closures	written	babel-7.24/ie11-runtime/for-of-closures.js	faithful
 babel	7.24	ie11-runtime	for-of-exits	written	babel-7.24/ie11-runtime/for-of-exits.js	faithful
 babel	7.24	ie11-runtime	for-of	written	babel-7.24/ie11-runtime/for-of.js	faithful
 babel	7.24	ie11-runtime	generators	written	babel-7.24/ie11-runtime/generators.js	faithful
@@ -377,6 +391,7 @@ babel	7.28	ie11	class-private	same	babel-7.24/ie11/class-private.js	faithful
 babel	7.28	ie11	class-static-block	same	babel-7.24/ie11/class-static-block.js	faithful
 babel	7.28	ie11	destructuring	written	babel-7.28/ie11/destructuring.js	faithful
 babel	7.28	ie11	exponent	written	babel-7.28/ie11/exponent.js	differs
+babel	7.28	ie11	for-of-closures	same	babel-7.24/ie11/for-of-closures.js	faithful
 babel	7.28	ie11	for-of-exits	written	babel-7.28/ie11/for-of-exits.js	faithful
 babel	7.28	ie11	for-of	same	babel-7.24/ie11/for-of.js	faithful
 babel	7.28	ie11	generators	written	babel-7.28/ie11/generators.js	faithful
@@ -403,6 +418,7 @@ babel	7.28	ie11-loose	class-private	same	babel-7.24/ie11-loose/class-private.js	
 babel	7.28	ie11-loose	class-static-block	same	babel-7.24/ie11-loose/class-static-block.js	faithful
 babel	7.28	ie11-loose	destructuring	written	babel-7.28/ie11-loose/destructuring.js	differs
 babel	7.28	ie11-loose	exponent	same	babel-7.28/ie11/exponent.js	differs
+babel	7.28	ie11-loose	for-of-closures	same	babel-7.24/ie11-loose/for-of-closures.js	faithful
 babel	7.28	ie11-loose	for-of-exits	written	babel-7.28/ie11-loose/for-of-exits.js	differs
 babel	7.28	ie11-loose	for-of	same	babel-7.24/ie11-loose/for-of.js	differs
 babel	7.28	ie11-loose	generators	written	babel-7.28/ie11-loose/generators.js	differs
@@ -429,6 +445,7 @@ babel	7.28	ie11-runtime	class-private	same	babel-7.24/ie11-runtime/class-private
 babel	7.28	ie11-runtime	class-static-block	same	babel-7.24/ie11-runtime/class-static-block.js	faithful
 babel	7.28	ie11-runtime	destructuring	written	babel-7.28/ie11-runtime/destructuring.js	faithful
 babel	7.28	ie11-runtime	exponent	written	babel-7.28/ie11-runtime/exponent.js	differs
+babel	7.28	ie11-runtime	for-of-closures	same	babel-7.24/ie11-runtime/for-of-closures.js	faithful
 babel	7.28	ie11-runtime	for-of-exits	written	babel-7.28/ie11-runtime/for-of-exits.js	faithful
 babel	7.28	ie11-runtime	for-of	same	babel-7.24/ie11-runtime/for-of.js	faithful
 babel	7.28	ie11-runtime	generators	written	babel-7.28/ie11-runtime/generators.js	faithful
@@ -455,6 +472,7 @@ babel	7.28	chrome45	class-private	same	babel-7.24/ie11/class-private.js	faithful
 babel	7.28	chrome45	class-static-block	same	babel-7.24/ie11/class-static-block.js	faithful
 babel	7.28	chrome45	destructuring	same	babel-7.28/ie11/destructuring.js	faithful
 babel	7.28	chrome45	exponent	same	babel-7.28/ie11/exponent.js	differs
+babel	7.28	chrome45	for-of-closures	same	babel-7.24/ie11/for-of-closures.js	faithful
 babel	7.28	chrome45	for-of-exits	written	babel-7.28/chrome45/for-of-exits.js	faithful
 babel	7.28	chrome45	for-of	written	babel-7.28/chrome45/for-of.js	faithful
 babel	7.28	chrome45	generators	written	babel-7.28/chrome45/generators.js	faithful
@@ -481,6 +499,7 @@ babel	7.29	ie11	class-private	written	babel-7.29/ie11/class-private.js	faithful
 babel	7.29	ie11	class-static-block	written	babel-7.29/ie11/class-static-block.js	faithful
 babel	7.29	ie11	destructuring	written	babel-7.29/ie11/destructuring.js	faithful
 babel	7.29	ie11	exponent	same	babel-7.28/ie11/exponent.js	differs
+babel	7.29	ie11	for-of-closures	same	babel-7.24/ie11/for-of-closures.js	faithful
 babel	7.29	ie11	for-of-exits	written	babel-7.29/ie11/for-of-exits.js	faithful
 babel	7.29	ie11	for-of	written	babel-7.29/ie11/for-of.js	faithful
 babel	7.29	ie11	generators	written	babel-7.29/ie11/generators.js	faithful
@@ -507,6 +526,7 @@ babel	7.29	ie11-loose	class-private	written	babel-7.29/ie11-loose/class-private.
 babel	7.29	ie11-loose	class-static-block	same	babel-7.24/ie11-loose/class-static-block.js	faithful
 babel	7.29	ie11-loose	destructuring	written	babel-7.29/ie11-loose/destructuring.js	differs
 babel	7.29	ie11-loose	exponent	same	babel-7.28/ie11/exponent.js	differs
+babel	7.29	ie11-loose	for-of-closures	same	babel-7.24/ie11-loose/for-of-closures.js	faithful
 babel	7.29	ie11-loose	for-of-exits	written	babel-7.29/ie11-loose/for-of-exits.js	differs
 babel	7.29	ie11-loose	for-of	same	babel-7.24/ie11-loose/for-of.js	differs
 babel	7.29	ie11-loose	generators	written	babel-7.29/ie11-loose/generators.js	differs
@@ -533,6 +553,7 @@ babel	7.29	ie11-runtime	class-private	written	babel-7.29/ie11-runtime/class-priv
 babel	7.29	ie11-runtime	class-static-block	written	babel-7.29/ie11-runtime/class-static-block.js	faithful
 babel	7.29	ie11-runtime	destructuring	written	babel-7.29/ie11-runtime/destructuring.js	faithful
 babel	7.29	ie11-runtime	exponent	same	babel-7.28/ie11-runtime/exponent.js	differs
+babel	7.29	ie11-runtime	for-of-closures	same	babel-7.24/ie11-runtime/for-of-closures.js	faithful
 babel	7.29	ie11-runtime	for-of-exits	written	babel-7.29/ie11-runtime/for-of-exits.js	faithful
 babel	7.29	ie11-runtime	for-of	written	babel-7.29/ie11-runtime/for-of.js	faithful
 babel	7.29	ie11-runtime	generators	written	babel-7.29/ie11-runtime/generators.js	faithful
@@ -559,6 +580,7 @@ babel	7.29	chrome45	class-private	same	babel-7.29/ie11/class-private.js	faithful
 babel	7.29	chrome45	class-static-block	same	babel-7.29/ie11/class-static-block.js	faithful
 babel	7.29	chrome45	destructuring	same	babel-7.29/ie11/destructuring.js	faithful
 babel	7.29	chrome45	exponent	same	babel-7.28/ie11/exponent.js	differs
+babel	7.29	chrome45	for-of-closures	same	babel-7.24/ie11/for-of-closures.js	faithful
 babel	7.29	chrome45	for-of-exits	written	babel-7.29/chrome45/for-of-exits.js	faithful
 babel	7.29	chrome45	for-of	same	babel-7.28/chrome45/for-of.js	faithful
 babel	7.29	chrome45	generators	written	babel-7.29/chrome45/generators.js	faithful
@@ -585,6 +607,7 @@ babel	7.29	ie11-runtime-cjs	class-private	written	babel-7.29/ie11-runtime-cjs/cl
 babel	7.29	ie11-runtime-cjs	class-static-block	written	babel-7.29/ie11-runtime-cjs/class-static-block.js	differs
 babel	7.29	ie11-runtime-cjs	destructuring	written	babel-7.29/ie11-runtime-cjs/destructuring.js	differs
 babel	7.29	ie11-runtime-cjs	exponent	same	babel-7.28/ie11-runtime/exponent.js	differs
+babel	7.29	ie11-runtime-cjs	for-of-closures	written	babel-7.29/ie11-runtime-cjs/for-of-closures.js	differs
 babel	7.29	ie11-runtime-cjs	for-of-exits	written	babel-7.29/ie11-runtime-cjs/for-of-exits.js	differs
 babel	7.29	ie11-runtime-cjs	for-of	written	babel-7.29/ie11-runtime-cjs/for-of.js	differs
 babel	7.29	ie11-runtime-cjs	generators	written	babel-7.29/ie11-runtime-cjs/generators.js	differs
@@ -611,6 +634,7 @@ babel	7.29	chrome58	class-private	written	babel-7.29/chrome58/class-private.js	f
 babel	7.29	chrome58	class-static-block	written	babel-7.29/chrome58/class-static-block.js	faithful
 babel	7.29	chrome58	destructuring	written	babel-7.29/chrome58/destructuring.js	faithful
 babel	7.29	chrome58	exponent	written	babel-7.29/chrome58/exponent.js	faithful
+babel	7.29	chrome58	for-of-closures	written	babel-7.29/chrome58/for-of-closures.js	faithful
 babel	7.29	chrome58	for-of-exits	written	babel-7.29/chrome58/for-of-exits.js	faithful
 babel	7.29	chrome58	for-of	written	babel-7.29/chrome58/for-of.js	faithful
 babel	7.29	chrome58	generators	written	babel-7.29/chrome58/generators.js	faithful
@@ -637,6 +661,7 @@ babel	7.29	esmodules	class-private	written	babel-7.29/esmodules/class-private.js
 babel	7.29	esmodules	class-static-block	written	babel-7.29/esmodules/class-static-block.js	faithful
 babel	7.29	esmodules	destructuring	written	babel-7.29/esmodules/destructuring.js	faithful
 babel	7.29	esmodules	exponent	written	babel-7.29/esmodules/exponent.js	faithful
+babel	7.29	esmodules	for-of-closures	written	babel-7.29/esmodules/for-of-closures.js	faithful
 babel	7.29	esmodules	for-of-exits	written	babel-7.29/esmodules/for-of-exits.js	faithful
 babel	7.29	esmodules	for-of	written	babel-7.29/esmodules/for-of.js	faithful
 babel	7.29	esmodules	generators	written	babel-7.29/esmodules/generators.js	faithful
@@ -663,6 +688,7 @@ babel	8	ie11	class-private	written	babel-8/ie11/class-private.js	faithful
 babel	8	ie11	class-static-block	written	babel-8/ie11/class-static-block.js	faithful
 babel	8	ie11	destructuring	written	babel-8/ie11/destructuring.js	faithful
 babel	8	ie11	exponent	written	babel-8/ie11/exponent.js	differs
+babel	8	ie11	for-of-closures	written	babel-8/ie11/for-of-closures.js	faithful
 babel	8	ie11	for-of-exits	written	babel-8/ie11/for-of-exits.js	faithful
 babel	8	ie11	for-of	written	babel-8/ie11/for-of.js	faithful
 babel	8	ie11	generators	written	babel-8/ie11/generators.js	faithful
@@ -689,6 +715,7 @@ babel	8	ie11-loose	class-private	refused:[BABEL] unknown file: @babel/preset-env
 babel	8	ie11-loose	class-static-block	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	destructuring	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	exponent	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
+babel	8	ie11-loose	for-of-closures	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	for-of-exits	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	for-of	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	generators	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
@@ -715,6 +742,7 @@ babel	8	ie11-runtime	class-private	written	babel-8/ie11-runtime/class-private.js
 babel	8	ie11-runtime	class-static-block	written	babel-8/ie11-runtime/class-static-block.js	faithful
 babel	8	ie11-runtime	destructuring	written	babel-8/ie11-runtime/destructuring.js	faithful
 babel	8	ie11-runtime	exponent	same	babel-7.28/ie11-runtime/exponent.js	differs
+babel	8	ie11-runtime	for-of-closures	written	babel-8/ie11-runtime/for-of-closures.js	faithful
 babel	8	ie11-runtime	for-of-exits	written	babel-8/ie11-runtime/for-of-exits.js	faithful
 babel	8	ie11-runtime	for-of	written	babel-8/ie11-runtime/for-of.js	faithful
 babel	8	ie11-runtime	generators	written	babel-8/ie11-runtime/generators.js	faithful
@@ -741,6 +769,7 @@ babel	8	chrome45	class-private	same	babel-8/ie11/class-private.js	faithful
 babel	8	chrome45	class-static-block	same	babel-8/ie11/class-static-block.js	faithful
 babel	8	chrome45	destructuring	same	babel-8/ie11/destructuring.js	faithful
 babel	8	chrome45	exponent	same	babel-8/ie11/exponent.js	differs
+babel	8	chrome45	for-of-closures	same	babel-8/ie11/for-of-closures.js	faithful
 babel	8	chrome45	for-of-exits	written	babel-8/chrome45/for-of-exits.js	faithful
 babel	8	chrome45	for-of	written	babel-8/chrome45/for-of.js	faithful
 babel	8	chrome45	generators	written	babel-8/chrome45/generators.js	faithful
@@ -767,6 +796,7 @@ babel	8	ie11-runtime-cjs	class-private	same	babel-8/ie11-runtime/class-private.j
 babel	8	ie11-runtime-cjs	class-static-block	same	babel-8/ie11-runtime/class-static-block.js	faithful
 babel	8	ie11-runtime-cjs	destructuring	same	babel-8/ie11-runtime/destructuring.js	faithful
 babel	8	ie11-runtime-cjs	exponent	same	babel-7.28/ie11-runtime/exponent.js	differs
+babel	8	ie11-runtime-cjs	for-of-closures	same	babel-8/ie11-runtime/for-of-closures.js	faithful
 babel	8	ie11-runtime-cjs	for-of-exits	same	babel-8/ie11-runtime/for-of-exits.js	faithful
 babel	8	ie11-runtime-cjs	for-of	same	babel-8/ie11-runtime/for-of.js	faithful
 babel	8	ie11-runtime-cjs	generators	same	babel-8/ie11-runtime/generators.js	faithful
@@ -793,6 +823,7 @@ babel	8	chrome58	class-private	written	babel-8/chrome58/class-private.js	faithfu
 babel	8	chrome58	class-static-block	written	babel-8/chrome58/class-static-block.js	faithful
 babel	8	chrome58	destructuring	written	babel-8/chrome58/destructuring.js	faithful
 babel	8	chrome58	exponent	native	-	-
+babel	8	chrome58	for-of-closures	native	-	-
 babel	8	chrome58	for-of-exits	native	-	-
 babel	8	chrome58	for-of	native	-	-
 babel	8	chrome58	generators	native	-	-
@@ -819,6 +850,7 @@ babel	8	esmodules	class-private	native	-	-
 babel	8	esmodules	class-static-block	native	-	-
 babel	8	esmodules	destructuring	native	-	-
 babel	8	esmodules	exponent	native	-	-
+babel	8	esmodules	for-of-closures	native	-	-
 babel	8	esmodules	for-of-exits	native	-	-
 babel	8	esmodules	for-of	native	-	-
 babel	8	esmodules	generators	native	-	-
@@ -845,6 +877,7 @@ ts	3.9	es3	class-private	refused:the tool's output does not parse	-	-
 ts	3.9	es3	class-static-block	refused:the tool's output does not parse	-	-
 ts	3.9	es3	destructuring	written	ts-3.9/es3/destructuring.js	differs
 ts	3.9	es3	exponent	written	ts-3.9/es3/exponent.js	differs
+ts	3.9	es3	for-of-closures	written	ts-3.9/es3/for-of-closures.js	differs
 ts	3.9	es3	for-of-exits	written	ts-3.9/es3/for-of-exits.js	differs
 ts	3.9	es3	for-of	written	ts-3.9/es3/for-of.js	differs
 ts	3.9	es3	generators	written	ts-3.9/es3/generators.js	differs
@@ -871,6 +904,7 @@ ts	3.9	es5	class-private	refused:the tool's output does not parse	-	-
 ts	3.9	es5	class-static-block	refused:the tool's output does not parse	-	-
 ts	3.9	es5	destructuring	same	ts-3.9/es3/destructuring.js	differs
 ts	3.9	es5	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	3.9	es5	for-of-closures	same	ts-3.9/es3/for-of-closures.js	differs
 ts	3.9	es5	for-of-exits	written	ts-3.9/es5/for-of-exits.js	differs
 ts	3.9	es5	for-of	written	ts-3.9/es5/for-of.js	differs
 ts	3.9	es5	generators	written	ts-3.9/es5/generators.js	differs
@@ -897,6 +931,7 @@ ts	3.9	es5-iter	class-private	refused:the tool's output does not parse	-	-
 ts	3.9	es5-iter	class-static-block	refused:the tool's output does not parse	-	-
 ts	3.9	es5-iter	destructuring	written	ts-3.9/es5-iter/destructuring.js	faithful
 ts	3.9	es5-iter	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	3.9	es5-iter	for-of-closures	written	ts-3.9/es5-iter/for-of-closures.js	faithful
 ts	3.9	es5-iter	for-of-exits	written	ts-3.9/es5-iter/for-of-exits.js	faithful
 ts	3.9	es5-iter	for-of	written	ts-3.9/es5-iter/for-of.js	faithful
 ts	3.9	es5-iter	generators	written	ts-3.9/es5-iter/generators.js	faithful
@@ -923,6 +958,7 @@ ts	3.9	es5-tslib	class-private	refused:.entry/ts-3.9-es5-tslib-class-private.mjs
 ts	3.9	es5-tslib	class-static-block	refused:the tool's output does not parse	-	-
 ts	3.9	es5-tslib	destructuring	written	ts-3.9/es5-tslib/destructuring.js	faithful
 ts	3.9	es5-tslib	exponent	written	ts-3.9/es5-tslib/exponent.js	differs
+ts	3.9	es5-tslib	for-of-closures	written	ts-3.9/es5-tslib/for-of-closures.js	faithful
 ts	3.9	es5-tslib	for-of-exits	written	ts-3.9/es5-tslib/for-of-exits.js	faithful
 ts	3.9	es5-tslib	for-of	written	ts-3.9/es5-tslib/for-of.js	faithful
 ts	3.9	es5-tslib	generators	written	ts-3.9/es5-tslib/generators.js	faithful
@@ -949,6 +985,7 @@ ts	3.9	es2015	class-private	refused:the tool's output does not parse	-	-
 ts	3.9	es2015	class-static-block	refused:the tool's output does not parse	-	-
 ts	3.9	es2015	destructuring	written	ts-3.9/es2015/destructuring.js	faithful
 ts	3.9	es2015	exponent	written	ts-3.9/es2015/exponent.js	differs
+ts	3.9	es2015	for-of-closures	written	ts-3.9/es2015/for-of-closures.js	faithful
 ts	3.9	es2015	for-of-exits	written	ts-3.9/es2015/for-of-exits.js	faithful
 ts	3.9	es2015	for-of	written	ts-3.9/es2015/for-of.js	faithful
 ts	3.9	es2015	generators	written	ts-3.9/es2015/generators.js	faithful
@@ -975,6 +1012,7 @@ ts	3.9	es2015-define	class-private	refused:the tool's output does not parse	-	-
 ts	3.9	es2015-define	class-static-block	refused:the tool's output does not parse	-	-
 ts	3.9	es2015-define	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	3.9	es2015-define	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	3.9	es2015-define	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	3.9	es2015-define	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	3.9	es2015-define	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	3.9	es2015-define	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1001,6 +1039,7 @@ ts	3.9	es2017	class-private	refused:the tool's output does not parse	-	-
 ts	3.9	es2017	class-static-block	refused:the tool's output does not parse	-	-
 ts	3.9	es2017	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	3.9	es2017	exponent	written	ts-3.9/es2017/exponent.js	faithful
+ts	3.9	es2017	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	3.9	es2017	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	3.9	es2017	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	3.9	es2017	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1027,6 +1066,7 @@ ts	3.9	es2019	class-private	refused:the tool's output does not parse	-	-
 ts	3.9	es2019	class-static-block	refused:the tool's output does not parse	-	-
 ts	3.9	es2019	destructuring	written	ts-3.9/es2019/destructuring.js	faithful
 ts	3.9	es2019	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	3.9	es2019	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	3.9	es2019	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	3.9	es2019	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	3.9	es2019	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1053,6 +1093,7 @@ ts	4.9	es3	class-private	written	ts-4.9/es3/class-private.js	faithful
 ts	4.9	es3	class-static-block	written	ts-4.9/es3/class-static-block.js	faithful
 ts	4.9	es3	destructuring	written	ts-4.9/es3/destructuring.js	differs
 ts	4.9	es3	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	4.9	es3	for-of-closures	same	ts-3.9/es3/for-of-closures.js	differs
 ts	4.9	es3	for-of-exits	written	ts-4.9/es3/for-of-exits.js	differs
 ts	4.9	es3	for-of	same	ts-3.9/es3/for-of.js	differs
 ts	4.9	es3	generators	written	ts-4.9/es3/generators.js	differs
@@ -1079,6 +1120,7 @@ ts	4.9	es5	class-private	same	ts-4.9/es3/class-private.js	faithful
 ts	4.9	es5	class-static-block	same	ts-4.9/es3/class-static-block.js	faithful
 ts	4.9	es5	destructuring	same	ts-4.9/es3/destructuring.js	differs
 ts	4.9	es5	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	4.9	es5	for-of-closures	same	ts-3.9/es3/for-of-closures.js	differs
 ts	4.9	es5	for-of-exits	written	ts-4.9/es5/for-of-exits.js	differs
 ts	4.9	es5	for-of	same	ts-3.9/es5/for-of.js	differs
 ts	4.9	es5	generators	written	ts-4.9/es5/generators.js	differs
@@ -1105,6 +1147,7 @@ ts	4.9	es5-iter	class-private	same	ts-4.9/es3/class-private.js	faithful
 ts	4.9	es5-iter	class-static-block	same	ts-4.9/es3/class-static-block.js	faithful
 ts	4.9	es5-iter	destructuring	written	ts-4.9/es5-iter/destructuring.js	faithful
 ts	4.9	es5-iter	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	4.9	es5-iter	for-of-closures	same	ts-3.9/es5-iter/for-of-closures.js	faithful
 ts	4.9	es5-iter	for-of-exits	written	ts-4.9/es5-iter/for-of-exits.js	faithful
 ts	4.9	es5-iter	for-of	same	ts-3.9/es5-iter/for-of.js	faithful
 ts	4.9	es5-iter	generators	written	ts-4.9/es5-iter/generators.js	faithful
@@ -1131,6 +1174,7 @@ ts	4.9	es5-tslib	class-private	written	ts-4.9/es5-tslib/class-private.js	faithfu
 ts	4.9	es5-tslib	class-static-block	written	ts-4.9/es5-tslib/class-static-block.js	faithful
 ts	4.9	es5-tslib	destructuring	written	ts-4.9/es5-tslib/destructuring.js	faithful
 ts	4.9	es5-tslib	exponent	same	ts-3.9/es5-tslib/exponent.js	differs
+ts	4.9	es5-tslib	for-of-closures	same	ts-3.9/es5-tslib/for-of-closures.js	faithful
 ts	4.9	es5-tslib	for-of-exits	written	ts-4.9/es5-tslib/for-of-exits.js	faithful
 ts	4.9	es5-tslib	for-of	same	ts-3.9/es5-tslib/for-of.js	faithful
 ts	4.9	es5-tslib	generators	written	ts-4.9/es5-tslib/generators.js	faithful
@@ -1157,6 +1201,7 @@ ts	4.9	es2015	class-private	written	ts-4.9/es2015/class-private.js	faithful
 ts	4.9	es2015	class-static-block	written	ts-4.9/es2015/class-static-block.js	faithful
 ts	4.9	es2015	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	4.9	es2015	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	4.9	es2015	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	4.9	es2015	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	4.9	es2015	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	4.9	es2015	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1183,6 +1228,7 @@ ts	4.9	es2015-define	class-private	same	ts-4.9/es2015/class-private.js	faithful
 ts	4.9	es2015-define	class-static-block	written	ts-4.9/es2015-define/class-static-block.js	faithful
 ts	4.9	es2015-define	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	4.9	es2015-define	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	4.9	es2015-define	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	4.9	es2015-define	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	4.9	es2015-define	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	4.9	es2015-define	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1209,6 +1255,7 @@ ts	4.9	es2017	class-private	same	ts-4.9/es2015/class-private.js	faithful
 ts	4.9	es2017	class-static-block	same	ts-4.9/es2015/class-static-block.js	faithful
 ts	4.9	es2017	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	4.9	es2017	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	4.9	es2017	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	4.9	es2017	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	4.9	es2017	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	4.9	es2017	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1235,6 +1282,7 @@ ts	4.9	es2019	class-private	same	ts-4.9/es2015/class-private.js	faithful
 ts	4.9	es2019	class-static-block	same	ts-4.9/es2015/class-static-block.js	faithful
 ts	4.9	es2019	destructuring	same	ts-3.9/es2019/destructuring.js	faithful
 ts	4.9	es2019	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	4.9	es2019	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	4.9	es2019	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	4.9	es2019	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	4.9	es2019	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1261,6 +1309,7 @@ ts	5.0	es3	class-private	same	ts-4.9/es3/class-private.js	faithful
 ts	5.0	es3	class-static-block	same	ts-4.9/es3/class-static-block.js	faithful
 ts	5.0	es3	destructuring	same	ts-4.9/es3/destructuring.js	differs
 ts	5.0	es3	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	5.0	es3	for-of-closures	same	ts-3.9/es3/for-of-closures.js	differs
 ts	5.0	es3	for-of-exits	same	ts-4.9/es3/for-of-exits.js	differs
 ts	5.0	es3	for-of	same	ts-3.9/es3/for-of.js	differs
 ts	5.0	es3	generators	same	ts-4.9/es3/generators.js	differs
@@ -1287,6 +1336,7 @@ ts	5.0	es5	class-private	same	ts-4.9/es3/class-private.js	faithful
 ts	5.0	es5	class-static-block	same	ts-4.9/es3/class-static-block.js	faithful
 ts	5.0	es5	destructuring	same	ts-4.9/es3/destructuring.js	differs
 ts	5.0	es5	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	5.0	es5	for-of-closures	same	ts-3.9/es3/for-of-closures.js	differs
 ts	5.0	es5	for-of-exits	same	ts-4.9/es5/for-of-exits.js	differs
 ts	5.0	es5	for-of	same	ts-3.9/es5/for-of.js	differs
 ts	5.0	es5	generators	same	ts-4.9/es5/generators.js	differs
@@ -1313,6 +1363,7 @@ ts	5.0	es5-iter	class-private	same	ts-4.9/es3/class-private.js	faithful
 ts	5.0	es5-iter	class-static-block	same	ts-4.9/es3/class-static-block.js	faithful
 ts	5.0	es5-iter	destructuring	same	ts-4.9/es5-iter/destructuring.js	faithful
 ts	5.0	es5-iter	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	5.0	es5-iter	for-of-closures	same	ts-3.9/es5-iter/for-of-closures.js	faithful
 ts	5.0	es5-iter	for-of-exits	same	ts-4.9/es5-iter/for-of-exits.js	faithful
 ts	5.0	es5-iter	for-of	same	ts-3.9/es5-iter/for-of.js	faithful
 ts	5.0	es5-iter	generators	same	ts-4.9/es5-iter/generators.js	faithful
@@ -1339,6 +1390,7 @@ ts	5.0	es5-tslib	class-private	same	ts-4.9/es5-tslib/class-private.js	faithful
 ts	5.0	es5-tslib	class-static-block	same	ts-4.9/es5-tslib/class-static-block.js	faithful
 ts	5.0	es5-tslib	destructuring	same	ts-4.9/es5-tslib/destructuring.js	faithful
 ts	5.0	es5-tslib	exponent	same	ts-3.9/es5-tslib/exponent.js	differs
+ts	5.0	es5-tslib	for-of-closures	same	ts-3.9/es5-tslib/for-of-closures.js	faithful
 ts	5.0	es5-tslib	for-of-exits	same	ts-4.9/es5-tslib/for-of-exits.js	faithful
 ts	5.0	es5-tslib	for-of	same	ts-3.9/es5-tslib/for-of.js	faithful
 ts	5.0	es5-tslib	generators	same	ts-4.9/es5-tslib/generators.js	faithful
@@ -1365,6 +1417,7 @@ ts	5.0	es2015	class-private	same	ts-4.9/es2015/class-private.js	faithful
 ts	5.0	es2015	class-static-block	same	ts-4.9/es2015/class-static-block.js	faithful
 ts	5.0	es2015	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	5.0	es2015	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	5.0	es2015	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	5.0	es2015	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	5.0	es2015	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	5.0	es2015	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1391,6 +1444,7 @@ ts	5.0	es2015-define	class-private	same	ts-4.9/es2015/class-private.js	faithful
 ts	5.0	es2015-define	class-static-block	same	ts-4.9/es2015-define/class-static-block.js	faithful
 ts	5.0	es2015-define	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	5.0	es2015-define	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	5.0	es2015-define	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	5.0	es2015-define	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	5.0	es2015-define	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	5.0	es2015-define	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1417,6 +1471,7 @@ ts	5.0	es2017	class-private	same	ts-4.9/es2015/class-private.js	faithful
 ts	5.0	es2017	class-static-block	same	ts-4.9/es2015/class-static-block.js	faithful
 ts	5.0	es2017	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	5.0	es2017	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	5.0	es2017	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	5.0	es2017	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	5.0	es2017	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	5.0	es2017	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1443,6 +1498,7 @@ ts	5.0	es2019	class-private	same	ts-4.9/es2015/class-private.js	faithful
 ts	5.0	es2019	class-static-block	same	ts-4.9/es2015/class-static-block.js	faithful
 ts	5.0	es2019	destructuring	same	ts-3.9/es2019/destructuring.js	faithful
 ts	5.0	es2019	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	5.0	es2019	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	5.0	es2019	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	5.0	es2019	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	5.0	es2019	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1469,6 +1525,7 @@ ts	5.9	es3	class-private	written	ts-5.9/es3/class-private.js	faithful
 ts	5.9	es3	class-static-block	written	ts-5.9/es3/class-static-block.js	faithful
 ts	5.9	es3	destructuring	written	ts-5.9/es3/destructuring.js	differs
 ts	5.9	es3	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	5.9	es3	for-of-closures	same	ts-3.9/es3/for-of-closures.js	differs
 ts	5.9	es3	for-of-exits	written	ts-5.9/es3/for-of-exits.js	differs
 ts	5.9	es3	for-of	same	ts-3.9/es5/for-of.js	differs
 ts	5.9	es3	generators	written	ts-5.9/es3/generators.js	differs
@@ -1495,6 +1552,7 @@ ts	5.9	es5	class-private	same	ts-5.9/es3/class-private.js	faithful
 ts	5.9	es5	class-static-block	same	ts-5.9/es3/class-static-block.js	faithful
 ts	5.9	es5	destructuring	same	ts-5.9/es3/destructuring.js	differs
 ts	5.9	es5	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	5.9	es5	for-of-closures	same	ts-3.9/es3/for-of-closures.js	differs
 ts	5.9	es5	for-of-exits	same	ts-5.9/es3/for-of-exits.js	differs
 ts	5.9	es5	for-of	same	ts-3.9/es5/for-of.js	differs
 ts	5.9	es5	generators	same	ts-5.9/es3/generators.js	differs
@@ -1521,6 +1579,7 @@ ts	5.9	es5-iter	class-private	same	ts-5.9/es3/class-private.js	faithful
 ts	5.9	es5-iter	class-static-block	same	ts-5.9/es3/class-static-block.js	faithful
 ts	5.9	es5-iter	destructuring	written	ts-5.9/es5-iter/destructuring.js	faithful
 ts	5.9	es5-iter	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	5.9	es5-iter	for-of-closures	same	ts-3.9/es5-iter/for-of-closures.js	faithful
 ts	5.9	es5-iter	for-of-exits	written	ts-5.9/es5-iter/for-of-exits.js	faithful
 ts	5.9	es5-iter	for-of	same	ts-3.9/es5-iter/for-of.js	faithful
 ts	5.9	es5-iter	generators	written	ts-5.9/es5-iter/generators.js	faithful
@@ -1547,6 +1606,7 @@ ts	5.9	es5-tslib	class-private	written	ts-5.9/es5-tslib/class-private.js	faithfu
 ts	5.9	es5-tslib	class-static-block	written	ts-5.9/es5-tslib/class-static-block.js	faithful
 ts	5.9	es5-tslib	destructuring	same	ts-4.9/es5-tslib/destructuring.js	faithful
 ts	5.9	es5-tslib	exponent	same	ts-3.9/es5-tslib/exponent.js	differs
+ts	5.9	es5-tslib	for-of-closures	same	ts-3.9/es5-tslib/for-of-closures.js	faithful
 ts	5.9	es5-tslib	for-of-exits	same	ts-4.9/es5-tslib/for-of-exits.js	faithful
 ts	5.9	es5-tslib	for-of	same	ts-3.9/es5-tslib/for-of.js	faithful
 ts	5.9	es5-tslib	generators	same	ts-4.9/es5-tslib/generators.js	faithful
@@ -1573,6 +1633,7 @@ ts	5.9	es2015	class-private	written	ts-5.9/es2015/class-private.js	faithful
 ts	5.9	es2015	class-static-block	written	ts-5.9/es2015/class-static-block.js	faithful
 ts	5.9	es2015	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	5.9	es2015	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	5.9	es2015	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	5.9	es2015	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	5.9	es2015	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	5.9	es2015	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1599,6 +1660,7 @@ ts	5.9	es2015-define	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	5.9	es2015-define	class-static-block	written	ts-5.9/es2015-define/class-static-block.js	faithful
 ts	5.9	es2015-define	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	5.9	es2015-define	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	5.9	es2015-define	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	5.9	es2015-define	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	5.9	es2015-define	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	5.9	es2015-define	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1625,6 +1687,7 @@ ts	5.9	es2017	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	5.9	es2017	class-static-block	same	ts-5.9/es2015/class-static-block.js	faithful
 ts	5.9	es2017	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	5.9	es2017	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	5.9	es2017	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	5.9	es2017	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	5.9	es2017	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	5.9	es2017	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1651,6 +1714,7 @@ ts	5.9	es2019	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	5.9	es2019	class-static-block	same	ts-5.9/es2015/class-static-block.js	faithful
 ts	5.9	es2019	destructuring	same	ts-3.9/es2019/destructuring.js	faithful
 ts	5.9	es2019	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	5.9	es2019	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	5.9	es2019	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	5.9	es2019	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	5.9	es2019	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1677,6 +1741,7 @@ ts	6.0	es5	class-private	same	ts-5.9/es3/class-private.js	faithful
 ts	6.0	es5	class-static-block	same	ts-5.9/es3/class-static-block.js	faithful
 ts	6.0	es5	destructuring	same	ts-5.9/es3/destructuring.js	differs
 ts	6.0	es5	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	6.0	es5	for-of-closures	same	ts-3.9/es3/for-of-closures.js	differs
 ts	6.0	es5	for-of-exits	same	ts-5.9/es3/for-of-exits.js	differs
 ts	6.0	es5	for-of	same	ts-3.9/es5/for-of.js	differs
 ts	6.0	es5	generators	same	ts-5.9/es3/generators.js	differs
@@ -1703,6 +1768,7 @@ ts	6.0	es5-iter	class-private	same	ts-5.9/es3/class-private.js	faithful
 ts	6.0	es5-iter	class-static-block	same	ts-5.9/es3/class-static-block.js	faithful
 ts	6.0	es5-iter	destructuring	same	ts-5.9/es5-iter/destructuring.js	faithful
 ts	6.0	es5-iter	exponent	same	ts-3.9/es3/exponent.js	differs
+ts	6.0	es5-iter	for-of-closures	same	ts-3.9/es5-iter/for-of-closures.js	faithful
 ts	6.0	es5-iter	for-of-exits	same	ts-5.9/es5-iter/for-of-exits.js	faithful
 ts	6.0	es5-iter	for-of	same	ts-3.9/es5-iter/for-of.js	faithful
 ts	6.0	es5-iter	generators	same	ts-5.9/es5-iter/generators.js	faithful
@@ -1729,6 +1795,7 @@ ts	6.0	es5-tslib	class-private	same	ts-5.9/es5-tslib/class-private.js	faithful
 ts	6.0	es5-tslib	class-static-block	same	ts-5.9/es5-tslib/class-static-block.js	faithful
 ts	6.0	es5-tslib	destructuring	same	ts-4.9/es5-tslib/destructuring.js	faithful
 ts	6.0	es5-tslib	exponent	same	ts-3.9/es5-tslib/exponent.js	differs
+ts	6.0	es5-tslib	for-of-closures	same	ts-3.9/es5-tslib/for-of-closures.js	faithful
 ts	6.0	es5-tslib	for-of-exits	same	ts-4.9/es5-tslib/for-of-exits.js	faithful
 ts	6.0	es5-tslib	for-of	same	ts-3.9/es5-tslib/for-of.js	faithful
 ts	6.0	es5-tslib	generators	same	ts-4.9/es5-tslib/generators.js	faithful
@@ -1755,6 +1822,7 @@ ts	6.0	es2015	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	6.0	es2015	class-static-block	same	ts-5.9/es2015/class-static-block.js	faithful
 ts	6.0	es2015	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	6.0	es2015	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	6.0	es2015	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	6.0	es2015	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	6.0	es2015	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	6.0	es2015	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1781,6 +1849,7 @@ ts	6.0	es2015-define	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	6.0	es2015-define	class-static-block	same	ts-5.9/es2015-define/class-static-block.js	faithful
 ts	6.0	es2015-define	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	6.0	es2015-define	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	6.0	es2015-define	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	6.0	es2015-define	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	6.0	es2015-define	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	6.0	es2015-define	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1807,6 +1876,7 @@ ts	6.0	es2017	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	6.0	es2017	class-static-block	same	ts-5.9/es2015/class-static-block.js	faithful
 ts	6.0	es2017	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	6.0	es2017	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	6.0	es2017	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	6.0	es2017	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	6.0	es2017	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	6.0	es2017	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1833,6 +1903,7 @@ ts	6.0	es2019	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	6.0	es2019	class-static-block	same	ts-5.9/es2015/class-static-block.js	faithful
 ts	6.0	es2019	destructuring	same	ts-3.9/es2019/destructuring.js	faithful
 ts	6.0	es2019	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	6.0	es2019	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	6.0	es2019	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	6.0	es2019	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	6.0	es2019	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1859,6 +1930,7 @@ ts	7.0	es2015	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	7.0	es2015	class-static-block	same	ts-5.9/es2015/class-static-block.js	faithful
 ts	7.0	es2015	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	7.0	es2015	exponent	same	ts-3.9/es2015/exponent.js	differs
+ts	7.0	es2015	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	7.0	es2015	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	7.0	es2015	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	7.0	es2015	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1885,6 +1957,7 @@ ts	7.0	es2017	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	7.0	es2017	class-static-block	same	ts-5.9/es2015/class-static-block.js	faithful
 ts	7.0	es2017	destructuring	same	ts-3.9/es2015/destructuring.js	faithful
 ts	7.0	es2017	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	7.0	es2017	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	7.0	es2017	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	7.0	es2017	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	7.0	es2017	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1911,6 +1984,7 @@ ts	7.0	es2019	class-private	same	ts-5.9/es2015/class-private.js	faithful
 ts	7.0	es2019	class-static-block	same	ts-5.9/es2015/class-static-block.js	faithful
 ts	7.0	es2019	destructuring	same	ts-3.9/es2019/destructuring.js	faithful
 ts	7.0	es2019	exponent	same	ts-3.9/es2017/exponent.js	faithful
+ts	7.0	es2019	for-of-closures	same	ts-3.9/es2015/for-of-closures.js	faithful
 ts	7.0	es2019	for-of-exits	same	ts-3.9/es2015/for-of-exits.js	faithful
 ts	7.0	es2019	for-of	same	ts-3.9/es2015/for-of.js	faithful
 ts	7.0	es2019	generators	same	ts-3.9/es2015/generators.js	faithful
@@ -1937,6 +2011,7 @@ swc	1.2	es5	class-private	refused:	-	-
 swc	1.2	es5	class-static-block	written	swc-1.2/es5/class-static-block.js	faithful
 swc	1.2	es5	destructuring	written	swc-1.2/es5/destructuring.js	faithful
 swc	1.2	es5	exponent	written	swc-1.2/es5/exponent.js	differs
+swc	1.2	es5	for-of-closures	written	swc-1.2/es5/for-of-closures.js	faithful
 swc	1.2	es5	for-of-exits	written	swc-1.2/es5/for-of-exits.js	faithful
 swc	1.2	es5	for-of	written	swc-1.2/es5/for-of.js	faithful
 swc	1.2	es5	generators	written	swc-1.2/es5/generators.js	faithful
@@ -1963,6 +2038,7 @@ swc	1.2	es5-loose	class-private	refused:	-	-
 swc	1.2	es5-loose	class-static-block	written	swc-1.2/es5-loose/class-static-block.js	faithful
 swc	1.2	es5-loose	destructuring	written	swc-1.2/es5-loose/destructuring.js	differs
 swc	1.2	es5-loose	exponent	same	swc-1.2/es5/exponent.js	differs
+swc	1.2	es5-loose	for-of-closures	written	swc-1.2/es5-loose/for-of-closures.js	differs
 swc	1.2	es5-loose	for-of-exits	written	swc-1.2/es5-loose/for-of-exits.js	differs
 swc	1.2	es5-loose	for-of	written	swc-1.2/es5-loose/for-of.js	differs
 swc	1.2	es5-loose	generators	written	swc-1.2/es5-loose/generators.js	differs
@@ -1989,6 +2065,7 @@ swc	1.2	es2015	class-private	refused:	-	-
 swc	1.2	es2015	class-static-block	written	swc-1.2/es2015/class-static-block.js	faithful
 swc	1.2	es2015	destructuring	written	swc-1.2/es2015/destructuring.js	faithful
 swc	1.2	es2015	exponent	written	swc-1.2/es2015/exponent.js	differs
+swc	1.2	es2015	for-of-closures	written	swc-1.2/es2015/for-of-closures.js	faithful
 swc	1.2	es2015	for-of-exits	written	swc-1.2/es2015/for-of-exits.js	faithful
 swc	1.2	es2015	for-of	written	swc-1.2/es2015/for-of.js	faithful
 swc	1.2	es2015	generators	written	swc-1.2/es2015/generators.js	faithful
@@ -2015,6 +2092,7 @@ swc	1.2	es2019	class-private	refused:	-	-
 swc	1.2	es2019	class-static-block	same	swc-1.2/es2015/class-static-block.js	faithful
 swc	1.2	es2019	destructuring	written	swc-1.2/es2019/destructuring.js	faithful
 swc	1.2	es2019	exponent	written	swc-1.2/es2019/exponent.js	faithful
+swc	1.2	es2019	for-of-closures	same	swc-1.2/es2015/for-of-closures.js	faithful
 swc	1.2	es2019	for-of-exits	same	swc-1.2/es2015/for-of-exits.js	faithful
 swc	1.2	es2019	for-of	same	swc-1.2/es2015/for-of.js	faithful
 swc	1.2	es2019	generators	same	swc-1.2/es2015/generators.js	faithful
@@ -2041,6 +2119,7 @@ swc	1.3	es5	class-private	written	swc-1.3/es5/class-private.js	faithful
 swc	1.3	es5	class-static-block	written	swc-1.3/es5/class-static-block.js	faithful
 swc	1.3	es5	destructuring	written	swc-1.3/es5/destructuring.js	faithful
 swc	1.3	es5	exponent	same	swc-1.2/es5/exponent.js	differs
+swc	1.3	es5	for-of-closures	written	swc-1.3/es5/for-of-closures.js	faithful
 swc	1.3	es5	for-of-exits	written	swc-1.3/es5/for-of-exits.js	faithful
 swc	1.3	es5	for-of	written	swc-1.3/es5/for-of.js	faithful
 swc	1.3	es5	generators	written	swc-1.3/es5/generators.js	faithful
@@ -2067,6 +2146,7 @@ swc	1.3	es5-loose	class-private	written	swc-1.3/es5-loose/class-private.js	diffe
 swc	1.3	es5-loose	class-static-block	written	swc-1.3/es5-loose/class-static-block.js	faithful
 swc	1.3	es5-loose	destructuring	written	swc-1.3/es5-loose/destructuring.js	differs
 swc	1.3	es5-loose	exponent	same	swc-1.2/es5/exponent.js	differs
+swc	1.3	es5-loose	for-of-closures	written	swc-1.3/es5-loose/for-of-closures.js	faithful
 swc	1.3	es5-loose	for-of-exits	written	swc-1.3/es5-loose/for-of-exits.js	differs
 swc	1.3	es5-loose	for-of	written	swc-1.3/es5-loose/for-of.js	differs
 swc	1.3	es5-loose	generators	written	swc-1.3/es5-loose/generators.js	differs
@@ -2093,6 +2173,7 @@ swc	1.3	es2015	class-private	written	swc-1.3/es2015/class-private.js	faithful
 swc	1.3	es2015	class-static-block	written	swc-1.3/es2015/class-static-block.js	faithful
 swc	1.3	es2015	destructuring	written	swc-1.3/es2015/destructuring.js	faithful
 swc	1.3	es2015	exponent	same	swc-1.2/es2015/exponent.js	differs
+swc	1.3	es2015	for-of-closures	same	swc-1.2/es2015/for-of-closures.js	faithful
 swc	1.3	es2015	for-of-exits	written	swc-1.3/es2015/for-of-exits.js	faithful
 swc	1.3	es2015	for-of	written	swc-1.3/es2015/for-of.js	faithful
 swc	1.3	es2015	generators	same	swc-1.2/es2015/generators.js	faithful
@@ -2119,6 +2200,7 @@ swc	1.3	es2019	class-private	same	swc-1.3/es2015/class-private.js	faithful
 swc	1.3	es2019	class-static-block	same	swc-1.3/es2015/class-static-block.js	faithful
 swc	1.3	es2019	destructuring	written	swc-1.3/es2019/destructuring.js	faithful
 swc	1.3	es2019	exponent	same	swc-1.2/es2019/exponent.js	faithful
+swc	1.3	es2019	for-of-closures	same	swc-1.2/es2015/for-of-closures.js	faithful
 swc	1.3	es2019	for-of-exits	same	swc-1.3/es2015/for-of-exits.js	faithful
 swc	1.3	es2019	for-of	same	swc-1.3/es2015/for-of.js	faithful
 swc	1.3	es2019	generators	same	swc-1.2/es2015/generators.js	faithful
@@ -2145,6 +2227,7 @@ swc	1.7	es5	class-private	same	swc-1.3/es5/class-private.js	faithful
 swc	1.7	es5	class-static-block	same	swc-1.3/es5/class-static-block.js	faithful
 swc	1.7	es5	destructuring	same	swc-1.3/es5/destructuring.js	faithful
 swc	1.7	es5	exponent	same	swc-1.2/es5/exponent.js	differs
+swc	1.7	es5	for-of-closures	same	swc-1.3/es5/for-of-closures.js	faithful
 swc	1.7	es5	for-of-exits	same	swc-1.3/es5/for-of-exits.js	faithful
 swc	1.7	es5	for-of	written	swc-1.7/es5/for-of.js	faithful
 swc	1.7	es5	generators	same	swc-1.3/es5/generators.js	faithful
@@ -2171,6 +2254,7 @@ swc	1.7	es5-loose	class-private	same	swc-1.3/es5-loose/class-private.js	differs
 swc	1.7	es5-loose	class-static-block	same	swc-1.3/es5-loose/class-static-block.js	faithful
 swc	1.7	es5-loose	destructuring	same	swc-1.3/es5-loose/destructuring.js	differs
 swc	1.7	es5-loose	exponent	same	swc-1.2/es5/exponent.js	differs
+swc	1.7	es5-loose	for-of-closures	same	swc-1.3/es5-loose/for-of-closures.js	faithful
 swc	1.7	es5-loose	for-of-exits	same	swc-1.3/es5-loose/for-of-exits.js	differs
 swc	1.7	es5-loose	for-of	written	swc-1.7/es5-loose/for-of.js	differs
 swc	1.7	es5-loose	generators	same	swc-1.3/es5-loose/generators.js	differs
@@ -2197,6 +2281,7 @@ swc	1.7	es2015	class-private	same	swc-1.3/es2015/class-private.js	faithful
 swc	1.7	es2015	class-static-block	same	swc-1.3/es2015/class-static-block.js	faithful
 swc	1.7	es2015	destructuring	same	swc-1.3/es2015/destructuring.js	faithful
 swc	1.7	es2015	exponent	same	swc-1.2/es2015/exponent.js	differs
+swc	1.7	es2015	for-of-closures	same	swc-1.2/es2015/for-of-closures.js	faithful
 swc	1.7	es2015	for-of-exits	same	swc-1.3/es2015/for-of-exits.js	faithful
 swc	1.7	es2015	for-of	same	swc-1.3/es2015/for-of.js	faithful
 swc	1.7	es2015	generators	same	swc-1.2/es2015/generators.js	faithful
@@ -2223,6 +2308,7 @@ swc	1.7	es2019	class-private	same	swc-1.3/es2015/class-private.js	faithful
 swc	1.7	es2019	class-static-block	same	swc-1.3/es2015/class-static-block.js	faithful
 swc	1.7	es2019	destructuring	same	swc-1.3/es2019/destructuring.js	faithful
 swc	1.7	es2019	exponent	same	swc-1.2/es2019/exponent.js	faithful
+swc	1.7	es2019	for-of-closures	same	swc-1.2/es2015/for-of-closures.js	faithful
 swc	1.7	es2019	for-of-exits	same	swc-1.3/es2015/for-of-exits.js	faithful
 swc	1.7	es2019	for-of	same	swc-1.3/es2015/for-of.js	faithful
 swc	1.7	es2019	generators	same	swc-1.2/es2015/generators.js	faithful
@@ -2249,6 +2335,7 @@ swc	1.16	es5	class-private	written	swc-1.16/es5/class-private.js	faithful
 swc	1.16	es5	class-static-block	written	swc-1.16/es5/class-static-block.js	faithful
 swc	1.16	es5	destructuring	written	swc-1.16/es5/destructuring.js	faithful
 swc	1.16	es5	exponent	written	swc-1.16/es5/exponent.js	faithful
+swc	1.16	es5	for-of-closures	written	swc-1.16/es5/for-of-closures.js	faithful
 swc	1.16	es5	for-of-exits	written	swc-1.16/es5/for-of-exits.js	faithful
 swc	1.16	es5	for-of	written	swc-1.16/es5/for-of.js	faithful
 swc	1.16	es5	generators	written	swc-1.16/es5/generators.js	faithful
@@ -2275,6 +2362,7 @@ swc	1.16	es5-loose	class-private	same	swc-1.3/es5-loose/class-private.js	differs
 swc	1.16	es5-loose	class-static-block	same	swc-1.3/es5-loose/class-static-block.js	faithful
 swc	1.16	es5-loose	destructuring	written	swc-1.16/es5-loose/destructuring.js	differs
 swc	1.16	es5-loose	exponent	same	swc-1.16/es5/exponent.js	faithful
+swc	1.16	es5-loose	for-of-closures	written	swc-1.16/es5-loose/for-of-closures.js	faithful
 swc	1.16	es5-loose	for-of-exits	written	swc-1.16/es5-loose/for-of-exits.js	differs
 swc	1.16	es5-loose	for-of	written	swc-1.16/es5-loose/for-of.js	differs
 swc	1.16	es5-loose	generators	written	swc-1.16/es5-loose/generators.js	differs
@@ -2301,6 +2389,7 @@ swc	1.16	es2015	class-private	written	swc-1.16/es2015/class-private.js	faithful
 swc	1.16	es2015	class-static-block	written	swc-1.16/es2015/class-static-block.js	faithful
 swc	1.16	es2015	destructuring	written	swc-1.16/es2015/destructuring.js	faithful
 swc	1.16	es2015	exponent	written	swc-1.16/es2015/exponent.js	faithful
+swc	1.16	es2015	for-of-closures	same	swc-1.2/es2015/for-of-closures.js	faithful
 swc	1.16	es2015	for-of-exits	same	swc-1.3/es2015/for-of-exits.js	faithful
 swc	1.16	es2015	for-of	same	swc-1.3/es2015/for-of.js	faithful
 swc	1.16	es2015	generators	same	swc-1.2/es2015/generators.js	faithful
@@ -2327,6 +2416,7 @@ swc	1.16	es2019	class-private	same	swc-1.16/es2015/class-private.js	faithful
 swc	1.16	es2019	class-static-block	same	swc-1.16/es2015/class-static-block.js	faithful
 swc	1.16	es2019	destructuring	same	swc-1.3/es2019/destructuring.js	faithful
 swc	1.16	es2019	exponent	same	swc-1.2/es2019/exponent.js	faithful
+swc	1.16	es2019	for-of-closures	same	swc-1.2/es2015/for-of-closures.js	faithful
 swc	1.16	es2019	for-of-exits	same	swc-1.3/es2015/for-of-exits.js	faithful
 swc	1.16	es2019	for-of	same	swc-1.3/es2015/for-of.js	faithful
 swc	1.16	es2019	generators	same	swc-1.2/es2015/generators.js	faithful
@@ -2353,6 +2443,7 @@ esbuild	0.14	es2015	class-private	written	esbuild-0.14/es2015/class-private.js	f
 esbuild	0.14	es2015	class-static-block	written	esbuild-0.14/es2015/class-static-block.js	faithful
 esbuild	0.14	es2015	destructuring	written	esbuild-0.14/es2015/destructuring.js	faithful
 esbuild	0.14	es2015	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.14	es2015	for-of-closures	native	-	-
 esbuild	0.14	es2015	for-of-exits	native	-	-
 esbuild	0.14	es2015	for-of	native	-	-
 esbuild	0.14	es2015	generators	native	-	-
@@ -2379,6 +2470,7 @@ esbuild	0.14	es2017	class-private	same	esbuild-0.14/es2015/class-private.js	fait
 esbuild	0.14	es2017	class-static-block	same	esbuild-0.14/es2015/class-static-block.js	faithful
 esbuild	0.14	es2017	destructuring	same	esbuild-0.14/es2015/destructuring.js	faithful
 esbuild	0.14	es2017	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.14	es2017	for-of-closures	native	-	-
 esbuild	0.14	es2017	for-of-exits	native	-	-
 esbuild	0.14	es2017	for-of	native	-	-
 esbuild	0.14	es2017	generators	native	-	-
@@ -2405,6 +2497,7 @@ esbuild	0.14	es2019	class-private	same	esbuild-0.14/es2015/class-private.js	fait
 esbuild	0.14	es2019	class-static-block	same	esbuild-0.14/es2015/class-static-block.js	faithful
 esbuild	0.14	es2019	destructuring	native	-	-
 esbuild	0.14	es2019	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.14	es2019	for-of-closures	native	-	-
 esbuild	0.14	es2019	for-of-exits	native	-	-
 esbuild	0.14	es2019	for-of	native	-	-
 esbuild	0.14	es2019	generators	native	-	-
@@ -2431,6 +2524,7 @@ esbuild	0.14	es2020	class-private	same	esbuild-0.14/es2015/class-private.js	fait
 esbuild	0.14	es2020	class-static-block	same	esbuild-0.14/es2015/class-static-block.js	faithful
 esbuild	0.14	es2020	destructuring	native	-	-
 esbuild	0.14	es2020	exponent	native	-	-
+esbuild	0.14	es2020	for-of-closures	native	-	-
 esbuild	0.14	es2020	for-of-exits	native	-	-
 esbuild	0.14	es2020	for-of	native	-	-
 esbuild	0.14	es2020	generators	native	-	-
@@ -2457,6 +2551,7 @@ esbuild	0.17	es2015	class-private	written	esbuild-0.17/es2015/class-private.js	f
 esbuild	0.17	es2015	class-static-block	same	esbuild-0.14/es2015/class-static-block.js	faithful
 esbuild	0.17	es2015	destructuring	same	esbuild-0.14/es2015/destructuring.js	faithful
 esbuild	0.17	es2015	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.17	es2015	for-of-closures	native	-	-
 esbuild	0.17	es2015	for-of-exits	native	-	-
 esbuild	0.17	es2015	for-of	native	-	-
 esbuild	0.17	es2015	generators	native	-	-
@@ -2483,6 +2578,7 @@ esbuild	0.17	es2017	class-private	same	esbuild-0.17/es2015/class-private.js	fait
 esbuild	0.17	es2017	class-static-block	same	esbuild-0.14/es2015/class-static-block.js	faithful
 esbuild	0.17	es2017	destructuring	same	esbuild-0.14/es2015/destructuring.js	faithful
 esbuild	0.17	es2017	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.17	es2017	for-of-closures	native	-	-
 esbuild	0.17	es2017	for-of-exits	native	-	-
 esbuild	0.17	es2017	for-of	native	-	-
 esbuild	0.17	es2017	generators	native	-	-
@@ -2509,6 +2605,7 @@ esbuild	0.17	es2019	class-private	same	esbuild-0.17/es2015/class-private.js	fait
 esbuild	0.17	es2019	class-static-block	same	esbuild-0.14/es2015/class-static-block.js	faithful
 esbuild	0.17	es2019	destructuring	native	-	-
 esbuild	0.17	es2019	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.17	es2019	for-of-closures	native	-	-
 esbuild	0.17	es2019	for-of-exits	native	-	-
 esbuild	0.17	es2019	for-of	native	-	-
 esbuild	0.17	es2019	generators	native	-	-
@@ -2535,6 +2632,7 @@ esbuild	0.17	es2020	class-private	same	esbuild-0.17/es2015/class-private.js	fait
 esbuild	0.17	es2020	class-static-block	same	esbuild-0.14/es2015/class-static-block.js	faithful
 esbuild	0.17	es2020	destructuring	native	-	-
 esbuild	0.17	es2020	exponent	native	-	-
+esbuild	0.17	es2020	for-of-closures	native	-	-
 esbuild	0.17	es2020	for-of-exits	native	-	-
 esbuild	0.17	es2020	for-of	native	-	-
 esbuild	0.17	es2020	generators	native	-	-
@@ -2561,6 +2659,7 @@ esbuild	0.19	es2015	class-private	written	esbuild-0.19/es2015/class-private.js	f
 esbuild	0.19	es2015	class-static-block	written	esbuild-0.19/es2015/class-static-block.js	faithful
 esbuild	0.19	es2015	destructuring	same	esbuild-0.14/es2015/destructuring.js	faithful
 esbuild	0.19	es2015	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.19	es2015	for-of-closures	native	-	-
 esbuild	0.19	es2015	for-of-exits	native	-	-
 esbuild	0.19	es2015	for-of	native	-	-
 esbuild	0.19	es2015	generators	written	esbuild-0.19/es2015/generators.js	faithful
@@ -2587,6 +2686,7 @@ esbuild	0.19	es2017	class-private	same	esbuild-0.19/es2015/class-private.js	fait
 esbuild	0.19	es2017	class-static-block	same	esbuild-0.19/es2015/class-static-block.js	faithful
 esbuild	0.19	es2017	destructuring	same	esbuild-0.14/es2015/destructuring.js	faithful
 esbuild	0.19	es2017	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.19	es2017	for-of-closures	native	-	-
 esbuild	0.19	es2017	for-of-exits	native	-	-
 esbuild	0.19	es2017	for-of	native	-	-
 esbuild	0.19	es2017	generators	same	esbuild-0.19/es2015/generators.js	faithful
@@ -2613,6 +2713,7 @@ esbuild	0.19	es2019	class-private	same	esbuild-0.19/es2015/class-private.js	fait
 esbuild	0.19	es2019	class-static-block	same	esbuild-0.19/es2015/class-static-block.js	faithful
 esbuild	0.19	es2019	destructuring	native	-	-
 esbuild	0.19	es2019	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.19	es2019	for-of-closures	native	-	-
 esbuild	0.19	es2019	for-of-exits	native	-	-
 esbuild	0.19	es2019	for-of	native	-	-
 esbuild	0.19	es2019	generators	native	-	-
@@ -2639,6 +2740,7 @@ esbuild	0.19	es2020	class-private	same	esbuild-0.19/es2015/class-private.js	fait
 esbuild	0.19	es2020	class-static-block	same	esbuild-0.19/es2015/class-static-block.js	faithful
 esbuild	0.19	es2020	destructuring	native	-	-
 esbuild	0.19	es2020	exponent	native	-	-
+esbuild	0.19	es2020	for-of-closures	native	-	-
 esbuild	0.19	es2020	for-of-exits	native	-	-
 esbuild	0.19	es2020	for-of	native	-	-
 esbuild	0.19	es2020	generators	native	-	-
@@ -2665,6 +2767,7 @@ esbuild	0.21	es2015	class-private	written	esbuild-0.21/es2015/class-private.js	f
 esbuild	0.21	es2015	class-static-block	written	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.21	es2015	destructuring	written	esbuild-0.21/es2015/destructuring.js	faithful
 esbuild	0.21	es2015	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.21	es2015	for-of-closures	native	-	-
 esbuild	0.21	es2015	for-of-exits	native	-	-
 esbuild	0.21	es2015	for-of	native	-	-
 esbuild	0.21	es2015	generators	written	esbuild-0.21/es2015/generators.js	faithful
@@ -2691,6 +2794,7 @@ esbuild	0.21	es2017	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.21	es2017	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.21	es2017	destructuring	same	esbuild-0.21/es2015/destructuring.js	faithful
 esbuild	0.21	es2017	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.21	es2017	for-of-closures	native	-	-
 esbuild	0.21	es2017	for-of-exits	native	-	-
 esbuild	0.21	es2017	for-of	native	-	-
 esbuild	0.21	es2017	generators	same	esbuild-0.21/es2015/generators.js	faithful
@@ -2717,6 +2821,7 @@ esbuild	0.21	es2019	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.21	es2019	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.21	es2019	destructuring	native	-	-
 esbuild	0.21	es2019	exponent	refused:Transform failed with 3 errors:	-	-
+esbuild	0.21	es2019	for-of-closures	native	-	-
 esbuild	0.21	es2019	for-of-exits	native	-	-
 esbuild	0.21	es2019	for-of	native	-	-
 esbuild	0.21	es2019	generators	native	-	-
@@ -2743,6 +2848,7 @@ esbuild	0.21	es2020	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.21	es2020	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.21	es2020	destructuring	native	-	-
 esbuild	0.21	es2020	exponent	native	-	-
+esbuild	0.21	es2020	for-of-closures	native	-	-
 esbuild	0.21	es2020	for-of-exits	native	-	-
 esbuild	0.21	es2020	for-of	native	-	-
 esbuild	0.21	es2020	generators	native	-	-
@@ -2769,6 +2875,7 @@ esbuild	0.25	es2015	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.25	es2015	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.25	es2015	destructuring	written	esbuild-0.25/es2015/destructuring.js	faithful
 esbuild	0.25	es2015	exponent	written	esbuild-0.25/es2015/exponent.js	differs
+esbuild	0.25	es2015	for-of-closures	native	-	-
 esbuild	0.25	es2015	for-of-exits	native	-	-
 esbuild	0.25	es2015	for-of	native	-	-
 esbuild	0.25	es2015	generators	same	esbuild-0.21/es2015/generators.js	faithful
@@ -2795,6 +2902,7 @@ esbuild	0.25	es2017	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.25	es2017	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.25	es2017	destructuring	same	esbuild-0.25/es2015/destructuring.js	faithful
 esbuild	0.25	es2017	exponent	written	esbuild-0.25/es2017/exponent.js	faithful
+esbuild	0.25	es2017	for-of-closures	native	-	-
 esbuild	0.25	es2017	for-of-exits	native	-	-
 esbuild	0.25	es2017	for-of	native	-	-
 esbuild	0.25	es2017	generators	same	esbuild-0.21/es2015/generators.js	faithful
@@ -2821,6 +2929,7 @@ esbuild	0.25	es2019	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.25	es2019	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.25	es2019	destructuring	native	-	-
 esbuild	0.25	es2019	exponent	same	esbuild-0.25/es2017/exponent.js	faithful
+esbuild	0.25	es2019	for-of-closures	native	-	-
 esbuild	0.25	es2019	for-of-exits	native	-	-
 esbuild	0.25	es2019	for-of	native	-	-
 esbuild	0.25	es2019	generators	native	-	-
@@ -2847,6 +2956,7 @@ esbuild	0.25	es2020	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.25	es2020	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.25	es2020	destructuring	native	-	-
 esbuild	0.25	es2020	exponent	native	-	-
+esbuild	0.25	es2020	for-of-closures	native	-	-
 esbuild	0.25	es2020	for-of-exits	native	-	-
 esbuild	0.25	es2020	for-of	native	-	-
 esbuild	0.25	es2020	generators	native	-	-
@@ -2873,6 +2983,7 @@ esbuild	0.28	es2015	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.28	es2015	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.28	es2015	destructuring	same	esbuild-0.25/es2015/destructuring.js	faithful
 esbuild	0.28	es2015	exponent	same	esbuild-0.25/es2015/exponent.js	differs
+esbuild	0.28	es2015	for-of-closures	native	-	-
 esbuild	0.28	es2015	for-of-exits	native	-	-
 esbuild	0.28	es2015	for-of	native	-	-
 esbuild	0.28	es2015	generators	written	esbuild-0.28/es2015/generators.js	faithful
@@ -2899,6 +3010,7 @@ esbuild	0.28	es2017	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.28	es2017	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.28	es2017	destructuring	same	esbuild-0.25/es2015/destructuring.js	faithful
 esbuild	0.28	es2017	exponent	same	esbuild-0.25/es2017/exponent.js	faithful
+esbuild	0.28	es2017	for-of-closures	native	-	-
 esbuild	0.28	es2017	for-of-exits	native	-	-
 esbuild	0.28	es2017	for-of	native	-	-
 esbuild	0.28	es2017	generators	same	esbuild-0.28/es2015/generators.js	faithful
@@ -2925,6 +3037,7 @@ esbuild	0.28	es2019	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.28	es2019	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.28	es2019	destructuring	native	-	-
 esbuild	0.28	es2019	exponent	same	esbuild-0.25/es2017/exponent.js	faithful
+esbuild	0.28	es2019	for-of-closures	native	-	-
 esbuild	0.28	es2019	for-of-exits	native	-	-
 esbuild	0.28	es2019	for-of	native	-	-
 esbuild	0.28	es2019	generators	native	-	-
@@ -2951,6 +3064,7 @@ esbuild	0.28	es2020	class-private	same	esbuild-0.21/es2015/class-private.js	fait
 esbuild	0.28	es2020	class-static-block	same	esbuild-0.21/es2015/class-static-block.js	faithful
 esbuild	0.28	es2020	destructuring	native	-	-
 esbuild	0.28	es2020	exponent	native	-	-
+esbuild	0.28	es2020	for-of-closures	native	-	-
 esbuild	0.28	es2020	for-of-exits	native	-	-
 esbuild	0.28	es2020	for-of	native	-	-
 esbuild	0.28	es2020	generators	native	-	-
@@ -2977,6 +3091,7 @@ esbuild	0.28	es2015-min	class-private	written	esbuild-0.28/es2015-min/class-priv
 esbuild	0.28	es2015-min	class-static-block	written	esbuild-0.28/es2015-min/class-static-block.js	faithful
 esbuild	0.28	es2015-min	destructuring	written	esbuild-0.28/es2015-min/destructuring.js	faithful
 esbuild	0.28	es2015-min	exponent	written	esbuild-0.28/es2015-min/exponent.js	differs
+esbuild	0.28	es2015-min	for-of-closures	written	esbuild-0.28/es2015-min/for-of-closures.js	faithful
 esbuild	0.28	es2015-min	for-of-exits	written	esbuild-0.28/es2015-min/for-of-exits.js	faithful
 esbuild	0.28	es2015-min	for-of	written	esbuild-0.28/es2015-min/for-of.js	faithful
 esbuild	0.28	es2015-min	generators	written	esbuild-0.28/es2015-min/generators.js	faithful
@@ -2989,7 +3104,7 @@ esbuild	0.28	es2015-min	optional-chaining	written	esbuild-0.28/es2015-min/option
 esbuild	0.28	es2015-min	params	written	esbuild-0.28/es2015-min/params.js	faithful
 esbuild	0.28	es2015-min	spread	written	esbuild-0.28/es2015-min/spread.js	faithful
 esbuild	0.28	es2015-min	template-literals	written	esbuild-0.28/es2015-min/template-literals.js	faithful
-closure	20230802	simple-ecmascript5	arrow-this	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript5	arrow-this	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20230802	simple-ecmascript5	async-await	written	closure-20230802/simple-ecmascript5/async-await.js	faithful
 closure	20230802	simple-ecmascript5	async-generators	written	closure-20230802/simple-ecmascript5/async-generators.js	differs
 closure	20230802	simple-ecmascript5	block-scoping	written	closure-20230802/simple-ecmascript5/block-scoping.js	faithful
@@ -2997,21 +3112,22 @@ closure	20230802	simple-ecmascript5	class-basic	written	closure-20230802/simple-
 closure	20230802	simple-ecmascript5	class-builtins	written	closure-20230802/simple-ecmascript5/class-builtins.js	faithful
 closure	20230802	simple-ecmascript5	class-early-return	written	closure-20230802/simple-ecmascript5/class-early-return.js	faithful
 closure	20230802	simple-ecmascript5	class-extends	written	closure-20230802/simple-ecmascript5/class-extends.js	faithful
-closure	20230802	simple-ecmascript5	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript5	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20230802	simple-ecmascript5	class-identity	written	closure-20230802/simple-ecmascript5/class-identity.js	differs
-closure	20230802	simple-ecmascript5	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
-closure	20230802	simple-ecmascript5	class-static-block	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript5	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
+closure	20230802	simple-ecmascript5	class-static-block	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20230802	simple-ecmascript5	destructuring	written	closure-20230802/simple-ecmascript5/destructuring.js	faithful
-closure	20230802	simple-ecmascript5	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript5	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
+closure	20230802	simple-ecmascript5	for-of-closures	written	closure-20230802/simple-ecmascript5/for-of-closures.js	faithful
 closure	20230802	simple-ecmascript5	for-of-exits	written	closure-20230802/simple-ecmascript5/for-of-exits.js	differs
 closure	20230802	simple-ecmascript5	for-of	written	closure-20230802/simple-ecmascript5/for-of.js	differs
 closure	20230802	simple-ecmascript5	generators	written	closure-20230802/simple-ecmascript5/generators.js	faithful
 closure	20230802	simple-ecmascript5	logical-assignment	written	closure-20230802/simple-ecmascript5/logical-assignment.js	faithful
 closure	20230802	simple-ecmascript5	nullish	written	closure-20230802/simple-ecmascript5/nullish.js	faithful
-closure	20230802	simple-ecmascript5	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
-closure	20230802	simple-ecmascript5	object-literals	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript5	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
+closure	20230802	simple-ecmascript5	object-literals	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20230802	simple-ecmascript5	object-spread-rest	written	closure-20230802/simple-ecmascript5/object-spread-rest.js	faithful
-closure	20230802	simple-ecmascript5	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript5	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20230802	simple-ecmascript5	params	written	closure-20230802/simple-ecmascript5/params.js	differs
 closure	20230802	simple-ecmascript5	spread	written	closure-20230802/simple-ecmascript5/spread.js	differs
 closure	20230802	simple-ecmascript5	template-literals	written	closure-20230802/simple-ecmascript5/template-literals.js	differs
@@ -3023,25 +3139,26 @@ closure	20230802	simple-ecmascript_2015	class-basic	written	closure-20230802/sim
 closure	20230802	simple-ecmascript_2015	class-builtins	written	closure-20230802/simple-ecmascript_2015/class-builtins.js	faithful
 closure	20230802	simple-ecmascript_2015	class-early-return	written	closure-20230802/simple-ecmascript_2015/class-early-return.js	faithful
 closure	20230802	simple-ecmascript_2015	class-extends	written	closure-20230802/simple-ecmascript_2015/class-extends.js	faithful
-closure	20230802	simple-ecmascript_2015	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript_2015	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20230802	simple-ecmascript_2015	class-identity	written	closure-20230802/simple-ecmascript_2015/class-identity.js	faithful
-closure	20230802	simple-ecmascript_2015	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
-closure	20230802	simple-ecmascript_2015	class-static-block	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript_2015	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
+closure	20230802	simple-ecmascript_2015	class-static-block	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20230802	simple-ecmascript_2015	destructuring	written	closure-20230802/simple-ecmascript_2015/destructuring.js	faithful
-closure	20230802	simple-ecmascript_2015	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript_2015	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
+closure	20230802	simple-ecmascript_2015	for-of-closures	written	closure-20230802/simple-ecmascript_2015/for-of-closures.js	faithful
 closure	20230802	simple-ecmascript_2015	for-of-exits	written	closure-20230802/simple-ecmascript_2015/for-of-exits.js	faithful
 closure	20230802	simple-ecmascript_2015	for-of	written	closure-20230802/simple-ecmascript_2015/for-of.js	faithful
 closure	20230802	simple-ecmascript_2015	generators	written	closure-20230802/simple-ecmascript_2015/generators.js	faithful
 closure	20230802	simple-ecmascript_2015	logical-assignment	written	closure-20230802/simple-ecmascript_2015/logical-assignment.js	faithful
 closure	20230802	simple-ecmascript_2015	nullish	written	closure-20230802/simple-ecmascript_2015/nullish.js	faithful
-closure	20230802	simple-ecmascript_2015	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript_2015	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20230802	simple-ecmascript_2015	object-literals	written	closure-20230802/simple-ecmascript_2015/object-literals.js	faithful
 closure	20230802	simple-ecmascript_2015	object-spread-rest	written	closure-20230802/simple-ecmascript_2015/object-spread-rest.js	faithful
-closure	20230802	simple-ecmascript_2015	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20230802	simple-ecmascript_2015	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20230802	simple-ecmascript_2015	params	written	closure-20230802/simple-ecmascript_2015/params.js	differs
 closure	20230802	simple-ecmascript_2015	spread	written	closure-20230802/simple-ecmascript_2015/spread.js	faithful
 closure	20230802	simple-ecmascript_2015	template-literals	written	closure-20230802/simple-ecmascript_2015/template-literals.js	differs
-closure	20261109	simple-ecmascript5	arrow-this	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript5	arrow-this	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20261109	simple-ecmascript5	async-await	written	closure-20261109/simple-ecmascript5/async-await.js	faithful
 closure	20261109	simple-ecmascript5	async-generators	written	closure-20261109/simple-ecmascript5/async-generators.js	faithful
 closure	20261109	simple-ecmascript5	block-scoping	written	closure-20261109/simple-ecmascript5/block-scoping.js	faithful
@@ -3049,21 +3166,22 @@ closure	20261109	simple-ecmascript5	class-basic	written	closure-20261109/simple-
 closure	20261109	simple-ecmascript5	class-builtins	written	closure-20261109/simple-ecmascript5/class-builtins.js	faithful
 closure	20261109	simple-ecmascript5	class-early-return	written	closure-20261109/simple-ecmascript5/class-early-return.js	faithful
 closure	20261109	simple-ecmascript5	class-extends	written	closure-20261109/simple-ecmascript5/class-extends.js	faithful
-closure	20261109	simple-ecmascript5	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript5	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20261109	simple-ecmascript5	class-identity	written	closure-20261109/simple-ecmascript5/class-identity.js	differs
-closure	20261109	simple-ecmascript5	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript5	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20261109	simple-ecmascript5	class-static-block	written	closure-20261109/simple-ecmascript5/class-static-block.js	faithful
 closure	20261109	simple-ecmascript5	destructuring	written	closure-20261109/simple-ecmascript5/destructuring.js	faithful
-closure	20261109	simple-ecmascript5	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript5	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
+closure	20261109	simple-ecmascript5	for-of-closures	written	closure-20261109/simple-ecmascript5/for-of-closures.js	faithful
 closure	20261109	simple-ecmascript5	for-of-exits	written	closure-20261109/simple-ecmascript5/for-of-exits.js	faithful
 closure	20261109	simple-ecmascript5	for-of	written	closure-20261109/simple-ecmascript5/for-of.js	faithful
 closure	20261109	simple-ecmascript5	generators	written	closure-20261109/simple-ecmascript5/generators.js	faithful
 closure	20261109	simple-ecmascript5	logical-assignment	written	closure-20261109/simple-ecmascript5/logical-assignment.js	faithful
 closure	20261109	simple-ecmascript5	nullish	written	closure-20261109/simple-ecmascript5/nullish.js	faithful
-closure	20261109	simple-ecmascript5	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
-closure	20261109	simple-ecmascript5	object-literals	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript5	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
+closure	20261109	simple-ecmascript5	object-literals	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20261109	simple-ecmascript5	object-spread-rest	written	closure-20261109/simple-ecmascript5/object-spread-rest.js	faithful
-closure	20261109	simple-ecmascript5	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript5	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20261109	simple-ecmascript5	params	written	closure-20261109/simple-ecmascript5/params.js	differs
 closure	20261109	simple-ecmascript5	spread	written	closure-20261109/simple-ecmascript5/spread.js	differs
 closure	20261109	simple-ecmascript5	template-literals	written	closure-20261109/simple-ecmascript5/template-literals.js	differs
@@ -3075,21 +3193,22 @@ closure	20261109	simple-ecmascript_2015	class-basic	same	closure-20230802/simple
 closure	20261109	simple-ecmascript_2015	class-builtins	written	closure-20261109/simple-ecmascript_2015/class-builtins.js	faithful
 closure	20261109	simple-ecmascript_2015	class-early-return	written	closure-20261109/simple-ecmascript_2015/class-early-return.js	faithful
 closure	20261109	simple-ecmascript_2015	class-extends	written	closure-20261109/simple-ecmascript_2015/class-extends.js	differs
-closure	20261109	simple-ecmascript_2015	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript_2015	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20261109	simple-ecmascript_2015	class-identity	written	closure-20261109/simple-ecmascript_2015/class-identity.js	faithful
-closure	20261109	simple-ecmascript_2015	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript_2015	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20261109	simple-ecmascript_2015	class-static-block	written	closure-20261109/simple-ecmascript_2015/class-static-block.js	faithful
 closure	20261109	simple-ecmascript_2015	destructuring	written	closure-20261109/simple-ecmascript_2015/destructuring.js	faithful
-closure	20261109	simple-ecmascript_2015	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript_2015	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
+closure	20261109	simple-ecmascript_2015	for-of-closures	written	closure-20261109/simple-ecmascript_2015/for-of-closures.js	faithful
 closure	20261109	simple-ecmascript_2015	for-of-exits	written	closure-20261109/simple-ecmascript_2015/for-of-exits.js	faithful
 closure	20261109	simple-ecmascript_2015	for-of	written	closure-20261109/simple-ecmascript_2015/for-of.js	faithful
 closure	20261109	simple-ecmascript_2015	generators	written	closure-20261109/simple-ecmascript_2015/generators.js	faithful
 closure	20261109	simple-ecmascript_2015	logical-assignment	written	closure-20261109/simple-ecmascript_2015/logical-assignment.js	faithful
 closure	20261109	simple-ecmascript_2015	nullish	written	closure-20261109/simple-ecmascript_2015/nullish.js	faithful
-closure	20261109	simple-ecmascript_2015	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript_2015	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20261109	simple-ecmascript_2015	object-literals	same	closure-20230802/simple-ecmascript_2015/object-literals.js	faithful
 closure	20261109	simple-ecmascript_2015	object-spread-rest	written	closure-20261109/simple-ecmascript_2015/object-spread-rest.js	faithful
-closure	20261109	simple-ecmascript_2015	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-forof/t	-	-
+closure	20261109	simple-ecmascript_2015	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut2-inline/	-	-
 closure	20261109	simple-ecmascript_2015	params	written	closure-20261109/simple-ecmascript_2015/params.js	differs
 closure	20261109	simple-ecmascript_2015	spread	written	closure-20261109/simple-ecmascript_2015/spread.js	faithful
 closure	20261109	simple-ecmascript_2015	template-literals	written	closure-20261109/simple-ecmascript_2015/template-literals.js	faithful
@@ -3107,6 +3226,7 @@ babel	7.29	ie11-terser	class-private	written	babel-7.29/ie11-terser/class-privat
 babel	7.29	ie11-terser	class-static-block	written	babel-7.29/ie11-terser/class-static-block.js	faithful
 babel	7.29	ie11-terser	destructuring	written	babel-7.29/ie11-terser/destructuring.js	faithful
 babel	7.29	ie11-terser	exponent	written	babel-7.29/ie11-terser/exponent.js	differs
+babel	7.29	ie11-terser	for-of-closures	written	babel-7.29/ie11-terser/for-of-closures.js	faithful
 babel	7.29	ie11-terser	for-of-exits	written	babel-7.29/ie11-terser/for-of-exits.js	faithful
 babel	7.29	ie11-terser	for-of	written	babel-7.29/ie11-terser/for-of.js	faithful
 babel	7.29	ie11-terser	generators	written	babel-7.29/ie11-terser/generators.js	faithful
@@ -3133,6 +3253,7 @@ babel	7.29	ie11-runtime-terser	class-private	written	babel-7.29/ie11-runtime-ter
 babel	7.29	ie11-runtime-terser	class-static-block	written	babel-7.29/ie11-runtime-terser/class-static-block.js	faithful
 babel	7.29	ie11-runtime-terser	destructuring	written	babel-7.29/ie11-runtime-terser/destructuring.js	faithful
 babel	7.29	ie11-runtime-terser	exponent	written	babel-7.29/ie11-runtime-terser/exponent.js	differs
+babel	7.29	ie11-runtime-terser	for-of-closures	written	babel-7.29/ie11-runtime-terser/for-of-closures.js	faithful
 babel	7.29	ie11-runtime-terser	for-of-exits	written	babel-7.29/ie11-runtime-terser/for-of-exits.js	faithful
 babel	7.29	ie11-runtime-terser	for-of	written	babel-7.29/ie11-runtime-terser/for-of.js	faithful
 babel	7.29	ie11-runtime-terser	generators	written	babel-7.29/ie11-runtime-terser/generators.js	faithful
@@ -3159,6 +3280,7 @@ babel	7.29	chrome45-terser	class-private	same	babel-7.29/ie11-terser/class-priva
 babel	7.29	chrome45-terser	class-static-block	same	babel-7.29/ie11-terser/class-static-block.js	faithful
 babel	7.29	chrome45-terser	destructuring	same	babel-7.29/ie11-terser/destructuring.js	faithful
 babel	7.29	chrome45-terser	exponent	same	babel-7.29/ie11-terser/exponent.js	differs
+babel	7.29	chrome45-terser	for-of-closures	same	babel-7.29/ie11-terser/for-of-closures.js	faithful
 babel	7.29	chrome45-terser	for-of-exits	written	babel-7.29/chrome45-terser/for-of-exits.js	faithful
 babel	7.29	chrome45-terser	for-of	written	babel-7.29/chrome45-terser/for-of.js	faithful
 babel	7.29	chrome45-terser	generators	written	babel-7.29/chrome45-terser/generators.js	faithful
@@ -3185,6 +3307,7 @@ babel	7.28	chrome45-terser	class-private	written	babel-7.28/chrome45-terser/clas
 babel	7.28	chrome45-terser	class-static-block	written	babel-7.28/chrome45-terser/class-static-block.js	faithful
 babel	7.28	chrome45-terser	destructuring	written	babel-7.28/chrome45-terser/destructuring.js	faithful
 babel	7.28	chrome45-terser	exponent	same	babel-7.29/ie11-terser/exponent.js	differs
+babel	7.28	chrome45-terser	for-of-closures	same	babel-7.29/ie11-terser/for-of-closures.js	faithful
 babel	7.28	chrome45-terser	for-of-exits	written	babel-7.28/chrome45-terser/for-of-exits.js	faithful
 babel	7.28	chrome45-terser	for-of	same	babel-7.29/chrome45-terser/for-of.js	faithful
 babel	7.28	chrome45-terser	generators	written	babel-7.28/chrome45-terser/generators.js	faithful
@@ -3211,6 +3334,7 @@ babel	7.28	ie11-terser	class-private	same	babel-7.28/chrome45-terser/class-priva
 babel	7.28	ie11-terser	class-static-block	same	babel-7.28/chrome45-terser/class-static-block.js	faithful
 babel	7.28	ie11-terser	destructuring	same	babel-7.28/chrome45-terser/destructuring.js	faithful
 babel	7.28	ie11-terser	exponent	same	babel-7.29/ie11-terser/exponent.js	differs
+babel	7.28	ie11-terser	for-of-closures	same	babel-7.29/ie11-terser/for-of-closures.js	faithful
 babel	7.28	ie11-terser	for-of-exits	written	babel-7.28/ie11-terser/for-of-exits.js	faithful
 babel	7.28	ie11-terser	for-of	written	babel-7.28/ie11-terser/for-of.js	faithful
 babel	7.28	ie11-terser	generators	written	babel-7.28/ie11-terser/generators.js	faithful
@@ -3237,6 +3361,7 @@ babel	7.28	safari9	class-private	written	babel-7.28/safari9/class-private.js	fai
 babel	7.28	safari9	class-static-block	written	babel-7.28/safari9/class-static-block.js	faithful
 babel	7.28	safari9	destructuring	same	babel-7.28/ie11/destructuring.js	faithful
 babel	7.28	safari9	exponent	same	babel-7.28/ie11/exponent.js	differs
+babel	7.28	safari9	for-of-closures	same	babel-7.24/ie11/for-of-closures.js	faithful
 babel	7.28	safari9	for-of-exits	same	babel-7.28/chrome45/for-of-exits.js	faithful
 babel	7.28	safari9	for-of	same	babel-7.28/chrome45/for-of.js	faithful
 babel	7.28	safari9	generators	written	babel-7.28/safari9/generators.js	faithful
@@ -3263,6 +3388,7 @@ babel	7.29	safari9	class-private	written	babel-7.29/safari9/class-private.js	fai
 babel	7.29	safari9	class-static-block	written	babel-7.29/safari9/class-static-block.js	faithful
 babel	7.29	safari9	destructuring	same	babel-7.29/ie11/destructuring.js	faithful
 babel	7.29	safari9	exponent	same	babel-7.28/ie11/exponent.js	differs
+babel	7.29	safari9	for-of-closures	same	babel-7.24/ie11/for-of-closures.js	faithful
 babel	7.29	safari9	for-of-exits	same	babel-7.29/chrome45/for-of-exits.js	faithful
 babel	7.29	safari9	for-of	same	babel-7.28/chrome45/for-of.js	faithful
 babel	7.29	safari9	generators	written	babel-7.29/safari9/generators.js	faithful
@@ -3289,6 +3415,7 @@ babel	7.28	safari9-iife-terser	class-private	written	babel-7.28/safari9-iife-ter
 babel	7.28	safari9-iife-terser	class-static-block	written	babel-7.28/safari9-iife-terser/class-static-block.js	faithful
 babel	7.28	safari9-iife-terser	destructuring	written	babel-7.28/safari9-iife-terser/destructuring.js	faithful
 babel	7.28	safari9-iife-terser	exponent	same	babel-7.29/ie11-runtime-terser/exponent.js	differs
+babel	7.28	safari9-iife-terser	for-of-closures	written	babel-7.28/safari9-iife-terser/for-of-closures.js	faithful
 babel	7.28	safari9-iife-terser	for-of-exits	written	babel-7.28/safari9-iife-terser/for-of-exits.js	faithful
 babel	7.28	safari9-iife-terser	for-of	written	babel-7.28/safari9-iife-terser/for-of.js	faithful
 babel	7.28	safari9-iife-terser	generators	written	babel-7.28/safari9-iife-terser/generators.js	faithful
@@ -3315,6 +3442,7 @@ babel	7.29	safari9-iife-terser	class-private	written	babel-7.29/safari9-iife-ter
 babel	7.29	safari9-iife-terser	class-static-block	written	babel-7.29/safari9-iife-terser/class-static-block.js	faithful
 babel	7.29	safari9-iife-terser	destructuring	written	babel-7.29/safari9-iife-terser/destructuring.js	faithful
 babel	7.29	safari9-iife-terser	exponent	same	babel-7.29/ie11-runtime-terser/exponent.js	differs
+babel	7.29	safari9-iife-terser	for-of-closures	same	babel-7.28/safari9-iife-terser/for-of-closures.js	faithful
 babel	7.29	safari9-iife-terser	for-of-exits	written	babel-7.29/safari9-iife-terser/for-of-exits.js	faithful
 babel	7.29	safari9-iife-terser	for-of	same	babel-7.28/safari9-iife-terser/for-of.js	faithful
 babel	7.29	safari9-iife-terser	generators	written	babel-7.29/safari9-iife-terser/generators.js	faithful
@@ -3341,6 +3469,7 @@ babel	7.28	ie11-runtime-iife-terser	class-private	written	babel-7.28/ie11-runtim
 babel	7.28	ie11-runtime-iife-terser	class-static-block	written	babel-7.28/ie11-runtime-iife-terser/class-static-block.js	faithful
 babel	7.28	ie11-runtime-iife-terser	destructuring	written	babel-7.28/ie11-runtime-iife-terser/destructuring.js	faithful
 babel	7.28	ie11-runtime-iife-terser	exponent	same	babel-7.29/ie11-runtime-terser/exponent.js	differs
+babel	7.28	ie11-runtime-iife-terser	for-of-closures	same	babel-7.29/ie11-runtime-terser/for-of-closures.js	faithful
 babel	7.28	ie11-runtime-iife-terser	for-of-exits	written	babel-7.28/ie11-runtime-iife-terser/for-of-exits.js	faithful
 babel	7.28	ie11-runtime-iife-terser	for-of	written	babel-7.28/ie11-runtime-iife-terser/for-of.js	faithful
 babel	7.28	ie11-runtime-iife-terser	generators	written	babel-7.28/ie11-runtime-iife-terser/generators.js	faithful
@@ -3367,6 +3496,7 @@ babel	7.29	ie11-runtime-iife-terser	class-private	same	babel-7.29/ie11-runtime-t
 babel	7.29	ie11-runtime-iife-terser	class-static-block	same	babel-7.29/ie11-runtime-terser/class-static-block.js	faithful
 babel	7.29	ie11-runtime-iife-terser	destructuring	written	babel-7.29/ie11-runtime-iife-terser/destructuring.js	faithful
 babel	7.29	ie11-runtime-iife-terser	exponent	same	babel-7.29/ie11-runtime-terser/exponent.js	differs
+babel	7.29	ie11-runtime-iife-terser	for-of-closures	same	babel-7.29/ie11-runtime-terser/for-of-closures.js	faithful
 babel	7.29	ie11-runtime-iife-terser	for-of-exits	written	babel-7.29/ie11-runtime-iife-terser/for-of-exits.js	faithful
 babel	7.29	ie11-runtime-iife-terser	for-of	same	babel-7.29/ie11-runtime-terser/for-of.js	faithful
 babel	7.29	ie11-runtime-iife-terser	generators	same	babel-7.29/ie11-runtime-terser/generators.js	faithful
@@ -3393,6 +3523,7 @@ babel	7.28	ie11-rollup-terser	class-private	written	babel-7.28/ie11-rollup-terse
 babel	7.28	ie11-rollup-terser	class-static-block	written	babel-7.28/ie11-rollup-terser/class-static-block.js	faithful
 babel	7.28	ie11-rollup-terser	destructuring	same	babel-7.28/safari9-iife-terser/destructuring.js	faithful
 babel	7.28	ie11-rollup-terser	exponent	same	babel-7.29/ie11-runtime-terser/exponent.js	differs
+babel	7.28	ie11-rollup-terser	for-of-closures	written	babel-7.28/ie11-rollup-terser/for-of-closures.js	faithful
 babel	7.28	ie11-rollup-terser	for-of-exits	written	babel-7.28/ie11-rollup-terser/for-of-exits.js	faithful
 babel	7.28	ie11-rollup-terser	for-of	written	babel-7.28/ie11-rollup-terser/for-of.js	faithful
 babel	7.28	ie11-rollup-terser	generators	written	babel-7.28/ie11-rollup-terser/generators.js	faithful
@@ -3419,6 +3550,7 @@ babel	7.29	ie11-rollup-terser	class-private	written	babel-7.29/ie11-rollup-terse
 babel	7.29	ie11-rollup-terser	class-static-block	written	babel-7.29/ie11-rollup-terser/class-static-block.js	faithful
 babel	7.29	ie11-rollup-terser	destructuring	same	babel-7.29/safari9-iife-terser/destructuring.js	faithful
 babel	7.29	ie11-rollup-terser	exponent	same	babel-7.29/ie11-runtime-terser/exponent.js	differs
+babel	7.29	ie11-rollup-terser	for-of-closures	same	babel-7.28/ie11-rollup-terser/for-of-closures.js	faithful
 babel	7.29	ie11-rollup-terser	for-of-exits	written	babel-7.29/ie11-rollup-terser/for-of-exits.js	faithful
 babel	7.29	ie11-rollup-terser	for-of	written	babel-7.29/ie11-rollup-terser/for-of.js	faithful
 babel	7.29	ie11-rollup-terser	generators	written	babel-7.29/ie11-rollup-terser/generators.js	faithful
@@ -3445,6 +3577,7 @@ babel	7.29	ie11-loose-terser	class-private	written	babel-7.29/ie11-loose-terser/
 babel	7.29	ie11-loose-terser	class-static-block	written	babel-7.29/ie11-loose-terser/class-static-block.js	faithful
 babel	7.29	ie11-loose-terser	destructuring	written	babel-7.29/ie11-loose-terser/destructuring.js	differs
 babel	7.29	ie11-loose-terser	exponent	same	babel-7.29/ie11-terser/exponent.js	differs
+babel	7.29	ie11-loose-terser	for-of-closures	written	babel-7.29/ie11-loose-terser/for-of-closures.js	faithful
 babel	7.29	ie11-loose-terser	for-of-exits	written	babel-7.29/ie11-loose-terser/for-of-exits.js	differs
 babel	7.29	ie11-loose-terser	for-of	written	babel-7.29/ie11-loose-terser/for-of.js	differs
 babel	7.29	ie11-loose-terser	generators	written	babel-7.29/ie11-loose-terser/generators.js	differs
@@ -3471,6 +3604,7 @@ ts	5.9	es5-terser	class-private	written	ts-5.9/es5-terser/class-private.js	faith
 ts	5.9	es5-terser	class-static-block	written	ts-5.9/es5-terser/class-static-block.js	faithful
 ts	5.9	es5-terser	destructuring	written	ts-5.9/es5-terser/destructuring.js	differs
 ts	5.9	es5-terser	exponent	written	ts-5.9/es5-terser/exponent.js	differs
+ts	5.9	es5-terser	for-of-closures	written	ts-5.9/es5-terser/for-of-closures.js	differs
 ts	5.9	es5-terser	for-of-exits	written	ts-5.9/es5-terser/for-of-exits.js	differs
 ts	5.9	es5-terser	for-of	written	ts-5.9/es5-terser/for-of.js	differs
 ts	5.9	es5-terser	generators	written	ts-5.9/es5-terser/generators.js	differs
@@ -3497,6 +3631,7 @@ ts	5.9	es5-tslib-terser	class-private	written	ts-5.9/es5-tslib-terser/class-priv
 ts	5.9	es5-tslib-terser	class-static-block	written	ts-5.9/es5-tslib-terser/class-static-block.js	faithful
 ts	5.9	es5-tslib-terser	destructuring	written	ts-5.9/es5-tslib-terser/destructuring.js	faithful
 ts	5.9	es5-tslib-terser	exponent	written	ts-5.9/es5-tslib-terser/exponent.js	differs
+ts	5.9	es5-tslib-terser	for-of-closures	written	ts-5.9/es5-tslib-terser/for-of-closures.js	faithful
 ts	5.9	es5-tslib-terser	for-of-exits	written	ts-5.9/es5-tslib-terser/for-of-exits.js	faithful
 ts	5.9	es5-tslib-terser	for-of	written	ts-5.9/es5-tslib-terser/for-of.js	faithful
 ts	5.9	es5-tslib-terser	generators	written	ts-5.9/es5-tslib-terser/generators.js	faithful
@@ -3523,6 +3658,7 @@ swc	1.16	es5-terser	class-private	written	swc-1.16/es5-terser/class-private.js	f
 swc	1.16	es5-terser	class-static-block	written	swc-1.16/es5-terser/class-static-block.js	faithful
 swc	1.16	es5-terser	destructuring	written	swc-1.16/es5-terser/destructuring.js	faithful
 swc	1.16	es5-terser	exponent	written	swc-1.16/es5-terser/exponent.js	faithful
+swc	1.16	es5-terser	for-of-closures	written	swc-1.16/es5-terser/for-of-closures.js	faithful
 swc	1.16	es5-terser	for-of-exits	written	swc-1.16/es5-terser/for-of-exits.js	faithful
 swc	1.16	es5-terser	for-of	written	swc-1.16/es5-terser/for-of.js	faithful
 swc	1.16	es5-terser	generators	written	swc-1.16/es5-terser/generators.js	faithful

@@ -140,3 +140,13 @@ fn inline_protocol_loops_become_for_of() {
     let code = run("matrix/swc-1.16/es5/for-of-exits.js", false);
     assert!(code.contains("_iteratorNormalCompletion"), "{code}");
 }
+
+#[test]
+fn a_loop_closure_is_inlined_with_per_iteration_bindings() {
+    let code = run("matrix/babel-7.24/ie11/for-of-closures.js", true);
+    assert!(!code.contains("_loop"), "{code}");
+    assert_has(
+        &code,
+        &[" of new Set([1, 2, 3])) {", "let note = \"n\" + v;"],
+    );
+}

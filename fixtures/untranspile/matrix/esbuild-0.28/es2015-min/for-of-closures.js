@@ -1,0 +1,1 @@
+const fns=[];for(const o of new Set([1,2,3])){const n=o*2;let e="n"+o;fns.push(()=>n+e),e+="!"}console.log(fns.map(o=>o()).join(","));const seen=[];for(const[o,n]of new Map([["a",1],["b",2]]))seen.push(()=>o+n);console.log(seen.map(o=>o()).join(","));const later=[];for(const o of"abc"){let n=0;later.push(()=>o+ ++n)}console.log(later.map(o=>o()+o()).join(","));

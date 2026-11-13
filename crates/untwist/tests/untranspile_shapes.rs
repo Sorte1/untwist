@@ -177,6 +177,11 @@ const SHAPE_FIXTURES: &[(&str, &str, &str)] = &[
     ),
     (
         "untranspile-helpers",
+        "for-of/loop-closure/unsafe",
+        "fixtures/untranspile/matrix/babel-7.24/ie11/for-of-closures.js",
+    ),
+    (
+        "untranspile-helpers",
         "generator/regenerator/unsafe",
         "fixtures/untranspile/matrix/babel-7.29/ie11/generators.js",
     ),

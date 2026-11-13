@@ -26,6 +26,7 @@ mod destructure;
 mod fingerprint;
 mod for_of;
 mod for_of_inline;
+mod for_of_loop;
 mod for_of_tsc;
 mod generator;
 mod generator_regen;
@@ -537,6 +538,13 @@ impl UntranspileHelpers {
                 self.waiting = true;
             }
             return;
+        }
+        if for_of_loop::may_hold_site(node) {
+            let inlined = for_of_loop::rewrite_statements(node, cx);
+            for _ in 0..inlined {
+                shapes::fire(PASS, for_of_loop::SHAPE);
+            }
+            cx.changed_by(inlined);
         }
         let fired = for_of::rewrite_statements(node, &self.table, cx);
         for _ in 0..fired {

@@ -185,6 +185,16 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   was identified). The protocol assumption covers its differences (`next` read per step,
   `return()`'s result ignored, `return()` called after a throwing `value` read, Babel 6
   skipping a falsy non-callable `return`).
+- **Babel's per-iteration closure around a helper loop is inlined first (`--unsafe` only).**
+  When a body captures its loop bindings, Babel moves it into `var _loop = function () { … }`
+  inside the `try` and the loop body becomes `_loop();`. When `_loop` is called only there,
+  takes no parameters, and its body has no `return`, no function or class declaration and no
+  `var` except at its top level (and, for a `function` rather than an arrow, no `this`,
+  `arguments` or `new.target`), the body moves into the loop, its top-level `var`s become `let`
+  (each iteration's block gets its own binding, as each call did). This needs every reference
+  to such a `var` to come after its declaration, since `let` has a dead zone. The loop then
+  converts as above. Babel's control-flow codes (`return 0`/`return 1`, `_ret`) keep the
+  closure.
 - **Babel's loose helper stays.** `_createForOfIteratorHelperLoose` never calls `return()`, so
   a loop left early does not close its iterator; a native loop does.
 
