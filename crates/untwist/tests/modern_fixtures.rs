@@ -69,7 +69,12 @@ fn modern_output_prints_what_the_babel_build_prints_in_node() {
         let name = file.file_name().unwrap().to_string_lossy().to_string();
         let before = printed(&node, dir.path(), &source);
         let lanes: &[(&str, bool)] = match name.ends_with(".rollup-cjs.js") {
-            true => &[("es2022", false), ("es2024", true), ("node 22", true)],
+            true => &[
+                ("es2017", false),
+                ("es2022", false),
+                ("es2024", true),
+                ("node 22", true),
+            ],
             false => &[("es2022", false)],
         };
         for &(baseline, unsafe_transforms) in lanes {
@@ -173,6 +178,56 @@ fn proposals_and_features_newer_than_the_baseline_are_kept() {
     );
     assert!(
         kept("modules/es.set.union.v2.js") || kept("modules/es.set.union"),
+        "{}",
+        ran.notes.join("\n")
+    );
+}
+
+#[test]
+fn every_helper_rewrite_runs_on_the_rollup_builds() {
+    let file = fixtures()
+        .into_iter()
+        .find(|file| {
+            file.to_string_lossy()
+                .ends_with("babel-usage.core-js-3.39.0.rollup-cjs.js")
+        })
+        .unwrap();
+    let source = std::fs::read_to_string(file).unwrap();
+    let ran = untwist(&source, &options(Some("node 22"), true));
+    for kind in [
+        "wellKnownSymbol(name) -> Symbol.name",
+        "getBuiltIn(...) -> the global",
+        "hasOwn(it, key) -> Object.hasOwn(it, key)",
+        "uncurryThis(method)(that, ...) -> Proto.method.call(that, ...)",
+        "isCallable(it) -> typeof it == \"function\"",
+    ] {
+        assert!(
+            ran.notes
+                .iter()
+                .any(|note| note.starts_with("modern: rewrote") && note.ends_with(kind)),
+            "{kind}\n{}",
+            ran.notes.join("\n")
+        );
+    }
+    assert!(ran.code.contains("Symbol.iterator"));
+    assert!(ran.code.contains("Object.hasOwn("));
+}
+
+#[test]
+fn is_callable_stays_a_helper_call_when_a_browser_is_in_the_baseline() {
+    let file = fixtures()
+        .into_iter()
+        .find(|file| {
+            file.to_string_lossy()
+                .ends_with("babel-usage.core-js-3.39.0.rollup-cjs.js")
+        })
+        .unwrap();
+    let source = std::fs::read_to_string(file).unwrap();
+    let ran = untwist(&source, &options(Some("node 22, chrome 125"), true));
+    assert!(
+        !ran.notes
+            .iter()
+            .any(|note| note.contains("isCallable(it) ->")),
         "{}",
         ran.notes.join("\n")
     );

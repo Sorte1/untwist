@@ -11,9 +11,13 @@ use super::edit::{apply, reachable};
 use super::lookalike::lookalikes;
 use super::plan::{module_hits, plan, units, Inputs, Installer, Plan, LABEL};
 use super::report;
+use super::rewrite::{self, Site};
+use super::rewrite_apply;
 use crate::library::match_program;
 use crate::text_reads::{text_read_bindings_with, SelfReads, TextReads};
 use oxc_semantic::Scoping;
+use oxc_span::Span;
+use rustc_hash::FxHashMap;
 use untwist_core::semantic::build_scoping;
 
 pub const NAME: &str = "modern";
@@ -66,6 +70,9 @@ struct Rounds {
     removed: Vec<Installer>,
     removed_helpers: usize,
     applied: usize,
+    rewrites: FxHashMap<&'static str, usize>,
+    kept: Option<Vec<Installer>>,
+    rewritten: bool,
     last: Option<Plan>,
 }
 
@@ -75,7 +82,7 @@ impl ModernPass {
         program: &Program<'_>,
         scoping: &Scoping,
         cx: &mut Cx<'_, '_>,
-    ) -> Option<Plan> {
+    ) -> Option<(Plan, FxHashMap<Span, Site>)> {
         let found = match_program(program, scoping);
         if !found.hits.iter().any(|hit| hit.label == LABEL) {
             cx.note("no core-js module was recognised", None);
@@ -106,7 +113,17 @@ impl ModernPass {
             baseline: &self.baseline,
             pinned: &pinned,
         };
-        Some(plan(&units, &inputs))
+        let plan = plan(&units, &inputs);
+        let rewrites = rewrite::Inputs {
+            facts: &facts,
+            scoping,
+            helpers: &plan.helpers,
+            compat: compat::builtin(),
+            baseline: &self.baseline,
+            pinned: &pinned,
+        };
+        let sites = rewrite::plan(program, &rewrites);
+        Some((plan, sites))
     }
 
     fn round<'a>(
@@ -115,37 +132,59 @@ impl ModernPass {
         scoping: &Scoping,
         rounds: &mut Rounds,
         cx: &mut Cx<'a, '_>,
+        rewrite: bool,
     ) -> bool {
         let alloc = cx.allocator();
-        let Some(mut plan) = self.planned(program, scoping, cx) else {
+        let Some((mut plan, sites)) = self.planned(program, scoping, cx) else {
             return false;
         };
-        if plan.regions.is_empty() {
-            rounds.last = Some(plan);
-            return false;
-        }
-        if reachable(program, &plan.regions) != plan.regions.len() {
+        let removing = !plan.regions.is_empty();
+        if removing && reachable(program, &plan.regions) != plan.regions.len() {
             refuse(cx, EDIT_MISMATCH);
             rounds.last = Some(plan);
             return false;
         }
-        rounds.applied += apply(program, &plan.regions, alloc);
-        rounds.removed_helpers += plan.removed_helpers;
-        let (removed, kept) = plan
-            .installers
-            .drain(..)
-            .partition(|installer| installer.kept.is_none());
-        rounds.removed.extend::<Vec<Installer>>(removed);
-        plan.installers = kept;
+        if removing {
+            rounds.applied += apply(program, &plan.regions, alloc);
+            rounds.removed_helpers += plan.removed_helpers;
+            let (removed, kept) = plan
+                .installers
+                .drain(..)
+                .partition(|installer| installer.kept.is_none());
+            rounds.removed.extend::<Vec<Installer>>(removed);
+            plan.installers = kept;
+        }
+        let rewritten = match rewrite {
+            true => rewrite_apply::apply(program, &sites, alloc, &*cx),
+            false => Vec::new(),
+        };
+        rounds.applied += rewritten.len();
+        for kind in &rewritten {
+            *rounds.rewrites.entry(kind).or_default() += 1;
+        }
+        if rounds.kept.is_none() || !rounds.rewritten {
+            rounds.kept = Some(plan.installers.clone());
+        }
+        rounds.rewritten |= rewrite;
         rounds.last = Some(plan);
-        true
+        removing || !rewritten.is_empty()
     }
 
     fn notes(&self, rounds: &Rounds, cx: &mut Cx<'_, '_>) {
         let Some(last) = &rounds.last else {
             return;
         };
-        let kept: Vec<&Installer> = last.installers.iter().collect();
+        let kept: Vec<&Installer> = rounds
+            .kept
+            .iter()
+            .flatten()
+            .filter(|installer| {
+                !rounds
+                    .removed
+                    .iter()
+                    .any(|removed| removed.span == installer.span)
+            })
+            .collect();
         let removed: Vec<&Installer> = rounds.removed.iter().collect();
         cx.note(
             report::summary(&removed, &kept, rounds.removed_helpers, last.kept_helpers),
@@ -153,6 +192,14 @@ impl ModernPass {
         );
         for installer in removed.iter().chain(&kept) {
             cx.note(report::installer_note(installer), None);
+        }
+        let mut rewrites: Vec<(&&str, &usize)> = rounds.rewrites.iter().collect();
+        rewrites.sort();
+        for (kind, count) in rewrites {
+            cx.note(
+                format!("rewrote {count} core-js helper calls: {kind}"),
+                None,
+            );
         }
     }
 }
@@ -172,10 +219,12 @@ impl<'a> Pass<'a> for ModernPass {
         }
         cx.note(report::assumption(&self.baseline), None);
         let mut rounds = Rounds::default();
-        for _ in 0..MAX_ROUNDS {
-            let sem = build_scoping(program);
-            if !self.round(program, &sem.scoping, &mut rounds, cx) {
-                break;
+        for phase in [false, true, false] {
+            for _ in 0..MAX_ROUNDS {
+                let sem = build_scoping(program);
+                if !self.round(program, &sem.scoping, &mut rounds, cx, phase) || phase {
+                    break;
+                }
             }
         }
         self.notes(&rounds, cx);

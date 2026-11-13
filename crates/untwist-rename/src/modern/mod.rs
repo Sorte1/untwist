@@ -7,6 +7,8 @@ pub mod pass;
 pub mod plan;
 pub mod regions;
 pub mod report;
+pub mod rewrite;
+pub mod rewrite_apply;
 pub mod trivial;
 
 pub use baseline::Baseline;

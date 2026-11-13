@@ -255,8 +255,19 @@ recognised core-js version, says no engine in the baseline needs it, which also 
 engines where core-js replaces a buggy native. Proposals (`esnext.*`), modules core-js still
 replaces in one of the engines, modules whose exports other code reads, and modules that call
 code not recognised as core-js are kept. Helper modules (`internals/*`) that nothing uses any
-more are removed after them. The report lists every removed and kept module with the reason,
-and says that the output assumes such an engine with its own built-ins; the output starts with
+more are removed after them.
+
+In the core-js code that stays, calls of exactly matched helpers become the native form where
+it behaves the same in every baseline engine: `wellKnownSymbol("iterator")` becomes
+`Symbol.iterator`, `getBuiltIn("Reflect", "ownKeys")` becomes `Reflect.ownKeys`, `hasOwn(it, key)`
+becomes `Object.hasOwn(it, key)`, an uncurried method `stringSlice(s, 1)` becomes
+`String.prototype.slice.call(s, 1)` (only when core-js does not replace that method in the
+baseline), and `isCallable(it)` becomes `typeof it == "function"` only when no browser is in the
+baseline (in browsers core-js also accepts `document.all`). `requireObjectCoercible` is left as
+it is, since no native form throws the same error.
+
+The report lists every removed and kept module with the reason and every rewritten call
+kind, and says that the output assumes such an engine with its own built-ins; the output starts with
 a comment saying the same.
 
 Today this covers Rollup bundles built with `@rollup/plugin-commonjs` and `strictRequires`

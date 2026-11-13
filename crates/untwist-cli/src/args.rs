@@ -107,7 +107,9 @@ pub struct Args {
         help = "opt-in: remove core-js polyfills of features native in BASELINE, an ES year \
                 (es2017 to es2024) and/or engines such as \"chrome 120, firefox 121, safari 17\"; \
                 only modules recognised exactly as core-js are touched, using core-js-compat data, \
-                and proposals or modules core-js still replaces in those engines are kept. The \
+                and proposals or modules core-js still replaces in those engines are kept; calls of \
+                matched helpers in the core-js code left become the native form (Symbol.iterator, \
+                Object.hasOwn, String.prototype.slice.call) where that behaves the same. The \
                 output then assumes such an engine with its own built-ins (the report says so); \
                 --unsafe does not turn this on"
     )]

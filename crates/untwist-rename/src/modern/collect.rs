@@ -18,7 +18,10 @@ pub struct RefSite {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeclKind {
     Function,
-    Var { pure: bool },
+    Var {
+        pure: bool,
+        call_of: Option<SymbolId>,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -221,6 +224,19 @@ impl Collector<'_> {
             .map(Callee::Symbol)
     }
 
+    fn bare_call(&self, expr: &Expression<'_>) -> Option<SymbolId> {
+        let Expression::CallExpression(call) = expr.without_parentheses() else {
+            return None;
+        };
+        if !call.arguments.is_empty() || call.optional {
+            return None;
+        }
+        match self.callee(call)? {
+            Callee::Symbol(symbol) => Some(symbol),
+            Callee::Function(_) => None,
+        }
+    }
+
     fn factory_call(&self, expr: &Expression<'_>) -> bool {
         let Expression::CallExpression(call) = expr.without_parentheses() else {
             return false;
@@ -279,7 +295,11 @@ impl Collector<'_> {
                     .init
                     .as_ref()
                     .is_none_or(|init| is_pure(init) || self.factory_call(init));
-                self.note_decl(symbol, declarator.span, DeclKind::Var { pure });
+                let call_of = declarator
+                    .init
+                    .as_ref()
+                    .and_then(|init| self.bare_call(init));
+                self.note_decl(symbol, declarator.span, DeclKind::Var { pure, call_of });
             }
         }
     }

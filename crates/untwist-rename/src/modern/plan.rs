@@ -42,6 +42,7 @@ pub struct Installer {
 #[derive(Default)]
 pub struct Plan {
     pub regions: Regions,
+    pub helpers: FxHashMap<SymbolId, (Vec<String>, (String, String))>,
     pub installers: Vec<Installer>,
     pub removed_helpers: usize,
     pub kept_helpers: usize,
@@ -396,6 +397,29 @@ pub fn plan(units: &[Unit], inputs: &Inputs<'_>) -> Plan {
             }
         }
     }
+    for (index, unit) in units.iter().enumerate() {
+        if let (Some(binding), true, Source::Matched) = (unit.binding, closed[index], unit.source) {
+            plan.helpers
+                .insert(binding, (unit.modules.clone(), unit.versions.clone()));
+        }
+    }
+    let closed_bindings: FxHashSet<SymbolId> = units
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| closed[*index])
+        .filter_map(|(_, unit)| unit.binding)
+        .collect();
+    for (symbol, decl) in &inputs.facts.decls {
+        if let DeclKind::Var {
+            call_of: Some(callee),
+            ..
+        } = decl.kind
+        {
+            if closed_bindings.contains(&callee) {
+                eligible.insert(*symbol);
+            }
+        }
+    }
     let mut seeds: Vec<Span> = Vec::new();
     for (index, unit) in units
         .iter()
@@ -415,9 +439,11 @@ pub fn plan(units: &[Unit], inputs: &Inputs<'_>) -> Plan {
         });
     }
     let mut dead = Dead::new(&graph, inputs, eligible);
+    dead.helpers = closed_bindings;
     for seed in seeds {
         dead.remove(seed);
     }
+    dead.seed_unused();
     dead.drain();
     plan.regions = dead.regions;
     for installer in &mut plan.installers {
@@ -443,6 +469,7 @@ fn helper_counts(units: &[Unit], regions: &Regions) -> (usize, usize) {
 }
 
 struct Dead<'g, 'i> {
+    helpers: FxHashSet<SymbolId>,
     inputs: &'g Inputs<'i>,
     eligible: FxHashSet<SymbolId>,
     counts: FxHashMap<SymbolId, usize>,
@@ -458,6 +485,7 @@ impl<'g, 'i> Dead<'g, 'i> {
             .map(|(symbol, refs)| (*symbol, refs.len()))
             .collect();
         Dead {
+            helpers: FxHashSet::default(),
             inputs,
             eligible,
             counts,
@@ -488,6 +516,19 @@ impl<'g, 'i> Dead<'g, 'i> {
         }
     }
 
+    fn seed_unused(&mut self) {
+        let unused: Vec<SymbolId> = self
+            .eligible
+            .iter()
+            .filter(|symbol| self.counts.get(symbol).is_none_or(|count| *count == 0))
+            .copied()
+            .collect();
+        for symbol in unused {
+            self.counts.insert(symbol, 1);
+            self.release(symbol);
+        }
+    }
+
     fn release(&mut self, symbol: SymbolId) {
         let Some(count) = self.counts.get_mut(&symbol) else {
             return;
@@ -502,7 +543,9 @@ impl<'g, 'i> Dead<'g, 'i> {
         let removable = !decl.global
             && match decl.kind {
                 DeclKind::Function => true,
-                DeclKind::Var { pure } => pure,
+                DeclKind::Var { pure, call_of } => {
+                    pure || call_of.is_some_and(|callee| self.helpers.contains(&callee))
+                }
             };
         if removable && !self.inputs.pinned.contains(&symbol) {
             self.queue.push(decl.region);
