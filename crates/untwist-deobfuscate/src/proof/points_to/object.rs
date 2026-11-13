@@ -6,6 +6,7 @@ pub(super) struct ObjectId(pub(super) u32);
 
 impl ObjectId {
     pub(super) const WORLD: ObjectId = ObjectId(0);
+    pub(super) const FUNCTIONS: ObjectId = ObjectId(1);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -37,6 +38,8 @@ pub(super) enum Builtin {
     PrimNumber,
     PrimBoolean,
     PrimSymbol,
+    PrimUndefined,
+    PrimNull,
     Machinery,
     Method(Method),
 }
@@ -73,6 +76,8 @@ pub(super) enum Method {
     DefineGetter,
     DefineSetter,
     LookupAccessor,
+    ProtoGetter,
+    ProtoSetter,
     FnCall,
     FnApply,
     FnBind,
@@ -96,6 +101,7 @@ pub(super) enum Method {
     ArrayJoin,
     ArrayIter,
     StringReplace,
+    StringPattern,
     CollectionSet,
     CollectionAdd,
     CollectionGet,
@@ -109,7 +115,12 @@ impl Builtin {
     pub(super) fn is_primitive(self) -> bool {
         matches!(
             self,
-            Builtin::PrimString | Builtin::PrimNumber | Builtin::PrimBoolean | Builtin::PrimSymbol
+            Builtin::PrimString
+                | Builtin::PrimNumber
+                | Builtin::PrimBoolean
+                | Builtin::PrimSymbol
+                | Builtin::PrimUndefined
+                | Builtin::PrimNull
         )
     }
 
@@ -143,6 +154,7 @@ pub(super) enum SiteKind {
 #[derive(Clone, Debug)]
 pub(super) enum Obj {
     World,
+    Functions,
     Builtin(Builtin),
     Str(Box<str>),
     Site(Span, SiteKind),
@@ -160,6 +172,7 @@ impl Objects {
     pub(super) fn new() -> Self {
         let mut objects = Self::default();
         objects.table.push(Obj::World);
+        objects.table.push(Obj::Functions);
         objects
     }
 
@@ -207,9 +220,11 @@ impl Objects {
         }
     }
 
-    pub(super) fn as_str(&self, id: ObjectId) -> Option<&str> {
+    pub(super) fn key_text(&self, id: ObjectId) -> Option<&str> {
         match self.get(id) {
             Obj::Str(text) => Some(text),
+            Obj::Builtin(Builtin::PrimUndefined) => Some("undefined"),
+            Obj::Builtin(Builtin::PrimNull) => Some("null"),
             _ => None,
         }
     }
@@ -221,6 +236,7 @@ impl Objects {
     pub(super) fn describe(&self, id: ObjectId) -> String {
         match self.get(id) {
             Obj::World => "world".to_string(),
+            Obj::Functions => "every program function".to_string(),
             Obj::Builtin(builtin) => format!("builtin {builtin:?}"),
             Obj::Str(text) => format!("string {text:?}"),
             Obj::Site(span, kind) => format!("{kind:?}@{}..{}", span.start, span.end),

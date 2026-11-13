@@ -1,7 +1,9 @@
 #[path = "common/host_alias.rs"]
 mod host_alias;
 
-use host_alias::{decoded, global_routes, hosted, rows, transformed, transformed_under_host};
+use host_alias::{
+    decoded, global_routes, hosted, plain_script, rows, transformed, transformed_under_host,
+};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
@@ -18,6 +20,8 @@ const ROWS_THE_DEFAULT_LANE_STILL_DECODES: &[&str] = &[
     "ref-unknown-key-on-event-target",
     "ref-super-returns-the-global-object",
     "ref-default-constructor-returns-the-global-object",
+    "ref-index-read-of-a-host-list",
+    "ref-function-constructor-off-a-host-object",
 ];
 
 #[test]
@@ -78,4 +82,13 @@ fn points_to_output_runs_like_node_under_a_host() {
     let modes: [Mode<'_>; 1] = [("points-to", &run)];
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn a_root_function_of_a_script_the_host_may_call_is_refused() {
+    let source = plain_script(
+        "function init(){this[k][j]=E;}setTimeout(\"init()\",0);setTimeout(function(){console.log(dec0(0x1),dec0(0x2));},10);",
+    );
+    let code = transformed(true, &source);
+    assert!(!decoded(&code), "{code}");
 }
