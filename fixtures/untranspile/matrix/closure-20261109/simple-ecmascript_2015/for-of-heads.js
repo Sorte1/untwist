@@ -1,0 +1,2 @@
+const calls=[],handlers=[()=>calls.push("a"),()=>calls.push("b")];for(let a of new Set(handlers))a();const counts={};for(let a of new Set(["x","y","x"]))counts[a]=(counts[a]||0)+1;for(let a of new Set([{list:[1,2]},{list:[3]}]))for(let b of a.list)calls.push(b);const removed={a:1,b:2,c:3};for(let a of new Set(["a","c"]))delete removed[a];let total=0;const weights={p:2,q:5};for(let a of new Set(["p","q","r"]))total+=weights[a]||0;for(let a of new Set([{run:b=>calls.push(b)}]))a.run("ran");
+console.log(calls.join(),JSON.stringify(counts),JSON.stringify(removed),total);

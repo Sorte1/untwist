@@ -147,9 +147,11 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   helper is a known version (Babel 7.9 to 8, inline, `@babel/runtime`, Rollup-bundled and
   terser-minified copies), the call has exactly one argument (`allowArrayLike` keeps the
   helper), and `it`, `step` and `err` are used only there. A first loop statement `var v =
-  step.value` (any declaration kind) or `v = step.value` becomes the head; otherwise, when that
-  statement starts by reading `step.value`, `step` itself becomes the head's `const` binding and
-  the read becomes `step`. A head binding whose name `x` mentions keeps the helper (it would
+  step.value` (any declaration kind) or `v = step.value` becomes the head; otherwise, when the first
+  statement that is not a `var`/`let` declaration without initialisers reads `step.value`
+  before anything else that can run code (plain names and literals may be evaluated first, as
+  in `(0, step.value)()`, `obj[step.value]` or `for (const x of step.value.list)`), `step`
+  itself becomes the head's `const` binding and the read becomes `step`. A head binding whose name `x` mentions keeps the helper (it would
   read the binding in its dead zone). The declarations of `it` and of `step` (when it has no
   initialiser and sits in the same statement list) go; a label stays on the loop. Assumptions:
   - **Iterators follow the protocol.** They keep their `next` method (the helper reads `next`

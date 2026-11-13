@@ -150,3 +150,17 @@ fn a_loop_closure_is_inlined_with_per_iteration_bindings() {
         &[" of new Set([1, 2, 3])) {", "let note = \"n\" + v;"],
     );
 }
+
+#[test]
+fn a_step_read_after_plain_names_still_heads_the_loop() {
+    let code = run("hand/for-of-inlined-heads.js", true);
+    assert!(!code.contains(".s();"), "{code}");
+    assert_has(
+        &code,
+        &[
+            "(0, _step)();",
+            "delete removed[_step4];",
+            "total += weights[_step5] || 0;",
+        ],
+    );
+}

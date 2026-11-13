@@ -31,6 +31,7 @@ struct Plan {
     iterator: SymbolId,
     step: SymbolId,
     head: Head,
+    lead: usize,
 }
 
 fn method_call<'k, 'a>(
@@ -159,41 +160,71 @@ pub(super) fn is_step_value(
             && resolved(&member.object, scoping) == Some(step))
 }
 
+fn trivial(expression: &Expression<'_>) -> bool {
+    matches!(
+        expression.without_parentheses(),
+        Expression::Identifier(_)
+            | Expression::NumericLiteral(_)
+            | Expression::StringLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NullLiteral(_)
+            | Expression::ThisExpression(_)
+    )
+}
+
+fn first_of<'k, 'a>(
+    mut expressions: impl Iterator<Item = &'k Expression<'a>>,
+) -> Option<&'k Expression<'a>> {
+    expressions.find(|expression| !trivial(expression))
+}
+
+fn first_argument<'k, 'a>(arguments: &'k [Argument<'a>]) -> Option<&'k Expression<'a>> {
+    for argument in arguments {
+        let expression = argument.as_expression()?;
+        if !trivial(expression) {
+            return Some(expression);
+        }
+    }
+    None
+}
+
 fn leads(expression: &Expression<'_>, step: SymbolId, scoping: &Scoping) -> bool {
     if is_step_value(expression, step, scoping) {
         return true;
     }
     let next = match expression.without_parentheses() {
         Expression::StaticMemberExpression(member) => &member.object,
+        Expression::ComputedMemberExpression(member) if trivial(&member.object) => {
+            &member.expression
+        }
         Expression::ComputedMemberExpression(member) => &member.object,
         Expression::CallExpression(call) if !call.optional => {
             match call.callee.without_parentheses() {
-                Expression::Identifier(_) => match call.arguments.first() {
-                    Some(argument) if !argument.is_spread() => {
-                        return argument
-                            .as_expression()
-                            .is_some_and(|first| leads(first, step, scoping))
-                    }
-                    _ => return false,
+                Expression::Identifier(_) => match first_argument(&call.arguments) {
+                    Some(argument) => argument,
+                    None => return false,
                 },
                 callee => callee,
             }
         }
-        Expression::AssignmentExpression(assign)
-            if matches!(assign.left, AssignmentTarget::AssignmentTargetIdentifier(_)) =>
-        {
-            &assign.right
-        }
         Expression::AssignmentExpression(assign) => match &assign.left {
+            AssignmentTarget::AssignmentTargetIdentifier(_) => &assign.right,
+            AssignmentTarget::StaticMemberExpression(member) if trivial(&member.object) => {
+                &assign.right
+            }
             AssignmentTarget::StaticMemberExpression(member) => &member.object,
+            AssignmentTarget::ComputedMemberExpression(member) if trivial(&member.object) => {
+                &member.expression
+            }
             AssignmentTarget::ComputedMemberExpression(member) => &member.object,
             _ => return false,
         },
+        Expression::BinaryExpression(binary) if trivial(&binary.left) => &binary.right,
         Expression::BinaryExpression(binary) => &binary.left,
         Expression::LogicalExpression(logical) => &logical.left,
         Expression::ConditionalExpression(conditional) => &conditional.test,
         Expression::UnaryExpression(unary) => &unary.argument,
-        Expression::SequenceExpression(sequence) => match sequence.expressions.first() {
+        Expression::SequenceExpression(sequence) => match first_of(sequence.expressions.iter()) {
             Some(first) => first,
             None => return false,
         },
@@ -205,13 +236,36 @@ fn leads(expression: &Expression<'_>, step: SymbolId, scoping: &Scoping) -> bool
 fn statement_leads(statement: &Statement<'_>, step: SymbolId, scoping: &Scoping) -> bool {
     let lead = match statement {
         Statement::ExpressionStatement(it) => Some(&it.expression),
-        Statement::VariableDeclaration(it) => it.declarations.first().and_then(|d| d.init.as_ref()),
+        Statement::VariableDeclaration(it) => it.declarations.iter().find_map(|d| d.init.as_ref()),
+        Statement::ForOfStatement(it) => Some(&it.right),
+        Statement::ForInStatement(it) => Some(&it.right),
         Statement::ReturnStatement(it) => it.argument.as_ref(),
         Statement::IfStatement(it) => Some(&it.test),
         Statement::ThrowStatement(it) => Some(&it.argument),
         _ => None,
     };
     lead.is_some_and(|expression| leads(expression, step, scoping))
+}
+
+fn quiet_declaration(statement: &Statement<'_>) -> bool {
+    matches!(statement, Statement::VariableDeclaration(declaration)
+        if declaration.kind != VariableDeclarationKind::Const
+            && declaration.declarations.iter().all(|declarator| declarator.init.is_none()
+                && matches!(declarator.id, BindingPattern::BindingIdentifier(_))))
+}
+
+pub(super) fn head_at(
+    body: &[Statement<'_>],
+    step: SymbolId,
+    scoping: &Scoping,
+) -> Option<(Head, usize)> {
+    let lead = body
+        .iter()
+        .position(|statement| !quiet_declaration(statement))?;
+    if lead == 0 {
+        return head_of(&body[0], step, scoping).map(|head| (head, 0));
+    }
+    statement_leads(&body[lead], step, scoping).then_some((Head::Step, lead))
 }
 
 pub(super) fn head_of(first: &Statement<'_>, step: SymbolId, scoping: &Scoping) -> Option<Head> {
@@ -364,7 +418,6 @@ fn plan_at(
     let Statement::BlockStatement(body) = &looped.body else {
         return None;
     };
-    let first = body.body.first()?;
     let counted = scoping.get_resolved_reference_ids(iterator).len() == ITERATOR_USES
         && scoping.get_resolved_reference_ids(step).len() == STEP_USES
         && scoping.symbol_redeclarations(iterator).is_empty()
@@ -373,13 +426,15 @@ fn plan_at(
         return None;
     }
     let source = helper_source(declaration, iterator, table, scoping)?;
-    let head = head_of(first, step, scoping)?;
+    let (head, lead) = head_at(&body.body, step, scoping)?;
+    let first = &body.body[lead];
     (!captures(head, first, step, source, scoping)).then_some(Plan {
         at,
         declared_at,
         iterator,
         step,
         head,
+        lead,
     })
 }
 
@@ -441,7 +496,7 @@ fn step_name<'a>(test: &Expression<'a>) -> Option<Ident<'a>> {
 }
 
 pub(super) fn left_of<'a>(
-    head: Head,
+    (head, lead): (Head, usize),
     body: &mut AVec<'a, Statement<'a>>,
     (step, name): (SymbolId, Ident<'a>),
     cx: &Cx<'a, '_>,
@@ -469,7 +524,7 @@ pub(super) fn left_of<'a>(
                 cx,
                 done: false,
             };
-            visitor.visit_statement(body.first_mut()?);
+            visitor.visit_statement(body.get_mut(lead)?);
             if !visitor.done {
                 return None;
             }
@@ -516,7 +571,12 @@ fn rewrite<'a>(
     let Statement::BlockStatement(body) = &mut for_loop.body else {
         return None;
     };
-    let left = left_of(plan.head, &mut body.body, (plan.step, name), cx)?;
+    let left = left_of(
+        (plan.head, plan.lead),
+        &mut body.body,
+        (plan.step, name),
+        cx,
+    )?;
     let body = std::mem::replace(
         &mut for_loop.body,
         Statement::new_empty_statement(SPAN, &*cx),

@@ -6,7 +6,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, 
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::Cx;
 
-use super::for_of::{captures, head_of, left_of, resolved_id, the_loop, unlabelled_mut, Head};
+use super::for_of::{captures, head_at, left_of, resolved_id, the_loop, unlabelled_mut, Head};
 use super::identify::resolved;
 
 pub const SHAPE: &str = "for-of/inline-protocol/unsafe";
@@ -30,6 +30,7 @@ struct Plan {
     at: usize,
     names: Names,
     head: Head,
+    lead: usize,
 }
 
 fn is(expression: &Expression<'_>, symbol: SymbolId, scoping: &Scoping) -> bool {
@@ -323,13 +324,18 @@ fn plan_at(statements: &[Statement<'_>], at: usize, scoping: &Scoping) -> Option
     let Statement::BlockStatement(body) = &looped.body else {
         return None;
     };
-    let first = body.body.first()?;
     let Some(ForStatementInit::VariableDeclaration(init)) = &looped.init else {
         return None;
     };
     let source = iterated(init.declarations.first()?.init.as_ref()?, scoping)?;
-    let head = head_of(first, step, scoping)?;
-    (!captures(head, first, step, source, scoping)).then_some(Plan { at, names, head })
+    let (head, lead) = head_at(&body.body, step, scoping)?;
+    let first = &body.body[lead];
+    (!captures(head, first, step, source, scoping)).then_some(Plan {
+        at,
+        names,
+        head,
+        lead,
+    })
 }
 
 fn rewrite<'a>(
@@ -370,7 +376,12 @@ fn rewrite<'a>(
     let Statement::BlockStatement(body) = &mut for_loop.body else {
         return None;
     };
-    let left = left_of(plan.head, &mut body.body, (plan.names.step, name), cx)?;
+    let left = left_of(
+        (plan.head, plan.lead),
+        &mut body.body,
+        (plan.names.step, name),
+        cx,
+    )?;
     let body = std::mem::replace(
         &mut for_loop.body,
         Statement::new_empty_statement(SPAN, &*cx),
