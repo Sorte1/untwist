@@ -12,6 +12,7 @@ const FIXTURES: &str = "../../fixtures/unpack-bundlers/rollup";
 
 const ON: UnpackOptions = UnpackOptions {
     split_hoisted: true,
+    assume_modules: false,
     conservative: false,
     trust_free_loader: false,
 };

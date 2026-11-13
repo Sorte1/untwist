@@ -49,6 +49,7 @@ const PASS_NAME: &str = "unpack";
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct UnpackOptions {
     pub split_hoisted: bool,
+    pub assume_modules: bool,
     pub conservative: bool,
     pub trust_free_loader: bool,
 }

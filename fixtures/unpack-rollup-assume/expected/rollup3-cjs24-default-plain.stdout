@@ -1,0 +1,19 @@
+currentScript read
+state evaluated
+host evaluated undefined
+helper evaluated
+legacy evaluated
+host-cjs evaluated undefined
+entry starts
+scheme file:
+file index.js
+ms 2m 7200000
+assign {"a":1,"b":2}
+counter 2
+legacy 42 legacy
+config now none
+hook now none
+host-cjs now none none
+config later none
+hook later none
+host-cjs later none none

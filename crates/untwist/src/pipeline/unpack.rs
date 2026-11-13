@@ -42,6 +42,7 @@ impl Pipeline {
     pub(super) fn unpack_options(&self) -> untwist_unpack::UnpackOptions {
         untwist_unpack::UnpackOptions {
             split_hoisted: self.options.split_hoisted,
+            assume_modules: self.options.split_assume_modules,
             conservative: !self.options.extended(),
             trust_free_loader: self.options.unsafe_transforms,
         }

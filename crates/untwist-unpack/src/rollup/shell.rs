@@ -13,6 +13,7 @@ pub struct Wrapper<'k, 'a> {
 
 pub struct Shell<'k, 'a> {
     pub wrapper: Wrapper<'k, 'a>,
+    pub outer: Option<Wrapper<'k, 'a>>,
 }
 
 const SCRIPT_ONLY: &str = "currentScript";
@@ -83,7 +84,10 @@ pub fn wrapper<'k, 'a>(top: &'k [Statement<'a>]) -> Option<Shell<'k, 'a>> {
         }
         found = Some(wrapper_of(index, statement)?);
     }
-    Some(Shell { wrapper: found? })
+    Some(Shell {
+        wrapper: found?,
+        outer: None,
+    })
 }
 
 fn reads_current_script(program: &Program<'_>, body: &FunctionBody<'_>) -> bool {
@@ -148,4 +152,61 @@ pub fn shell<'k, 'a>(program: &'k Program<'a>) -> Option<Shell<'k, 'a>> {
     let strict =
         found.wrapper.body.has_use_strict_directive() || program.has_use_strict_directive();
     (strict && !reads_current_script(program, found.wrapper.body)).then_some(found)
+}
+
+fn strict_body(program: &Program<'_>, body: &FunctionBody<'_>) -> bool {
+    body.has_use_strict_directive() || program.has_use_strict_directive()
+}
+
+fn nested<'k, 'a>(program: &Program<'a>, outer: &Wrapper<'k, 'a>) -> Option<Wrapper<'k, 'a>> {
+    let mut found = None;
+    for (index, statement) in outer.body.statements.iter().enumerate() {
+        let Some(inner) = wrapper_of(index, statement) else {
+            continue;
+        };
+        if found.is_some() {
+            return None;
+        }
+        found = Some(inner);
+    }
+    let inner = found?;
+    let strict = strict_body(program, outer.body) || inner.body.has_use_strict_directive();
+    strict.then_some(inner)
+}
+
+pub fn assumed<'k, 'a>(program: &'k Program<'a>) -> Vec<Shell<'k, 'a>> {
+    let Some(found) = wrapper(&program.body) else {
+        return Vec::new();
+    };
+    let mut shells = Vec::new();
+    if let Some(inner) = nested(program, &found.wrapper) {
+        let outer = wrapper_of(found.wrapper.index, &program.body[found.wrapper.index]);
+        shells.push(Shell {
+            wrapper: inner,
+            outer,
+        });
+    }
+    if strict_body(program, found.wrapper.body) {
+        shells.push(found);
+    }
+    shells
+}
+
+pub fn loose_wrapper(top: &[Statement<'_>]) -> bool {
+    let mut statements = top
+        .iter()
+        .filter(|statement| !matches!(statement, Statement::EmptyStatement(_)));
+    let (Some(Statement::ExpressionStatement(statement)), None) =
+        (statements.next(), statements.next())
+    else {
+        return false;
+    };
+    let Expression::CallExpression(call) =
+        discarded(statement.expression.without_parentheses()).without_parentheses()
+    else {
+        return false;
+    };
+    !call.optional
+        && call.arguments.is_empty()
+        && called(call.callee.without_parentheses()).is_some()
 }

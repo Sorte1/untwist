@@ -83,8 +83,17 @@ fn drain(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<Ve
 }
 
 pub fn run(node: &Path, file: &Path) -> std::io::Result<Option<Observed>> {
+    run_with(node, &[], file)
+}
+
+pub fn run_with(
+    node: &Path,
+    args: &[&std::ffi::OsStr],
+    file: &Path,
+) -> std::io::Result<Option<Observed>> {
     let started = Instant::now();
     let mut child = Command::new(node)
+        .args(args)
         .arg(file)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

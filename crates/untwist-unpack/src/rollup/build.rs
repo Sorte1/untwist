@@ -25,7 +25,7 @@ pub struct Links {
     pub dropped: Vec<bool>,
 }
 
-fn sanitized(name: &str) -> String {
+pub(super) fn sanitized(name: &str) -> String {
     name.chars()
         .map(
             |ch| match ch.is_ascii_alphanumeric() || ch == '_' || ch == '$' {
@@ -147,7 +147,7 @@ pub fn links(
     }
 }
 
-fn fresh_creator(text: &str) -> String {
+pub(super) fn fresh_creator(text: &str) -> String {
     let mut name = "createRequire".to_string();
     while text.contains(name.as_str()) {
         name.push('_');
@@ -155,7 +155,7 @@ fn fresh_creator(text: &str) -> String {
     name
 }
 
-fn head_text(links: &Links, at: usize, creator: &str) -> String {
+pub(super) fn head_text(links: &Links, at: usize, creator: &str) -> String {
     let mut text = String::new();
     for (from, names) in &links.imports[at] {
         let id = js_string(&links.ids[*from]);
@@ -173,21 +173,21 @@ fn head_text(links: &Links, at: usize, creator: &str) -> String {
     text
 }
 
-fn tail_text(links: &Links, at: usize) -> String {
+pub(super) fn tail_text(links: &Links, at: usize) -> String {
     match links.exports[at].is_empty() {
         true => String::new(),
         false => format!("export {{ {} }};", links.exports[at].join(", ")),
     }
 }
 
-fn parsed<'a>(alloc: &'a Allocator, text: String) -> Option<AVec<'a, Statement<'a>>> {
+pub(super) fn parsed<'a>(alloc: &'a Allocator, text: String) -> Option<AVec<'a, Statement<'a>>> {
     match text.is_empty() {
         true => Some(AVec::new_in(&alloc)),
         false => synthetic_statements(alloc, text),
     }
 }
 
-fn wrapper_body<'e, 'a>(
+pub(super) fn wrapper_body<'e, 'a>(
     statements: &'e mut AVec<'a, Statement<'a>>,
 ) -> Option<&'e mut FunctionBody<'a>> {
     let Some(Statement::ExpressionStatement(statement)) = statements.first_mut() else {
@@ -212,7 +212,7 @@ struct Parts<'a> {
     wrapper: Option<AVec<'a, Statement<'a>>>,
 }
 
-fn rebuilt_wrapper<'a>(
+pub(super) fn rebuilt_wrapper<'a>(
     alloc: &'a Allocator,
     shell: &Shell<'_, 'a>,
 ) -> Option<AVec<'a, Statement<'a>>> {
@@ -251,7 +251,7 @@ fn parts<'a>(
     })
 }
 
-fn comments_of(source: &Program<'_>, items: &[Statement<'_>]) -> Vec<Comment> {
+pub(super) fn comments_of(source: &Program<'_>, items: &[Statement<'_>]) -> Vec<Comment> {
     let mut comments = Vec::new();
     for item in items {
         let span = item.span();
@@ -268,7 +268,7 @@ fn comments_of(source: &Program<'_>, items: &[Statement<'_>]) -> Vec<Comment> {
     comments
 }
 
-fn program<'a>(
+pub(super) fn program<'a>(
     alloc: &'a Allocator,
     source: &Program<'a>,
     comments: Vec<Comment>,
@@ -288,7 +288,7 @@ fn program<'a>(
     )
 }
 
-fn entry_statements<'a>(
+pub(super) fn entry_statements<'a>(
     alloc: &'a Allocator,
     source: &Program<'a>,
     shell: &Shell<'_, 'a>,

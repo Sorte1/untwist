@@ -51,6 +51,16 @@ pub struct Args {
     )]
     pub split_hoisted: bool,
     #[arg(
+        long = "split-assume-modules",
+        requires = "split_hoisted",
+        help = "with --split-hoisted, assume the split tree is ES modules for reading and for \
+                running in node: lifts the document.currentScript refusal, splits a bundle that \
+                sits inside an outer wrapper function, and makes every Rollup commonjs wrapper \
+                its own module; does not preserve document.currentScript, classic-script load \
+                timing or sloppy-mode top-level semantics"
+    )]
+    pub split_assume_modules: bool,
+    #[arg(
         long = "no-deobfuscate",
         action = clap::ArgAction::SetFalse,
         help = "skip the deobfuscate stage: string arrays, decoders, control flow and protections"
@@ -354,6 +364,7 @@ impl Args {
             max_iterations: self.max_iterations,
             mappings: Vec::new(),
             split_hoisted: self.split_hoisted,
+            split_assume_modules: self.split_assume_modules,
             rename: self.rename_mode(),
             rename_all: self.rename_all,
             plugins: untwist::Plugins::default(),
@@ -432,5 +443,18 @@ mod tests {
         );
         let args = Args::parse_from(["untwist", "--split-hoisted", "in.js"]);
         assert!(args.options().split_hoisted);
+        assert!(!args.options().split_assume_modules);
+    }
+
+    #[test]
+    fn assumed_modules_need_the_hoisted_split() {
+        assert!(Args::try_parse_from(["untwist", "--split-assume-modules", "in.js"]).is_err());
+        let args = Args::parse_from([
+            "untwist",
+            "--split-hoisted",
+            "--split-assume-modules",
+            "in.js",
+        ]);
+        assert!(args.options().split_hoisted && args.options().split_assume_modules);
     }
 }

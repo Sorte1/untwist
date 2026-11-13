@@ -147,6 +147,27 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   not split. A function declared more than once at the wrapper's top level keeps its last
   declaration only, the one every reference in the wrapper sees; a name declared twice in any other
   way (a `var` beside a function) is refused, since an ES module may not declare a name twice.
+- **`--split-assume-modules` (with `--split-hoisted`) assumes the split tree is ES modules for
+  reading and for running in node.** It does not preserve `document.currentScript` (an ES module
+  sees `null`), classic-script synchronous load timing, or sloppy-mode top-level semantics. With
+  it, Rollup's iife `import.meta.url` stand-in
+  (`var x = typeof document != "undefined" ? document.currentScript : null`) no longer refuses the
+  split and stays in the entry as written, and the bundle may sit one function below the program
+  top level, inside an outer wrapper whose other statements are `var` declarations (and, when the
+  outer function is strict, function declarations and code after the bundle). The plan is not the
+  heuristic: every @rollup/plugin-commonjs `requireX` wrapper, with its flag and its exports
+  holder, becomes its own module; Rollup's own helpers that those wrappers read
+  (`commonjsGlobal` and other side-effect-free declarations) go to `chunk_shared.js`; everything
+  else stays in the entry, in order. A wrapper module only holds declarations that run no code
+  (function declarations, `var`s with no value or a plain literal, object or array value), so
+  importing it before the entry runs changes nothing; a value is only moved when nothing can read
+  it before its original line. A wrapper that reads code left in the entry, is written from
+  outside, or would be shadowed by an outer-wrapper name stays in the entry. Outer-wrapper
+  bindings a wrapper module reads come from a generated `shell.js` that exports them as live
+  bindings: they must be declared without a value, the bundle may not write them, and the outer
+  code may assign them only after the bundle with `x = e;` or `var x = e;` statements, which the
+  entry routes through a setter exported by `shell.js` (`set_x(x = e)`). Without the flag nothing
+  changes.
 - **Closure.** Only the module manager's `try {…} catch (e) { X._DumpException(e) }` segments
   are split (ids from `/*_M:id*/` markers or begin/end loader calls checked against the
   `_ModuleManager_initialize` graph). The namespace object is read once, in

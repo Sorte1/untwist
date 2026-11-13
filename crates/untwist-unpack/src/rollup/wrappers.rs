@@ -10,6 +10,7 @@ const REQUIRE: &str = "require";
 pub struct Group {
     pub function: u32,
     pub members: Vec<u32>,
+    pub holder: Option<u32>,
     pub stem: String,
 }
 
@@ -56,17 +57,32 @@ fn sets_one(scoping: &Scoping, statement: &Statement<'_>) -> Option<SymbolId> {
         .flatten()
 }
 
-fn shape(scoping: &Scoping, function: &Function<'_>) -> Option<(SymbolId, SymbolId, bool)> {
+fn guarded<'k, 'a>(
+    statements: &'k [Statement<'a>],
+    loose: bool,
+) -> Option<(&'k IfStatement<'a>, &'k Statement<'a>)> {
+    match statements {
+        [Statement::IfStatement(guard), set, ..] if guard.alternate.is_none() => Some((guard, set)),
+        [Statement::IfStatement(guard)] if loose => {
+            let Some(Statement::BlockStatement(block)) = &guard.alternate else {
+                return None;
+            };
+            Some((guard, block.body.first()?))
+        }
+        _ => None,
+    }
+}
+
+fn shape(
+    scoping: &Scoping,
+    function: &Function<'_>,
+    loose: bool,
+) -> Option<(SymbolId, SymbolId, bool)> {
     if !function.params.items.is_empty() || function.params.rest.is_some() {
         return None;
     }
     let statements = &function.body.as_ref()?.statements;
-    let [Statement::IfStatement(guard), set, ..] = &statements[..] else {
-        return None;
-    };
-    if guard.alternate.is_some() {
-        return None;
-    }
+    let (guard, set) = guarded(statements, loose)?;
     let flag = symbol(scoping, &guard.test)?;
     let (held, value) = holder(scoping, returned(&guard.consequent)?)?;
     (sets_one(scoping, set)? == flag && flag != held).then_some((flag, held, value))
@@ -88,12 +104,21 @@ fn owner(facts: &Facts, symbol: SymbolId) -> Option<u32> {
 }
 
 pub fn groups(scoping: &Scoping, items: &[Statement<'_>], facts: &Facts) -> Vec<Group> {
+    groups_with(scoping, items, facts, false)
+}
+
+pub fn groups_with(
+    scoping: &Scoping,
+    items: &[Statement<'_>],
+    facts: &Facts,
+    loose: bool,
+) -> Vec<Group> {
     let mut found = Vec::new();
     for (index, item) in items.iter().enumerate() {
         let Statement::FunctionDeclaration(function) = item else {
             continue;
         };
-        let Some((flag, held, _)) = shape(scoping, function) else {
+        let Some((flag, held, _)) = shape(scoping, function, loose) else {
             continue;
         };
         let Some(name) = function.id.as_ref().map(|id| id.name.as_str()) else {
@@ -118,6 +143,7 @@ pub fn groups(scoping: &Scoping, items: &[Statement<'_>], facts: &Facts) -> Vec<
         found.push(Group {
             function: index as u32,
             members,
+            holder: owner(facts, held),
             stem: stem(name).unwrap_or_else(|| scoping.symbol_name(held).to_string()),
         });
     }

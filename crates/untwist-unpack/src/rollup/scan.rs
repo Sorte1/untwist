@@ -4,6 +4,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashSet;
 
 use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step, Suspend};
 
@@ -22,12 +23,19 @@ pub struct Facts {
     pub pinned: Vec<bool>,
     pub requires: Vec<bool>,
     pub dropped: Vec<bool>,
+    pub shell: Vec<(u32, String, bool)>,
+}
+
+pub struct Enclosing {
+    pub scope: Option<ScopeId>,
+    pub names: FxHashSet<String>,
 }
 
 pub struct Context {
     pub scope: ScopeId,
     pub arrow: bool,
     pub module: bool,
+    pub enclosing: Option<Enclosing>,
 }
 
 fn item_of(items: &[Statement<'_>], span: Span) -> Option<u32> {
@@ -77,6 +85,7 @@ fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Option<
         pinned: vec![false; n],
         requires: vec![false; n],
         dropped: vec![false; n],
+        shell: Vec::new(),
     };
     for &symbol in scoping.get_bindings(scope).values() {
         let span = scoping.symbol_span(symbol);
@@ -155,7 +164,21 @@ impl Rules<'_> {
         }
     }
 
-    fn free(&mut self, name: &str, frame: Frame) {
+    fn enclosed(&mut self, name: &str, write: bool) -> bool {
+        let Some(enclosing) = &self.context.enclosing else {
+            return false;
+        };
+        if !enclosing.names.contains(name) {
+            return false;
+        }
+        self.facts.shell.push((self.item, name.to_string(), write));
+        true
+    }
+
+    fn free(&mut self, name: &str, frame: Frame, write: bool) {
+        if self.enclosed(name, write) {
+            return;
+        }
         if name == "arguments" {
             self.receiver_bound(frame);
         } else if name == "require" || HOST_NAMES.contains(&name) {
@@ -163,9 +186,20 @@ impl Rules<'_> {
         }
     }
 
+    fn outer_symbol(&self, symbol: SymbolId) -> bool {
+        self.context
+            .enclosing
+            .as_ref()
+            .and_then(|enclosing| enclosing.scope)
+            .is_some_and(|scope| self.scoping.symbol_scope_id(symbol) == scope)
+    }
+
     fn resolved(&mut self, symbol: SymbolId, write: bool) {
         let owner = self.facts.owner[symbol.index()];
-        if owner == ENTRY {
+        if owner == NONE && self.outer_symbol(symbol) {
+            let name = self.scoping.symbol_name(symbol).to_string();
+            self.enclosed(&name, write);
+        } else if owner == ENTRY {
             self.pin();
         } else if owner != NONE && owner != self.item {
             if self.seen[symbol.index()] != self.item {
@@ -196,7 +230,7 @@ impl<'a> Policy<'a> for Rules<'_> {
         let reference = self.scoping.get_reference(id);
         match reference.symbol_id() {
             Some(symbol) => self.resolved(symbol, reference.is_write()),
-            None => self.free(it.name.as_str(), frame),
+            None => self.free(it.name.as_str(), frame, reference.is_write()),
         }
     }
 
