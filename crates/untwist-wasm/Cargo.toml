@@ -11,7 +11,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-untwist = { path = "../untwist", default-features = false, features = ["refusal-spans"] }
+untwist = { path = "../untwist", default-features = false, features = ["refusal-spans", "modern", "boundaries"] }
 untwist-core = { path = "../untwist-core" }
 untwist-eval = { path = "../untwist-eval" }
 oxc_allocator.workspace = true

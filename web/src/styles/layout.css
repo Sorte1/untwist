@@ -409,15 +409,18 @@ button, input {
   background: var(--on-accent);
 }
 
-#jsx-opt[data-inactive] .switch[aria-checked='true'] {
+#jsx-opt[data-inactive] .switch[aria-checked='true'],
+#assume-opt[data-inactive] .switch[aria-checked='true'] {
   background: var(--track);
 }
 
-#jsx-opt[data-inactive] .switch[aria-checked='true'] span {
+#jsx-opt[data-inactive] .switch[aria-checked='true'] span,
+#assume-opt[data-inactive] .switch[aria-checked='true'] span {
   background: var(--knob);
 }
 
-#jsx-opt[data-inactive] .hint {
+#jsx-opt[data-inactive] .hint,
+#assume-opt[data-inactive] .hint {
   color: var(--warn);
 }
 

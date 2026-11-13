@@ -46,7 +46,15 @@
 <section class="set-group">
 <h3 class="set-title">Transforms</h3>
 <div class="opt" title="Split webpack, Browserify and Vite bundles into one file per module"><span class="opt-name">Unpack bundles</span><button type="button" role="switch" class="switch" data-key="unpack" aria-checked="true" aria-label="Unpack bundles"><span></span></button></div>
+<div class="opt" id="split-opt"><span class="opt-text"><span class="opt-name">Split hoisted bundles</span><span class="hint" id="split-hint">Also split Rollup and Vite output into modules by its top-level declarations (--split-hoisted)</span></span><button type="button" role="switch" class="switch" data-key="split" aria-checked="false" aria-label="Split hoisted bundles" aria-describedby="split-hint"><span></span></button></div>
+<div class="opt" id="assume-opt"><span class="opt-text"><span class="opt-name">Assume ES modules</span><span class="hint" id="assume-hint">With the split, read the tree as ES modules: splits wrapped bundles, Rollup commonjs wrappers and inferred module boundaries; drops classic-script timing and document.currentScript (--split-assume-modules)</span></span><button type="button" role="switch" class="switch" data-key="assume" aria-checked="false" aria-label="Assume ES modules" aria-describedby="assume-hint"><span></span></button></div>
 <div class="opt" id="jsx-opt"><span class="opt-text"><span class="opt-name">Decompile JSX</span><span class="hint" id="jsx-hint">Turn createElement calls back into JSX</span></span><button type="button" role="switch" class="switch" data-key="jsx" aria-checked="true" aria-label="Decompile JSX" aria-describedby="jsx-hint"><span></span></button></div>
+<div class="fuel-row" title="Opt-in: remove core-js polyfills of features native in this baseline and use the native form of the core-js helpers left; the output then assumes such an engine (--modern)">
+<label for="modern">Modern baseline</label>
+<input id="modern" type="text" class="num-input" list="modern-years" placeholder="off, or es2022 / chrome 120, safari 17" spellcheck="false" autocomplete="off" aria-describedby="modern-hint">
+<datalist id="modern-years"><option value="es2017"></option><option value="es2018"></option><option value="es2019"></option><option value="es2020"></option><option value="es2021"></option><option value="es2022"></option><option value="es2023"></option><option value="es2024"></option></datalist>
+</div>
+<span class="hint" id="modern-hint">Remove core-js polyfills the engines in the baseline have natively. Empty is off.</span>
 </section>
 
 <section class="set-group">
@@ -89,6 +97,18 @@
 <label class="check" title="In simple and unique, leave identifiers that already look human-written alone"><input type="checkbox" data-key="human">Keep human names</label>
 <label class="check" title="Write every unpacked module into one file, with a banner per module"><input type="checkbox" data-key="single">Single file</label>
 <label class="check" title="Fetch the wasm modules a run lists as not supplied without asking first. Off by default; kept in this browser only, never in a shared link"><input type="checkbox" id="always-fetch-wasm">Always fetch wasm</label>
+<label class="check" title="Append a source map from the output back to the input as a data URL (--source-map inline)"><input type="checkbox" data-key="smap">Source map</label>
+<label class="check" title="With Source map, map back through the input's own inline source map (--input-source-map inline)"><input type="checkbox" data-key="imap" id="imap">Input source map</label>
+<div class="fuel-row" title="Memory the run may use; at three quarters it stops its passes and keeps the output so far (default 1024 MiB in the playground)">
+<label for="max-memory">Memory budget</label>
+<input id="max-memory" type="number" class="num-input num-short" min="1" placeholder="1024">
+<span class="muted">MiB</span>
+</div>
+<div class="fuel-row" title="Seconds the run may take; at the limit it stops its passes and keeps the output so far (default: no limit)">
+<label for="time-limit">Time limit</label>
+<input id="time-limit" type="number" class="num-input num-short" min="1" placeholder="∞">
+<span class="muted">s</span>
+</div>
 <div class="fuel-row" title="Stop a stage after N passes over the program (default: run until nothing changes)">
 <label for="max-iterations">Max iterations</label>
 <input id="max-iterations" type="number" class="num-input num-short" min="1" placeholder="∞">

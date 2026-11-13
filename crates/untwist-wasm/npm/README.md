@@ -38,8 +38,11 @@ const result = run(source, '--unsafe', false);
 `run(source, flags, refused)` processes one script and returns a `RunOutput`. `flags` is the CLI's
 flags as one string: `--unsafe`, `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx`,
 `--single-file`, `--keep-human-names`, `--rename none|simple|unique|mangle`, `-m`,
-`--max-iterations N`, `--fuel N`, `--max-memory SIZE`, `--timeout SECS`, `--source-map` and
-`--disable PASS[,PASS]`. Pass `false` for `refused`; `true` returns the input unchanged.
+`--max-iterations N`, `--fuel N`, `--max-memory SIZE`, `--timeout SECS`, `--source-map`,
+`--source-map=inline` (appends the map to `stdout` as the CLI's `--source-map inline` does),
+`--input-source-map=inline`, `--split-hoisted`, `--split-assume-modules`, `--modern BASELINE`
+(quote a baseline with spaces: `--modern "chrome 120, safari 17"`), `--wasm-check off|on|auto`
+and `--disable PASS[,PASS]`. Pass `false` for `refused`; `true` returns the input unchanged.
 
 `--max-memory` and `--timeout` stop an input between its passes, keeping the output so far; one
 long pass is not cut short, since nothing can stop wasm code from outside but its host. For input

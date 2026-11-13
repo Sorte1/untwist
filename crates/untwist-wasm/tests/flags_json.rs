@@ -1,6 +1,6 @@
 use serde_json::Value;
 use untwist::{RenameMode, WasmCheck};
-use untwist_wasm::options_from;
+use untwist_wasm::{map_flags, options_from};
 
 const CASES: &str = include_str!("../../../web/src/settings/flags.json");
 const PASSES_JSON: &str = include_str!("../../../web/src/settings/passes.json");
@@ -85,6 +85,33 @@ fn every_flag_string_the_site_emits_parses_to_the_intended_options() {
             "{flags}"
         );
         assert_eq!(options.wasm_check, wasm_check(settings), "{flags}");
+        let split = flag(settings, "split", false);
+        assert_eq!(options.split_hoisted, split, "{flags}");
+        assert_eq!(
+            options.split_assume_modules,
+            split && flag(settings, "assume", false),
+            "{flags}"
+        );
+        let modern = settings.get("modern").and_then(Value::as_str);
+        assert_eq!(
+            options.modern.as_ref().map(|baseline| baseline.text()),
+            modern,
+            "{flags}"
+        );
+        let maps = map_flags(flags);
+        assert_eq!(options.source_map, flag(settings, "smap", false), "{flags}");
+        assert_eq!(maps.inline, flag(settings, "smap", false), "{flags}");
+        assert_eq!(maps.input_inline, flag(settings, "imap", false), "{flags}");
+        assert_eq!(
+            options.max_memory,
+            Some(number(settings, "mem").map_or(untwist_wasm::DEFAULT_MAX_MEMORY, |mib| mib << 20)),
+            "{flags}"
+        );
+        assert_eq!(
+            options.timeout,
+            number(settings, "time").map(std::time::Duration::from_secs),
+            "{flags}"
+        );
     }
 }
 

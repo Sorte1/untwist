@@ -8,7 +8,8 @@ use limits::limits_of;
 use untwist::{Isolation, Options, Pipeline};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-pub use flags::options_from;
+use flags::{link_inline, with_input_map, MapFlags};
+pub use flags::{map_flags, options_from, DEFAULT_MAX_MEMORY};
 pub use stdio::{exit_code, stderr_of, stdout_of};
 
 const USAGE_ERROR: u8 = 2;
@@ -41,11 +42,12 @@ fn source_map_of(result: &untwist::Output) -> String {
     result.source_map_json(0).unwrap_or_default()
 }
 
-fn run_with(source: &str, options: Options) -> RunOutput {
+fn run_with(source: &str, options: Options, maps: MapFlags) -> RunOutput {
     report::clock::register();
     let before = limits::fired();
-    let result = Pipeline::new(options).run(source);
+    let mut result = Pipeline::new(with_input_map(options, source, maps)).run(source);
     let fired = limits::fired().since(before);
+    link_inline(&mut result, maps);
     RunOutput {
         stdout: stdout_of(&result),
         stderr: stderr_of(&result),
@@ -105,6 +107,7 @@ pub fn run(source: &str, flags: &str, refused: bool) -> RunOutput {
                 isolation: isolation(refused),
                 ..options
             },
+            map_flags(flags),
         ),
         Err(message) => RunOutput {
             stdout: String::new(),

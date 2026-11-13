@@ -17,6 +17,13 @@ export interface Settings {
   readonly single: boolean;
   readonly off: string;
   readonly wasm: WasmCheck;
+  readonly split: boolean;
+  readonly assume: boolean;
+  readonly modern: string;
+  readonly smap: boolean;
+  readonly imap: boolean;
+  readonly mem: number | null;
+  readonly time: number | null;
   readonly view: View;
   readonly wrap: boolean;
   readonly theme: ThemeChoice | null;
@@ -41,6 +48,13 @@ export const DEFAULTS: Settings = {
   single: false,
   off: '',
   wasm: 'off',
+  split: false,
+  assume: false,
+  modern: '',
+  smap: false,
+  imap: false,
+  mem: null,
+  time: null,
   view: 'output',
   wrap: false,
   theme: null,
@@ -66,11 +80,14 @@ export const WASM_CHECK_HINTS: Readonly<Record<WasmCheck, string>> = {
   auto: 'Extract byte arrays and base64 text that hold a WebAssembly module with imports or exports.',
 };
 
+export const MODERN_YEARS: readonly string[] = ['es2017', 'es2018', 'es2019', 'es2020', 'es2021', 'es2022', 'es2023', 'es2024'];
+export const MODERN_CHARS = /^[A-Za-z0-9 ,.@_-]{0,200}$/;
+
 export function sameSettings(a: Settings, b: Settings): boolean {
   return (Object.keys(DEFAULTS) as Array<keyof Settings>).every((key) => a[key] === b[key]);
 }
 
-const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'jsx', 'libs', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'off', 'wasm'];
+const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'split', 'assume', 'jsx', 'libs', 'modern', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'smap', 'imap', 'mem', 'time', 'off', 'wasm'];
 
 export function changedCount(settings: Settings): number {
   return PANEL_KEYS.filter((key) => settings[key] !== DEFAULTS[key]).length;

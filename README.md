@@ -284,8 +284,9 @@ The report lists every removed and kept module with the reason and every rewritt
 kind, and says that the output assumes such an engine with its own built-ins; the output starts with
 a comment saying the same.
 
-Modern mode is part of the CLI and the Rust library (cargo feature `modern`, on by default); the
-WebAssembly build and the playground leave it out to stay within their size budget.
+Modern mode is part of the CLI, the Rust library (cargo feature `modern`, on by default), the
+WebAssembly build and the playground (Settings, Modern baseline), where the core-js table is
+fetched only when the input holds core-js code.
 
 Today this covers Rollup bundles built with `@rollup/plugin-commonjs` and `strictRequires`
 (the lazy `requireX()` wrappers and the inline wrappers Rollup makes for modules required

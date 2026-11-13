@@ -1,11 +1,11 @@
 import { byId, setText } from '../dom';
 import { flagsFrom } from '../settings/flags';
 import { writeHash } from '../settings/hash';
-import { DEFAULT_FUEL, RENAME_HINTS, WASM_CHECK_HINTS, type RenameMode, type Settings, type WasmCheck } from '../settings/settings';
+import { DEFAULT_FUEL, MODERN_CHARS, RENAME_HINTS, WASM_CHECK_HINTS, type RenameMode, type Settings, type WasmCheck } from '../settings/settings';
 import type { AppState } from '../state';
 import type { Store } from '../store';
 
-type BooleanKey = 'unpack' | 'jsx' | 'unsafe' | 'deob' | 'unmin' | 'human' | 'single' | 'libs';
+type BooleanKey = 'unpack' | 'jsx' | 'unsafe' | 'deob' | 'unmin' | 'human' | 'single' | 'libs' | 'split' | 'assume' | 'smap' | 'imap';
 
 const COPIED_MS = 1200;
 
@@ -48,6 +48,24 @@ function wireNumbers(store: Store<AppState>): void {
   });
   const iterations = byId<HTMLInputElement>('max-iterations');
   iterations.addEventListener('input', () => change(store, { iter: count(iterations.value) }));
+  const memory = byId<HTMLInputElement>('max-memory');
+  memory.addEventListener('input', () => change(store, { mem: count(memory.value) }));
+  const time = byId<HTMLInputElement>('time-limit');
+  time.addEventListener('input', () => change(store, { time: count(time.value) }));
+  const modern = byId<HTMLInputElement>('modern');
+  modern.addEventListener('input', () => {
+    modern.setCustomValidity(MODERN_CHARS.test(modern.value) ? '' : 'Use letters, digits, spaces, commas, dots, @, _ or -');
+    if (MODERN_CHARS.test(modern.value)) {
+      change(store, { modern: modern.value });
+    }
+  });
+}
+
+function paintNumber(id: string, value: number | null): void {
+  const input = byId<HTMLInputElement>(id);
+  if (count(input.value) !== value) {
+    input.value = value === null ? '' : String(value);
+  }
 }
 
 function wireLink(store: Store<AppState>): void {
@@ -88,10 +106,15 @@ function paint(settings: Settings): void {
   if (settings.fuel !== null && count(fuel.value) !== settings.fuel) {
     fuel.value = String(settings.fuel);
   }
-  const iterations = byId<HTMLInputElement>('max-iterations');
-  if (count(iterations.value) !== settings.iter) {
-    iterations.value = settings.iter === null ? '' : String(settings.iter);
+  paintNumber('max-iterations', settings.iter);
+  paintNumber('max-memory', settings.mem);
+  paintNumber('time-limit', settings.time);
+  const modern = byId<HTMLInputElement>('modern');
+  if (modern.value !== settings.modern) {
+    modern.value = settings.modern;
   }
+  byId('assume-opt').toggleAttribute('data-inactive', !settings.split);
+  byId<HTMLInputElement>('imap').disabled = !settings.smap;
 }
 
 export function mountOptions(store: Store<AppState>): void {

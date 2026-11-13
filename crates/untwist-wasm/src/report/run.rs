@@ -9,6 +9,7 @@ use super::schema::{bare_json, report_json, RunFacts};
 use super::stages;
 use super::strings::decoded_json;
 use super::wasm_files::{settle, WasmFiles};
+use crate::flags::{link_inline, map_flags, with_input_map, MapFlags};
 use crate::limits::{self, limits_of};
 use crate::{exit_code, isolation, options_from, stderr_of, stdout_of, USAGE_ERROR};
 
@@ -104,15 +105,16 @@ pub fn engine_info() -> String {
     serde_json::to_string(&super::schema::engine()).unwrap_or_default()
 }
 
-fn report_with(source: &str, options: Options, wasm: &WasmFiles) -> RunReport {
+fn report_with(source: &str, options: Options, wasm: &WasmFiles, maps: MapFlags) -> RunReport {
     clock::register();
     let fuel = options
         .fuel
         .unwrap_or_else(|| default_fuel(options.unsafe_transforms));
     let (fuel, max_iterations) = (Some(fuel), options.max_iterations);
     let before = limits::fired();
-    let mut result = Pipeline::new(options).run(source);
+    let mut result = Pipeline::new(with_input_map(options, source, maps)).run(source);
     let fired = limits::fired().since(before);
+    link_inline(&mut result, maps);
     let unsettled = result.codes.clone();
     let (wasm, wasm_bytes) = settle(&mut result, wasm);
     let settled_unchanged = unsettled == result.codes;
@@ -244,6 +246,7 @@ fn report_for_with(
                 ..options
             },
             wasm,
+            map_flags(flags),
         ),
         Err(message) => RunReport {
             stdout: String::new(),

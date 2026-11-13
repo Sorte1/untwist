@@ -1,10 +1,11 @@
-use std::str::SplitWhitespace;
+use std::vec::IntoIter;
 
-use untwist::{Options, RenameMode, WasmCheck};
+use untwist::{MapLink, Options, Output, RenameMode, WasmCheck};
 
 pub const DEFAULT_MAX_MEMORY: u64 = 1 << 30;
 
-const VALUE_FLAGS: [&str; 9] = [
+const VALUE_FLAGS: [&str; 10] = [
+    "--modern",
     "--rename",
     "--wasm-check",
     "--max-iterations",
@@ -16,8 +17,27 @@ const VALUE_FLAGS: [&str; 9] = [
     "--timeout",
 ];
 
-fn value<'f>(words: &mut SplitWhitespace<'f>, flag: &str) -> Result<&'f str, String> {
+fn value(words: &mut IntoIter<String>, flag: &str) -> Result<String, String> {
     words.next().ok_or_else(|| format!("{flag} needs a value"))
+}
+
+fn words_of(flags: &str) -> Result<Vec<String>, String> {
+    let mut words = Vec::new();
+    let mut rest = flags.trim_start();
+    while !rest.is_empty() {
+        let (word, after) = match rest.strip_prefix('"') {
+            Some(quoted) => {
+                let end = quoted
+                    .find('"')
+                    .ok_or_else(|| format!("unclosed quote in {flags}"))?;
+                (&quoted[..end], &quoted[end + 1..])
+            }
+            None => rest.split_at(rest.find(char::is_whitespace).unwrap_or(rest.len())),
+        };
+        words.push(word.to_string());
+        rest = after.trim_start();
+    }
+    Ok(words)
 }
 
 fn rename_mode(word: &str) -> Result<RenameMode, String> {
@@ -56,6 +76,43 @@ fn disable(mut options: Options, word: &str) -> Result<Options, String> {
     Ok(options)
 }
 
+const INLINE_MAP: &str = "--source-map=inline";
+const INLINE_INPUT_MAP: &str = "--input-source-map=inline";
+const FILE_MAP: &str = "--source-map=file";
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MapFlags {
+    pub inline: bool,
+    pub input_inline: bool,
+}
+
+pub fn map_flags(flags: &str) -> MapFlags {
+    let words = words_of(flags).unwrap_or_default();
+    let has = |flag: &str| words.iter().any(|word| word == flag);
+    MapFlags {
+        inline: has(INLINE_MAP),
+        input_inline: has(INLINE_INPUT_MAP),
+    }
+}
+
+pub fn with_input_map(options: Options, source: &str, maps: MapFlags) -> Options {
+    if !maps.input_inline {
+        return options;
+    }
+    Options {
+        input_source_maps: vec![Output::input_source_map(source)],
+        ..options
+    }
+}
+
+pub fn link_inline(result: &mut Output, maps: MapFlags) {
+    if !maps.inline {
+        return;
+    }
+    result.source_map_link = Some(MapLink::Inline);
+    result.codes = result.inline_linked_codes(&[]);
+}
+
 fn switched(mut options: Options, flag: &str) -> Option<Options> {
     match flag {
         "--no-jsx" => options.jsx = false,
@@ -66,7 +123,10 @@ fn switched(mut options: Options, flag: &str) -> Option<Options> {
         "--keep-human-names" => options.rename_all = false,
         "--single-file" => options.single_file = true,
         "-m" | "--mangle" => options.rename = RenameMode::Mangle,
-        "--source-map" => options.source_map = true,
+        "--source-map" | INLINE_MAP => options.source_map = true,
+        INLINE_INPUT_MAP => {}
+        "--split-hoisted" => options.split_hoisted = true,
+        "--split-assume-modules" => options.split_assume_modules = true,
         _ => return None,
     }
     Some(options)
@@ -75,6 +135,11 @@ fn switched(mut options: Options, flag: &str) -> Option<Options> {
 fn valued(mut options: Options, flag: &str, word: &str) -> Result<Options, String> {
     match flag {
         "--rename" => options.rename = rename_mode(word)?,
+        "--modern" => {
+            options.modern = Some(
+                untwist::parse_modern_baseline(word).map_err(|error| format!("{flag}: {error}"))?,
+            );
+        }
         "--max-iterations" => options.max_iterations = Some(number(word, flag)?),
         "--fuel" => options.fuel = Some(fuel(word)?),
         "--max-memory" => {
@@ -100,21 +165,31 @@ fn valued(mut options: Options, flag: &str, word: &str) -> Result<Options, Strin
     Ok(options)
 }
 
-fn apply(options: Options, flag: &str, words: &mut SplitWhitespace<'_>) -> Result<Options, String> {
+fn apply(options: Options, flag: &str, words: &mut IntoIter<String>) -> Result<Options, String> {
     if VALUE_FLAGS.contains(&flag) {
-        return valued(options, flag, value(words, flag)?);
+        return valued(options, flag, &value(words, flag)?);
     }
     switched(options, flag).ok_or_else(|| format!("unsupported flag {flag}"))
 }
 
 pub fn options_from(flags: &str) -> Result<Options, String> {
-    let mut words = flags.split_whitespace();
+    let mut words = words_of(flags)?.into_iter();
     let mut options = Options {
         max_memory: Some(DEFAULT_MAX_MEMORY),
         ..Options::default()
     };
     while let Some(flag) = words.next() {
-        options = apply(options, flag, &mut words)?;
+        options = apply(options, &flag, &mut words)?;
+    }
+    if options.split_assume_modules && !options.split_hoisted {
+        return Err("--split-assume-modules needs --split-hoisted".to_string());
+    }
+    let words = words_of(flags)?;
+    if words.iter().any(|word| word == FILE_MAP) {
+        return Err("--source-map file needs --output DIR; use --source-map inline to append the map to stdout".to_string());
+    }
+    if words.iter().any(|word| word == INLINE_INPUT_MAP) && !options.source_map {
+        return Err("--input-source-map needs --source-map".to_string());
     }
     Ok(options)
 }
@@ -153,6 +228,35 @@ mod tests {
         assert!(options.unsafe_transforms);
         assert!(!options.unpack && !options.jsx);
         assert_eq!(options.rename, RenameMode::Unique);
+    }
+
+    #[test]
+    fn the_split_flags_match_the_cli_and_the_assumption_needs_the_split() {
+        let options = options_from("--split-hoisted").unwrap();
+        assert!(options.split_hoisted && !options.split_assume_modules);
+        let options = options_from("--split-hoisted --split-assume-modules").unwrap();
+        assert!(options.split_hoisted && options.split_assume_modules);
+        assert_eq!(
+            options_from("--split-assume-modules").err().as_deref(),
+            Some("--split-assume-modules needs --split-hoisted")
+        );
+    }
+
+    #[test]
+    fn modern_takes_a_quoted_baseline_with_spaces() {
+        assert!(options_from("").unwrap().modern.is_none());
+        let options =
+            options_from("--unsafe --modern \"chrome 120, firefox 121\" --no-jsx").unwrap();
+        let baseline = options.modern.expect("a baseline");
+        assert_eq!(baseline.describe(), "chrome 120, firefox 121");
+        assert!(options.unsafe_transforms && !options.jsx);
+        let options = options_from("--modern es2022").unwrap();
+        assert_eq!(options.modern.expect("a baseline").text(), "es2022");
+        assert!(options_from("--modern es1999").is_err());
+        assert_eq!(
+            options_from("--modern \"chrome 120").err().as_deref(),
+            Some("unclosed quote in --modern \"chrome 120")
+        );
     }
 
     #[test]

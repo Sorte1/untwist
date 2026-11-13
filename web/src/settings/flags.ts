@@ -6,6 +6,10 @@ function disabled(settings: Settings): string {
   return [...named, ...extra].join(',');
 }
 
+function quoted(text: string): string {
+  return /\s/.test(text) ? `"${text}"` : text;
+}
+
 export function flagsFrom(settings: Settings): string {
   const words: string[] = [];
   const add = (on: boolean, ...flag: string[]) => {
@@ -14,6 +18,8 @@ export function flagsFrom(settings: Settings): string {
     }
   };
   add(!settings.unpack, '--no-unpack');
+  add(settings.split, '--split-hoisted');
+  add(settings.split && settings.assume, '--split-assume-modules');
   add(!settings.jsx, '--no-jsx');
   add(settings.unsafe, '--unsafe');
   add(settings.rename !== 'none', '--rename', settings.rename);
@@ -23,6 +29,11 @@ export function flagsFrom(settings: Settings): string {
   add(settings.human, '--keep-human-names');
   add(settings.iter !== null, '--max-iterations', String(settings.iter));
   add(settings.single, '--single-file');
+  add(settings.modern.trim() !== '', '--modern', quoted(settings.modern.trim()));
+  add(settings.smap, '--source-map=inline');
+  add(settings.smap && settings.imap, '--input-source-map=inline');
+  add(settings.mem !== null, '--max-memory', `${settings.mem}MiB`);
+  add(settings.time !== null, '--timeout', String(settings.time));
   const off = disabled(settings);
   add(off !== '', '--disable', off);
   add(settings.wasm !== 'off', '--wasm-check', settings.wasm);
