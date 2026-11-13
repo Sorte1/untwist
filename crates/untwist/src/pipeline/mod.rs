@@ -90,6 +90,15 @@ impl Output {
     pub fn code(&self) -> &str {
         self.codes.first().map_or("", String::as_str)
     }
+
+    pub fn libraries(&self) -> Vec<untwist_rename::library::pass::LibrarySummary> {
+        let messages = self
+            .notes
+            .iter()
+            .filter(|note| note.pass == untwist_rename::library::pass::NAME)
+            .map(|note| note.message.as_str());
+        untwist_rename::library::pass::summaries(messages)
+    }
 }
 
 #[cfg(feature = "parallel")]
@@ -305,6 +314,12 @@ fn summarize_diagnostics(source: &str, diagnostics: &[OxcDiagnostic]) -> (Vec<St
 
 impl Pipeline {
     pub fn new(options: Options) -> Self {
+        let pass_disabled = |name: &str| options.disabled_passes.contains(&name);
+        let libraries_used = !pass_disabled(untwist_rename::library::pass::NAME)
+            || !pass_disabled(untwist_rename::library::rename::NAME);
+        if libraries_used {
+            untwist_rename::library::table::current();
+        }
         Self { options }
     }
 

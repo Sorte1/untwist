@@ -163,3 +163,13 @@ mod tests {
         assert_eq!(out.code, 2);
     }
 }
+
+#[wasm_bindgen]
+pub fn load_library_table(bytes: &[u8]) -> bool {
+    untwist::libraries::LibraryTables::from_gz_bytes(bytes).is_some_and(untwist::libraries::load)
+}
+
+#[wasm_bindgen]
+pub fn library_tables() -> String {
+    untwist::libraries::loaded_ids().join(",")
+}

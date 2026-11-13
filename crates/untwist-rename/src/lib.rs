@@ -14,6 +14,7 @@ mod hazards;
 pub mod holders;
 pub mod human;
 pub mod import_path;
+pub mod library;
 pub mod mangle;
 pub mod oracle;
 pub mod pins;
@@ -62,7 +63,23 @@ fn stateless_passes<'a>(config: RenameConfig) -> Vec<Box<dyn Pass<'a> + 'a>> {
     }
 }
 
+fn with_library_names<'a>(
+    config: RenameConfig,
+    passes: Vec<Box<dyn Pass<'a> + 'a>>,
+) -> Vec<Box<dyn Pass<'a> + 'a>> {
+    if config.mode == RenameMode::None {
+        return passes;
+    }
+    let mut all = vec![library::rename::boxed(config)];
+    all.extend(passes);
+    all
+}
+
 pub fn rename_passes<'a>(config: RenameConfig) -> Vec<Box<dyn Pass<'a> + 'a>> {
+    with_library_names(config, mode_passes(config))
+}
+
+fn mode_passes<'a>(config: RenameConfig) -> Vec<Box<dyn Pass<'a> + 'a>> {
     if config.mode == RenameMode::Unique {
         let state = unique::shared_state();
         let Some(slot) = unique::reserve(&state, 0) else {
@@ -79,7 +96,8 @@ pub fn rename_passes_with_state<'a>(
     slot: unique::FileSlot,
 ) -> Vec<Box<dyn Pass<'a> + 'a>> {
     if config.mode == RenameMode::Unique {
-        return vec![unique::boxed(config, std::sync::Arc::clone(state), slot)];
+        let unique = vec![unique::boxed(config, std::sync::Arc::clone(state), slot)];
+        return with_library_names(config, unique);
     }
-    stateless_passes(config)
+    with_library_names(config, stateless_passes(config))
 }

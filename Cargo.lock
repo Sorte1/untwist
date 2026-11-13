@@ -1814,6 +1814,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "untwist-libraries-core"
+version = "0.5.0"
+
+[[package]]
+name = "untwist-libraries-corejs"
+version = "0.5.0"
+
+[[package]]
 name = "untwist-regress"
 version = "0.12.0"
 dependencies = [
@@ -1825,6 +1833,7 @@ dependencies = [
 name = "untwist-rename"
 version = "0.5.0"
 dependencies = [
+ "miniz_oxide",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",
@@ -1835,6 +1844,8 @@ dependencies = [
  "rustc-hash",
  "untwist-core",
  "untwist-eval",
+ "untwist-libraries-core",
+ "untwist-libraries-corejs",
  "untwist-rename",
  "untwist-testing",
 ]
@@ -2292,9 +2303,11 @@ version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
+ "miniz_oxide",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",
+ "oxc_span",
  "oxc_syntax",
  "serde_json",
  "sha2",

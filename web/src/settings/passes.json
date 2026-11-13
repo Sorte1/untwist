@@ -285,6 +285,11 @@
     "unsafe": false
   },
   {
+    "name": "library-rename",
+    "stage": "rename",
+    "unsafe": false
+  },
+  {
     "name": "rename-simple",
     "stage": "rename",
     "unsafe": false
@@ -307,6 +312,11 @@
   {
     "name": "rename-shorthand",
     "stage": "rename",
+    "unsafe": false
+  },
+  {
+    "name": "library-names",
+    "stage": "library",
     "unsafe": false
   }
 ]

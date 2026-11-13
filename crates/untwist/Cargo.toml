@@ -19,6 +19,7 @@ bench = false
 default = ["parallel"]
 parallel = ["dep:rayon"]
 refusal-spans = ["untwist-deobfuscate/refusal-spans"]
+libraries-all = ["untwist-rename/libraries-all"]
 test-hooks = ["refusal-spans", "untwist-core/test-hooks", "untwist-deobfuscate/test-hooks", "untwist-eval/test-hooks", "untwist-rename/test-hooks", "untwist-unminify/test-hooks"]
 
 [dependencies]
@@ -40,6 +41,7 @@ serde_json.workspace = true
 tempfile.workspace = true
 
 [dev-dependencies]
+untwist-rename = { path = "../untwist-rename", features = ["libraries-all"] }
 untwist = { path = ".", features = ["test-hooks"] }
 criterion.workspace = true
 serde_json.workspace = true

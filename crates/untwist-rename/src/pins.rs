@@ -40,7 +40,20 @@ pub fn prepare(
     if setting.safe_lane {
         pin_function_names(&mut collected, program, scoping);
     }
+    pin_library_names(&mut collected, program, scoping);
     collected
+}
+
+fn pin_library_names(collected: &mut Collected, program: &Program<'_>, scoping: &Scoping) {
+    collected.library = crate::library::match_program(program, scoping);
+    collected.pinned.extend(
+        collected
+            .library
+            .names
+            .iter()
+            .filter(|(symbol, name)| scoping.symbol_name(**symbol) == name.as_str())
+            .map(|(symbol, _)| *symbol),
+    );
 }
 
 fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, setting: Setting) {
