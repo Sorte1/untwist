@@ -10,6 +10,7 @@ struct Seen {
     script: bool,
     bound: HashSet<String>,
     free: HashSet<String>,
+    written: HashSet<String>,
     readable: bool,
 }
 
@@ -28,6 +29,7 @@ fn unreadable() -> Seen {
         script: true,
         bound: HashSet::new(),
         free: HashSet::new(),
+        written: HashSet::new(),
         readable: false,
     }
 }
@@ -50,6 +52,12 @@ fn seen(source: &str) -> Seen {
             .root_unresolved_references()
             .keys()
             .map(|name| name.as_str().to_string())
+            .collect(),
+        written: scoping
+            .root_unresolved_references()
+            .iter()
+            .filter(|(_, ids)| ids.iter().any(|id| scoping.get_reference(*id).is_write()))
+            .map(|(name, _)| name.as_str().to_string())
             .collect(),
         readable: !has_error(&parsed.diagnostics),
     }
@@ -89,7 +97,7 @@ pub(super) fn shared_globals(sources: &[&str]) -> Vec<Option<SharedGlobals>> {
         .collect();
     all.iter()
         .enumerate()
-        .map(|(index, own)| own.script.then(|| shared_for(&all, &dynamic, index)))
+        .map(|(index, _)| Some(shared_for(&all, &dynamic, index)))
         .collect()
 }
 
@@ -106,5 +114,18 @@ fn shared_for(all: &[Seen], dynamic: &[bool], own: usize) -> SharedGlobals {
         .filter(|name| others().any(|(_, other)| other.names(name)))
         .cloned()
         .collect();
-    SharedGlobals { every_name, names }
+    let every_foreign = others().any(|(_, other)| !other.readable);
+    let foreign = others()
+        .flat_map(|(_, other)| {
+            let bound = other.bound.iter().filter(|_| other.script);
+            bound.chain(other.written.iter())
+        })
+        .cloned()
+        .collect();
+    SharedGlobals {
+        every_name,
+        names,
+        every_foreign,
+        foreign,
+    }
 }

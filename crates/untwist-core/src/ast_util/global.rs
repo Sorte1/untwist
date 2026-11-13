@@ -6,6 +6,8 @@ use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 
+use crate::semantic::is_foreign_global;
+
 fn program_has_direct_eval(scoping: &Scoping) -> bool {
     scoping
         .scope_flags(scoping.root_scope_id())
@@ -26,14 +28,16 @@ fn object_environment_may_bind(scoping: &Scoping, scope: ScopeId) -> bool {
 pub fn is_global_name_at(scoping: &Scoping, scope: ScopeId, name: &str) -> bool {
     scoping.find_binding(scope, Ident::from(name)).is_none()
         && !object_environment_may_bind(scoping, scope)
+        && !is_foreign_global(name)
 }
 
 pub fn global_is_written(scoping: &Scoping, name: &str) -> bool {
-    scoping
-        .root_unresolved_references()
-        .iter()
-        .filter(|(unresolved, _)| unresolved.as_str() == name)
-        .any(|(_, ids)| ids.iter().any(|id| scoping.get_reference(*id).is_write()))
+    is_foreign_global(name)
+        || scoping
+            .root_unresolved_references()
+            .iter()
+            .filter(|(unresolved, _)| unresolved.as_str() == name)
+            .any(|(_, ids)| ids.iter().any(|id| scoping.get_reference(*id).is_write()))
 }
 
 pub fn program_rebinds_global(scoping: &Scoping, name: &str) -> bool {
@@ -49,7 +53,7 @@ pub fn is_global_reference_id(scoping: &Scoping, reference: Option<ReferenceId>)
 }
 
 pub fn is_global_reference(scoping: &Scoping, id: &IdentifierReference<'_>) -> bool {
-    is_global_reference_id(scoping, id.reference_id.get())
+    is_global_reference_id(scoping, id.reference_id.get()) && !is_foreign_global(id.name.as_str())
 }
 
 pub fn is_declared_reference(scoping: &Scoping, id: &IdentifierReference<'_>) -> bool {

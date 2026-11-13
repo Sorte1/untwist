@@ -83,6 +83,9 @@ impl PureHost {
     }
 
     pub(crate) fn global(&self, name: &str) -> Option<Value<'static>> {
+        if untwist_core::semantic::is_foreign_global(name) {
+            return None;
+        }
         self.globals.get(name)
     }
 
