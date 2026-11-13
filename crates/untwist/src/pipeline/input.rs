@@ -661,6 +661,11 @@ pub(super) fn final_trees<'b, T: AsRef<str>>(
     Ok(programs)
 }
 
+fn readers_after_a_panic(program: &oxc_ast::ast::Program<'_>) -> PendingReaders {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| PendingReaders::of(program)))
+        .unwrap_or(PendingReaders::Unresolved)
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{Options, Pipeline, Reservation};
@@ -720,9 +725,4 @@ mod tests {
         assert!(!result.panicked);
         assert!(result.notes.is_empty());
     }
-}
-
-fn readers_after_a_panic(program: &oxc_ast::ast::Program<'_>) -> PendingReaders {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| PendingReaders::of(program)))
-        .unwrap_or(PendingReaders::Unresolved)
 }
