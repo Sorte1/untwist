@@ -469,16 +469,16 @@ fn left_of<'a>(
             if !visitor.done {
                 return None;
             }
-            let id = BindingPattern::new_binding_identifier(SPAN, name, &*cx);
-            let declarator = VariableDeclarator::new(SPAN, id, None, None, false, &*cx);
-            let declarations = AVec::from_iter_in([declarator], &*cx);
+            let id = BindingPattern::new_binding_identifier(SPAN, name, cx);
+            let declarator = VariableDeclarator::new(SPAN, id, None, None, false, cx);
+            let declarations = AVec::from_iter_in([declarator], cx);
             Some(ForStatementLeft::VariableDeclaration(
                 VariableDeclaration::boxed(
                     SPAN,
                     VariableDeclarationKind::Const,
                     declarations,
                     false,
-                    &*cx,
+                    cx,
                 ),
             ))
         }
