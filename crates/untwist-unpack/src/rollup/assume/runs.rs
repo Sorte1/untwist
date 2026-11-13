@@ -14,10 +14,7 @@ const OBJECT: &str = "Object";
 const PROTO: &str = "__proto__";
 const MODULE_STEM: &str = "module";
 
-pub struct Run {
-    pub members: Vec<u32>,
-    pub stem: String,
-}
+pub use super::plan::Run;
 
 pub struct Input<'p> {
     pub entry: Vec<u32>,

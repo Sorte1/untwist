@@ -4,7 +4,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::literal::is_pure_value;
 
 use super::outer::Outer;
-use super::runs::{runs, Input, Run};
+#[cfg(feature = "boundaries")]
+use super::runs::{runs, Input};
+#[cfg(feature = "boundaries")]
 use super::setters::writes;
 use super::shared::{prefix_end, Absorb, Free};
 use crate::rollup::scan::Facts;
@@ -27,6 +29,11 @@ pub struct Plan {
     pub run_setters: Vec<RunSetter>,
     pub shell: Vec<String>,
     pub setters: Vec<String>,
+}
+
+pub struct Run {
+    pub members: Vec<u32>,
+    pub stem: String,
 }
 
 pub struct RunSetter {
@@ -267,6 +274,18 @@ fn settle(facts: &Facts, part_of: &mut [Option<usize>], alive: &mut [bool]) {
 
 type Runs = (Vec<Run>, Vec<Option<usize>>, Vec<RunSetter>);
 
+#[cfg(not(feature = "boundaries"))]
+fn entry_runs(
+    _scoping: &Scoping,
+    items: &[Statement<'_>],
+    _facts: &Facts,
+    _refs: (&[Vec<u32>], &[Option<usize>]),
+    _clashing: &[bool],
+) -> Runs {
+    (Vec::new(), vec![None; items.len()], Vec::new())
+}
+
+#[cfg(feature = "boundaries")]
 fn entry_runs(
     scoping: &Scoping,
     items: &[Statement<'_>],

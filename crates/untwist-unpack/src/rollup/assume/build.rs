@@ -7,6 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::outer::assigned_names;
 use super::plan::Plan;
+#[cfg(feature = "boundaries")]
 use super::rewrite::route;
 use crate::model::{Bundle, BundleKind, Module};
 use crate::rollup::build::{
@@ -91,6 +92,15 @@ fn grouped(mut edges: Vec<(usize, usize, String)>, count: usize) -> Vec<Vec<(usi
         }
     }
     imports
+}
+
+#[cfg(not(feature = "boundaries"))]
+fn route<'a>(
+    _alloc: &'a Allocator,
+    rewrites: &FxHashMap<u32, Rewrite>,
+    _statements: &mut [Statement<'a>],
+) -> bool {
+    rewrites.is_empty()
 }
 
 fn run_slot(first: usize, count: usize, run: usize) -> usize {

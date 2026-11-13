@@ -27,7 +27,11 @@ rustc-hash.workspace = true
 wasmparser.workspace = true
 sha2.workspace = true
 
+[features]
+boundaries = []
+
 [dev-dependencies]
+untwist-unpack = { path = ".", features = ["boundaries"] }
 untwist-testing = { path = "../untwist-testing" }
 untwist-unminify = { path = "../untwist-unminify" }
 insta.workspace = true

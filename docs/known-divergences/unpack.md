@@ -194,7 +194,9 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   boundary precision 0.78 and recall 0.48 overall; three.js 0.79/0.68 plain and 0.96/0.66
   minified, Svelte 5 0.67/0.38 plain and 1.00/0.31 minified, Solid 0.50/0.25 plain (solid-js is
   one large module), the synthetic app 0.67/0.50 plain; the terser-minified Solid and synthetic
-  apps stay one file (terser moves code between modules). Boundaries lean to under-splitting.
+  apps stay one file (terser moves code between modules). Boundaries lean to under-splitting. The
+  inference is the `boundaries` cargo feature, on in the CLI and off in the wasm build, where the
+  split stops at the wrapper modules.
 - **Closure.** Only the module manager's `try {…} catch (e) { X._DumpException(e) }` segments
   are split (ids from `/*_M:id*/` markers or begin/end loader calls checked against the
   `_ModuleManager_initialize` graph). The namespace object is read once, in
