@@ -273,3 +273,15 @@ fn a_self_read_through_an_assignment_is_seen() {
         "var F = function (s) {\n  var a = \"\", c;\n  c = a + F;\n  return c.charCodeAt(s);\n};\n";
     assert_eq!(source_readers(assigned), SourceReaders::Unguarded);
 }
+
+#[test]
+fn a_direct_eval_that_may_name_the_controller_unguards_it() {
+    let harmless = format!("var host = eval(\"require;\");\n{CONTROLLER_ONE_LINE}{READER}");
+    assert_eq!(source_readers(&harmless), SourceReaders::Guarded);
+    let naming = format!("{CONTROLLER_ONE_LINE}eval(\"c = 1\");\n{READER}");
+    assert_eq!(source_readers(&naming), SourceReaders::Unguarded);
+    let computed = format!("{CONTROLLER_ONE_LINE}eval(text);\n{READER}");
+    assert_eq!(source_readers(&computed), SourceReaders::Unguarded);
+    let with = format!("{CONTROLLER_ONE_LINE}with (o) {{\n  x;\n}}\n{READER}");
+    assert_eq!(source_readers(&with), SourceReaders::Unguarded);
+}

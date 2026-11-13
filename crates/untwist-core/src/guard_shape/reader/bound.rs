@@ -56,14 +56,29 @@ struct Targets<'s, 't> {
     scoping: &'s Scoping,
     printed: Printed<'t>,
     wanted: FxHashMap<SymbolId, Definitions>,
+    evals: Vec<Option<String>>,
 }
 
-fn dynamic_scopes(scoping: &Scoping) -> bool {
-    scoping.scope_descendants_from_root().any(|scope| {
-        scoping
-            .scope_flags(scope)
-            .intersects(ScopeFlags::DirectEval | ScopeFlags::With)
-    })
+const EVAL: &str = "eval";
+
+fn with_scopes(scoping: &Scoping) -> bool {
+    scoping
+        .scope_descendants_from_root()
+        .any(|scope| scoping.scope_flags(scope).contains(ScopeFlags::With))
+}
+
+fn eval_text<'k>(call: &'k CallExpression<'_>) -> Option<Option<&'k str>> {
+    let Expression::Identifier(callee) = call.callee.without_parentheses() else {
+        return None;
+    };
+    if callee.name != EVAL {
+        return None;
+    }
+    let text = match call.arguments.as_slice() {
+        [Argument::StringLiteral(text)] if !text.value.contains('\\') => Some(text.value.as_str()),
+        _ => None,
+    };
+    Some(text)
 }
 
 pub(super) fn settle_bound(
@@ -75,7 +90,7 @@ pub(super) fn settle_bound(
     if bound.is_empty() {
         return true;
     }
-    if dynamic_scopes(scoping) {
+    if with_scopes(scoping) {
         return false;
     }
     let mut wanted = FxHashMap::default();
@@ -89,8 +104,23 @@ pub(super) fn settle_bound(
         scoping,
         printed: Printed { text: Some(code) },
         wanted,
+        evals: Vec::new(),
     };
     targets.visit_program(program);
+    let names: Vec<(SymbolId, &str)> = targets
+        .wanted
+        .keys()
+        .map(|symbol| (*symbol, scoping.symbol_name(*symbol)))
+        .collect();
+    for text in &targets.evals {
+        for (symbol, name) in &names {
+            if text.is_none_or(|text| text.contains(name)) {
+                if let Some(found) = targets.wanted.get_mut(symbol) {
+                    found.poisoned = true;
+                }
+            }
+        }
+    }
     targets.wanted.iter().all(|(symbol, found)| {
         let writes = scoping
             .get_resolved_references(*symbol)
@@ -135,6 +165,13 @@ impl<'a> VisitJs<'a> for Targets<'_, '_> {
             }
         }
         walk_js::walk_assignment_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if let Some(text) = eval_text(it) {
+            self.evals.push(text.map(str::to_string));
+        }
+        walk_js::walk_call_expression(self, it);
     }
 
     fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
