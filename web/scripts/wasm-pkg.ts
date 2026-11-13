@@ -29,7 +29,7 @@ function build(): string {
   const wasm = join(cargoTarget, 'wasm32-unknown-unknown/release/untwist_wasm.wasm');
   run('wasm-bindgen', ['--target', 'web', '--out-dir', out, wasm]);
   const module = join(out, 'untwist_wasm_bg.wasm');
-  run('wasm-opt', ['-O1', '-g', module, '-o', `${module}.opt`]);
+  run('wasm-opt', ['-O1', module, '-o', `${module}.opt`]);
   renameSync(`${module}.opt`, module);
   return out;
 }

@@ -15,7 +15,7 @@ console.log(sum);
 const OUTPUT = '#output-editor .cm-content';
 const STATUS = '#output-edit-meta span:last-child';
 const MIB = 1024 * 1024;
-const LANG_CAP_BYTES = 16 * MIB;
+const LANG_CAP_BYTES = 32 * MIB;
 
 async function outputText(page: Page): Promise<string> {
   await expect(async () => {
@@ -164,7 +164,7 @@ test('go to definition jumps from a reference to its declaration', async ({ page
   expect(edited.indexOf('X')).toBeLessThanOrEqual(declared + 3);
 });
 
-test('a large output under the 16 MiB cap, game.js, gets the features and references answer', async ({ page }) => {
+test('a large output under the 32 MiB cap, game.js, gets the features and references answer', async ({ page }) => {
   skipWithoutGame();
   test.setTimeout(180_000);
   await openApp(page);

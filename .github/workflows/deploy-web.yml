@@ -58,6 +58,10 @@ jobs:
           npm ci --ignore-scripts
           npm run build
 
+      - name: Check the byte budgets
+        working-directory: web
+        run: npm run size
+
       - name: Check the branch name and that the deploy secrets exist
         id: gate
         env:
