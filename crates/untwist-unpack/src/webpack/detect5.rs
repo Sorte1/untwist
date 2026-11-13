@@ -127,6 +127,9 @@ pub fn detect_webpack5_noted<'a>(
         (None, false) => site(source, (body, candidate.container)),
         _ => None,
     };
+    if entry.as_ref().is_some_and(|entry| entry.unrecorded_head) {
+        return proving.gate(Err(crate::notes::library_head_unproven()));
+    }
     let deferred = deferred_entries(body, require_name);
     let started = !options.conservative && entry.is_none() && deferred.is_empty();
     let entry_id = assigned.or_else(|| {

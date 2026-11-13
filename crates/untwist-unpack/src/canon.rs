@@ -88,3 +88,15 @@ pub fn statement_shape(statement: &Statement<'_>, source_text: &str) -> String {
     let program = alone(&alloc, statement.clone_in(&alloc), source_text);
     print(&program, PrintStyle::Compact)
 }
+
+pub fn program_shape<'a>(alloc: &'a Allocator, program: &mut Program<'a>) -> String {
+    program.comments.clear();
+    let scoping = build_scoping(program).scoping;
+    let mut canon = Canon {
+        alloc,
+        scoping: &scoping,
+        names: FxHashMap::default(),
+    };
+    canon.visit_program(program);
+    print(program, PrintStyle::Compact)
+}

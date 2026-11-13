@@ -123,6 +123,13 @@ fn chunks_checked(
     if bundle.chunk_started && bundle.runtime.is_none() {
         return Err(notes::chunk_start_without_runtime());
     }
+    if let Some(file) = bundle
+        .chunk_files
+        .iter()
+        .find(|file| file.framed && bundle.runtime.is_some())
+    {
+        return Err(notes::chunk_framed(file.ids.join(", ")));
+    }
     crate::webpack::gate::chunk_modules_routed(bundle)?;
     crate::webpack::loads::chunks_supplied(bundle)
 }

@@ -14,6 +14,7 @@ use crate::rename::{rename_factory_parameters, rename_wrapper_bindings};
 use crate::webpack::container::module_factories;
 use crate::webpack::extract::WEBPACK_PARAMS;
 use crate::webpack::helpers::{declared_in, pattern_names};
+use crate::webpack::library_head::recorded_head;
 use crate::webpack::runtime_module::Needs;
 
 const NO_MODULE: &str = "\0module";
@@ -38,6 +39,7 @@ pub struct Site<'k, 'a> {
     declared: FxHashSet<&'k str>,
     exports: Vec<(&'k str, Span)>,
     pub returned: Option<(&'k str, Span)>,
+    pub unrecorded_head: bool,
 }
 
 fn last_expression<'k, 'a>(body: &'k [Statement<'a>]) -> Option<&'k Expression<'a>> {
@@ -128,12 +130,25 @@ struct Enclosing<'k, 'a> {
     top: Vec<&'k [Statement<'a>]>,
     params: Vec<&'k FormalParameters<'a>>,
     strict: bool,
+    bootstrap: Option<Span>,
 }
 
 struct Chain<'k, 'a> {
     target: *const Statement<'a>,
     stack: Vec<(&'k FormalParameters<'a>, &'k FunctionBody<'a>)>,
     found: Option<Vec<(&'k FormalParameters<'a>, &'k FunctionBody<'a>)>>,
+    bootstrap: Option<Span>,
+}
+
+fn function_body<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k FunctionBody<'a>> {
+    match expr.without_parentheses() {
+        Expression::FunctionExpression(function) => function.body.as_deref(),
+        Expression::ArrowFunctionExpression(arrow) => match &arrow.body {
+            ArrowFunctionBody::FunctionBody(body) => Some(body),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 impl<'k, 'a> Chain<'k, 'a> {
@@ -170,6 +185,11 @@ impl<'k, 'a> Chain<'k, 'a> {
     fn expression(&mut self, expr: &'k Expression<'a>) {
         match expr.without_parentheses() {
             Expression::CallExpression(call) => {
+                let runs_target = function_body(&call.callee)
+                    .is_some_and(|body| std::ptr::eq(body.statements.as_ptr(), self.target));
+                if runs_target && self.found.is_none() {
+                    self.bootstrap = Some(call.span);
+                }
                 self.expression(&call.callee);
                 for argument in &call.arguments {
                     if let Some(argument) = argument.as_expression() {
@@ -211,6 +231,7 @@ fn nested<'k, 'a>(source: &'k Program<'a>, body: &'k [Statement<'a>]) -> Option<
         target: body.as_ptr(),
         stack: Vec::new(),
         found: None,
+        bootstrap: None,
     };
     chain.statements(&source.body);
     let found = chain.found?;
@@ -222,6 +243,7 @@ fn nested<'k, 'a>(source: &'k Program<'a>, body: &'k [Statement<'a>]) -> Option<
             .collect(),
         params: found.iter().map(|(params, _)| *params).collect(),
         strict,
+        bootstrap: Some(chain.bootstrap.unwrap_or_default()),
     })
 }
 
@@ -235,6 +257,7 @@ fn enclosing<'k, 'a>(
             top: Vec::new(),
             params: Vec::new(),
             strict: outer,
+            bootstrap: None,
         });
     }
     let frame = Frame::of(source);
@@ -243,6 +266,7 @@ fn enclosing<'k, 'a>(
             top: vec![frame.top],
             params: vec![wrapper.function.params],
             strict: outer || strict(&wrapper.function.body.directives),
+            bootstrap: None,
         }),
         _ => nested(source, body),
     }
@@ -301,6 +325,9 @@ pub fn site<'k, 'a>(
     if module_code || evaluates(body) || around.top.iter().any(|top| evaluates(top)) {
         return None;
     }
+    let unrecorded_head = around
+        .bootstrap
+        .is_some_and(|bootstrap| !recorded_head(source, bootstrap));
     let mut declared = FxHashSet::default();
     declared_in(body, &mut declared);
     for top in &around.top {
@@ -316,6 +343,7 @@ pub fn site<'k, 'a>(
         declared,
         exports,
         returned,
+        unrecorded_head,
     })
 }
 

@@ -1,0 +1,15 @@
+# case	verdict	reason (a refused case's notes must contain the reason; a running case's tree must print what node prints for the input)
+early-require	refused	where its chunk may not be loaded yet
+late-require	runs
+late-require-bound	runs
+shared-chunk-loaded	runs
+shared-chunk-unawaited	refused	where its chunk may not be loaded yet
+rejected-callback	refused	where its chunk may not be loaded yet
+ensure-alias	refused	other than by calling it with a chunk id
+ensure-comma	refused	other than by calling it with a chunk id
+ensure-call	refused	other than by calling it with a chunk id
+library-wrapper	refused	not a recorded webpack library wrapper
+library-umd-edited	refused	not a recorded webpack library wrapper
+chunk-framed	refused	runs code besides its push to the chunk list
+chunk-conditional	refused	runs code besides its push to the chunk list
+module-parent	refused	uses its module object (module.parent)

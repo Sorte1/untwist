@@ -8,7 +8,7 @@ use untwist_core::ast_util::prop::{identifier_name, member_parts, number_key};
 use crate::matcher::{
     argument_expression, call_parts, const_member, expression_statement, literal_id, Factory,
 };
-use crate::model::{Bodies, Bundle, BundleKind};
+use crate::model::{Bodies, Bundle, BundleKind, ChunkFile};
 use crate::notes::chunk_start_unproven;
 use crate::webpack::container::{is_module_container, module_factories};
 use crate::webpack::extract::extract_modules_with;
@@ -270,7 +270,24 @@ pub fn detect_webpack_chunk_noted<'a>(
 ) -> Option<Bundle<'a>> {
     let found = chunk(expr)?;
     let length = payload_len(expr);
-    detect_found(alloc, source, (found, length), bodies, options, proving)
+    let mut bundle = detect_found(alloc, source, (found, length), bodies, options, proving)?;
+    let framed = !sole_statement(source, expr);
+    for file in &mut bundle.chunk_files {
+        file.framed = framed;
+    }
+    Some(bundle)
+}
+
+fn sole_statement(source: &Program<'_>, expr: &Expression<'_>) -> bool {
+    let mut statements = source
+        .body
+        .iter()
+        .filter(|statement| !matches!(statement, Statement::EmptyStatement(_)));
+    let only = match (statements.next(), statements.next()) {
+        (Some(Statement::ExpressionStatement(only)), None) => &only.expression,
+        _ => return false,
+    };
+    std::ptr::eq(only, expr) || std::ptr::eq(only.without_parentheses(), expr)
 }
 
 const EXPORTED: [(&str, &str, &str, &str); 2] = [
@@ -466,6 +483,12 @@ fn detect_found<'a>(
     (bundle.modules, bundle.fresh_requires) =
         extract_modules_with(alloc, source, (container, None), bodies, options);
     bundle.chunk_modules = bundle.modules.keys().cloned().collect();
+    bundle.chunk_files = vec![ChunkFile {
+        ids: bundle.chunk_ids.clone(),
+        modules: bundle.chunk_modules.clone(),
+        eager: launched.is_some() || !bundle.deferred.is_empty(),
+        framed: false,
+    }];
     match launched {
         Some(launched) => {
             bundle.chunk_started = true;

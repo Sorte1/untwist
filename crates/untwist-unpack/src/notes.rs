@@ -182,6 +182,30 @@ pub fn chunk_computed(id: impl Display) -> String {
     format!("module {id} loads a chunk whose id is computed at run time; no bundle is written")
 }
 
+pub fn ensure_escapes(id: impl Display) -> String {
+    format!("module {id} reaches its chunk loader other than by calling it with a chunk id; no bundle is written")
+}
+
+pub fn chunk_framed(chunk: impl Display) -> String {
+    format!("the file of chunk {chunk} runs code besides its push to the chunk list; no bundle is written")
+}
+
+pub fn chunk_module_early(id: impl Display, required: impl Display) -> String {
+    format!("module {id} requires module {required} where its chunk may not be loaded yet; no bundle is written")
+}
+
+pub fn chunk_module_computed(id: impl Display) -> String {
+    format!("module {id} requires a module whose id is computed at run time, and some modules exist only in lazily loaded chunks; no bundle is written")
+}
+
+pub fn module_object_used(id: impl Display, what: impl Display) -> String {
+    format!("module {id} uses its module object ({what}), which a written file would take from node's module instead of the bundle's; no bundle is written")
+}
+
+pub fn library_head_unproven() -> String {
+    "the code around the webpack bundle is not a recorded webpack library wrapper (umd, amd, system); no bundle is written".to_string()
+}
+
 pub fn chunks_without_runtime() -> String {
     "the webpack runtime among the inputs was refused, so its chunks are not written on their own; no bundle is written".to_string()
 }
