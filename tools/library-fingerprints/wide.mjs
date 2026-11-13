@@ -15,7 +15,15 @@ export function packageDir(entry) {
   return join(CORPUS, entry.root, "node_modules", entry.alias);
 }
 
-export function files(entry, { include, exclude }) {
+const MODULAR = /^(lib|es|esm|src|modules|internals|cjs|internal)\//;
+const CONCATENATED = /^(dist|build|bundles|umd)\//;
+
+function dropConcatenations(rels) {
+  if (rels.filter((rel) => MODULAR.test(rel)).length < 5) return rels;
+  return rels.filter((rel) => !CONCATENATED.test(rel) || /[.-]min\.(c|m)?js$/.test(rel));
+}
+
+export function files(entry, { include, exclude, keepConcatenations = false }) {
   const dir = packageDir(entry);
   const skipped = new Set(EXCLUDES[entry.slug] ?? []);
   const out = [];
@@ -25,7 +33,7 @@ export function files(entry, { include, exclude }) {
     const kind = form(rel, readFileSync(abs, "utf8"));
     if (KEPT_FORMS.has(kind) && include(rel, kind)) out.push(rel);
   }
-  return out.sort();
+  return (keepConcatenations ? out : dropConcatenations(out)).sort();
 }
 
 function specifier(entry, rel) {
@@ -37,12 +45,12 @@ export function entrySource(entry, rels, { main }) {
   const lines = [];
   const keep = [];
   if (main) {
-    lines.push(`import * as m0 from ${JSON.stringify(entry.alias)};`);
+    lines.push(`const m0 = require(${JSON.stringify(entry.alias)});`);
     keep.push("m0");
   }
   rels.forEach((rel, index) => {
     const name = `m${index + 1}`;
-    lines.push(`import * as ${name} from ${JSON.stringify(specifier(entry, rel))};`);
+    lines.push(`const ${name} = require(${JSON.stringify(specifier(entry, rel))});`);
     keep.push(name);
   });
   lines.push(`globalThis.__untwistLibrary = [${keep.join(", ")}];`);
@@ -51,7 +59,8 @@ export function entrySource(entry, rels, { main }) {
 
 const DIST = (rel, kind) => kind === "min" || kind === "umd" || /^(dist|build|umd|bundles|lib)\//.test(rel) || !rel.includes("/");
 
-export function wide({ id, name, label = name, include = DIST, exclude = null, main = true, ...rest }) {
+export function wide({ id, name, label = name, include: wanted = DIST, exclude = null, main = true, keepConcatenations = false, ...rest }) {
+  const include = wanted instanceof RegExp ? (rel) => wanted.test(rel) : wanted;
   const versions = entries().filter((entry) => entry.name === name);
   if (!versions.length) throw new Error(`no corpus versions for ${name}`);
   const find = (dir, version) => {
@@ -66,7 +75,7 @@ export function wide({ id, name, label = name, include = DIST, exclude = null, m
     entry(dir, version) {
       const entry = find(dir, version);
       const mainExcluded = (EXCLUDES[entry.slug] ?? []).includes("<main>");
-      return entrySource(entry, files(entry, { include, exclude }), { main: main && !mainExcluded });
+      return entrySource(entry, files(entry, { include, exclude, keepConcatenations }), { main: main && !mainExcluded });
     },
     module(rel) {
       const match = /^(.*)\.(c|m)?js$/.exec(rel);
