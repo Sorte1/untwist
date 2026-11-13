@@ -23,6 +23,7 @@ fn engine_names() -> BTreeSet<&'static str> {
     names.extend([
         UNSTAMP_REMAINING_PASS,
         untwist_deobfuscate::layers::LAYER_PASS,
+        untwist_deobfuscate::layers::INLINE_LAYER_PASS,
     ]);
     names
 }

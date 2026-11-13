@@ -148,11 +148,11 @@ const FORMS = {
   "inline/function.js": ["I-Function", "peel"],
   "inline/function-new.js": ["I-Function", "peel"],
   "inline/refuse-captured.js": ["I-Function", "refuse:LAYER_SHAPE"],
-  "inline/refuse-strict-payload.js": ["I-stmt", "refuse:LAYER_SHAPE"],
+  "inline/strict-payload.js": ["I-stmt", "peel"],
   "inline/refuse-await.js": ["I-expr", "refuse:LAYER_SHAPE"],
   "inline/refuse-decl.js": ["I-stmt", "refuse:LAYER_SHAPE"],
   "inline/refuse-indirect.js": ["I-eval-indirect", "refuse:LAYER_SHAPE"],
-  "inline/refuse-gen5.js": ["I-stmt", "peel*4,refuse:LAYER_TOO_DEEP"],
+  "inline/refuse-gen5.js": ["I-stmt", "refuse:LAYER_SHAPE;unsafe=peel*5"],
   "inline/refuse-deep.js": ["I-expr", "refuse:LAYER_TOO_DEEP"],
 };
 

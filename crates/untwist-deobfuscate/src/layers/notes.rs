@@ -4,6 +4,8 @@ use super::model::Refusal;
 
 pub const LAYER_PEELED: &str = "peeled whole-program layer";
 
+pub const LAYER_INLINED: &str = "inlined eval layer";
+
 pub const LAYER_NOT_A_STRING: &str = "a layer was kept: its argument does not evaluate to a string";
 
 pub const LAYER_BAILED: &str = "a layer was kept: computing its text read the host, wrote outside \
@@ -38,6 +40,7 @@ pub const LAYER_FUEL: &str = "a layer was kept: decoding it would spend more ste
 catalogue!(
     LAYER_NOTES,
     LAYER_PEELED,
+    LAYER_INLINED,
     LAYER_NOT_A_STRING,
     LAYER_BAILED,
     LAYER_UNPARSABLE,
@@ -75,4 +78,12 @@ pub fn refused_message(reason: Refusal, index: u32, form: &str) -> String {
 
 pub fn peeled_message(index: u32, form: &str, bytes_in: usize, bytes_out: usize) -> String {
     format!("{LAYER_PEELED} {index}: {form}, {bytes_in} → {bytes_out} bytes")
+}
+
+pub fn inlined_message(index: u32, form: &str, bytes: (usize, usize), sites: usize) -> String {
+    let plural = if sites == 1 { "" } else { "s" };
+    format!(
+        "{LAYER_INLINED} {index}: {form}, {} → {} bytes, {sites} site{plural}",
+        bytes.0, bytes.1
+    )
 }

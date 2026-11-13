@@ -1,0 +1,151 @@
+/*
+ * ATTENTION: An "eval-source-map" devtool has been used.
+ * This devtool is neither made for production nor for readable output files.
+ * It uses "eval()" calls to create a separate source file with attached SourceMaps in the browser devtools.
+ * If you are trying to read the output file, select a different devtool (https://webpack.js.org/configuration/devtool/)
+ * or disable the default devtool with "devtool: false".
+ * If you are looking for production-ready output files, see mode: "production" (https://webpack.js.org/configuration/mode/).
+ */
+/******/ (() => { // webpackBootstrap
+/******/ 	var __webpack_modules__ = ({
+
+/***/ "./data.json":
+/*!*******************!*\
+  !*** ./data.json ***!
+  \*******************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = JSON.parse('{"name":"fixture","items":["a","b","c"]}');
+
+/***/ }),
+
+/***/ "./index.js":
+/*!******************!*\
+  !*** ./index.js ***!
+  \******************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+eval("__webpack_require__.r(__webpack_exports__);\n/* harmony import */ var _util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./util.js */ \"./util.js\");\n/* harmony import */ var _legacy_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./legacy.js */ \"./legacy.js\");\n/* harmony import */ var _legacy_js__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_legacy_js__WEBPACK_IMPORTED_MODULE_1__);\n/* harmony import */ var _strict_cjs_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./strict-cjs.js */ \"./strict-cjs.js\");\n/* harmony import */ var _data_json__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./data.json */ \"./data.json\");\n/* harmony import */ var _shapes_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./shapes.js */ \"./shapes.js\");\n\n\n\n\n\n\nconsole.log((0,_util_js__WEBPACK_IMPORTED_MODULE_0__.greet)(\"webpack\"), (0,_util_js__WEBPACK_IMPORTED_MODULE_0__.total)([1, 2, 3, 4]));\nconst counter = new _util_js__WEBPACK_IMPORTED_MODULE_0__.Counter(2);\ncounter.add(3);\nconsole.log(\"counter\", counter.value, _util_js__WEBPACK_IMPORTED_MODULE_0__.Counter.name);\nconsole.log(\"adders\", (0,_util_js__WEBPACK_IMPORTED_MODULE_0__.makeAdders)(3).map((add) => add(10)).join(\",\"));\nconsole.log(\"legacy\", _legacy_js__WEBPACK_IMPORTED_MODULE_1___default().bump(), _legacy_js__WEBPACK_IMPORTED_MODULE_1___default().bump(), (_legacy_js__WEBPACK_IMPORTED_MODULE_1___default().selfIsExports), _legacy_js__WEBPACK_IMPORTED_MODULE_1___default().blockFn());\nconsole.log(\"strict cjs\", _strict_cjs_js__WEBPACK_IMPORTED_MODULE_2__.mode(), _strict_cjs_js__WEBPACK_IMPORTED_MODULE_2__.label);\nconsole.log(\"data\", _data_json__WEBPACK_IMPORTED_MODULE_3__.name, _data_json__WEBPACK_IMPORTED_MODULE_3__.items.length);\nconsole.log(\"shapes\", Object.keys(_shapes_js__WEBPACK_IMPORTED_MODULE_4__).sort().join(\",\"), _shapes_js__WEBPACK_IMPORTED_MODULE_4__.area(_shapes_js__WEBPACK_IMPORTED_MODULE_4__.unit));\n//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiLi9pbmRleC5qcy5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy8uL2luZGV4LmpzPzQxZjUiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgZ3JlZXQsIHRvdGFsLCBDb3VudGVyLCBtYWtlQWRkZXJzIH0gZnJvbSBcIi4vdXRpbC5qc1wiO1xuaW1wb3J0IGxlZ2FjeSBmcm9tIFwiLi9sZWdhY3kuanNcIjtcbmltcG9ydCBzdHJpY3RDanMgZnJvbSBcIi4vc3RyaWN0LWNqcy5qc1wiO1xuaW1wb3J0IGRhdGEgZnJvbSBcIi4vZGF0YS5qc29uXCI7XG5pbXBvcnQgKiBhcyBzaGFwZXMgZnJvbSBcIi4vc2hhcGVzLmpzXCI7XG5cbmNvbnNvbGUubG9nKGdyZWV0KFwid2VicGFja1wiKSwgdG90YWwoWzEsIDIsIDMsIDRdKSk7XG5jb25zdCBjb3VudGVyID0gbmV3IENvdW50ZXIoMik7XG5jb3VudGVyLmFkZCgzKTtcbmNvbnNvbGUubG9nKFwiY291bnRlclwiLCBjb3VudGVyLnZhbHVlLCBDb3VudGVyLm5hbWUpO1xuY29uc29sZS5sb2coXCJhZGRlcnNcIiwgbWFrZUFkZGVycygzKS5tYXAoKGFkZCkgPT4gYWRkKDEwKSkuam9pbihcIixcIikpO1xuY29uc29sZS5sb2coXCJsZWdhY3lcIiwgbGVnYWN5LmJ1bXAoKSwgbGVnYWN5LmJ1bXAoKSwgbGVnYWN5LnNlbGZJc0V4cG9ydHMsIGxlZ2FjeS5ibG9ja0ZuKCkpO1xuY29uc29sZS5sb2coXCJzdHJpY3QgY2pzXCIsIHN0cmljdENqcy5tb2RlKCksIHN0cmljdENqcy5sYWJlbCk7XG5jb25zb2xlLmxvZyhcImRhdGFcIiwgZGF0YS5uYW1lLCBkYXRhLml0ZW1zLmxlbmd0aCk7XG5jb25zb2xlLmxvZyhcInNoYXBlc1wiLCBPYmplY3Qua2V5cyhzaGFwZXMpLnNvcnQoKS5qb2luKFwiLFwiKSwgc2hhcGVzLmFyZWEoc2hhcGVzLnVuaXQpKTtcbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7OztBQUFBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTsiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///./index.js\n");
+
+/***/ }),
+
+/***/ "./legacy.js":
+/*!*******************!*\
+  !*** ./legacy.js ***!
+  \*******************/
+/***/ (function(module) {
+
+eval("var count = 0;\nfunction bump() {\n  count += 1;\n  return count;\n}\nvar selfIsExports = this === module.exports;\nif (count === 0) {\n  function blockFn() {\n    return typeof bump;\n  }\n}\nmodule.exports = { bump: bump, selfIsExports: selfIsExports, blockFn: blockFn };\n//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiLi9sZWdhY3kuanMuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vLi9sZWdhY3kuanM/YjM4ZiJdLCJzb3VyY2VzQ29udGVudCI6WyJ2YXIgY291bnQgPSAwO1xuZnVuY3Rpb24gYnVtcCgpIHtcbiAgY291bnQgKz0gMTtcbiAgcmV0dXJuIGNvdW50O1xufVxudmFyIHNlbGZJc0V4cG9ydHMgPSB0aGlzID09PSBtb2R1bGUuZXhwb3J0cztcbmlmIChjb3VudCA9PT0gMCkge1xuICBmdW5jdGlvbiBibG9ja0ZuKCkge1xuICAgIHJldHVybiB0eXBlb2YgYnVtcDtcbiAgfVxufVxubW9kdWxlLmV4cG9ydHMgPSB7IGJ1bXA6IGJ1bXAsIHNlbGZJc0V4cG9ydHM6IHNlbGZJc0V4cG9ydHMsIGJsb2NrRm46IGJsb2NrRm4gfTtcbiJdLCJtYXBwaW5ncyI6IkFBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOyIsInNvdXJjZVJvb3QiOiIifQ==\n//# sourceURL=webpack-internal:///./legacy.js\n");
+
+/***/ }),
+
+/***/ "./shapes.js":
+/*!*******************!*\
+  !*** ./shapes.js ***!
+  \*******************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpack_require__.d(__webpack_exports__, {\n/* harmony export */   \"unit\": () => (/* binding */ unit),\n/* harmony export */   \"area\": () => (/* binding */ area),\n/* harmony export */   \"default\": () => (__WEBPACK_DEFAULT_EXPORT__)\n/* harmony export */ });\nconst unit = { width: 2, height: 3 };\nfunction area(shape) {\n  return shape.width * shape.height;\n}\n/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (\"shapes\");\n//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiLi9zaGFwZXMuanMuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vLi9zaGFwZXMuanM/MzBlMyJdLCJzb3VyY2VzQ29udGVudCI6WyJleHBvcnQgY29uc3QgdW5pdCA9IHsgd2lkdGg6IDIsIGhlaWdodDogMyB9O1xuZXhwb3J0IGZ1bmN0aW9uIGFyZWEoc2hhcGUpIHtcbiAgcmV0dXJuIHNoYXBlLndpZHRoICogc2hhcGUuaGVpZ2h0O1xufVxuZXhwb3J0IGRlZmF1bHQgXCJzaGFwZXNcIjtcbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7O0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTsiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///./shapes.js\n");
+
+/***/ }),
+
+/***/ "./strict-cjs.js":
+/*!***********************!*\
+  !*** ./strict-cjs.js ***!
+  \***********************/
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+eval("\nvar label = \"strict\";\nfunction mode() {\n  return typeof this === \"undefined\" ? \"strict\" : \"sloppy\";\n}\nexports.mode = mode;\nexports.label = label;\n//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiLi9zdHJpY3QtY2pzLmpzLmpzIiwic291cmNlcyI6WyJ3ZWJwYWNrOi8vLy4vc3RyaWN0LWNqcy5qcz84NDUzIl0sInNvdXJjZXNDb250ZW50IjpbIlwidXNlIHN0cmljdFwiO1xudmFyIGxhYmVsID0gXCJzdHJpY3RcIjtcbmZ1bmN0aW9uIG1vZGUoKSB7XG4gIHJldHVybiB0eXBlb2YgdGhpcyA9PT0gXCJ1bmRlZmluZWRcIiA/IFwic3RyaWN0XCIgOiBcInNsb3BweVwiO1xufVxuZXhwb3J0cy5tb2RlID0gbW9kZTtcbmV4cG9ydHMubGFiZWwgPSBsYWJlbDtcbiJdLCJtYXBwaW5ncyI6IkFBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7Iiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///./strict-cjs.js\n");
+
+/***/ }),
+
+/***/ "./util.js":
+/*!*****************!*\
+  !*** ./util.js ***!
+  \*****************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpack_require__.d(__webpack_exports__, {\n/* harmony export */   \"greet\": () => (/* binding */ greet),\n/* harmony export */   \"total\": () => (/* binding */ total),\n/* harmony export */   \"Counter\": () => (/* binding */ Counter),\n/* harmony export */   \"makeAdders\": () => (/* binding */ makeAdders)\n/* harmony export */ });\nfunction greet(name) {\n  return \"hello \" + name;\n}\n\nconst total = (list) => list.reduce((sum, value) => sum + value, 0);\n\nlet made = 0;\n\nclass Counter {\n  constructor(start) {\n    made += 1;\n    this.value = start;\n  }\n  add(step) {\n    this.value += step;\n    return this;\n  }\n}\n\nfunction makeAdders(count) {\n  const adders = [];\n  for (let index = 0; index < count; index++) {\n    adders.push((value) => value + index + made);\n  }\n  return adders;\n}\n//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiLi91dGlsLmpzLmpzIiwic291cmNlcyI6WyJ3ZWJwYWNrOi8vLy4vdXRpbC5qcz85NDE1Il0sInNvdXJjZXNDb250ZW50IjpbImV4cG9ydCBmdW5jdGlvbiBncmVldChuYW1lKSB7XG4gIHJldHVybiBcImhlbGxvIFwiICsgbmFtZTtcbn1cblxuZXhwb3J0IGNvbnN0IHRvdGFsID0gKGxpc3QpID0+IGxpc3QucmVkdWNlKChzdW0sIHZhbHVlKSA9PiBzdW0gKyB2YWx1ZSwgMCk7XG5cbmxldCBtYWRlID0gMDtcblxuZXhwb3J0IGNsYXNzIENvdW50ZXIge1xuICBjb25zdHJ1Y3RvcihzdGFydCkge1xuICAgIG1hZGUgKz0gMTtcbiAgICB0aGlzLnZhbHVlID0gc3RhcnQ7XG4gIH1cbiAgYWRkKHN0ZXApIHtcbiAgICB0aGlzLnZhbHVlICs9IHN0ZXA7XG4gICAgcmV0dXJuIHRoaXM7XG4gIH1cbn1cblxuZXhwb3J0IGZ1bmN0aW9uIG1ha2VBZGRlcnMoY291bnQpIHtcbiAgY29uc3QgYWRkZXJzID0gW107XG4gIGZvciAobGV0IGluZGV4ID0gMDsgaW5kZXggPCBjb3VudDsgaW5kZXgrKykge1xuICAgIGFkZGVycy5wdXNoKCh2YWx1ZSkgPT4gdmFsdWUgKyBpbmRleCArIG1hZGUpO1xuICB9XG4gIHJldHVybiBhZGRlcnM7XG59XG4iXSwibWFwcGluZ3MiOiI7Ozs7Ozs7QUFBQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOyIsInNvdXJjZVJvb3QiOiIifQ==\n//# sourceURL=webpack-internal:///./util.js\n");
+
+/***/ })
+
+/******/ 	});
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		if(__webpack_module_cache__[moduleId]) {
+/******/ 			return __webpack_module_cache__[moduleId].exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/************************************************************************/
+/******/ 	/* webpack/runtime/compat get default export */
+/******/ 	(() => {
+/******/ 		// getDefaultExport function for compatibility with non-harmony modules
+/******/ 		__webpack_require__.n = (module) => {
+/******/ 			var getter = module && module.__esModule ?
+/******/ 				() => (module['default']) :
+/******/ 				() => (module);
+/******/ 			__webpack_require__.d(getter, { a: getter });
+/******/ 			return getter;
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/define property getters */
+/******/ 	(() => {
+/******/ 		// define getter functions for harmony exports
+/******/ 		__webpack_require__.d = (exports, definition) => {
+/******/ 			for(var key in definition) {
+/******/ 				if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
+/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 				}
+/******/ 			}
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
+/******/ 	(() => {
+/******/ 		__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/make namespace object */
+/******/ 	(() => {
+/******/ 		// define __esModule on exports
+/******/ 		__webpack_require__.r = (exports) => {
+/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 			}
+/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/************************************************************************/
+/******/ 	
+/******/ 	// startup
+/******/ 	// Load entry module and return exports
+/******/ 	// This entry module can't be inlined because the eval-source-map devtool is used.
+/******/ 	var __webpack_exports__ = __webpack_require__("./index.js");
+/******/ 	
+/******/ })()
+;
