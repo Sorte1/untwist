@@ -33,8 +33,12 @@ function row(explanation: Explanation, view: RefusalView): HTMLElement {
   return item;
 }
 
+function placesText(places: number): string {
+  return `${places.toLocaleString('en-US')} ${places === 1 ? 'place' : 'places'}`;
+}
+
 export function renderRefusals(holder: HTMLElement, view: RefusalView): void {
-  const { shown, more } = explainRefusals(view.report, view.text);
+  const { shown, more, reasons } = explainRefusals(view.report, view.text);
   const title = make('p', 'why-title', 'Why Safe mode left the decoder calls in place');
   if (shown.length === 0) {
     holder.replaceChildren(title, make('p', 'why-note', 'This run did not record which code kept the decoder.'));
@@ -42,7 +46,9 @@ export function renderRefusals(holder: HTMLElement, view: RefusalView): void {
   }
   const list = make('ol', 'why-list');
   list.append(...shown.map((explanation) => row(explanation, view)));
+  const counted = more > 0 ? reasons.map((reason) => make('p', 'why-note why-count', `${placesText(reason.places)} ${reason.sentence}`)) : [];
   const notes = [
+    ...counted,
     ...(more > 0 ? [make('p', 'why-note', `${more.toLocaleString('en-US')} more not shown.`)] : []),
     ...(view.linked ? [] : [make('p', 'why-note', 'The input changed after this run, so the lines are not linked.')]),
   ];

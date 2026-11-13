@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use serde::Serialize;
 use untwist::{stage_rows, Output, RefusalSite, Snapshot, SnapshotCode, StageRow};
 use untwist_core::ast_util::respan::SYNTHETIC_BASE;
@@ -8,6 +10,7 @@ use super::diagnostics::{stderr_diagnostics, Diagnostic};
 use crate::limits;
 
 pub const SCHEMA: &str = "untwist.report/1";
+pub const SITE_ROWS: usize = 1000;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +43,19 @@ struct SiteRow<'a> {
     layer: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     input_span: Option<[u32; 2]>,
+}
+
+#[derive(Serialize)]
+struct ReasonRow<'a> {
+    what: &'a str,
+    places: usize,
+}
+
+#[derive(Default)]
+struct Sites<'a> {
+    rows: Vec<SiteRow<'a>>,
+    total: usize,
+    reasons: Vec<ReasonRow<'a>>,
 }
 
 #[derive(Serialize)]
@@ -109,6 +125,10 @@ struct Report<'a> {
     notes: Vec<NoteRow<'a>>,
     #[serde(rename = "refusalSites", skip_serializing_if = "Vec::is_empty")]
     refusal_sites: Vec<SiteRow<'a>>,
+    #[serde(rename = "refusalSitesTotal", skip_serializing_if = "Option::is_none")]
+    refusal_sites_total: Option<usize>,
+    #[serde(rename = "refusalReasons", skip_serializing_if = "Vec::is_empty")]
+    refusal_reasons: Vec<ReasonRow<'a>>,
     diagnostics: Vec<Diagnostic<'a>>,
     limits: Limits<'a>,
     detection: Detection<'a>,
@@ -184,16 +204,69 @@ fn site_span(site: &RefusalSite, source: &str, index: &Utf16Index) -> Option<[u3
     fits.then(|| Some([index.at(at.start)?, index.at(at.end)?]))?
 }
 
-fn site_rows<'a>(sites: &'a [RefusalSite], source: &str) -> Vec<SiteRow<'a>> {
-    let index = Utf16Index::new(source, !sites.is_empty());
-    sites
+fn rank(what: &str) -> u8 {
+    if what.starts_with("BUILTIN_PATCHED") {
+        0
+    } else if what == "GLOBAL_REACH" {
+        1
+    } else {
+        2
+    }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+enum Place<'a> {
+    Span([u32; 2]),
+    Elsewhere(u32, &'a str),
+}
+
+fn place<'a>(row: &SiteRow<'a>) -> Place<'a> {
+    row.input_span
+        .map_or(Place::Elsewhere(row.layer, row.what), Place::Span)
+}
+
+fn reason_rows<'a>(rows: &[SiteRow<'a>]) -> Vec<ReasonRow<'a>> {
+    let mut reasons: Vec<ReasonRow<'a>> = Vec::new();
+    let mut at: HashMap<&str, usize> = HashMap::new();
+    for row in rows {
+        let index = *at.entry(row.what).or_insert_with(|| {
+            reasons.push(ReasonRow {
+                what: row.what,
+                places: 0,
+            });
+            reasons.len() - 1
+        });
+        reasons[index].places += 1;
+    }
+    reasons.sort_by_key(|reason| (rank(reason.what), std::cmp::Reverse(reason.places)));
+    reasons
+}
+
+fn site_rows<'a>(sites: &'a [RefusalSite], source: &str) -> Sites<'a> {
+    if sites.is_empty() {
+        return Sites::default();
+    }
+    let index = Utf16Index::new(source, true);
+    let mut rows: Vec<SiteRow<'a>> = sites
         .iter()
         .map(|site| SiteRow {
             what: &site.what,
             layer: site.layer,
             input_span: site_span(site, source, &index),
         })
-        .collect()
+        .collect();
+    rows.sort_by_key(|row| rank(row.what));
+    let mut seen = HashSet::new();
+    rows.retain(|row| seen.insert(place(row)));
+    rows.sort_by_key(|row| row.input_span.map_or(u32::MAX, |span| span[0]));
+    let total = rows.len();
+    let reasons = reason_rows(&rows);
+    rows.truncate(SITE_ROWS);
+    Sites {
+        rows,
+        total,
+        reasons,
+    }
 }
 
 fn snapshot_rows(snapshots: &[Snapshot]) -> Vec<SnapshotRow> {
@@ -267,13 +340,16 @@ fn diagnostic_rows<'a>(
 pub fn report_json(output: &Output, facts: &RunFacts<'_>) -> String {
     let bundle = output.bundle.as_ref();
     let notes = note_rows(&output.notes, facts.source);
+    let sites = site_rows(&output.refusal_sites, facts.source);
     let report = Report {
         schema: SCHEMA,
         engine: engine(),
         stages: stage_rows(&output.stages),
         diagnostics: diagnostic_rows(output, facts, &notes),
         notes,
-        refusal_sites: site_rows(&output.refusal_sites, facts.source),
+        refusal_sites: sites.rows,
+        refusal_sites_total: (sites.total > 0).then_some(sites.total),
+        refusal_reasons: sites.reasons,
         limits: Limits {
             fired: facts
                 .limits
@@ -357,7 +433,68 @@ impl Utf16Index {
 
 #[cfg(test)]
 mod tests {
-    use super::Utf16Index;
+    use untwist::{RefusalSite, SiteAt};
+
+    use super::{site_rows, Utf16Index, SITE_ROWS};
+
+    fn site(what: &str, start: u32) -> RefusalSite {
+        RefusalSite {
+            input: 0,
+            layer: 0,
+            at: Some(SiteAt {
+                start,
+                end: start + 1,
+                line: 1,
+                column: 1,
+            }),
+            what: what.to_string(),
+        }
+    }
+
+    #[test]
+    fn sites_are_listed_once_per_place_in_input_order_and_capped_with_full_counts() {
+        let source = "x".repeat(2 * SITE_ROWS);
+        let extra = 200;
+        let count = u32::try_from(SITE_ROWS + extra).unwrap_or(u32::MAX);
+        let mut sites: Vec<RefusalSite> = (0..count)
+            .rev()
+            .map(|at| site("code from text", at))
+            .collect();
+        sites.push(site("code from text", 5));
+        sites.push(site("GLOBAL_REACH", 7));
+        let listed = site_rows(&sites, &source);
+        assert_eq!(listed.total, SITE_ROWS + extra);
+        assert_eq!(listed.rows.len(), SITE_ROWS);
+        let starts: Vec<u32> = listed
+            .rows
+            .iter()
+            .filter_map(|row| row.input_span.map(|span| span[0]))
+            .collect();
+        assert!(
+            starts.windows(2).all(|pair| pair[0] < pair[1]),
+            "{starts:?}"
+        );
+        assert_eq!(listed.rows[7].what, "GLOBAL_REACH");
+        let reasons: Vec<(&str, usize)> = listed
+            .reasons
+            .iter()
+            .map(|reason| (reason.what, reason.places))
+            .collect();
+        assert_eq!(
+            reasons,
+            [
+                ("GLOBAL_REACH", 1),
+                ("code from text", SITE_ROWS + extra - 1)
+            ]
+        );
+    }
+
+    #[test]
+    fn no_sites_give_no_rows_and_no_counts() {
+        let listed = site_rows(&[], "x");
+        assert!(listed.rows.is_empty() && listed.reasons.is_empty());
+        assert_eq!(listed.total, 0);
+    }
 
     #[test]
     fn byte_offsets_map_to_utf16_units_and_mid_character_offsets_to_none() {
