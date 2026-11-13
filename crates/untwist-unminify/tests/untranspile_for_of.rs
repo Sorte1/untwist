@@ -158,7 +158,7 @@ fn a_step_read_after_plain_names_still_heads_the_loop() {
     assert_has(
         &code,
         &[
-            "(0, _step)();",
+            "  _step();",
             "delete removed[_step4];",
             "total += weights[_step5] || 0;",
         ],
