@@ -26,7 +26,10 @@ fn split_count(source: &str) -> Option<usize> {
 #[test]
 fn an_es_module_with_static_imports_or_exports_is_split() {
     let source = format!("import path from \"node:path\";\n{BODY}export {{ c, f, path }};\n");
-    assert!(split_count(&source).is_some_and(|count| count >= 2), "{source}");
+    assert!(
+        split_count(&source).is_some_and(|count| count >= 2),
+        "{source}"
+    );
 }
 
 #[test]
