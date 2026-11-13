@@ -503,3 +503,25 @@ pub fn take_logical_left_assignment_value<'a>(
         }
     }
 }
+
+pub fn take_binary_left_assignment_value<'a>(
+    test: Expression<'a>,
+    cx: &mut Cx<'a, '_>,
+) -> Result<Expression<'a>, Expression<'a>> {
+    let binary = match test {
+        Expression::BinaryExpression(binary) => binary.unbox(),
+        other => return Err(other),
+    };
+    let binary_span = binary.span;
+    let binary_operator = binary.operator;
+    match binary.left {
+        Expression::AssignmentExpression(assignment) => Ok(assignment.unbox().right),
+        other => Err(Expression::new_binary_expression(
+            binary_span,
+            other,
+            binary_operator,
+            binary.right,
+            cx,
+        )),
+    }
+}

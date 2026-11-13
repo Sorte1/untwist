@@ -1,6 +1,7 @@
 use crate::transpile_util::{
     assignment_temp_symbol, has_reference_counts, identifier_symbol_is, is_repeatable,
-    is_undefined_identifier, take_logical_left_assignment_value, TempVars,
+    is_undefined_identifier, take_binary_left_assignment_value, take_logical_left_assignment_value,
+    TempVars,
 };
 use oxc_allocator::{Box as ABox, Vec as AVec};
 use oxc_ast::ast::*;
@@ -145,28 +146,6 @@ fn take_conditional<'a>(
             *node = other;
             None
         }
-    }
-}
-
-fn take_binary_left_assignment_value<'a>(
-    test: Expression<'a>,
-    cx: &mut Cx<'a, '_>,
-) -> Result<Expression<'a>, Expression<'a>> {
-    let binary = match test {
-        Expression::BinaryExpression(binary) => binary.unbox(),
-        other => return Err(other),
-    };
-    let binary_span = binary.span;
-    let binary_operator = binary.operator;
-    match binary.left {
-        Expression::AssignmentExpression(assignment) => Ok(assignment.unbox().right),
-        other => Err(Expression::new_binary_expression(
-            binary_span,
-            other,
-            binary_operator,
-            binary.right,
-            cx,
-        )),
     }
 }
 
