@@ -224,7 +224,7 @@ impl<'s> Gen<'s> {
         let object = self
             .g
             .new_site(span, SiteKind::Arguments, &[Builtin::ObjectProto]);
-        let fields = self.g.field_node(object, Field::UNKNOWN);
+        let fields = self.g.field_node(object, Field::INDEX);
         let node = self.g.singleton(object);
         let callee = self.g.singleton(function);
         self.g.store_named(node, "callee", callee);
@@ -520,8 +520,6 @@ impl<'s> Gen<'s> {
             .g
             .new_site(span, SiteKind::Function, &[Builtin::FunctionProto]);
         let node = self.g.singleton(object);
-        let callers = self.g.callers;
-        self.g.copy(node, callers);
         if prototype {
             let proto = self
                 .g
@@ -677,7 +675,7 @@ impl<'s> Gen<'s> {
             let object = self
                 .g
                 .new_site(rest.span, SiteKind::Rest, &[Builtin::ArrayProto]);
-            let fields = self.g.field_node(object, Field::UNKNOWN);
+            let fields = self.g.field_node(object, Field::INDEX);
             let node = self.g.singleton(object);
             self.bind_pattern(&rest.rest.argument, Some(node));
             fields

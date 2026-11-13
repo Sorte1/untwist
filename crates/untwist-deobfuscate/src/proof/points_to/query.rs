@@ -1,7 +1,7 @@
 use oxc_span::Span;
 
 use super::generate::{Gen, SiteKey};
-use super::object::{Obj, ObjectId};
+use super::object::{Obj, ObjectId, SiteKind};
 use super::solve::{Field, Graph, Node, PatchKey};
 use crate::mutants::builtin_aliases_trusted;
 use crate::proof::aliased::{AliasKey, AliasSite};
@@ -51,7 +51,7 @@ fn field_names(graph: &Graph, sources: &[Node]) -> AliasKey {
             for field in graph.named_fields(*object) {
                 match field {
                     Field::ACCESSORS | Field::ENTRIES => {}
-                    Field::UNKNOWN => return AliasKey::Unknown,
+                    Field::UNKNOWN | Field::INDEX => return AliasKey::Unknown,
                     named => names.extend(graph.field_name(named).map(str::to_string)),
                 }
             }
@@ -118,10 +118,21 @@ impl Gen<'_> {
     pub(super) fn describe(&self, node: Node) -> Vec<String> {
         let objects = self.g.points_to(node);
         let world = objects.first() == Some(&ObjectId::WORLD);
+        let functions = objects
+            .iter()
+            .take(2)
+            .any(|object| *object == ObjectId::FUNCTIONS);
         let mut found: Vec<String> = objects
             .iter()
             .filter(|object| {
-                !(world && self.g.objects.is_site(**object) && self.g.is_escaped(**object))
+                let covered = match self.g.objects.get(**object) {
+                    Obj::Site(_, SiteKind::Function) if functions => true,
+                    Obj::Site(..) => world && self.g.is_escaped(**object),
+                    Obj::Str(_) => world,
+                    Obj::Builtin(builtin) => world && builtin.is_primitive(),
+                    Obj::World | Obj::Functions => false,
+                };
+                !covered
             })
             .map(|object| self.g.objects.describe(*object))
             .collect();

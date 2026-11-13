@@ -310,7 +310,10 @@ const ESCAPED_BEFORE_A_WORLD_SET: &[(&str, &[&str])] = &[
     ),
     (
         "var o = {}; host(o); var q = host2(); if (c) { q = o; } q.__proto__ = Object; o.defineProperty(String.prototype, 'x', { value: 1 });",
-        &["o.defineProperty(String.prototype, 'x', { value: 1 })"],
+        &[
+            "q.__proto__",
+            "o.defineProperty(String.prototype, 'x', { value: 1 })",
+        ],
     ),
 ];
 

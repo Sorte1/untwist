@@ -9,6 +9,7 @@ const ACCESSORS: Key = Key::Static(Field::ACCESSORS);
 const ENTRIES: Key = Key::Static(Field::ENTRIES);
 const ELEMENTS: Key = Key::Static(Field::ELEMENTS);
 const OWN: Key = Key::Static(Field::OWN);
+const INDEX: Key = Key::Static(Field::INDEX);
 const BOUND_ARGS_LIMIT: usize = 16;
 
 impl Graph {
@@ -21,6 +22,7 @@ impl Graph {
         match self.objects.get(callee).clone() {
             Obj::World | Obj::Builtin(Builtin::Other) if standard_conversion => {}
             Obj::World => self.generic(&call),
+            Obj::Functions => self.call_functions(&call),
             Obj::Str(_) => {}
             Obj::Site(_, SiteKind::Function) => self.bind_function(callee, &call),
             Obj::Site(_, SiteKind::Bound) => {
@@ -30,6 +32,42 @@ impl Graph {
             Obj::Site(..) => {}
             Obj::Builtin(Builtin::Method(method)) => self.method(index, method, &call),
             Obj::Builtin(builtin) => self.root_call(builtin, &call),
+        }
+    }
+
+    fn call_functions(&mut self, call: &Call) {
+        let slot = usize::from(call.construct);
+        let (this, args, ret) = match self.function_calls[slot] {
+            Some(summary) => summary,
+            None => {
+                let summary = (self.node(), self.node(), self.node());
+                self.function_calls[slot] = Some(summary);
+                let (this, args, ret) = summary;
+                let shared = Call {
+                    callee: self.empty,
+                    this: Some(this),
+                    args: Vec::new(),
+                    spread: Some(args),
+                    result: Some(ret),
+                    construct: call.construct,
+                    loose: true,
+                    firm: false,
+                    span: Span::new(u32::MAX, u32::MAX),
+                };
+                for function in self.function_sites().iter() {
+                    self.bind_function(*function, &shared);
+                }
+                summary
+            }
+        };
+        if let Some(receiver) = call.this {
+            self.copy(receiver, this);
+        }
+        for arg in call.args.iter().chain(&call.spread) {
+            self.copy(*arg, args);
+        }
+        if let Some(result) = call.result {
+            self.copy(ret, result);
         }
     }
 
@@ -254,7 +292,7 @@ impl Graph {
         if let Some(result) = result {
             self.copy(node, result);
         }
-        self.field_node(object, Field::UNKNOWN)
+        self.field_node(object, Field::INDEX)
     }
 
     fn prims(&mut self, result: Option<Node>) {
@@ -647,7 +685,7 @@ impl Graph {
                 let elements = self.fresh_array(span, result);
                 let (pair, pair_node) = self.fresh(span, SiteKind::Rest, &[Builtin::ArrayProto]);
                 self.copy(pair_node, elements);
-                let pair_fields = self.field_node(pair, Field::UNKNOWN);
+                let pair_fields = self.field_node(pair, Field::INDEX);
                 if let Some(target) = arg(0) {
                     self.load(target, OWN, pair_fields);
                     self.keys_of(target, pair_fields);
@@ -902,7 +940,7 @@ impl Graph {
         match method {
             Method::ArrayPush => {
                 for value in call.args.iter().chain(&call.spread) {
-                    self.store(this, UNKNOWN, *value);
+                    self.store(this, INDEX, *value);
                 }
                 self.prims(result);
             }
@@ -911,7 +949,7 @@ impl Graph {
                 let fields = self.fresh_array(span, result);
                 self.copy(elements, fields);
                 for value in call.args.iter().skip(2).chain(&call.spread) {
-                    self.store(this, UNKNOWN, *value);
+                    self.store(this, INDEX, *value);
                 }
             }
             Method::ArrayCopy => {
@@ -938,7 +976,7 @@ impl Graph {
             Method::ArraySelf => self.returns(Some(this), result),
             Method::ArrayFill => {
                 if let Some(value) = arg(0) {
-                    self.store(this, UNKNOWN, value);
+                    self.store(this, INDEX, value);
                 }
                 self.returns(Some(this), result);
             }
@@ -985,7 +1023,7 @@ impl Graph {
                 };
                 self.copy(source, fields);
                 let (pair, pair_node) = self.fresh(span, SiteKind::Rest, &[Builtin::ArrayProto]);
-                let pair_fields = self.field_node(pair, Field::UNKNOWN);
+                let pair_fields = self.field_node(pair, Field::INDEX);
                 self.copy(source, pair_fields);
                 self.add_builtin(pair_fields, Builtin::PrimNumber);
                 self.copy(pair_node, fields);

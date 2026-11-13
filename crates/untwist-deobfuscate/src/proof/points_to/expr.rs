@@ -175,7 +175,7 @@ impl Gen<'_> {
         let object = self
             .g
             .new_site(array.span, SiteKind::Array, &[Builtin::ArrayProto]);
-        let fields = self.g.field_node(object, Field::UNKNOWN);
+        let fields = self.g.field_node(object, Field::INDEX);
         for element in &array.elements {
             match element {
                 ArrayExpressionElement::SpreadElement(spread) => {
@@ -483,7 +483,7 @@ impl Gen<'_> {
         let object = self
             .g
             .new_site(span, SiteKind::Rest, &[Builtin::ArrayProto]);
-        let fields = self.g.field_node(object, Field::UNKNOWN);
+        let fields = self.g.field_node(object, Field::INDEX);
         self.flow(items, fields);
         self.g.singleton(object)
     }
