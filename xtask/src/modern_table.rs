@@ -3,7 +3,7 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
-pub const TABLE: &str = "crates/untwist-rename/data/core-js-compat.tsv";
+pub const TABLE: &str = "crates/untwist-rename/data/core-js-compat.tsv.gz";
 const GENERATOR: &str = "tools/core-js-compat/table.mjs";
 
 #[derive(clap::Args, Debug)]
@@ -43,7 +43,7 @@ pub fn run(root: &Path, request: &Request) -> Result<()> {
         println!("{TABLE} is up to date");
         return Ok(());
     }
-    std::fs::write(&path, &table).with_context(|| format!("writing {TABLE}"))?;
+    crate::library_gz::write(&path, &table)?;
     println!("wrote {TABLE} ({} lines)", table.lines().count());
     Ok(())
 }

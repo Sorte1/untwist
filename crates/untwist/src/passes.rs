@@ -77,6 +77,7 @@ pub const PASSES: &[PassInfo] = &[
     pass("rename-unique", "rename", false),
     pass("mangle", "rename", false),
     pass("rename-shorthand", "rename", false),
+    #[cfg(feature = "modern")]
     pass("modern", "modern", false),
     pass("library-names", "library", false),
 ];

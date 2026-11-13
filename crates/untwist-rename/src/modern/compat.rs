@@ -7,7 +7,7 @@ use super::baseline::{Baseline, Version};
 pub const HEADER: &str = "#untwist-core-js-compat";
 pub const FORMAT: &str = "v1";
 
-static TABLE_TEXT: &str = include_str!("../../data/core-js-compat.tsv");
+static TABLE_GZ: &[u8] = include_bytes!("../../data/core-js-compat.tsv.gz");
 
 #[derive(Clone, Debug)]
 struct Entry {
@@ -174,5 +174,9 @@ fn listed_at(entries: &[Entry], at: usize) -> bool {
 
 pub fn builtin() -> &'static Compat {
     static COMPAT: OnceLock<Compat> = OnceLock::new();
-    COMPAT.get_or_init(|| Compat::parse(TABLE_TEXT).unwrap_or_default())
+    COMPAT.get_or_init(|| {
+        crate::library::table::inflate(TABLE_GZ)
+            .and_then(|text| Compat::parse(&text))
+            .unwrap_or_default()
+    })
 }

@@ -78,6 +78,7 @@ pub struct Options {
     pub split_assume_modules: bool,
     pub rename: RenameMode,
     pub rename_all: bool,
+    #[cfg(feature = "modern")]
     pub modern: Option<untwist_rename::modern::Baseline>,
     pub plugins: Plugins,
     pub single_file: bool,
@@ -115,6 +116,7 @@ impl Default for Options {
             split_assume_modules: false,
             rename: RenameMode::None,
             rename_all: true,
+            #[cfg(feature = "modern")]
             modern: None,
             plugins: Plugins::default(),
             single_file: false,

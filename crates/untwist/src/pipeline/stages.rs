@@ -145,6 +145,12 @@ impl Pipeline {
         settle_notes(site, &runs, latest);
     }
 
+    #[cfg(not(feature = "modern"))]
+    fn modern_stage<'a>(&self, _site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {
+        sem
+    }
+
+    #[cfg(feature = "modern")]
     fn modern_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {
         let Some(baseline) = self.options.modern.clone() else {
             return sem;
