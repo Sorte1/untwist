@@ -28,7 +28,7 @@ pub use pipeline::{
 pub use pipeline::{DecodedSite, Snapshot, SnapshotCode};
 #[cfg(feature = "refusal-spans")]
 pub use pipeline::{RefusalSite, SiteAt};
-pub use plan::{is_safe_relative, PlanRefusal, PlannedFile};
+pub use plan::{input_names, is_safe_relative, PlanRefusal, PlannedFile};
 pub use plugin::{PluginCtor, Plugins, Stage};
 pub use printable::printable;
 pub use report::{stage_rows, StageReport, StageRow};

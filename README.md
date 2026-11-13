@@ -103,7 +103,7 @@ Common flags:
 
 | Flag | What it does |
 | --- | --- |
-| `-o, --output DIR` | Write `deobfuscated.js`, and, when a bundle is found, `bundle.json` and one file per module. |
+| `-o, --output DIR` | Write `deobfuscated.js`, and, when a bundle is found, `bundle.json` and one file per module. With several inputs each is written as `deobfuscated.<name>.js`; when only some of them form the bundle (a chunk unpacked without its loader, or an entry whose chunks are not bundles), every input is written under its own relative name instead, so the tree runs as the inputs did, and no module takes one of those names. |
 | `-f, --force` | Overwrite the files in `DIR` that this run writes and remove the ones a previous run left there. Input files are never overwritten. |
 | `--unsafe` | Use the unsafe lane (see below). |
 | `--rename MODE` | `none` (default), `mangle`, `simple`, `smart` or `unique`. `-m` is short for `--rename mangle`. |

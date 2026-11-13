@@ -38,7 +38,7 @@ pub use detect::{
     holds_a_bundle, holds_a_bundle_with, unpack_program, unpack_program_taking,
     unpack_program_taking_with, unpack_program_with,
 };
-pub use inputs::unpack_inputs;
+pub use inputs::{unpack_inputs, unpack_named_inputs};
 pub use mappings::{Mapping, MappingMatcher};
 pub use merge::{merge_bundles, merge_noted};
 pub use model::{Bundle, BundleKind, Module};
@@ -109,7 +109,8 @@ pub fn finish_with<'a>(
 ) -> Vec<Note> {
     let mut notes = mappings::apply_mappings(bundle, mappings);
     notes.extend(entry_candidates_note(bundle));
-    notes.extend(assign::assign_paths(bundle));
+    let inputs = bundle.mirrored_inputs.clone();
+    notes.extend(assign::assign_paths_around(bundle, &inputs));
     notes.extend(kind_transforms(alloc, bundle, options));
     notes
 }

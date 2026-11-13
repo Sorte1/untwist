@@ -32,6 +32,7 @@ fn bundle_with_path(path: &str) -> BundleOutput {
         kind: "webpack".to_string(),
         entry_id: Some("./index".to_string()),
         chunk_ids: Vec::new(),
+        mirrored_inputs: Vec::new(),
         modules: vec![ModuleOutput {
             id: path.to_string(),
             path: path.to_string(),
