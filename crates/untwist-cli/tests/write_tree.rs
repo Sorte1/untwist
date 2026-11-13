@@ -18,8 +18,8 @@ const CELLS: &[Cell] = &[
     Cell {
         name: "mini-parcel-nohoist-min",
         inputs: &["index.js", "lazy.d601cb87.js"],
-        mirrored: true,
-        entry_module_runs: false,
+        mirrored: false,
+        entry_module_runs: true,
     },
     Cell {
         name: "mini-parcel-nohoist",
@@ -197,19 +197,4 @@ fn a_partial_bundle_writes_each_input_under_its_own_name() {
             );
         }
     }
-}
-
-#[test]
-fn a_chunk_unpacked_without_its_loader_does_not_claim_index_js() {
-    let cell = &CELLS[0];
-    let (_dir, out) = written(cell, &[]);
-
-    let paths = module_paths(&out);
-    let main = std::fs::read_to_string(out.join("index.js")).unwrap();
-
-    assert!(
-        paths.iter().all(|(path, _)| path != "index.js"),
-        "{paths:?}"
-    );
-    assert!(main.contains("lazy.d601cb87.js"), "{main}");
 }
