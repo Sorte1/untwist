@@ -6,6 +6,7 @@ own observables, so node must print the same thing before and after Untwist.
 | Folder | What it holds | Used by |
 |---|---|---|
 | `behaviour/` | Programs that print, one string-array, rotator or decoder hazard each; `.mjs` files run as modules | `cargo xtask diff-behaviour`, `crates/untwist/tests/decode_behaviour.rs` |
+| `bundle-matrix/` | Two small apps (CommonJS deps, a CommonJS cycle, JSON, a dynamic import; core-js polyfills from Babel `useBuiltIns`) built by every bundler, version and runtime-shaping option in `tools/bundle-matrix/`, then minified or obfuscated; `MANIFEST`, `SHA256SUMS`, `EXPECT` and `expected/` describe each cell, `DROPPED` lists the cells whose own output does not run | `cargo xtask bundle-matrix` (local and release check), `xtask/tests/bundle_matrix_drift.rs` |
 | `builtin-replaced/` | Programs that print, a string-array unit beside a write to a built-in | `crates/untwist/tests/builtin_replaced_behaviour.rs` |
 | `corpus-npm/` | Generated npm-style modules obfuscated with several decoder shapes | `cargo xtask corpus-npm`, `crates/untwist-deobfuscate/tests/corpus_npm.rs` |
 | `dead-code/` | Programs that print, one rule of the safe `dead-code` fold each | `crates/untwist/tests/dead_code_behaviour.rs` |
@@ -32,7 +33,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `write-tree/` | Multi-file bundler output (an entry with a lazy chunk) copied from the `bundle-matrix/` cells of the same name, `tools/bundle-matrix/`; `expected/` holds what the original prints | `crates/untwist-cli/tests/write_tree.rs`, which runs the `-o` tree in node |
 
 Third-party inputs keep their licence beside them: `LICENSE-reference`,
-`LICENSE-javascript-obfuscator`, `obfuscators/licenses/`, `unpack-bundlers/licenses/`, `unpack-rolldown/licenses/` and `write-tree/licenses/`.
+`LICENSE-javascript-obfuscator`, `obfuscators/licenses/`, `unpack-bundlers/licenses/`, `unpack-rolldown/licenses/`, `bundle-matrix/licenses/` and `write-tree/licenses/`.
 
 Not every sample in `reference/deobfuscate/` comes from the reference deobfuscator.
 `obfuscator.io-site-memo-reset.js` is the obfuscator.io website's output for `console.log("")`.
@@ -45,6 +46,6 @@ javascript-obfuscator 5 emits. Their `.snap` files hold the program before obfus
 
 Put the file in the folder whose test should pick it up, name it after the shape it covers, and make
 it print what it computes so node can check it. Generated folders (`eval/`, `corpus-npm/`,
-`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `rollup-commonjs/`, `unpack-bundlers/`, `unpack-rolldown/`, `untranspile/`) are rewritten by their generator, so change the
+`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `rollup-commonjs/`, `unpack-bundlers/`, `unpack-rolldown/`, `bundle-matrix/`, `untranspile/`) are rewritten by their generator, so change the
 generator instead. Run the folder's test or differential; add an allowlist entry only for a
 divergence documented in `docs/known-divergences/`.

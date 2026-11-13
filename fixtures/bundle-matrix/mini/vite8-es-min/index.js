@@ -1,0 +1,8 @@
+// .src-mini-esm/index.js
+var e = (/* @__PURE__ */ ((e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports))(((e) => {
+	console.log("eval cjs"), e.twice = function(e) {
+		return e * 2;
+	};
+})))();
+console.log("eval index " + (0, e.twice)(21)), import("./lazy.chunk.js").then((e) => console.log("lazy " + e.value));
+export {};

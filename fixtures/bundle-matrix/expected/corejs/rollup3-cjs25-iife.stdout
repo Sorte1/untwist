@@ -1,0 +1,7 @@
+exit=0
+eval keys
+eval describe
+eval index
+at 3 hasOwn true
+replaceAll a+b+c
+describe nAme|items true

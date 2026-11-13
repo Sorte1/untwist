@@ -1,5 +1,6 @@
 pub mod behaviour;
 pub mod bench;
+pub mod bundle_matrix;
 pub mod corpus;
 pub mod corpus_bundle;
 pub mod corpus_export;

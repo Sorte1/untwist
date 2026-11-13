@@ -1,0 +1,1 @@
+!function(){"use strict";var e,o={},l=(e||(e=1,console.log("eval cjs"),o.twice=function(e){return 2*e}),o);console.log("eval index "+l.twice(21)),Promise.resolve().then(function(){return n}).then(e=>console.log("lazy "+e.value)),console.log("eval lazy");var n=Object.freeze({__proto__:null,value:42})}();

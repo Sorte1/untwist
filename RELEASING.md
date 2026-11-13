@@ -3,6 +3,14 @@
 A release puts the same version on crates.io, npm and https://untwist.dev. It starts from a
 `vX.Y.Z` tag; nothing else deploys the site to production.
 
+## Before tagging
+
+`cargo xtask bundle-matrix` checks every bundler variant in `fixtures/bundle-matrix/` (unpack
+recognised, module count, machinery left, node behaviour) in three lanes. It needs a release
+build and `npm ci --prefix tools/bundle-matrix --ignore-scripts`, takes about a minute with
+`--jobs 16` and is too slow for CI with a debug build, so run it before a release. It must end
+with 0 failed and 0 unexpected-pass.
+
 ## Steps
 
 ```sh

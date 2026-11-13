@@ -1,0 +1,2 @@
+base/webpack5-prod-node+obf-rename-properties	original does not run: exit 1: TypeError: Cannot read properties of undefined (reading 'length')
+mini/webpack5-federation	build failed: ERROR in container entry ./util[0]
