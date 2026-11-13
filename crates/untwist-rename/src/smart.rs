@@ -156,7 +156,24 @@ fn instance_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> O
     (!name.is_empty() && name != "_").then_some(name)
 }
 
+const WRAPPER_PREFIX: &str = "require";
+
+fn wrapper_value_base(info: &BindingInfo) -> Option<String> {
+    let BindingRole::Variable(shape) = &info.role else {
+        return None;
+    };
+    if shape.kind != InitKind::Call || shape.symbol.is_none() {
+        return None;
+    }
+    let rest = shape.name.as_deref()?.strip_prefix(WRAPPER_PREFIX)?;
+    let named = rest.starts_with(|ch: char| ch.is_ascii_uppercase()) && looks_human_written(rest);
+    named.then(|| lower_camel(rest))
+}
+
 fn derived_base(info: &BindingInfo, cx: &Context<'_>) -> String {
+    if let Some(base) = wrapper_value_base(info) {
+        return base;
+    }
     let base = base_name(info, cx);
     if base == STRUCTURAL_FUNCTION && is_call_result(info) {
         return CALL_RESULT.to_string();
