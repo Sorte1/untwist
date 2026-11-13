@@ -568,7 +568,7 @@ impl VarToLet {
         cx: &mut Cx<'a, '_>,
     ) -> usize {
         let scope = cx.current_scope_id();
-        let captures = is_function_scope(cx.scoping(), scope);
+        let captures = !cx.opts.keep_captured_vars && is_function_scope(cx.scoping(), scope);
         let mut candidates = self
             .facts(cx.scoping())
             .statement_candidates(stmts, scope, captures);
