@@ -626,3 +626,193 @@ fn a_key_that_names_another_property_still_restores_the_default() {
     );
     assert!(out.contains("b = 2"), "{out}");
 }
+
+#[test]
+fn a_guard_after_bare_declarations_becomes_a_default_parameter() {
+    let rows = [
+        (
+            r#"function Bar(v) { this.b = v; }
+function Foo() {
+  var _this;
+  var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 1;
+  var b = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : a + 1;
+  _this = new Bar(a);
+  _this.c = b;
+  return _this;
+}
+console.log(JSON.stringify(Foo()), JSON.stringify(Foo(5)), JSON.stringify(Foo(5, 9)), Foo.length);"#,
+            "function Foo(a = 1, b = a + 1) {\n  var _this;",
+        ),
+        (
+            r#"function g(x) {
+  let self, other;
+  var y = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : x * 2;
+  self = [x, y];
+  return self.concat(other === undefined);
+}
+console.log(String(g(1)), String(g(1, 3)), g.length);"#,
+            "function g(x, y = x * 2) {\n  let self, other;",
+        ),
+        (
+            r#"function h(w = 0, x) {
+  var _this;
+  if (x === undefined) { x = "d" + w; }
+  _this = x;
+  return _this;
+}
+console.log(h(), h(1), h(1, 0), h.length);"#,
+            "function h(w = 0, x = \"d\" + w) {\n  var _this;",
+        ),
+    ];
+    for (source, expected) in rows {
+        for output in [default_lane(source), unsafe_lane(source)] {
+            assert!(output.contains(expected), "{output}");
+            untwist_testing::node::assert_node_agrees(source, &output);
+        }
+    }
+}
+
+#[test]
+fn a_guard_after_a_declaration_it_reads_or_one_that_runs_code_stays() {
+    let sources = [
+        r#"function f() {
+  var t;
+  var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : t;
+  return [a, t];
+}
+console.log(String(f()), String(f(2)));"#,
+        r#"function f() {
+  let n;
+  var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : read();
+  function read() { return n === undefined ? "unset" : n; }
+  n = 3;
+  return [a, read()];
+}
+console.log(String(f()), String(f(2)));"#,
+        r#"var calls = [];
+function f() {
+  var t = calls.push("t");
+  var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : calls.push("a");
+  return [a, t, calls.join()];
+}
+console.log(String(f()), String(f(2)));"#,
+        r#"function f() {
+  var [t] = [1];
+  var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 2;
+  return [a, t];
+}
+console.log(String(f()), String(f(3)));"#,
+    ];
+    for source in sources {
+        for output in [default_lane(source), unsafe_lane(source)] {
+            assert_declaration_stays(source, &output);
+        }
+    }
+}
+
+fn params_fixture(variant: &str, name: &str) -> String {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/untranspile/params")
+        .join(variant)
+        .join(name);
+    std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
+}
+
+#[test]
+fn babel_derived_constructors_get_their_default_parameters_back_under_unsafe() {
+    let source = params_fixture("babel-7.29", "derived-defaults.js");
+    let output = unsafe_lane(&source);
+    assert!(
+        output.contains("function Box(width = 1, height = width * 2, label) {\n    var _this;"),
+        "{output}"
+    );
+    assert!(
+        output.contains("function Tagged(tag = \"t\") {\n    var _this2;"),
+        "{output}"
+    );
+    untwist_testing::node::assert_node_agrees(&source, &output);
+}
+
+#[test]
+fn transpiled_parameter_fixtures_agree_with_node_in_both_lanes() {
+    for variant in [
+        "babel-7.29",
+        "babel-7.29-loose",
+        "ts-5.9-es5",
+        "swc-1.16-es5",
+    ] {
+        for name in ["derived-defaults.js", "this-capture-defaults.js"] {
+            let source = params_fixture(variant, name);
+            for output in [default_lane(&source), unsafe_lane(&source)] {
+                untwist_testing::node::assert_node_agrees(&source, &output);
+            }
+        }
+    }
+}
+
+#[test]
+fn babel_this_and_arguments_captures_keep_their_place_above_the_defaults_under_unsafe() {
+    let source = params_fixture("babel-7.29", "this-capture-defaults.js");
+    let output = unsafe_lane(&source);
+    assert!(
+        output.contains(
+            "function stepper(by = 1, label = \"n\" + this.count) {\n      var _this = this;"
+        ),
+        "{output}"
+    );
+    assert!(
+        output.contains("function tally(seed = 10, extra) {\n  var _arguments = arguments,"),
+        "{output}"
+    );
+    untwist_testing::node::assert_node_agrees(&source, &output);
+}
+
+#[test]
+fn a_guard_after_a_this_capture_becomes_a_default_parameter_by_default() {
+    let source = r#"function f() {
+  var self = this;
+  var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : this.d;
+  return () => self.d + a;
+}
+console.log(f.call({ d: 1 })(), f.call({ d: 1 }, 5)(), f.length);"#;
+    let output = default_lane(source);
+    assert!(
+        output.contains("function f(a = this.d) {\n  var self = this;"),
+        "{output}"
+    );
+    untwist_testing::node::assert_node_agrees(source, &output);
+}
+
+#[test]
+fn a_guard_after_an_arguments_capture_stays_by_default() {
+    let source = r#"function f() {
+  var all = arguments;
+  var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 1;
+  a = 7;
+  return [a, all[0], all.length];
+}
+console.log(String(f()), String(f(2)), String(f(undefined, 3)));"#;
+    assert_declaration_stays(source, &default_lane(source));
+}
+
+#[test]
+fn a_guard_after_this_in_a_derived_constructor_stays() {
+    let source = r#"var log = [];
+class B {}
+class C extends B {
+  constructor() {
+    var self = this;
+    var a = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : log.push("a");
+    super();
+    this.a = a;
+  }
+}
+try {
+  new C();
+} catch (err) {
+  console.log(err.constructor.name, log.length);
+}"#;
+    for output in [default_lane(source), unsafe_lane(source)] {
+        assert_declaration_stays(source, &output);
+    }
+}

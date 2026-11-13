@@ -75,15 +75,16 @@ fn restore_one<'a>(
     host: &Host,
     cx: &mut Cx<'a, '_>,
 ) -> bool {
-    let Some(plan) = plan(params, stmts.as_slice(), host, cx) else {
+    let skipped = leading_declarations(stmts.as_slice(), host);
+    let Some(plan) = plan(params, &stmts[skipped..], host, cx) else {
         return false;
     };
-    match (plan, stmts.first_mut()) {
+    match (plan, stmts.get_mut(skipped)) {
         (Plan::Declared(index, form), Some(Statement::VariableDeclaration(declaration))) => {
             let Some(parameter) = take_parameter(declaration, form, cx) else {
                 return false;
             };
-            stmts.remove(0);
+            stmts.remove(skipped);
             place_parameter(params, index, parameter, cx);
             true
         }
@@ -91,12 +92,32 @@ fn restore_one<'a>(
             let Some(value) = take_loose_default_value(statement, cx) else {
                 return false;
             };
-            stmts.remove(0);
+            stmts.remove(skipped);
             params.items[position].initializer = Some(ABox::new_in(value, cx));
             true
         }
         _ => false,
     }
+}
+
+fn leading_declarations(stmts: &[Statement<'_>], host: &Host) -> usize {
+    stmts
+        .iter()
+        .take_while(|statement| may_precede_defaults(statement, host))
+        .count()
+}
+
+fn may_precede_defaults(statement: &Statement<'_>, host: &Host) -> bool {
+    let Statement::VariableDeclaration(declaration) = statement else {
+        return false;
+    };
+    matches!(
+        declaration.kind,
+        VariableDeclarationKind::Var | VariableDeclarationKind::Let
+    ) && declaration.declarations.iter().all(|declarator| {
+        matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+            && host.may_precede_defaults(declarator.init.as_ref())
+    })
 }
 
 fn plan<'a>(
