@@ -88,10 +88,24 @@ struct Head2 {
     reset: Option<SymbolId>,
 }
 
-fn is_void(expression: &Expression<'_>) -> bool {
-    matches!(expression.without_parentheses(), Expression::UnaryExpression(it)
-        if it.operator == UnaryOperator::Void
-            && matches!(it.argument.without_parentheses(), Expression::NumericLiteral(_)))
+fn is_void(expression: &Expression<'_>, scoping: &Scoping) -> bool {
+    match expression.without_parentheses() {
+        Expression::UnaryExpression(it) => {
+            it.operator == UnaryOperator::Void
+                && matches!(
+                    it.argument.without_parentheses(),
+                    Expression::NumericLiteral(_)
+                )
+        }
+        Expression::Identifier(id) => {
+            id.name.as_str() == "undefined"
+                && id
+                    .reference_id
+                    .get()
+                    .is_some_and(|reference| scoping.get_reference(reference).symbol_id().is_none())
+        }
+        _ => false,
+    }
 }
 
 fn values_call<'k, 'a>(
@@ -109,7 +123,8 @@ fn values_call<'k, 'a>(
             let AssignmentTarget::AssignmentTargetIdentifier(id) = &reset.left else {
                 return None;
             };
-            let cleared = reset.operator == AssignmentOperator::Assign && is_void(&reset.right);
+            let cleared =
+                reset.operator == AssignmentOperator::Assign && is_void(&reset.right, scoping);
             cleared.then(|| Some((&**call, Some(resolved_id(id, scoping)?))))?
         }
         _ => None,
