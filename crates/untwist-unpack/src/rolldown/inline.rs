@@ -196,7 +196,7 @@ pub fn replace_inline<'a>(
     }
     let sites: FxHashMap<Span, &'a str> = sites
         .iter()
-        .map(|&(span, name)| (span, &*alloc.alloc_str(name)))
+        .map(|&(span, name)| (span, alloc.alloc_str(name) as &str))
         .collect();
     let mut replace = Replace {
         builder: AstBuilder::new(alloc),
