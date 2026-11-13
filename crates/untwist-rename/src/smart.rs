@@ -210,13 +210,18 @@ fn decide_with_limit(
         namer: None,
         config,
     };
-    let planned: Vec<(&BindingInfo, String)> = collected
+    let candidates: Vec<&BindingInfo> = collected
         .bindings
         .iter()
         .filter(|info| !text_read.contains(&info.symbol))
         .filter(|info| smart_renameable(info, collected, config))
-        .filter_map(|info| smart_base(info, &cx, &evidence).map(|base| (info, base)))
         .collect();
+    let mut planned: Vec<(&BindingInfo, String)> = candidates
+        .iter()
+        .filter_map(|info| smart_base(info, &cx, &evidence).map(|base| (*info, base)))
+        .collect();
+    let flowed = flowed_hex_tokens(&candidates, &planned, (collected, &evidence));
+    planned.extend(flowed);
     let mut oracle = NameOracle::new(scoping, collected);
     oracle.defer(planned.iter().map(|(info, _)| info.symbol));
     let units = unit_roots(scoping);
@@ -228,6 +233,36 @@ fn decide_with_limit(
         }
     }
     oracle.into_plan()
+}
+
+fn flowed_hex_tokens<'c>(
+    candidates: &[&'c BindingInfo],
+    planned: &[(&BindingInfo, String)],
+    (collected, evidence): (&Collected, &Evidence),
+) -> Vec<(&'c BindingInfo, String)> {
+    let bases: FxHashMap<SymbolId, &str> = planned
+        .iter()
+        .map(|(info, base)| (info.symbol, base.as_str()))
+        .collect();
+    let target_base = |target: SymbolId| -> Option<String> {
+        if let Some(base) = bases.get(&target) {
+            return Some((*base).to_string());
+        }
+        let binding = collected.bindings.get(*collected.by_symbol.get(&target)?)?;
+        looks_human_written(&binding.name).then(|| binding.name.clone())
+    };
+    candidates
+        .iter()
+        .filter(|info| is_hex_token(&info.name) && !bases.contains_key(&info.symbol))
+        .filter_map(|info| {
+            let targets = evidence.flows_into(info.symbol);
+            let mut names = targets.iter().map(|target| target_base(*target));
+            let first = names.next()??;
+            let agreed = names.all(|name| name.as_deref() == Some(first.as_str()));
+            let usable = agreed && first != FALLBACK_BASE && !is_hex_token(&first);
+            usable.then_some((*info, first))
+        })
+        .collect()
 }
 
 fn candidate(base: &str, number: u32) -> String {

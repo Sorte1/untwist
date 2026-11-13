@@ -173,7 +173,13 @@ const HEX_TOKENS: &str = "(function () {
   var f9e2c8d63a4b7128b031 = function (cb) { cb(1, 2); };
   var list = [7].map(function (c0ffee00c0ffee00c0ff) { return c0ffee00c0ffee00c0ff + 1; });
   var plus = function (c0ffee00c0ffee00c0ff) { return c0ffee00c0ffee00c0ff + 1; };
+  var a1b2c3d4e5f6a7b8c9d0;
+  if (Math.random() < 2) { a1b2c3d4e5f6a7b8c9d0 = 'second'; }
   var hasToken = typeof b475796ed633d5fd0485 != 'undefined';
+  Promise.resolve(1).then(function (_0x9) {
+    _0x9 = hasToken ? a1b2c3d4e5f6a7b8c9d0 : undefined;
+    console.log(JSON.stringify({ bypassToken: _0x9 }));
+  });
   var validationToken;
   validationToken = hasToken ? b475796ed633d5fd0485 : undefined;
   if (typeof f9e2c8d63a4b7128b031 == 'function') {
@@ -414,12 +420,16 @@ fn long_hex_tokens_are_machine_names_only_under_smart() {
             "validationToken2 = \"token\"",
             "callback = function",
             "typeof callback == \"function\"",
+            "bypassToken2 = \"second\"",
+            "hasToken ? bypassToken2 : undefined",
             "function (item)",
             "(c0ffee00c0ffee00c0ff) => {",
         ],
     );
     assert!(
-        !code.contains("b475796ed633d5fd0485") && !code.contains("f9e2c8d63a4b7128b031"),
+        !code.contains("b475796ed633d5fd0485")
+            && !code.contains("f9e2c8d63a4b7128b031")
+            && !code.contains("a1b2c3d4e5f6a7b8c9d0"),
         "{code}"
     );
     for mode in [RenameMode::Simple, RenameMode::Unique] {

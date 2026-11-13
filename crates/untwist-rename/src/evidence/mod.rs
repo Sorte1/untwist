@@ -89,11 +89,16 @@ impl Rank {
 pub struct Evidence {
     names: FxHashMap<SymbolId, String>,
     constructors: FxHashSet<SymbolId>,
+    flows: FxHashMap<SymbolId, Vec<SymbolId>>,
 }
 
 impl Evidence {
     pub fn name(&self, symbol: SymbolId) -> Option<&str> {
         self.names.get(&symbol).map(String::as_str)
+    }
+
+    pub fn flows_into(&self, symbol: SymbolId) -> &[SymbolId] {
+        self.flows.get(&symbol).map_or(&[], Vec::as_slice)
     }
 
     pub fn is_constructor(&self, symbol: SymbolId) -> bool {
@@ -111,6 +116,7 @@ pub fn collect_evidence(program: &Program<'_>, scoping: &Scoping) -> Evidence {
         calls: FxHashMap::default(),
         handlers: Vec::new(),
         prototypes: FxHashSet::default(),
+        flows: FxHashMap::default(),
         methods: MethodSites::default(),
     };
     walker.visit_program(program);
@@ -132,6 +138,7 @@ struct EvidenceWalker<'s> {
     calls: FxHashMap<SymbolId, CallFacts>,
     handlers: Vec<Handler>,
     prototypes: FxHashSet<SymbolId>,
+    flows: FxHashMap<SymbolId, Vec<SymbolId>>,
     methods: MethodSites,
 }
 
@@ -365,22 +372,23 @@ impl EvidenceWalker<'_> {
         if let Some(name) = assigned_value_name(&it.right) {
             self.offer(symbol, Rank::Assigned, name);
         }
-        self.flows_into(&id.name, &it.right);
+        self.flows_into((&id.name, symbol), &it.right);
     }
 
-    fn flows_into(&mut self, target: &str, value: &Expression<'_>) {
-        if !is_naming_property(target) {
-            return;
-        }
+    fn flows_into(&mut self, (target, into): (&str, SymbolId), value: &Expression<'_>) {
         match value.without_parentheses() {
             Expression::Identifier(id) => {
-                if let Some(symbol) = reference_symbol(id, self.scoping) {
+                let Some(symbol) = reference_symbol(id, self.scoping) else {
+                    return;
+                };
+                if is_naming_property(target) {
                     self.offer(symbol, Rank::Written, target);
                 }
+                self.flows.entry(symbol).or_default().push(into);
             }
             Expression::ConditionalExpression(conditional) => {
-                self.flows_into(target, &conditional.consequent);
-                self.flows_into(target, &conditional.alternate);
+                self.flows_into((target, into), &conditional.consequent);
+                self.flows_into((target, into), &conditional.alternate);
             }
             _ => {}
         }
@@ -441,6 +449,7 @@ impl EvidenceWalker<'_> {
         Evidence {
             names,
             constructors,
+            flows: std::mem::take(&mut self.flows),
         }
     }
 
@@ -590,7 +599,7 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
                 self.defined.insert(symbol);
             }
             if let BindingPattern::BindingIdentifier(id) = &it.id {
-                self.flows_into(&id.name, init);
+                self.flows_into((&id.name, symbol), init);
             }
             match init.without_parentheses() {
                 Expression::FunctionExpression(function) => {
