@@ -35,6 +35,7 @@ import { mountSettingsPanel } from './ui/settings-panel';
 import { mountShareLink } from './ui/share-link';
 import { mountSteps } from './ui/steps-view';
 import { mountStringsTab } from './ui/strings-tab';
+import { mountLibrariesTab } from './ui/libraries-tab';
 import { mountLinks } from './ui/link-view';
 import { mountStatusBar } from './ui/status-bar';
 import { mountDetailsToggle } from './ui/details/toggle';
@@ -199,6 +200,7 @@ function main(): void {
   mountModeSwitch(store);
   mountStringsBanner(store, start, inputView);
   mountStringsTab(store, inputView);
+  mountLibrariesTab(store, outputView, libraries, run);
   mountLinks(store, inputView, outputView);
   mountDetailsToggle(store, () => flagsFrom(store.get().settings));
   mountPaletteKey(store, { run, pickExample });

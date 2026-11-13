@@ -1,3 +1,4 @@
+import type { TableTiming } from '../libraries/tables';
 import type { SuppliedWasm } from '../wasm/wasm';
 
 export type TrapKind = 'stack' | 'other';
@@ -33,6 +34,7 @@ export interface LibraryTablesUsed {
   readonly reran: boolean;
   readonly scanMs: number;
   readonly loadMs: number;
+  readonly timings?: readonly TableTiming[];
 }
 
 export type WorkerRequest =

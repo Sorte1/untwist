@@ -10,9 +10,24 @@ export interface LoadedTable {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
+export type TableSource = 'memory' | 'cache' | 'network';
+
+export interface TableTiming {
+  readonly id: string;
+  readonly bytes: number;
+  readonly ms: number;
+  readonly source: TableSource | null;
+}
+
 export interface TableFetch {
   readonly tables: readonly LoadedTable[];
   readonly failed: readonly string[];
+  readonly timings: readonly TableTiming[];
+}
+
+interface Fetched {
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly source: TableSource;
 }
 
 export interface ScanResult {
@@ -156,43 +171,54 @@ export class LibraryTables {
   }
 
   async load(tables: readonly IndexedTable[], signal?: AbortSignal): Promise<TableFetch> {
-    const settled = await Promise.allSettled(tables.map((table) => this.#bytesOf(table, signal)));
+    const settled = await Promise.allSettled(tables.map((table) => this.#timed(table, signal)));
     const loaded: LoadedTable[] = [];
     const failed: string[] = [];
+    const timings: TableTiming[] = [];
     settled.forEach((outcome, at) => {
-      const id = tables[at]?.id ?? '';
+      const table = tables[at];
+      const id = table?.id ?? '';
       if (outcome.status === 'fulfilled') {
-        loaded.push({ id, bytes: outcome.value });
+        loaded.push({ id, bytes: outcome.value.bytes });
+        timings.push({ id, bytes: table?.bytes ?? 0, ms: outcome.value.ms, source: outcome.value.source });
       } else {
         failed.push(id);
+        timings.push({ id, bytes: table?.bytes ?? 0, ms: 0, source: null });
       }
     });
-    return { tables: loaded, failed };
+    return { tables: loaded, failed, timings };
   }
 
-  #bytesOf(table: IndexedTable, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>> {
+  async #timed(table: IndexedTable, signal?: AbortSignal): Promise<Fetched & { readonly ms: number }> {
+    const started = performance.now();
+    const fetched = await this.#bytesOf(table, signal);
+    return { ...fetched, ms: performance.now() - started };
+  }
+
+  async #bytesOf(table: IndexedTable, signal?: AbortSignal): Promise<Fetched> {
     const known = this.#bytes.get(table.id);
     if (known !== undefined) {
-      return known;
+      return { bytes: await known, source: 'memory' };
     }
-    const loading = this.#download(table, signal);
+    const downloading = this.#download(table, signal);
+    const loading = downloading.then((fetched) => fetched.bytes);
     this.#bytes.set(table.id, loading);
     loading.catch(() => {
       if (this.#bytes.get(table.id) === loading) {
         this.#bytes.delete(table.id);
       }
     });
-    return loading;
+    return downloading;
   }
 
-  async #download(table: IndexedTable, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>> {
+  async #download(table: IndexedTable, signal?: AbortSignal): Promise<Fetched> {
     const url = new URL(table.file, this.#base);
     url.searchParams.set('v', table.sha256.slice(0, 16));
     const key = url.href;
     const cache = await openCache();
     const hit = await cached(cache, key);
     if (hit !== null && (await this.#valid(table, hit))) {
-      return hit;
+      return { bytes: hit, source: 'cache' };
     }
     const response = await this.#fetch(url, signal === undefined ? undefined : { signal });
     if (!response.ok) {
@@ -203,7 +229,7 @@ export class LibraryTables {
       throw new Error(`${table.file} does not match its index entry`);
     }
     await remember(cache, table, key, bytes);
-    return bytes;
+    return { bytes, source: 'network' };
   }
 
   async #valid(table: IndexedTable, bytes: Uint8Array<ArrayBuffer>): Promise<boolean> {

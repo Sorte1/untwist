@@ -47,9 +47,9 @@ describe('the library tables', () => {
   it('report a table that is missing or does not match its index entry as failed', async () => {
     const wrong = new Uint8Array([0x1f, 0x8b, 8, 0, 9, 9, 9]);
     const missing = new LibraryTables(BASE, scanAll, server({ '/libraries/index.json': index([ENTRY]) }));
-    expect(await missing.load([ENTRY])).toEqual({ tables: [], failed: ['core-js'] });
+    expect(await missing.load([ENTRY])).toMatchObject({ tables: [], failed: ['core-js'] });
     const changed = new LibraryTables(BASE, scanAll, server({ '/libraries/core-js.table': wrong }));
-    expect(await changed.load([ENTRY])).toEqual({ tables: [], failed: ['core-js'] });
+    expect(await changed.load([ENTRY])).toMatchObject({ tables: [], failed: ['core-js'] });
   });
 
   it('want nothing without an index, and ask for the index again on the next run', async () => {
@@ -87,7 +87,17 @@ describe('the library tables', () => {
     };
     const tables = new LibraryTables(BASE, scanAll, fetcher);
     abort.abort();
-    expect(await tables.load([ENTRY], abort.signal)).toEqual({ tables: [], failed: ['core-js'] });
+    expect(await tables.load([ENTRY], abort.signal)).toMatchObject({ tables: [], failed: ['core-js'] });
     expect((await tables.load([ENTRY])).tables.map((table) => table.id)).toEqual(['core-js']);
+  });
+
+  it('time each table and say where it came from', async () => {
+    const tables = new LibraryTables(BASE, scanAll, server({ '/libraries/core-js.table': BYTES }));
+    const first = await tables.load([ENTRY]);
+    expect(first.timings).toEqual([{ id: 'core-js', bytes: BYTES.length, ms: expect.any(Number), source: 'network' }]);
+    const second = await tables.load([ENTRY]);
+    expect(second.timings[0]?.source).toBe('memory');
+    const missing = await new LibraryTables(BASE, scanAll, server({})).load([ENTRY]);
+    expect(missing.timings).toEqual([{ id: 'core-js', bytes: BYTES.length, ms: 0, source: null }]);
   });
 });
