@@ -3,10 +3,12 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_syntax::operator::BinaryOperator;
 
 const CODE_RUNNERS: [&str; 3] = ["eval", "Function", "execScript"];
 const TIMERS: [&str; 2] = ["setTimeout", "setInterval"];
 const CONSTRUCTOR: &str = "constructor";
+const NAME: &str = "name";
 
 struct CodeText<'s> {
     scoping: &'s Scoping,
@@ -56,15 +58,47 @@ fn calls_back(first: Option<&Argument<'_>>) -> bool {
     )
 }
 
+fn literal_text(expression: &Expression<'_>) -> Option<String> {
+    match expression.without_parentheses() {
+        Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
+        Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
+            .quasis
+            .first()
+            .and_then(|quasi| quasi.value.cooked.as_ref())
+            .and_then(|cooked| cooked.as_str())
+            .map(str::to_string),
+        Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+            Some(literal_text(&binary.left)? + &literal_text(&binary.right)?)
+        }
+        _ => None,
+    }
+}
+
+fn texts_read_no_name(arguments: &[Argument<'_>]) -> bool {
+    arguments.iter().all(|argument| {
+        argument
+            .as_expression()
+            .and_then(literal_text)
+            .is_some_and(|text| !text.contains(NAME) && !text.contains('\\'))
+    })
+}
+
 impl CodeText<'_> {
-    fn runs_text(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
+    fn runner(&self, callee: &Expression<'_>) -> bool {
         let direct_eval = matches!(
             callee.without_parentheses(),
             Expression::Identifier(id) if id.name == "eval"
         );
-        direct_eval
-            || names_constructor(callee)
-            || (is_free(self.scoping, callee, &TIMERS) && !calls_back(arguments.first()))
+        direct_eval || names_constructor(callee) || is_free(self.scoping, callee, &CODE_RUNNERS)
+    }
+
+    fn runs_text(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
+        if self.runner(callee) {
+            return !texts_read_no_name(arguments);
+        }
+        is_free(self.scoping, callee, &TIMERS)
+            && !calls_back(arguments.first())
+            && !texts_read_no_name(arguments.get(..1).unwrap_or_default())
     }
 }
 
@@ -85,7 +119,8 @@ impl<'a> VisitJs<'a> for CodeText<'_> {
             self.found = true;
             return;
         }
-        if is_free(self.scoping, &it.callee, &TIMERS) {
+        if self.runner(&it.callee) || is_free(self.scoping, &it.callee, &TIMERS) {
+            self.visit_callee_object(&it.callee);
             self.visit_arguments(&it.arguments);
             return;
         }
@@ -93,10 +128,25 @@ impl<'a> VisitJs<'a> for CodeText<'_> {
     }
 
     fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
-        if names_constructor(&it.callee) {
+        let runner =
+            names_constructor(&it.callee) || is_free(self.scoping, &it.callee, &CODE_RUNNERS);
+        if runner && !texts_read_no_name(&it.arguments) {
             self.found = true;
             return;
         }
+        if runner {
+            self.visit_callee_object(&it.callee);
+            self.visit_arguments(&it.arguments);
+            return;
+        }
         walk_js::walk_new_expression(self, it);
+    }
+}
+
+impl<'a> CodeText<'_> {
+    fn visit_callee_object(&mut self, callee: &Expression<'a>) {
+        if let Some(member) = callee.without_parentheses().as_member_expression() {
+            self.visit_expression(member.object());
+        }
     }
 }
