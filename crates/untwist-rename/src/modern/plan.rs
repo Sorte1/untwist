@@ -410,6 +410,7 @@ fn checks(
 enum Judged {
     Remove(Vec<Span>),
     Cascade,
+    Spare(Keep),
     Keep(Keep),
 }
 
@@ -437,8 +438,14 @@ fn judge_all(
     );
     first
         .into_iter()
-        .map(|judged| match judged {
+        .zip(installers)
+        .map(|(judged, &index)| match judged {
             (None, Ok(sites)) => Judged::Remove(sites),
+            (None, Err(keep @ (Keep::ExportsRead | Keep::NotRun)))
+                if !text_read(&[], &graph.units[index], inputs) =>
+            {
+                Judged::Spare(keep)
+            }
             (None, Err(keep)) => Judged::Keep(keep),
             (Some(Keep::Unlisted), Ok(sites))
                 if sites.iter().all(|site| inside(&removable, *site)) =>
@@ -473,7 +480,7 @@ fn sets(
                     helpers.insert(binding);
                     eligible.insert(binding);
                 }
-                Some(Judged::Remove(_) | Judged::Cascade) => {
+                Some(Judged::Remove(_) | Judged::Cascade | Judged::Spare(_)) => {
                     eligible.insert(binding);
                 }
                 Some(Judged::Keep(_)) => {}
@@ -535,7 +542,7 @@ fn sweep(
         let unit = &units[index];
         let removed = dead.regions.covers(unit.span);
         match judged {
-            Judged::Remove(_) => continue,
+            Judged::Remove(_) | Judged::Spare(_) => continue,
             Judged::Cascade if removed => continue,
             Judged::Keep(_) if removed => {
                 blame.extend(dead.origin_over(unit.span));
@@ -622,15 +629,17 @@ pub fn plan(units: &[Unit], inputs: &Inputs<'_>) -> Plan {
         let removed = plan.regions.covers(unit.span);
         let kept = match &judged[&index] {
             Judged::Remove(_) => None,
-            Judged::Cascade if removed => None,
+            Judged::Cascade | Judged::Spare(_) if removed => None,
             Judged::Cascade => Some(Keep::Unlisted),
+            Judged::Spare(keep) => Some(keep.clone()),
             Judged::Keep(keep) => Some(keep.clone()),
         };
         plan.installers.push(Installer {
             modules: unit.modules.clone(),
             range: unit.range.clone(),
             span: unit.span,
-            with_others: kept.is_none() && matches!(judged[&index], Judged::Cascade),
+            with_others: kept.is_none()
+                && matches!(judged[&index], Judged::Cascade | Judged::Spare(_)),
             kept,
         });
     }
