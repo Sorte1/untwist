@@ -26,6 +26,7 @@ fn engine_names() -> BTreeSet<&'static str> {
         untwist_deobfuscate::layers::INLINE_LAYER_PASS,
         untwist_rename::library::pass::NAME,
         untwist_rename::library::rename::NAME,
+        untwist_rename::modern::pass::NAME,
     ]);
     names
 }
