@@ -7,7 +7,6 @@ use std::sync::Mutex;
 use untwist_testing::node::run;
 use untwist_testing::node_rows::node_or_skip;
 
-const DIR: &str = "fixtures/unpack-rolldown";
 const EXPECT: &str = "EXPECT";
 const XFAIL: &str = "XFAIL";
 const BLESS: &str = "UNTWIST_BLESS";
@@ -22,8 +21,8 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn cells() -> BTreeMap<String, Vec<String>> {
-    let manifest = std::fs::read_to_string(root().join(DIR).join("MANIFEST")).expect("MANIFEST");
+fn cells(dir: &str) -> BTreeMap<String, Vec<String>> {
+    let manifest = std::fs::read_to_string(root().join(dir).join("MANIFEST")).expect("MANIFEST");
     let mut cells: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for line in manifest
         .lines()
@@ -40,24 +39,43 @@ fn cells() -> BTreeMap<String, Vec<String>> {
     cells
 }
 
-fn bundle(out: &Path) -> (String, usize) {
+struct Written {
+    kind: String,
+    modules: usize,
+    entry: Option<String>,
+}
+
+fn bundle(out: &Path) -> Written {
     let Ok(text) = std::fs::read_to_string(out.join("bundle.json")) else {
-        return ("none".to_string(), 0);
+        return Written {
+            kind: "none".to_string(),
+            modules: 0,
+            entry: None,
+        };
     };
     let json: serde_json::Value = serde_json::from_str(&text).expect("bundle.json");
-    let kind = json["type"].as_str().unwrap_or("?").to_string();
-    let modules = json["modules"].as_array().map_or(0, Vec::len);
-    (kind, modules)
+    let modules = json["modules"].as_array().cloned().unwrap_or_default();
+    let entry = modules
+        .iter()
+        .find(|module| module["isEntry"].as_bool() == Some(true))
+        .and_then(|module| module["path"].as_str())
+        .map(str::to_string);
+    Written {
+        kind: json["type"].as_str().unwrap_or("?").to_string(),
+        modules: modules.len(),
+        entry,
+    }
 }
 
 fn row(
+    dir: &str,
     node: &Path,
     work: &Path,
     cell: &str,
     files: &[String],
     (lane, flags): (&str, &[&str]),
 ) -> String {
-    let source = root().join(DIR).join(cell);
+    let source = root().join(dir).join(cell);
     let out = work.join(format!("{cell}-{lane}"));
     let inputs: Vec<PathBuf> = files.iter().map(|file| source.join(file)).collect();
     let status = common::bin()
@@ -73,26 +91,30 @@ fn row(
         "{cell} ({lane}): untwist failed: {}",
         String::from_utf8_lossy(&status.stderr)
     );
-    let (kind, modules) = bundle(&out);
+    let written = bundle(&out);
     let expected = std::fs::read_to_string(
         root()
-            .join(DIR)
+            .join(dir)
             .join("expected")
             .join(format!("{cell}.stdout")),
     )
     .expect("expected stdout");
-    let entry = match out.join("index.js").exists() {
-        true => out.join("index.js"),
-        false => out.join("deobfuscated.js"),
+    let entry = match (&written.entry, out.join("index.js").exists()) {
+        (Some(path), _) => out.join(path),
+        (None, true) => out.join("index.js"),
+        (None, false) => out.join("deobfuscated.js"),
     };
     let observed = run(node, &entry).expect("run node");
     let same = observed.is_some_and(|o| o.exit == Some(0) && o.stdout == expected);
     let verdict = if same { "same" } else { "differs" };
-    format!("{cell}\t{lane}\t{kind}\t{modules}\t{verdict}")
+    format!(
+        "{cell}\t{lane}\t{}\t{}\t{verdict}",
+        written.kind, written.modules
+    )
 }
 
-fn rows(node: &Path) -> Vec<String> {
-    let cells: Vec<(String, Vec<String>)> = cells().into_iter().collect();
+fn rows(dir: &str, node: &Path) -> Vec<String> {
+    let cells: Vec<(String, Vec<String>)> = cells(dir).into_iter().collect();
     let jobs: Vec<(usize, usize)> = (0..cells.len())
         .flat_map(|cell| (0..LANES.len()).map(move |lane| (cell, lane)))
         .collect();
@@ -111,7 +133,7 @@ fn rows(node: &Path) -> Vec<String> {
                     break;
                 };
                 let (name, files) = &cells[cell];
-                let line = row(node, work.path(), name, files, LANES[lane]);
+                let line = row(dir, node, work.path(), name, files, LANES[lane]);
                 found.lock().unwrap().push(line);
             });
         }
@@ -121,8 +143,8 @@ fn rows(node: &Path) -> Vec<String> {
     lines
 }
 
-fn xfails() -> Vec<String> {
-    std::fs::read_to_string(root().join(DIR).join(XFAIL))
+fn xfails(dir: &str) -> Vec<String> {
+    std::fs::read_to_string(root().join(dir).join(XFAIL))
         .unwrap_or_default()
         .lines()
         .filter(|line| !line.starts_with('#') && !line.is_empty())
@@ -146,17 +168,21 @@ fn listed(xfails: &[String], cell: &str) -> bool {
     xfails.iter().any(|pattern| glob(pattern, cell))
 }
 
-#[test]
-fn every_generated_rolldown_bundle_unpacks_into_a_tree_that_runs_the_same() {
+fn check(dir: &str) {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let lines = rows(&node);
-    let xfails = xfails();
+    let lines = rows(dir, &node);
+    let xfails = xfails(dir);
     let wrong: Vec<&String> = lines
         .iter()
         .filter(|line| line.ends_with("\tdiffers"))
-        .filter(|line| !listed(&xfails, line.split('\t').next().unwrap_or_default()))
+        .filter(|line| {
+            let mut fields = line.split('\t');
+            let cell = fields.next().unwrap_or_default();
+            let lane = fields.next().unwrap_or_default();
+            !listed(&xfails, &format!("{cell}/{lane}"))
+        })
         .collect();
     assert!(
         wrong.is_empty(),
@@ -171,7 +197,7 @@ fn every_generated_rolldown_bundle_unpacks_into_a_tree_that_runs_the_same() {
         "# cell\tlane\tbundle\tmodules\tnode\n{}\n",
         lines.join("\n")
     );
-    let expect = root().join(DIR).join(EXPECT);
+    let expect = root().join(dir).join(EXPECT);
     if std::env::var_os(BLESS).is_some() {
         std::fs::write(&expect, &text).expect("write EXPECT");
         return;
@@ -186,4 +212,14 @@ fn every_generated_rolldown_bundle_unpacks_into_a_tree_that_runs_the_same() {
         "recognition moved (rerun with {BLESS}=1 to accept):\n{}",
         changed.join("\n")
     );
+}
+
+#[test]
+fn every_generated_rolldown_bundle_unpacks_into_a_tree_that_runs_the_same() {
+    check("fixtures/unpack-rolldown");
+}
+
+#[test]
+fn every_generated_rollup_es_bundle_unpacks_into_a_tree_that_runs_the_same() {
+    check("fixtures/unpack-rollup-es");
 }

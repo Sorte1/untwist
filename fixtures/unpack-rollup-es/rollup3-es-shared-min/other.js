@@ -1,0 +1,1 @@
+import{l as o,t}from"./util.chunk.js";console.log("other "+o("x")+" "+t([1,2]));const r="other";export{r as other};

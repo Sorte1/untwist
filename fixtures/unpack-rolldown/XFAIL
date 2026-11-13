@@ -1,2 +1,2 @@
-# cell glob	reason
+# cell/lane glob	reason
 *-cjs-split*	refused (the entry requires its chunk by a relative path and writes exports), and a refused multi-input run writes deobfuscated.<name>.js, which the chunk require cannot find

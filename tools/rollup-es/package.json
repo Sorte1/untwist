@@ -1,0 +1,16 @@
+{
+  "name": "untwist-rollup-es-fixtures",
+  "private": true,
+  "description": "Pinned rollup, @rollup/plugin-commonjs and vite versions that tools/rollup-es/gen.mjs runs to generate fixtures/unpack-rollup-es.",
+  "dependencies": {
+    "rollup-3": "npm:rollup@3.29.5",
+    "rollup-4": "npm:rollup@4.66.0",
+    "@rollup/plugin-commonjs": "29.0.3",
+    "@rollup/plugin-json": "6.1.0",
+    "vite-4": "npm:vite@4.5.14",
+    "vite-5": "npm:vite@5.4.21",
+    "vite-6": "npm:vite@6.4.6",
+    "vite-7": "npm:vite@7.3.8",
+    "terser": "5.51.2"
+  }
+}

@@ -94,6 +94,55 @@ fn reads_current_script(program: &Program<'_>, body: &FunctionBody<'_>) -> bool 
         .is_none_or(|text| text.contains(SCRIPT_ONLY))
 }
 
+fn module_item(statement: &Statement<'_>) -> bool {
+    matches!(
+        statement,
+        Statement::ImportDeclaration(_)
+            | Statement::ExportDeclaration(_)
+            | Statement::ExportNamedDeclaration(_)
+            | Statement::ExportDefaultDeclaration(_)
+    )
+}
+
+fn reexports(statement: &Statement<'_>) -> bool {
+    matches!(
+        statement,
+        Statement::ExportAllDeclaration(_) | Statement::ExportFromDeclaration(_)
+    )
+}
+
+pub fn module_list(top: &[Statement<'_>]) -> bool {
+    let imports = top
+        .iter()
+        .take_while(|statement| {
+            matches!(
+                statement,
+                Statement::ImportDeclaration(_) | Statement::EmptyStatement(_)
+            )
+        })
+        .count();
+    let imports_lead = top[imports..]
+        .iter()
+        .all(|statement| !matches!(statement, Statement::ImportDeclaration(_)));
+    top.len() >= 2 && top.iter().any(module_item) && !top.iter().any(reexports) && imports_lead
+}
+
+pub fn imports_end(top: &[Statement<'_>]) -> usize {
+    top.iter()
+        .rposition(|statement| matches!(statement, Statement::ImportDeclaration(_)))
+        .map_or(0, |at| at + 1)
+}
+
+pub fn top<'k, 'a>(program: &'k Program<'a>) -> Option<&'k [Statement<'a>]> {
+    let module = program.source_type.is_module() && module_list(&program.body);
+    let span = program.span;
+    let current = program
+        .source_text
+        .get(span.start as usize..span.end as usize)
+        .is_none_or(|text| text.contains(SCRIPT_ONLY));
+    (module && !current).then_some(&program.body[..])
+}
+
 pub fn shell<'k, 'a>(program: &'k Program<'a>) -> Option<Shell<'k, 'a>> {
     let found = wrapper(&program.body)?;
     let strict =

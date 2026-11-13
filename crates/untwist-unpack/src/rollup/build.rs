@@ -209,13 +209,27 @@ fn wrapper_body<'e, 'a>(
 struct Parts<'a> {
     heads: Vec<AVec<'a, Statement<'a>>>,
     tails: Vec<AVec<'a, Statement<'a>>>,
-    wrapper: AVec<'a, Statement<'a>>,
+    wrapper: Option<AVec<'a, Statement<'a>>>,
+}
+
+fn rebuilt_wrapper<'a>(
+    alloc: &'a Allocator,
+    shell: &Shell<'_, 'a>,
+) -> Option<AVec<'a, Statement<'a>>> {
+    let text = match shell.wrapper.arrow {
+        true => "(() => {})();",
+        false => "(function () {})();",
+    };
+    let mut wrapper = synthetic_statements(alloc, text.to_string())?;
+    let body = wrapper_body(&mut wrapper)?;
+    body.directives = shell.wrapper.body.directives.clone_in(alloc);
+    Some(wrapper)
 }
 
 fn parts<'a>(
     alloc: &'a Allocator,
     source: &Program<'a>,
-    shell: &Shell<'_, 'a>,
+    shell: Option<&Shell<'_, 'a>>,
     links: &Links,
 ) -> Option<Parts<'a>> {
     let creator = fresh_creator(source.source_text);
@@ -226,13 +240,10 @@ fn parts<'a>(
         heads.push(parsed(alloc, head_text(links, at, &creator))?);
         tails.push(parsed(alloc, tail_text(links, at))?);
     }
-    let text = match shell.wrapper.arrow {
-        true => "(() => {})();",
-        false => "(function () {})();",
+    let wrapper = match shell {
+        Some(shell) => Some(rebuilt_wrapper(alloc, shell)?),
+        None => None,
     };
-    let mut wrapper = synthetic_statements(alloc, text.to_string())?;
-    let body = wrapper_body(&mut wrapper)?;
-    body.directives = shell.wrapper.body.directives.clone_in(alloc);
     Some(Parts {
         heads,
         tails,
@@ -298,7 +309,7 @@ fn entry_statements<'a>(
 pub fn assemble<'a>(
     alloc: &'a Allocator,
     source: &Program<'a>,
-    shell: &Shell<'_, 'a>,
+    shell: Option<&Shell<'_, 'a>>,
     (segments, links): (&[Range<usize>], &Links),
     owned: AVec<'a, Statement<'a>>,
 ) -> Result<Bundle<'a>, AVec<'a, Statement<'a>>> {
@@ -323,11 +334,19 @@ pub fn assemble<'a>(
         let comments = comments_of(source, &body);
         let id = links.ids[at].clone();
         let statements = if at == last {
-            let mut wrapper = std::mem::replace(&mut wrapper, AVec::new_in(&alloc));
-            if let Some(inner) = wrapper_body(&mut wrapper) {
-                inner.statements.extend(body);
+            match (shell, wrapper.take()) {
+                (Some(shell), Some(mut wrapper)) => {
+                    if let Some(inner) = wrapper_body(&mut wrapper) {
+                        inner.statements.extend(body);
+                    }
+                    entry_statements(alloc, source, shell, head, wrapper)
+                }
+                _ => {
+                    let mut statements = head;
+                    statements.extend(body);
+                    statements
+                }
             }
-            entry_statements(alloc, source, shell, head, wrapper)
         } else {
             let mut statements = head;
             statements.extend(body);
