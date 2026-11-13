@@ -70,17 +70,25 @@ pub fn lazy_helper<'k, 'a>(init: &'k Expression<'a>) -> Option<(Vec<&'a str>, In
     Some((params, inner))
 }
 
-fn inner_bindings<'a>(init: &Expression<'a>) -> Vec<&'a str> {
+struct InnerBindings<'a> {
+    function: Option<&'a str>,
+    caught: Option<&'a str>,
+}
+
+fn inner_bindings<'a>(init: &Expression<'a>) -> InnerBindings<'a> {
+    let mut names = InnerBindings {
+        function: None,
+        caught: None,
+    };
     let Expression::ArrowFunctionExpression(outer) = init.without_parentheses() else {
-        return Vec::new();
+        return names;
     };
     let Some(Inner::Expr(value)) = arrow_inner(outer) else {
-        return Vec::new();
+        return names;
     };
-    let mut names = Vec::new();
     let statements = match value.without_parentheses() {
         Expression::FunctionExpression(function) => {
-            names.extend(function.id.as_ref().map(|id| id.name.as_str()));
+            names.function = function.id.as_ref().map(|id| id.name.as_str());
             function.body.as_deref().map(|body| &body.statements[..])
         }
         Expression::ArrowFunctionExpression(arrow) => match arrow_inner(arrow) {
@@ -95,7 +103,7 @@ fn inner_bindings<'a>(init: &Expression<'a>) -> Vec<&'a str> {
             .as_deref()
             .and_then(|handler| handler.param.as_ref());
         if let Some(BindingPattern::BindingIdentifier(error)) = caught.map(|param| &param.pattern) {
-            names.push(error.name.as_str());
+            names.caught = Some(error.name.as_str());
         }
     }
     names
@@ -107,7 +115,11 @@ pub fn helper_shadows(init: &Expression<'_>, params: &[&str], getter: Option<&st
         .any(|name| matches!(*name, "eval" | "arguments"));
     let getter_param = getter.is_some_and(|getter| params.contains(&getter));
     let read: Vec<&str> = params.iter().copied().chain(getter).collect();
-    implicit || getter_param || inner_bindings(init).iter().any(|name| read.contains(name))
+    let inner = inner_bindings(init);
+    let named = inner.function.is_some_and(|name| read.contains(&name));
+    let module = params.get(1).copied();
+    let caught = inner.caught.is_some_and(|name| Some(name) == module);
+    implicit || getter_param || named || caught
 }
 
 pub fn export_helper(init: &Expression<'_>) -> bool {

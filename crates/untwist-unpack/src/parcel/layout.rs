@@ -1,5 +1,9 @@
+use std::cell::Cell;
+
 use oxc_ast::ast::*;
+use oxc_span::Span;
 use oxc_syntax::operator::{BinaryOperator, LogicalOperator};
+use oxc_syntax::scope::ScopeId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::{member_parts, prop_name};
 
@@ -18,9 +22,18 @@ const MAX_RUNTIME_ARGUMENTS: usize = 8;
 const REGISTER: &str = "register";
 const PROTO_KEY: &str = "__proto__";
 
+#[derive(Clone, Copy)]
+pub struct DefFunction<'k, 'a> {
+    pub params: &'k FormalParameters<'a>,
+    pub body: &'k FunctionBody<'a>,
+    pub scope: &'k Cell<Option<ScopeId>>,
+    pub span: Span,
+    pub arrow: bool,
+}
+
 pub struct Def<'k, 'a> {
     pub id: String,
-    pub function: &'k Function<'a>,
+    pub function: DefFunction<'k, 'a>,
     pub deps: Vec<(String, String)>,
     pub at: usize,
     pub element: Option<usize>,
@@ -28,11 +41,12 @@ pub struct Def<'k, 'a> {
 
 impl<'k, 'a> Def<'k, 'a> {
     pub fn body(&self) -> Option<&'k FunctionBody<'a>> {
-        self.function.body.as_deref()
+        Some(self.function.body)
     }
 }
 
 pub struct Registry<'k, 'a> {
+    pub legacy: bool,
     pub defs: Vec<Def<'k, 'a>>,
     pub entries: Vec<String>,
     pub main: Option<String>,
@@ -166,19 +180,46 @@ fn dependencies(object: &ObjectExpression<'_>) -> Option<Vec<(String, String)>> 
     distinct.then_some(deps)
 }
 
-pub fn simple_factory<'k, 'a>(expr: &'k Expression<'a>, most: usize) -> Option<&'k Function<'a>> {
-    let Expression::FunctionExpression(function) = expr else {
-        return None;
-    };
-    let params = &function.params;
-    let simple = params.rest.is_none()
+fn simple_params(params: &FormalParameters<'_>, most: usize) -> bool {
+    params.rest.is_none()
         && params.items.len() <= most
         && params.items.iter().all(|item| {
             item.initializer.is_none()
                 && matches!(item.pattern, BindingPattern::BindingIdentifier(_))
-        });
-    let plain = function.id.is_none() && !function.r#async && !function.generator;
-    (simple && plain && function.body.is_some()).then_some(&**function)
+        })
+}
+
+pub fn simple_factory<'k, 'a>(
+    expr: &'k Expression<'a>,
+    most: usize,
+) -> Option<DefFunction<'k, 'a>> {
+    match expr {
+        Expression::FunctionExpression(function) => {
+            let plain = function.id.is_none() && !function.r#async && !function.generator;
+            (plain && simple_params(&function.params, most)).then_some(())?;
+            Some(DefFunction {
+                params: &function.params,
+                body: function.body.as_deref()?,
+                scope: &function.scope_id,
+                span: function.span,
+                arrow: false,
+            })
+        }
+        Expression::ArrowFunctionExpression(arrow) => {
+            let ArrowFunctionBody::FunctionBody(body) = &arrow.body else {
+                return None;
+            };
+            (!arrow.r#async && simple_params(&arrow.params, most)).then_some(())?;
+            Some(DefFunction {
+                params: &arrow.params,
+                body,
+                scope: &arrow.scope_id,
+                span: arrow.span,
+                arrow: true,
+            })
+        }
+        _ => None,
+    }
 }
 
 fn registry_def<'k, 'a>(property: &'k ObjectPropertyKind<'a>) -> Option<Def<'k, 'a>> {
@@ -220,7 +261,10 @@ fn unique(defs: &[Def<'_, '_>], reserved: &[&str]) -> bool {
         .all(|def| !reserved.contains(&def.id.as_str()) && seen.insert(def.id.as_str()))
 }
 
-fn registry<'k, 'a>(arguments: &'k [Argument<'a>]) -> Option<Registry<'k, 'a>> {
+fn registry<'k, 'a>(arguments: &'k [Argument<'a>], legacy: bool) -> Option<Registry<'k, 'a>> {
+    if legacy && arguments.len() != REGISTRY_PARAMS {
+        return None;
+    }
     let global = string(argument_expression(&arguments[3])?)?;
     let Some(Expression::ObjectExpression(modules)) = argument_expression(&arguments[0]) else {
         return None;
@@ -247,12 +291,22 @@ fn registry<'k, 'a>(arguments: &'k [Argument<'a>]) -> Option<Registry<'k, 'a>> {
     });
     let rest = arguments.iter().skip(5).all(inert);
     let runtime = runtime_id(BundleKind::Parcel);
+    let most = if legacy {
+        REGISTRY_PARAMS - 1
+    } else {
+        REGISTRY_PARAMS
+    };
+    let fitting = defs
+        .iter()
+        .all(|def| def.function.params.items.len() <= most);
     let sound = externals
         && rest
+        && fitting
         && !defs.is_empty()
         && !entries.is_empty()
         && unique(&defs, &[runtime.as_str()]);
     sound.then_some(Registry {
+        legacy,
         defs,
         entries,
         main,
@@ -316,7 +370,7 @@ fn register_declarator<'k, 'a>(
 fn register_call<'k, 'a>(
     expr: &'k Expression<'a>,
     register: &str,
-) -> Option<(String, &'k Function<'a>)> {
+) -> Option<(String, DefFunction<'k, 'a>)> {
     let Expression::CallExpression(call) = expr else {
         return None;
     };
@@ -501,12 +555,12 @@ pub fn layout<'k, 'a>(frame: &Frame<'k, 'a>, program: &'k Program<'a>) -> Option
             return None;
         }
         let function = runtime_function(frame)?;
-        if arguments.len() > function.params.items.len()
-            || !runtime::proven(function, program.source_text)
-        {
+        if arguments.len() > function.params.items.len() {
             return None;
         }
-        return registry(arguments).map(Layout::Registry);
+        let generation = runtime::proven(function, program.source_text)?;
+        let legacy = generation == runtime::Generation::Legacy;
+        return registry(arguments, legacy).map(Layout::Registry);
     }
     hoisted(frame.top, program.source_text).map(Layout::Hoisted)
 }

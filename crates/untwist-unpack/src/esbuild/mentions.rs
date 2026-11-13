@@ -1,6 +1,9 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
+use oxc_semantic::Scoping;
+use oxc_syntax::scope::ScopeId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::semantic::build_scoping;
 
 struct Mentions<'w> {
     wanted: &'w FxHashMap<String, usize>,
@@ -65,6 +68,80 @@ pub fn closure<'a>(
             continue;
         };
         for found in mentioned(candidates, std::iter::once(statement)) {
+            if moved.insert(found) {
+                pending.push(found);
+            }
+        }
+    }
+    let mut moved: Vec<usize> = moved.into_iter().collect();
+    moved.sort_unstable();
+    moved
+}
+
+pub fn free_mentions(
+    wanted: &FxHashMap<String, usize>,
+    program: &Program<'_>,
+    bound: &[&str],
+) -> FxHashSet<usize> {
+    if wanted.is_empty() {
+        return FxHashSet::default();
+    }
+    let scoping = build_scoping(program).scoping;
+    scoping
+        .root_unresolved_references()
+        .keys()
+        .filter(|name| !bound.contains(&name.as_str()))
+        .filter_map(|name| wanted.get(name.as_str()).copied())
+        .collect()
+}
+
+struct ScopedMentions<'w, 's> {
+    scoping: &'s Scoping,
+    scope: ScopeId,
+    wanted: &'w FxHashMap<String, usize>,
+    found: FxHashSet<usize>,
+}
+
+impl<'a> VisitJs<'a> for ScopedMentions<'_, '_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let Some(&index) = self.wanted.get(it.name.as_str()) else {
+            return;
+        };
+        let symbol = it
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        let at_list = match symbol {
+            Some(symbol) => self.scoping.symbol_scope_id(symbol) == self.scope,
+            None => true,
+        };
+        if at_list {
+            self.found.insert(index);
+        }
+    }
+}
+
+pub fn scoped_closure(
+    scoping: &Scoping,
+    scope: ScopeId,
+    list: &[Statement<'_>],
+    candidates: &FxHashMap<String, usize>,
+    seeds: FxHashSet<usize>,
+) -> Vec<usize> {
+    let mut moved = seeds;
+    let mut pending: Vec<usize> = moved.iter().copied().collect();
+    while let Some(index) = pending.pop() {
+        let Some(statement) = list.get(index) else {
+            continue;
+        };
+        let mut mentions = ScopedMentions {
+            scoping,
+            scope,
+            wanted: candidates,
+            found: FxHashSet::default(),
+        };
+        mentions.visit_statement(statement);
+        for found in mentions.found {
             if moved.insert(found) {
                 pending.push(found);
             }

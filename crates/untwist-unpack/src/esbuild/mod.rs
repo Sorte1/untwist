@@ -24,7 +24,7 @@ use crate::esbuild::build::{
 use crate::esbuild::check::{entry_sound, factory_closed, Proof};
 use crate::esbuild::layout::{layout, scopes, FactoryDecl, Host, Layout, Scope, INLINE_PREFIX};
 use crate::esbuild::live::read_as_members;
-use crate::esbuild::mentions::closure;
+use crate::esbuild::mentions::scoped_closure;
 use crate::frame::Frame;
 use crate::model::{body_key, Bodies, Bundle, BundleKind};
 use crate::rolldown;
@@ -68,6 +68,7 @@ fn seeds_in(
     scoping: &Scoping,
     plan: &Plan<'_, '_>,
     wanted: &FxHashMap<String, usize>,
+    list_scope: ScopeId,
 ) -> FxHashSet<usize> {
     let factories: FxHashSet<ScopeId> = plan
         .layout
@@ -84,8 +85,8 @@ fn seeds_in(
             )
         })
     };
-    for symbol in scoping.symbol_ids() {
-        if let Some(&index) = wanted.get(scoping.symbol_name(symbol)) {
+    for (name, &symbol) in scoping.get_bindings(list_scope) {
+        if let Some(&index) = wanted.get(name.as_str()) {
             if referenced_inside(scoping.get_resolved_reference_ids(symbol)) {
                 seeds.insert(index);
             }
@@ -207,7 +208,9 @@ fn entry_proven(proof: &Proof<'_>, plan: &Plan<'_, '_>, moved: &[usize]) -> bool
         .iter()
         .enumerate()
         .filter(|(index, _)| {
-            moved.binary_search(index).is_err() && !layout.is_factory_statement(*index)
+            moved.binary_search(index).is_err()
+                && !layout.is_factory_statement(*index)
+                && !layout.is_map_statement(*index)
         })
         .map(|(_, statement)| statement);
     let declarators = list
@@ -255,6 +258,17 @@ fn helpers_unchanged(scoping: &Scoping, layout: &Layout<'_, '_>) -> bool {
         .all(|binding| unchanged(scoping, binding))
 }
 
+fn maps_used_once(scoping: &Scoping, layout: &Layout<'_, '_>) -> bool {
+    layout.maps().all(|map| {
+        unchanged(scoping, map.binding)
+            && map
+                .binding
+                .symbol_id
+                .get()
+                .is_some_and(|symbol| scoping.get_resolved_reference_ids(symbol).len() == 1)
+    })
+}
+
 fn list_scope(scoping: &Scoping, plan: &Plan<'_, '_>) -> Option<ScopeId> {
     match plan.scope.host {
         Host::Top => Some(scoping.root_scope_id()),
@@ -274,13 +288,15 @@ fn round(scoping: &Scoping, plan: &Plan<'_, '_>) -> Option<Round> {
         return None;
     }
     let (candidates, wanted) = helper_names(plan);
-    let moved = closure(
+    let list_scope = list_scope(scoping, plan)?;
+    let moved = scoped_closure(
+        scoping,
+        list_scope,
         plan.scope.list,
         &candidates,
-        seeds_in(scoping, plan, &wanted),
+        seeds_in(scoping, plan, &wanted, list_scope),
     );
     let proof = proof(scoping, plan, &moved);
-    let list_scope = list_scope(scoping, plan)?;
     let free_object = scoping
         .find_binding(list_scope, oxc_str::Ident::from("Object"))
         .is_none();
@@ -357,7 +373,7 @@ fn proven(source: &Program<'_>, plan: &mut Plan<'_, '_>) -> Option<Vec<usize>> {
         return None;
     }
     let scoping = build_scoping(source).scoping;
-    if !helpers_unchanged(&scoping, &plan.layout) {
+    if !helpers_unchanged(&scoping, &plan.layout) || !maps_used_once(&scoping, &plan.layout) {
         return None;
     }
     loop {
@@ -413,8 +429,14 @@ fn detect_plan<'k, 'a>(
     }
     let (candidates, wanted) = helper_names(&plan);
     let scanned = scan(&plan, &wanted, &programs);
-    let moved =
-        proven_moved.unwrap_or_else(|| closure(plan.scope.list, &candidates, scanned.seeds));
+    let moved = match proven_moved {
+        Some(moved) => moved,
+        None => {
+            let scoping = build_scoping(source).scoping;
+            let scope = list_scope(&scoping, &plan)?;
+            scoped_closure(&scoping, scope, plan.scope.list, &candidates, scanned.seeds)
+        }
+    };
     build::bundle(
         alloc,
         source,

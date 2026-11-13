@@ -11,8 +11,8 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
 
-use super::layout::{Def, Hoisted, Layout, Registry};
-use super::links::{loader, ParcelView};
+use super::layout::{Def, DefFunction, Hoisted, Layout, Registry};
+use super::links::{loader, module_name, require_name, ParcelView};
 use super::slot::reaches_slot;
 use super::{
     bare, candidates, is_builtin, moved_helpers, resolve, single_string, ENTRY_ID, HOISTED_NAMES,
@@ -50,6 +50,8 @@ struct Rules<'s, 'l> {
     builtins: bool,
     slot: bool,
     mode: Mode,
+    arrow: bool,
+    legacy: bool,
     ok: bool,
 }
 
@@ -148,6 +150,12 @@ impl Rules<'_, '_> {
 
     fn loading(&self, call: &CallExpression<'_>) -> bool {
         match &call.callee {
+            Expression::Identifier(id) if self.legacy && self.require_param.is_some() => {
+                self.symbol(id) == self.require_param
+                    && single_string(call).is_some_and(|spec| {
+                        resolve(self.deps, spec) == spec && !self.ids.contains(spec)
+                    })
+            }
             Expression::Identifier(id) => id.name == REQUIRE && self.symbol(id).is_none(),
             Expression::StaticMemberExpression(member) => {
                 member.property.name == REQUIRE && self.is_module(&member.object)
@@ -249,7 +257,8 @@ impl<'a> Policy<'a> for Rules<'_, '_> {
     }
 
     fn this(&mut self, frame: Frame) {
-        self.ok &= self.mode != Mode::Helper || frame.receiver();
+        let lexical = self.mode == Mode::Helper || self.arrow;
+        self.ok &= !lexical || frame.receiver();
     }
 
     fn import_meta(&mut self) {
@@ -269,7 +278,7 @@ impl<'a> Policy<'a> for Rules<'_, '_> {
     }
 }
 
-fn param_symbols(function: &Function<'_>) -> Vec<Option<SymbolId>> {
+fn param_symbols(function: DefFunction<'_, '_>) -> Vec<Option<SymbolId>> {
     function
         .params
         .items
@@ -281,8 +290,8 @@ fn param_symbols(function: &Function<'_>) -> Vec<Option<SymbolId>> {
         .collect()
 }
 
-fn canonical(function: &Function<'_>, names: &[&str]) -> bool {
-    let params = param_names(&function.params);
+fn canonical(function: DefFunction<'_, '_>, names: &[&str]) -> bool {
+    let params = param_names(function.params);
     let mut seen = FxHashSet::default();
     params.iter().enumerate().all(|(index, name)| {
         let placed = names.iter().position(|canon| canon == name);
@@ -296,12 +305,8 @@ fn declared_once(scoping: &Scoping, symbols: impl IntoIterator<Item = Option<Sym
         .all(|symbol| symbol.is_some_and(|s| scoping.symbol_redeclarations(s).is_empty()))
 }
 
-fn factory_span(function: &Function<'_>) -> Span {
-    let end = function
-        .body
-        .as_ref()
-        .map_or(function.span.end, |body| body.span.end);
-    Span::new(function.params.span.start, end)
+fn factory_span(function: DefFunction<'_, '_>) -> Span {
+    Span::new(function.params.span.start, function.body.span.end)
 }
 
 struct Context<'s, 'l> {
@@ -313,6 +318,7 @@ struct Context<'s, 'l> {
     helpers: FxHashMap<SymbolId, usize>,
     moved: FxHashSet<SymbolId>,
     builtins: bool,
+    legacy: bool,
     slot: Cell<bool>,
 }
 
@@ -340,6 +346,8 @@ impl<'s, 'l> Context<'s, 'l> {
             builtins: self.builtins,
             slot: false,
             mode,
+            arrow: false,
+            legacy: self.legacy,
             ok: true,
         }
     }
@@ -357,7 +365,8 @@ impl<'s, 'l> Context<'s, 'l> {
         let mut rules = self.rules(Mode::Factory);
         rules.deps = &def.deps;
         rules.inside = factory_span(def.function);
-        (rules.load, rules.target) = self.load(body).unzip();
+        rules.arrow = def.function.arrow;
+        (rules.load, rules.target) = self.load(def, body).unzip();
         rules.require_param = if offset == 0 {
             symbols.first().copied().flatten()
         } else {
@@ -369,10 +378,12 @@ impl<'s, 'l> Context<'s, 'l> {
         rules.ok && (offset == 1 || self.global_unshadowed(def, symbols.len()))
     }
 
-    fn load(&self, body: &FunctionBody<'_>) -> Option<(Span, Span)> {
+    fn load(&self, def: &Def<'_, '_>, body: &FunctionBody<'_>) -> Option<(Span, Span)> {
         let view = self.view?;
         let require = self.hoisted.map(|(_, _, names)| names[0]);
-        let found = loader(&body.statements, require)?;
+        let module = module_name(def, self.hoisted.is_some());
+        let plain = self.legacy.then(|| require_name(def));
+        let found = loader(&body.statements, require, module, plain)?;
         view.loadable
             .contains(found.id)
             .then_some((found.load, found.target))
@@ -382,7 +393,15 @@ impl<'s, 'l> Context<'s, 'l> {
         if params < REGISTRY_PARAMS {
             return true;
         }
-        let Some(scope) = def.function.scope_id.get() else {
+        let unread = param_symbols(def.function)
+            .get(REGISTRY_PARAMS - 1)
+            .copied()
+            .flatten()
+            .is_some_and(|symbol| self.scoping.get_resolved_reference_ids(symbol).is_empty());
+        if unread {
+            return true;
+        }
+        let Some(scope) = def.function.scope.get() else {
             return false;
         };
         let inside = factory_span(def.function);
@@ -432,6 +451,7 @@ fn registry(scoping: &Scoping, layout: &Registry<'_, '_>, view: Option<&ParcelVi
         helpers: FxHashMap::default(),
         moved: FxHashSet::default(),
         builtins: layout.externals,
+        legacy: layout.legacy,
         slot: Cell::new(false),
     };
     let factories = layout
@@ -521,6 +541,7 @@ fn hoisted(
         helpers,
         moved: FxHashSet::default(),
         builtins: true,
+        legacy: false,
         slot: Cell::new(false),
     };
     if !layout

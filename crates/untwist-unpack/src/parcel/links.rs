@@ -3,7 +3,7 @@ use oxc_span::Span;
 use oxc_syntax::operator::AssignmentOperator;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::layout::{self, Hoisted, Layout};
+use super::layout::{self, Def, Hoisted, Layout};
 use super::single_string;
 use crate::frame::Frame;
 use crate::matcher::expression_statement;
@@ -60,7 +60,10 @@ fn relative(call: &CallExpression<'_>) -> bool {
     single_string(call).is_some_and(|spec| spec.starts_with("./") || spec.starts_with("../"))
 }
 
-fn exports_assignment<'k, 'a>(statement: &'k Statement<'a>) -> Option<&'k Expression<'a>> {
+fn exports_assignment<'k, 'a>(
+    statement: &'k Statement<'a>,
+    module: &str,
+) -> Option<&'k Expression<'a>> {
     let Expression::AssignmentExpression(assign) = expression_statement(statement)? else {
         return None;
     };
@@ -70,7 +73,7 @@ fn exports_assignment<'k, 'a>(statement: &'k Statement<'a>) -> Option<&'k Expres
     let fits = assign.operator == AssignmentOperator::Assign
         && !target.optional
         && target.property.name == "exports"
-        && named(&target.object, "module");
+        && named(&target.object, module);
     fits.then_some(&assign.right)
 }
 
@@ -100,25 +103,45 @@ fn hoisted_target<'k>(target: &'k Expression<'_>, require: &str) -> Option<&'k s
     single_string(call)
 }
 
-fn registry_target<'k>(target: &'k Expression<'_>) -> Option<&'k str> {
+fn registry_target<'k>(target: &'k Expression<'_>, module: &str) -> Option<&'k str> {
     let call = call_of(target)?;
     let Expression::StaticMemberExpression(root) = &call.callee else {
         return None;
     };
     let fits = !root.optional
         && root.property.name == "root"
-        && member_callee(&root.object, "module", "bundle");
+        && member_callee(&root.object, module, "bundle");
     if !fits {
         return None;
     }
     single_string(call)
 }
 
-pub fn loader<'k>(statements: &'k [Statement<'_>], require: Option<&str>) -> Option<Loader<'k>> {
+pub fn module_name<'a>(def: &Def<'_, 'a>, hoisted: bool) -> &'a str {
+    let at = usize::from(!hoisted);
+    match def.function.params.items.get(at).map(|item| &item.pattern) {
+        Some(BindingPattern::BindingIdentifier(id)) => id.name.as_str(),
+        _ => "module",
+    }
+}
+
+pub fn require_name<'a>(def: &Def<'_, 'a>) -> &'a str {
+    match def.function.params.items.first().map(|item| &item.pattern) {
+        Some(BindingPattern::BindingIdentifier(id)) => id.name.as_str(),
+        _ => "",
+    }
+}
+
+pub fn loader<'k>(
+    statements: &'k [Statement<'_>],
+    require: Option<&str>,
+    module: &str,
+    plain: Option<&str>,
+) -> Option<Loader<'k>> {
     let [statement] = statements else {
         return None;
     };
-    let then = call_of(exports_assignment(statement)?)?;
+    let then = call_of(exports_assignment(statement, module)?)?;
     let Expression::StaticMemberExpression(member) = &then.callee else {
         return None;
     };
@@ -143,8 +166,10 @@ pub fn loader<'k>(statements: &'k [Statement<'_>], require: Option<&str>) -> Opt
         Some(require) if named(&load.callee, "require") => {
             (Form::Hoisted, hoisted_target(target, require)?)
         }
-        None if member_callee(&load.callee, "module", "require") => {
-            (Form::Registry, registry_target(target)?)
+        None if member_callee(&load.callee, module, "require")
+            || plain.is_some_and(|name| !name.is_empty() && named(&load.callee, name)) =>
+        {
+            (Form::Registry, registry_target(target, module)?)
         }
         _ => return None,
     };
@@ -202,7 +227,14 @@ fn hoisted_part(input: usize, top: &[Statement<'_>], layout: &Hoisted<'_, '_>) -
     let loads = layout
         .defs
         .iter()
-        .filter_map(|def| loader(&def.body()?.statements, Some(require)))
+        .filter_map(|def| {
+            loader(
+                &def.body()?.statements,
+                Some(require),
+                module_name(def, true),
+                None,
+            )
+        })
         .filter(|found| found.form == Form::Hoisted)
         .map(|found| found.id.to_string())
         .collect();
@@ -225,7 +257,15 @@ fn part(input: usize, program: &Program<'_>) -> Option<Part> {
             let loads = registry
                 .defs
                 .iter()
-                .filter_map(|def| loader(&def.body()?.statements, None))
+                .filter_map(|def| {
+                    let plain = registry.legacy.then(|| require_name(def));
+                    loader(
+                        &def.body()?.statements,
+                        None,
+                        module_name(def, false),
+                        plain,
+                    )
+                })
                 .filter(|found| found.form == Form::Registry)
                 .map(|found| found.id.to_string())
                 .collect();

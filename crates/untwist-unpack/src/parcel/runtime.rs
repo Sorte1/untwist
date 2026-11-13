@@ -3,7 +3,7 @@ use oxc_ast_visit::VisitJs;
 
 use crate::canon::{function_shape, statement_shape};
 
-const KNOWN: [&str; 7] = [
+const KNOWN: [&str; 9] = [
     include_str!("runtimes/dev.txt"),
     include_str!("runtimes/dev-unminified.txt"),
     include_str!("runtimes/dev-default.txt"),
@@ -11,6 +11,8 @@ const KNOWN: [&str; 7] = [
     include_str!("runtimes/min-prepared.txt"),
     include_str!("runtimes/min-unminified.txt"),
     include_str!("runtimes/min-default.txt"),
+    include_str!("runtimes/dev-unsafe.txt"),
+    include_str!("runtimes/min-unsafe.txt"),
 ];
 
 const KEY: &str = "%KEY%";
@@ -22,8 +24,29 @@ const KNOWN_DEFINITIONS: [&str; 5] = [
     include_str!("runtimes/hoisted-min-default.txt"),
 ];
 
-pub fn proven(function: &Function<'_>, source_text: &str) -> bool {
-    function_shape(function, source_text).is_some_and(|text| KNOWN.contains(&text.as_str()))
+const LEGACY: [&str; 6] = [
+    include_str!("runtimes/legacy-dev.txt"),
+    include_str!("runtimes/legacy-dev-default.txt"),
+    include_str!("runtimes/legacy-dev-unsafe.txt"),
+    include_str!("runtimes/legacy-min.txt"),
+    include_str!("runtimes/legacy-min-default.txt"),
+    include_str!("runtimes/legacy-min-unsafe.txt"),
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Generation {
+    Current,
+    Legacy,
+}
+
+pub fn proven(function: &Function<'_>, source_text: &str) -> Option<Generation> {
+    let text = function_shape(function, source_text)?;
+    if KNOWN.contains(&text.as_str()) {
+        return Some(Generation::Current);
+    }
+    LEGACY
+        .contains(&text.as_str())
+        .then_some(Generation::Legacy)
 }
 
 const STORES: [&str; 2] = ["$parcel$inits", "$parcel$modules"];

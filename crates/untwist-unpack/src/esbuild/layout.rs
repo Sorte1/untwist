@@ -7,7 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::prop::prop_name;
 
 use crate::esbuild::shape::{
-    commonjs_call, export_helper, helper_shadows, is_object_get_own_property_names,
+    commonjs_call, export_helper, helper_shadows, is_name, is_object_get_own_property_names,
     is_object_member_chain, is_require_shim, lazy_helper, CallForm,
 };
 use crate::frame::{Frame, Shape};
@@ -33,8 +33,14 @@ pub struct Scope<'k, 'a> {
     pub wrapper: Option<&'k Statement<'a>>,
 }
 
+pub struct FactoryMap<'k, 'a> {
+    pub statement: usize,
+    pub binding: &'k BindingIdentifier<'a>,
+}
+
 pub struct FactoryDecl<'k, 'a> {
     pub statement: usize,
+    pub map: Option<FactoryMap<'k, 'a>>,
     pub declarator: usize,
     pub name: String,
     pub binding: Option<&'k BindingIdentifier<'a>>,
@@ -55,6 +61,7 @@ pub struct Layout<'k, 'a> {
     pub created_shim: bool,
     pub banner: Option<usize>,
     pub trusted: Vec<&'k BindingIdentifier<'a>>,
+    pub map_statements: Vec<usize>,
     pub unsound: bool,
     pub early: bool,
     pub first_effect: (usize, usize),
@@ -77,6 +84,16 @@ impl<'k, 'a> Layout<'k, 'a> {
         self.factories
             .binary_search_by_key(&index, |factory| factory.statement)
             .is_ok()
+    }
+
+    pub fn is_map_statement(&self, index: usize) -> bool {
+        self.map_statements.binary_search(&index).is_ok()
+    }
+
+    pub fn maps(&self) -> impl Iterator<Item = &FactoryMap<'_, '_>> {
+        self.factories
+            .iter()
+            .filter_map(|factory| factory.map.as_ref())
     }
 
     pub fn factories_at(&self, index: usize) -> &[FactoryDecl<'_, '_>] {
@@ -272,6 +289,10 @@ fn keyed_factory<'k, 'a>(argument: &'k Argument<'a>) -> Option<(String, Scoped<'
     let Argument::ObjectExpression(object) = argument else {
         return None;
     };
+    keyed_object(object)
+}
+
+fn keyed_object<'k, 'a>(object: &'k ObjectExpression<'a>) -> Option<(String, Scoped<'k, 'a>)> {
     let [ObjectPropertyKind::ObjectProperty(property)] = &object.properties[..] else {
         return None;
     };
@@ -282,13 +303,56 @@ fn keyed_factory<'k, 'a>(argument: &'k Argument<'a>) -> Option<(String, Scoped<'
     Some((key, block_factory(&property.value)?))
 }
 
+type Made<'k, 'a> = (Option<String>, Scoped<'k, 'a>, Option<FactoryMap<'k, 'a>>);
+
+fn named_map<'k, 'a>(
+    list: &'k [Statement<'a>],
+    statement: usize,
+    name: &str,
+) -> Option<(String, Scoped<'k, 'a>, FactoryMap<'k, 'a>)> {
+    let at = statement.checked_sub(1)?;
+    let Statement::VariableDeclaration(declaration) = list.get(at)? else {
+        return None;
+    };
+    let [declarator] = &declaration.declarations[..] else {
+        return None;
+    };
+    let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+        return None;
+    };
+    let Some(Expression::ObjectExpression(object)) = declarator.init.as_ref() else {
+        return None;
+    };
+    if binding.name != name || !unreassigned_var(declaration.kind) {
+        return None;
+    }
+    let (key, factory) = keyed_object(object)?;
+    Some((
+        key,
+        factory,
+        FactoryMap {
+            statement: at,
+            binding,
+        },
+    ))
+}
+
 fn factory_of<'k, 'a>(
     form: CallForm,
     argument: &'k Argument<'a>,
-) -> Option<(Option<String>, Scoped<'k, 'a>)> {
-    match form {
-        CallForm::FirstKey => keyed_factory(argument).map(|(key, factory)| (Some(key), factory)),
-        CallForm::Direct => block_factory(argument.as_expression()?).map(|factory| (None, factory)),
+    (list, statement): (&'k [Statement<'a>], usize),
+) -> Option<Made<'k, 'a>> {
+    match (form, argument) {
+        (CallForm::FirstKey, Argument::Identifier(name)) => {
+            let (key, factory, map) = named_map(list, statement, name.name.as_str())?;
+            Some((Some(key), factory, Some(map)))
+        }
+        (CallForm::FirstKey, _) => {
+            keyed_factory(argument).map(|(key, factory)| (Some(key), factory, None))
+        }
+        (CallForm::Direct, _) => {
+            block_factory(argument.as_expression()?).map(|factory| (None, factory, None))
+        }
     }
 }
 
@@ -317,13 +381,14 @@ fn factories<'k, 'a>(list: &'k [Statement<'a>], lazies: &Lazies<'a>) -> Option<F
         let Some(&form) = lazies.commonjs.get(callee) else {
             continue;
         };
-        let (key, (function, scope)) = factory_of(form, argument)?;
+        let (key, (function, scope), map) = factory_of(form, argument, (list, statement))?;
         if !fits_factory_params(&function) {
             return None;
         }
         proto_key |= key.as_deref() == Some("__proto__");
         found.push(FactoryDecl {
             statement,
+            map,
             declarator,
             name: binding.name.to_string(),
             binding: Some(binding),
@@ -443,15 +508,39 @@ fn is_function_literal(argument: &Argument<'_>) -> bool {
     }
 }
 
+fn object_destructure(declarator: &VariableDeclarator<'_>) -> bool {
+    let BindingPattern::ObjectPattern(pattern) = &declarator.id else {
+        return false;
+    };
+    let plain = pattern.rest.is_none()
+        && pattern.properties.iter().all(|property| {
+            !property.computed
+                && prop_name(&property.key).is_some()
+                && matches!(property.value, BindingPattern::BindingIdentifier(_))
+        });
+    plain
+        && declarator
+            .init
+            .as_ref()
+            .is_some_and(|init| is_name(init, "Object") || is_object_member_chain(init))
+}
+
+fn pure_declarator(declarator: &VariableDeclarator<'_>, lazy_callees: &Callees<'_>) -> bool {
+    match declarator.id {
+        BindingPattern::BindingIdentifier(_) => effect_free(declarator.init.as_ref(), lazy_callees),
+        _ => object_destructure(declarator),
+    }
+}
+
 fn prefix_statement(statement: &Statement<'_>, lazy_callees: &Callees<'_>) -> Option<bool> {
     match statement {
         Statement::FunctionDeclaration(_) => Some(true),
         other if is_banner(other) => Some(false),
         Statement::VariableDeclaration(declaration) if unreassigned_var(declaration.kind) => {
-            let pure = declaration.declarations.iter().all(|declarator| {
-                matches!(declarator.id, BindingPattern::BindingIdentifier(_))
-                    && effect_free(declarator.init.as_ref(), lazy_callees)
-            });
+            let pure = declaration
+                .declarations
+                .iter()
+                .all(|declarator| pure_declarator(declarator, lazy_callees));
             pure.then_some(true)
         }
         Statement::ImportDeclaration(_) | Statement::EmptyStatement(_) => Some(false),
@@ -477,6 +566,58 @@ fn lazy_callees<'a>(list: &[Statement<'a>], lazies: &Lazies<'a>) -> Callees<'a> 
     }
 }
 
+fn factory_declarator(factories: &[FactoryDecl<'_, '_>], statement: usize, at: usize) -> bool {
+    factories
+        .binary_search_by(|factory| (factory.statement, factory.declarator).cmp(&(statement, at)))
+        .is_ok()
+}
+
+fn map_statements(factories: &[FactoryDecl<'_, '_>]) -> Vec<usize> {
+    let mut maps: Vec<usize> = factories
+        .iter()
+        .filter_map(|factory| factory.map.as_ref().map(|map| map.statement))
+        .collect();
+    maps.sort_unstable();
+    maps
+}
+
+struct Quiet<'l, 'f, 'k, 'a> {
+    lazy_callees: &'l Callees<'l>,
+    factories: &'f [FactoryDecl<'k, 'a>],
+    maps: &'f [usize],
+}
+
+fn quiet_at(
+    (list, index): (&[Statement<'_>], usize),
+    quiet: &Quiet<'_, '_, '_, '_>,
+    until: usize,
+) -> bool {
+    let (lazy_callees, factories) = (quiet.lazy_callees, quiet.factories);
+    if quiet.maps.binary_search(&index).is_ok() {
+        return true;
+    }
+    let statement = &list[index];
+    if until == usize::MAX && prefix_statement(statement, lazy_callees).is_some() {
+        return true;
+    }
+    match statement {
+        Statement::VariableDeclaration(declaration) if unreassigned_var(declaration.kind) => {
+            declaration
+                .declarations
+                .iter()
+                .enumerate()
+                .take(until)
+                .all(|(at, declarator)| {
+                    factory_declarator(factories, index, at)
+                        || matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+                            && quiet_init(declarator.init.as_ref(), lazy_callees)
+                        || pure_declarator(declarator, lazy_callees)
+                })
+        }
+        statement => quiet_statement(statement, lazy_callees),
+    }
+}
+
 fn defined_before_any_effect(
     list: &[Statement<'_>],
     lazy_callees: &Callees<'_>,
@@ -485,16 +626,20 @@ fn defined_before_any_effect(
     let Some(last) = factories.last() else {
         return true;
     };
-    let Some(Statement::VariableDeclaration(declaration)) = list.get(last.statement) else {
+    if !matches!(
+        list.get(last.statement),
+        Some(Statement::VariableDeclaration(_))
+    ) {
         return false;
+    }
+    let maps = map_statements(factories);
+    let quiet = Quiet {
+        lazy_callees,
+        factories,
+        maps: &maps,
     };
-    let quiet_before = list[..last.statement]
-        .iter()
-        .all(|statement| quiet_statement(statement, lazy_callees));
-    quiet_before
-        && declaration.declarations[..last.declarator]
-            .iter()
-            .all(|declarator| quiet_init(declarator.init.as_ref(), lazy_callees))
+    (0..last.statement).all(|index| quiet_at((list, index), &quiet, usize::MAX))
+        && quiet_at((list, last.statement), &quiet, last.declarator)
 }
 
 fn inert_value(expr: &Expression<'_>) -> bool {
@@ -562,8 +707,22 @@ fn prefix(
 ) -> Vec<usize> {
     let mut found = Vec::new();
     for (index, statement) in list.iter().enumerate() {
+        if layout.is_map_statement(index) {
+            continue;
+        }
+        if layout.is_factory_statement(index) {
+            let quiet = Quiet {
+                lazy_callees,
+                factories: &layout.factories,
+                maps: &layout.map_statements,
+            };
+            match quiet_at((list, index), &quiet, usize::MAX) {
+                true => continue,
+                false => break,
+            }
+        }
         match prefix_statement(statement, lazy_callees) {
-            Some(true) if !layout.is_factory_statement(index) => found.push(index),
+            Some(true) => found.push(index),
             Some(_) => {}
             None => break,
         }
@@ -605,6 +764,7 @@ fn inline_factories<'k, 'a>(
         .enumerate()
         .map(|(index, site)| FactoryDecl {
             statement: site.statement,
+            map: None,
             declarator: site.declarator,
             name: format!("{INLINE_PREFIX}{index}"),
             binding: None,
@@ -651,7 +811,9 @@ pub fn layout<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
         created_shim: false,
         banner: banner_of(list),
         trusted: trusted(list, &lazies),
+        map_statements: Vec::new(),
     };
+    layout.map_statements = map_statements(&layout.factories);
     if !layout.accepted() {
         return None;
     }

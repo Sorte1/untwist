@@ -44,9 +44,12 @@ pub fn take_statements<'a>(
 }
 
 fn binding_names(pattern: &BindingPattern<'_>, names: &mut Vec<String>) {
-    if let BindingPattern::BindingIdentifier(id) = pattern {
-        names.push(id.name.to_string());
-    }
+    names.extend(
+        pattern
+            .get_binding_identifiers()
+            .into_iter()
+            .map(|id| id.name.to_string()),
+    );
 }
 
 pub fn declared_names(statements: &[Statement<'_>]) -> Vec<String> {
@@ -73,9 +76,13 @@ fn declared_symbols(statement: &Statement<'_>, symbols: &mut FxHashSet<SymbolId>
     match statement {
         Statement::VariableDeclaration(declaration) => {
             for declarator in &declaration.declarations {
-                if let BindingPattern::BindingIdentifier(id) = &declarator.id {
-                    symbols.extend(id.symbol_id.get());
-                }
+                symbols.extend(
+                    declarator
+                        .id
+                        .get_binding_identifiers()
+                        .into_iter()
+                        .filter_map(|id| id.symbol_id.get()),
+                );
             }
         }
         Statement::FunctionDeclaration(function) => {
