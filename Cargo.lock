@@ -1908,6 +1908,7 @@ dependencies = [
  "untwist-core",
  "untwist-testing",
  "untwist-unminify",
+ "untwist-unpack",
  "wasmparser",
 ]
 

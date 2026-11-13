@@ -51,6 +51,12 @@ const ROLLUP_ASSUMED: Suite = Suite {
     preload: Some(DOCUMENT),
 };
 
+const ROLLUP_BOUNDARIES: Suite = Suite {
+    dir: "fixtures/unpack-rollup-boundaries",
+    lanes: &ASSUMED_LANES,
+    preload: None,
+};
+
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -303,4 +309,9 @@ fn every_generated_rollup_iife_bundle_splits_under_assumed_modules_into_a_tree_t
             );
         }
     }
+}
+
+#[test]
+fn every_generated_rollup_app_splits_into_inferred_modules_that_run_the_same() {
+    check(&ROLLUP_BOUNDARIES);
 }

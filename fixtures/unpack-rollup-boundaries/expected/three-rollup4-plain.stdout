@@ -1,0 +1,6 @@
+rotated 3.000,2.000,-1.000
+transformed 3.000,4.000,5.000
+bounds -0.707,-0.500,-2.828 2.828,0.500,0.707
+picked box1@7.517 box1@7.517
+color 336699 40bf40
+children box1,ball0.5

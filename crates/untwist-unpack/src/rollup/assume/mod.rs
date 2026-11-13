@@ -1,6 +1,12 @@
 pub mod build;
 pub mod outer;
 pub mod plan;
+#[cfg(feature = "boundaries")]
+pub mod rewrite;
+#[cfg(feature = "boundaries")]
+pub mod runs;
+#[cfg(feature = "boundaries")]
+pub mod setters;
 pub mod shared;
 
 use oxc_allocator::{Allocator, Vec as AVec};

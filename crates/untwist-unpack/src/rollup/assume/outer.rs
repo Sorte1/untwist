@@ -126,8 +126,16 @@ impl<'a> Visit<'a> for Writes<'_> {
     }
 }
 
+fn lexical(kind: VariableDeclarationKind) -> bool {
+    matches!(
+        kind,
+        VariableDeclarationKind::Let | VariableDeclarationKind::Const
+    )
+}
+
 fn quiet_declaration(outer: &mut Outer, declaration: &VariableDeclaration<'_>) -> bool {
-    if declaration.kind != VariableDeclarationKind::Var {
+    let kind = declaration.kind;
+    if kind != VariableDeclarationKind::Var && !lexical(kind) {
         return false;
     }
     declaration.declarations.iter().all(|declarator| {
@@ -136,6 +144,9 @@ fn quiet_declaration(outer: &mut Outer, declaration: &VariableDeclaration<'_>) -
         };
         let name = id.name.to_string();
         outer.names.insert(name.clone());
+        if lexical(kind) {
+            outer.unclean.insert(name.clone());
+        }
         match &declarator.init {
             None => true,
             Some(init) => {
@@ -161,7 +172,8 @@ fn declared(outer: &mut Outer, statement: &Statement<'_>, strict: bool) -> Optio
 }
 
 fn later_declaration(writes: &mut Writes<'_>, declaration: &VariableDeclaration<'_>) -> bool {
-    if declaration.kind != VariableDeclarationKind::Var {
+    let kind = declaration.kind;
+    if kind != VariableDeclarationKind::Var && !lexical(kind) {
         return false;
     }
     for declarator in &declaration.declarations {
@@ -169,6 +181,13 @@ fn later_declaration(writes: &mut Writes<'_>, declaration: &VariableDeclaration<
             return false;
         };
         writes.outer.names.insert(id.name.to_string());
+        if lexical(kind) {
+            writes.outer.unclean.insert(id.name.to_string());
+            if let Some(init) = &declarator.init {
+                writes.visit_expression(init);
+            }
+            continue;
+        }
         if let Some(init) = &declarator.init {
             writes.outer.assigned.insert(id.name.to_string());
             writes.visit_expression(init);
