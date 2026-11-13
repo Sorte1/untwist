@@ -2,8 +2,8 @@ use std::cell::Cell;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, ArrowFunctionExpression, CallExpression, Function, Program, ReturnStatement,
-    ThisExpression,
+    Argument, ArrowFunctionExpression, CallExpression, Expression, Function, Program,
+    ReturnStatement, ThisExpression,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::{Scoping, SemanticBuilder};
@@ -84,6 +84,23 @@ pub fn closed_eval_names(call: &CallExpression<'_>) -> Option<Vec<String>> {
         return None;
     };
     payload_names(literal.value.as_str()?)
+}
+
+pub fn is_closed_eval_at(scoping: &Scoping, call: &CallExpression<'_>) -> bool {
+    let Expression::Identifier(callee) = &call.callee else {
+        return false;
+    };
+    let Some(reference) = callee.reference_id.get() else {
+        return false;
+    };
+    let site = scoping.get_reference(reference).scope_id();
+    closed_eval_names(call).is_some_and(|names| {
+        names.iter().all(|name| {
+            scoping
+                .find_binding(site, Ident::from(name.as_str()))
+                .is_none()
+        })
+    })
 }
 
 const STRICT_PREFIX: &str = "\"use strict\";";
@@ -249,18 +266,6 @@ struct EvalSites<'s> {
     open: Vec<ScopeId>,
 }
 
-impl EvalSites<'_> {
-    fn closed_at(&self, call: &CallExpression<'_>, site: ScopeId) -> bool {
-        closed_eval_names(call).is_some_and(|names| {
-            names.iter().all(|name| {
-                self.scoping
-                    .find_binding(site, Ident::from(name.as_str()))
-                    .is_none()
-            })
-        })
-    }
-}
-
 impl<'a> Visit<'a> for EvalSites<'_> {
     fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &Cell<Option<ScopeId>>) {
         if let Some(scope) = scope_id.get() {
@@ -281,7 +286,7 @@ impl<'a> Visit<'a> for EvalSites<'_> {
                 .last()
                 .copied()
                 .unwrap_or(self.scoping.root_scope_id());
-            if !self.closed_at(it, site) {
+            if !is_closed_eval_at(self.scoping, it) {
                 self.open.push(site);
             }
         }
@@ -308,6 +313,43 @@ impl<'a> Visit<'a> for PayloadNames {
                     self.names.push(name);
                 }
             }
+        }
+        walk::walk_call_expression(self, it);
+    }
+}
+
+pub fn closed_evals_kept(program: &Program<'_>) -> bool {
+    if eval_payload_names(program).is_empty() {
+        return true;
+    }
+    let scoping = super::build_scoping(program).scoping;
+    let mut kept = ClosedEvalsKept {
+        scoping: &scoping,
+        kept: true,
+    };
+    kept.visit_program(program);
+    kept.kept
+}
+
+struct ClosedEvalsKept<'s> {
+    scoping: &'s Scoping,
+    kept: bool,
+}
+
+impl<'a> Visit<'a> for ClosedEvalsKept<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        let free = match &it.callee {
+            Expression::Identifier(id) => id.reference_id.get().is_some_and(|reference| {
+                self.scoping.get_reference(reference).symbol_id().is_none()
+            }),
+            _ => false,
+        };
+        if free
+            && !it.optional
+            && closed_eval_names(it).is_some()
+            && !is_closed_eval_at(self.scoping, it)
+        {
+            self.kept = false;
         }
         walk::walk_call_expression(self, it);
     }

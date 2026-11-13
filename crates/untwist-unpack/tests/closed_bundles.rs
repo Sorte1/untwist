@@ -73,8 +73,10 @@ const SHAPES: [(&str, BundleKind, &str); 4] = [
     (BROWSERIFY, BundleKind::Browserify, "1"),
 ];
 
-const CLOSED_BODIES: [&str; 3] = [
+const CLOSED_BODIES: [&str; 5] = [
     "\"hello\"",
+    "eval(\"1\")",
+    "eval(\"typeof Math\")",
     "typeof window + String(Math.max(1, 2))",
     "(function () { var greeting = arguments.length; return greeting; })()",
 ];
@@ -85,7 +87,7 @@ const OPEN_BODIES: [(&str, &str); 3] = [
         "it reads greeting, a binding of the bundle's scope",
     ),
     ("arguments.length", "it reads the factory's own arguments"),
-    ("eval(\"1\")", "it calls eval directly"),
+    ("eval(\"greeting\")", "it calls eval directly"),
 ];
 
 const CONSERVATIVE: UnpackOptions = UnpackOptions {

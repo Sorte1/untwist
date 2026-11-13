@@ -4,6 +4,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
+use untwist_core::semantic::{closed_eval_names, is_closed_eval_at};
 
 use crate::matcher::Factory;
 use crate::scan::{is_direct_eval, is_free, Frame, Policy, Scan, Step, Suspend};
@@ -256,6 +257,15 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
         read.then(|| Captured::Host(name.to_string()))
     }
 
+    fn eval_capture(&self, call: &CallExpression<'_>) -> Option<Captured> {
+        if !is_closed_eval_at(self.scoping, call) {
+            return Some(Captured::Eval);
+        }
+        closed_eval_names(call)?
+            .iter()
+            .find_map(|name| self.host(Reach::Free, name))
+    }
+
     fn outer(&mut self, frame: Frame, what: &'static str) {
         if self.arrow && !frame.receiver() {
             self.captured.get_or_insert(Captured::Outer(what));
@@ -285,7 +295,7 @@ impl<'a> Policy<'a> for Check<'_, '_, 'a> {
 
     fn call(&mut self, _frame: Frame, it: &CallExpression<'a>) -> Step {
         if self.captured.is_none() && is_direct_eval(self.scoping, &it.callee) {
-            self.captured = Some(Captured::Eval);
+            self.captured = self.eval_capture(it);
         }
         Step::Walk
     }

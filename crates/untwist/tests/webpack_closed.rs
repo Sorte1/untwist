@@ -97,3 +97,52 @@ const ARROW_FACTORIES_SHARE_THIS: &str = r#"(function (modules) {
 fn a_webpack_bundle_whose_arrow_factory_uses_the_bundles_this_is_not_unpacked() {
     refused(ARROW_FACTORIES_SHARE_THIS, "0", "t\n");
 }
+
+const CLOSED_EVAL_FACTORY: &str = r#"(function (modules) {
+  var installedModules = {};
+  function __webpack_require__(moduleId) {
+    if (installedModules[moduleId]) return installedModules[moduleId].exports;
+    var module = (installedModules[moduleId] = { i: moduleId, l: false, exports: {} });
+    modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+    module.l = true;
+    return module.exports;
+  }
+  return __webpack_require__((__webpack_require__.s = 0));
+})([
+  function (e, t, n) {
+    var seen;
+    try { seen = typeof eval("require;").cache; } catch (error) { seen = error.name; }
+    t.marker = 1;
+    console.log(seen, eval("typeof exports.marker"), n(1));
+  },
+  function (e) { e.exports = "world"; },
+]);
+"#;
+
+const OPEN_EVAL_FACTORY: &str = r#"(function (modules) {
+  var installedModules = {};
+  function __webpack_require__(moduleId) {
+    if (installedModules[moduleId]) return installedModules[moduleId].exports;
+    var module = (installedModules[moduleId] = { i: moduleId, l: false, exports: {} });
+    modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+    module.l = true;
+    return module.exports;
+  }
+  return __webpack_require__((__webpack_require__.s = 0));
+})([
+  function (e, t, n) { eval("var made = n(1)"); console.log(made); },
+  function (e) { e.exports = "world"; },
+]);
+"#;
+
+#[test]
+fn a_webpack_factory_whose_eval_reads_only_globals_is_unpacked_without_capturing_them() {
+    let unpacked = Unpacked::of(CLOSED_EVAL_FACTORY, false);
+    assert!(unpacked.has("bundle.json"), "{:?}", unpacked.notes());
+    unpacked.runs_like_the_bundle("object undefined world\n");
+}
+
+#[test]
+fn a_webpack_factory_whose_eval_declares_a_var_is_not_unpacked() {
+    refused(OPEN_EVAL_FACTORY, "0", "world\n");
+}

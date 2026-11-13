@@ -6,7 +6,7 @@ use oxc_str::Ident;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
-use untwist_core::semantic::build_scoping;
+use untwist_core::semantic::{build_scoping, eval_payload_names};
 
 use crate::closed::HOST_NAMES;
 
@@ -28,6 +28,13 @@ pub fn generate_uid(base: &str, scoping: &Scoping, used: &FxHashSet<String>) -> 
         }
     }
     format!("_{base}_{}", used.len())
+}
+
+fn evaluated_names(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<String> {
+    if !scoping.root_unresolved_references().contains_key("eval") {
+        return FxHashSet::default();
+    }
+    eval_payload_names(program).into_iter().collect()
 }
 
 struct Apply<'a, 'r> {
@@ -102,10 +109,11 @@ fn collect_collisions<'a>(
 fn uncaptured_target(
     scoping: &Scoping,
     (from, to): (&str, &str),
-    params: &[&str],
+    (params, evaluated): (&[&str], &FxHashSet<String>),
     used: &mut FxHashSet<String>,
 ) -> Option<String> {
-    if from == to || !scoping.root_unresolved_references().contains_key(to) {
+    let free = scoping.root_unresolved_references().contains_key(to) || evaluated.contains(to);
+    if from == to || !free {
         return None;
     }
     if params.contains(&to) {
@@ -151,7 +159,8 @@ fn rename_parameters_as<'a>(
 ) -> (usize, Vec<(usize, String)>) {
     let scoping = build_scoping(program).scoping;
     let mut symbols: FxHashMap<SymbolId, Ident<'a>> = FxHashMap::default();
-    let mut used: FxHashSet<String> = FxHashSet::default();
+    let evaluated = evaluated_names(program, &scoping);
+    let mut used: FxHashSet<String> = evaluated.clone();
     let mut free: FxHashMap<&str, Ident<'a>> = FxHashMap::default();
 
     let pairs = original.len().min(renamed.len());
@@ -159,7 +168,10 @@ fn rename_parameters_as<'a>(
     for index in 0..pairs {
         let from = original[index];
         let uid = uncaptured
-            .then(|| uncaptured_target(&scoping, (from, renamed[index]), original, &mut used))
+            .then(|| {
+                let names = (original, &evaluated);
+                uncaptured_target(&scoping, (from, renamed[index]), names, &mut used)
+            })
             .flatten();
         let to = uid.as_deref().unwrap_or(renamed[index]);
         collect_collisions(alloc, &scoping, from, to, &mut symbols, &mut used);
