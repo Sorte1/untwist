@@ -1,0 +1,6 @@
+exit=0
+b sees a a
+a sees b function
+entry a b with a true
+entry exports {"total":3}
+second entry 1

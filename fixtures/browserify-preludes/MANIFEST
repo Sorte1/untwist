@@ -1,0 +1,57 @@
+bp0.9	browserify 17.0.1 rows | browser-pack 0.9.4
+bp0.9+terser	browserify 17.0.1 rows | browser-pack 0.9.4 | terser 5.51.2
+bp0.9+uglify	browserify 17.0.1 rows | browser-pack 0.9.4 | uglify-js 3.19.3
+bp0.9+esbuild-min	browserify 17.0.1 rows | browser-pack 0.9.4 | esbuild 0.28.2
+bp0.9+swc-min	browserify 17.0.1 rows | browser-pack 0.9.4 | @swc/core 1.16.22
+bp0.9-two-entries	browserify 17.0.1 rows | browser-pack 0.9.4
+bp2	browserify 17.0.1 rows | browser-pack 2.0.1
+bp2+terser	browserify 17.0.1 rows | browser-pack 2.0.1 | terser 5.51.2
+bp2+uglify	browserify 17.0.1 rows | browser-pack 2.0.1 | uglify-js 3.19.3
+bp2+esbuild-min	browserify 17.0.1 rows | browser-pack 2.0.1 | esbuild 0.28.2
+bp2+swc-min	browserify 17.0.1 rows | browser-pack 2.0.1 | @swc/core 1.16.22
+bp2-two-entries	browserify 17.0.1 rows | browser-pack 2.0.1
+bp3	browserify 17.0.1 rows | browser-pack 3.2.0
+bp3+terser	browserify 17.0.1 rows | browser-pack 3.2.0 | terser 5.51.2
+bp3+uglify	browserify 17.0.1 rows | browser-pack 3.2.0 | uglify-js 3.19.3
+bp3+esbuild-min	browserify 17.0.1 rows | browser-pack 3.2.0 | esbuild 0.28.2
+bp3+swc-min	browserify 17.0.1 rows | browser-pack 3.2.0 | @swc/core 1.16.22
+bp3-two-entries	browserify 17.0.1 rows | browser-pack 3.2.0
+bp3-standalone	browserify 17.0.1 rows | browser-pack 3.2.0 standalone
+bp3-standalone+terser	browserify 17.0.1 rows | browser-pack 3.2.0 standalone | terser 5.51.2
+bp3-standalone+uglify	browserify 17.0.1 rows | browser-pack 3.2.0 standalone | uglify-js 3.19.3
+bp3-standalone+esbuild-min	browserify 17.0.1 rows | browser-pack 3.2.0 standalone | esbuild 0.28.2
+bp3-standalone+swc-min	browserify 17.0.1 rows | browser-pack 3.2.0 standalone | @swc/core 1.16.22
+bp5	browserify 17.0.1 rows | browser-pack 5.0.1
+bp5+terser	browserify 17.0.1 rows | browser-pack 5.0.1 | terser 5.51.2
+bp5+uglify	browserify 17.0.1 rows | browser-pack 5.0.1 | uglify-js 3.19.3
+bp5+esbuild-min	browserify 17.0.1 rows | browser-pack 5.0.1 | esbuild 0.28.2
+bp5+swc-min	browserify 17.0.1 rows | browser-pack 5.0.1 | @swc/core 1.16.22
+bp5-two-entries	browserify 17.0.1 rows | browser-pack 5.0.1
+bp5-standalone	browserify 17.0.1 rows | browser-pack 5.0.1 standalone
+bp5-standalone+terser	browserify 17.0.1 rows | browser-pack 5.0.1 standalone | terser 5.51.2
+bp5-standalone+uglify	browserify 17.0.1 rows | browser-pack 5.0.1 standalone | uglify-js 3.19.3
+bp5-standalone+esbuild-min	browserify 17.0.1 rows | browser-pack 5.0.1 standalone | esbuild 0.28.2
+bp5-standalone+swc-min	browserify 17.0.1 rows | browser-pack 5.0.1 standalone | @swc/core 1.16.22
+bp6.0	browserify 17.0.1 rows | browser-pack 6.0.4
+bp6.0+terser	browserify 17.0.1 rows | browser-pack 6.0.4 | terser 5.51.2
+bp6.0+uglify	browserify 17.0.1 rows | browser-pack 6.0.4 | uglify-js 3.19.3
+bp6.0+esbuild-min	browserify 17.0.1 rows | browser-pack 6.0.4 | esbuild 0.28.2
+bp6.0+swc-min	browserify 17.0.1 rows | browser-pack 6.0.4 | @swc/core 1.16.22
+bp6.0-two-entries	browserify 17.0.1 rows | browser-pack 6.0.4
+bp6.0-standalone	browserify 17.0.1 rows | browser-pack 6.0.4 standalone
+bp6.0-standalone+terser	browserify 17.0.1 rows | browser-pack 6.0.4 standalone | terser 5.51.2
+bp6.0-standalone+uglify	browserify 17.0.1 rows | browser-pack 6.0.4 standalone | uglify-js 3.19.3
+bp6.0-standalone+esbuild-min	browserify 17.0.1 rows | browser-pack 6.0.4 standalone | esbuild 0.28.2
+bp6.0-standalone+swc-min	browserify 17.0.1 rows | browser-pack 6.0.4 standalone | @swc/core 1.16.22
+bp6.1	browserify 17.0.1 rows | browser-pack 6.1.0
+bp6.1+terser	browserify 17.0.1 rows | browser-pack 6.1.0 | terser 5.51.2
+bp6.1+uglify	browserify 17.0.1 rows | browser-pack 6.1.0 | uglify-js 3.19.3
+bp6.1+esbuild-min	browserify 17.0.1 rows | browser-pack 6.1.0 | esbuild 0.28.2
+bp6.1+swc-min	browserify 17.0.1 rows | browser-pack 6.1.0 | @swc/core 1.16.22
+bp6.1-two-entries	browserify 17.0.1 rows | browser-pack 6.1.0
+bp6.1-standalone	browserify 17.0.1 rows | browser-pack 6.1.0 standalone
+bp6.1-standalone+terser	browserify 17.0.1 rows | browser-pack 6.1.0 standalone | terser 5.51.2
+bp6.1-standalone+uglify	browserify 17.0.1 rows | browser-pack 6.1.0 standalone | uglify-js 3.19.3
+bp6.1-standalone+esbuild-min	browserify 17.0.1 rows | browser-pack 6.1.0 standalone | esbuild 0.28.2
+bp6.1-standalone+swc-min	browserify 17.0.1 rows | browser-pack 6.1.0 standalone | @swc/core 1.16.22
+bp6.1-exports	browserify 17.0.1 rows | browser-pack 6.1.0 hasExports

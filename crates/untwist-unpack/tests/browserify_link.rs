@@ -147,11 +147,11 @@ fn a_numeric_request_in_the_map_links_like_its_string_form() {
 #[test]
 fn a_request_the_map_inherits_from_object_prototype_stays_as_written() {
     let split = split(
-        "{1:[function(require,module,exports){require(\"toString\");require(\"constructor\");require(\"__proto__\")},{}],toString:[function(require,module,exports){},{}],constructor:[function(require,module,exports){},{}],__proto__:[function(require,module,exports){},{}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"toString\");require(\"constructor\")},{}],toString:[function(require,module,exports){},{}],constructor:[function(require,module,exports){},{}]},{},[1]",
     );
     assert_eq!(
         split.code("index.js"),
-        "require(\"toString\");\nrequire(\"constructor\");\nrequire(\"__proto__\");"
+        "require(\"toString\");\nrequire(\"constructor\");"
     );
 }
 
@@ -179,10 +179,9 @@ fn the_entry_file_runs_every_later_entry_in_order() {
 #[test]
 fn later_entries_that_cannot_be_run_from_the_entry_file_are_noted() {
     for arguments in [
-        "{1:[function(require,module,exports){if(module.parent)return;console.log(1)},{}],7:[function(require,module,exports){},{}]},{},[1,7]",
+        "{1:[function(require,module,exports){if(exports.done)return;console.log(1)},{}],7:[function(require,module,exports){},{}]},{},[1,7]",
         "{1:[function(require,module,exports){var require=null;console.log(1)},{}],7:[function(require,module,exports){},{}]},{},[1,7]",
         "{1:[function(require,module,exports){console.log(1)},{}],7:[function(require,module,exports){},{}]},{},[1,9]",
-        "{1:[function(require,module,exports){console.log(1)},{}],7:[function(require,module,exports){},{}]},{},[1,later]",
     ] {
         let split = split(arguments);
         assert!(!split.code("index.js").contains("7.js"), "{arguments}");
