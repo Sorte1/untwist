@@ -198,20 +198,22 @@ fn run_extended<'a>(alloc: &'a Allocator, source: &'a str) -> String {
 }
 
 #[test]
-fn extended_a_string_literal_left_at_the_head_of_the_program_stays_inert() {
+fn the_default_lane_keeps_a_string_literal_left_at_the_head_of_the_program_inert() {
     let alloc = Allocator::default();
     let source = format!("{CONTROLLER}\"use strict\";\nconsole.log(1);");
-    let out = run_extended(&alloc, &source);
+    let out =
+        common::run_ctors_default_lane(&alloc, &source, &untwist_deobfuscate::protections_ctors());
     assert_eq!(out.trim(), "(\"use strict\");\nconsole.log(1);");
     assert_eq!(common::directive_count(&out), 0);
 }
 
 #[test]
-fn extended_a_string_literal_left_at_the_head_of_a_function_body_stays_inert() {
+fn the_default_lane_keeps_a_string_literal_left_at_the_head_of_a_function_body_inert() {
     let alloc = Allocator::default();
     let source =
         format!("function hi() {{\n{CONTROLLER}  \"use strict\";\n  console.log('x');\n}}");
-    let out = run_extended(&alloc, &source);
+    let out =
+        common::run_ctors_default_lane(&alloc, &source, &untwist_deobfuscate::protections_ctors());
     assert_eq!(
         out.trim(),
         "function hi() {\n  (\"use strict\");\n  console.log(\"x\");\n}"
@@ -307,4 +309,17 @@ fn a_guarded_function_whose_result_is_not_declared_is_kept() {
     let source = "function hi() {\n  const t = (() => {\n    let n = true;\n    return function (t, o) {\n      const e = n ? function () {\n        if (o) {\n          e = o.apply(t, arguments);\n          o = null;\n          return e;\n        }\n      } : function () {};\n      n = false;\n      return e;\n    };\n  })()(this, () => 1);\n  t();\n  console.log('x');\n}";
     let out = run(&alloc, source);
     assert!(out.contains("apply"), "{out}");
+}
+
+#[test]
+fn under_unsafe_a_prologue_the_protection_displaced_becomes_a_directive_again() {
+    let alloc = Allocator::default();
+    let source =
+        format!("function hi() {{\n{CONTROLLER}  \"use strict\";\n  console.log('x');\n}}");
+    let out =
+        common::run_ctors_extended(&alloc, &source, &untwist_deobfuscate::protections_ctors());
+    assert_eq!(
+        out.trim(),
+        "function hi() {\n  \"use strict\";\n  console.log(\"x\");\n}"
+    );
 }

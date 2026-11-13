@@ -1,0 +1,1 @@
+class Resource{constructor(a){this.name=a}}class Pooled extends Resource{constructor(a,b=4){super(a);this.size=b;8<b?this.capped=!0:this.items=[]}}const [first,second]=[new Pooled("a"),new Pooled("b",16)];console.log(first.items.length,second.capped,second.items,first instanceof Resource);

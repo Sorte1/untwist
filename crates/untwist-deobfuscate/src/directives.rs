@@ -183,7 +183,7 @@ pub fn remove_protection_statements<'a>(
         }
     }
     let wanted = removals.len();
-    if cx.opts.extended {
+    if cx.opts.extended && !cx.opts.unsafe_transforms {
         let applied = removals.apply(program, cx.allocator(), cx.scoping_mut());
         return Ok((wanted, applied));
     }

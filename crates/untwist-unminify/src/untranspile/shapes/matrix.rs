@@ -2,6 +2,8 @@ use untwist_core::pass::{ExpressionKind, StatementKind};
 
 use super::{Kind, Variant, TOKEN_CAP};
 
+const BABEL_7_29_SAFARI9_IIFE_TERSER_CLASS_EARLY_RETURN: &str =
+    "fixtures/untranspile/matrix/babel-7.29/safari9-iife-terser/class-early-return.js";
 const BABEL_7_0_IE11_ARROW_THIS: &str = "fixtures/untranspile/matrix/babel-7.0/ie11/arrow-this.js";
 const BABEL_7_0_IE11_DESTRUCTURING: &str =
     "fixtures/untranspile/matrix/babel-7.0/ie11/destructuring.js";
@@ -382,6 +384,14 @@ pub const VARIANTS: &[Variant] = &[
         (FOR_STATEMENT, DECLARED_FOCUS),
         (&[Kind::DefinePropertyPlain], 97),
         SWC_1_16_ES5_TERSER_OBJECT_SPREAD_REST,
+    ),
+    variant(
+        Kind::PossibleConstructorReturn,
+        0xd8c0_c1a7_ccaf_31cf_0440_d7a8_97f1_fc32,
+        (2, 3),
+        (IF_STATEMENT, LOGICAL_EXPRESSION_FOCUS),
+        (&[], 51),
+        BABEL_7_29_SAFARI9_IIFE_TERSER_CLASS_EARLY_RETURN,
     ),
     variant(
         Kind::PossibleConstructorReturn,

@@ -225,13 +225,22 @@ fn a_reference_the_template_cannot_account_for_refuses_the_removal() {
 }
 
 #[test]
-fn extended_a_string_literal_left_at_the_head_stays_inert() {
+fn the_default_lane_keeps_a_string_literal_left_at_the_head_inert() {
+    let alloc = Allocator::default();
+    let source = format!("{DPF}\"use strict\";\nconsole.log(1);");
+    let out =
+        common::run_ctors_default_lane(&alloc, &source, &untwist_deobfuscate::protections_ctors());
+    assert_eq!(out.trim(), "(\"use strict\");\nconsole.log(1);");
+    assert_eq!(common::directive_count(&out), 0);
+}
+
+#[test]
+fn under_unsafe_a_string_literal_left_at_the_head_becomes_the_directive() {
     let alloc = Allocator::default();
     let source = format!("{DPF}\"use strict\";\nconsole.log(1);");
     let out =
         common::run_ctors_extended(&alloc, &source, &untwist_deobfuscate::protections_ctors());
-    assert_eq!(out.trim(), "(\"use strict\");\nconsole.log(1);");
-    assert_eq!(common::directive_count(&out), 0);
+    assert_eq!(common::directive_count(&out), 1);
 }
 
 const INTERVAL_WITH_A_GETTER: &str = "(function () {\n  var getGlobal = function () {\n    var that;\n    try {\n      that = Function(\"return (function() {}.constructor(\\\"return this\\\")( ));\")();\n    } catch (e) {\n      that = window;\n    }\n    return that;\n  };\n  var that = getGlobal();\n  that.setInterval(dpf, 4000);\n})();\n";
