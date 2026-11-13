@@ -4,8 +4,9 @@ use untwist::{Options, RenameMode, WasmCheck};
 
 pub const DEFAULT_MAX_MEMORY: u64 = 1 << 30;
 
-const VALUE_FLAGS: [&str; 9] = [
+const VALUE_FLAGS: [&str; 10] = [
     "--rename",
+    "--modern",
     "--wasm-check",
     "--max-iterations",
     "--fuel",
@@ -88,6 +89,7 @@ fn valued(mut options: Options, flag: &str, word: &str) -> Result<Options, Strin
             options.timeout = Some(timeout);
         }
         "--disable" => return disable(options, word),
+        "--modern" => options.modern = Some(untwist::parse_modern_baseline(word)?),
         "--wasm-check" => {
             options.wasm_check = WasmCheck::named(word)
                 .ok_or_else(|| format!("unknown wasm check {word} (off, on or auto)"))?;
@@ -145,6 +147,25 @@ mod tests {
         let options = options_from("--max-memory unlimited").unwrap();
         assert_eq!(options.max_memory, None);
         assert!(options_from("--max-memory lots").is_err());
+    }
+
+    #[test]
+    fn modern_takes_a_baseline_without_spaces_and_is_off_by_default() {
+        assert!(options_from("--unsafe").unwrap().modern.is_none());
+        let options = options_from("--modern es2022").unwrap();
+        assert_eq!(
+            options
+                .modern
+                .map(|baseline| baseline.text().to_string())
+                .as_deref(),
+            Some("es2022")
+        );
+        let options = options_from("--modern chrome@120,firefox@121").unwrap();
+        assert_eq!(
+            options.modern.map(|baseline| baseline.engines().len()),
+            Some(2)
+        );
+        assert!(options_from("--modern es1999").is_err());
     }
 
     #[test]

@@ -1,0 +1,16 @@
+{
+  "name": "untwist-modern-fixtures",
+  "private": true,
+  "description": "Pinned Babel preset-env + core-js builds through Rollup, webpack and esbuild for the --modern fixtures (see build.mjs).",
+  "dependencies": {
+    "@babel/core": "7.29.7",
+    "@babel/preset-env": "7.29.14",
+    "@rollup/plugin-commonjs": "29.0.3",
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "core-js": "3.39.0",
+    "esbuild": "0.28.2",
+    "rollup": "4.66.0",
+    "terser": "5.51.2",
+    "webpack": "5.112.2"
+  }
+}

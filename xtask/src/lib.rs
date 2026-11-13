@@ -16,6 +16,7 @@ pub mod library_false_positives;
 pub mod library_gz;
 pub mod library_scan;
 pub mod library_table;
+pub mod modern_table;
 pub mod name_share;
 pub mod obf_fuzz;
 pub mod obf_matrix;

@@ -122,6 +122,7 @@ impl Pipeline {
                 true => self.rename_stage(site, sem, reservation),
                 false => sem,
             };
+            let sem = self.modern_stage(site, sem);
             self.library_stage(site, sem);
             settle_notes(site, &runs, latest);
             return;
@@ -132,14 +133,24 @@ impl Pipeline {
         match self.lexical_stage(site, sem) {
             Some(sem) => {
                 let sem = self.rename_stage(site, sem, reservation);
+                let sem = self.modern_stage(site, sem);
                 self.library_stage(site, sem);
             }
             None => {
                 let sem = untwist_core::semantic::build_scoping(site.program);
+                let sem = self.modern_stage(site, sem);
                 self.library_stage(site, sem);
             }
         }
         settle_notes(site, &runs, latest);
+    }
+
+    fn modern_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {
+        let Some(baseline) = self.options.modern.clone() else {
+            return sem;
+        };
+        let passes = vec![untwist_rename::modern::pass::boxed(baseline)];
+        self.stage_group("modern", passes, site, (sem, site.pass_opts.clone()))
     }
 
     fn library_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {

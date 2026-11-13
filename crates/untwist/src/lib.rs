@@ -41,6 +41,9 @@ pub use untwist_core::budget::{
 };
 pub use untwist_core::pass::{IterationTiming, Note, NoteKind, PassCtor, StopReason};
 pub use untwist_core::source_map::{self, Coverage, OwnedSourceMap};
+pub use untwist_rename::modern::{
+    parse_baseline as parse_modern_baseline, Baseline as ModernBaseline,
+};
 pub use untwist_rename::RenameMode;
 
 pub mod libraries {
