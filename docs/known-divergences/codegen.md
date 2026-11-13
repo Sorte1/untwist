@@ -138,33 +138,44 @@ fixture that then joins the differential.
 - **A G1 check whose read target would still print across lines passes the input through.**
   The G1 templates above are a recogniser, so a near-miss used to leave the target across lines
   and the output hung (javascript-obfuscator 5.10.1 with dead-code injection, R51-SD). Every input
-  is now also checked for the G1 reader: a `var n = c(this, <parameterless function or arrow>)`,
+  is now also checked for the G1 reader: a `var n = c(this, <parameterless function or arrow>)`
+  (block or expression body, extra arguments after the callback allowed),
   `n = c(this, …)` or the control-flow proxy form `n = t.k(c, this, …)`, whose callback holds a
   chain of at least three calls that passes `n` back in
   (`n.toString().search(r).toString().constructor(n)…`, or the older
   `Q.constructor("return /" + this + "/")().constructor(r).test(n)`; string-array calls in the
-  keys do not matter). For every reader, `c` is looked up by name among the declarations and plain
-  assignments (or is the callee itself when it is not a name), and every two-parameter controller
-  target inside them, in every branch the template matches, must come out on one line: either it
-  prints without a line break, or the reflow printed its one-line text (looked up in the reflow's
-  guard record by the same key). If no target is found, or one would be printed across lines, the
-  input is passed through unchanged with the note "a self-defending check reads the source text of
-  a function the output prints across lines (or one it cannot find), so the reformatted output
-  would hang where the input runs; it is passed through unchanged". The check runs on the final
-  tree before it is printed (two walks; +0.4 % instructions on `game.js`, which holds one reader).
+  keys do not matter). The check runs on the final printed text, not on what the reflow meant to
+  print: when the final tree holds a reader, the output is parsed again with scope analysis. `c`
+  is resolved by binding, not by name. It must be a `var`/`let`/`const` binding (no parameter,
+  function, class, catch or import binding of it, no destructuring) with exactly one value, its
+  initialiser or one plain `c = …` assignment, and no other write; a program with a `with`
+  statement has no resolved controller, and neither does a `var`/`let` controller when a direct
+  `eval` inside its scope takes an argument that is not a string literal without escapes, or
+  whose text spells the controller's name (a `const` cannot be rewritten that way). A write through the global
+  object (`window.c = …`, an indirect `eval`) is not seen. When `c` is not a name, the callee itself is
+  the controller. Every two-parameter controller target inside that value, in every branch the
+  template matches, must be printed without a line break in the output. If the binding does not
+  qualify, no target is found, or one is printed across lines, the input is passed through
+  unchanged with the note "a self-defending check reads the source text of a function the output
+  prints across lines (or one it cannot find), so the reformatted output would hang where the
+  input runs; it is passed through unchanged". The tree walk that finds readers is unchanged; the
+  second parse runs only for programs that hold one. A controller written as an arrow (terser's
+  `unsafe_arrows`) is not a template, so those programs are passed through.
   Older obfuscator.io lines (0.x) also test, inside the same `c(this, cb)` callback, that a bait
   `function () { return "\x77\x69…"; }` keeps its hex escapes; no reprint keeps a string's
   escapes, so a callback holding a parameterless function returning `"window"` (assigned or called
   in place, as terser leaves it) passes the input through. The bait functions themselves
   (a parameterless function whose whole body is `return "dev"`, `"window"` or `"newState"`, the
   words obfuscator.io's checks read) are printed on one line wherever they stand.
-  A function that adds its own name to a string (`c = a + F` inside `F`, the G3 self-read, which
-  terser can strip of its `("" + function () { … }).indexOf("\n")` escape hatch; a function that
-  still holds that escape is left alone, since a printed escape function holds a line break) is a reader too: it must come out on one
-  line the same way. Every unpacked module's tree is checked the same way against the module
-  reflow's record; a module that fails makes the inputs be written without a bundle. A source
-  check of another shape (another obfuscator's, or a read through a member such as `F.toString()`
-  outside G1) is not seen; see the next item.
+  A function that adds its own name to a string (`c = a + F` inside `F`, declared or assigned,
+  the G3 self-read) is a reader too: it must come out on one line the same way. Its
+  `("" + function () { … }).indexOf("\n")` escape hatch only counts when the escape function is
+  printed with a line break in the output; an escape printed on one line (an empty function, an
+  expression arrow, a bait) leaves the self-read live. Every unpacked module is checked the same
+  way on its own printed text; a module that fails makes the inputs be written without a bundle.
+  When a stage panics, the tree printed instead is checked too. A source check of another shape
+  (another obfuscator's, or a read through a member such as `F.toString()` outside G1) is not
+  seen; see the next item.
 - **Function source text is not kept (the printer premise).** Untwist's output is a new spelling
   of the program in every mode, `--no-deobfuscate --no-unminify` included, so
   `Function.prototype.toString`, `String(f)`, `"" + f` and template substitutions of a function

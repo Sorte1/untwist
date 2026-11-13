@@ -65,13 +65,6 @@ impl GuardRecord {
         add(&mut self.counts_mut().kept, key, 1);
     }
 
-    pub fn compacted(&self, text: &str) -> bool {
-        let key = guard_key(text);
-        self.counts
-            .as_ref()
-            .is_some_and(|counts| counts.compacted.contains_key(&key))
-    }
-
     pub fn tally(&self) -> GuardTally {
         let Some(counts) = &self.counts else {
             return GuardTally::default();
@@ -105,11 +98,6 @@ impl GuardRecord {
             add(&mut counts.kept, key, count);
         }
     }
-}
-
-pub fn guard_text(target: &Function<'_>) -> Option<String> {
-    let printed = function_text(target, false);
-    holds_a_line_terminator(&printed).then(|| printed.replace('\n', ""))
 }
 
 pub(super) fn holds_a_line_terminator(text: &str) -> bool {

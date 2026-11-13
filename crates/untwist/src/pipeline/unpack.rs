@@ -64,8 +64,12 @@ impl Pipeline {
         let _boundary = Boundary::enter();
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let (bundle, pending, readers) = self.unpack_in_arena(codes, guard, stages, notes)?;
-            let (mut bundle, tally, record) = bundle.reflowed(prior.guards);
-            if readers.iter().any(|module| module.unguarded(&record)) {
+            let (mut bundle, tally) = bundle.reflowed(prior.guards);
+            let unguarded = readers
+                .iter()
+                .zip(&bundle.modules)
+                .any(|(module, printed)| module.unguarded(&printed.code));
+            if unguarded || readers.len() != bundle.modules.len() {
                 notes.push(Note {
                     pass: "pipeline",
                     kind: NoteKind::Refusal,

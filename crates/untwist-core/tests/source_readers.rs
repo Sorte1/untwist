@@ -137,7 +137,7 @@ n();
 #[test]
 fn a_function_that_adds_its_own_name_to_a_string_is_a_reader() {
     let across = "var F = function (s) {\n  var a = \"\";\n  var c = a + F;\n  return c.charCodeAt(s);\n};\n";
-    assert_eq!(source_readers(across), SourceReaders::None);
+    assert_eq!(source_readers(across), SourceReaders::Unguarded);
     let with_reader = format!("{across}{CONTROLLER_ONE_LINE}{READER}");
     assert_eq!(source_readers(&with_reader), SourceReaders::Unguarded);
     let one_line = "var F = function (s) {var a = \"\";var c = a + F;return c.charCodeAt(s);};\n";
@@ -159,4 +159,141 @@ fn a_reader_that_checks_the_escaped_spelling_of_a_bait_is_unguarded() {
         source_readers(&format!("{CONTROLLER_ONE_LINE}{old}")),
         SourceReaders::Unguarded
     );
+}
+
+fn scoped(controller: &str) -> String {
+    format!("function other() {{\n{controller}return c;\n}}\n")
+}
+
+#[test]
+fn a_same_named_controller_in_another_scope_does_not_guard_the_reader() {
+    let code = format!(
+        "{}{CONTROLLER_ACROSS_LINES}{READER}",
+        scoped(CONTROLLER_ONE_LINE)
+    );
+    assert_eq!(source_readers(&code), SourceReaders::Unguarded);
+    let code = format!(
+        "{}{CONTROLLER_ONE_LINE}{READER}",
+        scoped(CONTROLLER_ACROSS_LINES)
+    );
+    assert_eq!(source_readers(&code), SourceReaders::Guarded);
+}
+
+#[test]
+fn a_reassigned_controller_is_unguarded() {
+    let reassigned = "c = function (t, fn) {\n  return function () {\n    return fn.apply(t, arguments);\n  };\n};\n";
+    let code = format!("{CONTROLLER_ONE_LINE}{reassigned}{READER}");
+    assert_eq!(source_readers(&code), SourceReaders::Unguarded);
+    let updated = format!("{CONTROLLER_ONE_LINE}c += 1;\n{READER}");
+    assert_eq!(source_readers(&updated), SourceReaders::Unguarded);
+    let declared_twice = format!("{CONTROLLER_ONE_LINE}var c = c;\n{READER}");
+    assert_eq!(source_readers(&declared_twice), SourceReaders::Unguarded);
+}
+
+#[test]
+fn a_controller_assigned_once_after_a_bare_declaration_is_resolved() {
+    let assigned = CONTROLLER_ONE_LINE.replacen("var c = ", "var c;\nc = ", 1);
+    assert_eq!(
+        source_readers(&format!("{assigned}{READER}")),
+        SourceReaders::Guarded
+    );
+}
+
+#[test]
+fn a_controller_bound_as_a_parameter_is_unguarded() {
+    let code = format!(
+        "function run(c) {{\n{READER}}}\nrun({});\n",
+        CONTROLLER_ONE_LINE
+            .trim_start_matches("var c = ")
+            .trim_end()
+            .trim_end_matches(';')
+    );
+    assert_eq!(source_readers(&code), SourceReaders::Unguarded);
+}
+
+#[test]
+fn a_controller_with_two_targets_needs_both_on_one_line() {
+    let two = |second: &str| {
+        format!(
+            "var c = function () {{\n  var f = true;\n  return function (t, fn) {{\n    if (typeof t === \"number\") {{\n      var r = f ? function () {{if (fn) {{var x = fn.apply(t, arguments);fn = null;return x;}}}} : function () {{}};\n      f = false;\n      return r;\n    }} else {{\n      var q = f ? {second} : function () {{}};\n      f = false;\n      return q;\n    }}\n  }};\n}}();\n{READER}"
+        )
+    };
+    let one_line = "function () {if (fn) {var y = fn.apply(t, arguments);fn = null;return y;}}";
+    let across = "function () {\n        if (fn) {\n          var y = fn.apply(t, arguments);\n          fn = null;\n          return y;\n        }\n      }";
+    assert_eq!(source_readers(&two(one_line)), SourceReaders::Guarded);
+    assert_eq!(source_readers(&two(across)), SourceReaders::Unguarded);
+}
+
+#[test]
+fn an_expression_arrow_reader_is_seen() {
+    let arrow = "var n = c(this, () => n.toString().search(\"(((.+)+)+)+$\").toString().constructor(n).search(\"(((.+)+)+)+$\"));\nn();\n";
+    assert_eq!(
+        source_readers(&format!("{CONTROLLER_ACROSS_LINES}{arrow}")),
+        SourceReaders::Unguarded
+    );
+    assert_eq!(
+        source_readers(&format!("{CONTROLLER_ONE_LINE}{arrow}")),
+        SourceReaders::Guarded
+    );
+}
+
+#[test]
+fn a_reader_with_a_trailing_argument_is_seen() {
+    let extra = READER.replacen("\n});", "\n}, 0);", 1);
+    assert_eq!(
+        source_readers(&format!("{CONTROLLER_ACROSS_LINES}{extra}")),
+        SourceReaders::Unguarded
+    );
+}
+
+fn escaped_helper(escape: &str) -> String {
+    format!("var F = function (s) {{\n  var a = \"\";\n  var c = a + F;\n  var z = (\"\" + {escape}).indexOf(\"\\n\") !== -1;\n  return z || c.charCodeAt(s);\n}};\n")
+}
+
+#[test]
+fn an_escape_that_prints_on_one_line_leaves_the_self_read_live() {
+    for escape in [
+        "function () {}",
+        "(() => 0)",
+        "function () {return \"dev\";}",
+    ] {
+        assert_eq!(
+            source_readers(&escaped_helper(escape)),
+            SourceReaders::Unguarded,
+            "{escape}"
+        );
+    }
+    let one_line = "var F = function (s) {var a = \"\";var c = a + F;var z = (\"\" + function () {}).indexOf(\"\\n\") !== -1;return z || c.charCodeAt(s);};\n";
+    assert_eq!(source_readers(one_line), SourceReaders::Guarded);
+}
+
+#[test]
+fn a_self_read_through_an_assignment_is_seen() {
+    let assigned =
+        "var F = function (s) {\n  var a = \"\", c;\n  c = a + F;\n  return c.charCodeAt(s);\n};\n";
+    assert_eq!(source_readers(assigned), SourceReaders::Unguarded);
+}
+
+#[test]
+fn a_direct_eval_that_may_name_the_controller_unguards_it() {
+    let harmless = format!("var host = eval(\"require;\");\n{CONTROLLER_ONE_LINE}{READER}");
+    assert_eq!(source_readers(&harmless), SourceReaders::Guarded);
+    let naming = format!("{CONTROLLER_ONE_LINE}eval(\"c = 1\");\n{READER}");
+    assert_eq!(source_readers(&naming), SourceReaders::Unguarded);
+    let computed = format!("{CONTROLLER_ONE_LINE}eval(text);\n{READER}");
+    assert_eq!(source_readers(&computed), SourceReaders::Unguarded);
+    let with = format!("{CONTROLLER_ONE_LINE}with (o) {{\n  x;\n}}\n{READER}");
+    assert_eq!(source_readers(&with), SourceReaders::Unguarded);
+}
+
+#[test]
+fn a_direct_eval_cannot_rewrite_a_const_controller_or_one_outside_its_scope() {
+    let constant = CONTROLLER_ONE_LINE.replacen("var c = ", "const c = ", 1);
+    let code = format!("{constant}eval(text);\n{READER}");
+    assert_eq!(source_readers(&code), SourceReaders::Guarded);
+    let elsewhere =
+        format!("{CONTROLLER_ONE_LINE}function f(text) {{\n  return eval(text);\n}}\n{READER}");
+    assert_eq!(source_readers(&elsewhere), SourceReaders::Unguarded);
+    let walled = format!("function f(text) {{\n  return eval(text);\n}}\nfunction g() {{\n{CONTROLLER_ONE_LINE}{READER}}}\n");
+    assert_eq!(source_readers(&walled), SourceReaders::Guarded);
 }

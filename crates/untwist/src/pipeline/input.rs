@@ -214,12 +214,13 @@ impl Pipeline {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let processed = self.process(source, (reservation, room, reserved), &mut result)?;
             let (code, guards) = self.reflow(processed, &mut result.unbundled);
-            if result.readers.unguarded(&guards) {
+            let code = respelled_as(code, result.respelling);
+            if result.readers.unguarded(&code) {
                 return Some(Err(SOURCE_READER_UNGUARDED));
             }
             result.notes.extend(guard_notes(guards.tally()));
             result.guards = guards;
-            Some(Ok(respelled_as(code, result.respelling)))
+            Some(Ok(code))
         }));
         let outcome = match outcome {
             Ok(None) => return InputResult::refused(source, TYPESCRIPT_IN_JAVASCRIPT),
@@ -440,7 +441,7 @@ impl Pipeline {
             }
             Err(_) => {
                 result.note_panicked();
-                result.readers = PendingReaders::Absent;
+                result.readers = readers_after_a_panic(&parsed.program);
                 let printed = Printed::unplaced(pretty_codegen(&parsed.program));
                 result.respelling = respelling(&parsed.program, printed.text());
                 Step::Done(Some(printed))
@@ -658,6 +659,11 @@ pub(super) fn final_trees<'b, T: AsRef<str>>(
         programs.push(parsed.program);
     }
     Ok(programs)
+}
+
+fn readers_after_a_panic(program: &oxc_ast::ast::Program<'_>) -> PendingReaders {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| PendingReaders::of(program)))
+        .unwrap_or(PendingReaders::Unresolved)
 }
 
 #[cfg(test)]

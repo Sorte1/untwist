@@ -9,7 +9,7 @@ mod helper;
 mod reader;
 mod state;
 
-pub use reader::{judge_readers, source_readers, SourceReaders};
+pub use reader::{reads_source, source_readers, SourceReaders};
 
 const FOLD_DEPTH: u32 = 16;
 const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=";
