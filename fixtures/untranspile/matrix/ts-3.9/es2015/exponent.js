@@ -1,0 +1,11 @@
+"use strict";
+var _a, _b, _c;
+let x = 2;
+console.log(Math.pow(2, 10), Math.pow((-2), 3), Math.pow(2, -1), Math.pow(2, Math.pow(3, 2)));
+x = Math.pow(x, 3);
+console.log(x);
+const o = { v: 3 };
+(_a = o).v = Math.pow(_a.v, 2);
+const arr = [4];
+(_b = arr)[_c = 0] = Math.pow(_b[_c], 0.5);
+console.log(o.v, arr[0], Math.pow(10n, 3n) === 1000n);

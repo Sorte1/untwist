@@ -17,6 +17,7 @@ mod class;
 mod class_ctor;
 mod class_members;
 mod class_native;
+mod class_parent;
 mod class_proto;
 mod class_super;
 mod define_chain;
@@ -87,6 +88,8 @@ pub struct UntranspileHelpers {
     open_classes: bool,
     open_waiting: bool,
     prototypes: class_proto::Prototypes,
+    parent_calls: bool,
+    class_seen: bool,
     strict: bool,
     class_pending: u32,
     waiting: bool,
@@ -121,6 +124,8 @@ impl Default for UntranspileHelpers {
             open_classes: false,
             open_waiting: false,
             prototypes: class_proto::Prototypes::default(),
+            parent_calls: false,
+            class_seen: false,
             strict: false,
             class_pending: 0,
             waiting: false,
@@ -384,6 +389,9 @@ impl UntranspileHelpers {
 
     #[inline(never)]
     fn class_site<'a>(&mut self, node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        if self.parent_calls {
+            return false;
+        }
         let outcome = class::rewrite(
             node,
             self.strict,
@@ -724,6 +732,9 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         }
         self.gate = self.open_gate(cx.opts.unsafe_transforms);
         self.dormant = self.inert(cx.opts.unsafe_transforms);
+        self.parent_calls = self.gate.unsafe_
+            && std::mem::take(&mut self.class_seen)
+            && class_parent::calls_parent_as_function(program, cx.scoping());
         self.prototypes = if self.gate.unsafe_ && std::mem::take(&mut self.open_waiting) {
             class_proto::gather(program, cx.scoping())
         } else {
@@ -740,6 +751,7 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         if self.gate.unsafe_ && self.holds_extends() {
             self.open_classes = true;
         }
+        self.class_seen = self.table.has_classes();
         let refused_open = std::mem::take(&mut self.open_classes);
         if refused_open {
             cx.note(UNTRANSPILE_CLASS_PROTOTYPE_OPEN, None);

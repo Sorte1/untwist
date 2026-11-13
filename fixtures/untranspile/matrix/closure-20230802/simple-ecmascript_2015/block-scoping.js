@@ -1,0 +1,2 @@
+const fns=[];for(let a=0;3>a;a++)fns.push(()=>a);console.log(fns.map(a=>a()).join(","));const later=[];for(let a=0;4>a;a++)if(1!==a){if(3===a)break;later.push(function(){return 10*a})}console.log(later.map(a=>a()).join(","));function find(a){for(const b of a)if(b.ok)return b.id;return-1}console.log(find([{id:1},{id:2,ok:!0}]));let x="outer";console.log("inner","inner!");console.log(x);const ws=[];let j=0;for(;3>j;){let a=j;ws.push(()=>a);j++}console.log(ws.map(a=>a()).join(","));
+for(let a=0,b=2;a<b;a++)setTimeout(()=>console.log("timer",a),0);console.log("case");

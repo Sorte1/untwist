@@ -1,0 +1,1 @@
+"use strict";var _Config,Config=function(){};_Config=Config,Config.defaults={mode:"fast"},Config.ready=void 0,_Config.ready=Object.keys(_Config.defaults).length>0,_Config.loaded="yes",_Config.triple=9,console.log(Config.ready,Config.loaded,Config.triple,typeof local);

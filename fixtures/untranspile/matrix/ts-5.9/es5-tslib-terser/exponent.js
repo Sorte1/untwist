@@ -1,0 +1,1 @@
+!function(){"use strict";var o,a,t=2;console.log(Math.pow(2,10),Math.pow(-2,3),Math.pow(2,-1),Math.pow(2,Math.pow(3,2))),t=Math.pow(t,3),console.log(t);var h={v:3};(o=h).v=Math.pow(o.v,2);var p=[4];(a=p)[0]=Math.pow(a[0],.5),console.log(h.v,p[0],1000n===Math.pow(10n,3n))}();

@@ -1,0 +1,2 @@
+const name="world",n=3;console.log(`hello ${name}`,"3 + 3 = 6",`nested ${`inner ${name}`}`),console.log(`multi
+line`,`${{toString(){return"obj"}}}`,`${[1,2]}`);function tag(o,...t){return o.raw.join("|")+"#"+o.join("|")+"#"+t.join(",")}console.log(tag`a${1}b${2}c`,tag`\n${"x"}\t`);function same(o){return o}const first=()=>same`x`;console.log(first()===first(),Object.isFrozen(first()),String.raw`\u{41}${1}\n`);const sym={valueOf(){return 1},toString(){return"str"}};console.log(`${sym}`,""+sym);

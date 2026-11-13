@@ -1,0 +1,1 @@
+const k="dyn",x=1,o={x:1,dyn1:2,method(){return"m"+this.x},get g(){return"get"},tdyn:3,__proto__:{inherited:!0}};console.log(o.x,o.dyn1,o.method(),o.g,o.tdyn,o.inherited,Object.keys(o).join(","));const sup={hello(){return"base"}},sub={__proto__:sup,hello(){return super.hello()+"+sub"}};console.log(sub.hello());

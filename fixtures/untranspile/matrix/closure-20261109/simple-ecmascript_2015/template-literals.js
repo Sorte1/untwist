@@ -1,0 +1,2 @@
+const name="world",n=3;console.log(`hello ${name}`,`${n} + ${n} = ${n+n}`,`nested ${`inner ${name}`}`);console.log("multi\nline",`${({toString(){return"obj"}})}`,"1,2");function tag(a,...b){return a.raw.join("|")+"#"+a.join("|")+"#"+b.join(",")}console.log(tag`a${1}b${2}c`,tag`\n${"x"}\t`);function same(a){return a}const first=()=>same`x`;console.log(first()===first(),Object.isFrozen(first()),String.raw`\u{41}${1}\n`);const sym={valueOf(){return 1},toString(){return"str"}};
+console.log(`${sym}`,""+sym);

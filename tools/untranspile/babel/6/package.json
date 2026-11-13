@@ -1,0 +1,12 @@
+{
+  "name": "untwist-untranspile-babel-6",
+  "private": true,
+  "description": "Babel 6 as installed on 2018-05-11: npm install --before 2018-05-11, so every @babel package, helper and regenerator-transform is the one that line shipped with.",
+  "dependencies": {
+    "babel-core": "6.26.3",
+    "babel-helpers": "6.24.1",
+    "babel-plugin-transform-class-properties": "6.24.1",
+    "babel-plugin-transform-object-rest-spread": "6.26.0",
+    "babel-preset-env": "1.7.0"
+  }
+}

@@ -1,0 +1,28 @@
+"use strict";
+const k = "dyn";
+const x = 1;
+const o = {
+    x,
+    [k + "1"]: 2,
+    method() {
+        return "m" + this.x;
+    },
+    get g() {
+        return "get";
+    },
+    [`t${k}`]: 3,
+    __proto__: { inherited: true },
+};
+console.log(o.x, o.dyn1, o.method(), o.g, o.tdyn, o.inherited, Object.keys(o).join(","));
+const sup = {
+    hello() {
+        return "base";
+    },
+};
+const sub = {
+    __proto__: sup,
+    hello() {
+        return super.hello() + "+sub";
+    },
+};
+console.log(sub.hello());
