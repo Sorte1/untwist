@@ -1,0 +1,1 @@
+function e(e,l,o,t){Object.defineProperty(e,l,{get:o,set:t,enumerable:!0,configurable:!0})}("u">typeof globalThis?globalThis:"u">typeof self?self:"u">typeof window?window:"u">typeof global?global:{}).parcelRequire9d85.register("736rF",function(l,o){e(l.exports,"value",()=>t),e(l.exports,"default",()=>a),console.log("eval lazy");let t=42;var a="lazy-default"});

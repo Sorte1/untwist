@@ -1,0 +1,9 @@
+{
+  "name": "untwist-bundle-matrix-parcel-2.12",
+  "private": true,
+  "description": "Parcel 2.12.0 for the parcel2.12 cells of tools/bundle-matrix/others.mjs, kept apart so its @parcel/* plugins resolve to the same release.",
+  "dependencies": {
+    "@parcel/config-default": "2.12.0",
+    "@parcel/core": "2.12.0"
+  }
+}
