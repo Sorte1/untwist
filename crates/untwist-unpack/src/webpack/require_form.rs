@@ -11,6 +11,7 @@ enum Step<'k, 'a> {
     Bind(&'k str, &'k Expression<'a>),
     Guard(&'k Expression<'a>, &'k Expression<'a>),
     Return(&'k Expression<'a>),
+    Missing(&'k IfStatement<'a>),
 }
 
 fn sequence<'k, 'a>(expr: &'k Expression<'a>) -> Vec<&'k Expression<'a>> {
@@ -70,6 +71,9 @@ fn steps<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<Vec<Step<'k, 'a>>> {
                     ));
                 }
             }
+            Statement::IfStatement(branch) if missing_shape(branch) => {
+                steps.push(Step::Missing(branch));
+            }
             Statement::IfStatement(branch) if branch.alternate.is_none() => {
                 steps.push(Step::Guard(
                     branch.test.without_parentheses(),
@@ -80,6 +84,72 @@ fn steps<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<Vec<Step<'k, 'a>>> {
         }
     }
     Some(steps)
+}
+
+const MISSING_CODE: &str = "MODULE_NOT_FOUND";
+
+fn missing_shape(branch: &IfStatement<'_>) -> bool {
+    branch.alternate.is_none()
+        && matches!(&branch.consequent, Statement::BlockStatement(block) if block.body.len() == 4)
+        && matches!(branch.test.without_parentheses(), Expression::UnaryExpression(unary)
+            if unary.operator == UnaryOperator::LogicalNot)
+}
+
+fn missing_message(expr: &Expression<'_>, index: &str) -> bool {
+    let Expression::BinaryExpression(outer) = expr.without_parentheses() else {
+        return false;
+    };
+    let Expression::BinaryExpression(inner) = outer.left.without_parentheses() else {
+        return false;
+    };
+    let text = |e: &Expression<'_>, want: &str| matches!(e.without_parentheses(), Expression::StringLiteral(s) if s.value.as_str() == Some(want));
+    outer.operator == BinaryOperator::Addition
+        && inner.operator == BinaryOperator::Addition
+        && text(&inner.left, "Cannot find module '")
+        && is_name(&inner.right, index)
+        && text(&outer.right, "'")
+}
+
+fn missing_check(branch: &IfStatement<'_>, names: &Names<'_>, cache: &str) -> bool {
+    let Expression::UnaryExpression(not) = branch.test.without_parentheses() else {
+        return false;
+    };
+    let Expression::BinaryExpression(within) = not.argument.without_parentheses() else {
+        return false;
+    };
+    if within.operator != BinaryOperator::In
+        || !is_name(&within.left, names.index)
+        || !is_name(&within.right, names.container)
+    {
+        return false;
+    }
+    let Statement::BlockStatement(block) = &branch.consequent else {
+        return false;
+    };
+    let [Statement::ExpressionStatement(forget), Statement::VariableDeclaration(error), Statement::ExpressionStatement(code), Statement::ThrowStatement(thrown)] =
+        &block.body[..]
+    else {
+        return false;
+    };
+    let forgets = matches!(forget.expression.without_parentheses(), Expression::UnaryExpression(delete)
+        if delete.operator == UnaryOperator::Delete && indexed(&delete.argument, names.index) == Some(cache));
+    let [declarator] = &error.declarations[..] else {
+        return false;
+    };
+    let BindingPattern::BindingIdentifier(name) = &declarator.id else {
+        return false;
+    };
+    let name = name.name.as_str();
+    let built = matches!(declarator.init.as_ref().map(Expression::without_parentheses), Some(Expression::NewExpression(new))
+        if is_name(&new.callee, "Error")
+            && matches!(&new.arguments[..], [message] if message.as_expression().is_some_and(|m| missing_message(m, names.index))));
+    let coded = matches!(code.expression.without_parentheses(), Expression::AssignmentExpression(assignment)
+        if assignment.operator == AssignmentOperator::Assign
+            && matches!(&assignment.left, AssignmentTarget::StaticMemberExpression(member)
+                if member.property.name == "code" && is_name(&member.object, name))
+            && matches!(assignment.right.without_parentheses(), Expression::StringLiteral(s) if s.value.as_str() == Some(MISSING_CODE)));
+    let names_distinct = ![names.index, names.require, names.container, cache].contains(&name);
+    forgets && built && coded && names_distinct && is_name(&thrown.argument, name)
 }
 
 fn name_of<'k>(expr: &'k Expression<'_>) -> Option<&'k str> {
@@ -320,6 +390,12 @@ pub fn caching_cache<'k>(
             return None;
         }
         keys.push(key);
+        rest = tail;
+    }
+    if let [Step::Missing(branch), tail @ ..] = rest {
+        if !missing_check(branch, &names, cache) {
+            return None;
+        }
         rest = tail;
     }
     let [Step::Effect(call), middle @ .., Step::Return(result)] = rest else {

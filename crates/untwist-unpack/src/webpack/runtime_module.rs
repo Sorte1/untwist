@@ -23,6 +23,7 @@ pub struct Uses {
 struct Members<'n> {
     object: &'n str,
     uses: Uses,
+    skip: &'n [oxc_span::Span],
 }
 
 fn declared_head<'k, 'a>(left: &'k ForStatementLeft<'a>) -> Option<&'k VariableDeclaration<'a>> {
@@ -82,6 +83,13 @@ impl Members<'_> {
 }
 
 impl<'a> VisitJs<'a> for Members<'_> {
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        if !self.skip.is_empty() && self.skip.contains(&oxc_span::GetSpan::span(it)) {
+            return;
+        }
+        walk_js::walk_expression(self, it);
+    }
+
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         let body = it
             .body
@@ -275,9 +283,18 @@ pub fn uses_in<'k, 'a: 'k>(
     object: &str,
     statements: impl IntoIterator<Item = &'k Statement<'a>>,
 ) -> Uses {
+    uses_in_skipping(object, statements, &[])
+}
+
+pub fn uses_in_skipping<'k, 'a: 'k>(
+    object: &str,
+    statements: impl IntoIterator<Item = &'k Statement<'a>>,
+    skip: &[oxc_span::Span],
+) -> Uses {
     let mut members = Members {
         object,
         uses: Uses::default(),
+        skip,
     };
     for statement in statements {
         members.visit_statement(statement);

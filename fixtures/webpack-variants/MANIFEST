@@ -1,0 +1,60 @@
+# cell	bundler	loader	entries	files	flags	sha256
+w4-node	webpack@4.47.0	node	index.js	1.chunk.js,2.chunk.js,3.chunk.js,index.js	target=node	ea10df2c13745176ca7f832c90c875d01a4cfa1da7889f2d68804cdd5d5b85f3
+w4-node-dev	webpack@4.47.0	node	index.js	0.chunk.js,1.chunk.js,2.chunk.js,index.js	mode=development target=node	0bfdf876c2808340f6689126f014e48da59a46b02b3d09ed8ad9287a5fb10d36
+w4-node-min	webpack@4.47.0	node	index.js	1.chunk.js,2.chunk.js,3.chunk.js,index.js	target=node minimize=true	bd6b25988aeba3b26929026ec5f33dd43ef76a0dad3eca6f920e27ba91a58dfe
+w4-async-node	webpack@4.47.0	node	index.js	1.chunk.js,2.chunk.js,3.chunk.js,index.js	target=async-node	d2aa4384d8a4d8df36523b8c74e91f9445d5a697c233c8570acde1cff5245177
+w4-web	webpack@4.47.0	browser	index.js	1.chunk.js,2.chunk.js,3.chunk.js,index.js	target=web	6b7a2bf519e25991111cdcdf04181e31d882c2b5e57cea29b570eada84d37540
+w4-web-dev	webpack@4.47.0	browser	index.js	0.chunk.js,1.chunk.js,2.chunk.js,index.js	mode=development target=web	e2f3fc2a639cd80cfe128f73f0a858949332e690da0302d1a5d0020e399dfb7f
+w4-web-min	webpack@4.47.0	browser	index.js	1.chunk.js,2.chunk.js,3.chunk.js,index.js	target=web minimize=true	a120c2c67c106f1cb2a7664d614fceb2d677d9a6e638a943c13fb7e5325c029c
+w4-web-split	webpack@4.47.0	browser	vendors~index.chunk.js,index.js	2.chunk.js,3.chunk.js,4.chunk.js,index.js,vendors~index.chunk.js	target=web splitChunks=all minSize=0	f53d55f5efbd6d562cb43ed049724a86745bbff654f7e555c8a03f5c48c64bb8
+w4-web-runtime-single	webpack@4.47.0	browser	runtime.js,index.chunk.js	2.chunk.js,3.chunk.js,4.chunk.js,index.chunk.js,runtime.js	target=web runtimeChunk=single	704d9a5eb4fc83e141aba85afb115990ed3c3b4efd0bab4f6fee9debb112020a
+w4-umd	webpack@4.47.0	node	index.js	1.chunk.js,2.chunk.js,3.chunk.js,index.js	target=node library.type=umd globalObject=this	ab20e061692355dd56052f5b456cc22da46be81db4f9e0d6916e126362686043
+w5.24-node	webpack@5.24.4	node	index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js	target=node	94d27a7600f751e887a84f07fefe0bd521b47ffb56359e229b7d351ae85bf9ae
+w5.24-web	webpack@5.24.4	browser	index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js	target=web	908d59504239a1b5615e6e1203d96b113eabc5956177c4462aafce9a393bec49
+w5.24-web-min	webpack@5.24.4	browser	index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js	target=web minimize=true	b00217da77d51b67201c5c02923ea72d88c53e45a690c1b87c9b645327cc3e98
+w5.24-web-split	webpack@5.24.4	browser	926.js,index.js	103.chunk.js,401.chunk.js,803.chunk.js,926.js,index.js	target=web splitChunks=all minSize=0	f8a4e952cbbdbfeef78f1aad21886deb4eff15e9fc0a9820a06df993f665031d
+w5.52-node	webpack@5.52.1	node	index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js	target=node	219b39a16e2191e455f79e39a1201e706d5c81d1d251f6ef205cfd741d668223
+w5.52-web	webpack@5.52.1	browser	index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js	target=web	b72238cf5ecb8b61e1875a5d8e99dcfdf3ca8821c712903ba6136f7c6d757375
+w5.52-web-min	webpack@5.52.1	browser	index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js	target=web minimize=true	aa581ea69d7193e2cb5f0c60737b32ceb3ab596ef281776074c4f9d89741b453
+w5.52-web-split	webpack@5.52.1	browser	926.js,index.js	103.chunk.js,401.chunk.js,803.chunk.js,926.js,index.js	target=web splitChunks=all minSize=0	66e7e730546ed3a5970544ff8d507ae3905ead7b2255691e38460e7a479445a8
+w5.52-module	webpack@5.52.1	node	index.mjs	103.chunk.mjs,401.chunk.mjs,803.chunk.mjs,index.mjs	target=node experiments.outputModule output.module chunkFormat=module chunkLoading=import	ad765c70040f2144e4df0b74a0d0de5557b37b9de319f726df595ad8d08ff259
+w5.52-node-split	webpack@5.52.1	node	926.js,index.js	103.chunk.js,401.chunk.js,803.chunk.js,926.js,index.js	target=node splitChunks=all minSize=0	46a65623e8468f16c1d30f21a94e0218863330e30c03eca42a4bff6ef4e816ad
+w5.52-web-runtime-single	webpack@5.52.1	browser	runtime.js,index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js,runtime.js	target=web runtimeChunk=single	6f49883b2f0b416165f1e533a3ddce18ecfc03198e8bcf3ccb32e6e848fe72ad
+w5.75-node	webpack@5.75.0	node	index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js	target=node	dd69bcb3f82c67c148f8ff6d4664d0851baf4d137b3c3df34389aa99faa0dace
+w5.75-web	webpack@5.75.0	browser	index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js	target=web	f0ce6d2e8b80e74ac4479b3c539590aa2ae334281cd53bf2adfa84cd4b6a1cb3
+w5.75-web-min	webpack@5.75.0	browser	index.js	103.chunk.js,401.chunk.js,803.chunk.js,index.js	target=web minimize=true	e5e1537f829ab2f4499ff986d5b700c5656c859acc389b6a4e56f41deccd29de
+w5.75-web-split	webpack@5.75.0	browser	926.js,index.js	103.chunk.js,401.chunk.js,803.chunk.js,926.js,index.js	target=web splitChunks=all minSize=0	b4f89736a8002cbc43657eb596ee62772fa91896186f9b114b0ef31c484fb227
+w5.90-node	webpack@5.90.3	node	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=node	9fbc7a6a88bcc4da0ca3dfb8e9b788b5d1eb7e03e79c63c7dc13e8b1a0eb6066
+w5.90-web	webpack@5.90.3	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=web	5b930854a784173a67be790b992b03d2cd76f00b732b77c8494d737efb6369c5
+w5.90-web-min	webpack@5.90.3	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=web minimize=true	8a20b81ddc97138f9066f30d4f1ab6ded1dd1cb140c364132a98b563bbcb09e2
+w5.90-web-split	webpack@5.90.3	browser	814.js,index.js	339.chunk.js,542.chunk.js,814.js,899.chunk.js,index.js	target=web splitChunks=all minSize=0	84f6c1336cd6fd0e57add913aa58f24db0be8a75da743f043373f7f77cd38f56
+w5.90-module	webpack@5.90.3	node	index.mjs	339.chunk.mjs,542.chunk.mjs,899.chunk.mjs,index.mjs	target=node experiments.outputModule output.module chunkFormat=module chunkLoading=import	e620338171484c485ee038082ce86c24a490ce4e5128b110b3e41f8b9e908330
+w5.90-node-split	webpack@5.90.3	node	814.js,index.js	339.chunk.js,542.chunk.js,814.js,899.chunk.js,index.js	target=node splitChunks=all minSize=0	bd8d24972a06562068959a2f4fd56b3f3c10339acbfce52fb8502b8f4816925c
+w5.90-web-runtime-single	webpack@5.90.3	browser	runtime.js,index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js,runtime.js	target=web runtimeChunk=single	efa29c717ad660e42b5250cdb0853bff4a39fdec31ecef3ce5c72479afb1e4be
+w5.99-node	webpack@5.99.9	node	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=node	bfdd07792fed7038e8770d91551a646b544d4376a2e8c3c9a2f82a0d925b3c5d
+w5.99-web	webpack@5.99.9	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=web	f77ce5a5c06fc674154fdd5e5565ccc4161aa7ed245e149528595a425129cf23
+w5.99-web-min	webpack@5.99.9	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=web minimize=true	f76227d140e57b959db4d83ffb2ffe659741d515669444f28ff42330bf7d82df
+w5.99-web-split	webpack@5.99.9	browser	814.js,index.js	339.chunk.js,542.chunk.js,814.js,899.chunk.js,index.js	target=web splitChunks=all minSize=0	bab68ea9b42cef7bea780d38ce657fa31a8b7cfcf3af79b38d9b7375ee26d31e
+w5.112-node	webpack@5.112.2	node	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=node	5cbee4a5889fa8bfdf245f7702717d31f75e51f71231cb44ef952d8d735af867
+w5.112-node-dev	webpack@5.112.2	node	index.js	deep_js.chunk.js,index.js,lazy_js.chunk.js,legacy_js.chunk.js	mode=development target=node	3aa949d10a1990c0ebf27c0d58623f0fe114d6cad457fc731919c5e6f2254cc1
+w5.112-node-min	webpack@5.112.2	node	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=node minimize=true	4eb86b5c38f74f4a6744134c70ee03b97eb05cf3e451bda809c8a18773f69619
+w5.112-async-node	webpack@5.112.2	node	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=async-node	bee12e3882d25c09f39a7a48c0adf672bbdd488ea75e4bef418f1a5c1fabd211
+w5.112-node-split	webpack@5.112.2	node	814.js,index.js	339.chunk.js,542.chunk.js,814.js,899.chunk.js,index.js	target=node splitChunks=all minSize=0	7d7c0948393e967a426c75d771cd67ffa9d8c8733564c2b2c74c72796c5d4f83
+w5.112-node-sourcemap	webpack@5.112.2	node	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=node devtool=source-map	ebfb38918145bf1ca1ba1ecee6d0bcad68213fb95fcdba7c40f5aef8816eb0fb
+w5.112-web	webpack@5.112.2	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=web	2928a0bb32bfc72330cdcee067089f93f99be836a3242542e21d5e9931fcf85b
+w5.112-web-dev	webpack@5.112.2	browser	index.js	deep_js.chunk.js,index.js,lazy_js.chunk.js,legacy_js.chunk.js	mode=development target=web	2a80f6ca4d0c9b8e5657aa8c17fd6149333e451a0c8d5022c8669b2869143c1d
+w5.112-web-min	webpack@5.112.2	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=web minimize=true	9fd7b32a32a60b101bfc263ae5f5a53ea6971abdc0c4440dca42bdf3aa5932c5
+w5.112-web-split	webpack@5.112.2	browser	814.js,index.js	339.chunk.js,542.chunk.js,814.js,899.chunk.js,index.js	target=web splitChunks=all minSize=0	a180bd6cb3a2f2a123d6188d1a9175175cf9278730f639ef3adbbb6147ad353b
+w5.112-web-split-min	webpack@5.112.2	browser	814.js,index.js	339.chunk.js,542.chunk.js,814.js,899.chunk.js,index.js	target=web splitChunks=all minSize=0 minimize=true	69dc3b9f0163f37f2da2d63af99c9ea26f2f6362c75176147f528c9bd40f5689
+w5.112-web-runtime-single	webpack@5.112.2	browser	runtime.js,index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js,runtime.js	target=web runtimeChunk=single	0ba900e5cf062560435dd6728db10aa170d85c55a5bc3bfe8acfd309dd85ee6c
+w5.112-web-runtime-multiple	webpack@5.112.2	browser	runtime~index.js,index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js,runtime~index.js	target=web runtimeChunk=multiple	92d94cfe7d0444eca462a83cb3c04a6fbcb5ad7a00a3c73be62c5510b26d0a20
+w5.112-web-public-auto	webpack@5.112.2	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=web publicPath=auto	97f2bd2cb8610e32e9b6dd07c03ddc10017813a5548579804df4e88e97925d95
+w5.112-web-sourcemap	webpack@5.112.2	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=web devtool=source-map	0112eb676a161522ccff3c5fba1e92b3df1aa539a49d7365b31305f3a7ebb7cb
+w5.112-module	webpack@5.112.2	node	index.mjs	339.chunk.mjs,542.chunk.mjs,899.chunk.mjs,index.mjs	target=node experiments.outputModule output.module chunkFormat=module chunkLoading=import	3671e30279cb72335cb1509230347deb2f2b9d739a9f03ddbf00e023564e8003
+w5.112-umd	webpack@5.112.2	node	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=node library.type=umd globalObject=this	9cb060df094857d427904f826c7086965a7010fc42030f72cdb7e36c365332d1
+w5.112-amd	webpack@5.112.2	amd	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=node library.type=amd	c33d6ff2882a38e9a73331b79ae3486fde26d2b984a62434c4d7197bf8d646b4
+w5.112-system	webpack@5.112.2	system	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=node library.type=system	dc6662f37fe064eb7dbfe525e43e06f94937a08900ad95fb26e29026a4fd371a
+w5.112-web-es5	webpack@5.112.2	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=[web,es5]	2db8ac225be6a47282bac4eabfccc7e2aa473de9f98255ee96ec0fb904497157
+w5.112-web-noiife	webpack@5.112.2	browser	index.js	339.chunk.js,542.chunk.js,899.chunk.js,index.js	target=web output.iife=false	e59b03132293a6ec5e4c0169c9fa7a4688fe228544ea395005cacab2b1a69af2
+w5.112-web-federation	webpack@5.112.2	browser	index.js,remoteEntry.js	275.chunk.js,339.chunk.js,542.chunk.js,899.chunk.js,index.js,remoteEntry.js	target=web ModuleFederationPlugin(name=variants exposes=./cjs shared=tinylib eager)	f8caa5618a0583df0efee6b22f926162a2b100b26bb51abcebfc4c53efef95dd
+w5.112-web-module	webpack@5.112.2	node	index.mjs	339.chunk.mjs,542.chunk.mjs,899.chunk.mjs,index.mjs	target=web experiments.outputModule output.module	3671e30279cb72335cb1509230347deb2f2b9d739a9f03ddbf00e023564e8003

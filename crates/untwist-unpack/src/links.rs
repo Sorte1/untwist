@@ -9,6 +9,7 @@ pub struct Links {
     pub esbuild: Option<EsbuildView>,
     pub parcel: Option<ParcelView>,
     pub turbopack: Option<TurboView>,
+    pub merged: bool,
 }
 
 pub struct Member {
@@ -35,7 +36,13 @@ pub fn groups(programs: &[Program<'_>], names: &[String]) -> Groups {
         return Groups::default();
     }
     let mut groups = Groups {
-        views: programs.iter().map(|_| Links::default()).collect(),
+        views: programs
+            .iter()
+            .map(|_| Links {
+                merged: true,
+                ..Links::default()
+            })
+            .collect(),
         ..Groups::default()
     };
     for (input, view) in crate::esbuild::links::views(programs, names) {

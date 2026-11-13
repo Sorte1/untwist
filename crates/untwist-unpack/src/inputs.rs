@@ -25,7 +25,7 @@ fn detected<'a>(
     programs: &mut [Program<'a>],
     groups: &Groups,
     options: UnpackOptions,
-    notes: &mut Vec<Note>,
+    (notes, refused_any): (&mut Vec<Note>, &mut bool),
 ) -> Vec<Option<Bundle<'a>>> {
     let none = Links::default();
     programs
@@ -45,6 +45,7 @@ fn detected<'a>(
                 let refused = unproven.or_else(|| {
                     refused_kind(program, options).map(|kind| notes::shape_refused(kind.as_str()))
                 });
+                *refused_any |= refused.is_some();
                 notes.extend(refused.map(note));
             }
             bundle
@@ -104,6 +105,28 @@ fn moved_fixed_path(bundle: &Bundle<'_>) -> Option<String> {
         .cloned()
 }
 
+fn chunks_checked(
+    bundle: &Bundle<'_>,
+    options: UnpackOptions,
+    refused_any: bool,
+) -> Result<(), String> {
+    if options.conservative {
+        return Ok(());
+    }
+    let orphaned = refused_any
+        && bundle.kind == crate::model::BundleKind::Webpack
+        && bundle.runtime.is_none()
+        && !bundle.chunk_modules.is_empty();
+    if orphaned {
+        return Err(notes::chunks_without_runtime());
+    }
+    if bundle.chunk_started && bundle.runtime.is_none() {
+        return Err(notes::chunk_start_without_runtime());
+    }
+    crate::webpack::gate::chunk_modules_routed(bundle)?;
+    crate::webpack::loads::chunks_supplied(bundle)
+}
+
 pub fn unpack_inputs<'a>(
     alloc: &'a Allocator,
     programs: &mut [Program<'a>],
@@ -136,13 +159,24 @@ pub fn unpack_named_inputs<'a>(
     };
     let groups = groups(programs, names);
     let mut notes = Vec::new();
-    let mut found = detected(alloc, programs, &groups, options, &mut notes);
+    let mut refused_any = false;
+    let mut found = detected(
+        alloc,
+        programs,
+        &groups,
+        options,
+        (&mut notes, &mut refused_any),
+    );
     let bundles = complete(alloc, programs, &groups, &mut found, &mut notes);
     let (merged, merge_notes) = merge_noted(alloc, bundles);
     notes.extend(merge_notes);
     let Some(mut bundle) = merged else {
         return (None, notes);
     };
+    if let Err(why) = chunks_checked(&bundle, options, refused_any) {
+        notes.push(note(why));
+        return (None, notes);
+    }
     bundle.mirrored_inputs = mirrored_inputs(&mut bundle, names);
     notes.extend(finish_with(alloc, &mut bundle, mappings, options));
     if let Some(moved) = moved_fixed_path(&bundle) {

@@ -37,6 +37,7 @@ pub struct Site<'k, 'a> {
     container: &'k Expression<'a>,
     declared: FxHashSet<&'k str>,
     exports: Vec<(&'k str, Span)>,
+    pub returned: Option<(&'k str, Span)>,
 }
 
 fn last_expression<'k, 'a>(body: &'k [Statement<'a>]) -> Option<&'k Expression<'a>> {
@@ -49,21 +50,72 @@ fn last_expression<'k, 'a>(body: &'k [Statement<'a>]) -> Option<&'k Expression<'
     }
 }
 
+#[derive(Default)]
+struct OwnContext {
+    depth: u32,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for OwnContext {
+    fn visit_this_expression(&mut self, _it: &ThisExpression) {
+        self.found |= self.depth == 0;
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= self.depth == 0 && it.name == "arguments";
+    }
+
+    fn visit_new_target(&mut self, _it: &NewTarget) {
+        self.found |= self.depth == 0;
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.depth += 1;
+        walk_js::walk_function(self, it, flags);
+        self.depth -= 1;
+    }
+}
+
+fn reads_own_context(body: &FunctionBody<'_>) -> bool {
+    let mut context = OwnContext::default();
+    context.visit_function_body(body);
+    context.found
+}
+
 fn entry_body<'k, 'a>(expression: &'k Expression<'a>) -> Option<&'k FunctionBody<'a>> {
+    let expression = match expression.without_parentheses() {
+        Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::LogicalNot => {
+            &unary.argument
+        }
+        other => other,
+    };
     let Expression::CallExpression(call) = expression.without_parentheses() else {
         return None;
     };
     if call.optional || !call.arguments.is_empty() {
         return None;
     }
-    let Expression::ArrowFunctionExpression(arrow) = call.callee.without_parentheses() else {
-        return None;
-    };
-    let ArrowFunctionBody::FunctionBody(body) = &arrow.body else {
-        return None;
-    };
-    let plain = !arrow.r#async && arrow.params.items.is_empty() && arrow.params.rest.is_none();
-    plain.then_some(&**body)
+    match call.callee.without_parentheses() {
+        Expression::ArrowFunctionExpression(arrow) => {
+            let ArrowFunctionBody::FunctionBody(body) = &arrow.body else {
+                return None;
+            };
+            let plain =
+                !arrow.r#async && arrow.params.items.is_empty() && arrow.params.rest.is_none();
+            plain.then_some(&**body)
+        }
+        Expression::FunctionExpression(function) => {
+            let body = function.body.as_deref()?;
+            let plain = !function.r#async
+                && !function.generator
+                && function.id.is_none()
+                && function.params.items.is_empty()
+                && function.params.rest.is_none()
+                && !reads_own_context(body);
+            plain.then_some(body)
+        }
+        _ => None,
+    }
 }
 
 fn strict(directives: &[Directive<'_>]) -> bool {
@@ -73,9 +125,104 @@ fn strict(directives: &[Directive<'_>]) -> bool {
 }
 
 struct Enclosing<'k, 'a> {
-    top: &'k [Statement<'a>],
-    params: Option<&'k FormalParameters<'a>>,
+    top: Vec<&'k [Statement<'a>]>,
+    params: Vec<&'k FormalParameters<'a>>,
     strict: bool,
+}
+
+struct Chain<'k, 'a> {
+    target: *const Statement<'a>,
+    stack: Vec<(&'k FormalParameters<'a>, &'k FunctionBody<'a>)>,
+    found: Option<Vec<(&'k FormalParameters<'a>, &'k FunctionBody<'a>)>>,
+}
+
+impl<'k, 'a> Chain<'k, 'a> {
+    fn enter(&mut self, params: &'k FormalParameters<'a>, body: &'k FunctionBody<'a>) -> bool {
+        if self.found.is_some() {
+            return false;
+        }
+        if std::ptr::eq(body.statements.as_ptr(), self.target) {
+            self.found = Some(self.stack.clone());
+            return false;
+        }
+        self.stack.push((params, body));
+        true
+    }
+
+    fn statements(&mut self, statements: &'k [Statement<'a>]) {
+        for statement in statements {
+            self.statement(statement);
+        }
+    }
+
+    fn statement(&mut self, statement: &'k Statement<'a>) {
+        match statement {
+            Statement::ExpressionStatement(statement) => self.expression(&statement.expression),
+            Statement::ReturnStatement(ret) => {
+                if let Some(argument) = &ret.argument {
+                    self.expression(argument);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn expression(&mut self, expr: &'k Expression<'a>) {
+        match expr.without_parentheses() {
+            Expression::CallExpression(call) => {
+                self.expression(&call.callee);
+                for argument in &call.arguments {
+                    if let Some(argument) = argument.as_expression() {
+                        self.expression(argument);
+                    }
+                }
+            }
+            Expression::FunctionExpression(function) => {
+                if let Some(body) = function.body.as_deref() {
+                    self.function(&function.params, body);
+                }
+            }
+            Expression::ArrowFunctionExpression(arrow) => {
+                if let ArrowFunctionBody::FunctionBody(body) = &arrow.body {
+                    self.function(&arrow.params, body);
+                }
+            }
+            Expression::ObjectExpression(object) => {
+                for property in &object.properties {
+                    if let ObjectPropertyKind::ObjectProperty(property) = property {
+                        self.expression(&property.value);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn function(&mut self, params: &'k FormalParameters<'a>, body: &'k FunctionBody<'a>) {
+        if self.enter(params, body) {
+            self.statements(&body.statements);
+            self.stack.pop();
+        }
+    }
+}
+
+fn nested<'k, 'a>(source: &'k Program<'a>, body: &'k [Statement<'a>]) -> Option<Enclosing<'k, 'a>> {
+    let mut chain = Chain {
+        target: body.as_ptr(),
+        stack: Vec::new(),
+        found: None,
+    };
+    chain.statements(&source.body);
+    let found = chain.found?;
+    let strict =
+        strict(&source.directives) || found.iter().any(|(_, body)| strict(&body.directives));
+    Some(Enclosing {
+        top: std::iter::once(&source.body[..])
+            .chain(found.iter().map(|(_, body)| &body.statements[..]))
+            .collect(),
+        params: found.iter().map(|(params, _)| *params).collect(),
+        strict,
+    })
 }
 
 fn enclosing<'k, 'a>(
@@ -85,21 +232,20 @@ fn enclosing<'k, 'a>(
     let outer = strict(&source.directives);
     if std::ptr::eq(body, source.body.as_slice()) {
         return Some(Enclosing {
-            top: &[],
-            params: None,
+            top: Vec::new(),
+            params: Vec::new(),
             strict: outer,
         });
     }
     let frame = Frame::of(source);
-    let wrapper = frame.wrapper?;
-    if !std::ptr::eq(wrapper.body(), body) {
-        return None;
+    match frame.wrapper {
+        Some(wrapper) if std::ptr::eq(wrapper.body(), body) => Some(Enclosing {
+            top: vec![frame.top],
+            params: vec![wrapper.function.params],
+            strict: outer || strict(&wrapper.function.body.directives),
+        }),
+        _ => nested(source, body),
     }
-    Some(Enclosing {
-        top: frame.top,
-        params: Some(wrapper.function.params),
-        strict: outer || strict(&wrapper.function.body.directives),
-    })
 }
 
 fn exports_candidates<'k>(body: &'k [Statement<'_>]) -> Vec<(&'k str, Span)> {
@@ -120,25 +266,46 @@ fn exports_candidates<'k>(body: &'k [Statement<'_>]) -> Vec<(&'k str, Span)> {
         .collect()
 }
 
+fn returned<'k>(statement: &'k Statement<'_>) -> Option<(&'k str, Span)> {
+    let Statement::ReturnStatement(ret) = statement else {
+        return None;
+    };
+    match ret.argument.as_ref().map(Expression::without_parentheses) {
+        Some(Expression::Identifier(id)) => Some((id.name.as_str(), ret.span)),
+        _ => None,
+    }
+}
+
 pub fn site<'k, 'a>(
     source: &'k Program<'a>,
     (body, container): (&'k [Statement<'a>], &'k Expression<'a>),
 ) -> Option<Site<'k, 'a>> {
+    let exports = exports_candidates(body);
+    let (body, returned) = match body.split_last() {
+        Some((last, rest)) => match returned(last) {
+            Some(found) if exports.iter().any(|(name, _)| *name == found.0) => (rest, Some(found)),
+            _ => (body, None),
+        },
+        None => (body, None),
+    };
     let expression = last_expression(body)?;
     let entry = entry_body(expression)?;
     let around = enclosing(source, body)?;
     if around.strict && !strict(&entry.directives) {
         return None;
     }
-    if around.top.iter().any(Statement::is_module_declaration)
-        || evaluates(body)
-        || evaluates(around.top)
-    {
+    let module_code = around
+        .top
+        .iter()
+        .any(|top| top.iter().any(Statement::is_module_declaration));
+    if module_code || evaluates(body) || around.top.iter().any(|top| evaluates(top)) {
         return None;
     }
     let mut declared = FxHashSet::default();
     declared_in(body, &mut declared);
-    declared_in(around.top, &mut declared);
+    for top in &around.top {
+        declared_in(top, &mut declared);
+    }
     for item in around.params.iter().flat_map(|params| &params.items) {
         pattern_names(&item.pattern, &mut declared);
     }
@@ -147,7 +314,8 @@ pub fn site<'k, 'a>(
         body: entry,
         container,
         declared,
-        exports: exports_candidates(body),
+        exports,
+        returned,
     })
 }
 
@@ -189,6 +357,7 @@ fn skipped_spans(site: &Site<'_, '_>, name: &str, declared: Span) -> Vec<Span> {
         .collect();
     spans.push(site.span);
     spans.push(declared);
+    spans.extend(site.returned.map(|(_, span)| span));
     spans.sort_unstable_by_key(|span| span.start);
     spans
 }
@@ -236,7 +405,10 @@ fn exports_name<'s>(
             return None;
         }
     }
-    Some(found)
+    match site.returned {
+        Some((name, _)) if found != Some(name) => None,
+        _ => Some(found),
+    }
 }
 
 struct Uses<'s> {
@@ -467,17 +639,23 @@ pub fn attach<'a>(
     (site, require): (&Site<'_, 'a>, &str),
     bundle: &mut Bundle<'a>,
     bodies: &mut Bodies<'a>,
-) {
+) -> bool {
     let planned = matches!(bodies, Bodies::Planned(_));
+    let runtime = bundle.runtime.as_ref();
+    if planned {
+        let probe = module_from_body_with(alloc, source, site.body, &mut Bodies::Cloned);
+        if proven(&probe, site, (source.source_text, require), runtime).is_none() {
+            return false;
+        }
+    }
     let mut program = module_from_body_with(alloc, source, site.body, bodies);
     program.directives = site.body.directives.clone_in(alloc);
     let exports = match planned {
         true => None,
         false => {
-            let runtime = bundle.runtime.as_ref();
             let Some(exports) = proven(&program, site, (source.source_text, require), runtime)
             else {
-                return;
+                return false;
             };
             exports
         }
@@ -490,4 +668,5 @@ pub fn attach<'a>(
     module.runtime_require = RequireParam::Default;
     bundle.modules.shift_insert(0, id.clone(), module);
     bundle.entry_id = Some(id);
+    true
 }

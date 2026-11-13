@@ -179,7 +179,8 @@ fn merge_webpack<'a>(merged: &mut Bundle<'a>, bundle: Bundle<'a>, notes: &mut Ve
         return false;
     }
     let started = |deferred: &[String], other: &Bundle<'_>| {
-        (!deferred.is_empty() && other.runtime.is_some()).then(|| deferred.join(", "))
+        (!deferred.is_empty() && other.runtime.is_some() && !other.runs_deferred)
+            .then(|| deferred.join(", "))
     };
     if let Some(ids) =
         started(&bundle.deferred, merged).or_else(|| started(&merged.deferred, &bundle))
@@ -195,6 +196,11 @@ fn merge_webpack<'a>(merged: &mut Bundle<'a>, bundle: Bundle<'a>, notes: &mut Ve
         return false;
     }
     merged.deferred.extend(bundle.deferred.iter().cloned());
+    merged.runs_deferred |= bundle.runs_deferred;
+    merged.chunk_started |= bundle.chunk_started;
+    merged.chunk_modules.extend(bundle.chunk_modules);
+    merged.startup_chunks.extend(bundle.startup_chunks);
+    merged.installed_chunks.extend(bundle.installed_chunks);
     if merged.entry_id.is_none() {
         merged.entry_id = bundle.entry_id;
         merged.entry_candidates = bundle.entry_candidates;
@@ -218,6 +224,16 @@ fn merge_webpack<'a>(merged: &mut Bundle<'a>, bundle: Bundle<'a>, notes: &mut Ve
         merged.modules.insert(id, module);
     }
     true
+}
+
+fn run_deferred(merged: &mut Bundle<'_>) {
+    if !merged.runs_deferred || merged.entry_id.is_some() {
+        return;
+    }
+    if let [entry] = &merged.deferred[..] {
+        merged.entry_id = Some(entry.clone());
+        merged.deferred.clear();
+    }
 }
 
 pub fn merge_noted<'a>(
@@ -244,6 +260,7 @@ pub fn merge_noted<'a>(
         }
     }
     if merged.kind == BundleKind::Webpack {
+        run_deferred(&mut merged);
         retag_entry(&mut merged);
         if !merged.deferred.is_empty() {
             notes.push(note(crate::notes::deferred_not_run(

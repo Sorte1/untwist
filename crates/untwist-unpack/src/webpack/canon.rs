@@ -304,6 +304,10 @@ fn unwrapped<'k, 'a>(statement: &'k Statement<'a>) -> &'k Statement<'a> {
     }
 }
 
+pub fn canonical_statement(statement: &Statement<'_>, require: &str) -> Option<String> {
+    canonical(statement, require)
+}
+
 pub fn canonical_helper(statement: &Statement<'_>, require: &str) -> Option<String> {
     canonical(unwrapped(statement), require)
 }

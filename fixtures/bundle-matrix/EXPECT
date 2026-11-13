@@ -6,41 +6,6 @@ base/webpack5-prod-node+obf-heavy	unsafe	clean	xfail	bm-obf-heavy-proxies: one C
 *+obf*	split	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
 *+obf*	default	clean	xfail	safe-global-names: the default lane keeps the string array when code may hold the global object
 *+obf*	split	clean	xfail	safe-global-names: the default lane keeps the string array when code may hold the global object
-*/webpack*-dev-eval*	*	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
-*/webpack5-web-runtime-chunk	default	recognised	xfail	bm-webpack-runtime-chunk: a separate runtime chunk (runtimeChunk single) is refused (chunk start not proven)
-*/webpack5-web-runtime-chunk	*	recognised	xfail	bm-webpack-runtime-chunk: the separate runtime chunk is refused in every lane (since #307 --split-hoisted no longer splits it as a rollup bundle)
-*/webpack5-umd	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
-*/webpack5-system	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
-*/webpack5-web-es5	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
-*/webpack5-amd	*	recognised	xfail	bm-webpack-in-amd: the AMD library wrapper is unpacked as one amd module; the webpack bundle inside is not
-*/webpack5-amd	*	modules	xfail	bm-webpack-in-amd: the AMD library wrapper is unpacked as one amd module; the webpack bundle inside is not
-base/webpack*-web-split	*	modules	xfail	bm-webpack-async-chunks: only the split vendors chunk is unpacked; the entry with the chunk-loading runtime is not
-base/webpack5-dev-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack5-dev-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack5-prod-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack5-prod-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack5-prod-node+*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack5-prod-node+*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack5-prod-concat*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack5-prod-concat*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack5-prod-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack5-prod-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack5-web-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack5-web-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack5-esm-output*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack5-esm-output*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack5-federation*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack4-dev-node*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack4-dev-node*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack4-prod-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack4-prod-node	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack4-prod-node+*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack4-prod-concat*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack4-prod-concat*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-base/webpack4-prod-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack4-prod-min*	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-mini/webpack*-web-split	*	recognised	xfail	bm-webpack-async-chunks: an entry whose runtime loads async chunks (require.e, require/jsonp/import chunk loading) is refused
-*/webpack5-web-noiife	*	modules	xfail	bm-webpack-noiife: output.iife=false leaves one module in the prelude
 corejs/webpack*	*	modules	allow	unpack writes webpack's runtime as a module of its own
 mini/webpack4-umd	*	modules	allow	unpack writes webpack's runtime as a module of its own
 */rollup*-iife*	default	recognised	allow	rollup-split-opt-in: a scope-hoisted bundle is split only with --split-hoisted
@@ -82,3 +47,41 @@ mini/esbuild*-iife+swc-min	*	recognised	xfail	bm-minified-esbuild: the minifier 
 */parcel2.12-hoist-min	*	recognised	xfail	bm-parcel-legacy-hoist: parcel 2.12 minified hoisted output mangles the $parcel$ stores and calls (0, l.register)(...); not proven
 */parcel*-hoist*	*	modules	allow	parcel-scope-hoist: parcel scope hoisting merges modules
 base/parcel*-nohoist*	*	recognised	xfail	bm-parcel-node-modules: lodash reaches the global object (Function("return this")), so a module may read the parcelRequire slot; refused
+base/webpack*	*	modules	allow	unpack writes webpack's runtime as a module of its own
+mini/webpack*	*	modules	allow	unpack writes webpack's runtime as a module of its own
+base/webpack4-dev-eval	default	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
+base/webpack4-dev-eval	split	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
+base/webpack4-prod-min	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack4-prod-node+esbuild-min	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack4-prod-node+swc-min	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack4-prod-node+terser	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack4-prod-node+uglify	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-amd	*	recognised	xfail	bm-webpack-library-entry: the library's inline entry reads the names around it; refused
+base/webpack5-dev-eval	default	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
+base/webpack5-dev-eval	split	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
+base/webpack5-dev-eval-source-map	default	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
+base/webpack5-dev-eval-source-map	split	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
+base/webpack5-esm-output	*	recognised	xfail	bm-webpack-esm-output: output.module puts the entry at the top level of an ES module; not proven
+base/webpack5-federation	*	recognised	xfail	bm-webpack-federation: module federation share scopes and remotes are not recorded loader forms
+base/webpack5-prod-node+obf-cff	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-dead-code	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-default	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-dictionary	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-heavy	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-numbers	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-object-keys	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-rename-globals	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-self-defending	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-split-strings	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-strings-base64	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-strings-none	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-strings-rc4-wrappers	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf-unicode	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+obf4-default	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+swc-min	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-prod-node+uglify	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+base/webpack5-system	*	recognised	xfail	bm-webpack-library-entry: the library's inline entry reads the names around it; refused
+base/webpack5-umd	*	recognised	xfail	bm-webpack-library-entry: the library's inline entry reads the names around it; refused
+mini/webpack5-esm-output	*	recognised	xfail	bm-webpack-esm-output: output.module puts the entry at the top level of an ES module; not proven
+mini/webpack5-prod-node+swc-min	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+mini/webpack5-prod-node+uglify	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms

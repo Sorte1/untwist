@@ -12,10 +12,12 @@ use crate::notes::runtime_not_proven;
 use crate::webpack::guard::{dirname_suffix, guarded};
 use crate::webpack::helpers::{declared_in, pattern_names};
 use crate::webpack::locals::closed_value;
+use crate::webpack::machinery::{known, Role};
 use crate::webpack::require_form::caching_cache;
-use crate::webpack::runtime_module::uses_in;
+use crate::webpack::runtime_module::uses_in_skipping;
 
 const ENTRY_SLOT: &str = "s";
+const DEFERRED: &str = "O";
 const HOST_MODULE: &str = "module";
 const EXPORTS: &str = "exports";
 
@@ -26,6 +28,8 @@ pub struct Shape<'k, 'a> {
     pub container: &'k str,
     pub container_at: Option<usize>,
     pub skip: Option<Span>,
+    pub startup: &'k [Span],
+    pub proven: &'k [Span],
 }
 
 struct Proof<'k, 'a> {
@@ -38,6 +42,8 @@ struct Proof<'k, 'a> {
     definitions: FxHashSet<u32>,
     defined: FxHashMap<&'k str, usize>,
     startups: usize,
+    recorded: FxHashSet<&'k str>,
+    dropped: Vec<Span>,
 }
 
 type Proven = Result<(), String>;
@@ -212,6 +218,11 @@ impl<'k, 'a> Proof<'k, 'a> {
         if top && self.skip == Some(expr.span()) {
             return Ok(());
         }
+        if top {
+            if let Some(found) = known(expr, self.require) {
+                return self.machinery(expr, found.role);
+            }
+        }
         if let Expression::AssignmentExpression(assignment) = expr.without_parentheses() {
             if let Some(proven) = self.helper(assignment) {
                 return proven;
@@ -237,6 +248,49 @@ impl<'k, 'a> Proof<'k, 'a> {
             return self.unit(body?);
         }
         refuse("a prelude statement is neither a helper definition nor the entry call")
+    }
+
+    fn machinery(&mut self, expr: &'k Expression<'a>, role: Role) -> Proven {
+        match role {
+            Role::Loader => {
+                self.dropped.push(expr.span());
+                Ok(())
+            }
+            Role::Ensure => match iife_body(expr) {
+                Some(body) => self.unit(body?),
+                None => match expr.without_parentheses() {
+                    Expression::AssignmentExpression(assignment) => self
+                        .helper(assignment)
+                        .unwrap_or_else(|| refuse("require.e is not a helper definition")),
+                    _ => refuse("require.e is not a helper definition"),
+                },
+            },
+            Role::Helper => {
+                if let Expression::AssignmentExpression(assignment) = expr.without_parentheses() {
+                    let Some(name) = own_member(assignment, self.require) else {
+                        return refuse("a recorded runtime helper is not a helper definition");
+                    };
+                    self.define(name, assignment)?;
+                    self.recorded.insert(name);
+                    return Ok(());
+                }
+                let Some(body) = iife_body(expr) else {
+                    return refuse("a recorded runtime helper is not a wrapper");
+                };
+                for statement in &body?.statements {
+                    let Statement::ExpressionStatement(statement) = statement else {
+                        continue;
+                    };
+                    if let Expression::AssignmentExpression(assignment) = &statement.expression {
+                        if let Some(name) = own_member(assignment, self.require) {
+                            self.define(name, assignment)?;
+                            self.recorded.insert(name);
+                        }
+                    }
+                }
+                Ok(())
+            }
+        }
     }
 
     fn module_exports(&self, assignment: &AssignmentExpression<'_>) -> bool {
@@ -342,6 +396,14 @@ impl<'k, 'a> Proof<'k, 'a> {
             Some(argument) => self.expression_statement(argument, true),
         }
     }
+}
+
+fn own_member<'k>(assignment: &'k AssignmentExpression<'_>, require: &str) -> Option<&'k str> {
+    let AssignmentTarget::StaticMemberExpression(member) = &assignment.left else {
+        return None;
+    };
+    (assignment.operator == AssignmentOperator::Assign && is_name(&member.object, require))
+        .then(|| member.property.name.as_str())
 }
 
 fn started_by(expr: &Expression<'_>, require: &str) -> Option<String> {
@@ -468,9 +530,11 @@ fn require_function<'k, 'a>(shape: &Shape<'k, 'a>) -> Option<(usize, &'k Functio
         })
 }
 
-fn skipped(statement: &Statement<'_>, skip: Option<Span>) -> bool {
-    matches!(statement, Statement::ExpressionStatement(expression)
-        if skip == Some(expression.expression.span()))
+fn skipped(statement: &Statement<'_>, shape: &Shape<'_, '_>) -> bool {
+    shape.startup.contains(&statement.span())
+        || shape.proven.contains(&statement.span())
+        || matches!(statement, Statement::ExpressionStatement(expression)
+        if shape.skip == Some(expression.expression.span()))
 }
 
 fn ends_early(statements: &[Statement<'_>], at: usize) -> bool {
@@ -484,10 +548,7 @@ fn ends_early(statements: &[Statement<'_>], at: usize) -> bool {
 
 fn classify<'k, 'a>(proof: &mut Proof<'k, 'a>, shape: &Shape<'k, 'a>, require_at: usize) -> Proven {
     for (index, statement) in shape.statements.iter().enumerate() {
-        if Some(index) == shape.container_at
-            || index == require_at
-            || skipped(statement, shape.skip)
-        {
+        if Some(index) == shape.container_at || index == require_at || skipped(statement, shape) {
             continue;
         }
         match statement {
@@ -509,9 +570,7 @@ fn uses_proven(proof: &Proof<'_, '_>, shape: &Shape<'_, '_>, require_at: usize) 
         .iter()
         .enumerate()
         .filter(|(index, statement)| {
-            Some(*index) != shape.container_at
-                && *index != require_at
-                && !skipped(statement, shape.skip)
+            Some(*index) != shape.container_at && *index != require_at && !skipped(statement, shape)
         })
         .map(|(_, statement)| match statement {
             Statement::IfStatement(branch) if guarded(statement, shape.require).is_some() => {
@@ -519,7 +578,7 @@ fn uses_proven(proof: &Proof<'_, '_>, shape: &Shape<'_, '_>, require_at: usize) 
             }
             other => other,
         });
-    let uses = uses_in(shape.require, statements);
+    let uses = uses_in_skipping(shape.require, statements, &proof.dropped);
     if uses.bare {
         return refuse("the prelude passes the require function on or aliases it");
     }
@@ -650,9 +709,17 @@ pub fn prove<'k, 'a>(shape: &Shape<'k, 'a>, scoping: &Scoping) -> Proven {
         entries: FxHashSet::default(),
         definitions: FxHashSet::default(),
         defined: FxHashMap::default(),
-        startups: usize::from(shape.skip.is_some()),
+        startups: usize::from(shape.skip.is_some()) + usize::from(!shape.startup.is_empty()),
+        recorded: FxHashSet::default(),
+        dropped: Vec::new(),
     };
     classify(&mut proof, shape, require_at)?;
+    if !shape.startup.is_empty()
+        && proof.defined.contains_key(DEFERRED)
+        && !proof.recorded.contains(DEFERRED)
+    {
+        return refuse("the startup waits on require.O, which is not webpack's recorded form");
+    }
     if proof.startups > 1 {
         return refuse("the prelude starts more than one entry module");
     }
@@ -664,6 +731,7 @@ pub struct Proving<'s> {
     scoping: Option<&'s Scoping>,
     built: Option<Scoping>,
     unproven: Option<&'s mut Option<String>>,
+    merged: bool,
 }
 
 impl<'s> Proving<'s> {
@@ -672,6 +740,7 @@ impl<'s> Proving<'s> {
             scoping,
             built: None,
             unproven: Some(unproven),
+            merged: false,
         }
     }
 
@@ -680,7 +749,16 @@ impl<'s> Proving<'s> {
             scoping: None,
             built: None,
             unproven: None,
+            merged: false,
         }
+    }
+
+    pub fn with_merged(self, merged: bool) -> Self {
+        Self { merged, ..self }
+    }
+
+    pub fn merged(&self) -> bool {
+        self.merged
     }
 
     fn refused<T>(&mut self, why: String) -> Option<T> {
@@ -706,9 +784,9 @@ impl<'s> Proving<'s> {
         }
     }
 
-    pub fn gate(&mut self, routed: Result<(), String>) -> Option<()> {
+    pub fn gate<T>(&mut self, routed: Result<T, String>) -> Option<T> {
         match routed {
-            Ok(()) => Some(()),
+            Ok(value) => Some(value),
             Err(why) => self.refused(why),
         }
     }

@@ -1,0 +1,1 @@
+exports.ids=[1],exports.modules={6:function(e,o,t){"use strict";t.r(o),t.d(o,"depth",(function(){return s})),console.log("eval deep");const s=2}};

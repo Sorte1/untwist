@@ -15,7 +15,7 @@ const APP_MODULES: [&str; 6] = [
     "shapes.js",
 ];
 
-const UNPACK_PENDING: &str = "webpack5/dev-";
+const UNPACK_PENDING: &[&str] = &[];
 
 struct Row {
     path: String,
@@ -77,7 +77,9 @@ fn problems(row: &Row, out: &Output) -> Vec<String> {
     if peels != 1 {
         found.push(format!("{peels} inline peels"));
     }
-    let pending = row.path.starts_with(UNPACK_PENDING);
+    let pending = UNPACK_PENDING
+        .iter()
+        .any(|prefix| row.path.starts_with(prefix));
     let Some(bundle) = &out.bundle else {
         if !pending {
             found.push("not unpacked".to_string());

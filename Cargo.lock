@@ -1893,6 +1893,7 @@ dependencies = [
  "oxc_syntax",
  "oxc_traverse",
  "rustc-hash",
+ "sha2",
  "untwist-core",
  "untwist-testing",
  "untwist-unminify",
