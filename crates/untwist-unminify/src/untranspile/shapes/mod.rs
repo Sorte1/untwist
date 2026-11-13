@@ -65,6 +65,7 @@ pub enum Kind {
     ForOfIterator,
     Regenerator,
     RegeneratorDefine,
+    RegeneratorValues,
     AsyncToGenerator,
     AsyncGeneratorStep,
     Alias(Alias),
@@ -167,7 +168,7 @@ pub fn known(hash: u128, size: Size) -> Option<&'static Variant> {
     variants().find(|variant| variant.hash == hash && sized(variant, size))
 }
 
-pub const HELPER_NAMES: [(&str, Kind); 68] = [
+pub const HELPER_NAMES: [(&str, Kind); 69] = [
     ("_toConsumableArray", Kind::ToConsumableArray),
     ("_to_consumable_array", Kind::ToConsumableArray),
     ("_arrayWithoutHoles", Kind::ArrayWithoutHoles),
@@ -255,6 +256,7 @@ pub const HELPER_NAMES: [(&str, Kind); 68] = [
     ("_create_for_of_iterator_helper", Kind::ForOfIterator),
     ("_regenerator", Kind::Regenerator),
     ("_regeneratorDefine2", Kind::RegeneratorDefine),
+    ("_regeneratorValues", Kind::RegeneratorValues),
     ("_asyncToGenerator", Kind::AsyncToGenerator),
     ("asyncGeneratorStep", Kind::AsyncGeneratorStep),
 ];

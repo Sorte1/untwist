@@ -69,11 +69,15 @@ fn the_default_lane_keeps_the_machine() {
 }
 
 #[test]
-fn machines_with_handlers_or_delegation_are_kept() {
+fn handlers_and_delegation_are_read_and_an_entered_finally_is_kept() {
     let code = run("matrix/babel-7.29/ie11/generators.js", true);
     assert_has(
         &code,
-        &["_regenerator().m(outer)", "_regenerator().m(thrower)"],
+        &[
+            "function* thrower() {",
+            "} catch (_t) {",
+            "_regenerator().m(outer)",
+        ],
     );
 }
 
@@ -100,7 +104,14 @@ fn babel_async_wrappers_become_async_functions() {
 }
 
 #[test]
-fn async_machines_with_handlers_keep_their_wrapper() {
+fn async_handlers_become_try_statements() {
     let code = run("matrix/babel-7.29/ie11/async-await.js", true);
-    assert!(code.contains("_guarded = _asyncToGenerator("), "{code}");
+    assert_has(
+        &code,
+        &[
+            "async function guarded() {",
+            "} catch (_t2) {",
+            "} finally {",
+        ],
+    );
 }

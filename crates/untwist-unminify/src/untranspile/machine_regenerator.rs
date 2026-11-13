@@ -105,9 +105,38 @@ pub struct Regenerator<'s> {
     pub context: Context<'s>,
     pub home: Option<ScopeId>,
     pub regions: Vec<TryRegion>,
+    pub values: &'s dyn Fn(&Expression<'_>) -> bool,
 }
 
 impl Regenerator<'_> {
+    fn delegated(&self, statement: &Statement<'_>, loc: Loc) -> Option<Term> {
+        let Statement::ReturnStatement(it) = statement else {
+            return None;
+        };
+        let Expression::CallExpression(call) = it.argument.as_ref()?.without_parentheses() else {
+            return None;
+        };
+        if call.optional || !self.context.member(&call.callee, "d") {
+            return None;
+        }
+        let [Argument::CallExpression(values), resume] = call.arguments.as_slice() else {
+            return None;
+        };
+        let wrapped = !values.optional
+            && values.arguments.len() == 1
+            && values.arguments.first()?.is_expression()
+            && (self.values)(&values.callee);
+        wrapped.then_some(())?;
+        Some(Term::Yield {
+            value: Some(Slot {
+                at: loc,
+                part: Part::Delegated,
+            }),
+            delegate: true,
+            resume: numeric(resume.as_expression()?)?,
+        })
+    }
+
     fn location(&self, statement: &Statement<'_>, label: u32) -> Option<Read> {
         let set = self.context.prev_set(statement)?;
         if set != label {
@@ -188,6 +217,9 @@ impl<'a> Machinery<'a> for Regenerator<'_> {
             return Some(parsed(self.location(statement, label)?, 1, 1));
         }
         if let Some(term) = self.finally_end(statement, label) {
+            return Some(parsed(Read::Term(term), 1, 1));
+        }
+        if let Some(term) = self.delegated(statement, loc) {
             return Some(parsed(Read::Term(term), 1, 1));
         }
         let Some(target) = self.context.next_set(statement) else {
@@ -384,6 +416,20 @@ fn after_catch(
     closed.then_some(end)
 }
 
+fn falls_into(cases: &[&[Statement<'_>]], label: u32) -> bool {
+    let Some(before) = label.checked_sub(1).and_then(|at| cases.get(at as usize)) else {
+        return false;
+    };
+    !matches!(
+        before.last(),
+        Some(
+            Statement::ReturnStatement(_)
+                | Statement::ThrowStatement(_)
+                | Statement::BreakStatement(_)
+        )
+    )
+}
+
 fn location(element: Option<&ArrayExpressionElement<'_>>) -> Option<Option<u32>> {
     match element {
         Some(ArrayExpressionElement::Elision(_)) | None => Some(None),
@@ -416,7 +462,13 @@ pub fn regions(
         let finally = location(locs.elements.get(2))?;
         let after = location(locs.elements.get(3))?;
         let end = match (catch, finally, after) {
-            (_, Some(_), Some(end)) => end,
+            (_, Some(finally), Some(end)) => {
+                let entered = targets(&cases, (start, finally), context)?.contains(&finally);
+                if entered || falls_into(&cases, finally) {
+                    return None;
+                }
+                end
+            }
             (Some(catch), None, None) => after_catch(&cases, (start, catch), context)?,
             _ => return None,
         };

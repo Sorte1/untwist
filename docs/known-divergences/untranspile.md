@@ -387,10 +387,18 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   terser-minified copies). The cases are read like the tslib machine: `_context.n = L; return
   v` yields `v` and resumes at `L`, `_context.n = L; break` jumps, `return _context.a(2, v)`
   returns, a case without either falls into the next, and `_context.v` at the start of a resumed
-  case is the received value. A machine with a `try` (`_context.p`, the try list), a delegation
-  (`_context.d`), any other use of `_context`, `this` in the state function, a state function
-  in an expression (`_regenerator().m(function _callee() { … })`), `@babel/runtime`'s
-  `_regeneratorRuntime()` or the classic `regeneratorRuntime.mark/wrap` is kept. The rewrite
+  case is the received value; `return _context.d(_regeneratorValues(x), L)` delegates (`yield*
+  x`, under the delegate assumption below). The try list (`.w(…, _marked, null, [[try, catch,
+  finally, after]])`) gives the `try` regions (`_context.p = L` at a region's start, catch or
+  finally is bookkeeping, `return _context.f(L)` ends a finally, the caught value is
+  `_context.v`); a catch-only entry has no `after`, so its end is the one label the try body
+  leaves to, kept only when the catch cases reach nothing outside it. A `finally` that the try
+  or catch cases enter by a jump, a resumption or falling through (the normal completion of
+  the `try`) keeps the machine, since the structurer's `finally` is entered by the region's
+  exit, not by an edge. Any other use of `_context`, `this` in the state function,
+  `@babel/runtime`'s `_regeneratorRuntime()` or the classic `regeneratorRuntime.mark/wrap`
+  keeps it too. The expression form `_regenerator().m(function _callee() { return
+  _regenerator().w(…, _callee); })` becomes that `function*` in place. The rewrite
   is `--unsafe` only, under the generator assumptions above (a regenerator generator object is
   `Object.create(g.prototype)` with the runtime's `next`/`throw`/`return`; `_regenerator().m(g)`
   gives `g` the runtime's generator-function prototype).

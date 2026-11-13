@@ -130,6 +130,7 @@ const OBJECT_EXPRESSION_FOCUS: u8 = ExpressionKind::ObjectExpression as u8;
 const UNARY_EXPRESSION_FOCUS: u8 = ExpressionKind::UnaryExpression as u8;
 const DECLARED_FOCUS: u8 = u8::MAX - 1;
 const NO_FOCUS: u8 = u8::MAX;
+const VALUES_FOCUS: u8 = ExpressionKind::BinaryExpression as u8;
 const ARROW_OR_FUNCTION_FOCUS: u8 = ExpressionKind::FunctionExpression as u8;
 const TRY_STATEMENT: u8 = StatementKind::TryStatement as u8;
 const STATIC_MEMBER_FOCUS: u8 = ExpressionKind::StaticMemberExpression as u8;
@@ -828,5 +829,21 @@ pub const VARIANTS: &[Variant] = &[
         (TRY_STATEMENT, NO_FOCUS),
         (&[], 64),
         BABEL_7_29_IE11_ASYNC_AWAIT,
+    ),
+    variant(
+        Kind::RegeneratorValues,
+        0x0e5c_bc48_9bb6_d96e_5616_9807_a062_1077,
+        (1, 2),
+        (IF_STATEMENT, VALUES_FOCUS),
+        (&[Kind::Typeof], 100),
+        BABEL_7_29_IE11_GENERATORS,
+    ),
+    variant(
+        Kind::RegeneratorValues,
+        0x6898_328c_7a20_3936_2ad3_3c81_8697_76c3,
+        (1, 2),
+        (IF_STATEMENT, VALUES_FOCUS),
+        (&[Kind::Typeof], 99),
+        BABEL_7_28_IE11_TERSER_GENERATORS,
     ),
 ];

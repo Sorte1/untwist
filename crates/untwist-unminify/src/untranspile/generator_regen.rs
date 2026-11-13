@@ -185,10 +185,14 @@ pub fn rewrite<'a>(function: &mut Function<'a>, table: &Table, cx: &mut Cx<'a, '
     };
     let list = call.arguments.get(3).and_then(Argument::as_expression);
     let regions = machine_regenerator::regions(list, body.statements, &context)?;
+    let values = |callee: &Expression<'_>| {
+        table.kind_of_callee(callee, scoping) == Some(Kind::RegeneratorValues)
+    };
     let regenerator = Regenerator {
         context,
         home: (!prefix.iter().any(aliases_arguments)).then_some(scope),
         regions,
+        values: &values,
     };
     let loaded = machine_regenerator::read(body.statements, &regenerator)?;
     let mut structured = structure::structure(&loaded.machine)?;

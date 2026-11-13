@@ -47,6 +47,7 @@ pub enum Part {
     ElementArgument,
     Returned,
     ReturnedArgument(u8),
+    Delegated,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -269,6 +270,7 @@ pub fn take_slot<'a>(
         Part::ElementArgument => argument(element(returned(statement)?)?, 0)?,
         Part::Returned => returned(statement)?,
         Part::ReturnedArgument(index) => argument(returned(statement)?, index)?,
+        Part::Delegated => argument(argument(returned(statement)?, 0)?, 0)?,
     };
     Some(expression.take_in(cx))
 }
@@ -305,5 +307,6 @@ pub fn slot_at<'k, 'a>(cases: &[&'k [Statement<'a>]], slot: &Slot) -> Option<&'k
         Part::ElementArgument => argument_ref(element_ref(returned_ref(statement)?)?, 0),
         Part::Returned => returned_ref(statement),
         Part::ReturnedArgument(index) => argument_ref(returned_ref(statement)?, index),
+        Part::Delegated => argument_ref(argument_ref(returned_ref(statement)?, 0)?, 0),
     }
 }
