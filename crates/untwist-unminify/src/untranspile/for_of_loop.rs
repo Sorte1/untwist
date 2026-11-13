@@ -186,6 +186,7 @@ fn site(attempt: &TryStatement<'_>, scoping: &Scoping) -> bool {
         if let Statement::VariableDeclaration(top) = statement {
             if top.kind == VariableDeclarationKind::Var {
                 for declarator in &top.declarations {
+                    scan.visit_binding_pattern(&declarator.id);
                     if let Some(init) = &declarator.init {
                         scan.visit_expression(init);
                     }
