@@ -78,6 +78,26 @@ pub fn closure<'a>(
     moved
 }
 
+struct Named<'w> {
+    wanted: &'w FxHashMap<String, usize>,
+    read: FxHashSet<&'w str>,
+    bound: FxHashSet<String>,
+}
+
+impl<'a> VisitJs<'a> for Named<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if let Some((name, _)) = self.wanted.get_key_value(it.name.as_str()) {
+            self.read.insert(name.as_str());
+        }
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        if self.wanted.contains_key(it.name.as_str()) {
+            self.bound.insert(it.name.to_string());
+        }
+    }
+}
+
 pub fn free_mentions(
     wanted: &FxHashMap<String, usize>,
     program: &Program<'_>,
@@ -85,6 +105,24 @@ pub fn free_mentions(
 ) -> FxHashSet<usize> {
     if wanted.is_empty() {
         return FxHashSet::default();
+    }
+    let mut named = Named {
+        wanted,
+        read: FxHashSet::default(),
+        bound: FxHashSet::default(),
+    };
+    named.visit_program(program);
+    let read: Vec<&str> = named
+        .read
+        .iter()
+        .copied()
+        .filter(|name| !bound.contains(name))
+        .collect();
+    if read.iter().all(|name| !named.bound.contains(*name)) {
+        return read
+            .iter()
+            .filter_map(|name| wanted.get(*name).copied())
+            .collect();
     }
     let scoping = build_scoping(program).scoping;
     scoping
