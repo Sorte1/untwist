@@ -11,6 +11,8 @@ use untwist_core::ast_util::js_text::js_text;
 
 use super::hash::{fnv, mix, Exact, PolyHash};
 
+mod inline;
+
 const TAG_TYPE: u8 = 1;
 const TAG_STR: u8 = 2;
 const TAG_GLOBAL: u8 = 3;
@@ -107,6 +109,7 @@ pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> 
     emitter.collect_units = true;
     emitter.visit_program_body(program);
     let len = emitter.count;
+    emitter.emit_deferred();
     let mut units = std::mem::take(&mut emitter.units);
     units.push(Unit {
         node: UnitNode::Program(program),
@@ -130,6 +133,7 @@ pub struct ExactShape {
     pub inner: Vec<SymbolId>,
     pub outer: Vec<SymbolId>,
     pub specific: u32,
+    pub inlined: Vec<(SymbolId, Span)>,
 }
 
 pub fn exact_shape(unit: &Unit<'_, '_>, scoping: &Scoping) -> ExactShape {
@@ -140,6 +144,7 @@ pub fn exact_shape(unit: &Unit<'_, '_>, scoping: &Scoping) -> ExactShape {
         inner: Vec::new(),
         outer: Vec::new(),
         specific: 0,
+        inlined: Vec::new(),
     });
     let mut emitter = Emitter::new(scoping, sink);
     match unit.node {
@@ -157,6 +162,7 @@ pub fn exact_shape(unit: &Unit<'_, '_>, scoping: &Scoping) -> ExactShape {
         inner: sink.inner,
         outer: sink.outer,
         specific: sink.specific,
+        inlined: sink.inlined,
     }
 }
 
@@ -167,6 +173,7 @@ struct ExactSink {
     inner: Vec<SymbolId>,
     outer: Vec<SymbolId>,
     specific: u32,
+    inlined: Vec<(SymbolId, Span)>,
 }
 
 enum Sink {
@@ -213,6 +220,7 @@ struct Emitter<'n, 'a> {
     collect_units: bool,
     units: Vec<Unit<'n, 'a>>,
     pending: Option<(Span, SymbolId)>,
+    deferred: Vec<&'n Function<'a>>,
 }
 
 fn function_value_span(expr: &Expression<'_>) -> Option<Span> {
@@ -332,6 +340,7 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
             collect_units: false,
             units: Vec::new(),
             pending: None,
+            deferred: Vec::new(),
         }
     }
 
@@ -545,7 +554,7 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
         }
         self.visit_formal_parameters(&function.params);
         if let Some(body) = &function.body {
-            self.emit_list(&body.statements);
+            self.emit_body(&body.statements);
         }
         self.close();
     }
@@ -557,7 +566,7 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
         }
         self.visit_formal_parameters(&arrow.params);
         match &arrow.body {
-            ArrowFunctionBody::FunctionBody(body) => self.emit_list(&body.statements),
+            ArrowFunctionBody::FunctionBody(body) => self.emit_body(&body.statements),
             body => {
                 let expr = body.to_expression();
                 self.open(AstType::ReturnStatement);
@@ -808,6 +817,10 @@ impl<'n, 'a: 'n> VisitJs<'a> for Emitter<'n, 'a> {
         self.visit_expression(left);
         self.visit_expression(right);
         self.close();
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.emit_call(it);
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {

@@ -1,4 +1,6 @@
 pub mod annotate;
+mod guard;
+mod inlined;
 pub mod hash;
 pub mod pass;
 pub mod rename;
@@ -444,6 +446,7 @@ pub fn match_with(table: &Table, program: &Program<'_>, scoping: &Scoping) -> Li
         true => first,
         false => candidates(table, &probes, Some(&windows)),
     };
+    let found = inlined::settle(found, &shaped.units);
     let (accepted, offers) = accept(&shaped.units, &found);
     let mut conflicts: Vec<(SymbolId, Vec<String>)> = offers
         .names
