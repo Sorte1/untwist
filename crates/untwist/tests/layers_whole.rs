@@ -180,6 +180,14 @@ fn a_fixture_that_peels_nothing_prints_as_the_run_with_layers_disabled() {
     }
 }
 
+fn whole_program_peels(source: &str, unsafe_transforms: bool) -> usize {
+    let out = Pipeline::new(options(unsafe_transforms)).run(source);
+    out.stages
+        .iter()
+        .filter(|stage| stage.stage == "layers")
+        .count()
+}
+
 fn peeled(source: &str, unsafe_transforms: bool) -> Outcome {
     observed(&Pipeline::new(options(unsafe_transforms)).run(source))
 }
@@ -296,7 +304,7 @@ fn each_scanned_form_keeps_a_declaring_payload_for_unsafe() {
             refused(LAYER_NEEDS_UNSAFE),
             "{source}"
         );
-        assert_eq!(peeled(&source, true).peels, 1, "{source}");
+        assert_eq!(whole_program_peels(&source, true), 1, "{source}");
     }
     let clean = [
         "var x = 1; console.log(x);",

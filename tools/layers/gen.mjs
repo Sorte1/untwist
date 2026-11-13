@@ -152,7 +152,7 @@ const FORMS = {
   "inline/refuse-await.js": ["I-expr", "refuse:LAYER_SHAPE"],
   "inline/refuse-decl.js": ["I-stmt", "refuse:LAYER_SHAPE"],
   "inline/refuse-indirect.js": ["I-eval-indirect", "refuse:LAYER_SHAPE"],
-  "inline/refuse-gen5.js": ["I-stmt", "refuse:LAYER_SHAPE;unsafe=peel*5"],
+  "inline/refuse-gen5.js": ["I-stmt", "refuse:LAYER_SHAPE;unsafe=peel*4"],
   "inline/refuse-deep.js": ["I-expr", "refuse:LAYER_TOO_DEEP"],
 };
 

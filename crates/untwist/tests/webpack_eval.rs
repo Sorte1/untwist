@@ -105,7 +105,7 @@ fn problems(row: &Row, out: &Output) -> Vec<String> {
                 !bundle
                     .modules
                     .iter()
-                    .any(|module| module.path.ends_with(name))
+                    .any(|module| module.id.ends_with(name))
             })
             .collect();
         if !missing.is_empty() {

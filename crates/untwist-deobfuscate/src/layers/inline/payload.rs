@@ -87,7 +87,19 @@ fn single_expression(program: &Program<'_>, strict: bool, source: &str) -> Optio
     }
     let text = slice(source, only.span).trim_end();
     let text = text.strip_suffix(';').unwrap_or(text);
+    if is_anonymous_definition(&only.expression) {
+        return None;
+    }
     Some((text.to_string(), keeps_its_meaning_bare(&only.expression)))
+}
+
+fn is_anonymous_definition(expression: &Expression<'_>) -> bool {
+    match expression.without_parentheses() {
+        Expression::FunctionExpression(function) => function.id.is_none(),
+        Expression::ClassExpression(class) => class.id.is_none(),
+        Expression::ArrowFunctionExpression(_) => true,
+        _ => false,
+    }
 }
 
 fn keeps_its_meaning_bare(expression: &Expression<'_>) -> bool {
@@ -98,9 +110,6 @@ fn keeps_its_meaning_bare(expression: &Expression<'_>) -> bool {
             | Expression::ComputedMemberExpression(_)
             | Expression::PrivateFieldExpression(_)
             | Expression::ChainExpression(_)
-            | Expression::FunctionExpression(_)
-            | Expression::ArrowFunctionExpression(_)
-            | Expression::ClassExpression(_)
     )
 }
 
