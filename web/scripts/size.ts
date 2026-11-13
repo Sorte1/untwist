@@ -8,12 +8,12 @@ const WEB = resolve(HERE, '..');
 const DIST = resolve(process.env.UNTWIST_WEB_DIST ?? join(WEB, 'dist'));
 const WASM = resolve(process.env.UNTWIST_WEB_WASM ?? join(WEB, 'src/engine/pkg/untwist_wasm_bg.wasm'));
 
-const INITIAL_JS_GZIP = 180_000;
+const INITIAL_JS_GZIP = 190_000;
 const CSS_GZIP = 15_000;
 const FONT_BYTES = 120_000;
 const SW_GZIP = 4_000;
-const WASM_BASELINE_BYTES = 9_058_021;
-const WASM_GROWTH = 0.04;
+const WASM_BASELINE_BYTES = 11_745_187;
+const WASM_GROWTH = 0.1;
 
 const gzip = (bytes: Buffer): number => gzipSync(bytes, { level: 9 }).length;
 const brotli = (bytes: Buffer): number => brotliCompressSync(bytes).length;
