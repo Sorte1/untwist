@@ -14,6 +14,7 @@ pub struct Setting {
     pub keep_lexicals: bool,
     pub safe_lane: bool,
     pub classic_script: bool,
+    pub library_names: bool,
 }
 
 impl Setting {
@@ -23,6 +24,7 @@ impl Setting {
             keep_lexicals: opts.keep_script_lexicals,
             safe_lane: !opts.unsafe_transforms,
             classic_script: !opts.nested_root && !has_module_syntax(program),
+            library_names: !opts.rule_disabled(crate::library::rename::NAME),
         }
     }
 }
@@ -40,7 +42,9 @@ pub fn prepare(
     if setting.safe_lane {
         pin_function_names(&mut collected, program, scoping);
     }
-    pin_library_names(&mut collected, program, scoping);
+    if setting.library_names {
+        pin_library_names(&mut collected, program, scoping);
+    }
     collected
 }
 
