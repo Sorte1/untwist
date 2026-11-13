@@ -3,7 +3,8 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::symbol::SymbolId;
 
-use crate::matcher::Factory;
+use crate::matcher::{const_member, Factory};
+use crate::webpack::runtime_module::own_arguments;
 
 const MODULE_PARAM: usize = 0;
 const REQUIRE_PARAM: usize = 2;
@@ -12,6 +13,7 @@ const ID_MEMBERS: [&str; 2] = ["id", "i"];
 const ASYNC_MODULE: &str = "a";
 const WASM_MODULE: &str = "v";
 const WASM_EXPORTS: &str = "w";
+const CALL: &str = "call";
 
 struct ModuleUses<'s> {
     scoping: &'s Scoping,
@@ -47,7 +49,29 @@ impl ModuleUses<'_> {
             if ID_MEMBERS.contains(&member.property.name.as_str()) && self.is_module(&member.object))
     }
 
+    fn silent_call(call: &CallExpression<'_>) -> bool {
+        let Some(callee) = const_member(&call.callee, CALL) else {
+            return false;
+        };
+        let Expression::FunctionExpression(function) = callee.without_parentheses() else {
+            return false;
+        };
+        let silent = function.params.items.is_empty() && function.params.rest.is_none();
+        silent
+            && function
+                .body
+                .as_ref()
+                .is_some_and(|body| !own_arguments(body))
+    }
+
     fn handed_to_helper(&self, call: &CallExpression<'_>, at: usize) -> bool {
+        if at > 0 && Self::silent_call(call) {
+            return call
+                .arguments
+                .get(at)
+                .and_then(Argument::as_expression)
+                .is_some_and(|argument| self.is_module(argument));
+        }
         let Some(argument) = call.arguments.get(at).and_then(Argument::as_expression) else {
             return false;
         };

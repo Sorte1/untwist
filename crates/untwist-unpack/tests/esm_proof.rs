@@ -180,8 +180,8 @@ fn refuses_an_exports_write_left_after_conversion() {
 }
 
 #[test]
-fn refuses_a_module_reference() {
-    refused_target("function a() {} console.log(e.id);");
+fn a_module_id_read_refuses_the_bundle() {
+    unbundled_target("function a() {} console.log(e.id);");
 }
 
 #[test]

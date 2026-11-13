@@ -1,6 +1,6 @@
 mod common;
 
-use common::{bundle_from, fixture};
+use common::{bundle_from, webpack4_without_module_value};
 use oxc_allocator::Allocator;
 use untwist_unpack::mappings::{apply_mappings, Mapping, MappingMatcher};
 
@@ -13,7 +13,7 @@ fn mapping(path: &str, matcher: MappingMatcher) -> Mapping {
 
 #[test]
 fn mappings_move_modules_and_unused_ones_are_reported() {
-    let source = fixture("webpack-4.js");
+    let source = webpack4_without_module_value();
     let alloc = Allocator::default();
     let mut bundle = bundle_from(&alloc, &source).expect("webpack bundle");
     let mappings = vec![

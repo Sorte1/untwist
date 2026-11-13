@@ -1,12 +1,15 @@
 mod common;
 
 use common::PrintedModule;
-use common::{bundle_from, fixture, module_summary};
+use common::{bundle_from, fixture, module_summary, webpack4_without_module_value};
 use oxc_allocator::Allocator;
 use untwist_unpack::model::BundleKind;
 
 fn detect(name: &str) -> (BundleKind, Option<String>, Vec<(String, String, bool)>) {
-    let source = fixture(name);
+    let source = match name {
+        "webpack-4.js" => webpack4_without_module_value(),
+        _ => fixture(name),
+    };
     let alloc = Allocator::default();
     let bundle = bundle_from(&alloc, &source).unwrap_or_else(|| panic!("no bundle in {name}"));
     (
@@ -21,7 +24,6 @@ fn every_webpack_shape_is_found_through_its_wrapper() {
     for (name, entry) in [
         ("webpack-4.js", Some("2")),
         ("webpack-object.js", Some("386")),
-        ("webpack-esm.js", Some("0")),
         ("webpack-var-injection.js", Some("0")),
         ("webpack-5.js", Some("2")),
         ("webpack-5-method.js", Some("2")),
@@ -34,6 +36,13 @@ fn every_webpack_shape_is_found_through_its_wrapper() {
         assert_eq!(entry_id.as_deref(), entry, "{name}");
         assert!(!modules.is_empty(), "{name}");
     }
+}
+
+#[test]
+fn a_module_that_reassigns_its_module_object_refuses_the_bundle() {
+    let source = fixture("webpack-esm.js");
+    let alloc = Allocator::default();
+    assert!(bundle_from(&alloc, &source).is_none());
 }
 
 #[test]

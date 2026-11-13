@@ -51,6 +51,13 @@ pub fn prepared<'a>(alloc: &'a Allocator, source: &'a str) -> Program<'a> {
     program
 }
 
+pub fn webpack4_without_module_value() -> String {
+    let value = "console.log(e);";
+    let source = fixture("webpack-4.js");
+    assert!(source.contains(value));
+    source.replacen(value, "console.log(e.exports);", 1)
+}
+
 pub fn fixture(name: &str) -> String {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/reference/unpack")
