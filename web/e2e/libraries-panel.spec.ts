@@ -64,7 +64,7 @@ test('the panel lists each library as the CLI reports it, jumps to a module and 
   await expect(core.locator('.lib-jump')).toHaveCount(0);
   await core.locator('summary').click();
   const jumps = core.locator('.lib-jump');
-  expect(await jumps.count()).toBeGreaterThan(0);
+  await expect(jumps.first()).toBeVisible();
   const target = jumps.nth(Math.min(3, (await jumps.count()) - 1));
   const module = (await target.locator('.lib-module-name').textContent()) ?? '';
   await target.click();
