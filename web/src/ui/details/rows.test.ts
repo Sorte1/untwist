@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Report } from './report';
-import { libraryPairs, limitPairs, NOT_RECORDED, passesOf, renamePairs, warningClassPairs } from './rows';
+import { libraryPairs, limitPairs, tablePairs, NOT_RECORDED, passesOf, renamePairs, warningClassPairs } from './rows';
 
 const report: Report = {
   schema: 'untwist.report/1',
@@ -76,6 +76,16 @@ describe('the details rows', () => {
     expect(libraryPairs([{ library: 'core-js', range: '3.30.0 - 3.38.1', modules: 412 }, { library: 'tslib', range: '', modules: 1 }])).toEqual([
       { label: 'core-js', value: '3.30.0 - 3.38.1 · 412 modules' },
       { label: 'tslib', value: '1 module' },
+    ]);
+  });
+
+  it('name the library tables a run fetched and the ones that failed', () => {
+    expect(tablePairs(undefined)).toEqual([]);
+    expect(tablePairs({ fetched: [], failed: [], reran: false, scanMs: 3, loadMs: 0 })).toEqual([]);
+    expect(tablePairs({ fetched: ['core-js'], failed: ['lodash'], reran: true, scanMs: 12, loadMs: 140 })).toEqual([
+      { label: 'Tables loaded', value: 'core-js (found in the output, run again)' },
+      { label: 'Tables not loaded', value: 'lodash' },
+      { label: 'Table scan / load', value: '12 ms / 140 ms' },
     ]);
   });
 });

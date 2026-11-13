@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import { metaPolicy } from './src/csp.ts';
 import { serviceWorker } from './scripts/service-worker.ts';
+import { libraryTables } from './scripts/library-tables.ts';
 
 const CSP = metaPolicy(readFileSync(new URL('./public/_headers', import.meta.url), 'utf8'));
 
@@ -22,7 +23,7 @@ function contentSecurityPolicy(): Plugin {
 
 export default defineConfig({
   base: './',
-  plugins: [contentSecurityPolicy(), serviceWorker()],
+  plugins: [contentSecurityPolicy(), libraryTables(), serviceWorker()],
   build: {
     target: 'es2022',
     manifest: true,

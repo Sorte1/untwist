@@ -14,6 +14,9 @@ const FILES = [
   'fonts/OFL-Spline-Sans.txt',
   'favicon.svg',
   'site.webmanifest',
+  'libraries/index.json',
+  'libraries/core-js.table',
+  'libraries/core-js.keys.json',
 ];
 
 describe('precacheEntries', () => {
@@ -25,6 +28,7 @@ describe('precacheEntries', () => {
       'assets/run.worker-DDDD.js',
       'assets/wasm/untwist_wasm_bg-CCCC.wasm',
       'favicon.svg',
+      'libraries/index.json',
       'site.webmanifest',
     ]);
   });

@@ -6,35 +6,31 @@ export interface LibraryRow {
   readonly modules: number;
 }
 
-export interface LibraryComment {
+export interface LibraryMatch {
   readonly library: string;
   readonly range: string;
-  readonly path: string;
+  readonly modules: readonly string[];
 }
 
-const COMMENT = /^\s*\/\/ (\S+) ([^:\n]+): (\S[^\n]*)$/;
-
-function text(value: unknown): string | null {
-  return typeof value === 'string' && value !== '' ? value : null;
+export interface LibraryComment extends LibraryMatch {
+  readonly also: readonly LibraryMatch[];
 }
 
-function moduleCount(value: unknown): number {
-  if (Array.isArray(value)) {
-    return value.length;
-  }
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 1;
-}
+const COMMENT = /^\s*\/\/ (\S.*)$/;
+const PART = /^(\S+) ([^:\s][^:]*): (\S.*)$/;
+const SAME_CODE = ', same code in ';
+const MODULE_SEPARATOR = ' | ';
 
 function rowOf(value: unknown): LibraryRow | null {
   if (typeof value !== 'object' || value === null) {
     return null;
   }
-  const row = value as Record<string, unknown>;
-  const library = text(row['library']) ?? text(row['name']);
-  if (library === null) {
+  const { library, range, modules } = value as Record<string, unknown>;
+  if (typeof library !== 'string' || library === '' || typeof range !== 'string') {
     return null;
   }
-  return { library, range: text(row['range']) ?? text(row['version']) ?? '', modules: moduleCount(row['modules']) };
+  const count = typeof modules === 'number' && Number.isSafeInteger(modules) && modules >= 0 ? modules : 0;
+  return { library, range, modules: count };
 }
 
 export function librariesOf(report: string): LibraryRow[] {
@@ -47,25 +43,40 @@ export function librariesOf(report: string): LibraryRow[] {
     if (row === null) {
       continue;
     }
-    const key = `${row.library}\u0000${row.range}`;
-    const seen = grouped.get(key);
-    grouped.set(key, seen === undefined ? row : { ...seen, modules: seen.modules + row.modules });
+    const seen = grouped.get(row.library);
+    grouped.set(row.library, seen === undefined ? row : { ...seen, modules: seen.modules + row.modules });
   }
-  return [...grouped.values()].sort((a, b) => b.modules - a.modules || a.library.localeCompare(b.library) || a.range.localeCompare(b.range));
+  return [...grouped.values()].sort((a, b) => b.modules - a.modules || a.library.localeCompare(b.library));
 }
 
-export function commentShape(line: string): LibraryComment | null {
-  const match = COMMENT.exec(line);
+function matchOf(part: string): LibraryMatch | null {
+  const match = PART.exec(part);
   if (match === null) {
     return null;
   }
-  const [, library = '', range = '', path = ''] = match;
-  return { library, range: range.trim(), path: path.trim() };
+  const [, library = '', range = '', modules = ''] = match;
+  return { library, range: range.trim(), modules: modules.split(MODULE_SEPARATOR).map((module) => module.trim()) };
+}
+
+export function commentShape(line: string): LibraryComment | null {
+  const body = COMMENT.exec(line)?.[1];
+  if (body === undefined) {
+    return null;
+  }
+  const parts = body.split(SAME_CODE).map(matchOf);
+  const [first, ...rest] = parts;
+  if (first === undefined || first === null || rest.some((part) => part === null)) {
+    return null;
+  }
+  return { ...first, also: rest.filter((part): part is LibraryMatch => part !== null) };
 }
 
 export function libraryComment(line: string, known: ReadonlySet<string>): LibraryComment | null {
   const comment = commentShape(line);
-  return comment !== null && known.has(comment.library) ? comment : null;
+  if (comment === null) {
+    return null;
+  }
+  return known.has(comment.library) || comment.also.some((same) => known.has(same.library)) ? comment : null;
 }
 
 export function moduleLabel(count: number): string {

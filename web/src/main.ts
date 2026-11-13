@@ -3,6 +3,7 @@ import './styles/layout.css';
 import { Cancelled, Engine, REPORT_EXTRAS } from './engine/engine';
 import { initialState, runCancelled, runFailed, runFinished, runStarted, stageBegan, ticked, type AppState, type InputState } from './state';
 import { flagsFrom } from './settings/flags';
+import { LibraryTables } from './libraries/tables';
 import { registerServiceWorker } from './pwa/register';
 import { settingsFromHash, writeHash } from './settings/hash';
 import { createStore, type Store } from './store';
@@ -89,7 +90,8 @@ function runner(store: Store<AppState>, start: (input: InputState, flags: string
 function main(): void {
   const parsed = settingsFromHash(window.location.hash);
   const store = createStore(initialState(preferredTheme(), parsed.settings, parsed.problems));
-  const engine = new Engine();
+  const libraries = new LibraryTables();
+  const engine = new Engine(undefined, true, libraries);
   applyTheme(store.get().theme);
   store.subscribe((state, previous) => {
     if (state.theme !== previous.theme) {
@@ -106,8 +108,8 @@ function main(): void {
   });
   const start = starter(store, engine);
   const run = runner(store, start);
-  const compare = mountCompareModes(store, new Engine(engine.module, false));
-  const steps = mountSteps(store, new Engine(engine.module, false));
+  const compare = mountCompareModes(store, new Engine(engine.module, false, libraries));
+  const steps = mountSteps(store, new Engine(engine.module, false, libraries));
   const cancel = () => {
     engine.cancel();
     compare.cancel();

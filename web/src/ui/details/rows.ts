@@ -2,6 +2,7 @@ import { explainLimit } from '../../limits';
 import type { DiagnosticRow } from '../diagnostics-model';
 import { moduleLabel, type LibraryRow } from '../../libraries/libraries';
 import type { Report, RunStats, StageRow } from './report';
+import type { LibraryTablesUsed } from '../../engine/types';
 
 export interface Pair {
   readonly label: string;
@@ -44,6 +45,15 @@ export function libraryPairs(rows: readonly LibraryRow[]): Pair[] {
     return [{ label: 'Libraries', value: 'none detected' }];
   }
   return rows.map((row) => ({ label: row.library, value: row.range === '' ? moduleLabel(row.modules) : `${row.range} · ${moduleLabel(row.modules)}` }));
+}
+
+export function tablePairs(used: LibraryTablesUsed | undefined): Pair[] {
+  if (used === undefined || (used.fetched.length === 0 && used.failed.length === 0)) {
+    return [];
+  }
+  const fetched = used.fetched.length === 0 ? [] : [{ label: 'Tables loaded', value: `${used.fetched.join(', ')}${used.reran ? ' (found in the output, run again)' : ''}` }];
+  const failed = used.failed.length === 0 ? [] : [{ label: 'Tables not loaded', value: used.failed.join(', ') }];
+  return [...fetched, ...failed, { label: 'Table scan / load', value: `${ms(used.scanMs)} / ${ms(used.loadMs)}` }];
 }
 
 export function limitPairs(report: Report): Pair[] {
