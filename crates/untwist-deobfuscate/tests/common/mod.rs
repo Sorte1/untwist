@@ -121,6 +121,19 @@ pub fn run_ctors_extended<'a>(
     run_ctors_with(alloc, source, ctors, opts).0
 }
 
+pub fn run_ctors_default_lane<'a>(
+    alloc: &'a Allocator,
+    source: &'a str,
+    ctors: &[PassCtor<'a>],
+) -> String {
+    let opts = PassOptions {
+        extended: true,
+        unsafe_transforms: false,
+        ..pass_options()
+    };
+    run_ctors_with(alloc, source, ctors, opts).0
+}
+
 fn run_ctors_with<'a>(
     alloc: &'a Allocator,
     source: &'a str,

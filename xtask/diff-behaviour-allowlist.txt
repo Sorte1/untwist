@@ -122,6 +122,10 @@ fixtures/untranspile/hand/class-proto-closed.js rename-unique 688c0c3a4fba1be3
 fixtures/untranspile/hand/default-parameters-length.js conservative ea130e32fba48fc6
 fixtures/untranspile/hand/demoted-prologue-debug-protection.js conservative d092d6879c5ebfd5
 fixtures/untranspile/hand/demoted-prologue-self-defending.js conservative efa03b25b96f9d1d
+fixtures/untranspile/hand/demoted-prologue-self-defending.js default efa03b25b96f9d1d
+fixtures/untranspile/hand/demoted-prologue-self-defending.js rename-unique efa03b25b96f9d1d
+fixtures/untranspile/hand/demoted-prologue-self-defending.js rename-simple efa03b25b96f9d1d
+fixtures/untranspile/hand/demoted-prologue-self-defending.js rename-smart efa03b25b96f9d1d
 fixtures/untranspile/params/babel-7.29-loose/derived-defaults.js conservative 6074c0f160a01b29
 fixtures/untranspile/params/babel-7.29-loose/this-capture-defaults.js conservative 1330b3692b5d2939
 fixtures/untranspile/params/ts-5.9-es5/derived-defaults.js conservative 6074c0f160a01b29

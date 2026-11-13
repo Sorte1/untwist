@@ -621,9 +621,13 @@
   sits before the string, so the string is an ordinary expression statement), and the promotion
   makes the output strict: an assignment to an undeclared name throws, `this` in a plain call is
   `undefined`. Default mode keeps the string inert, printed as `("use strict");`, so the output
-  stays sloppy. `fixtures/untranspile/hand/demoted-prologue-self-defending.js` (in a
-  function body, game.js's shape) and `demoted-prologue-debug-protection.js` (at the program
-  head) are the witnesses; their conservative lanes are allowlisted.
+  stays sloppy. `--unsafe` promotes them as the conservative mode does, under the assumption that
+  **the program is the strict source the obfuscator wrapped**: only the removed protection code
+  stood before the string, and nothing in the program relies on running sloppy. Krunker 10.0.7 is
+  this shape (its self-defending call sits before the bundle's `'use strict'`).
+  `fixtures/untranspile/hand/demoted-prologue-self-defending.js` (in a function body, game.js's
+  shape) and `demoted-prologue-debug-protection.js` (at the program head) are the witnesses; their
+  conservative and `--unsafe` lanes are allowlisted.
 - **In the conservative comparison mode a simple string array's eligibility is decided once, before any decoding.**
   the reference deobfuscator's `findStringArray` runs a single time ahead of the decoders, so an array whose
   elements only become literals after decoding is never inlined. The conservative comparison mode reproduces that exactly:

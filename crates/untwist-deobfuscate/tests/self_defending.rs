@@ -308,3 +308,27 @@ fn a_guarded_function_whose_result_is_not_declared_is_kept() {
     let out = run(&alloc, source);
     assert!(out.contains("apply"), "{out}");
 }
+
+#[test]
+fn under_unsafe_a_prologue_the_protection_displaced_becomes_a_directive_again() {
+    let alloc = Allocator::default();
+    let source =
+        format!("function hi() {{\n{CONTROLLER}  \"use strict\";\n  console.log('x');\n}}");
+    let out =
+        common::run_ctors_extended(&alloc, &source, &untwist_deobfuscate::protections_ctors());
+    assert_eq!(
+        out.trim(),
+        "function hi() {\n  \"use strict\";\n  console.log(\"x\");\n}"
+    );
+}
+
+#[test]
+fn the_default_lane_keeps_a_displaced_prologue_inert() {
+    let alloc = Allocator::default();
+    let source =
+        format!("function hi() {{\n{CONTROLLER}  \"use strict\";\n  console.log('x');\n}}");
+    let out =
+        common::run_ctors_default_lane(&alloc, &source, &untwist_deobfuscate::protections_ctors());
+    assert!(out.contains("(\"use strict\");"), "{out}");
+    assert_eq!(common::directive_count(&out), 0);
+}
