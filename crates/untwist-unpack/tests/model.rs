@@ -109,6 +109,7 @@ fn every_kind_names_itself_in_lower_case_for_bundle_json() {
             "webpack",
             "browserify",
             "esbuild",
+            "rolldown",
             "rollup",
             "systemjs",
             "amd",

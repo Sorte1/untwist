@@ -1,0 +1,1 @@
+require("./index.js"),console.log(`eval lazy`);var e=`lazy-default`;exports.default=e,exports.value=42;

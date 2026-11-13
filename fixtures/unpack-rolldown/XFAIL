@@ -1,0 +1,2 @@
+# cell glob	reason
+*-split*	bm-esm-split-chunks (R51-WL): the chunk the entry loads is written as deobfuscated.<name>.js, so the written tree cannot find it

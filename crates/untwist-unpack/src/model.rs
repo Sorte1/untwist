@@ -12,6 +12,7 @@ pub enum BundleKind {
     Webpack,
     Browserify,
     Esbuild,
+    Rolldown,
     Rollup,
     SystemJs,
     Amd,
@@ -23,10 +24,11 @@ pub enum BundleKind {
 }
 
 impl BundleKind {
-    pub const ALL: [BundleKind; 11] = [
+    pub const ALL: [BundleKind; 12] = [
         Self::Webpack,
         Self::Browserify,
         Self::Esbuild,
+        Self::Rolldown,
         Self::Rollup,
         Self::SystemJs,
         Self::Amd,
@@ -42,6 +44,7 @@ impl BundleKind {
             Self::Webpack => "webpack",
             Self::Browserify => "browserify",
             Self::Esbuild => "esbuild",
+            Self::Rolldown => "rolldown",
             Self::Rollup => "rollup",
             Self::SystemJs => "systemjs",
             Self::Amd => "amd",

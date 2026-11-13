@@ -9,7 +9,7 @@ use untwist_core::parse::parse_program;
 use crate::esbuild::layout::{FactoryDecl, Host, Layout, Scope};
 use crate::esbuild::mentions::mentioned;
 use crate::matcher::param_names;
-use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module, Runtime};
+use crate::model::{module_from_body_with, Bodies, Bundle, Module, Runtime};
 use crate::path::PosixPath;
 use crate::rename::{rename_parameters_uncaptured, rename_wrapper_bindings};
 use crate::runtime::{declared_names, live_runtime_module, runtime_id};
@@ -111,8 +111,7 @@ pub fn scan(
 
 fn factory_names(layout: &Layout<'_, '_>) -> FxHashMap<String, usize> {
     layout
-        .factories
-        .iter()
+        .all()
         .enumerate()
         .map(|(index, factory)| (factory.name.to_string(), index))
         .collect()
@@ -140,7 +139,7 @@ fn comment_path(
     }
     let comment = attached.get(&statement.span().start)?;
     let text = comment.span.source_text(source.source_text);
-    let path = text.strip_prefix("//")?.trim();
+    let path = crate::rolldown::shape::region_path(text.strip_prefix("//")?.trim());
     let plain = !path.is_empty() && !path.chars().any(char::is_whitespace);
     (plain && PosixPath::parse(path).is_some()).then(|| path.to_string())
 }
@@ -168,23 +167,25 @@ fn factory_ids(
     let mut taken: FxHashSet<String> = FxHashSet::default();
     taken.insert(ENTRY_ID.to_string());
     if has_runtime {
-        taken.insert(runtime_id(BundleKind::Esbuild));
+        taken.insert(runtime_id(layout.kind));
     }
-    let keyless = layout.factories.iter().any(|factory| factory.key.is_none());
+    let keyless = layout.all().any(|factory| factory.key.is_none());
     let attached = if keyless {
         line_comments(source)
     } else {
         FxHashMap::default()
     };
     layout
-        .factories
-        .iter()
+        .all()
         .map(|factory| {
-            let preferred = factory
-                .key
-                .clone()
-                .or_else(|| comment_path(source, (list, &attached), factory));
-            unique_id(&mut taken, preferred, factory.name)
+            let preferred = factory.key.clone().or_else(|| {
+                factory
+                    .inline
+                    .is_none()
+                    .then(|| comment_path(source, (list, &attached), factory))
+                    .flatten()
+            });
+            unique_id(&mut taken, preferred, &factory.name)
         })
         .collect()
 }
@@ -196,8 +197,7 @@ pub fn factory_programs<'a>(
     bodies: &mut Bodies<'a>,
 ) -> Vec<Program<'a>> {
     plan.layout
-        .factories
-        .iter()
+        .all()
         .map(|factory| {
             let mut program = module_from_body_with(alloc, source, factory.function.body, bodies);
             program.directives =
@@ -207,10 +207,10 @@ pub fn factory_programs<'a>(
         .collect()
 }
 
-fn named(found: &[usize], layout: &Layout<'_, '_>, ids: &[String]) -> Vec<(String, String)> {
+fn named(found: &[usize], names: &[&str], ids: &[String]) -> Vec<(String, String)> {
     found
         .iter()
-        .map(|&index| (ids[index].clone(), layout.factories[index].name.to_string()))
+        .map(|&index| (ids[index].clone(), names[index].to_string()))
         .collect()
 }
 
@@ -253,6 +253,13 @@ fn removed_spans(plan: &Plan<'_, '_>, moved: &[usize]) -> Vec<Span> {
         };
         spans.push(span);
     }
+    for factory in &plan.layout.inline {
+        let function = factory.function;
+        spans.push(Span::new(
+            function.params.span.start,
+            function.body.span.end,
+        ));
+    }
     spans.sort_unstable_by_key(|span| span.start);
     spans
 }
@@ -290,11 +297,18 @@ fn entry_statements<'a>(
     let mut out = AVec::with_capacity_in(list.len(), &alloc);
     for (index, statement) in list.iter().enumerate() {
         if moved.binary_search(&index).is_err() {
-            out.extend(kept_statement(
-                alloc,
-                statement,
-                plan.layout.factories_at(index),
-            ));
+            let kept = kept_statement(alloc, statement, plan.layout.factories_at(index));
+            out.extend(kept.map(|mut kept| {
+                let sites: Vec<(Span, &str)> = plan
+                    .layout
+                    .inline
+                    .iter()
+                    .filter(|factory| factory.statement == index)
+                    .filter_map(|factory| Some((factory.inline?, factory.name.as_str())))
+                    .collect();
+                crate::rolldown::inline::replace_inline(alloc, &mut kept, &sites);
+                kept
+            }));
         }
     }
     out
@@ -347,7 +361,7 @@ fn runtime_of<'a>(
     for &index in moved {
         statements.push(plan.scope.list[index].clone_in(alloc));
     }
-    let mut module = live_runtime_module(alloc, source, BundleKind::Esbuild, statements)?;
+    let mut module = live_runtime_module(alloc, source, plan.layout.kind, statements)?;
     let program = module.program_mut();
     program.directives = strict_directives(alloc, &program.directives, plan.strict);
     Some(module)
@@ -363,7 +377,7 @@ pub fn bundle<'a>(
     let list = plan.scope.list;
     let ids = factory_ids(source, list, &plan.layout, !moved.is_empty());
     let names = factory_names(&plan.layout);
-    let mut bundle = Bundle::new(BundleKind::Esbuild, Some(ENTRY_ID.to_string()));
+    let mut bundle = Bundle::new(plan.layout.kind, Some(ENTRY_ID.to_string()));
     let mut entry = entry_program(alloc, source, plan, moved);
     rename_wrapper_bindings(alloc, &mut entry, &wrapper_params(plan));
     let mut entry = Module::new(ENTRY_ID.to_string(), entry, true);
@@ -371,13 +385,18 @@ pub fn bundle<'a>(
         .into_iter()
         .collect();
     found.sort_unstable();
-    entry.dependencies = named(&found, &plan.layout, &ids);
+    let listed: Vec<&str> = plan
+        .layout
+        .all()
+        .map(|factory| factory.name.as_str())
+        .collect();
+    entry.dependencies = named(&found, &listed, &ids);
     bundle.modules.insert(ENTRY_ID.to_string(), entry);
     if !moved.is_empty() {
         let runtime = runtime_of(alloc, source, plan, moved)?;
         bundle.modules.insert(runtime.id.clone(), runtime);
     }
-    let factories = plan.layout.factories.iter().zip(programs).zip(&ids);
+    let factories = plan.layout.all().zip(programs).zip(&ids);
     for (((factory, mut program), id), found) in factories.zip(&dependencies) {
         let params = param_names(factory.function.params);
         if params
@@ -389,7 +408,7 @@ pub fn bundle<'a>(
         }
         rename_wrapper_bindings(alloc, &mut program, &params);
         let mut module = Module::new(id.clone(), program, false);
-        module.dependencies = named(found, &plan.layout, &ids);
+        module.dependencies = named(found, &listed, &ids);
         bundle.modules.insert(id.clone(), module);
     }
     bundle.runtime = plan.layout.shim.map(|shim| Runtime {

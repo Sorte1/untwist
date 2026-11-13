@@ -122,6 +122,7 @@ fn entry_require<'a>(alloc: &'a Allocator, program: &mut Program<'a>) -> String 
 }
 
 struct Shared {
+    kind: BundleKind,
     names: Vec<String>,
     wanted: FxHashMap<String, usize>,
     live: FxHashMap<String, usize>,
@@ -136,8 +137,10 @@ fn indexed(names: &[String]) -> FxHashMap<String, usize> {
 }
 
 fn shared(bundle: &Bundle<'_>) -> Shared {
-    let Some(runtime) = bundle.modules.get(&runtime_id(BundleKind::Esbuild)) else {
+    let kind = bundle.kind;
+    let Some(runtime) = bundle.modules.get(&runtime_id(kind)) else {
         return Shared {
+            kind,
             names: Vec::new(),
             wanted: FxHashMap::default(),
             live: FxHashMap::default(),
@@ -151,6 +154,7 @@ fn shared(bundle: &Bundle<'_>) -> Shared {
         .filter(|name| !read_live.contains(name.as_str()))
         .collect();
     Shared {
+        kind,
         wanted: indexed(&names),
         live: indexed(&live),
         names,
@@ -161,9 +165,9 @@ fn runtime_import<'a>(
     alloc: &'a Allocator,
     module: &Module<'a>,
     (binding, names): (Option<&str>, &[String]),
-    require: &str,
+    (require, kind): (&str, BundleKind),
 ) -> Option<AVec<'a, Statement<'a>>> {
-    let specifier = runtime_specifier(module.path.as_str(), BundleKind::Esbuild);
+    let specifier = runtime_specifier(module.path.as_str(), kind);
     let specifier = js_string(&specifier);
     let whole = binding.map(|binding| format!("var {binding} = {require}({specifier});\n"));
     let named = (!names.is_empty())
@@ -237,19 +241,24 @@ fn rewrite_module<'a>(
     let used = used_runtime(program, names, is_entry, scoping.as_ref());
     let binding = read_through_runtime(alloc, program, &shared.live, scoping.as_ref());
     module.dependencies = dependencies;
-    import_runtime(alloc, module, (binding.as_deref(), &used), &require)
+    import_runtime(
+        alloc,
+        module,
+        (binding.as_deref(), &used),
+        (&require, shared.kind),
+    )
 }
 
 fn import_runtime<'a>(
     alloc: &'a Allocator,
     module: &mut Module<'a>,
     (binding, used): (Option<&str>, &[String]),
-    require: &str,
+    (require, kind): (&str, BundleKind),
 ) -> Option<()> {
     if binding.is_none() && used.is_empty() {
         return Some(());
     }
-    let import = runtime_import(alloc, module, (binding, used), require)?;
+    let import = runtime_import(alloc, module, (binding, used), (require, kind))?;
     let is_entry = module.is_entry;
     let program = module.program_mut();
     let at = if is_entry {
@@ -268,7 +277,7 @@ pub fn rewrite<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note> {
         .as_ref()
         .map(|runtime| runtime.require_name.clone());
     let shared = shared(bundle);
-    let runtime_key = runtime_id(BundleKind::Esbuild);
+    let runtime_key = runtime_id(bundle.kind);
     for (id, module) in bundle.modules.iter_mut() {
         if *id != runtime_key {
             let _ = rewrite_module(alloc, module, &paths, shim.as_deref(), &shared);

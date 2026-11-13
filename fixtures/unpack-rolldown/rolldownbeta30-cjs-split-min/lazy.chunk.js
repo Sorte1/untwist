@@ -1,0 +1,1 @@
+const e=require(`./index.js`);console.log(`eval lazy`);const t=42;var n=`lazy-default`;exports.default=n,exports.value=t;

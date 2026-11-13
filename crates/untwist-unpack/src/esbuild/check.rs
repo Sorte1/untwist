@@ -34,15 +34,14 @@ fn contains(outer: Span, inner: Span) -> bool {
 }
 
 pub fn bare_specifier(call: &CallExpression<'_>) -> bool {
-    match &call.arguments[..] {
-        [Argument::StringLiteral(text)] => {
-            !text.value.has_lone_surrogate()
-                && !text.value.is_empty()
-                && !text.value.starts_with('.')
-                && !text.value.starts_with('/')
+    let text = match &call.arguments[..] {
+        [Argument::StringLiteral(text)] => text.value.as_str(),
+        [Argument::TemplateLiteral(template)] => {
+            template.single_quasi().and_then(|text| text.as_str())
         }
-        _ => false,
-    }
+        _ => None,
+    };
+    text.is_some_and(|text| !text.is_empty() && !text.starts_with('.') && !text.starts_with('/'))
 }
 
 impl Proof<'_> {

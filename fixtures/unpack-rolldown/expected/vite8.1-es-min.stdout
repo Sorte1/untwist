@@ -1,0 +1,17 @@
+eval greet
+eval cycle-a start
+eval cycle-b
+eval cycle-a end
+eval util
+eval math
+eval bridge
+eval shape
+eval index
+greet hello ada HELLO BOB
+cycle b saw a-early,undefined b later a-late
+label [.fixture] total 15
+barrel own 8 half,own,twice
+bridge square 9 shape-default
+counter 2 S
+eval lazy
+lazy 42 lazy-default

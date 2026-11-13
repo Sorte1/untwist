@@ -1,5 +1,6 @@
 pub mod build;
 pub mod check;
+pub mod late;
 pub mod layout;
 pub mod live;
 pub mod mentions;
@@ -21,20 +22,32 @@ use crate::esbuild::build::{
     candidates, factory_programs, has_use_strict, scan, wanted_helpers, Plan,
 };
 use crate::esbuild::check::{entry_sound, factory_closed, Proof};
-use crate::esbuild::layout::{layout, scopes, Host, Layout, Scope};
+use crate::esbuild::layout::{layout, scopes, FactoryDecl, Host, Layout, Scope, INLINE_PREFIX};
 use crate::esbuild::live::read_as_members;
 use crate::esbuild::mentions::closure;
 use crate::frame::Frame;
-use crate::model::{Bodies, Bundle, BundleKind};
+use crate::model::{body_key, Bodies, Bundle, BundleKind};
+use crate::rolldown;
 use crate::runtime::{first_unclosed_helper, helper_symbols};
 
-pub fn probe(frame: &Frame<'_, '_>) -> bool {
-    scopes(frame, &[]).any(|scope| layout(scope.list).is_some())
+pub fn probe_kind(frame: &Frame<'_, '_>, marked: bool) -> Option<BundleKind> {
+    scopes(frame, &[]).find_map(|scope| layout(scope.list, marked).map(|layout| layout.kind))
 }
 
-fn found<'k, 'a>(source: &'k Program<'a>, frame: &Frame<'k, 'a>) -> Option<Plan<'k, 'a>> {
-    let (scope, layout) = scopes(frame, &source.directives)
-        .find_map(|scope| layout(scope.list).map(|layout| (scope, layout)))?;
+pub fn probe(frame: &Frame<'_, '_>) -> bool {
+    probe_kind(frame, false) == Some(BundleKind::Esbuild)
+}
+
+pub fn found<'k, 'a>(
+    source: &'k Program<'a>,
+    frame: &Frame<'k, 'a>,
+    marked: bool,
+) -> Option<Plan<'k, 'a>> {
+    let (scope, mut layout) = scopes(frame, &source.directives)
+        .find_map(|scope| layout(scope.list, marked).map(|layout| (scope, layout)))?;
+    if source.source_text.contains(INLINE_PREFIX) {
+        layout.inline.clear();
+    }
     let module_code = frame.top.iter().any(Statement::is_module_declaration);
     let strict =
         module_code || has_use_strict(&source.directives) || has_use_strict(scope.directives);
@@ -66,8 +79,7 @@ fn seeds_in(
 ) -> FxHashSet<usize> {
     let factories: FxHashSet<ScopeId> = plan
         .layout
-        .factories
-        .iter()
+        .all()
         .filter_map(|factory| factory.scope.get())
         .collect();
     let mut seeds = FxHashSet::default();
@@ -104,6 +116,7 @@ fn wrapper_scope(scope: &Scope<'_, '_>) -> Option<ScopeId> {
     match statement.expression.without_parentheses() {
         Expression::CallExpression(call) => match call.callee.without_parentheses() {
             Expression::ArrowFunctionExpression(arrow) => arrow.scope_id.get(),
+            Expression::FunctionExpression(function) => function.scope_id.get(),
             _ => None,
         },
         Expression::FunctionExpression(function) => function.scope_id.get(),
@@ -170,15 +183,24 @@ fn proof<'s>(scoping: &'s Scoping, plan: &Plan<'_, '_>, moved: &[usize]) -> Proo
         .factories
         .iter()
         .filter_map(|factory| {
-            let span = oxc_span::GetSpan::span(&list[factory.statement]);
-            factory.binding.symbol_id.get().map(|symbol| (symbol, span))
+            let span = match &list[factory.statement] {
+                Statement::VariableDeclaration(declaration) => {
+                    declaration.declarations[factory.declarator].span
+                }
+                other => oxc_span::GetSpan::span(other),
+            };
+            factory
+                .binding?
+                .symbol_id
+                .get()
+                .map(|symbol| (symbol, span))
         })
         .collect();
     Proof {
         scoping,
         requires,
         shim: plan.layout.shim.and_then(|shim| shim.symbol_id.get()),
-        shim_loads: !plan.module || plan.layout.banner.is_some(),
+        shim_loads: !plan.module || plan.layout.banner.is_some() || plan.layout.created_shim,
         hosts: hosts(plan),
         host_params: host_params(plan),
         shim_init: shim_init(plan),
@@ -218,7 +240,9 @@ fn entry_proven(proof: &Proof<'_>, plan: &Plan<'_, '_>, moved: &[usize]) -> bool
                 })
                 .map(|(_, declarator)| declarator)
         });
-    entry_sound(proof, statements, declarators)
+    let unwrapped = plan.scope.host != Host::Function
+        || rolldown::receiver::receiver_free(proof.scoping, statements.clone());
+    unwrapped && entry_sound(proof, statements, declarators)
 }
 
 fn unchanged(scoping: &Scoping, binding: &BindingIdentifier<'_>) -> bool {
@@ -239,33 +263,39 @@ fn helpers_unchanged(scoping: &Scoping, layout: &Layout<'_, '_>) -> bool {
         .all(|binding| unchanged(scoping, binding))
 }
 
-fn proven(source: &Program<'_>, plan: &Plan<'_, '_>) -> Option<Vec<usize>> {
-    if plan.layout.unsound {
-        return None;
+fn list_scope(scoping: &Scoping, plan: &Plan<'_, '_>) -> Option<ScopeId> {
+    match plan.scope.host {
+        Host::Top => Some(scoping.root_scope_id()),
+        Host::Iife | Host::Function | Host::Bun => wrapper_scope(&plan.scope),
     }
-    let scoping = build_scoping(source).scoping;
-    if !helpers_unchanged(&scoping, &plan.layout) {
+}
+
+enum Round {
+    Proven(Vec<usize>),
+    Keep(Vec<bool>),
+}
+
+fn round(scoping: &Scoping, plan: &Plan<'_, '_>) -> Option<Round> {
+    let ordered = !plan.layout.early
+        || late::first_call_follows_definition(scoping, plan.scope.list, &plan.layout);
+    if !ordered {
         return None;
     }
     let (candidates, wanted) = helper_names(plan);
     let moved = closure(
         plan.scope.list,
         &candidates,
-        seeds_in(&scoping, plan, &wanted),
+        seeds_in(scoping, plan, &wanted),
     );
-    let proof = proof(&scoping, plan, &moved);
-    let list_scope = match plan.scope.host {
-        Host::Top => Some(scoping.root_scope_id()),
-        Host::Iife | Host::Bun => wrapper_scope(&plan.scope),
-    };
-    let list_scope = list_scope?;
+    let proof = proof(scoping, plan, &moved);
+    let list_scope = list_scope(scoping, plan)?;
     let free_object = scoping
         .find_binding(list_scope, oxc_str::Ident::from("Object"))
         .is_none();
     if !free_object || !proof.requires_host_at(list_scope) {
         return None;
     }
-    if first_unclosed_helper(&scoping, plan.scope.list, &moved).is_some() {
+    if first_unclosed_helper(scoping, plan.scope.list, &moved).is_some() {
         return None;
     }
     let declared_once = proof
@@ -273,15 +303,90 @@ fn proven(source: &Program<'_>, plan: &Plan<'_, '_>) -> Option<Vec<usize>> {
         .keys()
         .chain(&proof.helpers)
         .all(|&symbol| scoping.symbol_redeclarations(symbol).is_empty());
-    if !declared_once || !read_as_members(&scoping, plan.scope.list, &moved, &proof.helpers) {
+    if !declared_once || !read_as_members(scoping, plan.scope.list, &moved, &proof.helpers) {
         return None;
     }
-    let factories = plan
+    let closed: Vec<bool> = plan
         .layout
-        .factories
+        .all()
+        .map(|factory| factory_closed(&proof, factory))
+        .collect();
+    if closed.contains(&false) {
+        let closed = kept_users(scoping, plan, closed);
+        if !closed.contains(&true) {
+            return None;
+        }
+        return Some(Round::Keep(closed));
+    }
+    entry_proven(&proof, plan, &moved).then_some(Round::Proven(moved))
+}
+
+fn kept_users(scoping: &Scoping, plan: &Plan<'_, '_>, mut closed: Vec<bool>) -> Vec<bool> {
+    let all: Vec<&FactoryDecl<'_, '_>> = plan.layout.all().collect();
+    let owners: FxHashMap<ScopeId, usize> = all
         .iter()
-        .all(|factory| factory_closed(&proof, factory));
-    (factories && entry_proven(&proof, plan, &moved)).then_some(moved)
+        .enumerate()
+        .filter_map(|(index, factory)| Some((factory.scope.get()?, index)))
+        .collect();
+    let mut users: Vec<Vec<usize>> = vec![Vec::new(); all.len()];
+    for (index, factory) in all.iter().enumerate() {
+        let Some(symbol) = factory.binding.and_then(|binding| binding.symbol_id.get()) else {
+            continue;
+        };
+        for reference in scoping.get_resolved_references(symbol) {
+            let user = scoping
+                .scope_ancestors(reference.scope_id())
+                .find_map(|scope| owners.get(&scope).copied());
+            users[index].extend(user.filter(|&user| user != index));
+        }
+    }
+    let mut pending: Vec<usize> = (0..all.len()).filter(|&index| !closed[index]).collect();
+    while let Some(kept) = pending.pop() {
+        for &user in &users[kept] {
+            if closed[user] {
+                closed[user] = false;
+                pending.push(user);
+            }
+        }
+    }
+    closed
+}
+
+fn retain<T>(items: &mut Vec<T>, keep: &[bool]) {
+    let mut at = 0;
+    items.retain(|_| {
+        at += 1;
+        keep[at - 1]
+    });
+}
+
+fn proven(source: &Program<'_>, plan: &mut Plan<'_, '_>) -> Option<Vec<usize>> {
+    if plan.layout.unsound {
+        return None;
+    }
+    let scoping = build_scoping(source).scoping;
+    if !helpers_unchanged(&scoping, &plan.layout) {
+        return None;
+    }
+    loop {
+        match round(&scoping, plan)? {
+            Round::Proven(moved) => return Some(moved),
+            Round::Keep(closed) => {
+                let (declared, inline) = closed.split_at(plan.layout.factories.len());
+                retain(&mut plan.layout.factories, declared);
+                retain(&mut plan.layout.inline, inline);
+            }
+        }
+    }
+}
+
+fn taken_only(plan: &mut Plan<'_, '_>, bodies: &Bodies<'_>) {
+    let Bodies::Taken(pool) = bodies else {
+        return;
+    };
+    let taken = |factory: &FactoryDecl<'_, '_>| pool.contains_key(&body_key(factory.function.body));
+    plan.layout.factories.retain(taken);
+    plan.layout.inline.retain(taken);
 }
 
 pub fn detect_with<'k, 'a>(
@@ -290,16 +395,27 @@ pub fn detect_with<'k, 'a>(
     frame: &Frame<'k, 'a>,
     bodies: &mut Bodies<'a>,
 ) -> Option<Bundle<'a>> {
-    let plan = found(source, frame)?;
+    let plan = found(source, frame, false)?;
+    (plan.layout.kind == BundleKind::Esbuild).then_some(())?;
+    detect_plan(alloc, source, plan, bodies)
+}
+
+pub fn detect_plan<'k, 'a>(
+    alloc: &'a Allocator,
+    source: &'k Program<'a>,
+    mut plan: Plan<'k, 'a>,
+    bodies: &mut Bodies<'a>,
+) -> Option<Bundle<'a>> {
     let taken = matches!(bodies, Bodies::Taken(_));
     let proven_moved = if taken {
+        taken_only(&mut plan, bodies);
         None
     } else {
-        Some(proven(source, &plan)?)
+        Some(proven(source, &mut plan)?)
     };
     let programs = factory_programs(alloc, source, &plan, bodies);
     if matches!(bodies, Bodies::Planned(_)) {
-        return Some(Bundle::new(BundleKind::Esbuild, None));
+        return Some(Bundle::new(plan.layout.kind, None));
     }
     let (candidates, wanted) = helper_names(&plan);
     let scanned = scan(&plan, &wanted, &programs);
