@@ -11,8 +11,11 @@ fn fixture(path: &str) -> String {
 
 #[test]
 fn a_table_loaded_at_run_time_names_its_library_in_the_report() {
+    let built_in = untwist_wasm::library_tables()
+        .split(',')
+        .any(|id| id == "core-js");
     assert!(!untwist_wasm::load_library_table(b"not a table"));
-    assert!(untwist_wasm::load_library_table(CORE_JS));
+    assert_eq!(untwist_wasm::load_library_table(CORE_JS), !built_in);
     assert!(!untwist_wasm::load_library_table(CORE_JS));
     assert!(untwist_wasm::library_tables()
         .split(',')

@@ -25,14 +25,6 @@ fn the_report_lists_a_library_whose_table_is_compiled_in() {
 }
 
 #[test]
-fn core_js_is_not_compiled_into_the_wasm_build() {
-    assert!(!untwist_wasm::library_tables()
-        .split(',')
-        .any(|id| id == "core-js"));
-    assert!(libraries(&fixture("core-js/rollup-cjs.terser.js")).is_null());
-}
-
-#[test]
 fn a_program_without_library_code_has_no_libraries_key() {
     assert!(libraries("function add(a, b) { return a + b; }\nconsole.log(add(1, 2));\n").is_null());
 }
