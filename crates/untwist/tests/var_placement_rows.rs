@@ -79,10 +79,10 @@ fn a_trailing_var_assigned_in_two_branches_moves_to_the_top_in_both_lanes() {
 }
 
 #[test]
-fn a_trailing_var_captured_in_a_loop_stays_a_var_at_the_top() {
+fn a_trailing_var_captured_in_a_loop_moves_to_the_top() {
     let source = row("closure-in-for-loop");
     let code = transformed(&Options::default(), &source);
-    let declared = code.find("var a;").expect(&code);
+    let declared = code.find("let a;").expect(&code);
     let written = code.find("a = i;").expect(&code);
     assert!(declared < written, "{code}");
 }

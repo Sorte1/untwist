@@ -171,7 +171,12 @@ impl Pipeline {
             return Some(sem);
         }
         let started = self.begin("lexical");
-        let mut group = PassGroup::from_ctors(&lexical_ctors(), site.pass_opts.clone());
+        let opts = PassOptions {
+            keep_captured_vars: self.options.unpack
+                && untwist_unpack::holds_a_bundle_with(site.program, self.unpack_options()),
+            ..site.pass_opts.clone()
+        };
+        let mut group = PassGroup::from_ctors(&lexical_ctors(), opts);
         let renames = self.options.rename != RenameMode::None || self.names_wanted(site);
         let (kept, report) = run_last_traversal(site.alloc, site.program, sem, &mut group, renames);
         site.record("lexical", started, report);
