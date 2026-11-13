@@ -53,24 +53,23 @@ async function timeline(page: Page): Promise<Record<string, string>> {
   return Object.fromEntries(labels.map((label, at) => [label, values[at] ?? '']));
 }
 
-test('a run names each stage as the worker reaches it', async ({ page }) => {
+test('a run names the stages as the worker reaches them, in order, and times every phase', async ({ page }) => {
   await recordStages(page);
   await openApp(page, '#unsafe=1');
   await pasteFile(page, readRepo(OBFUSCATED));
   await expect(page.locator('#status-label')).toHaveText('Done', { timeout: 60_000 });
   const { stages } = await seen(page);
-  const first = (name: string) => stages.indexOf(`Stage: ${name}`);
-  for (const name of ['parse', 'prepare', 'deobfuscate', 'unminify', 'jsx', 'cleanup', 'print', 'unpack']) {
-    expect(first(name), `${name} in ${stages.join(' | ')}`).toBeGreaterThanOrEqual(0);
-  }
   expect(stages[0]).toBe('Starting the engine…');
-  expect(first('parse')).toBeLessThan(first('prepare'));
-  expect(first('prepare')).toBeLessThan(first('deobfuscate'));
-  expect(first('deobfuscate')).toBeLessThan(first('unminify'));
-  expect(first('cleanup')).toBeLessThan(first('unpack'));
-  expect(stages).toContain('Stage: deobfuscate · round 2');
-  expect(stages).not.toContain('Stage: library');
+  const order = ['parse', 'prepare', 'deobfuscate', 'unminify', 'jsx', 'cleanup', 'print', 'unpack'];
+  const shown = order.map((name) => stages.findIndex((line) => line.startsWith(`Stage: ${name}`))).filter((at) => at !== -1);
+  expect([...shown].sort((a, b) => a - b), stages.join(' | ')).toEqual(shown);
+  expect(stages.at(-1)).toBe('Loading the output into the editor…');
+  expect(stages.some((line) => line.startsWith('Stage: library'))).toBe(false);
   await expect(page.locator('#running')).toBeHidden();
+  const rows = await timeline(page);
+  for (const label of ['Start worker', 'Parse', 'Prepare', 'Deobfuscate', 'Unminify', 'JSX', 'Clean up', 'Print', 'Unpack', 'Transfer output', 'Editor']) {
+    expect(rows[label], `${label} in ${JSON.stringify(rows)}`).toMatch(/^\d+ ms$|^\d+\.\d\d s$/);
+  }
 });
 
 test('the steps follow the settings of the run, carry their time, and end with every phase reached', async ({ page }) => {
@@ -108,7 +107,7 @@ test('a long run shows its stage, the time in it and an open-ended bar while it 
   expect(await bar.getAttribute('aria-valuenow')).toBeNull();
   if (SCREENSHOTS !== undefined) {
     await page.waitForTimeout(1500);
-    await page.screenshot({ path: `${SCREENSHOTS}/progress-${test.info().project.name}.png` });
+    await page.screenshot({ path: `${SCREENSHOTS}/progress-${test.info().project.name}.png`, caret: 'initial' });
   }
   const asked = Date.now();
   await page.locator('#cancel').click();

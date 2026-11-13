@@ -52,7 +52,7 @@ function statusStage(progress: RunProgress): string {
   if (current === undefined) {
     return '';
   }
-  return `${current.label} · ${durationLabel(progress.stageMs)}`;
+  return `${current.label} · ${durationLabel(current.ms)}`;
 }
 
 export function mountRunProgress(store: Store<AppState>): void {

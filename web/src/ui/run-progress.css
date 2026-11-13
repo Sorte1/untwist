@@ -61,9 +61,9 @@
 
 .run-steps {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px 22px;
-  width: min(440px, calc(100% - 32px));
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  width: min(300px, calc(100% - 32px));
   margin: 6px 0 0;
   padding: 0;
   list-style: none;
@@ -102,7 +102,7 @@
 
 .run-bar {
   position: relative;
-  width: min(440px, calc(100% - 32px));
+  width: min(300px, calc(100% - 32px));
   height: 3px;
   overflow: hidden;
   border-radius: 2px;
@@ -135,12 +135,6 @@
   }
 }
 
-@media (max-width: 480px) {
-  .run-steps {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 .status-stage {
   margin-left: 6px;
   color: var(--muted);
@@ -149,4 +143,10 @@
 
 .status-stage:empty {
   display: none;
+}
+
+.running {
+  overflow-y: auto;
+  justify-content: safe center;
+  padding: 12px 0;
 }

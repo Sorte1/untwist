@@ -13,7 +13,7 @@ function masked(stages: Row[]): Row[] {
 
 function cliStages(fixture: string): Row[] {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  const json = execFileSync(bin, ['--report', 'json', repoPath(fixture)], {
+  const json = execFileSync(bin, ['--report', 'json', '--disable', 'library-names,library-rename', repoPath(fixture)], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },

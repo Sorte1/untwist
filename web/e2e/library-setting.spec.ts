@@ -93,7 +93,7 @@ test('the progress panel names the table it fetches with its size, and cancel st
   await expect(page.locator('#run-steps [aria-current="step"]')).toHaveAttribute('data-phase', 'tables');
   await expect(page.locator('#status-stage')).toHaveText(/^Library tables · /);
   if (SCREENSHOTS !== undefined) {
-    await page.screenshot({ path: `${SCREENSHOTS}/progress-tables-${test.info().project.name}.png` });
+    await page.screenshot({ path: `${SCREENSHOTS}/progress-tables-${test.info().project.name}.png`, caret: 'initial' });
   }
   const asked = Date.now();
   await page.locator('#cancel').click();
