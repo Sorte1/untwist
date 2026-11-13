@@ -20,6 +20,14 @@ fn rows(text: &str) -> Vec<(String, String)> {
 fn unsafe_options() -> Options {
     Options {
         unsafe_transforms: true,
+        disabled_passes: vec!["inline-layers"],
+        ..Options::default()
+    }
+}
+
+fn safe_options() -> Options {
+    Options {
+        disabled_passes: vec!["inline-layers"],
         ..Options::default()
     }
 }
@@ -39,7 +47,7 @@ fn a_var_declared_after_its_uses_is_placed_only_as_node_runs_it() {
     };
     let programs = rows(ROWS);
     assert!(programs.len() >= 70, "found {} rows", programs.len());
-    let safe = Options::default();
+    let safe = safe_options();
     let unsafe_transforms = unsafe_options();
     let run_safe = |source: &str| transformed(&safe, source);
     let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
