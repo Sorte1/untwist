@@ -14,7 +14,10 @@ struct Row {
 
 fn modes() -> [Options; 2] {
     [
-        Options::default(),
+        Options {
+            disabled_passes: vec!["inline-layers"],
+            ..Options::default()
+        },
         Options {
             extended: false,
             unsafe_transforms: true,

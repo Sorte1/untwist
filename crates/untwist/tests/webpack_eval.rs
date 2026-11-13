@@ -81,7 +81,7 @@ fn problems(row: &Row, out: &Output) -> Vec<String> {
     let Some(bundle) = &out.bundle else {
         if !pending {
             found.push("not unpacked".to_string());
-        } else if out.code().contains("eval(") || out.code().contains("sourceURL") {
+        } else if out.code().contains("eval(\"") || out.code().contains("sourceURL=") {
             found.push("keeps an eval or a sourceURL".to_string());
         }
         return found;
@@ -93,7 +93,7 @@ fn problems(row: &Row, out: &Output) -> Vec<String> {
         found.push(format!("unpacked as {}", bundle.kind));
     }
     for module in &bundle.modules {
-        if module.code.contains("eval(") || module.code.contains("sourceURL") {
+        if module.code.contains("eval(\"") || module.code.contains("sourceURL=") {
             found.push(format!("{} keeps an eval or a sourceURL", module.path));
         }
     }

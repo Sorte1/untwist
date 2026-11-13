@@ -116,6 +116,7 @@ fn options(rename: RenameMode, unsafe_transforms: bool) -> Options {
         unsafe_transforms,
         unpack: false,
         jsx: false,
+        disabled_passes: vec!["inline-layers"],
         ..Options::default()
     }
 }

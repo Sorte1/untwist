@@ -55,6 +55,11 @@
     "unsafe": false
   },
   {
+    "name": "inline-layers",
+    "stage": "deobfuscate",
+    "unsafe": false
+  },
+  {
     "name": "default-parameters",
     "stage": "transpile",
     "unsafe": false

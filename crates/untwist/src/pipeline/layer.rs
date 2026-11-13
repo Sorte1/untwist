@@ -280,7 +280,7 @@ impl Pipeline {
         {
             return None;
         }
-        let started = self.begin(INLINE_LAYER_PASS);
+        let started = Instant::now();
         let index = layering.peeled().saturating_add(1);
         let admits = |text: &str| layering.readmit(text).map(|_| ());
         let cx = InlineCx {
@@ -310,6 +310,7 @@ impl Pipeline {
                 return None;
             }
         };
+        self.begin(INLINE_LAYER_PASS);
         *site.heap_peak = (*site.heap_peak).max(heap);
         let message = inlined_message(index, form.name(), (source.len(), text.len()), sites);
         site.notes
