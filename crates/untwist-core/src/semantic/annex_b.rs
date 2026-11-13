@@ -7,9 +7,10 @@ use oxc_semantic::Scoping;
 use oxc_syntax::node::NodeId;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::cell::OnceCell;
 
-use super::{is_constant_binding, Strictness};
+use super::{is_constant_binding, is_constant_binding_by, Strictness};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AnnexBFunction {
@@ -70,7 +71,7 @@ fn is_function_declaration(scoping: &Scoping, symbol: SymbolId) -> bool {
     flags.contains(SymbolFlags::Function) && !flags.contains(SymbolFlags::FunctionExpression)
 }
 
-fn scope_owned_by(scoping: &Scoping, node: NodeId) -> Option<ScopeId> {
+fn bisected_owner(scoping: &Scoping, node: NodeId) -> Option<ScopeId> {
     let count = scoping.scopes_len();
     let (mut low, mut high) = (0, count);
     while low < high {
@@ -81,17 +82,69 @@ fn scope_owned_by(scoping: &Scoping, node: NodeId) -> Option<ScopeId> {
             high = middle;
         }
     }
-    let found = (low < count)
+    (low < count)
         .then(|| ScopeId::new(low))
-        .filter(|scope| scoping.get_node_id(*scope) == node);
-    found.or_else(|| {
-        (0..count)
+        .filter(|scope| scoping.get_node_id(*scope) == node)
+}
+
+fn scope_owned_by(scoping: &Scoping, node: NodeId) -> Option<ScopeId> {
+    bisected_owner(scoping, node).or_else(|| {
+        (0..scoping.scopes_len())
             .map(ScopeId::new)
             .find(|scope| scoping.get_node_id(*scope) == node)
     })
 }
 
+pub struct ScopeOwners<'s> {
+    scoping: &'s Scoping,
+    index: OnceCell<FxHashMap<NodeId, ScopeId>>,
+}
+
+impl<'s> ScopeOwners<'s> {
+    pub fn new(scoping: &'s Scoping) -> Self {
+        Self {
+            scoping,
+            index: OnceCell::new(),
+        }
+    }
+
+    fn owner(&self, node: NodeId) -> Option<ScopeId> {
+        bisected_owner(self.scoping, node).or_else(|| {
+            self.index
+                .get_or_init(|| first_owners(self.scoping))
+                .get(&node)
+                .copied()
+        })
+    }
+
+    pub fn declaring_block(&self, symbol: SymbolId) -> Option<ScopeId> {
+        declaring_block_by(self.scoping, symbol, |node| self.owner(node))
+    }
+
+    pub fn is_constant_binding(&self, symbol: SymbolId) -> bool {
+        is_constant_binding_by(self.scoping, symbol, |symbol| {
+            is_hoisted_by(self.scoping, symbol, |symbol| self.declaring_block(symbol))
+        })
+    }
+}
+
+fn first_owners(scoping: &Scoping) -> FxHashMap<NodeId, ScopeId> {
+    let mut owners = FxHashMap::default();
+    for scope in (0..scoping.scopes_len()).map(ScopeId::new) {
+        owners.entry(scoping.get_node_id(scope)).or_insert(scope);
+    }
+    owners
+}
+
 pub fn declaring_block(scoping: &Scoping, symbol: SymbolId) -> Option<ScopeId> {
+    declaring_block_by(scoping, symbol, |node| scope_owned_by(scoping, node))
+}
+
+fn declaring_block_by(
+    scoping: &Scoping,
+    symbol: SymbolId,
+    owned_by: impl Fn(NodeId) -> Option<ScopeId>,
+) -> Option<ScopeId> {
     if !is_function_declaration(scoping, symbol) {
         return None;
     }
@@ -99,16 +152,24 @@ pub fn declaring_block(scoping: &Scoping, symbol: SymbolId) -> Option<ScopeId> {
     if !scoping.scope_flags(home).is_var() {
         return Some(home);
     }
-    scope_owned_by(scoping, scoping.symbol_declaration(symbol))
+    owned_by(scoping.symbol_declaration(symbol))
         .and_then(|scope| scoping.scope_parent_id(scope))
         .filter(|parent| !scoping.scope_flags(*parent).is_var())
 }
 
 pub fn is_hoisted_block_function(scoping: &Scoping, symbol: SymbolId) -> bool {
+    is_hoisted_by(scoping, symbol, |symbol| declaring_block(scoping, symbol))
+}
+
+fn is_hoisted_by(
+    scoping: &Scoping,
+    symbol: SymbolId,
+    declaring: impl Fn(SymbolId) -> Option<ScopeId>,
+) -> bool {
     scoping
         .scope_flags(scoping.symbol_scope_id(symbol))
         .is_var()
-        && declaring_block(scoping, symbol).is_some()
+        && declaring(symbol).is_some()
 }
 
 pub fn block_function_symbols(scoping: &Scoping) -> FxHashSet<SymbolId> {
