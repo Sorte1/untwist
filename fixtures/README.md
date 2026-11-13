@@ -15,6 +15,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `jsx/` | `createElement` and `jsx()` call shapes | `cargo xtask diff-jsx`, `crates/untwist-jsx/tests/fixtures.rs` |
 | `layers/` | `eval`, `Function`, `atob` and p.a.c.k.e.r. layers, as classic scripts that print | `cargo xtask diff-layers`, `crates/untwist/tests/layers_*.rs` |
 | `obfuscated/` | javascript-obfuscator output from `tools/obfuscated/gen.mjs`; `MANIFEST` and `EXPECT` describe each file | `cargo xtask obf-matrix` |
+| `obfuscators/` | Output of obfuscators, encoders and minifiers outside the javascript-obfuscator matrices (Closure Compiler, JSFuck, aaencode, jjencode, js-confuser, js-virtualizer, terser and uglify property mangling, webpack's eval devtool, eval/Function loaders), from `tools/obfuscators/gen.mjs`; `MANIFEST` records each file's tool, options and the outcome per lane | `crates/untwist/tests/other_obfuscators.rs`, `node tools/obfuscators/check.mjs` |
 | `obfuscator-io/` | javascript-obfuscator 5.9.1 output over every free option, pairs of the high-impact options and the four presets, from `tools/obfuscated/matrix.mjs`; `MANIFEST`, `EXPECT`, `ORACLE` (webcrack's results) and `BASELINE` describe each file | `cargo xtask obf-options`, `xtask/tests/obf_options_drift.rs` |
 | `pure-calls/` | Programs that print, a pure helper called with literal arguments that `fold-pure-calls` folds, or a near miss it must leave alone | `crates/untwist/tests/pure_calls_behaviour.rs` |
 | `real-shapes/` | Obfuscator and webpack machinery reduced from real bundles by `tools/real-shapes/reduce.mjs` | `cargo xtask obf-matrix` |
@@ -28,7 +29,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `untranspile/` | TypeScript, swc, Babel, esbuild and terser output from `tools/untranspile/gen.mjs` (`params/` from `tools/untranspile-params/gen.mjs`), as programs that print | `cargo xtask diff-behaviour`, `crates/untwist-unminify/tests/` |
 
 Third-party inputs keep their licence beside them: `LICENSE-reference`,
-`LICENSE-javascript-obfuscator` and `unpack-bundlers/licenses/`.
+`LICENSE-javascript-obfuscator`, `obfuscators/licenses/` and `unpack-bundlers/licenses/`.
 
 Not every sample in `reference/deobfuscate/` comes from the reference deobfuscator.
 `obfuscator.io-site-memo-reset.js` is the obfuscator.io website's output for `console.log("")`.
@@ -41,6 +42,6 @@ javascript-obfuscator 5 emits. Their `.snap` files hold the program before obfus
 
 Put the file in the folder whose test should pick it up, name it after the shape it covers, and make
 it print what it computes so node can check it. Generated folders (`eval/`, `corpus-npm/`,
-`obfuscated/`, `obfuscator-io/`, `unpack-bundlers/`, `untranspile/`) are rewritten by their generator, so change the
+`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `unpack-bundlers/`, `untranspile/`) are rewritten by their generator, so change the
 generator instead. Run the folder's test or differential; add an allowlist entry only for a
 divergence documented in `docs/known-divergences/`.

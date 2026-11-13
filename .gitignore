@@ -18,6 +18,7 @@ web/src/engine/pkg
 /game_old.js
 /.wrangler/
 /tools/obfuscated/node_modules/
+/tools/obfuscators/node_modules/
 /tools/webcrack/node_modules/
 
 /target
