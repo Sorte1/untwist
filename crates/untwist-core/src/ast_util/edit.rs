@@ -272,6 +272,14 @@ impl<'a> ExprEdits<'a> {
         self.edits.remove(&span).is_some()
     }
 
+    pub fn take(&mut self, span: Span) -> Option<Expression<'a>> {
+        self.edits.remove(&span)
+    }
+
+    pub fn put_back(&mut self, span: Span, expr: Expression<'a>) {
+        self.edits.insert(span, expr);
+    }
+
     pub fn apply(
         self,
         program: &mut Program<'a>,
