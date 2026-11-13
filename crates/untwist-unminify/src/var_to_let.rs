@@ -14,11 +14,15 @@ use untwist_core::pass::{
 };
 use untwist_core::semantic::{block_function_symbols, is_constant_binding, scope_hazard};
 
+use crate::var_placement;
+
 pub const PASS: &str = "var-to-let";
 
 pub const SHAPE_STATEMENT: &str = "statement";
 pub const SHAPE_FOR_HEAD: &str = "for-head";
 pub const SHAPE_FOR_IN_OF_HEAD: &str = "for-in-of-head";
+pub const PLACED_AT_FIRST_WRITE: &str = "placed-at-first-write";
+pub const HOISTED_TO_TOP: &str = "hoisted-to-top";
 
 const REFUSED_NAMES: [&str; 5] = ["let", "yield", "await", "arguments", "eval"];
 const SMALL_NAME_SET: usize = 8;
@@ -69,6 +73,7 @@ pub struct VarToLet {
     frozen: Frozen,
     active: bool,
     pending: Vec<u64>,
+    bare: Vec<u64>,
     class_scopes: FxHashSet<ScopeId>,
     switch_scopes: FxHashSet<ScopeId>,
     block_functions: Option<FxHashSet<u64>>,
@@ -97,6 +102,31 @@ fn note_shape(site: Site) {
 
 #[cfg(not(feature = "test-hooks"))]
 fn note_shape(_site: Site) {}
+
+#[cfg(feature = "test-hooks")]
+fn note_placement(shape: &'static str) {
+    crate::untranspile::shapes::note(PASS, shape);
+}
+
+#[cfg(not(feature = "test-hooks"))]
+fn note_placement(_shape: &'static str) {}
+
+fn is_function_scope(scoping: &Scoping, scope: ScopeId) -> bool {
+    let flags = scoping.scope_flags(scope);
+    flags.intersects(ScopeFlags::Function | ScopeFlags::ClassStaticBlock) && !flags.is_top()
+}
+
+fn bare_var_scope(scoping: &Scoping, declaration: &VariableDeclaration<'_>) -> Option<ScopeId> {
+    declaration.declarations.iter().find_map(|declarator| {
+        let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+            return None;
+        };
+        if declarator.init.is_some() {
+            return None;
+        }
+        Some(scoping.symbol_scope_id(id.symbol_id.get()?))
+    })
+}
 
 type Bindings<'a> = Vec<(SymbolId, Ident<'a>)>;
 
@@ -474,6 +504,7 @@ impl VarToLet {
         self.switch_scopes.clear();
         self.block_functions = None;
         self.pending.clear();
+        self.bare.clear();
     }
 
     fn facts<'f>(&'f mut self, scoping: &'f Scoping) -> Facts<'f> {
@@ -511,6 +542,30 @@ impl VarToLet {
             }
         }
         converted
+    }
+
+    fn place<'a>(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) -> bool {
+        let scope = cx.current_scope_id();
+        if !is_function_scope(cx.scoping(), scope) {
+            return false;
+        }
+        let facts = self.facts(cx.scoping());
+        let plan = var_placement::plan(facts.scoping, stmts, scope, |name| {
+            REFUSED_NAMES.contains(&name) || facts.block_functions.contains(&name_hash(name))
+        });
+        if plan.is_empty() {
+            return false;
+        }
+        for _ in &plan.converted {
+            note_placement(PLACED_AT_FIRST_WRITE);
+        }
+        for _ in &plan.hoisted {
+            note_placement(HOISTED_TO_TOP);
+        }
+        let hoisted = !plan.hoisted.is_empty();
+        let changed = var_placement::apply(stmts, &plan, cx);
+        cx.changed_by(changed);
+        hoisted
     }
 
     fn convert_head<'a>(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
@@ -577,6 +632,7 @@ impl<'a> Pass<'a> for VarToLet {
         self.active = scope_hazard(scoping).is_none();
         if self.active {
             self.pending.resize(scoping.scopes_len().div_ceil(64), 0);
+            self.bare.resize(scoping.scopes_len().div_ceil(64), 0);
         }
     }
 
@@ -620,6 +676,9 @@ impl<'a> Pass<'a> for VarToLet {
     ) {
         if self.active && is_plain_var(node) {
             set_bit(&mut self.pending, cx.current_scope_id().index());
+            if let Some(scope) = bare_var_scope(cx.scoping(), node) {
+                set_bit(&mut self.bare, scope.index());
+            }
         }
     }
 
@@ -630,13 +689,20 @@ impl<'a> Pass<'a> for VarToLet {
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
-        if !self.active || !take_bit(&mut self.pending, cx.current_scope_id().index()) {
+        if !self.active {
             return;
         }
-        if self.frozen.is_open() {
+        let scope = cx.current_scope_id();
+        let pending = take_bit(&mut self.pending, scope.index());
+        let bare = take_bit(&mut self.bare, scope.index());
+        if (!pending && !bare) || self.frozen.is_open() {
             return;
         }
-        if !self.switch_scopes.is_empty() && self.switch_scopes.contains(&cx.current_scope_id()) {
+        let hoisted = bare && self.place(stmts, cx);
+        if !pending && !hoisted {
+            return;
+        }
+        if !self.switch_scopes.is_empty() && self.switch_scopes.contains(&scope) {
             return;
         }
         let converted = self.convert_statements(stmts, cx);
