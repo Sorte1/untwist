@@ -161,7 +161,7 @@ mod tests {
             WASM_ATTEMPT_NESTING,
             WASM_V8_ROOM / WASM_V8_WORST_UNIT_BYTES - C_P1
         );
-        assert!(WASM_ATTEMPT_NESTING > WASM_NESTING);
+        const { assert!(WASM_ATTEMPT_NESTING > WASM_NESTING) };
         assert!(
             stack_units(
                 WASM_SHADOW_STACK_BYTES - WASM_SHADOW_ENTRY_BYTES,
