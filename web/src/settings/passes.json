@@ -275,6 +275,11 @@
     "unsafe": false
   },
   {
+    "name": "name-commonjs-wrappers",
+    "stage": "rename",
+    "unsafe": false
+  },
+  {
     "name": "rename-simple",
     "stage": "rename",
     "unsafe": false

@@ -172,7 +172,7 @@ impl Pipeline {
         }
         let started = self.begin("lexical");
         let mut group = PassGroup::from_ctors(&lexical_ctors(), site.pass_opts.clone());
-        let renames = self.options.rename != RenameMode::None;
+        let renames = self.options.rename != RenameMode::None || self.names_wanted(site);
         let (kept, report) = run_last_traversal(site.alloc, site.program, sem, &mut group, renames);
         site.record("lexical", started, report);
         kept
@@ -219,6 +219,7 @@ impl Pipeline {
         sem: Semantics,
         reservation: Reservation<'_>,
     ) -> Semantics {
+        let sem = self.names_stage(site, sem);
         if self.options.rename == RenameMode::None {
             return sem;
         }
@@ -246,6 +247,25 @@ impl Pipeline {
         let sem = self.stage_group("rename", passes, site, (sem, opts.clone()));
         let shorthand = vec![shorthand::boxed()];
         self.stage_group("rename-shorthand", shorthand, site, (sem, opts))
+    }
+
+    fn names_wanted(&self, site: &StageCx<'_, '_>) -> bool {
+        !site.pass_opts.rule_disabled(untwist_rename::commonjs::PASS)
+            && untwist_rename::commonjs::may_hold_wrappers(site.program)
+    }
+
+    fn names_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {
+        if !self.names_wanted(site) {
+            return sem;
+        }
+        let (keep_script_globals, keep_script_lexicals) = keeps_script_globals(site, &sem);
+        let opts = PassOptions {
+            keep_script_globals,
+            keep_script_lexicals,
+            ..site.pass_opts.clone()
+        };
+        let passes = vec![untwist_rename::commonjs::boxed()];
+        self.stage_group("rename", passes, site, (sem, opts))
     }
 
     fn protections_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {

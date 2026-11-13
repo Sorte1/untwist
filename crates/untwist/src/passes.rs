@@ -69,6 +69,7 @@ pub const PASSES: &[PassInfo] = &[
     pass("var-to-let", "lexical", false),
     pass("function-to-arrow", "lexical", false),
     pass("merge-member-declarations", "lexical", false),
+    pass("name-commonjs-wrappers", "rename", false),
     pass("rename-simple", "rename", false),
     pass("rename-smart", "rename", false),
     pass("rename-unique", "rename", false),

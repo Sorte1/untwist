@@ -4,7 +4,8 @@ use untwist::{all_pass_ctors, pass_named, PassInfo, PASSES};
 use untwist_deobfuscate::unstamp::UNSTAMP_REMAINING_PASS;
 use untwist_unminify::untranspile_ctors;
 
-const RENAME_PASSES: [&str; 5] = [
+const RENAME_PASSES: [&str; 6] = [
+    "name-commonjs-wrappers",
     "rename-simple",
     "rename-smart",
     "rename-unique",

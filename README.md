@@ -47,6 +47,12 @@ engine as WebAssembly, and your code never leaves the page.
   setter values, export aliases, `is*` names for functions that return booleans, PascalCase for functions only used
   with `new`, and a parameter's name when every call passes the same named value; a name is reused in sibling scopes
   and numbered only where it would clash, and human-written names are left alone).
+- **CommonJS wrappers.** In every mode, the lazy `requireX()` wrappers that `@rollup/plugin-commonjs` writes
+  (`if (hasRequiredX) return x; hasRequiredX = 1; ...`), terser's inlined forms of them, rolldown's
+  `__commonJSMin` factories and the plugin's interop helpers (`commonjsGlobal`, `getDefaultExportFromCjs`,
+  `getAugmentedNamespace`, `commonjsRequire`) get their names back when minification or obfuscation took them:
+  `requireModule3`, `hasRequiredModule3`, `module3`, or the module's own name when one survives. Only names change;
+  every wrapper still runs on its first call. `--disable name-commonjs-wrappers` turns it off.
 - **JSX.** Rebuilds JSX from `React.createElement` and the automatic `jsx`/`jsxs` runtime.
 
 ## Install
