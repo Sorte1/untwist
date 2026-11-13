@@ -37,7 +37,8 @@ fn untwist(source: &str, options: &Options) -> Ran {
         notes: output
             .notes
             .iter()
-            .map(|note| note.message.clone())
+            .filter(|note| note.pass == "modern")
+            .map(|note| format!("modern: {}", note.message))
             .collect(),
     }
 }
