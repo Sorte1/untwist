@@ -174,6 +174,17 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   as the Babel loop; init-free declarations of `e_1` and `_a` in the same statement list go.
   The same assumptions hold; for the second one, `__values` also walks any object with a
   numeric `length` that has no `Symbol.iterator`, which the loop rejects with a `TypeError`.
+- **SWC's and Babel 6's inline iterator protocol becomes a `for … of` loop too (`--unsafe`
+  only).** `var normal = true, failed = false, error = undefined; try { for (var it =
+  x[Symbol.iterator](), step; !(normal = (step = it.next()).done); normal = true) { … } }
+  catch (err) { failed = true; error = err; } finally { try { if (!normal && it.return != null)
+  it.return(); } finally { if (failed) throw error; } }` (Babel 6 tests `it.return` for
+  truthiness), with the three flags declared with those values in the same statement list and
+  every name used only there, takes the same heads as the Babel loop; the flag declarations
+  go. It needs no helper, but runs only once the program's built-ins are known (another helper
+  was identified). The protocol assumption covers its differences (`next` read per step,
+  `return()`'s result ignored, `return()` called after a throwing `value` read, Babel 6
+  skipping a falsy non-callable `return`).
 - **Babel's loose helper stays.** `_createForOfIteratorHelperLoose` never calls `return()`, so
   a loop left early does not close its iterator; a native loop does.
 
