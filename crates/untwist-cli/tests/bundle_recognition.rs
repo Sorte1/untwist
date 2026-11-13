@@ -90,6 +90,27 @@ const CELLS: &[Cell] = &[
         lanes: &LANES,
     },
     Cell {
+        app: "base",
+        name: "esbuild0.28-esm-split",
+        family: "esbuild",
+        modules: 25,
+        lanes: &LANES,
+    },
+    Cell {
+        app: "mini",
+        name: "esbuild0.14-esm-split",
+        family: "esbuild",
+        modules: 2,
+        lanes: &LANES,
+    },
+    Cell {
+        app: "base",
+        name: "bun1.2-esm-splitting",
+        family: "esbuild",
+        modules: 25,
+        lanes: &LANES,
+    },
+    Cell {
         app: "corejs",
         name: "parcel-nohoist",
         family: "parcel",
@@ -124,6 +145,19 @@ fn expected(cell: &Cell) -> String {
 fn listing(out: &Path) -> serde_json::Value {
     let text = std::fs::read_to_string(out.join("bundle.json")).expect("a bundle listing");
     serde_json::from_str(&text).unwrap()
+}
+
+fn entry_path(listing: &serde_json::Value) -> String {
+    listing["modules"]
+        .as_array()
+        .and_then(|modules| {
+            modules
+                .iter()
+                .find(|module| module["isEntry"].as_bool() == Some(true))
+        })
+        .and_then(|module| module["path"].as_str())
+        .unwrap_or("index.js")
+        .to_string()
 }
 
 fn written(cell: &Cell, flags: &[&str]) -> (tempfile::TempDir, PathBuf) {
@@ -175,7 +209,8 @@ fn the_written_tree_prints_what_the_bundle_printed() {
     for cell in CELLS {
         for flags in cell.lanes {
             let (_dir, out) = written(cell, flags);
-            let ran = node::run(&node, &out.join("index.js"))
+            let entry = entry_path(&listing(&out));
+            let ran = node::run(&node, &out.join(entry))
                 .unwrap()
                 .expect("node finished in time");
             let exit = ran

@@ -2,6 +2,7 @@ pub mod build;
 pub mod check;
 pub mod late;
 pub mod layout;
+pub mod links;
 pub mod live;
 pub mod mentions;
 pub mod notes;
@@ -22,21 +23,31 @@ use crate::esbuild::build::{
     candidates, factory_programs, has_use_strict, scan, wanted_helpers, Plan,
 };
 use crate::esbuild::check::{entry_sound, factory_closed, Proof};
-use crate::esbuild::layout::{layout, scopes, FactoryDecl, Host, Layout, Scope, INLINE_PREFIX};
+use crate::esbuild::layout::{
+    layout, layout_linked, scopes, FactoryDecl, Host, Layout, Scope, INLINE_PREFIX,
+};
 use crate::esbuild::live::read_as_members;
 use crate::esbuild::mentions::scoped_closure;
+use crate::esbuild::shape::CallForm;
 use crate::frame::Frame;
+use crate::links::Links;
 use crate::model::{body_key, Bodies, Bundle, BundleKind};
 use crate::rolldown;
 use crate::runtime::{first_unclosed_helper, helper_symbols};
 
 pub fn probe(frame: &Frame<'_, '_>) -> bool {
-    scopes(frame, &[]).any(|scope| layout(scope.list).is_some())
+    scopes(frame, &[]).any(|scope| layout(scope.list).is_some()) || links::may_link(frame.top)
 }
 
-fn found<'k, 'a>(source: &'k Program<'a>, frame: &Frame<'k, 'a>) -> Option<Plan<'k, 'a>> {
-    let (scope, mut layout) = scopes(frame, &source.directives)
-        .find_map(|scope| layout(scope.list).map(|layout| (scope, layout)))?;
+fn found<'k, 'a>(
+    source: &'k Program<'a>,
+    frame: &Frame<'k, 'a>,
+    view: Option<&FxHashMap<String, CallForm>>,
+) -> Option<Plan<'k, 'a>> {
+    let (scope, mut layout) = scopes(frame, &source.directives).find_map(|scope| {
+        let view = view.filter(|_| scope.host == Host::Top);
+        layout_linked(scope.list, view).map(|layout| (scope, layout))
+    })?;
     if source.source_text.contains(INLINE_PREFIX) {
         layout.inline.clear();
     }
@@ -402,8 +413,10 @@ pub fn detect_with<'k, 'a>(
     source: &'k Program<'a>,
     frame: &Frame<'k, 'a>,
     bodies: &mut Bodies<'a>,
+    links: &Links,
 ) -> Option<Bundle<'a>> {
-    let mut plan = found(source, frame)?;
+    let view = links.esbuild.as_ref().map(|view| &view.helpers);
+    let mut plan = found(source, frame, view)?;
     if plan.layout.kind == BundleKind::Esbuild && rolldown::marked(source) {
         plan.layout.kind = BundleKind::Rolldown;
     }

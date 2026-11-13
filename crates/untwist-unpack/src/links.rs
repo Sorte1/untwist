@@ -1,10 +1,12 @@
 use oxc_ast::ast::Program;
 
+use crate::esbuild::links::EsbuildView;
 use crate::parcel::links::ParcelView;
 use crate::turbopack::links::{Group, TurboView, NAMESPACE};
 
 #[derive(Default)]
 pub struct Links {
+    pub esbuild: Option<EsbuildView>,
     pub parcel: Option<ParcelView>,
     pub turbopack: Option<TurboView>,
 }
@@ -28,7 +30,7 @@ impl Groups {
     }
 }
 
-pub fn groups(programs: &[Program<'_>]) -> Groups {
+pub fn groups(programs: &[Program<'_>], names: &[String]) -> Groups {
     if programs.len() < 2 {
         return Groups::default();
     }
@@ -36,6 +38,9 @@ pub fn groups(programs: &[Program<'_>]) -> Groups {
         views: programs.iter().map(|_| Links::default()).collect(),
         ..Groups::default()
     };
+    for (input, view) in crate::esbuild::links::views(programs, names) {
+        groups.views[input].esbuild = Some(view);
+    }
     for group in crate::parcel::links::groups(programs) {
         let Some(namespace) = group.first().map(|(_, view)| view.namespace.clone()) else {
             continue;

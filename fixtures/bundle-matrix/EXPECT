@@ -71,8 +71,8 @@ mini/vite5-iife	*	recognised	allow	rollup-split-heuristic: the commonjs plugin i
 corejs/rolldown-iife	*	recognised	xfail	bm-rolldown: rolldown iife with core-js commonjs wrappers is not unpacked (the plain app is, since #299)
 */vite8-*	*	recognised	xfail	bm-rolldown: rolldown output (also vite 8) is refused as rollup (shape not proven) or read as esbuild with one module
 */rollup*-cjssrc	*	recognised	xfail	bm-rollup-cjs-wrappers: (R51-RC) a bundle of @rollup/plugin-commonjs wrappers is not split
-*/bun1.*-esm-splitting*	*	recognised	xfail	bm-esm-split-chunks: bun before 1.4 imports its helpers from a shared chunk, like esbuild --splitting, so the entry is not unpacked
-*/esbuild*-esm-split*	*	recognised	xfail	bm-esm-split-chunks: esbuild/bun --splitting output (entry plus shared chunks) is not unpacked
+base/esbuild*-esm-split-keepnames	*	recognised	xfail	bm-esm-split-chunks: its factories call __name, which the entry imports from the shared chunk; only an imported __commonJS is proven
+mini/bun1.*-esm-splitting*	*	recognised	xfail	bm-bun-esm: bun turned the small app's one CommonJS module into ESM, so no __commonJS factory is left to unpack
 mini/bun-esm*	*	recognised	xfail	bm-bun-esm: bun turned the small app's one CommonJS module into ESM, so only a single __esm init is left and nothing is unpacked
 */esbuild*	*	modules	allow	esbuild-hoisted-esm: esbuild scope-hoists ES modules that nothing requires lazily, so their boundaries are gone
 mini/esbuild*-iife+terser	*	recognised	xfail	bm-minified-esbuild: the minifier inlined the only __commonJS call into the program, so no helper is left to prove
