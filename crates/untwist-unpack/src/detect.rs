@@ -213,7 +213,97 @@ unlinked!(metro_detect, crate::metro::detect_with);
 unlinked!(metro_trusting_detect, crate::metro::detect_trusting_with);
 unlinked!(amd_detect, crate::amd::detect_with);
 unlinked!(umd_detect, crate::umd::detect_with);
-unlinked!(rollup_detect, crate::rollup::detect_with);
+fn indexed_by<'k>(callee: &'k Expression<'_>, param: &str) -> Option<&'k str> {
+    let callee = match callee.without_parentheses() {
+        Expression::StaticMemberExpression(member) if member.property.name == "call" => {
+            &member.object
+        }
+        other => other,
+    };
+    let Expression::ComputedMemberExpression(member) = callee.without_parentheses() else {
+        return None;
+    };
+    let by_param = matches!(&member.expression, Expression::Identifier(id) if id.name == param);
+    match &member.object {
+        Expression::Identifier(container) if by_param => Some(container.name.as_str()),
+        _ => None,
+    }
+}
+
+fn dispatched_containers<'k>(statement: &'k Statement<'_>) -> Vec<&'k str> {
+    let Statement::FunctionDeclaration(function) = statement else {
+        return Vec::new();
+    };
+    let [param] = &function.params.items[..] else {
+        return Vec::new();
+    };
+    let BindingPattern::BindingIdentifier(param) = &param.pattern else {
+        return Vec::new();
+    };
+    let Some(body) = function.body.as_deref() else {
+        return Vec::new();
+    };
+    let param = param.name.as_str();
+    body.statements
+        .iter()
+        .filter_map(|statement| match statement {
+            Statement::ExpressionStatement(statement) => Some(&statement.expression),
+            Statement::ReturnStatement(statement) => {
+                statement.argument.as_ref().filter(|argument| {
+                    matches!(
+                        argument.without_parentheses(),
+                        Expression::SequenceExpression(_)
+                    )
+                })
+            }
+            _ => None,
+        })
+        .flat_map(|expression| match expression.without_parentheses() {
+            Expression::SequenceExpression(sequence) => sequence.expressions.iter().collect(),
+            other => vec![other],
+        })
+        .filter_map(|expression| match expression.without_parentheses() {
+            Expression::CallExpression(call) => indexed_by(&call.callee, param),
+            _ => None,
+        })
+        .collect()
+}
+
+fn declares(list: &[Statement<'_>], name: &str) -> bool {
+    list.iter().any(|statement| match statement {
+        Statement::VariableDeclaration(declaration) => declaration.declarations.iter().any(
+            |declarator| matches!(&declarator.id, BindingPattern::BindingIdentifier(id) if id.name == name),
+        ),
+        _ => false,
+    })
+}
+
+fn webpack_dispatcher(list: &[Statement<'_>]) -> bool {
+    list.iter()
+        .flat_map(dispatched_containers)
+        .any(|container| declares(list, container))
+}
+
+fn foreign_runtime(frame: &Frame<'_, '_>) -> bool {
+    frame.lists().any(webpack_dispatcher)
+}
+
+fn hoisted_probe(frame: &Frame<'_, '_>) -> bool {
+    !foreign_runtime(frame) && crate::rollup::probe(frame)
+}
+
+fn hoisted_detect<'k, 'a>(
+    alloc: &'a Allocator,
+    source: &'k Program<'a>,
+    frame: &Frame<'k, 'a>,
+    bodies: &mut Bodies<'a>,
+    _links: &Links,
+) -> Option<Bundle<'a>> {
+    if foreign_runtime(frame) {
+        return None;
+    }
+    crate::rollup::detect_with(alloc, source, frame, bodies)
+}
 
 const KINDS: [Kind; 9] = [
     (BundleKind::Closure, crate::closure::probe, closure_detect),
@@ -243,7 +333,7 @@ const KINDS: [Kind; 9] = [
     (BundleKind::Umd, crate::umd::probe, umd_detect),
 ];
 
-const HOISTED: Kind = (BundleKind::Rollup, crate::rollup::probe, rollup_detect);
+const HOISTED: Kind = (BundleKind::Rollup, hoisted_probe, hoisted_detect);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
