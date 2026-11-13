@@ -21,6 +21,8 @@ pub const NUMBER_LIMIT: u32 = 4096;
 
 const SHORT_NAME: usize = 2;
 
+const HEX_TOKEN: usize = 16;
+
 const STRUCTURAL_FUNCTION: &str = "fn";
 
 const CALL_RESULT: &str = "result";
@@ -104,6 +106,15 @@ fn has_strong_base(info: &BindingInfo, collected: &Collected) -> bool {
     }
 }
 
+pub fn is_hex_token(name: &str) -> bool {
+    name.len() >= HEX_TOKEN && name.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+fn smart_renameable(info: &BindingInfo, collected: &Collected, config: RenameConfig) -> bool {
+    let hex_token = !collected.pinned.contains(&info.symbol) && is_hex_token(&info.name);
+    hex_token || is_renameable(info, collected, config)
+}
+
 pub fn smart_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> Option<String> {
     let evidenced = (!has_strong_base(info, cx.collected))
         .then(|| evidence.name(info.symbol))
@@ -121,8 +132,9 @@ pub fn smart_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> 
             }
             derived
         });
-    let unevidenced_short = base == FALLBACK_BASE && info.name.chars().count() <= SHORT_NAME;
-    (!unevidenced_short).then_some(base)
+    let unevidenced = base == FALLBACK_BASE
+        && (info.name.chars().count() <= SHORT_NAME || is_hex_token(&info.name));
+    (!unevidenced).then_some(base)
 }
 
 fn instance_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> Option<String> {
@@ -137,7 +149,7 @@ fn instance_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> O
         .collected
         .bindings
         .get(*cx.collected.by_symbol.get(&callee)?)?;
-    if !is_renameable(binding, cx.collected, cx.config) {
+    if !smart_renameable(binding, cx.collected, cx.config) {
         return None;
     }
     let name = to_identifier(&lower_camel(evidence.name(callee)?));
@@ -202,7 +214,7 @@ fn decide_with_limit(
         .bindings
         .iter()
         .filter(|info| !text_read.contains(&info.symbol))
-        .filter(|info| is_renameable(info, collected, config))
+        .filter(|info| smart_renameable(info, collected, config))
         .filter_map(|info| smart_base(info, &cx, &evidence).map(|base| (info, base)))
         .collect();
     let mut oracle = NameOracle::new(scoping, collected);
