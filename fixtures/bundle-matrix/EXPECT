@@ -1,11 +1,7 @@
 # app/cell	lane	check	xfail|allow	reason
 # The first matching line wins. A bm-* reason names a gap in .superpowers/sdd/2026-11-05-v030/review/r51-bundle-gaps.md.
-base/rollup4-cjs29-iife+obf-heavy	default	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
 base/browserify+uglify	*	recognised	xfail	bm-browserify-require-rebound: a module that redeclares its renamed require parameter (var e=e(...)) refuses the bundle
-base/rollup4-cjs29-iife+obf-heavy	split	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
 base/webpack5-prod-node+obf-heavy	unsafe	clean	xfail	bm-obf-heavy-proxies: one CFF proxy object survives the unsafe lane in the webpack heavy cell
-base/esbuild0.28-iife+obf-heavy	default	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
-base/esbuild0.28-iife+obf-heavy	split	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
 *+obf*	default	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
 *+obf*	split	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
 *+obf*	default	clean	xfail	safe-global-names: the default lane keeps the string array when code may hold the global object
