@@ -118,6 +118,7 @@ impl Pipeline {
             .collect();
         let recording = self.options.source_map.then(Recording::start);
         let mut bundle = self.unpack_stage(&alloc, &mut programs, stages, notes)?;
+        self.relex_modules(&alloc, &mut bundle, notes);
         self.after_unpack(&alloc, &mut bundle, stages, notes);
         let unreflowed = BundleOutput::unreflowed(&bundle, crate::bundle::single_text_len(codes));
         let readers = bundle

@@ -294,16 +294,13 @@ fn every_generated_rollup_iife_bundle_splits_under_assumed_modules_into_a_tree_t
         return;
     };
     for cell in cells(ROLLUP_ASSUMED.dir).keys() {
-        let default = written(&work.path().join(format!("{cell}-default")));
-        let split = written(&work.path().join(format!("{cell}-split")));
-        assert_eq!(
-            default.keys().collect::<Vec<_>>(),
-            ["deobfuscated.js"],
-            "{cell}: the default lane must not split"
-        );
-        assert!(
-            default == split,
-            "{cell}: --split-hoisted without --split-assume-modules must write what the default lane writes"
-        );
+        for lane in ["default", "split"] {
+            let files = written(&work.path().join(format!("{cell}-{lane}")));
+            assert_eq!(
+                files.keys().collect::<Vec<_>>(),
+                ["deobfuscated.js"],
+                "{cell}: the {lane} lane must not split without --split-assume-modules"
+            );
+        }
     }
 }

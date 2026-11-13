@@ -166,8 +166,11 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   bindings a wrapper module reads come from a generated `shell.js` that exports them as live
   bindings: they must be declared without a value, the bundle may not write them, and the outer
   code may assign them only after the bundle with `x = e;` or `var x = e;` statements, which the
-  entry routes through a setter exported by `shell.js` (`set_x(x = e)`). Without the flag nothing
-  changes.
+  entry routes through a setter exported by `shell.js` (`set_x(x = e)`). Under the flag the
+  lexical stage keeps `var`s that later closures read (the split reads Rollup's `var` holders), and
+  once the bundle is split, `var`-to-`let`/`const` runs again on each written module, where each
+  module is its own scope; `deobfuscated.js`, written beside the tree, keeps those `var`s. Without
+  the flag nothing changes.
 - **Closure.** Only the module manager's `try {…} catch (e) { X._DumpException(e) }` segments
   are split (ids from `/*_M:id*/` markers or begin/end loader calls checked against the
   `_ModuleManager_initialize` graph). The namespace object is read once, in
