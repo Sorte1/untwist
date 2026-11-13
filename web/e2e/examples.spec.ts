@@ -10,7 +10,7 @@ const manifest = JSON.parse(readRepo('web/src/examples/manifest.json')) as Reado
 
 function cli(fixture: string): string {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  return execFileSync(bin, [repoPath(fixture)], {
+  return execFileSync(bin, ['--disable', 'library-names,library-rename', repoPath(fixture)], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },
