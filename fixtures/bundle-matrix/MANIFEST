@@ -50,10 +50,10 @@ base	vite7-iife	rollup	vite@7.3.8	node	index.js	28	build.lib formats=[iife] buil
 base	vite7-es-min	rollup	vite@7.3.8	node	index.js	28	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
 base	vite8-iife	rollup	vite@8.3.8	node	index.js	28	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
 base	vite8-es-min	rollup	vite@8.3.8	node	index.js	28	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
-base	rolldown-iife	rollup	rolldown@1.3.2	node	index.js	28	format=iife platform=node minify=false
-base	rolldown-cjs	rollup	rolldown@1.3.2	node	index.js	28	format=cjs platform=node minify=false
-base	rolldown-esm	rollup	rolldown@1.3.2	node	index.js	28	format=esm platform=node minify=false
-base	rolldown-esm-min	rollup	rolldown@1.3.2	node	index.js	28	format=esm platform=node minify=true
+base	rolldown-iife	rolldown	rolldown@1.3.2	node	index.js	28	format=iife platform=node minify=false
+base	rolldown-cjs	rolldown	rolldown@1.3.2	node	index.js	28	format=cjs platform=node minify=false
+base	rolldown-esm	rolldown	rolldown@1.3.2	node	index.js	28	format=esm platform=node minify=false
+base	rolldown-esm-min	rolldown	rolldown@1.3.2	node	index.js	28	format=esm platform=node minify=true
 base	esbuild0.14-iife	esbuild	esbuild@0.14.54	node	index.js	28	--bundle --platform=node --format=iife
 base	esbuild0.14-cjs	esbuild	esbuild@0.14.54	node	index.js	28	--bundle --platform=node --format=cjs
 base	esbuild0.14-esm-split	esbuild	esbuild@0.14.54	node	index.js	28	--bundle --platform=node --format=esm --splitting
@@ -197,7 +197,7 @@ corejs	vite5-iife	rollup	vite@5.4.21	node	index.js	84	build.lib formats=[iife] b
 corejs	vite6-iife	rollup	vite@6.4.6	node	index.js	85	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
 corejs	vite7-iife	rollup	vite@7.3.8	node	index.js	85	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
 corejs	vite8-iife	rollup	vite@8.3.8	node	index.js	85	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
-corejs	rolldown-iife	rollup	rolldown@1.3.2	node	index.js	85	format=iife platform=node minify=false
+corejs	rolldown-iife	rolldown	rolldown@1.3.2	node	index.js	85	format=iife platform=node minify=false
 corejs	esbuild0.28-iife	esbuild	esbuild@0.28.2	node	index.js	85	--bundle --platform=node --format=iife
 corejs	esbuild0.28-cjs	esbuild	esbuild@0.28.2	node	index.js	85	--bundle --platform=node --format=cjs
 corejs	parcel-nohoist	parcel	parcel@2.16.4	node	index.js	86	context=node outputFormat=commonjs optimize=false scopeHoist=false
@@ -269,10 +269,10 @@ mini	vite7-iife	rollup	vite@7.3.8	node	index.js	3	build.lib formats=[iife] build
 mini	vite7-es-min	rollup	vite@7.3.8	node	index.js	3	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
 mini	vite8-iife	rollup	vite@8.3.8	node	index.js	3	build.lib formats=[iife] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=false
 mini	vite8-es-min	rollup	vite@8.3.8	node	index.js	3	build.lib formats=[es] build.ssr ssr.noExternal build.commonjsOptions.include=[/./] minify=true
-mini	rolldown-iife	rollup	rolldown@1.3.2	node	index.js	3	format=iife platform=node minify=false
-mini	rolldown-cjs	rollup	rolldown@1.3.2	node	index.js	3	format=cjs platform=node minify=false
-mini	rolldown-esm	rollup	rolldown@1.3.2	node	index.js	3	format=esm platform=node minify=false
-mini	rolldown-esm-min	rollup	rolldown@1.3.2	node	index.js	3	format=esm platform=node minify=true
+mini	rolldown-iife	rolldown	rolldown@1.3.2	node	index.js	3	format=iife platform=node minify=false
+mini	rolldown-cjs	rolldown	rolldown@1.3.2	node	index.js	3	format=cjs platform=node minify=false
+mini	rolldown-esm	rolldown	rolldown@1.3.2	node	index.js	3	format=esm platform=node minify=false
+mini	rolldown-esm-min	rolldown	rolldown@1.3.2	node	index.js	3	format=esm platform=node minify=true
 mini	esbuild0.14-iife	esbuild	esbuild@0.14.54	node	index.js	3	--bundle --platform=node --format=iife
 mini	esbuild0.14-cjs	esbuild	esbuild@0.14.54	node	index.js	3	--bundle --platform=node --format=cjs
 mini	esbuild0.14-esm-split	esbuild	esbuild@0.14.54	node	index.js	3	--bundle --platform=node --format=esm --splitting

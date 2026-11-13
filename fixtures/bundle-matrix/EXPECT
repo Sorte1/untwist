@@ -75,12 +75,12 @@ mini/vite5-iife	*	recognised	allow	rollup-split-heuristic: the commonjs plugin i
 */vite5-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
 */vite6-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
 */vite7-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
-*/rolldown*	*	recognised	xfail	bm-rolldown: rolldown output (also vite 8) is refused as rollup (shape not proven) or read as esbuild with one module
-base/rolldown-esm*	*	modules	xfail	bm-rolldown: rolldown output (also vite 8) is refused as rollup (shape not proven) or read as esbuild with one module
+*/rolldown*	*	modules	allow	rolldown-hoisted-esm: rolldown scope-hoists ES modules, so their boundaries are gone
+*/rolldown-cjs	*	recognised	xfail	bm-rolldown: rolldown cjs-format output is not unpacked (iife and esm are, since #299)
+corejs/rolldown-iife	*	recognised	xfail	bm-rolldown: rolldown iife with core-js commonjs wrappers is not unpacked (the plain app is, since #299)
 */vite8-*	*	recognised	xfail	bm-rolldown: rolldown output (also vite 8) is refused as rollup (shape not proven) or read as esbuild with one module
 */rollup*-cjssrc	*	recognised	xfail	bm-rollup-cjs-wrappers: (R51-RC) a bundle of @rollup/plugin-commonjs wrappers is not split
 */esbuild*-esm-split	*	recognised	xfail	bm-esm-split-chunks: esbuild/bun --splitting output (entry plus shared chunks) is not unpacked
-*/bun-iife-minify	*	recognised	xfail	bm-bun-minify: bun build --minify --format=iife is refused (esbuild shape not proven)
 mini/bun-esm*	*	recognised	xfail	bm-bun-esm: bun --format=esm output of the small app is not unpacked (the larger app is)
 */esbuild*	*	modules	allow	esbuild-hoisted-esm: esbuild scope-hoists ES modules that nothing requires lazily, so their boundaries are gone
 */esbuild*-iife+terser	*	recognised	xfail	bm-minified-esbuild: esbuild output minified again by terser, swc or uglify is refused (esbuild shape not proven)

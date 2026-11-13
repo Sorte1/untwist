@@ -111,7 +111,7 @@ export const vite = [4, 5, 6, 7, 8].flatMap((major) => [viteCell(major, "iife", 
 function rolldownCell(format, minify) {
   return {
     name: `rolldown-${format}${minify ? "-min" : ""}`,
-    family: "rollup",
+    family: "rolldown",
     tool: () => `rolldown@${version("rolldown")}`,
     loader: "node",
     flags: `format=${format} platform=node minify=${minify}`,
