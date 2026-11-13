@@ -38,6 +38,7 @@ const NAMES_NOTHING: &str =
 fn options(unsafe_transforms: bool) -> Options {
     Options {
         unsafe_transforms,
+        disabled_passes: vec!["inline-layers"],
         ..Options::default()
     }
 }
