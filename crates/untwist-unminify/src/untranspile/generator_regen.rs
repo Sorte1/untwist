@@ -135,11 +135,10 @@ fn wrapped<'k, 'a>(
     else {
         return None;
     };
-    let extra_fits = match call.arguments.as_slice() {
-        [_, _] => true,
-        [_, _, Argument::NullLiteral(_), Argument::ArrayExpression(_)] => true,
-        _ => false,
-    };
+    let extra_fits = matches!(
+        call.arguments.as_slice(),
+        [_, _] | [_, _, Argument::NullLiteral(_), Argument::ArrayExpression(_)]
+    );
     if !extra_fits {
         return None;
     }

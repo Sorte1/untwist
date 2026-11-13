@@ -308,10 +308,7 @@ pub struct Loaded<'a> {
     pub labels: Vec<&'a str>,
 }
 
-pub fn read<'k, 'a>(
-    statements: &'k [Statement<'a>],
-    regenerator: &Regenerator<'_>,
-) -> Option<Loaded<'a>> {
+pub fn read<'a>(statements: &[Statement<'a>], regenerator: &Regenerator<'_>) -> Option<Loaded<'a>> {
     let (cases, uses) = cases(statements, &regenerator.context)?;
     if uses == 1 && !regenerator.regions.is_empty() {
         return None;
