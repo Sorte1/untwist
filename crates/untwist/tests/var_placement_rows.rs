@@ -45,9 +45,7 @@ fn a_var_declared_after_its_uses_is_placed_only_as_node_runs_it() {
     let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
     let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];
     let wrong = node_rows::mismatches(&node, &programs, &modes);
-    let (wrong, witnesses) = node_rows::unsafe_dynamic_code_witnesses(wrong, &programs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    assert_eq!(witnesses, ["direct-eval-reads"]);
 }
 
 #[test]

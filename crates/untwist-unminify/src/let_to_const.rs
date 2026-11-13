@@ -6,7 +6,9 @@ use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::{effectively_constant_bindings, has_module_syntax, scope_hazard};
+use untwist_core::semantic::{
+    assumed_hazard, effectively_constant_bindings, has_module_syntax, scope_hazard,
+};
 
 pub const PASS: &str = "let-to-const";
 
@@ -185,7 +187,11 @@ impl<'a> Pass<'a> for LetToConst {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.constant.clear();
-        if scope_hazard(cx.scoping()).is_some() {
+        let scoping = cx.scoping();
+        if scope_hazard(scoping)
+            .or_else(|| assumed_hazard(scoping))
+            .is_some()
+        {
             cx.note(SCOPE_HAZARD, None);
             return;
         }

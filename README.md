@@ -202,8 +202,9 @@ computed key (`f[key]`) or through reflection is not seen, as `fn.toString()` is
 [`docs/known-divergences/rename.md`](docs/known-divergences/rename.md) has the details.
 
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
-patched, even when the program visibly patches one, and a few passes that rest on heuristics are
-allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).
+patched, even when the program visibly patches one, a direct `eval` reads and writes no local
+variable (the lexical passes still refuse a program whose `eval` may), and a few passes that rest on
+heuristics are allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).
 `dead-code`, which deletes branches behind constant comparisons, runs in both lanes.
 `fold-pure-calls` also folds calls to a pure helper that is passed around as a value or that the
 program could rebind through a key it cannot resolve.

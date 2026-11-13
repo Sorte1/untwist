@@ -12,7 +12,9 @@ use untwist_core::guard_shape::{may_be_a_guard, read_target};
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
 };
-use untwist_core::semantic::{block_function_symbols, is_constant_binding, scope_hazard};
+use untwist_core::semantic::{
+    assumed_hazard, block_function_symbols, is_constant_binding, scope_hazard,
+};
 
 use crate::var_placement;
 
@@ -629,7 +631,9 @@ impl<'a> Pass<'a> for VarToLet {
     fn enter_program(&mut self, _program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.clear();
         let scoping = cx.scoping();
-        self.active = scope_hazard(scoping).is_none();
+        self.active = scope_hazard(scoping)
+            .or_else(|| assumed_hazard(scoping))
+            .is_none();
         if self.active {
             self.pending.resize(scoping.scopes_len().div_ceil(64), 0);
             self.bare.resize(scoping.scopes_len().div_ceil(64), 0);
