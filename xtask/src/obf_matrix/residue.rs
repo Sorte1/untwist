@@ -146,6 +146,15 @@ impl<'a> Visit<'a> for Counter {
         walk::walk_call_expression(self, call);
     }
 
+    fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {
+        let Expression::ArrayExpression(array) = property.value.without_parentheses() else {
+            walk::walk_object_property(self, property);
+            return;
+        };
+        self.visit_property_key(&property.key);
+        walk::walk_array_expression(self, array);
+    }
+
     fn visit_array_expression(&mut self, array: &ArrayExpression<'a>) {
         if is_string_array(array) {
             self.residue.string_arrays += 1;
@@ -179,6 +188,17 @@ mod tests {
     fn a_short_or_mixed_array_is_not_a_string_array() {
         let m = measure("var a=['a','b'];var b=['a','b','c','d','e','f','g','h','i',1];");
         assert_eq!(m.residue.string_arrays, 0);
+    }
+
+    #[test]
+    fn a_string_list_under_an_object_key_is_data_not_a_string_array() {
+        let m = measure(
+            "module.exports={w1:['a','b','c','d','e','f','g','h','i','j']};\
+             var t={k:(['a','b','c','d','e','f','g','h','i','j'])};",
+        );
+        assert_eq!(m.residue.string_arrays, 0);
+        let kept = measure("var o={k:f(['a','b','c','d','e','f','g','h','i','j'])};");
+        assert_eq!(kept.residue.string_arrays, 1);
     }
 
     #[test]
