@@ -315,6 +315,11 @@
     "unsafe": false
   },
   {
+    "name": "modern",
+    "stage": "modern",
+    "unsafe": false
+  },
+  {
     "name": "library-names",
     "stage": "library",
     "unsafe": false
