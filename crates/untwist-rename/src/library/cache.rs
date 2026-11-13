@@ -47,7 +47,10 @@ fn scoping_fingerprint(scoping: &Scoping) -> u64 {
     scoping.references_len().hash(&mut hasher);
     for index in 0..scoping.references_len() {
         let reference = scoping.get_reference(ReferenceId::from_usize(index));
-        reference.symbol_id().map(|symbol| symbol.index()).hash(&mut hasher);
+        reference
+            .symbol_id()
+            .map(|symbol| symbol.index())
+            .hash(&mut hasher);
         reference.flags().bits().hash(&mut hasher);
     }
     hasher.finish()

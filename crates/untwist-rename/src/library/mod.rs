@@ -700,7 +700,11 @@ pub fn match_program(program: &Program<'_>, scoping: &Scoping) -> Arc<LibraryNam
     match_cached(&table::current(), program, scoping)
 }
 
-pub fn match_cached(table: &Arc<Table>, program: &Program<'_>, scoping: &Scoping) -> Arc<LibraryNames> {
+pub fn match_cached(
+    table: &Arc<Table>,
+    program: &Program<'_>,
+    scoping: &Scoping,
+) -> Arc<LibraryNames> {
     cache::matched(table, program, scoping, match_shaped)
 }
 
