@@ -109,7 +109,11 @@ pub struct Shaped<'n, 'a> {
 pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> Shaped<'n, 'a> {
     let mut scan = DefScan::new(scoping);
     scan.visit_program(program);
-    let mut emitter = Emitter::new(scoping, Sink::Prefix(PolyHash::new()), scan.single_definitions());
+    let mut emitter = Emitter::new(
+        scoping,
+        Sink::Prefix(PolyHash::new()),
+        scan.single_definitions(),
+    );
     emitter.collect_units = true;
     emitter.visit_program_body(program);
     let len = emitter.count;
@@ -683,9 +687,7 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
             AstKind::ThisExpression(_) | AstKind::Super(_) | AstKind::NewTarget(_) => {
                 self.uses_lexical_this()
             }
-            AstKind::VariableDeclaration(declaration) => {
-                self.push(flag(declaration.kind.as_str()))
-            }
+            AstKind::VariableDeclaration(declaration) => self.push(flag(declaration.kind.as_str())),
             AstKind::StringLiteral(literal) => {
                 self.push_specific(tagged(TAG_STR, &js_text(literal.value)))
             }
@@ -1106,7 +1108,9 @@ impl<'a> Visit<'a> for DefScan<'_> {
     }
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        self.in_frame(it.is_declaration(), |scan| walk::walk_function(scan, it, flags));
+        self.in_frame(it.is_declaration(), |scan| {
+            walk::walk_function(scan, it, flags)
+        });
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {

@@ -5,7 +5,9 @@ use untwist_core::pass::{Cx, Interest, Pass};
 
 use super::annotate::annotate;
 use super::annotate::one_line;
-use super::{intersect_ranges, match_program, parse_ranges, ranges_text, Hit, Ranges, VERSIONS_DISAGREE};
+use super::{
+    intersect_ranges, match_program, parse_ranges, ranges_text, Hit, Ranges, VERSIONS_DISAGREE,
+};
 
 pub const NAME: &str = "library-names";
 

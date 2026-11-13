@@ -15,7 +15,12 @@ fn first_function(source: &str) -> UnitRecord {
     records(source)
         .into_iter()
         .filter(|record| record.kind == untwist_rename::library::shape::UnitKind::Function)
-        .max_by_key(|record| (record.span.end - record.span.start, std::cmp::Reverse(record.span.start)))
+        .max_by_key(|record| {
+            (
+                record.span.end - record.span.start,
+                std::cmp::Reverse(record.span.start),
+            )
+        })
         .expect("the source has a function")
 }
 
@@ -725,7 +730,10 @@ fn a_shared_shape_takes_the_label_the_rest_of_the_program_agrees_with() {
     let other = GET_BUILT_IN.replace("arguments.length < 2", "arguments.length < 5");
     let mut rows = shared_rows(
         GET_BUILT_IN,
-        &[("aaa-helpers", "helpers/x"), ("core-js", "internals/get-built-in")],
+        &[
+            ("aaa-helpers", "helpers/x"),
+            ("core-js", "internals/get-built-in"),
+        ],
     );
     rows.extend(shared_rows(&other, &[("core-js", "internals/other")]));
     let table = Table::from_rows(&rows);
@@ -748,7 +756,10 @@ fn a_shared_shape_takes_the_label_the_rest_of_the_program_agrees_with() {
 fn a_shared_shape_without_context_names_both_and_counts_for_neither() {
     let rows = shared_rows(
         GET_BUILT_IN,
-        &[("zzz-helpers", "helpers/x"), ("core-js", "internals/get-built-in")],
+        &[
+            ("zzz-helpers", "helpers/x"),
+            ("core-js", "internals/get-built-in"),
+        ],
     );
     let table = Table::from_rows(&rows);
     let alloc = Allocator::default();
@@ -760,7 +771,10 @@ fn a_shared_shape_without_context_names_both_and_counts_for_neither() {
     let reported: Vec<&untwist_rename::library::Hit> = found.hits.iter().collect();
     assert!(untwist_rename::library::pass::summary_notes(&reported).is_empty());
     let text = untwist_rename::library::annotate::comment_text(hit);
-    assert!(text.contains("core-js") && text.contains("zzz-helpers"), "{text}");
+    assert!(
+        text.contains("core-js") && text.contains("zzz-helpers"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -829,7 +843,10 @@ mod summaries {
     fn a_unit_found_in_several_modules_counts_once() {
         let one = hit(&["tslib", "tslib.es6"], "1.10.0~2.9.0", 0);
         let notes = summary_notes(&[&one]);
-        assert_eq!(notes, ["library: tslib@1.10\u{2013}2.9, 1 module recognised"]);
+        assert_eq!(
+            notes,
+            ["library: tslib@1.10\u{2013}2.9, 1 module recognised"]
+        );
         let twice = hit(&["tslib", "tslib.es6"], "1.10.0~2.9.0", 20);
         assert!(summary_notes(&[&one, &twice])[0].ends_with(", 1 module recognised"));
     }
@@ -847,8 +864,13 @@ mod summaries {
             summary_notes(&[&gap, &late]),
             ["library: tslib@3.35\u{2013}3.39, 2 modules recognised"]
         );
-        assert_eq!(ranges_text(&parse_ranges("3.0.0~3.5.0,3.30.0~3.39.0")), "3.0\u{2013}3.5, 3.30\u{2013}3.39");
-        assert!(intersect_ranges(&parse_ranges("1.0.0~1.2.0"), &parse_ranges("1.3.0~1.4.0")).is_empty());
+        assert_eq!(
+            ranges_text(&parse_ranges("3.0.0~3.5.0,3.30.0~3.39.0")),
+            "3.0\u{2013}3.5, 3.30\u{2013}3.39"
+        );
+        assert!(
+            intersect_ranges(&parse_ranges("1.0.0~1.2.0"), &parse_ranges("1.3.0~1.4.0")).is_empty()
+        );
     }
 
     #[test]
@@ -866,7 +888,13 @@ mod summaries {
 
 #[test]
 fn a_label_with_a_line_terminator_stays_inside_its_comment() {
-    let mut row = row_for(GET_BUILT_IN, "internals/a\u{2028}b\nc", "requireGetBuiltIn", &INNER[..4], &OUTER);
+    let mut row = row_for(
+        GET_BUILT_IN,
+        "internals/a\u{2028}b\nc",
+        "requireGetBuiltIn",
+        &INNER[..4],
+        &OUTER,
+    );
     row.label = "evil\u{2029}lib\r".to_string();
     let table = Table::from_rows(&[row]);
     let alloc = Allocator::default();
@@ -879,12 +907,16 @@ fn a_label_with_a_line_terminator_stays_inside_its_comment() {
         !text.contains(['\n', '\r', '\u{2028}', '\u{2029}']),
         "{text:?}"
     );
-    assert!(text.contains("evil\\u2029lib\\r") && text.contains("a\\u2028b\\nc"), "{text}");
+    assert!(
+        text.contains("evil\\u2029lib\\r") && text.contains("a\\u2028b\\nc"),
+        "{text}"
+    );
 }
 
 #[test]
 fn a_table_that_claims_too_many_rows_is_refused_without_allocating_them() {
-    let text = "#untwist-library-table\tv2\tx\n#strings\t1\n-\n#lists\t0\n#rows\t18446744073709551615\n";
+    let text =
+        "#untwist-library-table\tv2\tx\n#strings\t1\n-\n#lists\t0\n#rows\t18446744073709551615\n";
     assert!(Table::parse(text).is_some_and(|table| table.rows.is_empty()));
 }
 
@@ -901,7 +933,13 @@ fn an_inflated_table_over_the_limit_is_refused() {
 
 #[test]
 fn matching_grows_linearly_with_the_number_of_matched_copies() {
-    let row = row_for(GET_BUILT_IN, "internals/get-built-in", "requireGetBuiltIn", &INNER[..4], &OUTER);
+    let row = row_for(
+        GET_BUILT_IN,
+        "internals/get-built-in",
+        "requireGetBuiltIn",
+        &INNER[..4],
+        &OUTER,
+    );
     let table = Table::from_rows(&[row]);
     let copies = |count: usize| {
         (0..count)
@@ -932,13 +970,20 @@ fn a_program_is_matched_once_while_only_names_change() {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, "function __rest(s, e) { var t = {}; for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0) t[p] = s[p]; return t; }");
     let sem = build_scoping(&parsed.program);
-    let row = row_for(GET_BUILT_IN, "internals/get-built-in", "requireGetBuiltIn", &INNER[..4], &OUTER);
+    let row = row_for(
+        GET_BUILT_IN,
+        "internals/get-built-in",
+        "requireGetBuiltIn",
+        &INNER[..4],
+        &OUTER,
+    );
     let table = std::sync::Arc::new(Table::from_rows(&[row]));
     let first = untwist_rename::library::match_cached(&table, &parsed.program, &sem.scoping);
     let again = untwist_rename::library::match_cached(&table, &parsed.program, &sem.scoping);
     assert!(std::sync::Arc::ptr_eq(&first, &again));
     let other = parse_program(&alloc, "function __rest(s, e) { return s; }");
     let other_sem = build_scoping(&other.program);
-    let different = untwist_rename::library::match_cached(&table, &other.program, &other_sem.scoping);
+    let different =
+        untwist_rename::library::match_cached(&table, &other.program, &other_sem.scoping);
     assert!(!std::sync::Arc::ptr_eq(&first, &different));
 }

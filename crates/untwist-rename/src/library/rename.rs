@@ -7,10 +7,10 @@ use crate::generate::to_identifier;
 use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
 use crate::simple::is_renameable;
-use crate::unique::{await_turn, is_taken, next_number, take_names, SharedUniqueState};
-use std::cell::RefCell;
 use crate::text_reads::{text_read_bindings, TextReads};
+use crate::unique::{await_turn, is_taken, next_number, take_names, SharedUniqueState};
 use crate::RenameConfig;
+use std::cell::RefCell;
 
 pub const NAME: &str = "library-rename";
 
