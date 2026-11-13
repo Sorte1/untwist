@@ -26,11 +26,20 @@ pub const WASM_SHADOW_STACK_BYTES: u32 = 1 << 20;
 pub const WASM_SHADOW_ENTRY_BYTES: u32 = 8 << 10;
 pub const WASM_SHADOW_UNIT_BYTES: u32 = 1_325;
 pub const WASM_V8_ROOM: u32 = WASM_V8_STACK_BYTES - WASM_V8_ENTRY_BYTES;
+pub const WASM_V8_WORST_UNIT_BYTES: u32 = 639;
+pub const WASM_SHADOW_WORST_UNIT_BYTES: u32 = 576;
 pub const WASM_NESTING: u32 = smaller(
     stack_units(WASM_V8_ROOM, WASM_V8_UNIT_BYTES),
     stack_units(
         WASM_SHADOW_STACK_BYTES - WASM_SHADOW_ENTRY_BYTES,
         WASM_SHADOW_UNIT_BYTES,
+    ),
+);
+pub const WASM_ATTEMPT_NESTING: u32 = smaller(
+    stack_units(WASM_V8_ROOM, WASM_V8_WORST_UNIT_BYTES),
+    stack_units(
+        WASM_SHADOW_STACK_BYTES - WASM_SHADOW_ENTRY_BYTES,
+        WASM_SHADOW_WORST_UNIT_BYTES,
     ),
 );
 
@@ -67,12 +76,26 @@ pub fn limits_for(room: usize, input_len: usize) -> Limits {
     }
 }
 
-fn nesting_for(room: usize) -> u32 {
+pub fn admission_limits(room: usize, input_len: usize) -> Limits {
+    let limits = limits_for(room, input_len);
+    #[cfg(target_arch = "wasm32")]
+    let limits = Limits {
+        nesting: native_nesting(room).min(WASM_ATTEMPT_NESTING),
+        ..limits
+    };
+    limits
+}
+
+fn native_nesting(room: usize) -> u32 {
     let units = room / (2 * UNIT_STACK_BYTES);
-    let nesting = u32::try_from(units)
+    u32::try_from(units)
         .unwrap_or(u32::MAX)
         .saturating_sub(C_P1)
-        .min(NESTING_CEILING);
+        .min(NESTING_CEILING)
+}
+
+fn nesting_for(room: usize) -> u32 {
+    let nesting = native_nesting(room);
     #[cfg(target_arch = "wasm32")]
     let nesting = nesting.min(WASM_NESTING);
     nesting
@@ -82,9 +105,9 @@ fn nesting_for(room: usize) -> u32 {
 mod tests {
     use super::*;
 
-    const V8_WORST_UNIT_BYTES: u32 = 639;
+    const V8_WORST_UNIT_BYTES: u32 = WASM_V8_WORST_UNIT_BYTES;
     const V8_WORST_ENTRY_BYTES: u32 = 23_173;
-    const SHADOW_WORST_UNIT_BYTES: u32 = 576;
+    const SHADOW_WORST_UNIT_BYTES: u32 = WASM_SHADOW_WORST_UNIT_BYTES;
     const SHADOW_WORST_ENTRY_BYTES: u32 = 7_618;
 
     fn holds_the_margin(unit: u32, worst: u32) -> bool {
@@ -129,6 +152,30 @@ mod tests {
                 WASM_SHADOW_UNIT_BYTES
             ) > WASM_NESTING
         );
+    }
+
+    #[test]
+    fn a_wasm_attempt_admits_up_to_v8s_room_over_its_worst_measured_unit() {
+        assert_eq!(WASM_ATTEMPT_NESTING, 1_532);
+        assert_eq!(
+            WASM_ATTEMPT_NESTING,
+            WASM_V8_ROOM / WASM_V8_WORST_UNIT_BYTES - C_P1
+        );
+        assert!(WASM_ATTEMPT_NESTING > WASM_NESTING);
+        assert!(
+            stack_units(
+                WASM_SHADOW_STACK_BYTES - WASM_SHADOW_ENTRY_BYTES,
+                WASM_SHADOW_WORST_UNIT_BYTES
+            ) > WASM_ATTEMPT_NESTING
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn native_admission_is_the_native_limit() {
+        for room in [16_usize << 20, 1 << 30] {
+            assert_eq!(admission_limits(room, 7), limits_for(room, 7));
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]

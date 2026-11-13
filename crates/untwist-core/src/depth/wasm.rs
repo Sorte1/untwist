@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use super::limits::WASM_NESTING;
+use super::limits::{WASM_ATTEMPT_NESTING, WASM_NESTING};
 use super::{DepthRefusal, Limits};
 
 const NO_TEXT_CAP: u32 = u32::MAX;
@@ -27,7 +27,9 @@ pub fn capped_above_the_input(nesting: u32, shares: u32) -> u32 {
 
 fn set_by_the_wasm_budget(limits: &Limits) -> bool {
     let binding = BINDING_TEXT_CAP.swap(NO_TEXT_CAP, Ordering::Relaxed);
-    limits.nesting == WASM_NESTING || limits.nesting == binding
+    limits.nesting == WASM_NESTING
+        || limits.nesting == WASM_ATTEMPT_NESTING
+        || limits.nesting == binding
 }
 
 pub(super) fn noted<T>(

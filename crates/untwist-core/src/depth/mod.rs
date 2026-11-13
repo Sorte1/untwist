@@ -21,8 +21,8 @@ use scope::Tracker;
 #[cfg(not(target_arch = "wasm32"))]
 use limits::noted;
 pub use limits::{
-    limits_for, C_P1, LIFT_DEPTH_MAX, UNIT_STACK_BYTES, WASM_NESTING, WASM_SHADOW_STACK_BYTES,
-    WASM_V8_ROOM,
+    admission_limits, limits_for, C_P1, LIFT_DEPTH_MAX, UNIT_STACK_BYTES, WASM_ATTEMPT_NESTING,
+    WASM_NESTING, WASM_SHADOW_STACK_BYTES, WASM_V8_ROOM,
 };
 #[cfg(target_arch = "wasm32")]
 use wasm::noted;

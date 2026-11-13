@@ -19,7 +19,17 @@ between the two sizes. Node's flags served only to measure; the build relies on 
 | V8's stack (the wasm call chain) | 984 KiB, V8's default | 23,173 B (charged 23 KiB) | 639 B (template literals, parse) | 1,470 B | **661** |
 | shadow stack (linear memory) | 1 MiB, the linker's default | 7,618 B (charged 8 KiB) | 576 B (template literals, parse) | 1,325 B | 777 |
 
-`nesting ≤ (stack − entry) / unit − 8`, the smaller of the two: **661 units**. The `− 8` is
+`nesting ≤ (stack − entry) / unit − 8`, the smaller of the two: **661 units**. That is the guaranteed
+budget: within it no input traps.
+
+An input that nests deeper, up to the room over the worst measured unit itself (V8's 961 KiB ÷ 639 B
+− 8 = **1,532 units**; the shadow stack's 1,798 does not bind), is still attempted. Every budget
+below the input (code texts, `JSON.parse` literals, the unpack re-parse) keeps the 661-unit budget,
+so it has no room left above such an input and those caps fire. If the attempt runs out of stack it
+traps; the host throws the instance away and runs the input again refused, which passes it through
+with the depth note, the same result the build gave before the attempt existed. A finished attempt
+gives native's output, apart from those caps. Krunker 3.2.1 and 3.2.4 nest 834 units: they are
+attempted and finish on V8's default stack in every lane. The `− 8` is
 `C_P1`. Native admits `min(100,000, room / (2 × UNIT_STACK_BYTES) − 8)` units. The shadow stack
 never binds first, so the module keeps the linker's default size; `harness/budget.mjs` checks that
 the module's `__stack_pointer` starts where the budget assumes.
@@ -49,7 +59,8 @@ Where each stage traps first, on V8's stack, in bytes per unit (the slope betwee
 
 | Where | Native | wasm | Note or effect |
 | --- | --- | --- | --- |
-| an input nesting more than 661 units | parsed (up to 100,000 units) | refused before parse | `this input nests deeper than untwist can parse on its stack; it is passed through unchanged`, exit 3 |
+| an input nesting 662 to 1,532 units | parsed (up to 100,000 units) | attempted with the inner budgets at 661 | finishes with native's output, or traps and the refused re-run passes it through with the depth note, exit 3 |
+| an input nesting more than 1,532 units | parsed (up to 100,000 units) | refused before parse | `this input nests deeper than untwist can parse on its stack; it is passed through unchanged`, exit 3 |
 | the unpack re-parse of the final texts | trusts the re-parse premise (`2 × nesting + 8`) | scans each final text against the same budget | a deeper final text: `a final text nests too deeply to parse again for unpacking; the inputs are written without a bundle` |
 | a `JSON.parse('…')` literal | inlined when it nests at most the input's nesting + 8 | inlined only when it also nests at most 661 − the input's nesting, so the tree stays within the budget | no note; the output keeps the call, which is node's value |
 | a decoded or literal code text (sinks, `Function` bodies) | parsed when it nests at most 512 units, a quarter of its headroom | parsed only when it also nests at most a quarter of 661 − the input's nesting | the text is judged unparsable: its unit stays encoded |

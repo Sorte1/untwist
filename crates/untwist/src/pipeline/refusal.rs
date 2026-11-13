@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use untwist_core::depth::{limits_for, print_estimate, scan, DepthRefusal, UNIT_STACK_BYTES};
+use untwist_core::depth::{admission_limits, print_estimate, scan, DepthRefusal, UNIT_STACK_BYTES};
 use untwist_core::parse::strip_bookmarklet;
 use untwist_core::pass::{InputRoom, Note, NoteKind};
 use untwist_core::source_map::OwnedSourceMap;
@@ -176,6 +176,14 @@ impl Pipeline {
         }
     }
 
+    fn refused_for(&self, index: usize, source: &str) -> &'static str {
+        let died = self.died_of(index);
+        if died != WORKER_DIED || !nests_past_the_guaranteed_budget(source) {
+            return died;
+        }
+        NESTED_TOO_DEEP
+    }
+
     fn load_as_the_hooks_say(&self, index: usize) {
         let hooks = self.options.hooks();
         if hooks.hog == Some(index) {
@@ -192,7 +200,7 @@ impl Pipeline {
         }
         if self.options.isolation.refused.contains(&index) {
             stack.give_up(index);
-            return Err(self.died_of(index));
+            return Err(self.refused_for(index, source));
         }
         if self.parse_exceeds_the_budget(source.len()) {
             stack.give_up(index);
@@ -202,7 +210,7 @@ impl Pipeline {
         if self.options.hooks().scan_off {
             return Ok((stack.reserve(index, MIB), None));
         }
-        let limits = limits_for(room(), source.len());
+        let limits = admission_limits(room(), source.len());
         match scan(source, &limits) {
             Ok(found) => {
                 let print_room = limits
@@ -355,4 +363,20 @@ mod tests {
         );
         assert_eq!(stack_request(u32::MAX), STACK_RESERVE_BYTES);
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn nests_past_the_guaranteed_budget(source: &str) -> bool {
+    matches!(
+        scan(
+            source,
+            &untwist_core::depth::limits_for(room(), source.len())
+        ),
+        Err(DepthRefusal::Nesting)
+    )
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn nests_past_the_guaranteed_budget(_source: &str) -> bool {
+    false
 }
