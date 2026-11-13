@@ -560,3 +560,73 @@ fn a_var_and_a_function_of_one_name_in_one_item_refuse() {
         )));
     }
 }
+
+const WRAPPERS: &str = "var cjs = {};
+var hasRequiredCjs;
+function requireCjs() {
+  if (hasRequiredCjs) return cjs;
+  hasRequiredCjs = 1;
+  cjs.value = 1;
+  return cjs;
+}
+var shout;
+var hasRequiredShout;
+function requireShout() {
+  if (hasRequiredShout) return shout;
+  hasRequiredShout = 1;
+  var cjsValue = requireCjs().value;
+  shout = function (text) { return text + cjsValue; };
+  return shout;
+}
+var tail;
+var hasRequiredTail;
+function requireTail() {
+  if (hasRequiredTail) return tail;
+  hasRequiredTail = 1;
+  tail = requireShout()(\"x\");
+  return tail;
+}
+console.log(requireTail());";
+
+#[test]
+fn each_commonjs_wrapper_becomes_a_module_named_after_it() {
+    let files = split(&iife(WRAPPERS)).expect("a split");
+    assert_eq!(
+        paths(&files),
+        [
+            "chunk_cjs.js",
+            "chunk_shout.js",
+            "chunk_tail.js",
+            "index.js"
+        ]
+    );
+    let shout = code(&files, "chunk_shout.js");
+    assert!(
+        shout.contains("var hasRequiredShout;") && shout.contains("export { requireShout };"),
+        "{shout}"
+    );
+}
+
+#[test]
+fn wrappers_that_call_a_later_wrapper_stay_together() {
+    let body = "var b;
+var hasRequiredB;
+function requireA() {
+  if (hasRequiredA) return a;
+  hasRequiredA = 1;
+  a = requireB() + 1;
+  return a;
+}
+var a;
+var hasRequiredA;
+function requireB() {
+  if (hasRequiredB) return b;
+  hasRequiredB = 1;
+  b = 1;
+  return b;
+}
+console.log(requireA());";
+    let files = split(&iife(body));
+    let modules = files.as_ref().map_or(0, |files| files.len());
+    assert!(modules <= 2, "{:?}", files.as_ref().map(paths));
+}

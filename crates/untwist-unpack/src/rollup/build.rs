@@ -9,6 +9,7 @@ use rustc_hash::FxHashSet;
 
 use super::scan::Facts;
 use super::shell::Shell;
+use super::wrappers::Group;
 use crate::model::{Bundle, BundleKind, Module};
 use crate::runtime::{js_string, synthetic_statements};
 
@@ -35,19 +36,39 @@ fn sanitized(name: &str) -> String {
         .collect()
 }
 
-fn chunk_ids(scoping: &Scoping, facts: &Facts, segments: &[Range<usize>]) -> Vec<String> {
+fn group_stem<'g>(groups: &'g [Group], segment: &Range<usize>) -> Option<&'g str> {
+    let mut inside = groups
+        .iter()
+        .filter(|group| segment.contains(&(group.function as usize)));
+    match (inside.next(), inside.next()) {
+        (Some(only), None) => Some(only.stem.as_str()),
+        _ => None,
+    }
+}
+
+fn chunk_ids(
+    scoping: &Scoping,
+    facts: &Facts,
+    segments: &[Range<usize>],
+    groups: &[Group],
+) -> Vec<String> {
     let mut taken: FxHashSet<String> = FxHashSet::default();
     taken.insert(ENTRY_ID.to_string());
     let mut ids = Vec::with_capacity(segments.len());
     for segment in &segments[..segments.len() - 1] {
-        let stem = facts.first_decl[segment.clone()]
-            .iter()
-            .flatten()
-            .next()
-            .map_or_else(
-                || segment.start.to_string(),
-                |&s| sanitized(scoping.symbol_name(s)),
-            );
+        let stem = group_stem(groups, segment).map_or_else(
+            || {
+                facts.first_decl[segment.clone()]
+                    .iter()
+                    .flatten()
+                    .next()
+                    .map_or_else(
+                        || segment.start.to_string(),
+                        |&s| sanitized(scoping.symbol_name(s)),
+                    )
+            },
+            sanitized,
+        );
         let base = format!("{CHUNK_PREFIX}{stem}");
         let mut id = base.clone();
         let mut suffix = 2usize;
@@ -91,7 +112,12 @@ fn grouped(mut edges: Vec<(usize, usize, String)>, count: usize) -> Vec<Vec<(usi
     imports
 }
 
-pub fn links(scoping: &Scoping, facts: &Facts, segments: &[Range<usize>]) -> Links {
+pub fn links(
+    scoping: &Scoping,
+    facts: &Facts,
+    segments: &[Range<usize>],
+    groups: &[Group],
+) -> Links {
     let count = segments.len();
     let of = segment_of(segments, facts.declares.len());
     let mut edges: Vec<(usize, usize, String)> = Vec::new();
@@ -113,7 +139,7 @@ pub fn links(scoping: &Scoping, facts: &Facts, segments: &[Range<usize>]) -> Lin
         .map(|segment| facts.requires[segment.clone()].contains(&true))
         .collect();
     Links {
-        ids: chunk_ids(scoping, facts, segments),
+        ids: chunk_ids(scoping, facts, segments, groups),
         imports: grouped(edges, count),
         exports,
         requires,
