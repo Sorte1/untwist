@@ -20,13 +20,21 @@ export interface ScanResult {
   readonly ms: number;
 }
 
-export type Scanner = (text: string, tables: readonly KeyedTable[]) => Promise<ScanResult>;
+export type Scanner = (text: string, tables: readonly KeyedTable[], signal?: AbortSignal) => Promise<ScanResult>;
 
-function workerScan(text: string, tables: readonly KeyedTable[]): Promise<ScanResult> {
+function aborted(): Error {
+  return new DOMException('cancelled', 'AbortError');
+}
+
+function workerScan(text: string, tables: readonly KeyedTable[], signal?: AbortSignal): Promise<ScanResult> {
+  if (signal?.aborted === true) {
+    return Promise.reject(aborted());
+  }
   const worker = new ScanWorker();
   const result = new Promise<ScanResult>((resolve, reject) => {
     worker.onmessage = (event: MessageEvent<ScanResult>) => resolve(event.data);
     worker.onerror = (event) => reject(new Error(event.message));
+    signal?.addEventListener('abort', () => reject(aborted()), { once: true });
     worker.postMessage({ text, tables });
   });
   const done = () => worker.terminate();
@@ -137,18 +145,18 @@ export class LibraryTables {
     return bytes === null ? null : parseIndex(new TextDecoder().decode(bytes));
   }
 
-  async wanted(text: string, skip: readonly string[] = []): Promise<readonly IndexedTable[]> {
+  async wanted(text: string, skip: readonly string[] = [], signal?: AbortSignal): Promise<readonly IndexedTable[]> {
     const index = await this.index();
     const candidates = index?.tables.filter((table) => !skip.includes(table.id)) ?? [];
     if (candidates.length === 0 || text === '') {
       return [];
     }
-    const { ids } = await this.#scan(text, candidates.map((table) => ({ id: table.id, keys: table.keys })));
+    const { ids } = await this.#scan(text, candidates.map((table) => ({ id: table.id, keys: table.keys })), signal);
     return candidates.filter((table) => ids.includes(table.id));
   }
 
-  async load(tables: readonly IndexedTable[]): Promise<TableFetch> {
-    const settled = await Promise.allSettled(tables.map((table) => this.#bytesOf(table)));
+  async load(tables: readonly IndexedTable[], signal?: AbortSignal): Promise<TableFetch> {
+    const settled = await Promise.allSettled(tables.map((table) => this.#bytesOf(table, signal)));
     const loaded: LoadedTable[] = [];
     const failed: string[] = [];
     settled.forEach((outcome, at) => {
@@ -162,12 +170,12 @@ export class LibraryTables {
     return { tables: loaded, failed };
   }
 
-  #bytesOf(table: IndexedTable): Promise<Uint8Array<ArrayBuffer>> {
+  #bytesOf(table: IndexedTable, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>> {
     const known = this.#bytes.get(table.id);
     if (known !== undefined) {
       return known;
     }
-    const loading = this.#download(table);
+    const loading = this.#download(table, signal);
     this.#bytes.set(table.id, loading);
     loading.catch(() => {
       if (this.#bytes.get(table.id) === loading) {
@@ -177,7 +185,7 @@ export class LibraryTables {
     return loading;
   }
 
-  async #download(table: IndexedTable): Promise<Uint8Array<ArrayBuffer>> {
+  async #download(table: IndexedTable, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>> {
     const url = new URL(table.file, this.#base);
     url.searchParams.set('v', table.sha256.slice(0, 16));
     const key = url.href;
@@ -186,7 +194,7 @@ export class LibraryTables {
     if (hit !== null && (await this.#valid(table, hit))) {
       return hit;
     }
-    const response = await this.#fetch(url);
+    const response = await this.#fetch(url, signal === undefined ? undefined : { signal });
     if (!response.ok) {
       throw new Error(`${table.file}: HTTP ${response.status}`);
     }

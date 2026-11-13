@@ -1,5 +1,6 @@
 import { initSync, library_tables, load_library_table, run_report_with_wasm, WasmFiles } from './pkg/untwist_wasm.js';
 import type { SuppliedWasm } from '../wasm/wasm';
+import { MARK } from '../progress';
 import type { TrapKind, WorkerReply, WorkerRequest } from './types';
 
 let memory: WebAssembly.Memory | null = null;
@@ -8,7 +9,11 @@ function reply(message: WorkerReply): void {
   self.postMessage(message);
 }
 
-(globalThis as { untwistStage?: (name: string) => void }).untwistStage = (name) => reply({ kind: 'stage', name });
+function stage(name: string): void {
+  reply({ kind: 'stage', name, at: performance.timeOrigin + performance.now() });
+}
+
+(globalThis as { untwistStage?: (name: string) => void }).untwistStage = stage;
 
 function trapKind(error: unknown): TrapKind | null {
   if (error instanceof RangeError && /Maximum call stack size exceeded/.test(error.message)) {
@@ -66,6 +71,9 @@ function wasmCount(json: string): number {
 function run(source: string, flags: string, refused: boolean, extras: string, wasm: readonly SuppliedWasm[], tables: readonly Uint8Array[]): void {
   const started = performance.now();
   try {
+    if (tables.length > 0) {
+      stage(MARK.loadTables);
+    }
     for (const table of tables) {
       load_library_table(table);
     }
@@ -75,6 +83,7 @@ function run(source: string, flags: string, refused: boolean, extras: string, wa
     }
     const output = run_report_with_wasm(source, flags, refused, extras, files);
     files.free();
+    stage(MARK.transfer);
     const wasmJson = output.wasm_json();
     const result = {
       stdout: output.stdout,

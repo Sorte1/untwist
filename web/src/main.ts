@@ -1,7 +1,10 @@
 import './styles/tokens.css';
 import './styles/layout.css';
 import { Cancelled, Engine, REPORT_EXTRAS } from './engine/engine';
-import { initialState, runCancelled, runFailed, runFinished, runStarted, stageBegan, ticked, type AppState, type InputState } from './state';
+import { initialState, runCancelled, runFailed, runFinished, runStarted, stagesAdded, stagesClosed, ticked, type AppState, type InputState } from './state';
+import { FOLDS_MARK, MARK, type StageMark } from './progress';
+import type { RunResult } from './engine/types';
+import { hashSetsLibraries, storedLibraryNames, storeLibraryNames } from './settings/library-pref';
 import { flagsFrom } from './settings/flags';
 import { LibraryTables } from './libraries/tables';
 import { registerServiceWorker } from './pwa/register';
@@ -40,17 +43,40 @@ import { mountToolbar } from './ui/toolbar';
 import { mountWasmBar } from './ui/wasm-bar';
 
 const TICK_MS = 100;
+const PAINT_WAIT_MS = 100;
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function startClock(store: Store<AppState>): void {
+interface Marks {
+  readonly add: (mark: StageMark) => void;
+  readonly flush: () => void;
+}
+
+function bufferedMarks(store: Store<AppState>): Marks {
+  let pending: StageMark[] = [];
+  return {
+    add: (mark) => {
+      pending = [...pending, mark];
+    },
+    flush: () => {
+      if (pending.length > 0) {
+        const batch = pending;
+        pending = [];
+        store.update((state) => stagesAdded(state, batch));
+      }
+    },
+  };
+}
+
+function startClock(store: Store<AppState>, marks: Marks): void {
   let last = 0;
   const frame = (now: number) => {
     if (store.get().run.status !== 'running') {
       return;
     }
+    marks.flush();
     if (now - last >= TICK_MS) {
       last = now;
       store.update((state) => ticked(state, performance.now()));
@@ -60,6 +86,29 @@ function startClock(store: Store<AppState>): void {
   requestAnimationFrame(frame);
 }
 
+function afterPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => window.setTimeout(resolve, 0));
+    window.setTimeout(resolve, PAINT_WAIT_MS);
+  });
+}
+
+function foldsSince(started: number): StageMark[] {
+  const entry = performance.getEntriesByName(FOLDS_MARK).at(-1);
+  return entry !== undefined && entry.startTime >= started ? [{ name: MARK.folds, at: entry.startTime }] : [];
+}
+
+async function deliver(store: Store<AppState>, marks: Marks, result: RunResult): Promise<void> {
+  marks.add({ name: MARK.editor, at: performance.now() });
+  marks.flush();
+  store.update((state) => ticked(state, performance.now()));
+  await afterPaint();
+  const started = performance.now();
+  store.update((state) => runFinished(state, result, performance.now()));
+  const ended = performance.now();
+  store.update((state) => stagesClosed(state, [...foldsSince(started), { name: MARK.end, at: ended }], ended));
+}
+
 function starter(store: Store<AppState>, engine: Engine): (input: InputState, flags: string) => void {
   return (input, flags) => {
     const state = store.get();
@@ -67,10 +116,10 @@ function starter(store: Store<AppState>, engine: Engine): (input: InputState, fl
       return;
     }
     store.update((current) => runStarted(current, performance.now(), flags, input));
-    startClock(store);
-    const staged = (name: string) => store.update((current) => stageBegan(current, name, performance.now()));
-    engine.run(input.text, flags, staged, REPORT_EXTRAS, store.get().wasm).then(
-      (result) => store.update((current) => runFinished(current, result, performance.now())),
+    const marks = bufferedMarks(store);
+    startClock(store, marks);
+    engine.run(input.text, flags, marks.add, REPORT_EXTRAS, store.get().wasm).then(
+      (result) => deliver(store, marks, result),
       (error: unknown) => {
         if (!(error instanceof Cancelled)) {
           store.update((current) => runFailed(current, message(error), performance.now()));
@@ -78,6 +127,12 @@ function starter(store: Store<AppState>, engine: Engine): (input: InputState, fl
       },
     );
   };
+}
+
+function initialSettings(hash: string): ReturnType<typeof settingsFromHash> {
+  const parsed = settingsFromHash(hash);
+  const stored = hashSetsLibraries(hash) ? null : storedLibraryNames();
+  return stored === null ? parsed : { ...parsed, settings: { ...parsed.settings, libs: stored } };
 }
 
 function runner(store: Store<AppState>, start: (input: InputState, flags: string) => void): () => void {
@@ -88,7 +143,7 @@ function runner(store: Store<AppState>, start: (input: InputState, flags: string
 }
 
 function main(): void {
-  const parsed = settingsFromHash(window.location.hash);
+  const parsed = initialSettings(window.location.hash);
   const store = createStore(initialState(preferredTheme(), parsed.settings, parsed.problems));
   const libraries = new LibraryTables();
   const engine = new Engine(undefined, true, libraries);
@@ -97,13 +152,16 @@ function main(): void {
     if (state.theme !== previous.theme) {
       applyTheme(state.theme);
     }
+    if (state.settings.libs !== previous.settings.libs) {
+      storeLibraryNames(state.settings.libs);
+    }
     if (state.settings !== previous.settings) {
       const hash = writeHash(state.settings);
       window.history.replaceState(null, '', hash === '' ? window.location.pathname + window.location.search : hash);
     }
   });
   window.addEventListener('hashchange', () => {
-    const next = settingsFromHash(window.location.hash);
+    const next = initialSettings(window.location.hash);
     store.update((state) => ({ ...state, settings: next.settings, settingsProblems: next.problems, theme: next.settings.theme ?? state.theme }));
   });
   const start = starter(store, engine);

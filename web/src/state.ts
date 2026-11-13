@@ -127,11 +127,18 @@ export function runStarted(state: AppState, now: number, flags = '', input: Inpu
   return { ...state, run: { ...state.run, status: 'running', startedAt: now, elapsedMs: 0, error: null, ranFlags: flags, ranInput: input, stages: [] } };
 }
 
-export function stageBegan(state: AppState, name: string, now: number): AppState {
-  if (state.run.status !== 'running') {
+export function stagesAdded(state: AppState, marks: readonly StageMark[]): AppState {
+  if (state.run.status !== 'running' || marks.length === 0) {
     return state;
   }
-  return { ...state, run: { ...state.run, stages: [...state.run.stages, { name, at: now }] } };
+  return { ...state, run: { ...state.run, stages: [...state.run.stages, ...marks] } };
+}
+
+export function stagesClosed(state: AppState, marks: readonly StageMark[], now: number): AppState {
+  if (state.run.status !== 'done' && state.run.status !== 'limit') {
+    return state;
+  }
+  return { ...state, run: { ...state.run, elapsedMs: now - state.run.startedAt, stages: [...state.run.stages, ...marks] } };
 }
 
 export function ticked(state: AppState, now: number): AppState {

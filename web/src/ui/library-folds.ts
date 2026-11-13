@@ -4,6 +4,7 @@ import { byId, setText } from '../dom';
 import { libraryFolds } from '../libraries/folds';
 import { librariesOf } from '../libraries/libraries';
 import type { AppState } from '../state';
+import { FOLDS_MARK } from '../progress';
 
 export interface LibraryFolding {
   refresh(view: EditorView, state: AppState): void;
@@ -29,7 +30,13 @@ export function libraryFolding(): LibraryFolding {
     setText(label, shown ? 'Hide library code' : 'Show library code');
   };
   const apply = (view: EditorView, state: AppState) => {
-    const folds = libraryFolds(view.state.doc, knownLibraries(state), state.selectedModule !== null);
+    const known = knownLibraries(state);
+    if (known.size === 0) {
+      paint(0);
+      return;
+    }
+    performance.mark(FOLDS_MARK);
+    const folds = libraryFolds(view.state.doc, known, state.selectedModule !== null);
     const effect = shown ? unfoldEffect : foldEffect;
     if (folds.length > 0) {
       view.dispatch({ effects: folds.map((fold) => effect.of({ from: fold.from, to: fold.to })) });

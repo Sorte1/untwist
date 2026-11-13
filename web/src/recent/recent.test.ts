@@ -90,5 +90,6 @@ describe('settingsLine', () => {
     expect(settingsLine('')).toBe('Unsafe');
     expect(settingsLine('#unsafe=0&rename=unique&theme=light')).toBe('Safe · --rename unique');
     expect(settingsLine('#unpack=0&fuel=1000')).toBe('Unsafe · --no-unpack --fuel 1000');
+    expect(settingsLine('#libs=1&rename=smart')).toBe('Unsafe · library names · --rename smart');
   });
 });

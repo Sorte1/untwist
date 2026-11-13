@@ -6,6 +6,7 @@ const CORE_JS = 'fixtures/libraries/core-js/rollup-cjs.terser.js';
 const CORE_JS_OBFUSCATED = 'fixtures/libraries/core-js/babel-entry.webpack5.prod.obf.js';
 const CORE_ONLY = 'fixtures/libraries/regenerator-runtime/rollup-cjs.js';
 const TABLE = /\/libraries\/core-js\.table\b/;
+const LIBS = '#libs=1';
 
 interface LibraryRow {
   readonly library: string;
@@ -69,7 +70,7 @@ test.use({ acceptDownloads: true });
 
 test('core-js code fetches the core-js table, names its modules and matches the CLI report', async ({ page }) => {
   const requests = tableRequests(page);
-  await openApp(page);
+  await openApp(page, LIBS);
   await load(page, CORE_JS);
   await runAndWait(page);
   expect(requests).toHaveLength(1);
@@ -86,7 +87,7 @@ test('core-js code fetches the core-js table, names its modules and matches the 
 
 test('a second run and a reload take the table from the cache', async ({ page }) => {
   const requests = tableRequests(page);
-  await openApp(page);
+  await openApp(page, LIBS);
   await load(page, CORE_JS);
   await runAndWait(page);
   await runAndWait(page);
@@ -102,7 +103,7 @@ test('a second run and a reload take the table from the cache', async ({ page })
 
 test('code with only compiled-in libraries fetches no table', async ({ page }) => {
   const requests = tableRequests(page);
-  await openApp(page);
+  await openApp(page, LIBS);
   await load(page, CORE_ONLY);
   await runAndWait(page);
   expect(requests).toEqual([]);
@@ -115,7 +116,7 @@ test('code with only compiled-in libraries fetches no table', async ({ page }) =
 
 test('core-js hidden by a string array is found in the output and run again with its table', async ({ page }) => {
   const requests = tableRequests(page);
-  await openApp(page);
+  await openApp(page, LIBS);
   await load(page, CORE_JS_OBFUSCATED);
   await runAndWait(page);
   expect(requests).toHaveLength(1);
@@ -131,9 +132,9 @@ test('the run says it is loading tables, and still finishes when a table is brok
     await held;
     await route.fulfill({ status: 200, contentType: 'application/octet-stream', body: Buffer.from('not a table') });
   });
-  await openApp(page);
+  await openApp(page, LIBS);
   await load(page, CORE_JS);
-  await expect(page.locator('#running-stage')).toHaveText('Loading library tables: core-js…');
+  await expect(page.locator('#running-stage')).toHaveText(/^Fetching library tables: core-js \([\d.]+ (KB|MB)\)…$/);
   release();
   await expect(page.locator('#status-label')).toHaveText(/Done|Stopped by limit/, { timeout: 120_000 });
   await openDetails(page);

@@ -11,7 +11,8 @@ import {
   runFinished,
   runStarted,
   skippedLabel,
-  stageBegan,
+  stagesAdded,
+  stagesClosed,
   statusLabel,
   ticked,
   utf8Bytes,
@@ -39,7 +40,7 @@ describe('the stages of a run', () => {
   it('keeps each stage the worker announces while the run goes, and starts empty', () => {
     const running = runStarted(ready(), 1000);
     expect(running.run.stages).toEqual([]);
-    const staged = stageBegan(stageBegan(running, 'prepare', 1010), 'deobfuscate', 1200);
+    const staged = stagesAdded(stagesAdded(running, [{ name: 'prepare', at: 1010 }]), [{ name: 'deobfuscate', at: 1200 }]);
     expect(staged.run.stages).toEqual([
       { name: 'prepare', at: 1010 },
       { name: 'deobfuscate', at: 1200 },
@@ -49,7 +50,26 @@ describe('the stages of a run', () => {
 
   it('ignores a stage that arrives after the run ended', () => {
     const done = runFinished(runStarted(ready(), 1000), result(), 1100);
-    expect(stageBegan(done, 'unpack', 1200)).toBe(done);
+    expect(stagesAdded(done, [{ name: 'unpack', at: 1200 }])).toBe(done);
+  });
+
+  it('adds a batch in one update and skips an empty one', () => {
+    const running = runStarted(ready(), 1000);
+    expect(stagesAdded(running, [])).toBe(running);
+    const batch = [
+      { name: 'parse', at: 1001 },
+      { name: 'prepare', at: 1002 },
+    ];
+    expect(stagesAdded(running, batch).run.stages).toEqual(batch);
+  });
+
+  it('closes the timeline of a finished run with the editor steps and the full elapsed time', () => {
+    const done = runFinished(runStarted(ready(), 1000), result(), 1100);
+    const closed = stagesClosed(done, [{ name: 'end', at: 1400 }], 1400);
+    expect(closed.run.stages).toEqual([{ name: 'end', at: 1400 }]);
+    expect(closed.run.elapsedMs).toBe(400);
+    const cancelled = runCancelled(runStarted(ready(), 1000), 1050);
+    expect(stagesClosed(cancelled, [{ name: 'end', at: 1400 }], 1400)).toBe(cancelled);
   });
 });
 

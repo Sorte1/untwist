@@ -3,9 +3,12 @@
 The playground at [untwist.dev](https://untwist.dev) runs Untwist in the browser. Paste, drop or
 open a script, or pick an example, and press Run. Ctrl+K (⌘K) opens a command palette for the
 examples, settings, modules and actions. The WebAssembly build (`crates/untwist-wasm`)
-works in a Web Worker and reports each stage it reaches, so a long run shows where it is. You
+works in a Web Worker and reports each stage it reaches, so a long run shows where it is: the
+running panel lists every step (the playground's own steps too: library scan and fetch, worker
+start, transfer, editor) with its time, and Details keeps the timeline of the last run. You
 can read, edit and download the output and the unpacked modules, compare before and after, and
-read the diagnostics and the run report. Library modules untwist recognises are listed in the
+read the diagnostics and the run report. Library names is an opt-in setting (off by default, so the
+playground runs with `--disable library-names,library-rename`). With it on, library modules untwist recognises are listed in the
 report and folded under their `// <library> <range>: <path>` comment; Show library code unfolds
 them, and copy and download always keep the full text. The engine has the small library
 tables built in; larger ones such as core-js are served from `libraries/` and fetched only when
