@@ -1,13 +1,16 @@
 use oxc_ast::ast::*;
-use oxc_syntax::operator::UnaryOperator;
+use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
+use oxc_syntax::scope::ScopeFlags;
 
 use super::{
-    closes, has_no_params, is_named, is_null, param_name, returned, single_var, statements_of,
+    has_no_params, is_named, is_null, is_reset, param_name, returned, single_var, statements_of,
+    var_declaration,
 };
 use crate::ast_util::literal::{is_false_literal, is_true_literal};
 
 const CALL_ARGUMENTS: &str = "arguments";
-const PROXY_PARAMS: usize = 2;
+const BRANCH_DEPTH: u32 = 4;
 
 pub(super) fn controller_target<'k, 'a>(
     statements: &'k [Statement<'a>],
@@ -24,7 +27,7 @@ pub(super) fn controller_target<'k, 'a>(
     let Some(Expression::FunctionExpression(guarded)) = returned(handoff) else {
         return None;
     };
-    if !leading.iter().all(is_constants_declaration) {
+    if !leading.iter().all(is_leading_declaration) {
         return None;
     }
     guarded_target(guarded, Some(flag))
@@ -34,27 +37,116 @@ pub(super) fn handed_out_target<'k, 'a>(guarded: &'k Function<'a>) -> Option<&'k
     guarded_target(guarded, None)
 }
 
+pub(super) fn handed_out_targets<'k, 'a>(guarded: &'k Function<'a>) -> Vec<&'k Function<'a>> {
+    guarded_targets(guarded, None)
+}
+
+fn is_leading_declaration(statement: &Statement<'_>) -> bool {
+    var_declaration(statement).is_some() && !is_choice(statement)
+}
+
+fn is_choice(statement: &Statement<'_>) -> bool {
+    matches!(
+        single_var(statement),
+        Some((_, Some(Expression::ConditionalExpression(_))))
+    )
+}
+
 fn guarded_target<'k, 'a>(
     guarded: &'k Function<'a>,
     flag: Option<&str>,
 ) -> Option<&'k Function<'a>> {
-    if guarded.params.items.len() != 2 || guarded.params.rest.is_some() {
+    if super::narrowed() {
         return None;
     }
-    let (caller, callee) = (param_name(guarded, 0)?, param_name(guarded, 1)?);
-    let statements = statements_of(guarded)?;
-    let tables = statements
-        .iter()
-        .take_while(|statement| is_proxy_table(statement))
-        .count();
-    let (first, rest) = statements.get(tables..)?.split_first()?;
+    guarded_targets(guarded, flag).into_iter().next()
+}
+
+fn guarded_targets<'k, 'a>(guarded: &'k Function<'a>, flag: Option<&str>) -> Vec<&'k Function<'a>> {
+    let mut lists = Vec::new();
+    if guarded.params.items.len() != 2 || guarded.params.rest.is_some() {
+        return Vec::new();
+    }
+    let (Some(caller), Some(callee), Some(statements)) = (
+        param_name(guarded, 0),
+        param_name(guarded, 1),
+        statements_of(guarded),
+    ) else {
+        return Vec::new();
+    };
+    template_lists(statements, BRANCH_DEPTH, &mut lists);
+    lists
+        .into_iter()
+        .filter_map(|list| matched_target(list, flag, [caller, callee]))
+        .collect()
+}
+
+fn matched_target<'k, 'a>(
+    list: &'k [Statement<'a>],
+    flag: Option<&str>,
+    [caller, callee]: [&str; 2],
+) -> Option<&'k Function<'a>> {
+    let (first, rest) = list.split_first()?;
     let flag = match flag {
         Some(flag) => flag,
         None => choice_flag(first, [caller, callee])?,
     };
     let (result, target) = guarded_choice(first, flag)?;
-    let closed = closes(rest, flag, is_false_flag, result);
+    let closed = closes_skipping_declarations(rest, flag, result);
     (closed && runs_once(target, caller, callee)).then_some(target)
+}
+
+fn closes_skipping_declarations(rest: &[Statement<'_>], flag: &str, result: &str) -> bool {
+    let mut live = rest
+        .iter()
+        .filter(|statement| !matches!(statement, Statement::FunctionDeclaration(_)));
+    let (first, second) = (live.next(), live.next());
+    if let (Some(Statement::ExpressionStatement(reset)), Some(last)) = (first, second) {
+        if is_reset(&reset.expression, flag, is_false_flag)
+            && returned(last).is_some_and(|expr| is_named(expr, result))
+        {
+            return true;
+        }
+    }
+    let Some(Expression::SequenceExpression(sequence)) = first.and_then(returned) else {
+        return false;
+    };
+    matches!(sequence.expressions.as_slice(),
+        [reset, last] if is_reset(reset, flag, is_false_flag) && is_named(last, result))
+}
+
+fn template_lists<'k, 'a>(
+    statements: &'k [Statement<'a>],
+    depth: u32,
+    lists: &mut Vec<&'k [Statement<'a>]>,
+) {
+    for (index, statement) in statements.iter().enumerate() {
+        match statement {
+            _ if is_choice(statement) => lists.extend(statements.get(index..)),
+            Statement::BlockStatement(block) if depth > 0 => {
+                template_lists(&block.body, depth - 1, lists);
+            }
+            Statement::IfStatement(branch) if depth > 0 => {
+                branch_lists(&branch.consequent, depth - 1, lists);
+                if let Some(alternate) = &branch.alternate {
+                    branch_lists(alternate, depth - 1, lists);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn branch_lists<'k, 'a>(
+    branch: &'k Statement<'a>,
+    depth: u32,
+    lists: &mut Vec<&'k [Statement<'a>]>,
+) {
+    match branch {
+        Statement::BlockStatement(block) => template_lists(&block.body, depth, lists),
+        Statement::IfStatement(_) => template_lists(std::slice::from_ref(branch), depth, lists),
+        _ => {}
+    }
 }
 
 fn is_false_flag(expr: &Expression<'_>) -> bool {
@@ -79,14 +171,12 @@ fn choice_flag<'k>(statement: &'k Statement<'_>, params: [&str; 2]) -> Option<&'
 }
 
 pub(super) fn opens_with_a_choice(statements: &[Statement<'_>]) -> bool {
-    let Some(first) = statements
-        .iter()
-        .find(|statement| !is_proxy_table(statement))
-    else {
-        return false;
-    };
-    matches!(single_var(first), Some((_, Some(Expression::ConditionalExpression(choice))))
-        if matches!(choice.consequent, Expression::FunctionExpression(_)))
+    let mut lists = Vec::new();
+    template_lists(statements, BRANCH_DEPTH, &mut lists);
+    lists.iter().any(|list| {
+        matches!(list.first().and_then(single_var), Some((_, Some(Expression::ConditionalExpression(choice))))
+            if matches!(choice.consequent, Expression::FunctionExpression(_)))
+    })
 }
 
 fn is_empty_function(expr: &Expression<'_>) -> bool {
@@ -111,102 +201,44 @@ fn guarded_choice<'k, 'a>(
     shaped.then_some((result, target))
 }
 
-fn is_leading_alias(statement: &Statement<'_>) -> bool {
-    match statement {
-        Statement::FunctionDeclaration(function) => {
-            function.id.is_some()
-                && statements_of(function)
-                    .is_some_and(|body| matches!(body, [only] if returned(only).is_some()))
-        }
-        _ => matches!(single_var(statement), Some((_, Some(init)))
-            if is_alias_or_constants(init) || is_wrapper_value(init)),
+struct Forwarding<'n> {
+    caller: &'n str,
+    callee: &'n str,
+    forwards: bool,
+    resets: bool,
+}
+
+impl<'a> VisitJs<'a> for Forwarding<'_> {
+    fn visit_function(&mut self, _: &Function<'a>, _: ScopeFlags) {}
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.forwards |= is_forwarding_call(it, self.caller, self.callee);
+        walk_js::walk_call_expression(self, it);
     }
-}
 
-fn is_wrapper_value(init: &Expression<'_>) -> bool {
-    if super::narrowed() {
-        return false;
-    }
-    match init {
-        Expression::FunctionExpression(function) => {
-            !function.generator && !function.r#async && is_proxy_function(function)
-        }
-        Expression::ArrowFunctionExpression(arrow) => {
-            !arrow.r#async
-                && arrow.params.rest.is_none()
-                && arrow.params.items.len() <= PROXY_PARAMS
-                && match &arrow.body {
-                    ArrowFunctionBody::FunctionBody(body) => {
-                        matches!(body.statements.as_slice(), [only] if returned(only).is_some())
-                    }
-                    _ => true,
-                }
-        }
-        _ => false,
-    }
-}
-
-fn is_constant_property(property: &ObjectPropertyKind<'_>) -> bool {
-    let ObjectPropertyKind::ObjectProperty(property) = property else {
-        return false;
-    };
-    property.kind == PropertyKind::Init
-        && !property.computed
-        && !property.method
-        && is_table_value(&property.value)
-}
-
-fn is_table_value(value: &Expression<'_>) -> bool {
-    match value {
-        Expression::StringLiteral(_) | Expression::NumericLiteral(_) => true,
-        Expression::FunctionExpression(function) => is_proxy_function(function),
-        _ => value
-            .as_member_expression()
-            .is_some_and(|member| matches!(member.object(), Expression::Identifier(_))),
-    }
-}
-
-fn is_proxy_function(function: &Function<'_>) -> bool {
-    function.params.rest.is_none()
-        && function.params.items.len() <= PROXY_PARAMS
-        && statements_of(function)
-            .is_some_and(|body| matches!(body, [only] if returned(only).is_some()))
-}
-
-fn is_constants_declaration(statement: &Statement<'_>) -> bool {
-    matches!(single_var(statement), Some((_, Some(init @ Expression::ObjectExpression(_)))) if is_alias_or_constants(init))
-}
-
-fn is_proxy_table(statement: &Statement<'_>) -> bool {
-    let Some((_, Some(Expression::ObjectExpression(object)))) = single_var(statement) else {
-        return false;
-    };
-    let holds_a_proxy = object.properties.iter().any(|property| {
-        matches!(property, ObjectPropertyKind::ObjectProperty(property)
-            if matches!(&property.value, Expression::FunctionExpression(function) if is_proxy_function(function)))
-    });
-    holds_a_proxy && object.properties.iter().all(is_constant_property)
-}
-
-fn is_alias_or_constants(init: &Expression<'_>) -> bool {
-    match init {
-        Expression::Identifier(_) => true,
-        Expression::ObjectExpression(object) => object.properties.iter().all(is_constant_property),
-        _ => false,
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        self.resets |= it.operator == AssignmentOperator::Assign
+            && matches!(&it.left, AssignmentTarget::AssignmentTargetIdentifier(id) if id.name == self.callee)
+            && is_null(&it.right);
+        walk_js::walk_assignment_expression(self, it);
     }
 }
 
 fn runs_once(target: &Function<'_>, caller: &str, callee: &str) -> bool {
-    let Some((last, leading)) = statements_of(target).and_then(<[_]>::split_last) else {
+    let Some(body) = &target.body else {
         return false;
     };
-    leading.iter().all(is_leading_alias) && guarded_call(last, caller, callee)
+    let mut found = Forwarding {
+        caller,
+        callee,
+        forwards: false,
+        resets: false,
+    };
+    found.visit_function_body(body);
+    found.forwards && found.resets
 }
 
-fn is_forwarding_call(expr: &Expression<'_>, caller: &str, callee: &str) -> bool {
-    let Expression::CallExpression(call) = expr else {
-        return false;
-    };
+fn is_forwarding_call(call: &CallExpression<'_>, caller: &str, callee: &str) -> bool {
     let forwards = matches!(call.arguments.as_slice(),
         [Argument::Identifier(this), Argument::Identifier(rest)]
             if this.name == caller && rest.name == CALL_ARGUMENTS);
@@ -216,39 +248,4 @@ fn is_forwarding_call(expr: &Expression<'_>, caller: &str, callee: &str) -> bool
             .callee
             .as_member_expression()
             .is_some_and(|member| !member.optional() && is_named(member.object(), callee))
-}
-
-fn guarded_call(statement: &Statement<'_>, caller: &str, callee: &str) -> bool {
-    let Statement::IfStatement(guard) = statement else {
-        return false;
-    };
-    if !is_named(&guard.test, callee) {
-        return guard
-            .alternate
-            .as_ref()
-            .is_some_and(|alternate| dead_code_branch(alternate, caller, callee));
-    }
-    let Statement::BlockStatement(block) = &guard.consequent else {
-        return false;
-    };
-    let Some((first, rest)) = block.body.split_first() else {
-        return false;
-    };
-    let Some((result, Some(call))) = single_var(first) else {
-        return false;
-    };
-    guard.alternate.is_none()
-        && is_named(&guard.test, callee)
-        && is_forwarding_call(call, caller, callee)
-        && closes(rest, callee, is_null, result)
-}
-
-fn dead_code_branch(alternate: &Statement<'_>, caller: &str, callee: &str) -> bool {
-    match alternate {
-        Statement::IfStatement(_) => guarded_call(alternate, caller, callee),
-        Statement::BlockStatement(block) => {
-            matches!(block.body.as_slice(), [only] if guarded_call(only, caller, callee))
-        }
-        _ => false,
-    }
 }

@@ -3,12 +3,14 @@ use oxc_ast::ast::Program;
 use untwist_core::ast_util::respan::reset_synthetic_spans;
 use untwist_core::clock::StageInstant as Instant;
 use untwist_core::pass::{Note, NoteKind, StopReason};
-use untwist_core::reflow::GuardRecord;
+use untwist_core::reflow::{GuardRecord, PendingReaders};
 use untwist_core::source_map::{self, Mapped, Origins, OwnedSourceMap, Recording, Through};
 
 use super::boundary::Boundary;
 use super::input::{final_trees, guard_admits, FinalTextGuard, FinalTextRefusal};
-use super::notes::{guard_notes, UNPACK_PANICKED, UNPACK_TEXT_UNPARSABLE};
+use super::notes::{
+    guard_notes, SOURCE_READER_UNGUARDED_MODULE, UNPACK_PANICKED, UNPACK_TEXT_UNPARSABLE,
+};
 use super::refusal::UNPACK_TEXT_TOO_DEEP;
 use super::stages::round_of;
 use super::Pipeline;
@@ -60,8 +62,17 @@ impl Pipeline {
         reset_synthetic_spans();
         let _boundary = Boundary::enter();
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let (bundle, pending) = self.unpack_in_arena(codes, guard, stages, notes)?;
-            let (mut bundle, tally) = bundle.reflowed(prior.guards);
+            let (bundle, pending, readers) = self.unpack_in_arena(codes, guard, stages, notes)?;
+            let (mut bundle, tally, record) = bundle.reflowed(prior.guards);
+            if readers.iter().any(|module| module.unguarded(&record)) {
+                notes.push(Note {
+                    pass: "pipeline",
+                    kind: NoteKind::Refusal,
+                    message: SOURCE_READER_UNGUARDED_MODULE.to_string(),
+                    span: None,
+                });
+                return None;
+            }
             notes.extend(guard_notes(tally));
             attach_module_maps(&mut bundle, pending, prior.maps, codes);
             Some(bundle)
@@ -87,7 +98,7 @@ impl Pipeline {
         (guard, unbundled): (FinalTextGuard, bool),
         stages: &mut Vec<StageReport>,
         notes: &mut Vec<Note>,
-    ) -> Option<(BundleOutput, PendingMaps)> {
+    ) -> Option<(BundleOutput, PendingMaps, Vec<PendingReaders>)> {
         self.options.progress(Progress::StageBegins("unpack"));
         if unbundled {
             return unpack_nothing(codes, guard, stages, notes);
@@ -108,11 +119,16 @@ impl Pipeline {
         let mut bundle = self.unpack_stage(&alloc, &mut programs, stages, notes)?;
         self.after_unpack(&alloc, &mut bundle, stages, notes);
         let unreflowed = BundleOutput::unreflowed(&bundle, crate::bundle::single_text_len(codes));
+        let readers = bundle
+            .modules
+            .values()
+            .map(|module| PendingReaders::of(module.program()))
+            .collect();
         let pending = match recording {
             Some(recording) => module_maps(&mut bundle, &texts, &recording.finish()),
             None => Vec::new(),
         };
-        Some((unreflowed, pending))
+        Some((unreflowed, pending, readers))
     }
 
     fn unpack_stage<'a>(
@@ -206,7 +222,7 @@ fn unpack_nothing<T: AsRef<str>>(
     guard: FinalTextGuard,
     stages: &mut Vec<StageReport>,
     notes: &mut Vec<Note>,
-) -> Option<(BundleOutput, PendingMaps)> {
+) -> Option<(BundleOutput, PendingMaps, Vec<PendingReaders>)> {
     if !codes.iter().all(|code| guard_admits(guard, code.as_ref())) {
         refuse_final_texts(notes, FinalTextRefusal::TooDeep);
         return None;
@@ -264,7 +280,7 @@ mod tests {
             &mut Vec::new(),
             &mut false,
         );
-        let (Some((unreflowed, _)), Some(finished)) = (unreflowed, finished) else {
+        let (Some((unreflowed, _, _)), Some(finished)) = (unreflowed, finished) else {
             panic!("the bundle did not unpack");
         };
         assert_eq!(unreflowed.modules.len(), finished.modules.len());

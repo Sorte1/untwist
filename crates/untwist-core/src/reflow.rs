@@ -8,15 +8,17 @@ use crate::parse::{has_error, parse_program};
 mod guard_key;
 mod guards;
 mod placed;
+mod readers;
 #[cfg(debug_assertions)]
 mod rounds;
 
 use crate::guard_shape::{holder_read_target, may_be_a_guard};
+pub use guards::{guard_text, GuardRecord, GuardTally};
 use guards::{splice_guards, Guard};
-pub use guards::{GuardRecord, GuardTally};
 #[cfg(feature = "test-hooks")]
 pub use placed::{flip_bundle_answer_for_tests, misplace_an_edit_for_tests};
 pub use placed::{print_placing, Check, Printed};
+pub use readers::PendingReaders;
 #[cfg(debug_assertions)]
 pub use rounds::{recording, Witnessed};
 
