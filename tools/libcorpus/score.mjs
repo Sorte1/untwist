@@ -13,23 +13,24 @@ const only = new RegExp(option("--only", "."));
 const [shard, shards] = option("--shard", "0/1").split("/").map(Number);
 const BUNDLERS = ["webpack", "rollup", "esbuild", "vite"];
 const POST = { none: ".js", terser: ".min.js", obfuscator: ".obf.js" };
-const COMMENT = /^\s*\/\/ (\S+) (\S+): (\S+?)(\.(c|m)?js)?\s*$/gm;
+const COMMENT = /^\s*\/\/ (\S+) (\d[\d.,~–-]*): (.+?)\s*$/gm;
 
-const cmp = (a, b) => {
-  const x = a.split(".").map(Number);
-  const y = b.split(".").map(Number);
-  for (let i = 0; i < Math.max(x.length, y.length); i += 1) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
-  return 0;
-};
+const minor = (version) => version.split(".").slice(0, 2).map(Number);
+const before = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1]);
 const inRange = (range, version) => range.split(",").some((part) => {
-  const [low, high = low] = part.split("~");
-  return cmp(low, version) <= 0 && cmp(version, high) <= 0;
+  const [low, high = low] = part.split(/[~–-]/).map((piece) => minor(piece));
+  const v = minor(version);
+  return before(low, v) && before(v, high);
 });
+const CONCATENATED = /^(dist|build|bundles|umd)\/|[.-]min\.(c|m)?js$/;
+const stem = (file) => file.replace(/\.(c|m)?js$/, "");
 
-function untwist(input, lane) {
+function untwist(input, lane, saved) {
   const flags = lane === "unsafe" ? ["--unsafe"] : [];
   try {
-    return execFileSync(UNTWIST, [...flags, input], { encoding: "utf8", maxBuffer: 1 << 30, stdio: ["ignore", "pipe", "pipe"], timeout: 600_000 });
+    const text = execFileSync(UNTWIST, [...flags, input], { encoding: "utf8", maxBuffer: 1 << 30, stdio: ["ignore", "pipe", "pipe"], timeout: 600_000 });
+    writeFileSync(saved, text);
+    return text;
   } catch (error) {
     return null;
   }
@@ -37,17 +38,28 @@ function untwist(input, lane) {
 
 function score(truthFile, output) {
   const truth = readFileSync(truthFile, "utf8").split("\n").filter(Boolean).map((line) => line.split("\t"));
-  const truthKeys = new Map(truth.map(([lib, version, file]) => [`${lib}\t${file.replace(/\.(c|m)?js$/, "")}`, version]));
-  const named = new Map();
-  for (const match of output.matchAll(COMMENT)) named.set(`${match[1]}\t${match[3]}`, match[2]);
-  let right = 0;
+  const comments = [...output.matchAll(COMMENT)].map((match) => ({ label: match[1], range: match[2], modules: match[3].split(" | ").map(stem), module: match[3] }));
+  const versions = new Map(truth.map(([lib, version]) => [lib, version]));
   const wrong = [];
-  for (const [key, range] of named) {
-    const version = truthKeys.get(key);
-    if (version && inRange(range, version)) right += 1;
-    else wrong.push(`${key.replace("\t", ":")} ${range}${version ? ` (truth ${version})` : " (not in bundle)"}`);
+  const ok = [];
+  for (const comment of comments) {
+    const version = versions.get(comment.label);
+    if (!version) wrong.push(`${comment.label}:${comment.module} ${comment.range} (library not in bundle)`);
+    else if (!inRange(comment.range, version)) wrong.push(`${comment.label}:${comment.module} ${comment.range} (truth ${version})`);
+    else ok.push(comment);
   }
-  return { modules: truth.length, right, wrong };
+  let named = 0;
+  let exact = 0;
+  for (const [lib, , file] of truth) {
+    const mine = ok.filter((comment) => comment.label === lib);
+    if (mine.some((comment) => comment.modules.includes(stem(file)))) {
+      named += 1;
+      exact += 1;
+    } else if (CONCATENATED.test(file) && mine.length) named += 1;
+  }
+  const truthStems = new Set(truth.map(([lib, , file]) => `${lib}\t${stem(file)}`));
+  const elsewhere = ok.filter((comment) => !comment.modules.some((module) => truthStems.has(`${comment.label}\t${module}`))).length;
+  return { modules: truth.length, named, exact, comments: comments.length, elsewhere, wrong };
 }
 
 const rows = [];
@@ -61,17 +73,18 @@ for (const app of work) {
       if (!existsSync(input)) continue;
       for (const lane of LANES) {
         const started = Date.now();
-        const output = untwist(input, lane);
+        mkdirSync(join(OUT, "outputs", app.id), { recursive: true });
+        const output = untwist(input, lane, join(OUT, "outputs", app.id, `${bundler}${suffix.replace(/\.js$/, "")}.${lane}.js`));
         if (output === null) {
-          rows.push([app.id, app.lib, app.version, bundler, post, lane, "error", "", "", "", Date.now() - started].join("\t"));
+          rows.push([app.id, app.lib, app.version, bundler, post, lane, "error", "", "", "", "", "", "", "", Date.now() - started].join("\t"));
           continue;
         }
         const result = score(truthFile, output);
-        rows.push([app.id, app.lib, app.version, bundler, post, lane, "ok", result.modules, result.right, result.wrong.join(" | "), Date.now() - started].join("\t"));
+        rows.push([app.id, app.lib, app.version, bundler, post, lane, "ok", result.modules, result.named, result.exact, result.comments, result.elsewhere, result.wrong.length, result.wrong.join(" | "), Date.now() - started].join("\t"));
       }
     }
   }
 }
 mkdirSync(join(OUT, "scores"), { recursive: true });
-writeFileSync(join(OUT, "scores", `score-${shard}-of-${shards}.tsv`), `${rows.join("\n")}\n`);
+writeFileSync(join(OUT, "scores", `score${option("--tag", "")}-${shard}-of-${shards}.tsv`), `${rows.join("\n")}\n`);
 console.log(`${rows.length} rows, cpus ${availableParallelism()}`);

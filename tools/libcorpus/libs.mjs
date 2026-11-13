@@ -96,7 +96,7 @@ export const TOOLS = {
 };
 
 export const SELF_RESOLVING = new Set([
-  "three", "preact", "moment", "react", "react-dom", "solid-js", "rxjs", "@reduxjs/toolkit", "zustand", "dayjs", "vue", "zone.js",
+  "three", "preact", "moment", "react", "react-dom", "solid-js", "rxjs", "zustand", "dayjs", "vue", "zone.js",
 ]);
 
 export const alias = (name, version) => `${name.replace(/^@/, "").replace("/", "-")}--${version}`;

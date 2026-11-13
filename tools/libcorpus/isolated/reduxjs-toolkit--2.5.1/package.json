@@ -1,7 +1,0 @@
-{
-  "name": "untwist-libcorpus-reduxjs-toolkit--2-5-1",
-  "private": true,
-  "dependencies": {
-    "@reduxjs/toolkit": "2.5.1"
-  }
-}

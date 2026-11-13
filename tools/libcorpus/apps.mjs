@@ -52,5 +52,7 @@ export function apps() {
     const entry = byKey.get(`${name}@${version}`);
     out.push({ lib: name, version, root: entry.root, aliases: aliasesFor(entry), id: `${entry.slug}--${kind}`, env: "production", source });
   }
+  out.push({ lib: "baseline", version: "0.0.0", root: ".", aliases: {}, id: "baseline--esm", env: "production", source: "export const value = 1;\nglobalThis.__lib = { value };\n" });
+  out.push({ lib: "baseline", version: "0.0.0", root: ".", aliases: {}, id: "baseline--cjs", env: "production", source: "module.exports = { value: 1 };\nglobalThis.__lib = require(\"./index.js\");\n" });
   return out;
 }
