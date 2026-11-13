@@ -282,3 +282,27 @@ function w(o) {
 }
 ");
 }
+
+#[test]
+fn a_declarator_keeps_the_sequence_that_hides_an_anonymous_function_from_its_name() {
+    assert_transform!("var f = (0, function () {}), g = (0, class {}); let h = (a(), () => 1);", [untwist_unminify::sequence::boxed], @r"
+var f = (0, function () {}), g = (0, class {});
+let h = (a(), () => 1);
+");
+}
+
+#[test]
+fn an_assignment_keeps_the_sequence_that_hides_an_anonymous_function_from_its_name() {
+    assert_transform!("f = (a(), function () {}); o.g = (b(), async () => 1);", [untwist_unminify::sequence::boxed], @r"
+f = (a(), function () {});
+o.g = (b(), async () => 1);
+");
+}
+
+#[test]
+fn a_named_function_expression_still_moves_out_of_the_sequence() {
+    assert_transform!("var f = (a(), function named() {});", [untwist_unminify::sequence::boxed], @r"
+a();
+var f = function named() {};
+");
+}

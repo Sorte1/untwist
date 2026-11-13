@@ -67,12 +67,26 @@ fn hoist_head<'a>(expr: &mut Expression<'a>, out: &mut AVec<'a, Statement<'a>>, 
     *expr = last;
 }
 
+fn ends_in_anonymous_definition(expr: &Expression<'_>) -> bool {
+    let Expression::SequenceExpression(seq) = expr else {
+        return false;
+    };
+    match seq.expressions.last().map(Expression::without_parentheses) {
+        Some(Expression::FunctionExpression(function)) => function.id.is_none(),
+        Some(Expression::ClassExpression(class)) => class.id.is_none(),
+        Some(Expression::ArrowFunctionExpression(_)) => true,
+        _ => false,
+    }
+}
+
 fn declarator_has_sequence_init(declaration: &VariableDeclaration<'_>) -> bool {
     declaration.declarations.len() == 1
-        && declaration
-            .declarations
-            .first()
-            .is_some_and(|declarator| declarator.init.as_ref().is_some_and(is_sequence))
+        && declaration.declarations.first().is_some_and(|declarator| {
+            declarator
+                .init
+                .as_ref()
+                .is_some_and(|init| is_sequence(init) && !ends_in_anonymous_definition(init))
+        })
 }
 
 fn hoist_declarator<'a>(
@@ -80,7 +94,7 @@ fn hoist_declarator<'a>(
     out: &mut AVec<'a, Statement<'a>>,
     cx: &Cx<'a, '_>,
 ) {
-    if declaration.declarations.len() != 1 {
+    if !declarator_has_sequence_init(declaration) {
         return;
     }
     let Some(declarator) = declaration.declarations.first_mut() else {
@@ -376,6 +390,7 @@ fn hoist_assignment_sequence<'a>(expr: &mut Expression<'a>, cx: &Cx<'a, '_>) -> 
             return false;
         }
         if !is_sequence(&assign.right)
+            || ends_in_anonymous_definition(&assign.right)
             || !is_hoistable_target(&assign.left)
             || !is_hoist_order_safe(assign, cx)
         {

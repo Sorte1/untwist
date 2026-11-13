@@ -1,0 +1,9 @@
+var-function|var g = (0, function () {}); console.log(JSON.stringify(g.name));
+var-class|var C = (0, class {}); console.log(JSON.stringify(C.name));
+let-arrow|let a = (0, () => 1); console.log(JSON.stringify(a.name));
+const-async-arrow|const a = (console.log("head"), async () => 1); console.log(JSON.stringify(a.name));
+assign-function|var f; f = (console.log("head"), function () {}); console.log(JSON.stringify(f.name));
+assign-member|var o = {}; o.m = (console.log("head"), function () {}); console.log(JSON.stringify(o.m.name));
+for-init|for (var g = (0, function () {}), i = 0; i < 1; i++) console.log(JSON.stringify(g.name));
+named-expression|var g = (console.log("head"), function inner() {}); console.log(g.name);
+generator|var gen = (0, function* () {}); console.log(JSON.stringify(gen.name));
