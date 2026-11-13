@@ -254,13 +254,24 @@ function closureVariant(version, jar, out) {
       mkdirSync(dir, { recursive: true });
       const file = join(dir, `${version}-${out}-${feature}.js`);
       writeFileSync(file, source);
-      const { stdout } = await promisify(execFile)("java", ["-jar", jar, "--compilation_level", "SIMPLE", "--language_in", "ECMASCRIPT_NEXT", "--language_out", out, "--js", file, "--warning_level", "QUIET"], { encoding: "utf8", maxBuffer: 1 << 26 });
+      const { stdout } = await promisify(execFile)("java", ["-jar", jar, "--compilation_level", "SIMPLE", "--language_in", "ECMASCRIPT_NEXT", "--language_out", out, "--js", basename(file), "--warning_level", "QUIET"], { encoding: "utf8", maxBuffer: 1 << 26, cwd: dir });
       return stdout;
     },
   };
 }
 
 const closureVariants = closureJars.flatMap(([version, jar]) => ["ECMASCRIPT5", "ECMASCRIPT_2015"].map((out) => closureVariant(version, jar, out)));
+
+function bundled(variant) {
+  return {
+    ...variant,
+    options: `${variant.options}-iife-terser`,
+    async compile(source, feature) {
+      const code = await variant.compile(source, feature);
+      return (await terser.minify(`(function () {\n${code}\n})();`, { compress: true, mangle: true })).code;
+    },
+  };
+}
 
 function minified(variant) {
   return {
@@ -272,6 +283,10 @@ function minified(variant) {
     },
   };
 }
+
+const safari9 = babelLines
+  .filter(([line]) => line === "7.28" || line === "7.29")
+  .map(([line, b]) => babelVariant(line, b, "safari9", { targets: { safari: "9" } }));
 
 const latest = (tool, version, options) => [...babelVariants, ...tsVariants, ...swcVariants].find((v) => v.tool === tool && v.version === version && v.options === options);
 
@@ -287,6 +302,8 @@ const variants = [
   minified(latest("babel", "7.29", "chrome45")),
   minified(latest("babel", "7.28", "chrome45")),
   minified(latest("babel", "7.28", "ie11")),
+  ...safari9,
+  ...safari9.map(bundled),
   minified(latest("babel", "7.29", "ie11-loose")),
   minified(latest("ts", "5.9", "es5")),
   minified(latest("ts", "5.9", "es5-tslib")),

@@ -5,6 +5,7 @@ babel6	6	ie11	async-generators	refused:unknown: Unexpected token (1:14)	-	-
 babel6	6	ie11	block-scoping	written	babel6-6/ie11/block-scoping.js	faithful
 babel6	6	ie11	class-basic	written	babel6-6/ie11/class-basic.js	faithful
 babel6	6	ie11	class-builtins	written	babel6-6/ie11/class-builtins.js	differs
+babel6	6	ie11	class-early-return	written	babel6-6/ie11/class-early-return.js	faithful
 babel6	6	ie11	class-extends	written	babel6-6/ie11/class-extends.js	faithful
 babel6	6	ie11	class-fields	written	babel6-6/ie11/class-fields.js	differs
 babel6	6	ie11	class-identity	written	babel6-6/ie11/class-identity.js	differs
@@ -29,6 +30,7 @@ babel6	6	ie11-loose	async-generators	refused:unknown: Unexpected token (1:14)	-	
 babel6	6	ie11-loose	block-scoping	written	babel6-6/ie11-loose/block-scoping.js	faithful
 babel6	6	ie11-loose	class-basic	written	babel6-6/ie11-loose/class-basic.js	faithful
 babel6	6	ie11-loose	class-builtins	written	babel6-6/ie11-loose/class-builtins.js	differs
+babel6	6	ie11-loose	class-early-return	written	babel6-6/ie11-loose/class-early-return.js	faithful
 babel6	6	ie11-loose	class-extends	written	babel6-6/ie11-loose/class-extends.js	faithful
 babel6	6	ie11-loose	class-fields	written	babel6-6/ie11-loose/class-fields.js	differs
 babel6	6	ie11-loose	class-identity	written	babel6-6/ie11-loose/class-identity.js	differs
@@ -53,6 +55,7 @@ babel	7.0	ie11	async-generators	written	babel-7.0/ie11/async-generators.js	faith
 babel	7.0	ie11	block-scoping	written	babel-7.0/ie11/block-scoping.js	faithful
 babel	7.0	ie11	class-basic	written	babel-7.0/ie11/class-basic.js	faithful
 babel	7.0	ie11	class-builtins	written	babel-7.0/ie11/class-builtins.js	faithful
+babel	7.0	ie11	class-early-return	written	babel-7.0/ie11/class-early-return.js	faithful
 babel	7.0	ie11	class-extends	written	babel-7.0/ie11/class-extends.js	faithful
 babel	7.0	ie11	class-fields	written	babel-7.0/ie11/class-fields.js	faithful
 babel	7.0	ie11	class-identity	written	babel-7.0/ie11/class-identity.js	differs
@@ -77,6 +80,7 @@ babel	7.0	ie11-loose	async-generators	same	babel-7.0/ie11/async-generators.js	fa
 babel	7.0	ie11-loose	block-scoping	written	babel-7.0/ie11-loose/block-scoping.js	faithful
 babel	7.0	ie11-loose	class-basic	written	babel-7.0/ie11-loose/class-basic.js	faithful
 babel	7.0	ie11-loose	class-builtins	written	babel-7.0/ie11-loose/class-builtins.js	faithful
+babel	7.0	ie11-loose	class-early-return	written	babel-7.0/ie11-loose/class-early-return.js	faithful
 babel	7.0	ie11-loose	class-extends	written	babel-7.0/ie11-loose/class-extends.js	faithful
 babel	7.0	ie11-loose	class-fields	written	babel-7.0/ie11-loose/class-fields.js	differs
 babel	7.0	ie11-loose	class-identity	written	babel-7.0/ie11-loose/class-identity.js	differs
@@ -101,6 +105,7 @@ babel	7.0	ie11-runtime	async-generators	written	babel-7.0/ie11-runtime/async-gen
 babel	7.0	ie11-runtime	block-scoping	written	babel-7.0/ie11-runtime/block-scoping.js	faithful
 babel	7.0	ie11-runtime	class-basic	written	babel-7.0/ie11-runtime/class-basic.js	faithful
 babel	7.0	ie11-runtime	class-builtins	written	babel-7.0/ie11-runtime/class-builtins.js	faithful
+babel	7.0	ie11-runtime	class-early-return	written	babel-7.0/ie11-runtime/class-early-return.js	faithful
 babel	7.0	ie11-runtime	class-extends	written	babel-7.0/ie11-runtime/class-extends.js	faithful
 babel	7.0	ie11-runtime	class-fields	written	babel-7.0/ie11-runtime/class-fields.js	faithful
 babel	7.0	ie11-runtime	class-identity	written	babel-7.0/ie11-runtime/class-identity.js	differs
@@ -125,6 +130,7 @@ babel	7.12	ie11	async-generators	written	babel-7.12/ie11/async-generators.js	fai
 babel	7.12	ie11	block-scoping	written	babel-7.12/ie11/block-scoping.js	faithful
 babel	7.12	ie11	class-basic	written	babel-7.12/ie11/class-basic.js	faithful
 babel	7.12	ie11	class-builtins	written	babel-7.12/ie11/class-builtins.js	faithful
+babel	7.12	ie11	class-early-return	written	babel-7.12/ie11/class-early-return.js	faithful
 babel	7.12	ie11	class-extends	written	babel-7.12/ie11/class-extends.js	faithful
 babel	7.12	ie11	class-fields	written	babel-7.12/ie11/class-fields.js	faithful
 babel	7.12	ie11	class-identity	written	babel-7.12/ie11/class-identity.js	differs
@@ -149,6 +155,7 @@ babel	7.12	ie11-loose	async-generators	same	babel-7.12/ie11/async-generators.js	
 babel	7.12	ie11-loose	block-scoping	written	babel-7.12/ie11-loose/block-scoping.js	faithful
 babel	7.12	ie11-loose	class-basic	written	babel-7.12/ie11-loose/class-basic.js	faithful
 babel	7.12	ie11-loose	class-builtins	written	babel-7.12/ie11-loose/class-builtins.js	faithful
+babel	7.12	ie11-loose	class-early-return	written	babel-7.12/ie11-loose/class-early-return.js	faithful
 babel	7.12	ie11-loose	class-extends	written	babel-7.12/ie11-loose/class-extends.js	faithful
 babel	7.12	ie11-loose	class-fields	written	babel-7.12/ie11-loose/class-fields.js	differs
 babel	7.12	ie11-loose	class-identity	written	babel-7.12/ie11-loose/class-identity.js	differs
@@ -173,6 +180,7 @@ babel	7.12	ie11-runtime	async-generators	written	babel-7.12/ie11-runtime/async-g
 babel	7.12	ie11-runtime	block-scoping	written	babel-7.12/ie11-runtime/block-scoping.js	faithful
 babel	7.12	ie11-runtime	class-basic	written	babel-7.12/ie11-runtime/class-basic.js	faithful
 babel	7.12	ie11-runtime	class-builtins	written	babel-7.12/ie11-runtime/class-builtins.js	faithful
+babel	7.12	ie11-runtime	class-early-return	written	babel-7.12/ie11-runtime/class-early-return.js	faithful
 babel	7.12	ie11-runtime	class-extends	written	babel-7.12/ie11-runtime/class-extends.js	faithful
 babel	7.12	ie11-runtime	class-fields	written	babel-7.12/ie11-runtime/class-fields.js	faithful
 babel	7.12	ie11-runtime	class-identity	written	babel-7.12/ie11-runtime/class-identity.js	differs
@@ -197,6 +205,7 @@ babel	7.20	ie11	async-generators	written	babel-7.20/ie11/async-generators.js	fai
 babel	7.20	ie11	block-scoping	written	babel-7.20/ie11/block-scoping.js	faithful
 babel	7.20	ie11	class-basic	written	babel-7.20/ie11/class-basic.js	faithful
 babel	7.20	ie11	class-builtins	written	babel-7.20/ie11/class-builtins.js	faithful
+babel	7.20	ie11	class-early-return	written	babel-7.20/ie11/class-early-return.js	faithful
 babel	7.20	ie11	class-extends	written	babel-7.20/ie11/class-extends.js	faithful
 babel	7.20	ie11	class-fields	written	babel-7.20/ie11/class-fields.js	faithful
 babel	7.20	ie11	class-identity	written	babel-7.20/ie11/class-identity.js	differs
@@ -221,6 +230,7 @@ babel	7.20	ie11-loose	async-generators	written	babel-7.20/ie11-loose/async-gener
 babel	7.20	ie11-loose	block-scoping	written	babel-7.20/ie11-loose/block-scoping.js	faithful
 babel	7.20	ie11-loose	class-basic	written	babel-7.20/ie11-loose/class-basic.js	faithful
 babel	7.20	ie11-loose	class-builtins	written	babel-7.20/ie11-loose/class-builtins.js	faithful
+babel	7.20	ie11-loose	class-early-return	written	babel-7.20/ie11-loose/class-early-return.js	faithful
 babel	7.20	ie11-loose	class-extends	written	babel-7.20/ie11-loose/class-extends.js	faithful
 babel	7.20	ie11-loose	class-fields	written	babel-7.20/ie11-loose/class-fields.js	differs
 babel	7.20	ie11-loose	class-identity	written	babel-7.20/ie11-loose/class-identity.js	differs
@@ -245,6 +255,7 @@ babel	7.20	ie11-runtime	async-generators	written	babel-7.20/ie11-runtime/async-g
 babel	7.20	ie11-runtime	block-scoping	written	babel-7.20/ie11-runtime/block-scoping.js	faithful
 babel	7.20	ie11-runtime	class-basic	written	babel-7.20/ie11-runtime/class-basic.js	faithful
 babel	7.20	ie11-runtime	class-builtins	written	babel-7.20/ie11-runtime/class-builtins.js	faithful
+babel	7.20	ie11-runtime	class-early-return	written	babel-7.20/ie11-runtime/class-early-return.js	faithful
 babel	7.20	ie11-runtime	class-extends	written	babel-7.20/ie11-runtime/class-extends.js	faithful
 babel	7.20	ie11-runtime	class-fields	written	babel-7.20/ie11-runtime/class-fields.js	faithful
 babel	7.20	ie11-runtime	class-identity	written	babel-7.20/ie11-runtime/class-identity.js	differs
@@ -269,6 +280,7 @@ babel	7.24	ie11	async-generators	written	babel-7.24/ie11/async-generators.js	fai
 babel	7.24	ie11	block-scoping	written	babel-7.24/ie11/block-scoping.js	faithful
 babel	7.24	ie11	class-basic	written	babel-7.24/ie11/class-basic.js	faithful
 babel	7.24	ie11	class-builtins	written	babel-7.24/ie11/class-builtins.js	faithful
+babel	7.24	ie11	class-early-return	written	babel-7.24/ie11/class-early-return.js	faithful
 babel	7.24	ie11	class-extends	written	babel-7.24/ie11/class-extends.js	faithful
 babel	7.24	ie11	class-fields	written	babel-7.24/ie11/class-fields.js	faithful
 babel	7.24	ie11	class-identity	written	babel-7.24/ie11/class-identity.js	differs
@@ -293,6 +305,7 @@ babel	7.24	ie11-loose	async-generators	written	babel-7.24/ie11-loose/async-gener
 babel	7.24	ie11-loose	block-scoping	written	babel-7.24/ie11-loose/block-scoping.js	faithful
 babel	7.24	ie11-loose	class-basic	written	babel-7.24/ie11-loose/class-basic.js	faithful
 babel	7.24	ie11-loose	class-builtins	written	babel-7.24/ie11-loose/class-builtins.js	faithful
+babel	7.24	ie11-loose	class-early-return	written	babel-7.24/ie11-loose/class-early-return.js	faithful
 babel	7.24	ie11-loose	class-extends	written	babel-7.24/ie11-loose/class-extends.js	faithful
 babel	7.24	ie11-loose	class-fields	written	babel-7.24/ie11-loose/class-fields.js	differs
 babel	7.24	ie11-loose	class-identity	written	babel-7.24/ie11-loose/class-identity.js	differs
@@ -317,6 +330,7 @@ babel	7.24	ie11-runtime	async-generators	written	babel-7.24/ie11-runtime/async-g
 babel	7.24	ie11-runtime	block-scoping	written	babel-7.24/ie11-runtime/block-scoping.js	faithful
 babel	7.24	ie11-runtime	class-basic	written	babel-7.24/ie11-runtime/class-basic.js	faithful
 babel	7.24	ie11-runtime	class-builtins	written	babel-7.24/ie11-runtime/class-builtins.js	faithful
+babel	7.24	ie11-runtime	class-early-return	written	babel-7.24/ie11-runtime/class-early-return.js	faithful
 babel	7.24	ie11-runtime	class-extends	written	babel-7.24/ie11-runtime/class-extends.js	faithful
 babel	7.24	ie11-runtime	class-fields	written	babel-7.24/ie11-runtime/class-fields.js	faithful
 babel	7.24	ie11-runtime	class-identity	written	babel-7.24/ie11-runtime/class-identity.js	differs
@@ -341,6 +355,7 @@ babel	7.28	ie11	async-generators	written	babel-7.28/ie11/async-generators.js	fai
 babel	7.28	ie11	block-scoping	same	babel-7.24/ie11/block-scoping.js	faithful
 babel	7.28	ie11	class-basic	same	babel-7.24/ie11/class-basic.js	faithful
 babel	7.28	ie11	class-builtins	written	babel-7.28/ie11/class-builtins.js	faithful
+babel	7.28	ie11	class-early-return	same	babel-7.24/ie11/class-early-return.js	faithful
 babel	7.28	ie11	class-extends	written	babel-7.28/ie11/class-extends.js	faithful
 babel	7.28	ie11	class-fields	same	babel-7.24/ie11/class-fields.js	faithful
 babel	7.28	ie11	class-identity	same	babel-7.24/ie11/class-identity.js	differs
@@ -365,6 +380,7 @@ babel	7.28	ie11-loose	async-generators	same	babel-7.28/ie11/async-generators.js	
 babel	7.28	ie11-loose	block-scoping	same	babel-7.24/ie11-loose/block-scoping.js	faithful
 babel	7.28	ie11-loose	class-basic	same	babel-7.24/ie11-loose/class-basic.js	faithful
 babel	7.28	ie11-loose	class-builtins	written	babel-7.28/ie11-loose/class-builtins.js	faithful
+babel	7.28	ie11-loose	class-early-return	same	babel-7.24/ie11-loose/class-early-return.js	faithful
 babel	7.28	ie11-loose	class-extends	same	babel-7.24/ie11-loose/class-extends.js	faithful
 babel	7.28	ie11-loose	class-fields	same	babel-7.24/ie11-loose/class-fields.js	differs
 babel	7.28	ie11-loose	class-identity	same	babel-7.24/ie11-loose/class-identity.js	differs
@@ -389,6 +405,7 @@ babel	7.28	ie11-runtime	async-generators	written	babel-7.28/ie11-runtime/async-g
 babel	7.28	ie11-runtime	block-scoping	same	babel-7.24/ie11-runtime/block-scoping.js	faithful
 babel	7.28	ie11-runtime	class-basic	same	babel-7.24/ie11-runtime/class-basic.js	faithful
 babel	7.28	ie11-runtime	class-builtins	written	babel-7.28/ie11-runtime/class-builtins.js	faithful
+babel	7.28	ie11-runtime	class-early-return	same	babel-7.24/ie11-runtime/class-early-return.js	faithful
 babel	7.28	ie11-runtime	class-extends	written	babel-7.28/ie11-runtime/class-extends.js	faithful
 babel	7.28	ie11-runtime	class-fields	same	babel-7.24/ie11-runtime/class-fields.js	faithful
 babel	7.28	ie11-runtime	class-identity	same	babel-7.24/ie11-runtime/class-identity.js	differs
@@ -413,6 +430,7 @@ babel	7.28	chrome45	async-generators	same	babel-7.28/ie11/async-generators.js	fa
 babel	7.28	chrome45	block-scoping	same	babel-7.24/ie11/block-scoping.js	faithful
 babel	7.28	chrome45	class-basic	same	babel-7.24/ie11/class-basic.js	faithful
 babel	7.28	chrome45	class-builtins	same	babel-7.28/ie11/class-builtins.js	faithful
+babel	7.28	chrome45	class-early-return	same	babel-7.24/ie11/class-early-return.js	faithful
 babel	7.28	chrome45	class-extends	same	babel-7.28/ie11/class-extends.js	faithful
 babel	7.28	chrome45	class-fields	same	babel-7.24/ie11/class-fields.js	faithful
 babel	7.28	chrome45	class-identity	same	babel-7.24/ie11/class-identity.js	differs
@@ -437,6 +455,7 @@ babel	7.29	ie11	async-generators	written	babel-7.29/ie11/async-generators.js	fai
 babel	7.29	ie11	block-scoping	same	babel-7.24/ie11/block-scoping.js	faithful
 babel	7.29	ie11	class-basic	written	babel-7.29/ie11/class-basic.js	faithful
 babel	7.29	ie11	class-builtins	written	babel-7.29/ie11/class-builtins.js	faithful
+babel	7.29	ie11	class-early-return	written	babel-7.29/ie11/class-early-return.js	faithful
 babel	7.29	ie11	class-extends	written	babel-7.29/ie11/class-extends.js	faithful
 babel	7.29	ie11	class-fields	written	babel-7.29/ie11/class-fields.js	faithful
 babel	7.29	ie11	class-identity	written	babel-7.29/ie11/class-identity.js	differs
@@ -461,6 +480,7 @@ babel	7.29	ie11-loose	async-generators	same	babel-7.29/ie11/async-generators.js	
 babel	7.29	ie11-loose	block-scoping	same	babel-7.24/ie11-loose/block-scoping.js	faithful
 babel	7.29	ie11-loose	class-basic	written	babel-7.29/ie11-loose/class-basic.js	faithful
 babel	7.29	ie11-loose	class-builtins	same	babel-7.28/ie11-loose/class-builtins.js	faithful
+babel	7.29	ie11-loose	class-early-return	same	babel-7.24/ie11-loose/class-early-return.js	faithful
 babel	7.29	ie11-loose	class-extends	written	babel-7.29/ie11-loose/class-extends.js	faithful
 babel	7.29	ie11-loose	class-fields	written	babel-7.29/ie11-loose/class-fields.js	differs
 babel	7.29	ie11-loose	class-identity	same	babel-7.24/ie11-loose/class-identity.js	differs
@@ -485,6 +505,7 @@ babel	7.29	ie11-runtime	async-generators	written	babel-7.29/ie11-runtime/async-g
 babel	7.29	ie11-runtime	block-scoping	same	babel-7.24/ie11-runtime/block-scoping.js	faithful
 babel	7.29	ie11-runtime	class-basic	written	babel-7.29/ie11-runtime/class-basic.js	faithful
 babel	7.29	ie11-runtime	class-builtins	written	babel-7.29/ie11-runtime/class-builtins.js	faithful
+babel	7.29	ie11-runtime	class-early-return	same	babel-7.24/ie11-runtime/class-early-return.js	faithful
 babel	7.29	ie11-runtime	class-extends	written	babel-7.29/ie11-runtime/class-extends.js	faithful
 babel	7.29	ie11-runtime	class-fields	written	babel-7.29/ie11-runtime/class-fields.js	faithful
 babel	7.29	ie11-runtime	class-identity	written	babel-7.29/ie11-runtime/class-identity.js	differs
@@ -509,6 +530,7 @@ babel	7.29	chrome45	async-generators	same	babel-7.29/ie11/async-generators.js	fa
 babel	7.29	chrome45	block-scoping	same	babel-7.24/ie11/block-scoping.js	faithful
 babel	7.29	chrome45	class-basic	same	babel-7.29/ie11/class-basic.js	faithful
 babel	7.29	chrome45	class-builtins	same	babel-7.29/ie11/class-builtins.js	faithful
+babel	7.29	chrome45	class-early-return	same	babel-7.29/ie11/class-early-return.js	faithful
 babel	7.29	chrome45	class-extends	same	babel-7.29/ie11/class-extends.js	faithful
 babel	7.29	chrome45	class-fields	same	babel-7.29/ie11/class-fields.js	faithful
 babel	7.29	chrome45	class-identity	same	babel-7.29/ie11/class-identity.js	differs
@@ -533,6 +555,7 @@ babel	7.29	ie11-runtime-cjs	async-generators	written	babel-7.29/ie11-runtime-cjs
 babel	7.29	ie11-runtime-cjs	block-scoping	same	babel-7.24/ie11-runtime/block-scoping.js	faithful
 babel	7.29	ie11-runtime-cjs	class-basic	written	babel-7.29/ie11-runtime-cjs/class-basic.js	differs
 babel	7.29	ie11-runtime-cjs	class-builtins	written	babel-7.29/ie11-runtime-cjs/class-builtins.js	differs
+babel	7.29	ie11-runtime-cjs	class-early-return	written	babel-7.29/ie11-runtime-cjs/class-early-return.js	differs
 babel	7.29	ie11-runtime-cjs	class-extends	written	babel-7.29/ie11-runtime-cjs/class-extends.js	differs
 babel	7.29	ie11-runtime-cjs	class-fields	written	babel-7.29/ie11-runtime-cjs/class-fields.js	differs
 babel	7.29	ie11-runtime-cjs	class-identity	written	babel-7.29/ie11-runtime-cjs/class-identity.js	differs
@@ -557,6 +580,7 @@ babel	7.29	chrome58	async-generators	written	babel-7.29/chrome58/async-generator
 babel	7.29	chrome58	block-scoping	written	babel-7.29/chrome58/block-scoping.js	faithful
 babel	7.29	chrome58	class-basic	written	babel-7.29/chrome58/class-basic.js	faithful
 babel	7.29	chrome58	class-builtins	written	babel-7.29/chrome58/class-builtins.js	faithful
+babel	7.29	chrome58	class-early-return	written	babel-7.29/chrome58/class-early-return.js	faithful
 babel	7.29	chrome58	class-extends	written	babel-7.29/chrome58/class-extends.js	faithful
 babel	7.29	chrome58	class-fields	written	babel-7.29/chrome58/class-fields.js	faithful
 babel	7.29	chrome58	class-identity	written	babel-7.29/chrome58/class-identity.js	faithful
@@ -581,6 +605,7 @@ babel	7.29	esmodules	async-generators	written	babel-7.29/esmodules/async-generat
 babel	7.29	esmodules	block-scoping	written	babel-7.29/esmodules/block-scoping.js	faithful
 babel	7.29	esmodules	class-basic	written	babel-7.29/esmodules/class-basic.js	faithful
 babel	7.29	esmodules	class-builtins	written	babel-7.29/esmodules/class-builtins.js	faithful
+babel	7.29	esmodules	class-early-return	written	babel-7.29/esmodules/class-early-return.js	faithful
 babel	7.29	esmodules	class-extends	written	babel-7.29/esmodules/class-extends.js	faithful
 babel	7.29	esmodules	class-fields	written	babel-7.29/esmodules/class-fields.js	faithful
 babel	7.29	esmodules	class-identity	written	babel-7.29/esmodules/class-identity.js	faithful
@@ -605,6 +630,7 @@ babel	8	ie11	async-generators	written	babel-8/ie11/async-generators.js	faithful
 babel	8	ie11	block-scoping	written	babel-8/ie11/block-scoping.js	faithful
 babel	8	ie11	class-basic	written	babel-8/ie11/class-basic.js	faithful
 babel	8	ie11	class-builtins	written	babel-8/ie11/class-builtins.js	faithful
+babel	8	ie11	class-early-return	written	babel-8/ie11/class-early-return.js	faithful
 babel	8	ie11	class-extends	written	babel-8/ie11/class-extends.js	faithful
 babel	8	ie11	class-fields	written	babel-8/ie11/class-fields.js	faithful
 babel	8	ie11	class-identity	written	babel-8/ie11/class-identity.js	differs
@@ -629,6 +655,7 @@ babel	8	ie11-loose	async-generators	refused:[BABEL] unknown file: @babel/preset-
 babel	8	ie11-loose	block-scoping	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	class-basic	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	class-builtins	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
+babel	8	ie11-loose	class-early-return	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	class-extends	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	class-fields	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
 babel	8	ie11-loose	class-identity	refused:[BABEL] unknown file: @babel/preset-env: The 'loose' and 'spec' options have bee	-	-
@@ -653,6 +680,7 @@ babel	8	ie11-runtime	async-generators	written	babel-8/ie11-runtime/async-generat
 babel	8	ie11-runtime	block-scoping	written	babel-8/ie11-runtime/block-scoping.js	faithful
 babel	8	ie11-runtime	class-basic	written	babel-8/ie11-runtime/class-basic.js	faithful
 babel	8	ie11-runtime	class-builtins	written	babel-8/ie11-runtime/class-builtins.js	faithful
+babel	8	ie11-runtime	class-early-return	written	babel-8/ie11-runtime/class-early-return.js	faithful
 babel	8	ie11-runtime	class-extends	written	babel-8/ie11-runtime/class-extends.js	faithful
 babel	8	ie11-runtime	class-fields	written	babel-8/ie11-runtime/class-fields.js	faithful
 babel	8	ie11-runtime	class-identity	written	babel-8/ie11-runtime/class-identity.js	differs
@@ -677,6 +705,7 @@ babel	8	chrome45	async-generators	same	babel-8/ie11/async-generators.js	faithful
 babel	8	chrome45	block-scoping	same	babel-8/ie11/block-scoping.js	faithful
 babel	8	chrome45	class-basic	same	babel-8/ie11/class-basic.js	faithful
 babel	8	chrome45	class-builtins	same	babel-8/ie11/class-builtins.js	faithful
+babel	8	chrome45	class-early-return	same	babel-8/ie11/class-early-return.js	faithful
 babel	8	chrome45	class-extends	same	babel-8/ie11/class-extends.js	faithful
 babel	8	chrome45	class-fields	same	babel-8/ie11/class-fields.js	faithful
 babel	8	chrome45	class-identity	same	babel-8/ie11/class-identity.js	differs
@@ -701,6 +730,7 @@ babel	8	ie11-runtime-cjs	async-generators	same	babel-8/ie11-runtime/async-genera
 babel	8	ie11-runtime-cjs	block-scoping	same	babel-8/ie11-runtime/block-scoping.js	faithful
 babel	8	ie11-runtime-cjs	class-basic	same	babel-8/ie11-runtime/class-basic.js	faithful
 babel	8	ie11-runtime-cjs	class-builtins	same	babel-8/ie11-runtime/class-builtins.js	faithful
+babel	8	ie11-runtime-cjs	class-early-return	same	babel-8/ie11-runtime/class-early-return.js	faithful
 babel	8	ie11-runtime-cjs	class-extends	same	babel-8/ie11-runtime/class-extends.js	faithful
 babel	8	ie11-runtime-cjs	class-fields	same	babel-8/ie11-runtime/class-fields.js	faithful
 babel	8	ie11-runtime-cjs	class-identity	same	babel-8/ie11-runtime/class-identity.js	differs
@@ -725,6 +755,7 @@ babel	8	chrome58	async-generators	written	babel-8/chrome58/async-generators.js	f
 babel	8	chrome58	block-scoping	native	-	-
 babel	8	chrome58	class-basic	native	-	-
 babel	8	chrome58	class-builtins	native	-	-
+babel	8	chrome58	class-early-return	native	-	-
 babel	8	chrome58	class-extends	native	-	-
 babel	8	chrome58	class-fields	written	babel-8/chrome58/class-fields.js	faithful
 babel	8	chrome58	class-identity	native	-	-
@@ -749,6 +780,7 @@ babel	8	esmodules	async-generators	native	-	-
 babel	8	esmodules	block-scoping	native	-	-
 babel	8	esmodules	class-basic	native	-	-
 babel	8	esmodules	class-builtins	native	-	-
+babel	8	esmodules	class-early-return	native	-	-
 babel	8	esmodules	class-extends	native	-	-
 babel	8	esmodules	class-fields	native	-	-
 babel	8	esmodules	class-identity	native	-	-
@@ -773,6 +805,7 @@ ts	3.9	es3	async-generators	written	ts-3.9/es3/async-generators.js	faithful
 ts	3.9	es3	block-scoping	written	ts-3.9/es3/block-scoping.js	faithful
 ts	3.9	es3	class-basic	written	ts-3.9/es3/class-basic.js	faithful
 ts	3.9	es3	class-builtins	written	ts-3.9/es3/class-builtins.js	differs
+ts	3.9	es3	class-early-return	written	ts-3.9/es3/class-early-return.js	faithful
 ts	3.9	es3	class-extends	written	ts-3.9/es3/class-extends.js	faithful
 ts	3.9	es3	class-fields	written	ts-3.9/es3/class-fields.js	differs
 ts	3.9	es3	class-identity	written	ts-3.9/es3/class-identity.js	differs
@@ -797,6 +830,7 @@ ts	3.9	es5	async-generators	written	ts-3.9/es5/async-generators.js	faithful
 ts	3.9	es5	block-scoping	same	ts-3.9/es3/block-scoping.js	faithful
 ts	3.9	es5	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	3.9	es5	class-builtins	same	ts-3.9/es3/class-builtins.js	differs
+ts	3.9	es5	class-early-return	same	ts-3.9/es3/class-early-return.js	faithful
 ts	3.9	es5	class-extends	same	ts-3.9/es3/class-extends.js	faithful
 ts	3.9	es5	class-fields	same	ts-3.9/es3/class-fields.js	differs
 ts	3.9	es5	class-identity	same	ts-3.9/es3/class-identity.js	differs
@@ -821,6 +855,7 @@ ts	3.9	es5-iter	async-generators	same	ts-3.9/es5/async-generators.js	faithful
 ts	3.9	es5-iter	block-scoping	written	ts-3.9/es5-iter/block-scoping.js	faithful
 ts	3.9	es5-iter	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	3.9	es5-iter	class-builtins	same	ts-3.9/es3/class-builtins.js	differs
+ts	3.9	es5-iter	class-early-return	written	ts-3.9/es5-iter/class-early-return.js	faithful
 ts	3.9	es5-iter	class-extends	same	ts-3.9/es3/class-extends.js	faithful
 ts	3.9	es5-iter	class-fields	same	ts-3.9/es3/class-fields.js	differs
 ts	3.9	es5-iter	class-identity	written	ts-3.9/es5-iter/class-identity.js	differs
@@ -845,16 +880,17 @@ ts	3.9	es5-tslib	async-generators	written	ts-3.9/es5-tslib/async-generators.js	f
 ts	3.9	es5-tslib	block-scoping	written	ts-3.9/es5-tslib/block-scoping.js	faithful
 ts	3.9	es5-tslib	class-basic	written	ts-3.9/es5-tslib/class-basic.js	faithful
 ts	3.9	es5-tslib	class-builtins	written	ts-3.9/es5-tslib/class-builtins.js	differs
+ts	3.9	es5-tslib	class-early-return	written	ts-3.9/es5-tslib/class-early-return.js	faithful
 ts	3.9	es5-tslib	class-extends	written	ts-3.9/es5-tslib/class-extends.js	faithful
 ts	3.9	es5-tslib	class-fields	written	ts-3.9/es5-tslib/class-fields.js	differs
 ts	3.9	es5-tslib	class-identity	written	ts-3.9/es5-tslib/class-identity.js	differs
-ts	3.9	es5-tslib	class-private	refused:.entry/ts-3.9-es5-tslib-class-private.mjs (22:23): Expected ident (Note that you	-	-
+ts	3.9	es5-tslib	class-private	refused:tools/untranspile/.entry/ts-3.9-es5-tslib-class-private.mjs (22:23): Expected id	-	-
 ts	3.9	es5-tslib	class-static-block	refused:the tool's output does not parse	-	-
 ts	3.9	es5-tslib	destructuring	written	ts-3.9/es5-tslib/destructuring.js	faithful
 ts	3.9	es5-tslib	exponent	written	ts-3.9/es5-tslib/exponent.js	differs
 ts	3.9	es5-tslib	for-of	written	ts-3.9/es5-tslib/for-of.js	faithful
 ts	3.9	es5-tslib	generators	written	ts-3.9/es5-tslib/generators.js	faithful
-ts	3.9	es5-tslib	logical-assignment	refused:.entry/ts-3.9-es5-tslib-logical-assignment.mjs (3:7): Expression expected (Note 	-	-
+ts	3.9	es5-tslib	logical-assignment	refused:tools/untranspile/.entry/ts-3.9-es5-tslib-logical-assignment.mjs (3:7): Expressi	-	-
 ts	3.9	es5-tslib	nullish	written	ts-3.9/es5-tslib/nullish.js	faithful
 ts	3.9	es5-tslib	numeric-separators	written	ts-3.9/es5-tslib/numeric-separators.js	faithful
 ts	3.9	es5-tslib	object-literals	written	ts-3.9/es5-tslib/object-literals.js	differs
@@ -869,6 +905,7 @@ ts	3.9	es2015	async-generators	written	ts-3.9/es2015/async-generators.js	faithfu
 ts	3.9	es2015	block-scoping	written	ts-3.9/es2015/block-scoping.js	faithful
 ts	3.9	es2015	class-basic	written	ts-3.9/es2015/class-basic.js	faithful
 ts	3.9	es2015	class-builtins	written	ts-3.9/es2015/class-builtins.js	faithful
+ts	3.9	es2015	class-early-return	written	ts-3.9/es2015/class-early-return.js	faithful
 ts	3.9	es2015	class-extends	written	ts-3.9/es2015/class-extends.js	faithful
 ts	3.9	es2015	class-fields	written	ts-3.9/es2015/class-fields.js	differs
 ts	3.9	es2015	class-identity	written	ts-3.9/es2015/class-identity.js	faithful
@@ -893,6 +930,7 @@ ts	3.9	es2015-define	async-generators	same	ts-3.9/es2015/async-generators.js	fai
 ts	3.9	es2015-define	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	3.9	es2015-define	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	3.9	es2015-define	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	3.9	es2015-define	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	3.9	es2015-define	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	3.9	es2015-define	class-fields	written	ts-3.9/es2015-define/class-fields.js	faithful
 ts	3.9	es2015-define	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -917,6 +955,7 @@ ts	3.9	es2017	async-generators	written	ts-3.9/es2017/async-generators.js	faithfu
 ts	3.9	es2017	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	3.9	es2017	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	3.9	es2017	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	3.9	es2017	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	3.9	es2017	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	3.9	es2017	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	3.9	es2017	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -941,6 +980,7 @@ ts	3.9	es2019	async-generators	written	ts-3.9/es2019/async-generators.js	faithfu
 ts	3.9	es2019	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	3.9	es2019	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	3.9	es2019	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	3.9	es2019	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	3.9	es2019	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	3.9	es2019	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	3.9	es2019	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -965,6 +1005,7 @@ ts	4.9	es3	async-generators	written	ts-4.9/es3/async-generators.js	faithful
 ts	4.9	es3	block-scoping	same	ts-3.9/es3/block-scoping.js	faithful
 ts	4.9	es3	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	4.9	es3	class-builtins	written	ts-4.9/es3/class-builtins.js	differs
+ts	4.9	es3	class-early-return	written	ts-4.9/es3/class-early-return.js	faithful
 ts	4.9	es3	class-extends	written	ts-4.9/es3/class-extends.js	faithful
 ts	4.9	es3	class-fields	written	ts-4.9/es3/class-fields.js	differs
 ts	4.9	es3	class-identity	written	ts-4.9/es3/class-identity.js	differs
@@ -989,6 +1030,7 @@ ts	4.9	es5	async-generators	written	ts-4.9/es5/async-generators.js	faithful
 ts	4.9	es5	block-scoping	same	ts-3.9/es3/block-scoping.js	faithful
 ts	4.9	es5	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	4.9	es5	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	4.9	es5	class-early-return	same	ts-4.9/es3/class-early-return.js	faithful
 ts	4.9	es5	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	4.9	es5	class-fields	same	ts-4.9/es3/class-fields.js	differs
 ts	4.9	es5	class-identity	same	ts-4.9/es3/class-identity.js	differs
@@ -1013,6 +1055,7 @@ ts	4.9	es5-iter	async-generators	same	ts-4.9/es5/async-generators.js	faithful
 ts	4.9	es5-iter	block-scoping	same	ts-3.9/es5-iter/block-scoping.js	faithful
 ts	4.9	es5-iter	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	4.9	es5-iter	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	4.9	es5-iter	class-early-return	written	ts-4.9/es5-iter/class-early-return.js	faithful
 ts	4.9	es5-iter	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	4.9	es5-iter	class-fields	same	ts-4.9/es3/class-fields.js	differs
 ts	4.9	es5-iter	class-identity	written	ts-4.9/es5-iter/class-identity.js	differs
@@ -1037,6 +1080,7 @@ ts	4.9	es5-tslib	async-generators	written	ts-4.9/es5-tslib/async-generators.js	f
 ts	4.9	es5-tslib	block-scoping	same	ts-3.9/es5-tslib/block-scoping.js	faithful
 ts	4.9	es5-tslib	class-basic	same	ts-3.9/es5-tslib/class-basic.js	faithful
 ts	4.9	es5-tslib	class-builtins	same	ts-3.9/es5-tslib/class-builtins.js	differs
+ts	4.9	es5-tslib	class-early-return	same	ts-3.9/es5-tslib/class-early-return.js	faithful
 ts	4.9	es5-tslib	class-extends	same	ts-3.9/es5-tslib/class-extends.js	faithful
 ts	4.9	es5-tslib	class-fields	same	ts-3.9/es5-tslib/class-fields.js	differs
 ts	4.9	es5-tslib	class-identity	same	ts-3.9/es5-tslib/class-identity.js	differs
@@ -1061,6 +1105,7 @@ ts	4.9	es2015	async-generators	written	ts-4.9/es2015/async-generators.js	faithfu
 ts	4.9	es2015	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	4.9	es2015	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	4.9	es2015	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	4.9	es2015	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	4.9	es2015	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	4.9	es2015	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	4.9	es2015	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1085,6 +1130,7 @@ ts	4.9	es2015-define	async-generators	same	ts-4.9/es2015/async-generators.js	fai
 ts	4.9	es2015-define	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	4.9	es2015-define	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	4.9	es2015-define	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	4.9	es2015-define	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	4.9	es2015-define	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	4.9	es2015-define	class-fields	same	ts-3.9/es2015-define/class-fields.js	faithful
 ts	4.9	es2015-define	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1109,6 +1155,7 @@ ts	4.9	es2017	async-generators	written	ts-4.9/es2017/async-generators.js	faithfu
 ts	4.9	es2017	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	4.9	es2017	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	4.9	es2017	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	4.9	es2017	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	4.9	es2017	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	4.9	es2017	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	4.9	es2017	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1133,6 +1180,7 @@ ts	4.9	es2019	async-generators	same	ts-3.9/es2019/async-generators.js	faithful
 ts	4.9	es2019	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	4.9	es2019	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	4.9	es2019	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	4.9	es2019	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	4.9	es2019	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	4.9	es2019	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	4.9	es2019	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1157,6 +1205,7 @@ ts	5.0	es3	async-generators	same	ts-4.9/es3/async-generators.js	faithful
 ts	5.0	es3	block-scoping	same	ts-3.9/es3/block-scoping.js	faithful
 ts	5.0	es3	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	5.0	es3	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	5.0	es3	class-early-return	same	ts-4.9/es3/class-early-return.js	faithful
 ts	5.0	es3	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	5.0	es3	class-fields	same	ts-4.9/es3/class-fields.js	differs
 ts	5.0	es3	class-identity	same	ts-4.9/es3/class-identity.js	differs
@@ -1181,6 +1230,7 @@ ts	5.0	es5	async-generators	same	ts-4.9/es5/async-generators.js	faithful
 ts	5.0	es5	block-scoping	same	ts-3.9/es3/block-scoping.js	faithful
 ts	5.0	es5	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	5.0	es5	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	5.0	es5	class-early-return	same	ts-4.9/es3/class-early-return.js	faithful
 ts	5.0	es5	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	5.0	es5	class-fields	same	ts-4.9/es3/class-fields.js	differs
 ts	5.0	es5	class-identity	same	ts-4.9/es3/class-identity.js	differs
@@ -1205,6 +1255,7 @@ ts	5.0	es5-iter	async-generators	same	ts-4.9/es5/async-generators.js	faithful
 ts	5.0	es5-iter	block-scoping	same	ts-3.9/es5-iter/block-scoping.js	faithful
 ts	5.0	es5-iter	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	5.0	es5-iter	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	5.0	es5-iter	class-early-return	same	ts-4.9/es5-iter/class-early-return.js	faithful
 ts	5.0	es5-iter	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	5.0	es5-iter	class-fields	same	ts-4.9/es3/class-fields.js	differs
 ts	5.0	es5-iter	class-identity	same	ts-4.9/es5-iter/class-identity.js	differs
@@ -1229,6 +1280,7 @@ ts	5.0	es5-tslib	async-generators	same	ts-4.9/es5-tslib/async-generators.js	fait
 ts	5.0	es5-tslib	block-scoping	same	ts-3.9/es5-tslib/block-scoping.js	faithful
 ts	5.0	es5-tslib	class-basic	same	ts-3.9/es5-tslib/class-basic.js	faithful
 ts	5.0	es5-tslib	class-builtins	same	ts-3.9/es5-tslib/class-builtins.js	differs
+ts	5.0	es5-tslib	class-early-return	same	ts-3.9/es5-tslib/class-early-return.js	faithful
 ts	5.0	es5-tslib	class-extends	same	ts-3.9/es5-tslib/class-extends.js	faithful
 ts	5.0	es5-tslib	class-fields	same	ts-3.9/es5-tslib/class-fields.js	differs
 ts	5.0	es5-tslib	class-identity	same	ts-3.9/es5-tslib/class-identity.js	differs
@@ -1253,6 +1305,7 @@ ts	5.0	es2015	async-generators	same	ts-4.9/es2015/async-generators.js	faithful
 ts	5.0	es2015	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	5.0	es2015	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	5.0	es2015	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	5.0	es2015	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	5.0	es2015	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	5.0	es2015	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	5.0	es2015	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1277,6 +1330,7 @@ ts	5.0	es2015-define	async-generators	same	ts-4.9/es2015/async-generators.js	fai
 ts	5.0	es2015-define	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	5.0	es2015-define	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	5.0	es2015-define	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	5.0	es2015-define	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	5.0	es2015-define	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	5.0	es2015-define	class-fields	same	ts-3.9/es2015-define/class-fields.js	faithful
 ts	5.0	es2015-define	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1301,6 +1355,7 @@ ts	5.0	es2017	async-generators	same	ts-4.9/es2017/async-generators.js	faithful
 ts	5.0	es2017	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	5.0	es2017	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	5.0	es2017	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	5.0	es2017	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	5.0	es2017	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	5.0	es2017	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	5.0	es2017	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1325,6 +1380,7 @@ ts	5.0	es2019	async-generators	same	ts-3.9/es2019/async-generators.js	faithful
 ts	5.0	es2019	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	5.0	es2019	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	5.0	es2019	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	5.0	es2019	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	5.0	es2019	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	5.0	es2019	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	5.0	es2019	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1349,6 +1405,7 @@ ts	5.9	es3	async-generators	written	ts-5.9/es3/async-generators.js	faithful
 ts	5.9	es3	block-scoping	same	ts-3.9/es3/block-scoping.js	faithful
 ts	5.9	es3	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	5.9	es3	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	5.9	es3	class-early-return	same	ts-4.9/es3/class-early-return.js	faithful
 ts	5.9	es3	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	5.9	es3	class-fields	same	ts-4.9/es3/class-fields.js	differs
 ts	5.9	es3	class-identity	same	ts-4.9/es3/class-identity.js	differs
@@ -1373,6 +1430,7 @@ ts	5.9	es5	async-generators	same	ts-5.9/es3/async-generators.js	faithful
 ts	5.9	es5	block-scoping	same	ts-3.9/es3/block-scoping.js	faithful
 ts	5.9	es5	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	5.9	es5	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	5.9	es5	class-early-return	same	ts-4.9/es3/class-early-return.js	faithful
 ts	5.9	es5	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	5.9	es5	class-fields	same	ts-4.9/es3/class-fields.js	differs
 ts	5.9	es5	class-identity	same	ts-4.9/es3/class-identity.js	differs
@@ -1397,6 +1455,7 @@ ts	5.9	es5-iter	async-generators	same	ts-5.9/es3/async-generators.js	faithful
 ts	5.9	es5-iter	block-scoping	same	ts-3.9/es5-iter/block-scoping.js	faithful
 ts	5.9	es5-iter	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	5.9	es5-iter	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	5.9	es5-iter	class-early-return	same	ts-4.9/es5-iter/class-early-return.js	faithful
 ts	5.9	es5-iter	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	5.9	es5-iter	class-fields	written	ts-5.9/es5-iter/class-fields.js	differs
 ts	5.9	es5-iter	class-identity	same	ts-4.9/es5-iter/class-identity.js	differs
@@ -1421,6 +1480,7 @@ ts	5.9	es5-tslib	async-generators	written	ts-5.9/es5-tslib/async-generators.js	f
 ts	5.9	es5-tslib	block-scoping	same	ts-3.9/es5-tslib/block-scoping.js	faithful
 ts	5.9	es5-tslib	class-basic	same	ts-3.9/es5-tslib/class-basic.js	faithful
 ts	5.9	es5-tslib	class-builtins	same	ts-3.9/es5-tslib/class-builtins.js	differs
+ts	5.9	es5-tslib	class-early-return	same	ts-3.9/es5-tslib/class-early-return.js	faithful
 ts	5.9	es5-tslib	class-extends	same	ts-3.9/es5-tslib/class-extends.js	faithful
 ts	5.9	es5-tslib	class-fields	written	ts-5.9/es5-tslib/class-fields.js	differs
 ts	5.9	es5-tslib	class-identity	same	ts-3.9/es5-tslib/class-identity.js	differs
@@ -1445,6 +1505,7 @@ ts	5.9	es2015	async-generators	written	ts-5.9/es2015/async-generators.js	faithfu
 ts	5.9	es2015	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	5.9	es2015	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	5.9	es2015	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	5.9	es2015	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	5.9	es2015	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	5.9	es2015	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	5.9	es2015	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1469,6 +1530,7 @@ ts	5.9	es2015-define	async-generators	same	ts-5.9/es2015/async-generators.js	fai
 ts	5.9	es2015-define	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	5.9	es2015-define	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	5.9	es2015-define	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	5.9	es2015-define	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	5.9	es2015-define	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	5.9	es2015-define	class-fields	same	ts-3.9/es2015-define/class-fields.js	faithful
 ts	5.9	es2015-define	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1493,6 +1555,7 @@ ts	5.9	es2017	async-generators	written	ts-5.9/es2017/async-generators.js	faithfu
 ts	5.9	es2017	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	5.9	es2017	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	5.9	es2017	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	5.9	es2017	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	5.9	es2017	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	5.9	es2017	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	5.9	es2017	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1517,6 +1580,7 @@ ts	5.9	es2019	async-generators	same	ts-3.9/es2019/async-generators.js	faithful
 ts	5.9	es2019	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	5.9	es2019	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	5.9	es2019	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	5.9	es2019	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	5.9	es2019	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	5.9	es2019	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	5.9	es2019	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1541,6 +1605,7 @@ ts	6.0	es5	async-generators	same	ts-5.9/es3/async-generators.js	faithful
 ts	6.0	es5	block-scoping	same	ts-3.9/es3/block-scoping.js	faithful
 ts	6.0	es5	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	6.0	es5	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	6.0	es5	class-early-return	same	ts-4.9/es3/class-early-return.js	faithful
 ts	6.0	es5	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	6.0	es5	class-fields	same	ts-4.9/es3/class-fields.js	differs
 ts	6.0	es5	class-identity	same	ts-4.9/es3/class-identity.js	differs
@@ -1565,6 +1630,7 @@ ts	6.0	es5-iter	async-generators	same	ts-5.9/es3/async-generators.js	faithful
 ts	6.0	es5-iter	block-scoping	same	ts-3.9/es5-iter/block-scoping.js	faithful
 ts	6.0	es5-iter	class-basic	same	ts-3.9/es3/class-basic.js	faithful
 ts	6.0	es5-iter	class-builtins	same	ts-4.9/es3/class-builtins.js	differs
+ts	6.0	es5-iter	class-early-return	same	ts-4.9/es5-iter/class-early-return.js	faithful
 ts	6.0	es5-iter	class-extends	same	ts-4.9/es3/class-extends.js	faithful
 ts	6.0	es5-iter	class-fields	same	ts-5.9/es5-iter/class-fields.js	differs
 ts	6.0	es5-iter	class-identity	same	ts-4.9/es5-iter/class-identity.js	differs
@@ -1589,6 +1655,7 @@ ts	6.0	es5-tslib	async-generators	same	ts-5.9/es5-tslib/async-generators.js	fait
 ts	6.0	es5-tslib	block-scoping	same	ts-3.9/es5-tslib/block-scoping.js	faithful
 ts	6.0	es5-tslib	class-basic	same	ts-3.9/es5-tslib/class-basic.js	faithful
 ts	6.0	es5-tslib	class-builtins	same	ts-3.9/es5-tslib/class-builtins.js	differs
+ts	6.0	es5-tslib	class-early-return	same	ts-3.9/es5-tslib/class-early-return.js	faithful
 ts	6.0	es5-tslib	class-extends	same	ts-3.9/es5-tslib/class-extends.js	faithful
 ts	6.0	es5-tslib	class-fields	same	ts-5.9/es5-tslib/class-fields.js	differs
 ts	6.0	es5-tslib	class-identity	same	ts-3.9/es5-tslib/class-identity.js	differs
@@ -1613,6 +1680,7 @@ ts	6.0	es2015	async-generators	same	ts-5.9/es2015/async-generators.js	faithful
 ts	6.0	es2015	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	6.0	es2015	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	6.0	es2015	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	6.0	es2015	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	6.0	es2015	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	6.0	es2015	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	6.0	es2015	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1637,6 +1705,7 @@ ts	6.0	es2015-define	async-generators	same	ts-5.9/es2015/async-generators.js	fai
 ts	6.0	es2015-define	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	6.0	es2015-define	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	6.0	es2015-define	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	6.0	es2015-define	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	6.0	es2015-define	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	6.0	es2015-define	class-fields	same	ts-3.9/es2015-define/class-fields.js	faithful
 ts	6.0	es2015-define	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1661,6 +1730,7 @@ ts	6.0	es2017	async-generators	same	ts-5.9/es2017/async-generators.js	faithful
 ts	6.0	es2017	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	6.0	es2017	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	6.0	es2017	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	6.0	es2017	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	6.0	es2017	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	6.0	es2017	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	6.0	es2017	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1685,6 +1755,7 @@ ts	6.0	es2019	async-generators	same	ts-3.9/es2019/async-generators.js	faithful
 ts	6.0	es2019	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	6.0	es2019	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	6.0	es2019	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	6.0	es2019	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	6.0	es2019	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	6.0	es2019	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	6.0	es2019	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1709,6 +1780,7 @@ ts	7.0	es2015	async-generators	same	ts-5.9/es2015/async-generators.js	faithful
 ts	7.0	es2015	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	7.0	es2015	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	7.0	es2015	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	7.0	es2015	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	7.0	es2015	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	7.0	es2015	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	7.0	es2015	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1733,6 +1805,7 @@ ts	7.0	es2017	async-generators	same	ts-5.9/es2017/async-generators.js	faithful
 ts	7.0	es2017	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	7.0	es2017	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	7.0	es2017	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	7.0	es2017	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	7.0	es2017	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	7.0	es2017	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	7.0	es2017	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1757,6 +1830,7 @@ ts	7.0	es2019	async-generators	same	ts-3.9/es2019/async-generators.js	faithful
 ts	7.0	es2019	block-scoping	same	ts-3.9/es2015/block-scoping.js	faithful
 ts	7.0	es2019	class-basic	same	ts-3.9/es2015/class-basic.js	faithful
 ts	7.0	es2019	class-builtins	same	ts-3.9/es2015/class-builtins.js	faithful
+ts	7.0	es2019	class-early-return	same	ts-3.9/es2015/class-early-return.js	faithful
 ts	7.0	es2019	class-extends	same	ts-3.9/es2015/class-extends.js	faithful
 ts	7.0	es2019	class-fields	same	ts-3.9/es2015/class-fields.js	differs
 ts	7.0	es2019	class-identity	same	ts-3.9/es2015/class-identity.js	faithful
@@ -1781,6 +1855,7 @@ swc	1.2	es5	async-generators	written	swc-1.2/es5/async-generators.js	differs
 swc	1.2	es5	block-scoping	written	swc-1.2/es5/block-scoping.js	differs
 swc	1.2	es5	class-basic	written	swc-1.2/es5/class-basic.js	faithful
 swc	1.2	es5	class-builtins	written	swc-1.2/es5/class-builtins.js	faithful
+swc	1.2	es5	class-early-return	written	swc-1.2/es5/class-early-return.js	faithful
 swc	1.2	es5	class-extends	written	swc-1.2/es5/class-extends.js	faithful
 swc	1.2	es5	class-fields	written	swc-1.2/es5/class-fields.js	faithful
 swc	1.2	es5	class-identity	written	swc-1.2/es5/class-identity.js	differs
@@ -1805,6 +1880,7 @@ swc	1.2	es5-loose	async-generators	same	swc-1.2/es5/async-generators.js	differs
 swc	1.2	es5-loose	block-scoping	written	swc-1.2/es5-loose/block-scoping.js	differs
 swc	1.2	es5-loose	class-basic	written	swc-1.2/es5-loose/class-basic.js	faithful
 swc	1.2	es5-loose	class-builtins	written	swc-1.2/es5-loose/class-builtins.js	faithful
+swc	1.2	es5-loose	class-early-return	written	swc-1.2/es5-loose/class-early-return.js	faithful
 swc	1.2	es5-loose	class-extends	written	swc-1.2/es5-loose/class-extends.js	differs
 swc	1.2	es5-loose	class-fields	written	swc-1.2/es5-loose/class-fields.js	differs
 swc	1.2	es5-loose	class-identity	written	swc-1.2/es5-loose/class-identity.js	differs
@@ -1829,6 +1905,7 @@ swc	1.2	es2015	async-generators	written	swc-1.2/es2015/async-generators.js	faith
 swc	1.2	es2015	block-scoping	written	swc-1.2/es2015/block-scoping.js	faithful
 swc	1.2	es2015	class-basic	written	swc-1.2/es2015/class-basic.js	faithful
 swc	1.2	es2015	class-builtins	written	swc-1.2/es2015/class-builtins.js	faithful
+swc	1.2	es2015	class-early-return	written	swc-1.2/es2015/class-early-return.js	faithful
 swc	1.2	es2015	class-extends	written	swc-1.2/es2015/class-extends.js	faithful
 swc	1.2	es2015	class-fields	written	swc-1.2/es2015/class-fields.js	faithful
 swc	1.2	es2015	class-identity	written	swc-1.2/es2015/class-identity.js	faithful
@@ -1853,6 +1930,7 @@ swc	1.2	es2019	async-generators	written	swc-1.2/es2019/async-generators.js	faith
 swc	1.2	es2019	block-scoping	same	swc-1.2/es2015/block-scoping.js	faithful
 swc	1.2	es2019	class-basic	same	swc-1.2/es2015/class-basic.js	faithful
 swc	1.2	es2019	class-builtins	same	swc-1.2/es2015/class-builtins.js	faithful
+swc	1.2	es2019	class-early-return	same	swc-1.2/es2015/class-early-return.js	faithful
 swc	1.2	es2019	class-extends	same	swc-1.2/es2015/class-extends.js	faithful
 swc	1.2	es2019	class-fields	same	swc-1.2/es2015/class-fields.js	faithful
 swc	1.2	es2019	class-identity	same	swc-1.2/es2015/class-identity.js	faithful
@@ -1877,6 +1955,7 @@ swc	1.3	es5	async-generators	written	swc-1.3/es5/async-generators.js	faithful
 swc	1.3	es5	block-scoping	written	swc-1.3/es5/block-scoping.js	faithful
 swc	1.3	es5	class-basic	written	swc-1.3/es5/class-basic.js	faithful
 swc	1.3	es5	class-builtins	written	swc-1.3/es5/class-builtins.js	faithful
+swc	1.3	es5	class-early-return	written	swc-1.3/es5/class-early-return.js	faithful
 swc	1.3	es5	class-extends	written	swc-1.3/es5/class-extends.js	faithful
 swc	1.3	es5	class-fields	written	swc-1.3/es5/class-fields.js	faithful
 swc	1.3	es5	class-identity	written	swc-1.3/es5/class-identity.js	differs
@@ -1901,6 +1980,7 @@ swc	1.3	es5-loose	async-generators	same	swc-1.3/es5/async-generators.js	faithful
 swc	1.3	es5-loose	block-scoping	written	swc-1.3/es5-loose/block-scoping.js	faithful
 swc	1.3	es5-loose	class-basic	written	swc-1.3/es5-loose/class-basic.js	faithful
 swc	1.3	es5-loose	class-builtins	written	swc-1.3/es5-loose/class-builtins.js	faithful
+swc	1.3	es5-loose	class-early-return	written	swc-1.3/es5-loose/class-early-return.js	faithful
 swc	1.3	es5-loose	class-extends	written	swc-1.3/es5-loose/class-extends.js	faithful
 swc	1.3	es5-loose	class-fields	written	swc-1.3/es5-loose/class-fields.js	differs
 swc	1.3	es5-loose	class-identity	written	swc-1.3/es5-loose/class-identity.js	differs
@@ -1925,6 +2005,7 @@ swc	1.3	es2015	async-generators	written	swc-1.3/es2015/async-generators.js	faith
 swc	1.3	es2015	block-scoping	written	swc-1.3/es2015/block-scoping.js	faithful
 swc	1.3	es2015	class-basic	same	swc-1.2/es2015/class-basic.js	faithful
 swc	1.3	es2015	class-builtins	same	swc-1.2/es2015/class-builtins.js	faithful
+swc	1.3	es2015	class-early-return	same	swc-1.2/es2015/class-early-return.js	faithful
 swc	1.3	es2015	class-extends	same	swc-1.2/es2015/class-extends.js	faithful
 swc	1.3	es2015	class-fields	written	swc-1.3/es2015/class-fields.js	faithful
 swc	1.3	es2015	class-identity	same	swc-1.2/es2015/class-identity.js	faithful
@@ -1949,6 +2030,7 @@ swc	1.3	es2019	async-generators	written	swc-1.3/es2019/async-generators.js	faith
 swc	1.3	es2019	block-scoping	same	swc-1.3/es2015/block-scoping.js	faithful
 swc	1.3	es2019	class-basic	same	swc-1.2/es2015/class-basic.js	faithful
 swc	1.3	es2019	class-builtins	same	swc-1.2/es2015/class-builtins.js	faithful
+swc	1.3	es2019	class-early-return	same	swc-1.2/es2015/class-early-return.js	faithful
 swc	1.3	es2019	class-extends	same	swc-1.2/es2015/class-extends.js	faithful
 swc	1.3	es2019	class-fields	same	swc-1.3/es2015/class-fields.js	faithful
 swc	1.3	es2019	class-identity	same	swc-1.2/es2015/class-identity.js	faithful
@@ -1973,6 +2055,7 @@ swc	1.7	es5	async-generators	written	swc-1.7/es5/async-generators.js	faithful
 swc	1.7	es5	block-scoping	same	swc-1.3/es5/block-scoping.js	faithful
 swc	1.7	es5	class-basic	same	swc-1.3/es5/class-basic.js	faithful
 swc	1.7	es5	class-builtins	written	swc-1.7/es5/class-builtins.js	faithful
+swc	1.7	es5	class-early-return	written	swc-1.7/es5/class-early-return.js	faithful
 swc	1.7	es5	class-extends	written	swc-1.7/es5/class-extends.js	faithful
 swc	1.7	es5	class-fields	written	swc-1.7/es5/class-fields.js	faithful
 swc	1.7	es5	class-identity	written	swc-1.7/es5/class-identity.js	differs
@@ -1997,6 +2080,7 @@ swc	1.7	es5-loose	async-generators	same	swc-1.7/es5/async-generators.js	faithful
 swc	1.7	es5-loose	block-scoping	same	swc-1.3/es5-loose/block-scoping.js	faithful
 swc	1.7	es5-loose	class-basic	same	swc-1.3/es5-loose/class-basic.js	faithful
 swc	1.7	es5-loose	class-builtins	written	swc-1.7/es5-loose/class-builtins.js	faithful
+swc	1.7	es5-loose	class-early-return	same	swc-1.3/es5-loose/class-early-return.js	faithful
 swc	1.7	es5-loose	class-extends	written	swc-1.7/es5-loose/class-extends.js	faithful
 swc	1.7	es5-loose	class-fields	written	swc-1.7/es5-loose/class-fields.js	differs
 swc	1.7	es5-loose	class-identity	same	swc-1.3/es5-loose/class-identity.js	differs
@@ -2021,6 +2105,7 @@ swc	1.7	es2015	async-generators	written	swc-1.7/es2015/async-generators.js	faith
 swc	1.7	es2015	block-scoping	same	swc-1.3/es2015/block-scoping.js	faithful
 swc	1.7	es2015	class-basic	same	swc-1.2/es2015/class-basic.js	faithful
 swc	1.7	es2015	class-builtins	same	swc-1.2/es2015/class-builtins.js	faithful
+swc	1.7	es2015	class-early-return	same	swc-1.2/es2015/class-early-return.js	faithful
 swc	1.7	es2015	class-extends	same	swc-1.2/es2015/class-extends.js	faithful
 swc	1.7	es2015	class-fields	written	swc-1.7/es2015/class-fields.js	faithful
 swc	1.7	es2015	class-identity	same	swc-1.2/es2015/class-identity.js	faithful
@@ -2045,6 +2130,7 @@ swc	1.7	es2019	async-generators	same	swc-1.3/es2019/async-generators.js	faithful
 swc	1.7	es2019	block-scoping	same	swc-1.3/es2015/block-scoping.js	faithful
 swc	1.7	es2019	class-basic	same	swc-1.2/es2015/class-basic.js	faithful
 swc	1.7	es2019	class-builtins	same	swc-1.2/es2015/class-builtins.js	faithful
+swc	1.7	es2019	class-early-return	same	swc-1.2/es2015/class-early-return.js	faithful
 swc	1.7	es2019	class-extends	same	swc-1.2/es2015/class-extends.js	faithful
 swc	1.7	es2019	class-fields	same	swc-1.7/es2015/class-fields.js	faithful
 swc	1.7	es2019	class-identity	same	swc-1.2/es2015/class-identity.js	faithful
@@ -2069,6 +2155,7 @@ swc	1.16	es5	async-generators	written	swc-1.16/es5/async-generators.js	faithful
 swc	1.16	es5	block-scoping	written	swc-1.16/es5/block-scoping.js	faithful
 swc	1.16	es5	class-basic	written	swc-1.16/es5/class-basic.js	faithful
 swc	1.16	es5	class-builtins	written	swc-1.16/es5/class-builtins.js	faithful
+swc	1.16	es5	class-early-return	written	swc-1.16/es5/class-early-return.js	faithful
 swc	1.16	es5	class-extends	written	swc-1.16/es5/class-extends.js	faithful
 swc	1.16	es5	class-fields	written	swc-1.16/es5/class-fields.js	faithful
 swc	1.16	es5	class-identity	written	swc-1.16/es5/class-identity.js	differs
@@ -2093,6 +2180,7 @@ swc	1.16	es5-loose	async-generators	same	swc-1.16/es5/async-generators.js	faithf
 swc	1.16	es5-loose	block-scoping	written	swc-1.16/es5-loose/block-scoping.js	faithful
 swc	1.16	es5-loose	class-basic	same	swc-1.3/es5-loose/class-basic.js	faithful
 swc	1.16	es5-loose	class-builtins	written	swc-1.16/es5-loose/class-builtins.js	faithful
+swc	1.16	es5-loose	class-early-return	written	swc-1.16/es5-loose/class-early-return.js	faithful
 swc	1.16	es5-loose	class-extends	written	swc-1.16/es5-loose/class-extends.js	faithful
 swc	1.16	es5-loose	class-fields	same	swc-1.7/es5-loose/class-fields.js	differs
 swc	1.16	es5-loose	class-identity	same	swc-1.3/es5-loose/class-identity.js	differs
@@ -2117,6 +2205,7 @@ swc	1.16	es2015	async-generators	written	swc-1.16/es2015/async-generators.js	fai
 swc	1.16	es2015	block-scoping	same	swc-1.3/es2015/block-scoping.js	faithful
 swc	1.16	es2015	class-basic	same	swc-1.2/es2015/class-basic.js	faithful
 swc	1.16	es2015	class-builtins	same	swc-1.2/es2015/class-builtins.js	faithful
+swc	1.16	es2015	class-early-return	same	swc-1.2/es2015/class-early-return.js	faithful
 swc	1.16	es2015	class-extends	same	swc-1.2/es2015/class-extends.js	faithful
 swc	1.16	es2015	class-fields	written	swc-1.16/es2015/class-fields.js	faithful
 swc	1.16	es2015	class-identity	same	swc-1.2/es2015/class-identity.js	faithful
@@ -2141,6 +2230,7 @@ swc	1.16	es2019	async-generators	same	swc-1.3/es2019/async-generators.js	faithfu
 swc	1.16	es2019	block-scoping	same	swc-1.3/es2015/block-scoping.js	faithful
 swc	1.16	es2019	class-basic	same	swc-1.2/es2015/class-basic.js	faithful
 swc	1.16	es2019	class-builtins	same	swc-1.2/es2015/class-builtins.js	faithful
+swc	1.16	es2019	class-early-return	same	swc-1.2/es2015/class-early-return.js	faithful
 swc	1.16	es2019	class-extends	same	swc-1.2/es2015/class-extends.js	faithful
 swc	1.16	es2019	class-fields	same	swc-1.16/es2015/class-fields.js	faithful
 swc	1.16	es2019	class-identity	same	swc-1.2/es2015/class-identity.js	faithful
@@ -2165,6 +2255,7 @@ esbuild	0.14	es2015	async-generators	refused:Transform failed with 5 errors:	-	-
 esbuild	0.14	es2015	block-scoping	native	-	-
 esbuild	0.14	es2015	class-basic	native	-	-
 esbuild	0.14	es2015	class-builtins	native	-	-
+esbuild	0.14	es2015	class-early-return	native	-	-
 esbuild	0.14	es2015	class-extends	native	-	-
 esbuild	0.14	es2015	class-fields	written	esbuild-0.14/es2015/class-fields.js	faithful
 esbuild	0.14	es2015	class-identity	native	-	-
@@ -2189,6 +2280,7 @@ esbuild	0.14	es2017	async-generators	refused:Transform failed with 5 errors:	-	-
 esbuild	0.14	es2017	block-scoping	native	-	-
 esbuild	0.14	es2017	class-basic	native	-	-
 esbuild	0.14	es2017	class-builtins	native	-	-
+esbuild	0.14	es2017	class-early-return	native	-	-
 esbuild	0.14	es2017	class-extends	native	-	-
 esbuild	0.14	es2017	class-fields	same	esbuild-0.14/es2015/class-fields.js	faithful
 esbuild	0.14	es2017	class-identity	native	-	-
@@ -2213,6 +2305,7 @@ esbuild	0.14	es2019	async-generators	native	-	-
 esbuild	0.14	es2019	block-scoping	native	-	-
 esbuild	0.14	es2019	class-basic	native	-	-
 esbuild	0.14	es2019	class-builtins	native	-	-
+esbuild	0.14	es2019	class-early-return	native	-	-
 esbuild	0.14	es2019	class-extends	native	-	-
 esbuild	0.14	es2019	class-fields	same	esbuild-0.14/es2015/class-fields.js	faithful
 esbuild	0.14	es2019	class-identity	native	-	-
@@ -2237,6 +2330,7 @@ esbuild	0.14	es2020	async-generators	native	-	-
 esbuild	0.14	es2020	block-scoping	native	-	-
 esbuild	0.14	es2020	class-basic	native	-	-
 esbuild	0.14	es2020	class-builtins	native	-	-
+esbuild	0.14	es2020	class-early-return	native	-	-
 esbuild	0.14	es2020	class-extends	native	-	-
 esbuild	0.14	es2020	class-fields	same	esbuild-0.14/es2015/class-fields.js	faithful
 esbuild	0.14	es2020	class-identity	native	-	-
@@ -2261,6 +2355,7 @@ esbuild	0.17	es2015	async-generators	refused:Transform failed with 2 errors:	-	-
 esbuild	0.17	es2015	block-scoping	native	-	-
 esbuild	0.17	es2015	class-basic	native	-	-
 esbuild	0.17	es2015	class-builtins	native	-	-
+esbuild	0.17	es2015	class-early-return	native	-	-
 esbuild	0.17	es2015	class-extends	native	-	-
 esbuild	0.17	es2015	class-fields	same	esbuild-0.14/es2015/class-fields.js	faithful
 esbuild	0.17	es2015	class-identity	native	-	-
@@ -2285,6 +2380,7 @@ esbuild	0.17	es2017	async-generators	refused:Transform failed with 2 errors:	-	-
 esbuild	0.17	es2017	block-scoping	native	-	-
 esbuild	0.17	es2017	class-basic	native	-	-
 esbuild	0.17	es2017	class-builtins	native	-	-
+esbuild	0.17	es2017	class-early-return	native	-	-
 esbuild	0.17	es2017	class-extends	native	-	-
 esbuild	0.17	es2017	class-fields	same	esbuild-0.14/es2015/class-fields.js	faithful
 esbuild	0.17	es2017	class-identity	native	-	-
@@ -2309,6 +2405,7 @@ esbuild	0.17	es2019	async-generators	native	-	-
 esbuild	0.17	es2019	block-scoping	native	-	-
 esbuild	0.17	es2019	class-basic	native	-	-
 esbuild	0.17	es2019	class-builtins	native	-	-
+esbuild	0.17	es2019	class-early-return	native	-	-
 esbuild	0.17	es2019	class-extends	native	-	-
 esbuild	0.17	es2019	class-fields	same	esbuild-0.14/es2015/class-fields.js	faithful
 esbuild	0.17	es2019	class-identity	native	-	-
@@ -2333,6 +2430,7 @@ esbuild	0.17	es2020	async-generators	native	-	-
 esbuild	0.17	es2020	block-scoping	native	-	-
 esbuild	0.17	es2020	class-basic	native	-	-
 esbuild	0.17	es2020	class-builtins	native	-	-
+esbuild	0.17	es2020	class-early-return	native	-	-
 esbuild	0.17	es2020	class-extends	native	-	-
 esbuild	0.17	es2020	class-fields	same	esbuild-0.14/es2015/class-fields.js	faithful
 esbuild	0.17	es2020	class-identity	native	-	-
@@ -2357,6 +2455,7 @@ esbuild	0.19	es2015	async-generators	written	esbuild-0.19/es2015/async-generator
 esbuild	0.19	es2015	block-scoping	native	-	-
 esbuild	0.19	es2015	class-basic	native	-	-
 esbuild	0.19	es2015	class-builtins	native	-	-
+esbuild	0.19	es2015	class-early-return	native	-	-
 esbuild	0.19	es2015	class-extends	native	-	-
 esbuild	0.19	es2015	class-fields	written	esbuild-0.19/es2015/class-fields.js	faithful
 esbuild	0.19	es2015	class-identity	native	-	-
@@ -2381,6 +2480,7 @@ esbuild	0.19	es2017	async-generators	written	esbuild-0.19/es2017/async-generator
 esbuild	0.19	es2017	block-scoping	native	-	-
 esbuild	0.19	es2017	class-basic	native	-	-
 esbuild	0.19	es2017	class-builtins	native	-	-
+esbuild	0.19	es2017	class-early-return	native	-	-
 esbuild	0.19	es2017	class-extends	native	-	-
 esbuild	0.19	es2017	class-fields	same	esbuild-0.19/es2015/class-fields.js	faithful
 esbuild	0.19	es2017	class-identity	native	-	-
@@ -2405,6 +2505,7 @@ esbuild	0.19	es2019	async-generators	native	-	-
 esbuild	0.19	es2019	block-scoping	native	-	-
 esbuild	0.19	es2019	class-basic	native	-	-
 esbuild	0.19	es2019	class-builtins	native	-	-
+esbuild	0.19	es2019	class-early-return	native	-	-
 esbuild	0.19	es2019	class-extends	native	-	-
 esbuild	0.19	es2019	class-fields	same	esbuild-0.19/es2015/class-fields.js	faithful
 esbuild	0.19	es2019	class-identity	native	-	-
@@ -2429,6 +2530,7 @@ esbuild	0.19	es2020	async-generators	native	-	-
 esbuild	0.19	es2020	block-scoping	native	-	-
 esbuild	0.19	es2020	class-basic	native	-	-
 esbuild	0.19	es2020	class-builtins	native	-	-
+esbuild	0.19	es2020	class-early-return	native	-	-
 esbuild	0.19	es2020	class-extends	native	-	-
 esbuild	0.19	es2020	class-fields	same	esbuild-0.19/es2015/class-fields.js	faithful
 esbuild	0.19	es2020	class-identity	native	-	-
@@ -2453,6 +2555,7 @@ esbuild	0.21	es2015	async-generators	written	esbuild-0.21/es2015/async-generator
 esbuild	0.21	es2015	block-scoping	native	-	-
 esbuild	0.21	es2015	class-basic	native	-	-
 esbuild	0.21	es2015	class-builtins	native	-	-
+esbuild	0.21	es2015	class-early-return	native	-	-
 esbuild	0.21	es2015	class-extends	native	-	-
 esbuild	0.21	es2015	class-fields	written	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.21	es2015	class-identity	native	-	-
@@ -2477,6 +2580,7 @@ esbuild	0.21	es2017	async-generators	written	esbuild-0.21/es2017/async-generator
 esbuild	0.21	es2017	block-scoping	native	-	-
 esbuild	0.21	es2017	class-basic	native	-	-
 esbuild	0.21	es2017	class-builtins	native	-	-
+esbuild	0.21	es2017	class-early-return	native	-	-
 esbuild	0.21	es2017	class-extends	native	-	-
 esbuild	0.21	es2017	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.21	es2017	class-identity	native	-	-
@@ -2501,6 +2605,7 @@ esbuild	0.21	es2019	async-generators	native	-	-
 esbuild	0.21	es2019	block-scoping	native	-	-
 esbuild	0.21	es2019	class-basic	native	-	-
 esbuild	0.21	es2019	class-builtins	native	-	-
+esbuild	0.21	es2019	class-early-return	native	-	-
 esbuild	0.21	es2019	class-extends	native	-	-
 esbuild	0.21	es2019	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.21	es2019	class-identity	native	-	-
@@ -2525,6 +2630,7 @@ esbuild	0.21	es2020	async-generators	native	-	-
 esbuild	0.21	es2020	block-scoping	native	-	-
 esbuild	0.21	es2020	class-basic	native	-	-
 esbuild	0.21	es2020	class-builtins	native	-	-
+esbuild	0.21	es2020	class-early-return	native	-	-
 esbuild	0.21	es2020	class-extends	native	-	-
 esbuild	0.21	es2020	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.21	es2020	class-identity	native	-	-
@@ -2549,6 +2655,7 @@ esbuild	0.25	es2015	async-generators	same	esbuild-0.21/es2015/async-generators.j
 esbuild	0.25	es2015	block-scoping	native	-	-
 esbuild	0.25	es2015	class-basic	native	-	-
 esbuild	0.25	es2015	class-builtins	native	-	-
+esbuild	0.25	es2015	class-early-return	native	-	-
 esbuild	0.25	es2015	class-extends	native	-	-
 esbuild	0.25	es2015	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.25	es2015	class-identity	native	-	-
@@ -2573,6 +2680,7 @@ esbuild	0.25	es2017	async-generators	same	esbuild-0.21/es2017/async-generators.j
 esbuild	0.25	es2017	block-scoping	native	-	-
 esbuild	0.25	es2017	class-basic	native	-	-
 esbuild	0.25	es2017	class-builtins	native	-	-
+esbuild	0.25	es2017	class-early-return	native	-	-
 esbuild	0.25	es2017	class-extends	native	-	-
 esbuild	0.25	es2017	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.25	es2017	class-identity	native	-	-
@@ -2597,6 +2705,7 @@ esbuild	0.25	es2019	async-generators	native	-	-
 esbuild	0.25	es2019	block-scoping	native	-	-
 esbuild	0.25	es2019	class-basic	native	-	-
 esbuild	0.25	es2019	class-builtins	native	-	-
+esbuild	0.25	es2019	class-early-return	native	-	-
 esbuild	0.25	es2019	class-extends	native	-	-
 esbuild	0.25	es2019	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.25	es2019	class-identity	native	-	-
@@ -2621,6 +2730,7 @@ esbuild	0.25	es2020	async-generators	native	-	-
 esbuild	0.25	es2020	block-scoping	native	-	-
 esbuild	0.25	es2020	class-basic	native	-	-
 esbuild	0.25	es2020	class-builtins	native	-	-
+esbuild	0.25	es2020	class-early-return	native	-	-
 esbuild	0.25	es2020	class-extends	native	-	-
 esbuild	0.25	es2020	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.25	es2020	class-identity	native	-	-
@@ -2645,6 +2755,7 @@ esbuild	0.28	es2015	async-generators	written	esbuild-0.28/es2015/async-generator
 esbuild	0.28	es2015	block-scoping	native	-	-
 esbuild	0.28	es2015	class-basic	native	-	-
 esbuild	0.28	es2015	class-builtins	native	-	-
+esbuild	0.28	es2015	class-early-return	native	-	-
 esbuild	0.28	es2015	class-extends	native	-	-
 esbuild	0.28	es2015	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.28	es2015	class-identity	native	-	-
@@ -2669,6 +2780,7 @@ esbuild	0.28	es2017	async-generators	written	esbuild-0.28/es2017/async-generator
 esbuild	0.28	es2017	block-scoping	native	-	-
 esbuild	0.28	es2017	class-basic	native	-	-
 esbuild	0.28	es2017	class-builtins	native	-	-
+esbuild	0.28	es2017	class-early-return	native	-	-
 esbuild	0.28	es2017	class-extends	native	-	-
 esbuild	0.28	es2017	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.28	es2017	class-identity	native	-	-
@@ -2693,6 +2805,7 @@ esbuild	0.28	es2019	async-generators	native	-	-
 esbuild	0.28	es2019	block-scoping	native	-	-
 esbuild	0.28	es2019	class-basic	native	-	-
 esbuild	0.28	es2019	class-builtins	native	-	-
+esbuild	0.28	es2019	class-early-return	native	-	-
 esbuild	0.28	es2019	class-extends	native	-	-
 esbuild	0.28	es2019	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.28	es2019	class-identity	native	-	-
@@ -2717,6 +2830,7 @@ esbuild	0.28	es2020	async-generators	native	-	-
 esbuild	0.28	es2020	block-scoping	native	-	-
 esbuild	0.28	es2020	class-basic	native	-	-
 esbuild	0.28	es2020	class-builtins	native	-	-
+esbuild	0.28	es2020	class-early-return	native	-	-
 esbuild	0.28	es2020	class-extends	native	-	-
 esbuild	0.28	es2020	class-fields	same	esbuild-0.21/es2015/class-fields.js	faithful
 esbuild	0.28	es2020	class-identity	native	-	-
@@ -2741,6 +2855,7 @@ esbuild	0.28	es2015-min	async-generators	written	esbuild-0.28/es2015-min/async-g
 esbuild	0.28	es2015-min	block-scoping	written	esbuild-0.28/es2015-min/block-scoping.js	faithful
 esbuild	0.28	es2015-min	class-basic	written	esbuild-0.28/es2015-min/class-basic.js	faithful
 esbuild	0.28	es2015-min	class-builtins	written	esbuild-0.28/es2015-min/class-builtins.js	faithful
+esbuild	0.28	es2015-min	class-early-return	written	esbuild-0.28/es2015-min/class-early-return.js	faithful
 esbuild	0.28	es2015-min	class-extends	written	esbuild-0.28/es2015-min/class-extends.js	faithful
 esbuild	0.28	es2015-min	class-fields	written	esbuild-0.28/es2015-min/class-fields.js	faithful
 esbuild	0.28	es2015-min	class-identity	written	esbuild-0.28/es2015-min/class-identity.js	faithful
@@ -2759,27 +2874,28 @@ esbuild	0.28	es2015-min	optional-chaining	written	esbuild-0.28/es2015-min/option
 esbuild	0.28	es2015-min	params	written	esbuild-0.28/es2015-min/params.js	faithful
 esbuild	0.28	es2015-min	spread	written	esbuild-0.28/es2015-min/spread.js	faithful
 esbuild	0.28	es2015-min	template-literals	written	esbuild-0.28/es2015-min/template-literals.js	faithful
-closure	20230802	simple-ecmascript5	arrow-this	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript5	arrow-this	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript5	async-await	written	closure-20230802/simple-ecmascript5/async-await.js	faithful
 closure	20230802	simple-ecmascript5	async-generators	written	closure-20230802/simple-ecmascript5/async-generators.js	differs
 closure	20230802	simple-ecmascript5	block-scoping	written	closure-20230802/simple-ecmascript5/block-scoping.js	faithful
 closure	20230802	simple-ecmascript5	class-basic	written	closure-20230802/simple-ecmascript5/class-basic.js	faithful
 closure	20230802	simple-ecmascript5	class-builtins	written	closure-20230802/simple-ecmascript5/class-builtins.js	faithful
+closure	20230802	simple-ecmascript5	class-early-return	written	closure-20230802/simple-ecmascript5/class-early-return.js	faithful
 closure	20230802	simple-ecmascript5	class-extends	written	closure-20230802/simple-ecmascript5/class-extends.js	faithful
-closure	20230802	simple-ecmascript5	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript5	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript5	class-identity	written	closure-20230802/simple-ecmascript5/class-identity.js	differs
-closure	20230802	simple-ecmascript5	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
-closure	20230802	simple-ecmascript5	class-static-block	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript5	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
+closure	20230802	simple-ecmascript5	class-static-block	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript5	destructuring	written	closure-20230802/simple-ecmascript5/destructuring.js	faithful
-closure	20230802	simple-ecmascript5	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript5	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript5	for-of	written	closure-20230802/simple-ecmascript5/for-of.js	differs
 closure	20230802	simple-ecmascript5	generators	written	closure-20230802/simple-ecmascript5/generators.js	faithful
 closure	20230802	simple-ecmascript5	logical-assignment	written	closure-20230802/simple-ecmascript5/logical-assignment.js	faithful
 closure	20230802	simple-ecmascript5	nullish	written	closure-20230802/simple-ecmascript5/nullish.js	faithful
-closure	20230802	simple-ecmascript5	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
-closure	20230802	simple-ecmascript5	object-literals	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript5	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
+closure	20230802	simple-ecmascript5	object-literals	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript5	object-spread-rest	written	closure-20230802/simple-ecmascript5/object-spread-rest.js	faithful
-closure	20230802	simple-ecmascript5	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript5	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript5	params	written	closure-20230802/simple-ecmascript5/params.js	differs
 closure	20230802	simple-ecmascript5	spread	written	closure-20230802/simple-ecmascript5/spread.js	differs
 closure	20230802	simple-ecmascript5	template-literals	written	closure-20230802/simple-ecmascript5/template-literals.js	differs
@@ -2789,45 +2905,47 @@ closure	20230802	simple-ecmascript_2015	async-generators	written	closure-2023080
 closure	20230802	simple-ecmascript_2015	block-scoping	written	closure-20230802/simple-ecmascript_2015/block-scoping.js	faithful
 closure	20230802	simple-ecmascript_2015	class-basic	written	closure-20230802/simple-ecmascript_2015/class-basic.js	faithful
 closure	20230802	simple-ecmascript_2015	class-builtins	written	closure-20230802/simple-ecmascript_2015/class-builtins.js	faithful
+closure	20230802	simple-ecmascript_2015	class-early-return	written	closure-20230802/simple-ecmascript_2015/class-early-return.js	faithful
 closure	20230802	simple-ecmascript_2015	class-extends	written	closure-20230802/simple-ecmascript_2015/class-extends.js	faithful
-closure	20230802	simple-ecmascript_2015	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript_2015	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript_2015	class-identity	written	closure-20230802/simple-ecmascript_2015/class-identity.js	faithful
-closure	20230802	simple-ecmascript_2015	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
-closure	20230802	simple-ecmascript_2015	class-static-block	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript_2015	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
+closure	20230802	simple-ecmascript_2015	class-static-block	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript_2015	destructuring	written	closure-20230802/simple-ecmascript_2015/destructuring.js	faithful
-closure	20230802	simple-ecmascript_2015	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript_2015	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript_2015	for-of	written	closure-20230802/simple-ecmascript_2015/for-of.js	faithful
 closure	20230802	simple-ecmascript_2015	generators	written	closure-20230802/simple-ecmascript_2015/generators.js	faithful
 closure	20230802	simple-ecmascript_2015	logical-assignment	written	closure-20230802/simple-ecmascript_2015/logical-assignment.js	faithful
 closure	20230802	simple-ecmascript_2015	nullish	written	closure-20230802/simple-ecmascript_2015/nullish.js	faithful
-closure	20230802	simple-ecmascript_2015	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript_2015	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript_2015	object-literals	written	closure-20230802/simple-ecmascript_2015/object-literals.js	faithful
 closure	20230802	simple-ecmascript_2015	object-spread-rest	written	closure-20230802/simple-ecmascript_2015/object-spread-rest.js	faithful
-closure	20230802	simple-ecmascript_2015	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20230802	simple-ecmascript_2015	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20230802	simple-ecmascript_2015	params	written	closure-20230802/simple-ecmascript_2015/params.js	differs
 closure	20230802	simple-ecmascript_2015	spread	written	closure-20230802/simple-ecmascript_2015/spread.js	faithful
 closure	20230802	simple-ecmascript_2015	template-literals	written	closure-20230802/simple-ecmascript_2015/template-literals.js	differs
-closure	20261109	simple-ecmascript5	arrow-this	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript5	arrow-this	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript5	async-await	written	closure-20261109/simple-ecmascript5/async-await.js	faithful
 closure	20261109	simple-ecmascript5	async-generators	written	closure-20261109/simple-ecmascript5/async-generators.js	faithful
 closure	20261109	simple-ecmascript5	block-scoping	written	closure-20261109/simple-ecmascript5/block-scoping.js	faithful
 closure	20261109	simple-ecmascript5	class-basic	written	closure-20261109/simple-ecmascript5/class-basic.js	faithful
 closure	20261109	simple-ecmascript5	class-builtins	written	closure-20261109/simple-ecmascript5/class-builtins.js	faithful
+closure	20261109	simple-ecmascript5	class-early-return	written	closure-20261109/simple-ecmascript5/class-early-return.js	faithful
 closure	20261109	simple-ecmascript5	class-extends	written	closure-20261109/simple-ecmascript5/class-extends.js	faithful
-closure	20261109	simple-ecmascript5	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript5	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript5	class-identity	written	closure-20261109/simple-ecmascript5/class-identity.js	differs
-closure	20261109	simple-ecmascript5	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript5	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript5	class-static-block	written	closure-20261109/simple-ecmascript5/class-static-block.js	faithful
 closure	20261109	simple-ecmascript5	destructuring	written	closure-20261109/simple-ecmascript5/destructuring.js	faithful
-closure	20261109	simple-ecmascript5	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript5	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript5	for-of	written	closure-20261109/simple-ecmascript5/for-of.js	faithful
 closure	20261109	simple-ecmascript5	generators	written	closure-20261109/simple-ecmascript5/generators.js	faithful
 closure	20261109	simple-ecmascript5	logical-assignment	written	closure-20261109/simple-ecmascript5/logical-assignment.js	faithful
 closure	20261109	simple-ecmascript5	nullish	written	closure-20261109/simple-ecmascript5/nullish.js	faithful
-closure	20261109	simple-ecmascript5	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
-closure	20261109	simple-ecmascript5	object-literals	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript5	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
+closure	20261109	simple-ecmascript5	object-literals	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript5	object-spread-rest	written	closure-20261109/simple-ecmascript5/object-spread-rest.js	faithful
-closure	20261109	simple-ecmascript5	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript5	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript5	params	written	closure-20261109/simple-ecmascript5/params.js	differs
 closure	20261109	simple-ecmascript5	spread	written	closure-20261109/simple-ecmascript5/spread.js	differs
 closure	20261109	simple-ecmascript5	template-literals	written	closure-20261109/simple-ecmascript5/template-literals.js	differs
@@ -2837,21 +2955,22 @@ closure	20261109	simple-ecmascript_2015	async-generators	written	closure-2026110
 closure	20261109	simple-ecmascript_2015	block-scoping	written	closure-20261109/simple-ecmascript_2015/block-scoping.js	faithful
 closure	20261109	simple-ecmascript_2015	class-basic	same	closure-20230802/simple-ecmascript_2015/class-basic.js	faithful
 closure	20261109	simple-ecmascript_2015	class-builtins	written	closure-20261109/simple-ecmascript_2015/class-builtins.js	faithful
+closure	20261109	simple-ecmascript_2015	class-early-return	written	closure-20261109/simple-ecmascript_2015/class-early-return.js	faithful
 closure	20261109	simple-ecmascript_2015	class-extends	written	closure-20261109/simple-ecmascript_2015/class-extends.js	differs
-closure	20261109	simple-ecmascript_2015	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript_2015	class-fields	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript_2015	class-identity	written	closure-20261109/simple-ecmascript_2015/class-identity.js	faithful
-closure	20261109	simple-ecmascript_2015	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript_2015	class-private	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript_2015	class-static-block	written	closure-20261109/simple-ecmascript_2015/class-static-block.js	faithful
 closure	20261109	simple-ecmascript_2015	destructuring	written	closure-20261109/simple-ecmascript_2015/destructuring.js	faithful
-closure	20261109	simple-ecmascript_2015	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript_2015	exponent	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript_2015	for-of	written	closure-20261109/simple-ecmascript_2015/for-of.js	faithful
 closure	20261109	simple-ecmascript_2015	generators	written	closure-20261109/simple-ecmascript_2015/generators.js	faithful
 closure	20261109	simple-ecmascript_2015	logical-assignment	written	closure-20261109/simple-ecmascript_2015/logical-assignment.js	faithful
 closure	20261109	simple-ecmascript_2015	nullish	written	closure-20261109/simple-ecmascript_2015/nullish.js	faithful
-closure	20261109	simple-ecmascript_2015	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript_2015	numeric-separators	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript_2015	object-literals	same	closure-20230802/simple-ecmascript_2015/object-literals.js	faithful
 closure	20261109	simple-ecmascript_2015	object-spread-rest	written	closure-20261109/simple-ecmascript_2015/object-spread-rest.js	faithful
-closure	20261109	simple-ecmascript_2015	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut/tools/un	-	-
+closure	20261109	simple-ecmascript_2015	optional-chaining	refused:Command failed: java -jar /home/noah/projects/untwist/.worktrees/r51-ut3/tools/u	-	-
 closure	20261109	simple-ecmascript_2015	params	written	closure-20261109/simple-ecmascript_2015/params.js	differs
 closure	20261109	simple-ecmascript_2015	spread	written	closure-20261109/simple-ecmascript_2015/spread.js	faithful
 closure	20261109	simple-ecmascript_2015	template-literals	written	closure-20261109/simple-ecmascript_2015/template-literals.js	faithful
@@ -2861,6 +2980,7 @@ babel	7.29	ie11-terser	async-generators	written	babel-7.29/ie11-terser/async-gen
 babel	7.29	ie11-terser	block-scoping	written	babel-7.29/ie11-terser/block-scoping.js	faithful
 babel	7.29	ie11-terser	class-basic	written	babel-7.29/ie11-terser/class-basic.js	differs
 babel	7.29	ie11-terser	class-builtins	written	babel-7.29/ie11-terser/class-builtins.js	faithful
+babel	7.29	ie11-terser	class-early-return	written	babel-7.29/ie11-terser/class-early-return.js	faithful
 babel	7.29	ie11-terser	class-extends	written	babel-7.29/ie11-terser/class-extends.js	differs
 babel	7.29	ie11-terser	class-fields	written	babel-7.29/ie11-terser/class-fields.js	faithful
 babel	7.29	ie11-terser	class-identity	written	babel-7.29/ie11-terser/class-identity.js	differs
@@ -2885,6 +3005,7 @@ babel	7.29	ie11-runtime-terser	async-generators	written	babel-7.29/ie11-runtime-
 babel	7.29	ie11-runtime-terser	block-scoping	written	babel-7.29/ie11-runtime-terser/block-scoping.js	faithful
 babel	7.29	ie11-runtime-terser	class-basic	written	babel-7.29/ie11-runtime-terser/class-basic.js	differs
 babel	7.29	ie11-runtime-terser	class-builtins	written	babel-7.29/ie11-runtime-terser/class-builtins.js	faithful
+babel	7.29	ie11-runtime-terser	class-early-return	written	babel-7.29/ie11-runtime-terser/class-early-return.js	faithful
 babel	7.29	ie11-runtime-terser	class-extends	written	babel-7.29/ie11-runtime-terser/class-extends.js	differs
 babel	7.29	ie11-runtime-terser	class-fields	written	babel-7.29/ie11-runtime-terser/class-fields.js	faithful
 babel	7.29	ie11-runtime-terser	class-identity	written	babel-7.29/ie11-runtime-terser/class-identity.js	differs
@@ -2909,6 +3030,7 @@ babel	7.29	chrome45-terser	async-generators	same	babel-7.29/ie11-terser/async-ge
 babel	7.29	chrome45-terser	block-scoping	same	babel-7.29/ie11-terser/block-scoping.js	faithful
 babel	7.29	chrome45-terser	class-basic	same	babel-7.29/ie11-terser/class-basic.js	differs
 babel	7.29	chrome45-terser	class-builtins	same	babel-7.29/ie11-terser/class-builtins.js	faithful
+babel	7.29	chrome45-terser	class-early-return	same	babel-7.29/ie11-terser/class-early-return.js	faithful
 babel	7.29	chrome45-terser	class-extends	same	babel-7.29/ie11-terser/class-extends.js	differs
 babel	7.29	chrome45-terser	class-fields	same	babel-7.29/ie11-terser/class-fields.js	faithful
 babel	7.29	chrome45-terser	class-identity	same	babel-7.29/ie11-terser/class-identity.js	differs
@@ -2933,6 +3055,7 @@ babel	7.28	chrome45-terser	async-generators	written	babel-7.28/chrome45-terser/a
 babel	7.28	chrome45-terser	block-scoping	same	babel-7.29/ie11-terser/block-scoping.js	faithful
 babel	7.28	chrome45-terser	class-basic	written	babel-7.28/chrome45-terser/class-basic.js	differs
 babel	7.28	chrome45-terser	class-builtins	written	babel-7.28/chrome45-terser/class-builtins.js	faithful
+babel	7.28	chrome45-terser	class-early-return	written	babel-7.28/chrome45-terser/class-early-return.js	faithful
 babel	7.28	chrome45-terser	class-extends	written	babel-7.28/chrome45-terser/class-extends.js	differs
 babel	7.28	chrome45-terser	class-fields	written	babel-7.28/chrome45-terser/class-fields.js	faithful
 babel	7.28	chrome45-terser	class-identity	written	babel-7.28/chrome45-terser/class-identity.js	differs
@@ -2957,6 +3080,7 @@ babel	7.28	ie11-terser	async-generators	same	babel-7.28/chrome45-terser/async-ge
 babel	7.28	ie11-terser	block-scoping	same	babel-7.29/ie11-terser/block-scoping.js	faithful
 babel	7.28	ie11-terser	class-basic	same	babel-7.28/chrome45-terser/class-basic.js	differs
 babel	7.28	ie11-terser	class-builtins	same	babel-7.28/chrome45-terser/class-builtins.js	faithful
+babel	7.28	ie11-terser	class-early-return	same	babel-7.28/chrome45-terser/class-early-return.js	faithful
 babel	7.28	ie11-terser	class-extends	same	babel-7.28/chrome45-terser/class-extends.js	differs
 babel	7.28	ie11-terser	class-fields	same	babel-7.28/chrome45-terser/class-fields.js	faithful
 babel	7.28	ie11-terser	class-identity	same	babel-7.28/chrome45-terser/class-identity.js	differs
@@ -2975,12 +3099,113 @@ babel	7.28	ie11-terser	optional-chaining	written	babel-7.28/ie11-terser/optional
 babel	7.28	ie11-terser	params	same	babel-7.29/ie11-terser/params.js	faithful
 babel	7.28	ie11-terser	spread	written	babel-7.28/ie11-terser/spread.js	differs
 babel	7.28	ie11-terser	template-literals	same	babel-7.29/ie11-terser/template-literals.js	faithful
+babel	7.28	safari9	arrow-this	written	babel-7.28/safari9/arrow-this.js	faithful
+babel	7.28	safari9	async-await	written	babel-7.28/safari9/async-await.js	faithful
+babel	7.28	safari9	async-generators	same	babel-7.28/ie11/async-generators.js	faithful
+babel	7.28	safari9	block-scoping	same	babel-7.24/ie11/block-scoping.js	faithful
+babel	7.28	safari9	class-basic	written	babel-7.28/safari9/class-basic.js	faithful
+babel	7.28	safari9	class-builtins	written	babel-7.28/safari9/class-builtins.js	faithful
+babel	7.28	safari9	class-early-return	written	babel-7.28/safari9/class-early-return.js	faithful
+babel	7.28	safari9	class-extends	written	babel-7.28/safari9/class-extends.js	faithful
+babel	7.28	safari9	class-fields	written	babel-7.28/safari9/class-fields.js	faithful
+babel	7.28	safari9	class-identity	written	babel-7.28/safari9/class-identity.js	differs
+babel	7.28	safari9	class-private	written	babel-7.28/safari9/class-private.js	faithful
+babel	7.28	safari9	class-static-block	written	babel-7.28/safari9/class-static-block.js	faithful
+babel	7.28	safari9	destructuring	same	babel-7.28/ie11/destructuring.js	faithful
+babel	7.28	safari9	exponent	same	babel-7.28/ie11/exponent.js	differs
+babel	7.28	safari9	for-of	same	babel-7.28/chrome45/for-of.js	faithful
+babel	7.28	safari9	generators	written	babel-7.28/safari9/generators.js	faithful
+babel	7.28	safari9	logical-assignment	same	babel-7.28/ie11/logical-assignment.js	faithful
+babel	7.28	safari9	nullish	same	babel-7.20/ie11/nullish.js	faithful
+babel	7.28	safari9	numeric-separators	same	babel-7.28/chrome45/numeric-separators.js	faithful
+babel	7.28	safari9	object-literals	written	babel-7.28/safari9/object-literals.js	faithful
+babel	7.28	safari9	object-spread-rest	written	babel-7.28/safari9/object-spread-rest.js	faithful
+babel	7.28	safari9	optional-chaining	written	babel-7.28/safari9/optional-chaining.js	faithful
+babel	7.28	safari9	params	same	babel-7.20/ie11/params.js	faithful
+babel	7.28	safari9	spread	written	babel-7.28/safari9/spread.js	differs
+babel	7.28	safari9	template-literals	written	babel-7.28/safari9/template-literals.js	faithful
+babel	7.29	safari9	arrow-this	written	babel-7.29/safari9/arrow-this.js	faithful
+babel	7.29	safari9	async-await	written	babel-7.29/safari9/async-await.js	faithful
+babel	7.29	safari9	async-generators	same	babel-7.29/ie11/async-generators.js	faithful
+babel	7.29	safari9	block-scoping	same	babel-7.24/ie11/block-scoping.js	faithful
+babel	7.29	safari9	class-basic	written	babel-7.29/safari9/class-basic.js	faithful
+babel	7.29	safari9	class-builtins	written	babel-7.29/safari9/class-builtins.js	faithful
+babel	7.29	safari9	class-early-return	written	babel-7.29/safari9/class-early-return.js	faithful
+babel	7.29	safari9	class-extends	written	babel-7.29/safari9/class-extends.js	faithful
+babel	7.29	safari9	class-fields	written	babel-7.29/safari9/class-fields.js	faithful
+babel	7.29	safari9	class-identity	written	babel-7.29/safari9/class-identity.js	differs
+babel	7.29	safari9	class-private	written	babel-7.29/safari9/class-private.js	faithful
+babel	7.29	safari9	class-static-block	written	babel-7.29/safari9/class-static-block.js	faithful
+babel	7.29	safari9	destructuring	same	babel-7.29/ie11/destructuring.js	faithful
+babel	7.29	safari9	exponent	same	babel-7.28/ie11/exponent.js	differs
+babel	7.29	safari9	for-of	same	babel-7.28/chrome45/for-of.js	faithful
+babel	7.29	safari9	generators	written	babel-7.29/safari9/generators.js	faithful
+babel	7.29	safari9	logical-assignment	same	babel-7.28/ie11/logical-assignment.js	faithful
+babel	7.29	safari9	nullish	same	babel-7.20/ie11/nullish.js	faithful
+babel	7.29	safari9	numeric-separators	same	babel-7.28/chrome45/numeric-separators.js	faithful
+babel	7.29	safari9	object-literals	same	babel-7.28/safari9/object-literals.js	faithful
+babel	7.29	safari9	object-spread-rest	same	babel-7.29/esmodules/object-spread-rest.js	faithful
+babel	7.29	safari9	optional-chaining	written	babel-7.29/safari9/optional-chaining.js	faithful
+babel	7.29	safari9	params	same	babel-7.20/ie11/params.js	faithful
+babel	7.29	safari9	spread	written	babel-7.29/safari9/spread.js	differs
+babel	7.29	safari9	template-literals	same	babel-7.28/safari9/template-literals.js	faithful
+babel	7.28	safari9-iife-terser	arrow-this	written	babel-7.28/safari9-iife-terser/arrow-this.js	faithful
+babel	7.28	safari9-iife-terser	async-await	written	babel-7.28/safari9-iife-terser/async-await.js	faithful
+babel	7.28	safari9-iife-terser	async-generators	written	babel-7.28/safari9-iife-terser/async-generators.js	faithful
+babel	7.28	safari9-iife-terser	block-scoping	written	babel-7.28/safari9-iife-terser/block-scoping.js	faithful
+babel	7.28	safari9-iife-terser	class-basic	written	babel-7.28/safari9-iife-terser/class-basic.js	differs
+babel	7.28	safari9-iife-terser	class-builtins	written	babel-7.28/safari9-iife-terser/class-builtins.js	faithful
+babel	7.28	safari9-iife-terser	class-early-return	written	babel-7.28/safari9-iife-terser/class-early-return.js	faithful
+babel	7.28	safari9-iife-terser	class-extends	written	babel-7.28/safari9-iife-terser/class-extends.js	differs
+babel	7.28	safari9-iife-terser	class-fields	written	babel-7.28/safari9-iife-terser/class-fields.js	faithful
+babel	7.28	safari9-iife-terser	class-identity	written	babel-7.28/safari9-iife-terser/class-identity.js	differs
+babel	7.28	safari9-iife-terser	class-private	written	babel-7.28/safari9-iife-terser/class-private.js	faithful
+babel	7.28	safari9-iife-terser	class-static-block	written	babel-7.28/safari9-iife-terser/class-static-block.js	faithful
+babel	7.28	safari9-iife-terser	destructuring	written	babel-7.28/safari9-iife-terser/destructuring.js	faithful
+babel	7.28	safari9-iife-terser	exponent	same	babel-7.29/ie11-runtime-terser/exponent.js	differs
+babel	7.28	safari9-iife-terser	for-of	written	babel-7.28/safari9-iife-terser/for-of.js	faithful
+babel	7.28	safari9-iife-terser	generators	written	babel-7.28/safari9-iife-terser/generators.js	faithful
+babel	7.28	safari9-iife-terser	logical-assignment	same	babel-7.29/ie11-runtime-terser/logical-assignment.js	faithful
+babel	7.28	safari9-iife-terser	nullish	same	babel-7.29/ie11-runtime-terser/nullish.js	faithful
+babel	7.28	safari9-iife-terser	numeric-separators	same	babel-7.29/ie11-runtime-terser/numeric-separators.js	faithful
+babel	7.28	safari9-iife-terser	object-literals	written	babel-7.28/safari9-iife-terser/object-literals.js	faithful
+babel	7.28	safari9-iife-terser	object-spread-rest	written	babel-7.28/safari9-iife-terser/object-spread-rest.js	faithful
+babel	7.28	safari9-iife-terser	optional-chaining	written	babel-7.28/safari9-iife-terser/optional-chaining.js	faithful
+babel	7.28	safari9-iife-terser	params	same	babel-7.29/ie11-runtime-terser/params.js	faithful
+babel	7.28	safari9-iife-terser	spread	written	babel-7.28/safari9-iife-terser/spread.js	differs
+babel	7.28	safari9-iife-terser	template-literals	written	babel-7.28/safari9-iife-terser/template-literals.js	faithful
+babel	7.29	safari9-iife-terser	arrow-this	written	babel-7.29/safari9-iife-terser/arrow-this.js	faithful
+babel	7.29	safari9-iife-terser	async-await	written	babel-7.29/safari9-iife-terser/async-await.js	faithful
+babel	7.29	safari9-iife-terser	async-generators	written	babel-7.29/safari9-iife-terser/async-generators.js	faithful
+babel	7.29	safari9-iife-terser	block-scoping	same	babel-7.28/safari9-iife-terser/block-scoping.js	faithful
+babel	7.29	safari9-iife-terser	class-basic	written	babel-7.29/safari9-iife-terser/class-basic.js	differs
+babel	7.29	safari9-iife-terser	class-builtins	written	babel-7.29/safari9-iife-terser/class-builtins.js	faithful
+babel	7.29	safari9-iife-terser	class-early-return	written	babel-7.29/safari9-iife-terser/class-early-return.js	faithful
+babel	7.29	safari9-iife-terser	class-extends	written	babel-7.29/safari9-iife-terser/class-extends.js	differs
+babel	7.29	safari9-iife-terser	class-fields	written	babel-7.29/safari9-iife-terser/class-fields.js	faithful
+babel	7.29	safari9-iife-terser	class-identity	written	babel-7.29/safari9-iife-terser/class-identity.js	differs
+babel	7.29	safari9-iife-terser	class-private	written	babel-7.29/safari9-iife-terser/class-private.js	faithful
+babel	7.29	safari9-iife-terser	class-static-block	written	babel-7.29/safari9-iife-terser/class-static-block.js	faithful
+babel	7.29	safari9-iife-terser	destructuring	written	babel-7.29/safari9-iife-terser/destructuring.js	faithful
+babel	7.29	safari9-iife-terser	exponent	same	babel-7.29/ie11-runtime-terser/exponent.js	differs
+babel	7.29	safari9-iife-terser	for-of	same	babel-7.28/safari9-iife-terser/for-of.js	faithful
+babel	7.29	safari9-iife-terser	generators	written	babel-7.29/safari9-iife-terser/generators.js	faithful
+babel	7.29	safari9-iife-terser	logical-assignment	same	babel-7.29/ie11-runtime-terser/logical-assignment.js	faithful
+babel	7.29	safari9-iife-terser	nullish	same	babel-7.29/ie11-runtime-terser/nullish.js	faithful
+babel	7.29	safari9-iife-terser	numeric-separators	same	babel-7.29/ie11-runtime-terser/numeric-separators.js	faithful
+babel	7.29	safari9-iife-terser	object-literals	same	babel-7.28/safari9-iife-terser/object-literals.js	faithful
+babel	7.29	safari9-iife-terser	object-spread-rest	written	babel-7.29/safari9-iife-terser/object-spread-rest.js	faithful
+babel	7.29	safari9-iife-terser	optional-chaining	written	babel-7.29/safari9-iife-terser/optional-chaining.js	faithful
+babel	7.29	safari9-iife-terser	params	same	babel-7.29/ie11-runtime-terser/params.js	faithful
+babel	7.29	safari9-iife-terser	spread	written	babel-7.29/safari9-iife-terser/spread.js	differs
+babel	7.29	safari9-iife-terser	template-literals	same	babel-7.28/safari9-iife-terser/template-literals.js	faithful
 babel	7.29	ie11-loose-terser	arrow-this	written	babel-7.29/ie11-loose-terser/arrow-this.js	faithful
 babel	7.29	ie11-loose-terser	async-await	written	babel-7.29/ie11-loose-terser/async-await.js	faithful
 babel	7.29	ie11-loose-terser	async-generators	same	babel-7.29/ie11-terser/async-generators.js	faithful
 babel	7.29	ie11-loose-terser	block-scoping	written	babel-7.29/ie11-loose-terser/block-scoping.js	faithful
 babel	7.29	ie11-loose-terser	class-basic	written	babel-7.29/ie11-loose-terser/class-basic.js	differs
 babel	7.29	ie11-loose-terser	class-builtins	written	babel-7.29/ie11-loose-terser/class-builtins.js	faithful
+babel	7.29	ie11-loose-terser	class-early-return	written	babel-7.29/ie11-loose-terser/class-early-return.js	faithful
 babel	7.29	ie11-loose-terser	class-extends	written	babel-7.29/ie11-loose-terser/class-extends.js	differs
 babel	7.29	ie11-loose-terser	class-fields	written	babel-7.29/ie11-loose-terser/class-fields.js	differs
 babel	7.29	ie11-loose-terser	class-identity	written	babel-7.29/ie11-loose-terser/class-identity.js	differs
@@ -3005,6 +3230,7 @@ ts	5.9	es5-terser	async-generators	written	ts-5.9/es5-terser/async-generators.js
 ts	5.9	es5-terser	block-scoping	written	ts-5.9/es5-terser/block-scoping.js	faithful
 ts	5.9	es5-terser	class-basic	written	ts-5.9/es5-terser/class-basic.js	differs
 ts	5.9	es5-terser	class-builtins	written	ts-5.9/es5-terser/class-builtins.js	differs
+ts	5.9	es5-terser	class-early-return	written	ts-5.9/es5-terser/class-early-return.js	faithful
 ts	5.9	es5-terser	class-extends	written	ts-5.9/es5-terser/class-extends.js	differs
 ts	5.9	es5-terser	class-fields	written	ts-5.9/es5-terser/class-fields.js	differs
 ts	5.9	es5-terser	class-identity	written	ts-5.9/es5-terser/class-identity.js	differs
@@ -3029,6 +3255,7 @@ ts	5.9	es5-tslib-terser	async-generators	written	ts-5.9/es5-tslib-terser/async-g
 ts	5.9	es5-tslib-terser	block-scoping	written	ts-5.9/es5-tslib-terser/block-scoping.js	faithful
 ts	5.9	es5-tslib-terser	class-basic	written	ts-5.9/es5-tslib-terser/class-basic.js	differs
 ts	5.9	es5-tslib-terser	class-builtins	written	ts-5.9/es5-tslib-terser/class-builtins.js	differs
+ts	5.9	es5-tslib-terser	class-early-return	written	ts-5.9/es5-tslib-terser/class-early-return.js	faithful
 ts	5.9	es5-tslib-terser	class-extends	written	ts-5.9/es5-tslib-terser/class-extends.js	differs
 ts	5.9	es5-tslib-terser	class-fields	written	ts-5.9/es5-tslib-terser/class-fields.js	differs
 ts	5.9	es5-tslib-terser	class-identity	written	ts-5.9/es5-tslib-terser/class-identity.js	differs
@@ -3053,6 +3280,7 @@ swc	1.16	es5-terser	async-generators	written	swc-1.16/es5-terser/async-generator
 swc	1.16	es5-terser	block-scoping	written	swc-1.16/es5-terser/block-scoping.js	faithful
 swc	1.16	es5-terser	class-basic	written	swc-1.16/es5-terser/class-basic.js	differs
 swc	1.16	es5-terser	class-builtins	written	swc-1.16/es5-terser/class-builtins.js	faithful
+swc	1.16	es5-terser	class-early-return	written	swc-1.16/es5-terser/class-early-return.js	faithful
 swc	1.16	es5-terser	class-extends	written	swc-1.16/es5-terser/class-extends.js	differs
 swc	1.16	es5-terser	class-fields	written	swc-1.16/es5-terser/class-fields.js	faithful
 swc	1.16	es5-terser	class-identity	written	swc-1.16/es5-terser/class-identity.js	differs
