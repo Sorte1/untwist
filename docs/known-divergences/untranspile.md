@@ -394,7 +394,7 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   is `--unsafe` only, under the generator assumptions above (a regenerator generator object is
   `Object.create(g.prototype)` with the runtime's `next`/`throw`/`return`; `_regenerator().m(g)`
   gives `g` the runtime's generator-function prototype).
-- **Async functions (Babel's `_asyncToGenerator`).** Once the regenerator machine above is a
+- **Async functions (Babel's `_asyncToGenerator`, SWC's `_async_to_generator` with the same body).** Once the regenerator machine above (or any `function*`) is a
   `function*` (a machine in an expression, `_regenerator().m(function _callee() { return
   _regenerator().w(…, _callee); })`, becomes that `function*` in place), three wrappers become
   `async` functions, each yield turned into `await`: `return _asyncToGenerator(function* () {

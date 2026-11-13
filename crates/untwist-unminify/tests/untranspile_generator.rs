@@ -167,7 +167,7 @@ fn reads_that_would_cross_a_resumption_bind_the_received_value_first() {
 fn spread_arguments_around_an_await_keep_converting_through_a_temporary() {
     for (path, bound) in [
         ("ts/async.es5.js", "const _t = await "),
-        ("swc/async.es5.js", "const _t = yield "),
+        ("swc/async.es5.js", "const _t = await "),
     ] {
         let code = unsafe_run(path);
         assert!(!code.contains("_generator(this"), "{path}:\n{code}");
