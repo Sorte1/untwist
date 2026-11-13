@@ -100,14 +100,12 @@ pub fn run_mode<'a, F>(
 ) where
     F: Fn(&Program<'a>, &Collected, &Scoping) -> RenamePlan,
 {
-    #[cfg(feature = "test-hooks")]
-    let setting = crate::pins::Setting::of(program, cx.opts);
+    let setting = Setting::of(program, cx.opts);
     run_mode_once(
         done,
         program,
         cx,
-        hazard_note,
-        rule,
+        (hazard_note, rule, setting),
         |program, collected, scoping| {
             let plan = decide(program, collected, scoping);
             #[cfg(feature = "test-hooks")]
@@ -121,8 +119,7 @@ pub fn run_mode_once<'a, F>(
     done: &mut bool,
     program: &mut Program<'a>,
     cx: &mut Cx<'a, '_>,
-    hazard_note: HazardNote,
-    rule: OuterRule,
+    (hazard_note, rule, setting): (HazardNote, OuterRule, Setting),
     decide: F,
 ) where
     F: FnOnce(&Program<'a>, &Collected, &Scoping) -> RenamePlan,
@@ -140,7 +137,7 @@ pub fn run_mode_once<'a, F>(
     if rebuilt.is_none() {
         crate::fresh::assert_fresh(program, scoping);
     }
-    let collected = prepare(program, scoping, rule, Setting::of(program, cx.opts));
+    let collected = prepare(program, scoping, rule, setting);
     let hazard = match hazard_note {
         HazardNote::Report => collected.hazard,
         HazardNote::Suppress => None,

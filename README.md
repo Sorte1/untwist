@@ -184,7 +184,9 @@ do: a top-level `var`, function, `let`, `const` or `class` of one is treated as 
 the others when another input names it (a free reference or a top-level declaration of its own) or
 reaches globals through a computed key or code text, and is then not inlined away, removed or
 renamed. When two or more classic scripts are given, or another input may observe the global
-object's names, no top-level binding of a classic script is renamed, and no input's top-level
+object's names, no top-level binding of a classic script is renamed (`--rename unique`, whose
+counter is shared by every input, still renames them when only other scripts are the reason),
+and no input's top-level
 binding takes a name another input binds at the top level or reads free. Inputs that share no
 names come out as they would alone, apart from those top-level names. A module (a file with `import`, `export`,
 `import.meta` or top-level `await`) is closed apart from its exports. Code from outside the file

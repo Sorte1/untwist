@@ -225,8 +225,9 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   `Object.hasOwn`, `Object.keys`, `getOwnPropertyNames`, `Reflect.ownKeys`, `for…in`,
   `getOwnPropertyDescriptor`); a key that is not a literal keeps them all. When several classic
   scripts are given together they share one global scope, so no top-level binding of a classic
-  script is renamed in that run, and no top-level binding of any input takes a name another input
-  binds at the top level or reads free. In a classic script, shorthand
+  script is renamed in that run (`unique` still renames them: its counter is shared by every
+  input, so two inputs never hand out the same name), and no top-level binding of any input takes
+  a name another input binds at the top level or reads free. In a classic script, shorthand
   restoration leaves top-level `var` and function bindings alone (each is a property of the
   global object), and no mode gives a top-level binding the name of a browser or Node global
   property (`status`, `location`, `top`, `name`, `onload`, ...). When code built from text can

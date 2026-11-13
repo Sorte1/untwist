@@ -7,7 +7,8 @@ use rustc_hash::FxHashSet;
 pub struct SharedGlobals {
     pub every_name: bool,
     pub names: FxHashSet<String>,
-    pub keep_top_level: bool,
+    pub other_scripts: bool,
+    pub observed_elsewhere: bool,
     pub named_elsewhere: FxHashSet<String>,
 }
 
@@ -15,7 +16,8 @@ impl SharedGlobals {
     pub fn is_empty(&self) -> bool {
         !self.every_name
             && self.names.is_empty()
-            && !self.keep_top_level
+            && !self.other_scripts
+            && !self.observed_elsewhere
             && self.named_elsewhere.is_empty()
     }
 
@@ -53,11 +55,11 @@ pub fn is_shared_global(name: &str) -> bool {
     })
 }
 
-pub fn top_level_names_fixed() -> bool {
+pub fn top_level_names_fixed(counter_shared: bool) -> bool {
     SHARED_GLOBALS.with(|cell| {
-        cell.borrow()
-            .as_ref()
-            .is_some_and(|shared| shared.keep_top_level)
+        cell.borrow().as_ref().is_some_and(|shared| {
+            shared.observed_elsewhere || (shared.other_scripts && !counter_shared)
+        })
     })
 }
 

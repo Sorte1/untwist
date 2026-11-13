@@ -115,7 +115,8 @@ fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGloba
         .filter(|name| others().any(|(_, other)| other.names(name)))
         .cloned()
         .collect();
-    let keep_top_level = others().any(|(index, other)| other.script || reached[index].observed);
+    let other_scripts = others().any(|(_, other)| other.script);
+    let observed_elsewhere = others().any(|(index, _)| reached[index].observed);
     let named_elsewhere = others()
         .flat_map(|(_, other)| other.named())
         .map(str::to_string)
@@ -123,7 +124,8 @@ fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGloba
     SharedGlobals {
         every_name,
         names,
-        keep_top_level,
+        other_scripts,
+        observed_elsewhere,
         named_elsewhere,
     }
 }

@@ -16,6 +16,7 @@ pub struct Setting {
     pub keep_lexicals: bool,
     pub safe_lane: bool,
     pub classic_script: bool,
+    pub shared_counter: bool,
 }
 
 impl Setting {
@@ -25,6 +26,7 @@ impl Setting {
             keep_lexicals: opts.keep_script_lexicals,
             safe_lane: !opts.unsafe_transforms,
             classic_script: !opts.nested_root && !has_module_syntax(program),
+            shared_counter: false,
         }
     }
 }
@@ -47,7 +49,8 @@ pub fn prepare(
 
 fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, setting: Setting) {
     pin_shared_globals(collected, scoping);
-    let fixed_by_other_inputs = setting.classic_script && top_level_names_fixed();
+    let fixed_by_other_inputs =
+        setting.classic_script && top_level_names_fixed(setting.shared_counter);
     if !setting.keep_globals && !setting.keep_lexicals && !fixed_by_other_inputs {
         return;
     }
