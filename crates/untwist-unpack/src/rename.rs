@@ -30,6 +30,11 @@ pub fn generate_uid(base: &str, scoping: &Scoping, used: &FxHashSet<String>) -> 
     format!("_{base}_{}", used.len())
 }
 
+pub fn reads_free_name(program: &Program<'_>, scoping: &Scoping, name: &str) -> bool {
+    scoping.root_unresolved_references().contains_key(name)
+        || evaluated_names(program, scoping).contains(name)
+}
+
 fn evaluated_names(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<String> {
     if !scoping.root_unresolved_references().contains_key("eval") {
         return FxHashSet::default();

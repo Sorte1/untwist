@@ -111,6 +111,7 @@ impl<'a> Policy<'a> for Sound<'_, '_, 'a> {
     }
 
     fn call(&mut self, frame: Frame, it: &CallExpression<'a>) -> Step {
+        self.check.refuse_every_eval(it);
         self.check.call(frame, it)
     }
 

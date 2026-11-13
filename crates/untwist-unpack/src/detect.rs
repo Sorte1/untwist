@@ -5,10 +5,11 @@ use oxc_semantic::Scoping;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
 
+use crate::browserify::detect::BROWSERIFY_PARAMS;
 use crate::browserify::detect::{
     browserify_factories, detect_browserify_with, is_browserify, rebound_require, unlinked_require,
 };
-use crate::closed::first_open;
+use crate::closed::{first_host_read, first_open};
 use crate::frame::Frame;
 use crate::links::Links;
 use crate::matcher::Factory;
@@ -20,6 +21,7 @@ use crate::webpack::chunk::{
 };
 use crate::webpack::detect4::{detect_webpack4_noted, is_webpack4, webpack4_factories};
 use crate::webpack::detect5::{detect_webpack5_noted, is_webpack5, webpack5_factories};
+use crate::webpack::extract::WEBPACK_PARAMS;
 use crate::webpack::module_object::module_object_use;
 use crate::webpack::proof::Proving;
 use crate::UnpackOptions;
@@ -45,6 +47,14 @@ struct Extract<'a, 'p, 'b> {
 
 impl<'a> Extract<'a, '_, '_> {
     fn closed(&mut self, factories: Option<Vec<(String, Factory<'_, 'a>)>>) -> bool {
+        self.closed_as(factories, &WEBPACK_PARAMS)
+    }
+
+    fn closed_as(
+        &mut self,
+        factories: Option<Vec<(String, Factory<'_, 'a>)>>,
+        targets: &[&str],
+    ) -> bool {
         let Some(factories) = factories else {
             return false;
         };
@@ -55,7 +65,9 @@ impl<'a> Extract<'a, '_, '_> {
         let scoping = self
             .scoping
             .get_or_insert_with(|| build_scoping(source).scoping);
-        let Some((id, captured)) = first_open(scoping, factories, MAPPED_PARAMS) else {
+        let open = first_host_read(scoping, factories.iter().cloned(), targets)
+            .or_else(|| first_open(scoping, factories, MAPPED_PARAMS));
+        let Some((id, captured)) = open else {
             return true;
         };
         self.unproven
@@ -148,7 +160,7 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
             });
         }
         if self.bundle.is_none()
-            && self.closed(browserify_factories(expr))
+            && self.closed_as(browserify_factories(expr), &BROWSERIFY_PARAMS)
             && self.require_kept(browserify_factories(expr))
             && self.requests_linked(expr)
         {
