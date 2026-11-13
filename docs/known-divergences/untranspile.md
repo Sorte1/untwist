@@ -403,7 +403,10 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   _context["catch"](L)`, `finish` and `delegateYield` keep the machine. Any other use of
   `_context`, `this` in the state function, `@babel/runtime`'s module copy or the global
   `regeneratorRuntime` keeps it too. The expression form `_regenerator().m(function _callee() { return
-  _regenerator().w(…, _callee); })` becomes that `function*` in place. The rewrite
+  _regenerator().w(…, _callee); })` becomes that `function*` in place, and a function whose
+  body ends `return function* () { … }()` (Babel's form for a generator with default
+  parameters) becomes the generator itself when the inner one has no parameters, uses no
+  `this`, `arguments` or `new.target`, and binds no name the outer function binds. The rewrite
   is `--unsafe` only, under the generator assumptions above (a regenerator generator object is
   `Object.create(g.prototype)` with the runtime's `next`/`throw`/`return`; `_regenerator().m(g)`
   gives `g` the runtime's generator-function prototype).

@@ -130,3 +130,12 @@ fn the_classic_runtime_machines_convert_too() {
     let code = run("matrix/babel-7.20/ie11/async-await.js", true);
     assert_has(&code, &["async function fetchTwice(x) {"]);
 }
+
+#[test]
+fn an_immediately_called_generator_becomes_the_function_itself() {
+    let code = run("matrix/babel-7.29/ie11/generators.js", true);
+    assert_has(
+        &code,
+        &["function* range(start, end, step = 1) {", "yield i;"],
+    );
+}

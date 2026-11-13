@@ -849,6 +849,13 @@ impl<'a> Pass<'a> for UntranspileHelpers {
         if self.machines_on() {
             self.machine_site(node, cx);
         }
+        if self.gate.unsafe_
+            && self.table.has_regenerators()
+            && generator_regen::rewrite_invoked(node, cx).is_some()
+        {
+            shapes::fire(PASS, generator_regen::INVOKED);
+            cx.changed();
+        }
         if let (Some(scope), Some(body)) = (node.scope_id.get(), node.body.as_mut()) {
             if !self.sites.is_empty() {
                 self.rewrite_sites(&mut body.statements, node.span, cx);

@@ -27,6 +27,7 @@ use super::structure;
 use super::structure_tidy::tidy;
 
 pub const SHAPE: &str = "generator/regenerator/unsafe";
+pub const INVOKED: &str = "generator/invoked/unsafe";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Flavor {
@@ -462,4 +463,114 @@ pub fn rewrite_expression<'a>(
     };
     *expression = Expression::FunctionExpression(function);
     true
+}
+
+fn invoked_generator<'k, 'a>(
+    function: &'k Function<'a>,
+    scoping: &Scoping,
+) -> Option<&'k Function<'a>> {
+    if function.generator || function.r#async {
+        return None;
+    }
+    let call = returned_call(function)?;
+    if !call.arguments.is_empty() {
+        return None;
+    }
+    let Expression::FunctionExpression(generator) = call.callee.without_parentheses() else {
+        return None;
+    };
+    let unnamed = generator.id.as_ref().is_none_or(|id| {
+        id.symbol_id
+            .get()
+            .is_some_and(|symbol| scoping.get_resolved_reference_ids(symbol).is_empty())
+    });
+    let plain = generator.generator
+        && !generator.r#async
+        && unnamed
+        && generator.params.items.is_empty()
+        && generator.params.rest.is_none()
+        && generator
+            .body
+            .as_ref()
+            .is_some_and(|body| body.directives.is_empty());
+    plain.then_some(generator)
+}
+
+struct Receivers {
+    depth: u32,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for Receivers {
+    fn visit_this_expression(&mut self, _it: &ThisExpression) {
+        self.found |= self.depth == 0;
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= self.depth == 0 && it.name.as_str() == "arguments";
+    }
+
+    fn visit_new_target(&mut self, _it: &NewTarget) {
+        self.found |= self.depth == 0;
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.depth += 1;
+        walk_js::walk_function(self, it, flags);
+        self.depth -= 1;
+    }
+}
+
+fn names_free(
+    generator: &Function<'_>,
+    outer: oxc_syntax::scope::ScopeId,
+    scoping: &Scoping,
+) -> bool {
+    let Some(inner) = generator.scope_id.get() else {
+        return false;
+    };
+    let outer_names = scoping.get_bindings(outer);
+    scoping
+        .get_bindings(inner)
+        .keys()
+        .all(|name| !outer_names.contains_key(name))
+}
+
+pub fn rewrite_invoked<'a>(function: &mut Function<'a>, cx: &mut Cx<'a, '_>) -> Option<()> {
+    let scope = function.scope_id.get()?;
+    let scoping = cx.scoping();
+    let named_yield = function
+        .id
+        .as_ref()
+        .is_some_and(|id| id.name.as_str() == "yield");
+    if named_yield || super::async_fn::binds_name(scope, "yield", scoping) {
+        return None;
+    }
+    let generator = invoked_generator(function, scoping)?;
+    let mut scan = Receivers {
+        depth: 0,
+        found: false,
+    };
+    for statement in generator.body.as_ref()?.statements.iter() {
+        scan.visit_statement(statement);
+    }
+    if scan.found || !names_free(generator, scope, scoping) {
+        return None;
+    }
+    let body = function.body.as_mut()?;
+    let Some(Statement::ReturnStatement(returned)) = body.statements.pop() else {
+        return None;
+    };
+    let Some(Expression::CallExpression(call)) = returned.unbox().argument else {
+        return None;
+    };
+    let Expression::FunctionExpression(mut generator) = call.unbox().callee.into_inner_expression()
+    else {
+        return None;
+    };
+    let moved = generator.body.take()?;
+    body.statements.extend(moved.unbox().statements);
+    function.generator = true;
+    cx.binding_moved();
+    Some(())
 }
