@@ -512,7 +512,7 @@
 2.19.1--b64-norot-shuf-noshift-istr-w2f5-t75-cff--top--terser	1	1/1	1/1	-	0	-
 2.19.1--b64-norot-shuf-shift-inum-w0-t1-mangled--iife--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 2.19.1--b64-norot-shuf-shift-inum-w3f-t75-mangled--iife--terser	1	1/1	1/1	-	0	-
-2.19.1--b64-rot-noshuf-noshift-istr-w0-t75-self--wp4-bundle--terser	1	0/1	0/1	-	0	rotator-reads-outside (2)
+2.19.1--b64-rot-noshuf-noshift-istr-w0-t75-self--wp4-bundle--terser	1	0/1	0/1	-	0	self-defending-passed-through (2)
 2.19.1--b64-rot-noshuf-shift-istr-w0-t75-cff--top--none	1	1/1	1/1	-	0	-
 2.19.1--b64-rot-noshuf-shift-istr-w1-t75-cff--wp4-module--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
 2.19.1--b64-rot-shuf-noshift-istr-w1-t75-keys--wp4-bundle--uglify	1	0/1	0/1	-	0	wrapper-alias-read-early (2)
@@ -683,7 +683,7 @@
 4.2.2--rc4-norot-shuf-shift-istr-w2u-calls-t1-keys--iife--terser	1	1/1	1/1	-	0	-
 4.2.2--rc4-rot-noshuf-noshift-inum-w0-calls-t1-mangled--iife--none	1	1/1	1/1	-	0	-
 4.2.2--rc4-rot-noshuf-shift-inum-w2f5-nocalls-t1--iife--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
-4.2.2--rc4-rot-noshuf-shift-inum-w3f-calls-t1-self--wp4-bundle--terser	1	0/1	0/1	-	0	builtin-alias-patched (1), stateful-decoder-escape (1)
+4.2.2--rc4-rot-noshuf-shift-inum-w3f-calls-t1-self--wp4-bundle--terser	1	0/1	0/1	-	0	self-defending-passed-through (2)
 4.2.2--rc4-rot-noshuf-shift-inum-w3f-calls-t75-mangled--top--none	1	1/1	1/1	-	0	-
 4.2.2--rc4-rot-noshuf-shift-inum-w3f-nocalls-t75-mangled--wp4-bundle--uglify	1	0/1	1/1	-	0	safe-global-key-reach (1)
 4.2.2--rc4-rot-shuf-noshift-istr-w1-nocalls-t1-numbers--top--terser	1	1/1	1/1	-	0	-
@@ -727,16 +727,17 @@
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
 legacy-array-reached	130	130	130	0	safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded
 builtin-replaced-decoded-key	74	74	74	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
-builtin-alias-patched	69	69	69	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
+builtin-alias-patched	68	68	68	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
 decoder-reads-outer-binding	60	60	61	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
 safe-global-names	26	26	26	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
 array-reached-outside	12	12	24	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
 safe-global-key-reach	8	8	8	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 object-keys-not-merged	6	6	7	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...) or a value may throw or run code (a member read, arithmetic on a binding)
 stateful-decoder-state	6	6	9	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
-rotator-reads-outside	4	4	8	0	the rotator reads or writes something other than its own bindings, the string array and its decoders, so its effect is not proven
 decoder-used-as-value	3	3	6	0	a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's calls are left alone
+rotator-reads-outside	3	3	6	0	the rotator reads or writes something other than its own bindings, the string array and its decoders, so its effect is not proven
 wrapper-alias-read-early	3	3	5	0	a decoder alias may be read before its declaration runs, so it is left in place
 wrapper-alias-redeclared	3	3	5	0	a decoder alias is not declared exactly once by a single-declarator declaration in a statement list, so it is left in place
-stateful-decoder-escape	2	2	2	0	a stateful base64 or rc4 decoder is also reached through calls whose arguments are not proven (wrappers reading locals of an enclosing function, or the decoder handed on as a value), so decoding the collected calls ahead of those could change its state, and the unit's calls are left alone
+self-defending-passed-through	2	2	4	0	a self-defending check reads the source text of a function the output would print across lines (a minified or older template untwist cannot keep on one line), so the input is passed through unchanged
+stateful-decoder-escape	1	1	1	0	a stateful base64 or rc4 decoder is also reached through calls whose arguments are not proven (wrappers reading locals of an enclosing function, or the decoder handed on as a value), so decoding the collected calls ahead of those could change its state, and the unit's calls are left alone
 wrapper-reads-outside	1	1	2	0	a decoder wrapper body reads something other than its own parameters and the stamped machinery, so it is not inlined
