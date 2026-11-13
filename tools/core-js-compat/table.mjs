@@ -5,92 +5,128 @@ import { fileURLToPath } from "node:url";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const MODULES = join(ROOT, "node_modules");
 
-const YEAR_ENGINES = ["chrome", "edge", "firefox", "safari", "ios", "node", "opera", "samsung"];
-
-const SYNTAX = {
-  2015: [
-    "transform-template-literals",
-    "transform-literals",
-    "transform-function-name",
-    "transform-arrow-functions",
-    "transform-block-scoped-functions",
-    "transform-classes",
-    "transform-object-super",
-    "transform-shorthand-properties",
-    "transform-duplicate-keys",
-    "transform-computed-properties",
-    "transform-for-of",
-    "transform-sticky-regex",
-    "transform-unicode-escapes",
-    "transform-unicode-regex",
-    "transform-spread",
-    "transform-destructuring",
-    "transform-block-scoping",
-    "transform-typeof-symbol",
-    "transform-new-target",
-    "transform-regenerator",
-    "transform-parameters",
-  ],
-  2016: ["transform-exponentiation-operator"],
-  2017: ["transform-async-to-generator"],
-  2018: [
-    "transform-async-generator-functions",
-    "transform-object-rest-spread",
-    "transform-dotall-regex",
-    "transform-unicode-property-regex",
-    "transform-named-capturing-groups-regex",
-  ],
-  2019: ["transform-optional-catch-binding", "transform-json-strings"],
-  2020: ["transform-nullish-coalescing-operator", "transform-optional-chaining", "transform-export-namespace-from"],
-  2021: ["transform-logical-assignment-operators", "transform-numeric-separator"],
-  2022: [
-    "transform-class-properties",
-    "transform-private-methods",
-    "transform-class-static-block",
-    "transform-private-property-in-object",
-  ],
-  2023: [],
-  2024: ["transform-unicode-sets-regex"],
+const YEAR_ENGINES = {
+  chrome: "chrome",
+  edge: "edge",
+  firefox: "firefox",
+  safari: "safari",
+  safari_ios: "ios",
+  nodejs: "node",
+  opera: "opera",
+  samsunginternet_android: "samsung",
 };
 
-const BUILT_INS = {
-  2016: ["es.array.includes"],
+const FEATURES = {
+  2015: [
+    "javascript.functions.arrow_functions",
+    "javascript.classes",
+    "javascript.statements.let",
+    "javascript.statements.const",
+    "javascript.operators.destructuring",
+    "javascript.functions.default_parameters",
+    "javascript.functions.rest_parameters",
+    "javascript.operators.spread.spread_in_function_calls",
+    "javascript.grammar.template_literals",
+    "javascript.statements.for_of",
+    "javascript.statements.generator_function",
+    "javascript.operators.new_target",
+    "javascript.builtins.Symbol",
+    "javascript.builtins.Promise",
+    "javascript.builtins.Map",
+    "javascript.builtins.Set",
+    "javascript.builtins.WeakMap",
+    "javascript.builtins.WeakSet",
+    "javascript.builtins.Proxy",
+    "javascript.builtins.Reflect",
+    "javascript.builtins.Array.from",
+    "javascript.builtins.Array.find",
+    "javascript.builtins.Object.assign",
+    "javascript.builtins.String.includes",
+    "javascript.builtins.String.raw",
+    "javascript.builtins.Number.isInteger",
+    "javascript.builtins.Math.trunc",
+  ],
+  2016: ["javascript.operators.exponentiation", "javascript.builtins.Array.includes"],
   2017: [
-    "es.object.values",
-    "es.object.entries",
-    "es.object.get-own-property-descriptors",
-    "es.string.pad-start",
-    "es.string.pad-end",
+    "javascript.statements.async_function",
+    "javascript.builtins.Object.values",
+    "javascript.builtins.Object.entries",
+    "javascript.builtins.Object.getOwnPropertyDescriptors",
+    "javascript.builtins.String.padStart",
+    "javascript.builtins.String.padEnd",
   ],
-  2018: ["es.promise.finally"],
+  2018: [
+    "javascript.statements.async_generator_function",
+    "javascript.statements.for_await_of",
+    "javascript.operators.spread.spread_in_object_literals",
+    "javascript.operators.destructuring.rest_in_objects",
+    "javascript.builtins.RegExp.dotAll",
+    "javascript.regular_expressions.named_capturing_group",
+    "javascript.regular_expressions.lookbehind_assertion",
+    "javascript.regular_expressions.unicode_character_class_escape",
+    "javascript.builtins.Promise.finally",
+    "javascript.builtins.Symbol.asyncIterator",
+  ],
   2019: [
-    "es.array.flat",
-    "es.array.flat-map",
-    "es.object.from-entries",
-    "es.string.trim-start",
-    "es.string.trim-end",
-    "es.symbol.description",
+    "javascript.builtins.Array.flat",
+    "javascript.builtins.Array.flatMap",
+    "javascript.builtins.Object.fromEntries",
+    "javascript.builtins.String.trimStart",
+    "javascript.builtins.String.trimEnd",
+    "javascript.builtins.Symbol.description",
+    "javascript.statements.try_catch.optional_catch_binding",
   ],
-  2020: ["es.string.match-all", "es.promise.all-settled", "es.global-this"],
-  2021: ["es.string.replace-all", "es.promise.any", "es.aggregate-error"],
-  2022: ["es.array.at", "es.string.at-alternative", "es.object.has-own", "es.error.cause"],
+  2020: [
+    "javascript.operators.optional_chaining",
+    "javascript.operators.nullish_coalescing",
+    "javascript.builtins.BigInt",
+    "javascript.builtins.globalThis",
+    "javascript.builtins.Promise.allSettled",
+    "javascript.builtins.String.matchAll",
+    "javascript.statements.export.namespace",
+  ],
+  2021: [
+    "javascript.operators.logical_or_assignment",
+    "javascript.operators.nullish_coalescing_assignment",
+    "javascript.grammar.numeric_separators",
+    "javascript.builtins.String.replaceAll",
+    "javascript.builtins.Promise.any",
+    "javascript.builtins.AggregateError",
+    "javascript.builtins.WeakRef",
+    "javascript.builtins.FinalizationRegistry",
+  ],
+  2022: [
+    "javascript.classes.public_class_fields",
+    "javascript.classes.private_class_fields",
+    "javascript.classes.private_class_methods",
+    "javascript.classes.static.initialization_blocks",
+    "javascript.classes.private_class_fields_in",
+    "javascript.builtins.Array.at",
+    "javascript.builtins.String.at",
+    "javascript.builtins.Object.hasOwn",
+    "javascript.builtins.Error.cause",
+    "javascript.builtins.RegExp.hasIndices",
+    "javascript.operators.await.top_level",
+  ],
   2023: [
-    "es.array.find-last",
-    "es.array.find-last-index",
-    "es.array.to-reversed",
-    "es.array.to-sorted",
-    "es.array.to-spliced",
-    "es.array.with",
+    "javascript.builtins.Array.findLast",
+    "javascript.builtins.Array.findLastIndex",
+    "javascript.builtins.Array.toSorted",
+    "javascript.builtins.Array.toReversed",
+    "javascript.builtins.Array.toSpliced",
+    "javascript.builtins.Array.with",
+    "javascript.grammar.hashbang_comments",
   ],
   2024: [
-    "es.object.group-by",
-    "es.map.group-by",
-    "es.promise.with-resolvers",
-    "es.string.is-well-formed",
-    "es.string.to-well-formed",
-    "es.array-buffer.transfer",
-    "es.array-buffer.transfer-to-fixed-length",
-    "es.array-buffer.detached",
+    "javascript.builtins.Object.groupBy",
+    "javascript.builtins.Map.groupBy",
+    "javascript.builtins.Promise.withResolvers",
+    "javascript.builtins.String.isWellFormed",
+    "javascript.builtins.String.toWellFormed",
+    "javascript.builtins.ArrayBuffer.transfer",
+    "javascript.builtins.ArrayBuffer.resizable",
+    "javascript.builtins.Atomics.waitAsync",
+    "javascript.builtins.RegExp.unicodeSets",
   ],
 };
 
@@ -146,46 +182,41 @@ function ranges(indices, versions) {
     .join(",");
 }
 
-function minVersion(a, b) {
-  if (a === undefined) return b;
-  return compare(a, b) <= 0 ? a : b;
+function firstShipped(entries) {
+  const list = Array.isArray(entries) ? entries : [entries];
+  const full = list.filter(
+    (entry) =>
+      entry &&
+      typeof entry.version_added === "string" &&
+      /^[\u2264]?\d/.test(entry.version_added) &&
+      !entry.flags &&
+      !entry.prefix &&
+      !entry.alternative_name,
+  );
+  const versions = full.map((entry) => entry.version_added.replace("\u2264", ""));
+  return versions.sort(compare)[0];
 }
 
-function shipped(datasets) {
-  const out = {};
-  for (const data of datasets) {
-    for (const [module, engines] of Object.entries(data)) {
-      out[module] ??= {};
-      for (const [engine, version] of Object.entries(engines)) {
-        out[module][engine] = minVersion(out[module][engine], version);
-      }
-    }
-  }
-  return out;
+function feature(bcd, path) {
+  const node = path.split(".").reduce((object, key) => object && object[key], bcd);
+  if (!node?.__compat) throw new Error(`@mdn/browser-compat-data has no ${path}`);
+  return node.__compat.support;
 }
 
-function yearBaselines(plugins, first) {
+function yearBaselines(bcd) {
   const lines = [];
   const need = {};
   for (let year = FIRST_YEAR; year <= LAST_YEAR; year++) {
-    for (const plugin of SYNTAX[year] ?? []) {
-      const data = plugins[plugin];
-      if (!data) throw new Error(`@babel/compat-data has no ${plugin}`);
-      for (const engine of YEAR_ENGINES) {
-        if (!data[engine]) throw new Error(`${plugin} has no ${engine} version`);
-        need[engine] = maxVersion(need[engine], data[engine]);
-      }
-    }
-    for (const module of BUILT_INS[year] ?? []) {
-      const data = first[module];
-      if (!data) throw new Error(`core-js-compat has no ${module}`);
-      for (const engine of YEAR_ENGINES) {
-        if (!data[engine]) throw new Error(`${module} has no ${engine} version`);
-        need[engine] = maxVersion(need[engine], data[engine]);
+    for (const path of FEATURES[year] ?? []) {
+      const support = feature(bcd, path);
+      for (const [browser, engine] of Object.entries(YEAR_ENGINES)) {
+        const version = firstShipped(support[browser]);
+        if (!version) throw new Error(`${path} has no shipped ${browser} version`);
+        need[engine] = maxVersion(need[engine], version);
       }
     }
     if (year >= OFFERED_FROM) {
-      const engines = YEAR_ENGINES.map((engine) => `${engine}:${need[engine]}`).join(",");
+      const engines = Object.values(YEAR_ENGINES).map((engine) => `${engine}:${need[engine]}`).join(",");
       lines.push(`#baseline\tes${year}\t${engines}`);
     }
   }
@@ -206,12 +237,12 @@ function main() {
       }
     }
   });
-  const plugins = readJson("@babel", "compat-data", "data", "plugins.json");
-  const babel = readJson("@babel", "compat-data", "package.json").version;
+  const bcd = readJson("@mdn", "browser-compat-data", "data.json");
+  const mdn = readJson("@mdn", "browser-compat-data", "package.json").version;
   const out = ["#untwist-core-js-compat\tv1"];
-  out.push(`#source\tcore-js-compat ${versions[0]}~${versions[versions.length - 1]}, @babel/compat-data ${babel}`);
+  out.push(`#source\tcore-js-compat ${versions[0]}~${versions[versions.length - 1]}, @mdn/browser-compat-data ${mdn}`);
   out.push(`#versions\t${versions.join(",")}`);
-  out.push(...yearBaselines(plugins, shipped(datasets)));
+  out.push(...yearBaselines(bcd));
   const body = [...rows.entries()]
     .map(([id, indices]) => `${id}\t${ranges(indices, versions)}`)
     .sort();

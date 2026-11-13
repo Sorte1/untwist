@@ -21,9 +21,9 @@ fn an_es_year_stands_for_the_engines_in_the_generated_table() {
             "firefox 93",
             "safari 16.4",
             "ios 16.4",
-            "node 16.11",
+            "node 16.11.0",
             "opera 80",
-            "samsung 17"
+            "samsung 17.0"
         ]
     );
 }
