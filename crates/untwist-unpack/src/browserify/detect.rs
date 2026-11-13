@@ -6,6 +6,7 @@ use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::prop_name;
 
 use crate::browserify::link::leaves_require_unbound;
+use crate::browserify::prelude::{frame, head_proven, prelude_proven, Frame, Unproven};
 use crate::browserify::tree::{dependency_tree, infer_index_directories, resolve_dependency_tree};
 use crate::matcher::{
     anonymous_factory, argument_expression, call_parts, literal_id, param_names, Factory,
@@ -18,6 +19,7 @@ use crate::UnpackOptions;
 
 pub const BROWSERIFY_PARAMS: [&str; 3] = ["require", "module", "exports"];
 const REQUIRE_PARAM: usize = 0;
+const PROTO: &str = "__proto__";
 const UNLINKED_REQUEST: &str =
     "it calls its renamed require with a request the unpacked files cannot link";
 
@@ -83,6 +85,9 @@ fn dependency_list(object: &ObjectExpression<'_>) -> Option<Vec<(String, String)
             PropertyKey::StringLiteral(literal) => literal.value.as_str()?.to_string(),
             _ => return None,
         };
+        if request == PROTO {
+            return None;
+        }
         if matches!(&property.value, Expression::Identifier(id) if id.name == "undefined") {
             continue;
         }
@@ -106,6 +111,9 @@ fn module_entry<'k, 'a>(property: &'k ObjectPropertyKind<'a>) -> Option<ModuleEn
         return None;
     }
     let id = prop_name(&property.key)?.into_owned();
+    if id == PROTO {
+        return None;
+    }
     let Expression::ArrayExpression(array) = &property.value else {
         return None;
     };
@@ -151,21 +159,43 @@ fn browserify<'k, 'a>(expr: &'k Expression<'a>) -> Option<(&'k ObjectExpression<
     };
     if !matches!(
         argument_expression(arguments.get(1)?)?,
-        Expression::ObjectExpression(_)
+        Expression::ObjectExpression(cache) if cache.properties.is_empty()
     ) {
         return None;
     }
     let Expression::ArrayExpression(entries) = argument_expression(arguments.get(2)?)? else {
         return None;
     };
-    let entry_id = literal_id(entries.elements.first()?.as_expression()?)?;
-    let later = entries
+    let mut ids = entries
         .elements
         .iter()
-        .skip(1)
-        .map(|element| element.as_expression().and_then(literal_id))
-        .collect();
-    Some((files, (entry_id, later)))
+        .map(|element| element.as_expression().and_then(literal_id));
+    let entry_id = ids.next()??;
+    let later = ids.collect::<Option<Vec<String>>>()?;
+    Some((files, (entry_id, later.into_iter().map(Some).collect())))
+}
+
+fn standalone_entry(entry: &Expression<'_>, entries: &Entries) -> bool {
+    let (entry_id, later) = entries;
+    later.is_empty() && literal_id(entry).as_ref() == Some(entry_id)
+}
+
+pub fn unproven_bundle(source: &Program<'_>, expr: &Expression<'_>) -> Option<Unproven> {
+    let (callee, _) = call_parts(expr)?;
+    let (_, entries) = browserify(expr)?;
+    if !prelude_proven(callee, source.source_text) {
+        return Some(Unproven::Prelude);
+    }
+    match frame(source, expr) {
+        Err(unproven) => Some(unproven),
+        Ok(Frame::Plain) => None,
+        Ok(Frame::Standalone { head, entry }) => {
+            if !standalone_entry(entry, &entries) {
+                return Some(Unproven::Placement);
+            }
+            (!head_proven(head, source.source_text)).then_some(Unproven::Head)
+        }
+    }
 }
 
 pub fn is_browserify(expr: &Expression<'_>) -> bool {
