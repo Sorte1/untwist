@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-react--16-14-0",
   "private": true,
   "dependencies": {
-    "react": "16.14.0"
+    "react": "16.14.0",
+    "react--16.14.0": "npm:react@16.14.0"
   }
 }

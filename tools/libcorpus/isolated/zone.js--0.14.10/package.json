@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-zone-js--0-14-10",
   "private": true,
   "dependencies": {
-    "zone.js": "0.14.10"
+    "zone.js": "0.14.10",
+    "zone.js--0.14.10": "npm:zone.js@0.14.10"
   }
 }

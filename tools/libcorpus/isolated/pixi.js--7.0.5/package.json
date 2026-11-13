@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-pixi-js--7-0-5",
   "private": true,
   "dependencies": {
-    "pixi.js": "7.0.5"
+    "pixi.js": "7.0.5",
+    "pixi.js--7.0.5": "npm:pixi.js@7.0.5"
   }
 }

@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-react-dom--19-1-10",
   "private": true,
   "dependencies": {
-    "react-dom": "19.1.10"
+    "react-dom": "19.1.10",
+    "react-dom--19.1.10": "npm:react-dom@19.1.10"
   }
 }

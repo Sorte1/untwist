@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-preact--10-7-3",
   "private": true,
   "dependencies": {
-    "preact": "10.7.3"
+    "preact": "10.7.3",
+    "preact--10.7.3": "npm:preact@10.7.3"
   }
 }

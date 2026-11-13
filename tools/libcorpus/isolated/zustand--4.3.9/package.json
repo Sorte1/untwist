@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-zustand--4-3-9",
   "private": true,
   "dependencies": {
-    "zustand": "4.3.9"
+    "zustand": "4.3.9",
+    "zustand--4.3.9": "npm:zustand@4.3.9"
   }
 }

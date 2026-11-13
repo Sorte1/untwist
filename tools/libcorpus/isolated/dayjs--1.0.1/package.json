@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-dayjs--1-0-1",
   "private": true,
   "dependencies": {
-    "dayjs": "1.0.1"
+    "dayjs": "1.0.1",
+    "dayjs--1.0.1": "npm:dayjs@1.0.1"
   }
 }

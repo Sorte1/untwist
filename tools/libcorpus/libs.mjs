@@ -108,14 +108,14 @@ export function entries() {
       for (const version of versions) {
         const slug = alias(name, version);
         out.push(SELF_RESOLVING.has(name)
-          ? { group, name, version, slug, alias: name, root: `isolated/${slug}` }
+          ? { group, name, version, slug, alias: slug, root: `isolated/${slug}`, selfName: true }
           : { group, name, version, slug, alias: slug, root: "." });
       }
     }
   }
   for (const [group, libs] of Object.entries(ISOLATED)) {
     for (const [name, versions] of Object.entries(libs)) {
-      for (const version of versions) out.push({ group, name, version, slug: alias(name, version), alias: name, root: `isolated/${alias(name, version)}` });
+      for (const version of versions) out.push({ group, name, version, slug: alias(name, version), alias: alias(name, version), root: `isolated/${alias(name, version)}`, selfName: true });
     }
   }
   return out;

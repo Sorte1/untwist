@@ -2,6 +2,7 @@
   "name": "untwist-libcorpus-rxjs--7-8-2",
   "private": true,
   "dependencies": {
-    "rxjs": "7.8.2"
+    "rxjs": "7.8.2",
+    "rxjs--7.8.2": "npm:rxjs@7.8.2"
   }
 }

@@ -44,6 +44,7 @@ enum Cmd {
     ObfMatrix(xtask::obf_matrix::Request),
     LibraryTable(xtask::library_table::Request),
     LibraryScan(xtask::library_scan::Request),
+    LibraryDeny(xtask::library_deny::Request),
     LibraryFalsePositives(xtask::library_false_positives::Request),
     ObfOptions(xtask::obf_options::Request),
     ObfFuzz(xtask::obf_fuzz::Request),
@@ -491,6 +492,7 @@ fn main() -> Result<()> {
         Cmd::ObfMatrix(request) => xtask::obf_matrix::run(&repo_root(), &request),
         Cmd::LibraryTable(request) => xtask::library_table::run(&repo_root(), &request),
         Cmd::LibraryScan(request) => xtask::library_scan::run(&request),
+        Cmd::LibraryDeny(request) => xtask::library_deny::run(&request),
         Cmd::LibraryFalsePositives(request) => {
             xtask::library_false_positives::run(&repo_root(), &request)
         }

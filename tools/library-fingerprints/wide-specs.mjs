@@ -7,8 +7,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const OWNED_ELSEWHERE = new Set(["regenerator-runtime", "node-libs-browser"]);
 const IDS = { "@babel/polyfill": "babel-polyfill-7", "core-js": "core-js-2" };
 const OPTIONS = {
-  three: { include: String.raw`/^build\/three\.(module|min|module\.min)\.js$|^examples\/jsm\/(controls|loaders|postprocessing|shaders|math|utils|geometries|objects|lines|exporters|environments|curves|modifiers|interactive|csm|effects|animation|misc)\//`, exclude: String.raw`/^examples\/jsm\/libs\//` },
-  "pixi.js": { include: String.raw`/^dist\/(browser\/)?pixi(\.min)?\.(m?js)$/` },
+  three: { keepConcatenations: true, include: String.raw`/^build\/three\.(module|min|module\.min)\.js$|^examples\/jsm\/(controls|loaders|postprocessing|shaders|math|utils|geometries|objects|lines|exporters|environments|curves|modifiers|interactive|csm|effects|animation|misc)\//`, exclude: String.raw`/^examples\/jsm\/libs\//` },
+  "pixi.js": { keepConcatenations: true, include: String.raw`/^dist\/(browser\/)?pixi\.min\.js$/` },
   svelte: { include: String.raw`/^(internal|src\/internal|src\/runtime)\//`, exclude: String.raw`/(^|\/)(compiler|server)(\/|\.|$)/` },
   react: { include: String.raw`/^(cjs|umd)\/react(-jsx-runtime)?\.(production\.min|development|production)\.js$/` },
   "react-dom": { include: String.raw`/^(cjs|umd)\/react-dom(-client|-server\.browser|-server-legacy\.browser)?\.(production\.min|development|production)\.js$/` },
@@ -16,6 +16,10 @@ const OPTIONS = {
   "date-fns": { exclude: String.raw`/^(esm\/)?(fp|locale\/(?!en-US\/))|\/fp\//` },
   vue: { include: String.raw`/^dist\/[^/]+\.js$/`, exclude: String.raw`/compiler|server|ssr/` },
   lodash: { exclude: String.raw`/^fp\//` },
+  "lodash-es": { label: "lodash" },
+  "@msgpack/msgpack": { exclude: String.raw`/^dist\.(es5\+umd|umd)\/msgpack\.js$/` },
+  "babel-polyfill": { exclude: String.raw`/^dist\/polyfill\.js$/` },
+  "@babel/polyfill": { exclude: String.raw`/^dist\/polyfill\.js$/` },
   rxjs: { exclude: String.raw`/^(src|_esm2015|dist\/esm)\//` },
   mobx: { include: String.raw`/^(lib|dist)\/[^/]+\.js$/` },
   "@reduxjs/toolkit": { include: String.raw`/^dist\/[^/]+\.(c|m)?js$/` },
@@ -36,6 +40,8 @@ for (const name of [...names].sort()) {
     `name: ${JSON.stringify(name)}`,
     `include: ${extra.include ?? "ALL"}`,
     extra.exclude ? `exclude: ${extra.exclude}` : null,
+    extra.label ? `label: ${JSON.stringify(extra.label)}` : null,
+    extra.keepConcatenations ? "keepConcatenations: true" : null,
   ].filter(Boolean);
   const source = `import { ALL, wide } from "../wide.mjs";\n\nexport default wide({ ${options.join(", ")} });\n`;
   writeFileSync(join(HERE, "libraries", `${id}.mjs`), source);
