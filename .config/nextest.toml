@@ -5,3 +5,7 @@ default-filter = "not binary(stack_main_thread)"
 default-filter = "not (binary(stack_main_thread) | (package(untwist) & binary(/^scaling/) & not binary(scaling_control_flow)))"
 fail-fast = false
 failure-output = "immediate-final"
+
+[[profile.default.overrides]]
+filter = "binary(bundle_trees) | test(/splits_in_linear_time$/)"
+threads-required = "num-cpus"
