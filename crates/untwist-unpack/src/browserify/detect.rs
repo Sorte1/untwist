@@ -2,19 +2,24 @@ use indexmap::IndexMap;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
+use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::prop_name;
 
+use crate::browserify::link::leaves_require_unbound;
 use crate::browserify::tree::{dependency_tree, infer_index_directories, resolve_dependency_tree};
 use crate::matcher::{
     anonymous_factory, argument_expression, call_parts, literal_id, param_names, Factory,
 };
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module, RequireParam};
+use crate::notes::require_not_shared;
 use crate::path::PosixPath;
 use crate::rename::{rename_factory_parameters, rename_wrapper_bindings};
 use crate::UnpackOptions;
 
 pub const BROWSERIFY_PARAMS: [&str; 3] = ["require", "module", "exports"];
 const REQUIRE_PARAM: usize = 0;
+const UNLINKED_REQUEST: &str =
+    "it calls its renamed require with a request the unpacked files cannot link";
 
 type Entries = (String, Vec<Option<String>>);
 
@@ -208,6 +213,20 @@ pub fn rebound_require<'k, 'a: 'k>(
         let rebound =
             scoping.symbol_is_mutated(symbol) || !scoping.symbol_redeclarations(symbol).is_empty();
         rebound.then_some(id)
+    })
+}
+
+pub fn unlinked_require(expr: &Expression<'_>) -> Option<String> {
+    let (files, _) = browserify(expr)?;
+    let entries: Vec<ModuleEntry<'_, '_>> =
+        files.properties.iter().filter_map(module_entry).collect();
+    let ids: FxHashSet<String> = entries.iter().map(|entry| entry.id.clone()).collect();
+    entries.into_iter().find_map(|entry| {
+        let name = param_names(entry.params).first().copied()?;
+        let renamed = name != BROWSERIFY_PARAMS[REQUIRE_PARAM];
+        let unbound =
+            renamed && leaves_require_unbound(entry.body, name, &entry.dependencies, &ids);
+        unbound.then(|| require_not_shared(&entry.id, UNLINKED_REQUEST))
     })
 }
 
