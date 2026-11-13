@@ -961,6 +961,8 @@ impl<'n, 'a: 'n> VisitJs<'a> for Emitter<'n, 'a> {
 #[derive(Default)]
 struct DefState {
     defined_in: Option<u32>,
+    defined_hoisted: u32,
+    defined_in_loop: bool,
     early: bool,
     captured: bool,
     written: bool,
@@ -982,6 +984,7 @@ impl DefState {
 struct ScanFrame {
     id: u32,
     loops: u32,
+    hoisted: u32,
 }
 
 struct DefScan<'s> {
@@ -1002,23 +1005,30 @@ impl<'s> DefScan<'s> {
     fn new(scoping: &'s Scoping) -> Self {
         Self {
             scoping,
-            frames: vec![ScanFrame { id: 0, loops: 0 }],
+            frames: vec![ScanFrame {
+                id: 0,
+                loops: 0,
+                hoisted: 0,
+            }],
             next_frame: 1,
             states: FxHashMap::default(),
         }
     }
 
     fn frame(&self) -> ScanFrame {
-        self.frames
-            .last()
-            .copied()
-            .unwrap_or(ScanFrame { id: 0, loops: 0 })
+        self.frames.last().copied().unwrap_or(ScanFrame {
+            id: 0,
+            loops: 0,
+            hoisted: 0,
+        })
     }
 
-    fn in_frame(&mut self, walk: impl FnOnce(&mut Self)) {
+    fn in_frame(&mut self, hoisted: bool, walk: impl FnOnce(&mut Self)) {
+        let outer = self.frame().hoisted;
         self.frames.push(ScanFrame {
             id: self.next_frame,
             loops: 0,
+            hoisted: outer + u32::from(hoisted),
         });
         self.next_frame += 1;
         walk(self);
@@ -1049,6 +1059,8 @@ impl<'s> DefScan<'s> {
             state.constant |= constant;
             if definite && !resets {
                 state.defined_in = Some(frame.id);
+                state.defined_hoisted = frame.hoisted;
+                state.defined_in_loop = frame.loops > 0;
             }
         }
     }
@@ -1094,15 +1106,15 @@ impl<'a> Visit<'a> for DefScan<'_> {
     }
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        self.in_frame(|scan| walk::walk_function(scan, it, flags));
+        self.in_frame(it.is_declaration(), |scan| walk::walk_function(scan, it, flags));
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
-        self.in_frame(|scan| walk::walk_arrow_function_expression(scan, it));
+        self.in_frame(false, |scan| walk::walk_arrow_function_expression(scan, it));
     }
 
     fn visit_class(&mut self, it: &Class<'a>) {
-        self.in_frame(|scan| walk::walk_class(scan, it));
+        self.in_frame(false, |scan| walk::walk_class(scan, it));
     }
 
     fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
@@ -1134,12 +1146,14 @@ impl<'a> Visit<'a> for DefScan<'_> {
             return;
         };
         let written = reference.is_write();
-        let frame = self.frame().id;
+        let frame = self.frame();
         let state = self.states.entry(symbol).or_default();
         state.written |= written;
         match state.defined_in {
             None => state.early = true,
-            Some(defined) if defined != frame => state.captured = true,
+            Some(defined) if defined != frame.id => {
+                state.captured |= state.defined_in_loop || frame.hoisted > state.defined_hoisted;
+            }
             Some(_) => {}
         }
     }
