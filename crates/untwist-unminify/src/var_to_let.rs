@@ -16,7 +16,7 @@ use untwist_core::semantic::{
     assumed_hazard, block_function_symbols, is_constant_binding, scope_hazard,
 };
 
-use crate::var_placement;
+use crate::{var_capture, var_placement};
 
 pub const PASS: &str = "var-to-let";
 
@@ -136,6 +136,7 @@ struct Candidate<'a> {
     index: usize,
     bindings: Bindings<'a>,
     refused: bool,
+    captured: bool,
 }
 
 struct Facts<'f> {
@@ -251,13 +252,13 @@ impl Facts<'_> {
             })
     }
 
-    fn is_exact(&self, symbol: SymbolId, name: Ident<'_>, scope: ScopeId) -> bool {
+    fn is_exact(&self, symbol: SymbolId, name: Ident<'_>, scope: ScopeId, captures: bool) -> bool {
         let scoping = self.scoping;
         let text = name.as_str();
         scoping.symbol_flags(symbol) == SymbolFlags::FunctionScopedVariable
             && scoping.symbol_redeclarations(symbol).is_empty()
             && scoping.symbol_scope_id(symbol) != scoping.root_scope_id()
-            && self.references_stay_inside(symbol, scope)
+            && (captures || self.references_stay_inside(symbol, scope))
             && !REFUSED_NAMES.contains(&text)
             && !self.block_functions.contains(&name_hash(text))
             && bindings_clear(scoping, symbol, name, scope)
@@ -286,6 +287,7 @@ impl Facts<'_> {
         site: Site,
         scope: ScopeId,
         list_scope: ScopeId,
+        captures: bool,
     ) -> Option<Bindings<'a>> {
         let exact = |declarator: &VariableDeclarator<'a>| {
             let BindingPattern::BindingIdentifier(id) = &declarator.id else {
@@ -293,7 +295,7 @@ impl Facts<'_> {
             };
             let symbol = id.symbol_id.get()?;
             let exact = self.initialisation_allows(declarator, symbol, site, list_scope)
-                && self.is_exact(symbol, id.name, scope);
+                && self.is_exact(symbol, id.name, scope, captures);
             exact.then_some((symbol, id.name))
         };
         let mut bindings = Vec::new();
@@ -318,6 +320,7 @@ impl Facts<'_> {
         &self,
         stmts: &AVec<'a, Statement<'a>>,
         list_scope: ScopeId,
+        captures: bool,
     ) -> Vec<Candidate<'a>> {
         let mut found = Vec::new();
         for (index, stmt) in stmts.iter().enumerate() {
@@ -328,13 +331,24 @@ impl Facts<'_> {
                 continue;
             }
             if let Some(bindings) = self
-                .exact_bindings(declaration, Site::Statement, list_scope, list_scope)
+                .exact_bindings(
+                    declaration,
+                    Site::Statement,
+                    list_scope,
+                    list_scope,
+                    captures,
+                )
                 .filter(|bindings| self.one_kind(declaration, bindings))
             {
+                let captured = captures
+                    && bindings
+                        .iter()
+                        .any(|(symbol, _)| !self.references_stay_inside(*symbol, list_scope));
                 found.push(Candidate {
                     index,
                     bindings,
                     refused: false,
+                    captured,
                 });
             }
         }
@@ -425,6 +439,34 @@ fn mark_earlier_reads<'a>(stmts: &AVec<'a, Statement<'a>>, candidates: &mut [Can
     for (index, stmt) in stmts.iter().enumerate().take(last + 1) {
         scan.statement = index;
         scan.visit_statement(stmt);
+    }
+}
+
+fn refuse_early_captures<'a>(
+    scoping: &Scoping,
+    stmts: &AVec<'a, Statement<'a>>,
+    candidates: &mut [Candidate<'a>],
+) {
+    let watched: Vec<(SymbolId, usize)> = candidates
+        .iter()
+        .filter(|candidate| candidate.captured && !candidate.refused)
+        .flat_map(|candidate| {
+            candidate
+                .bindings
+                .iter()
+                .map(move |(symbol, _)| (*symbol, candidate.index))
+        })
+        .collect();
+    if watched.is_empty() {
+        return;
+    }
+    let follow = var_capture::captures_follow(scoping, stmts, &watched);
+    for candidate in candidates.iter_mut().filter(|candidate| candidate.captured) {
+        let late = candidate
+            .bindings
+            .iter()
+            .all(|(symbol, _)| follow.get(symbol).copied().unwrap_or(false));
+        candidate.refused |= !late;
     }
 }
 
@@ -526,11 +568,15 @@ impl VarToLet {
         cx: &mut Cx<'a, '_>,
     ) -> usize {
         let scope = cx.current_scope_id();
-        let mut candidates = self.facts(cx.scoping()).statement_candidates(stmts, scope);
+        let captures = is_function_scope(cx.scoping(), scope);
+        let mut candidates = self
+            .facts(cx.scoping())
+            .statement_candidates(stmts, scope, captures);
         if candidates.is_empty() {
             return 0;
         }
         mark_earlier_reads(stmts, &mut candidates);
+        refuse_early_captures(cx.scoping(), stmts, &mut candidates);
         let mut converted = 0;
         for candidate in candidates {
             if candidate.refused {
@@ -580,7 +626,7 @@ impl VarToLet {
         };
         let Some(bindings) =
             self.facts(cx.scoping())
-                .exact_bindings(declaration, site, scope, list_scope)
+                .exact_bindings(declaration, site, scope, list_scope, false)
         else {
             return false;
         };
@@ -588,6 +634,7 @@ impl VarToLet {
             index: 0,
             bindings,
             refused: false,
+            captured: false,
         }];
         if head_reads(stmt, &mut candidate) {
             return false;

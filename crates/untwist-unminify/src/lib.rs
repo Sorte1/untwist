@@ -36,6 +36,7 @@ pub mod unminify;
 pub mod unminify_booleans;
 pub mod untranspile;
 pub mod unwrap_comma_call;
+mod var_capture;
 mod var_placement;
 pub mod var_to_let;
 pub mod void_to_undefined;

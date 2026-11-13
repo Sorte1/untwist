@@ -107,8 +107,102 @@ fn a_read_outside_the_block_keeps_the_var() {
 }
 
 #[test]
-fn a_read_from_a_closure_keeps_the_var() {
-    assert_stays("  var a = g();\n  return () => a;");
+fn a_read_from_a_later_closure_in_the_function_body_becomes_const() {
+    assert_converts(
+        "  var a = g();\n  return () => a;",
+        "  const a = g();\n  return () => a;",
+    );
+}
+
+#[test]
+fn a_read_from_a_later_function_expression_becomes_const() {
+    assert_converts(
+        "  var a = g();\n  var h = function () {\n    return a;\n  };\n  return h;",
+        "  const a = g();\n  const h = function () {\n    return a;\n  };\n  return h;",
+    );
+}
+
+#[test]
+fn a_closure_written_var_becomes_let() {
+    assert_converts(
+        "  var a = 0;\n  return () => a++;",
+        "  let a = 0;\n  return () => a++;",
+    );
+}
+
+#[test]
+fn a_read_from_a_hoisted_function_declaration_keeps_the_var() {
+    assert_stays("  var a = g();\n  return h;\n  function h() {\n    return a;\n  }");
+}
+
+#[test]
+fn a_read_from_a_closure_in_its_own_initialiser_keeps_the_var() {
+    assert_stays("  var a = run(() => a);\n  use(a);");
+}
+
+#[test]
+fn a_read_from_a_closure_before_the_declaration_keeps_the_var() {
+    assert_converts(
+        "  var h = () => a;\n  var a = g();\n  return h;",
+        "  const h = () => a;\n  var a = g();\n  return h;",
+    );
+}
+
+#[test]
+fn a_read_from_a_closure_in_a_block_keeps_the_var() {
+    assert_stays("  if (c) {\n    var a = g();\n    fs.push(() => a);\n  }");
+}
+
+#[test]
+fn a_read_from_a_closure_in_a_loop_body_keeps_the_var() {
+    assert_stays("  while (c()) {\n    var a = g();\n    fs.push(() => a);\n  }");
+}
+
+#[test]
+fn a_read_from_a_closure_inside_a_later_loop_becomes_const() {
+    assert_converts(
+        "  var a = g();\n  for (const k of ks) {\n    fs.push(() => a + k);\n  }",
+        "  const a = g();\n  for (const k of ks) {\n    fs.push(() => a + k);\n  }",
+    );
+}
+
+#[test]
+fn a_read_from_a_later_class_keeps_the_var() {
+    assert_stays("  var a = g();\n  return class {\n    m() {\n      return a;\n    }\n  };");
+}
+
+#[test]
+fn a_parameter_default_closure_does_not_see_the_body_var() {
+    let source = "function f(p = () => a) {\n  var a = g();\n  return p;\n}";
+    let expected = "function f(p = () => a) {\n  const a = g();\n  return p;\n}";
+    assert_eq!(run(source), expected);
+}
+
+#[test]
+fn a_for_head_read_from_a_closure_keeps_the_var() {
+    assert_stays("  for (var i = 0; i < 3; i++) fs.push(() => i);");
+}
+
+#[test]
+fn a_captured_var_with_a_direct_eval_stays() {
+    assert_stays("  var a = g();\n  eval(\"\");\n  return () => a;");
+}
+
+#[test]
+fn a_captured_var_named_like_a_block_function_stays() {
+    assert_stays("  var a = g();\n  {\n    function a() {}\n  }\n  return () => a;");
+}
+
+#[test]
+fn a_captured_var_in_a_labelled_statement_stays() {
+    assert_stays("  l: var a = g();\n  return () => a;");
+}
+
+#[test]
+fn a_captured_var_in_a_generator_body_becomes_const() {
+    let source = "function* f() {\n  var a = yield 1;\n  yield () => a;\n}";
+    let expected = "function* f() {\n  const a = yield 1;\n  yield () => a;\n}";
+    assert_eq!(run(source), expected);
 }
 
 #[test]
@@ -296,10 +390,10 @@ fn a_trailing_var_read_by_its_own_write_moves_to_the_top() {
 }
 
 #[test]
-fn a_trailing_var_captured_by_a_closure_in_a_loop_moves_to_the_top_as_var() {
+fn a_trailing_var_captured_by_a_closure_in_a_loop_moves_to_the_top() {
     assert_converts(
         "  for (i = 0; i < 3; i++) {\n    a = i;\n    fs.push(() => a);\n  }\n  return fs;\n  var a;",
-        "  var a;\n  for (i = 0; i < 3; i++) {\n    a = i;\n    fs.push(() => a);\n  }\n  return fs;",
+        "  let a;\n  for (i = 0; i < 3; i++) {\n    a = i;\n    fs.push(() => a);\n  }\n  return fs;",
     );
 }
 
@@ -419,7 +513,7 @@ fn a_trailing_var_captured_by_a_hoisted_function_moves_to_the_top() {
 fn a_trailing_var_captured_inside_a_loop_body_block_moves_to_the_top() {
     assert_converts(
         "  while (c()) {\n    if (d) {\n      a = g();\n      fs.push(() => a);\n    }\n  }\n  var a;",
-        "  var a;\n  while (c()) {\n    if (d) {\n      a = g();\n      fs.push(() => a);\n    }\n  }",
+        "  let a;\n  while (c()) {\n    if (d) {\n      a = g();\n      fs.push(() => a);\n    }\n  }",
     );
 }
 
