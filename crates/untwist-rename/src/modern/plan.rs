@@ -416,13 +416,15 @@ enum Judged {
     Keep(Keep),
 }
 
+type FirstLook = (Option<Keep>, Result<Vec<Span>, Keep>);
+
 fn judge_all(
     installers: &[usize],
     closed: &[bool],
     graph: &Graph<'_>,
     inputs: &Inputs<'_>,
 ) -> Vec<Judged> {
-    let first: Vec<(Option<Keep>, Result<Vec<Span>, Keep>)> = installers
+    let first: Vec<FirstLook> = installers
         .iter()
         .map(|&index| {
             (
