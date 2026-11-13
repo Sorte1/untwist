@@ -55,4 +55,9 @@ describe('stageLine', () => {
     expect(stageLine(progressOf('', marks('cleanup', 'unminify', 'cleanup'), 0))).toBe('Stage: cleanup · round 2');
     expect(stageLine(progressOf('', [], 0))).toBe('Starting the engine…');
   });
+
+  it('says which library tables load until the engine reports a stage', () => {
+    expect(stageLine(progressOf('', marks('library-tables:core-js'), 0))).toBe('Loading library tables: core-js…');
+    expect(stageLine(progressOf('', marks('library-tables:core-js', 'prepare'), 0))).toBe('Stage: prepare');
+  });
 });

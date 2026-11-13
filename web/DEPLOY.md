@@ -38,6 +38,13 @@ Every asset name except `index.html`, `_headers` and the font licences carries a
 
 - `sw.js` is `no-cache`, so a deploy reaches the browsers on their next visit.
 
+- `/libraries/` holds the library tables the wasm build does not compile in (`<id>.table`, the
+  gzip bytes of `<id>.table.gz` under a name hosts do not serve with `Content-Encoding: gzip`;
+  `<id>.keys.json`; `index.json`), copied by the build from `crates/untwist-libraries-*/data`
+  except `untwist-libraries-core`. They are `no-cache`; the page checks each table against the
+  size and SHA-256 in `index.json` and keeps it in its own `library-tables` cache. The service
+  worker does not precache them.
+
 - `Content-Security-Policy` is sent with every file, so it binds the workers and the service
   worker as well as the page. It forbids framing (`frame-ancestors 'none'`, with
   `X-Frame-Options: DENY` for older browsers), `<base>`, form targets and plugins. The build

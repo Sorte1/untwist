@@ -12,7 +12,10 @@ export interface Step {
   readonly state: StepState;
 }
 
+export const TABLES_MARK = 'library-tables:';
+
 export interface RunProgress {
+  readonly loading: string | null;
   readonly steps: readonly Step[];
   readonly stage: string | null;
   readonly round: number;
@@ -79,7 +82,9 @@ export function progressOf(flags: string, marks: readonly StageMark[], now: numb
     label: LABELS[phase],
     state: phase === current ? 'current' : seen.has(phase) ? 'done' : 'pending',
   }) satisfies Step);
+  const latest = marks.at(-1);
   return {
+    loading: latest?.name.startsWith(TABLES_MARK) === true ? latest.name.slice(TABLES_MARK.length) : null,
     steps,
     stage: last?.name ?? null,
     round: last === undefined ? 0 : known.filter((mark) => mark.name === last.name).length,
@@ -88,6 +93,9 @@ export function progressOf(flags: string, marks: readonly StageMark[], now: numb
 }
 
 export function stageLine(progress: RunProgress): string {
+  if (progress.loading !== null) {
+    return `Loading library tables: ${progress.loading}…`;
+  }
   if (progress.stage === null) {
     return 'Starting the engine…';
   }

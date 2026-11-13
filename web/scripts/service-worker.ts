@@ -5,6 +5,7 @@ import { injectPrecache, precacheEntries, versionOf } from '../src/pwa/precache.
 
 const SW_ENTRY = 'src/pwa/sw.ts';
 const SW_FILE = 'sw.js';
+const HASHED = /^assets\//;
 
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry): string[] => {
@@ -40,7 +41,8 @@ export function serviceWorker(): Plugin {
       const publicDir = config?.publicDir ?? '';
       const unhashed = publicFiles(publicDir);
       const entries = precacheEntries([...Object.keys(bundle), ...unhashed]);
-      const contents = unhashed.filter((file) => entries.includes(file)).map((file) => readFileSync(join(publicDir, file)));
+      const emitted = Object.values(bundle).flatMap((item) => (item.type === 'asset' && !HASHED.test(item.fileName) && entries.includes(item.fileName) ? [item.source] : []));
+      const contents = [...unhashed.filter((file) => entries.includes(file)).map((file) => readFileSync(join(publicDir, file))), ...emitted];
       sw.code = injectPrecache(sw.code, entries, versionOf(entries, [String(html.source), ...contents]));
     },
   };

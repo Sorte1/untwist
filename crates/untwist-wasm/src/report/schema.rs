@@ -95,6 +95,13 @@ struct BundleRow<'a> {
 }
 
 #[derive(Serialize)]
+struct LibraryRow {
+    library: String,
+    range: String,
+    modules: usize,
+}
+
+#[derive(Serialize)]
 struct Report<'a> {
     schema: &'static str,
     engine: Engine,
@@ -111,6 +118,8 @@ struct Report<'a> {
     bundle: Option<BundleRow<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     snapshots: Vec<SnapshotRow>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    libraries: Vec<LibraryRow>,
 }
 
 pub struct RunFacts<'a> {
@@ -229,6 +238,18 @@ fn bundle_row<'a>(output: &'a Output, stdout: &str) -> Option<BundleRow<'a>> {
     })
 }
 
+fn library_rows(output: &Output) -> Vec<LibraryRow> {
+    output
+        .libraries()
+        .into_iter()
+        .map(|summary| LibraryRow {
+            library: summary.library,
+            range: summary.range,
+            modules: summary.modules,
+        })
+        .collect()
+}
+
 fn diagnostic_rows<'a>(
     output: &Output,
     facts: &RunFacts<'a>,
@@ -276,6 +297,7 @@ pub fn report_json(output: &Output, facts: &RunFacts<'_>) -> String {
         stats: &output.stats,
         bundle: bundle_row(output, facts.stdout),
         snapshots: snapshot_rows(&output.snapshots),
+        libraries: library_rows(output),
     };
     serde_json::to_string(&report).unwrap_or_default()
 }

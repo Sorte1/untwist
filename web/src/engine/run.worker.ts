@@ -1,4 +1,4 @@
-import { initSync, run_report_with_wasm, WasmFiles } from './pkg/untwist_wasm.js';
+import { initSync, library_tables, load_library_table, run_report_with_wasm, WasmFiles } from './pkg/untwist_wasm.js';
 import type { SuppliedWasm } from '../wasm/wasm';
 import type { TrapKind, WorkerReply, WorkerRequest } from './types';
 
@@ -63,9 +63,12 @@ function wasmCount(json: string): number {
   }
 }
 
-function run(source: string, flags: string, refused: boolean, extras: string, wasm: readonly SuppliedWasm[]): void {
+function run(source: string, flags: string, refused: boolean, extras: string, wasm: readonly SuppliedWasm[], tables: readonly Uint8Array[]): void {
   const started = performance.now();
   try {
+    for (const table of tables) {
+      load_library_table(table);
+    }
     const files = new WasmFiles();
     for (const file of wasm) {
       files.add(file.name, file.bytes, file.url ?? undefined);
@@ -89,6 +92,7 @@ function run(source: string, flags: string, refused: boolean, extras: string, wa
       wasmBytes: wasmBytesOf(output, wasmCount(wasmJson)),
       engineMs: performance.now() - started,
       memoryBytes: memory?.buffer.byteLength ?? 0,
+      tablesLoaded: library_tables(),
     };
     output.free();
     reply({ kind: 'done', result });
@@ -107,6 +111,6 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   if (request.kind === 'init') {
     init(request.module);
   } else {
-    run(request.source, request.flags, request.refused, request.extras, request.wasm ?? []);
+    run(request.source, request.flags, request.refused, request.extras, request.wasm ?? [], request.tables ?? []);
   }
 };

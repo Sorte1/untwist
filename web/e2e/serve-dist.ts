@@ -20,6 +20,7 @@ const TYPES: Readonly<Record<string, string>> = {
   '.json': 'application/json',
   '.webmanifest': 'application/manifest+json',
   '.txt': 'text/plain; charset=utf-8',
+  '.table': 'application/octet-stream',
 };
 
 export function parseHeaders(text: string): Rule[] {

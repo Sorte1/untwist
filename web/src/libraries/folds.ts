@@ -50,7 +50,7 @@ function commentLines(doc: Text, known: ReadonlySet<string>): Map<number, string
     if (line.includes('// ')) {
       const comment = libraryComment(line, known);
       if (comment !== null) {
-        found.set(number, comment.library);
+        found.set(number, known.has(comment.library) ? comment.library : (comment.also.find((same) => known.has(same.library))?.library ?? comment.library));
       }
     }
   }

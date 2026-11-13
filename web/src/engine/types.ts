@@ -23,15 +23,25 @@ export interface RunResult extends RunFields {
   readonly links?: string;
   readonly wasm?: string;
   readonly wasmBytes?: readonly Uint8Array<ArrayBuffer>[];
+  readonly tablesLoaded?: string;
+  readonly libraryTables?: LibraryTablesUsed;
+}
+
+export interface LibraryTablesUsed {
+  readonly fetched: readonly string[];
+  readonly failed: readonly string[];
+  readonly reran: boolean;
+  readonly scanMs: number;
+  readonly loadMs: number;
 }
 
 export type WorkerRequest =
   | { readonly kind: 'init'; readonly module: WebAssembly.Module }
-  | { readonly kind: 'run'; readonly source: string; readonly flags: string; readonly refused: boolean; readonly extras: string; readonly wasm: readonly SuppliedWasm[] };
+  | { readonly kind: 'run'; readonly source: string; readonly flags: string; readonly refused: boolean; readonly extras: string; readonly wasm: readonly SuppliedWasm[]; readonly tables?: readonly Uint8Array<ArrayBuffer>[] };
 
 export type WorkerReply =
   | { readonly kind: 'ready' }
   | { readonly kind: 'stage'; readonly name: string }
   | { readonly kind: 'failed'; readonly message: string }
   | { readonly kind: 'trap'; readonly trap: TrapKind; readonly message: string }
-  | { readonly kind: 'done'; readonly result: Omit<RunResult, 'trap' | 'workerMs'> };
+  | { readonly kind: 'done'; readonly result: Omit<RunResult, 'trap' | 'workerMs' | 'libraryTables'> };

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-const SKIPPED: readonly RegExp[] = [/^\.vite\//, /^_headers$/, /^sw\.js$/, /\.map$/, /^fonts\/.*\.txt$/];
+const SKIPPED: readonly RegExp[] = [/^\.vite\//, /^_headers$/, /^sw\.js$/, /\.map$/, /^fonts\/.*\.txt$/, /^libraries\/(?!index\.json$)/];
 const PRECACHE_TOKEN = '__UNTWIST_PRECACHE__';
 const VERSION_TOKEN = '__UNTWIST_VERSION__';
 const VERSION_CHARS = 16;
