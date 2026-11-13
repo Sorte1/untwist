@@ -2,7 +2,9 @@ use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::pins::script_global_symbols;
-use untwist_core::semantic::{has_module_syntax, is_shared_global, AnnexBWrites};
+use untwist_core::semantic::{
+    has_module_syntax, is_shared_global, top_level_names_fixed, AnnexBWrites,
+};
 
 use crate::collect::{collect, Collected};
 use crate::function_names::function_names;
@@ -45,10 +47,11 @@ pub fn prepare(
 
 fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, setting: Setting) {
     pin_shared_globals(collected, scoping);
-    if !setting.keep_globals && !setting.keep_lexicals {
+    let fixed_by_other_inputs = setting.classic_script && top_level_names_fixed();
+    if !setting.keep_globals && !setting.keep_lexicals && !fixed_by_other_inputs {
         return;
     }
-    if setting.keep_lexicals {
+    if setting.keep_lexicals || fixed_by_other_inputs {
         collected.pinned.extend(
             scoping
                 .get_bindings(scoping.root_scope_id())

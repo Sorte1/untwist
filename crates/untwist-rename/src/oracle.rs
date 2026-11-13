@@ -3,6 +3,7 @@ use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::host_globals::is_host_global_property;
+use untwist_core::semantic::named_by_another_input;
 
 use crate::collect::Collected;
 use crate::collisions::{Reason, Tally};
@@ -161,7 +162,7 @@ impl<'s> NameOracle<'s> {
         self.collected.classic_script
             && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
             && self.scoping.symbol_name(symbol) != name
-            && is_host_global_property(name)
+            && (is_host_global_property(name) || named_by_another_input(name))
     }
 
     fn uid_refusal(&self, name: &str, symbol: SymbolId) -> Option<Reason> {

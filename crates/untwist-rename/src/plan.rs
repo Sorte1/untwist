@@ -35,6 +35,18 @@ impl RenamePlan {
         self.names.is_empty()
     }
 
+    pub fn without_unchanged(self, scoping: &Scoping) -> Self {
+        let names = self
+            .names
+            .into_iter()
+            .filter(|(symbol, name)| scoping.symbol_name(*symbol) != name)
+            .collect();
+        Self {
+            names,
+            notes: self.notes,
+        }
+    }
+
     pub fn apply<'a>(
         &self,
         program: &mut Program<'a>,

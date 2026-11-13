@@ -7,11 +7,16 @@ use rustc_hash::FxHashSet;
 pub struct SharedGlobals {
     pub every_name: bool,
     pub names: FxHashSet<String>,
+    pub keep_top_level: bool,
+    pub named_elsewhere: FxHashSet<String>,
 }
 
 impl SharedGlobals {
     pub fn is_empty(&self) -> bool {
-        !self.every_name && self.names.is_empty()
+        !self.every_name
+            && self.names.is_empty()
+            && !self.keep_top_level
+            && self.named_elsewhere.is_empty()
     }
 
     pub fn contains(&self, name: &str) -> bool {
@@ -45,5 +50,21 @@ pub fn is_shared_global(name: &str) -> bool {
         cell.borrow()
             .as_ref()
             .is_some_and(|shared| shared.contains(name))
+    })
+}
+
+pub fn top_level_names_fixed() -> bool {
+    SHARED_GLOBALS.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .is_some_and(|shared| shared.keep_top_level)
+    })
+}
+
+pub fn named_by_another_input(name: &str) -> bool {
+    SHARED_GLOBALS.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .is_some_and(|shared| shared.named_elsewhere.contains(name))
     })
 }

@@ -213,29 +213,37 @@ pub fn globals_reachable_by_key<'a>(program: &'a Program<'a>, scoping: &Scoping)
         names: &names,
         props: &names,
         fns: &[],
-        observe: false,
+        observe: true,
     };
-    global_reach(program, scoping, (None, &[]), watch)
-        .reach
-        .is_some()
+    let found = global_reach(program, scoping, (None, &[]), watch);
+    found.reach.or(found.observed).is_some()
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NamesReached {
+    pub reached: bool,
+    pub observed: bool,
 }
 
 pub fn names_reachable_from<'a>(
     program: &'a Program<'a>,
     scoping: &Scoping,
     names: &[&str],
-) -> bool {
+) -> NamesReached {
     if names.is_empty() {
-        return false;
+        return NamesReached::default();
     }
     let watch = ReachWatch {
         names,
         props: names,
         fns: &[],
-        observe: false,
+        observe: true,
     };
     let found = global_reach(program, scoping, (None, &[]), watch);
-    found.reach.is_some() || found.reach_by_code.is_some()
+    NamesReached {
+        reached: found.reach.or(found.reach_by_code).is_some(),
+        observed: found.observed.is_some(),
+    }
 }
 
 pub fn script_lexicals_reachable_by_code<'a>(program: &'a Program<'a>, scoping: &Scoping) -> bool {

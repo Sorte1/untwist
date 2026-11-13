@@ -3,3 +3,8 @@ ref-later-script-reads-earlier-bindings|var counter = 41; function helper(n) { r
 ref-later-script-reaches-earlier-bindings-through-eval|var cfg = { a: 1 }; function show() { return cfg.a; } console.log(show()); @@ eval("cf" + "g").a = 5; console.log(show());
 apart-independent-scripts-inline-as-they-do-alone|function f() { return "abc"; } console.log(f()); var arr = ["p", "q"]; console.log(arr[1]); @@ function g() { return "xyz"; } console.log(g()); let n = 3; console.log(n + 1);
 ref-later-script-redeclares-an-earlier-binding|var cfg = { a: 1 }; function show() { return cfg.a; } console.log(show()); @@ var cfg = { a: 5 }; console.log(show());
+ref-wrapper-flags-of-two-scripts-stay-apart|var a, b; a || (a = 1, b = { v: 1 }); @@ var c, d; c || (c = 1, d = { v: 2 }); console.log(d && d.v);
+ref-new-name-is-not-another-scripts-name|var o = { width: Math.random() < 2 ? 1 : 0 }; var q = o.width; function show() { console.log(q, typeof height); } @@ var width = 7; var k = { height: Math.random() }; var z = k.height; show();
+ref-two-scripts-pick-the-same-new-name|var o = { width: Math.random() < 2 ? 1 : 0 }; var q = o.width; function show() { console.log(q); } @@ var p = { width: 7, height: Math.random() }; var z = p.width; show();
+ref-three-scripts-wrappers-and-names|var a, b; a || (a = 1, b = { v: 1 }); var o = { width: 1 }; var q = o.width; @@ var c, d; c || (c = 1, d = { v: 2 }); var p = { width: 7 }; var z = p.width; @@ var e, f; e || (e = 1, f = { v: 3 }); console.log(q, z, d && d.v, f && f.v, typeof width);
+ref-three-scripts-free-name-in-the-last|var o = { height: Math.random() < 2 ? 1 : 0 }; var q = o.height; @@ function noop() {} @@ console.log(q, typeof height);

@@ -183,7 +183,10 @@ program. Several classic scripts given in one run share one global scope, as scr
 do: a top-level `var`, function, `let`, `const` or `class` of one is treated as read and written by
 the others when another input names it (a free reference or a top-level declaration of its own) or
 reaches globals through a computed key or code text, and is then not inlined away, removed or
-renamed. Inputs that share no names come out as they would alone. A module (a file with `import`, `export`,
+renamed. When two or more classic scripts are given, or another input may observe the global
+object's names, no top-level binding of a classic script is renamed, and no input's top-level
+binding takes a name another input binds at the top level or reads free. Inputs that share no
+names come out as they would alone, apart from those top-level names. A module (a file with `import`, `export`,
 `import.meta` or top-level `await`) is closed apart from its exports. Code from outside the file
 (`require` results, host functions, other scripts) writes no built-in. It also does not depend on
 the names the obfuscator picked for the string array and its decoders, because that code was

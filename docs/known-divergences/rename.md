@@ -202,11 +202,15 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   assignment whose value is an anonymous function, arrow or class. A file with no such read is
   renamed as before, and `--unsafe` renames them anyway. The limit, like `fn.toString()`: a read
   through a key that is not a literal (`f[key]`) or through reflection (`Reflect.get(f, "name")`,
-  `Object.getOwnPropertyDescriptor`) is not seen.
+  `Object.getOwnPropertyDescriptor`) is not seen. The host also reads `name` when it prints a
+  value: `console.log(f)`, `console.dir`, `util.inspect` and the devtools show
+  `[Function: newName]` or `NewClass { … }` for a function, a class or an instance. Like error
+  stack traces, what the host prints is outside the promise, so the guard does not look for it.
 - **Function source under `smart`.** `smart` keeps every name inside or referenced by a function
   whose source the program reads (`'' + f`, `` `${f}` ``, `String(f)`, `f.toString()`), and leaves
-  the whole program unrenamed when a function may read its own source through `this`,
-  `arguments.callee` or `.caller`. With `--unsafe`, `this.toString()` inside an instance method (a
+  the whole program unrenamed when a function may read its own source through a method call on
+  `this`, `arguments.callee` or `.caller` (`this.toString()`); other routes are text-only reads
+  (below). With `--unsafe`, `this.toString()` inside an instance method (a
   function stored on `X.prototype`, other than `Function.prototype` and `Object.prototype`, or a
   non-static class method) is taken to read the instance, not a function, so it does not stop
   renaming: a call that hands such a method a function as its receiver
@@ -214,7 +218,15 @@ Not divergences from the reference deobfuscator, but worth recording about the o
 - **Hoisting and the host's global object.** A sloppy block function and a `var` or parameter
   of the same name in its function are one binding to Annex B, so both keep their names. A `var`
   written inside a block or catch body counts where it hoists to, so no block-scoped binding in
-  that body takes its name and it takes none of theirs. In a classic script, shorthand
+  that body takes its name and it takes none of theirs. In a classic script, every top-level
+  `var` and function keeps its name in every mode and both lanes when the file may read it off
+  the global object (`window.x`, `globalThis[k]`, `this.f()` at the top level, indirect `eval`)
+  or may observe the global object's names (`"x" in globalThis`, `hasOwnProperty`,
+  `Object.hasOwn`, `Object.keys`, `getOwnPropertyNames`, `Reflect.ownKeys`, `for…in`,
+  `getOwnPropertyDescriptor`); a key that is not a literal keeps them all. When several classic
+  scripts are given together they share one global scope, so no top-level binding of a classic
+  script is renamed in that run, and no top-level binding of any input takes a name another input
+  binds at the top level or reads free. In a classic script, shorthand
   restoration leaves top-level `var` and function bindings alone (each is a property of the
   global object), and no mode gives a top-level binding the name of a browser or Node global
   property (`status`, `location`, `top`, `name`, `onload`, ...). When code built from text can
@@ -231,6 +243,12 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   guard only on those terms, since its value never leaves its call sites. Error stack traces
   show the new names, and a read through a computed key that is not a literal (`f[key]` that
   is `caller` at run time) is not seen, as for the rename modes.
+- **Text-only reads.** Names a function's source shows after renaming (a function stringified
+  through a parameter, `[f].join()`, `Reflect.apply(Function.prototype.toString, f, [])`, a
+  wrapper inside a named IIFE, a class static block or a stringifying `__commonJS` look-alike)
+  fall under the printer premise in [codegen.md](codegen.md) ("Function source text is not
+  kept"): the `smart` source-text pin and the wrapper pass's sealing are best effort for such
+  reads, not a promise.
 - A program containing a direct `eval` call or a `with` statement is renamed anyway, with a
   diagnostic note naming the hazard. Static scope analysis cannot see what those constructs
   resolve; the reference deobfuscator reports nothing at all.
