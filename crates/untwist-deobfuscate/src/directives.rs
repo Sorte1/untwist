@@ -146,19 +146,77 @@ struct Restore<'a, 'b> {
     builder: &'b AstBuilder<'a>,
 }
 
+const USE_STRICT: &str = "use strict";
+
+fn simple_parameters(params: &FormalParameters<'_>) -> bool {
+    params.rest.is_none()
+        && params.items.iter().all(|param| {
+            param.initializer.is_none()
+                && matches!(param.pattern, BindingPattern::BindingIdentifier(_))
+        })
+}
+
+fn asks_strict(statements: &[Statement<'_>]) -> bool {
+    statements
+        .iter()
+        .map_while(directive_text)
+        .any(|text| text == USE_STRICT)
+}
+
+#[derive(Default)]
+struct WithScan {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for WithScan {
+    fn visit_with_statement(&mut self, _it: &WithStatement<'a>) {
+        self.found = true;
+    }
+}
+
+fn holds_with(statements: &[Statement<'_>]) -> bool {
+    let mut scan = WithScan::default();
+    for statement in statements {
+        scan.visit_statement(statement);
+        if scan.found {
+            return true;
+        }
+    }
+    false
+}
+
+fn strict_allowed(params: Option<&FormalParameters<'_>>, statements: &[Statement<'_>]) -> bool {
+    !asks_strict(statements) || (params.is_none_or(simple_parameters) && !holds_with(statements))
+}
+
+impl<'a> Restore<'a, '_> {
+    fn restore_body(&self, params: &FormalParameters<'a>, body: &mut FunctionBody<'a>) {
+        if self.heads.contains(&body.span) && strict_allowed(Some(params), &body.statements) {
+            promote(&mut body.directives, &mut body.statements, self.builder);
+        }
+    }
+}
+
 impl<'a> VisitMut<'a> for Restore<'a, '_> {
     fn visit_program(&mut self, it: &mut Program<'a>) {
-        if self.heads.contains(&it.span) {
+        if self.heads.contains(&it.span) && strict_allowed(None, &it.body) {
             promote(&mut it.directives, &mut it.body, self.builder);
         }
         walk_mut::walk_program(self, it);
     }
 
-    fn visit_function_body(&mut self, it: &mut FunctionBody<'a>) {
-        if self.heads.contains(&it.span) {
-            promote(&mut it.directives, &mut it.statements, self.builder);
+    fn visit_function(&mut self, it: &mut Function<'a>, flags: ScopeFlags) {
+        if let Some(body) = it.body.as_mut() {
+            self.restore_body(&it.params, body);
         }
-        walk_mut::walk_function_body(self, it);
+        walk_mut::walk_function(self, it, flags);
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &mut ArrowFunctionExpression<'a>) {
+        if let ArrowFunctionBody::FunctionBody(body) = &mut it.body {
+            self.restore_body(&it.params, body);
+        }
+        walk_mut::walk_arrow_function_expression(self, it);
     }
 }
 

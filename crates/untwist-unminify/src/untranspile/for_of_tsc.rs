@@ -3,7 +3,10 @@ use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
 use oxc_span::SPAN;
 use oxc_syntax::operator::{AssignmentOperator, LogicalOperator, UnaryOperator};
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
+use oxc_traverse::Ancestor;
+use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 
 use super::for_of::{captures, head_at, left_of, resolved_id, the_loop, unlabelled_mut, Head};
@@ -282,10 +285,74 @@ fn cleanup(
     closes(statement, ids, scoping)
 }
 
+#[derive(Clone, Copy)]
+struct Records<'r> {
+    fresh: Option<&'r FxHashSet<SymbolId>>,
+    once_in: Option<ScopeId>,
+}
+
+impl Records<'_> {
+    const UNCHECKED: Records<'static> = Records {
+        fresh: None,
+        once_in: None,
+    };
+
+    fn empty_at_start(&self, error: SymbolId, reset: bool, scoping: &Scoping) -> bool {
+        let Some(fresh) = self.fresh else {
+            return true;
+        };
+        fresh.contains(&error) && (reset || self.once_in == Some(scoping.symbol_scope_id(error)))
+    }
+}
+
+pub fn note_fresh_records(
+    declaration: &VariableDeclaration<'_>,
+    scoping: &Scoping,
+    fresh: &mut FxHashSet<SymbolId>,
+) {
+    if declaration.declare || declaration.kind == VariableDeclarationKind::Const {
+        return;
+    }
+    for declarator in &declaration.declarations {
+        if declarator.init.is_some() {
+            continue;
+        }
+        let Some(symbol) = binding(declarator) else {
+            continue;
+        };
+        let uses = scoping.get_resolved_reference_ids(symbol).len();
+        if uses == ERROR_USES || uses == ERROR_USES + 1 {
+            fresh.insert(symbol);
+        }
+    }
+}
+
+fn runs_once_in(cx: &Cx<'_, '_>) -> Option<ScopeId> {
+    for ancestor in cx.tcx.ancestors() {
+        match ancestor {
+            Ancestor::ForStatementBody(_)
+            | Ancestor::ForInStatementBody(_)
+            | Ancestor::ForOfStatementBody(_)
+            | Ancestor::WhileStatementBody(_)
+            | Ancestor::DoWhileStatementBody(_) => return None,
+            Ancestor::FunctionBody(_)
+            | Ancestor::ArrowFunctionExpressionBody(_)
+            | Ancestor::StaticBlockBody(_)
+            | Ancestor::ProgramBody(_) => break,
+            _ => {}
+        }
+    }
+    let scoping = cx.scoping();
+    scoping
+        .scope_ancestors(cx.current_scope_id())
+        .find(|scope| scoping.scope_flags(*scope).is_var())
+}
+
 fn plan_at(
     statements: &[Statement<'_>],
     at: usize,
     table: &Table,
+    records: Records<'_>,
     scoping: &Scoping,
 ) -> Option<Plan> {
     let Statement::TryStatement(attempt) = statements.get(at)? else {
@@ -301,6 +368,7 @@ fn plan_at(
         && ids.reset.is_none_or(|reset| reset == error)
         && scoping.get_resolved_reference_ids(error).len()
             == ERROR_USES + usize::from(ids.reset.is_some())
+        && records.empty_at_start(error, ids.reset.is_some(), scoping)
         && scoping.get_resolved_reference_ids(closer).len() == RETURN_USES
         && [ids.iterator, ids.step, error, closer]
             .iter()
@@ -401,16 +469,29 @@ fn prune<'a>(statements: &mut AVec<'a, Statement<'a>>, dropped: &[SymbolId]) {
 }
 
 pub fn has_site(statements: &[Statement<'_>], table: &Table, scoping: &Scoping) -> bool {
-    (0..statements.len()).any(|at| plan_at(statements, at, table, scoping).is_some())
+    (0..statements.len())
+        .any(|at| plan_at(statements, at, table, Records::UNCHECKED, scoping).is_some())
 }
 
 pub fn rewrite_statements<'a>(
     statements: &mut AVec<'a, Statement<'a>>,
     table: &Table,
+    fresh: &FxHashSet<SymbolId>,
     cx: &mut Cx<'a, '_>,
 ) -> usize {
-    let plans: Vec<Plan> = (0..statements.len())
-        .filter_map(|at| plan_at(statements, at, table, cx.scoping()))
+    let sites: Vec<usize> = (0..statements.len())
+        .filter(|at| plan_at(statements, *at, table, Records::UNCHECKED, cx.scoping()).is_some())
+        .collect();
+    if sites.is_empty() {
+        return 0;
+    }
+    let records = Records {
+        fresh: Some(fresh),
+        once_in: runs_once_in(cx),
+    };
+    let plans: Vec<Plan> = sites
+        .into_iter()
+        .filter_map(|at| plan_at(statements, at, table, records, cx.scoping()))
         .collect();
     let mut dropped = Vec::new();
     for plan in plans {

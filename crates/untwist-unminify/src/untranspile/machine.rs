@@ -125,6 +125,14 @@ impl TryRegion {
             .is_some_and(|finally| finally <= label && label < self.end)
     }
 
+    pub fn within(&self, outer: &TryRegion) -> bool {
+        outer
+            .parts()
+            .iter()
+            .flatten()
+            .any(|(start, end)| *start <= self.start && self.end <= *end)
+    }
+
     pub fn parts(&self) -> [Option<(u32, u32)>; 3] {
         [
             Some((self.start, self.body_end())),
