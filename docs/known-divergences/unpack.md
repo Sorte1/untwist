@@ -189,7 +189,12 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   `++`, destructuring, `for (x in ...)`) keeps the writer and the declaration in one run. A run is
   named after the first class or function another module imports from it, else `module<N>`. An
   outer wrapper may now also declare `let`/`const` names; those are never exported through
-  `shell.js`, so a wrapper module that reads them stays in the entry.
+  `shell.js`, so a wrapper module that reads them stays in the entry. Expected quality, scored against
+  Rollup's own source map on fixtures/unpack-rollup-boundaries (rollup 3/4, see `SCORES`):
+  boundary precision 0.78 and recall 0.48 overall; three.js 0.79/0.68 plain and 0.96/0.66
+  minified, Svelte 5 0.67/0.38 plain and 1.00/0.31 minified, Solid 0.50/0.25 plain (solid-js is
+  one large module), the synthetic app 0.67/0.50 plain; the terser-minified Solid and synthetic
+  apps stay one file (terser moves code between modules). Boundaries lean to under-splitting.
 - **Closure.** Only the module manager's `try {…} catch (e) { X._DumpException(e) }` segments
   are split (ids from `/*_M:id*/` markers or begin/end loader calls checked against the
   `_ModuleManager_initialize` graph). The namespace object is read once, in
