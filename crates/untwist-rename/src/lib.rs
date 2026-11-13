@@ -16,6 +16,8 @@ pub mod human;
 pub mod import_path;
 pub mod library;
 pub mod mangle;
+#[cfg(feature = "modern")]
+pub mod modern;
 pub mod oracle;
 pub mod pins;
 pub mod plan;

@@ -100,6 +100,20 @@ pub struct Args {
                 (by default they are renamed too; no effect in mangle)"
     )]
     pub rename_all: bool,
+    #[arg(
+        long,
+        value_name = "BASELINE",
+        value_parser = modern_baseline,
+        help = "opt-in: remove core-js polyfills of features native in BASELINE, an ES year \
+                (es2017 to es2024) and/or engines such as \"chrome 120, firefox 121, safari 17\"; \
+                only modules recognised exactly as core-js are touched, using core-js-compat data, \
+                and proposals or modules core-js still replaces in those engines are kept; calls of \
+                matched helpers in the core-js code left become the native form (Symbol.iterator, \
+                Object.hasOwn, String.prototype.slice.call) where that behaves the same. The \
+                output then assumes such an engine with its own built-ins (the report says so); \
+                --unsafe does not turn this on"
+    )]
+    pub modern: Option<untwist::ModernBaseline>,
     #[cfg(feature = "test-hooks")]
     #[arg(long = "conservative", hide = true)]
     pub conservative: bool,
@@ -337,6 +351,10 @@ impl RenameArg {
     }
 }
 
+fn modern_baseline(text: &str) -> Result<untwist::ModernBaseline, String> {
+    untwist::parse_modern_baseline(text)
+}
+
 impl Args {
     fn rename_mode(&self) -> untwist::RenameMode {
         if self.mangle {
@@ -367,6 +385,7 @@ impl Args {
             split_assume_modules: self.split_assume_modules,
             rename: self.rename_mode(),
             rename_all: self.rename_all,
+            modern: self.modern.clone(),
             plugins: untwist::Plugins::default(),
             single_file: self.single_file,
             jobs: self.jobs,

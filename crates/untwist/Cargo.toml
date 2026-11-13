@@ -16,7 +16,8 @@ description = "Fast JavaScript deobfuscator, unminifier and unbundler that never
 bench = false
 
 [features]
-default = ["parallel"]
+default = ["parallel", "modern"]
+modern = ["untwist-rename/modern"]
 parallel = ["dep:rayon"]
 refusal-spans = ["untwist-deobfuscate/refusal-spans"]
 libraries-all = ["untwist-rename/libraries-all"]
