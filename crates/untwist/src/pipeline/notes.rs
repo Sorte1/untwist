@@ -47,6 +47,14 @@ pub const GUARD_KEPT_ACROSS_LINES: &str = "a self-defending check that reads a f
      source survived, but that function holds a line break no one-line print can remove, so the \
      output may not run as the input did:";
 
+pub const SOURCE_READER_UNGUARDED: &str = "a self-defending check reads the source text of a \
+     function the output prints across lines (or one it cannot find), so the reformatted output \
+     would hang where the input runs; it is passed through unchanged";
+
+pub const SOURCE_READER_UNGUARDED_MODULE: &str = "an unpacked module holds a self-defending check \
+     that reads the source text of a function the module prints across lines (or one it cannot \
+     find); the inputs are written without a bundle";
+
 pub const BUDGET_MEMORY_REACHED: &str = "budget-memory: this input reached the memory budget \
      (--max-memory); the work after that point was cut short or refused, so the output is the \
      tree as far as the passes got";
@@ -117,6 +125,8 @@ catalogue!(
     ANONYMOUS_SHELL_SCOPED,
     GUARD_ON_ONE_LINE,
     GUARD_KEPT_ACROSS_LINES,
+    SOURCE_READER_UNGUARDED,
+    SOURCE_READER_UNGUARDED_MODULE,
     NESTED_TOO_DEEP,
     PARENTHESES_TOO_DEEP,
     PRINT_TOO_LARGE,

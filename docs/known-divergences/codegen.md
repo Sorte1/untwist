@@ -68,10 +68,34 @@ fixture that then joins the differential.
     five statements or one sequence). Its target is the `newState` function. The regex built from
     the two strings matches `function () {return "newState";}` exactly as it matches the obfuscator's
     `function(){return'newState';}`.
-  - **G3, the self-reading base64 helper** (a 65-character alphabet, `var a = "", b = "", c = a +
-    <id>` as one or three declarations, and a `for` holding `c.charCodeAt(<e> + 10) - 10 !== 0`).
-    Its target is the helper itself. That test asks only whether the character at each offset is a
-    line feed, so it is constant-true on any single-line text.
+  - **G3, the self-reading base64 helper** (an optional leading 65-character alphabet, which
+    terser inlines into the `indexOf` call, then `var a = "", b = "", c = a + <id>` as one or
+    three declarations, and a `for` holding `c.charCodeAt(<e> + 10) - 10 !== 0`, or terser's
+    `!=`). Its target is the helper itself. That test asks only whether the character at each
+    offset is a line feed, so it is constant-true on any single-line text.
+
+  Every template is also matched at its own function wherever that function stands (a `return`
+  argument, a call argument, a branch, uglify's `x.k = e = function (i) { … }` inside a sequence),
+  not only in the declarator and assignment slots above. Before this (R51-SD) a G2 or G3 template
+  that uglify or terser had folded into a sequence was left across lines, and 90 of the 240
+  default, `--unsafe` and reprint runs of the obfuscator-versions matrix's selfDefending cells
+  printed something else or hung. For G1, obfuscator.io's dead-code injection wraps the
+  controller in `if (<opaque test>) { … } else { <junk> }` (terser: `if (!t) { … } { <junk> }`),
+  around the `var f = true; return function (c, fn) { … }` pair and around the choice inside the
+  two-parameter function, and sometimes puts a decoy copy of the template (with foreign names)
+  in the other branch; control-flow flattening, string-array wrappers and transformObjectKeys put
+  proxy tables (`var t = { k: function (a, b) { var w = d; return a === b; } }`), aliases and
+  split tables (`var h = {}; h[k] = v;`) in front of the choice and of the forwarding call. So
+  the two-parameter function may hold any statements before the choice, the choice may sit up
+  to four `if` branches deep in either branch (every branch is tried, and
+  the decoy does not match), and the target `r` only has to hold the forwarding call
+  `fn[<any key>](c, arguments)` and the reset `fn = null` somewhere outside its nested
+  functions. The flag, the empty alternate `function () {}` and the closing `f = false; return
+  r` (or `return f = false, r`, hoisted function declarations skipped, unreachable code after it
+  allowed) stay exact. A function of this shape that is not a guard is
+  printed on one line too; that costs readability, never behaviour, since a one-line print is
+  used only when it re-parses to the same tree (`reflow_guard_shapes.rs`,
+  `fixtures/self-defending`).
 
   The templates also accept leading constant tables (`var k = { a: "0x37a" }`) before the controller
   and inside `r`, and numbers written as literal arithmetic (`-1385 * -1 + -7397 + 6013`), which is
@@ -111,3 +135,44 @@ fixture that then joins the differential.
   Proving the input text single-line would need a walk on every row and the arena kept alive across
   the reflow; obfuscator.io never emits the template multi-line or spaced. A span-based check that
   rides an existing walk could lift this premise.
+- **A G1 check whose read target would still print across lines passes the input through.**
+  The G1 templates above are a recogniser, so a near-miss used to leave the target across lines
+  and the output hung (javascript-obfuscator 5.10.1 with dead-code injection, R51-SD). Every input
+  is now also checked for the G1 reader: a `var n = c(this, <parameterless function or arrow>)`,
+  `n = c(this, …)` or the control-flow proxy form `n = t.k(c, this, …)`, whose callback holds a
+  chain of at least three calls that passes `n` back in
+  (`n.toString().search(r).toString().constructor(n)…`, or the older
+  `Q.constructor("return /" + this + "/")().constructor(r).test(n)`; string-array calls in the
+  keys do not matter). For every reader, `c` is looked up by name among the declarations and plain
+  assignments (or is the callee itself when it is not a name), and every two-parameter controller
+  target inside them, in every branch the template matches, must come out on one line: either it
+  prints without a line break, or the reflow printed its one-line text (looked up in the reflow's
+  guard record by the same key). If no target is found, or one would be printed across lines, the
+  input is passed through unchanged with the note "a self-defending check reads the source text of
+  a function the output prints across lines (or one it cannot find), so the reformatted output
+  would hang where the input runs; it is passed through unchanged". The check runs on the final
+  tree before it is printed (two walks; +0.4 % instructions on `game.js`, which holds one reader).
+  Older obfuscator.io lines (0.x) also test, inside the same `c(this, cb)` callback, that a bait
+  `function () { return "\x77\x69…"; }` keeps its hex escapes; no reprint keeps a string's
+  escapes, so a callback holding a parameterless function returning `"window"` (assigned or called
+  in place, as terser leaves it) passes the input through. The bait functions themselves
+  (a parameterless function whose whole body is `return "dev"`, `"window"` or `"newState"`, the
+  words obfuscator.io's checks read) are printed on one line wherever they stand.
+  A function that adds its own name to a string (`c = a + F` inside `F`, the G3 self-read, which
+  terser can strip of its `("" + function () { … }).indexOf("\n")` escape hatch; a function that
+  still holds that escape is left alone, since a printed escape function holds a line break) is a reader too: it must come out on one
+  line the same way. Every unpacked module's tree is checked the same way against the module
+  reflow's record; a module that fails makes the inputs be written without a bundle. A source
+  check of another shape (another obfuscator's, or a read through a member such as `F.toString()`
+  outside G1) is not seen; see the next item.
+- **Function source text is not kept (the printer premise).** Untwist's output is a new spelling
+  of the program in every mode, `--no-deobfuscate --no-unminify` included, so
+  `Function.prototype.toString`, `String(f)`, `"" + f` and template substitutions of a function
+  see the printed text, not the input's. A program whose behaviour depends on that text (a hash
+  or length of a function, a comparison, a regular expression run over it) can behave
+  differently after any print. The safe lane's behaviour-equality promise holds modulo function
+  source text. The exceptions are the self-reading checks obfuscator.io emits: the G1-G3 read
+  targets and the cookie check are printed on one line as the obfuscator emitted them, and a G1
+  reader whose target cannot be printed that way passes the input through (item above). The
+  protections stage removes these checks where it proves the callback is obfuscator.io's own; the
+  one-line print and the pass-through are for the lanes and programs where it does not.

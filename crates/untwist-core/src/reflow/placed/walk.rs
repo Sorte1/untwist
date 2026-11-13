@@ -8,8 +8,8 @@ use oxc_syntax::scope::ScopeFlags;
 
 use super::super::guard_key::guard_key;
 use super::super::guards::{
-    fixed_point_text, guard_candidate, holds_a_line_terminator, may_hold_a_guard, statement_guard,
-    GuardRecord,
+    fixed_point_text, guard_candidate, handed_out, holds_a_line_terminator, may_hold_a_guard,
+    statement_guard, GuardRecord,
 };
 use crate::guard_shape::{holder_read_target, may_be_a_guard, read_target};
 use crate::print::{function_text, pretty_function_text};
@@ -139,12 +139,25 @@ impl<'a> Placer<'a> {
             return;
         }
         if let Some(target) = read_target(function) {
-            let compacted = self.compacts(target);
-            self.pending = Some(Pending {
-                target: std::ptr::from_ref(target),
-                compacted,
-            });
+            self.hold(target);
         }
+    }
+
+    fn settle_handed_out(&mut self, function: &Function<'a>) {
+        if self.pending.is_some() {
+            return;
+        }
+        if let Some(target) = handed_out(function) {
+            self.hold(target);
+        }
+    }
+
+    fn hold(&mut self, target: &Function<'a>) {
+        let compacted = self.compacts(target);
+        self.pending = Some(Pending {
+            target: std::ptr::from_ref(target),
+            compacted,
+        });
     }
 
     fn compacts(&mut self, target: &Function<'a>) -> Option<String> {
@@ -204,6 +217,7 @@ impl<'a> Placer<'a> {
 
 impl<'a> VisitJsMut<'a> for Placer<'a> {
     fn visit_function(&mut self, it: &mut Function<'a>, flags: ScopeFlags) {
+        self.settle_handed_out(it);
         let target = self.pending_target(it);
         self.note_candidate(it);
         self.name(it, target);

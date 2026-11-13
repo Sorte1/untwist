@@ -6,7 +6,10 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 mod controller;
 mod cookie;
 mod helper;
+mod reader;
 mod state;
+
+pub use reader::{judge_readers, source_readers, SourceReaders};
 
 const FOLD_DEPTH: u32 = 16;
 const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=";
@@ -35,6 +38,7 @@ pub fn may_be_a_guard(function: &Function<'_>) -> bool {
         (0, [.., Statement::VariableDeclaration(_), Statement::ReturnStatement(handoff)]) => {
             matches!(handoff.argument, Some(Expression::FunctionExpression(_)))
         }
+        (0, [only]) => !narrowed() && returns_a_string(only),
         (0, statements) if cookie::opens_like_a_cookie(statements) => {
             !narrowed() && cookie::cookie_target(statements).is_some()
         }
@@ -49,9 +53,20 @@ pub fn may_be_a_guard(function: &Function<'_>) -> bool {
         (1, [Statement::ExpressionStatement(first), _, _, _, _]) => {
             matches!(first.expression, Expression::AssignmentExpression(_))
         }
-        (1, [Statement::VariableDeclaration(first), _, _, ..]) => opens_with_an_alphabet(first),
+        (1, [Statement::VariableDeclaration(first), _, _, ..]) => {
+            opens_with_an_alphabet(first)
+                || helper::helper_target(function, &body.statements).is_some()
+        }
         _ => false,
     }
+}
+
+const BAIT_WORDS: [&str; 3] = ["dev", "window", "newState"];
+
+fn returns_a_string(statement: &Statement<'_>) -> bool {
+    matches!(statement, Statement::ReturnStatement(ret)
+        if matches!(&ret.argument, Some(Expression::StringLiteral(text))
+            if BAIT_WORDS.iter().any(|word| text.value == *word)))
 }
 
 fn opens_with_an_alphabet(declaration: &VariableDeclaration<'_>) -> bool {
@@ -64,8 +79,9 @@ pub fn read_target<'k, 'a>(function: &'k Function<'a>) -> Option<&'k Function<'a
     if function.params.rest.is_some() {
         return None;
     }
-    match (function.params.items.len(), statements.len()) {
-        (0, 2..) => controller::controller_target(statements)
+    match (function.params.items.len(), statements.as_slice()) {
+        (0, [only]) if !narrowed() && returns_a_string(only) => Some(function),
+        (0, [_, _, ..]) => controller::controller_target(statements)
             .or_else(|| cookie::cookie_target(statements).filter(|_| !narrowed())),
         (1, _) => state::state_target(function, statements)
             .or_else(|| helper::helper_target(function, statements)),
@@ -106,7 +122,9 @@ fn declared<'k, 'a>(declarator: &'k VariableDeclarator<'a>) -> Option<Declared<'
     Some((binding_name(&declarator.id)?, declarator.init.as_ref()))
 }
 
-fn var_declaration<'k, 'a>(statement: &'k Statement<'a>) -> Option<&'k VariableDeclaration<'a>> {
+pub(super) fn var_declaration<'k, 'a>(
+    statement: &'k Statement<'a>,
+) -> Option<&'k VariableDeclaration<'a>> {
     match statement {
         Statement::VariableDeclaration(declaration)
             if matches!(
@@ -177,36 +195,17 @@ fn returned<'k, 'a>(statement: &'k Statement<'a>) -> Option<&'k Expression<'a>> 
     }
 }
 
-fn is_reset(expr: &Expression<'_>, name: &str, value: fn(&Expression<'_>) -> bool) -> bool {
+pub(super) fn is_reset(
+    expr: &Expression<'_>,
+    name: &str,
+    value: fn(&Expression<'_>) -> bool,
+) -> bool {
     let Expression::AssignmentExpression(assign) = expr else {
         return false;
     };
     assign.operator == AssignmentOperator::Assign
         && matches!(&assign.left, AssignmentTarget::AssignmentTargetIdentifier(id) if id.name == name)
         && value(&assign.right)
-}
-
-fn closes(
-    statements: &[Statement<'_>],
-    name: &str,
-    value: fn(&Expression<'_>) -> bool,
-    result: &str,
-) -> bool {
-    match statements {
-        [Statement::ExpressionStatement(reset), last] => {
-            is_reset(&reset.expression, name, value)
-                && returned(last).is_some_and(|expr| is_named(expr, result))
-        }
-        [only] => match returned(only) {
-            Some(Expression::SequenceExpression(sequence)) => match sequence.expressions.as_slice()
-            {
-                [reset, last] => is_reset(reset, name, value) && is_named(last, result),
-                _ => false,
-            },
-            _ => false,
-        },
-        _ => false,
-    }
 }
 
 fn is_null(expr: &Expression<'_>) -> bool {

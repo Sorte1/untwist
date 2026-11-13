@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use untwist::{Options, Pipeline};
+use untwist::{Options, Pipeline, SOURCE_READER_UNGUARDED};
 use untwist_core::guard_shape::narrow_guard_shapes_for_tests;
 use untwist_eval::source::satisfies_self_defending_regex;
 use untwist_testing::node::{node, run, skip_allowed, SKIP_MESSAGE};
@@ -60,7 +60,18 @@ fn the_cookie_check_fails_on_its_printed_function_once_the_shape_is_narrowed() {
     );
 }
 
-fn the_controllers_hang_once_the_shapes_are_narrowed() {
+fn passed_through(source: &str) -> bool {
+    narrow_guard_shapes_for_tests(true);
+    let out = Pipeline::new(Options::default()).run(source);
+    narrow_guard_shapes_for_tests(false);
+    let noted = out
+        .notes
+        .iter()
+        .any(|note| note.message == SOURCE_READER_UNGUARDED);
+    noted && out.code() == source
+}
+
+fn the_controllers_are_passed_through_once_the_shapes_are_narrowed() {
     let Some(node) = node_or_skip() else {
         return;
     };
@@ -70,13 +81,12 @@ fn the_controllers_hang_once_the_shapes_are_narrowed() {
         assert_eq!(before, "start\nend 5\nexit Some(0)");
         let kept = observed(&node, dir.path(), &printed(source, false));
         assert_eq!(kept, before, "{source}");
-        let narrowed = observed(&node, dir.path(), &printed(source, true));
-        assert_eq!(narrowed, "did not finish", "{source}");
+        assert!(passed_through(source), "{source}");
     }
 }
 
 #[test]
 fn every_new_guard_shape_turns_red_once_narrowed() {
     the_cookie_check_fails_on_its_printed_function_once_the_shape_is_narrowed();
-    the_controllers_hang_once_the_shapes_are_narrowed();
+    the_controllers_are_passed_through_once_the_shapes_are_narrowed();
 }

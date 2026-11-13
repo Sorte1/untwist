@@ -3,7 +3,12 @@ pub const INTERPRETED: &str = "no checksum could be extracted from the rotator";
 pub const GUARD_ON_ONE_LINE: &str =
     "a self-defending check that reads a function's own source survived; the function it reads was printed on one line";
 
-pub const REFUSALS: [(&str, &str, &str); 14] = [
+pub const REFUSALS: [(&str, &str, &str); 15] = [
+    (
+        "a self-defending check reads the source text of a function the output prints across lines",
+        "self-defending-passed-through",
+        "a self-defending check reads the source text of a function the output would print across lines (a minified or older template untwist cannot keep on one line), so the input is passed through unchanged",
+    ),
     (
         "reads a binding outside itself",
         "decoder-reads-outer-binding",

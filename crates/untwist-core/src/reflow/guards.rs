@@ -5,6 +5,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
+use oxc_syntax::scope::ScopeFlags;
 
 use super::guard_key::{guard_key, GuardKey};
 use super::{settle, Edit, Scan};
@@ -64,6 +65,13 @@ impl GuardRecord {
         add(&mut self.counts_mut().kept, key, 1);
     }
 
+    pub fn compacted(&self, text: &str) -> bool {
+        let key = guard_key(text);
+        self.counts
+            .as_ref()
+            .is_some_and(|counts| counts.compacted.contains_key(&key))
+    }
+
     pub fn tally(&self) -> GuardTally {
         let Some(counts) = &self.counts else {
             return GuardTally::default();
@@ -97,6 +105,11 @@ impl GuardRecord {
             add(&mut counts.kept, key, count);
         }
     }
+}
+
+pub fn guard_text(target: &Function<'_>) -> Option<String> {
+    let printed = function_text(target, false);
+    holds_a_line_terminator(&printed).then(|| printed.replace('\n', ""))
 }
 
 pub(super) fn holds_a_line_terminator(text: &str) -> bool {
@@ -242,6 +255,20 @@ impl<'a, const GUARDS: bool> VisitJs<'a> for Slots<'_, '_, GUARDS> {
         }
         walk_js::walk_object_expression(self, it);
     }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        if let Some(target) = handed_out(it) {
+            self.scan.settle_holder(target);
+        }
+        walk_js::walk_function(self, it, flags);
+    }
+}
+
+pub(super) fn handed_out<'k, 'a>(function: &'k Function<'a>) -> Option<&'k Function<'a>> {
+    if !may_be_a_guard(function) {
+        return None;
+    }
+    read_target(function)
 }
 
 impl<const GUARDS: bool> Scan<'_, GUARDS> {

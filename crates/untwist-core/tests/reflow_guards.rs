@@ -329,16 +329,24 @@ fn an_offset_written_as_arithmetic_is_matched() {
 }
 
 #[test]
-fn a_leading_table_that_runs_code_is_left_as_printed() {
-    assert_unchanged(&LITERAL_APPLY_GUARD.replace(
-        "  var f = !![];\n",
-        "  var k = { a: g() };\n  var f = !![];\n",
-    ));
+fn a_leading_declaration_that_runs_code_is_matched() {
+    assert_compacted(
+        &LITERAL_APPLY_GUARD.replace(
+            "  var f = !![];\n",
+            "  var k = { a: g() };\n  var f = !![];\n",
+        ),
+        LITERAL_APPLY_GUARD_TARGET,
+        LITERAL_APPLY_GUARD_COMPACT,
+    );
 }
 
 #[test]
-fn counters_that_fold_to_other_numbers_are_left_as_printed() {
-    assert_unchanged(&GUARD_STATEMENTS.replace("[1, 0, 0]", "[1 + 1, 0, 0]"));
+fn counters_that_fold_to_other_numbers_still_print_the_bait_on_one_line() {
+    assert_compacted(
+        &GUARD_STATEMENTS.replace("[1, 0, 0]", "[1 + 1, 0, 0]"),
+        NEW_STATE_TARGET,
+        NEW_STATE_COMPACT,
+    );
 }
 
 #[test]
@@ -358,16 +366,24 @@ fn split_declarations_with_a_non_empty_start_are_left_as_printed() {
 }
 
 #[test]
-fn a_leading_table_holding_a_name_is_left_as_printed() {
-    assert_unchanged(&LITERAL_APPLY_GUARD.replace(
-        "  var f = !![];\n",
-        "  var k = { a: b };\n  var f = !![];\n",
-    ));
+fn a_leading_table_holding_a_name_is_matched() {
+    assert_compacted(
+        &LITERAL_APPLY_GUARD.replace(
+            "  var f = !![];\n",
+            "  var k = { a: b };\n  var f = !![];\n",
+        ),
+        LITERAL_APPLY_GUARD_TARGET,
+        LITERAL_APPLY_GUARD_COMPACT,
+    );
 }
 
 #[test]
-fn a_controller_whose_flag_starts_false_is_left_as_printed() {
-    assert_unchanged(&LITERAL_APPLY_GUARD.replace("var f = !![];", "var f = false;"));
+fn a_controller_whose_flag_starts_false_is_matched_by_its_guarded_function() {
+    assert_compacted(
+        &LITERAL_APPLY_GUARD.replace("var f = !![];", "var f = false;"),
+        LITERAL_APPLY_GUARD_TARGET,
+        LITERAL_APPLY_GUARD_COMPACT,
+    );
 }
 
 #[test]
@@ -376,11 +392,15 @@ fn a_guarded_function_with_three_parameters_is_left_as_printed() {
 }
 
 #[test]
-fn a_statement_after_the_guarded_call_is_left_as_printed() {
-    assert_unchanged(&LITERAL_APPLY_GUARD.replace(
-        "        return x;\n      }\n",
-        "        return x;\n      }\n      g();\n",
-    ));
+fn a_statement_after_the_guarded_call_is_matched() {
+    assert_compacted(
+        &LITERAL_APPLY_GUARD.replace(
+            "        return x;\n      }\n",
+            "        return x;\n      }\n      g();\n",
+        ),
+        &LITERAL_APPLY_GUARD_TARGET.replace("      }\n    }", "      }\n      g();\n    }"),
+        "function () {if (fn) {var x = fn.apply(c, arguments);fn = null;return x;}g();}",
+    );
 }
 
 #[test]
@@ -401,13 +421,21 @@ fn a_state_function_returning_another_word_is_left_as_printed() {
 }
 
 #[test]
-fn a_regex_piece_one_character_off_is_left_as_printed() {
-    assert_unchanged(&GUARD_STATEMENTS.replace(";? *}", ";? *]"));
+fn a_regex_piece_one_character_off_still_prints_the_bait_on_one_line() {
+    assert_compacted(
+        &GUARD_STATEMENTS.replace(";? *}", ";? *]"),
+        NEW_STATE_TARGET,
+        NEW_STATE_COMPACT,
+    );
 }
 
 #[test]
-fn a_constructor_with_four_assignments_is_left_as_printed() {
-    assert_unchanged(&GUARD_STATEMENTS.replace("  this.b = [1, 0, 0];\n", ""));
+fn a_constructor_with_four_assignments_still_prints_the_bait_on_one_line() {
+    assert_compacted(
+        &GUARD_STATEMENTS.replace("  this.b = [1, 0, 0];\n", ""),
+        NEW_STATE_TARGET,
+        NEW_STATE_COMPACT,
+    );
 }
 
 #[test]
@@ -526,26 +554,42 @@ fn a_helper_assigned_with_a_plain_equals_prints_on_one_line() {
 }
 
 #[test]
-fn a_compound_assignment_is_left_as_printed() {
-    assert_unchanged(&assigned(LITERAL_APPLY_GUARD, "ctrl", "+="));
+fn a_compound_assignment_is_matched_by_its_guarded_function() {
+    assert_compacted(
+        &assigned(LITERAL_APPLY_GUARD, "ctrl", "+="),
+        LITERAL_APPLY_GUARD_TARGET,
+        LITERAL_APPLY_GUARD_COMPACT,
+    );
 }
 
 #[test]
-fn a_destructuring_target_is_left_as_printed() {
+fn a_destructuring_target_is_matched_by_its_guarded_function() {
     let source = LITERAL_APPLY_GUARD.replacen("var ctrl = ", "var ctrl;\n[ctrl] = ", 1);
-    assert_unchanged(&source);
+    assert_compacted(
+        &source,
+        LITERAL_APPLY_GUARD_TARGET,
+        LITERAL_APPLY_GUARD_COMPACT,
+    );
 }
 
 #[test]
-fn a_member_target_is_left_as_printed() {
+fn a_member_target_is_matched_by_its_guarded_function() {
     let source = LITERAL_APPLY_GUARD.replacen("var ctrl = ", "var o = {};\no.ctrl = ", 1);
-    assert_unchanged(&source);
+    assert_compacted(
+        &source,
+        LITERAL_APPLY_GUARD_TARGET,
+        LITERAL_APPLY_GUARD_COMPACT,
+    );
 }
 
 #[test]
-fn an_assignment_inside_a_sequence_is_left_as_printed() {
+fn an_assignment_inside_a_sequence_is_matched_by_its_guarded_function() {
     let source = LITERAL_APPLY_GUARD.replacen("var ctrl = ", "var ctrl;\n0, ctrl = ", 1);
-    assert_unchanged(&source);
+    assert_compacted(
+        &source,
+        LITERAL_APPLY_GUARD_TARGET,
+        LITERAL_APPLY_GUARD_COMPACT,
+    );
 }
 
 fn reprinted(code: &str) -> String {
@@ -599,11 +643,15 @@ fn two_equal_guards_are_each_tallied_and_absorbed() {
 }
 
 #[test]
-fn a_guard_shaped_call_outside_any_slot_is_left_as_printed() {
+fn a_guard_shaped_call_outside_any_slot_is_matched_by_its_guarded_function() {
     let source = LITERAL_APPLY_GUARD
         .replacen("var ctrl = ", "console.log(", 1)
         .replacen("}();", "}());", 1);
-    assert_unchanged(&source);
+    assert_compacted(
+        &source,
+        LITERAL_APPLY_GUARD_TARGET,
+        LITERAL_APPLY_GUARD_COMPACT,
+    );
 }
 
 #[test]
@@ -662,34 +710,34 @@ fn a_property_spelled_like_a_renamed_name_is_not_renamed() {
     assert_eq!(beyond(&earlier, &other), guard_tally(1, 0), "seen: {other}");
 }
 
-fn assert_left_as_reprinted(source: &str) {
+fn assert_matched_by_its_guarded_function(source: &str) {
     let (out, tally) = reflow_tallied(reprinted(source));
-    assert!(out.contains("fn = null;\n"), "{out}");
-    assert!(!out.contains(LITERAL_APPLY_GUARD_COMPACT), "{out}");
-    assert_eq!(tally, GuardTally::default());
+    assert!(!out.contains("fn = null;\n"), "{out}");
+    assert!(out.contains(LITERAL_APPLY_GUARD_COMPACT), "{out}");
+    assert_eq!(tally, guard_tally(1, 0));
 }
 
 #[test]
-fn logical_assignments_are_left_as_printed() {
+fn logical_assignments_are_matched_by_their_guarded_function() {
     for operator in ["??=", "||=", "&&="] {
-        assert_left_as_reprinted(&assigned(LITERAL_APPLY_GUARD, "ctrl", operator));
+        assert_matched_by_its_guarded_function(&assigned(LITERAL_APPLY_GUARD, "ctrl", operator));
     }
 }
 
 #[test]
-fn a_chained_assignment_is_left_as_printed() {
+fn a_chained_assignment_is_matched_by_its_guarded_function() {
     let source =
         LITERAL_APPLY_GUARD.replacen("var ctrl = ", "var ctrl, other;\nother = ctrl = ", 1);
-    assert_left_as_reprinted(&source);
+    assert_matched_by_its_guarded_function(&source);
 }
 
 #[test]
-fn a_class_field_is_left_as_printed() {
+fn a_class_field_is_matched_by_its_guarded_function() {
     let source = format!(
         "class K {{\n  ctrl = {}\n}}",
         &LITERAL_APPLY_GUARD["var ctrl = ".len()..]
     );
-    assert_left_as_reprinted(&source);
+    assert_matched_by_its_guarded_function(&source);
 }
 
 #[test]

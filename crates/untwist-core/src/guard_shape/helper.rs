@@ -47,13 +47,13 @@ pub(super) fn helper_target<'k, 'a>(
     function: &'k Function<'a>,
     statements: &'k [Statement<'a>],
 ) -> Option<&'k Function<'a>> {
-    let (_, Some(Expression::StringLiteral(alphabet))) = single_var(statements.first()?)? else {
-        return None;
+    let statements = match statements.first().and_then(single_var) {
+        Some((_, Some(Expression::StringLiteral(alphabet)))) if alphabet.value == ALPHABET => {
+            &statements[1..]
+        }
+        _ => statements,
     };
-    if alphabet.value.len() != ALPHABET.len() || alphabet.value != ALPHABET {
-        return None;
-    }
-    let (reader, rest) = reader_declarations(&statements[1..])?;
+    let (reader, rest) = reader_declarations(statements)?;
     let Some(Statement::ForStatement(scan)) = rest.first() else {
         return None;
     };
@@ -93,8 +93,10 @@ impl SelfRead<'_> {
         let Expression::BinaryExpression(difference) = &it.left else {
             return false;
         };
-        it.operator == BinaryOperator::StrictInequality
-            && is_number(&it.right, 0.0)
+        matches!(
+            it.operator,
+            BinaryOperator::StrictInequality | BinaryOperator::Inequality
+        ) && is_number(&it.right, 0.0)
             && difference.operator == BinaryOperator::Subtraction
             && is_number(&difference.right, READ_OFFSET)
             && self.is_offset_read(&difference.left)

@@ -9,7 +9,7 @@ use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{has_error, parse_program, parse_with, Parsed, SourceType};
 use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions, RoundCapUndo};
 use untwist_core::print::pretty_codegen;
-use untwist_core::reflow::{print_placing, Check, GuardRecord, Printed};
+use untwist_core::reflow::{print_placing, Check, GuardRecord, PendingReaders, Printed};
 use untwist_core::semantic::{
     assume_observers, assume_shared_globals, build_scoping, forget_failures, Observers, Semantics,
 };
@@ -24,7 +24,9 @@ use untwist_unpack::holds_a_bundle_with;
 
 use super::boundary::Boundary;
 use super::layer::{Counters, InlineSite, Layering, Peeled, RoomSeed};
-use super::notes::{consolidate_reach, dedupe_spanned, guard_notes, unsafe_lane_hint};
+use super::notes::{
+    consolidate_reach, dedupe_spanned, guard_notes, unsafe_lane_hint, SOURCE_READER_UNGUARDED,
+};
 use super::shell::{scope_shell_body, strip_shell};
 use super::snapshots::Snapshots;
 use super::stages::StageCx;
@@ -45,6 +47,7 @@ pub(super) struct InputResult {
     pub(super) memory_peak: u64,
     pub(super) budget_hit: Option<untwist_core::budget::Hit>,
     pub(super) guards: GuardRecord,
+    pub(super) readers: PendingReaders,
     pub(super) unbundled: bool,
     pub(super) snapshots: Snapshots,
     pub(super) decoded_strings: Vec<super::DecodedSite>,
@@ -210,13 +213,17 @@ impl Pipeline {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let processed = self.process(source, (reservation, room, reserved), &mut result)?;
             let (code, guards) = self.reflow(processed, &mut result.unbundled);
+            if result.readers.unguarded(&guards) {
+                return Some(Err(SOURCE_READER_UNGUARDED));
+            }
             result.notes.extend(guard_notes(guards.tally()));
             result.guards = guards;
-            Some(respelled_as(code, result.respelling))
+            Some(Ok(respelled_as(code, result.respelling)))
         }));
         let outcome = match outcome {
             Ok(None) => return InputResult::refused(source, TYPESCRIPT_IN_JAVASCRIPT),
-            Ok(Some(code)) => Ok(code),
+            Ok(Some(Err(note))) => return InputResult::refused(source, note),
+            Ok(Some(Ok(code))) => Ok(code),
             Err(panic) => Err(panic),
         };
         settle(outcome, source, &mut result);
@@ -418,6 +425,7 @@ impl Pipeline {
                 if first && self.options.statement_spans {
                     result.statement_spans = Some(statement_spans(&parsed.program));
                 }
+                result.readers = PendingReaders::of(&parsed.program);
                 let printed = self.printed(&alloc, &mut parsed.program, errors == 0);
                 if let Some(origins) = origins {
                     result.mapped = (layering.peeled() == 0)
@@ -429,6 +437,7 @@ impl Pipeline {
             }
             Err(_) => {
                 result.note_panicked();
+                result.readers = PendingReaders::Absent;
                 let printed = Printed::unplaced(pretty_codegen(&parsed.program));
                 result.respelling = respelling(&parsed.program, printed.text());
                 Step::Done(Some(printed))

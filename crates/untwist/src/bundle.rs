@@ -93,7 +93,7 @@ impl BundleOutput {
         }
     }
 
-    pub(crate) fn reflowed(self, earlier: &GuardRecord) -> (Self, GuardTally) {
+    pub(crate) fn reflowed(self, earlier: &GuardRecord) -> (Self, GuardTally, GuardRecord) {
         let mut found = GuardRecord::default();
         let mut reflower = Reflower::default();
         let modules = self
@@ -108,7 +108,8 @@ impl BundleOutput {
                 }
             })
             .collect();
-        (Self { modules, ..self }, found.tally_beyond(earlier))
+        let tally = found.tally_beyond(earlier);
+        (Self { modules, ..self }, tally, found)
     }
 
     pub fn entry(&self) -> Option<&ModuleOutput> {
