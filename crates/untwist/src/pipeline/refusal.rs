@@ -329,6 +329,22 @@ impl Pipeline {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn nests_past_the_guaranteed_budget(source: &str) -> bool {
+    matches!(
+        scan(
+            source,
+            &untwist_core::depth::limits_for(room(), source.len())
+        ),
+        Err(DepthRefusal::Nesting)
+    )
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn nests_past_the_guaranteed_budget(_source: &str) -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::{refusal_note, stack_request, MIB};
@@ -363,20 +379,4 @@ mod tests {
         );
         assert_eq!(stack_request(u32::MAX), STACK_RESERVE_BYTES);
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn nests_past_the_guaranteed_budget(source: &str) -> bool {
-    matches!(
-        scan(
-            source,
-            &untwist_core::depth::limits_for(room(), source.len())
-        ),
-        Err(DepthRefusal::Nesting)
-    )
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn nests_past_the_guaranteed_budget(_source: &str) -> bool {
-    false
 }
