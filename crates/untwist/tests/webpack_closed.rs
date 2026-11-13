@@ -161,13 +161,28 @@ const HOST_READ_FACTORY: &str = r#"(function (modules) {
 fn a_webpack_factory_reading_a_free_exports_its_parameter_would_take_is_not_unpacked() {
     for expr in ["exports.marker", "eval(\"exports.marker\")", "module.id"] {
         let bundle = HOST_READ_FACTORY.replace("EXPR", expr);
-        let expected = if expr == "module.id" { "string world\n" } else { "undefined world\n" };
+        let expected = if expr == "module.id" {
+            "string world\n"
+        } else {
+            "undefined world\n"
+        };
         let unpacked = Unpacked::of(&bundle, false);
-        assert!(!unpacked.has("bundle.json"), "{expr}: {:?}", unpacked.notes());
-        let name = if expr == "module.id" { "module" } else { "exports" };
+        assert!(
+            !unpacked.has("bundle.json"),
+            "{expr}: {:?}",
+            unpacked.notes()
+        );
+        let name = if expr == "module.id" {
+            "module"
+        } else {
+            "exports"
+        };
         let why = format!("it reads {name}, which every module has for itself");
         assert!(
-            unpacked.notes().iter().any(|note| note.contains(REFUSAL) && note.contains(&why)),
+            unpacked
+                .notes()
+                .iter()
+                .any(|note| note.contains(REFUSAL) && note.contains(&why)),
             "{expr}: {:?}",
             unpacked.notes()
         );
