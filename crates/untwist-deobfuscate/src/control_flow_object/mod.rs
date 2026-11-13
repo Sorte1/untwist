@@ -26,8 +26,8 @@ use crate::wrapper_calls::arguments_are_substitutable;
 
 mod dead;
 mod declared;
-mod doomed;
 mod hoisted;
+mod inner_first;
 mod keys;
 mod nested;
 mod sequenced;
@@ -526,8 +526,7 @@ pub struct ControlFlowObject<'a> {
     callee_objects: bool,
     open_sites: Vec<Span>,
     refused_nest: Option<Span>,
-    doomed: FxHashSet<Span>,
-    deferred: FxHashSet<Span>,
+    pending: FxHashSet<Span>,
 }
 
 pub(super) const MAX_NEST: usize = 256;
@@ -557,19 +556,20 @@ pub(super) fn nested_past_the_limit(spans: impl Iterator<Item = Span>) -> bool {
 }
 
 impl<'a> ControlFlowObject<'a> {
-    fn inline_deferred(&mut self, expr: &Expression<'a>, cx: &Cx<'a, '_>) -> bool {
-        if self.deferred.is_empty() || !self.deferred.remove(&expr.span()) {
+    fn inline_pending(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let span = expr.span();
+        if self.pending.is_empty() || !self.pending.remove(&span) {
             return false;
         }
-        if self
-            .refused_nest
-            .is_some_and(|root| contains(root, expr.span()))
-        {
+        if self.refused_nest.is_some_and(|root| contains(root, span)) {
             return true;
         }
-        let Some((callee, arguments)) = call_parts(expr) else {
+        let Expression::CallExpression(call) = expr else {
             return true;
         };
+        let CallExpression {
+            callee, arguments, ..
+        } = &mut **call;
         let Some((object, name)) = member_parts(callee) else {
             return true;
         };
@@ -580,12 +580,18 @@ impl<'a> ControlFlowObject<'a> {
         else {
             return true;
         };
-        if !matches!(call_site_is_safe(function, arguments, cx), SiteSafety::Safe) {
-            return true;
+        match call_site_is_safe(function, arguments, cx) {
+            SiteSafety::Safe => {}
+            SiteSafety::Refused(Refusal::LogicalArgument) => {
+                self.logical_refusals.record(span, &name);
+                return true;
+            }
+            SiteSafety::Refused(Refusal::Shape) => return true,
         }
-        if let Some(inlined) = inline_site(function, arguments, cx) {
-            self.edits.insert(expr.span(), inlined);
-        }
+        let swapped = inner_first::swap_in(arguments, &mut self.edits);
+        let inlined = inline_site(function, arguments, &*cx);
+        let inserted = inlined.is_some_and(|inlined| self.edits.insert(span, inlined));
+        inner_first::swap_back(arguments, swapped, &mut self.edits, inserted);
         true
     }
 
@@ -635,8 +641,7 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.open_sites.clear();
         self.refused_nest = None;
-        self.doomed.clear();
-        self.deferred.clear();
+        self.pending.clear();
         let applied = inline_declared_objects(program, cx);
         cx.changed_by(applied);
     }
@@ -655,7 +660,7 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     }
 
     fn enter_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
-        let Some((callee, arguments)) = call_parts(expr) else {
+        let Some((callee, _)) = call_parts(expr) else {
             return;
         };
         let Some((object, name)) = member_parts(callee) else {
@@ -674,36 +679,17 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
         let Some(props) = cff_props(object, cx.opts.extended) else {
             return;
         };
-        let Some((_, CffValue::Function(function))) = props.iter().find(|(key, _)| *key == name)
-        else {
+        let Some((_, CffValue::Function(_))) = props.iter().find(|(key, _)| *key == name) else {
             return;
         };
         if self.nest_refused(expr.span(), cx) {
             return;
         }
-        if self.open_sites.len() == 1 {
-            self.doomed = doomed::doomed_sites(expr, cx.opts.extended);
-        }
-        match call_site_is_safe(function, arguments, cx) {
-            SiteSafety::Safe => {}
-            SiteSafety::Refused(Refusal::LogicalArgument) => {
-                self.logical_refusals.record(expr.span(), &name);
-                return;
-            }
-            SiteSafety::Refused(Refusal::Shape) => return,
-        }
-        if self.doomed.contains(&expr.span()) {
-            self.deferred.insert(expr.span());
-            return;
-        }
-        let Some(inlined) = inline_site(function, arguments, &*cx) else {
-            return;
-        };
-        self.edits.insert(expr.span(), inlined);
+        self.pending.insert(expr.span());
     }
 
     fn exit_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
-        if self.inline_deferred(expr, cx) {
+        if self.inline_pending(expr, cx) {
             return;
         }
         let Some((object, name)) = literal_member_parts(expr) else {
