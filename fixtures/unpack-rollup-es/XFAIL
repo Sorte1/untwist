@@ -1,0 +1,3 @@
+# cell/lane glob	reason
+*-split*/default	the default lane does not split hoisted bundles, and a multi-input run that unpacks nothing writes deobfuscated.<name>.js, which the entry's chunk import cannot find
+*-shared*/default	the default lane does not split hoisted bundles, and a multi-input run that unpacks nothing writes deobfuscated.<name>.js, which the entry's chunk import cannot find

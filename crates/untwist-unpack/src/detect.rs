@@ -237,7 +237,6 @@ macro_rules! unlinked {
 unlinked!(closure_detect, crate::closure::detect_with);
 unlinked!(systemjs_detect, crate::systemjs::detect_with);
 unlinked!(esbuild_detect, crate::esbuild::detect_with);
-unlinked!(rolldown_detect, crate::rolldown::detect_with);
 unlinked!(metro_detect, crate::metro::detect_with);
 unlinked!(metro_trusting_detect, crate::metro::detect_trusting_with);
 unlinked!(amd_detect, crate::amd::detect_with);
@@ -334,17 +333,12 @@ fn hoisted_detect<'k, 'a>(
     crate::rollup::detect_with(alloc, source, frame, bodies)
 }
 
-const KINDS: [Kind; 9] = [
+const KINDS: [Kind; 8] = [
     (BundleKind::Closure, crate::closure::probe, closure_detect),
     (
         BundleKind::SystemJs,
         crate::systemjs::probe,
         systemjs_detect,
-    ),
-    (
-        BundleKind::Rolldown,
-        crate::rolldown::probe,
-        rolldown_detect,
     ),
     (BundleKind::Esbuild, crate::esbuild::probe, esbuild_detect),
     (BundleKind::Metro, crate::metro::probe, metro_detect),

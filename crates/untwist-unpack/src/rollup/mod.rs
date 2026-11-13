@@ -7,7 +7,7 @@ pub mod wrappers;
 
 use std::ops::Range;
 
-use oxc_allocator::{Allocator, Vec as AVec};
+use oxc_allocator::{Allocator, CloneIn, Vec as AVec};
 use oxc_ast::ast::{ImportDeclaration, Program, Statement};
 use oxc_ast::builder::AstBuilder;
 use oxc_semantic::Scoping;
@@ -28,6 +28,7 @@ type Plan = (Vec<Range<usize>>, Links);
 
 pub fn probe(frame: &Frame<'_, '_>) -> bool {
     wrapper(frame.top).is_some_and(|found| found.wrapper.body.statements.len() >= 2)
+        || shell::module_list(frame.top)
 }
 
 fn planned(scoping: &Scoping, items: &[Statement<'_>], context: &Context) -> Option<Plan> {
@@ -43,6 +44,7 @@ fn on_source(source: &Program<'_>, found: &Shell<'_, '_>) -> Option<Plan> {
     let context = Context {
         scope: found.wrapper.scope.get()?,
         arrow: found.wrapper.arrow,
+        module: false,
     };
     planned(&semantics.scoping, &found.wrapper.body.statements, &context)
 }
@@ -68,6 +70,7 @@ fn detached<'a>(
     let context = Context {
         scope: semantics.scoping.root_scope_id(),
         arrow: found.wrapper.arrow,
+        module: false,
     };
     let plan = planned(&semantics.scoping, &temporary.body, &context);
     let owned = std::mem::replace(&mut temporary.body, AVec::new_in(&builder));
@@ -80,13 +83,48 @@ fn give_back<'a>(bodies: &mut Bodies<'a>, found: &Shell<'_, 'a>, owned: AVec<'a,
     }
 }
 
+fn top_plan(source: &Program<'_>, list: &[Statement<'_>]) -> Option<Plan> {
+    let semantics = build_scoping(source);
+    let context = Context {
+        scope: semantics.scoping.root_scope_id(),
+        arrow: false,
+        module: true,
+    };
+    let plan = planned(&semantics.scoping, list, &context)?;
+    let imports = shell::imports_end(list);
+    plan.0
+        .first()
+        .is_some_and(|first| first.end >= imports)
+        .then_some(plan)
+}
+
+fn detect_top<'k, 'a>(
+    alloc: &'a Allocator,
+    source: &'k Program<'a>,
+    list: &'k [Statement<'a>],
+    bodies: &Bodies<'a>,
+) -> Option<Bundle<'a>> {
+    let (segments, links) = top_plan(source, list)?;
+    if matches!(bodies, Bodies::Planned(_)) {
+        return Some(Bundle::new(
+            BundleKind::Rollup,
+            Some(build::ENTRY_ID.to_string()),
+        ));
+    }
+    let owned = AVec::from_iter_in(list.iter().map(|item| item.clone_in(alloc)), &alloc);
+    assemble(alloc, source, None, (&segments, &links), owned).ok()
+}
+
 pub fn detect_with<'k, 'a>(
     alloc: &'a Allocator,
     source: &'k Program<'a>,
     _frame: &Frame<'k, 'a>,
     bodies: &mut Bodies<'a>,
 ) -> Option<Bundle<'a>> {
-    let found = shell(source)?;
+    let Some(found) = shell(source) else {
+        let list = shell::top(source)?;
+        return detect_top(alloc, source, list, bodies);
+    };
     let (plan, owned) = match bodies {
         Bodies::Taken(_) => {
             let owned = bodies.statements(alloc, found.wrapper.body);
@@ -108,7 +146,7 @@ pub fn detect_with<'k, 'a>(
         give_back(bodies, &found, owned);
         return None;
     };
-    match assemble(alloc, source, &found, (&segments, &links), owned) {
+    match assemble(alloc, source, Some(&found), (&segments, &links), owned) {
         Ok(bundle) => Some(bundle),
         Err(owned) => {
             give_back(bodies, &found, owned);

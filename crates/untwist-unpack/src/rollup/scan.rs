@@ -5,7 +5,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 
-use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step};
+use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step, Suspend};
 
 pub const ENTRY: u32 = u32::MAX - 1;
 const NONE: u32 = u32::MAX;
@@ -27,6 +27,7 @@ pub struct Facts {
 pub struct Context {
     pub scope: ScopeId,
     pub arrow: bool,
+    pub module: bool,
 }
 
 fn item_of(items: &[Statement<'_>], span: Span) -> Option<u32> {
@@ -203,7 +204,7 @@ impl<'a> Policy<'a> for Rules<'_> {
         self.refused |= is_direct_eval(self.scoping, &it.callee);
         if let Expression::Identifier(callee) = &it.callee {
             if callee.name == "require" && self.unresolved(callee) {
-                if !bare_specifier(&it.arguments) || it.optional {
+                if self.context.module || !bare_specifier(&it.arguments) || it.optional {
                     self.refused = true;
                 }
                 self.facts.requires[self.item as usize] = true;
@@ -231,9 +232,24 @@ impl<'a> Policy<'a> for Rules<'_> {
         }
     }
 
+    fn suspends(&mut self, frame: Frame, what: Suspend) {
+        if what == Suspend::Await && frame.functions + frame.arrows == 0 {
+            self.refused = true;
+        }
+    }
+
     fn with(&mut self) {
         self.refused = true;
     }
+}
+
+fn exported(item: &Statement<'_>) -> bool {
+    matches!(
+        item,
+        Statement::ExportDeclaration(_)
+            | Statement::ExportNamedDeclaration(_)
+            | Statement::ExportDefaultDeclaration(_)
+    )
 }
 
 pub fn scan(scoping: &Scoping, items: &[Statement<'_>], context: &Context) -> Option<Facts> {
@@ -248,6 +264,9 @@ pub fn scan(scoping: &Scoping, items: &[Statement<'_>], context: &Context) -> Op
     };
     for (index, item) in items.iter().enumerate() {
         rules.item = index as u32;
+        if exported(item) {
+            rules.pin();
+        }
         Scan::new(&mut rules).visit_statement(item);
         if rules.refused {
             return None;

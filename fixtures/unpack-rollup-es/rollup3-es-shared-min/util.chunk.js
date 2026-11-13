@@ -1,0 +1,1 @@
+console.log("eval util");const t=t=>`[${t.padStart(8,".")}]`;function a(t){return t.reduce((t,a)=>t+a,0)}class s{constructor(){this.value=0}add(t){this.value+=t}}export{s as C,t as l,a as t};

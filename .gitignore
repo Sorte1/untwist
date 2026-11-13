@@ -6,6 +6,7 @@
 /tools/corpus/node_modules/
 /tools/bundlers/node_modules/
 /tools/rolldown/node_modules/
+/tools/rollup-es/node_modules/
 /tools/gap-sweep/node_modules/
 **/*.snap.new
 **/*.pending-snap

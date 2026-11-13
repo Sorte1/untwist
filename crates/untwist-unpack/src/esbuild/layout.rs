@@ -618,7 +618,7 @@ fn inline_factories<'k, 'a>(
         .collect()
 }
 
-pub fn layout<'k, 'a>(list: &'k [Statement<'a>], marked: bool) -> Option<Layout<'k, 'a>> {
+pub fn layout<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
     let lazies = lazies(list);
     let direct: FxHashSet<&str> = lazies
         .commonjs
@@ -633,7 +633,7 @@ pub fn layout<'k, 'a>(list: &'k [Statement<'a>], marked: bool) -> Option<Layout<
     let found = factories(list, &lazies)?;
     let lazy_callees = lazy_callees(list, &lazies);
     let early = !defined_before_any_effect(list, &lazy_callees, &found.factories);
-    let kind = match lazies.rolldown || marked || !sites.is_empty() {
+    let kind = match lazies.rolldown || !sites.is_empty() {
         true => BundleKind::Rolldown,
         false => BundleKind::Esbuild,
     };

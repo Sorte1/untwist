@@ -9,7 +9,7 @@ base/webpack5-prod-node+obf-heavy	unsafe	clean	xfail	bm-obf-heavy-proxies: one C
 base/esbuild*+obf-object-keys	unsafe	recognised	xfail	bm-obf-object-keys: transformObjectKeys leaves esbuild's __commonJS/__esm maps as statement sequences the esbuild detector refuses
 */webpack*-dev-eval*	*	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
 */webpack5-web-runtime-chunk	default	recognised	xfail	bm-webpack-runtime-chunk: a separate runtime chunk (runtimeChunk single) is refused (chunk start not proven)
-*/webpack5-web-runtime-chunk	*	recognised	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle instead
+*/webpack5-web-runtime-chunk	*	recognised	xfail	bm-webpack-runtime-chunk: the separate runtime chunk is refused in every lane (since #307 --split-hoisted no longer splits it as a rollup bundle)
 */webpack5-umd	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
 */webpack5-system	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
 */webpack5-web-es5	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
@@ -60,13 +60,13 @@ mini/vite5-iife	*	recognised	allow	rollup-split-heuristic: the commonjs plugin i
 */rollup4-cjs29-umd	*	recognised	allow	bm-wrapped-hoisted: the UMD/AMD/System wrapper is unpacked as one module; the hoisted bundle inside is not split
 */rollup4-cjs29-amd	*	recognised	allow	bm-wrapped-hoisted: the UMD/AMD/System wrapper is unpacked as one module; the hoisted bundle inside is not split
 */rollup4-cjs29-system	*	recognised	allow	bm-wrapped-hoisted: the UMD/AMD/System wrapper is unpacked as one module; the hoisted bundle inside is not split
-*/rollup*-cjs	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
-*/rollup*-cjs-split	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
-*/rollup*-es-split	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
-*/vite4-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
-*/vite5-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
-*/vite6-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
-*/vite7-es-min	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs/es output (no IIFE shell) and code-split chunks are not split, even with --split-hoisted
+*/rollup*-cjs	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs output is a classic script and is never split into ES modules
+*/rollup*-cjs-split	*	recognised	xfail	bm-rollup-unwrapped: rollup cjs output is a classic script and is never split into ES modules
+*/rollup*-es-split	*	recognised	xfail	bm-rollup-unwrapped: an es entry with no static import or export may be a classic script, so --split-hoisted does not split it (es with module syntax is split since feat/rollup-es-split)
+*/vite4-es-min	*	recognised	xfail	bm-rollup-unwrapped: an es entry with no static import or export may be a classic script, so --split-hoisted does not split it (es with module syntax is split since feat/rollup-es-split)
+*/vite5-es-min	*	recognised	xfail	bm-rollup-unwrapped: an es entry with no static import or export may be a classic script, so --split-hoisted does not split it (es with module syntax is split since feat/rollup-es-split)
+*/vite6-es-min	*	recognised	xfail	bm-rollup-unwrapped: an es entry with no static import or export may be a classic script, so --split-hoisted does not split it (es with module syntax is split since feat/rollup-es-split)
+*/vite7-es-min	*	recognised	xfail	bm-rollup-unwrapped: an es entry with no static import or export may be a classic script, so --split-hoisted does not split it (es with module syntax is split since feat/rollup-es-split)
 */rolldown*	*	modules	allow	rolldown-hoisted-esm: rolldown scope-hoists ES modules, so their boundaries are gone
 */rolldown-cjs	*	recognised	xfail	bm-rolldown: rolldown cjs-format output is not unpacked (iife and esm are, since #299)
 corejs/rolldown-iife	*	recognised	xfail	bm-rolldown: rolldown iife with core-js commonjs wrappers is not unpacked (the plain app is, since #299)
