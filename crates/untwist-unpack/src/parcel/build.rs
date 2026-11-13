@@ -4,7 +4,8 @@ use oxc_ast::builder::AstBuilder;
 use oxc_span::{GetSpan, SourceType, Span};
 
 use super::layout::{Def, Hoisted, Layout, Registry};
-use super::links::ParcelView;
+use super::link::loaded_call;
+use super::links::{loader, module_name, require_name, ParcelView};
 use super::{candidates, moved_helpers, ENTRY_ID, GLOBAL_PARAM, HOISTED_NAMES, REGISTRY_NAMES};
 use crate::esbuild::mentions::names_anywhere;
 use crate::matcher::{expression_statement, param_names};
@@ -50,15 +51,44 @@ fn global_prologue<'a>(
     Some(())
 }
 
+fn legacy_load<'a>(
+    alloc: &'a Allocator,
+    program: &mut Program<'a>,
+    def: &Def<'_, 'a>,
+    view: Option<&ParcelView>,
+) {
+    let module = module_name(def, false);
+    let loads = loader(&program.body, None, module, Some(require_name(def)))
+        .is_some_and(|found| view.is_some_and(|view| view.loadable.contains(found.id)));
+    if !loads {
+        return;
+    }
+    let Some(resolved) = loaded_call(program) else {
+        return;
+    };
+    let Some(Argument::CallExpression(load)) = resolved.arguments.first_mut() else {
+        return;
+    };
+    let builder = AstBuilder::new(alloc);
+    let span = load.callee.span();
+    load.callee = Expression::new_static_member_expression(
+        span,
+        Expression::new_identifier(span, module, &builder),
+        IdentifierName::new(span, "require", &builder),
+        false,
+        &builder,
+    );
+}
+
 fn registry_module<'a>(
     alloc: &'a Allocator,
     source: &Program<'a>,
-    def: &Def<'_, 'a>,
+    (def, legacy, view): (&Def<'_, 'a>, bool, Option<&ParcelView>),
     bodies: &mut Bodies<'a>,
 ) -> Option<(Program<'a>, String)> {
     let body = def.body()?;
     let mut program = module_from_body_with(alloc, source, body, bodies);
-    let params = param_names(&def.function.params);
+    let params = param_names(def.function.params);
     let require = params
         .first()
         .map_or_else(String::new, |name| name.to_string());
@@ -66,6 +96,9 @@ fn registry_module<'a>(
         return Some((program, require));
     }
     program.directives = body.directives.clone_in(alloc);
+    if legacy {
+        legacy_load(alloc, &mut program, def, view);
+    }
     if params.len() > 1 {
         let fresh = renamed(alloc, &mut program, &params[1..], &REGISTRY_NAMES[1..]);
         if params.len() == REGISTRY_NAMES.len() {
@@ -122,15 +155,17 @@ fn registry<'a>(
     source: &Program<'a>,
     layout: &Registry<'_, 'a>,
     bodies: &mut Bodies<'a>,
-    chunk: bool,
+    view: Option<&ParcelView>,
 ) -> Option<Bundle<'a>> {
+    let chunk = view.is_some_and(|view| view.chunk);
     let direct = (layout.entries.len() == 1 && layout.main.as_ref() == layout.entries.first())
         .then(|| layout.entries[0].clone())
         .filter(|_| !chunk);
     let entry = (!chunk).then(|| direct.clone().unwrap_or_else(|| ENTRY_ID.to_string()));
     let mut bundle = Bundle::new(BundleKind::Parcel, entry);
     for def in &layout.defs {
-        let (program, require) = registry_module(alloc, source, def, bodies)?;
+        let (program, require) =
+            registry_module(alloc, source, (def, layout.legacy, view), bodies)?;
         let mut module = Module::new(
             def.id.clone(),
             program,
@@ -285,7 +320,7 @@ fn hoisted<'a>(
     for (def, mut program) in layout.defs.iter().zip(programs) {
         let body = def.body()?;
         program.directives = body.directives.clone_in(alloc);
-        let params = param_names(&def.function.params);
+        let params = param_names(def.function.params);
         renamed(alloc, &mut program, &params, &HOISTED_NAMES);
         rename_wrapper_bindings(alloc, &mut program, &params);
         bundle
@@ -308,9 +343,7 @@ pub fn bundle<'a>(
 ) -> Option<Bundle<'a>> {
     let chunk = view.is_some_and(|view| view.chunk);
     match layout {
-        Layout::Registry(registry_layout) => {
-            registry(alloc, source, registry_layout, bodies, chunk)
-        }
+        Layout::Registry(registry_layout) => registry(alloc, source, registry_layout, bodies, view),
         Layout::Hoisted(hoisted_layout) => hoisted(alloc, source, hoisted_layout, bodies, chunk),
     }
 }

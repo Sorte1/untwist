@@ -103,7 +103,9 @@ impl<'a> VisitMut<'a> for Rewrite<'a, '_> {
     }
 }
 
-fn loaded_call<'a, 'k>(program: &'k mut Program<'a>) -> Option<&'k mut CallExpression<'a>> {
+pub(super) fn loaded_call<'a, 'k>(
+    program: &'k mut Program<'a>,
+) -> Option<&'k mut CallExpression<'a>> {
     let [Statement::ExpressionStatement(statement)] = program.body.as_mut_slice() else {
         return None;
     };
@@ -129,7 +131,8 @@ fn rewrite_loader<'a>(
     paths: &ModulePaths,
     from: &str,
 ) {
-    let found = loader(&program.body, hoisted).map(|found| (found.form, found.id.to_string()));
+    let found = loader(&program.body, hoisted, "module", None)
+        .map(|found| (found.form, found.id.to_string()));
     let Some((form, id)) = found else {
         return;
     };

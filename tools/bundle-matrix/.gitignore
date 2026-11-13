@@ -1,3 +1,4 @@
 /.work/
 /.src-*/
 /node_modules/
+/parcel-*/node_modules/

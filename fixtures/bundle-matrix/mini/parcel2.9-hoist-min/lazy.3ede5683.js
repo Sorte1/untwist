@@ -1,0 +1,1 @@
+("u">typeof globalThis?globalThis:"u">typeof self?self:"u">typeof window?window:"u">typeof global?global:{}).parcelRequire9d85.register("9wClJ",function(e,l){Object.defineProperty(e.exports,"value",{get:()=>o,set:void 0,enumerable:!0,configurable:!0}),console.log("eval lazy");let o=42});

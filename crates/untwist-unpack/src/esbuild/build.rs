@@ -7,7 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::parse::parse_program;
 
 use crate::esbuild::layout::{FactoryDecl, Host, Layout, Scope};
-use crate::esbuild::mentions::mentioned;
+use crate::esbuild::mentions::{free_mentions, mentioned};
 use crate::matcher::param_names;
 use crate::model::{module_from_body_with, Bodies, Bundle, Module, Runtime};
 use crate::path::PosixPath;
@@ -89,9 +89,11 @@ pub fn scan(
     let mut seeds = FxHashSet::default();
     let dependencies = programs
         .iter()
-        .map(|program| {
+        .zip(plan.layout.all())
+        .map(|(program, factory)| {
             let mut found: Vec<usize> = Vec::new();
-            for index in mentioned(&wanted, program.body.iter()) {
+            let params = param_names(factory.function.params);
+            for index in free_mentions(&wanted, program, &params) {
                 match index.checked_sub(offset) {
                     Some(factory) => found.push(factory),
                     None => {
@@ -243,6 +245,7 @@ fn kept_statement<'a>(
 fn removed_spans(plan: &Plan<'_, '_>, moved: &[usize]) -> Vec<Span> {
     let list = plan.scope.list;
     let mut spans: Vec<Span> = moved.iter().map(|&index| list[index].span()).collect();
+    spans.extend(plan.layout.maps().map(|map| list[map.statement].span()));
     for factory in &plan.layout.factories {
         let statement = &list[factory.statement];
         let span = match statement {
@@ -296,7 +299,7 @@ fn entry_statements<'a>(
     let list = plan.scope.list;
     let mut out = AVec::with_capacity_in(list.len(), &alloc);
     for (index, statement) in list.iter().enumerate() {
-        if moved.binary_search(&index).is_err() {
+        if moved.binary_search(&index).is_err() && !plan.layout.is_map_statement(index) {
             let kept = kept_statement(alloc, statement, plan.layout.factories_at(index));
             out.extend(kept.map(|mut kept| {
                 let sites: Vec<(Span, &str)> = plan

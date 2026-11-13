@@ -1,0 +1,1 @@
+var c=(o,n,l)=>()=>{if(o)try{n=o(o=0)}catch(a){l=[a]}if(l)throw l[0];return n};var r=42;var t=c(()=>{console.log("eval lazy")});console.log("eval cjs");var e=function(o){return o*2};console.log("eval index "+e(21));Promise.resolve().then(() => (t(),{})).then((o)=>console.log("lazy "+r));

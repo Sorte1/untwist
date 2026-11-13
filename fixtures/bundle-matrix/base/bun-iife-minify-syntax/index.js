@@ -1,0 +1,346 @@
+(() => {
+  var __create = Object.create;
+  var { getPrototypeOf: __getProtoOf, defineProperty: __defProp, getOwnPropertyNames: __getOwnPropNames } = Object;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  function __accessProp(key) {
+    return this[key];
+  }
+  var __toESMCache_node, __toESMCache_esm, __toESM = (mod, isNodeMode, target) => {
+    var canCache = mod != null && typeof mod === "object";
+    if (canCache) {
+      var cache = isNodeMode ? __toESMCache_node ??= /* @__PURE__ */ new WeakMap : __toESMCache_esm ??= /* @__PURE__ */ new WeakMap, cached = cache.get(mod);
+      if (cached)
+        return cached;
+    }
+    target = mod != null ? __create(__getProtoOf(mod)) : {};
+    let to = isNodeMode || !mod || !mod.__esModule || !__hasOwnProp.call(mod, "default") ? __defProp(target, "default", { value: mod, enumerable: !0 }) : target;
+    if (mod && typeof mod === "object" || typeof mod === "function") {
+      for (let key of __getOwnPropNames(mod))
+        if (!__hasOwnProp.call(to, key))
+          __defProp(to, key, {
+            get: __accessProp.bind(mod, key),
+            enumerable: !0
+          });
+    }
+    if (canCache)
+      cache.set(mod, to);
+    return to;
+  };
+  var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+  var __esm = (fn, res, err) => () => {
+    if (fn)
+      try {
+        res = fn(fn = 0);
+      } catch (e) {
+        err = [e];
+      }
+    if (err)
+      throw err[0];
+    return res;
+  };
+
+  // ../node_modules/lodash/_baseSlice.js
+  var require__baseSlice = __commonJS(function(exports, module) {
+    function baseSlice(array, start, end) {
+      var index = -1, length = array.length;
+      if (start < 0)
+        start = -start > length ? 0 : length + start;
+      if (end = end > length ? length : end, end < 0)
+        end += length;
+      length = start > end ? 0 : end - start >>> 0, start >>>= 0;
+      var result = Array(length);
+      while (++index < length)
+        result[index] = array[index + start];
+      return result;
+    }
+    module.exports = baseSlice;
+  });
+
+  // ../node_modules/lodash/eq.js
+  var require_eq = __commonJS(function(exports, module) {
+    function eq(value, other) {
+      return value === other || value !== value && other !== other;
+    }
+    module.exports = eq;
+  });
+
+  // ../node_modules/lodash/_freeGlobal.js
+  var require__freeGlobal = __commonJS(function(exports, module) {
+    var freeGlobal = typeof global == "object" && global && global.Object === Object && global;
+    module.exports = freeGlobal;
+  });
+
+  // ../node_modules/lodash/_root.js
+  var require__root = __commonJS(function(exports, module) {
+    var freeGlobal = require__freeGlobal(), freeSelf = typeof self == "object" && self && self.Object === Object && self, root = freeGlobal || freeSelf || Function("return this")();
+    module.exports = root;
+  });
+
+  // ../node_modules/lodash/_Symbol.js
+  var require__Symbol = __commonJS(function(exports, module) {
+    var root = require__root(), Symbol2 = root.Symbol;
+    module.exports = Symbol2;
+  });
+
+  // ../node_modules/lodash/_getRawTag.js
+  var require__getRawTag = __commonJS(function(exports, module) {
+    var Symbol2 = require__Symbol(), objectProto = Object.prototype, { hasOwnProperty, toString: nativeObjectToString } = objectProto, symToStringTag = Symbol2 ? Symbol2.toStringTag : void 0;
+    function getRawTag(value) {
+      var isOwn = hasOwnProperty.call(value, symToStringTag), tag = value[symToStringTag];
+      try {
+        value[symToStringTag] = void 0;
+        var unmasked = !0;
+      } catch (e) {}
+      var result = nativeObjectToString.call(value);
+      if (unmasked)
+        if (isOwn)
+          value[symToStringTag] = tag;
+        else
+          delete value[symToStringTag];
+      return result;
+    }
+    module.exports = getRawTag;
+  });
+
+  // ../node_modules/lodash/_objectToString.js
+  var require__objectToString = __commonJS(function(exports, module) {
+    var objectProto = Object.prototype, nativeObjectToString = objectProto.toString;
+    function objectToString(value) {
+      return nativeObjectToString.call(value);
+    }
+    module.exports = objectToString;
+  });
+
+  // ../node_modules/lodash/_baseGetTag.js
+  var require__baseGetTag = __commonJS(function(exports, module) {
+    var Symbol2 = require__Symbol(), getRawTag = require__getRawTag(), objectToString = require__objectToString(), nullTag = "[object Null]", undefinedTag = "[object Undefined]", symToStringTag = Symbol2 ? Symbol2.toStringTag : void 0;
+    function baseGetTag(value) {
+      if (value == null)
+        return value === void 0 ? undefinedTag : nullTag;
+      return symToStringTag && symToStringTag in Object(value) ? getRawTag(value) : objectToString(value);
+    }
+    module.exports = baseGetTag;
+  });
+
+  // ../node_modules/lodash/isObject.js
+  var require_isObject = __commonJS(function(exports, module) {
+    function isObject(value) {
+      var type = typeof value;
+      return value != null && (type == "object" || type == "function");
+    }
+    module.exports = isObject;
+  });
+
+  // ../node_modules/lodash/isFunction.js
+  var require_isFunction = __commonJS(function(exports, module) {
+    var baseGetTag = require__baseGetTag(), isObject = require_isObject(), asyncTag = "[object AsyncFunction]", funcTag = "[object Function]", genTag = "[object GeneratorFunction]", proxyTag = "[object Proxy]";
+    function isFunction(value) {
+      if (!isObject(value))
+        return !1;
+      var tag = baseGetTag(value);
+      return tag == funcTag || tag == genTag || tag == asyncTag || tag == proxyTag;
+    }
+    module.exports = isFunction;
+  });
+
+  // ../node_modules/lodash/isLength.js
+  var require_isLength = __commonJS(function(exports, module) {
+    var MAX_SAFE_INTEGER = 9007199254740991;
+    function isLength(value) {
+      return typeof value == "number" && value > -1 && value % 1 == 0 && value <= MAX_SAFE_INTEGER;
+    }
+    module.exports = isLength;
+  });
+
+  // ../node_modules/lodash/isArrayLike.js
+  var require_isArrayLike = __commonJS(function(exports, module) {
+    var isFunction = require_isFunction(), isLength = require_isLength();
+    function isArrayLike(value) {
+      return value != null && isLength(value.length) && !isFunction(value);
+    }
+    module.exports = isArrayLike;
+  });
+
+  // ../node_modules/lodash/_isIndex.js
+  var require__isIndex = __commonJS(function(exports, module) {
+    var MAX_SAFE_INTEGER = 9007199254740991, reIsUint = /^(?:0|[1-9]\d*)$/;
+    function isIndex(value, length) {
+      var type = typeof value;
+      return length = length == null ? MAX_SAFE_INTEGER : length, !!length && (type == "number" || type != "symbol" && reIsUint.test(value)) && (value > -1 && value % 1 == 0 && value < length);
+    }
+    module.exports = isIndex;
+  });
+
+  // ../node_modules/lodash/_isIterateeCall.js
+  var require__isIterateeCall = __commonJS(function(exports, module) {
+    var eq = require_eq(), isArrayLike = require_isArrayLike(), isIndex = require__isIndex(), isObject = require_isObject();
+    function isIterateeCall(value, index, object) {
+      if (!isObject(object))
+        return !1;
+      var type = typeof index;
+      if (type == "number" ? isArrayLike(object) && isIndex(index, object.length) : type == "string" && (index in object))
+        return eq(object[index], value);
+      return !1;
+    }
+    module.exports = isIterateeCall;
+  });
+
+  // ../node_modules/lodash/_trimmedEndIndex.js
+  var require__trimmedEndIndex = __commonJS(function(exports, module) {
+    var reWhitespace = /\s/;
+    function trimmedEndIndex(string) {
+      var index = string.length;
+      while (index-- && reWhitespace.test(string.charAt(index)))
+        ;
+      return index;
+    }
+    module.exports = trimmedEndIndex;
+  });
+
+  // ../node_modules/lodash/_baseTrim.js
+  var require__baseTrim = __commonJS(function(exports, module) {
+    var trimmedEndIndex = require__trimmedEndIndex(), reTrimStart = /^\s+/;
+    function baseTrim(string) {
+      return string ? string.slice(0, trimmedEndIndex(string) + 1).replace(reTrimStart, "") : string;
+    }
+    module.exports = baseTrim;
+  });
+
+  // ../node_modules/lodash/isObjectLike.js
+  var require_isObjectLike = __commonJS(function(exports, module) {
+    function isObjectLike(value) {
+      return value != null && typeof value == "object";
+    }
+    module.exports = isObjectLike;
+  });
+
+  // ../node_modules/lodash/isSymbol.js
+  var require_isSymbol = __commonJS(function(exports, module) {
+    var baseGetTag = require__baseGetTag(), isObjectLike = require_isObjectLike(), symbolTag = "[object Symbol]";
+    function isSymbol(value) {
+      return typeof value == "symbol" || isObjectLike(value) && baseGetTag(value) == symbolTag;
+    }
+    module.exports = isSymbol;
+  });
+
+  // ../node_modules/lodash/toNumber.js
+  var require_toNumber = __commonJS(function(exports, module) {
+    var baseTrim = require__baseTrim(), isObject = require_isObject(), isSymbol = require_isSymbol(), NAN = NaN, reIsBadHex = /^[-+]0x[0-9a-f]+$/i, reIsBinary = /^0b[01]+$/i, reIsOctal = /^0o[0-7]+$/i, freeParseInt = parseInt;
+    function toNumber(value) {
+      if (typeof value == "number")
+        return value;
+      if (isSymbol(value))
+        return NAN;
+      if (isObject(value)) {
+        var other = typeof value.valueOf == "function" ? value.valueOf() : value;
+        value = isObject(other) ? other + "" : other;
+      }
+      if (typeof value != "string")
+        return value === 0 ? value : +value;
+      value = baseTrim(value);
+      var isBinary = reIsBinary.test(value);
+      return isBinary || reIsOctal.test(value) ? freeParseInt(value.slice(2), isBinary ? 2 : 8) : reIsBadHex.test(value) ? NAN : +value;
+    }
+    module.exports = toNumber;
+  });
+
+  // ../node_modules/lodash/toFinite.js
+  var require_toFinite = __commonJS(function(exports, module) {
+    var toNumber = require_toNumber(), INFINITY = 1 / 0, MAX_INTEGER = 179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;
+    function toFinite(value) {
+      if (!value)
+        return value === 0 ? value : 0;
+      if (value = toNumber(value), value === INFINITY || value === -INFINITY) {
+        var sign = value < 0 ? -1 : 1;
+        return sign * MAX_INTEGER;
+      }
+      return value === value ? value : 0;
+    }
+    module.exports = toFinite;
+  });
+
+  // ../node_modules/lodash/toInteger.js
+  var require_toInteger = __commonJS(function(exports, module) {
+    var toFinite = require_toFinite();
+    function toInteger(value) {
+      var result = toFinite(value), remainder = result % 1;
+      return result === result ? remainder ? result - remainder : result : 0;
+    }
+    module.exports = toInteger;
+  });
+
+  // ../node_modules/lodash/chunk.js
+  var require_chunk = __commonJS(function(exports, module) {
+    var baseSlice = require__baseSlice(), isIterateeCall = require__isIterateeCall(), toInteger = require_toInteger(), { ceil: nativeCeil, max: nativeMax } = Math;
+    function chunk(array, size, guard) {
+      if (guard ? isIterateeCall(array, size, guard) : size === void 0)
+        size = 1;
+      else
+        size = nativeMax(toInteger(size), 0);
+      var length = array == null ? 0 : array.length;
+      if (!length || size < 1)
+        return [];
+      var index = 0, resIndex = 0, result = Array(nativeCeil(length / size));
+      while (index < length)
+        result[resIndex++] = baseSlice(array, index, index += size);
+      return result;
+    }
+    module.exports = chunk;
+  });
+
+  // cycle-b.js
+  var require_cycle_b = __commonJS(function(exports) {
+    console.log("eval cycle-b");
+    var a = require_cycle_a();
+    exports.seen = "b saw " + a.early + "," + a.late;
+    exports.check = function() {
+      return "b later " + a.late;
+    };
+  });
+
+  // cycle-a.js
+  var require_cycle_a = __commonJS(function(exports) {
+    console.log("eval cycle-a start");
+    exports.early = "a-early";
+    var b = require_cycle_b();
+    exports.late = "a-late";
+    exports.report = function() {
+      return b.seen + " " + b.check();
+    };
+    console.log("eval cycle-a end");
+  });
+
+  // lazy.js
+  var value = 42, lazy_default = "lazy-default";
+  var init_lazy = __esm(() => {
+    console.log("eval lazy");
+  });
+
+  // index.js
+  var import_chunk = __toESM(require_chunk());
+  // data.json
+  var data_default = {
+    name: "fixture",
+    items: [1, 2, 3, 4, 5]
+  };
+
+  // index.js
+  var import_cycle_a = __toESM(require_cycle_a());
+
+  // util.js
+  console.log("eval util");
+  var label = (name) => `[${name.padStart(8, ".")}]`;
+  function total(list) {
+    return list.reduce((sum, n) => sum + n, 0);
+  }
+
+  // index.js
+  var items = data_default.items;
+  console.log("eval index");
+  console.log("last " + items[items.length - 1] + " own " + Object.prototype.hasOwnProperty.call(data_default, "name"));
+  console.log("replace " + "a-b-c".split("-").join("+"));
+  console.log("chunk " + JSON.stringify(import_chunk.default(items, 2)));
+  console.log("cycle " + import_cycle_a.report());
+  console.log("label " + label(data_default.name) + " total " + total(items));
+  Promise.resolve().then(() => (init_lazy(), {})).then((lazy) => (console.log("lazy " + value + " " + lazy_default), Promise.allSettled([Promise.resolve(1), Promise.reject(Error("no"))]))).then((settled) => console.log("settled " + settled.map((s) => s.status).join(",")));
+})();

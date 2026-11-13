@@ -87,14 +87,92 @@ base	esbuild0.28-iife-min-keepnames	esbuild	esbuild@0.28.2	node	index.js	28	--bu
 base	esbuild0.28-iife-es2015	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife --target=es2015
 base	esbuild0.28-iife-esnext	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife --target=esnext
 base	esbuild0.28-iife-browser	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=browser --format=iife
+base	esbuild0.15-iife	esbuild	esbuild@0.15.18	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.15-cjs	esbuild	esbuild@0.15.18	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.15-esm-split	esbuild	esbuild@0.15.18	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.15-iife-min	esbuild	esbuild@0.15.18	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.16-iife	esbuild	esbuild@0.16.17	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.16-cjs	esbuild	esbuild@0.16.17	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.16-esm-split	esbuild	esbuild@0.16.17	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.16-iife-min	esbuild	esbuild@0.16.17	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.18-iife	esbuild	esbuild@0.18.20	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.18-cjs	esbuild	esbuild@0.18.20	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.18-esm-split	esbuild	esbuild@0.18.20	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.18-iife-min	esbuild	esbuild@0.18.20	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.20-iife	esbuild	esbuild@0.20.2	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.20-cjs	esbuild	esbuild@0.20.2	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.20-esm-split	esbuild	esbuild@0.20.2	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.20-iife-min	esbuild	esbuild@0.20.2	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.22-iife	esbuild	esbuild@0.22.0	node	index.js	28	--bundle --platform=node --format=iife --packages=bundle
+base	esbuild0.22-cjs	esbuild	esbuild@0.22.0	node	index.js	28	--bundle --platform=node --format=cjs --packages=bundle
+base	esbuild0.22-esm-split	esbuild	esbuild@0.22.0	node	index.js	28	--bundle --platform=node --format=esm --splitting --packages=bundle
+base	esbuild0.22-iife-min	esbuild	esbuild@0.22.0	node	index.js	28	--bundle --platform=node --format=iife --minify --packages=bundle
+base	esbuild0.23-iife	esbuild	esbuild@0.23.1	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.23-cjs	esbuild	esbuild@0.23.1	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.23-esm-split	esbuild	esbuild@0.23.1	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.23-iife-min	esbuild	esbuild@0.23.1	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.26-iife	esbuild	esbuild@0.26.0	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.26-cjs	esbuild	esbuild@0.26.0	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.26-esm-split	esbuild	esbuild@0.26.0	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.26-iife-min	esbuild	esbuild@0.26.0	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.27-iife	esbuild	esbuild@0.27.7	node	index.js	28	--bundle --platform=node --format=iife
+base	esbuild0.27-cjs	esbuild	esbuild@0.27.7	node	index.js	28	--bundle --platform=node --format=cjs
+base	esbuild0.27-esm-split	esbuild	esbuild@0.27.7	node	index.js	28	--bundle --platform=node --format=esm --splitting
+base	esbuild0.27-iife-min	esbuild	esbuild@0.27.7	node	index.js	28	--bundle --platform=node --format=iife --minify
+base	esbuild0.14-esm	esbuild	esbuild@0.14.54	node	index.js	28	--bundle --platform=node --format=esm
+base	esbuild0.14-esm-split-min	esbuild	esbuild@0.14.54	node	index.js	28	--bundle --platform=node --format=esm --splitting --minify
+base	esbuild0.21-esm	esbuild	esbuild@0.21.5	node	index.js	28	--bundle --platform=node --format=esm
+base	esbuild0.21-esm-split-min	esbuild	esbuild@0.21.5	node	index.js	28	--bundle --platform=node --format=esm --splitting --minify
+base	esbuild0.28-esm	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=esm
+base	esbuild0.28-esm-split-min	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=esm --splitting --minify
+base	esbuild0.28-esm-min	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=esm --minify
+base	esbuild0.28-cjs-min	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=cjs --minify
+base	esbuild0.28-cjs-keepnames	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=cjs --keep-names
+base	esbuild0.28-esm-split-keepnames	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=esm --splitting --keep-names
+base	esbuild0.28-iife-min-browser	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=browser --format=iife --minify
+base	esbuild0.28-iife-es2017	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife --target=es2017
+base	esbuild0.28-iife-min-es2015	esbuild	esbuild@0.28.2	node	index.js	28	--bundle --platform=node --format=iife --minify --target=es2015
 base	bun-cjs	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=cjs
 base	bun-esm	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm
 base	bun-esm-splitting	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm --splitting
 base	bun-iife-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify
+base	bun-iife	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife
+base	bun-cjs-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=cjs --minify
+base	bun-esm-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm --minify
+base	bun-esm-splitting-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm --splitting --minify
+base	bun-iife-minify-syntax	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify-syntax
+base	bun-iife-minify-whitespace	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify-whitespace
+base	bun-iife-minify-identifiers	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify-identifiers
+base	bun1.1-cjs	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=cjs
+base	bun1.1-esm	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=esm
+base	bun1.1-esm-splitting	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=esm --splitting
+base	bun1.1-iife	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=iife
+base	bun1.1-iife-minify	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=iife --minify
+base	bun1.2-cjs	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=cjs
+base	bun1.2-esm	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=esm
+base	bun1.2-esm-splitting	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=esm --splitting
+base	bun1.2-iife	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=iife
+base	bun1.2-iife-minify	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=iife --minify
+base	bun1.3-cjs	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=cjs
+base	bun1.3-esm	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=esm
+base	bun1.3-esm-splitting	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=esm --splitting
+base	bun1.3-iife	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=iife
+base	bun1.3-iife-minify	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=iife --minify
+base	bun1.0-esm	esbuild	bun@1.0.36	node	index.js	-	build --target=node --format=esm
+base	bun1.0-esm-splitting	esbuild	bun@1.0.36	node	index.js	-	build --target=node --format=esm --splitting
+base	bun1.0-esm-minify	esbuild	bun@1.0.36	node	index.js	-	build --target=node --format=esm --minify
 base	parcel-hoist	parcel	parcel@2.16.4	node	index.js	29	context=node outputFormat=commonjs optimize=false scopeHoist=true
 base	parcel-nohoist	parcel	parcel@2.16.4	node	index.js	30	context=node outputFormat=commonjs optimize=false scopeHoist=false
 base	parcel-hoist-min	parcel	parcel@2.16.4	node	index.js	29	context=node outputFormat=commonjs optimize=true scopeHoist=true
 base	parcel-nohoist-min	parcel	parcel@2.16.4	node	index.js	30	context=node outputFormat=commonjs optimize=true scopeHoist=false
+base	parcel2.9-hoist	parcel	parcel@2.9.3	node	index.js	29	context=node outputFormat=commonjs optimize=false scopeHoist=true
+base	parcel2.9-nohoist	parcel	parcel@2.9.3	node	index.js	30	context=node outputFormat=commonjs optimize=false scopeHoist=false
+base	parcel2.9-hoist-min	parcel	parcel@2.9.3	node	index.js	29	context=node outputFormat=commonjs optimize=true scopeHoist=true
+base	parcel2.9-nohoist-min	parcel	parcel@2.9.3	node	index.js	30	context=node outputFormat=commonjs optimize=true scopeHoist=false
+base	parcel2.12-hoist	parcel	parcel@2.12.0	node	index.js	29	context=node outputFormat=commonjs optimize=false scopeHoist=true
+base	parcel2.12-nohoist	parcel	parcel@2.12.0	node	index.js	30	context=node outputFormat=commonjs optimize=false scopeHoist=false
+base	parcel2.12-hoist-min	parcel	parcel@2.12.0	node	index.js	29	context=node outputFormat=commonjs optimize=true scopeHoist=true
+base	parcel2.12-nohoist-min	parcel	parcel@2.12.0	node	index.js	30	context=node outputFormat=commonjs optimize=true scopeHoist=false
 base	browserify	browserify	browserify@17.0.1	node	index.js	28	browserify --node (Babel modules=commonjs source)
 base	browserify-standalone	browserify	browserify@17.0.1	node	index.js	28	browserify --standalone matrix --node (Babel modules=commonjs source)
 base	webpack5-prod-node-cjssrc	webpack	webpack@5.112.2	node	index.js	28	mode=production minimize=false concatenateModules=false target=node (Babel modules=commonjs source)
@@ -306,14 +384,92 @@ mini	esbuild0.28-iife-min-keepnames	esbuild	esbuild@0.28.2	node	index.js	3	--bun
 mini	esbuild0.28-iife-es2015	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife --target=es2015
 mini	esbuild0.28-iife-esnext	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife --target=esnext
 mini	esbuild0.28-iife-browser	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=browser --format=iife
+mini	esbuild0.15-iife	esbuild	esbuild@0.15.18	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.15-cjs	esbuild	esbuild@0.15.18	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.15-esm-split	esbuild	esbuild@0.15.18	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.15-iife-min	esbuild	esbuild@0.15.18	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.16-iife	esbuild	esbuild@0.16.17	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.16-cjs	esbuild	esbuild@0.16.17	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.16-esm-split	esbuild	esbuild@0.16.17	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.16-iife-min	esbuild	esbuild@0.16.17	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.18-iife	esbuild	esbuild@0.18.20	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.18-cjs	esbuild	esbuild@0.18.20	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.18-esm-split	esbuild	esbuild@0.18.20	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.18-iife-min	esbuild	esbuild@0.18.20	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.20-iife	esbuild	esbuild@0.20.2	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.20-cjs	esbuild	esbuild@0.20.2	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.20-esm-split	esbuild	esbuild@0.20.2	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.20-iife-min	esbuild	esbuild@0.20.2	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.22-iife	esbuild	esbuild@0.22.0	node	index.js	3	--bundle --platform=node --format=iife --packages=bundle
+mini	esbuild0.22-cjs	esbuild	esbuild@0.22.0	node	index.js	3	--bundle --platform=node --format=cjs --packages=bundle
+mini	esbuild0.22-esm-split	esbuild	esbuild@0.22.0	node	index.js	3	--bundle --platform=node --format=esm --splitting --packages=bundle
+mini	esbuild0.22-iife-min	esbuild	esbuild@0.22.0	node	index.js	3	--bundle --platform=node --format=iife --minify --packages=bundle
+mini	esbuild0.23-iife	esbuild	esbuild@0.23.1	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.23-cjs	esbuild	esbuild@0.23.1	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.23-esm-split	esbuild	esbuild@0.23.1	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.23-iife-min	esbuild	esbuild@0.23.1	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.26-iife	esbuild	esbuild@0.26.0	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.26-cjs	esbuild	esbuild@0.26.0	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.26-esm-split	esbuild	esbuild@0.26.0	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.26-iife-min	esbuild	esbuild@0.26.0	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.27-iife	esbuild	esbuild@0.27.7	node	index.js	3	--bundle --platform=node --format=iife
+mini	esbuild0.27-cjs	esbuild	esbuild@0.27.7	node	index.js	3	--bundle --platform=node --format=cjs
+mini	esbuild0.27-esm-split	esbuild	esbuild@0.27.7	node	index.js	3	--bundle --platform=node --format=esm --splitting
+mini	esbuild0.27-iife-min	esbuild	esbuild@0.27.7	node	index.js	3	--bundle --platform=node --format=iife --minify
+mini	esbuild0.14-esm	esbuild	esbuild@0.14.54	node	index.js	3	--bundle --platform=node --format=esm
+mini	esbuild0.14-esm-split-min	esbuild	esbuild@0.14.54	node	index.js	3	--bundle --platform=node --format=esm --splitting --minify
+mini	esbuild0.21-esm	esbuild	esbuild@0.21.5	node	index.js	3	--bundle --platform=node --format=esm
+mini	esbuild0.21-esm-split-min	esbuild	esbuild@0.21.5	node	index.js	3	--bundle --platform=node --format=esm --splitting --minify
+mini	esbuild0.28-esm	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=esm
+mini	esbuild0.28-esm-split-min	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=esm --splitting --minify
+mini	esbuild0.28-esm-min	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=esm --minify
+mini	esbuild0.28-cjs-min	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=cjs --minify
+mini	esbuild0.28-cjs-keepnames	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=cjs --keep-names
+mini	esbuild0.28-esm-split-keepnames	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=esm --splitting --keep-names
+mini	esbuild0.28-iife-min-browser	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=browser --format=iife --minify
+mini	esbuild0.28-iife-es2017	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife --target=es2017
+mini	esbuild0.28-iife-min-es2015	esbuild	esbuild@0.28.2	node	index.js	3	--bundle --platform=node --format=iife --minify --target=es2015
 mini	bun-cjs	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=cjs
 mini	bun-esm	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm
 mini	bun-esm-splitting	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm --splitting
 mini	bun-iife-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify
+mini	bun-iife	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife
+mini	bun-cjs-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=cjs --minify
+mini	bun-esm-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm --minify
+mini	bun-esm-splitting-minify	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=esm --splitting --minify
+mini	bun-iife-minify-syntax	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify-syntax
+mini	bun-iife-minify-whitespace	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify-whitespace
+mini	bun-iife-minify-identifiers	esbuild	bun@1.4.2	node	index.js	-	build --target=node --format=iife --minify-identifiers
+mini	bun1.1-cjs	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=cjs
+mini	bun1.1-esm	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=esm
+mini	bun1.1-esm-splitting	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=esm --splitting
+mini	bun1.1-iife	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=iife
+mini	bun1.1-iife-minify	esbuild	bun@1.1.45	node	index.js	-	build --target=node --format=iife --minify
+mini	bun1.2-cjs	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=cjs
+mini	bun1.2-esm	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=esm
+mini	bun1.2-esm-splitting	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=esm --splitting
+mini	bun1.2-iife	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=iife
+mini	bun1.2-iife-minify	esbuild	bun@1.2.23	node	index.js	-	build --target=node --format=iife --minify
+mini	bun1.3-cjs	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=cjs
+mini	bun1.3-esm	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=esm
+mini	bun1.3-esm-splitting	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=esm --splitting
+mini	bun1.3-iife	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=iife
+mini	bun1.3-iife-minify	esbuild	bun@1.3.14	node	index.js	-	build --target=node --format=iife --minify
+mini	bun1.0-esm	esbuild	bun@1.0.36	node	index.js	-	build --target=node --format=esm
+mini	bun1.0-esm-splitting	esbuild	bun@1.0.36	node	index.js	-	build --target=node --format=esm --splitting
+mini	bun1.0-esm-minify	esbuild	bun@1.0.36	node	index.js	-	build --target=node --format=esm --minify
 mini	parcel-hoist	parcel	parcel@2.16.4	node	index.js	4	context=node outputFormat=commonjs optimize=false scopeHoist=true
 mini	parcel-nohoist	parcel	parcel@2.16.4	node	index.js	5	context=node outputFormat=commonjs optimize=false scopeHoist=false
 mini	parcel-hoist-min	parcel	parcel@2.16.4	node	index.js	4	context=node outputFormat=commonjs optimize=true scopeHoist=true
 mini	parcel-nohoist-min	parcel	parcel@2.16.4	node	index.js	5	context=node outputFormat=commonjs optimize=true scopeHoist=false
+mini	parcel2.9-hoist	parcel	parcel@2.9.3	node	index.js	4	context=node outputFormat=commonjs optimize=false scopeHoist=true
+mini	parcel2.9-nohoist	parcel	parcel@2.9.3	node	index.js	5	context=node outputFormat=commonjs optimize=false scopeHoist=false
+mini	parcel2.9-hoist-min	parcel	parcel@2.9.3	node	index.js	4	context=node outputFormat=commonjs optimize=true scopeHoist=true
+mini	parcel2.9-nohoist-min	parcel	parcel@2.9.3	node	index.js	5	context=node outputFormat=commonjs optimize=true scopeHoist=false
+mini	parcel2.12-hoist	parcel	parcel@2.12.0	node	index.js	4	context=node outputFormat=commonjs optimize=false scopeHoist=true
+mini	parcel2.12-nohoist	parcel	parcel@2.12.0	node	index.js	5	context=node outputFormat=commonjs optimize=false scopeHoist=false
+mini	parcel2.12-hoist-min	parcel	parcel@2.12.0	node	index.js	4	context=node outputFormat=commonjs optimize=true scopeHoist=true
+mini	parcel2.12-nohoist-min	parcel	parcel@2.12.0	node	index.js	5	context=node outputFormat=commonjs optimize=true scopeHoist=false
 mini	browserify	browserify	browserify@17.0.1	node	index.js	3	browserify --node (Babel modules=commonjs source)
 mini	browserify-standalone	browserify	browserify@17.0.1	node	index.js	3	browserify --standalone matrix --node (Babel modules=commonjs source)
 mini	webpack5-prod-node-cjssrc	webpack	webpack@5.112.2	node	index.js	3	mode=production minimize=false concatenateModules=false target=node (Babel modules=commonjs source)

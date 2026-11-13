@@ -1,0 +1,1 @@
+function e(e,l,r,t){Object.defineProperty(e,l,{get:r,set:t,enumerable:!0,configurable:!0})}(0,globalThis.parcelRequire9d85.register)("736rF",function(l,r){e(l.exports,"value",()=>t),e(l.exports,"default",()=>a),console.log("eval lazy");let t=42;var a="lazy-default"});
