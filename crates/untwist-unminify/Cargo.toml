@@ -15,6 +15,7 @@ description = "Unminify and untranspile passes that turn minified JavaScript bac
 [dependencies]
 untwist-core = { path = "../untwist-core", version = "0.5.0" }
 untwist-eval = { path = "../untwist-eval", version = "0.5.0" }
+untwist-rename = { path = "../untwist-rename", version = "0.5.0" }
 oxc_allocator.workspace = true
 oxc_ast.workspace = true
 oxc_ast_visit.workspace = true

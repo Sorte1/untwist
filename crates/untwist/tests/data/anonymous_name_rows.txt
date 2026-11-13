@@ -7,3 +7,6 @@ assign-member|var o = {}; o.m = (console.log("head"), function () {}); console.l
 for-init|for (var g = (0, function () {}), i = 0; i < 1; i++) console.log(JSON.stringify(g.name));
 named-expression|var g = (console.log("head"), function inner() {}); console.log(g.name);
 generator|var gen = (0, function* () {}); console.log(JSON.stringify(gen.name));
+destructured-name|var f = (console.log("head"), function () {}); var { name } = f; console.log(JSON.stringify(name));
+no-name-read-var|var f = (console.log("head"), function () { return 1; }); console.log(f());
+no-name-read-assign|var g; g = (console.log("head"), () => 2); console.log(g());

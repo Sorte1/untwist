@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
@@ -9,11 +11,21 @@ use untwist_core::pass::{
     StatementVariants,
 };
 
+use untwist_rename::function_names::function_names;
+
 use crate::sequence_hazard::is_hoist_order_safe;
 use crate::statement_slot::{hoist_in_front_of_labels, in_single_statement_slot, labelled_loop};
 
 #[derive(Default)]
 pub struct Sequence;
+
+thread_local! {
+    static NAMES_OBSERVED: Cell<bool> = const { Cell::new(true) };
+}
+
+fn names_observed() -> bool {
+    NAMES_OBSERVED.with(Cell::get)
+}
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
     Box::new(Sequence)
@@ -71,6 +83,9 @@ fn ends_in_anonymous_definition(expr: &Expression<'_>) -> bool {
     let Expression::SequenceExpression(seq) = expr else {
         return false;
     };
+    if !names_observed() {
+        return false;
+    }
     match seq.expressions.last().map(Expression::without_parentheses) {
         Some(Expression::FunctionExpression(function)) => function.id.is_none(),
         Some(Expression::ClassExpression(class)) => class.id.is_none(),
@@ -458,12 +473,19 @@ impl<'a> Pass<'a> for Sequence {
     }
 
     fn interest(&self) -> Interest {
-        (Interest::ENTER_STATEMENTS
+        (Interest::ENTER_PROGRAM
+            | Interest::ENTER_STATEMENTS
             | Interest::EXIT_STATEMENTS
             | Interest::EXIT_STATEMENT
             | Interest::EXIT_EXPRESSION)
             .on_expressions(ACTED_ON_EXPRESSIONS)
             .on_statements(ACTED_ON_STATEMENTS)
+    }
+
+    fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        let observed =
+            !cx.opts.unsafe_transforms && function_names(program, cx.scoping()).name_read;
+        NAMES_OBSERVED.with(|cell| cell.set(observed));
     }
 
     fn enter_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
