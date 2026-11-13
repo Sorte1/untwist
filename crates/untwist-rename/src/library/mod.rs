@@ -249,10 +249,6 @@ fn hull(ranges: &[(String, String)]) -> (String, String) {
     }
 }
 
-fn slot_of(name: Option<&str>) -> Slot {
-    name.map_or(Slot::Unknown, |name| Slot::Name(name.to_string()))
-}
-
 fn merge_slots(into: &mut Vec<Slot>, from: &[Option<&str>]) {
     if into.len() < from.len() {
         into.resize(from.len(), Slot::Unknown);
@@ -701,7 +697,11 @@ fn match_shaped(table: &Table, shaped: &shape::Shaped<'_, '_>, scoping: &Scoping
 }
 
 pub fn match_program(program: &Program<'_>, scoping: &Scoping) -> Arc<LibraryNames> {
-    cache::matched(&table::current(), program, scoping, match_shaped)
+    match_cached(&table::current(), program, scoping)
+}
+
+pub fn match_cached(table: &Arc<Table>, program: &Program<'_>, scoping: &Scoping) -> Arc<LibraryNames> {
+    cache::matched(table, program, scoping, match_shaped)
 }
 
 pub struct UnitRecord {
