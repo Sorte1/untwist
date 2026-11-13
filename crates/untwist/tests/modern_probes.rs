@@ -95,6 +95,13 @@ const PROBES: &[Probe] = &[
 		try { console.log("strict delete", delete gbi$("AggregateError"), typeof AggregateError); } catch (e) { console.log("strict delete threw", e.name); }
 	})();
 	(function () {
+		var early$ = function () { try { return String(lateA$("iterator")); } catch (e) { return e.name; } };
+		console.log("closure before", early$());
+		var lateA$ = requireWellKnownSymbol();
+		var after$ = requireWellKnownSymbol();
+		console.log("closure after", early$(), String(after$("iterator")));
+	})();
+	(function () {
 		var first = requireWellKnownSymbol();
 		console.log("redeclared", String(first("iterator")));
 		var first = function () { return "replaced"; };
@@ -261,22 +268,39 @@ fn a_needed_module_run_only_by_a_removed_module_still_runs() {
     assert!(note(&ran, "removed", "es.promise.try").is_none());
 }
 
+fn plain(source: &str) -> String {
+    let options = Options {
+        unpack: false,
+        unsafe_transforms: true,
+        ..Options::default()
+    };
+    Pipeline::new(options).run(source).code().to_string()
+}
+
+fn same_count(name: &str, ran: &Ran, texts: &[&str]) {
+    let without = plain(&source(probe(name)));
+    for text in texts {
+        let expected = without.matches(text).count();
+        assert!(
+            expected > 0,
+            "{name}: {text} is not in the output without --modern"
+        );
+        assert_eq!(ran.code.matches(text).count(), expected, "{name}: {text}");
+    }
+}
+
 #[test]
 fn user_functions_and_their_results_are_never_removed() {
-    for name in ["user-state-functions", "user-wrapper-shaped-functions"] {
-        let ran = untwist(&source(probe(name)), "node 22");
-        for text in [
-            "function init()",
-            "var started = init()",
-            "function mark()",
-            "var marked = mark()",
-        ] {
-            let input = source(probe(name));
-            if input.contains(text) {
-                assert!(ran.code.contains(text), "{name}: {text}");
-            }
-        }
-    }
+    let name = "user-state-functions";
+    let ran = untwist(&source(probe(name)), "node 22");
+    same_count(
+        name,
+        &ran,
+        &["function init()", "= init()", "function get()"],
+    );
+    let name = "user-wrapper-shaped-functions";
+    let ran = untwist(&source(probe(name)), "node 22");
+    same_count(name, &ran, &["function mark()", "= mark()", "hasSeen"]);
 }
 
 #[test]
@@ -291,20 +315,29 @@ fn a_kept_module_run_through_an_unused_var_keeps_its_run() {
 
 #[test]
 fn helper_calls_under_delete_shadowed_or_before_their_alias_stay_calls() {
-    let ran = untwist(&source(probe("helper-calls-in-odd-positions")), "node 22");
-    for text in [
-        "sl$(\"abcdef\", 2); })({",
-        "push$(a, 1)",
-        "isC$(notDeclaredAnywhere)",
-        "delete gbi$(\"Object\", \"groupBy\")",
-        "delete wks$(\"iterator\")",
-        "delete gbi$(\"AggregateError\")",
-        "typeof late$(\"iterator\")",
-        "first(\"iterator\")",
-    ] {
-        assert!(ran.code.contains(text), "{text}\n{}", ran.code.len());
-    }
+    let name = "helper-calls-in-odd-positions";
+    let ran = untwist(&source(probe(name)), "node 22");
+    same_count(
+        name,
+        &ran,
+        &[
+            "push$(a, 1)",
+            "isC$(notDeclaredAnywhere)",
+            "delete gbi$(\"Object\", \"groupBy\")",
+            "delete wks$(\"iterator\")",
+            "delete gbi$(\"Object\", \"keys\")",
+            "delete gbi$(\"AggregateError\")",
+            "typeof late$(\"iterator\")",
+            "String(late$(\"iterator\"))",
+            "first(\"iterator\")",
+            "lateA$(\"iterator\")",
+        ],
+    );
+    assert_eq!(ran.code.matches("sl$(\"abcdef\", 2)").count(), 1);
     assert!(ran.code.contains("String(Symbol.iterator)"));
+    assert!(ran
+        .code
+        .contains("String.prototype.slice.call(\"abcdef\", 2)"));
 }
 
 #[test]

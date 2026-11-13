@@ -2,26 +2,50 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
-use oxc_syntax::scope::ScopeFlags;
-use oxc_syntax::symbol::SymbolFlags;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use rustc_hash::FxHashSet;
 
-struct Inert<'s> {
+pub struct Prefix<'s> {
     scoping: &'s Scoping,
     body: Span,
-    ok: bool,
+    read: FxHashSet<SymbolId>,
+    calls_local_function: bool,
+    pub budget: usize,
 }
 
-impl<'a> Visit<'a> for Inert<'_> {
-    fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {
-        self.ok = false;
+impl<'s> Prefix<'s> {
+    pub fn new(scoping: &'s Scoping, body: Span, budget: usize) -> Self {
+        Prefix {
+            scoping,
+            body,
+            read: FxHashSet::default(),
+            calls_local_function: false,
+            budget,
+        }
     }
 
-    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {
-        self.ok = false;
+    pub fn set_before(&self, symbol: SymbolId) -> bool {
+        self.budget > 0 && !self.calls_local_function && !self.read.contains(&symbol)
     }
 
-    fn visit_class(&mut self, _it: &Class<'a>) {
-        self.ok = false;
+    pub fn statement(&mut self, it: &Statement<'_>) {
+        if !matches!(it, Statement::FunctionDeclaration(_)) {
+            self.visit_statement(it);
+        }
+    }
+
+    pub fn declarator(&mut self, it: &VariableDeclarator<'_>) {
+        self.visit_variable_declarator(it);
+    }
+}
+
+impl<'a> Visit<'a> for Prefix<'_> {
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        if self.budget == 0 {
+            return;
+        }
+        self.budget -= 1;
+        walk::walk_expression(self, it);
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
@@ -32,50 +56,16 @@ impl<'a> Visit<'a> for Inert<'_> {
         else {
             return;
         };
+        self.read.insert(symbol);
         let declared = self.scoping.symbol_span(symbol);
         let local = self.body.start <= declared.start && declared.end <= self.body.end;
         if local
             && self
                 .scoping
                 .symbol_flags(symbol)
-                .intersects(SymbolFlags::Function)
+                .intersects(SymbolFlags::Function | SymbolFlags::Class)
         {
-            self.ok = false;
+            self.calls_local_function = true;
         }
     }
-
-    fn visit_statement(&mut self, it: &Statement<'a>) {
-        if self.ok {
-            walk::walk_statement(self, it);
-        }
-    }
-
-    fn visit_expression(&mut self, it: &Expression<'a>) {
-        if self.ok {
-            walk::walk_expression(self, it);
-        }
-    }
-}
-
-pub fn statement(it: &Statement<'_>, body: Span, scoping: &Scoping) -> bool {
-    if matches!(it, Statement::FunctionDeclaration(_)) {
-        return true;
-    }
-    let mut check = Inert {
-        scoping,
-        body,
-        ok: true,
-    };
-    check.visit_statement(it);
-    check.ok
-}
-
-pub fn declarator(it: &VariableDeclarator<'_>, body: Span, scoping: &Scoping) -> bool {
-    let mut check = Inert {
-        scoping,
-        body,
-        ok: true,
-    };
-    check.visit_variable_declarator(it);
-    check.ok
 }

@@ -222,6 +222,12 @@ pub fn plan(program: &Program<'_>, inputs: &Inputs<'_>) -> FxHashMap<Span, Site>
         callees: FxHashSet::default(),
         deleted: FxHashSet::default(),
         dominating: FxHashMap::default(),
+        budget: inputs
+            .facts
+            .refs
+            .len()
+            .saturating_mul(4)
+            .saturating_add(PREFIX_BUDGET),
     };
     planner.visit_program(program);
     let callees = std::mem::take(&mut planner.callees);
@@ -243,6 +249,21 @@ struct Planner<'p, 'i> {
     callees: FxHashSet<Span>,
     deleted: FxHashSet<Span>,
     dominating: FxHashMap<Span, Set>,
+    budget: usize,
+}
+
+const PREFIX_BUDGET: usize = 100_000;
+
+fn alias_candidate(statement: &Statement<'_>) -> bool {
+    let Statement::VariableDeclaration(declaration) = statement else {
+        return false;
+    };
+    declaration.declarations.iter().any(|declarator| {
+        matches!(
+            declarator.init.as_ref().map(Expression::without_parentheses),
+            Some(Expression::CallExpression(call)) if matches!(call.callee.without_parentheses(), Expression::Identifier(_))
+        )
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -550,25 +571,26 @@ impl<'a> Visit<'a> for Planner<'_, '_> {
 
     fn visit_function_body(&mut self, it: &FunctionBody<'a>) {
         let scope = self.var_scope();
-        let mut inert = true;
-        let scoping = self.inputs.scoping;
-        for statement in &it.statements {
-            if !inert {
-                break;
-            }
+        let mut prefix = super::inert::Prefix::new(self.inputs.scoping, it.span, self.budget);
+        let last = it.statements.iter().rposition(alias_candidate);
+        for statement in it.statements.iter().take(last.map_or(0, |last| last + 1)) {
             let Statement::VariableDeclaration(declaration) = statement else {
-                inert = super::inert::statement(statement, it.span, scoping);
+                prefix.statement(statement);
                 continue;
             };
             for declarator in &declaration.declarations {
-                if !inert {
-                    break;
+                let symbol = match &declarator.id {
+                    BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
+                    _ => None,
+                };
+                if symbol.is_some_and(|symbol| prefix.set_before(symbol)) {
+                    let end = declarator.span.end;
+                    self.dominating.insert(declarator.span, Set { scope, end });
                 }
-                let end = declarator.span.end;
-                self.dominating.insert(declarator.span, Set { scope, end });
-                inert = super::inert::declarator(declarator, it.span, scoping);
+                prefix.declarator(declarator);
             }
         }
+        self.budget = prefix.budget;
         walk::walk_function_body(self, it);
     }
 
