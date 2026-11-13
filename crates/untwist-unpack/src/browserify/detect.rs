@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
+use oxc_semantic::Scoping;
 use untwist_core::ast_util::prop::prop_name;
 
 use crate::browserify::tree::{dependency_tree, infer_index_directories, resolve_dependency_tree};
@@ -189,6 +190,25 @@ pub fn browserify_factories<'k, 'a>(
             Some((entry.id, factory))
         })
         .collect()
+}
+
+pub fn rebound_require<'k, 'a: 'k>(
+    scoping: &Scoping,
+    factories: impl IntoIterator<Item = (String, Factory<'k, 'a>)>,
+) -> Option<String> {
+    factories.into_iter().find_map(|(id, factory)| {
+        let item = factory.params.items.get(REQUIRE_PARAM)?;
+        let BindingPattern::BindingIdentifier(binding) = &item.pattern else {
+            return None;
+        };
+        if binding.name == BROWSERIFY_PARAMS[REQUIRE_PARAM] {
+            return None;
+        }
+        let symbol = binding.symbol_id.get()?;
+        let rebound =
+            scoping.symbol_is_mutated(symbol) || !scoping.symbol_redeclarations(symbol).is_empty();
+        rebound.then_some(id)
+    })
 }
 
 pub fn detect_browserify<'a>(

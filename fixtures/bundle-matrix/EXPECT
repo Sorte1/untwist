@@ -1,11 +1,11 @@
 # app/cell	lane	check	xfail|allow	reason
 # The first matching line wins. A bm-* reason names a gap in .superpowers/sdd/2026-11-05-v030/review/r51-bundle-gaps.md.
 base/rollup4-cjs29-iife+obf-heavy	default	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
+base/browserify+uglify	*	recognised	xfail	bm-browserify-require-rebound: a module that redeclares its renamed require parameter (var e=e(...)) refuses the bundle
 base/rollup4-cjs29-iife+obf-heavy	split	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
 base/webpack5-prod-node+obf-heavy	unsafe	clean	xfail	bm-obf-heavy-proxies: one CFF proxy object survives the unsafe lane in the webpack heavy cell
 base/esbuild0.28-iife+obf-heavy	default	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
 base/esbuild0.28-iife+obf-heavy	split	node	xfail	bm-obf-heavy-hang: self-defending survives in a CFF + dead-code program and the reprinted output loops
-base/browserify+uglify	*	node	xfail	bm-browserify-require-rebound: a module that redeclares its require parameter (var e=e(...)) is written with an unbound call
 *+obf*	default	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
 *+obf*	split	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
 *+obf*	default	clean	xfail	safe-global-names: the default lane keeps the string array when code may hold the global object
@@ -14,10 +14,6 @@ base/esbuild*+obf-object-keys	unsafe	recognised	xfail	bm-obf-object-keys: transf
 */webpack*-dev-eval*	*	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
 */webpack5-web-runtime-chunk	default	recognised	xfail	bm-webpack-runtime-chunk: a separate runtime chunk (runtimeChunk single) is refused (chunk start not proven)
 */webpack5-web-runtime-chunk	*	recognised	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle instead
-*/webpack5-web-runtime-chunk	split	node	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle and needs the browser
-*/webpack5-web-runtime-chunk	unsafe	node	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle and needs the browser
-*/webpack5-web-runtime-chunk	split	modules	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle instead
-*/webpack5-web-runtime-chunk	unsafe	modules	xfail	bm-webpack-runtime-chunk: with --split-hoisted the runtime file is split as a rollup bundle instead
 */webpack5-umd	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
 */webpack5-system	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs
 */webpack5-web-es5	*	recognised	xfail	bm-webpack-library-prelude: a library prelude (umd/system/es5) initialises a chunk with code that runs

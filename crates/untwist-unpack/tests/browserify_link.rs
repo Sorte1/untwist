@@ -222,3 +222,57 @@ fn a_renamed_require_that_is_fully_linked_is_not_noted() {
     );
     assert!(!split.notes(REQUIRE_LEFT_UNBOUND), "{:?}", split.notes);
 }
+
+fn refusal(arguments: &str) -> Option<Vec<String>> {
+    let alloc = Allocator::default();
+    let source = alloc.alloc_str(&format!("{PRELUDE}({arguments});"));
+    let parsed = parse_program(&alloc, source);
+    let mut programs = vec![parsed.program];
+    let (bundle, notes) = untwist_unpack::unpack_inputs(
+        &alloc,
+        &mut programs,
+        &[],
+        untwist_unpack::UnpackOptions::default(),
+    );
+    bundle
+        .is_none()
+        .then(|| notes.into_iter().map(|note| note.message).collect())
+}
+
+#[test]
+fn a_module_that_redeclares_its_require_parameter_refuses_the_bundle() {
+    let notes = refusal(
+        "{1:[function(e,t,n){var e=e(\"./a\");t.exports=e},{\"./a\":2}],2:[function(e,t,n){t.exports=1},{}]},{},[1]",
+    )
+    .expect("the bundle is refused");
+    assert!(
+        notes
+            .iter()
+            .any(|note| note.contains("module 1") && note.contains("no bundle is written")),
+        "{notes:?}"
+    );
+}
+
+#[test]
+fn a_module_that_assigns_its_require_parameter_refuses_the_bundle() {
+    assert!(refusal(
+        "{1:[function(e,t,n){var a=e(\"./a\");e=null;t.exports=a},{\"./a\":2}],2:[function(e,t,n){t.exports=1},{}]},{},[1]",
+    )
+    .is_some());
+}
+
+#[test]
+fn a_module_that_only_calls_its_require_parameter_is_unpacked() {
+    assert!(refusal(
+        "{1:[function(e,t,n){var a=e(\"./a\");t.exports=a},{\"./a\":2}],2:[function(e,t,n){t.exports=1},{}]},{},[1]",
+    )
+    .is_none());
+}
+
+#[test]
+fn a_require_parameter_named_require_may_be_declared_again() {
+    assert!(refusal(
+        "{1:[function(require,module,exports){var require=require(\"./a\");module.exports=require},{\"./a\":2}],2:[function(require,module,exports){module.exports=1},{}]},{},[1]",
+    )
+    .is_none());
+}
