@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use super::baseline::Version;
 use super::plan::LABEL;
 use crate::library::shape::{exact_shape, shape_program, UnitKind};
-use crate::library::table::{builtin, Role, Row};
+use crate::library::table::{builtin, exact_key, loose_key, Role, Row, Table};
 
 pub struct Lookalike {
     pub span: Span,
@@ -14,10 +14,15 @@ pub struct Lookalike {
     pub versions: (String, String),
 }
 
-fn versions(rows: &[&Row]) -> Option<(String, String)> {
+fn versions(table: &Table, rows: &[&Row]) -> Option<(String, String)> {
     let mut all: Vec<Version> = rows
         .iter()
-        .flat_map(|row| row.versions.split(',').flat_map(|range| range.split('~')))
+        .flat_map(|row| {
+            table
+                .versions(row)
+                .split(',')
+                .flat_map(|range| range.split('~'))
+        })
         .filter_map(Version::parse)
         .collect();
     all.sort();
@@ -36,24 +41,27 @@ pub fn lookalikes(
         if unit.kind != UnitKind::Function || known.contains(&unit.span) {
             continue;
         }
-        if !table.has_loose(unit.loose_key(&shaped.prefix)) {
+        if !table.has_loose(loose_key(unit.loose_key(&shaped.prefix))) {
             continue;
         }
         let shape = exact_shape(unit, scoping);
         let rows: Vec<&Row> = table
-            .rows_for(shape.exact)
-            .filter(|row| row.loose == shape.loose)
+            .rows_for(exact_key(shape.exact))
+            .filter(|row| row.loose == loose_key(shape.loose))
             .collect();
         let wrappers = rows
             .iter()
-            .all(|row| row.label == LABEL && row.role == Role::Wrapper);
+            .all(|row| table.label(row) == LABEL && row.role == Role::Wrapper);
         if rows.is_empty() || !wrappers {
             continue;
         }
-        let mut modules: Vec<String> = rows.iter().map(|row| row.module.clone()).collect();
+        let mut modules: Vec<String> = rows
+            .iter()
+            .map(|row| table.module(row).to_string())
+            .collect();
         modules.sort();
         modules.dedup();
-        if let Some(versions) = versions(&rows) {
+        if let Some(versions) = versions(table, &rows) {
             found.push(Lookalike {
                 span: unit.span,
                 modules,

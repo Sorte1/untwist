@@ -259,8 +259,9 @@ a comment saying the same.
 
 Today this covers Rollup bundles built with `@rollup/plugin-commonjs` and `strictRequires`
 (the lazy `requireX()` wrappers and the inline wrappers Rollup makes for modules required
-once). Scope-hoisted Rollup output, webpack module maps and esbuild `__commonJS` bundles are
-recognised but left as they are.
+once), in one program (with `--split-hoisted` every wrapper becomes its own module and they are
+left as they are). Scope-hoisted Rollup output, webpack module maps, esbuild `__commonJS`
+bundles and wrappers a minifier inlined into their caller are recognised but left as they are.
 
 ## Playground
 
