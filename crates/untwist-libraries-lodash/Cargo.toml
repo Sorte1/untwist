@@ -1,0 +1,16 @@
+[package]
+name = "untwist-libraries-lodash"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "deobfuscator", "fingerprint"]
+categories = ["development-tools"]
+description = "Library fingerprint tables for untwist: lodash, lodash-es, underscore and Ramda"
+include = ["build.rs", "src/**", "data/*.table.gz", "data/*.keys.json"]
+
+[dependencies]

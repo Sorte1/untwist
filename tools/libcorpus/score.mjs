@@ -23,6 +23,8 @@ const inRange = (range, version) => range.split(",").some((part) => {
   return before(low, v) && before(v, high);
 });
 const CONCATENATED = /^(dist|build|bundles|umd)\/|[.-]min\.(c|m)?js$/;
+const LABELS = { "lodash-es": "lodash" };
+const labelOf = (lib) => LABELS[lib] ?? lib;
 const stem = (file) => file.replace(/\.(c|m)?js$/, "");
 
 function untwist(input, lane, saved) {
@@ -39,7 +41,7 @@ function untwist(input, lane, saved) {
 function score(truthFile, output) {
   const truth = readFileSync(truthFile, "utf8").split("\n").filter(Boolean).map((line) => line.split("\t"));
   const comments = [...output.matchAll(COMMENT)].map((match) => ({ label: match[1], range: match[2], modules: match[3].split(" | ").map(stem), module: match[3] }));
-  const versions = new Map(truth.map(([lib, version]) => [lib, version]));
+  const versions = new Map(truth.map(([lib, version]) => [labelOf(lib), version]));
   const wrong = [];
   const ok = [];
   for (const comment of comments) {
@@ -51,13 +53,13 @@ function score(truthFile, output) {
   let named = 0;
   let exact = 0;
   for (const [lib, , file] of truth) {
-    const mine = ok.filter((comment) => comment.label === lib);
+    const mine = ok.filter((comment) => comment.label === labelOf(lib));
     if (mine.some((comment) => comment.modules.includes(stem(file)))) {
       named += 1;
       exact += 1;
     } else if (CONCATENATED.test(file) && mine.length) named += 1;
   }
-  const truthStems = new Set(truth.map(([lib, , file]) => `${lib}\t${stem(file)}`));
+  const truthStems = new Set(truth.map(([lib, , file]) => `${labelOf(lib)}\t${stem(file)}`));
   const elsewhere = ok.filter((comment) => !comment.modules.some((module) => truthStems.has(`${comment.label}\t${module}`))).length;
   return { modules: truth.length, named, exact, comments: comments.length, elsewhere, wrong };
 }

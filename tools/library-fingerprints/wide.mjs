@@ -59,9 +59,9 @@ export function entrySource(entry, rels, { main }) {
 
 const DIST = (rel, kind) => kind === "min" || kind === "umd" || /^(dist|build|umd|bundles|lib)\//.test(rel) || !rel.includes("/");
 
-export function wide({ id, name, label = name, include: wanted = DIST, exclude = null, main = true, keepConcatenations = false, ...rest }) {
+export function wide({ id, name, label = name, include: wanted = DIST, exclude = null, main = true, keepConcatenations = false, versions: only = null, ...rest }) {
   const include = wanted instanceof RegExp ? (rel) => wanted.test(rel) : wanted;
-  const versions = entries().filter((entry) => entry.name === name);
+  const versions = entries().filter((entry) => entry.name === name && (!only || only.test(entry.version)));
   if (!versions.length) throw new Error(`no corpus versions for ${name}`);
   const find = (dir, version) => {
     const matches = versions.filter((entry) => entry.alias === dir && (version === undefined || entry.version === (version.version ?? version)));

@@ -385,6 +385,26 @@ fn builtin_sources() -> Vec<(&'static str, &'static [u8])> {
     sources.extend_from_slice(untwist_libraries_core::TABLES);
     #[cfg(feature = "libraries-corejs")]
     sources.extend_from_slice(untwist_libraries_corejs::TABLES);
+    #[cfg(feature = "libraries-polyfills")]
+    sources.extend_from_slice(untwist_libraries_polyfills::TABLES);
+    #[cfg(feature = "libraries-react")]
+    sources.extend_from_slice(untwist_libraries_react::TABLES);
+    #[cfg(feature = "libraries-frameworks")]
+    sources.extend_from_slice(untwist_libraries_frameworks::TABLES);
+    #[cfg(feature = "libraries-lodash")]
+    sources.extend_from_slice(untwist_libraries_lodash::TABLES);
+    #[cfg(feature = "libraries-dates")]
+    sources.extend_from_slice(untwist_libraries_dates::TABLES);
+    #[cfg(feature = "libraries-state")]
+    sources.extend_from_slice(untwist_libraries_state::TABLES);
+    #[cfg(feature = "libraries-data")]
+    sources.extend_from_slice(untwist_libraries_data::TABLES);
+    #[cfg(feature = "libraries-game")]
+    sources.extend_from_slice(untwist_libraries_game::TABLES);
+    #[cfg(feature = "libraries-pixi")]
+    sources.extend_from_slice(untwist_libraries_pixi::TABLES);
+    #[cfg(feature = "libraries-three")]
+    sources.extend_from_slice(untwist_libraries_three::TABLES);
     sources
 }
 

@@ -1,3 +1,3 @@
 import { ALL, wide } from "../wide.mjs";
 
-export default wide({ id: "ramda", name: "ramda", include: ALL });
+export default wide({ id: "ramda", group: "lodash", name: "ramda", include: ALL });

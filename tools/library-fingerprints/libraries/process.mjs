@@ -1,3 +1,3 @@
 import { ALL, wide } from "../wide.mjs";
 
-export default wide({ id: "process", name: "process", include: ALL });
+export default wide({ id: "process", group: "polyfills", name: "process", include: ALL });
