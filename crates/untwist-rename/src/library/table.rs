@@ -377,6 +377,8 @@ fn builtin_sources() -> Vec<(&'static str, &'static [u8])> {
     let mut sources: Vec<(&'static str, &'static [u8])> = Vec::new();
     #[cfg(feature = "libraries-core")]
     sources.extend_from_slice(untwist_libraries_core::TABLES);
+    #[cfg(feature = "libraries-corejs")]
+    sources.extend_from_slice(untwist_libraries_corejs::TABLES);
     sources
 }
 

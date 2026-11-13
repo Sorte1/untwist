@@ -21,4 +21,5 @@ export default {
     return match ? `${match[1]}/${match[2]}` : null;
   },
   obfuscate: "3.39.0,latest",
+  group: "corejs",
 };

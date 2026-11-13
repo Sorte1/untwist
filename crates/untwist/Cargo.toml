@@ -41,6 +41,7 @@ serde_json.workspace = true
 tempfile.workspace = true
 
 [dev-dependencies]
+untwist-rename = { path = "../untwist-rename", features = ["libraries-all"] }
 untwist = { path = ".", features = ["test-hooks"] }
 criterion.workspace = true
 serde_json.workspace = true

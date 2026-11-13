@@ -11,14 +11,30 @@ use super::shape::UnitKind;
 use super::table::Role;
 use super::Hit;
 
-pub fn comment_text(hit: &Hit) -> String {
-    let modules = hit
-        .modules
+fn module_list(modules: &[String]) -> String {
+    modules
         .iter()
         .map(|module| format!("{module}.js"))
         .collect::<Vec<_>>()
-        .join(" | ");
-    format!("// {} {}: {modules}", hit.label, hit.range())
+        .join(" | ")
+}
+
+pub fn comment_text(hit: &Hit) -> String {
+    let mut text = format!(
+        "// {} {}: {}",
+        hit.label,
+        hit.range(),
+        module_list(&hit.modules)
+    );
+    for same in &hit.also {
+        text.push_str(&format!(
+            ", same code in {} {}: {}",
+            same.label,
+            same.range(),
+            module_list(&same.modules)
+        ));
+    }
+    text
 }
 
 fn function_span(expr: &Expression<'_>) -> Option<Span> {

@@ -394,3 +394,44 @@ fn a_table_loaded_at_run_time_is_matched_and_loads_once() {
         found.hits
     );
 }
+
+#[test]
+fn a_shape_two_libraries_share_names_both_and_keeps_only_agreed_names() {
+    let first = row_for(
+        GET_BUILT_IN,
+        "helpers/possibleConstructorReturn",
+        "requireGetBuiltIn",
+        &INNER[..4],
+        &OUTER,
+    );
+    let mut second = row_for(
+        GET_BUILT_IN,
+        "possible_constructor_return",
+        "requireOther",
+        &INNER[..4],
+        &OUTER,
+    );
+    second.label = "@swc/helpers".to_string();
+    second.versions = "0.5.24".to_string();
+    let table = Table::from_rows(&[first, second]);
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, GET_BUILT_IN);
+    let sem = build_scoping(&parsed.program);
+    let found = match_with(&table, &parsed.program, &sem.scoping);
+    let hit = found
+        .hits
+        .iter()
+        .find(|hit| hit.outermost)
+        .expect("the wrapper is a hit");
+    let text = untwist_rename::library::annotate::comment_text(hit);
+    assert!(
+        text.contains("same code in @swc/helpers 0.5: possible_constructor_return.js"),
+        "{text}"
+    );
+    let names = names_after(&table, GET_BUILT_IN);
+    assert!(!names.iter().any(|(old, _)| old == "wrapper"), "{names:?}");
+    assert!(
+        names.contains(&("g".to_string(), "globalThis".to_string())),
+        "{names:?}"
+    );
+}

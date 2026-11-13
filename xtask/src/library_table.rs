@@ -344,6 +344,8 @@ fn literal_modules(
         .collect()
 }
 
+type BuildFindings = (Vec<Observed>, Vec<(String, String)>);
+
 struct Observed {
     row: Row,
     known: bool,
@@ -491,7 +493,7 @@ fn process_build(
     work: &Path,
     build: &Build,
     manifest: &Manifest,
-) -> Result<(Vec<Observed>, Vec<(String, String)>)> {
+) -> Result<BuildFindings> {
     let mut observed = Vec::new();
     let mut keys = Vec::new();
     let empty = BTreeMap::new();

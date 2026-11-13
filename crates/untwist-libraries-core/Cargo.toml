@@ -10,7 +10,7 @@ readme.workspace = true
 rust-version.workspace = true
 keywords = ["javascript", "deobfuscator", "core-js", "fingerprint"]
 categories = ["development-tools"]
-description = "Library fingerprint tables for untwist: core-js 3, regenerator-runtime, tslib, Babel and swc helpers"
+description = "Small library fingerprint tables for untwist: regenerator-runtime, tslib, Babel and swc helpers"
 include = ["build.rs", "src/**", "data/*.table.gz", "data/*.keys.json"]
 
 [dependencies]

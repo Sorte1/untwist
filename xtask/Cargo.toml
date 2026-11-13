@@ -16,7 +16,7 @@ untwist-core = { path = "../crates/untwist-core" }
 untwist-eval = { path = "../crates/untwist-eval", features = ["value-api"] }
 oxc_ast.workspace = true
 untwist-testing = { path = "../crates/untwist-testing" }
-untwist-rename = { path = "../crates/untwist-rename" }
+untwist-rename = { path = "../crates/untwist-rename", features = ["libraries-all"] }
 oxc_span.workspace = true
 miniz_oxide = "0.9.1"
 oxc_allocator.workspace = true

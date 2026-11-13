@@ -16,7 +16,8 @@ description = "Scope-safe identifier renaming for untwist: mangle, simple and un
 default = ["libraries-core"]
 test-hooks = ["untwist-core/test-hooks"]
 libraries-core = ["dep:untwist-libraries-core"]
-libraries-all = ["libraries-core"]
+libraries-corejs = ["dep:untwist-libraries-corejs"]
+libraries-all = ["libraries-core", "libraries-corejs"]
 
 [dependencies]
 untwist-core = { path = "../untwist-core", version = "0.5.0" }
@@ -31,6 +32,7 @@ oxc_syntax.workspace = true
 rustc-hash.workspace = true
 miniz_oxide = "0.9.1"
 untwist-libraries-core = { path = "../untwist-libraries-core", version = "0.5.0", optional = true }
+untwist-libraries-corejs = { path = "../untwist-libraries-corejs", version = "0.5.0", optional = true }
 
 [dev-dependencies]
 untwist-rename = { path = ".", features = ["test-hooks"] }

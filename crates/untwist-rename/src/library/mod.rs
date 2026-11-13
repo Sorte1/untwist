@@ -27,6 +27,7 @@ pub struct Hit {
     pub kind: UnitKind,
     pub outermost: bool,
     pub reported: bool,
+    pub also: Vec<SameCode>,
 }
 
 impl Hit {
@@ -52,7 +53,21 @@ impl LibraryNames {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SameCode {
+    pub label: String,
+    pub versions: (String, String),
+    pub modules: Vec<String>,
+}
+
+impl SameCode {
+    pub fn range(&self) -> String {
+        version_range(&self.versions.0, &self.versions.1)
+    }
+}
+
 struct Merged {
+    also: Vec<SameCode>,
     label: String,
     versions: (String, String),
     modules: Vec<String>,
@@ -149,6 +164,27 @@ fn overlaps(versions: &str, window: &(String, String)) -> bool {
     ranges(versions).any(|(from, to)| version_key(from) <= high && version_key(to) >= low)
 }
 
+fn note_same_code(also: &mut Vec<SameCode>, label: &str, bounds: (String, String), module: String) {
+    let Some(entry) = also.iter_mut().find(|entry| entry.label == label) else {
+        also.push(SameCode {
+            label: label.to_string(),
+            versions: bounds,
+            modules: vec![module],
+        });
+        return;
+    };
+    if !entry.modules.contains(&module) {
+        entry.modules.push(module);
+        entry.modules.sort();
+    }
+    if version_key(&bounds.0) < version_key(&entry.versions.0) {
+        entry.versions.0 = bounds.0;
+    }
+    if version_key(&bounds.1) > version_key(&entry.versions.1) {
+        entry.versions.1 = bounds.1;
+    }
+}
+
 fn merge_rows(table: &Table, shape: &ExactShape, windows: Option<&Windows>) -> Option<Merged> {
     let loose = table::loose_key(shape.loose);
     let mut merged: Option<Merged> = None;
@@ -165,6 +201,7 @@ fn merge_rows(table: &Table, shape: &ExactShape, windows: Option<&Windows>) -> O
         let module = table.module(row).to_string();
         let Some(current) = merged.as_mut() else {
             merged = Some(Merged {
+                also: Vec::new(),
                 label: label.to_string(),
                 versions: row_bounds,
                 modules: vec![module],
@@ -176,12 +213,18 @@ fn merge_rows(table: &Table, shape: &ExactShape, windows: Option<&Windows>) -> O
             continue;
         };
         if current.label != label {
-            return None;
+            current
+                .own
+                .merge(table.own(row).map(str::to_string).as_ref());
+            merge_slots(&mut current.inner, &table.inner(row));
+            merge_slots(&mut current.outer, &table.outer(row));
+            note_same_code(&mut current.also, label, row_bounds, module);
+            continue;
         }
         current
             .own
             .merge(table.own(row).map(str::to_string).as_ref());
-        if current.own == Slot::Conflict {
+        if current.own == Slot::Conflict && current.also.is_empty() {
             return None;
         }
         if !current.modules.contains(&module) {
@@ -369,6 +412,7 @@ fn hits(units: &[Unit<'_, '_>], candidates: &[Candidate], accepted: &[(usize, bo
                 kind: unit.kind,
                 outermost: true,
                 reported: strong || candidate.merged.role != Role::Function,
+                also: candidate.merged.also.clone(),
             }
         })
         .collect();

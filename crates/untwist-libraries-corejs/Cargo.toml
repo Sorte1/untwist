@@ -1,0 +1,16 @@
+[package]
+name = "untwist-libraries-corejs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "deobfuscator", "core-js", "fingerprint"]
+categories = ["development-tools"]
+description = "core-js 3 fingerprint table for untwist (every minor 3.0 to 3.51)"
+include = ["build.rs", "src/**", "data/*.table.gz", "data/*.keys.json"]
+
+[dependencies]
