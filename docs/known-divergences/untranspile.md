@@ -378,11 +378,53 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   the statement follows with `_t` in its place, so every read keeps the machine's order (the
   spread-around-`await` lowering of TypeScript and SWC takes this form;
   `fixtures/untranspile/hand/machine-resume-order.js`). Neither form needs an assumption.
-- **Babel's regenerator is kept.** `_regenerator()` / `_regeneratorRuntime()` and
-  `_asyncToGenerator` (Babel `ie 11` output, and game.js has none) are not identified: the
-  runtime's body exceeds the fingerprint's binding slots, so its identity cannot be proved by
-  structure, and an unknown helper is refused. Babel's async and generator fixtures keep their
-  helpers unchanged.
+- **Generators (Babel's inline regenerator, Babel 7.18 to 8).** A function declaration `g`
+  whose body is `return _regenerator().w(function (_context) { while (1) switch (_context.n) {
+  … } }, _marked)`, after only `var` declarations initialised with nothing, `this` or
+  `arguments`, where `var _marked = _regenerator().m(g)` sits in the same statement list and
+  `_marked` is read only there, becomes a `function*` and the `_marked` declaration goes.
+  `_regenerator` and `_regeneratorDefine2` are identified by structure (inline and
+  terser-minified copies). The cases are read like the tslib machine: `_context.n = L; return
+  v` yields `v` and resumes at `L`, `_context.n = L; break` jumps, `return _context.a(2, v)`
+  returns, a case without either falls into the next, and `_context.v` at the start of a resumed
+  case is the received value; `return _context.d(_regeneratorValues(x), L)` delegates (`yield*
+  x`, under the delegate assumption below). The try list (`.w(…, _marked, null, [[try, catch,
+  finally, after]])`) gives the `try` regions (`_context.p = L` at a region's start, catch or
+  finally is bookkeeping, `return _context.f(L)` ends a finally, the caught value is
+  `_context.v`); a catch-only entry has no `after`, so its end is the one label the try body
+  leaves to, kept only when the catch cases reach nothing outside it. A `finally` that the try
+  or catch cases enter by a jump, a resumption or falling through (the normal completion of
+  the `try`) keeps the machine, since the structurer's `finally` is entered by the region's
+  exit, not by an edge. Babel 7.18 to 7.27's inline `_regeneratorRuntime()` (identified by
+  structure) is read the same way from its classic protocol: `.mark(g)`/`.wrap(function g$
+  (_context) { while (1) switch (_context.prev = _context.next) { case 0: … case "end": return
+  _context.stop(); } }, _marked)`, numbered cases mapped in order, `_context.next = L`,
+  `_context.sent`, `return _context.abrupt("return", v)`; its try lists, `_context.t0 =
+  _context["catch"](L)`, `finish` and `delegateYield` keep the machine. Any other use of
+  `_context`, `this` in the state function, `@babel/runtime`'s module copy or the global
+  `regeneratorRuntime` keeps it too. The expression form `_regenerator().m(function _callee() { return
+  _regenerator().w(…, _callee); })` becomes that `function*` in place, and a function whose
+  body ends `return function* () { … }()` (Babel's form for a generator with default
+  parameters) becomes the generator itself when the inner one has no parameters, uses no
+  `this`, `arguments` or `new.target`, and binds no name the outer function binds. The rewrite
+  is `--unsafe` only, under the generator assumptions above (a regenerator generator object is
+  `Object.create(g.prototype)` with the runtime's `next`/`throw`/`return`; `_regenerator().m(g)`
+  gives `g` the runtime's generator-function prototype).
+- **Async functions (Babel's `_asyncToGenerator`, SWC's `_async_to_generator` with the same body).** Once the regenerator machine above (or any `function*`) is a
+  `function*` (a machine in an expression, `_regenerator().m(function _callee() { return
+  _regenerator().w(…, _callee); })`, becomes that `function*` in place), three wrappers become
+  `async` functions, each yield turned into `await`: `return _asyncToGenerator(function* () {
+  … })()` in a function (the generator uses neither `this` nor `arguments`, which Babel moved
+  into `_this`/`_arguments`); the declaration pair `function f(_x) { return
+  _f.apply(this, arguments); } function _f() { _f = _asyncToGenerator(function* (x) { … });
+  return _f.apply(this, arguments); }`, where `_f` is used only there and `f`'s parameters are
+  unread placeholders as many as the generator's `length`, which becomes `async function
+  f(x) { … }`; and the arrow closure `(function () { var _ref = _asyncToGenerator(function* (k)
+  { … }); return function add(_x) { return _ref.apply(this, arguments); }; })()`, which becomes
+  `async function add(k) { … }` when the generator does not mention `add`. A generator that
+  binds or reads `await` or delegates (`yield*`) keeps the wrapper, and a program that writes
+  `Promise` keeps every one. Assumptions: the async ones above (microtask ticks, function
+  identity: the old `f` was constructible).
 - **game.js's generator helper is kept.** Its `__generator` is an older tslib copy that the
   obfuscator rewrote (arrow, inlined `step`), so it matches no known version and its three
   machines stay.

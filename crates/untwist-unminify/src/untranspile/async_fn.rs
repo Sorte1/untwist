@@ -17,11 +17,12 @@ use super::shapes::Kind;
 
 pub const AWAITER: &str = "async/awaiter/unsafe";
 pub const ESBUILD: &str = "async/esbuild/unsafe";
+pub const BABEL: &str = "async/babel/unsafe";
 
 #[derive(Default)]
-struct Scan {
+pub(super) struct Scan {
     frame: Frame,
-    bad: bool,
+    pub(super) bad: bool,
     this: bool,
     arguments: bool,
 }
@@ -80,9 +81,9 @@ impl<'a> VisitJs<'a> for Scan {
     }
 }
 
-struct Awaits<'c, 'a, 'x> {
-    functions: u32,
-    cx: &'x Cx<'a, 'c>,
+pub(super) struct Awaits<'c, 'a, 'x> {
+    pub(super) functions: u32,
+    pub(super) cx: &'x Cx<'a, 'c>,
 }
 
 impl<'a> VisitMut<'a> for Awaits<'_, 'a, '_> {
@@ -183,6 +184,9 @@ fn runner<'k, 'a>(
     table: &Table,
     scoping: &Scoping,
 ) -> Option<Runner<'k, 'a>> {
+    if let Some(found) = babel_runner(call, table, scoping) {
+        return Some(found);
+    }
     let arguments: Vec<&Expression<'a>> = call
         .arguments
         .iter()
@@ -217,6 +221,46 @@ fn runner<'k, 'a>(
         shape,
         receiver: receiver(this, scoping)?,
         args,
+        generator,
+    })
+}
+
+fn babel_runner<'k, 'a>(
+    call: &'k CallExpression<'a>,
+    table: &Table,
+    scoping: &Scoping,
+) -> Option<Runner<'k, 'a>> {
+    let Expression::CallExpression(inner) = call.callee.without_parentheses() else {
+        return None;
+    };
+    if !call.arguments.is_empty()
+        || call.optional
+        || inner.optional
+        || table.kind_of_callee(&inner.callee, scoping) != Some(Kind::AsyncToGenerator)
+    {
+        return None;
+    }
+    let [Argument::FunctionExpression(generator)] = inner.arguments.as_slice() else {
+        return None;
+    };
+    let unnamed = generator.id.as_ref().is_none_or(|id| {
+        id.symbol_id
+            .get()
+            .is_some_and(|symbol| scoping.get_resolved_reference_ids(symbol).is_empty())
+    });
+    let fits = generator.generator
+        && !generator.r#async
+        && unnamed
+        && generator.params.items.is_empty()
+        && generator.params.rest.is_none()
+        && generator
+            .body
+            .as_ref()
+            .is_some_and(|body| body.directives.is_empty());
+    fits.then_some(Runner {
+        shape: BABEL,
+        receiver: Receiver::Inert,
+        args: Args::Empty,
         generator,
     })
 }
@@ -259,7 +303,7 @@ fn generator_clean(found: &Runner<'_, '_>, outer: ScopeId, scoping: &Scoping) ->
     !scan.bad && receiver_ok && arguments_ok && names_disjoint(inner, outer, scoping)
 }
 
-fn expected_length(params: &FormalParameters<'_>) -> usize {
+pub(super) fn expected_length(params: &FormalParameters<'_>) -> usize {
     params
         .items
         .iter()
@@ -298,8 +342,16 @@ fn take_generator<'a>(
 }
 
 fn take_from_call<'a>(expression: &mut Expression<'a>, cx: &Cx<'a, '_>) -> Option<Taken<'a>> {
-    let Expression::CallExpression(call) = expression.without_parentheses_mut() else {
+    let Expression::CallExpression(outer) = expression.without_parentheses_mut() else {
         return None;
+    };
+    let call = if outer.arguments.is_empty() {
+        let Expression::CallExpression(inner) = outer.callee.without_parentheses_mut() else {
+            return None;
+        };
+        inner
+    } else {
+        outer
     };
     let Expression::FunctionExpression(generator) =
         call.arguments.last_mut()?.as_expression_mut()?
@@ -321,7 +373,8 @@ pub fn is_site(function: &Function<'_>, table: &Table, scoping: &Scoping) -> boo
             matches!(
                 table.kind_of_callee(&call.callee, scoping),
                 Some(Kind::Awaiter | Kind::Async)
-            )
+            ) || matches!(call.callee.without_parentheses(), Expression::CallExpression(inner)
+                if table.kind_of_callee(&inner.callee, scoping) == Some(Kind::AsyncToGenerator))
         })
 }
 

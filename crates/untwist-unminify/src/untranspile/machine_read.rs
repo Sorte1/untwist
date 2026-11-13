@@ -14,6 +14,7 @@ pub enum Read {
     Term(Term),
     LabelSet(u32),
     Try(TryRegion),
+    Skip,
     Other,
 }
 
@@ -304,6 +305,10 @@ impl<'k, 'a, M: Machinery<'a>> Builder<'_, 'k, 'a, M> {
             Read::Try(region) => {
                 (list.top && first && region.start == list.label).then_some(())?;
                 self.machine.trys.push(region);
+                Some(Flow::Next(used))
+            }
+            Read::Skip => {
+                (list.top && first).then_some(())?;
                 Some(Flow::Next(used))
             }
             Read::Other => self.other(id, list, (at, loc), cont),

@@ -13,7 +13,7 @@ const GLOBAL: u8 = 0xf0;
 const OWN: u8 = 0xf1;
 const LOCAL: u8 = 0xf2;
 const EXTERNAL: u8 = 0xf3;
-const LOCAL_SLOTS: usize = 32;
+const LOCAL_SLOTS: usize = 192;
 const EXTERNAL_SLOTS: usize = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

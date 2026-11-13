@@ -46,7 +46,7 @@ pub fn eager_free(statement: &Statement<'_>) -> bool {
         })
 }
 
-fn aliases_arguments(statement: &Statement<'_>) -> bool {
+pub fn aliases_arguments(statement: &Statement<'_>) -> bool {
     let Statement::VariableDeclaration(declaration) = statement else {
         return false;
     };
@@ -82,13 +82,13 @@ pub fn simple_param(params: &FormalParameters<'_>) -> Option<SymbolId> {
     }
 }
 
-struct Body<'k, 'a> {
-    state: SymbolId,
-    scope: ScopeId,
-    statements: &'k [Statement<'a>],
+pub struct Body<'k, 'a> {
+    pub state: SymbolId,
+    pub scope: ScopeId,
+    pub statements: &'k [Statement<'a>],
 }
 
-fn body_of<'k, 'a>(expression: &'k Expression<'a>) -> Option<Body<'k, 'a>> {
+pub fn body_of<'k, 'a>(expression: &'k Expression<'a>) -> Option<Body<'k, 'a>> {
     match expression.without_parentheses() {
         Expression::FunctionExpression(function)
             if !function.generator && !function.r#async && function.id.is_none() =>
@@ -130,7 +130,7 @@ fn generator_body<'k, 'a>(
     body_of(body.as_expression()?)
 }
 
-fn scopes_free(body: &Body<'_, '_>, scoping: &Scoping) -> bool {
+pub fn scopes_free(body: &Body<'_, '_>, scoping: &Scoping) -> bool {
     let own = scoping.get_bindings(body.scope);
     let only_state = own.len() == 1 && own.values().all(|symbol| *symbol == body.state);
     let switch_free = match body.statements {
@@ -250,7 +250,7 @@ fn confined(
     Some(())
 }
 
-fn rebinds<'a>(
+pub fn rebinds<'a>(
     machine: &Machine,
     cases: &[&[Statement<'a>]],
     prefix: &[Statement<'a>],
@@ -281,7 +281,7 @@ fn rebinds<'a>(
     out
 }
 
-fn drop_declarators(statements: &mut AVec<'_, Statement<'_>>, symbols: &[SymbolId]) {
+pub fn drop_declarators(statements: &mut AVec<'_, Statement<'_>>, symbols: &[SymbolId]) {
     for statement in statements.iter_mut() {
         if let Statement::VariableDeclaration(declaration) = statement {
             declaration.declarations.retain(|declarator| {
@@ -295,14 +295,14 @@ fn drop_declarators(statements: &mut AVec<'_, Statement<'_>>, symbols: &[SymbolI
     });
 }
 
-fn unbind(generated: &[BoundIdentifier<'_>], cx: &mut Cx<'_, '_>) {
+pub fn unbind(generated: &[BoundIdentifier<'_>], cx: &mut Cx<'_, '_>) {
     for bound in generated {
         let scope = cx.scoping().symbol_scope_id(bound.symbol_id);
         cx.scoping_mut().remove_binding(scope, bound.name);
     }
 }
 
-fn drop_final_return(statements: &mut AVec<'_, Statement<'_>>) {
+pub fn drop_final_return(statements: &mut AVec<'_, Statement<'_>>) {
     if matches!(statements.last(), Some(Statement::ReturnStatement(it)) if it.argument.is_none()) {
         statements.pop();
     }

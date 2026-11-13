@@ -48,6 +48,7 @@ pub struct Table {
     machines: bool,
     runners: bool,
     iterators: bool,
+    regenerators: bool,
 }
 
 impl Table {
@@ -60,6 +61,7 @@ impl Table {
         self.machines = false;
         self.runners = false;
         self.iterators = false;
+        self.regenerators = false;
     }
 
     pub fn is_empty(&self) -> bool {
@@ -94,6 +96,10 @@ impl Table {
         self.iterators
     }
 
+    pub fn has_regenerators(&self) -> bool {
+        self.regenerators
+    }
+
     pub fn kinds(&self) -> impl Iterator<Item = Kind> + '_ {
         self.helpers.values().map(|helper| helper.kind)
     }
@@ -106,6 +112,7 @@ impl Table {
         self.machines |= shapes::is_machine_runtime(helper.kind);
         self.runners |= shapes::is_async_runner(helper.kind);
         self.iterators |= shapes::is_iterator_helper(helper.kind);
+        self.regenerators |= shapes::is_regenerator(helper.kind);
         self.helpers.insert(symbol, helper);
     }
 
