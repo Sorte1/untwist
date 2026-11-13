@@ -24,7 +24,7 @@ describe('phaseOf', () => {
     expect(['deobfuscate', 'protections'].map(phaseOf)).toEqual(['deobfuscate', 'deobfuscate']);
     expect(['unminify', 'lexical'].map(phaseOf)).toEqual(['unminify', 'unminify']);
     expect(['rename', 'rename-shorthand', 'jsx', 'cleanup', 'unpack'].map(phaseOf)).toEqual(['rename', 'rename', 'jsx', 'cleanup', 'unpack']);
-    expect(['parse', 'print', 'library', 'modern'].map(phaseOf)).toEqual(['parse', 'print', 'library', 'modern']);
+    expect(['parse', 'print', 'library', 'modern', 'locate'].map(phaseOf)).toEqual(['parse', 'print', 'library', 'modern', 'locate']);
     expect(phaseOf('plugin:after-parse')).toBeNull();
   });
 

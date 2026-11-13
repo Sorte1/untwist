@@ -81,7 +81,7 @@ test('the steps follow the settings of the run, carry their time, and end with e
   const phases = 'start parse prepare deobfuscate unminify jsx cleanup rename print transfer editor'.split(' ');
   expect(steps[0]).toBe(phases.map((phase) => `${phase}:pending`).join(' '));
   const last = steps.at(-1)?.split(' ') ?? [];
-  expect(last.map((step) => step.split(':')[0])).toEqual(phases);
+  expect(last.map((step) => step.split(':')[0])).toEqual([...phases.slice(0, -3), 'locate', ...phases.slice(-3)]);
   expect(last.at(-1)).toBe('editor:current');
   expect(last.slice(0, -1).every((step) => step.endsWith(':done'))).toBe(true);
   expect(times.at(-1)?.split('|').slice(0, -1).every((time) => /^\d+ ms$|^\d+\.\d\d s$/.test(time))).toBe(true);

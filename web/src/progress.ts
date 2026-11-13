@@ -10,6 +10,7 @@ export type Phase =
   | 'rename'
   | 'modern'
   | 'library'
+  | 'locate'
   | 'print'
   | 'unpack'
   | 'transfer'
@@ -59,7 +60,7 @@ export const MARK = {
   end: 'end',
 } as const;
 
-const ORDER: readonly Phase[] = ['tables', 'start', 'parse', 'prepare', 'deobfuscate', 'unminify', 'jsx', 'cleanup', 'rename', 'modern', 'library', 'print', 'unpack', 'transfer', 'editor'];
+const ORDER: readonly Phase[] = ['tables', 'start', 'parse', 'prepare', 'deobfuscate', 'unminify', 'jsx', 'cleanup', 'rename', 'modern', 'library', 'locate', 'print', 'unpack', 'transfer', 'editor'];
 
 const LABELS: Readonly<Record<Phase, string>> = {
   tables: 'Library tables',
@@ -73,6 +74,7 @@ const LABELS: Readonly<Record<Phase, string>> = {
   rename: 'Rename',
   modern: 'Modern',
   library: 'Library names',
+  locate: 'Locate report spans',
   print: 'Print',
   unpack: 'Unpack',
   transfer: 'Transfer output',
@@ -99,6 +101,7 @@ const STAGES: Readonly<Record<string, Phase>> = {
   'rename-shorthand': 'rename',
   modern: 'modern',
   library: 'library',
+  locate: 'locate',
   print: 'print',
   unpack: 'unpack',
   [MARK.transfer]: 'transfer',
@@ -106,7 +109,7 @@ const STAGES: Readonly<Record<string, Phase>> = {
   [MARK.folds]: 'editor',
 };
 
-const ENGINE_PHASES: ReadonlySet<Phase> = new Set(['start', 'parse', 'prepare', 'deobfuscate', 'unminify', 'jsx', 'cleanup', 'rename', 'modern', 'library', 'print', 'unpack', 'transfer']);
+const ENGINE_PHASES: ReadonlySet<Phase> = new Set(['start', 'parse', 'prepare', 'deobfuscate', 'unminify', 'jsx', 'cleanup', 'rename', 'modern', 'library', 'locate', 'print', 'unpack', 'transfer']);
 
 export function phaseOf(stage: string): Phase | null {
   if (stage.startsWith(MARK.tables)) {
@@ -148,6 +151,7 @@ export function expectedPhases(flags: string, options: ProgressOptions = { libra
     rename: renames(list),
     modern: false,
     library: options.libraries,
+    locate: false,
     print: true,
     unpack: !off('--no-unpack'),
     transfer: true,

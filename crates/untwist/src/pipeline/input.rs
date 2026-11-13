@@ -413,6 +413,9 @@ impl Pipeline {
             self.stage_layer(tree, (layer, undo), layering, result)
         }));
         let replay = matches!(staged, Ok(Staged::Replay));
+        if self.options.decoded_strings || self.options.refusal_spans {
+            self.options.progress(Progress::StageBegins("locate"));
+        }
         #[cfg(feature = "refusal-spans")]
         if let Some((layer, recorder)) = recorder.filter(|_| !replay) {
             let sites = super::refusal_spans::located(text, layer, recorder.finish());
