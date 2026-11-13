@@ -14,26 +14,30 @@ function hitsOf(match: LibraryMatch, file: number | null, line: number): ModuleH
   return match.modules.map((module) => ({ library: match.library, range: match.range, module, file, line }));
 }
 
+function newlinesBetween(text: string, from: number, to: number): number {
+  let count = 0;
+  for (let at = text.indexOf('\n', from); at !== -1 && at < to; at = text.indexOf('\n', at + 1)) {
+    count += 1;
+  }
+  return count;
+}
+
 function scanText(text: string, file: number | null, known: ReadonlySet<string>, into: Map<string, ModuleHit[]>): void {
-  let start = 0;
   let line = 1;
-  while (start <= text.length) {
-    const end = text.indexOf('\n', start);
+  let counted = 0;
+  for (let marker = text.indexOf(MARKER); marker !== -1; ) {
+    const lineStart = text.lastIndexOf('\n', marker) + 1;
+    const end = text.indexOf('\n', marker);
     const stop = end === -1 ? text.length : end;
-    const marker = text.indexOf(MARKER, start);
-    if (marker !== -1 && marker < stop) {
-      const comment = libraryComment(text.slice(start, stop), known);
-      for (const match of comment === null ? [] : [comment, ...comment.also]) {
-        if (known.has(match.library)) {
-          into.set(match.library, [...(into.get(match.library) ?? []), ...hitsOf(match, file, line)]);
-        }
+    line += newlinesBetween(text, counted, lineStart);
+    counted = lineStart;
+    const comment = libraryComment(text.slice(lineStart, stop), known);
+    for (const match of comment === null ? [] : [comment, ...comment.also]) {
+      if (known.has(match.library)) {
+        into.set(match.library, [...(into.get(match.library) ?? []), ...hitsOf(match, file, line)]);
       }
     }
-    if (end === -1) {
-      break;
-    }
-    start = end + 1;
-    line += 1;
+    marker = end === -1 ? -1 : text.indexOf(MARKER, end);
   }
 }
 
