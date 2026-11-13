@@ -7,6 +7,7 @@ use crate::turbopack::links::{Group, TurboView, NAMESPACE};
 pub struct Links {
     pub parcel: Option<ParcelView>,
     pub turbopack: Option<TurboView>,
+    pub merged: bool,
 }
 
 pub struct Member {
@@ -33,7 +34,13 @@ pub fn groups(programs: &[Program<'_>]) -> Groups {
         return Groups::default();
     }
     let mut groups = Groups {
-        views: programs.iter().map(|_| Links::default()).collect(),
+        views: programs
+            .iter()
+            .map(|_| Links {
+                merged: true,
+                ..Links::default()
+            })
+            .collect(),
         ..Groups::default()
     };
     for group in crate::parcel::links::groups(programs) {

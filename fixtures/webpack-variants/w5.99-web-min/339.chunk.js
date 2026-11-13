@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkwpvariants=self.webpackChunkwpvariants||[]).push([[339],{339:(e,n,s)=>{s.r(n),s.d(n,{deeper:()=>u,nested:()=>r,value:()=>l});var a=s(48),t=s(814);console.log("eval lazy "+(0,a.u)("lazy")+" "+(0,t.e)("y"));const l=42;function r(){return"nested"}const u=()=>s.e(899).then(s.bind(s,899))}}]);

@@ -12,8 +12,9 @@ use crate::model::{Bodies, Bundle, BundleKind};
 use crate::notes::chunk_start_unproven;
 use crate::webpack::container::{is_module_container, module_factories};
 use crate::webpack::extract::extract_modules_with;
-use crate::webpack::gate::{routable, Prelude};
+use crate::webpack::gate::{chunk_uses, routable, Prelude};
 use crate::webpack::proof::Proving;
+use crate::webpack::startup::chunk_startup;
 use crate::UnpackOptions;
 
 const GLOBAL_PREFIX: &str = "webpack";
@@ -177,7 +178,7 @@ fn chunk<'k, 'a>(expr: &'k Expression<'a>) -> Option<Chunk<'k, 'a>> {
     })
 }
 
-fn deferred_entries(start: &Expression<'_>) -> Option<Vec<String>> {
+fn deferred_lists(start: &Expression<'_>) -> Option<Vec<Vec<String>>> {
     let Expression::ArrayExpression(list) = start.without_parentheses() else {
         return None;
     };
@@ -185,9 +186,25 @@ fn deferred_entries(start: &Expression<'_>) -> Option<Vec<String>> {
         .iter()
         .map(|element| {
             let ids = chunk_ids(element.as_expression()?.without_parentheses())?;
-            ids.into_iter().next()
+            (!ids.is_empty()).then_some(ids)
         })
         .collect()
+}
+
+fn deferred_entries(start: &Expression<'_>) -> Option<Vec<String>> {
+    deferred_lists(start).map(|lists| lists.into_iter().map(|ids| ids[0].clone()).collect())
+}
+
+fn deferred_chunks(start: Option<&Expression<'_>>) -> Vec<String> {
+    start
+        .and_then(deferred_lists)
+        .map(|lists| {
+            lists
+                .into_iter()
+                .flat_map(|ids| ids.into_iter().skip(1))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn started(chunk: &Chunk<'_, '_>, length: usize) -> Result<Vec<String>, String> {
@@ -249,29 +266,214 @@ pub fn detect_webpack_chunk_noted<'a>(
     expr: &Expression<'a>,
     bodies: &mut Bodies<'a>,
     options: UnpackOptions,
-    mut proving: Proving<'_>,
+    proving: Proving<'_>,
 ) -> Option<Bundle<'a>> {
     let found = chunk(expr)?;
-    let deferred = match options.conservative {
-        true => Vec::new(),
-        false => match started(&found, payload_len(expr)) {
+    let length = payload_len(expr);
+    detect_found(alloc, source, (found, length), bodies, options, proving)
+}
+
+const EXPORTED: [(&str, &str, &str, &str); 2] = [
+    ("id", "ids", "modules", "runtime"),
+    (
+        "__webpack_esm_id__",
+        "__webpack_esm_ids__",
+        "__webpack_esm_modules__",
+        "__webpack_esm_runtime__",
+    ),
+];
+
+#[derive(Default)]
+struct Exported<'k, 'a> {
+    id: Option<&'k Expression<'a>>,
+    ids: Option<&'k Expression<'a>>,
+    modules: Option<&'k Expression<'a>>,
+    runtime: Option<&'k Expression<'a>>,
+}
+
+impl<'k, 'a> Exported<'k, 'a> {
+    fn set(&mut self, name: &str, value: &'k Expression<'a>, names: usize) -> Option<()> {
+        let (id, ids, modules, runtime) = EXPORTED[names];
+        let slot = match name {
+            n if n == id => &mut self.id,
+            n if n == ids => &mut self.ids,
+            n if n == modules => &mut self.modules,
+            n if n == runtime => &mut self.runtime,
+            _ => return None,
+        };
+        slot.replace(value).is_none().then_some(())
+    }
+
+    fn chunk(self) -> Option<(Chunk<'k, 'a>, usize)> {
+        let ids = chunk_ids(self.ids?.without_parentheses())?;
+        if let Some(id) = self.id {
+            if ids.first() != literal_id(id.without_parentheses()).as_ref() {
+                return None;
+            }
+        }
+        let container = self.modules?.without_parentheses();
+        let length = if self.runtime.is_some() { 3 } else { 2 };
+        is_module_container(container).then_some((
+            Chunk {
+                ids,
+                container,
+                start: self.runtime,
+            },
+            length,
+        ))
+    }
+}
+
+fn commonjs_assignment<'k, 'a>(expr: &'k Expression<'a>) -> Option<(&'k str, &'k Expression<'a>)> {
+    let Expression::AssignmentExpression(assignment) = expr.without_parentheses() else {
+        return None;
+    };
+    let AssignmentTarget::StaticMemberExpression(member) = &assignment.left else {
+        return None;
+    };
+    let exports = matches!(&member.object, Expression::Identifier(id) if id.name == "exports");
+    (exports && assignment.operator == AssignmentOperator::Assign)
+        .then(|| (member.property.name.as_str(), &assignment.right))
+}
+
+fn commonjs_chunk<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Chunk<'k, 'a>, usize)> {
+    let mut exported = Exported::default();
+    for statement in body {
+        if matches!(statement, Statement::EmptyStatement(_)) {
+            continue;
+        }
+        let expr = expression_statement(statement)?;
+        if matches!(expr, Expression::StringLiteral(_)) {
+            continue;
+        }
+        let parts: Vec<&Expression<'a>> = match expr.without_parentheses() {
+            Expression::SequenceExpression(sequence) => sequence.expressions.iter().collect(),
+            other => vec![other],
+        };
+        for part in parts {
+            let (name, value) = commonjs_assignment(part)?;
+            exported.set(name, value, 0)?;
+        }
+    }
+    exported.chunk()
+}
+
+fn module_chunk<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Chunk<'k, 'a>, usize)> {
+    let mut exported = Exported::default();
+    let mut names = None;
+    for statement in body {
+        if matches!(statement, Statement::EmptyStatement(_)) {
+            continue;
+        }
+        let Statement::ExportDeclaration(export) = statement else {
+            return None;
+        };
+        let Declaration::VariableDeclaration(declaration) = &export.declaration else {
+            return None;
+        };
+        if declaration.kind != VariableDeclarationKind::Const {
+            return None;
+        }
+        for declarator in &declaration.declarations {
+            let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+                return None;
+            };
+            let name = id.name.as_str();
+            let set = EXPORTED
+                .iter()
+                .position(|(a, b, c, d)| [a, b, c, d].contains(&&name))?;
+            if *names.get_or_insert(set) != set {
+                return None;
+            }
+            exported.set(name, declarator.init.as_ref()?, set)?;
+        }
+    }
+    exported.chunk()
+}
+
+fn exports_chunk<'k, 'a>(
+    source: Option<&Program<'a>>,
+    body: &'k [Statement<'a>],
+) -> Option<(Chunk<'k, 'a>, usize)> {
+    let top = source.is_none_or(|source| std::ptr::eq(body.as_ptr(), source.body.as_ptr()));
+    if !top || body.is_empty() {
+        return None;
+    }
+    commonjs_chunk(body).or_else(|| module_chunk(body))
+}
+
+pub fn is_exports_chunk(body: &[Statement<'_>]) -> bool {
+    exports_chunk(None, body).is_some()
+}
+
+pub fn exports_chunk_factories<'k, 'a>(
+    source: &Program<'a>,
+    body: &'k [Statement<'a>],
+) -> Option<Vec<(String, Factory<'k, 'a>)>> {
+    exports_chunk(Some(source), body).map(|(found, _)| module_factories(found.container))
+}
+
+pub fn detect_exports_chunk_noted<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    body: &[Statement<'a>],
+    bodies: &mut Bodies<'a>,
+    options: UnpackOptions,
+    proving: Proving<'_>,
+) -> Option<Bundle<'a>> {
+    let found = exports_chunk(Some(source), body)?;
+    detect_found(alloc, source, found, bodies, options, proving)
+}
+
+fn detect_found<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    (found, length): (Chunk<'_, 'a>, usize),
+    bodies: &mut Bodies<'a>,
+    options: UnpackOptions,
+    mut proving: Proving<'_>,
+) -> Option<Bundle<'a>> {
+    let launched = match (options.conservative, found.start) {
+        (false, Some(start)) if length == 3 => chunk_startup(start),
+        _ => None,
+    };
+    let deferred = match (options.conservative, &launched) {
+        (true, _) | (false, Some(_)) => Vec::new(),
+        (false, None) => match started(&found, length) {
             Ok(deferred) => deferred,
             Err(why) => {
-                proving.gate(Err(why));
+                proving.gate::<()>(Err(why));
                 return None;
             }
         },
     };
     let container = found.container;
     if !matches!(bodies, Bodies::Taken(_)) {
-        let prelude = Prelude { runtime: None };
-        proving.gate(routable(source.source_text, container, &prelude, options))?;
+        let checked = match proving.merged() {
+            true => chunk_uses(source.source_text, container, options),
+            false => routable(
+                source.source_text,
+                container,
+                &Prelude { runtime: None },
+                options,
+            ),
+        };
+        proving.gate(checked)?;
     }
     let mut bundle = Bundle::new(BundleKind::Webpack, None);
     bundle.chunk_ids = found.ids;
     bundle.deferred = deferred;
     (bundle.modules, bundle.fresh_requires) =
         extract_modules_with(alloc, source, (container, None), bodies, options);
+    bundle.chunk_modules = bundle.modules.keys().cloned().collect();
+    match launched {
+        Some(launched) => {
+            bundle.chunk_started = true;
+            bundle.entry_id = Some(launched.entry);
+            bundle.startup_chunks = launched.chunks;
+        }
+        None => bundle.startup_chunks = deferred_chunks(found.start),
+    }
     if bundle.entry_id.is_none() {
         bundle.entry_id = program_entry_id(source);
     }

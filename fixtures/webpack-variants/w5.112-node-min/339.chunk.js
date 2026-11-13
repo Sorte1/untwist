@@ -1,0 +1,1 @@
+"use strict";exports.ids=[339],exports.modules={339(e,s,t){t.d(s,{nested:()=>n});var d=t(48),l=t(814);function n(){return"nested"}console.log("eval lazy "+(0,d.u)("lazy")+" "+(0,l.e)("y")),t.d(s,["deeper",0,()=>t.e(899).then(()=>t(899)),"value",0,42])}};

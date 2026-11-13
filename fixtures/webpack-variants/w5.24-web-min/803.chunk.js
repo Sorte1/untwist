@@ -1,0 +1,1 @@
+(self.webpackChunkwpvariants=self.webpackChunkwpvariants||[]).push([[803],{803:(e,s,a)=>{"use strict";a.r(s),a.d(s,{depth:()=>p}),console.log("eval deep");const p=2}}]);

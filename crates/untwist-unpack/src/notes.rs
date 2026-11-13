@@ -173,3 +173,27 @@ pub fn deferred_not_run(ids: impl Display) -> String {
 pub fn duplicate_differs(id: impl Display) -> String {
     format!("chunk merge: module {id} {DUPLICATE_DIFFERS}")
 }
+
+pub fn chunk_missing(id: impl Display, chunk: impl Display) -> String {
+    format!("module {id} loads chunk {chunk}, which is not among the inputs; no bundle is written (pass every chunk file together)")
+}
+
+pub fn chunk_computed(id: impl Display) -> String {
+    format!("module {id} loads a chunk whose id is computed at run time; no bundle is written")
+}
+
+pub fn chunks_without_runtime() -> String {
+    "the webpack runtime among the inputs was refused, so its chunks are not written on their own; no bundle is written".to_string()
+}
+
+pub fn module_missing(id: impl Display, missing: impl Display) -> String {
+    format!("module {id} requires module {missing}, which no input defines; no bundle is written")
+}
+
+pub fn chunk_start_without_runtime() -> String {
+    "a chunk starts its entry only when webpack's runtime runs it, and no input carries that runtime; no bundle is written".to_string()
+}
+
+pub fn entry_not_shared() -> String {
+    "the inline entry module uses its require function or the names around it in a way the unpacked files cannot share; no bundle is written".to_string()
+}

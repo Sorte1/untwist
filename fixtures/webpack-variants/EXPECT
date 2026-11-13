@@ -1,0 +1,60 @@
+# cell	verdict	reason (a refused cell's notes must contain the reason)
+w4-node	runs
+w4-node-dev	runs
+w4-node-min	runs
+w4-async-node	runs
+w4-web	runs
+w4-web-dev	runs
+w4-web-min	runs
+w4-web-split	runs
+w4-web-runtime-single	runs
+w5.24-node	runs
+w5.24-web	runs
+w5.24-web-min	runs
+w5.24-web-split	refused	the prelude is not proven to be webpack's runtime
+w5.52-node	runs
+w5.52-web	runs
+w5.52-web-min	runs
+w5.52-web-split	runs
+w5.52-module	runs
+w5.52-node-split	runs
+w5.52-web-runtime-single	runs
+w5.75-node	runs
+w5.75-web	runs
+w5.75-web-min	runs
+w5.75-web-split	runs
+w5.90-node	runs
+w5.90-web	runs
+w5.90-web-min	runs
+w5.90-web-split	runs
+w5.90-module	runs
+w5.90-node-split	runs
+w5.90-web-runtime-single	runs
+w5.99-node	runs
+w5.99-web	runs
+w5.99-web-min	runs
+w5.99-web-split	runs
+w5.112-node	runs
+w5.112-node-dev	runs
+w5.112-node-min	runs
+w5.112-async-node	runs
+w5.112-node-split	runs
+w5.112-node-sourcemap	runs
+w5.112-web	runs
+w5.112-web-dev	runs
+w5.112-web-min	runs
+w5.112-web-split	runs
+w5.112-web-split-min	runs
+w5.112-web-runtime-single	runs
+w5.112-web-runtime-multiple	runs
+w5.112-web-public-auto	runs
+w5.112-web-sourcemap	runs
+w5.112-module	refused	a prelude statement is neither a helper definition nor the entry call
+w5.112-web-module	refused	a prelude statement is neither a helper definition nor the entry call
+w4-umd	runs
+w5.112-umd	runs
+w5.112-amd	runs
+w5.112-system	runs
+w5.112-web-es5	runs-default
+w5.112-web-noiife	runs
+w5.112-web-federation	refused	no bundle is written

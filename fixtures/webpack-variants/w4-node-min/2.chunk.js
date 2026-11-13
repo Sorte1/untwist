@@ -1,0 +1,1 @@
+exports.ids=[2],exports.modules={4:function(e,n,t){"use strict";t.r(n),t.d(n,"value",(function(){return u})),t.d(n,"nested",(function(){return c})),t.d(n,"deeper",(function(){return s}));var r=t(0),o=t(1);console.log("eval lazy "+Object(r.a)("lazy")+" "+Object(o.pad)("y"));const u=42;function c(){return"nested"}const s=()=>t.e(1).then(t.bind(null,6))}};

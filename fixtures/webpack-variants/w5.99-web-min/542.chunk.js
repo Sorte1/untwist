@@ -1,0 +1,1 @@
+(self.webpackChunkwpvariants=self.webpackChunkwpvariants||[]).push([[542],{542:a=>{console.log("eval legacy"),a.exports={kind:"commonjs",run(){}}}}]);

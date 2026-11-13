@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkwpvariants=self.webpackChunkwpvariants||[]).push([[339],{339(e,a,n){n.d(a,{nested:()=>l});var s=n(48),t=n(814);function l(){return"nested"}console.log("eval lazy "+(0,s.u)("lazy")+" "+(0,t.e)("y")),n.d(a,["deeper",0,()=>n.e(899).then(()=>n(899)),"value",0,42])}}]);

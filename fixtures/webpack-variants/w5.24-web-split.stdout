@@ -1,0 +1,11 @@
+eval cjs
+eval shared
+eval tinylib
+eval index 42 shared<index> [x]
+eval lazy shared<lazy> [y]
+lazy 42 nested
+eval legacy
+legacy commonjs function
+eval deep
+deeper 2
+done

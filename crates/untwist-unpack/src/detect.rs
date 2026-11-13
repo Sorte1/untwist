@@ -14,7 +14,10 @@ use crate::links::Links;
 use crate::matcher::Factory;
 use crate::model::{body_key, Bodies, BodyKey, Bundle, BundleKind};
 use crate::notes::{factory_not_closed, require_not_shared};
-use crate::webpack::chunk::{chunk_factories, detect_webpack_chunk_noted, is_webpack_chunk};
+use crate::webpack::chunk::{
+    chunk_factories, detect_exports_chunk_noted, detect_webpack_chunk_noted,
+    exports_chunk_factories, is_exports_chunk, is_webpack_chunk,
+};
 use crate::webpack::detect4::{detect_webpack4_noted, is_webpack4, webpack4_factories};
 use crate::webpack::detect5::{detect_webpack5_noted, is_webpack5, webpack5_factories};
 use crate::webpack::proof::Proving;
@@ -36,6 +39,7 @@ struct Extract<'a, 'p, 'b> {
     bundle: Option<Bundle<'a>>,
     scoping: Option<Scoping>,
     unproven: &'b mut Option<String>,
+    merged: bool,
 }
 
 impl<'a> Extract<'a, '_, '_> {
@@ -95,6 +99,13 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
                 detect_webpack5_noted(alloc, source, body, bodies, options, proving)
             });
         }
+        if self.bundle.is_none() && self.closed(exports_chunk_factories(source, body)) {
+            let proving =
+                Proving::new(self.scoping.as_ref(), self.unproven).with_merged(self.merged);
+            self.bundle = attempt(self.bodies, |bodies| {
+                detect_exports_chunk_noted(alloc, source, body, bodies, options, proving)
+            });
+        }
     }
 
     fn expression(&mut self, expr: &Expression<'a>) {
@@ -106,7 +117,8 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
             });
         }
         if self.bundle.is_none() && self.closed(chunk_factories(expr)) {
-            let proving = Proving::new(self.scoping.as_ref(), self.unproven);
+            let proving =
+                Proving::new(self.scoping.as_ref(), self.unproven).with_merged(self.merged);
             self.bundle = attempt(self.bodies, |bodies| {
                 detect_webpack_chunk_noted(alloc, source, expr, bodies, options, proving)
             });
@@ -146,7 +158,7 @@ impl<'a> Finder<'a> for Probe {
     }
 
     fn statements(&mut self, body: &[Statement<'a>]) {
-        self.found = is_webpack5(body);
+        self.found = is_webpack5(body) || is_exports_chunk(body);
     }
 
     fn expression(&mut self, expr: &Expression<'a>) {
@@ -445,6 +457,7 @@ fn extract_with<'a>(
             bundle: None,
             scoping: None,
             unproven,
+            merged: links.merged,
         },
     };
     detector.visit_program(program);

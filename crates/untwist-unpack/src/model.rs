@@ -151,6 +151,11 @@ pub struct Bundle<'a> {
     pub deferred: Vec<String>,
     pub inputs: Vec<usize>,
     pub mirrored_inputs: Vec<String>,
+    pub installed_chunks: Vec<String>,
+    pub chunk_modules: Vec<String>,
+    pub startup_chunks: Vec<String>,
+    pub runs_deferred: bool,
+    pub chunk_started: bool,
 }
 
 impl<'a> Bundle<'a> {
@@ -170,6 +175,11 @@ impl<'a> Bundle<'a> {
             deferred: Vec::new(),
             inputs: Vec::new(),
             mirrored_inputs: Vec::new(),
+            installed_chunks: Vec::new(),
+            chunk_modules: Vec::new(),
+            startup_chunks: Vec::new(),
+            runs_deferred: false,
+            chunk_started: false,
         }
     }
 

@@ -7,11 +7,14 @@ use crate::webpack::container::{is_module_container, module_factories};
 use crate::webpack::extract::{extract_modules_with, strip_trailing_marker_comment};
 use crate::webpack::gate::{routable, Prelude};
 use crate::webpack::helpers::prelude_runtime;
+use crate::webpack::machinery::{installed_declared, jsonp_block, loading_of, settle};
 use crate::webpack::proof::{deferred_entries, Proving, Shape};
 use crate::webpack::require_fn::{
     count_required_entry_ids, find_assigned_entry_id, find_required_entry_id, require_function,
 };
+use crate::webpack::startup::webpack4_deferred;
 use crate::UnpackOptions;
+use oxc_span::Span;
 
 struct Webpack4<'k, 'a> {
     container: &'k Expression<'a>,
@@ -48,6 +51,25 @@ fn webpack4<'k, 'a>(expr: &'k Expression<'a>) -> Option<Webpack4<'k, 'a>> {
         body,
         require_name,
     })
+}
+
+fn deferred_check<'k>(statements: &'k [Statement<'_>]) -> Option<&'k str> {
+    let call = match statements.last()? {
+        Statement::ExpressionStatement(statement) => &statement.expression,
+        Statement::ReturnStatement(ret) => ret.argument.as_ref()?,
+        _ => return None,
+    };
+    let Expression::CallExpression(call) = call.without_parentheses() else {
+        return None;
+    };
+    let Expression::Identifier(callee) = call.callee.without_parentheses() else {
+        return None;
+    };
+    let declared = statements.iter().any(|statement| {
+        matches!(statement, Statement::FunctionDeclaration(function)
+            if function.id.as_ref().is_some_and(|id| id.name == callee.name))
+    });
+    declared.then(|| callee.name.as_str())
 }
 
 pub fn is_webpack4(expr: &Expression<'_>) -> bool {
@@ -98,6 +120,18 @@ pub fn detect_webpack4_noted<'a>(
         body,
         require_name,
     } = webpack4(expr)?;
+    let loading = loading_of(&body.statements, require_name, bodies);
+    let block = jsonp_block(source.source_text, &body.statements, require_name);
+    let deferred = block
+        .as_ref()
+        .and_then(|_| deferred_check(&body.statements))
+        .and_then(|check| webpack4_deferred(&body.statements, check));
+    let proven: Vec<Span> = block
+        .iter()
+        .flatten()
+        .chain(deferred.iter().flat_map(|deferred| &deferred.spans))
+        .copied()
+        .collect();
     let checked = !matches!(bodies, Bodies::Taken(_)) && !options.conservative;
     if checked {
         let container_name = single_param_name(params)?;
@@ -108,13 +142,21 @@ pub fn detect_webpack4_noted<'a>(
             container: container_name,
             container_at: None,
             skip: None,
+            startup: &[],
+            proven: &proven,
         };
         proving.prove(source, &shape)?;
     }
     let assigned = find_assigned_entry_id(&body.statements, require_name, None);
-    let entry_id = assigned
-        .clone()
-        .or_else(|| find_required_entry_id(&body.statements, require_name, None));
+    let started = deferred
+        .as_ref()
+        .and_then(|deferred| deferred.entry.clone());
+    let entry_id = match &started {
+        Some((entry, _)) => Some(entry.clone()),
+        None => assigned
+            .clone()
+            .or_else(|| find_required_entry_id(&body.statements, require_name, None)),
+    };
 
     let mut bundle = Bundle::new(BundleKind::Webpack, entry_id);
     if !options.conservative {
@@ -129,6 +171,20 @@ pub fn detect_webpack4_noted<'a>(
         require_name,
         bodies,
     );
+    if let Some(runtime) = bundle.runtime.as_mut() {
+        settle(alloc, runtime, &loading);
+    }
+    let settled = loading.settles_ensure();
+    bundle.installed_chunks = loading.installed;
+    if block.is_some() || settled {
+        bundle
+            .installed_chunks
+            .extend(installed_declared(&body.statements));
+    }
+    bundle.runs_deferred = deferred.is_some();
+    if let Some((_, chunks)) = started {
+        bundle.startup_chunks = chunks;
+    }
     if checked {
         let prelude = Prelude {
             runtime: bundle.runtime.as_ref(),
