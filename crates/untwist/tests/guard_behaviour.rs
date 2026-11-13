@@ -89,7 +89,7 @@ fn mismatches(
     node: &Path,
     sources: &[(String, String)],
     modes: &[(&'static str, Options)],
-    expect_guard_note: bool,
+    expect_guard_note: Option<bool>,
 ) -> Vec<String> {
     let dir = tempfile::tempdir().unwrap();
     let mut wrong = Vec::new();
@@ -99,7 +99,7 @@ fn mismatches(
             let out = Pipeline::new(options.clone()).run(source);
             let after = observed(node, dir.path(), out.code());
             let noted = holds(&out.notes, GUARD_ON_ONE_LINE);
-            if after != before || noted != expect_guard_note {
+            if after != before || expect_guard_note.is_some_and(|expected| noted != expected) {
                 wrong.push(format!(
                     "{label} ({mode}): node printed {before:?}, untwist's output printed \
                      {after:?}, guard note {noted}"
@@ -132,17 +132,17 @@ fn every_self_defending_npm_case_runs_like_its_input_without_deobfuscation() {
         &node,
         &cases(&SELF_DEFENDING, ""),
         &without_deobfuscation(),
-        true,
+        Some(true),
     );
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 #[test]
-fn the_npm_cases_without_self_defending_print_as_before() {
+fn the_npm_cases_without_self_defending_run_as_before() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let wrong = mismatches(&node, &cases(&PLAIN, ""), &without_deobfuscation(), false);
+    let wrong = mismatches(&node, &cases(&PLAIN, ""), &without_deobfuscation(), None);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -152,7 +152,7 @@ fn a_refused_unit_keeps_its_guards_running() {
         return;
     };
     let sources = cases(&["006", "001"], PATCHED_BUILTIN);
-    let wrong = mismatches(&node, &sources, &decoding(), true);
+    let wrong = mismatches(&node, &sources, &decoding(), Some(true));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     for (label, source) in &sources {
         for (mode, options) in decoding() {
@@ -173,7 +173,7 @@ fn a_decoded_unit_leaves_no_guard_to_print() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let wrong = mismatches(&node, &cases(&SELF_DEFENDING, ""), &decoding(), false);
+    let wrong = mismatches(&node, &cases(&SELF_DEFENDING, ""), &decoding(), Some(false));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -213,7 +213,7 @@ fn every_widened_template_shape_runs_like_its_input_without_deobfuscation() {
     .into_iter()
     .map(|(label, source)| (label.to_string(), source.to_string()))
     .collect();
-    let wrong = mismatches(&node, &sources, &without_deobfuscation(), true);
+    let wrong = mismatches(&node, &sources, &without_deobfuscation(), Some(true));
     assert!(
         wrong.is_empty(),
         "{}",
@@ -266,7 +266,7 @@ fn a_let_a_const_and_an_assigned_guard_run_like_their_input_without_deobfuscatio
     .into_iter()
     .map(|(label, source)| (label.to_string(), source.to_string()))
     .collect();
-    let wrong = mismatches(&node, &sources, &without_deobfuscation(), true);
+    let wrong = mismatches(&node, &sources, &without_deobfuscation(), Some(true));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -281,7 +281,7 @@ fn a_controller_written_with_let_and_const_inside_runs_like_its_input() {
         "let/const inside <G1>".to_string(),
         BLOCK_SCOPED_CONTROLLER.to_string(),
     )];
-    let wrong = mismatches(&node, &sources, &without_deobfuscation(), true);
+    let wrong = mismatches(&node, &sources, &without_deobfuscation(), Some(true));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -296,7 +296,7 @@ fn a_controller_with_injected_dead_code_and_proxy_tables_runs_like_its_input() {
         "dead code in <G1>".to_string(),
         DEAD_CODE_CONTROLLER.to_string(),
     )];
-    let wrong = mismatches(&node, &sources, &without_deobfuscation(), true);
+    let wrong = mismatches(&node, &sources, &without_deobfuscation(), Some(true));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -360,6 +360,6 @@ fn a_cookie_rotator_and_controllers_built_where_they_are_called_run_like_their_i
         .into_iter()
         .chain(decoding())
         .collect();
-    let wrong = mismatches(&node, &sources, &modes, true);
+    let wrong = mismatches(&node, &sources, &modes, Some(true));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

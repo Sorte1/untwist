@@ -462,17 +462,18 @@ fn a_let_a_const_and_a_plain_assignment_guard_are_each_noted_once() {
 }
 
 #[test]
-fn a_compound_or_destructuring_assignment_of_a_guard_is_not_noted() {
+fn a_compound_or_destructuring_assignment_of_a_guard_is_noted_through_its_guarded_function() {
+    let one = vec![format!("{} 1", untwist::GUARD_ON_ONE_LINE)];
     for source in [
         A_SURVIVING_CONTROLLER.replacen("var ctrl = ", "var ctrl;\nctrl += ", 1),
         A_SURVIVING_CONTROLLER.replacen("var ctrl = ", "var ctrl;\n[ctrl] = ", 1),
     ] {
         let out = Pipeline::new(without_deobfuscation()).run(&source);
         assert!(
-            !out.code().contains(THE_CONTROLLER_ON_ONE_LINE),
+            out.code().contains(THE_CONTROLLER_ON_ONE_LINE),
             "{}",
             out.code()
         );
-        assert!(guard_messages(&out).is_empty(), "{source}");
+        assert_eq!(guard_messages(&out), one, "{source}");
     }
 }
