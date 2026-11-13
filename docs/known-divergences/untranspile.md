@@ -100,6 +100,14 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
 
 ## `var-to-let` and `function-to-arrow` (the lexical stage)
 
+- **A direct `eval` keeps every `var` and `let` as written, in every lane.** `--unsafe` otherwise
+  assumes a direct `eval` does not observe the local scope (several deobfuscate and unminify passes
+  rely on it), but a `let` or `const` made from a `var` turns the eval's own reads and writes into
+  errors: `var a = 1; eval("a = a + 1")` would become `const a = 1` and throw, and
+  `var r = eval("a"); var a = 1` would read `a` before its `let` initialises. So `var-to-let` (with
+  its placement of a trailing `var`) and `let-to-const` refuse a program holding a direct `eval`
+  whose text may name a binding, also under `--unsafe`; an eval of a literal that names none
+  (`eval("1 + 2")`) does not stop them.
 - **`function-to-arrow`, a callback argument (`--unsafe` only).** An anonymous function expression
   passed straight as an argument of a call becomes an arrow when it uses no `this`, `arguments`,
   `new.target` or `super` of its own, is not a generator and has distinct parameters. The rewrite
