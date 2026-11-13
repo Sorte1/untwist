@@ -148,8 +148,10 @@ fixture that then joins the differential.
   print: when the final tree holds a reader, the output is parsed again with scope analysis. `c`
   is resolved by binding, not by name. It must be a `var`/`let`/`const` binding (no parameter,
   function, class, catch or import binding of it, no destructuring) with exactly one value, its
-  initialiser or one plain `c = …` assignment, and no other write; a program with a direct `eval`
-  or a `with` statement has no resolved controller. When `c` is not a name, the callee itself is
+  initialiser or one plain `c = …` assignment, and no other write; a program with a `with`
+  statement, or a direct `eval` whose argument is not a string literal without escapes or whose
+  text spells the controller's name, has no resolved controller. A write through the global
+  object (`window.c = …`, an indirect `eval`) is not seen. When `c` is not a name, the callee itself is
   the controller. Every two-parameter controller target inside that value, in every branch the
   template matches, must be printed without a line break in the output. If the binding does not
   qualify, no target is found, or one is printed across lines, the input is passed through
