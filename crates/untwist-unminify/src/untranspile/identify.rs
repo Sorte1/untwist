@@ -47,6 +47,7 @@ pub struct Table {
     field_definers: bool,
     machines: bool,
     runners: bool,
+    iterators: bool,
 }
 
 impl Table {
@@ -58,6 +59,7 @@ impl Table {
         self.field_definers = false;
         self.machines = false;
         self.runners = false;
+        self.iterators = false;
     }
 
     pub fn is_empty(&self) -> bool {
@@ -88,6 +90,10 @@ impl Table {
         self.runners
     }
 
+    pub fn has_iterators(&self) -> bool {
+        self.iterators
+    }
+
     pub fn kinds(&self) -> impl Iterator<Item = Kind> + '_ {
         self.helpers.values().map(|helper| helper.kind)
     }
@@ -99,6 +105,7 @@ impl Table {
         self.field_definers |= shapes::is_field_definer(helper.kind);
         self.machines |= shapes::is_machine_runtime(helper.kind);
         self.runners |= shapes::is_async_runner(helper.kind);
+        self.iterators |= shapes::is_iterator_helper(helper.kind);
         self.helpers.insert(symbol, helper);
     }
 

@@ -162,6 +162,11 @@ const SHAPE_FIXTURES: &[(&str, &str, &str)] = &[
     ),
     (
         "untranspile-helpers",
+        "for-of/iterator-helper/unsafe",
+        "fixtures/untranspile/matrix/babel-7.29/ie11/for-of-exits.js",
+    ),
+    (
+        "untranspile-helpers",
         "async/awaiter/unsafe",
         "fixtures/untranspile/ts/async.es2015.js",
     ),
