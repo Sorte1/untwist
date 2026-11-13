@@ -1,8 +1,12 @@
+use oxc_allocator::{Allocator, CloneIn, Vec as AVec};
 use oxc_ast::ast::*;
+use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk, Visit, VisitJs};
+use oxc_span::SourceType;
 use oxc_syntax::scope::ScopeFlags;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::literal::is_pure_value;
+use untwist_core::semantic::build_scoping;
 
 use crate::rollup::scan::{HOST_NAMES, MODULE_RESERVED, REQUIRE};
 use crate::rollup::shell::Wrapper;
@@ -213,24 +217,20 @@ fn later_statement(writes: &mut Writes<'_>, statement: &Statement<'_>) -> bool {
     true
 }
 
-struct Reads<'o> {
-    free: &'o mut FxHashSet<String>,
+struct Reads {
     arrow: bool,
     refused: bool,
 }
 
-impl Reads<'_> {
+impl Reads {
     fn reserved(&mut self, name: &str) {
         self.refused |= name == MODULE_RESERVED;
     }
 }
 
-impl<'a> Policy<'a> for Reads<'_> {
+impl<'a> Policy<'a> for Reads {
     fn reference(&mut self, _frame: Frame, it: &IdentifierReference<'a>) {
-        let name = it.name.as_str();
-        self.reserved(name);
-        self.refused |= name == REQUIRE || HOST_NAMES.contains(&name);
-        self.free.insert(name.to_string());
+        self.reserved(it.name.as_str());
     }
 
     fn binding(&mut self, it: &BindingIdentifier<'a>) {
@@ -254,9 +254,45 @@ impl<'a> Policy<'a> for Reads<'_> {
     }
 }
 
-fn outer_reads(outer: &Wrapper<'_, '_>, inner: usize, found: &mut Outer) -> bool {
+fn free_names<'a>(
+    (alloc, text): (&'a Allocator, &'a str),
+    outer: &Wrapper<'_, 'a>,
+    inner: usize,
+) -> FxHashSet<String> {
+    let builder = AstBuilder::new(alloc);
+    let statements = outer
+        .body
+        .statements
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != inner)
+        .map(|(_, statement)| statement.clone_in(alloc));
+    let program = Program::new(
+        outer.body.span,
+        SourceType::cjs(),
+        text,
+        AVec::new_in(&builder),
+        None,
+        outer.body.directives.clone_in(alloc),
+        AVec::from_iter_in(statements, &builder),
+        &builder,
+    );
+    let semantics = build_scoping(&program);
+    semantics
+        .scoping
+        .root_unresolved_references()
+        .keys()
+        .map(|name| name.to_string())
+        .collect()
+}
+
+fn outer_reads<'a>(
+    alloc: (&'a Allocator, &'a str),
+    outer: &Wrapper<'_, 'a>,
+    inner: usize,
+    found: &mut Outer,
+) -> bool {
     let mut reads = Reads {
-        free: &mut found.free,
         arrow: outer.arrow,
         refused: false,
     };
@@ -265,12 +301,22 @@ fn outer_reads(outer: &Wrapper<'_, '_>, inner: usize, found: &mut Outer) -> bool
             Scan::new(&mut reads).visit_statement(statement);
         }
     }
-    !reads.refused
+    found.free = free_names(alloc, outer, inner);
+    let host = found
+        .free
+        .iter()
+        .any(|name| name == REQUIRE || HOST_NAMES.contains(&name.as_str()));
+    !reads.refused && !host
 }
 
-pub fn analyse(outer: &Wrapper<'_, '_>, inner: usize, strict: bool) -> Option<Outer> {
+pub fn analyse<'a>(
+    alloc: (&'a Allocator, &'a str),
+    outer: &Wrapper<'_, 'a>,
+    inner: usize,
+    strict: bool,
+) -> Option<Outer> {
     let mut found = Outer::default();
-    if !outer_reads(outer, inner, &mut found) {
+    if !outer_reads(alloc, outer, inner, &mut found) {
         return None;
     }
     let mut later = Vec::new();
