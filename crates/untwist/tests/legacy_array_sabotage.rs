@@ -17,6 +17,7 @@ fn transformed(source: &str) -> String {
     let options = Options {
         unpack: false,
         jsx: false,
+        disabled_passes: vec!["inline-layers"],
         ..Options::default()
     };
     Pipeline::new(options).run(source).code().to_string()

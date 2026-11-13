@@ -23,7 +23,7 @@ use untwist_rename::RenameMode;
 use untwist_unpack::holds_a_bundle_with;
 
 use super::boundary::Boundary;
-use super::layer::{Counters, Layering, Peeled, RoomSeed};
+use super::layer::{Counters, InlineSite, Layering, Peeled, RoomSeed};
 use super::notes::{consolidate_reach, dedupe_spanned, guard_notes, unsafe_lane_hint};
 use super::shell::{scope_shell_body, strip_shell};
 use super::snapshots::Snapshots;
@@ -368,6 +368,17 @@ impl Pipeline {
             return Step::Kept(reason);
         }
         *fallback = None;
+        if errors == 0 {
+            let site = InlineSite {
+                notes: &mut result.notes,
+                stages: &mut result.stages,
+                heap_peak: &mut result.heap_peak,
+                scoped,
+            };
+            if let Some(peeled) = self.peel_inline(&parsed.program, layering, site) {
+                return Step::Peel(peeled);
+            }
+        }
         result.snapshots.enter_layer(layering.peeled());
         let decoding = self.options.decoded_strings.then(|| {
             (

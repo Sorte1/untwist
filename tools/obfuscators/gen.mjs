@@ -20,7 +20,7 @@ const WITNESSES = [
   ["online-style/", "\"FizzBuzz\""],
   ["krunker-like/", "\"FizzBuzz\""],
   ["js-confuser/", "\"FizzBuzz\""],
-  ["webpack-eval/", "!eval("],
+  ["webpack-eval/", '!eval("'],
 ];
 
 function witness(path) {

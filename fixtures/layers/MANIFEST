@@ -42,10 +42,10 @@ inline/refuse-await.js	I-expr	hand	refuse:LAYER_SHAPE	5ec62ab3507673f0c2b39f94ca
 inline/refuse-captured.js	I-Function	hand	refuse:LAYER_SHAPE	a84e74fb53b605862a85b0cb7b874ae0d456975a97d853816476519fb8b363c9
 inline/refuse-decl.js	I-stmt	hand	refuse:LAYER_SHAPE	a150215cbcf2262157f81caeaca1b198a51e5a2aa0082ec99c65488d0c364037
 inline/refuse-deep.js	I-expr	gen.mjs	refuse:LAYER_TOO_DEEP	63711cda1a04f803564c780c2cf7d888ca94c638a1158b1948a46fe9ff7b66e4
-inline/refuse-gen5.js	I-stmt	gen.mjs	peel*4,refuse:LAYER_TOO_DEEP	e22fc499b017394ca504005a6a59fc7fc6d5343d44c727333df4f06e884443bb
+inline/refuse-gen5.js	I-stmt	gen.mjs	refuse:LAYER_SHAPE;unsafe=peel*4	e22fc499b017394ca504005a6a59fc7fc6d5343d44c727333df4f06e884443bb
 inline/refuse-indirect.js	I-eval-indirect	hand	refuse:LAYER_SHAPE	817c08625c32020095cf79107bd0ec01bc4e8784fc7986592d61c0261916dc4c
-inline/refuse-strict-payload.js	I-stmt	hand	refuse:LAYER_SHAPE	67c39aa9b9616ec13001cbfa479874292918eb5b3e53e7e58015bca3920afa6b
 inline/stmt.js	I-stmt	hand	peel	4dfee0821e0f2a366b7203b24c814a112a38e5b88483648507af9da910a8468d
+inline/strict-payload.js	I-stmt	hand	peel	67c39aa9b9616ec13001cbfa479874292918eb5b3e53e7e58015bca3920afa6b
 packer/empty-slots.js	W-packer	pack.mjs	peel	68ab8a7e305793e72095531d83371843df54aef19555e0c4610d511924804f49
 packer/nested.js	W-packer	pack.mjs	peel*2	d03be053546f73e538ec7c2f8a993f1ca90403a02bccf603e5978e834d11de9e
 packer/r10.js	W-packer	pack.mjs	peel	6af8b99c49289ed9029d8497d0731938552faf9f16cd29cf453263c4f232cd6a

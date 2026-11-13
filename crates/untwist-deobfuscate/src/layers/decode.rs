@@ -94,13 +94,13 @@ pub fn argument_refusal<'a>(
     for expr in exprs {
         free.visit_expression(expr);
     }
-    if !intrinsics_hold(scoping, &free.names) {
+    if !names_hold(scoping, &free.names) {
         return Some(Refusal::Shape);
     }
     free.over_cap.then_some(Refusal::TooLarge)
 }
 
-fn intrinsics_hold(scoping: &Scoping, names: &[&str]) -> bool {
+pub fn names_hold(scoping: &Scoping, names: &[&str]) -> bool {
     if scoping.symbol_names().any(|name| names.contains(&name)) {
         return false;
     }

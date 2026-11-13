@@ -8,10 +8,11 @@ use untwist_core::depth::{
 };
 use untwist_core::pass::{InputRoom, Note, NoteKind, StopReason};
 use untwist_core::semantic::Semantics;
-use untwist_deobfuscate::layers::notes::{peeled_message, refused_message};
+use untwist_deobfuscate::layers::inline::{self, InlineCx, Plan};
+use untwist_deobfuscate::layers::notes::{inlined_message, peeled_message, refused_message};
 use untwist_deobfuscate::layers::{
-    self, DecodeCx, Decoded, Layer, LayerForm, Probe, Refusal, Refused, FUEL_LAYERS, LAYER_CAP,
-    LAYER_PASS, TEXT_COPIES,
+    self, DecodeCx, Decoded, Layer, LayerForm, Probe, Refusal, Refused, FUEL_LAYERS,
+    INLINE_LAYER_PASS, LAYER_CAP, LAYER_PASS, TEXT_COPIES,
 };
 use untwist_eval::budget::{heap_budget, STEP_BUDGET, STRING_LEN_CAP};
 use untwist_eval::stack::room;
@@ -199,8 +200,12 @@ impl Layering {
 }
 
 fn layer_note(kind: NoteKind, message: String) -> Note {
+    pass_note(LAYER_PASS, kind, message)
+}
+
+fn pass_note(pass: &'static str, kind: NoteKind, message: String) -> Note {
     Note {
-        pass: LAYER_PASS,
+        pass,
         kind,
         message,
         span: None,
@@ -208,14 +213,23 @@ fn layer_note(kind: NoteKind, message: String) -> Note {
 }
 
 fn peel_report(stages: &[StageReport], started: Instant) -> StageReport {
+    pass_report(LAYER_PASS, stages, started, 1)
+}
+
+fn pass_report(
+    pass: &'static str,
+    stages: &[StageReport],
+    started: Instant,
+    changes: u32,
+) -> StageReport {
     let elapsed = started.elapsed();
     StageReport {
-        stage: LAYER_PASS,
-        round: round_of(stages, LAYER_PASS),
+        stage: pass,
+        round: round_of(stages, pass),
         iterations: 1,
-        changes: 1,
-        per_pass: vec![(LAYER_PASS, 1)],
-        per_pass_elapsed: vec![(LAYER_PASS, elapsed)],
+        changes,
+        per_pass: vec![(pass, changes)],
+        per_pass_elapsed: vec![(pass, elapsed)],
         fixpoint_per_pass: Vec::new(),
         fixpoint_per_pass_elapsed: Vec::new(),
         iteration_elapsed: Vec::new(),
@@ -226,6 +240,14 @@ fn peel_report(stages: &[StageReport], started: Instant) -> StageReport {
     }
 }
 
+fn note_inline_refused(notes: &mut Vec<Note>, refused: Refused, index: u32) {
+    let message = refused_message(refused.reason, index, refused.form.name());
+    if notes.iter().any(|note| note.message == message) {
+        return;
+    }
+    notes.push(pass_note(INLINE_LAYER_PASS, NoteKind::Refusal, message));
+}
+
 fn note_refused(site: &mut StageCx<'_, '_>, refused: Refused, index: u32) {
     let message = refused_message(refused.reason, index, refused.form.name());
     if site.notes.iter().any(|note| note.message == message) {
@@ -234,7 +256,79 @@ fn note_refused(site: &mut StageCx<'_, '_>, refused: Refused, index: u32) {
     site.notes.push(layer_note(NoteKind::Refusal, message));
 }
 
+pub(super) struct InlineSite<'r> {
+    pub(super) notes: &'r mut Vec<Note>,
+    pub(super) stages: &'r mut Vec<StageReport>,
+    pub(super) heap_peak: &'r mut u64,
+    pub(super) scoped: bool,
+}
+
 impl Pipeline {
+    fn inline_layers_enabled(&self) -> bool {
+        self.options.deobfuscate && self.options.extended() && !self.disabled(INLINE_LAYER_PASS)
+    }
+
+    pub(super) fn peel_inline(
+        &self,
+        program: &Program<'_>,
+        layering: &mut Layering,
+        site: InlineSite<'_>,
+    ) -> Option<Peeled> {
+        if !self.inline_layers_enabled()
+            || untwist_core::budget::check().is_err()
+            || layers::probe(program).is_some()
+        {
+            return None;
+        }
+        let started = Instant::now();
+        let index = layering.peeled().saturating_add(1);
+        let admits = |text: &str| layering.readmit(text).map(|_| ());
+        let cx = InlineCx {
+            decode: layering.cx(self.options.unsafe_transforms),
+            admits: &admits,
+        };
+        let inlined = match inline::plan(program, &cx) {
+            Plan::Nothing => return None,
+            Plan::Kept(refused) => {
+                note_inline_refused(site.notes, refused, index);
+                return None;
+            }
+            Plan::Peel(inlined) => inlined,
+        };
+        let source = program.source_text;
+        let (form, heap, sites) = (inlined.form, inlined.heap, inlined.sites);
+        let layer = Layer {
+            form,
+            text: inlined.text,
+            steps: inlined.steps,
+            heap,
+        };
+        let (text, room) = match layering.admit(source, layer) {
+            Ok(admitted) => admitted,
+            Err(refused) => {
+                note_inline_refused(site.notes, refused, index);
+                return None;
+            }
+        };
+        self.begin(INLINE_LAYER_PASS);
+        *site.heap_peak = (*site.heap_peak).max(heap);
+        let message = inlined_message(index, form.name(), (source.len(), text.len()), sites);
+        site.notes
+            .push(pass_note(INLINE_LAYER_PASS, NoteKind::Progress, message));
+        site.stages.push(pass_report(
+            INLINE_LAYER_PASS,
+            site.stages,
+            started,
+            u32::try_from(sites).unwrap_or(u32::MAX),
+        ));
+        Some(Peeled {
+            text,
+            room,
+            form,
+            scoped: site.scoped,
+        })
+    }
+
     pub(super) fn layer_budget(&self, input_len: usize) -> (u64, u64) {
         let fuel = self.options.fuel.unwrap_or(STEP_BUDGET);
         let heap = self

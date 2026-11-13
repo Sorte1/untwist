@@ -25,6 +25,7 @@ pub const PASSES: &[PassInfo] = &[
     pass("remove-decoder-machinery", "deobfuscate", false),
     pass("unstamp-remaining-machinery", "deobfuscate", false),
     pass("layers", "deobfuscate", false),
+    pass("inline-layers", "deobfuscate", false),
     pass("default-parameters", "transpile", false),
     pass("logical-assignments", "transpile", false),
     pass("nullish-coalescing", "transpile", false),

@@ -1,0 +1,11 @@
+{
+  "name": "untwist-webpack-eval",
+  "private": true,
+  "description": "Pinned webpack versions used by tools/webpack-eval/gen.mjs to generate fixtures/webpack-eval (eval devtools).",
+  "dependencies": {
+    "webpack-4": "npm:webpack@4.47.0",
+    "webpack-5.24": "npm:webpack@5.24.4",
+    "webpack-5.75": "npm:webpack@5.75.0",
+    "webpack": "5.112.2"
+  }
+}

@@ -17,9 +17,9 @@ fn options(unsafe_transforms: bool, mutant: bool) -> Options {
         unpack: false,
         jsx: false,
         disabled_passes: if mutant {
-            vec!["value-flow-sinks"]
+            vec!["value-flow-sinks", "inline-layers"]
         } else {
-            vec![]
+            vec!["inline-layers"]
         },
         ..Options::default()
     }

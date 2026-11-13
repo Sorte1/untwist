@@ -1,13 +1,18 @@
 use std::path::{Path, PathBuf};
 
 use untwist::{Options, Output, Pipeline};
+use untwist_core::pass::NoteKind;
 use untwist_deobfuscate::layers::notes::{
     LAYER_BAILED, LAYER_CAP, LAYER_CYCLE, LAYER_FUEL, LAYER_INJECTION, LAYER_NEEDS_UNSAFE,
-    LAYER_NOT_A_STRING, LAYER_PEELED, LAYER_SHAPE, LAYER_TOO_DEEP, LAYER_UNPARSABLE,
+    LAYER_NOT_A_STRING, LAYER_SHAPE, LAYER_TOO_DEEP, LAYER_UNPARSABLE,
 };
 use untwist_testing::node_rows::{mismatches, node_or_skip, Mode};
 
-const KINDS: &[&str] = &["eval/", "function/"];
+const KINDS: &[&str] = &["eval/", "function/", "inline/"];
+
+const UNBUILT_FORMS: &[&str] = &["I-Function"];
+
+const PASSES: [&str; 2] = ["layers", "inline-layers"];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/layers")
@@ -24,7 +29,7 @@ fn options(unsafe_transforms: bool) -> Options {
 
 fn disabled(options: Options) -> Options {
     Options {
-        disabled_passes: vec!["layers"],
+        disabled_passes: PASSES.to_vec(),
         ..options
     }
 }
@@ -52,6 +57,11 @@ struct Outcome {
 }
 
 fn expected(expect: &str, unsafe_transforms: bool) -> Outcome {
+    let expect = match (expect.split_once(";unsafe="), unsafe_transforms) {
+        (Some((_, lane)), true) => lane,
+        (Some((safe, _)), false) => safe,
+        (None, _) => expect,
+    };
     let base = expect.split(':').collect::<Vec<_>>();
     if base[0] == "needs-unsafe" {
         return match unsafe_transforms {
@@ -88,12 +98,13 @@ fn observed(out: &Output) -> Outcome {
     let peels = out
         .stages
         .iter()
-        .filter(|stage| stage.stage == "layers")
+        .filter(|stage| PASSES.contains(&stage.stage))
         .count();
     let refused = out
         .notes
         .iter()
-        .filter(|note| note.pass == "layers" && !note.message.starts_with(LAYER_PEELED))
+        .filter(|note| PASSES.contains(&note.pass))
+        .filter(|note| note.kind == NoteKind::Refusal)
         .map(|note| note.message.split("; layer ").next().unwrap_or(""))
         .collect::<Vec<_>>();
     assert!(refused.len() <= 1, "{refused:?}");
@@ -123,12 +134,11 @@ fn rows() -> Vec<(String, String)> {
         .filter(|line| !line.starts_with('#'))
         .filter_map(|line| {
             let fields: Vec<&str> = line.split('\t').collect();
-            let [rel, _, _, expect, _] = fields[..] else {
+            let [rel, form, _, expect, _] = fields[..] else {
                 return None;
             };
-            KINDS
-                .iter()
-                .any(|kind| rel.starts_with(kind))
+            let built = !UNBUILT_FORMS.contains(&form);
+            (built && KINDS.iter().any(|kind| rel.starts_with(kind)))
                 .then(|| (rel.to_string(), expect.to_string()))
         })
         .collect()
@@ -137,7 +147,7 @@ fn rows() -> Vec<(String, String)> {
 #[test]
 fn every_eval_and_function_fixture_has_its_manifest_outcome_in_both_modes() {
     let rows = rows();
-    assert!(rows.len() >= 33, "{} rows", rows.len());
+    assert!(rows.len() >= 41, "{} rows", rows.len());
     let mut wrong = Vec::new();
     for (rel, expect) in &rows {
         let source = std::fs::read_to_string(root().join(rel)).unwrap_or_default();
@@ -168,6 +178,14 @@ fn a_fixture_that_peels_nothing_prints_as_the_run_with_layers_disabled() {
             assert_eq!(out.code(), kept.code(), "{rel} unsafe={unsafe_transforms}");
         }
     }
+}
+
+fn whole_program_peels(source: &str, unsafe_transforms: bool) -> usize {
+    let out = Pipeline::new(options(unsafe_transforms)).run(source);
+    out.stages
+        .iter()
+        .filter(|stage| stage.stage == "layers")
+        .count()
 }
 
 fn peeled(source: &str, unsafe_transforms: bool) -> Outcome {
@@ -286,7 +304,7 @@ fn each_scanned_form_keeps_a_declaring_payload_for_unsafe() {
             refused(LAYER_NEEDS_UNSAFE),
             "{source}"
         );
-        assert_eq!(peeled(&source, true).peels, 1, "{source}");
+        assert_eq!(whole_program_peels(&source, true), 1, "{source}");
     }
     let clean = [
         "var x = 1; console.log(x);",

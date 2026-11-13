@@ -18,6 +18,7 @@ fn options(lane: Lane) -> Options {
         extended: lane != Lane::Conservative,
         unpack: false,
         jsx: false,
+        disabled_passes: vec!["inline-layers"],
         ..Options::default()
     }
 }

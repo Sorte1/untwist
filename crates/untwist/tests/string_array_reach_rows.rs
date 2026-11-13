@@ -45,11 +45,18 @@ const DYNAMIC_PATH_WITNESSES: [&str; 22] = [
 
 fn both_modes() -> [(&'static str, Options); 2] {
     [
-        ("default", Options::default()),
+        (
+            "default",
+            Options {
+                disabled_passes: vec!["inline-layers"],
+                ..Options::default()
+            },
+        ),
         (
             "unsafe",
             Options {
                 unsafe_transforms: true,
+                disabled_passes: vec!["inline-layers"],
                 ..Options::default()
             },
         ),
