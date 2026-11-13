@@ -12,6 +12,8 @@ use crate::esbuild::shape::{
 };
 use crate::frame::{Frame, Shape};
 use crate::matcher::{anonymous_factory, unreassigned_var, Factory};
+use crate::model::BundleKind;
+use crate::rolldown;
 
 const MIN_LAZY_FACTORIES: usize = 5;
 
@@ -19,6 +21,7 @@ const MIN_LAZY_FACTORIES: usize = 5;
 pub enum Host {
     Top,
     Iife,
+    Function,
     Bun,
 }
 
@@ -33,28 +36,41 @@ pub struct Scope<'k, 'a> {
 pub struct FactoryDecl<'k, 'a> {
     pub statement: usize,
     pub declarator: usize,
-    pub name: &'a str,
-    pub binding: &'k BindingIdentifier<'a>,
+    pub name: String,
+    pub binding: Option<&'k BindingIdentifier<'a>>,
+    pub inline: Option<Span>,
     pub key: Option<String>,
     pub function: Factory<'k, 'a>,
     pub scope: &'k Cell<Option<ScopeId>>,
 }
 
 pub struct Layout<'k, 'a> {
+    pub kind: BundleKind,
     pub factories: Vec<FactoryDecl<'k, 'a>>,
+    pub inline: Vec<FactoryDecl<'k, 'a>>,
     pub lazy_factories: usize,
     pub exports_helper: bool,
     pub prefix: Vec<usize>,
     pub shim: Option<&'k BindingIdentifier<'a>>,
+    pub created_shim: bool,
     pub banner: Option<usize>,
     pub trusted: Vec<&'k BindingIdentifier<'a>>,
     pub unsound: bool,
+    pub early: bool,
+    pub first_effect: (usize, usize),
 }
 
-impl Layout<'_, '_> {
+impl<'k, 'a> Layout<'k, 'a> {
     pub fn accepted(&self) -> bool {
         let all = self.factories.len() + self.lazy_factories;
-        !self.factories.is_empty() || all >= MIN_LAZY_FACTORIES || (self.exports_helper && all >= 1)
+        !self.factories.is_empty()
+            || !self.inline.is_empty()
+            || all >= MIN_LAZY_FACTORIES
+            || (self.exports_helper && all >= 1)
+    }
+
+    pub fn all(&self) -> impl Iterator<Item = &FactoryDecl<'k, 'a>> {
+        self.factories.iter().chain(&self.inline)
     }
 
     pub fn is_factory_statement(&self, index: usize) -> bool {
@@ -103,6 +119,7 @@ pub fn wrapped<'k, 'a>(frame: &Frame<'k, 'a>) -> Option<Scope<'k, 'a>> {
     let statement = frame.top.get(wrapper.index)?;
     let host = match wrapper.shape {
         Shape::Iife if unwrappable_iife(statement) => Host::Iife,
+        Shape::Iife if rolldown::shape::function_iife(statement) => Host::Function,
         Shape::Bun if bare_function(statement) => Host::Bun,
         _ => return None,
     };
@@ -133,6 +150,7 @@ pub fn scopes<'k, 'a>(
 }
 
 struct Lazies<'a> {
+    rolldown: bool,
     commonjs: FxHashMap<&'a str, CallForm>,
     esm: FxHashSet<&'a str>,
     getters: FxHashSet<&'a str>,
@@ -184,6 +202,7 @@ fn names_getters<'a>(list: &[Statement<'a>]) -> FxHashSet<&'a str> {
 
 fn lazies<'a>(list: &[Statement<'a>]) -> Lazies<'a> {
     let mut found = Lazies {
+        rolldown: false,
         commonjs: FxHashMap::default(),
         esm: FxHashSet::default(),
         getters: FxHashSet::default(),
@@ -204,6 +223,9 @@ fn lazies<'a>(list: &[Statement<'a>]) -> Lazies<'a> {
             CallForm::Direct => true,
             CallForm::FirstKey => getter.is_some_and(|getter| getters.contains(getter)),
         });
+        let rolldown = proven.is_none() && rolldown::shape::commonjs_min(&params, &inner);
+        found.rolldown |= rolldown;
+        let proven = proven.or(rolldown.then_some((CallForm::Direct, None)));
         match proven {
             Some((form, getter)) => {
                 found.shadowed |= helper_shadows(init, &params, getter);
@@ -303,8 +325,9 @@ fn factories<'k, 'a>(list: &'k [Statement<'a>], lazies: &Lazies<'a>) -> Option<F
         found.push(FactoryDecl {
             statement,
             declarator,
-            name: binding.name.as_str(),
-            binding,
+            name: binding.name.to_string(),
+            binding: Some(binding),
+            inline: None,
             key,
             function,
             scope,
@@ -315,6 +338,25 @@ fn factories<'k, 'a>(list: &'k [Statement<'a>], lazies: &Lazies<'a>) -> Option<F
         lazy,
         proto_key,
     })
+}
+
+pub fn require_creators<'a>(list: &[Statement<'a>]) -> FxHashSet<&'a str> {
+    list.iter()
+        .filter_map(|statement| match statement {
+            Statement::ImportDeclaration(import) => Some(import),
+            _ => None,
+        })
+        .filter(|import| matches!(import.source.value.as_str(), Some("module" | "node:module")))
+        .flat_map(|import| import.specifiers.iter().flatten())
+        .filter_map(|specifier| match specifier {
+            ImportDeclarationSpecifier::ImportSpecifier(named)
+                if named.imported.name() == "createRequire" =>
+            {
+                Some(named.local.name.as_str())
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 fn creates_require(list: &[Statement<'_>], callee: &str) -> bool {
@@ -366,15 +408,16 @@ fn banner_callee<'a>(statement: &Statement<'a>) -> Option<&'a str> {
     (at_url && !call.optional).then_some(callee.name.as_str())
 }
 
-fn effect_free(init: Option<&Expression<'_>>, lazy_callees: &FxHashSet<&str>) -> bool {
+fn effect_free(init: Option<&Expression<'_>>, lazy_callees: &Callees<'_>) -> bool {
     let Some(init) = init else {
         return true;
     };
     match init.without_parentheses() {
         Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => true,
         other if is_object_member_chain(other) || is_require_shim(other) => true,
+        other if rolldown::shape::require_shim(&lazy_callees.creators, other) => true,
         other => callee_of(other).is_some_and(|(callee, argument)| {
-            lazy_callees.contains(&callee) && is_function_literal(argument)
+            lazy_callees.lazy.contains(&callee) && is_function_literal(argument)
         }),
     }
 }
@@ -400,7 +443,7 @@ fn is_function_literal(argument: &Argument<'_>) -> bool {
     }
 }
 
-fn prefix_statement(statement: &Statement<'_>, lazy_callees: &FxHashSet<&str>) -> Option<bool> {
+fn prefix_statement(statement: &Statement<'_>, lazy_callees: &Callees<'_>) -> Option<bool> {
     match statement {
         Statement::FunctionDeclaration(_) => Some(true),
         other if is_banner(other) => Some(false),
@@ -416,18 +459,27 @@ fn prefix_statement(statement: &Statement<'_>, lazy_callees: &FxHashSet<&str>) -
     }
 }
 
-fn lazy_callees<'a>(lazies: &Lazies<'a>) -> FxHashSet<&'a str> {
-    lazies
+pub struct Callees<'a> {
+    lazy: FxHashSet<&'a str>,
+    creators: FxHashSet<&'a str>,
+}
+
+fn lazy_callees<'a>(list: &[Statement<'a>], lazies: &Lazies<'a>) -> Callees<'a> {
+    let lazy = lazies
         .commonjs
         .keys()
         .copied()
         .chain(lazies.esm.iter().copied())
-        .collect()
+        .collect();
+    Callees {
+        lazy,
+        creators: require_creators(list),
+    }
 }
 
 fn defined_before_any_effect(
     list: &[Statement<'_>],
-    lazy_callees: &FxHashSet<&str>,
+    lazy_callees: &Callees<'_>,
     factories: &[FactoryDecl<'_, '_>],
 ) -> bool {
     let Some(last) = factories.last() else {
@@ -467,11 +519,32 @@ fn inert_value(expr: &Expression<'_>) -> bool {
     }
 }
 
-fn quiet_init(init: Option<&Expression<'_>>, lazy_callees: &FxHashSet<&str>) -> bool {
+fn quiet_init(init: Option<&Expression<'_>>, lazy_callees: &Callees<'_>) -> bool {
     init.is_some_and(inert_value) || effect_free(init, lazy_callees)
 }
 
-fn quiet_statement(statement: &Statement<'_>, lazy_callees: &FxHashSet<&str>) -> bool {
+fn first_effect(list: &[Statement<'_>], lazy_callees: &Callees<'_>) -> (usize, usize) {
+    let Some(index) = list
+        .iter()
+        .position(|statement| !quiet_statement(statement, lazy_callees))
+    else {
+        return (list.len(), 0);
+    };
+    let declarator = match &list[index] {
+        Statement::VariableDeclaration(declaration) => declaration
+            .declarations
+            .iter()
+            .position(|declarator| {
+                !matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+                    || !quiet_init(declarator.init.as_ref(), lazy_callees)
+            })
+            .unwrap_or(0),
+        _ => 0,
+    };
+    (index, declarator)
+}
+
+fn quiet_statement(statement: &Statement<'_>, lazy_callees: &Callees<'_>) -> bool {
     if prefix_statement(statement, lazy_callees).is_some() {
         return true;
     }
@@ -484,7 +557,7 @@ fn quiet_statement(statement: &Statement<'_>, lazy_callees: &FxHashSet<&str>) ->
 
 fn prefix(
     list: &[Statement<'_>],
-    lazy_callees: &FxHashSet<&str>,
+    lazy_callees: &Callees<'_>,
     layout: &Layout<'_, '_>,
 ) -> Vec<usize> {
     let mut found = Vec::new();
@@ -498,10 +571,18 @@ fn prefix(
     found
 }
 
-fn shim<'k, 'a>(list: &'k [Statement<'a>], prefix: &[usize]) -> Option<&'k BindingIdentifier<'a>> {
+fn shim<'k, 'a>(
+    list: &'k [Statement<'a>],
+    prefix: &[usize],
+    creators: &FxHashSet<&str>,
+) -> Option<(&'k BindingIdentifier<'a>, bool)> {
     declarators(list)
         .filter(|(statement, ..)| prefix.binary_search(statement).is_ok())
-        .find_map(|(_, _, id, init)| init.filter(|init| is_require_shim(init)).map(|_| id))
+        .find_map(|(_, _, id, init)| {
+            let init = init?;
+            let created = rolldown::shape::require_shim(creators, init);
+            (created || is_require_shim(init)).then_some((id, created))
+        })
 }
 
 fn trusted<'k, 'a>(
@@ -514,21 +595,60 @@ fn trusted<'k, 'a>(
         .collect()
 }
 
-pub fn layout<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
+pub const INLINE_PREFIX: &str = "__untwist_inline_require_";
+
+fn inline_factories<'k, 'a>(
+    sites: Vec<rolldown::inline::InlineSite<'k, 'a>>,
+) -> Vec<FactoryDecl<'k, 'a>> {
+    sites
+        .into_iter()
+        .enumerate()
+        .map(|(index, site)| FactoryDecl {
+            statement: site.statement,
+            declarator: site.declarator,
+            name: format!("{INLINE_PREFIX}{index}"),
+            binding: None,
+            inline: Some(site.span),
+            key: site
+                .hint
+                .map(|hint| hint.strip_prefix("import_").unwrap_or(hint).to_string()),
+            function: site.function,
+            scope: site.scope,
+        })
+        .collect()
+}
+
+pub fn layout<'k, 'a>(list: &'k [Statement<'a>], marked: bool) -> Option<Layout<'k, 'a>> {
     let lazies = lazies(list);
-    if lazies.commonjs.is_empty() && lazies.esm.is_empty() {
+    let direct: FxHashSet<&str> = lazies
+        .commonjs
+        .iter()
+        .filter(|(_, form)| **form == CallForm::Direct)
+        .map(|(name, _)| *name)
+        .collect();
+    let sites = rolldown::inline::inline_sites(list, &direct);
+    if lazies.commonjs.is_empty() && lazies.esm.is_empty() && sites.is_empty() {
         return None;
     }
     let found = factories(list, &lazies)?;
-    let lazy_callees = lazy_callees(&lazies);
+    let lazy_callees = lazy_callees(list, &lazies);
     let early = !defined_before_any_effect(list, &lazy_callees, &found.factories);
+    let kind = match lazies.rolldown || marked || !sites.is_empty() {
+        true => BundleKind::Rolldown,
+        false => BundleKind::Esbuild,
+    };
     let mut layout = Layout {
-        unsound: lazies.shadowed || found.proto_key || early,
+        kind,
+        unsound: lazies.shadowed || found.proto_key,
+        early,
+        first_effect: first_effect(list, &lazy_callees),
         factories: found.factories,
+        inline: inline_factories(sites),
         lazy_factories: found.lazy,
         exports_helper: lazies.exports_helper,
         prefix: Vec::new(),
         shim: None,
+        created_shim: false,
         banner: banner_of(list),
         trusted: trusted(list, &lazies),
     };
@@ -536,7 +656,9 @@ pub fn layout<'k, 'a>(list: &'k [Statement<'a>]) -> Option<Layout<'k, 'a>> {
         return None;
     }
     layout.prefix = prefix(list, &lazy_callees, &layout);
-    layout.shim = shim(list, &layout.prefix);
+    let found = shim(list, &layout.prefix, &lazy_callees.creators);
+    layout.shim = found.map(|(id, _)| id);
+    layout.created_shim = found.is_some_and(|(_, created)| created);
     Some(layout)
 }
 

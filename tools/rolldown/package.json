@@ -1,0 +1,17 @@
+{
+  "name": "untwist-rolldown-fixtures",
+  "private": true,
+  "description": "Pinned rolldown and vite 8 versions that tools/rolldown/gen.mjs runs to generate fixtures/unpack-rolldown.",
+  "dependencies": {
+    "rolldown-beta30": "npm:rolldown@1.0.0-beta.30",
+    "rolldown-rc9": "npm:rolldown@1.0.0-rc.9",
+    "rolldown-1.0": "npm:rolldown@1.0.0",
+    "rolldown-1.1": "npm:rolldown@1.1.8",
+    "rolldown-1.2": "npm:rolldown@1.2.18",
+    "rolldown-1.3": "npm:rolldown@1.3.2",
+    "vite-8.0": "npm:vite@8.0.16",
+    "vite-8.1": "npm:vite@8.1.7",
+    "vite-8.2": "npm:vite@8.2.6",
+    "vite-8.3": "npm:vite@8.3.8"
+  }
+}

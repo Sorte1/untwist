@@ -67,6 +67,7 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     ALL_NOTES,
     crate::browserify::notes::NOTES,
     crate::esbuild::notes::NOTES,
+    crate::rolldown::notes::NOTES,
     crate::bun::notes::NOTES,
     crate::rollup::notes::NOTES,
     crate::systemjs::notes::NOTES,

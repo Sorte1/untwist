@@ -81,7 +81,7 @@ const MATRIX: &[(&str, Option<&str>)] = &[
     ("rollup/neg-rollup-one-module.js", None),
     ("rollup/neg-rollup-sloppy.js", None),
     ("rollup/rollup-iife.js", None),
-    ("rollup/vite-iife.js", None),
+    ("rollup/vite-iife.js", Some("rolldown")),
     ("systemjs/min-system-named.js", Some("systemjs")),
     ("systemjs/min-system.js", Some("systemjs")),
     ("systemjs/neg-system-computed-deps.js", None),

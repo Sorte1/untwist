@@ -30,7 +30,7 @@ pub fn is_name(expr: &Expression<'_>, name: &str) -> bool {
     matches!(expr.without_parentheses(), Expression::Identifier(id) if id.name == name)
 }
 
-fn arrow_inner<'k, 'a>(arrow: &'k ArrowFunctionExpression<'a>) -> Option<Inner<'k, 'a>> {
+pub fn arrow_inner<'k, 'a>(arrow: &'k ArrowFunctionExpression<'a>) -> Option<Inner<'k, 'a>> {
     match &arrow.body {
         ArrowFunctionBody::FunctionBody(body) => Some(Inner::Block(&body.statements)),
         other => other.as_expression().map(Inner::Expr),

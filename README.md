@@ -31,8 +31,8 @@ engine as WebAssembly, and your code never leaves the page.
   ternaries become `if`/`else`, Yoda conditions are flipped, `void 0` becomes `undefined`, and so on.
 - **Untranspile.** Turns TypeScript, Babel, SWC and esbuild helpers for spread, destructuring,
   classes, generators and `async` back into native syntax.
-- **Unpack.** Detects webpack 4/5 (including JSONP chunks), browserify, esbuild and Bun, SystemJS,
-  AMD, UMD, Parcel, Metro, Turbopack and Closure bundles, extracts their modules and rewrites
+- **Unpack.** Detects webpack 4/5 (including JSONP chunks), browserify, esbuild and Bun, rolldown
+  (also Vite 8), SystemJS, AMD, UMD, Parcel, Metro, Turbopack and Closure bundles, extracts their modules and rewrites
   `require`/`import` specifiers to relative paths. Rollup and Vite scope-hoisted bundles can be
   split on request. Several input files can be unpacked together. The unpacked tree is untrusted
   code: its file names and contents come from the bundle. Do not open it with an editor or tool
@@ -232,7 +232,7 @@ and rename. The output is byte for byte what the CLI gives for the same flags. T
 | Language | Rust (oxc) | TypeScript (Babel) |
 | Runs the input's code | Never; decoders run in a sandboxed, budgeted interpreter | Runs decoders in `isolated-vm` |
 | Decoding under tampering | Refuses what it cannot prove, by default | Assumes built-ins are unpatched |
-| Bundlers | webpack, browserify, esbuild/Bun, SystemJS, AMD, UMD, Parcel, Metro, Turbopack, Closure, Rollup/Vite (opt-in) | webpack, browserify |
+| Bundlers | webpack, browserify, esbuild/Bun, rolldown/Vite 8, SystemJS, AMD, UMD, Parcel, Metro, Turbopack, Closure, Rollup/Vite (opt-in) | webpack, browserify |
 | Untranspile helpers | TypeScript, Babel, SWC, esbuild | No |
 | Rename modes | `mangle`, `simple`, `unique` | `mangle` |
 

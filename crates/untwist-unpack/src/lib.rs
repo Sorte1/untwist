@@ -19,6 +19,7 @@ pub mod notes;
 pub mod parcel;
 pub mod path;
 pub mod rename;
+pub mod rolldown;
 pub mod rollup;
 pub mod runtime;
 pub mod scan;
@@ -81,7 +82,7 @@ fn kind_transforms<'a>(
         }
         BundleKind::Browserify if options.conservative => Vec::new(),
         BundleKind::Browserify => browserify::link::transforms(alloc, bundle),
-        BundleKind::Esbuild => esbuild::transforms(alloc, bundle),
+        BundleKind::Esbuild | BundleKind::Rolldown => esbuild::transforms(alloc, bundle),
         BundleKind::Rollup => rollup::transforms(alloc, bundle),
         BundleKind::SystemJs => systemjs::transforms(alloc, bundle),
         BundleKind::Amd => amd::transforms(alloc, bundle),

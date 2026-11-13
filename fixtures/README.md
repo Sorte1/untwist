@@ -26,12 +26,13 @@ own observables, so node must print the same thing before and after Untwist.
 | `unsafe-parity/` | javascript-obfuscator output that the reference deobfuscator decodes and the safe lane refuses; `MANIFEST` names each source under `sources/` and the options | `crates/untwist/tests/unsafe_parity.rs` |
 | `unminify/` | Minified programs for the unminify passes | `cargo xtask diff-unminify`, `diff-mangle` |
 | `unpack-bundlers/` | Bundler output from `tools/bundlers/` plus hand-written `min-*` and `neg-*` shapes; `MANIFEST` lists each | `cargo xtask diff-unpack-behaviour`, `crates/untwist-unpack/tests/` |
+| `unpack-rolldown/` | rolldown 1.x and Vite 8 output from `tools/rolldown/gen.mjs` (formats, minify, code splitting, keepNames, treeshake) with each cell's stdout; `EXPECT` and `XFAIL` | `crates/untwist-cli/tests/rolldown_tree.rs` |
 | `unpack-gaps/` | Hand-written bundles for known unpacking gaps | `crates/untwist-unpack/tests/` |
 | `untranspile/` | TypeScript, swc, Babel, esbuild and terser output from `tools/untranspile/gen.mjs` (`params/` from `tools/untranspile-params/gen.mjs`), as programs that print | `cargo xtask diff-behaviour`, `crates/untwist-unminify/tests/` |
 | `write-tree/` | Multi-file bundler output (an entry with a lazy chunk) copied from the `bundle-matrix/` cells of the same name, `tools/bundle-matrix/`; `expected/` holds what the original prints | `crates/untwist-cli/tests/write_tree.rs`, which runs the `-o` tree in node |
 
 Third-party inputs keep their licence beside them: `LICENSE-reference`,
-`LICENSE-javascript-obfuscator`, `obfuscators/licenses/`, `unpack-bundlers/licenses/` and `write-tree/licenses/`.
+`LICENSE-javascript-obfuscator`, `obfuscators/licenses/`, `unpack-bundlers/licenses/`, `unpack-rolldown/licenses/` and `write-tree/licenses/`.
 
 Not every sample in `reference/deobfuscate/` comes from the reference deobfuscator.
 `obfuscator.io-site-memo-reset.js` is the obfuscator.io website's output for `console.log("")`.
@@ -44,6 +45,6 @@ javascript-obfuscator 5 emits. Their `.snap` files hold the program before obfus
 
 Put the file in the folder whose test should pick it up, name it after the shape it covers, and make
 it print what it computes so node can check it. Generated folders (`eval/`, `corpus-npm/`,
-`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `rollup-commonjs/`, `unpack-bundlers/`, `untranspile/`) are rewritten by their generator, so change the
+`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `rollup-commonjs/`, `unpack-bundlers/`, `unpack-rolldown/`, `untranspile/`) are rewritten by their generator, so change the
 generator instead. Run the folder's test or differential; add an allowlist entry only for a
 divergence documented in `docs/known-divergences/`.
