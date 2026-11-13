@@ -680,7 +680,7 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
                 self.push_specific(tagged(TAG_STR, &format!("#{}", name.name)))
             }
             AstKind::LabelIdentifier(label) => self.push_label(label.name.as_str()),
-            AstKind::ThisExpression(_) | AstKind::Super(_) | AstKind::MetaProperty(_) => {
+            AstKind::ThisExpression(_) | AstKind::Super(_) | AstKind::NewTarget(_) => {
                 self.uses_lexical_this()
             }
             AstKind::VariableDeclaration(declaration) => {
@@ -720,7 +720,10 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
             }
             AstKind::ObjectProperty(property) => {
                 self.push(flag(property_kind(property.kind)));
-                let proto = property.key.static_name().as_deref() == Some("__proto__");
+                let proto = property
+                    .key
+                    .static_name()
+                    .is_some_and(|name| name.as_str() == Some("__proto__"));
                 let string_key = matches!(property.key, PropertyKey::StringLiteral(_));
                 if property.computed && (!string_key || proto) {
                     self.push(COMPUTED);
@@ -1059,7 +1062,7 @@ impl<'s> DefScan<'s> {
     }
 }
 
-fn lexical(statement: &Statement<'_>) -> Option<&VariableDeclaration<'_>> {
+fn lexical<'s, 'a>(statement: &'s Statement<'a>) -> Option<&'s VariableDeclaration<'a>> {
     match statement {
         Statement::VariableDeclaration(declaration)
             if declaration.kind != VariableDeclarationKind::Var =>

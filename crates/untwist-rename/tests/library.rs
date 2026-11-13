@@ -14,7 +14,8 @@ fn records(source: &str) -> Vec<UnitRecord> {
 fn first_function(source: &str) -> UnitRecord {
     records(source)
         .into_iter()
-        .find(|record| record.kind == untwist_rename::library::shape::UnitKind::Function)
+        .filter(|record| record.kind == untwist_rename::library::shape::UnitKind::Function)
+        .max_by_key(|record| (record.span.end - record.span.start, std::cmp::Reverse(record.span.start)))
         .expect("the source has a function")
 }
 
@@ -196,13 +197,16 @@ fn an_exact_wrapper_match_names_the_wrapper_its_locals_and_its_dependencies() {
         ("d", "getBuiltIn"),
         ("g", "globalThis"),
         ("n", "namespace"),
-        ("requireGlobal", "requireGlobalThis"),
     ] {
         assert!(
             names.contains(&(expected.0.to_string(), expected.1.to_string())),
             "{names:?}"
         );
     }
+    assert!(
+        !names.iter().any(|(old, _)| old == "requireGlobal"),
+        "a function defined outside the wrapper is named only by its own match: {names:?}"
+    );
 }
 
 #[test]
@@ -424,8 +428,10 @@ fn a_shape_two_libraries_share_names_both_and_keeps_only_agreed_names() {
         .find(|hit| hit.outermost)
         .expect("the wrapper is a hit");
     let text = untwist_rename::library::annotate::comment_text(hit);
+    assert!(hit.shared, "{hit:?}");
     assert!(
-        text.contains("same code in @swc/helpers 0.5: possible_constructor_return.js"),
+        text.contains("@swc/helpers 0.5: possible_constructor_return.js")
+            && text.contains("core-js 3.39: helpers/possibleConstructorReturn.js"),
         "{text}"
     );
     let names = names_after(&table, GET_BUILT_IN);
@@ -910,11 +916,13 @@ fn a_program_is_matched_once_while_only_names_change() {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, "function __rest(s, e) { var t = {}; for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0) t[p] = s[p]; return t; }");
     let sem = build_scoping(&parsed.program);
-    let first = untwist_rename::library::match_program(&parsed.program, &sem.scoping);
-    let again = untwist_rename::library::match_program(&parsed.program, &sem.scoping);
+    let row = row_for(GET_BUILT_IN, "internals/get-built-in", "requireGetBuiltIn", &INNER[..4], &OUTER);
+    let table = std::sync::Arc::new(Table::from_rows(&[row]));
+    let first = untwist_rename::library::match_cached(&table, &parsed.program, &sem.scoping);
+    let again = untwist_rename::library::match_cached(&table, &parsed.program, &sem.scoping);
     assert!(std::sync::Arc::ptr_eq(&first, &again));
     let other = parse_program(&alloc, "function __rest(s, e) { return s; }");
     let other_sem = build_scoping(&other.program);
-    let different = untwist_rename::library::match_program(&other.program, &other_sem.scoping);
+    let different = untwist_rename::library::match_cached(&table, &other.program, &other_sem.scoping);
     assert!(!std::sync::Arc::ptr_eq(&first, &different));
 }
