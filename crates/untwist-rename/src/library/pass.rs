@@ -1,10 +1,11 @@
 use oxc_allocator::GetAllocator;
 use oxc_ast::ast::Program;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::{Cx, Interest, Pass};
 
 use super::annotate::annotate;
-use super::{match_program, version_key, version_range, Hit};
+use super::annotate::one_line;
+use super::{intersect_ranges, match_program, parse_ranges, ranges_text, Hit, Ranges, VERSIONS_DISAGREE};
 
 pub const NAME: &str = "library-names";
 
@@ -23,75 +24,33 @@ pub fn reported(hits: &[Hit]) -> Vec<&Hit> {
 }
 
 pub fn commented<'h>(hits: &[&'h Hit]) -> Vec<&'h Hit> {
-    let mut seen: Vec<(&str, &[String])> = Vec::new();
+    let mut seen: FxHashSet<(&str, &[String])> = FxHashSet::default();
     hits.iter()
         .copied()
         .filter(|hit| {
-            if hit.role != super::table::Role::Function {
-                return true;
-            }
-            let key = (hit.label.as_str(), hit.modules.as_slice());
-            if seen.contains(&key) {
-                return false;
-            }
-            seen.push(key);
-            true
+            hit.role != super::table::Role::Function
+                || seen.insert((hit.label.as_str(), hit.modules.as_slice()))
         })
         .collect()
 }
 
 #[derive(Default)]
-struct Summary {
-    modules: Vec<String>,
-    low: Option<String>,
-    high: Option<String>,
-    union: Option<(String, String)>,
+struct Summary<'h> {
+    modules: FxHashSet<&'h [String]>,
+    ranges: Option<Ranges>,
 }
 
-impl Summary {
-    fn add(&mut self, hit: &Hit) {
-        for module in &hit.modules {
-            if !self.modules.contains(module) {
-                self.modules.push(module.clone());
-            }
-        }
-        let (low, high) = &hit.versions;
-        if self
-            .low
-            .as_ref()
-            .is_none_or(|known| version_key(low) > version_key(known))
-        {
-            self.low = Some(low.clone());
-        }
-        if self
-            .high
-            .as_ref()
-            .is_none_or(|known| version_key(high) < version_key(known))
-        {
-            self.high = Some(high.clone());
-        }
-        let union = self
-            .union
-            .get_or_insert_with(|| (low.clone(), high.clone()));
-        if version_key(low) < version_key(&union.0) {
-            union.0 = low.clone();
-        }
-        if version_key(high) > version_key(&union.1) {
-            union.1 = high.clone();
-        }
+impl<'h> Summary<'h> {
+    fn add(&mut self, hit: &'h Hit) {
+        self.modules.insert(hit.modules.as_slice());
+        self.ranges = Some(match self.ranges.take() {
+            None => hit.ranges.clone(),
+            Some(known) => intersect_ranges(&known, &hit.ranges),
+        });
     }
 
     fn range(&self) -> String {
-        match (&self.low, &self.high) {
-            (Some(low), Some(high)) if version_key(low) <= version_key(high) => {
-                version_range(low, high)
-            }
-            _ => self
-                .union
-                .as_ref()
-                .map(|(low, high)| version_range(low, high))
-                .unwrap_or_default(),
-        }
+        ranges_text(self.ranges.as_deref().unwrap_or_default())
     }
 }
 
@@ -119,38 +78,19 @@ pub fn parse_note(message: &str) -> Option<LibrarySummary> {
     })
 }
 
-fn range_bounds(range: &str) -> (String, String) {
-    match range.split_once('\u{2013}') {
-        Some((low, high)) => (low.to_string(), high.to_string()),
-        None => (range.to_string(), range.to_string()),
-    }
-}
-
 fn combined_range(ranges: &[String]) -> String {
-    let mut window: Option<(String, String)> = None;
+    let mut window: Option<Ranges> = None;
     for range in ranges {
-        let (low, high) = range_bounds(range);
+        if range == VERSIONS_DISAGREE {
+            return VERSIONS_DISAGREE.to_string();
+        }
+        let parsed = parse_ranges(range);
         window = Some(match window {
-            None => (low, high),
-            Some((known_low, known_high)) => {
-                let low = if version_key(&low) > version_key(&known_low) {
-                    low
-                } else {
-                    known_low
-                };
-                let high = if version_key(&high) < version_key(&known_high) {
-                    high
-                } else {
-                    known_high
-                };
-                (low, high)
-            }
+            None => parsed,
+            Some(known) => intersect_ranges(&known, &parsed),
         });
     }
-    match window {
-        Some((low, high)) if version_key(&low) <= version_key(&high) => version_range(&low, &high),
-        _ => ranges.join(", "),
-    }
+    ranges_text(window.as_deref().unwrap_or_default())
 }
 
 pub fn summaries<'n>(messages: impl IntoIterator<Item = &'n str>) -> Vec<LibrarySummary> {
@@ -182,7 +122,7 @@ pub fn summaries<'n>(messages: impl IntoIterator<Item = &'n str>) -> Vec<Library
 pub fn summary_notes(hits: &[&Hit]) -> Vec<String> {
     let mut libraries: FxHashMap<&str, Summary> = FxHashMap::default();
     let mut order: Vec<&str> = Vec::new();
-    for hit in hits {
+    for hit in hits.iter().filter(|hit| !hit.shared) {
         if !libraries.contains_key(hit.label.as_str()) {
             order.push(&hit.label);
         }
@@ -195,7 +135,8 @@ pub fn summary_notes(hits: &[&Hit]) -> Vec<String> {
             let count = summary.modules.len();
             let noun = if count == 1 { "module" } else { "modules" };
             format!(
-                "{NOTE_PREFIX}{label}@{}, {count} {noun}{NOTE_SUFFIX}",
+                "{NOTE_PREFIX}{}@{}, {count} {noun}{NOTE_SUFFIX}",
+                one_line(label),
                 summary.range()
             )
         })
