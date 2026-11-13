@@ -25,6 +25,7 @@ oxc_traverse.workspace = true
 indexmap.workspace = true
 rustc-hash.workspace = true
 wasmparser.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 untwist-testing = { path = "../untwist-testing" }

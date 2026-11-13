@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 use untwist_core::parse::parse_program;
-use untwist_unpack::webpack::machinery::{form_text, jsonp_block_text, known, Role};
+use untwist_unpack::webpack::machinery::{
+    form_digest, form_text, jsonp_block_text, known, Role, ENSURE_FORMS, HELPER_FORMS, LOADER_FORMS,
+};
 
 const FIXTURES: &str = "../../fixtures/webpack-variants";
 
@@ -201,4 +203,46 @@ fn every_fixture_loader_is_a_recorded_form() {
             .count();
     }
     assert!(loaders > 0);
+}
+
+fn recorded_texts() -> Vec<(String, String)> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/webpack_machinery_forms.txt");
+    std::fs::read_to_string(path)
+        .expect("forms")
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            let (role, text) = line.split_once('\t').expect("role");
+            let mut unescaped = String::new();
+            let mut chars = text.chars();
+            while let Some(c) = chars.next() {
+                match (c, c == '\\') {
+                    (_, true) => match chars.next() {
+                        Some('n') => unescaped.push('\n'),
+                        Some(other) => unescaped.push(other),
+                        None => {}
+                    },
+                    (c, false) => unescaped.push(c),
+                }
+            }
+            (role.to_string(), unescaped)
+        })
+        .collect()
+}
+
+#[test]
+fn every_recorded_digest_has_its_form_text() {
+    let texts = recorded_texts();
+    for (role, table) in [
+        ("LOADER", LOADER_FORMS),
+        ("ENSURE", ENSURE_FORMS),
+        ("HELPER", HELPER_FORMS),
+    ] {
+        let digests: Vec<String> = texts
+            .iter()
+            .filter(|(r, _)| r == role)
+            .map(|(_, text)| form_digest(text))
+            .collect();
+        assert_eq!(digests, table, "{role}");
+    }
 }

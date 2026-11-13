@@ -9,12 +9,13 @@ use oxc_syntax::symbol::SymbolId;
 use untwist_core::semantic::build_scoping;
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use sha2::{Digest, Sha256};
 use untwist_core::ast_util::prop::number_key;
 
 use crate::model::{body_key, Bodies, BodyKey, Runtime};
 use crate::runtime::synthetic_statements;
 use crate::webpack::canon::canonical_statement;
-use crate::webpack::machinery_forms::{ENSURE_FORMS, HELPER_FORMS, LOADER_FORMS};
+pub use crate::webpack::machinery_forms::{ENSURE_FORMS, HELPER_FORMS, LOADER_FORMS};
 
 const MARK: char = '\0';
 const INSTALLED: &str = "\0installed";
@@ -444,6 +445,18 @@ fn symbols_renamed<'a>(
         .unwrap_or_else(|| Statement::new_empty_statement(SPAN, &builder))
 }
 
+pub fn form_digest(text: &str) -> String {
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn recorded(table: &[&str], text: &str) -> bool {
+    let digest = form_digest(text);
+    table.contains(&digest.as_str())
+}
+
 pub fn form_text(expr: &Expression<'_>, require: &str) -> Option<String> {
     abstracted(expr, require).map(|(text, _)| text)
 }
@@ -451,11 +464,11 @@ pub fn form_text(expr: &Expression<'_>, require: &str) -> Option<String> {
 pub fn known(expr: &Expression<'_>, require: &str) -> Option<Known> {
     let (text, installed) = abstracted(expr, require)?;
     let text = text.as_str();
-    let role = if LOADER_FORMS.contains(&text) && loads_javascript_only(text) {
+    let role = if recorded(LOADER_FORMS, text) && loads_javascript_only(text) {
         Role::Loader
-    } else if ENSURE_FORMS.contains(&text) {
+    } else if recorded(ENSURE_FORMS, text) {
         Role::Ensure
-    } else if HELPER_FORMS.contains(&text) {
+    } else if recorded(HELPER_FORMS, text) {
         Role::Helper
     } else {
         return None;
@@ -606,14 +619,14 @@ pub fn loading_of(statements: &[Statement<'_>], require: &str, bodies: &Bodies<'
             continue;
         };
         let text = text.as_str();
-        if LOADER_FORMS.contains(&text) && loads_javascript_only(text) {
+        if recorded(LOADER_FORMS, text) && loads_javascript_only(text) {
             loading.installed.extend(installed);
             loading.handlers.extend(
                 named_after(text, HANDLER, '=')
                     .into_iter()
                     .map(str::to_string),
             );
-        } else if ENSURE_FORMS.contains(&text) && installed.is_empty() {
+        } else if recorded(ENSURE_FORMS, text) && installed.is_empty() {
             let called = match (text.contains(SPREAD), text.contains(HANDLER)) {
                 (true, _) => Vec::new(),
                 (false, true) => named_after(text, HANDLER, '(')
@@ -683,7 +696,7 @@ fn jsonp_form(
 
 pub fn jsonp_block(source: &str, statements: &[Statement<'_>], require: &str) -> Option<Vec<Span>> {
     let (form, installed, spans) = jsonp_form(source, statements, require)?;
-    (LOADER_FORMS.contains(&form.as_str()) && installed.is_empty()).then_some(spans)
+    (recorded(LOADER_FORMS, &form) && installed.is_empty()).then_some(spans)
 }
 
 pub fn jsonp_block_text(
