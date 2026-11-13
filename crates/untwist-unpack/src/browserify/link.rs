@@ -6,7 +6,7 @@ use oxc_semantic::Scoping;
 use oxc_span::GetSpan;
 use oxc_str::{Ident, Str};
 use oxc_syntax::scope::ScopeFlags;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::prop::number_key;
 use untwist_core::pass::{Note, NoteKind};
 use untwist_core::semantic::build_scoping;
@@ -184,6 +184,73 @@ impl<'a> VisitJs<'a> for NameUse<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         self.found |= it.name == self.name;
     }
+}
+
+struct Uses<'r> {
+    name: &'r str,
+    dependencies: &'r [(String, String)],
+    ids: &'r FxHashSet<String>,
+    total: usize,
+    linked: usize,
+    rebinds: bool,
+    mentions_require: bool,
+}
+
+impl Uses<'_> {
+    fn resolves(&self, request: &str) -> bool {
+        match self.dependencies.iter().rfind(|(_, r)| r == request) {
+            Some((id, _)) => !FALSY_IDS.contains(&id.as_str()) && self.ids.contains(id),
+            None => !INHERITED_KEYS.contains(&request) && self.ids.contains(request),
+        }
+    }
+
+    fn links(&self, it: &CallExpression<'_>) -> bool {
+        let Expression::Identifier(callee) = &it.callee else {
+            return false;
+        };
+        callee.name == self.name
+            && it
+                .arguments
+                .first()
+                .and_then(request_key)
+                .is_some_and(|request| self.resolves(&request))
+    }
+}
+
+impl<'a> VisitJs<'a> for Uses<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.total += usize::from(it.name == self.name);
+        self.mentions_require |= it.name == REQUIRE;
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.rebinds |= it.name == self.name || it.name == REQUIRE;
+        self.mentions_require |= it.name == REQUIRE;
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.linked += usize::from(self.links(it));
+        oxc_ast_visit::walk_js::walk_call_expression(self, it);
+    }
+}
+
+pub fn leaves_require_unbound(
+    body: &FunctionBody<'_>,
+    name: &str,
+    dependencies: &[(String, String)],
+    ids: &FxHashSet<String>,
+) -> bool {
+    let mut uses = Uses {
+        name,
+        dependencies,
+        ids,
+        total: 0,
+        linked: 0,
+        rebinds: false,
+        mentions_require: false,
+    };
+    uses.visit_function_body(body);
+    uses.mentions_require && (uses.rebinds || uses.total > uses.linked)
 }
 
 fn still_uses(program: &Program<'_>, name: &str) -> bool {

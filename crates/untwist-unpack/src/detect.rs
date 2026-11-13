@@ -6,7 +6,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
 
 use crate::browserify::detect::{
-    browserify_factories, detect_browserify_with, is_browserify, rebound_require,
+    browserify_factories, detect_browserify_with, is_browserify, rebound_require, unlinked_require,
 };
 use crate::closed::first_open;
 use crate::frame::Frame;
@@ -72,6 +72,16 @@ impl<'a> Extract<'a, '_, '_> {
     }
 }
 
+impl Extract<'_, '_, '_> {
+    fn requests_linked(&mut self, expr: &Expression<'_>) -> bool {
+        let Some(note) = unlinked_require(expr) else {
+            return true;
+        };
+        self.unproven.get_or_insert(note);
+        false
+    }
+}
+
 impl<'a> Finder<'a> for Extract<'a, '_, '_> {
     fn found(&self) -> bool {
         self.bundle.is_some()
@@ -104,6 +114,7 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
         if self.bundle.is_none()
             && self.closed(browserify_factories(expr))
             && self.require_kept(browserify_factories(expr))
+            && self.requests_linked(expr)
         {
             self.bundle = attempt(self.bodies, |bodies| {
                 detect_browserify_with(alloc, source, expr, bodies, options)

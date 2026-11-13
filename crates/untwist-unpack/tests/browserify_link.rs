@@ -207,12 +207,33 @@ fn a_factory_that_takes_no_require_keeps_the_hosts_requests() {
 }
 
 #[test]
-fn a_renamed_require_left_with_a_computed_request_is_noted() {
-    let split = split(
+fn a_renamed_require_left_with_a_computed_request_refuses_the_bundle() {
+    let notes = refusal(
         "{1:[function(t,e,n){var host=typeof require;var name=\"./a\";t(name);t(\"./a\")},{\"./a\":2}],2:[function(t,e,n){},{}]},{},[1]",
+    )
+    .expect("the bundle is refused");
+    assert!(
+        notes
+            .iter()
+            .any(|note| note.contains("module 1") && note.contains("cannot link")),
+        "{notes:?}"
     );
-    assert!(split.code("index.js").ends_with("require(\"./a.js\");"));
-    assert!(split.notes(REQUIRE_LEFT_UNBOUND), "{:?}", split.notes);
+}
+
+#[test]
+fn a_renamed_require_passed_as_a_value_refuses_the_bundle() {
+    assert!(refusal(
+        "{1:[function(t,e,n){var host=typeof require;var load=t;load(\"./a\")},{\"./a\":2}],2:[function(t,e,n){},{}]},{},[1]",
+    )
+    .is_some());
+}
+
+#[test]
+fn a_renamed_require_with_a_request_that_names_no_module_refuses_the_bundle() {
+    assert!(refusal(
+        "{1:[function(t,e,n){var host=typeof require;t(\"./gone\")},{\"./gone\":9}]},{},[1]",
+    )
+    .is_some());
 }
 
 #[test]
