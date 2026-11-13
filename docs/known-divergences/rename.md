@@ -203,6 +203,14 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   renamed as before, and `--unsafe` renames them anyway. The limit, like `fn.toString()`: a read
   through a key that is not a literal (`f[key]`) or through reflection (`Reflect.get(f, "name")`,
   `Object.getOwnPropertyDescriptor`) is not seen.
+- **Function source under `smart`.** `smart` keeps every name inside or referenced by a function
+  whose source the program reads (`'' + f`, `` `${f}` ``, `String(f)`, `f.toString()`), and leaves
+  the whole program unrenamed when a function may read its own source through `this`,
+  `arguments.callee` or `.caller`. With `--unsafe`, `this.toString()` inside an instance method (a
+  function stored on `X.prototype`, other than `Function.prototype` and `Object.prototype`, or a
+  non-static class method) is taken to read the instance, not a function, so it does not stop
+  renaming: a call that hands such a method a function as its receiver
+  (`Number.prototype.m.call(f)`) would see renamed source.
 - **Hoisting and the host's global object.** A sloppy block function and a `var` or parameter
   of the same name in its function are one binding to Annex B, so both keep their names. A `var`
   written inside a block or catch body counts where it hoists to, so no block-scoped binding in

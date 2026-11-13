@@ -8,12 +8,12 @@ use untwist_core::pass::{Cx, Interest, Pass};
 use crate::base_name::{base_name, structural_base, Context, FALLBACK_BASE};
 use crate::collect::{BindingInfo, BindingRole, Collected, InitKind};
 use crate::evidence::{collect_evidence, Evidence};
-use crate::generate::{to_identifier, uid_candidates};
+use crate::generate::{lower_camel, to_identifier, uid_candidates};
 use crate::human::looks_human_written;
 use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
 use crate::simple::{is_renameable, unit_roots};
-use crate::text_reads::{text_read_bindings, TextReads};
+use crate::text_reads::{text_read_bindings_with, SelfReads, TextReads};
 use crate::usage::collect_naming_usage;
 use crate::RenameConfig;
 
@@ -25,8 +25,18 @@ const STRUCTURAL_FUNCTION: &str = "fn";
 
 const CALL_RESULT: &str = "result";
 
+const CONSTRUCTED: &str = "instance";
+
+const CONSTRUCTOR: &str = "Ctor";
+
+const UNNAMED_CALLABLES: [&str; 2] = ["fn", "cb"];
+
 fn is_call_result(info: &BindingInfo) -> bool {
     matches!(&info.role, BindingRole::Variable(shape) if shape.kind == InitKind::Call)
+}
+
+fn is_constructed(info: &BindingInfo) -> bool {
+    matches!(&info.role, BindingRole::Variable(shape) if shape.kind == InitKind::New)
 }
 
 pub struct Smart {
@@ -52,15 +62,25 @@ impl<'a> Pass<'a> for Smart {
 
     fn exit_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         let config = smart_config(self.config);
+        let self_reads = lane_self_reads(cx.opts.unsafe_transforms);
         run_mode(
             &mut self.done,
             program,
             cx,
             HazardNote::Report,
             OuterRule::UsedEnclosing,
-            move |program, collected, scoping| decide(program, collected, scoping, config),
+            move |program, collected, scoping| {
+                decide_in(program, collected, scoping, (config, self_reads))
+            },
         );
     }
+}
+
+pub fn lane_self_reads(unsafe_transforms: bool) -> SelfReads {
+    if unsafe_transforms {
+        return SelfReads::InstanceMethodsReadInstances;
+    }
+    SelfReads::Unknown
 }
 
 pub fn smart_config(config: RenameConfig) -> RenameConfig {
@@ -90,15 +110,47 @@ pub fn smart_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> 
         .flatten()
         .map(to_identifier)
         .filter(|name| !name.is_empty() && name != "_");
-    let base = evidenced.unwrap_or_else(|| derived_base(info, cx));
+    let base = evidenced
+        .or_else(|| instance_base(info, cx, evidence))
+        .unwrap_or_else(|| {
+            let derived = derived_base(info, cx);
+            let unnamed_constructor = evidence.is_constructor(info.symbol)
+                && UNNAMED_CALLABLES.contains(&derived.as_str());
+            if unnamed_constructor {
+                return CONSTRUCTOR.to_string();
+            }
+            derived
+        });
     let unevidenced_short = base == FALLBACK_BASE && info.name.chars().count() <= SHORT_NAME;
     (!unevidenced_short).then_some(base)
+}
+
+fn instance_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> Option<String> {
+    let BindingRole::Variable(shape) = &info.role else {
+        return None;
+    };
+    if shape.kind != InitKind::New {
+        return None;
+    }
+    let callee = shape.symbol?;
+    let binding = cx
+        .collected
+        .bindings
+        .get(*cx.collected.by_symbol.get(&callee)?)?;
+    if !is_renameable(binding, cx.collected, cx.config) {
+        return None;
+    }
+    let name = to_identifier(&lower_camel(evidence.name(callee)?));
+    (!name.is_empty() && name != "_").then_some(name)
 }
 
 fn derived_base(info: &BindingInfo, cx: &Context<'_>) -> String {
     let base = base_name(info, cx);
     if base == STRUCTURAL_FUNCTION && is_call_result(info) {
         return CALL_RESULT.to_string();
+    }
+    if base == STRUCTURAL_FUNCTION && is_constructed(info) {
+        return CONSTRUCTED.to_string();
     }
     let counter = cx.collected.loop_counters.contains_key(&info.symbol);
     if counter || looks_human_written(&base) {
@@ -115,19 +167,28 @@ pub fn decide(
     scoping: &Scoping,
     config: RenameConfig,
 ) -> RenamePlan {
-    decide_with_limit(program, collected, scoping, config, NUMBER_LIMIT)
+    decide_in(program, collected, scoping, (config, SelfReads::Unknown))
+}
+
+pub fn decide_in(
+    program: &Program<'_>,
+    collected: &Collected,
+    scoping: &Scoping,
+    settings: (RenameConfig, SelfReads),
+) -> RenamePlan {
+    decide_with_limit(program, collected, scoping, settings, NUMBER_LIMIT)
 }
 
 fn decide_with_limit(
     program: &Program<'_>,
     collected: &Collected,
     scoping: &Scoping,
-    config: RenameConfig,
+    (config, self_reads): (RenameConfig, SelfReads),
     limit: u32,
 ) -> RenamePlan {
     let usage = collect_naming_usage(program, scoping);
     let evidence = collect_evidence(program, scoping);
-    let text_read = match text_read_bindings(program, scoping) {
+    let text_read = match text_read_bindings_with(program, scoping, self_reads) {
         TextReads::Bindings(pinned) => pinned,
         TextReads::Unknown => return refused(),
     };
@@ -239,7 +300,8 @@ mod tests {
             rename_all: false,
             extended: true,
         };
-        let plan = decide_with_limit(&parsed.program, &collected, &sem.scoping, config, 0);
+        let settings = (config, SelfReads::Unknown);
+        let plan = decide_with_limit(&parsed.program, &collected, &sem.scoping, settings, 0);
         assert!(plan.is_empty(), "the mode must rename nothing");
         assert_eq!(plan.notes.len(), 1, "{:?}", plan.notes);
     }

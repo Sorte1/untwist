@@ -11,6 +11,7 @@ pub mod diff;
 pub mod diff_eval;
 pub mod freeze_records;
 pub mod layers;
+pub mod name_share;
 pub mod obf_fuzz;
 pub mod obf_matrix;
 pub mod obf_options;
