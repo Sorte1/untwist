@@ -4,6 +4,24 @@ use super::{Kind, Variant, TOKEN_CAP};
 
 const BABEL_7_29_SAFARI9_IIFE_TERSER_CLASS_EARLY_RETURN: &str =
     "fixtures/untranspile/matrix/babel-7.29/safari9-iife-terser/class-early-return.js";
+const BABEL_7_12_IE11_FOR_OF: &str = "fixtures/untranspile/matrix/babel-7.12/ie11/for-of.js";
+const BABEL_7_12_IE11_RUNTIME_FOR_OF: &str =
+    "fixtures/untranspile/matrix/babel-7.12/ie11-runtime/for-of.js";
+const BABEL_7_20_IE11_FOR_OF: &str = "fixtures/untranspile/matrix/babel-7.20/ie11/for-of.js";
+const BABEL_7_20_IE11_RUNTIME_FOR_OF: &str =
+    "fixtures/untranspile/matrix/babel-7.20/ie11-runtime/for-of.js";
+const BABEL_7_24_IE11_FOR_OF: &str = "fixtures/untranspile/matrix/babel-7.24/ie11/for-of.js";
+const BABEL_7_24_IE11_RUNTIME_FOR_OF: &str =
+    "fixtures/untranspile/matrix/babel-7.24/ie11-runtime/for-of.js";
+const BABEL_7_29_IE11_TERSER_FOR_OF: &str =
+    "fixtures/untranspile/matrix/babel-7.29/ie11-terser/for-of.js";
+const BABEL_7_28_IE11_RUNTIME_IIFE_TERSER_FOR_OF: &str =
+    "fixtures/untranspile/matrix/babel-7.28/ie11-runtime-iife-terser/for-of.js";
+const BABEL_7_29_IE11_ROLLUP_TERSER_FOR_OF: &str =
+    "fixtures/untranspile/matrix/babel-7.29/ie11-rollup-terser/for-of.js";
+const BABEL_8_IE11_FOR_OF: &str = "fixtures/untranspile/matrix/babel-8/ie11/for-of.js";
+const BABEL_8_IE11_RUNTIME_FOR_OF: &str =
+    "fixtures/untranspile/matrix/babel-8/ie11-runtime/for-of.js";
 const BABEL_7_0_IE11_ARROW_THIS: &str = "fixtures/untranspile/matrix/babel-7.0/ie11/arrow-this.js";
 const BABEL_7_0_IE11_DESTRUCTURING: &str =
     "fixtures/untranspile/matrix/babel-7.0/ie11/destructuring.js";
@@ -645,5 +663,93 @@ pub const VARIANTS: &[Variant] = &[
         (IF_STATEMENT, IDENTIFIER_FOCUS),
         (&[Kind::ArrayLikeToArray], 91),
         SWC_1_16_ES5_TERSER_DESTRUCTURING,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0x22d2_6ded_7f28_7957_b4a7_ae61_2cd3_9a89,
+        (2, 6),
+        (VARIABLE_DECLARATION, NO_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 212),
+        BABEL_7_12_IE11_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0x8c1c_ef01_a0eb_e85e_38c8_7a34_ff0a_8aae,
+        (2, 6),
+        (VARIABLE_DECLARATION, NO_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 203),
+        BABEL_7_12_IE11_RUNTIME_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0xa867_f61f_c41f_4b6e_dda2_28e8_6128_e106,
+        (2, 6),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 215),
+        BABEL_7_20_IE11_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0x8bb9_5c65_791c_51e3_4d61_750f_014e_d388,
+        (2, 6),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 206),
+        BABEL_7_20_IE11_RUNTIME_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0x66a6_27d8_fb6f_ae61_772d_66bd_6ebf_f5ba,
+        (2, 6),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 216),
+        BABEL_7_24_IE11_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0xb222_8b91_7096_5c0b_e8b4_75c0_e03d_352f,
+        (2, 6),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 207),
+        BABEL_7_24_IE11_RUNTIME_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0x141d_a36f_26b6_b924_19c4_fe2c_d346_478f,
+        (2, 6),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 209),
+        BABEL_7_29_IE11_TERSER_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0xacf7_0344_bf23_3e7a_47b6_43b3_5f6a_74aa,
+        (2, 6),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::ArrayLikeToArray], 287),
+        BABEL_7_28_IE11_RUNTIME_IIFE_TERSER_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0x2e6a_e86c_3904_0c14_cccf_8907_df8b_ad58,
+        (2, 6),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 234),
+        BABEL_8_IE11_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0xd982_3a52_4be2_33be_7952_1f7c_37a0_4bc7,
+        (2, 6),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 225),
+        BABEL_8_IE11_RUNTIME_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIterator,
+        0xb067_bdd7_1751_98a8_4496_5bdd_dae4_126a,
+        (2, 6),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 200),
+        BABEL_7_29_IE11_ROLLUP_TERSER_FOR_OF,
     ),
 ];

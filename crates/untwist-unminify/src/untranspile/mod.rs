@@ -23,6 +23,7 @@ mod class_super;
 mod define_chain;
 mod destructure;
 mod fingerprint;
+mod for_of;
 mod generator;
 pub mod identify;
 mod machine;
@@ -103,6 +104,7 @@ pub struct UntranspileHelpers {
     trust: Option<trust::Trust>,
     wants_trust: bool,
     identified_late: bool,
+    iterators_seen: bool,
 }
 
 impl Default for UntranspileHelpers {
@@ -139,6 +141,7 @@ impl Default for UntranspileHelpers {
             trust: None,
             wants_trust: false,
             identified_late: false,
+            iterators_seen: false,
         }
     }
 }
@@ -517,6 +520,21 @@ impl UntranspileHelpers {
     }
 
     #[inline(never)]
+    fn for_of_site<'a>(&mut self, node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        if !self.gate.unsafe_ {
+            if self.may_wait(cx) && for_of::has_site(node, &self.table, cx.scoping()) {
+                self.waiting = true;
+            }
+            return;
+        }
+        let fired = for_of::rewrite_statements(node, &self.table, cx);
+        for _ in 0..fired {
+            shapes::fire(PASS, for_of::SHAPE);
+        }
+        cx.changed_by(fired);
+    }
+
+    #[inline(never)]
     fn arrow_site<'a>(&mut self, node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
         let Expression::ArrowFunctionExpression(arrow) = node else {
             return;
@@ -700,7 +718,10 @@ impl<'a> Pass<'a> for UntranspileHelpers {
     fn retired(&self) -> Interest {
         if self.dormant {
             Interest::EXIT_EXPRESSION | Interest::EXIT_STATEMENT | Interest::EXIT_STATEMENTS
-        } else if self.identified && (self.define_quiet || !self.define_live()) {
+        } else if self.identified
+            && (self.define_quiet || !self.define_live())
+            && !self.iterators_seen
+        {
             Interest::EXIT_STATEMENTS
         } else {
             Interest::NONE
@@ -752,6 +773,7 @@ impl<'a> Pass<'a> for UntranspileHelpers {
             self.open_classes = true;
         }
         self.class_seen = self.table.has_classes();
+        self.iterators_seen = self.table.has_iterators();
         let refused_open = std::mem::take(&mut self.open_classes);
         if refused_open {
             cx.note(UNTRANSPILE_CLASS_PROTOTYPE_OPEN, None);
@@ -831,6 +853,9 @@ impl<'a> Pass<'a> for UntranspileHelpers {
     }
 
     fn exit_statements(&mut self, node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        if self.table.has_iterators() {
+            self.for_of_site(node, cx);
+        }
         if self.run_lists.is_empty() {
             return;
         }

@@ -139,6 +139,35 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   keys before copying, return `{}` for `null`, and (the loose form) omit symbol keys; object rest
   does none of these.
 
+## `for … of` loops
+
+- **Babel's iterator helper becomes a `for … of` loop (`--unsafe` only).** `var it =
+  _createForOfIteratorHelper(x)` directly before `try { for (it.s(); !(step = it.n()).done;) {
+  … } } catch (err) { it.e(err); } finally { it.f(); }` becomes `for (… of x) { … }` when the
+  helper is a known version (Babel 7.9 to 8, inline, `@babel/runtime`, Rollup-bundled and
+  terser-minified copies), the call has exactly one argument (`allowArrayLike` keeps the
+  helper), and `it`, `step` and `err` are used only there. A first loop statement `var v =
+  step.value` (any declaration kind) or `v = step.value` becomes the head; otherwise, when that
+  statement starts by reading `step.value`, `step` itself becomes the head's `const` binding and
+  the read becomes `step`. A head binding whose name `x` mentions keeps the helper (it would
+  read the binding in its dead zone). The declarations of `it` and of `step` (when it has no
+  initialiser and sits in the same statement list) go; a label stays on the loop. Assumptions:
+  - **Iterators follow the protocol.** They keep their `next` method (the helper reads `next`
+    at every step, the loop once), `next()` returns an object and does not throw, the result's
+    `value` read does not throw, and `return()` returns an object. The helper ignores what
+    `return()` returns, where the loop throws a `TypeError` for a non-object; and it calls
+    `return()` when `next()` or the `value` read throws after the first step, where the loop
+    does not.
+  - **An iterable value has `Symbol.iterator`.** The helper also walks an array, string,
+    `Map`, `Set`, `arguments` or typed array (by its tag) that has no `Symbol.iterator` by
+    index, and an object with only a `"@@iterator"` method; the loop throws a `TypeError` for
+    them.
+  - Witness: `tools/untranspile/features/for-of-exits.js` (every matrix cell), which counts
+    `next` and `return` calls on early `break`, `return`, `throw`, `continue` to an outer label
+    and a throwing body.
+- **Babel's loose helper stays.** `_createForOfIteratorHelperLoose` never calls `return()`, so
+  a loop left early does not close its iterator; a native loop does.
+
 ## `merge-member-declarations` (reference deobfuscator issue #30)
 
 - Consecutive declarations `var a = e.x; var b = e["y"];` of the same kind, each with one

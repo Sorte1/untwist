@@ -62,6 +62,7 @@ pub enum Kind {
     Values,
     Awaiter,
     Async,
+    ForOfIterator,
     Alias(Alias),
 }
 
@@ -162,7 +163,7 @@ pub fn known(hash: u128, size: Size) -> Option<&'static Variant> {
     variants().find(|variant| variant.hash == hash && sized(variant, size))
 }
 
-pub const HELPER_NAMES: [(&str, Kind); 62] = [
+pub const HELPER_NAMES: [(&str, Kind); 64] = [
     ("_toConsumableArray", Kind::ToConsumableArray),
     ("_to_consumable_array", Kind::ToConsumableArray),
     ("_arrayWithoutHoles", Kind::ArrayWithoutHoles),
@@ -246,6 +247,8 @@ pub const HELPER_NAMES: [(&str, Kind); 62] = [
     ("_ts_values", Kind::Values),
     ("__awaiter", Kind::Awaiter),
     ("__async", Kind::Async),
+    ("_createForOfIteratorHelper", Kind::ForOfIterator),
+    ("_create_for_of_iterator_helper", Kind::ForOfIterator),
 ];
 
 pub fn is_consumer(kind: Kind) -> bool {
@@ -283,6 +286,10 @@ pub fn is_machine_runtime(kind: Kind) -> bool {
 
 pub fn is_async_runner(kind: Kind) -> bool {
     matches!(kind, Kind::Awaiter | Kind::Async)
+}
+
+pub fn is_iterator_helper(kind: Kind) -> bool {
+    matches!(kind, Kind::ForOfIterator)
 }
 
 pub fn is_object_rest(kind: Kind) -> bool {

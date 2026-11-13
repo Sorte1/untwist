@@ -60,14 +60,14 @@ function babelLine(line) {
 
 const babelLines = ["6", "7.0", "7.12", "7.20", "7.24", "7.28", "7.29", "8"].map((line) => [line, babelLine(line)]);
 
-function babelOptions(b, { targets, loose = false, runtime = false }) {
+function babelOptions(b, { targets, loose = false, runtime = false, rollup = false }) {
   const plugins = [];
   if (b.classProperties) plugins.push([b.classProperties, b.six ? {} : { loose }]);
   if (b.privateMethods) plugins.push([b.privateMethods, { loose }]);
   if (b.staticBlock) plugins.push(b.staticBlock);
   if (b.objectRestSpread) plugins.push(b.objectRestSpread);
   if (runtime) plugins.push([b.runtime, b.core.version.startsWith("7.0") || b.core.version.startsWith("7.12") ? { useESModules: runtime === "esm" } : {}]);
-  const envOptions = { targets, ...(loose ? { loose } : {}), ...(runtime === "esm" ? { modules: false } : {}) };
+  const envOptions = { targets, ...(loose ? { loose } : {}), ...(runtime === "esm" || rollup ? { modules: false } : {}) };
   return {
     presets: [[b.env, envOptions]],
     plugins,
@@ -108,7 +108,7 @@ function babelVariant(line, b, name, opts, bundled) {
     label: b.label,
     async compile(source, feature) {
       const out = (b.core.transformSync ?? b.core.transform)(source, babelOptions(b, opts)).code;
-      if (!opts.runtime) return regeneratorPrelude(b, out);
+      if (!opts.runtime && !opts.rollup) return regeneratorPrelude(b, out);
       return bundle(out, b.dir, `${line}-${name}-${feature}`);
     },
     bundled,
@@ -288,6 +288,10 @@ const safari9 = babelLines
   .filter(([line]) => line === "7.28" || line === "7.29")
   .map(([line, b]) => babelVariant(line, b, "safari9", { targets: { safari: "9" } }));
 
+const rollupTerser = babelLines
+  .filter(([line]) => line === "7.28" || line === "7.29")
+  .map(([line, b]) => minified(babelVariant(line, b, "ie11-rollup", { targets: ie11, rollup: true }, true)));
+
 const latest = (tool, version, options) => [...babelVariants, ...tsVariants, ...swcVariants].find((v) => v.tool === tool && v.version === version && v.options === options);
 
 const variants = [
@@ -304,6 +308,9 @@ const variants = [
   minified(latest("babel", "7.28", "ie11")),
   ...safari9,
   ...safari9.map(bundled),
+  bundled(latest("babel", "7.28", "ie11-runtime")),
+  bundled(latest("babel", "7.29", "ie11-runtime")),
+  ...rollupTerser,
   minified(latest("babel", "7.29", "ie11-loose")),
   minified(latest("ts", "5.9", "es5")),
   minified(latest("ts", "5.9", "es5-tslib")),
