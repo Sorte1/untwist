@@ -87,33 +87,31 @@ pub fn run_node(node: &Path, root: &Path, loader: &str, entries: &[PathBuf]) -> 
     Ok(Ran { exit, stdout })
 }
 
-fn js_under(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in std::fs::read_dir(dir).with_context(|| dir.display().to_string())? {
-        let path = entry?.path();
-        if path.is_dir() {
-            js_under(&path, out)?;
-        } else if path
-            .extension()
-            .is_some_and(|e| e == "js" || e == "mjs" || e == "cjs")
-        {
-            out.push(path);
-        }
-    }
-    out.sort();
-    Ok(())
+struct Written {
+    kind: String,
+    entry: bool,
+    paths: Vec<String>,
 }
 
-fn bundle_of(out: &Path) -> Result<Option<(String, usize)>> {
+fn bundle_of(out: &Path) -> Result<Option<Written>> {
     let manifest = out.join("bundle.json");
     if !manifest.is_file() {
         return Ok(None);
     }
     let value: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&manifest)?)?;
-    let kind = value["type"].as_str().unwrap_or("?").to_string();
-    Ok(Some((
-        kind,
-        value["modules"].as_array().map_or(0, Vec::len),
-    )))
+    let paths = value["modules"]
+        .as_array()
+        .map(|m| {
+            m.iter()
+                .filter_map(|m| m["path"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(Some(Written {
+        kind: value["type"].as_str().unwrap_or("?").to_string(),
+        entry: !value["entryId"].is_null(),
+        paths,
+    }))
 }
 
 fn untwist(
@@ -159,18 +157,17 @@ pub fn observe(
     if let Err(error) = untwist(setup.untwist, flags, &args)? {
         return Ok(failed(error));
     }
-    if let Some(bundle) = bundle_of(&out)? {
-        let mut outputs = Vec::new();
-        js_under(&out, &mut outputs)?;
-        outputs.retain(|f| {
-            !f.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with("deobfuscated."))
-        });
-        let ran = run_node(setup.node, setup.root, "node", &[out.join("index.js")])?;
+    if let Some(written) = bundle_of(&out)? {
+        let outputs: Vec<PathBuf> = written.paths.iter().map(|p| out.join(p)).collect();
+        let ran = if written.entry {
+            run_node(setup.node, setup.root, "node", &[out.join("index.js")])?
+        } else {
+            let entries: Vec<PathBuf> = cell.entry.iter().map(|e| out.join(e)).collect();
+            run_node(setup.node, setup.root, &cell.loader, &entries)?
+        };
         return Ok(Observation {
             untwist_error: None,
-            bundle: Some(bundle),
+            bundle: Some((written.kind, written.paths.len())),
             machinery: measure_files(&outputs),
             ran: Some(ran),
         });
