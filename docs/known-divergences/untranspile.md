@@ -165,6 +165,15 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
   - Witness: `tools/untranspile/features/for-of-exits.js` (every matrix cell), which counts
     `next` and `return` calls on early `break`, `return`, `throw`, `continue` to an outer label
     and a throwing body.
+- **TypeScript's `__values` loop becomes a `for … of` loop too (`--unsafe` only).** `try { for
+  (var it = __values(x), step = it.next(); !step.done; step = it.next()) { … } } catch (e_1_1)
+  { e_1 = { error: e_1_1 }; } finally { try { if (step && !step.done && (_a = it.return))
+  _a.call(it); } finally { if (e_1) throw e_1.error; } }` (also with `(e_1 = void 0,
+  __values(x))`, as nested loops reset it), with `__values` identified (TypeScript and tslib copies),
+  and `it`, `step`, `e_1`, `e_1_1` and `_a` used only there, takes the same heads
+  as the Babel loop; init-free declarations of `e_1` and `_a` in the same statement list go.
+  The same assumptions hold; for the second one, `__values` also walks any object with a
+  numeric `length` that has no `Symbol.iterator`, which the loop rejects with a `TypeError`.
 - **Babel's loose helper stays.** `_createForOfIteratorHelperLoose` never calls `return()`, so
   a loop left early does not close its iterator; a native loop does.
 

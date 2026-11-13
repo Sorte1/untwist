@@ -18,7 +18,7 @@ const STEP_USES: usize = 2;
 const ERROR_USES: usize = 1;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Head {
+pub(super) enum Head {
     Declared,
     Assigned,
     Step,
@@ -81,7 +81,7 @@ fn catch_forwards(handler: &CatchClause<'_>, iterator: SymbolId, scoping: &Scopi
     forwarded && scoping.get_resolved_reference_ids(error).len() == ERROR_USES
 }
 
-fn resolved_id(id: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
+pub(super) fn resolved_id(id: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
     scoping.get_reference(id.reference_id.get()?).symbol_id()
 }
 
@@ -89,21 +89,21 @@ fn finally_closes(block: &BlockStatement<'_>, iterator: SymbolId, scoping: &Scop
     only_expression(block).is_some_and(|expression| bare_call(expression, iterator, "f", scoping))
 }
 
-fn unlabelled<'k, 'a>(statement: &'k Statement<'a>) -> &'k Statement<'a> {
+pub(super) fn unlabelled<'k, 'a>(statement: &'k Statement<'a>) -> &'k Statement<'a> {
     match statement {
         Statement::LabeledStatement(labelled) => unlabelled(&labelled.body),
         other => other,
     }
 }
 
-fn unlabelled_mut<'k, 'a>(statement: &'k mut Statement<'a>) -> &'k mut Statement<'a> {
+pub(super) fn unlabelled_mut<'k, 'a>(statement: &'k mut Statement<'a>) -> &'k mut Statement<'a> {
     match statement {
         Statement::LabeledStatement(labelled) => unlabelled_mut(&mut labelled.body),
         other => other,
     }
 }
 
-fn the_loop<'k, 'a>(block: &'k BlockStatement<'a>) -> Option<&'k ForStatement<'a>> {
+pub(super) fn the_loop<'k, 'a>(block: &'k BlockStatement<'a>) -> Option<&'k ForStatement<'a>> {
     match block.body.as_slice() {
         [statement] => match unlabelled(statement) {
             Statement::ForStatement(it) => Some(it),
@@ -148,7 +148,11 @@ fn stepped(test: &Expression<'_>, iterator: SymbolId, scoping: &Scoping) -> Opti
     fresh.then(|| resolved_id(step, scoping)).flatten()
 }
 
-fn is_step_value(expression: &Expression<'_>, step: SymbolId, scoping: &Scoping) -> bool {
+pub(super) fn is_step_value(
+    expression: &Expression<'_>,
+    step: SymbolId,
+    scoping: &Scoping,
+) -> bool {
     matches!(expression.without_parentheses(), Expression::StaticMemberExpression(member)
         if !member.optional
             && member.property.name.as_str() == "value"
@@ -210,7 +214,7 @@ fn statement_leads(statement: &Statement<'_>, step: SymbolId, scoping: &Scoping)
     lead.is_some_and(|expression| leads(expression, step, scoping))
 }
 
-fn head_of(first: &Statement<'_>, step: SymbolId, scoping: &Scoping) -> Option<Head> {
+pub(super) fn head_of(first: &Statement<'_>, step: SymbolId, scoping: &Scoping) -> Option<Head> {
     match first {
         Statement::VariableDeclaration(declaration) if !declaration.declare => {
             if let [declarator] = declaration.declarations.as_slice() {
@@ -277,13 +281,13 @@ impl<'a> oxc_ast_visit::Visit<'a> for Names<'_> {
     }
 }
 
-fn mentions(expression: &Expression<'_>, names: &[&str]) -> bool {
+pub(super) fn mentions(expression: &Expression<'_>, names: &[&str]) -> bool {
     let mut visitor = Names { names, hit: false };
     oxc_ast_visit::Visit::visit_expression(&mut visitor, expression);
     visitor.hit
 }
 
-fn captures(
+pub(super) fn captures(
     head: Head,
     first: &Statement<'_>,
     step: SymbolId,
@@ -436,7 +440,7 @@ fn step_name<'a>(test: &Expression<'a>) -> Option<Ident<'a>> {
     }
 }
 
-fn left_of<'a>(
+pub(super) fn left_of<'a>(
     head: Head,
     body: &mut AVec<'a, Statement<'a>>,
     (step, name): (SymbolId, Ident<'a>),
