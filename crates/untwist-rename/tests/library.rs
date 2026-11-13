@@ -556,6 +556,22 @@ fn a_single_definition_before_every_use_is_one_shape_whatever_its_kind() {
         "function f(a) { let x; x = a.b; x = x.c; return x; }",
         "function f(a) { var x = a.b; x = x.c; return x; }",
     ));
+    assert!(same_shape(
+        "function f(m) { var g = m.g; m.exports = function (a) { return g(a); }; }",
+        "function f(m) { const g = m.g; m.exports = function (a) { return g(a); }; }",
+    ));
+}
+
+#[test]
+fn a_closure_that_can_run_before_or_per_iteration_keeps_the_kind() {
+    assert!(!same_shape(
+        "function f(m) { m(); var g = m.g; function h() { return g; } return h; }",
+        "function f(m) { m(); const g = m.g; function h() { return g; } return h; }",
+    ));
+    assert!(!same_shape(
+        "function f(a, s) { while (a()) { var g = a.g; s.push(() => g); } }",
+        "function f(a, s) { while (a()) { const g = a.g; s.push(() => g); } }",
+    ));
 }
 
 #[test]
