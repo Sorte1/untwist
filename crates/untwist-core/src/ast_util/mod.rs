@@ -1,3 +1,4 @@
+pub mod code_text;
 pub mod edit;
 pub mod frame;
 pub mod frame_reads;

@@ -5,6 +5,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
 use oxc_span::{GetSpan, SPAN};
 use oxc_syntax::scope::ScopeFlags;
+use untwist_core::ast_util::code_text::may_run_code_text;
 use untwist_core::ast_util::literal::is_safe_literal;
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass, StatementKind,
@@ -483,8 +484,9 @@ impl<'a> Pass<'a> for Sequence {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let observed =
-            !cx.opts.unsafe_transforms && function_names(program, cx.scoping()).name_read;
+        let observed = !cx.opts.unsafe_transforms
+            && (function_names(program, cx.scoping()).name_read
+                || may_run_code_text(program, cx.scoping()));
         NAMES_OBSERVED.with(|cell| cell.set(observed));
     }
 

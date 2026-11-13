@@ -10,3 +10,5 @@ generator|var gen = (0, function* () {}); console.log(JSON.stringify(gen.name));
 destructured-name|var f = (console.log("head"), function () {}); var { name } = f; console.log(JSON.stringify(name));
 no-name-read-var|var f = (console.log("head"), function () { return 1; }); console.log(f());
 no-name-read-assign|var g; g = (console.log("head"), () => 2); console.log(g());
+name-read-in-eval-text|var g = (console.log("head"), function () {}); function show(s) { console.log(eval(s)); } show("JSON.stringify(g.name)");
+name-read-in-function-text|var g = (console.log("head"), function () {}); console.log(Function("return JSON.stringify(g.name)")());

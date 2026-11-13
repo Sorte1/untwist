@@ -148,5 +148,5 @@ fn names_itself(function: &Function<'_>) -> bool {
     if let Some(body) = &function.body {
         names.visit_function_body(body);
     }
-    names.names.contains(&NAME)
+    names.names.contains(&NAME) || names.names.contains(&"eval")
 }

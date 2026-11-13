@@ -8,6 +8,7 @@ use untwist_eval::budget::STRING_LEN_CAP;
 use untwist_eval::fold::{fold_layer_text, LayerText};
 
 use oxc_semantic::Scoping;
+use rustc_hash::FxHashSet;
 
 use super::model::{DecodeCx, Layer, LayerForm, Refusal, Refused};
 use super::probe::Probe;
@@ -101,18 +102,30 @@ pub fn argument_refusal<'a>(
 }
 
 pub fn names_hold(scoping: &Scoping, names: &[&str]) -> bool {
-    if names.iter().any(|name| is_foreign_global(name)) {
-        return false;
-    }
-    if scoping.symbol_names().any(|name| names.contains(&name)) {
-        return false;
-    }
-    let unresolved = scoping.root_unresolved_references();
-    names.iter().all(|name| {
-        unresolved.get(*name).is_none_or(|references| {
-            references
+    Rebound::of(scoping).holds(names)
+}
+
+pub struct Rebound<'s> {
+    names: FxHashSet<&'s str>,
+}
+
+impl<'s> Rebound<'s> {
+    pub fn of(scoping: &'s Scoping) -> Self {
+        let mut names: FxHashSet<&'s str> = scoping.symbol_names().collect();
+        for (name, references) in scoping.root_unresolved_references() {
+            let written = references
                 .iter()
-                .all(|reference| !scoping.get_reference(*reference).is_write())
-        })
-    })
+                .any(|reference| scoping.get_reference(*reference).is_write());
+            if written {
+                names.insert(name.as_str());
+            }
+        }
+        Self { names }
+    }
+
+    pub fn holds(&self, names: &[&str]) -> bool {
+        names
+            .iter()
+            .all(|name| !self.names.contains(name) && !is_foreign_global(name))
+    }
 }

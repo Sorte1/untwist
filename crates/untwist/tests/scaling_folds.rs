@@ -64,3 +64,18 @@ fn a_folded_nest_of_pure_calls_is_one_literal() {
     ));
     assert_eq!(out.code().trim(), "x = 41;");
 }
+
+#[test]
+fn many_var_declaring_eval_statements_in_one_function_are_planned_once() {
+    assert_scales_linearly(
+        "function f() { eval(\"var aN = N;\") ... }",
+        2_000,
+        |count| {
+            let body: String = (0..count)
+                .map(|index| format!("eval(\"var a{index} = {index};\");"))
+                .collect();
+            format!("function f() {{ \"use strict\"; {body} }} f();")
+        },
+        Options::default,
+    );
+}
