@@ -4,6 +4,7 @@ use untwist::{Options, Pipeline, SOURCE_READER_UNGUARDED, SOURCE_READER_UNGUARDE
 use untwist_testing::node::{node, run, skip_allowed, SKIP_MESSAGE};
 
 const WORKERS: usize = 4;
+const ARROW_CONTROLLERS: &str = "-terser-arrows--";
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/self-defending")
@@ -82,7 +83,8 @@ fn check(node: &Path, dir: &Path, file: &str) -> Vec<String> {
     let expected =
         std::fs::read_to_string(fixtures().join("expected").join(format!("{file}.stdout")))
             .unwrap();
-    compare(node, dir, &fixtures().join(file), &expected, false)
+    let net_allowed = file.contains(ARROW_CONTROLLERS);
+    compare(node, dir, &fixtures().join(file), &expected, net_allowed)
 }
 
 fn compare(

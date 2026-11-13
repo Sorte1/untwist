@@ -33,6 +33,7 @@ const COMBOS = {
     stringArrayWrappersChainedCalls: true, stringArrayWrappersParametersMaxCount: 4, stringArrayIndexShift: true,
   },
   "dead-code-rc4": { ...STRINGS, stringArrayEncoding: ["rc4"], deadCodeInjection: true, deadCodeInjectionThreshold: 1 },
+  "strings-off": { stringArray: false },
   "names-mangled-shuffled": { identifierNamesGenerator: "mangled-shuffled" },
   "names-dictionary": { ...STRINGS, stringArrayEncoding: ["none"], identifierNamesGenerator: "dictionary", identifiersDictionary: DICTIONARY.flatMap((a) => DICTIONARY.map((b) => a + b.slice(1))) },
   heavy: {
@@ -48,6 +49,8 @@ const COMBOS = {
 };
 
 const MINIFIED = ["dead-code", "cff-dead-code", "heavy"];
+const ARROWS = ["alone", "strings-off"];
+const TERSER_ARROWS = { ecma: 2020, compress: { passes: 2, unsafe_arrows: true }, mangle: true };
 const terser = require("terser-5");
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
@@ -75,6 +78,10 @@ for (const alias of OBFUSCATORS) {
       if (MINIFIED.includes(combo)) {
         const minified = (await terser.minify(code, { compress: { passes: 2 }, mangle: true })).code;
         variants.push([`${combo}-terser`, minified, `${tag}+terser@${version("terser-5")}`]);
+      }
+      if (ARROWS.includes(combo)) {
+        const arrows = (await terser.minify(code, TERSER_ARROWS)).code;
+        variants.push([`${combo}-terser-arrows`, arrows, `${tag}+terser@${version("terser-5")} unsafe_arrows`]);
       }
       for (const [name, text, tool] of variants) {
         const file = `${version(alias)}--${name}--${program}.js`;
