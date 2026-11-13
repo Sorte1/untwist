@@ -1825,6 +1825,7 @@ dependencies = [
 name = "untwist-rename"
 version = "0.5.0"
 dependencies = [
+ "miniz_oxide",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",
@@ -2291,9 +2292,11 @@ version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
+ "miniz_oxide",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",
+ "oxc_span",
  "oxc_syntax",
  "serde_json",
  "sha2",
@@ -2302,6 +2305,7 @@ dependencies = [
  "untwist",
  "untwist-core",
  "untwist-eval",
+ "untwist-rename",
  "untwist-testing",
 ]
 

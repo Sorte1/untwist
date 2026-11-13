@@ -88,6 +88,15 @@ impl Output {
     pub fn code(&self) -> &str {
         self.codes.first().map_or("", String::as_str)
     }
+
+    pub fn libraries(&self) -> Vec<untwist_rename::library::pass::LibrarySummary> {
+        let messages = self
+            .notes
+            .iter()
+            .filter(|note| note.pass == untwist_rename::library::pass::NAME)
+            .map(|note| note.message.as_str());
+        untwist_rename::library::pass::summaries(messages)
+    }
 }
 
 #[cfg(feature = "parallel")]
