@@ -45,3 +45,4 @@ AGENTS.md
 /fixtures/corpus-export/
 /tools/untranspile-params/node_modules/
 /tools/rollup-commonjs/node_modules/
+/tools/rollup-assume/node_modules/

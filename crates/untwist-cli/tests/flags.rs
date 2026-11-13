@@ -143,3 +143,24 @@ fn disable_turns_a_named_pass_off_and_refuses_an_unknown_name() {
         "{message}"
     );
 }
+
+#[test]
+fn split_assume_modules_is_refused_without_split_hoisted() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.js");
+    std::fs::write(&input, "var a = 1;").unwrap();
+    let alone = bin()
+        .arg("--split-assume-modules")
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert_eq!(alone.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&alone.stderr);
+    assert!(stderr.contains("--split-hoisted"), "{stderr}");
+    let paired = bin()
+        .args(["--split-hoisted", "--split-assume-modules"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(paired.status.success());
+}

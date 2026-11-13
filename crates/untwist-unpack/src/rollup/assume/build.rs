@@ -1,0 +1,397 @@
+use oxc_allocator::{Allocator, CloneIn, Vec as AVec};
+use oxc_ast::ast::*;
+use oxc_ast::builder::AstBuilder;
+use oxc_semantic::Scoping;
+use oxc_span::SPAN;
+use rustc_hash::FxHashSet;
+
+use super::outer::assigned_names;
+use super::plan::Plan;
+use crate::model::{Bundle, BundleKind, Module};
+use crate::rollup::build::{
+    comments_of, entry_statements, fresh_creator, head_text, parsed, program, rebuilt_wrapper,
+    sanitized, tail_text, wrapper_body, Links, CHUNK_PREFIX, ENTRY_ID,
+};
+use crate::rollup::scan::Facts;
+use crate::rollup::shell::Shell;
+use crate::runtime::synthetic_statements;
+
+pub const SHELL_ID: &str = "shell";
+const SETTER_PREFIX: &str = "set_";
+
+fn fresh(text: &str, base: String, taken: &FxHashSet<String>) -> String {
+    let mut name = base;
+    while text.contains(name.as_str()) || taken.contains(&name) {
+        name.push('_');
+    }
+    name
+}
+
+pub struct Layout {
+    pub links: Links,
+    pub shell: Option<usize>,
+    pub entry: usize,
+    pub setters: Vec<(String, String)>,
+}
+
+fn ids(plan: &Plan, shell: bool) -> Vec<String> {
+    let mut taken: FxHashSet<String> = [ENTRY_ID, SHELL_ID]
+        .map(str::to_string)
+        .into_iter()
+        .collect();
+    let mut ids = Vec::new();
+    for part in &plan.parts {
+        let base = format!("{CHUNK_PREFIX}{}", sanitized(&part.stem));
+        let mut id = base.clone();
+        let mut suffix = 2usize;
+        while !taken.insert(id.to_ascii_lowercase()) {
+            id = format!("{base}-{suffix}");
+            suffix += 1;
+        }
+        ids.push(id);
+    }
+    if shell {
+        ids.push(SHELL_ID.to_string());
+    }
+    ids.push(ENTRY_ID.to_string());
+    ids
+}
+
+fn grouped(mut edges: Vec<(usize, usize, String)>, count: usize) -> Vec<Vec<(usize, Vec<String>)>> {
+    edges.sort_unstable();
+    edges.dedup();
+    let mut imports: Vec<Vec<(usize, Vec<String>)>> = vec![Vec::new(); count];
+    for (to, from, name) in edges {
+        match imports[to].last_mut() {
+            Some((known, names)) if *known == from => {
+                if !name.is_empty() {
+                    names.push(name);
+                }
+            }
+            _ => imports[to].push((from, [name].into_iter().filter(|n| !n.is_empty()).collect())),
+        }
+    }
+    imports
+}
+
+pub fn layout(scoping: &Scoping, facts: &Facts, plan: &Plan, text: &str) -> Layout {
+    let shell = (!plan.shell.is_empty()).then_some(plan.parts.len());
+    let ids = ids(plan, shell.is_some());
+    let entry = ids.len() - 1;
+    let at = |item: u32| plan.part_of[item as usize].unwrap_or(entry);
+    let mut edges = Vec::new();
+    let mut exports: Vec<Vec<String>> = vec![Vec::new(); ids.len()];
+    for &(item, symbol) in &facts.uses {
+        let owner = facts.owner[symbol.index()];
+        let (to, from) = (at(item), at(owner));
+        if from != to {
+            let name = scoping.symbol_name(symbol).to_string();
+            edges.push((to, from, name.clone()));
+            exports[from].push(name);
+        }
+    }
+    if let Some(shell) = shell {
+        for (item, name, _) in &facts.shell {
+            if plan.part_of[*item as usize].is_some() {
+                edges.push((at(*item), shell, name.clone()));
+            }
+        }
+    }
+    let taken: FxHashSet<String> = FxHashSet::default();
+    let setters: Vec<(String, String)> = plan
+        .setters
+        .iter()
+        .map(|name| {
+            (
+                name.clone(),
+                fresh(text, format!("{SETTER_PREFIX}{name}"), &taken),
+            )
+        })
+        .collect();
+    for (_, setter) in &setters {
+        edges.push((entry, shell.unwrap_or(entry), setter.clone()));
+    }
+    for part in 0..plan.parts.len() {
+        edges.push((entry, part, String::new()));
+    }
+    for names in &mut exports {
+        names.sort_unstable();
+        names.dedup();
+    }
+    let mut requires = vec![false; ids.len()];
+    for (item, &required) in facts.requires.iter().enumerate() {
+        requires[at(item as u32)] |= required;
+    }
+    Layout {
+        links: Links {
+            ids,
+            imports: grouped(edges, entry + 1),
+            exports,
+            requires,
+            dropped: facts.dropped.clone(),
+        },
+        shell,
+        entry,
+        setters,
+    }
+}
+
+fn shell_text(names: &[String], setters: &[(String, String)]) -> String {
+    let mut text = format!("export var {};\n", names.join(", "));
+    for (name, setter) in setters {
+        text.push_str(&format!(
+            "export function {setter}(value) {{\n  return {name} = value;\n}}\n"
+        ));
+    }
+    text
+}
+
+fn setter_call<'a>(
+    alloc: &'a Allocator,
+    setter: &str,
+    value: Expression<'a>,
+) -> Option<Expression<'a>> {
+    let mut call = synthetic_statements(alloc, format!("{setter}(0);"))?;
+    let Some(Statement::ExpressionStatement(wrapped)) = call.pop() else {
+        return None;
+    };
+    let mut expression = wrapped.unbox().expression;
+    let Expression::CallExpression(invoke) = &mut expression else {
+        return None;
+    };
+    invoke.arguments.clear();
+    invoke.arguments.push(Argument::from(value));
+    Some(expression)
+}
+
+fn setter_of<'s>(setters: &'s [(String, String)], name: &str) -> Option<&'s str> {
+    setters
+        .iter()
+        .find(|(known, _)| known == name)
+        .map(|(_, setter)| setter.as_str())
+}
+
+fn routed<'a>(
+    alloc: &'a Allocator,
+    mut statement: Statement<'a>,
+    setters: &[(String, String)],
+    statements: &mut AVec<'a, Statement<'a>>,
+) -> Option<()> {
+    let routes: Vec<&str> = assigned_names(&statement)
+        .into_iter()
+        .filter_map(|name| setter_of(setters, name))
+        .collect();
+    match (&mut statement, &routes[..]) {
+        (_, []) => statements.push(statement),
+        (Statement::ExpressionStatement(expression), [setter]) => {
+            let builder = AstBuilder::new(alloc);
+            let assignment = std::mem::replace(
+                &mut expression.expression,
+                Expression::new_null_literal(SPAN, &builder),
+            );
+            expression.expression = setter_call(alloc, setter, assignment)?;
+            statements.push(statement);
+        }
+        (Statement::VariableDeclaration(declaration), [setter])
+            if declaration.declarations.len() == 1 =>
+        {
+            let name = declaration.declarations[0]
+                .id
+                .get_binding_identifier()?
+                .name;
+            statements.push(statement);
+            statements.extend(synthetic_statements(alloc, format!("{setter}({name});"))?);
+        }
+        _ => return None,
+    }
+    Some(())
+}
+
+fn outer_statements<'a>(
+    alloc: &'a Allocator,
+    outer_body: &FunctionBody<'a>,
+    inner_index: usize,
+    inner: AVec<'a, Statement<'a>>,
+    setters: &[(String, String)],
+) -> Option<AVec<'a, Statement<'a>>> {
+    let mut statements = AVec::new_in(&alloc);
+    let mut inner = Some(inner);
+    for (index, statement) in outer_body.statements.iter().enumerate() {
+        let cloned = statement.clone_in(alloc);
+        match index.cmp(&inner_index) {
+            std::cmp::Ordering::Equal => statements.extend(inner.take()?),
+            std::cmp::Ordering::Greater => routed(alloc, cloned, setters, &mut statements)?,
+            std::cmp::Ordering::Less => statements.push(cloned),
+        }
+    }
+    Some(statements)
+}
+
+fn nested_entry<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    shell: &Shell<'_, 'a>,
+    head: AVec<'a, Statement<'a>>,
+    inner: AVec<'a, Statement<'a>>,
+    setters: &[(String, String)],
+) -> Option<AVec<'a, Statement<'a>>> {
+    let outer = shell.outer.as_ref()?;
+    let text = match outer.arrow {
+        true => "(() => {})();",
+        false => "(function () {})();",
+    };
+    let mut rebuilt = synthetic_statements(alloc, text.to_string())?;
+    let body = wrapper_body(&mut rebuilt)?;
+    body.directives = outer.body.directives.clone_in(alloc);
+    body.statements = outer_statements(alloc, outer.body, shell.wrapper.index, inner, setters)?;
+    let mut statements = head;
+    for (index, statement) in source.body.iter().enumerate() {
+        if index == outer.index {
+            statements.extend(rebuilt.drain(..));
+        } else {
+            statements.push(statement.clone_in(alloc));
+        }
+    }
+    Some(statements)
+}
+
+struct Pieces<'a> {
+    parts: Vec<Vec<Statement<'a>>>,
+    entry: Vec<Statement<'a>>,
+}
+
+fn pieces<'a>(plan: &Plan, layout: &Layout, owned: AVec<'a, Statement<'a>>) -> Pieces<'a> {
+    let mut parts: Vec<Vec<Statement<'a>>> = (0..plan.parts.len()).map(|_| Vec::new()).collect();
+    let mut entry = Vec::new();
+    for (index, statement) in owned.into_iter().enumerate() {
+        if layout.links.dropped.get(index).copied().unwrap_or(false) {
+            continue;
+        }
+        match plan.part_of.get(index).copied().flatten() {
+            Some(part) => parts[part].push(statement),
+            None => entry.push(statement),
+        }
+    }
+    Pieces { parts, entry }
+}
+
+fn module_of<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    layout: &Layout,
+    at: usize,
+    statements: AVec<'a, Statement<'a>>,
+    comments: Vec<Comment>,
+) -> Module<'a> {
+    let directives = match at == layout.entry {
+        true => source.directives.clone_in(alloc),
+        false => AVec::new_in(&alloc),
+    };
+    let program = program(alloc, source, comments, directives, statements);
+    let id = layout.links.ids[at].clone();
+    let mut module = Module::new(id, program, at == layout.entry);
+    module.dependencies = layout.links.imports[at]
+        .iter()
+        .map(|(from, _)| {
+            (
+                layout.links.ids[*from].clone(),
+                layout.links.ids[*from].clone(),
+            )
+        })
+        .collect();
+    module
+}
+
+struct Prepared<'a> {
+    heads: Vec<AVec<'a, Statement<'a>>>,
+    tails: Vec<AVec<'a, Statement<'a>>>,
+    shell: Option<AVec<'a, Statement<'a>>>,
+    inner: AVec<'a, Statement<'a>>,
+}
+
+fn prepared<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    shell: &Shell<'_, 'a>,
+    (plan, layout): (&Plan, &Layout),
+) -> Option<Prepared<'a>> {
+    let creator = fresh_creator(source.source_text);
+    let links = &layout.links;
+    let mut heads = Vec::with_capacity(links.ids.len());
+    let mut tails = Vec::with_capacity(links.ids.len());
+    for at in 0..links.ids.len() {
+        heads.push(parsed(alloc, head_text(links, at, &creator))?);
+        tails.push(parsed(alloc, tail_text(links, at))?);
+    }
+    let shell_module = match layout.shell {
+        Some(_) => Some(parsed(alloc, shell_text(&plan.shell, &layout.setters))?),
+        None => None,
+    };
+    let mut inner = rebuilt_wrapper(alloc, shell)?;
+    wrapper_body(&mut inner)?;
+    if shell.outer.is_some() {
+        let probe = AVec::new_in(&alloc);
+        nested_entry(
+            alloc,
+            source,
+            shell,
+            probe,
+            AVec::new_in(&alloc),
+            &layout.setters,
+        )?;
+    }
+    Some(Prepared {
+        heads,
+        tails,
+        shell: shell_module,
+        inner,
+    })
+}
+
+pub fn assemble<'a>(
+    alloc: &'a Allocator,
+    source: &Program<'a>,
+    shell: &Shell<'_, 'a>,
+    (plan, layout): (&Plan, &Layout),
+    owned: AVec<'a, Statement<'a>>,
+) -> Result<Bundle<'a>, AVec<'a, Statement<'a>>> {
+    let Some(prepared) = prepared(alloc, source, shell, (plan, layout)) else {
+        return Err(owned);
+    };
+    let Prepared {
+        heads,
+        tails,
+        shell: shell_module,
+        mut inner,
+    } = prepared;
+    let mut heads = heads.into_iter();
+    let mut tails = tails.into_iter();
+    let Pieces { parts, entry } = pieces(plan, layout, owned);
+    let mut bundle = Bundle::new(BundleKind::Rollup, Some(ENTRY_ID.to_string()));
+    for (at, body) in parts.into_iter().enumerate() {
+        let comments = comments_of(source, &body);
+        let mut statements = heads.next().unwrap_or_else(|| AVec::new_in(&alloc));
+        statements.extend(body);
+        statements.extend(tails.next().unwrap_or_else(|| AVec::new_in(&alloc)));
+        let module = module_of(alloc, source, layout, at, statements, comments);
+        bundle.modules.insert(module.id.clone(), module);
+    }
+    if let (Some(at), Some(statements)) = (layout.shell, shell_module) {
+        heads.next();
+        let module = module_of(alloc, source, layout, at, statements, Vec::new());
+        bundle.modules.insert(module.id.clone(), module);
+    }
+    let comments = comments_of(source, &entry);
+    if let Some(body) = wrapper_body(&mut inner) {
+        body.statements.extend(entry);
+    }
+    let head = heads.next().unwrap_or_else(|| AVec::new_in(&alloc));
+    let statements = match shell.outer {
+        Some(_) => nested_entry(alloc, source, shell, head, inner, &layout.setters)
+            .unwrap_or_else(|| AVec::new_in(&alloc)),
+        None => entry_statements(alloc, source, shell, head, inner),
+    };
+    let module = module_of(alloc, source, layout, layout.entry, statements, comments);
+    bundle.modules.insert(module.id.clone(), module);
+    Ok(bundle)
+}

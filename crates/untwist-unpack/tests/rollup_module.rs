@@ -4,6 +4,7 @@ use untwist_unpack::{unpack_program_with, UnpackOptions};
 
 const ON: UnpackOptions = UnpackOptions {
     split_hoisted: true,
+    assume_modules: false,
     conservative: false,
     trust_free_loader: false,
 };

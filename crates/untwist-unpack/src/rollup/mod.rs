@@ -1,3 +1,4 @@
+pub mod assume;
 pub mod build;
 pub mod cluster;
 pub mod notes;
@@ -31,6 +32,10 @@ pub fn probe(frame: &Frame<'_, '_>) -> bool {
         || shell::module_list(frame.top)
 }
 
+pub fn assumed_probe(frame: &Frame<'_, '_>) -> bool {
+    probe(frame) || shell::loose_wrapper(frame.top)
+}
+
 fn planned(scoping: &Scoping, items: &[Statement<'_>], context: &Context) -> Option<Plan> {
     let facts = scan(scoping, items, context)?;
     let groups = wrappers::groups(scoping, items, &facts);
@@ -45,6 +50,7 @@ fn on_source(source: &Program<'_>, found: &Shell<'_, '_>) -> Option<Plan> {
         scope: found.wrapper.scope.get()?,
         arrow: found.wrapper.arrow,
         module: false,
+        enclosing: None,
     };
     planned(&semantics.scoping, &found.wrapper.body.statements, &context)
 }
@@ -71,13 +77,18 @@ fn detached<'a>(
         scope: semantics.scoping.root_scope_id(),
         arrow: found.wrapper.arrow,
         module: false,
+        enclosing: None,
     };
     let plan = planned(&semantics.scoping, &temporary.body, &context);
     let owned = std::mem::replace(&mut temporary.body, AVec::new_in(&builder));
     (plan, owned)
 }
 
-fn give_back<'a>(bodies: &mut Bodies<'a>, found: &Shell<'_, 'a>, owned: AVec<'a, Statement<'a>>) {
+pub(super) fn give_back<'a>(
+    bodies: &mut Bodies<'a>,
+    found: &Shell<'_, 'a>,
+    owned: AVec<'a, Statement<'a>>,
+) {
     if let Bodies::Taken(pool) = bodies {
         pool.insert(body_key(found.wrapper.body), owned);
     }
@@ -89,6 +100,7 @@ fn top_plan(source: &Program<'_>, list: &[Statement<'_>]) -> Option<Plan> {
         scope: semantics.scoping.root_scope_id(),
         arrow: false,
         module: true,
+        enclosing: None,
     };
     let plan = planned(&semantics.scoping, list, &context)?;
     let imports = shell::imports_end(list);
@@ -113,6 +125,18 @@ fn detect_top<'k, 'a>(
     }
     let owned = AVec::from_iter_in(list.iter().map(|item| item.clone_in(alloc)), &alloc);
     assemble(alloc, source, None, (&segments, &links), owned).ok()
+}
+
+pub fn detect_assumed<'k, 'a>(
+    alloc: &'a Allocator,
+    source: &'k Program<'a>,
+    _frame: &Frame<'k, 'a>,
+    bodies: &mut Bodies<'a>,
+) -> Option<Bundle<'a>> {
+    match shell::wrapper(&source.body) {
+        Some(_) => assume::detect(alloc, source, bodies),
+        None => detect_with(alloc, source, _frame, bodies),
+    }
 }
 
 pub fn detect_with<'k, 'a>(

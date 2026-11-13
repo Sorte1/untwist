@@ -173,7 +173,8 @@ impl Pipeline {
         let started = self.begin("lexical");
         let opts = PassOptions {
             keep_captured_vars: self.options.unpack
-                && untwist_unpack::holds_a_bundle_with(site.program, self.unpack_options()),
+                && (self.options.split_assume_modules
+                    || untwist_unpack::holds_a_bundle_with(site.program, self.unpack_options())),
             ..site.pass_opts.clone()
         };
         let mut group = PassGroup::from_ctors(&lexical_ctors(), opts);

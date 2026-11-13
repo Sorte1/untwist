@@ -1,0 +1,19 @@
+{
+  "name": "untwist-rollup-assume-fixtures",
+  "private": true,
+  "description": "Pinned rollup and @rollup/plugin-commonjs versions that tools/rollup-assume/gen.mjs runs to generate fixtures/unpack-rollup-assume.",
+  "dependencies": {
+    "rollup2": "npm:rollup@2.80.0",
+    "rollup3": "npm:rollup@3.30.0",
+    "rollup4": "npm:rollup@4.66.0",
+    "cjs21": "npm:@rollup/plugin-commonjs@21.1.0",
+    "cjs22": "npm:@rollup/plugin-commonjs@22.0.2",
+    "cjs24": "npm:@rollup/plugin-commonjs@24.1.0",
+    "cjs25": "npm:@rollup/plugin-commonjs@25.0.8",
+    "cjs29": "npm:@rollup/plugin-commonjs@29.0.3",
+    "node-resolve": "npm:@rollup/plugin-node-resolve@16.0.3",
+    "terser": "5.51.2",
+    "ms": "2.1.3",
+    "object-assign": "4.1.1"
+  }
+}

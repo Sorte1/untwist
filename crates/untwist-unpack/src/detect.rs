@@ -358,6 +358,32 @@ const KINDS: [Kind; 8] = [
 
 const HOISTED: Kind = (BundleKind::Rollup, hoisted_probe, hoisted_detect);
 
+fn assumed_probe(frame: &Frame<'_, '_>) -> bool {
+    !foreign_runtime(frame) && crate::rollup::assumed_probe(frame)
+}
+
+fn assumed_detect<'k, 'a>(
+    alloc: &'a Allocator,
+    source: &'k Program<'a>,
+    frame: &Frame<'k, 'a>,
+    bodies: &mut Bodies<'a>,
+    _links: &Links,
+) -> Option<Bundle<'a>> {
+    if foreign_runtime(frame) {
+        return None;
+    }
+    crate::rollup::detect_assumed(alloc, source, frame, bodies)
+}
+
+const HOISTED_ASSUMED: Kind = (BundleKind::Rollup, assumed_probe, assumed_detect);
+
+fn hoisted(options: UnpackOptions) -> Kind {
+    match options.assume_modules {
+        true => HOISTED_ASSUMED,
+        false => HOISTED,
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
     Top,
@@ -384,7 +410,7 @@ fn kinds(options: UnpackOptions, scope: Scope) -> impl Iterator<Item = Kind> {
         .into_iter()
         .filter(move |(kind, _, _)| !nested || !matches!(kind, BundleKind::Amd | BundleKind::Umd))
         .map(move |kind| chosen(kind, options))
-        .chain((options.split_hoisted && !nested).then_some(HOISTED))
+        .chain((options.split_hoisted && !nested).then_some(hoisted(options)))
 }
 
 fn extract_kinds<'a>(
