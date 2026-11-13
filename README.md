@@ -46,7 +46,8 @@ engine as WebAssembly, and your code never leaves the page.
   event handlers and their events (`onKeydown(keyEvent)`), timer and frame callbacks, `fetch` responses and bodies,
   setter values, export aliases, `is*` names for functions that return booleans, PascalCase for functions only used
   with `new`, and a parameter's name when every call passes the same named value; a name is reused in sibling scopes
-  and numbered only where it would clash, and human-written names are left alone).
+  and numbered only where it would clash, and human-written names are left alone; long hex tokens such as
+  `b475796ed633d5fd0485` count as machine-made here and are renamed when evidence names them).
 - **CommonJS wrappers.** In every mode, the lazy `requireX()` wrappers that `@rollup/plugin-commonjs` writes
   (`if (hasRequiredX) return x; hasRequiredX = 1; ...`), terser's inlined forms of them, rolldown's
   `__commonJSMin` factories and the plugin's interop helpers (`commonjsGlobal`, `getDefaultExportFromCjs`,

@@ -14,12 +14,14 @@ use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
 use crate::simple::{is_renameable, unit_roots};
 use crate::text_reads::{text_read_bindings_with, SelfReads, TextReads};
-use crate::usage::collect_naming_usage;
+use crate::usage::{collect_naming_usage, Usage};
 use crate::RenameConfig;
 
 pub const NUMBER_LIMIT: u32 = 4096;
 
 const SHORT_NAME: usize = 2;
+
+const HEX_TOKEN: usize = 16;
 
 const STRUCTURAL_FUNCTION: &str = "fn";
 
@@ -104,6 +106,15 @@ fn has_strong_base(info: &BindingInfo, collected: &Collected) -> bool {
     }
 }
 
+pub fn is_hex_token(name: &str) -> bool {
+    name.len() >= HEX_TOKEN && name.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+fn smart_renameable(info: &BindingInfo, collected: &Collected, config: RenameConfig) -> bool {
+    let hex_token = !collected.pinned.contains(&info.symbol) && is_hex_token(&info.name);
+    hex_token || is_renameable(info, collected, config)
+}
+
 pub fn smart_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> Option<String> {
     let evidenced = (!has_strong_base(info, cx.collected))
         .then(|| evidence.name(info.symbol))
@@ -121,8 +132,9 @@ pub fn smart_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> 
             }
             derived
         });
-    let unevidenced_short = base == FALLBACK_BASE && info.name.chars().count() <= SHORT_NAME;
-    (!unevidenced_short).then_some(base)
+    let unevidenced = base == FALLBACK_BASE
+        && (info.name.chars().count() <= SHORT_NAME || is_hex_token(&info.name));
+    (!unevidenced).then_some(base)
 }
 
 fn instance_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> Option<String> {
@@ -137,7 +149,7 @@ fn instance_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> O
         .collected
         .bindings
         .get(*cx.collected.by_symbol.get(&callee)?)?;
-    if !is_renameable(binding, cx.collected, cx.config) {
+    if !smart_renameable(binding, cx.collected, cx.config) {
         return None;
     }
     let name = to_identifier(&lower_camel(evidence.name(callee)?));
@@ -198,13 +210,18 @@ fn decide_with_limit(
         namer: None,
         config,
     };
-    let planned: Vec<(&BindingInfo, String)> = collected
+    let candidates: Vec<&BindingInfo> = collected
         .bindings
         .iter()
         .filter(|info| !text_read.contains(&info.symbol))
-        .filter(|info| is_renameable(info, collected, config))
-        .filter_map(|info| smart_base(info, &cx, &evidence).map(|base| (info, base)))
+        .filter(|info| smart_renameable(info, collected, config))
         .collect();
+    let mut planned: Vec<(&BindingInfo, String)> = candidates
+        .iter()
+        .filter_map(|info| smart_base(info, &cx, &evidence).map(|base| (*info, base)))
+        .collect();
+    let flowed = flowed_hex_tokens(&candidates, &planned, (collected, &evidence, &usage));
+    planned.extend(flowed);
     let mut oracle = NameOracle::new(scoping, collected);
     oracle.defer(planned.iter().map(|(info, _)| info.symbol));
     let units = unit_roots(scoping);
@@ -216,6 +233,39 @@ fn decide_with_limit(
         }
     }
     oracle.into_plan()
+}
+
+fn flowed_hex_tokens<'c>(
+    candidates: &[&'c BindingInfo],
+    planned: &[(&BindingInfo, String)],
+    (collected, evidence, usage): (&Collected, &Evidence, &Usage),
+) -> Vec<(&'c BindingInfo, String)> {
+    let bases: FxHashMap<SymbolId, &str> = planned
+        .iter()
+        .map(|(info, base)| (info.symbol, base.as_str()))
+        .collect();
+    let target_base = |target: SymbolId| -> Option<String> {
+        if let Some(key) = usage.object_literal_key(target) {
+            return Some(to_identifier(key));
+        }
+        if let Some(base) = bases.get(&target) {
+            return Some((*base).to_string());
+        }
+        let binding = collected.bindings.get(*collected.by_symbol.get(&target)?)?;
+        looks_human_written(&binding.name).then(|| binding.name.clone())
+    };
+    candidates
+        .iter()
+        .filter(|info| is_hex_token(&info.name) && !bases.contains_key(&info.symbol))
+        .filter_map(|info| {
+            let targets = evidence.flows_into(info.symbol);
+            let mut names = targets.iter().map(|target| target_base(*target));
+            let first = names.next()??;
+            let agreed = names.all(|name| name.as_deref() == Some(first.as_str()));
+            let usable = agreed && first != FALLBACK_BASE && !is_hex_token(&first);
+            usable.then_some((*info, first))
+        })
+        .collect()
 }
 
 fn candidate(base: &str, number: u32) -> String {

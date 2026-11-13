@@ -168,6 +168,25 @@ var state = { progress: 4 };
 var hud = { drawBar: function (_0x3) { return '#'.repeat(_0x3); } };
 console.log(world.updateAim(player, state.progress), world.updateAim(player, state.progress), hud.drawBar(world.gravity));";
 
+const HEX_TOKENS: &str = "(function () {
+  var b475796ed633d5fd0485 = 'token';
+  var f9e2c8d63a4b7128b031 = function (cb) { cb(1, 2); };
+  var list = [7].map(function (c0ffee00c0ffee00c0ff) { return c0ffee00c0ffee00c0ff + 1; });
+  var plus = function (c0ffee00c0ffee00c0ff) { return c0ffee00c0ffee00c0ff + 1; };
+  var a1b2c3d4e5f6a7b8c9d0;
+  if (Math.random() < 2) { a1b2c3d4e5f6a7b8c9d0 = 'second'; }
+  var hasToken = typeof b475796ed633d5fd0485 != 'undefined';
+  Promise.resolve(0).then(function (_0x9) {
+    if (!_0x9) { _0x9 = hasToken ? a1b2c3d4e5f6a7b8c9d0 : undefined; }
+    console.log(JSON.stringify({ bypassToken: _0x9 }));
+  });
+  var validationToken;
+  validationToken = hasToken ? b475796ed633d5fd0485 : undefined;
+  if (typeof f9e2c8d63a4b7128b031 == 'function') {
+    f9e2c8d63a4b7128b031(function (a, b) { console.log(a + b, validationToken, list.join(), plus(list.length * 2)); });
+  }
+})();";
+
 fn options(rename: RenameMode, unsafe_transforms: bool) -> Options {
     Options {
         rename,
@@ -393,6 +412,40 @@ fn method_parameters_take_the_name_every_call_passes() {
 }
 
 #[test]
+fn long_hex_tokens_are_machine_names_only_under_smart() {
+    let code = smart(HEX_TOKENS);
+    assert_has(
+        &code,
+        &[
+            "validationToken2 = \"token\"",
+            "callback = function",
+            "typeof callback == \"function\"",
+            "bypassToken = \"second\"",
+            "hasToken ? bypassToken : undefined",
+            "function (item)",
+            "(c0ffee00c0ffee00c0ff) => {",
+        ],
+    );
+    assert!(
+        !code.contains("b475796ed633d5fd0485")
+            && !code.contains("f9e2c8d63a4b7128b031")
+            && !code.contains("a1b2c3d4e5f6a7b8c9d0"),
+        "{code}"
+    );
+    for mode in [RenameMode::Simple, RenameMode::Unique] {
+        let keep_human = Options {
+            rename_all: false,
+            ..options(mode, false)
+        };
+        let code = Pipeline::new(keep_human).run(HEX_TOKENS).code().to_string();
+        assert!(
+            code.contains("b475796ed633d5fd0485") && code.contains("f9e2c8d63a4b7128b031"),
+            "{code}"
+        );
+    }
+}
+
+#[test]
 fn node_agrees_on_every_new_evidence_kind_in_both_lanes() {
     let Some(node) = node_or_skip() else {
         return;
@@ -414,6 +467,7 @@ fn node_agrees_on_every_new_evidence_kind_in_both_lanes() {
         ("with sees evidence", WITH_SEES_EVIDENCE),
         ("element evidence", ELEMENT_EVIDENCE),
         ("method call sites", METHOD_CALL_SITES),
+        ("hex tokens", HEX_TOKENS),
     ]
     .iter()
     .map(|(label, source)| (label.to_string(), source.to_string()))

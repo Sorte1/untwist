@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -60,6 +61,8 @@ const FRAME_TIME: &str = "time";
 
 const SETTER_VALUE: &str = "value";
 
+const CALLBACK: &str = "callback";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Rank {
     Exported,
@@ -86,11 +89,16 @@ impl Rank {
 pub struct Evidence {
     names: FxHashMap<SymbolId, String>,
     constructors: FxHashSet<SymbolId>,
+    flows: FxHashMap<SymbolId, Vec<SymbolId>>,
 }
 
 impl Evidence {
     pub fn name(&self, symbol: SymbolId) -> Option<&str> {
         self.names.get(&symbol).map(String::as_str)
+    }
+
+    pub fn flows_into(&self, symbol: SymbolId) -> &[SymbolId] {
+        self.flows.get(&symbol).map_or(&[], Vec::as_slice)
     }
 
     pub fn is_constructor(&self, symbol: SymbolId) -> bool {
@@ -108,6 +116,7 @@ pub fn collect_evidence(program: &Program<'_>, scoping: &Scoping) -> Evidence {
         calls: FxHashMap::default(),
         handlers: Vec::new(),
         prototypes: FxHashSet::default(),
+        flows: FxHashMap::default(),
         methods: MethodSites::default(),
     };
     walker.visit_program(program);
@@ -129,6 +138,7 @@ struct EvidenceWalker<'s> {
     calls: FxHashMap<SymbolId, CallFacts>,
     handlers: Vec<Handler>,
     prototypes: FxHashSet<SymbolId>,
+    flows: FxHashMap<SymbolId, Vec<SymbolId>>,
     methods: MethodSites,
 }
 
@@ -362,6 +372,46 @@ impl EvidenceWalker<'_> {
         if let Some(name) = assigned_value_name(&it.right) {
             self.offer(symbol, Rank::Assigned, name);
         }
+        self.flows_into((&id.name, symbol), &it.right);
+    }
+
+    fn flows_into(&mut self, (target, into): (&str, SymbolId), value: &Expression<'_>) {
+        match value.without_parentheses() {
+            Expression::Identifier(id) => {
+                let Some(symbol) = reference_symbol(id, self.scoping) else {
+                    return;
+                };
+                if is_naming_property(target) {
+                    self.offer(symbol, Rank::Written, target);
+                }
+                self.flows.entry(symbol).or_default().push(into);
+            }
+            Expression::ConditionalExpression(conditional) => {
+                self.flows_into((target, into), &conditional.consequent);
+                self.flows_into((target, into), &conditional.alternate);
+            }
+            _ => {}
+        }
+    }
+
+    fn typeof_function_check(&mut self, it: &BinaryExpression<'_>) {
+        if !it.operator.is_equality() {
+            return;
+        }
+        let tested = match (&it.left, &it.right) {
+            (Expression::UnaryExpression(unary), Expression::StringLiteral(kind))
+            | (Expression::StringLiteral(kind), Expression::UnaryExpression(unary))
+                if unary.operator == UnaryOperator::Typeof && kind.value == "function" =>
+            {
+                &unary.argument
+            }
+            _ => return,
+        };
+        if let Expression::Identifier(id) = tested.without_parentheses() {
+            if let Some(symbol) = reference_symbol(id, self.scoping) {
+                self.offer(symbol, Rank::Role, CALLBACK);
+            }
+        }
     }
 
     fn name_setter(&mut self, params: &FormalParameters<'_>) {
@@ -399,6 +449,7 @@ impl EvidenceWalker<'_> {
         Evidence {
             names,
             constructors,
+            flows: std::mem::take(&mut self.flows),
         }
     }
 
@@ -492,6 +543,11 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
         walk_js::walk_new_expression(self, it);
     }
 
+    fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
+        self.typeof_function_check(it);
+        walk_js::walk_binary_expression(self, it);
+    }
+
     fn visit_catch_clause(&mut self, it: &CatchClause<'a>) {
         if let Some(symbol) = it
             .param
@@ -541,6 +597,9 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
             }
             if is_informative_init(init) {
                 self.defined.insert(symbol);
+            }
+            if let BindingPattern::BindingIdentifier(id) = &it.id {
+                self.flows_into((&id.name, symbol), init);
             }
             match init.without_parentheses() {
                 Expression::FunctionExpression(function) => {
