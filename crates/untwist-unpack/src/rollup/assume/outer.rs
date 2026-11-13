@@ -1,8 +1,8 @@
 use oxc_allocator::{Allocator, CloneIn, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
-use oxc_ast_visit::{walk, Visit, VisitJs};
-use oxc_span::SourceType;
+use oxc_ast_visit::{walk, Visit};
+use oxc_span::{GetSpan, SourceType};
 use oxc_syntax::scope::ScopeFlags;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::literal::is_pure_value;
@@ -10,7 +10,6 @@ use untwist_core::semantic::build_scoping;
 
 use crate::rollup::scan::{HOST_NAMES, MODULE_RESERVED, REQUIRE};
 use crate::rollup::shell::Wrapper;
-use crate::scan::{Frame, Policy, Scan};
 
 const EVAL: &str = "eval";
 
@@ -217,41 +216,24 @@ fn later_statement(writes: &mut Writes<'_>, statement: &Statement<'_>) -> bool {
     true
 }
 
-struct Reads {
-    arrow: bool,
-    refused: bool,
-}
+const MODULE_ONLY: [&str; 2] = [MODULE_RESERVED, "import"];
+const RECEIVER: &str = "this";
 
-impl Reads {
-    fn reserved(&mut self, name: &str) {
-        self.refused |= name == MODULE_RESERVED;
-    }
-}
-
-impl<'a> Policy<'a> for Reads {
-    fn reference(&mut self, _frame: Frame, it: &IdentifierReference<'a>) {
-        self.reserved(it.name.as_str());
-    }
-
-    fn binding(&mut self, it: &BindingIdentifier<'a>) {
-        self.reserved(it.name.as_str());
-    }
-
-    fn label(&mut self, it: &LabelIdentifier<'a>) {
-        self.reserved(it.name.as_str());
-    }
-
-    fn this(&mut self, frame: Frame) {
-        self.refused |= self.arrow && !frame.receiver();
-    }
-
-    fn import_meta(&mut self) {
-        self.refused = true;
-    }
-
-    fn with(&mut self) {
-        self.refused = true;
-    }
+fn module_safe_text(text: &str, outer: &Wrapper<'_, '_>, inner: usize) -> bool {
+    outer
+        .body
+        .statements
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != inner)
+        .all(|(_, statement)| {
+            let span = statement.span();
+            let Some(own) = text.get(span.start as usize..span.end as usize) else {
+                return false;
+            };
+            let receiver = outer.arrow && own.contains(RECEIVER);
+            !receiver && !MODULE_ONLY.iter().any(|word| own.contains(word))
+        })
 }
 
 fn free_names<'a>(
@@ -292,21 +274,14 @@ fn outer_reads<'a>(
     inner: usize,
     found: &mut Outer,
 ) -> bool {
-    let mut reads = Reads {
-        arrow: outer.arrow,
-        refused: false,
-    };
-    for (index, statement) in outer.body.statements.iter().enumerate() {
-        if index != inner {
-            Scan::new(&mut reads).visit_statement(statement);
-        }
+    if !module_safe_text(alloc.1, outer, inner) {
+        return false;
     }
     found.free = free_names(alloc, outer, inner);
-    let host = found
+    !found
         .free
         .iter()
-        .any(|name| name == REQUIRE || HOST_NAMES.contains(&name.as_str()));
-    !reads.refused && !host
+        .any(|name| name == REQUIRE || HOST_NAMES.contains(&name.as_str()))
 }
 
 pub fn analyse<'a>(
