@@ -289,7 +289,7 @@ pub fn is_async_runner(kind: Kind) -> bool {
 }
 
 pub fn is_iterator_helper(kind: Kind) -> bool {
-    matches!(kind, Kind::ForOfIterator)
+    matches!(kind, Kind::ForOfIterator | Kind::Values)
 }
 
 pub fn is_object_rest(kind: Kind) -> bool {

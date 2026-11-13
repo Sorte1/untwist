@@ -103,3 +103,24 @@ fn guarded_loops_keep_the_helper() {
         ],
     );
 }
+
+#[test]
+fn typescript_values_loops_become_for_of() {
+    let code = run("matrix/ts-3.9/es5-iter/for-of.js", true);
+    assert_has(
+        &code,
+        &[
+            "of \"héllo\")",
+            "of custom) {",
+            "of arguments) {",
+            "outer: for (",
+        ],
+    );
+    assert!(!code.contains(".next(); !"), "{code}");
+}
+
+#[test]
+fn typescript_values_loops_stay_in_the_default_lane() {
+    let code = run("matrix/ts-3.9/es5-iter/for-of.js", false);
+    assert!(code.contains("__values(\"héllo\")"), "{code}");
+}

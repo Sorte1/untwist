@@ -24,6 +24,7 @@ mod define_chain;
 mod destructure;
 mod fingerprint;
 mod for_of;
+mod for_of_tsc;
 mod generator;
 pub mod identify;
 mod machine;
@@ -522,7 +523,10 @@ impl UntranspileHelpers {
     #[inline(never)]
     fn for_of_site<'a>(&mut self, node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
         if !self.gate.unsafe_ {
-            if self.may_wait(cx) && for_of::has_site(node, &self.table, cx.scoping()) {
+            if self.may_wait(cx)
+                && (for_of::has_site(node, &self.table, cx.scoping())
+                    || for_of_tsc::has_site(node, &self.table, cx.scoping()))
+            {
                 self.waiting = true;
             }
             return;
@@ -531,7 +535,11 @@ impl UntranspileHelpers {
         for _ in 0..fired {
             shapes::fire(PASS, for_of::SHAPE);
         }
-        cx.changed_by(fired);
+        let values = for_of_tsc::rewrite_statements(node, &self.table, cx);
+        for _ in 0..values {
+            shapes::fire(PASS, for_of_tsc::SHAPE);
+        }
+        cx.changed_by(fired + values);
     }
 
     #[inline(never)]
