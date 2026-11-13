@@ -14,9 +14,15 @@ export interface Explanation {
   readonly span?: readonly [number, number];
 }
 
+export interface ReasonCount {
+  readonly sentence: string;
+  readonly places: number;
+}
+
 export interface Explained {
   readonly shown: readonly Explanation[];
   readonly more: number;
+  readonly reasons: readonly ReasonCount[];
 }
 
 interface Site {
@@ -71,12 +77,37 @@ function isSpan(value: unknown): value is readonly [number, number] {
   return Array.isArray(value) && value.length === 2 && value.every((at) => Number.isInteger(at) && at >= 0);
 }
 
+interface ReasonRow {
+  readonly what: string;
+  readonly places: number;
+}
+
 function parsed(report: string): { sites: Site[]; notes: NoteRow[] } {
   const refusalSites = reportField(report, 'refusalSites');
   const allNotes = reportField(report, 'notes');
   const sites = Array.isArray(refusalSites) ? refusalSites.filter((site): site is Site => typeof site?.what === 'string') : [];
   const notes = Array.isArray(allNotes) ? allNotes.filter((note): note is NoteRow => typeof note?.message === 'string') : [];
   return { sites, notes };
+}
+
+function unlisted(report: string): number {
+  const total = reportField(report, 'refusalSitesTotal');
+  const sites = reportField(report, 'refusalSites');
+  const listed = Array.isArray(sites) ? sites.length : 0;
+  return Number.isInteger(total) ? Math.max(0, (total as number) - listed) : 0;
+}
+
+function reasonCounts(report: string): ReasonCount[] {
+  const rows = reportField(report, 'refusalReasons');
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+  const counts = new Map<string, number>();
+  for (const row of rows.filter((item): item is ReasonRow => typeof item?.what === 'string' && Number.isInteger(item?.places))) {
+    const sentence = sentenceFor(row.what);
+    counts.set(sentence, (counts.get(sentence) ?? 0) + row.places);
+  }
+  return [...counts].map(([sentence, places]) => ({ sentence, places })).sort((a, b) => b.places - a.places);
 }
 
 function quoted(text: string, span: readonly [number, number]): string {
@@ -142,5 +173,6 @@ export function explainRefusals(report: string, text: string): Explained {
   const rows = uniqueBy(ranked, placeOf)
     .map((reason) => explained(index, reason))
     .sort((a, b) => (a.span?.[0] ?? Infinity) - (b.span?.[0] ?? Infinity));
-  return { shown: rows.slice(0, SHOWN_SITES), more: Math.max(0, rows.length - SHOWN_SITES) };
+  const all = rows.length + unlisted(report);
+  return { shown: rows.slice(0, SHOWN_SITES), more: Math.max(0, all - SHOWN_SITES), reasons: reasonCounts(report) };
 }

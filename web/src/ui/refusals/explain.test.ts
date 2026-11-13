@@ -82,8 +82,28 @@ describe('the refusal explanations', () => {
     expect(rows.more).toBe(3);
   });
 
+  it('count the places a capped report leaves out and total each reason once', () => {
+    const sites = Array.from({ length: SHOWN_SITES + 3 }, (_, index) => ({ what: 'code from text', layer: 0, inputSpan: [index, index + 1] }));
+    const capped = JSON.stringify({
+      notes: [],
+      refusalSites: sites,
+      refusalSitesTotal: SHOWN_SITES + 84_000,
+      refusalReasons: [
+        { what: 'GLOBAL_REACH', places: 1 },
+        { what: 'code from text', places: 83_000 },
+        { what: 'escaped read (definer)', places: 900 },
+        { what: 'reflective read (runner)', places: 102 },
+      ],
+    });
+    const rows = explainRefusals(capped, 'x'.repeat(SHOWN_SITES + 10));
+    expect(rows.shown).toHaveLength(SHOWN_SITES);
+    expect(rows.more).toBe(84_000);
+    expect(rows.reasons.map((reason) => reason.places)).toEqual([83_000, 1_002, 1]);
+    expect(rows.reasons[0]?.sentence).toMatch(/^may run code built from text/);
+  });
+
   it('read nothing from a broken report', () => {
-    expect(explainRefusals('not json', SOURCE)).toEqual({ shown: [], more: 0 });
+    expect(explainRefusals('not json', SOURCE)).toEqual({ shown: [], more: 0, reasons: [] });
   });
 
   it('name every reason the engine records in plain words', () => {
