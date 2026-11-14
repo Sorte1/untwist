@@ -269,6 +269,7 @@ fn unique_gives_one_library_name_to_one_binding_across_inputs() {
         });
     let options = Options {
         rename: RenameMode::Unique,
+        unsafe_transforms: true,
         unpack: false,
         ..Options::default()
     };
