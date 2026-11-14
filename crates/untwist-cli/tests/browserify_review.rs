@@ -9,6 +9,8 @@ const DEFAULT: &[&str] = &[];
 const UNSAFE: &[&str] = &["--unsafe"];
 const LANES: [&[&str]; 2] = [DEFAULT, UNSAFE];
 const PREMISE_ROWS: [(&str, &[&str]); 1] = [("a23", UNSAFE)];
+const PROTOTYPE_PREMISE_ROWS: [&str; 9] = ["a27", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"];
+const PROTOTYPE_PREMISE_TREE: &str = "Some(0)\ntwo\n";
 const INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/browserify_review");
 const MODULE_EXTENSION: &str = "mjs";
 const UNPACKED: [&str; 6] = ["a10", "a19c", "a26", "a30", "a36", "b10"];
@@ -87,6 +89,12 @@ fn review_probes_run_like_the_browserify_bundle_in_both_lanes() {
             let out = work.path().join(format!("{name}-{lane}"));
             let seen = tree_output(&node, input, &out, flags);
             let unpacked = out.join("bundle.json").exists();
+            if PROTOTYPE_PREMISE_ROWS.contains(&name.as_ref()) {
+                if !unpacked || seen.as_deref() != Some(PROTOTYPE_PREMISE_TREE) {
+                    wrong.push(format!("{name} {flags:?}: premise row gave {seen:?}"));
+                }
+                continue;
+            }
             if UNPACKED.contains(&name.as_ref()) && !unpacked {
                 wrong.push(format!("{name} {flags:?}: no bundle written"));
             }
