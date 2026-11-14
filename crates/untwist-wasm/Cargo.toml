@@ -10,6 +10,9 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+types = ["untwist/types"]
+
 [dependencies]
 untwist = { path = "../untwist", default-features = false, features = ["refusal-spans", "modern", "boundaries"] }
 untwist-core = { path = "../untwist-core" }

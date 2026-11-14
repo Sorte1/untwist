@@ -263,18 +263,7 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
             return Verdict::Refuse;
         };
         if let SlotKind::Binding { .. } = slot.kind {
-            let without = Annotations {
-                symbols: viewer
-                    .notes
-                    .symbols
-                    .iter()
-                    .filter(|(held, _)| **held != symbol)
-                    .map(|(held, ty)| (*held, ty.clone()))
-                    .collect(),
-                returns: viewer.notes.returns.clone(),
-            };
-            let plain = Viewer::new(self.env, &without);
-            if plain.declared_without(symbol) == View::Known(ty.clone()) {
+            if viewer.declared_without(symbol) == View::Known(ty.clone()) {
                 return Verdict::Redundant;
             }
         }

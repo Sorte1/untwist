@@ -194,3 +194,10 @@ fn coverage_and_tsc_pairs_over_the_fixture_corpus() {
     }
     println!("{}", lines.join("\n"));
 }
+
+#[test]
+fn rename_reserves_every_type_name_the_types_stage_writes() {
+    for name in untwist_types::EMITTED_TYPE_NAMES {
+        assert!(untwist_rename::reserved::is_reserved(name), "{name}");
+    }
+}
