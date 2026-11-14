@@ -53,6 +53,12 @@ const PROBES: &[Probe] = &[
         tail: "\tvar seen, hasSeen;\n\tfunction mark() { if (hasSeen) return seen; hasSeen = 1; seen = true; return seen; }\n\tvar marked = mark();\n\tconsole.log(\"marked:\", hasSeen, seen);\n",
     },
     Probe {
+        name: "user-terser-wrapper-shaped-functions",
+        base: USAGE,
+        edits: &[],
+        tail: "\tvar box, hasBox, flag, hasFlag;\n\tfunction boxed() { if (hasBox) { return box; } else { hasBox = 1; return box = {}; } }\n\tfunction flagged() { if (!hasFlag) { hasFlag = 1; flag = true; } return flag; }\n\tvar madeBox = boxed(), madeFlag = flagged();\n\tconsole.log(\"wrappers:\", hasBox, typeof box, hasFlag, flag);\n",
+    },
+    Probe {
         name: "needed-module-run-through-an-unused-var",
         base: ENTRY,
         edits: &[(
@@ -301,6 +307,18 @@ fn user_functions_and_their_results_are_never_removed() {
     let name = "user-wrapper-shaped-functions";
     let ran = untwist(&source(probe(name)), "node 22");
     same_count(name, &ran, &["function mark()", "= mark()", "hasSeen"]);
+    let name = "user-terser-wrapper-shaped-functions";
+    let ran = untwist(&source(probe(name)), "node 22");
+    same_count(
+        name,
+        &ran,
+        &[
+            "function boxed()",
+            "function flagged()",
+            "boxed()",
+            "flagged()",
+        ],
+    );
 }
 
 #[test]

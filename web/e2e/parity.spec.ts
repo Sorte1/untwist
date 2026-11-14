@@ -59,6 +59,19 @@ test('Modern baseline removes core-js polyfills exactly as --modern does', async
   expect(sha256(await outputText(page))).toBe(sha256(expected));
 });
 
+test('modern notes are info in Diagnostics and Details lists the modules by reason', async ({ page }) => {
+  await openApp(page, '#libs=1&modern=es2022');
+  await load(page, MODERN);
+  await runAndWait(page);
+  await expect(page.locator('#diag-list .diag-row[data-level="warning"]', { has: page.locator('.diag-src:text-is("modern")') })).toHaveCount(0);
+  await page.locator('#details-tab').click();
+  const section = page.locator('#details .details-section').filter({ has: page.locator('h3', { hasText: /^Modern$/ }) });
+  await expect(section.locator('.modern-summary')).toContainText(/^removed \d+ of \d+ core-js polyfill modules/);
+  const removed = section.locator('details.modern-group[data-status="removed"]').first();
+  await removed.locator('summary').click();
+  await expect(removed.locator('li').first()).toContainText('core-js 3.39: modules/');
+});
+
 test('Modern baseline fetches the core-js table with Library names off', async ({ page }) => {
   const expected = cli(['--disable', 'library-names,library-rename', '--modern', 'es2022'], MODERN);
   expect(expected).not.toBe(cli(['--disable', 'library-names,library-rename'], MODERN));

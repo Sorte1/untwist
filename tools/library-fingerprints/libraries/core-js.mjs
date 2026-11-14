@@ -20,6 +20,7 @@ export default {
     const match = /^(internals|modules)\/(.+)\.js$/.exec(rel);
     return match ? `${match[1]}/${match[2]}` : null;
   },
+  minifiers: ["none", "terser", "terser-mangle", "esbuild", "swc"],
   obfuscate: "3.39.0,latest",
   group: "corejs",
 };

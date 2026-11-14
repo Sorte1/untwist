@@ -88,3 +88,35 @@
 .mono {
   font-family: var(--mono);
 }
+
+.modern-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.modern-summary {
+  margin: 0 0 4px;
+}
+
+.modern-title {
+  cursor: pointer;
+}
+
+.modern-group[data-status='kept'] .modern-title {
+  color: var(--text);
+}
+
+.modern-group[data-status='removed'] .modern-title,
+.modern-group[data-status='rewrote'] .modern-title {
+  color: var(--muted);
+}
+
+.modern-items {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  max-height: 240px;
+  overflow: auto;
+  word-break: break-word;
+}

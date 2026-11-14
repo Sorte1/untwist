@@ -1,6 +1,6 @@
 import type { RunResult } from '../../engine/types';
 import { sizeLabel } from '../../dom';
-import { moduleLabel, type LibraryRow } from '../../libraries/libraries';
+import { moduleLabel, rangeLabel, type LibraryRow } from '../../libraries/libraries';
 import { locateModules, type ModuleHit } from '../../libraries/locate';
 import { tableRows, tableStateText, type TableRow } from '../../libraries/panel-model';
 import type { TableIndex } from '../../libraries/index-format';
@@ -67,7 +67,7 @@ function libraryItem(row: LibraryRow, view: LibrariesView, hits: () => Map<strin
   const item = make('details', 'lib-item');
   item.dataset['library'] = row.library;
   const summary = make('summary', 'lib-summary');
-  summary.append(make('span', 'lib-name', row.library), make('span', 'lib-range mono', row.range), make('span', 'lib-count muted', moduleLabel(row.modules)));
+  summary.append(make('span', 'lib-name', row.library), make('span', 'lib-range mono', rangeLabel(row)), make('span', 'lib-count muted', moduleLabel(row.modules)));
   item.append(summary);
   item.addEventListener('toggle', () => {
     if (item.open && item.childElementCount === 1) {

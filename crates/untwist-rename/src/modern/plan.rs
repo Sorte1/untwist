@@ -150,7 +150,12 @@ pub fn units(
     });
     let mut known: FxHashSet<Span> = hits.iter().map(|hit| hit.span).collect();
     for found in lookalikes {
-        if known.insert(found.span) {
+        let nested = hits.iter().any(|outer| {
+            outer.span.start <= found.span.start
+                && found.span.end <= outer.span.end
+                && outer.modules == found.modules
+        });
+        if !nested && known.insert(found.span) {
             out.push(unit(
                 found.span,
                 found.modules,

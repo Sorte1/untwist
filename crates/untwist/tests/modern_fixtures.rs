@@ -68,7 +68,8 @@ fn modern_output_prints_what_the_babel_build_prints_in_node() {
         let source = std::fs::read_to_string(&file).unwrap();
         let name = file.file_name().unwrap().to_string_lossy().to_string();
         let before = printed(&node, dir.path(), &source);
-        let lanes: &[(&str, bool)] = match name.ends_with(".rollup-cjs.js") {
+        let rollup = name.ends_with(".rollup-cjs.js") || name.ends_with(".rollup-cjs.terser.js");
+        let lanes: &[(&str, bool)] = match rollup {
             true => &[
                 ("es2017", false),
                 ("es2022", false),
@@ -86,6 +87,26 @@ fn modern_output_prints_what_the_babel_build_prints_in_node() {
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn the_mangled_terser_builds_lose_their_native_polyfills() {
+    for file in fixtures()
+        .iter()
+        .filter(|file| file.to_string_lossy().ends_with(".rollup-cjs.terser.js"))
+    {
+        let source = std::fs::read_to_string(file).unwrap();
+        for unsafe_transforms in [false, true] {
+            let ran = untwist(&source, &options(Some("es2022"), unsafe_transforms));
+            let count = removed(&ran.notes);
+            assert!(
+                count >= 50,
+                "{} (unsafe {unsafe_transforms}): removed {count}\n{}",
+                file.display(),
+                ran.notes.join("\n")
+            );
+        }
+    }
 }
 
 #[test]

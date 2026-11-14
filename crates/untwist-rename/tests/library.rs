@@ -845,7 +845,7 @@ mod summaries {
         let notes = summary_notes(&[&one]);
         assert_eq!(
             notes,
-            ["library: tslib@1.10\u{2013}2.9, 1 module recognised"]
+            ["library: tslib 1.10\u{2013}2.9, 1 module recognised"]
         );
         let twice = hit(&["tslib", "tslib.es6"], "1.10.0~2.9.0", 20);
         assert!(summary_notes(&[&one, &twice])[0].ends_with(", 1 module recognised"));
@@ -857,12 +857,12 @@ mod summaries {
         let middle = hit(&["b"], "3.10.0~3.20.0", 20);
         assert_eq!(
             summary_notes(&[&gap, &middle]),
-            ["library: tslib@versions disagree, 2 modules recognised"]
+            ["library: tslib 3.0\u{2013}3.5, 3.10\u{2013}3.20, 3.30\u{2013}3.39 (matches disagree), 2 modules recognised"]
         );
         let late = hit(&["c"], "3.35.0~3.50.0", 40);
         assert_eq!(
             summary_notes(&[&gap, &late]),
-            ["library: tslib@3.35\u{2013}3.39, 2 modules recognised"]
+            ["library: tslib 3.35\u{2013}3.39, 2 modules recognised"]
         );
         assert_eq!(
             ranges_text(&parse_ranges("3.0.0~3.5.0,3.30.0~3.39.0")),
@@ -876,13 +876,47 @@ mod summaries {
     #[test]
     fn programs_that_disagree_on_versions_say_so() {
         let merged = summaries([
-            "library: tslib@1.10\u{2013}1.14, 2 modules recognised",
-            "library: tslib@2.0\u{2013}2.9, 3 modules recognised",
+            "library: tslib 1.10\u{2013}1.14, 2 modules recognised",
+            "library: tslib 2.0\u{2013}2.9, 3 modules recognised",
         ]);
-        assert_eq!(merged[0].range, "versions disagree");
+        assert_eq!(merged[0].range, "1.10\u{2013}1.14, 2.0\u{2013}2.9");
+        assert!(merged[0].disagree);
         assert_eq!(merged[0].modules, 5);
-        let gap = summaries(["library: tslib@1.0\u{2013}1.5, 1.8\u{2013}2.1, 1 module recognised"]);
+        let gap = summaries(["library: tslib 1.0\u{2013}1.5, 1.8\u{2013}2.1, 1 module recognised"]);
         assert_eq!(gap[0].range, "1.0\u{2013}1.5, 1.8\u{2013}2.1");
+        assert!(!gap[0].disagree);
+    }
+
+    #[test]
+    fn a_disagreeing_note_reads_back_as_its_union() {
+        let read = summaries([
+            "library: @babel/runtime 7.0\u{2013}8.1 (matches disagree), 16 modules recognised",
+            "library: @babel/runtime 7.20\u{2013}7.29, 1 module recognised",
+        ]);
+        assert_eq!(read[0].library, "@babel/runtime");
+        assert_eq!(read[0].range, "7.0\u{2013}8.1");
+        assert!(read[0].disagree);
+        assert_eq!(read[0].modules, 17);
+    }
+
+    #[test]
+    fn a_scoped_label_keeps_its_at_sign() {
+        let one = Hit {
+            label: "@babel/runtime".to_string(),
+            ..hit(&["helpers/typeof"], "7.0.0~7.6.0", 0)
+        };
+        let other = Hit {
+            label: "@babel/runtime".to_string(),
+            ..hit(&["helpers/superPropGet"], "7.25.0~8.1.0", 20)
+        };
+        let notes = summary_notes(&[&one, &other]);
+        assert_eq!(
+            notes,
+            ["library: @babel/runtime 7.0\u{2013}7.6, 7.25\u{2013}8.1 (matches disagree), 2 modules recognised"]
+        );
+        let read = summaries(notes.iter().map(String::as_str));
+        assert_eq!(read[0].library, "@babel/runtime");
+        assert!(read[0].disagree);
     }
 }
 

@@ -115,7 +115,16 @@ struct BundleRow<'a> {
 struct LibraryRow {
     library: String,
     range: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    disagree: bool,
     modules: usize,
+}
+
+#[derive(Serialize)]
+struct ModernGroup<'a> {
+    status: &'static str,
+    reason: &'a str,
+    items: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -141,6 +150,8 @@ struct Report<'a> {
     snapshots: Vec<SnapshotRow>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     libraries: Vec<LibraryRow>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    modern: Vec<ModernGroup<'a>>,
 }
 
 pub struct RunFacts<'a> {
@@ -332,9 +343,55 @@ fn library_rows(output: &Output) -> Vec<LibraryRow> {
         .map(|summary| LibraryRow {
             library: summary.library,
             range: summary.range,
+            disagree: summary.disagree,
             modules: summary.modules,
         })
         .collect()
+}
+
+fn is_modern_detail(pass: &str, message: &str) -> bool {
+    pass == untwist::modern_report::NAME && untwist::modern_report::is_detail(message)
+}
+
+fn status_name(status: untwist::modern_report::Status) -> &'static str {
+    match status {
+        untwist::modern_report::Status::Kept => "kept",
+        untwist::modern_report::Status::Removed => "removed",
+        untwist::modern_report::Status::Rewrote => "rewrote",
+    }
+}
+
+fn modern_groups(notes: &[Note]) -> Vec<ModernGroup<'_>> {
+    let mut groups: Vec<ModernGroup<'_>> = Vec::new();
+    let details = notes
+        .iter()
+        .filter(|note| note.pass == untwist::modern_report::NAME)
+        .filter_map(|note| untwist::modern_report::detail(&note.message));
+    for detail in details {
+        let status = status_name(detail.status);
+        match groups
+            .iter_mut()
+            .find(|group| group.status == status && group.reason == detail.reason)
+        {
+            Some(group) => group.items.push(detail.item),
+            None => groups.push(ModernGroup {
+                status,
+                reason: detail.reason,
+                items: vec![detail.item],
+            }),
+        }
+    }
+    let rank = |status: &str| match status {
+        "kept" => 0,
+        "removed" => 1,
+        _ => 2,
+    };
+    groups.sort_by(|left, right| {
+        rank(left.status)
+            .cmp(&rank(right.status))
+            .then(right.items.len().cmp(&left.items.len()))
+    });
+    groups
 }
 
 fn diagnostic_rows<'a>(
@@ -346,6 +403,7 @@ fn diagnostic_rows<'a>(
     rows.extend(
         notes
             .iter()
+            .filter(|note| !is_modern_detail(note.pass, note.message))
             .map(|note| Diagnostic::new(note.level, note.pass, note.message, note.input_span)),
     );
     rows
@@ -389,6 +447,7 @@ pub fn report_json(output: &Output, facts: &RunFacts<'_>) -> String {
         bundle: bundle_row(output, facts.stdout),
         snapshots: snapshot_rows(&output.snapshots),
         libraries: library_rows(output),
+        modern: modern_groups(&output.notes),
     };
     serde_json::to_string(&report).unwrap_or_default()
 }

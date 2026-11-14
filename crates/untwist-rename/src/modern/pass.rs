@@ -18,7 +18,7 @@ use crate::library::match_program;
 use crate::text_reads::{text_read_bindings_with, SelfReads, TextReads};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
 
 pub const NAME: &str = "modern";
@@ -80,6 +80,13 @@ struct Rounds {
     library: Vec<Span>,
 }
 
+fn distinct<'i>(installers: impl Iterator<Item = &'i Installer>) -> Vec<&'i Installer> {
+    let mut seen: FxHashSet<&[String]> = FxHashSet::default();
+    installers
+        .filter(|installer| seen.insert(installer.modules.as_slice()))
+        .collect()
+}
+
 impl ModernPass {
     fn planned(
         &self,
@@ -90,7 +97,7 @@ impl ModernPass {
     ) -> Option<(Plan, FxHashMap<Span, Site>)> {
         let found = match_program(program, scoping);
         if !found.hits.iter().any(|hit| hit.label == LABEL) {
-            cx.note("no core-js module was recognised", None);
+            cx.progress("no core-js module was recognised", None);
             return None;
         }
         let facts = collect(program, scoping);
@@ -185,32 +192,25 @@ impl ModernPass {
         let Some(last) = &rounds.last else {
             return;
         };
-        let kept: Vec<&Installer> = rounds
-            .kept
-            .iter()
-            .flatten()
-            .filter(|installer| {
-                !rounds
-                    .removed
-                    .iter()
-                    .any(|removed| removed.span == installer.span)
-            })
-            .collect();
         let removed: Vec<&Installer> = rounds.removed.iter().collect();
-        cx.note(
-            report::summary(&removed, &kept, rounds.removed_helpers, last.kept_helpers),
-            None,
-        );
+        let kept = distinct(rounds.kept.iter().flatten().filter(|installer| {
+            !rounds.removed.iter().any(|removed| {
+                removed.span.start <= installer.span.start && installer.span.end <= removed.span.end
+            })
+        }));
+        let totals = report::Totals {
+            removed_helpers: rounds.removed_helpers,
+            kept_helpers: last.kept_helpers,
+            rewritten: rounds.rewrites.values().sum(),
+        };
+        cx.progress(report::summary(&removed, &kept, &totals), None);
         for installer in removed.iter().chain(&kept) {
-            cx.note(report::installer_note(installer), None);
+            cx.progress(report::installer_note(installer), None);
         }
         let mut rewrites: Vec<(&&str, &usize)> = rounds.rewrites.iter().collect();
         rewrites.sort();
         for (kind, count) in rewrites {
-            cx.note(
-                format!("rewrote {count} core-js helper calls: {kind}"),
-                None,
-            );
+            cx.progress(report::rewrite_note(kind, *count), None);
         }
     }
 }
@@ -228,7 +228,7 @@ impl<'a> Pass<'a> for ModernPass {
         if std::mem::replace(&mut self.done, true) {
             return;
         }
-        cx.note(report::assumption(&self.baseline), None);
+        cx.progress(report::assumption(&self.baseline), None);
         let mut rounds = Rounds::default();
         for phase in [false, true, false] {
             for _ in 0..MAX_ROUNDS {

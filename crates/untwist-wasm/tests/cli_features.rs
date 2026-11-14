@@ -34,6 +34,44 @@ fn modern_removes_core_js_polyfills_in_the_wasm_build() {
 }
 
 #[test]
+fn modern_and_library_notes_are_info_and_the_module_list_is_grouped() {
+    untwist_wasm::load_library_table(CORE_JS);
+    let source = fixture("modern/babel-usage.core-js-3.39.0.rollup-cjs.terser.js");
+    let modern = run_report(&source, "--modern es2022", false);
+    let json: serde_json::Value = serde_json::from_str(&modern.report_json()).unwrap();
+    let diagnostics = json["diagnostics"].as_array().unwrap();
+    let from = |pass: &str| -> Vec<&serde_json::Value> {
+        diagnostics
+            .iter()
+            .filter(|row| row["pass"] == pass)
+            .collect()
+    };
+    let modern_rows = from("modern");
+    assert_eq!(modern_rows.len(), 2, "{modern_rows:?}");
+    assert!(modern_rows.iter().all(|row| row["level"] == "info"));
+    assert!(from("library-names")
+        .iter()
+        .all(|row| row["level"] == "info"));
+    let groups = json["modern"].as_array().unwrap();
+    let kept: usize = groups
+        .iter()
+        .filter(|group| group["status"] == "kept")
+        .map(|group| group["items"].as_array().unwrap().len())
+        .sum();
+    let removed: usize = groups
+        .iter()
+        .filter(|group| group["status"] == "removed")
+        .map(|group| group["items"].as_array().unwrap().len())
+        .sum();
+    assert!(removed > 0, "{groups:?}");
+    let summary = modern_rows[1]["message"].as_str().unwrap();
+    assert!(
+        summary.starts_with(&format!("removed {removed} of {} core-js", removed + kept)),
+        "{summary}"
+    );
+}
+
+#[test]
 fn a_bad_baseline_is_a_usage_error() {
     let out = run_report("a;", "--modern es1999", false);
     assert_eq!(out.code(), 2);

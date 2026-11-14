@@ -47,6 +47,11 @@ pub use untwist_core::source_map::{self, Coverage, OwnedSourceMap};
 pub use untwist_rename::modern::{
     parse_baseline as parse_modern_baseline, Baseline as ModernBaseline,
 };
+#[cfg(feature = "modern")]
+pub mod modern_report {
+    pub use untwist_rename::modern::pass::NAME;
+    pub use untwist_rename::modern::report::{detail, is_detail, Detail, Status};
+}
 pub use untwist_rename::RenameMode;
 
 pub mod libraries {

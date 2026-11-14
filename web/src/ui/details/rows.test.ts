@@ -73,8 +73,15 @@ describe('the details rows', () => {
 
   it('lists each detected library with its version range and module count', () => {
     expect(libraryPairs([])).toEqual([{ label: 'Libraries', value: 'none detected' }]);
-    expect(libraryPairs([{ library: 'core-js', range: '3.30.0 - 3.38.1', modules: 412 }, { library: 'tslib', range: '', modules: 1 }])).toEqual([
+    expect(
+      libraryPairs([
+        { library: 'core-js', range: '3.30.0 - 3.38.1', disagree: false, modules: 412 },
+        { library: '@babel/runtime', range: '7.0–8.1', disagree: true, modules: 16 },
+        { library: 'tslib', range: '', disagree: false, modules: 1 },
+      ]),
+    ).toEqual([
       { label: 'core-js', value: '3.30.0 - 3.38.1 · 412 modules' },
+      { label: '@babel/runtime', value: '7.0–8.1, matches disagree · 16 modules' },
       { label: 'tslib', value: '1 module' },
     ]);
   });
