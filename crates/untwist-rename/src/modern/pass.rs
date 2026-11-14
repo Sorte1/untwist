@@ -155,8 +155,8 @@ impl ModernPass {
         let Some((mut plan, sites)) = self.planned(program, scoping, cx, &rounds.library) else {
             return false;
         };
-        let removing = !plan.regions.is_empty();
-        if removing && reachable(program, &plan.regions) != plan.regions.len() {
+        let removing = !plan.regions.is_empty() || plan.regions.has_unplaced();
+        if removing && (plan.regions.has_unplaced() || !reachable(program, &plan.regions)) {
             refuse(cx, EDIT_MISMATCH);
             rounds.last = Some(plan);
             return false;

@@ -108,21 +108,28 @@ impl<'a> VisitMut<'a> for Editor<'_, 'a> {
     }
 }
 
-pub fn reachable(program: &Program<'_>, regions: &Regions) -> usize {
-    let mut counter = Counter { regions, found: 0 };
+pub fn reachable(program: &Program<'_>, regions: &Regions) -> bool {
+    let mut counter = Counter {
+        regions,
+        found: rustc_hash::FxHashSet::default(),
+        twice: false,
+    };
     oxc_ast_visit::Visit::visit_program(&mut counter, program);
-    counter.found
+    !counter.twice && counter.found.len() == regions.len()
 }
 
 struct Counter<'r> {
     regions: &'r Regions,
-    found: usize,
+    found: rustc_hash::FxHashSet<oxc_span::Span>,
+    twice: bool,
 }
 
 impl Counter<'_> {
     fn count(&mut self, span: oxc_span::Span) -> bool {
         let hit = self.regions.contains(span);
-        self.found += usize::from(hit);
+        if hit && !self.found.insert(span) {
+            self.twice = true;
+        }
         hit
     }
 

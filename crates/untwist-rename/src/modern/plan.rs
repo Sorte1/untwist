@@ -116,6 +116,7 @@ pub fn module_hits(hits: &[Hit]) -> Vec<&Hit> {
     let mut seen = FxHashSet::default();
     hits.iter()
         .filter(|hit| hit.label == LABEL && hit.kind == UnitKind::Function)
+        .filter(|hit| !hit.span.is_empty())
         .filter(|hit| matches!(hit.role, Role::Wrapper | Role::Module))
         .filter(|hit| seen.insert(hit.span))
         .collect()
@@ -150,6 +151,9 @@ pub fn units(
     });
     let mut known: FxHashSet<Span> = hits.iter().map(|hit| hit.span).collect();
     for found in lookalikes {
+        if found.span.is_empty() {
+            continue;
+        }
         let nested = hits.iter().any(|outer| {
             outer.span.start <= found.span.start
                 && found.span.end <= outer.span.end
