@@ -9,6 +9,8 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_diagnostics::{OxcDiagnostic, Severity};
 use oxc_parser::{ParseOptions, Parser};
 pub use oxc_span::SourceType;
+
+mod unnamed;
 use oxc_syntax::scope::ScopeFlags;
 
 pub struct Parsed<'a> {
@@ -57,9 +59,10 @@ fn parse_recording<'a>(
         preserve_parens: false,
         ..ParseOptions::default()
     };
-    let ret = Parser::new(alloc, source, source_type)
+    let mut ret = Parser::new(alloc, source, source_type)
         .with_options(options)
         .parse();
+    unnamed::keep_unnamed(alloc, source, &mut ret.program);
     let module_syntax = ret.module_record.has_module_syntax;
     let parsed = Parsed {
         program: ret.program,

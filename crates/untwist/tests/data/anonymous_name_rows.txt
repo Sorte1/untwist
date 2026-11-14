@@ -12,3 +12,12 @@ no-name-read-var|var f = (console.log("head"), function () { return 1; }); conso
 no-name-read-assign|var g; g = (console.log("head"), () => 2); console.log(g());
 name-read-in-eval-text|var g = (console.log("head"), function () {}); function show(s) { console.log(eval(s)); } show("JSON.stringify(g.name)");
 name-read-in-function-text|var g = (console.log("head"), function () {}); console.log(Function("return JSON.stringify(g.name)")());
+paren-assign-function|var f; (f) = function () {}; console.log(JSON.stringify(f.name));
+paren-assign-class|var C; (C) = class {}; console.log(JSON.stringify(C.name));
+paren-assign-arrow|var a; ((a)) = () => 1; console.log(JSON.stringify(a.name));
+paren-assign-comment|var f; ( f /* c */ ) /* d */ = function () {}; console.log(JSON.stringify(f.name));
+paren-logical|var a, b, c = 1; (a) ??= function () {}; (b) ||= class {}; (c) &&= async () => 1; console.log(JSON.stringify([a.name, b.name, c.name]));
+paren-destructure|var a, b, c; [(a) = function () {}] = []; ({ x: (b) = class {} } = {}); [c = function () {}] = []; console.log(JSON.stringify([a.name, b.name, c.name]));
+paren-nested|var f, g; function h() { (f) = function () {}; return f; } var o = { m() { (g) = () => 0; return g; } }; console.log(JSON.stringify([h().name, o.m().name]));
+paren-in-value|var f; var o = { p: (f) = function () {} }; console.log(JSON.stringify([f.name, o.p.name]));
+paren-named-expression|var f; (f) = function inner() {}; console.log(f.name);
