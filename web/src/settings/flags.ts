@@ -37,5 +37,6 @@ export function flagsFrom(settings: Settings): string {
   const off = disabled(settings);
   add(off !== '', '--disable', off);
   add(settings.wasm !== 'off', '--wasm-check', settings.wasm);
+  add(settings.types !== 'off', '--types', settings.types);
   return words.join(' ');
 }

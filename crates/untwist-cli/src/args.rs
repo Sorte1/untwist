@@ -262,6 +262,17 @@ pub struct Args {
     )]
     pub input_source_map: Option<String>,
     #[arg(
+        long,
+        value_enum,
+        value_name = "MODE",
+        conflicts_with = "source_map",
+        help = "experimental, opt-in: annotate types that hold for every value on every run, as \
+                TypeScript (ts: writes .ts, or .tsx when JSX is left) or as JSDoc comments \
+                (jsdoc); a position untwist cannot prove stays unannotated, and a file with a \
+                direct eval or a with statement gets no types at all"
+    )]
+    pub types: Option<TypesArg>,
+    #[arg(
         long = "list-passes",
         help = "print every pass the engine can run, with its stage, and exit"
     )]
@@ -311,6 +322,21 @@ fn fuel_steps(word: &str) -> Result<u64, String> {
 pub enum ReportFormat {
     Text,
     Json,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum TypesArg {
+    Ts,
+    Jsdoc,
+}
+
+impl TypesArg {
+    pub fn mode(self) -> untwist::TypesMode {
+        match self {
+            TypesArg::Ts => untwist::TypesMode::Ts,
+            TypesArg::Jsdoc => untwist::TypesMode::Jsdoc,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -395,6 +421,7 @@ impl Args {
             disabled_passes: self.disable.clone(),
             wasm_check: self.wasm_check.check(),
             source_map: self.source_map.is_some(),
+            types: self.types.map(TypesArg::mode),
             ..untwist::Options::default()
         }
     }

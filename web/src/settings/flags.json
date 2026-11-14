@@ -30,5 +30,13 @@
   {
     "settings": { "unpack": false, "jsx": false, "unsafe": true, "rename": "unique", "fuel": 7, "deob": false, "unmin": false, "human": true, "iter": 2, "single": true, "off": "layers" },
     "flags": "--no-unpack --no-jsx --unsafe --rename unique --fuel 7 --no-deobfuscate --no-unminify --keep-human-names --max-iterations 2 --single-file --disable layers"
+  },
+  {
+    "settings": { "types": "ts" },
+    "flags": "--types ts"
+  },
+  {
+    "settings": { "wasm": "auto", "types": "jsdoc" },
+    "flags": "--wasm-check auto --types jsdoc"
   }
 ]

@@ -16,13 +16,14 @@ description = "Fast JavaScript deobfuscator, unminifier and unbundler that never
 bench = false
 
 [features]
-default = ["parallel", "modern", "boundaries"]
+default = ["parallel", "modern", "boundaries", "types"]
 modern = ["untwist-rename/modern"]
 boundaries = ["untwist-unpack/boundaries"]
 parallel = ["dep:rayon"]
+types = ["dep:untwist-types"]
 refusal-spans = ["untwist-deobfuscate/refusal-spans"]
 libraries-all = ["untwist-rename/libraries-all"]
-test-hooks = ["refusal-spans", "untwist-core/test-hooks", "untwist-deobfuscate/test-hooks", "untwist-eval/test-hooks", "untwist-rename/test-hooks", "untwist-unminify/test-hooks"]
+test-hooks = ["refusal-spans", "untwist-core/test-hooks", "untwist-deobfuscate/test-hooks", "untwist-eval/test-hooks", "untwist-rename/test-hooks", "untwist-unminify/test-hooks", "untwist-types?/test-hooks"]
 
 [dependencies]
 untwist-core = { path = "../untwist-core", version = "0.5.0" }
@@ -32,6 +33,7 @@ untwist-jsx = { path = "../untwist-jsx", version = "0.5.0" }
 untwist-rename = { path = "../untwist-rename", version = "0.5.0" }
 untwist-unminify = { path = "../untwist-unminify", version = "0.5.0" }
 untwist-unpack = { path = "../untwist-unpack", version = "0.5.0" }
+untwist-types = { path = "../untwist-types", version = "0.5.0", optional = true }
 anyhow.workspace = true
 oxc_allocator.workspace = true
 oxc_ast.workspace = true
@@ -51,6 +53,7 @@ criterion.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 untwist-testing = { path = "../untwist-testing" }
+untwist-types = { path = "../untwist-types" }
 untwist-unpack = { path = "../untwist-unpack" }
 insta.workspace = true
 stacker.workspace = true

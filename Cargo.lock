@@ -1696,6 +1696,7 @@ dependencies = [
  "untwist-jsx",
  "untwist-rename",
  "untwist-testing",
+ "untwist-types",
  "untwist-unminify",
  "untwist-unpack",
 ]
@@ -1864,6 +1865,24 @@ dependencies = [
  "serde_json",
  "tempfile",
  "untwist-core",
+]
+
+[[package]]
+name = "untwist-types"
+version = "0.5.0"
+dependencies = [
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
+ "oxc_diagnostics",
+ "oxc_parser",
+ "oxc_semantic",
+ "oxc_span",
+ "oxc_syntax",
+ "rustc-hash",
+ "serde",
+ "untwist-core",
+ "untwist-types",
 ]
 
 [[package]]

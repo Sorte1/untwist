@@ -16,6 +16,7 @@ mod shared_scan;
 mod shell;
 mod snapshots;
 mod stages;
+mod types;
 mod unpack;
 
 use std::num::NonZeroUsize;
@@ -41,6 +42,7 @@ use ladder::Ladder;
 #[cfg(feature = "refusal-spans")]
 pub use refusal_spans::{RefusalSite, SiteAt};
 pub use snapshots::{Snapshot, SnapshotCode};
+pub use types::{TYPES_NOT_BUILT, TYPES_PASS, TYPES_WITH_SOURCE_MAPS};
 
 pub use notes::{
     ADMIT_PANICKED, ANONYMOUS_SHELL_KEPT, ANONYMOUS_SHELL_SCOPED, ANONYMOUS_SHELL_STRIPPED,
@@ -81,6 +83,7 @@ pub struct Output {
     pub wasm_panicked: bool,
     pub source_maps: Vec<Option<OwnedSourceMap>>,
     pub source_map_link: Option<crate::maps::MapLink>,
+    pub types: Option<crate::types::TypesReport>,
 }
 
 pub(crate) fn admits_reparse(text: &str) -> bool {
@@ -279,6 +282,7 @@ impl OutputParts {
             wasm_panicked: false,
             source_maps: self.source_maps,
             source_map_link: None,
+            types: None,
         }
     }
 }
@@ -356,10 +360,12 @@ impl Pipeline {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             parts.stats = inputs.merged(crate::stats::RunStats::taken());
-            Output {
+            let mut output = Output {
                 wasm_check: self.options.wasm_check,
                 ..parts.into_output(bundle, self.options.single_file)
-            }
+            };
+            self.types_stage(&mut output);
+            output
         })
     }
 

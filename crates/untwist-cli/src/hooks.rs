@@ -11,6 +11,7 @@ pub const STALL: &str = "UNTWIST_TEST_STALL";
 pub const HOG: &str = "UNTWIST_TEST_HOG";
 pub const REFUSAL_SPANS: &str = "UNTWIST_TEST_REFUSAL_SPANS";
 pub const POINTS_TO: &str = "UNTWIST_TEST_POINTS_TO";
+const TYPES_ASSERT: &str = "UNTWIST_TEST_TYPES_ASSERT";
 pub const WASM_PANIC: &str = "UNTWIST_TEST_WASM_PANIC";
 pub const FETCH_REQUEST_MS: &str = "UNTWIST_TEST_FETCH_REQUEST_MS";
 
@@ -76,6 +77,7 @@ pub fn test_hooks_from(read: impl Fn(&str) -> Option<std::ffi::OsString>) -> unt
         layer_stub: None,
         refusal_spans: flag(read(REFUSAL_SPANS).as_deref()),
         points_to: flag(read(POINTS_TO).as_deref()),
+        types_assert: flag(read(TYPES_ASSERT).as_deref()),
     }
 }
 

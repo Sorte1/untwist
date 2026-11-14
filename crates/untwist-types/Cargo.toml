@@ -1,0 +1,32 @@
+[package]
+name = "untwist-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "typescript", "types", "deobfuscator"]
+categories = ["development-tools", "parser-implementations"]
+description = "Proven TypeScript and JSDoc annotations for untwist output"
+
+[features]
+test-hooks = []
+
+[dependencies]
+untwist-core = { path = "../untwist-core", version = "0.5.0" }
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_ast_visit.workspace = true
+oxc_diagnostics.workspace = true
+oxc_parser.workspace = true
+oxc_semantic.workspace = true
+oxc_span.workspace = true
+oxc_syntax.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+untwist-types = { path = ".", features = ["test-hooks"] }

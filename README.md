@@ -120,6 +120,7 @@ Common flags:
 | `-f, --force` | Overwrite the files in `DIR` that this run writes and remove the ones a previous run left there. Input files are never overwritten. |
 | `--unsafe` | Use the unsafe lane (see below). |
 | `--modern BASELINE` | Opt-in: remove core-js polyfills of features that are native in `BASELINE` (see [Modern mode](#modern-mode)). |
+| `--types ts\|jsdoc` | Experimental, opt-in: annotate only types that hold for every value on every run (see [Proven types](#proven-types)). |
 | `--rename MODE` | `none` (default), `mangle`, `simple`, `smart` or `unique`. `-m` is short for `--rename mangle`. |
 | `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx` | Skip a stage. |
 | `--split-hoisted` | Also split Rollup/Vite scope-hoisted bundles, when the split provably keeps behaviour. |
@@ -304,6 +305,36 @@ Today this covers Rollup bundles built with `@rollup/plugin-commonjs` and `stric
 once), in one program (with `--split-hoisted` every wrapper becomes its own module and they are
 left as they are). Scope-hoisted Rollup output, webpack module maps, esbuild `__commonJS`
 bundles and wrappers a minifier inlined into their caller are recognised but left as they are.
+
+## Proven types
+
+`--types ts` writes the output as TypeScript (`.ts`, or `.tsx` when JSX is left) and
+`--types jsdoc` keeps JavaScript and adds `/** @type */`, `@param` and `@returns` comments. It is
+experimental and off unless you ask for it. An annotation is written only when untwist proves
+that every value the position can hold, on every run, has that type; everything else stays as it
+was. `number` includes `NaN` and `-0`, a literal type is never `NaN` or `-0`, and no annotation is
+ever `any` or `unknown`.
+
+What it proves today: literals and the closed set of values a local binding is written with, the
+results of operators, function returns, and the parameters of a function whose every call is
+visible (never one that reads `arguments`, is called with a spread, or is reached any other way).
+Results of built-ins such as `Math.floor`, `parseInt` or `"".slice` count only when the program
+leaves those built-ins alone. A file with a direct `eval` or a `with` statement gets no types, and
+neither do script-level `var`s, exported bindings, objects, arrays, classes or the DOM.
+
+A type that TypeScript would infer the same way anyway is left out. A proven type is also left
+out when writing it would give the TypeScript checker a new error (for example a literal type
+compared with a value outside it, which the checker narrows away), so the annotated file checks
+no worse than the same file without annotations under `strict` with `noImplicitAny` off. Every
+annotated file is parsed again, stripped of its annotations and compared with the untyped
+output; if they differ the file is written without types. `--report` counts the annotated,
+redundant and refused positions. The flag cannot be combined with `--source-map`.
+
+The types run after every other stage, on the final text, so they describe the program untwist
+prints. The checks behind this live in `crates/untwist-types/tests` (one row per hazard), in the
+node run of the fixtures with every annotation turned into a runtime check, and in
+`tools/types-check`, which runs the pinned `tsc` over the fixture outputs with and without
+annotations and fails on any new diagnostic.
 
 ## Playground
 

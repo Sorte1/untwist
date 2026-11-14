@@ -3,6 +3,7 @@ export type View = 'output' | 'diff' | 'steps';
 export type ThemeChoice = 'dark' | 'light';
 export type InputVisibility = 'shown' | 'hidden';
 export type WasmCheck = 'off' | 'on' | 'auto';
+export type TypesChoice = 'off' | 'ts' | 'jsdoc';
 
 export interface Settings {
   readonly unpack: boolean;
@@ -29,10 +30,12 @@ export interface Settings {
   readonly theme: ThemeChoice | null;
   readonly input: InputVisibility;
   readonly libs: boolean;
+  readonly types: TypesChoice;
 }
 
 export const RENAME_MODES: readonly RenameMode[] = ['none', 'simple', 'smart', 'unique', 'mangle'];
 export const WASM_CHECKS: readonly WasmCheck[] = ['off', 'on', 'auto'];
+export const TYPES_CHOICES: readonly TypesChoice[] = ['off', 'ts', 'jsdoc'];
 export const DEFAULT_FUEL = 50_000_000;
 
 export const DEFAULTS: Settings = {
@@ -60,6 +63,7 @@ export const DEFAULTS: Settings = {
   theme: null,
   input: 'shown',
   libs: false,
+  types: 'off',
 };
 
 export const CLI_DEFAULTS: Settings = { ...DEFAULTS, unsafe: false, libs: true };
@@ -80,6 +84,12 @@ export const WASM_CHECK_HINTS: Readonly<Record<WasmCheck, string>> = {
   auto: 'Extract byte arrays and base64 text that hold a WebAssembly module with imports or exports.',
 };
 
+export const TYPES_HINTS: Readonly<Record<TypesChoice, string>> = {
+  off: 'No type annotations (the default).',
+  ts: 'Experimental: write the output as TypeScript, with a type only where untwist proves it holds for every value on every run.',
+  jsdoc: 'Experimental: keep JavaScript and add JSDoc @type, @param and @returns comments, only where proven.',
+};
+
 export const MODERN_PRESETS: readonly string[] = ['', 'es2017', 'es2022', 'chrome 120, firefox 121, safari 17'];
 export const MODERN_CHARS = /^[A-Za-z0-9 ,.@_-]{0,200}$/;
 
@@ -87,7 +97,7 @@ export function sameSettings(a: Settings, b: Settings): boolean {
   return (Object.keys(DEFAULTS) as Array<keyof Settings>).every((key) => a[key] === b[key]);
 }
 
-const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'split', 'assume', 'jsx', 'libs', 'modern', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'smap', 'imap', 'mem', 'time', 'off', 'wasm'];
+const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'split', 'assume', 'jsx', 'libs', 'modern', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'smap', 'imap', 'mem', 'time', 'off', 'wasm', 'types'];
 
 export function changedCount(settings: Settings): number {
   return PANEL_KEYS.filter((key) => settings[key] !== DEFAULTS[key]).length;

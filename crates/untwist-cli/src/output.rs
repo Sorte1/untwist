@@ -21,6 +21,8 @@ struct OutputJson<'a> {
     notes: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     libraries: Vec<LibraryJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    types: Option<&'a untwist::TypesReport>,
     parse_diagnostics: &'a [String],
     parse_errors: usize,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
@@ -141,6 +143,7 @@ pub fn to_json(output: &Output, written: &Written, limits: Limits) -> serde_json
         stages,
         notes,
         libraries: libraries_json(output),
+        types: output.types.as_ref(),
         parse_diagnostics: &output.parse_diagnostics,
         parse_errors: output.parse_errors,
         panicked: &output.panicked,
@@ -211,6 +214,9 @@ pub fn text_report(output: &Output, limits: Limits) -> String {
         ));
     }
     text.push_str(&format!("parse_errors: {}\n", output.parse_errors));
+    if let Some(types) = &output.types {
+        text.push_str(&types.line());
+    }
     if !output.depth_refused.is_empty() {
         let indices: Vec<String> = output.depth_refused.iter().map(usize::to_string).collect();
         text.push_str(&format!("depth_refused: {}\n", indices.join(", ")));
