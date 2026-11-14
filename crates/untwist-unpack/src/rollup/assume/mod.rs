@@ -30,12 +30,22 @@ fn library_boundaries() -> Vec<Boundary> {
     Vec::new()
 }
 
-fn outer_of(program: &Program<'_>, found: &Shell<'_, '_>) -> Option<Option<Outer>> {
+fn outer_of<'a>(
+    alloc: &'a Allocator,
+    program: &Program<'a>,
+    found: &Shell<'_, 'a>,
+) -> Option<Option<Outer>> {
     let Some(outer) = &found.outer else {
         return Some(None);
     };
     let strict = outer.body.has_use_strict_directive() || program.has_use_strict_directive();
-    outer::analyse(outer, found.wrapper.index, strict).map(Some)
+    outer::analyse(
+        (alloc, program.source_text),
+        outer,
+        found.wrapper.index,
+        strict,
+    )
+    .map(Some)
 }
 
 fn enclosing(found: &Shell<'_, '_>, outer: Option<&Outer>, on_source: bool) -> Option<Enclosing> {
@@ -126,7 +136,7 @@ fn attempt<'k, 'a>(
     found: &Shell<'k, 'a>,
     bodies: &mut Bodies<'a>,
 ) -> Option<Bundle<'a>> {
-    let outer = outer_of(source, found)?;
+    let outer = outer_of(alloc, source, found)?;
     let (plan, owned) = match bodies {
         Bodies::Taken(_) => {
             let owned = bodies.statements(alloc, found.wrapper.body);

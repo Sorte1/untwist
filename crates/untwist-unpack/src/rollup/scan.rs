@@ -10,8 +10,9 @@ use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step, Suspend};
 
 pub const ENTRY: u32 = u32::MAX - 1;
 const NONE: u32 = u32::MAX;
-const MODULE_RESERVED: &str = "await";
-const HOST_NAMES: [&str; 4] = ["module", "exports", "__filename", "__dirname"];
+pub const MODULE_RESERVED: &str = "await";
+pub const REQUIRE: &str = "require";
+pub const HOST_NAMES: [&str; 4] = ["module", "exports", "__filename", "__dirname"];
 
 pub struct Facts {
     pub owner: Vec<u32>,
@@ -181,7 +182,7 @@ impl Rules<'_> {
         }
         if name == "arguments" {
             self.receiver_bound(frame);
-        } else if name == "require" || HOST_NAMES.contains(&name) {
+        } else if name == REQUIRE || HOST_NAMES.contains(&name) {
             self.refused = true;
         }
     }
@@ -198,7 +199,7 @@ impl Rules<'_> {
         let owner = self.facts.owner[symbol.index()];
         if owner == NONE && self.outer_symbol(symbol) {
             let name = self.scoping.symbol_name(symbol).to_string();
-            self.enclosed(&name, write);
+            self.refused |= !self.enclosed(&name, write);
         } else if owner == ENTRY {
             self.pin();
         } else if owner != NONE && owner != self.item {

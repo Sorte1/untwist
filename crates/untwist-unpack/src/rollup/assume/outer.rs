@@ -1,9 +1,14 @@
+use oxc_allocator::{Allocator, CloneIn, Vec as AVec};
 use oxc_ast::ast::*;
+use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk, Visit};
+use oxc_span::{GetSpan, SourceType};
 use oxc_syntax::scope::ScopeFlags;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::literal::is_pure_value;
+use untwist_core::semantic::build_scoping;
 
+use crate::rollup::scan::{HOST_NAMES, MODULE_RESERVED, REQUIRE};
 use crate::rollup::shell::Wrapper;
 
 const EVAL: &str = "eval";
@@ -13,6 +18,7 @@ pub struct Outer {
     pub names: FxHashSet<String>,
     pub unclean: FxHashSet<String>,
     pub assigned: FxHashSet<String>,
+    pub free: FxHashSet<String>,
 }
 
 fn plain_assignment<'k, 'a>(statement: &'k Statement<'a>) -> Option<(&'k str, &'k Expression<'a>)> {
@@ -210,12 +216,93 @@ fn later_statement(writes: &mut Writes<'_>, statement: &Statement<'_>) -> bool {
     true
 }
 
-pub fn analyse(outer: &Wrapper<'_, '_>, inner: usize, strict: bool) -> Option<Outer> {
+const MODULE_ONLY: [&str; 2] = [MODULE_RESERVED, "import"];
+const RECEIVER: &str = "this";
+
+fn module_safe_text(text: &str, outer: &Wrapper<'_, '_>, inner: usize) -> bool {
+    outer
+        .body
+        .statements
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != inner)
+        .all(|(_, statement)| {
+            let span = statement.span();
+            let Some(own) = text.get(span.start as usize..span.end as usize) else {
+                return false;
+            };
+            let receiver = outer.arrow && own.contains(RECEIVER);
+            !receiver && !MODULE_ONLY.iter().any(|word| own.contains(word))
+        })
+}
+
+fn free_names<'a>(
+    (alloc, text): (&'a Allocator, &'a str),
+    outer: &Wrapper<'_, 'a>,
+    inner: usize,
+) -> FxHashSet<String> {
+    let builder = AstBuilder::new(alloc);
+    let statements = outer
+        .body
+        .statements
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != inner)
+        .map(|(_, statement)| statement.clone_in(alloc));
+    let program = Program::new(
+        outer.body.span,
+        SourceType::cjs(),
+        text,
+        AVec::new_in(&builder),
+        None,
+        outer.body.directives.clone_in(alloc),
+        AVec::from_iter_in(statements, &builder),
+        &builder,
+    );
+    let semantics = build_scoping(&program);
+    semantics
+        .scoping
+        .root_unresolved_references()
+        .keys()
+        .map(|name| name.to_string())
+        .collect()
+}
+
+fn outer_reads<'a>(
+    alloc: (&'a Allocator, &'a str),
+    outer: &Wrapper<'_, 'a>,
+    inner: usize,
+    found: &mut Outer,
+) -> bool {
+    if !module_safe_text(alloc.1, outer, inner) {
+        return false;
+    }
+    found.free = free_names(alloc, outer, inner);
+    !found
+        .free
+        .iter()
+        .any(|name| name == REQUIRE || HOST_NAMES.contains(&name.as_str()))
+}
+
+pub fn analyse<'a>(
+    alloc: (&'a Allocator, &'a str),
+    outer: &Wrapper<'_, 'a>,
+    inner: usize,
+    strict: bool,
+) -> Option<Outer> {
     let mut found = Outer::default();
+    if !outer_reads(alloc, outer, inner, &mut found) {
+        return None;
+    }
     let mut later = Vec::new();
     for (index, statement) in outer.body.statements.iter().enumerate() {
         if index == inner {
             continue;
+        }
+        if let Statement::FunctionDeclaration(function) = statement {
+            let id = function.id.as_ref()?;
+            found.names.insert(id.name.to_string());
+            found.unclean.insert(id.name.to_string());
         }
         if strict && index > inner {
             later.push(statement);

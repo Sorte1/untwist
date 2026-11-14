@@ -163,7 +163,12 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   (function declarations, `var`s with no value or a plain literal, object or array value), so
   importing it before the entry runs changes nothing; a value is only moved when nothing can read
   it before its original line. A wrapper that reads code left in the entry, is written from
-  outside, or would be shadowed by an outer-wrapper name stays in the entry. Outer-wrapper
+  outside, or would be shadowed by an outer-wrapper name stays in the entry, and so does a wrapper
+  whose names the outer wrapper's own code reads (the entry's new imports would otherwise capture
+  those reads). Outer code that reads `module`, `require`, `exports`, `__filename`, `__dirname`
+  or `import.meta` refuses the split, and so does `this` in the code of an arrow outer wrapper.
+  `undefined`, `NaN` and `Infinity` count as plain values only where no binding shadows them.
+  Outer-wrapper
   bindings a wrapper module reads come from a generated `shell.js` that exports them as live
   bindings: they must be declared without a value, the bundle may not write them, and the outer
   code may assign them only after the bundle with `x = e;` or `var x = e;` statements, which the

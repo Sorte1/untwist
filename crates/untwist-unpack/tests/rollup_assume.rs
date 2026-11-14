@@ -178,6 +178,35 @@ fn outer_wrappers_that_cannot_be_kept_as_written_are_refused() {
             ),
         ),
         ("an outer let", wrapped("", "let hostValue;\n", &inner, "")),
+        (
+            "outer code that reads a host name",
+            wrapped(
+                "\"use strict\";\n",
+                "var hostValue;\n",
+                &inner,
+                "console.log(typeof module);\n",
+            ),
+        ),
+        (
+            "outer code that reads a wrapper name",
+            wrapped(
+                "\"use strict\";\n",
+                "var hostValue;\n",
+                &inner,
+                "console.log(typeof requireHelper);\n",
+            ),
+        ),
+        (
+            "a function after the bundle that a wrapper reads",
+            wrapped("\"use strict\";\n", "", &inner, "function hostValue() {}\n"),
+        ),
+        (
+            "a quiet value that reads a shadowed undefined",
+            bundle("").replace(
+                "var helper = {};",
+                "var helper = { v: undefined };\nvar undefined = 1;",
+            ),
+        ),
     ];
     for (what, source) in cases {
         let found = ids(&source);
