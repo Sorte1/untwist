@@ -306,15 +306,8 @@ fn mangling_reads_of_a_reserved_base_numbers_every_binding_from_two() {
         let expected: String = (0..READS_OF_A_RESERVED_BASE)
             .map(|index| format!("var {word}{} = {read};\n", index + 2))
             .collect();
-        for extra in [&["--unsafe"][..]] {
-            let args = [&["--rename", "mangle"][..], extra].concat();
-            let out = stdin_output(&source, &args);
-            assert!(out.status.success(), "{word} {extra:?}");
-            assert_eq!(
-                String::from_utf8_lossy(&out.stdout),
-                expected,
-                "{word} {extra:?}"
-            );
-        }
+        let out = stdin_output(&source, &["--rename", "mangle", "--unsafe"]);
+        assert!(out.status.success(), "{word}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), expected, "{word}");
     }
 }
