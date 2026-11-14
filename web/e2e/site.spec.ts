@@ -157,11 +157,11 @@ async function codeBackground(page: Page): Promise<string> {
 test.describe('editor themes in dark mode', () => {
   test.use({ colorScheme: 'dark' });
 
-  test('dark mode defaults to Tokyo Night, and a picked theme applies at once and survives a reload', async ({ page }) => {
+  test('dark mode defaults to GitHub Dark, and a picked theme applies at once and survives a reload', async ({ page }) => {
     await openApp(page);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.locator('html')).toHaveAttribute('data-editor', 'tokyo-night');
-    expect(await codeBackground(page)).toBe('rgb(26, 27, 38)');
+    await expect(page.locator('html')).toHaveAttribute('data-editor', 'github-dark');
+    expect(await codeBackground(page)).toBe('rgb(13, 17, 23)');
     await openSettings(page);
     await page.locator('#editor-theme-dark [data-pick="one-dark"]').click();
     await expect(page.locator('html')).toHaveAttribute('data-editor', 'one-dark');

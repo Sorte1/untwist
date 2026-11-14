@@ -26,7 +26,7 @@ export const EDITOR_THEMES: readonly EditorTheme[] = [
   { id: BUILT_IN, label: 'Untwist', theme: 'light' },
 ];
 
-export const DEFAULT_PICKS: EditorThemePicks = { dark: 'tokyo-night', light: 'github-light' };
+export const DEFAULT_PICKS: EditorThemePicks = { dark: 'github-dark', light: 'github-light' };
 
 export function themesFor(theme: Theme): readonly EditorTheme[] {
   return EDITOR_THEMES.filter((entry) => entry.theme === theme);

@@ -135,11 +135,11 @@ test.describe('the sun and moon button', () => {
 
   test('switches the whole page between the dark and light picks', async ({ page }) => {
     await openApp(page);
-    await expectPalette(page, palette('tokyo-night', 'dark'));
+    await expectPalette(page, palette('github-dark', 'dark'));
     await page.locator('#theme').click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expectPalette(page, palette('github-light', 'light'));
     await page.locator('#theme').click();
-    await expectPalette(page, palette('tokyo-night', 'dark'));
+    await expectPalette(page, palette('github-dark', 'dark'));
   });
 });
