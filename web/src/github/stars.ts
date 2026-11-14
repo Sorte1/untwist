@@ -3,28 +3,39 @@ import { browserStorage, type KeyValue } from '../recent/storage';
 export const REPO_API = 'https://api.github.com/repos/Sorte1/untwist';
 export const STARS_KEY = 'untwist.githubStars';
 export const STARS_TTL_MS = 6 * 60 * 60 * 1000;
+export const RETRY_AFTER_MS = 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 8000;
 const COMPACT_FROM = 1000;
 
 interface CachedStars {
-  readonly count: number;
+  readonly count: number | null;
   readonly at: number;
 }
+
+export type Cached = { readonly kind: 'count'; readonly count: number } | { readonly kind: 'wait' } | { readonly kind: 'none' };
+
+const NONE: Cached = { kind: 'none' };
 
 function isCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
-export function cachedStars(raw: string | null, now: number): number | null {
+export function cachedStars(raw: string | null, now: number): Cached {
   if (raw === null) {
-    return null;
+    return NONE;
   }
   try {
     const value = JSON.parse(raw) as Partial<CachedStars> | null;
-    const fresh = isCount(value?.count) && typeof value?.at === 'number' && now >= value.at && now - value.at < STARS_TTL_MS;
-    return fresh ? (value.count as number) : null;
+    const at = value?.at;
+    if (typeof at !== 'number' || now < at) {
+      return NONE;
+    }
+    if (isCount(value?.count)) {
+      return now - at < STARS_TTL_MS ? { kind: 'count', count: value.count } : NONE;
+    }
+    return value?.count === null && now - at < RETRY_AFTER_MS ? { kind: 'wait' } : NONE;
   } catch {
-    return null;
+    return NONE;
   }
 }
 
@@ -49,15 +60,15 @@ export async function fetchStars(fetcher: typeof fetch = fetch): Promise<number 
   }
 }
 
-function readCache(store: KeyValue | null, now: number): number | null {
+function readCache(store: KeyValue | null, now: number): Cached {
   try {
     return cachedStars(store?.getItem(STARS_KEY) ?? null, now);
   } catch {
-    return null;
+    return NONE;
   }
 }
 
-function writeCache(store: KeyValue | null, count: number, now: number): void {
+function writeCache(store: KeyValue | null, count: number | null, now: number): void {
   try {
     store?.setItem(STARS_KEY, JSON.stringify({ count, at: now }));
   } catch {
@@ -75,16 +86,15 @@ function paint(link: HTMLElement, badge: HTMLElement, count: number): void {
 
 export async function showStars(link: HTMLElement, badge: HTMLElement, store: KeyValue | null = browserStorage(), fetcher: typeof fetch = fetch): Promise<void> {
   const cached = readCache(store, Date.now());
-  if (cached !== null) {
-    paint(link, badge, cached);
-    return;
+  if (cached.kind === 'count') {
+    paint(link, badge, cached.count);
   }
-  if (!navigator.onLine) {
+  if (cached.kind !== 'none' || !navigator.onLine) {
     return;
   }
   const count = await fetchStars(fetcher);
+  writeCache(store, count, Date.now());
   if (count !== null) {
-    writeCache(store, count, Date.now());
     paint(link, badge, count);
   }
 }

@@ -119,17 +119,20 @@ test('the star count is cached, so a reload asks the API nothing', async ({ page
   expect(asked).toBe(1);
 });
 
-test('a rate-limited API leaves the link without a count', async ({ page, context, pageErrors }) => {
-  let asked = false;
+test('a rate-limited API leaves the link without a count and is not asked again on reload', async ({ page, context, pageErrors }) => {
+  let asked = 0;
   await context.route(GITHUB_API, (route) => {
-    asked = true;
+    asked += 1;
     return route.fulfill({ status: 403, json: { message: 'API rate limit exceeded' } });
   });
   await openApp(page);
-  await expect.poll(() => asked).toBe(true);
-  await page.evaluate(() => new Promise((done) => setTimeout(done, 200)));
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('untwist.githubStars'))).toMatch(/"count":null/);
   await expect(page.locator('#github-stars')).toBeHidden();
   await expect(page.locator('#github-link')).toHaveAttribute('aria-label', 'untwist on GitHub');
+  await page.reload();
+  await expect(page.locator('#run')).toBeEnabled({ timeout: 30_000 });
+  await page.evaluate(() => new Promise((done) => setTimeout(done, 1500)));
+  expect(asked).toBe(1);
   pageErrors.splice(0, pageErrors.length, ...pageErrors.filter((error) => !/403|Failed to load resource/.test(error)));
 });
 
