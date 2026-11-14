@@ -1,5 +1,7 @@
 pub mod annotate;
 pub mod cache;
+mod guard;
+mod inlined;
 pub mod hash;
 pub mod pass;
 pub mod rename;
@@ -110,6 +112,17 @@ enum Slot {
     Conflict,
 }
 
+fn name_key(name: &str) -> String {
+    name.chars()
+        .filter(|c| *c != '_' && *c != '$')
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn same_name(left: &str, right: &str) -> bool {
+    left == right || name_key(left) == name_key(right)
+}
+
 impl Slot {
     fn merge(&mut self, name: Option<&str>) {
         let Some(name) = name else {
@@ -117,7 +130,7 @@ impl Slot {
         };
         match self {
             Slot::Unknown => *self = Slot::Name(name.to_string()),
-            Slot::Name(existing) if existing != name => *self = Slot::Conflict,
+            Slot::Name(existing) if !same_name(existing, name) => *self = Slot::Conflict,
             _ => {}
         }
     }
@@ -402,6 +415,7 @@ fn probes(
         .enumerate()
         .filter(|(_, unit)| table.has_loose(table::loose_key(unit.loose_key(&shaped.prefix))))
         .map(|(unit_index, unit)| (unit_index, exact_shape(unit, scoping)))
+        .chain(inlined::expanded_probes(table, units, shaped, scoping))
         .collect()
 }
 
@@ -671,6 +685,7 @@ fn match_shaped(table: &Table, shaped: &shape::Shaped<'_, '_>, scoping: &Scoping
         true => first,
         false => candidates(table, &probes, Some(&windows)),
     };
+    let found = inlined::settle(found, &shaped.units);
     let (accepted, offers) = accept(&shaped.units, &found);
     let mut conflicts: Vec<(SymbolId, Vec<String>)> = offers
         .names
@@ -738,5 +753,6 @@ pub fn unit_records(program: &Program<'_>, scoping: &Scoping) -> Vec<UnitRecord>
                 outer: shape.outer.iter().map(name).collect(),
             }
         })
+        .chain(inlined::expanded_records(&shaped, scoping))
         .collect()
 }

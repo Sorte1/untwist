@@ -82,6 +82,9 @@ fn carried_by_expression(expr: &Expression<'_>, out: &mut Vec<Span>) {
             }
         }
         Expression::CallExpression(call) => {
+            if let Some(span) = function_span(&call.callee) {
+                out.push(span);
+            }
             for argument in &call.arguments {
                 if let Some(argument) = argument.as_expression() {
                     carried_by_argument(argument, out);
