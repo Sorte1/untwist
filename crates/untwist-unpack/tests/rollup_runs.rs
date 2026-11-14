@@ -9,6 +9,7 @@ const ASSUMED: UnpackOptions = UnpackOptions {
     conservative: false,
     trust_free_loader: false,
     trust_legacy_reads: false,
+    trust_builtins: false,
 };
 
 const VECTOR: &str = "class Vector {

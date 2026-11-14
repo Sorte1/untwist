@@ -10,6 +10,7 @@ use untwist_core::semantic::build_scoping;
 
 use crate::matcher::literal_id;
 use crate::model::Bundle;
+use crate::runtime::synthetic_statements;
 use crate::scan::is_free;
 use crate::webpack::canon::canonical_statement;
 use crate::webpack::gate::module_require;
@@ -107,6 +108,19 @@ pub fn polyfill_id<'k>(
 
 pub const MODULE_NAME: &str = "module";
 
+const RECORD: &str = "({ get l() { return module.loaded; }, get exports() { return module.exports; }, set exports(value) { module.exports = value; } });";
+
+pub fn webpack_record<'a>(alloc: &'a Allocator) -> Option<Expression<'a>> {
+    let mut statements = synthetic_statements(alloc, RECORD.to_string())?;
+    let Some(Statement::ExpressionStatement(statement)) = statements.pop() else {
+        return None;
+    };
+    match statement.unbox().expression {
+        Expression::ParenthesizedExpression(inner) => Some(inner.unbox().expression),
+        expression => Some(expression),
+    }
+}
+
 pub fn bundle_buildins(bundle: &Bundle<'_>) -> FxHashMap<String, Buildin> {
     polyfill_ids(bundle.modules.iter().filter_map(|(id, module)| {
         let program = module.program();
@@ -122,6 +136,7 @@ struct DropCalls<'a, 'r> {
     scoping: Scoping,
     require: &'r str,
     ids: &'r FxHashMap<String, Buildin>,
+    record: Option<Option<Expression<'a>>>,
     dropped: usize,
 }
 
@@ -142,6 +157,14 @@ impl DropCalls<'_, '_> {
 
 impl<'a> VisitMut<'a> for DropCalls<'a, '_> {
     fn visit_expression(&mut self, it: &mut Expression<'a>) {
+        if self.dropped_call(it) && self.record.is_some() {
+            let record = self.record.as_mut().and_then(Option::take);
+            if let (Expression::CallExpression(call), Some(record)) = (it, record) {
+                call.arguments[0] = Argument::from(record);
+                self.dropped += 1;
+            }
+            return;
+        }
         if self.dropped_call(it) {
             *it = Expression::new_identifier(
                 SPAN,
@@ -170,12 +193,14 @@ pub fn drop_polyfill_calls<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) ->
         let Some(require) = require else {
             continue;
         };
+        let record = (!module.node_module).then(|| webpack_record(alloc));
         let program = module.program_mut();
         let mut drop = DropCalls {
             builder: AstBuilder::new(alloc),
             scoping: build_scoping(program).scoping,
             require: &require,
             ids: &ids,
+            record,
             dropped: 0,
         };
         drop.visit_program(program);
