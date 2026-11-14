@@ -66,3 +66,16 @@ decoder-name-and-text|var a=["log","beta","alpha"],d=(function(n){for(var e=2;--
 decoder-assigned-in-sequence|var a=["log","beta","alpha"],d;d=(function(n){for(var e=2;--e;)n.push(n.shift())}(a),function(t,e){return a[t=+t]});console[d("0x2")](d("0x0"),d("0x1"),JSON.stringify(d.name));
 decoder-arrow-in-lexical-sequence|const a=["log","beta","alpha"],d=(console.log("rotate first"),function(n){for(var e=2;--e;)n.push(n.shift())}(a),(t,e)=>a[t=+t]);console[d("0x2")](d("0x0"),d("0x1"),JSON.stringify(d.name));
 decoder-reads-its-own-name|var a=["log","beta","alpha"],d=(function(n){for(var e=2;--e;)n.push(n.shift())}(a),function(t,e){return a[t=+t]+JSON.stringify(d.name)+(e||"")});console.log(d("0x0"),d("0x1",d.toString().length>0));
+code-text-rr2-c2|var g = (console.log("head"), function () {}); eval("var E = eval"); var s = "JSON.stringify(g.name)"; console.log(E(s));
+code-text-rr2-c5|var g = (console.log("head"), function () {}); var eval; var s = "JSON.stringify(g.name)"; console.log(eval(s));
+code-text-rr2-c6|var g = (console.log("head"), function () {}); var s = "JSON.stringify(g.name)"; console.log(Function("s", "return eval(s)")(s));
+code-text-rr2-c7|var g = (console.log("head"), function () {}); var s = "JSON.stringify(g.name)"; with (globalThis) { console.log(eval(s)); }
+code-text-rr2-c8|var g = (console.log("head"), function () {}); function show(s) { console.log(eval(s)); } show("JSON.stringify(g.name)");
+code-text-rr2-c9|var g = (console.log("head"), function () {}); var s = "return JSON.stringify(g.name)"; console.log(Function`return eval`()("JSON.stringify(g.name)"));
+code-text-rr2-d1|var g = (console.log("head"), function () {}); with (g) { console.log(JSON.stringify(name)); }
+code-text-rr2-d2|var g = (console.log("head"), function () {}); console.log(JSON.stringify(g?.name));
+code-text-rr2-d3|var g = (console.log("head"), function () {}); console.log(JSON.stringify(g[`name`]));
+code-text-rr2-d6|var g = (console.log("head"), function () {}); console.log(String(g).length, JSON.stringify(Object.keys(g)));
+code-text-rr2-d7|var g = (console.log("head"), function () {}); console.log(JSON.stringify(g.bind().name));
+code-text-rr2-d8|var g = (console.log("head"), function () {}); const { ["name"]: n } = g; console.log(JSON.stringify(n));
+code-text-rr2-d9|var g = (console.log("head"), function () {}); function show(f) { with (f) { return name; } } console.log(JSON.stringify(show(g)));
