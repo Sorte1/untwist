@@ -107,3 +107,52 @@ fn a_strict_script_keeps_a_block_function_in_its_block() {
         .root_unresolved_references()
         .contains_key("atob"));
 }
+
+fn reprinted(source: &str) -> String {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    untwist_core::print::pretty_codegen(&parsed.program)
+}
+
+#[test]
+fn a_parenthesised_name_keeps_an_anonymous_function_unnamed() {
+    for (source, kept) in [
+        ("(f) = function () {};", "f = (0, function() {});"),
+        ("((C)) = class {};", "C = (0, class {});"),
+        ("( f /* c */ ) /* d */ ??= () => 1;", "f ??= (0, () => 1);"),
+        (
+            "[(a) = function () {}] = [];",
+            "[a = (0, function() {})] = [];",
+        ),
+        ("({ x: (b) = class {} } = {});", "b = (0, class {})"),
+        (
+            "g((f) = function () {}, (h) == 1);",
+            "f = (0, function() {})",
+        ),
+    ] {
+        assert!(
+            reprinted(source).contains(kept),
+            "{source}: {}",
+            reprinted(source)
+        );
+    }
+}
+
+#[test]
+fn a_bare_or_compound_target_is_left_as_written() {
+    for (source, kept) in [
+        ("f = function () {};", "f = function() {};"),
+        ("(f) += function () {};", "f += function() {};"),
+        ("(f) = function named() {};", "f = function named() {};"),
+        ("(o.f) = function () {};", "o.f = function() {};"),
+        ("if (a) f = function () {};", "f = function() {};"),
+        ("(f = function () {});", "f = function() {};"),
+    ] {
+        assert!(
+            reprinted(source).contains(kept),
+            "{source}: {}",
+            reprinted(source)
+        );
+    }
+}
