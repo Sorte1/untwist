@@ -74,6 +74,19 @@ pub(crate) fn parse_js<'a>(
     parse(alloc, source, module).map(|program| (program, module))
 }
 
+pub(crate) fn parse_any<'a>(
+    alloc: &'a Allocator,
+    source: &'a str,
+    typescript: bool,
+) -> Option<Program<'a>> {
+    if !typescript {
+        return parse_js(alloc, source).map(|(program, _)| program);
+    }
+    let script = SourceType::tsx().with_script(true).with_module(false);
+    parse_allowing(alloc, source, script, true)
+        .or_else(|| parse_allowing(alloc, source, SourceType::tsx().with_module(true), true))
+}
+
 pub(crate) fn typed_source_type(plain: SourceType, mode: Mode, jsx: bool) -> SourceType {
     let module = plain.is_module();
     let base = match (mode, jsx) {

@@ -115,7 +115,7 @@ pub fn typed_path(path: &str, jsx: bool) -> String {
     }
 }
 
-fn normalized(dir: &str, specifier: &str) -> Option<String> {
+fn normalized_path(dir: &str, specifier: &str) -> Option<String> {
     let mut parts: Vec<&str> = dir.split('/').filter(|part| !part.is_empty()).collect();
     for part in specifier.split('/') {
         match part {
@@ -148,15 +148,14 @@ fn relative(dir: &str, to: &str) -> String {
 
 const RESOLVED_SUFFIXES: [&str; 6] = ["", ".js", ".mjs", ".cjs", ".jsx", "/index.js"];
 
+type Found = Vec<(u32, u32, Option<String>)>;
+
 fn retargeted(
     code: &str,
+    found: &Found,
     dir: &str,
     renames: &std::collections::HashMap<String, String>,
-) -> Option<String> {
-    let found = crate::pipeline::specifier_list(code)?;
-    if found.iter().any(|(_, _, value)| value.is_none()) {
-        return None;
-    }
+) -> String {
     let mut edits: Vec<(usize, usize, String)> = Vec::new();
     for (start, end, value) in found {
         let Some(value) = value else {
@@ -165,18 +164,22 @@ fn retargeted(
         if !(value.starts_with("./") || value.starts_with("../")) {
             continue;
         }
-        let Some(base) = normalized(dir, &value) else {
+        let Some(base) = normalized_path(dir, value) else {
             continue;
         };
         let target = RESOLVED_SUFFIXES
             .iter()
             .find_map(|suffix| renames.get(&format!("{base}{suffix}")));
         if let Some(target) = target {
-            let quote = code.as_bytes().get(start as usize).copied().unwrap_or(b'"') as char;
+            let quote = code
+                .as_bytes()
+                .get(*start as usize)
+                .copied()
+                .unwrap_or(b'"') as char;
             let text = relative(dir, target);
             edits.push((
-                start as usize,
-                end as usize,
+                *start as usize,
+                *end as usize,
                 format!("{quote}{text}{quote}"),
             ));
         }
@@ -186,52 +189,124 @@ fn retargeted(
     for (start, end, text) in edits {
         out.replace_range(start..end, &text);
     }
-    Some(out)
+    out
 }
 
-pub(crate) fn rename_modules(
+pub(crate) struct Untyped {
+    pub codes: Vec<String>,
+    pub modules: Vec<String>,
+}
+
+fn restore_modules(output: &mut crate::Output, report: &mut TypesReport, untyped: &Untyped) {
+    if let Some(bundle) = output.bundle.as_mut() {
+        for (index, module) in bundle.modules.iter_mut().enumerate() {
+            if report.ts_modules.get(index).copied().unwrap_or(false) {
+                if let Some(text) = untyped.modules.get(index) {
+                    module.code = text.clone();
+                }
+                report.ts_modules[index] = false;
+            }
+        }
+    }
+}
+
+fn restore_codes(output: &mut crate::Output, report: &mut TypesReport, untyped: &Untyped) {
+    for (index, code) in output.codes.iter_mut().enumerate() {
+        if report.ts_outputs.get(index).copied().unwrap_or(false) {
+            if let Some(text) = untyped.codes.get(index) {
+                *code = text.clone();
+            }
+            report.ts_outputs[index] = false;
+        }
+    }
+}
+
+pub(crate) fn settle_names(
     output: &mut crate::Output,
-    renamed: &[(usize, String)],
+    report: &mut TypesReport,
+    untyped: &Untyped,
     notes: &mut Vec<untwist_core::pass::Note>,
 ) {
+    if !report.typescript {
+        return;
+    }
+    if output.single_file {
+        let whole = report
+            .ts_outputs
+            .iter()
+            .chain(&report.ts_modules)
+            .all(|ts| *ts);
+        if !whole {
+            restore_modules(output, report, untyped);
+            restore_codes(output, report, untyped);
+        }
+        return;
+    }
     let Some(bundle) = output.bundle.as_mut() else {
         return;
     };
-    if renamed.is_empty() {
-        return;
+    let mut found: Vec<Option<Found>> = Vec::with_capacity(bundle.modules.len());
+    for (index, module) in bundle.modules.iter_mut().enumerate() {
+        let typescript = report.ts_modules.get(index).copied().unwrap_or(false);
+        let read = crate::pipeline::specifier_list(&module.code, typescript);
+        if read.is_none() && typescript {
+            if let Some(text) = untyped.modules.get(index) {
+                module.code = text.clone();
+            }
+            report.ts_modules[index] = false;
+            found.push(crate::pipeline::specifier_list(&module.code, false));
+            continue;
+        }
+        found.push(read);
     }
-    let renames: std::collections::HashMap<String, String> = renamed
-        .iter()
-        .filter_map(|(index, path)| {
-            bundle.modules.get(*index).map(|module| {
-                (
-                    normalized("", &module.path).unwrap_or_default(),
-                    path.clone(),
-                )
-            })
-        })
-        .collect();
-    let codes: Option<Vec<String>> = output
+    let code_found: Vec<Option<Found>> = output
         .codes
         .iter()
-        .map(|code| retargeted(code, "", &renames))
+        .enumerate()
+        .map(|(index, code)| {
+            let typescript = report.ts_outputs.get(index).copied().unwrap_or(false);
+            crate::pipeline::specifier_list(code, typescript)
+        })
         .collect();
-    let modules: Option<Vec<String>> = bundle
+    let computed = found.iter().chain(&code_found).any(|read| {
+        read.as_ref()
+            .is_none_or(|list| list.iter().any(|(_, _, value)| value.is_none()))
+    });
+    if computed {
+        if report.ts_modules.iter().any(|ts| *ts) {
+            crate::pipeline::kept_names_note(notes);
+        }
+        restore_modules(output, report, untyped);
+        return;
+    }
+    let renames: std::collections::HashMap<String, String> = bundle
         .modules
         .iter()
-        .map(|module| retargeted(&module.code, directory_of(&module.path), &renames))
+        .enumerate()
+        .filter(|(index, _)| report.ts_modules.get(*index).copied().unwrap_or(false))
+        .map(|(index, module)| {
+            let jsx = report.jsx_modules.get(index).copied().unwrap_or(false);
+            (
+                normalized_path("", &module.path).unwrap_or_default(),
+                typed_path(&module.path, jsx),
+            )
+        })
         .collect();
-    let (Some(codes), Some(modules)) = (codes, modules) else {
-        crate::pipeline::kept_names_note(notes);
+    if renames.is_empty() {
         return;
-    };
-    output.codes = codes;
-    for (module, code) in bundle.modules.iter_mut().zip(modules) {
-        module.code = code;
     }
-    for (index, path) in renamed {
-        if let Some(module) = bundle.modules.get_mut(*index) {
-            module.path = path.clone();
+    for (code, read) in output.codes.iter_mut().zip(&code_found) {
+        if let Some(read) = read {
+            *code = retargeted(code, read, "", &renames);
+        }
+    }
+    for (index, (module, read)) in bundle.modules.iter_mut().zip(&found).enumerate() {
+        if let Some(read) = read {
+            module.code = retargeted(&module.code, read, directory_of(&module.path), &renames);
+        }
+        if report.ts_modules.get(index).copied().unwrap_or(false) {
+            let jsx = report.jsx_modules.get(index).copied().unwrap_or(false);
+            module.path = typed_path(&module.path, jsx);
         }
     }
 }

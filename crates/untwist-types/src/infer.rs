@@ -21,11 +21,16 @@ pub struct Env<'f, 'a> {
 }
 
 pub fn global_name<'a>(cx: &Ctx<'_, 'a>, ident: &IdentifierReference<'a>) -> Option<&'a str> {
-    let reference = ident.reference_id.get()?;
-    match cx.scoping.get_reference(reference).symbol_id() {
-        Some(_) => None,
-        None => Some(ident.name.as_str()),
+    let reference = cx.scoping.get_reference(ident.reference_id.get()?);
+    if reference.symbol_id().is_some() {
+        return None;
     }
+    let injected = !cx.injecting.is_empty()
+        && cx
+            .scoping
+            .scope_ancestors(reference.scope_id())
+            .any(|scope| cx.injecting.contains(&scope));
+    (!injected).then(|| ident.name.as_str())
 }
 
 pub fn resolved(cx: &Ctx<'_, '_>, ident: &IdentifierReference<'_>) -> Option<SymbolId> {

@@ -8,7 +8,21 @@ use untwist_testing::node::run;
 use untwist_testing::node_rows::node_or_skip;
 
 const NODE_PROBES: &[&str] = &[
-    "a1.js", "a2.js", "a4.js", "a5.js", "a6.js", "b1.js", "g18.js", "g19.js", "g20.js", "g21.js",
+    "a1.js",
+    "a2.js",
+    "a4.js",
+    "a5.js",
+    "a6.js",
+    "b1.js",
+    "g18.js",
+    "g19.js",
+    "g20.js",
+    "g21.js",
+    "a40r/ev1.js",
+    "a40r/ev2.js",
+    "a40r/ev8.js",
+    "a40r/fi1.js",
+    "a40r/t8b.js",
 ];
 
 fn probe(name: &str) -> String {
@@ -47,11 +61,12 @@ fn every_review_probe_holds_its_types_when_node_runs_it() {
     let mut failures = Vec::new();
     for name in NODE_PROBES {
         let source = probe(name);
-        let expected = node_run(&node, dir.path(), &format!("plain-{name}"), &source);
+        let flat = name.replace('/', "-");
+        let expected = node_run(&node, dir.path(), &format!("plain-{flat}"), &source);
         let direct = untwist_types::instrumented(&source).unwrap();
         let piped = Pipeline::new(checked()).run(&source).code().to_string();
         for (lane, code) in [("direct", direct), ("pipeline", piped)] {
-            let observed = node_run(&node, dir.path(), &format!("{lane}-{name}"), &code);
+            let observed = node_run(&node, dir.path(), &format!("{lane}-{flat}"), &code);
             if observed.stderr.contains("__UT_FAIL") {
                 failures.push(format!("{name} {lane}: a type did not hold\n{code}"));
             }
@@ -132,7 +147,20 @@ fn a_typescript_module_tree_runs_where_the_javascript_one_does() {
             .unwrap_or_else(|| panic!("no index.{ext} in {files:?}"))
     };
     let plain_entry = entry(&plain_files, "js");
-    let typed_entry = entry(&typed_files, "ts");
+    let typed_entry = typed_files
+        .iter()
+        .find(|file| {
+            file.file_name()
+                .is_some_and(|f| f == "index.ts" || f == "index.js")
+        })
+        .cloned()
+        .unwrap_or_else(|| panic!("no index in {typed_files:?}"));
+    assert!(
+        typed_files
+            .iter()
+            .any(|file| file.extension().is_some_and(|ext| ext == "ts")),
+        "{typed_files:?}"
+    );
     let expected = run(&node, &plain_entry).unwrap().expect("node finished");
     let observed = Command::new(&node)
         .arg("--experimental-strip-types")
@@ -147,4 +175,88 @@ fn a_typescript_module_tree_runs_where_the_javascript_one_does() {
         String::from_utf8_lossy(&observed.stderr)
     );
     drop((plain_dir, typed_dir));
+}
+
+fn a40r(name: &str) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../untwist-types/tests/probes/a40r")
+        .join(name);
+    std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("{}: {err}", path.display()))
+}
+
+fn checks_as_javascript(node: &Path, files: &[PathBuf]) -> Vec<String> {
+    files
+        .iter()
+        .filter(|file| file.extension().is_some_and(|ext| ext == "js"))
+        .filter_map(
+            |file| match untwist_testing::node::syntax_check(node, file).unwrap() {
+                Ok(()) => None,
+                Err(message) => Some(format!("{}: {message}", file.display())),
+            },
+        )
+        .collect()
+}
+
+#[test]
+fn a_typed_module_tree_never_holds_typescript_in_a_js_file() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let mut failures = Vec::new();
+    for name in ["wp8.js", "wp11.js", "wp12.js"] {
+        let source = a40r(name);
+        let expected = node_run(&node, tempfile::tempdir().unwrap().path(), name, &source);
+        let output = Pipeline::new(typed(TypesMode::Ts)).run(&source);
+        let (dir, files) = written(&output);
+        failures.extend(checks_as_javascript(&node, &files));
+        let entry = files
+            .iter()
+            .find(|file| {
+                file.file_name()
+                    .is_some_and(|f| f == "index.js" || f == "index.ts")
+            })
+            .cloned();
+        if let Some(entry) = entry {
+            let observed = Command::new(&node)
+                .arg("--experimental-strip-types")
+                .arg("--no-warnings")
+                .arg(&entry)
+                .output()
+                .unwrap();
+            if String::from_utf8_lossy(&observed.stdout) != expected.stdout {
+                failures.push(format!(
+                    "{name}: printed {:?}, the bundle printed {:?}; {}",
+                    String::from_utf8_lossy(&observed.stdout),
+                    expected.stdout,
+                    String::from_utf8_lossy(&observed.stderr)
+                ));
+            }
+        }
+        drop(dir);
+    }
+    let single = Pipeline::new(Options {
+        single_file: true,
+        ..typed(TypesMode::Ts)
+    })
+    .run(&a40r("wp16.js"));
+    let (dir, files) = written(&single);
+    failures.extend(checks_as_javascript(&node, &files));
+    drop(dir);
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+#[test]
+fn an_exported_function_takes_its_types_from_no_caller_inside_the_module() {
+    let (a, b) = (a40r("ex-a.mjs"), a40r("ex-b.mjs"));
+    let output = Pipeline::new(typed(TypesMode::Ts)).run_many(&[&a, &b]);
+    for code in &output.codes {
+        assert!(!code.contains("c: 3") && !code.contains("d: 4"), "{code}");
+    }
+}
+
+#[test]
+fn a_caller_read_in_another_input_closes_nothing_in_the_pipeline() {
+    let (helper, user) = (a40r("fr-b.js"), a40r("fr-a.js"));
+    let output = Pipeline::new(typed(TypesMode::Ts)).run_many(&[&helper, &user]);
+    assert!(!output.codes[1].contains("a: 1"), "{}", output.codes[1]);
 }

@@ -59,12 +59,25 @@ struct Typed {
 }
 
 #[cfg(feature = "types")]
-fn realm_of(texts: &[&str]) -> Realm {
-    (texts.len() > 1).then(|| untwist_types::realm(texts))
+fn realm_of(output: &Output) -> Realm {
+    let mut texts: Vec<(&str, &str)> = output
+        .codes
+        .iter()
+        .map(|code| (code.as_str(), ""))
+        .collect();
+    let mut known = Vec::new();
+    if let Some(bundle) = &output.bundle {
+        for module in &bundle.modules {
+            let dir = module.path.rfind('/').map_or("", |at| &module.path[..at]);
+            texts.push((module.code.as_str(), dir));
+            known.push(untwist_types::normalized("", &module.path).unwrap_or_default());
+        }
+    }
+    (texts.len() > 1).then(|| untwist_types::realm_in(&texts, &known))
 }
 
 #[cfg(not(feature = "types"))]
-fn realm_of(_texts: &[&str]) -> Realm {
+fn realm_of(_output: &Output) -> Realm {
     None
 }
 
@@ -153,28 +166,32 @@ impl Pipeline {
         let started = Instant::now();
         let assert = self.options.hooks().types_assert;
         let mut report = TypesReport::new(mode);
-        let realm = {
-            let mut texts: Vec<&str> = output.codes.iter().map(String::as_str).collect();
-            if let Some(bundle) = &output.bundle {
-                texts.extend(bundle.modules.iter().map(|module| module.code.as_str()));
-            }
-            realm_of(&texts)
-        };
+        let realm = realm_of(output);
         let how = (mode, assert, realm);
+        let untyped = crate::types::Untyped {
+            codes: output.codes.clone(),
+            modules: output
+                .bundle
+                .as_ref()
+                .map(|bundle| {
+                    bundle
+                        .modules
+                        .iter()
+                        .map(|module| module.code.clone())
+                        .collect()
+                })
+                .unwrap_or_default(),
+        };
         let notes = &mut output.notes;
         for code in &mut output.codes {
             let done = typed(code, how, &mut report, notes);
             report.jsx_outputs.push(done.jsx);
             report.ts_outputs.push(done.typescript);
         }
-        let mut renamed = Vec::new();
         if let Some(bundle) = output.bundle.as_mut() {
-            for (index, module) in bundle.modules.iter_mut().enumerate() {
+            for module in bundle.modules.iter_mut() {
                 let done = typed(&mut module.code, how, &mut report, notes);
                 report.ts_modules.push(done.typescript);
-                if done.typescript && !self.options.single_file {
-                    renamed.push((index, crate::types::typed_path(&module.path, done.jsx)));
-                }
                 let declares = mode == TypesMode::Jsdoc && !assert;
                 report.declarations.push(
                     declares
@@ -185,7 +202,7 @@ impl Pipeline {
             }
         }
         let mut held = std::mem::take(&mut output.notes);
-        crate::types::rename_modules(output, &renamed, &mut held);
+        crate::types::settle_names(output, &mut report, &untyped, &mut held);
         output.notes = held;
         if report.near_eval > 0 {
             let message = format!("{} positions skipped near a direct eval", report.near_eval);
@@ -199,8 +216,11 @@ impl Pipeline {
 }
 
 #[cfg(feature = "types")]
-pub(crate) fn specifier_list(code: &str) -> Option<Vec<(u32, u32, Option<String>)>> {
-    untwist_types::specifiers(code).map(|found| {
+pub(crate) fn specifier_list(
+    code: &str,
+    typescript: bool,
+) -> Option<Vec<(u32, u32, Option<String>)>> {
+    untwist_types::specifiers(code, typescript).map(|found| {
         found
             .into_iter()
             .map(|specifier| (specifier.start, specifier.end, specifier.value))
@@ -209,7 +229,10 @@ pub(crate) fn specifier_list(code: &str) -> Option<Vec<(u32, u32, Option<String>
 }
 
 #[cfg(not(feature = "types"))]
-pub(crate) fn specifier_list(_code: &str) -> Option<Vec<(u32, u32, Option<String>)>> {
+pub(crate) fn specifier_list(
+    _code: &str,
+    _typescript: bool,
+) -> Option<Vec<(u32, u32, Option<String>)>> {
     None
 }
 

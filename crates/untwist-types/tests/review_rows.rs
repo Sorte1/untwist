@@ -121,20 +121,32 @@ fn a_file_typescript_reads_differently_is_refused_even_without_annotations() {
 
 #[test]
 fn a_patch_in_another_input_turns_the_built_in_rows_off() {
-    let (patch, user) = (probe("m1.js"), probe("m2.js"));
-    let alone = annotate(&user, Mode::Ts).code;
+    let patch = probe("m1.js");
+    let user = "(function () {\n  const r = Math.random();\n  const t = String(r).trim();\n  console.log(typeof r, typeof t);\n})();\n";
+    let alone = annotate(user, Mode::Ts).code;
     assert!(alone.contains("r: number"), "{alone}");
-    let shared = realm(&[&patch, &user]);
+    let shared = realm(&[&patch, user]);
     assert!(!shared.builtins);
-    let together = annotate_in(&user, Mode::Ts, Some(shared)).code;
+    let together = annotate_in(user, Mode::Ts, Some(shared)).code;
     assert!(!together.contains("r: number"), "{together}");
     assert!(!together.contains("t: string"), "{together}");
+    let document = annotate(&probe("m2.js"), Mode::Ts).code;
+    assert!(!document.contains("r: number"), "{document}");
 }
 
 #[test]
-fn a_local_dynamic_import_keeps_the_built_in_rows() {
-    let source = "(function () {\n  import(\"./chunk.js\").then(function () {\n    const n = Math.floor(2.5);\n    console.log(n);\n  });\n})();\n";
-    assert!(annotate(source, Mode::Ts).code.contains("n: number"));
+fn a_relative_import_keeps_the_built_in_rows_only_when_the_run_holds_it() {
+    let source = "import(\"./chunk.js\").then(function () {\n  const n = Math.floor(2.5);\n  console.log(n);\n});\n";
+    let chunk = "console.log(1);\n";
+    assert!(!annotate(source, Mode::Ts).code.contains("n: number"));
+    let held = untwist_types::realm_in(&[(source, ""), (chunk, "")], &["chunk.js".to_string()]);
+    assert!(annotate_in(source, Mode::Ts, Some(held))
+        .code
+        .contains("n: number"));
+    let other = untwist_types::realm_in(&[(source, ""), (chunk, "")], &["other.js".to_string()]);
+    assert!(!annotate_in(source, Mode::Ts, Some(other))
+        .code
+        .contains("n: number"));
 }
 
 #[test]

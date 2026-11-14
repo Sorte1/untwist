@@ -357,32 +357,47 @@ ever `any` or `unknown`.
 
 What it proves today: literals and the closed set of values a local binding is written with, the
 results of operators, function returns, and the parameters of a function whose every call is
-visible (never one that reads `arguments`, is called with a spread, or is reached any other way).
-Results of built-ins such as `Math.floor`, `parseInt` or `"".slice` count only when the program
-leaves those built-ins alone. A file with a direct `eval` or a `with` statement gets no types, and
-neither do script-level `var`s, exported bindings, objects, arrays, classes or the DOM.
+visible. A function is never treated that way when it is exported, reads `arguments`, is called
+with a spread, or is reached any other way, and no function at all when any input or module of
+the run can read a function's frame (`.caller`, `.arguments`, stack-trace functions, or code text
+that could). A direct `eval` (also through a local binding named `eval`) leaves untyped every
+binding it can reach, and in sloppy code it also turns off the types that rest on global names it
+could shadow (`undefined`, `NaN`, `Infinity` and the built-ins); a constant-string `eval` that
+only reads leaves out only the names it reads. A `with` statement leaves the file untyped.
+Script-level `var`s, exported bindings, objects, arrays, classes and the DOM get no types.
 
-A type that TypeScript would infer the same way anyway is left out. A proven type is also left
-out when writing it would give the TypeScript checker a new error (for example a literal type
-compared with a value outside it, which the checker narrows away), so the annotated file checks
-no worse than the same file without annotations under `strict` with `noImplicitAny` off. Every
-annotated file is parsed again, stripped of its annotations and compared with the untyped
-output; if they differ the file is written without types. `--report` counts the annotated,
-redundant and refused positions. The flag cannot be combined with `--source-map`. A file is written as `.ts` only after its
-TypeScript parse was shown to be the same program as its JavaScript parse (`a < b > (c)` is a
-comparison in JavaScript and a generic call in TypeScript); otherwise it keeps its `.js` name. When
-split modules become `.ts`, the `import`, `export … from` and `require` specifiers that name them are
-rewritten to the new names, so the tree runs under node's type stripping and checks with
-`allowImportingTsExtensions`; when a module loads another by a computed name, every file keeps its
-`.js` name. With several inputs or split modules, the built-in results count only when no file
-patches a built-in, and a file that loads code text (`import()` of anything but a relative module,
-`document.write`, script elements) turns them off for all files.
+Results of built-ins such as `Math.floor`, `parseInt` or `"".slice` count only when no input or
+module of the run patches a built-in and every file is shown not to load other code: each global
+it names is on a short list of ones that cannot (`Math`, `JSON`, `Number`, `String`, `Array`,
+`Object`, `console`, `require`, … but not `document`, `window`, `self`, `location`,
+`importScripts`, timers or anything else), every `import`, `export … from`, `import()` and
+`require` names a relative module by a literal, and the file does not use `import.meta`.
+
+Every proven type is written, also when TypeScript would infer it anyway, unless writing it would
+give the TypeScript checker a new error (for example a literal type compared with a value outside
+it, which the checker narrows away), so the annotated file checks no worse than the untyped
+output under `strict` with `noImplicitAny` off. `--report` counts the annotated positions, how
+many of them TypeScript infers anyway, and the refused ones. The flag cannot be combined with
+`--source-map`.
+
+A file is written as `.ts` only when its TypeScript parse, stripped of the annotations, is the same
+program as its JavaScript parse (`a < b > (c)` is a comparison in JavaScript and a generic call in
+TypeScript) and it uses no name node's type stripping rejects (`await`, `yield` as identifiers);
+otherwise it keeps its `.js` name and is written untyped. CommonJS files (free `require`,
+`module` or `exports`) keep `.js` under `--types ts` and stay untyped; `--types jsdoc` types them.
+When split ES modules become `.ts`, the `import`, `export … from`, `import()` and `require`
+specifiers that name them are rewritten to the new names, so the tree runs under node's type
+stripping and checks with `allowImportingTsExtensions`. When a module loads another by a computed
+name, or uses `require` other than as a call with one literal, or `import.meta`, every file keeps
+its `.js` name and its untyped text. With `--single-file`, the joined file is TypeScript only when
+every part is; otherwise every part is written untyped.
 
 The types run after every other stage, on the final text, so they describe the program untwist
 prints. The checks behind this live in `crates/untwist-types/tests` (one row per hazard), in the
 node run of the fixtures with every annotation turned into a runtime check, and in
-`tools/types-check`, which runs the pinned `tsc` over the fixture outputs with and without
-annotations and fails on any new diagnostic.
+`tools/types-check`, which runs the pinned `tsc` over every fixture output that would be written as
+`.ts` (or annotated in JSDoc) against the untyped output as `.js` under `checkJs`, and fails on any
+new diagnostic.
 
 ## Playground
 

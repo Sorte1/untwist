@@ -125,12 +125,16 @@ fn typed_name(family: &str, label: &str, name: &str, extension: &str) -> String 
     format!("{flat}.{extension}")
 }
 
-fn write_pair(out: &Path, mode: Mode, file: &str, plain: &str, typed: &str) {
+fn write_pair(out: &Path, mode: Mode, (file, plain_file): (&str, &str), plain: &str, typed: &str) {
     let tree = out.join(mode.as_str());
-    for (side, text) in [("annotated", typed), ("plain", plain)] {
+    for (side, name, text) in [
+        ("annotated", file, typed),
+        ("plain", file, plain),
+        ("plain-js", plain_file, plain),
+    ] {
         let dir = tree.join(side);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join(file), text).unwrap();
+        std::fs::write(dir.join(name), text).unwrap();
     }
 }
 
@@ -187,7 +191,11 @@ fn coverage_and_tsc_pairs_over_the_fixture_corpus() {
                     if mode == Mode::Ts {
                         stats.absorb(typed.stats);
                     }
-                    let (Some(out), false) = (&out, typed.code == code) else {
+                    let unchanged = match mode {
+                        Mode::Ts => typed.refused.is_some(),
+                        Mode::Jsdoc => typed.code == code,
+                    };
+                    let (Some(out), false) = (&out, unchanged) else {
                         continue;
                     };
                     let extension = match (mode, typed.jsx) {
@@ -197,7 +205,9 @@ fn coverage_and_tsc_pairs_over_the_fixture_corpus() {
                         (Mode::Jsdoc, false) => "js",
                     };
                     let file = typed_name(family, &label, &name, extension);
-                    write_pair(out, mode, &file, &code, &typed.code);
+                    let plain_extension = if typed.jsx { "jsx" } else { "js" };
+                    let plain_file = typed_name(family, &label, &name, plain_extension);
+                    write_pair(out, mode, (&file, &plain_file), &code, &typed.code);
                 }
             }
         }

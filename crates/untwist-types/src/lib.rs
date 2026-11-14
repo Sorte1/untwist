@@ -17,7 +17,7 @@ use oxc_semantic::SemanticBuilder;
 
 pub use builtins::RELIANCE;
 pub use erase::erases;
-pub use realm::{realm, Realm};
+pub use realm::{normalized, realm, realm_in, Realm};
 pub use specifiers::{specifiers, Specifier};
 pub use stats::{Counts, TypeStats};
 
@@ -52,6 +52,7 @@ pub enum Refusal {
     TypeSyntax,
     Hazard(&'static str),
     Erasure,
+    CommonJs,
 }
 
 impl Refusal {
@@ -61,6 +62,7 @@ impl Refusal {
             Refusal::TypeSyntax => "a file already holds TypeScript syntax, so it was left untyped",
             Refusal::Hazard(_) => "a file has a with statement, which can reach every binding, so it was left untyped",
             Refusal::Erasure => "a file reads differently as TypeScript, so it was left untyped and keeps its .js name",
+            Refusal::CommonJs => "a CommonJS file keeps its .js name, so --types ts leaves it untyped (--types jsdoc types it)",
         }
     }
 }
@@ -133,6 +135,40 @@ fn prepare<'a>(alloc: &'a Allocator, code: &'a str) -> Result<Prepared<'a>, (Ref
     })
 }
 
+const COMMONJS_NAMES: [&str; 3] = ["exports", "require", "module"];
+
+fn is_commonjs(scoping: &oxc_semantic::Scoping) -> bool {
+    scoping
+        .root_unresolved_references()
+        .keys()
+        .any(|name| COMMONJS_NAMES.contains(&name.as_str()))
+}
+
+const STRIPPER_RESERVED: [&str; 2] = ["await", "yield"];
+
+struct Reserved(bool);
+
+impl<'a> oxc_ast_visit::Visit<'a> for Reserved {
+    fn visit_binding_identifier(&mut self, it: &oxc_ast::ast::BindingIdentifier<'a>) {
+        self.0 |= STRIPPER_RESERVED.contains(&it.name.as_str());
+    }
+
+    fn visit_identifier_reference(&mut self, it: &oxc_ast::ast::IdentifierReference<'a>) {
+        self.0 |= STRIPPER_RESERVED.contains(&it.name.as_str());
+    }
+
+    fn visit_label_identifier(&mut self, it: &oxc_ast::ast::LabelIdentifier<'a>) {
+        self.0 |= STRIPPER_RESERVED.contains(&it.name.as_str());
+    }
+}
+
+fn names_a_reserved_word(program: &oxc_ast::ast::Program<'_>) -> bool {
+    use oxc_ast_visit::Visit;
+    let mut reserved = Reserved(false);
+    reserved.visit_program(program);
+    reserved.0
+}
+
 fn has_with(scoping: &oxc_semantic::Scoping) -> bool {
     scoping.scope_descendants_from_root().any(|scope| {
         scoping
@@ -148,16 +184,26 @@ fn solved<R>(
 ) -> R {
     let program = prepared.program;
     let scoping = &prepared.scoping;
-    let local = realm::of_program(program, scoping, prepared.module);
-    let realm = local.meet(given.unwrap_or(local));
+    let realm = match given {
+        Some(given) => given,
+        None => {
+            let alone = realm::Place {
+                dir: "",
+                known: &[],
+            };
+            realm::of_program(program, scoping, prepared.module, alone)
+        }
+    };
     let shadowed = scoping
         .symbol_names()
         .any(|name| EMITTED_TYPE_NAMES.contains(&name));
+    let (tainted, injecting) = facts::eval_tainted(scoping, &prepared.nodes);
     let cx = facts::Ctx {
         exports: facts::export_spans(program),
-        frames_reachable: facts::frames_reachable(program, scoping),
+        frames_reachable: !realm.closed_calls,
         annexed: facts::annexed_symbols(scoping, &prepared.nodes),
-        tainted: facts::eval_tainted(scoping, &prepared.nodes),
+        tainted,
+        injecting,
         program,
         scoping,
         nodes: &prepared.nodes,
@@ -225,6 +271,13 @@ fn analyse(
     };
     if has_with(&prepared.scoping) {
         return Err((Refusal::Hazard("with statement"), jsx));
+    }
+    let annotating = matches!(purpose, Purpose::Annotate) && mode == Mode::Ts;
+    if annotating && is_commonjs(&prepared.scoping) {
+        return Err((Refusal::CommonJs, jsx));
+    }
+    if annotating && names_a_reserved_word(prepared.program) {
+        return Err((Refusal::Erasure, jsx));
     }
     let (typed, stats) = solved(&prepared, given, |env| {
         let decided = decide::decide(env, mode);

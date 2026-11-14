@@ -161,6 +161,7 @@ pub struct Ctx<'s, 'a> {
     pub frames_reachable: bool,
     pub annexed: FxHashSet<SymbolId>,
     pub tainted: FxHashSet<SymbolId>,
+    pub injecting: FxHashSet<oxc_syntax::scope::ScopeId>,
     pub program: &'a Program<'a>,
     pub scoping: &'s Scoping,
     pub nodes: &'s AstNodes<'a>,
@@ -174,6 +175,14 @@ struct StackNames {
 const STACK_NAMES: [&str; 2] = ["getFunction", "prepareStackTrace"];
 
 impl<'a> Visit<'a> for StackNames {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.found |= matches!(
+            it.callee.without_parentheses(),
+            Expression::Identifier(id) if id.name == "eval"
+        );
+        oxc_ast_visit::walk::walk_call_expression(self, it);
+    }
+
     fn visit_identifier_name(&mut self, it: &IdentifierName<'a>) {
         self.found |= STACK_NAMES.contains(&it.name.as_str());
     }
@@ -246,8 +255,12 @@ pub fn annexed_symbols(scoping: &Scoping, nodes: &AstNodes<'_>) -> FxHashSet<Sym
     annexed
 }
 
-pub fn eval_tainted(scoping: &Scoping, nodes: &AstNodes<'_>) -> FxHashSet<SymbolId> {
+pub fn eval_tainted(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) -> (FxHashSet<SymbolId>, FxHashSet<oxc_syntax::scope::ScopeId>) {
     let mut tainted = FxHashSet::default();
+    let mut injecting = FxHashSet::default();
     for node in nodes.iter() {
         let AstKind::CallExpression(call) = node.kind() else {
             continue;
@@ -262,11 +275,12 @@ pub fn eval_tainted(scoping: &Scoping, nodes: &AstNodes<'_>) -> FxHashSet<Symbol
             continue;
         };
         let reference = scoping.get_reference(reference);
-        if reference.symbol_id().is_some() {
-            continue;
-        }
         let site = reference.scope_id();
-        match untwist_core::semantic::closed_eval_names(call) {
+        let payload = match reference.symbol_id() {
+            Some(_) => None,
+            None => untwist_core::semantic::closed_eval_names(call),
+        };
+        match payload {
             Some(names) => {
                 for name in names {
                     if let Some(symbol) =
@@ -280,10 +294,13 @@ pub fn eval_tainted(scoping: &Scoping, nodes: &AstNodes<'_>) -> FxHashSet<Symbol
                 for scope in scoping.scope_ancestors(site) {
                     tainted.extend(scoping.get_bindings(scope).values().copied());
                 }
+                if !scoping.scope_flags(site).contains(ScopeFlags::StrictMode) {
+                    injecting.insert(var_scope(scoping, site));
+                }
             }
         }
     }
-    tainted
+    (tainted, injecting)
 }
 
 pub fn export_spans(program: &Program<'_>) -> Vec<Span> {
@@ -509,7 +526,11 @@ fn settle_function<'a>(cx: &Ctx<'_, 'a>, facts: &mut Facts<'a>, index: usize) {
             None => false,
         },
     };
-    let closed = reachable && !cx.frames_reachable;
+    let exported = cx
+        .exports
+        .iter()
+        .any(|span| span.contains_inclusive(fact.func.span()));
+    let closed = reachable && !cx.frames_reachable && !exported;
     let constructible = constructible(cx, fact);
     let returns_typed = !is_generator(fact.func)
         && !is_accessor(cx, fact)
@@ -667,7 +688,11 @@ fn binding_slot<'a>(
         sources.push(Source::Top);
     }
     match (&declarator.init, in_head) {
-        (Some(init), _) => sources.push(Source::Expr(init)),
+        (Some(init), true) => {
+            sources.push(Source::Expr(init));
+            sources.push(loop_head_source(cx, declarator));
+        }
+        (Some(init), false) => sources.push(Source::Expr(init)),
         (None, true) => sources.push(loop_head_source(cx, declarator)),
         (None, false) => sources.push(Source::Undefined),
     }
