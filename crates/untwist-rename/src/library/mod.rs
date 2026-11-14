@@ -197,7 +197,7 @@ pub fn parse_ranges(versions: &str) -> Ranges {
 }
 
 fn normalise(ranges: &mut Ranges) {
-    ranges.sort_by(|a, b| version_key(&a.0).cmp(&version_key(&b.0)));
+    ranges.sort_by_key(|range| version_key(&range.0));
     let mut merged: Ranges = Vec::with_capacity(ranges.len());
     for (low, high) in ranges.drain(..) {
         match merged.last_mut() {
