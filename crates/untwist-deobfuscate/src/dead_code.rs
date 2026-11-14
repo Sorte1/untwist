@@ -818,11 +818,21 @@ impl<'a> DeadCode<'a> {
         } else {
             Some(&node.consequent)
         };
-        let annex_b = if self.strict || !hoisted_by(dropped).function {
+        let hoisted = hoisted_by(dropped);
+        let annex_b = if self.strict || !hoisted.function {
             Some(Vec::new())
         } else {
             annex_b_vars(dropped, cx.scoping())
         };
+        let annex_b = annex_b.map(|functions| {
+            let mut names = hoisted.names;
+            for (name, symbol) in functions {
+                if !names.iter().any(|(known, _)| *known == name) {
+                    names.push((name, symbol));
+                }
+            }
+            names
+        });
         if let (true, false, Some(names)) = (cx.opts.unsafe_transforms, decision.literal, annex_b) {
             let names = still_needed(names, dropped, cx.scoping());
             if !names.is_empty() {

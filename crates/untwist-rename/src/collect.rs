@@ -120,6 +120,8 @@ pub struct Collected {
 
 pub const PROTO_KEY: &str = "__proto__";
 
+const OPAQUE_BINDING_NAMES: [&str; 2] = ["arguments", "eval"];
+
 pub fn is_proto_key(key: &PropertyKey<'_>) -> bool {
     matches!(key, PropertyKey::StaticIdentifier(id) if id.name.as_str() == PROTO_KEY)
 }
@@ -218,7 +220,7 @@ impl Collector<'_> {
             return;
         };
         self.observe_through_with(symbol);
-        if is_machinery_name(id.name.as_str()) {
+        if is_machinery_name(id.name.as_str()) || OPAQUE_BINDING_NAMES.contains(&id.name.as_str()) {
             self.out.pinned.insert(symbol);
         }
         self.mark_hoisted_site(symbol);

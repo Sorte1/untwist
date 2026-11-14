@@ -666,6 +666,10 @@ impl<'a> Pass<'a> for SelfDefending {
             }
             Plan::Remove(spans) => spans,
         };
+        if crate::directives::removes_what_an_eval_reads(cx.scoping(), &spans) {
+            cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
+            return;
+        }
         if crate::directives::removes_hoist_blocker(cx.scoping(), &spans) {
             cx.note(notes::PROTECTION_HOIST_BLOCKER_KEPT, None);
             return;

@@ -89,6 +89,67 @@ console.log(_0x1f3c("0x0"));"##,
 function u(){ { let o = 1; if ("abc" === "xyz") { console.log(o); } { function o(){} } } return typeof o; } console.log(u());
 function v(){ { if ("abc" !== "xyz") { let o = 1; { function o(){} } } } return typeof o; } console.log(v());"##,
     ),
+    (
+        "f1-var",
+        r##"var f = "outer"; function t(){ if ("abc" === "xyz") { var f = 1; } return typeof f } console.log(t());"##,
+    ),
+    (
+        "f1-forvar",
+        r##"var f = "outer"; function t(){ if ("abc" === "xyz") { for (var f of []) { function g(){} } } return typeof f + typeof g } console.log(t());"##,
+    ),
+    (
+        "f2-var-arguments",
+        r##"function t(){ var arguments; return typeof arguments + arguments.length } console.log(t(1,2));"##,
+    ),
+    (
+        "f2-unsafe-arguments",
+        r##"function t(){ if ("abc" === "xyz") { function arguments(){ return "abc" } } return arguments.length } console.log(t(1, 2));"##,
+    ),
+    (
+        "f3-catch-var",
+        r##"(function(){ var e = {abcde: "x", fghij: "q"}; eval("try { throw 1 } catch (e) { var e = 2 }"); console.log(typeof e, e && e.fghij); })();"##,
+    ),
+    (
+        "f3-let",
+        r##"(function(){ let e = {abcde: "x", fghij: "q"}; try { eval("try { throw 1 } catch (e) { var e = 2 }"); } catch (x) { console.log(x.name) } console.log(typeof e, e.fghij); })();"##,
+    ),
+    (
+        "f3-rename",
+        r##"(function(){ var e = "outer"; (function(){ console.log(typeof e); eval("try { throw 1 } catch (e) { var e = 2 }"); console.log(typeof e); e = 3; })(); console.log(e); })();"##,
+    ),
+    (
+        "f5-selfdefending-eval",
+        r##"var g = "outer";
+(function () { const g = (function () { let a = true; return function (b, c) { const d = a ? function () { if (c) { const e = c.apply(b, arguments); c = null; return e; } } : function () {}; a = false; return d; }; })(); const h = g(this, function () { return h.toString().search('(((.+)+)+)+$').toString().constructor(h).search('(((.+)+)+)+$'); }); h(); console.log(eval("typeof g")); })();"##,
+    ),
+    (
+        "f5-debug-eval",
+        r##"var dpf = "outer";
+(function (k) { { const dpf = function (ret) {
+  function debuggerProtection(counter) {
+    if (typeof counter === "string") {
+      return function (arg) {}.constructor("while (true) {}").apply("counter");
+    } else if (("" + counter / counter).length !== 1 || counter % 20 === 0) {
+      (function () {
+        return true;
+      }).constructor("debugger").call("action");
+    } else {
+      (function () {
+        return false;
+      }).constructor("debugger").apply("stateObject");
+    }
+    debuggerProtection(++counter);
+  }
+  try {
+    if (ret) {
+      return debuggerProtection;
+    } else {
+      debuggerProtection(0);
+    }
+  } catch (y) {}
+};
+ console.log(typeof eval(k)); } })("dpf");"##,
+    ),
 ];
 
 fn run(unsafe_transforms: bool, rename: RenameMode, source: &str) -> String {
@@ -101,7 +162,7 @@ fn run(unsafe_transforms: bool, rename: RenameMode, source: &str) -> String {
 }
 
 fn uses_direct_eval_of_a_local(program: &str) -> bool {
-    program.contains("eval(\"")
+    program.contains("eval(")
 }
 
 #[test]
@@ -127,7 +188,7 @@ fn every_a35r_probe_prints_what_node_prints_in_the_lanes_its_premises_cover() {
     let (direct_eval, static_code): (Vec<_>, Vec<_>) = programs
         .into_iter()
         .partition(|(_, program)| uses_direct_eval_of_a_local(program));
-    assert_eq!(direct_eval.len(), 4, "{direct_eval:?}");
+    assert_eq!(direct_eval.len(), 9, "{direct_eval:?}");
     let unsafe_lane = |source: &str| run(true, RenameMode::None, source);
     let unsafe_simple = |source: &str| run(true, RenameMode::Simple, source);
     let unsafe_mangle = |source: &str| run(true, RenameMode::Mangle, source);

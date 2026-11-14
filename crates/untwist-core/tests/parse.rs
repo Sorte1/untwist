@@ -181,3 +181,23 @@ fn module_syntax_and_top_level_await_still_parse_as_a_module() {
         assert!(p.source_type.is_module(), "{source}");
     }
 }
+
+#[test]
+fn a_top_level_await_call_is_read_as_a_module() {
+    let alloc = Allocator::default();
+    let source = "var f = \"outer\";\nfunction t(){ { function f(){ return 1 } } return typeof f; }\nconsole.log(await (async () => t())());";
+    let p = parse_program(&alloc, source);
+    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+    assert!(p.source_type.is_module());
+}
+
+#[test]
+fn a_function_named_await_in_a_script_stays_a_script() {
+    let alloc = Allocator::default();
+    let p = parse_program(
+        &alloc,
+        "function await(x) { return x; }\nvar y = 1<!--y\n;\nawait(2);",
+    );
+    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+    assert!(!p.source_type.is_module());
+}
