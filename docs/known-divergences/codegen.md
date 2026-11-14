@@ -187,3 +187,10 @@ fixture that then joins the differential.
   reader whose target cannot be printed that way passes the input through (item above). The
   protections stage removes these checks where it proves the callback is obfuscator.io's own; the
   one-line print and the pass-through are for the lanes and programs where it does not.
+- **A file is read as a script unless only the module goal makes sense of it.** Untwist parses the input as a
+  classic script first, so `<!--` and `-->` stay comments (Annex B.1.1). It takes the module goal when the script
+  parse fails (`import`, `export`, `import.meta`, `await x`) or when the script parse succeeds only by reading
+  `await (...)` as a call of a global named `await` and the module parse is clean and has a top-level await.
+  That last case is ambiguous: a classic script that really defines and calls a global function `await` is read as
+  a module, and the output (`await 3`) no longer runs as a script. A module spelled `await (async () => ...)()` is
+  the common shape and is read correctly.
