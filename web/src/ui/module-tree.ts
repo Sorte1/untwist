@@ -2,7 +2,7 @@ import { byId, setText } from '../dom';
 import type { AppState } from '../state';
 import type { Store } from '../store';
 import { reportField } from '../report-json';
-import { countLabel, groupModules, libraryLabel, libraryRanges, type ModuleGroups } from './module-groups';
+import { countLabel, groupModules, libraryDetail, libraryRanges, type ModuleGroups } from './module-groups';
 
 export interface ModuleInfo {
   readonly id: string;
@@ -103,19 +103,31 @@ function sectionOf(layout: Layout, index: number | null): Section | null {
   return index === null ? null : (layout.sections.find((section) => section.order.includes(index)) ?? null);
 }
 
-function group(key: string, label: string, count: number, open: boolean, remember: (key: string, open: boolean) => void): HTMLDetailsElement {
+interface GroupHead {
+  readonly key: string;
+  readonly label: string;
+  readonly count: number;
+  readonly detail: string | null;
+}
+
+function group(head: GroupHead, open: boolean, remember: (key: string, open: boolean) => void): HTMLDetailsElement {
   const details = document.createElement('details');
   details.className = 'tree-group';
-  details.dataset['group'] = key;
+  details.dataset['group'] = head.key;
   details.open = open;
   const summary = document.createElement('summary');
   summary.className = 'tree-group-head';
-  summary.append(
-    Object.assign(document.createElement('span'), { className: 'tree-group-name', textContent: label }),
-    Object.assign(document.createElement('span'), { className: 'tree-group-count', textContent: countLabel(count) }),
-  );
+  summary.title = head.detail === null ? `${head.label} · ${countLabel(head.count)}` : `${head.label} ${head.detail}`;
+  const name = Object.assign(document.createElement('span'), { className: 'tree-group-name', textContent: head.label });
+  if (head.detail === null) {
+    summary.append(name, Object.assign(document.createElement('span'), { className: 'tree-group-count', textContent: head.count.toLocaleString('en-US') }));
+  } else {
+    const text = Object.assign(document.createElement('span'), { className: 'tree-group-text' });
+    text.append(name, Object.assign(document.createElement('span'), { className: 'tree-group-detail', textContent: head.detail }));
+    summary.append(text);
+  }
   details.append(summary);
-  details.addEventListener('toggle', () => remember(key, details.open));
+  details.addEventListener('toggle', () => remember(head.key, details.open));
   return details;
 }
 
@@ -168,13 +180,13 @@ export function mountModuleTree(store: Store<AppState>): void {
     if (layout.groups === null) {
       root.append(sectionNodes.get('') ?? '');
     } else {
-      const app = group('app', 'App', layout.groups.app.length, isOpen('app', true), remember);
+      const app = group({ key: 'app', label: 'App', count: layout.groups.app.length, detail: null }, isOpen('app', true), remember);
       app.append(sectionNodes.get('app') ?? '');
       const libraryCount = layout.groups.libraries.reduce((sum, library) => sum + library.order.length, 0);
-      const libraries = group('libraries', 'Libraries', libraryCount, isOpen('libraries', false), remember);
+      const libraries = group({ key: 'libraries', label: 'Libraries', count: libraryCount, detail: null }, isOpen('libraries', false), remember);
       for (const library of layout.groups.libraries) {
         const key = `lib:${library.name}`;
-        const node = group(key, libraryLabel(library), library.order.length, isOpen(key, false), remember);
+        const node = group({ key, label: library.name, count: library.order.length, detail: libraryDetail(library) }, isOpen(key, false), remember);
         node.classList.add('tree-library');
         node.append(sectionNodes.get(key) ?? '');
         libraries.append(node);

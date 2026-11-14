@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countLabel, groupModules, libraryLabel, libraryRanges, packageOf } from './module-groups';
+import { countLabel, groupModules, libraryDetail, libraryRanges, packageOf } from './module-groups';
 import { treeOrder } from './module-tree';
 
 const module = (id: string, path: string, isEntry = false) => ({ id, path, isEntry });
@@ -46,9 +46,9 @@ describe('library groups in the module tree', () => {
     expect(groupModules(modules, treeOrder(modules), new Map([['core-js', '3.39']]))).toBeNull();
   });
 
-  it('labels a library with its range and counts modules', () => {
-    expect(libraryLabel({ name: 'core-js', range: '3.39', order: [] })).toBe('core-js 3.39');
-    expect(libraryLabel({ name: 'tslib', range: '', order: [] })).toBe('tslib');
+  it('describes a library by its range and counts modules', () => {
+    expect(libraryDetail({ name: 'core-js', range: '3.39', order: [1, 2] })).toBe('3.39 · 2 modules');
+    expect(libraryDetail({ name: 'tslib', range: '', order: [3] })).toBe('1 module');
     expect(countLabel(1)).toBe('1 module');
     expect(countLabel(1200)).toBe('1,200 modules');
   });

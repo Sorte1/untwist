@@ -58,8 +58,9 @@ export function groupModules(modules: readonly ModuleInfo[], order: readonly num
   return { app, libraries };
 }
 
-export function libraryLabel(group: LibraryGroup): string {
-  return group.range === '' ? group.name : `${group.name} ${group.range}`;
+export function libraryDetail(group: LibraryGroup): string {
+  const count = countLabel(group.order.length);
+  return group.range === '' ? count : `${group.range} · ${count}`;
 }
 
 export function countLabel(count: number): string {

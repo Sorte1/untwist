@@ -1267,13 +1267,13 @@ button.diag-row:hover .diag-loc {
 
 .tree-lib-badge {
   flex: 0 0 auto;
-  padding: 0 4px;
+  padding: 0 3px;
   border: 1px solid var(--hair);
   border-radius: 3px;
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
-  line-height: 14px;
+  line-height: 13px;
   color: var(--muted);
 }
 
@@ -1335,13 +1335,32 @@ button.diag-row:hover .diag-loc {
 }
 
 .tree-library > .tree-group-head {
-  padding-left: 14px;
+  height: auto;
+  min-height: 34px;
+  padding: 3px 8px 3px 14px;
   font-family: var(--mono);
   font-weight: 500;
 }
 
+.tree-group-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tree-group-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .tree-library .tree-item {
-  padding-left: 28px;
+  padding-left: 24px;
 }
 
 #download-note {
