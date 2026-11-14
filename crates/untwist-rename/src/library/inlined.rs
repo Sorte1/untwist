@@ -76,9 +76,8 @@ fn shares_label(outer: &Merged, inner: &Merged) -> bool {
 
 fn proven(candidate: &Candidate, kept: &[(Span, &Candidate)]) -> bool {
     candidate.shape.inlined.iter().all(|(_, span)| {
-        kept.iter().any(|(unit, inner)| {
-            unit == span && shares_label(&candidate.merged, &inner.merged)
-        })
+        kept.iter()
+            .any(|(unit, inner)| unit == span && shares_label(&candidate.merged, &inner.merged))
     })
 }
 

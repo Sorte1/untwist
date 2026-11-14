@@ -43,7 +43,10 @@ const INLINED: &str = "var keys = {}; var hasKeys;
 
 #[test]
 fn an_inlined_wrapper_without_its_last_return_shapes_as_the_wrapper() {
-    assert!(same_shape((WRAPPER, "if (hasKeys)"), (INLINED, "if (hasKeys)")));
+    assert!(same_shape(
+        (WRAPPER, "if (hasKeys)"),
+        (INLINED, "if (hasKeys)")
+    ));
 }
 
 #[test]
@@ -135,13 +138,29 @@ fn matched(table: &Table, source: &str) -> (LibraryNames, Vec<(String, String)>)
 
 #[test]
 fn an_inlined_caller_matches_and_its_stand_in_gets_no_name() {
-    let (found, names) = matched(&table(), &OUTER_INLINED.replace("hasA", "x").replace("hasB", "y"));
-    let mut modules: Vec<String> = found.hits.iter().flat_map(|hit| hit.modules.clone()).collect();
+    let (found, names) = matched(
+        &table(),
+        &OUTER_INLINED.replace("hasA", "x").replace("hasB", "y"),
+    );
+    let mut modules: Vec<String> = found
+        .hits
+        .iter()
+        .flat_map(|hit| hit.modules.clone())
+        .collect();
     modules.sort();
     assert_eq!(modules, ["internals/a", "internals/b"], "{:?}", found.hits);
-    assert!(names.contains(&("x".to_string(), "hasA".to_string())), "{names:?}");
-    assert!(names.contains(&("y".to_string(), "hasB".to_string())), "{names:?}");
-    assert!(!names.iter().any(|(_, name)| name == "requireB"), "{names:?}");
+    assert!(
+        names.contains(&("x".to_string(), "hasA".to_string())),
+        "{names:?}"
+    );
+    assert!(
+        names.contains(&("y".to_string(), "hasB".to_string())),
+        "{names:?}"
+    );
+    assert!(
+        !names.iter().any(|(_, name)| name == "requireB"),
+        "{names:?}"
+    );
 }
 
 #[test]
@@ -160,7 +179,8 @@ fn the_comment_for_an_inlined_wrapper_sits_above_its_statement() {
     let found = match_with(&table(), &parsed.program, &sem.scoping);
     let hits: Vec<&untwist_rename::library::Hit> = found.hits.iter().collect();
     untwist_rename::library::annotate::annotate(&mut parsed.program, &hits, &alloc);
-    let printed = untwist_core::print::print(&parsed.program, untwist_core::print::PrintStyle::Pretty);
+    let printed =
+        untwist_core::print::print(&parsed.program, untwist_core::print::PrintStyle::Pretty);
     let comment = printed
         .find("// core-js 3.39: internals/a.js")
         .expect("the inlined caller is commented");
@@ -174,7 +194,9 @@ fn a_caller_whose_inlined_wrapper_is_unknown_still_matches_in_full() {
     let expanded = records(OUTER_INLINED)
         .into_iter()
         .filter(|record| record.kind == UnitKind::Function)
-        .filter(|record| OUTER_INLINED[record.span.start as usize..].starts_with("function () { if (hasA)"))
+        .filter(|record| {
+            OUTER_INLINED[record.span.start as usize..].starts_with("function () { if (hasA)")
+        })
         .count();
     assert_eq!(expanded, 2);
 }

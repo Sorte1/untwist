@@ -392,9 +392,7 @@ const GENERATED_STEMS: [&str; 4] = ["fn", "module", "requireModule", "hasRequire
 fn generated(name: &str) -> bool {
     let stem = name.trim_end_matches(|ch: char| ch.is_ascii_digit());
     let numbered = stem.len() < name.len();
-    name.len() <= 2
-        || GENERATED_STEMS.contains(&stem)
-        || (numbered && stem.len() == 1)
+    name.len() <= 2 || GENERATED_STEMS.contains(&stem) || (numbered && stem.len() == 1)
 }
 
 fn is_strong(record: &UnitRecord) -> bool {
@@ -450,7 +448,8 @@ fn observe_file(
         .map(|(record, module, role)| {
             let known = !build.obfuscated;
             let own_known = known || role == Role::Wrapper;
-            let real = |name: Option<String>| name.filter(|name| !build.minified || !generated(name));
+            let real =
+                |name: Option<String>| name.filter(|name| !build.minified || !generated(name));
             Observed {
                 known,
                 row: Row {
@@ -575,6 +574,7 @@ fn merge_slot(slot: &mut Option<Option<String>>, name: Option<String>) {
     match slot {
         None => *slot = Some(Some(name)),
         Some(Some(existing)) if name_key(existing) != name_key(&name) => *slot = Some(None),
+        Some(Some(existing)) if name < *existing => *existing = name,
         _ => {}
     }
 }
@@ -627,10 +627,7 @@ fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row> {
         group.loose = row.loose;
         group.specific = row.specific;
         group.versions.insert(row.versions.clone());
-        match (&group.own, row.own) {
-            (_, None) if known => merge_slot(&mut group.own, Some(String::new())),
-            (_, own) => merge_slot(&mut group.own, own),
-        }
+        merge_slot(&mut group.own, row.own);
         if known {
             merge_list(&mut group.inner, row.inner);
             merge_list(&mut group.outer, row.outer);

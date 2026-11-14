@@ -1,8 +1,8 @@
 pub mod annotate;
 pub mod cache;
 mod guard;
-mod inlined;
 pub mod hash;
+mod inlined;
 pub mod pass;
 pub mod rename;
 pub mod shape;
