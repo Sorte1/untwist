@@ -2,7 +2,9 @@ use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::pins::script_global_symbols;
-use untwist_core::semantic::{has_module_syntax, hoist_blockers, is_shared_global, AnnexBWrites};
+use untwist_core::semantic::{
+    has_module_syntax, hoist_blockers, is_shared_global, top_level_names_fixed, AnnexBWrites,
+};
 
 use crate::collect::{collect, Collected};
 use crate::function_names::function_names;
@@ -15,6 +17,7 @@ pub struct Setting {
     pub safe_lane: bool,
     pub classic_script: bool,
     pub library_names: bool,
+    pub shared_counter: bool,
 }
 
 impl Setting {
@@ -25,6 +28,7 @@ impl Setting {
             safe_lane: !opts.unsafe_transforms,
             classic_script: !opts.nested_root && !has_module_syntax(program),
             library_names: !opts.rule_disabled(crate::library::rename::NAME),
+            shared_counter: false,
         }
     }
 }
@@ -62,10 +66,12 @@ fn pin_library_names(collected: &mut Collected, program: &Program<'_>, scoping: 
 
 fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, setting: Setting) {
     pin_shared_globals(collected, scoping);
-    if !setting.keep_globals && !setting.keep_lexicals {
+    let fixed_by_other_inputs =
+        setting.classic_script && top_level_names_fixed(setting.shared_counter);
+    if !setting.keep_globals && !setting.keep_lexicals && !fixed_by_other_inputs {
         return;
     }
-    if setting.keep_lexicals {
+    if setting.keep_lexicals || fixed_by_other_inputs {
         collected.pinned.extend(
             scoping
                 .get_bindings(scoping.root_scope_id())

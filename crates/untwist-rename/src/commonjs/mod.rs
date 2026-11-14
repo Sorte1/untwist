@@ -8,7 +8,7 @@ use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::{Cx, Interest, Pass};
 
 use crate::collect::Collected;
-use crate::generate::lower_camel;
+use crate::generate::{lower_camel, uid_candidates};
 use crate::human::looks_human_written;
 use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
@@ -249,14 +249,33 @@ pub fn decide(program: &Program<'_>, collected: &Collected, scoping: &Scoping) -
     let mut oracle = NameOracle::new(scoping, collected);
     oracle.defer(planned.iter().map(|wanted| wanted.symbol));
     for wanted in &planned {
-        if oracle.is_assigned(wanted.symbol) || scoping.symbol_name(wanted.symbol) == wanted.base {
+        if oracle.is_assigned(wanted.symbol) {
             continue;
         }
-        oracle.take(wanted.symbol, candidates(&wanted.base));
+        if take(&mut oracle, wanted).is_none() {
+            return aborted(scoping.symbol_name(wanted.symbol));
+        }
     }
-    let mut plan = oracle.into_plan();
+    let mut plan = oracle.into_plan().without_unchanged(scoping);
     plan.notes
         .push(found_note(found.len(), helpers.found.len(), plan.len()));
+    plan
+}
+
+fn take(oracle: &mut NameOracle<'_>, wanted: &Wanted) -> Option<String> {
+    oracle
+        .take(wanted.symbol, candidates(&wanted.base))
+        .or_else(|| {
+            let current = oracle.current_name(wanted.symbol).to_string();
+            oracle.take(wanted.symbol, uid_candidates(&current))
+        })
+}
+
+fn aborted(name: &str) -> RenamePlan {
+    let mut plan = RenamePlan::new();
+    plan.notes.push(format!(
+        "ran out of names for {name}; left the commonjs wrappers unnamed"
+    ));
     plan
 }
 

@@ -16,6 +16,22 @@ use crate::value_flow::{flow_rule_disabled, OBSERVER_LIST};
 use untwist_core::host_globals::is_host_global;
 
 const ALIAS_DEPTH: u8 = 4;
+const NAME_REVEALING_ROOTS: [&str; 14] = [
+    "Function",
+    "Object",
+    "Proxy",
+    "Reflect",
+    "eval",
+    "frames",
+    "global",
+    "globalThis",
+    "module",
+    "parent",
+    "require",
+    "self",
+    "top",
+    "window",
+];
 const FORWARD_DEPTH: u8 = 8;
 
 fn element_string<'a>(array: &'a ArrayExpression<'a>, index: f64) -> Option<&'a str> {
@@ -238,6 +254,9 @@ impl<'a> Sites<'_, 'a> {
             }
         }
         let eff = self.effective_callee(callee);
+        if self.watch.printers_quiet && self.quiet_host_call(eff, arguments) {
+            return;
+        }
         if self.evaluation_throws(eff, arguments, span) {
             return;
         }
@@ -332,6 +351,27 @@ impl<'a> Sites<'_, 'a> {
         if hits {
             self.observe_base(member.object(), span);
         }
+    }
+
+    fn quiet_host_call(&self, callee: &Expression<'a>, arguments: &[Argument<'a>]) -> bool {
+        self.root_identifier(callee)
+            .is_some_and(|root| self.quiet_root(root))
+            && arguments
+                .iter()
+                .filter_map(Argument::as_expression)
+                .all(|argument| {
+                    self.root_identifier(argument).is_none_or(|root| {
+                        self.quiet_root(root) || self.fresh.symbol(root).is_some()
+                    })
+                })
+    }
+
+    fn quiet_root(&self, root: &IdentifierReference<'a>) -> bool {
+        !NAME_REVEALING_ROOTS.contains(&root.name.as_str()) && self.unwritten_host(root)
+    }
+
+    fn unwritten_host(&self, id: &IdentifierReference<'a>) -> bool {
+        self.fresh.symbol(id).is_none() && !self.name_assigned(id.name.as_str())
     }
 
     pub(super) fn observe_template(&mut self, tagged: &TaggedTemplateExpression<'a>) {

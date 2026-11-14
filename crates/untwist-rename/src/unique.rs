@@ -191,14 +191,15 @@ impl<'a> Pass<'a> for Unique {
         let shared = Arc::clone(state);
         let index = slot.index();
         let namer = namer.as_deref();
-        #[cfg(feature = "test-hooks")]
-        let setting = crate::pins::Setting::of(program, cx.opts);
+        let setting = crate::pins::Setting {
+            shared_counter: true,
+            ..crate::pins::Setting::of(program, cx.opts)
+        };
         run_mode_once(
             done,
             program,
             cx,
-            HazardNote::Report,
-            OuterRule::UsedEnclosing,
+            (HazardNote::Report, OuterRule::UsedEnclosing, setting),
             move |program, collected, scoping| {
                 let usage = collect_naming_usage(program, scoping);
                 let mut state = wait_turn(&shared, index);

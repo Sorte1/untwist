@@ -45,7 +45,8 @@ pub(crate) use renamed::forget_program as forget_renames;
 pub(crate) use renamed::note_renames;
 pub use renamed::renamed_since_refresh;
 pub use shared::{
-    assume_shared_globals, is_foreign_global, is_shared_global, SharedGlobals, SharedGlobalsGuard,
+    assume_shared_globals, is_foreign_global, is_shared_global, named_by_another_input,
+    top_level_names_fixed, SharedGlobals, SharedGlobalsGuard,
 };
 pub use strictness::Strictness;
 

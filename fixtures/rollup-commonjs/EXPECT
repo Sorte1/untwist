@@ -635,8 +635,8 @@ rolldown/cjs-synthetic--plain.js	default	8	1	0
 rolldown/cjs-synthetic--plain.js	unsafe	8	1	0
 rolldown/cjs-synthetic--terser.js	default	8	1	12
 rolldown/cjs-synthetic--terser.js	unsafe	8	1	12
-rolldown/cjs-synthetic-min--plain.js	default	8	1	18
-rolldown/cjs-synthetic-min--plain.js	unsafe	8	1	18
+rolldown/cjs-synthetic-min--plain.js	default	8	1	12
+rolldown/cjs-synthetic-min--plain.js	unsafe	8	1	12
 rolldown/esm-corejs--obf-strings.js	default	0	0	0
 rolldown/esm-corejs--obf-strings.js	unsafe	27	1	52
 rolldown/esm-corejs--plain.js	default	27	1	0

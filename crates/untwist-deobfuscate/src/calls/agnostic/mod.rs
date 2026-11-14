@@ -163,6 +163,7 @@ fn reach_watch<'k>(reach: ReachWatch<'k>) -> settle::Watch<'k> {
         depth: reach_text::TEXT_DEPTH,
         observe: reach.observe,
         defer: false,
+        printers_quiet: false,
     }
 }
 
@@ -213,11 +214,28 @@ pub fn globals_reachable_by_key<'a>(program: &'a Program<'a>, scoping: &Scoping)
         names: &names,
         props: &names,
         fns: &[],
-        observe: false,
+        observe: true,
     };
-    global_reach(program, scoping, (None, &[]), watch)
-        .reach
-        .is_some()
+    let found = names_reach(program, scoping, watch);
+    found.reach.or(found.observed).is_some()
+}
+
+fn names_reach<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    reach: ReachWatch<'_>,
+) -> GlobalReach {
+    let watch = settle::Watch {
+        printers_quiet: true,
+        ..reach_watch(reach)
+    };
+    reach_of(&settle(program, scoping, (None, &[], watch)).0)
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NamesReached {
+    pub reached: bool,
+    pub observed: bool,
 }
 
 pub fn names_reachable_from<'a>(
@@ -236,6 +254,27 @@ pub fn names_reachable_from<'a>(
     };
     let found = global_reach(program, scoping, (None, &[]), watch);
     found.reach.is_some() || found.reach_by_code.is_some()
+}
+
+pub fn names_reached_from<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    names: &[&str],
+) -> NamesReached {
+    if names.is_empty() {
+        return NamesReached::default();
+    }
+    let watch = ReachWatch {
+        names,
+        props: names,
+        fns: &[],
+        observe: true,
+    };
+    let found = names_reach(program, scoping, watch);
+    NamesReached {
+        reached: found.reach.or(found.reach_by_code).is_some(),
+        observed: found.observed.is_some(),
+    }
 }
 
 pub fn script_lexicals_reachable_by_code<'a>(program: &'a Program<'a>, scoping: &Scoping) -> bool {
@@ -272,6 +311,7 @@ fn text_reach<'a>(
         depth,
         observe: true,
         defer: true,
+        printers_quiet: false,
     };
     let found = settle(program, scoping, (None, &[], watch)).0;
     let reached = found
