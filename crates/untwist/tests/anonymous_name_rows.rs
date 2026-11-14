@@ -4,7 +4,7 @@ use untwist_testing::node_rows::{self, listed_unsafe_witnesses, node_or_skip, ob
 
 const ROWS: &str = include_str!("data/anonymous_name_rows.txt");
 
-const UNSAFE_WITNESSES: [&str; 58] = [
+const UNSAFE_WITNESSES: [&str; 70] = [
     "var-function",
     "var-class",
     "let-arrow",
@@ -63,6 +63,18 @@ const UNSAFE_WITNESSES: [&str; 58] = [
     "decoder-assigned-in-sequence",
     "decoder-arrow-in-lexical-sequence",
     "decoder-reads-its-own-name",
+    "code-text-rr2-c2",
+    "code-text-rr2-c5",
+    "code-text-rr2-c6",
+    "code-text-rr2-c7",
+    "code-text-rr2-c8",
+    "code-text-rr2-c9",
+    "code-text-rr2-d1",
+    "code-text-rr2-d2",
+    "code-text-rr2-d3",
+    "code-text-rr2-d7",
+    "code-text-rr2-d8",
+    "code-text-rr2-d9",
 ];
 
 const TRIVIA_ROWS: [(&str, &str); 8] = [
@@ -263,5 +275,25 @@ fn a_folded_export_default_keeps_the_name_node_gives_it() {
             }
         }
     }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+const CODE_TEXT_DEFAULT_ROWS: &str = include_str!("data/code_text_default_rows.txt");
+
+#[test]
+fn a_name_read_by_a_code_text_keeps_the_function_unnamed_in_the_default_lane() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let programs: Vec<(String, String)> = CODE_TEXT_DEFAULT_ROWS
+        .lines()
+        .filter_map(|line| line.split_once('|'))
+        .map(|(label, program)| (label.to_string(), program.to_string()))
+        .collect();
+    assert!(programs.len() >= 2, "found {} rows", programs.len());
+    let safe = Options::default();
+    let run_safe = |source: &str| transformed(&safe, source);
+    let modes: [Mode<'_>; 1] = [("default", &run_safe)];
+    let wrong = node_rows::mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

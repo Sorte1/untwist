@@ -1,7 +1,8 @@
 use oxc_ast::ast::{
     Argument, AssignmentTargetPropertyIdentifier, AssignmentTargetPropertyProperty,
     BindingProperty, CallExpression, ComputedMemberExpression, Expression, IdentifierReference,
-    NewExpression, Program, PropertyKey, StaticMemberExpression,
+    ImportDeclaration, ImportExpression, NewExpression, Program, PropertyKey,
+    StaticMemberExpression,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
@@ -20,18 +21,35 @@ const RUNNERS: [&str; 10] = [
     "compileFunction",
 ];
 const TIMERS: [&str; 2] = ["setTimeout", "setInterval"];
-const NAME: &str = "name";
+const TEXT_MODULE_SCHEMES: [&str; 2] = ["data:", "blob:"];
 
-struct CodeText<'s> {
-    scoping: &'s Scoping,
+const TEXT_HAZARDS: [&str; 18] = [
+    "name",
+    "\\",
+    "[",
+    "this",
+    "globalThis",
+    "window",
+    "self",
+    "global",
+    "eval",
+    "Function",
+    "execScript",
+    "setTimeout",
+    "setInterval",
+    "constructor",
+    "runInThisContext",
+    "runInNewContext",
+    "runInContext",
+    "compileFunction",
+];
+
+struct CodeText {
     found: bool,
 }
 
-pub fn may_run_code_text(program: &Program<'_>, scoping: &Scoping) -> bool {
-    let mut scan = CodeText {
-        scoping,
-        found: false,
-    };
+pub fn may_run_code_text(program: &Program<'_>, _scoping: &Scoping) -> bool {
+    let mut scan = CodeText { found: false };
     scan.visit_program(program);
     scan.found
 }
@@ -96,7 +114,16 @@ fn texts_read_no_name(arguments: &[Argument<'_>]) -> bool {
         argument
             .as_expression()
             .and_then(literal_text)
-            .is_some_and(|text| !text.contains(NAME) && !text.contains('\\'))
+            .is_some_and(|text| !TEXT_HAZARDS.iter().any(|hazard| text.contains(hazard)))
+    })
+}
+
+fn names_a_module_file(source: Option<&str>) -> bool {
+    source.is_some_and(|text| {
+        let text = text.trim_start().to_ascii_lowercase();
+        !TEXT_MODULE_SCHEMES
+            .iter()
+            .any(|scheme| text.starts_with(scheme))
     })
 }
 
@@ -123,13 +150,9 @@ fn runner_name<'e>(callee: &'e Expression<'_>) -> Option<&'e str> {
     .filter(|name| RUNNERS.contains(name))
 }
 
-impl CodeText<'_> {
-    fn is_free_runner(&self, id: &IdentifierReference<'_>) -> bool {
+impl CodeText {
+    fn is_runner(id: &IdentifierReference<'_>) -> bool {
         RUNNERS.contains(&id.name.as_str())
-            && id
-                .reference_id
-                .get()
-                .is_none_or(|reference| self.scoping.get_reference(reference).symbol_id().is_none())
     }
 
     fn harmless_call(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
@@ -169,7 +192,7 @@ impl CodeText<'_> {
     }
 }
 
-impl<'a> VisitJs<'a> for CodeText<'_> {
+impl<'a> VisitJs<'a> for CodeText {
     fn visit_expression(&mut self, it: &Expression<'a>) {
         if !self.found {
             walk_js::walk_expression(self, it);
@@ -177,7 +200,7 @@ impl<'a> VisitJs<'a> for CodeText<'_> {
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        self.found |= self.is_free_runner(it);
+        self.found |= Self::is_runner(it);
     }
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
@@ -227,5 +250,21 @@ impl<'a> VisitJs<'a> for CodeText<'_> {
     ) {
         self.found |= RUNNERS.contains(&it.binding.name.as_str());
         walk_js::walk_assignment_target_property_identifier(self, it);
+    }
+
+    fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {
+        let literal = match it.source.without_parentheses() {
+            Expression::StringLiteral(literal) => literal.value.as_str(),
+            _ => None,
+        };
+        if !names_a_module_file(literal) {
+            self.found = true;
+            return;
+        }
+        walk_js::walk_import_expression(self, it);
+    }
+
+    fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
+        self.found |= !names_a_module_file(it.source.value.as_str());
     }
 }

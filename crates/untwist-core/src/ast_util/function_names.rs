@@ -136,6 +136,11 @@ impl Walker<'_> {
 }
 
 impl<'a> VisitJs<'a> for Walker<'_> {
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.out.name_read = true;
+        walk_js::walk_with_statement(self, it);
+    }
+
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         if let Some(id) = &it.id {
             self.give(id);
