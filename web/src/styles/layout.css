@@ -433,6 +433,10 @@ button, input {
   background: var(--code);
 }
 
+.seg-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .seg-3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -495,7 +499,7 @@ button, input {
   margin-left: auto;
 }
 
-.modern-opt {
+.stack-opt {
   display: flex;
   flex-direction: column;
   gap: 6px;

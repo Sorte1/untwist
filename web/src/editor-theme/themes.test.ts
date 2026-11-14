@@ -29,8 +29,8 @@ describe('editor theme picks', () => {
   it('lists the same themes in the settings panel as in the theme table', () => {
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     for (const theme of ['dark', 'light'] as const) {
-      const select = html.match(new RegExp(`<select id="editor-theme-${theme}"[^>]*>(.*?)</select>`))?.[1] ?? '';
-      const listed = [...select.matchAll(/<option value="([^"]+)">([^<]+)<\/option>/g)].map((match) => [match[1], match[2]]);
+      const group = html.match(new RegExp(`<div [^>]*id="editor-theme-${theme}"[^>]*>(.*?)</div>`))?.[1] ?? '';
+      const listed = [...group.matchAll(/<button [^>]*data-pick="([^"]+)"[^>]*>([^<]+)<\/button>/g)].map((match) => [match[1], match[2]]);
       expect(listed).toEqual(EDITOR_THEMES.filter((entry) => entry.theme === theme).map((entry) => [entry.id, entry.label]));
     }
   });
