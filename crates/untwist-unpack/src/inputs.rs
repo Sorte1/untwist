@@ -93,6 +93,10 @@ fn complete<'a>(
         .collect()
 }
 
+fn may_eval(text: &str) -> bool {
+    text.contains("eval") || text.contains("\\u")
+}
+
 fn eval_name_rebound(bundle: &Bundle<'_>) -> Option<String> {
     bundle
         .modules
@@ -199,7 +203,8 @@ pub fn unpack_named_inputs<'a>(
         notes.push(note(notes::group_refused(moved)));
         return (None, notes);
     }
-    if let Some(id) = eval_name_rebound(&bundle) {
+    let may_eval = programs.iter().any(|program| may_eval(program.source_text));
+    if let Some(id) = may_eval.then(|| eval_name_rebound(&bundle)).flatten() {
         notes.push(note(notes::eval_name_rebound(id)));
         return (None, notes);
     }
