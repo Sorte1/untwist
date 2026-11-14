@@ -45,6 +45,8 @@ pub(super) struct Site<'a> {
     pub text: Result<String, Refusal>,
     pub names: Vec<&'a str>,
     pub over_cap: bool,
+    pub chain: Vec<Span>,
+    pub shadows: Option<Option<Span>>,
 }
 
 #[derive(Clone, Copy)]
@@ -159,13 +161,23 @@ impl<'a> Finder<'a> {
             Kind::Indirect => Err(Refusal::Shape),
             _ => self.text_of(call),
         };
+        let context = self.context();
+        let shadows = match kind {
+            Kind::Indirect => names_eval(call).then_some(None),
+            _ => (!context.strict && text.as_ref().ok().is_none_or(|text| may_name_eval(text)))
+                .then_some(context.function),
+        };
+        let mut chain: Vec<Span> = self.frames.iter().filter_map(|frame| frame.span).collect();
+        chain.dedup();
         self.sites.push(Site {
             span,
             kind,
-            context: self.context(),
+            context,
             text,
             names: free.names,
             over_cap: free.over_cap,
+            chain,
+            shadows,
         });
     }
 
@@ -193,6 +205,20 @@ impl<'a> Finder<'a> {
         self.heap = self.heap.max(heap);
         Ok(text)
     }
+}
+
+fn names_eval(call: &CallExpression<'_>) -> bool {
+    call.arguments.iter().any(|argument| match argument {
+        Argument::StringLiteral(literal) => literal
+            .value
+            .as_str()
+            .is_none_or(|text| text.contains("eval")),
+        _ => true,
+    })
+}
+
+fn may_name_eval(text: &str) -> bool {
+    text.contains("eval") || text.contains('\\')
 }
 
 fn simple(params: &FormalParameters<'_>) -> bool {
@@ -300,12 +326,16 @@ impl<'a> Visit<'a> for Finder<'a> {
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        let class_member = self.top().class_member;
         self.push_function(
             it.span,
             it.has_use_strict_directive(),
             &it.params,
             it.r#async,
         );
+        if let Some(top) = self.frames.last_mut() {
+            top.class_member = class_member;
+        }
         walk::walk_arrow_function_expression(self, it);
         self.frames.pop();
     }

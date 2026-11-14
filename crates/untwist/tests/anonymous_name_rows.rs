@@ -3,7 +3,7 @@ use untwist_testing::node_rows::{self, listed_unsafe_witnesses, node_or_skip, Mo
 
 const ROWS: &str = include_str!("data/anonymous_name_rows.txt");
 
-const UNSAFE_WITNESSES: [&str; 8] = [
+const UNSAFE_WITNESSES: [&str; 10] = [
     "var-function",
     "var-class",
     "let-arrow",
@@ -12,6 +12,8 @@ const UNSAFE_WITNESSES: [&str; 8] = [
     "for-init",
     "generator",
     "destructured-name",
+    "name-read-in-eval-text",
+    "name-read-in-function-text",
 ];
 
 fn transformed(options: &Options, source: &str) -> String {

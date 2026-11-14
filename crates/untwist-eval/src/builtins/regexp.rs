@@ -238,6 +238,10 @@ pub fn compile_regexp<'a>(
     Ok(compiled)
 }
 
+pub fn engine_accepts(pattern: &str, flags: &str) -> bool {
+    Regex::with_flags(pattern, Flags::from(flags)).is_ok()
+}
+
 fn is_plain_ascii_pattern(pattern: &str) -> bool {
     let bytes = pattern.as_bytes();
     pattern.is_ascii()

@@ -35,3 +35,6 @@ strict-program|keep|"use strict"; []["filter"]["constructor"]("console.log('stri
 patched-filter|keep|Array.prototype.filter = function () {}; []["filter"]["constructor"]("console.log('patched')")()
 identifier-object|keep|var x = []; x["filter"]["constructor"]("console.log('named')")()
 chain-declares-alone|peel|[]["filter"]["constructor"]("var hidden = 1; console.log(typeof hidden)")()
+function-body-evals-its-name|keep|Function("s", "console.log(eval(s))")("typeof anonymous");
+function-literal-eval-of-its-name|keep|Function("console.log(eval('typeof anonymous'))")();
+constructor-chain-eval-of-its-name|keep|[]["filter"]["constructor"]("a", "console.log(eval('typeof anonymous + a'))")(1);

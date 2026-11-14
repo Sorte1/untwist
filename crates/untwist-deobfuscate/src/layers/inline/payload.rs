@@ -2,8 +2,8 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     ArrowFunctionExpression, BindingIdentifier, BindingPattern, Class, Expression, Function,
     IdentifierReference, ImportExpression, ImportMeta, LabeledStatement, NewTarget, Program,
-    ReturnStatement, Statement, StaticBlock, Super, UnaryExpression, VariableDeclaration,
-    VariableDeclarationKind,
+    RegExpLiteral, ReturnStatement, Statement, StaticBlock, Super, UnaryExpression,
+    VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::SemanticBuilder;
@@ -13,6 +13,7 @@ use oxc_syntax::scope::ScopeFlags;
 use untwist_core::parse::{has_error, parse_with, SourceType};
 
 use super::super::model::Refusal;
+use super::regex::holds_everywhere;
 
 const STRICT_PREFIX: &str = "\"use strict\";\n";
 
@@ -280,5 +281,14 @@ impl<'a> Visit<'a> for Scan {
 
     fn visit_import_expression(&mut self, _it: &ImportExpression<'a>) {
         self.refused = true;
+    }
+
+    fn visit_reg_exp_literal(&mut self, it: &RegExpLiteral<'a>) {
+        let flags = it
+            .raw
+            .as_ref()
+            .and_then(|raw| raw.as_str().rsplit_once('/'))
+            .map(|(_, flags)| flags);
+        self.refused |= !flags.is_some_and(|flags| holds_everywhere(&it.regex.pattern.text, flags));
     }
 }

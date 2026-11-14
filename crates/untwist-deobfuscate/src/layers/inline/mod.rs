@@ -1,17 +1,19 @@
 mod names;
 mod payload;
+mod regex;
 mod sites;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
 use oxc_ast_visit::Visit;
-use oxc_semantic::{Scoping, SemanticBuilder};
+use oxc_semantic::SemanticBuilder;
 use oxc_span::Span;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use self::names::Watch;
 use self::payload::Facts;
 use self::sites::{Context, Finder, Kind, List, Site};
-use super::decode::names_hold;
+use super::decode::Rebound;
 use super::model::{DecodeCx, LayerForm, Refusal, Refused};
 use untwist_core::parse::{has_error, parse_with, SourceType};
 use untwist_core::semantic::builtins::{scan, Reliance};
@@ -75,7 +77,7 @@ pub enum Plan {
 enum Shape {
     Bare(String),
     Block(String),
-    StrictCall(String),
+    StrictCall(String, bool),
     Parenthesized(String, bool),
 }
 
@@ -85,6 +87,8 @@ struct Pending {
     shape: Shape,
     watched: Vec<String>,
     function: Option<Span>,
+    site: usize,
+    runs_eval: bool,
 }
 
 pub fn plan(program: &Program<'_>, cx: &InlineCx<'_>) -> Plan {
@@ -102,16 +106,21 @@ pub fn plan(program: &Program<'_>, cx: &InlineCx<'_>) -> Plan {
         .semantic
         .into_scoping();
     repair_blocked_hoists(program, &mut scoping);
+    let rebound = Rebound::of(&scoping);
     let mut refused: Vec<(Span, Refused)> = Vec::new();
     let mut pending: Vec<Pending> = Vec::new();
-    for site in &finder.sites {
+    for (index, site) in finder.sites.iter().enumerate() {
         let form = form_of(site.kind);
-        match judge(site, &scoping, cx) {
-            Ok(shape) => pending.push(shape),
+        match judge(site, &rebound, cx) {
+            Ok(shape) => pending.push(Pending {
+                site: index,
+                ..shape
+            }),
             Err(reason) => refused.push((site.span, Refused { form, reason })),
         }
     }
     settle_names(program, &mut pending, &mut refused);
+    settle_shadowing(&finder.sites, &mut pending, &mut refused);
     if pending.is_empty() {
         refused.sort_by_key(|(span, _)| span.start);
         return match refused.first() {
@@ -163,10 +172,13 @@ fn builtins_hold(text: &str, unsafe_transforms: bool) -> Result<(), Refusal> {
         return Err(Refusal::Unparsable);
     }
     let program = &parsed.program;
-    let mut scoping = SemanticBuilder::new()
-        .build(program)
-        .semantic
-        .into_scoping();
+    let built = SemanticBuilder::new()
+        .with_check_syntax_error(true)
+        .build(program);
+    if has_error(&built.diagnostics) {
+        return Err(Refusal::Unparsable);
+    }
+    let mut scoping = built.semantic.into_scoping();
     repair_blocked_hoists(program, &mut scoping);
     let verdict = scan(program, &scoping, false, false, &RELIED_ON).verdict;
     match verdict.allows_safe(unsafe_transforms) {
@@ -175,11 +187,11 @@ fn builtins_hold(text: &str, unsafe_transforms: bool) -> Result<(), Refusal> {
     }
 }
 
-fn judge(site: &Site<'_>, scoping: &Scoping, cx: &InlineCx<'_>) -> Result<Pending, Refusal> {
+fn judge(site: &Site<'_>, rebound: &Rebound<'_>, cx: &InlineCx<'_>) -> Result<Pending, Refusal> {
     let text = site.text.as_ref().map_err(|reason| *reason)?;
     let mut roots = vec!["eval"];
     roots.extend(site.names.iter().copied());
-    if !names_hold(scoping, &roots) || !roots.iter().all(|name| FOLD_ROOTS.contains(name)) {
+    if !rebound.holds(&roots) || !roots.iter().all(|name| FOLD_ROOTS.contains(name)) {
         return Err(Refusal::Shape);
     }
     if site.over_cap {
@@ -194,21 +206,26 @@ fn judge(site: &Site<'_>, scoping: &Scoping, cx: &InlineCx<'_>) -> Result<Pendin
     if facts.own_strict && !context.strict {
         return strict_call(site, facts);
     }
+    let runs_eval = facts.calls_eval && !context.strict;
     if facts.reserved_words && context.async_or_generator {
         return Err(Refusal::Shape);
     }
     if facts.labels && context.labelled {
         return Err(Refusal::Shape);
     }
-    match site.kind {
+    let pending = match site.kind {
         Kind::Statement(list) => statement(site.span, list, context, facts),
         Kind::Expression => expression(site.span, facts),
         Kind::Indirect => Err(Refusal::Shape),
-    }
+    }?;
+    Ok(Pending {
+        runs_eval,
+        ..pending
+    })
 }
 
 fn strict_call(site: &Site<'_>, facts: Facts) -> Result<Pending, Refusal> {
-    let Kind::Statement(_) = site.kind else {
+    let Kind::Statement(list) = site.kind else {
         return Err(Refusal::Shape);
     };
     if site.context.async_or_generator {
@@ -217,9 +234,11 @@ fn strict_call(site: &Site<'_>, facts: Facts) -> Result<Pending, Refusal> {
     Ok(Pending {
         span: site.span,
         form: LayerForm::InlineStmt,
-        shape: Shape::StrictCall(facts.statements),
+        shape: Shape::StrictCall(facts.statements, list.is_some()),
         watched: Vec::new(),
         function: None,
+        site: 0,
+        runs_eval: false,
     })
 }
 
@@ -231,6 +250,8 @@ fn expression(span: Span, facts: Facts) -> Result<Pending, Refusal> {
         shape: Shape::Parenthesized(text, bare),
         watched: Vec::new(),
         function: None,
+        site: 0,
+        runs_eval: false,
     })
 }
 
@@ -246,6 +267,8 @@ fn statement(
         shape,
         watched,
         function,
+        site: 0,
+        runs_eval: false,
     };
     let in_body = list == Some(List::FunctionBody) && context.function.is_some();
     if facts.var_names.is_empty() {
@@ -295,13 +318,22 @@ fn settle_names(
         })
         .collect();
     names::clashes(program, &mut watches);
-    let clashed: Vec<Span> = watches
+    let clashed: FxHashSet<Span> = watches
         .iter()
         .filter(|watch| watch.clashed)
         .map(|watch| watch.site)
         .collect();
+    refuse_where(pending, refused, |site| clashed.contains(&site.span));
+}
+
+fn refuse_where(
+    pending: &mut Vec<Pending>,
+    refused: &mut Vec<(Span, Refused)>,
+    refuse: impl Fn(&Pending) -> bool,
+) -> bool {
+    let before = pending.len();
     pending.retain(|site| {
-        let keep = !clashed.contains(&site.span);
+        let keep = !refuse(site);
         if !keep {
             let refusal = Refused {
                 form: site.form,
@@ -311,6 +343,45 @@ fn settle_names(
         }
         keep
     });
+    pending.len() != before
+}
+
+fn settle_shadowing(
+    sites: &[Site<'_>],
+    pending: &mut Vec<Pending>,
+    refused: &mut Vec<(Span, Refused)>,
+) {
+    loop {
+        let peeled: FxHashSet<usize> = pending.iter().map(|site| site.site).collect();
+        let mut declaring: FxHashMap<Option<Span>, Vec<usize>> = FxHashMap::default();
+        for (index, site) in sites.iter().enumerate() {
+            let kept = !peeled.contains(&index);
+            let scope = match site.shadows {
+                Some(scope) if kept => Some(scope),
+                _ => None,
+            };
+            if let Some(scope) = scope {
+                declaring.entry(scope).or_default().push(index);
+            }
+        }
+        for site in pending.iter().filter(|site| site.runs_eval) {
+            let scope = sites[site.site].context.function;
+            declaring.entry(scope).or_default().push(site.site);
+        }
+        if declaring.is_empty() {
+            return;
+        }
+        let shadowed = |site: &Pending| {
+            let chain = &sites[site.site].chain;
+            std::iter::once(None)
+                .chain(chain.iter().copied().map(Some))
+                .filter_map(|scope| declaring.get(&scope))
+                .any(|indices| indices.iter().any(|index| *index != site.site))
+        };
+        if !refuse_where(pending, refused, shadowed) {
+            return;
+        }
+    }
 }
 
 fn splice(source: &str, pending: &[Pending]) -> String {
@@ -330,10 +401,14 @@ fn splice(source: &str, pending: &[Pending]) -> String {
                 out.push_str(text);
                 out.push_str("\n}");
             }
-            Shape::StrictCall(text) => {
-                out.push_str(";\n(() => {\n");
+            Shape::StrictCall(text, listed) => {
+                out.push_str(if *listed {
+                    ";\n(() => {\n"
+                } else {
+                    "{\n(() => {\n"
+                });
                 out.push_str(text);
-                out.push_str("\n})();");
+                out.push_str(if *listed { "\n})();" } else { "\n})();\n}" });
             }
             Shape::Parenthesized(text, bare) => {
                 out.push_str(if *bare { "(" } else { "(0, " });
