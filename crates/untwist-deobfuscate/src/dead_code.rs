@@ -244,6 +244,50 @@ fn hoisted_by<'a>(statement: Option<&Statement<'a>>) -> Hoisted<'a> {
     hoisted
 }
 
+struct DroppedFunctions<'s, 'a> {
+    scoping: &'s Scoping,
+    names: Vec<(Ident<'a>, Option<SymbolId>)>,
+    unbound: bool,
+}
+
+impl<'a> Visit<'a> for DroppedFunctions<'_, 'a> {
+    fn visit_function(&mut self, it: &Function<'a>, _flags: ScopeFlags) {
+        let Some(id) = it.id.as_ref().filter(|_| it.is_declaration()) else {
+            return;
+        };
+        let Some(symbol) = id.symbol_id.get() else {
+            self.unbound = true;
+            return;
+        };
+        let hoisted = self
+            .scoping
+            .scope_flags(self.scoping.symbol_scope_id(symbol))
+            .is_var();
+        if hoisted && !self.names.iter().any(|(name, _)| *name == id.name) {
+            self.names.push((id.name, Some(symbol)));
+        }
+    }
+
+    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
+
+    fn visit_class(&mut self, _it: &Class<'a>) {}
+}
+
+fn annex_b_vars<'a>(
+    dropped: Option<&Statement<'a>>,
+    scoping: &Scoping,
+) -> Option<Vec<(Ident<'a>, Option<SymbolId>)>> {
+    let mut found = DroppedFunctions {
+        scoping,
+        names: Vec::new(),
+        unbound: false,
+    };
+    if let Some(statement) = dropped {
+        found.visit_statement(statement);
+    }
+    (!found.unbound).then_some(found.names)
+}
+
 #[derive(Default)]
 struct References {
     ids: FxHashSet<ReferenceId>,
@@ -774,8 +818,16 @@ impl<'a> DeadCode<'a> {
         } else {
             Some(&node.consequent)
         };
-        let drops_block_function = !self.strict && hoisted_by(dropped).function;
-        if cx.opts.unsafe_transforms && !decision.literal && !drops_block_function {
+        let annex_b = if self.strict || !hoisted_by(dropped).function {
+            Some(Vec::new())
+        } else {
+            annex_b_vars(dropped, cx.scoping())
+        };
+        if let (true, false, Some(names)) = (cx.opts.unsafe_transforms, decision.literal, annex_b) {
+            let names = still_needed(names, dropped, cx.scoping());
+            if !names.is_empty() {
+                stmts.push(var_statement(&names, cx));
+            }
             self.merge_branch(node.unbox(), span, decision.value, outer, stmts, cx)
         } else {
             self.fold_soundly(node, decision.value, outer, stmts, cx)
