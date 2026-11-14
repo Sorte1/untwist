@@ -1,0 +1,13 @@
+new-function-reads-global|var o = {abcde: "x", fghij: "q"}; console.log(new Function("return o.abcde")(), o.fghij);
+function-call-reads-global|var o = {abcde: "x", fghij: "q"}; console.log(Function("return o.abcde")(), o.fghij);
+this-key-writes-global|var o = {abcde: "x", fghij: "q"}; (function(){ var s = "o"; var q = this[s]; q.abcde = "y"; })(); if (o.abcde !== "x") { o.fghij = "z"; } console.log(o.abcde, o.fghij);
+indirect-eval-writes-script-let|let o = {abcde: "x", fghij: "q"}; (0, eval)("o.abcde = 'y'"); if (o.abcde !== "x") { o.fghij = "z"; } console.log(o.abcde, o.fghij);
+global-this-reads-global|var o = {abcde: "x", fghij: "q"}; console.log(globalThis.o.abcde, o.fghij);
+top-level-and-indirect-eval|var o = {abcde: "x", fghij: "q"}; console.log(eval("o.abcde"), o.fghij); console.log((0, eval)("o.fghij"));
+indirect-eval-reads-global|var o = {abcde: "x", fghij: "q"}; console.log((0, eval)("o.abcde"), o.fghij);
+string-timer-reads-global|var o = {abcde: "x", fghij: "q"}; setTimeout("console.log(o.abcde)"); console.log(o.fghij);
+plain-global-function-text|function helper() { return 4; } var total = 3; console.log(new Function("return helper() + total")());
+with-declares-and-replaces|(function(){ var p = {}; with (p) { var o = {abcde: "x", fghij: "q"}; p.o = {abcde: "P", fghij: "Q"}; console.log(o.abcde, o.fghij); } })();
+with-object-shadows|(function(){ var o = {abcde: "x", fghij: "q"}; with ({o: {abcde: "other"}}) { console.log(o.abcde); } })();
+with-object-merged|(function(){ var w = {}; with (w) { var o = {}; o.abcde = "x"; w.o = {abcde: "W"}; console.log(o.abcde); } })();
+with-local-renamed|function t(p) { var count = 1; with (p) { count = count + 1; } return [count, p.count].join(); } console.log(t({}), t({count: 5}));

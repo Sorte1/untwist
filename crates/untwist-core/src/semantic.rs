@@ -65,7 +65,7 @@ pub fn scope_hazard(scoping: &Scoping) -> Option<&'static str> {
         }
         with |= flags.contains(ScopeFlags::With);
     }
-    (with && with_observes()).then_some("with statement")
+    with.then_some("with statement")
 }
 
 pub struct Semantics {
