@@ -3,13 +3,17 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashSet;
+use std::cell::OnceCell;
 
 use super::{Builtins, Reliance, Scanned};
 use crate::semantic::{is_foreign_global, program_is_strict};
 
+mod keys;
 mod reach;
 
-use reach::{call_of, member_of};
+use reach::{call_of, key_of, member_of, Key, REACHING_KEYS};
 
 const GLOBAL_OBJECTS: [&str; 7] = [
     "globalThis",
@@ -166,6 +170,9 @@ impl Frame {
 }
 
 struct Scan<'s> {
+    program: &'s Program<'s>,
+    spelling: OnceCell<FxHashSet<SymbolId>>,
+    reaching_text: OnceCell<bool>,
     scoping: &'s Scoping,
     reliance: &'s Reliance,
     writes_only: bool,
@@ -200,6 +207,9 @@ pub fn scan(
     reliance: &Reliance,
 ) -> Scanned {
     let mut scan = Scan {
+        program,
+        spelling: OnceCell::new(),
+        reaching_text: OnceCell::new(),
         scoping,
         reliance,
         writes_only,
@@ -217,6 +227,9 @@ pub fn scan(
 
 pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: &Reliance) -> bool {
     let mut scan = Scan {
+        program,
+        spelling: OnceCell::new(),
+        reaching_text: OnceCell::new(),
         scoping,
         reliance,
         writes_only: false,
@@ -230,6 +243,45 @@ pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: 
 }
 
 impl Scan<'_> {
+    pub(super) fn names_a_reaching_key(&self) -> bool {
+        *self
+            .reaching_text
+            .get_or_init(|| keys::names_a_reaching_key(self.program, &REACHING_KEYS))
+    }
+
+    pub(super) fn spelling_symbol(&self, symbol: SymbolId) -> bool {
+        self.spelling
+            .get_or_init(|| keys::spelling_symbols(self.program, self.scoping))
+            .contains(&symbol)
+    }
+
+    fn pattern_key_reaches(&self, computed: bool, key: &PropertyKey<'_>) -> bool {
+        let name = match (computed, key) {
+            (true, PropertyKey::StaticIdentifier(_) | PropertyKey::PrivateIdentifier(_)) => None,
+            (true, _) => match key.as_expression().map(key_of) {
+                Some(Key::Name(name)) => Some(name),
+                Some(Key::Other) | None => return false,
+                Some(Key::Unknown(expression)) => {
+                    return self.spells(expression, |name| self.pattern_name_reaches(name))
+                }
+            },
+            (false, PropertyKey::StaticIdentifier(id)) => Some(id.name.as_str()),
+            (false, PropertyKey::StringLiteral(literal)) => literal.value.as_str(),
+            (false, _) => None,
+        };
+        name.is_some_and(|name| self.pattern_name_reaches(name))
+    }
+
+    fn pattern_name_reaches(&self, name: &str) -> bool {
+        REACHING_KEYS.contains(&name) || self.names_a_root(name)
+    }
+
+    fn pattern_read(&mut self, reaches: bool) {
+        if reaches && !self.writes_only {
+            self.aliased();
+        }
+    }
+
     pub(super) fn this_value(&self) -> This {
         self.frame().this
     }
@@ -567,6 +619,30 @@ impl Scan<'_> {
 }
 
 impl<'a> VisitJs<'a> for Scan<'_> {
+    fn visit_binding_property(&mut self, it: &BindingProperty<'a>) {
+        let reaches = self.pattern_key_reaches(it.computed, &it.key);
+        self.pattern_read(reaches);
+        walk_js::walk_binding_property(self, it);
+    }
+
+    fn visit_assignment_target_property_property(
+        &mut self,
+        it: &AssignmentTargetPropertyProperty<'a>,
+    ) {
+        let reaches = self.pattern_key_reaches(it.computed, &it.name);
+        self.pattern_read(reaches);
+        walk_js::walk_assignment_target_property_property(self, it);
+    }
+
+    fn visit_assignment_target_property_identifier(
+        &mut self,
+        it: &AssignmentTargetPropertyIdentifier<'a>,
+    ) {
+        let reaches = self.pattern_name_reaches(it.binding.name.as_str());
+        self.pattern_read(reaches);
+        walk_js::walk_assignment_target_property_identifier(self, it);
+    }
+
     fn visit_statement(&mut self, it: &Statement<'a>) {
         if self.settled() {
             return;
