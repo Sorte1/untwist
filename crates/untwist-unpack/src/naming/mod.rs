@@ -120,34 +120,55 @@ fn wanted(
     }
 }
 
-struct Taken(FxHashSet<String>);
+#[derive(Default)]
+struct Taken {
+    paths: FxHashSet<String>,
+    next_number: usize,
+    next_suffix: FxHashMap<String, usize>,
+}
 
 impl Taken {
+    fn insert(&mut self, path: &str) -> bool {
+        self.paths.insert(path.to_lowercase())
+    }
+
     fn numbered(&mut self) -> Option<PosixPath> {
-        (1usize..)
-            .map(|n| format!("{CHUNK_PREFIX}{RUN_PREFIX}{n}.js"))
-            .find(|path| !self.0.contains(path))
-            .and_then(|path| PosixPath::parse(&path))
-            .map(|path| self.claim(path))
+        loop {
+            self.next_number += 1;
+            let path = format!("{CHUNK_PREFIX}{RUN_PREFIX}{}.js", self.next_number);
+            if !self.paths.contains(&path) {
+                return PosixPath::parse(&path).map(|path| self.claim(path));
+            }
+        }
     }
 
     fn claim(&mut self, path: PosixPath) -> PosixPath {
-        if self.0.insert(path.as_str().to_lowercase()) {
+        if self.insert(path.as_str()) {
             return path;
         }
-        let mut suffix = FIRST_SUFFIX;
+        let key = path.as_str().to_lowercase();
+        let mut suffix = self.next_suffix.get(&key).copied().unwrap_or(FIRST_SUFFIX);
         loop {
             let candidate = path.with_stem_suffix(&format!("-{suffix}"));
-            if self.0.insert(candidate.as_str().to_lowercase()) {
+            suffix += 1;
+            if self.insert(candidate.as_str()) {
+                self.next_suffix.insert(key, suffix);
                 return candidate;
             }
-            suffix += 1;
         }
     }
 }
 
 pub fn name_modules(bundle: &mut Bundle<'_>) {
     let kind = bundle.kind;
+    let guesses: Vec<Option<Guess>> = bundle
+        .modules
+        .iter()
+        .map(|(id, module)| guess(kind, id, module))
+        .collect();
+    if guesses.iter().all(Option::is_none) {
+        return;
+    }
     let (counts, importers) = match kind {
         BundleKind::Rollup => (import_counts(bundle), Importers::default()),
         _ => (FxHashMap::default(), importers::scan(bundle)),
@@ -155,24 +176,19 @@ pub fn name_modules(bundle: &mut Bundle<'_>) {
     let planned: Vec<Option<(String, bool)>> = bundle
         .modules
         .iter()
-        .map(|(id, module)| {
-            let guessed = guess(kind, id, module)?;
-            wanted(guessed, id, module, (&counts, &importers))
-        })
+        .zip(&guesses)
+        .map(|((id, module), guessed)| wanted((*guessed)?, id, module, (&counts, &importers)))
         .collect();
     if planned.iter().all(Option::is_none) {
         return;
     }
-    let mut taken = Taken(
-        RESERVED_FILES
-            .iter()
-            .chain([&ENTRY_PATH])
-            .map(|name| name.to_lowercase())
-            .collect(),
-    );
+    let mut taken = Taken::default();
+    for name in RESERVED_FILES.iter().chain([&ENTRY_PATH]) {
+        taken.insert(name);
+    }
     for (module, plan) in bundle.modules.values().zip(&planned) {
         if plan.is_none() {
-            taken.0.insert(module.path.as_str().to_lowercase());
+            taken.insert(module.path.as_str());
         }
     }
     for (module, plan) in bundle.modules.values_mut().zip(planned) {
