@@ -231,6 +231,18 @@ fn emptied_heads(program: &Program<'_>, spans: &[Span]) -> FxHashSet<Span> {
     heads.found
 }
 
+pub fn removes_what_an_eval_reads(scoping: &Scoping, spans: &[Span]) -> bool {
+    scoping.symbol_ids().any(|symbol| {
+        let declared = scoping.symbol_span(symbol);
+        scoping
+            .scope_flags(scoping.symbol_scope_id(symbol))
+            .contains_direct_eval()
+            && spans
+                .iter()
+                .any(|span| span.start <= declared.start && declared.end <= span.end)
+    })
+}
+
 pub fn removes_hoist_blocker(scoping: &Scoping, spans: &[Span]) -> bool {
     hoist_blockers(scoping).into_iter().any(|blocker| {
         let declared = scoping.symbol_span(blocker);

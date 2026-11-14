@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    ArrowFunctionExpression, AwaitExpression, Class, ForOfStatement, Function, Program, Statement,
-    VariableDeclaration,
+    ArrowFunctionExpression, AwaitExpression, Class, ForOfStatement, Function, IdentifierReference,
+    Program, Statement, VariableDeclaration,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_diagnostics::{OxcDiagnostic, Severity};
@@ -26,7 +26,7 @@ pub fn script_source_type() -> SourceType {
 pub fn parse_program<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
     let as_script = parse_with(alloc, source, script_source_type());
     if !has_error(&as_script.diagnostics) {
-        return as_script;
+        return awaited_module(alloc, source, &as_script.program).unwrap_or(as_script);
     }
     let (mut as_module, module_syntax) =
         parse_recording(alloc, source, SourceType::mjs().with_jsx(true));
@@ -145,6 +145,36 @@ impl<'a> VisitJs<'a> for TopLevelAwait {
     fn visit_arrow_function_expression(&mut self, _: &ArrowFunctionExpression<'a>) {}
 
     fn visit_class(&mut self, _: &Class<'a>) {}
+}
+
+fn awaited_module<'a>(
+    alloc: &'a Allocator,
+    source: &'a str,
+    script: &Program<'_>,
+) -> Option<Parsed<'a>> {
+    if !source.contains("await") || !calls_an_await_name(script) {
+        return None;
+    }
+    let as_module = parse_with(alloc, source, SourceType::mjs().with_jsx(true));
+    (!has_error(&as_module.diagnostics) && has_top_level_await(&as_module.program))
+        .then_some(as_module)
+}
+
+fn calls_an_await_name(program: &Program<'_>) -> bool {
+    let mut scan = AwaitName::default();
+    scan.visit_program(program);
+    scan.found
+}
+
+#[derive(Default)]
+struct AwaitName {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for AwaitName {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= it.name == "await";
+    }
 }
 
 fn has_top_level_await(program: &Program<'_>) -> bool {

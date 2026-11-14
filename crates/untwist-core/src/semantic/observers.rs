@@ -3,7 +3,7 @@ use std::cell::Cell;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrowFunctionExpression, CallExpression, Expression, Function, Program,
-    ReturnStatement, ThisExpression,
+    ReturnStatement, ThisExpression, VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::{Scoping, SemanticBuilder};
@@ -216,6 +216,11 @@ impl<'a> Visit<'a> for PayloadShape {
 
     fn visit_this_expression(&mut self, _it: &ThisExpression) {
         self.open = true;
+    }
+
+    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
+        self.open |= self.depth == 0 && it.kind == VariableDeclarationKind::Var;
+        walk::walk_variable_declaration(self, it);
     }
 
     fn visit_return_statement(&mut self, it: &ReturnStatement<'a>) {
