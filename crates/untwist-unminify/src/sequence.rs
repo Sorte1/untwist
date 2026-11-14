@@ -1,11 +1,12 @@
 use std::cell::Cell;
 
-use oxc_allocator::Vec as AVec;
+use oxc_allocator::{TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
 use oxc_span::{GetSpan, SPAN};
 use oxc_syntax::scope::ScopeFlags;
 use untwist_core::ast_util::literal::is_safe_literal;
+use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass, StatementKind,
     StatementVariants,
@@ -92,14 +93,29 @@ fn ends_in_anonymous_definition(expr: &Expression<'_>) -> bool {
     }
 }
 
+fn is_unnamed_form(expr: &Expression<'_>) -> bool {
+    !std::ptr::eq(without_unnamed(expr), expr)
+}
+
+fn is_splittable_value(expr: &Expression<'_>) -> bool {
+    is_sequence(expr) && !(ends_in_anonymous_definition(expr) && is_unnamed_form(expr))
+}
+
+fn split_value<'a>(expr: &mut Expression<'a>, out: &mut AVec<'a, Statement<'a>>, cx: &Cx<'a, '_>) {
+    let keeps_anonymous = ends_in_anonymous_definition(expr);
+    hoist_head(expr, out, cx);
+    if keeps_anonymous {
+        let last = expr.take_in(cx);
+        *expr = cx.unnamed_value(last);
+    }
+}
+
 fn declarator_has_sequence_init(declaration: &VariableDeclaration<'_>) -> bool {
     declaration.declarations.len() == 1
-        && declaration.declarations.first().is_some_and(|declarator| {
-            declarator
-                .init
-                .as_ref()
-                .is_some_and(|init| is_sequence(init) && !ends_in_anonymous_definition(init))
-        })
+        && declaration
+            .declarations
+            .first()
+            .is_some_and(|declarator| declarator.init.as_ref().is_some_and(is_splittable_value))
 }
 
 fn hoist_declarator<'a>(
@@ -116,7 +132,7 @@ fn hoist_declarator<'a>(
     let Some(init) = &mut declarator.init else {
         return;
     };
-    hoist_head(init, out, cx);
+    split_value(init, out, cx);
 }
 
 fn is_fast_path(stmt: &Statement<'_>) -> bool {
@@ -402,17 +418,23 @@ fn hoist_assignment_sequence<'a>(expr: &mut Expression<'a>, cx: &Cx<'a, '_>) -> 
         ) {
             return false;
         }
-        if !is_sequence(&assign.right)
-            || ends_in_anonymous_definition(&assign.right)
-            || !is_hoistable_target(&assign.left)
-            || !is_hoist_order_safe(assign, cx)
-        {
+        let names_value = assign.operator == AssignmentOperator::Assign
+            && matches!(assign.left, AssignmentTarget::AssignmentTargetIdentifier(_));
+        let splittable = match names_value {
+            true => is_splittable_value(&assign.right),
+            false => is_sequence(&assign.right),
+        };
+        if !splittable || !is_hoistable_target(&assign.left) || !is_hoist_order_safe(assign, cx) {
             return false;
         }
+        let keeps_anonymous = names_value && ends_in_anonymous_definition(&assign.right);
         let Some((leading, last)) = take_sequence_parts(&mut assign.right, cx) else {
             return false;
         };
-        assign.right = last;
+        assign.right = match keeps_anonymous {
+            true => cx.unnamed_value(last),
+            false => last,
+        };
         leading
     };
     let span = expr.span();

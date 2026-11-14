@@ -4,7 +4,7 @@ use untwist_testing::node_rows::{self, listed_unsafe_witnesses, node_or_skip, ob
 
 const ROWS: &str = include_str!("data/anonymous_name_rows.txt");
 
-const UNSAFE_WITNESSES: [&str; 54] = [
+const UNSAFE_WITNESSES: [&str; 58] = [
     "var-function",
     "var-class",
     "let-arrow",
@@ -59,6 +59,10 @@ const UNSAFE_WITNESSES: [&str; 54] = [
     "code-text-b5",
     "code-text-b6",
     "code-text-b7",
+    "decoder-name-and-text",
+    "decoder-assigned-in-sequence",
+    "decoder-arrow-in-lexical-sequence",
+    "decoder-reads-its-own-name",
 ];
 
 const TRIVIA_ROWS: [(&str, &str); 8] = [
@@ -181,6 +185,27 @@ fn a_program_that_reads_no_name_still_has_its_sequence_split() {
         let code = transformed(&safe, source);
         assert!(!code.contains("(console.log"), "{label}: {code}");
         assert!(!code.contains("(0, "), "{label}: {code}");
+    }
+}
+
+#[test]
+fn a_decoder_split_from_its_rotator_stays_anonymous_and_decodes() {
+    let (_, source) = rows()
+        .into_iter()
+        .find(|(label, _)| label == "decoder-in-sequence")
+        .unwrap();
+    for rename in [
+        RenameMode::None,
+        RenameMode::Smart,
+        RenameMode::Mangle,
+        RenameMode::Simple,
+    ] {
+        let code = renamed(rename, &source);
+        assert_eq!(
+            code.trim(),
+            "console.log(\"beta\", \"alpha\");",
+            "{rename:?}"
+        );
     }
 }
 

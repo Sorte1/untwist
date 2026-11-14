@@ -61,3 +61,8 @@ code-text-b4|var g = (console.log("head"), function () {}); console.log(new (Obj
 code-text-b5|var g = (console.log("head"), function () {}); console.log(globalThis.eval?.("JSON.stringify(g.name)"));
 code-text-b6|var g = (console.log("head"), function () {}); var e = globalThis.eval; console.log(e("JSON.stringify(g.name)"));
 code-text-b7|var g = (console.log("head"), function () {}); var { eval: e } = globalThis; console.log(e("JSON.stringify(g.name)"));
+decoder-in-sequence|var a=["log","beta","alpha"],d=(function(n){for(var e=2;--e;)n.push(n.shift())}(a),function(t,e){return a[t=+t]});console[d("0x2")](d("0x0"),d("0x1"));
+decoder-name-and-text|var a=["log","beta","alpha"],d=(function(n){for(var e=2;--e;)n.push(n.shift())}(a),function(t,e){return a[t=+t]});console[d("0x2")](d("0x0"),d("0x1"),JSON.stringify(d.name),d.toString().indexOf("function"));
+decoder-assigned-in-sequence|var a=["log","beta","alpha"],d;d=(function(n){for(var e=2;--e;)n.push(n.shift())}(a),function(t,e){return a[t=+t]});console[d("0x2")](d("0x0"),d("0x1"),JSON.stringify(d.name));
+decoder-arrow-in-lexical-sequence|const a=["log","beta","alpha"],d=(console.log("rotate first"),function(n){for(var e=2;--e;)n.push(n.shift())}(a),(t,e)=>a[t=+t]);console[d("0x2")](d("0x0"),d("0x1"),JSON.stringify(d.name));
+decoder-reads-its-own-name|var a=["log","beta","alpha"],d=(function(n){for(var e=2;--e;)n.push(n.shift())}(a),function(t,e){return a[t=+t]+JSON.stringify(d.name)+(e||"")});console.log(d("0x0"),d("0x1",d.toString().length>0));
