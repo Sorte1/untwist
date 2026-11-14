@@ -28,6 +28,7 @@
 <link rel="manifest" href="/site.webmanifest">
 <meta name="theme-color" content="#1C1A25" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#ECEAF2" media="(prefers-color-scheme: light)">
+<script id="theme-boot">(function(){var d=document.documentElement,h=/(?:^#|&)theme=(dark|light)(?:&|$)/.exec(location.hash),m=h?h[1]:matchMedia('(prefers-color-scheme: light)').matches?'light':'dark',t={dark:{'tokyo-night':'#16161E','github-dark':'#010409','one-dark':'#21252B','catppuccin-mocha':'#11111B',untwist:'#1C1A25'},light:{'github-light':'#F6F8FA','solarized-light':'#EEE8D5','catppuccin-latte':'#DCE0E8',untwist:'#ECEAF2'}}[m],e={dark:'tokyo-night',light:'github-light'}[m];try{var p=JSON.parse(localStorage.getItem('untwist.editorThemes'));if(p&&typeof p[m]==='string'&&Object.prototype.hasOwnProperty.call(t,p[m]))e=p[m]}catch(x){}d.setAttribute('data-theme',m);if(e!=='untwist')d.setAttribute('data-editor',e);var c=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<c.length;i++)c[i].setAttribute('content',t[e])})()</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"untwist","alternateName":"untwist playground","url":"https://untwist.dev/","description":"untwist is a fast JavaScript deobfuscator and unbundler. Undo obfuscator.io, unminify code and split webpack, Rollup and Browserify bundles into modules, right in your browser.","image":"https://untwist.dev/og.png","applicationCategory":"DeveloperApplication","operatingSystem":"Any","browserRequirements":"Requires JavaScript and WebAssembly","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Deobfuscate javascript-obfuscator (obfuscator.io) output","Unpack webpack, Browserify, esbuild, Parcel, Rollup and Vite bundles","Unminify and untranspile JavaScript","Rename mangled identifiers","Runs locally in the browser as WebAssembly"],"sameAs":["https://github.com/Sorte1/untwist","https://crates.io/crates/untwist-cli"]}</script>
 <script type="module" src="/src/main.ts"></script>
 </head>
@@ -98,10 +99,10 @@
 </section>
 
 <section class="set-group">
-<h3 class="set-title">Editor theme</h3>
+<h3 class="set-title">Theme</h3>
 <div class="stack-opt"><span class="opt-name" id="editor-theme-dark-title">Dark mode</span><div role="group" aria-labelledby="editor-theme-dark-title" class="seg seg-2" id="editor-theme-dark"><button type="button" class="seg-btn" data-pick="tokyo-night" aria-pressed="false">Tokyo Night</button><button type="button" class="seg-btn" data-pick="github-dark" aria-pressed="false">GitHub Dark</button><button type="button" class="seg-btn" data-pick="one-dark" aria-pressed="false">One Dark</button><button type="button" class="seg-btn" data-pick="catppuccin-mocha" aria-pressed="false">Catppuccin Mocha</button><button type="button" class="seg-btn" data-pick="untwist" aria-pressed="false">Untwist</button></div></div>
 <div class="stack-opt"><span class="opt-name" id="editor-theme-light-title">Light mode</span><div role="group" aria-labelledby="editor-theme-light-title" class="seg seg-2" id="editor-theme-light"><button type="button" class="seg-btn" data-pick="github-light" aria-pressed="false">GitHub Light</button><button type="button" class="seg-btn" data-pick="solarized-light" aria-pressed="false">Solarized Light</button><button type="button" class="seg-btn" data-pick="catppuccin-latte" aria-pressed="false">Catppuccin Latte</button><button type="button" class="seg-btn" data-pick="untwist" aria-pressed="false">Untwist</button></div></div>
-<span class="hint">The theme follows your system's light or dark setting; the sun and moon button switches it. Kept in this browser only.</span>
+<span class="hint">Colours the whole page and the editors. The page follows your system's light or dark setting; the sun and moon button switches it. Kept in this browser only.</span>
 </section>
 
 <section class="set-group" title="Evaluator steps the string-array decoder may spend per decode unit. The default is 50,000,000; Cancel still stops a long run.">

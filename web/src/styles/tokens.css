@@ -44,6 +44,7 @@
   --bar-h: 48px;
   --strip-h: 30px;
   --radius: 6px;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
 
 :root,
@@ -57,7 +58,7 @@
   --text: #EDEBF5;
   --muted: #A9A4C0;
   --faint: #9893B2;
-  --track: #3E3A52;
+  --track: #6F6A88;
   --knob: #EDEBF5;
   --sel: #302C3E;
   --active-line: rgba(255, 255, 255, 0.045);
@@ -87,6 +88,9 @@
   --selection: #2B2742;
   --diff-del-tint: #271B28;
   --diff-add-tint: #162427;
+  --focus: #52DCC8;
+  --scroll-thumb: #3E3A52;
+  --scrim: rgba(12, 10, 20, 0.48);
   color-scheme: dark;
 }
 
@@ -100,7 +104,7 @@
   --text: #1C1A25;
   --muted: #575270;
   --faint: #686381;
-  --track: #CFCBDB;
+  --track: #7E7994;
   --knob: #FFFFFF;
   --sel: #E2DFEB;
   --active-line: rgba(28, 26, 37, 0.045);
@@ -130,5 +134,8 @@
   --selection: #EDE8FA;
   --diff-del-tint: #FBEFF5;
   --diff-add-tint: #EAF6F3;
+  --focus: #06705F;
+  --scroll-thumb: #CFCBDB;
+  --scrim: rgba(12, 10, 20, 0.48);
   color-scheme: light;
 }

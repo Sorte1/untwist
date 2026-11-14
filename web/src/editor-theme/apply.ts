@@ -18,11 +18,23 @@ export function savePicks(picks: EditorThemePicks, store: KeyValue | null = brow
   }
 }
 
+function paintBrowserChrome(): void {
+  const background = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  if (background === '') {
+    return;
+  }
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+    meta.content = background;
+  }
+}
+
 export function applyEditorTheme(theme: Theme, picks: EditorThemePicks): void {
   const id = activeEditorTheme(theme, picks);
+  document.documentElement.dataset['theme'] = theme;
   if (id === BUILT_IN) {
     delete document.documentElement.dataset['editor'];
   } else {
     document.documentElement.dataset['editor'] = id;
   }
+  paintBrowserChrome();
 }

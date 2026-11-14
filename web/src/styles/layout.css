@@ -24,7 +24,7 @@ button, input {
 }
 
 :focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -1405,12 +1405,12 @@ button.diag-row:hover .diag-loc {
 }
 
 .switch:focus-visible, .seg-btn:focus-visible, .mode-btn:focus-visible, .tree-item:focus-visible, .btn-run:focus-visible, .strip-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
 .editor-host:focus-within {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: -2px;
 }
 
@@ -1605,7 +1605,7 @@ button.diag-row:hover .diag-loc {
   }
 
   .settings::backdrop {
-    background: rgba(12, 10, 20, 0.48);
+    background: var(--scrim);
   }
 
   .panes {
