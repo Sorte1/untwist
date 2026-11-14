@@ -330,17 +330,33 @@ fn dispatch(expr: &Expression<'_>, module: &str, names: &Names<'_>) -> bool {
         && matches!(&arguments[..], [this, rest @ ..] if exports_of(this, module) && standard(rest))
 }
 
-fn loaded(expr: &Expression<'_>, module: &str) -> bool {
+fn loaded<'k>(expr: &'k Expression<'_>, module: &str) -> Option<&'k str> {
     let Expression::AssignmentExpression(assignment) = expr else {
-        return false;
+        return None;
     };
     let AssignmentTarget::StaticMemberExpression(member) = &assignment.left else {
-        return false;
+        return None;
     };
-    assignment.operator == AssignmentOperator::Assign
+    let key = member.property.name.as_str();
+    let set = assignment.operator == AssignmentOperator::Assign
         && is_name(&member.object, module)
-        && LOADED.contains(&member.property.name.as_str())
-        && is_true(&assignment.right)
+        && LOADED.contains(&key)
+        && is_true(&assignment.right);
+    set.then_some(key)
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Record {
+    pub l: bool,
+    pub loaded: bool,
+}
+
+pub fn caching_cache<'k>(
+    function: &'k Function<'_>,
+    require: &str,
+    container: &str,
+) -> Option<&'k str> {
+    caching_record(function, require, container).map(|(cache, _)| cache)
 }
 
 fn cached_return<'s, 'k, 'a>(
@@ -360,11 +376,11 @@ fn cached_return<'s, 'k, 'a>(
     }
 }
 
-pub fn caching_cache<'k>(
+pub fn caching_record<'k>(
     function: &'k Function<'_>,
     require: &str,
     container: &str,
-) -> Option<&'k str> {
+) -> Option<(&'k str, Record)> {
     if function.generator || function.r#async {
         return None;
     }
@@ -402,15 +418,33 @@ pub fn caching_cache<'k>(
         return None;
     };
     let distinct = ![index, require, container, cache].contains(module) && cache != index;
+    let flag = match middle {
+        [] => None,
+        [Step::Effect(flag)] => Some(loaded(flag, module)?),
+        _ => return None,
+    };
     let fits = distinct
         && record_cache == cache
         && keys.contains(&EXPORTS)
         && dispatch(call, module, &names)
-        && exports_of(result, module)
-        && match middle {
-            [] => true,
-            [Step::Effect(flag)] => loaded(flag, module),
-            _ => false,
-        };
-    fits.then_some(cache)
+        && exports_of(result, module);
+    let record = Record {
+        l: flag == Some(LOADED[0]) && keys.contains(&LOADED[0]),
+        loaded: flag == Some(LOADED[1]) && keys.contains(&LOADED[1]),
+    };
+    fits.then_some((cache, record))
+}
+
+pub fn declared_record(statements: &[Statement<'_>], require: &str, container: &str) -> Record {
+    statements
+        .iter()
+        .find_map(|statement| match statement {
+            Statement::FunctionDeclaration(function)
+                if function.id.as_ref().is_some_and(|id| id.name == require) =>
+            {
+                caching_record(function, require, container).map(|(_, record)| record)
+            }
+            _ => None,
+        })
+        .unwrap_or_default()
 }

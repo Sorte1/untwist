@@ -1,6 +1,7 @@
 use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
+use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{GetSpan, Span};
 use rustc_hash::FxHashSet;
 
@@ -10,6 +11,7 @@ use crate::webpack::locals::{
     closed_value, expression_names, local_unit, mentions, scoped, statement_names, writes,
     FreeNames,
 };
+use crate::webpack::runtime_module::PATHS;
 
 type Wrapped<'k, 'a> = (
     &'k Statement<'a>,
@@ -301,23 +303,52 @@ struct Collected<'a> {
     unit_at: Option<usize>,
 }
 
+#[derive(Default)]
+struct DynamicScope {
+    found: Vec<&'static str>,
+}
+
+impl<'a> VisitJs<'a> for DynamicScope {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if matches!(it.callee.without_parentheses(), Expression::Identifier(id) if id.name == "eval")
+        {
+            self.found.push("eval");
+        }
+        walk_js::walk_call_expression(self, it);
+    }
+
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.found.push("with");
+        walk_js::walk_with_statement(self, it);
+    }
+}
+
 fn movable<'a>(
     alloc: &'a Allocator,
     prelude: &Prelude<'_>,
     statement: Statement<'a>,
 ) -> (Statement<'a>, FreeNames, Vec<String>) {
     let (statement, free) = scoped(alloc, statement);
-    let mut offending: Vec<String> = free
-        .iter()
-        .map(|(name, _)| name)
-        .filter(|name| {
-            name.as_str() != prelude.require_name
-                && (prelude.declared.contains(name.as_str())
-                    || HOST_LOCALS.contains(&name.as_str()))
-        })
-        .cloned()
+    let mut dynamic = DynamicScope::default();
+    dynamic.visit_statement(&statement);
+    let mut offending: Vec<String> = dynamic
+        .found
+        .into_iter()
+        .map(str::to_string)
+        .chain(
+            free.iter()
+                .map(|(name, _)| name)
+                .filter(|name| {
+                    name.as_str() != prelude.require_name
+                        && (prelude.declared.contains(name.as_str())
+                            || HOST_LOCALS.contains(&name.as_str())
+                            || name.as_str() == PATHS)
+                })
+                .cloned(),
+        )
         .collect();
     offending.sort_unstable();
+    offending.dedup();
     (statement, free, offending)
 }
 
@@ -609,7 +640,8 @@ fn closed_init<'a>(alloc: &'a Allocator, prelude: &Prelude<'_>, value: &Expressi
         && expression_names(alloc, value).iter().all(|(name, _)| {
             name.as_str() == prelude.require_name
                 || !(prelude.declared.contains(name.as_str())
-                    || HOST_LOCALS.contains(&name.as_str()))
+                    || HOST_LOCALS.contains(&name.as_str())
+                    || name.as_str() == PATHS)
         })
 }
 

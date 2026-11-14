@@ -45,6 +45,7 @@ impl Pipeline {
             assume_modules: self.options.split_assume_modules,
             conservative: !self.options.extended(),
             trust_free_loader: self.options.unsafe_transforms,
+            trust_legacy_reads: self.options.unsafe_transforms,
         }
     }
 

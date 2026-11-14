@@ -405,12 +405,14 @@ pub fn first_host_read<'k, 'a: 'k>(
     factories.into_iter().find_map(|(id, factory)| {
         let renamed: Vec<&str> = targets
             .iter()
-            .zip(&factory.params.items)
-            .filter(|(target, item)| {
-                **target != SHIELDED_HOST
-                    && !matches!(&item.pattern, BindingPattern::BindingIdentifier(binding) if binding.name == **target)
+            .enumerate()
+            .filter(|(at, target)| {
+                let kept = factory.params.items.get(*at).is_some_and(|item| {
+                    matches!(&item.pattern, BindingPattern::BindingIdentifier(binding) if binding.name == **target)
+                });
+                **target != SHIELDED_HOST && !kept
             })
-            .map(|(target, _)| *target)
+            .map(|(_, target)| *target)
             .collect();
         if renamed.is_empty() {
             return None;
@@ -457,5 +459,45 @@ impl<'a> VisitJs<'a> for HostReads<'_, '_> {
             }
         }
         oxc_ast_visit::walk_js::walk_call_expression(self, it);
+    }
+}
+
+const LEGACY_MEMBERS: [&str; 2] = ["caller", "arguments"];
+
+pub fn legacy_read(program: &Program<'_>) -> Option<&'static str> {
+    let mut reads = LegacyReads::default();
+    reads.visit_program(program);
+    reads.found
+}
+
+#[derive(Default)]
+struct LegacyReads {
+    found: Option<&'static str>,
+}
+
+impl LegacyReads {
+    fn note(&mut self, name: &str) {
+        if self.found.is_none() {
+            self.found = LEGACY_MEMBERS
+                .iter()
+                .find(|legacy| **legacy == name)
+                .copied();
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for LegacyReads {
+    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        self.note(it.property.name.as_str());
+        oxc_ast_visit::walk_js::walk_static_member_expression(self, it);
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        if let Expression::StringLiteral(key) = it.expression.without_parentheses() {
+            if let Some(name) = key.value.as_str() {
+                self.note(name);
+            }
+        }
+        oxc_ast_visit::walk_js::walk_computed_member_expression(self, it);
     }
 }

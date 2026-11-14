@@ -43,11 +43,13 @@ pub(crate) fn declared_methods(program: &Program<'_>, scoping: &Scoping) -> FxHa
         scoping,
         declared: FxHashMap::default(),
         installs: FxHashMap::default(),
+        exported: FxHashSet::default(),
     };
     found.visit_program(program);
     found
         .declared
         .into_iter()
+        .filter(|(symbol, _)| !found.exported.contains(symbol))
         .filter(|(symbol, _)| {
             found.installs.get(symbol).is_some_and(|count| {
                 let references = scoping.get_resolved_reference_ids(*symbol);
@@ -65,9 +67,28 @@ struct DeclaredMethods<'s> {
     scoping: &'s Scoping,
     declared: FxHashMap<SymbolId, Span>,
     installs: FxHashMap<SymbolId, usize>,
+    exported: FxHashSet<SymbolId>,
+}
+
+fn function_symbol(function: &Function<'_>) -> Option<SymbolId> {
+    function.id.as_ref().and_then(|id| id.symbol_id.get())
 }
 
 impl<'a> VisitJs<'a> for DeclaredMethods<'_> {
+    fn visit_export_declaration(&mut self, it: &ExportDeclaration<'a>) {
+        if let Declaration::FunctionDeclaration(function) = &it.declaration {
+            self.exported.extend(function_symbol(function));
+        }
+        walk_js::walk_export_declaration(self, it);
+    }
+
+    fn visit_export_default_declaration(&mut self, it: &ExportDefaultDeclaration<'a>) {
+        if let ExportDefaultDeclarationKind::FunctionDeclaration(function) = &it.declaration {
+            self.exported.extend(function_symbol(function));
+        }
+        walk_js::walk_export_default_declaration(self, it);
+    }
+
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         if let (true, Some(symbol)) = (
             it.is_declaration(),

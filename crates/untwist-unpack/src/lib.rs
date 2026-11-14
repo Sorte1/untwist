@@ -52,6 +52,7 @@ pub struct UnpackOptions {
     pub assume_modules: bool,
     pub conservative: bool,
     pub trust_free_loader: bool,
+    pub trust_legacy_reads: bool,
 }
 
 pub struct UnpackResult<'a> {

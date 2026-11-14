@@ -12,6 +12,7 @@ use crate::webpack::helpers::prelude_runtime_skipping;
 use crate::webpack::machinery::{loading_of, refilled, settle};
 use crate::webpack::proof::{deferred_entries, Proving, Shape};
 use crate::webpack::require_fn::{find_assigned_entry_id, find_required_entry_id, Dispatchers};
+use crate::webpack::require_form::{declared_record, Record};
 use crate::webpack::startup::top_startup;
 use crate::UnpackOptions;
 
@@ -68,6 +69,12 @@ fn webpack5<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Candidate<'k, 'a>, &'k
 
 pub fn is_webpack5(body: &[Statement<'_>]) -> bool {
     webpack5(body).is_some()
+}
+
+pub fn webpack5_record(body: &[Statement<'_>]) -> Record {
+    webpack5(body).map_or_else(Record::default, |(candidate, require)| {
+        declared_record(body, require, candidate.name)
+    })
 }
 
 pub fn webpack5_factories<'k, 'a>(

@@ -25,7 +25,7 @@ mod machinery_forms;
 pub mod module_object;
 pub mod proof;
 pub mod require_fn;
-mod require_form;
+pub mod require_form;
 pub mod require_paths;
 pub mod require_t;
 pub mod runtime_module;

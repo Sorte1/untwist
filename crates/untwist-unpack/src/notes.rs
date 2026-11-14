@@ -14,6 +14,7 @@ pub const ENTRY_CANDIDATES: &str = "top-level require calls and no entry marker 
 pub const REQUIRE_MISSING: &str = "has no module in this bundle";
 pub const UNHANDLED_HELPER: &str = "unhandled webpack helper require.";
 pub const FACTORY_NOT_CLOSED: &str = "is not closed over its own scope; no bundle is written";
+pub const LEGACY_READ: &str = "a read of a function's caller or arguments could reach the module functions the unpacked files replace; no bundle is written";
 pub const EVAL_NAME_REBOUND: &str =
     "evaluates code text whose names would reach a binding of the unpacked file; no bundle is written";
 pub const RUNTIME_HELPER_NOT_CLOSED: &str = "cannot move to a runtime module";
@@ -47,6 +48,7 @@ catalogue!(
     UNHANDLED_HELPER,
     FACTORY_NOT_CLOSED,
     EVAL_NAME_REBOUND,
+    LEGACY_READ,
     RUNTIME_HELPER_NOT_CLOSED,
     SHAPE_REFUSED,
     GROUP_REFUSED,
@@ -143,6 +145,10 @@ pub fn runtime_helper_not_closed(
 
 pub fn shape_refused(kind: impl Display) -> String {
     format!("{kind} {SHAPE_REFUSED}")
+}
+
+pub fn legacy_read(member: impl Display) -> String {
+    format!("the program reads .{member}: {LEGACY_READ}")
 }
 
 pub fn eval_name_rebound(id: impl Display) -> String {

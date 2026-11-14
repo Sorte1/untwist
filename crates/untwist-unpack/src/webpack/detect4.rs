@@ -12,6 +12,7 @@ use crate::webpack::proof::{deferred_entries, Proving, Shape};
 use crate::webpack::require_fn::{
     count_required_entry_ids, find_assigned_entry_id, find_required_entry_id, require_function,
 };
+use crate::webpack::require_form::{declared_record, Record};
 use crate::webpack::startup::webpack4_deferred;
 use crate::UnpackOptions;
 use oxc_span::Span;
@@ -70,6 +71,14 @@ fn deferred_check<'k>(statements: &'k [Statement<'_>]) -> Option<&'k str> {
             if function.id.as_ref().is_some_and(|id| id.name == callee.name))
     });
     declared.then(|| callee.name.as_str())
+}
+
+pub fn webpack4_record(expr: &Expression<'_>) -> Record {
+    webpack4(expr).map_or_else(Record::default, |found| {
+        single_param_name(found.params).map_or_else(Record::default, |container| {
+            declared_record(&found.body.statements, found.require_name, container)
+        })
+    })
 }
 
 pub fn is_webpack4(expr: &Expression<'_>) -> bool {

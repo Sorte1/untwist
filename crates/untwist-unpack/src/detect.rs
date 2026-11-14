@@ -12,7 +12,7 @@ use crate::browserify::detect::{
 };
 use crate::browserify::host::host_object_use;
 use crate::browserify::notes::{host_object, not_proven};
-use crate::closed::{first_host_read, first_open};
+use crate::closed::{first_host_read, first_open, legacy_read};
 use crate::frame::Frame;
 use crate::links::Links;
 use crate::matcher::Factory;
@@ -23,11 +23,16 @@ use crate::webpack::chunk::{
     chunk_factories, detect_exports_chunk_noted, detect_webpack_chunk_noted,
     exports_chunk_factories, is_exports_chunk, is_webpack_chunk,
 };
-use crate::webpack::detect4::{detect_webpack4_noted, is_webpack4, webpack4_factories};
-use crate::webpack::detect5::{detect_webpack5_noted, is_webpack5, webpack5_factories};
+use crate::webpack::detect4::{
+    detect_webpack4_noted, is_webpack4, webpack4_factories, webpack4_record,
+};
+use crate::webpack::detect5::{
+    detect_webpack5_noted, is_webpack5, webpack5_factories, webpack5_record,
+};
 use crate::webpack::extract::WEBPACK_PARAMS;
 use crate::webpack::module_object::module_object_use;
 use crate::webpack::proof::Proving;
+use crate::webpack::require_form::Record;
 use crate::UnpackOptions;
 
 const MAPPED_PARAMS: usize = 3;
@@ -47,6 +52,7 @@ struct Extract<'a, 'p, 'b> {
     scoping: Option<Scoping>,
     unproven: &'b mut Option<String>,
     merged: bool,
+    legacy: Option<Option<&'static str>>,
 }
 
 fn factory_buildins(factories: &[(String, Factory<'_, '_>)]) -> FxHashMap<String, Buildin> {
@@ -67,6 +73,11 @@ fn factory_buildins(factories: &[(String, Factory<'_, '_>)]) -> FxHashMap<String
 }
 
 impl<'a> Extract<'a, '_, '_> {
+    fn legacy(&mut self) -> Option<&'static str> {
+        let source = self.source;
+        *self.legacy.get_or_insert_with(|| legacy_read(source))
+    }
+
     fn closed(&mut self, factories: Option<Vec<(String, Factory<'_, 'a>)>>) -> bool {
         self.closed_as(factories, &WEBPACK_PARAMS)
     }
@@ -83,6 +94,11 @@ impl<'a> Extract<'a, '_, '_> {
             return true;
         }
         let source = self.source;
+        if let (false, Some(member)) = (self.options.trust_legacy_reads, self.legacy()) {
+            self.unproven
+                .get_or_insert_with(|| crate::notes::legacy_read(member));
+            return false;
+        }
         let scoping = self
             .scoping
             .get_or_insert_with(|| build_scoping(source).scoping);
@@ -96,16 +112,22 @@ impl<'a> Extract<'a, '_, '_> {
         false
     }
 
-    fn module_kept(&mut self, factories: Option<Vec<(String, Factory<'_, 'a>)>>) -> bool {
-        let (Some(factories), Some(scoping)) = (factories, self.scoping.as_ref()) else {
-            return true;
-        };
+    fn module_kept(
+        &mut self,
+        factories: Option<Vec<(String, Factory<'_, 'a>)>>,
+        record: Record,
+    ) -> bool {
         if self.options.conservative {
             return true;
         }
+        let legacy = self.legacy().is_some();
+        let (Some(factories), Some(scoping)) = (factories, self.scoping.as_ref()) else {
+            return true;
+        };
         let buildins = factory_buildins(&factories);
         let Some((id, what)) = factories.iter().find_map(|(id, factory)| {
-            module_object_use(scoping, factory, &buildins).map(|what| (id.clone(), what))
+            module_object_use(scoping, factory, (&buildins, record, legacy))
+                .map(|what| (id.clone(), what))
         }) else {
             return true;
         };
@@ -178,7 +200,9 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
 
     fn statements(&mut self, body: &[Statement<'a>]) {
         let (alloc, source, options) = (self.alloc, self.source, self.options);
-        if self.closed(webpack5_factories(body)) && self.module_kept(webpack5_factories(body)) {
+        if self.closed(webpack5_factories(body))
+            && self.module_kept(webpack5_factories(body), webpack5_record(body))
+        {
             let proving = Proving::new(self.scoping.as_ref(), self.unproven);
             self.bundle = attempt(self.bodies, |bodies| {
                 detect_webpack5_noted(alloc, source, body, bodies, options, proving)
@@ -186,7 +210,7 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
         }
         if self.bundle.is_none()
             && self.closed(exports_chunk_factories(source, body))
-            && self.module_kept(exports_chunk_factories(source, body))
+            && self.module_kept(exports_chunk_factories(source, body), Record::default())
         {
             let proving =
                 Proving::new(self.scoping.as_ref(), self.unproven).with_merged(self.merged);
@@ -198,7 +222,9 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
 
     fn expression(&mut self, expr: &Expression<'a>) {
         let (alloc, source, options) = (self.alloc, self.source, self.options);
-        if self.closed(webpack4_factories(expr)) && self.module_kept(webpack4_factories(expr)) {
+        if self.closed(webpack4_factories(expr))
+            && self.module_kept(webpack4_factories(expr), webpack4_record(expr))
+        {
             let proving = Proving::new(self.scoping.as_ref(), self.unproven);
             self.bundle = attempt(self.bodies, |bodies| {
                 detect_webpack4_noted(alloc, source, expr, bodies, options, proving)
@@ -206,7 +232,7 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
         }
         if self.bundle.is_none()
             && self.closed(chunk_factories(expr))
-            && self.module_kept(chunk_factories(expr))
+            && self.module_kept(chunk_factories(expr), Record::default())
         {
             let proving =
                 Proving::new(self.scoping.as_ref(), self.unproven).with_merged(self.merged);
@@ -555,6 +581,7 @@ fn extract_with<'a>(
             scoping: None,
             unproven,
             merged: links.merged,
+            legacy: None,
         },
     };
     detector.visit_program(program);

@@ -35,6 +35,7 @@ fn trusted(source: &str) -> bool {
     let program = parse(&alloc, source);
     let options = UnpackOptions {
         trust_free_loader: true,
+        trust_legacy_reads: false,
         ..UnpackOptions::default()
     };
     unpack_program_with(&alloc, &program, options).is_some()

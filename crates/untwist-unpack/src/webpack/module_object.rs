@@ -6,25 +6,33 @@ use rustc_hash::FxHashMap;
 
 use crate::matcher::{const_member, literal_id, Factory};
 use crate::webpack::buildin::Buildin;
+use crate::webpack::require_form::Record;
 use crate::webpack::runtime_module::own_arguments;
 
 const MODULE_PARAM: usize = 0;
 const REQUIRE_PARAM: usize = 2;
-const KEPT_MEMBERS: [&str; 2] = ["exports", "loaded"];
+const EXPORTS: &str = "exports";
+const LOADED: &str = "loaded";
+const KEPT_MEMBERS: [&str; 2] = [EXPORTS, LOADED];
 const ID_MEMBERS: [&str; 2] = ["id", "i"];
 const ASYNC_MODULE: &str = "a";
 const WASM_MODULE: &str = "v";
 const WASM_EXPORTS: &str = "w";
 const CALL: &str = "call";
-const POLYFILLED_MEMBERS: [&str; 2] = ["exports", "loaded"];
-const HARMONY_MEMBERS: [&str; 1] = ["loaded"];
-const READ_ONLY_MEMBER: &str = "loaded";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Held {
+    Record,
+    Polyfilled(Buildin),
+}
 
 struct ModuleUses<'s> {
     scoping: &'s Scoping,
     symbol: SymbolId,
     require: Option<SymbolId>,
     buildins: &'s FxHashMap<String, Buildin>,
+    record: Record,
+    legacy: bool,
     aliases: FxHashMap<SymbolId, Buildin>,
     polyfills: Vec<Buildin>,
     kept: &'s [&'s str],
@@ -46,10 +54,17 @@ fn immediate<'k, 'a>(call: &'k CallExpression<'a>) -> Option<(&'k Function<'a>, 
     }
 }
 
+fn plain_params(function: &Function<'_>) -> bool {
+    function.params.rest.is_none()
+        && function.params.items.iter().all(|item| {
+            item.initializer.is_none()
+                && matches!(item.pattern, BindingPattern::BindingIdentifier(_))
+        })
+}
+
 fn simple_param(function: &Function<'_>, at: usize) -> Option<SymbolId> {
-    let item = function.params.items.get(at)?;
-    match &item.pattern {
-        BindingPattern::BindingIdentifier(id) if item.initializer.is_none() => id.symbol_id.get(),
+    match &function.params.items.get(at)?.pattern {
+        BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
         _ => None,
     }
 }
@@ -175,7 +190,10 @@ impl ModuleUses<'_> {
             return false;
         };
         let body = function.body.as_deref();
-        if body.is_none_or(own_arguments) || function.params.rest.is_some() {
+        if body.is_none_or(own_arguments) || !plain_params(function) {
+            return false;
+        }
+        if self.legacy && !self.sealed(function) {
             return false;
         }
         let mut handed = Vec::new();
@@ -207,57 +225,160 @@ impl ModuleUses<'_> {
         true
     }
 
-    fn alias_member(&mut self, kind: Buildin, name: &str) {
-        let allowed = match kind {
-            Buildin::Module => POLYFILLED_MEMBERS.as_slice(),
-            Buildin::Harmony => HARMONY_MEMBERS.as_slice(),
-        };
-        if !allowed.contains(&name) {
-            self.refuse(format!("module.{name} of a webpack module polyfill"));
+    fn strict(&self, function: &Function<'_>) -> bool {
+        function
+            .scope_id
+            .get()
+            .is_some_and(|scope| self.scoping.scope_flags(scope).is_strict_mode())
+    }
+
+    fn inert(&self, expr: &Expression<'_>, params: &[SymbolId]) -> bool {
+        match expr.without_parentheses() {
+            Expression::ThisExpression(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::StringLiteral(_)
+            | Expression::NullLiteral(_) => true,
+            Expression::Identifier(id) => id
+                .reference_id
+                .get()
+                .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                .is_some_and(|symbol| params.contains(&symbol)),
+            Expression::LogicalExpression(logical) => {
+                self.inert(&logical.left, params) && self.inert(&logical.right, params)
+            }
+            other => self.held(other).is_some(),
         }
     }
 
-    fn written(&mut self, target: &SimpleAssignmentTarget<'_>) {
-        let SimpleAssignmentTarget::StaticMemberExpression(member) = target else {
-            return;
-        };
-        let Some(kind) = self.alias(&member.object) else {
-            return;
-        };
-        if kind == Buildin::Harmony || member.property.name == READ_ONLY_MEMBER {
-            self.refuse(format!(
-                "a write to module.{} of a webpack module polyfill",
-                member.property.name
-            ));
+    fn sealed(&self, function: &Function<'_>) -> bool {
+        if self.strict(function) {
+            return true;
         }
+        let Some(body) = function.body.as_deref() else {
+            return false;
+        };
+        let params: Vec<SymbolId> = (0..function.params.items.len())
+            .filter_map(|at| simple_param(function, at))
+            .collect();
+        body.statements.iter().all(|statement| {
+            let Statement::ExpressionStatement(statement) = statement else {
+                return false;
+            };
+            let Expression::CallExpression(call) = statement.expression.without_parentheses()
+            else {
+                return false;
+            };
+            immediate(call).is_some_and(|(callee, _)| {
+                self.strict(callee)
+                    && call.arguments.iter().all(|argument| {
+                        argument
+                            .as_expression()
+                            .is_some_and(|it| self.inert(it, &params))
+                    })
+            })
+        })
+    }
+
+    fn held_object(&self, expr: &Expression<'_>) -> Option<Held> {
+        if self.is_module(expr) {
+            return Some(Held::Record);
+        }
+        self.alias(expr).map(Held::Polyfilled)
+    }
+
+    fn readable(&self, held: Held, name: &str) -> bool {
+        if held == Held::Record && !self.kept.contains(&name) {
+            return false;
+        }
+        match (held, name) {
+            (Held::Record | Held::Polyfilled(Buildin::Module), EXPORTS) => true,
+            (Held::Record, LOADED) => self.record.loaded,
+            (Held::Polyfilled(_), LOADED) => self.record.l,
+            _ => false,
+        }
+    }
+
+    fn writable(&self, held: Held, name: &str) -> bool {
+        name == EXPORTS
+            && match held {
+                Held::Record => self.kept.contains(&EXPORTS),
+                Held::Polyfilled(kind) => kind == Buildin::Module,
+            }
+    }
+
+    fn kept_key<'k>(&self, key: &'k Expression<'_>) -> Option<&'k str> {
+        let Expression::StringLiteral(key) = key.without_parentheses() else {
+            return None;
+        };
+        let key = key.value.as_str()?;
+        (self.computed_kept && self.kept.contains(&key)).then_some(key)
+    }
+
+    fn member_of_held(&self, target: &SimpleAssignmentTarget<'_>) -> Option<(Held, String)> {
+        match target {
+            SimpleAssignmentTarget::StaticMemberExpression(member) => self
+                .held_object(&member.object)
+                .map(|held| (held, member.property.name.to_string())),
+            SimpleAssignmentTarget::ComputedMemberExpression(member) => {
+                self.held_object(&member.object).map(|held| {
+                    let name = self.kept_key(&member.expression).unwrap_or("[computed]");
+                    (held, name.to_string())
+                })
+            }
+            _ => None,
+        }
+    }
+
+    fn assigned_exports(&self, it: &AssignmentExpression<'_>) -> bool {
+        let (object, name) = match &it.left {
+            AssignmentTarget::StaticMemberExpression(member) => {
+                (&member.object, Some(member.property.name.as_str()))
+            }
+            AssignmentTarget::ComputedMemberExpression(member) => {
+                (&member.object, self.kept_key(&member.expression))
+            }
+            _ => return false,
+        };
+        let Some(name) = name else {
+            return false;
+        };
+        it.operator == AssignmentOperator::Assign
+            && self
+                .held_object(object)
+                .is_some_and(|held| self.writable(held, name))
     }
 }
 
 impl<'a> VisitJs<'a> for ModuleUses<'_> {
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
-        if let Some(target) = it.left.as_simple_assignment_target() {
-            self.written(target);
+        if self.assigned_exports(it) {
+            self.visit_expression(&it.right);
+            return;
         }
         walk_js::walk_assignment_expression(self, it);
     }
 
-    fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
-        self.written(&it.argument);
-        walk_js::walk_update_expression(self, it);
+    fn visit_simple_assignment_target(&mut self, it: &SimpleAssignmentTarget<'a>) {
+        if let Some((_, name)) = self.member_of_held(it) {
+            self.refuse(format!("a write to module.{name}"));
+            return;
+        }
+        walk_js::walk_simple_assignment_target(self, it);
     }
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
-        if let Some(kind) = self.alias(&it.object) {
-            self.alias_member(kind, it.property.name.as_str());
-            return;
-        }
-        if !self.is_module(&it.object) {
+        let Some(held) = self.held_object(&it.object) else {
             walk_js::walk_static_member_expression(self, it);
             return;
-        }
+        };
         let name = it.property.name.as_str();
-        if !self.kept.contains(&name) {
-            self.refuse(format!("module.{name}"));
+        if !self.readable(held, name) {
+            let what = match held {
+                Held::Record => format!("module.{name}"),
+                Held::Polyfilled(_) => format!("module.{name} of a webpack module polyfill"),
+            };
+            self.refuse(what);
         }
     }
 
@@ -277,23 +398,37 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
         if self.helper(&it.object, WASM_EXPORTS) && self.module_id(&it.expression) {
             return;
         }
-        let kept_key = self.computed_kept
-            && matches!(&it.expression, Expression::StringLiteral(key) if self.kept.iter().any(|kept| key.value == *kept));
-        if kept_key && self.is_module(&it.object) {
+        let held = self.held_object(&it.object);
+        let kept = self.kept_key(&it.expression);
+        if let (Some(held), Some(name)) = (held, kept) {
+            if !self.readable(held, name) {
+                self.refuse(format!("module.{name}"));
+            }
             return;
         }
-        if self.is_module(&it.object) || self.alias(&it.object).is_some() {
+        if held.is_some() {
             self.refuse("a computed member of module");
         }
         walk_js::walk_computed_member_expression(self, it);
     }
 
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
-        let typeof_module = it.operator == UnaryOperator::Typeof
-            && (self.is_module(&it.argument) || self.alias(&it.argument).is_some());
-        if !typeof_module {
-            walk_js::walk_unary_expression(self, it);
+        let held = self.held_object(&it.argument).is_some();
+        if it.operator == UnaryOperator::Typeof && held {
+            return;
         }
+        let member = match it.argument.without_parentheses() {
+            Expression::StaticMemberExpression(member) => Some(&member.object),
+            Expression::ComputedMemberExpression(member) => Some(&member.object),
+            _ => None,
+        };
+        let deleted = it.operator == UnaryOperator::Delete
+            && member.is_some_and(|object| self.held_object(object).is_some());
+        if deleted {
+            self.refuse("a delete of a member of module");
+            return;
+        }
+        walk_js::walk_unary_expression(self, it);
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
@@ -320,7 +455,7 @@ fn param_symbol(factory: &Factory<'_, '_>, at: usize) -> Option<SymbolId> {
 pub fn module_object_use(
     scoping: &Scoping,
     factory: &Factory<'_, '_>,
-    buildins: &FxHashMap<String, Buildin>,
+    (buildins, record, legacy): (&FxHashMap<String, Buildin>, Record, bool),
 ) -> Option<String> {
     let symbol = param_symbol(factory, MODULE_PARAM)?;
     let mut uses = ModuleUses {
@@ -328,6 +463,8 @@ pub fn module_object_use(
         symbol,
         require: param_symbol(factory, REQUIRE_PARAM),
         buildins,
+        record,
+        legacy,
         aliases: FxHashMap::default(),
         polyfills: Vec::new(),
         kept: &KEPT_MEMBERS,
@@ -354,6 +491,8 @@ pub fn module_param_use(
         symbol: module,
         require: None,
         buildins: &buildins,
+        record: Record::default(),
+        legacy: false,
         aliases: FxHashMap::default(),
         polyfills: Vec::new(),
         kept,
