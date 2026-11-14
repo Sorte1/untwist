@@ -334,7 +334,7 @@ impl Table {
             .map(|line| line.split(' ').filter_map(|id| id.parse().ok()).collect())
             .collect();
         let rows_count = count(lines.next(), "#rows")?;
-        let mut rows = Vec::with_capacity(rows_count);
+        let mut rows = Vec::with_capacity(rows_count.min(text.len() / MIN_ROW_BYTES));
         for line in lines.take(rows_count) {
             rows.push(parse_row(line)?);
         }
@@ -364,12 +364,18 @@ fn parse_row(line: &str) -> Option<Row> {
     })
 }
 
+const MIN_ROW_BYTES: usize = 40;
+pub const INFLATED_LIMIT: usize = 256 << 20;
 const GZIP_HEADER: usize = 10;
 const GZIP_TRAILER: usize = 8;
 
 pub fn inflate(data: &[u8]) -> Option<String> {
+    inflate_with_limit(data, INFLATED_LIMIT)
+}
+
+pub fn inflate_with_limit(data: &[u8], limit: usize) -> Option<String> {
     let body = data.get(GZIP_HEADER..data.len().checked_sub(GZIP_TRAILER)?)?;
-    let raw = miniz_oxide::inflate::decompress_to_vec(body).ok()?;
+    let raw = miniz_oxide::inflate::decompress_to_vec_with_limit(body, limit).ok()?;
     String::from_utf8(raw).ok()
 }
 

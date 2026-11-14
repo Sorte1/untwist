@@ -90,6 +90,28 @@ fn advance_turn(state: &SharedUniqueState, guard: &mut MutexGuard<'_, UniqueStat
     }
 }
 
+pub(crate) fn await_turn(state: &SharedUniqueState, index: usize) {
+    drop(wait_turn(state, index));
+}
+
+pub(crate) fn next_number(state: &SharedUniqueState, base: &str) -> Option<u32> {
+    lock(state).counters.get(base).copied()
+}
+
+pub(crate) fn is_taken(state: &SharedUniqueState, name: &str) -> bool {
+    lock(state).taken.contains(name)
+}
+
+pub(crate) fn take_names(state: &SharedUniqueState, names: &[(String, String, u32)]) {
+    let mut guard = lock(state);
+    for (base, name, number) in names {
+        let next = number.saturating_add(1);
+        let counter = guard.counters.entry(base.clone()).or_insert(next);
+        *counter = (*counter).max(next);
+        guard.taken.insert(name.clone());
+    }
+}
+
 pub fn release_turn(state: &SharedUniqueState, index: usize) {
     let mut guard = wait_turn(state, index);
     advance_turn(state, &mut guard, index);

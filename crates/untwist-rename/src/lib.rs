@@ -67,29 +67,25 @@ fn stateless_passes<'a>(config: RenameConfig) -> Vec<Box<dyn Pass<'a> + 'a>> {
 
 fn with_library_names<'a>(
     config: RenameConfig,
+    unique: Option<(unique::SharedUniqueState, usize)>,
     passes: Vec<Box<dyn Pass<'a> + 'a>>,
 ) -> Vec<Box<dyn Pass<'a> + 'a>> {
     if config.mode == RenameMode::None {
         return passes;
     }
-    let mut all = vec![library::rename::boxed(config)];
+    let mut all = vec![library::rename::boxed(config, unique)];
     all.extend(passes);
     all
 }
 
 pub fn rename_passes<'a>(config: RenameConfig) -> Vec<Box<dyn Pass<'a> + 'a>> {
-    with_library_names(config, mode_passes(config))
-}
-
-fn mode_passes<'a>(config: RenameConfig) -> Vec<Box<dyn Pass<'a> + 'a>> {
     if config.mode == RenameMode::Unique {
         let state = unique::shared_state();
-        let Some(slot) = unique::reserve(&state, 0) else {
-            return stateless_passes(config);
-        };
-        return vec![unique::boxed(config, state, slot)];
+        if let Some(slot) = unique::reserve(&state, 0) {
+            return rename_passes_with_state(config, &state, slot);
+        }
     }
-    stateless_passes(config)
+    with_library_names(config, None, stateless_passes(config))
 }
 
 pub fn rename_passes_with_state<'a>(
@@ -98,8 +94,9 @@ pub fn rename_passes_with_state<'a>(
     slot: unique::FileSlot,
 ) -> Vec<Box<dyn Pass<'a> + 'a>> {
     if config.mode == RenameMode::Unique {
+        let shared = Some((std::sync::Arc::clone(state), slot.index()));
         let unique = vec![unique::boxed(config, std::sync::Arc::clone(state), slot)];
-        return with_library_names(config, unique);
+        return with_library_names(config, shared, unique);
     }
-    with_library_names(config, stateless_passes(config))
+    with_library_names(config, None, stateless_passes(config))
 }

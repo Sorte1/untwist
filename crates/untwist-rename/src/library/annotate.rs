@@ -19,6 +19,20 @@ fn module_list(modules: &[String]) -> String {
         .join(" | ")
 }
 
+pub fn one_line(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for character in text.chars() {
+        match character {
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\u{2028}' => out.push_str("\\u2028"),
+            '\u{2029}' => out.push_str("\\u2029"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 pub fn comment_text(hit: &Hit) -> String {
     let mut text = format!(
         "// {} {}: {}",
@@ -34,7 +48,7 @@ pub fn comment_text(hit: &Hit) -> String {
             module_list(&same.modules)
         ));
     }
-    text
+    one_line(&text)
 }
 
 fn function_span(expr: &Expression<'_>) -> Option<Span> {
@@ -175,28 +189,33 @@ impl Anchors {
     }
 }
 
-fn already_there(program: &Program<'_>, start: u32, text: &str) -> bool {
-    program.comments.iter().any(|comment| {
-        comment.attached_to == start
-            && program
-                .source_text
-                .get(comment.span.start as usize..comment.span.end as usize)
-                == Some(text)
-    })
+fn existing<'a>(program: &Program<'a>) -> rustc_hash::FxHashSet<(u32, &'a str)> {
+    let source: &'a str = program.source_text;
+    program
+        .comments
+        .iter()
+        .filter_map(|comment| {
+            let text = source.get(comment.span.start as usize..comment.span.end as usize)?;
+            Some((comment.attached_to, text))
+        })
+        .collect()
 }
 
 pub fn annotate<'a>(program: &mut Program<'a>, hits: &[&Hit], alloc: &'a Allocator) -> usize {
     let mut anchors = Anchors::default();
     anchors.visit_program(program);
     let mut planned: Vec<(u32, String)> = Vec::new();
+    let mut taken: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
+    let present = existing(program);
     for hit in hits {
         let Some(start) = anchors.anchor(program, hit) else {
             continue;
         };
         let text = comment_text(hit);
-        if already_there(program, start, &text) || planned.iter().any(|(at, _)| *at == start) {
+        if taken.contains(&start) || present.contains(&(start, text.as_str())) {
             continue;
         }
+        taken.insert(start);
         planned.push((start, text));
     }
     if planned.is_empty() {

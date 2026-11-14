@@ -258,3 +258,35 @@ fn a_program_without_library_code_gets_no_library_note() {
     );
     assert!(!output.code().contains("// core-js"));
 }
+
+#[test]
+fn unique_gives_one_library_name_to_one_binding_across_inputs() {
+    let source = ["__extends", "__rest", "__awaiter", "__generator"]
+        .iter()
+        .enumerate()
+        .fold(fixture("tslib/rollup-cjs.js"), |code, (index, name)| {
+            code.replace(name, &format!("q{index}"))
+        });
+    let options = Options {
+        rename: RenameMode::Unique,
+        unsafe_transforms: true,
+        unpack: false,
+        ..Options::default()
+    };
+    let output = Pipeline::new(options).run_many(&[source.as_str(), source.as_str()]);
+    let declared = |code: &str| -> Vec<String> {
+        code.lines()
+            .filter_map(|line| line.trim_start().strip_prefix("function __"))
+            .filter_map(|rest| rest.split(['(', ' ']).next())
+            .filter(|name| !name.is_empty())
+            .map(|name| format!("__{name}"))
+            .collect()
+    };
+    let first = declared(&output.codes[0]);
+    let second = declared(&output.codes[1]);
+    assert!(!first.is_empty(), "{}", output.codes[0]);
+    assert!(
+        first.iter().all(|name| !second.contains(name)),
+        "{first:?} {second:?}"
+    );
+}

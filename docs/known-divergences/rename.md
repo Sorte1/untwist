@@ -151,6 +151,11 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   references that outer binding, which is what lets every function restart
   its sequence at `a`. The alpha-equivalence property test in
   `crates/untwist-rename/tests/` proves each such reuse is capture-free.
+- Library names (pass `library-rename`, which runs first in every mode) go through the
+  same shared state under `Unique`: the first input to claim a library name gets it bare
+  (`isCallable`), later inputs and scopes get the next free number (`isCallable2`, ...),
+  and `Unique`'s own counter for that base continues after them, so names stay unique
+  across the run.
 - `Unique` keeps its counters **per base name**, program-wide and shared across every input
   of one run (`fn1`, `fn2`, `arr1`, `arr2`), rather than one global declaration-order
   counter. Names stay globally unique because `(base, number)` pairs are, and adding an
