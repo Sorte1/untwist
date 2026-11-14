@@ -147,8 +147,8 @@ pub fn shape_refused(kind: impl Display) -> String {
     format!("{kind} {SHAPE_REFUSED}")
 }
 
-pub fn legacy_read(member: impl Display) -> String {
-    format!("the program reads .{member}: {LEGACY_READ}")
+pub fn legacy_read() -> String {
+    format!("the program reads a function's caller or arguments: {LEGACY_READ}")
 }
 
 pub fn eval_name_rebound(id: impl Display) -> String {

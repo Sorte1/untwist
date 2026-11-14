@@ -83,6 +83,8 @@ fn reaches_code(name: &str) -> bool {
 struct FrameReads<'s> {
     names: &'static [&'static str],
     code_text: bool,
+    opaque_keys: bool,
+    spelled_text: bool,
     scoping: &'s Scoping,
     found: bool,
 }
@@ -95,12 +97,15 @@ impl FrameReads<'_> {
     fn names_another_key(&self, key: &Expression<'_>) -> bool {
         match key.without_parentheses() {
             Expression::NumericLiteral(_) | Expression::BigIntLiteral(_) => true,
-            other => literal_key_name(other).is_some_and(|name| !self.is_frame_property(name)),
+            other => match literal_key_name(other) {
+                Some(name) => !self.is_frame_property(name),
+                None => !self.opaque_keys,
+            },
         }
     }
 
     fn is_suspect_name(&self, name: &str) -> bool {
-        is_reader(name) || (self.code_text && reaches_code(name))
+        !self.spelled_text && (is_reader(name) || (self.code_text && reaches_code(name)))
     }
 
     fn is_suspect_key(&self, computed: bool, key: &PropertyKey<'_>) -> bool {
@@ -160,6 +165,9 @@ impl FrameReads<'_> {
     }
 
     fn call_is_harmless(&self, name: &str, arguments: &[Argument<'_>]) -> Option<bool> {
+        if self.spelled_text && WHOLE_READERS.contains(&name) {
+            return Some(true);
+        }
         if is_reader(name) {
             return Some(!self.reader_reads_a_frame(name, arguments));
         }
@@ -290,10 +298,10 @@ impl<'a> VisitJs<'a> for FrameReads<'_> {
     }
 
     fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
-        self.found |= it
-            .value
-            .as_str()
-            .is_some_and(|text| self.is_frame_property(text));
+        self.found |= it.value.as_str().is_some_and(|text| {
+            self.is_frame_property(text)
+                || (self.spelled_text && self.names.iter().any(|name| text.contains(name)))
+        });
     }
 }
 
@@ -301,11 +309,13 @@ fn scan(
     program: &Program<'_>,
     scoping: &Scoping,
     names: &'static [&'static str],
-    code_text: bool,
+    (code_text, opaque_keys): (bool, bool),
 ) -> bool {
     let mut reads = FrameReads {
         names,
         code_text,
+        opaque_keys,
+        spelled_text: !code_text && !opaque_keys,
         scoping,
         found: false,
     };
@@ -314,9 +324,13 @@ fn scan(
 }
 
 pub fn reads_function_frame(program: &Program<'_>, scoping: &Scoping) -> bool {
-    scan(program, scoping, &FRAME_PROPERTIES, true)
+    scan(program, scoping, &FRAME_PROPERTIES, (true, true))
+}
+
+pub fn spells_function_frame(program: &Program<'_>, scoping: &Scoping) -> bool {
+    scan(program, scoping, &FRAME_PROPERTIES, (false, false))
 }
 
 pub fn reads_arguments_property(program: &Program<'_>, scoping: &Scoping) -> bool {
-    scan(program, scoping, &ARGUMENTS_PROPERTY, false)
+    scan(program, scoping, &ARGUMENTS_PROPERTY, (false, true))
 }

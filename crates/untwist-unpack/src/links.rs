@@ -10,6 +10,7 @@ pub struct Links {
     pub parcel: Option<ParcelView>,
     pub turbopack: Option<TurboView>,
     pub merged: bool,
+    pub legacy: Option<bool>,
 }
 
 pub struct Member {
