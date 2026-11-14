@@ -8,7 +8,6 @@ const PRIVATE_REACH: usize = 3;
 const SIMILAR: f64 = 1.0 / 3.0;
 const DECONFLICT_REACH: usize = 40;
 const DECONFLICT: char = '$';
-const MIN_STEM: usize = 3;
 const FREEZE: &str = "freeze";
 const OBJECT: &str = "Object";
 const PROTO: &str = "__proto__";
@@ -445,32 +444,6 @@ fn final_start(line: &Line<'_, '_>, pieces: &[(usize, usize)], held: &[bool]) ->
     end
 }
 
-fn stem(
-    scoping: &Scoping,
-    line: &Line<'_, '_>,
-    members: &[usize],
-    used: &FxHashSet<usize>,
-    n: usize,
-) -> String {
-    let named = members
-        .iter()
-        .filter(|at| used.contains(at))
-        .find_map(|&at| {
-            let id = match line.statement(at) {
-                Statement::ClassDeclaration(class) => class.id.as_ref()?,
-                Statement::FunctionDeclaration(function) => function.id.as_ref()?,
-                _ => return None,
-            };
-            let symbol = id.symbol_id.get()?;
-            let name = scoping.symbol_name(symbol);
-            let plain = name
-                .chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '$');
-            (plain && name.len() >= MIN_STEM).then(|| name.to_string())
-        });
-    named.unwrap_or_else(|| format!("{MODULE_STEM}{n}"))
-}
-
 pub fn runs(
     scoping: &Scoping,
     items: &[Statement<'_>],
@@ -516,26 +489,11 @@ pub fn runs(
     let pieces = strong(&line, &atoms(&glue.glued(n)), &forced);
     let end = final_start(&line, &pieces, input.held);
     let kept: Vec<(usize, usize)> = pieces.into_iter().filter(|&(_, last)| last < end).collect();
-    let mut piece_of = vec![usize::MAX; n];
-    for (index, &(start, last)) in kept.iter().enumerate() {
-        piece_of[start..=last].fill(index);
-    }
-    let used: FxHashSet<usize> = line
-        .refs
-        .iter()
-        .enumerate()
-        .flat_map(|(at, targets)| targets.iter().map(move |&target| (at, target)))
-        .filter(|&(at, target)| piece_of[at] != piece_of[target])
-        .map(|(_, target)| target)
-        .collect();
     kept.iter()
         .enumerate()
-        .map(|(index, &(start, last))| {
-            let members: Vec<usize> = (start..=last).collect();
-            Run {
-                stem: stem(scoping, &line, &members, &used, index + 1),
-                members: members.iter().map(|&at| line.entry[at]).collect(),
-            }
+        .map(|(index, &(start, last))| Run {
+            stem: format!("{MODULE_STEM}{}", index + 1),
+            members: (start..=last).map(|at| line.entry[at]).collect(),
         })
         .collect()
 }

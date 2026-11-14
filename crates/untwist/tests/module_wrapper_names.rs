@@ -156,11 +156,11 @@ function(module, exports, __webpack_require__) {var table = { "./utils": functio
 #[test]
 fn a_webpack_factory_var_named_require_still_runs_after_unminify() {
     let tree = Unpacked::with(WEBPACK4_LOCAL_REQUIRE, untwist::Options::default());
-    assert!(tree.has("1.js"), "not unpacked: {:?}", tree.notes());
+    assert!(tree.has("lib.js"), "not unpacked: {:?}", tree.notes());
     assert!(
-        !tree.file("1.js").contains("const require"),
+        !tree.file("lib.js").contains("const require"),
         "{}",
-        tree.file("1.js")
+        tree.file("lib.js")
     );
     tree.runs_like_the_bundle("{\"v\":\"utilsone\"} \n");
 }

@@ -1,0 +1,34 @@
+synthetic-rollup3-plain	exact 3	defined 4	generic 1	misleading 1	isEven.js=app:synthetic/cycle-b.js
+synthetic-rollup3-wrapped	exact 3	defined 4	generic 1	misleading 1	isEven.js=app:synthetic/cycle-b.js
+synthetic-rollup3-wrapped-strict	exact 3	defined 4	generic 1	misleading 1	isEven.js=app:synthetic/cycle-b.js
+synthetic-rollup3-min-plain	exact 0	defined 0	generic 0	misleading 0	
+synthetic-rollup3-min-wrapped	exact 0	defined 0	generic 0	misleading 0	
+synthetic-rollup3-min-wrapped-strict	exact 0	defined 0	generic 0	misleading 0	
+three-rollup3-plain	exact 18	defined 3	generic 4	misleading 4	pick.js=three/src/core/Raycaster.js buildWorld.js=app:three/geometry.js MeshBasicMaterial.js=three/src/materials/Material.js BoxGeometry.js=three/src/geometries/SphereGeometry.js
+three-rollup3-wrapped	exact 18	defined 3	generic 4	misleading 4	pick.js=three/src/core/Raycaster.js buildWorld.js=app:three/geometry.js MeshBasicMaterial.js=three/src/materials/Material.js BoxGeometry.js=three/src/geometries/SphereGeometry.js
+three-rollup3-wrapped-strict	exact 18	defined 3	generic 4	misleading 4	pick.js=three/src/core/Raycaster.js buildWorld.js=app:three/geometry.js MeshBasicMaterial.js=three/src/materials/Material.js BoxGeometry.js=three/src/geometries/SphereGeometry.js
+three-rollup3-min-plain	exact 0	defined 0	generic 24	misleading 0	
+three-rollup3-min-wrapped	exact 0	defined 0	generic 24	misleading 0	
+three-rollup3-min-wrapped-strict	exact 0	defined 0	generic 24	misleading 0	
+three-rollup4-plain	exact 18	defined 3	generic 4	misleading 4	pick.js=three/src/core/Raycaster.js buildWorld.js=app:three/geometry.js MeshBasicMaterial.js=three/src/materials/Material.js BoxGeometry.js=three/src/geometries/SphereGeometry.js
+three-rollup4-wrapped	exact 18	defined 3	generic 4	misleading 4	pick.js=three/src/core/Raycaster.js buildWorld.js=app:three/geometry.js MeshBasicMaterial.js=three/src/materials/Material.js BoxGeometry.js=three/src/geometries/SphereGeometry.js
+three-rollup4-wrapped-strict	exact 18	defined 3	generic 4	misleading 4	pick.js=three/src/core/Raycaster.js buildWorld.js=app:three/geometry.js MeshBasicMaterial.js=three/src/materials/Material.js BoxGeometry.js=three/src/geometries/SphereGeometry.js
+solid-rollup3-plain	exact 0	defined 1	generic 1	misleading 0	
+solid-rollup3-wrapped	exact 0	defined 1	generic 1	misleading 0	
+solid-rollup3-wrapped-strict	exact 0	defined 1	generic 1	misleading 0	
+solid-rollup3-min-plain	exact 0	defined 0	generic 2	misleading 0	
+solid-rollup3-min-wrapped	exact 0	defined 0	generic 2	misleading 0	
+solid-rollup3-min-wrapped-strict	exact 0	defined 0	generic 2	misleading 0	
+solid-rollup4-plain	exact 0	defined 1	generic 1	misleading 0	
+solid-rollup4-wrapped	exact 0	defined 1	generic 1	misleading 0	
+solid-rollup4-wrapped-strict	exact 0	defined 1	generic 1	misleading 0	
+solid-rollup4-min-plain	exact 0	defined 0	generic 2	misleading 0	
+solid-rollup4-min-wrapped	exact 0	defined 0	generic 2	misleading 0	
+solid-rollup4-min-wrapped-strict	exact 0	defined 0	generic 2	misleading 0	
+svelte-rollup3-plain	exact 0	defined 4	generic 3	misleading 2	App.js=svelte/src/internal/server/index.js render.js=svelte/src/internal/server/context.js
+svelte-rollup3-wrapped	exact 0	defined 4	generic 3	misleading 2	App.js=svelte/src/internal/server/index.js render.js=svelte/src/internal/server/context.js
+svelte-rollup3-wrapped-strict	exact 0	defined 4	generic 3	misleading 2	App.js=svelte/src/internal/server/index.js render.js=svelte/src/internal/server/context.js
+svelte-rollup3-min-plain	exact 0	defined 0	generic 5	misleading 0	
+svelte-rollup3-min-wrapped	exact 0	defined 0	generic 5	misleading 0	
+svelte-rollup3-min-wrapped-strict	exact 0	defined 0	generic 5	misleading 0	
+total	exact 117	defined 48	generic 141	misleading 33

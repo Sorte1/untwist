@@ -12,6 +12,7 @@ const RESOLVED_SUFFIXES: [&str; 4] = ["", ".js", ".json", ".node"];
 pub struct ModulePaths {
     by_id: FxHashMap<String, String>,
     taken: FxHashSet<String>,
+    named: FxHashSet<String>,
     reference: bool,
 }
 
@@ -29,12 +30,19 @@ fn may_name_a_core_module(tail: &str) -> bool {
 
 impl ModulePaths {
     pub fn of(bundle: &Bundle<'_>) -> Self {
-        Self::from_pairs(
+        let paths = Self::from_pairs(
             bundle
                 .modules
                 .iter()
                 .map(|(id, module)| (id.as_str(), module.path.as_str())),
-        )
+        );
+        let named = bundle
+            .modules
+            .values()
+            .filter(|module| module.named_path)
+            .map(|module| normalize_posix(module.path.as_str()))
+            .collect();
+        Self { named, ..paths }
     }
 
     pub fn from_pairs<'p>(pairs: impl IntoIterator<Item = (&'p str, &'p str)>) -> Self {
@@ -50,6 +58,7 @@ impl ModulePaths {
         Self {
             by_id,
             taken,
+            named: FxHashSet::default(),
             reference: false,
         }
     }
@@ -69,6 +78,7 @@ impl ModulePaths {
     pub fn specifier(&self, from: &str, to: &str) -> String {
         let to = normalize_posix(to);
         match to.strip_prefix(NODE_MODULES) {
+            Some(_) if self.named.contains(&to) => self.relative(from, &to),
             Some(tail) if self.reference || self.resolves_bare(from, &to, tail) => tail.to_string(),
             _ => self.relative(from, &to),
         }

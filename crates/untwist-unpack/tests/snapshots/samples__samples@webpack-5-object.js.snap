@@ -9,18 +9,18 @@ entry: 2
 === 2 -> index.js (entry)
 "use strict";
 const __webpack_require__ = require("./_runtime/webpack.js");
-const lib = require("./3.js");
+const lib = require("./lib.js");
 console.log(lib);
 const _0x8da276 = require(__webpack_require__.ab + "build/Release/spdlog.node");
 
-=== 3 -> 3.js
+=== 3 -> lib.js
 "use strict";
 module.exports = "foo";
 
 === _runtime/webpack -> _runtime/webpack.js
 var __webpack_module_paths__ = {
   "2": "../index.js",
-  "3": "../3.js"
+  "3": "../lib.js"
 };
 var __webpack_require__ = function (id) {
   return require(__webpack_module_paths__[id]);

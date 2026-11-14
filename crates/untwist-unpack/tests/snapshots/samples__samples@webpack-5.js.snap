@@ -8,10 +8,10 @@ entry: 2
 
 === 2 -> index.js (entry)
 "use strict";
-const lib = require("./3.js");
+const lib = require("./lib.js");
 console.log(lib);
 
-=== 3 -> 3.js
+=== 3 -> lib.js
 "use strict";
 require.r(exports);
 const a = require(4);

@@ -130,7 +130,7 @@ fn a_bundle_prints_the_same_bytes_plain_and_as_a_single_file() {
     assert!(single.status.success());
     assert_eq!(
         String::from_utf8_lossy(&single.stdout),
-        "// untwist: every module of this bundle, concatenated for reading. require() calls still name the paths in bundle.json; this file is not runnable.\n\n// ==== index.js ====\nconst lib = require(\"./1.js\");\nconsole.log(lib);\n\n// ==== 1.js ====\nmodule.exports = 1;\n\n"
+        "// untwist: every module of this bundle, concatenated for reading. require() calls still name the paths in bundle.json; this file is not runnable.\n\n// ==== index.js ====\nconst lib = require(\"./lib.js\");\nconsole.log(lib);\n\n// ==== lib.js ====\nmodule.exports = 1;\n\n"
     );
 }
 

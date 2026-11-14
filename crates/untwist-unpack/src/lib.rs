@@ -15,6 +15,7 @@ pub mod matcher;
 pub mod merge;
 pub mod metro;
 pub mod model;
+pub mod naming;
 pub mod notes;
 pub mod parcel;
 pub mod path;
@@ -113,6 +114,7 @@ pub fn finish_with<'a>(
 ) -> Vec<Note> {
     let mut notes = mappings::apply_mappings(bundle, mappings);
     notes.extend(entry_candidates_note(bundle));
+    naming::name_modules(bundle);
     let inputs = bundle.mirrored_inputs.clone();
     notes.extend(assign::assign_paths_around(bundle, &inputs));
     notes.extend(kind_transforms(alloc, bundle, options));

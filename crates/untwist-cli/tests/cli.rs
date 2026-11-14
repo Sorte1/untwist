@@ -348,7 +348,7 @@ fn output_dir_gets_bundle_json_and_one_file_per_module() {
     assert!(out.status.success());
     assert!(outdir.join("deobfuscated.js").is_file());
     assert!(outdir.join("index.js").is_file());
-    assert!(outdir.join("1.js").is_file());
+    assert!(outdir.join("lib.js").is_file());
     let json: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(outdir.join("bundle.json")).unwrap())
             .unwrap();
@@ -356,7 +356,7 @@ fn output_dir_gets_bundle_json_and_one_file_per_module() {
     assert_eq!(json["entryId"], "0");
     assert!(std::fs::read_to_string(outdir.join("index.js"))
         .unwrap()
-        .contains("require(\"./1.js\")"));
+        .contains("require(\"./lib.js\")"));
 }
 
 #[test]
@@ -415,7 +415,7 @@ fn json_report_includes_the_bundle_and_the_written_files() {
         .collect();
     assert_eq!(
         files,
-        vec!["deobfuscated.js", "bundle.json", "index.js", "1.js"]
+        vec!["deobfuscated.js", "bundle.json", "index.js", "lib.js"]
     );
 }
 
@@ -537,7 +537,7 @@ fn a_hard_linked_target_file_is_not_written_through() {
     std::fs::create_dir(&outdir).unwrap();
     let victim = outside.path().join("victim.js");
     std::fs::write(&victim, "keep me").unwrap();
-    std::fs::hard_link(&victim, outdir.join("1.js")).unwrap();
+    std::fs::hard_link(&victim, outdir.join("lib.js")).unwrap();
     let out = bin()
         .arg("-o")
         .arg(&outdir)
@@ -548,13 +548,13 @@ fn a_hard_linked_target_file_is_not_written_through() {
     assert!(out.status.success());
     assert_eq!(std::fs::read_to_string(&victim).unwrap(), "keep me");
     assert_eq!(
-        std::fs::read_to_string(outdir.join("1.js"))
+        std::fs::read_to_string(outdir.join("lib.js"))
             .unwrap()
             .trim_end(),
         "module.exports = 1;"
     );
     use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(outdir.join("1.js"))
+    let mode = std::fs::metadata(outdir.join("lib.js"))
         .unwrap()
         .permissions()
         .mode();
