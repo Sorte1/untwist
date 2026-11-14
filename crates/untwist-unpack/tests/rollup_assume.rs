@@ -8,6 +8,7 @@ const SPLIT: UnpackOptions = UnpackOptions {
     assume_modules: false,
     conservative: false,
     trust_free_loader: false,
+    trust_legacy_reads: false,
 };
 const ASSUMED: UnpackOptions = UnpackOptions {
     assume_modules: true,

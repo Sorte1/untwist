@@ -488,7 +488,9 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         let here = address(it);
         match it.name.as_str() {
-            "exports" | "module" | "eval" => self.facts.leftover |= !self.suppress,
+            "exports" | "module" | "eval" | "__dirname" | "__filename" => {
+                self.facts.leftover |= !self.suppress
+            }
             "arguments" => self.top_level(),
             "await" | "yield" => self.facts.leftover = true,
             REQUIRE => self.facts.global |= here != self.require_callee,
