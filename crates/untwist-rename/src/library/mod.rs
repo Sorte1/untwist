@@ -1,5 +1,5 @@
 pub mod annotate;
-mod cache;
+pub mod cache;
 pub mod hash;
 pub mod pass;
 pub mod rename;
