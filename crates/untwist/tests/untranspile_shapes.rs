@@ -48,7 +48,7 @@ const SHAPE_FIXTURES: &[(&str, &str, &str)] = &[
     (
         "untranspile-helpers",
         "object/define-chain/safe",
-        "fixtures/untranspile/babel/define-chain.7.29.js",
+        "fixtures/untranspile/babel/define-chain-alias.js",
     ),
     (
         "untranspile-helpers",

@@ -1,9 +1,11 @@
 use oxc_ast::ast::*;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 
+use super::keys::{classify, Class};
 use super::{Scan, This, GLOBAL_OBJECTS};
+use crate::source_map::decode_base64;
 
-const REACHING_KEYS: [&str; 4] = [
+pub(super) const REACHING_KEYS: [&str; 4] = [
     "__proto__",
     "constructor",
     "__lookupGetter__",
@@ -33,25 +35,26 @@ const TIMERS: [&str; 2] = ["setTimeout", "setInterval"];
 pub(super) enum Key<'k> {
     Name(&'k str),
     Other,
-    Unknown,
+    Unknown(&'k Expression<'k>),
 }
 
-pub(super) fn key_of<'k>(expression: &'k Expression<'_>) -> Key<'k> {
+pub(super) fn key_of<'k>(expression: &'k Expression<'k>) -> Key<'k> {
     match expression.without_parentheses() {
-        Expression::StringLiteral(literal) => {
-            literal.value.as_str().map_or(Key::Unknown, Key::Name)
-        }
+        Expression::StringLiteral(literal) => literal
+            .value
+            .as_str()
+            .map_or(Key::Unknown(expression), Key::Name),
         Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
             .quasis
             .first()
             .and_then(|quasi| quasi.value.cooked)
             .and_then(|cooked| cooked.as_str())
-            .map_or(Key::Unknown, Key::Name),
+            .map_or(Key::Unknown(expression), Key::Name),
         Expression::NumericLiteral(_) | Expression::BigIntLiteral(_) => Key::Other,
         Expression::UpdateExpression(_) => Key::Other,
         Expression::UnaryExpression(unary) if is_numeric_unary(unary.operator) => Key::Other,
         Expression::BinaryExpression(binary) if is_numeric_binary(binary.operator) => Key::Other,
-        _ => Key::Unknown,
+        _ => Key::Unknown(expression),
     }
 }
 
@@ -140,8 +143,89 @@ impl Scan<'_> {
                 self.is_reached(object) || self.reads_prototypes(object)
             }
             Key::Name(_) | Key::Other => false,
-            Key::Unknown => self.is_reached(object) || self.is_root(object),
+            Key::Unknown(key) => {
+                self.is_reached(object)
+                    || self.is_root(object)
+                    || self.spells(key, |name| self.reached_member(object, Key::Name(name)))
+            }
         }
+    }
+
+    fn folded_text(&self, expression: &Expression<'_>) -> Option<String> {
+        match expression.without_parentheses() {
+            Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
+            Expression::BooleanLiteral(literal) => Some(literal.value.to_string()),
+            Expression::NullLiteral(_) => Some("null".to_string()),
+            Expression::NumericLiteral(literal)
+                if literal.value.fract() == 0.0 && literal.value.abs() < 1e15 =>
+            {
+                Some(format!("{}", literal.value as i64))
+            }
+            Expression::ArrayExpression(array) if array.elements.is_empty() => Some(String::new()),
+            Expression::TemplateLiteral(template) => {
+                let mut text = String::new();
+                for (index, quasi) in template.quasis.iter().enumerate() {
+                    text.push_str(quasi.value.cooked.as_ref()?.as_str()?);
+                    if let Some(inner) = template.expressions.get(index) {
+                        text.push_str(&self.folded_text(inner)?);
+                    }
+                }
+                Some(text)
+            }
+            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+                Some(self.folded_text(&binary.left)? + &self.folded_text(&binary.right)?)
+            }
+            Expression::CallExpression(call) => self.folded_call(call),
+            _ => None,
+        }
+    }
+
+    fn folded_call(&self, call: &CallExpression<'_>) -> Option<String> {
+        let literals: Option<Vec<&Expression<'_>>> = call
+            .arguments
+            .iter()
+            .map(|argument| argument.as_expression())
+            .collect();
+        let literals = literals?;
+        match call.callee.without_parentheses() {
+            Expression::Identifier(id) if self.global_named(id, &["atob"]) => {
+                let [Expression::StringLiteral(text)] = literals.as_slice() else {
+                    return None;
+                };
+                let bytes = decode_base64(text.value.as_str()?)?;
+                Some(bytes.into_iter().map(char::from).collect())
+            }
+            Expression::StaticMemberExpression(member)
+                if member.property.name == "fromCharCode"
+                    && matches!(member.object.without_parentheses(),
+                        Expression::Identifier(id) if self.global_named(id, &["String"])) =>
+            {
+                literals
+                    .iter()
+                    .map(|argument| match argument.without_parentheses() {
+                        Expression::NumericLiteral(number)
+                            if number.value.fract() == 0.0
+                                && (0.0..65536.0).contains(&number.value) =>
+                        {
+                            char::from_u32(number.value as u32)
+                        }
+                        _ => None,
+                    })
+                    .collect()
+            }
+            _ => None,
+        }
+    }
+
+    pub(super) fn spells(&self, key: &Expression<'_>, named: impl Fn(&str) -> bool) -> bool {
+        if let Some(text) = self.folded_text(key) {
+            return named(&text);
+        }
+        let mut deps = Vec::new();
+        let class = classify(self.scoping, key, &mut deps);
+        class == Class::Spelling
+            || deps.iter().any(|symbol| self.spelling_symbol(*symbol))
+            || ((class == Class::Opaque || !deps.is_empty()) && self.names_a_reaching_key())
     }
 
     pub(super) fn names_a_root(&self, name: &str) -> bool {

@@ -223,3 +223,69 @@ fn json_reached_through_a_value_and_written_is_not_intact() {
         );
     }
 }
+
+#[test]
+fn a_prototype_read_through_a_pattern_or_a_spelled_key_is_aliased() {
+    for source in [
+        "var { __proto__: p } = []; p.round = 1;",
+        "var { constructor: c } = [];",
+        "var { __proto__ } = [];",
+        "({ __proto__: p } = []);",
+        "({ __proto__ } = []);",
+        "function f({ __proto__: p }) { return p; }",
+        "var k = '__proto__'; var { [k]: p } = [];",
+        "var p = []['__pro' + 'to__'];",
+        "var p = []['__pro' + `to__`];",
+        "var p = [][`__${k}__`];",
+        "var k = '__pro'; k += 'to__'; var p = [][k];",
+        "var k = '__proto__'; x = [][k];",
+        "var a = '__pro', b = 'to__'; x = [][a + b];",
+        "var a = '__pro', b = 'to__', k = a + b; x = [][k];",
+        "var o = { k: '__proto__' }; x = [][o.k];",
+        "function g(o, k) { return o[k]; } x = g([], '__proto__');",
+        "function g(o, k) { return o[k]; } x = g([], `constructor`);",
+        "var parts = 'a constructor'.split(' '); x = (function () {})[parts[1]];",
+        "var [k] = ['__proto__']; x = [][k];",
+        "var k = 'a'; k = 'con' + 'structor'; x = (function () {})[k];",
+        "var k; ({ k = '__proto__' } = {}); x = [][k];",
+        "for (var k of ['__proto__']) { x = [][k]; }",
+        "var j = '__proto__', k = j; x = [][k];",
+        "x = [][atob('X19wcm90b19f')];",
+        "x = [][String.fromCharCode(95, 95, 112, 114, 111, 116, 111, 95, 95)];",
+    ] {
+        assert_eq!(verdict(source), Builtins::Aliased, "{source}");
+    }
+}
+
+#[test]
+fn a_key_that_cannot_spell_a_prototype_name_stays_intact() {
+    for source in [
+        "var a = [1, 2]; for (var i = 0; i < a.length; i++) { x = a[i]; }",
+        "var a = [1, 2], n = 0; n += 1; x = a[n * 2] + a[n - 1] + a[-n];",
+        "var a = [1, 2], j = 0, k = j; x = a[k];",
+        "var o = { ab: 1 }; x = o['a' + 'b'];",
+        "x = [][[]];",
+        "x = o[typeof y] + o[!y];",
+        "var o = { foo: 1 }; x = o[atob('Zm9v')];",
+        "var k = 'dyn'; x = o[k];",
+        "for (var i = 0; i < n; i++) { x = a[i + 1] + a[1 + i]; }",
+        "for (var p in b) { d[p] = b[p]; } throw new TypeError('is not a constructor');",
+        "x = r[Symbol.iterator] || r['@@iterator'];",
+        "var { a: b } = o;",
+        "({ a } = o);",
+    ] {
+        assert_eq!(verdict(source), Builtins::Intact, "{source}");
+    }
+}
+
+#[test]
+fn a_key_from_a_parameter_an_enumeration_or_an_opaque_call_is_not_taken_to_spell_a_prototype_name()
+{
+    for source in [
+        "function f(k) { return [][k]; }",
+        "for (var k in o) { x = o[k]; }",
+        "x = cache[id()];",
+    ] {
+        assert_eq!(verdict(source), Builtins::Intact, "{source}");
+    }
+}
