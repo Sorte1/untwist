@@ -7,11 +7,66 @@ use oxc_traverse::{Ancestor, TraverseCtx};
 
 use crate::ast_util::code_text::may_run_code_text;
 use crate::ast_util::function_names::function_names;
+use crate::semantic::{build_scoping, has_module_syntax, names_read_by_another_input};
 
 const PROTO: &str = "__proto__";
 
-pub fn names_observed(program: &Program<'_>, scoping: &Scoping) -> bool {
+const MODULE: &str = "module";
+const EXPORTS: &str = "exports";
+
+pub fn reads_names(program: &Program<'_>, scoping: &Scoping) -> bool {
     function_names(program, scoping).name_read || may_run_code_text(program, scoping)
+}
+
+fn exports_values(program: &Program<'_>, scoping: &Scoping) -> bool {
+    let free = scoping.root_unresolved_references();
+    has_module_syntax(program) || free.contains_key(MODULE) || free.contains_key(EXPORTS)
+}
+
+pub fn names_observed(program: &Program<'_>, scoping: &Scoping) -> bool {
+    names_read_by_another_input()
+        || exports_values(program, scoping)
+        || reads_names(program, scoping)
+}
+
+pub fn text_observes_names(text: &str) -> bool {
+    let alloc = oxc_allocator::Allocator::default();
+    let parsed = crate::parse::parse_program(&alloc, text);
+    names_observed(&parsed.program, &build_scoping(&parsed.program).scoping)
+}
+
+pub fn named_as<'a>(
+    name: &'a str,
+    value: Expression<'a>,
+    builder: &AstBuilder<'a>,
+) -> Expression<'a> {
+    if !value.is_anonymous_function_definition() {
+        return value;
+    }
+    let proto = name == PROTO;
+    let key = match proto {
+        true => PropertyKey::new_string_literal(SPAN, name, None, builder),
+        false => PropertyKey::new_static_identifier(SPAN, name, builder),
+    };
+    let property = ObjectPropertyKind::new_object_property(
+        SPAN,
+        PropertyKind::Init,
+        key,
+        value,
+        false,
+        false,
+        proto,
+        builder,
+    );
+    let object =
+        Expression::new_object_expression(SPAN, AVec::from_array_in([property], builder), builder);
+    Expression::new_static_member_expression(
+        SPAN,
+        object,
+        IdentifierName::new(SPAN, name, builder),
+        false,
+        builder,
+    )
 }
 
 fn binds_name(pattern: &BindingPattern<'_>) -> bool {

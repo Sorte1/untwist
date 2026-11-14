@@ -79,3 +79,4 @@ code-text-rr2-d6|var g = (console.log("head"), function () {}); console.log(Stri
 code-text-rr2-d7|var g = (console.log("head"), function () {}); console.log(JSON.stringify(g.bind().name));
 code-text-rr2-d8|var g = (console.log("head"), function () {}); const { ["name"]: n } = g; console.log(JSON.stringify(n));
 code-text-rr2-d9|var g = (console.log("head"), function () {}); function show(f) { with (f) { return name; } } console.log(JSON.stringify(show(g)));
+with-name-read|var f = (console.log("h"), function () {}); var g = true ? function () {} : 0; with (f) { console.log(JSON.stringify(name)); } with (g) { console.log(JSON.stringify(name)); }

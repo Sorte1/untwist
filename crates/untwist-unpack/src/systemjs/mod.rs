@@ -33,6 +33,8 @@ pub fn detect_with<'k, 'a>(
     let mut shared = build::Shared {
         names: &names,
         prefix: None,
+        text: source.source_text,
+        names_read: None,
     };
     let mut bundle = Bundle::new(
         BundleKind::SystemJs,

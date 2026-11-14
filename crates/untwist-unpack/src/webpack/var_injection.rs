@@ -2,6 +2,7 @@ use oxc_allocator::{Allocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_span::Span;
+use untwist_core::ast_util::naming_slot::unnamed;
 
 use crate::matcher::{call_parts, const_member};
 use crate::model::Module;
@@ -130,7 +131,7 @@ fn push_injection<'a>(
             param_span,
             BindingPattern::new_binding_identifier(param_span, name, builder),
             None,
-            arguments.next(),
+            arguments.next().map(|argument| unnamed(argument, builder)),
             false,
             builder,
         );
