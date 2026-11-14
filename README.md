@@ -190,12 +190,12 @@ program. Several classic scripts given in one run share one global scope, as scr
 do: a top-level `var`, function, `let`, `const` or `class` of one is treated as read and written by
 the others when another input names it (a free reference or a top-level declaration of its own) or
 reaches globals through a computed key or code text, and is then not inlined away, removed or
-renamed. A built-in name (`eval`, `String`, `atob`, ...) that another input declares at its top level, assigns as a bare name, sets as a property of the global object (`this.X =`, `globalThis.X =`, `window["X"] =`, a definer such as `Object.defineProperty(globalThis, ...)`), or declares or assigns in a code text it runs (`eval`, `(0, eval)`, `Function`, a timer string) is not the built-in for any input, so no fold relies on it. A global-object write with a computed key, or a code text that is not a literal, counts for every name. When two or more classic scripts are given, or another input may
-observe the global object's names, no top-level binding of a classic script is renamed
-(`--rename unique`, whose counter is shared by every input, still renames them when only other
-scripts are the reason), and no input's top-level binding takes a name another input binds at the
-top level or reads free. Inputs that share no names come out as they would alone, apart from
-those top-level names. A module (a file with `import`, `export`,
+renamed. A built-in name (`eval`, `String`, `atob`, ...) that another input declares at its top level, assigns as a bare name, sets as a property of the global object (`this.X =`, `globalThis.X =`, `window["X"] =`, a definer such as `Object.defineProperty(globalThis, ...)`), or declares or assigns in a code text it runs (`eval`, `(0, eval)`, `Function`, a timer string) is not the built-in for any input, so no fold relies on it. A global-object write with a computed key, or a code text that is not a literal, counts for every name. Renaming never renames a classic script's top-level bindings in the safe lane. Under `--unsafe`,
+when two or more classic scripts are given or another input may observe the global object's
+names, they keep their names too (`--rename unique`, whose counter is shared by every input,
+still renames them when only other scripts are the reason), and no input's new top-level name is a
+name another input binds at the top level, reads free or uses as a key. Inputs that share no names
+come out as they would alone. A module (a file with `import`, `export`,
 `import.meta` or top-level `await`) is closed apart from its exports. Code from outside the file
 (`require` results, host functions, other scripts) writes no built-in. It also does not depend on
 the names the obfuscator picked for the string array and its decoders, because that code was
@@ -219,7 +219,9 @@ The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in 
 patched, even when the program visibly patches one, a direct `eval` reads and writes no local
 variable (the lexical passes still refuse a program whose `eval` may), a built-in prototype that the
 program reaches through a value it reads (`[].__proto__`, `o[key]`, `Reflect.getPrototypeOf(x)`)
-is not patched through that value, and a few passes that rest on
+is not patched through that value, no code observes a classic script's top-level `var` or
+function through the global object or by its name (so renaming may rename them; the safe lane
+never does), and a few passes that rest on
 heuristics are allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).
 `dead-code`, which deletes branches behind constant comparisons, runs in both lanes.
 `fold-pure-calls` also folds calls to a pure helper that is passed around as a value or that the

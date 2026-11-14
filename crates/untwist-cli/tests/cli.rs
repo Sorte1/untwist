@@ -630,7 +630,7 @@ fn rename_is_off_unless_asked_for() {
 
 #[test]
 fn rename_simple_renames_generated_names() {
-    let out = stdin_output("var _0xa = 1;\n_0xa;", &["--rename", "simple"]);
+    let out = stdin_output("var _0xa = 1;\n_0xa;", &["--rename", "simple", "--unsafe"]);
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).trim_end(),
         "var a = 1;\na;"
@@ -639,7 +639,7 @@ fn rename_simple_renames_generated_names() {
 
 #[test]
 fn rename_unique_gives_readable_names() {
-    let out = stdin_output("function _0xa() {}", &["--rename", "unique"]);
+    let out = stdin_output("function _0xa() {}", &["--rename", "unique", "--unsafe"]);
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).trim_end(),
         "function fn1() {}"
@@ -648,8 +648,8 @@ fn rename_unique_gives_readable_names() {
 
 #[test]
 fn dash_m_is_an_alias_for_rename_mangle() {
-    let short = stdin_output("var _0xa = 1;\n_0xa;", &["-m"]);
-    let long = stdin_output("var _0xa = 1;\n_0xa;", &["--rename", "mangle"]);
+    let short = stdin_output("var _0xa = 1;\n_0xa;", &["-m", "--unsafe"]);
+    let long = stdin_output("var _0xa = 1;\n_0xa;", &["--rename", "mangle", "--unsafe"]);
     assert_eq!(
         String::from_utf8_lossy(&short.stdout).trim_end(),
         "var vLN1 = 1;\nvLN1;"
@@ -660,7 +660,7 @@ fn dash_m_is_an_alias_for_rename_mangle() {
 #[test]
 fn human_written_names_are_renamed_by_default_and_kept_on_request() {
     let source = "function handleClick(event) {\n  return event;\n}";
-    let without = stdin_output(source, &["--rename", "simple"]);
+    let without = stdin_output(source, &["--rename", "simple", "--unsafe"]);
     let with_keep = stdin_output(source, &["--rename", "simple", "--keep-human-names"]);
     assert_eq!(
         String::from_utf8_lossy(&without.stdout).trim_end(),
@@ -687,6 +687,7 @@ fn unique_names_stay_distinct_across_several_inputs() {
     let out = bin()
         .arg("--rename")
         .arg("unique")
+        .arg("--unsafe")
         .arg("--no-unpack")
         .arg("-o")
         .arg(&outdir)

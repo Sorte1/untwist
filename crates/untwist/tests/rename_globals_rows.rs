@@ -45,8 +45,10 @@ fn script_globals_reached_by_key_keep_their_names_in_every_safe_rename_mode() {
 
 #[test]
 fn globals_no_key_can_reach_are_still_renamed() {
-    let code = renamed(NOT_REACHED, RenameMode::Simple, false, Vec::new());
+    let code = renamed(NOT_REACHED, RenameMode::Simple, true, Vec::new());
     assert!(!code.contains("var total"), "{code}");
+    let safe = renamed(NOT_REACHED, RenameMode::Simple, false, Vec::new());
+    assert!(safe.contains("var total"), "{safe}");
 }
 
 #[test]

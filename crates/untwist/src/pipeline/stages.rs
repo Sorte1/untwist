@@ -467,6 +467,9 @@ fn keeps_script_globals(site: &StageCx<'_, '_>, sem: &Semantics) -> (bool, bool)
     if !guarded {
         return (false, false);
     }
+    if !site.pass_opts.unsafe_transforms {
+        return (true, true);
+    }
     let agnostic = untwist_deobfuscate::calls::agnostic::globals_reachable_by_key;
     let lexicals = untwist_deobfuscate::calls::agnostic::script_lexicals_reachable_by_code;
     untwist_core::semantic::observing_open(|| {

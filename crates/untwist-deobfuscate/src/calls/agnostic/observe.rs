@@ -14,6 +14,7 @@ use super::source::is_ambient_intrinsic;
 use super::AKey;
 use crate::value_flow::{flow_rule_disabled, OBSERVER_LIST};
 use untwist_core::host_globals::is_host_global;
+use untwist_core::semantic::is_foreign_global;
 
 const ALIAS_DEPTH: u8 = 4;
 const NAME_REVEALING_ROOTS: [&str; 14] = [
@@ -99,6 +100,9 @@ impl<'a> Sites<'_, 'a> {
     }
 
     fn name_assigned(&self, name: &str) -> bool {
+        if is_foreign_global(name) {
+            return true;
+        }
         let scoping = self.fresh.scoping;
         self.assigned_globals
             .get_or_init(|| {

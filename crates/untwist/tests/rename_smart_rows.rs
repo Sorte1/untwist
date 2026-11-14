@@ -128,6 +128,10 @@ fn smart(source: &str) -> String {
         .to_string()
 }
 
+fn local_smart(source: &str) -> String {
+    smart(&format!("(function () {{\n{source}\n}})();"))
+}
+
 fn rows(programs: &[(&str, &str)]) -> Vec<String> {
     let Some(node) = node_or_skip() else {
         return Vec::new();
@@ -142,7 +146,7 @@ fn rows(programs: &[(&str, &str)]) -> Vec<String> {
 
 #[test]
 fn smart_names_bindings_from_their_evidence() {
-    let code = smart(EVIDENCE);
+    let code = local_smart(EVIDENCE);
     for expected in [
         "for (let i = 0;",
         "for (let j = 0;",

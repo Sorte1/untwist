@@ -4,8 +4,19 @@ fn with(mode: RenameMode, rename_all: bool) -> Options {
     Options {
         rename: mode,
         rename_all,
+        unsafe_transforms: true,
         ..Options::default()
     }
+}
+
+#[test]
+fn the_safe_lane_keeps_every_top_level_name_of_a_classic_script() {
+    let out = Pipeline::new(Options {
+        rename: RenameMode::Simple,
+        ..Options::default()
+    })
+    .run("var _0xa = 1;\n_0xa;");
+    assert_eq!(out.code(), "var _0xa = 1;\n_0xa;");
 }
 
 #[test]
@@ -74,6 +85,7 @@ fn unique_mode_numbers_the_same_way_however_many_inputs_precede_an_empty_one() {
 fn human_written_names_are_renamed_by_default() {
     let out = Pipeline::new(Options {
         rename: RenameMode::Simple,
+        unsafe_transforms: true,
         ..Options::default()
     })
     .run("function handleClick(event) {\n  return event;\n}");

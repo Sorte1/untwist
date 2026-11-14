@@ -218,6 +218,10 @@ fn smart(source: &str) -> String {
         .to_string()
 }
 
+fn local_smart(source: &str) -> String {
+    smart(&format!("(function () {{\n{source}\n}})();"))
+}
+
 fn unsafe_smart(source: &str) -> String {
     Pipeline::new(options(RenameMode::Smart, true))
         .run(source)
@@ -283,7 +287,7 @@ fn names_come_from_dom_lookups_and_storage_keys() {
 
 #[test]
 fn event_handlers_and_their_parameters_are_named_by_event_type() {
-    let code = smart(EVENT_EVIDENCE);
+    let code = local_smart(EVENT_EVIDENCE);
     assert_has(
         &code,
         &[
@@ -298,7 +302,7 @@ fn event_handlers_and_their_parameters_are_named_by_event_type() {
 
 #[test]
 fn timer_callbacks_are_named() {
-    let code = smart(TIMER_EVIDENCE);
+    let code = local_smart(TIMER_EVIDENCE);
     assert_has(
         &code,
         &[
@@ -326,7 +330,7 @@ fn fetch_chains_name_the_response_and_the_body() {
 
 #[test]
 fn constructor_functions_get_pascal_case_names() {
-    let code = smart(CONSTRUCTOR_FUNCTIONS);
+    let code = local_smart(CONSTRUCTOR_FUNCTIONS);
     assert_has(
         &code,
         &[
@@ -339,7 +343,7 @@ fn constructor_functions_get_pascal_case_names() {
 
 #[test]
 fn boolean_returners_get_predicate_names() {
-    let code = smart(BOOLEAN_RETURNERS);
+    let code = local_smart(BOOLEAN_RETURNERS);
     assert_has(
         &code,
         &[
@@ -354,7 +358,7 @@ fn boolean_returners_get_predicate_names() {
 
 #[test]
 fn parameters_take_the_name_every_call_site_passes() {
-    let code = smart(CALL_SITE_PARAMS);
+    let code = local_smart(CALL_SITE_PARAMS);
     assert_has(
         &code,
         &[

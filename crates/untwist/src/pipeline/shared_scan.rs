@@ -1,8 +1,9 @@
 use oxc_allocator::Allocator;
 use std::collections::HashSet;
+use untwist_core::ast_util::key_names::key_names;
 use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{has_error, parse_program};
-use untwist_core::semantic::{build_scoping, SharedGlobals};
+use untwist_core::semantic::{assume_shared_globals, build_scoping, SharedGlobals};
 use untwist_deobfuscate::calls::agnostic::{names_reached_from, NamesReached};
 use untwist_eval::stack;
 
@@ -14,6 +15,7 @@ struct Seen {
     free: HashSet<String>,
     written: HashSet<String>,
     global_written: GlobalWrites,
+    keys: HashSet<String>,
     readable: bool,
 }
 
@@ -28,6 +30,7 @@ impl Seen {
             .iter()
             .chain(bound)
             .chain(self.global_written.names.iter())
+            .chain(self.keys.iter())
             .map(String::as_str)
     }
 }
@@ -43,6 +46,7 @@ fn unreadable() -> Seen {
         free: HashSet::new(),
         written: HashSet::new(),
         global_written: GlobalWrites::default(),
+        keys: HashSet::new(),
         readable: false,
     }
 }
@@ -73,14 +77,16 @@ fn seen(source: &str) -> Seen {
             .map(|(name, _)| name.as_str().to_string())
             .collect(),
         global_written: global_writes(&parsed.program),
+        keys: key_names(&parsed.program, &scoping).into_iter().collect(),
         readable: !has_error(&parsed.diagnostics),
     }
 }
 
-fn reaches_others(source: &str, others: &[&str]) -> NamesReached {
+fn reaches_others(source: &str, others: &[&str], foreign: SharedGlobals) -> NamesReached {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, source);
     let scoping = build_scoping(&parsed.program).scoping;
+    let _foreign = assume_shared_globals(Some(foreign));
     names_reached_from(&parsed.program, &scoping, others)
 }
 
@@ -89,8 +95,9 @@ fn other_script_names(all: &[Seen], own: usize) -> Vec<&str> {
         .iter()
         .enumerate()
         .filter(|(index, other)| *index != own && other.script)
-        .flat_map(|(_, other)| other.bound.iter().map(String::as_str))
-        .filter(|name| !all[own].bound.contains(*name))
+        .flat_map(|(_, other)| other.bound.iter().chain(other.global_written.names.iter()))
+        .map(String::as_str)
+        .filter(|name| !all[own].script || !all[own].bound.contains(*name))
         .collect();
     names.sort_unstable();
     names.dedup();
@@ -105,13 +112,18 @@ pub(super) fn shared_globals(sources: &[&str]) -> Vec<Option<SharedGlobals>> {
     let reached: Vec<NamesReached> = sources
         .iter()
         .enumerate()
-        .map(|(index, source)| match all[index].readable {
-            true => reaches_others(source, &other_script_names(&all, index)),
-            false => NamesReached {
-                reached: true,
-                observed: true,
+        .map(
+            |(index, source)| match all[index].readable && !others_unknown(&all, index) {
+                true => {
+                    let foreign = foreign_of(&all, index);
+                    reaches_others(source, &other_script_names(&all, index), foreign)
+                }
+                false => NamesReached {
+                    reached: true,
+                    observed: true,
+                },
             },
-        })
+        )
         .collect();
     all.iter()
         .enumerate()
@@ -135,16 +147,11 @@ fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGloba
         .filter(|name| others().any(|(_, other)| other.names(name)))
         .cloned()
         .collect();
-    let every_foreign = others().any(|(_, other)| !other.readable || other.global_written.every);
-    let foreign = others()
-        .flat_map(|(_, other)| {
-            let bound = other.bound.iter().filter(|_| other.script);
-            bound
-                .chain(other.written.iter())
-                .chain(other.global_written.names.iter())
-        })
-        .cloned()
-        .collect();
+    let SharedGlobals {
+        every_foreign,
+        foreign,
+        ..
+    } = foreign_of(all, own);
     let other_scripts = others().any(|(_, other)| other.script);
     let observed_elsewhere = others().any(|(index, _)| reached[index].observed);
     let named_elsewhere = others()
@@ -160,4 +167,30 @@ fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGloba
         observed_elsewhere,
         named_elsewhere,
     }
+}
+
+fn others_unknown(all: &[Seen], own: usize) -> bool {
+    all.iter()
+        .enumerate()
+        .any(|(index, other)| index != own && other.global_written.every)
+}
+
+fn foreign_of(all: &[Seen], own: usize) -> SharedGlobals {
+    let others = all
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != own)
+        .map(|(_, other)| other);
+    let mut shared = SharedGlobals::default();
+    for other in others {
+        shared.every_foreign |= !other.readable || other.global_written.every;
+        let bound = other.bound.iter().filter(|_| other.script);
+        shared.foreign.extend(
+            bound
+                .chain(other.written.iter())
+                .chain(other.global_written.names.iter())
+                .cloned(),
+        );
+    }
+    shared
 }
