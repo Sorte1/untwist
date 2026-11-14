@@ -99,7 +99,11 @@ impl<'f, 'a> Env<'f, 'a> {
         Self {
             cx,
             facts,
-            vals: facts.slots.keys().map(|symbol| (*symbol, Val::Bottom)).collect(),
+            vals: facts
+                .slots
+                .keys()
+                .map(|symbol| (*symbol, Val::Bottom))
+                .collect(),
             returns: vec![Val::Bottom; facts.functions.len()],
             builtins,
             promises,
@@ -138,9 +142,9 @@ impl<'f, 'a> Env<'f, 'a> {
         let Some(slot) = self.facts.slots.get(&symbol) else {
             return Val::Top;
         };
-        slot.sources
-            .iter()
-            .fold(Val::Bottom, |held, source| held.join(&self.source_val(source)))
+        slot.sources.iter().fold(Val::Bottom, |held, source| {
+            held.join(&self.source_val(source))
+        })
     }
 
     fn source_val(&self, source: &Source<'a>) -> Val {
@@ -349,9 +353,7 @@ impl<'f, 'a> Env<'f, 'a> {
                 };
                 self.row_val(builtins::find(Owner::Global, name, true), call)
             }
-            Expression::FunctionExpression(function) => {
-                self.iife(function.node_id.get())
-            }
+            Expression::FunctionExpression(function) => self.iife(function.node_id.get()),
             Expression::ArrowFunctionExpression(arrow) => self.iife(arrow.node_id.get()),
             Expression::StaticMemberExpression(member) => self.method(member, call),
             _ => Val::Top,
@@ -381,7 +383,9 @@ impl<'f, 'a> Env<'f, 'a> {
     fn plain_pattern(&self, call: &CallExpression<'a>) -> bool {
         match call.arguments.first().and_then(Argument::as_expression) {
             Some(Expression::RegExpLiteral(_)) => true,
-            Some(expression) => matches!(self.eval(expression), Val::Known(ty) if ty.only(Kind::String)),
+            Some(expression) => {
+                matches!(self.eval(expression), Val::Known(ty) if ty.only(Kind::String))
+            }
             None => false,
         }
     }

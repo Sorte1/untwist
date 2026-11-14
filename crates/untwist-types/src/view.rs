@@ -279,7 +279,10 @@ impl<'e, 'f, 'a> Viewer<'e, 'f, 'a> {
                     Some(init) => {
                         let view = self.view_at(init, depth);
                         let nullish = matches!(&view, View::Known(ty) if ty.is_nullable());
-                        match (crate::facts::declaration_kind(cx.nodes, declarator).is_const(), nullish) {
+                        match (
+                            crate::facts::declaration_kind(cx.nodes, declarator).is_const(),
+                            nullish,
+                        ) {
                             (_, true) => View::Unknown,
                             (true, false) => view,
                             (false, false) => view.widened(),
@@ -303,11 +306,12 @@ impl<'e, 'f, 'a> Viewer<'e, 'f, 'a> {
             return self.view_at(default, depth).widened();
         }
         let nodes = self.env.cx.nodes;
-        let Some(function_node) = nodes
-            .ancestor_ids(declaration)
-            .skip(1)
-            .find(|id| matches!(nodes.kind(*id), AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)))
-        else {
+        let Some(function_node) = nodes.ancestor_ids(declaration).skip(1).find(|id| {
+            matches!(
+                nodes.kind(*id),
+                AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
+            )
+        }) else {
             return View::Unknown;
         };
         let Some(&index) = self.env.facts.by_node.get(&function_node) else {

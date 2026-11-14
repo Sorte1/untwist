@@ -29,16 +29,16 @@ pub use pipeline::{
     UNSAFE_LANE_DECODES, WORKER_DIED,
 };
 pub use pipeline::{DecodedSite, Snapshot, SnapshotCode};
-pub use pipeline::{TYPES_NOT_BUILT, TYPES_PASS, TYPES_WITH_SOURCE_MAPS};
-pub use types::{typed_path, TypeCounts, TypesReport};
 #[cfg(feature = "refusal-spans")]
 pub use pipeline::{RefusalSite, SiteAt};
+pub use pipeline::{TYPES_NOT_BUILT, TYPES_PASS, TYPES_WITH_SOURCE_MAPS};
 pub use plan::{input_names, is_safe_relative, PlanRefusal, PlannedFile};
 pub use plugin::{PluginCtor, Plugins, Stage};
 pub use printable::printable;
 pub use report::{stage_rows, StageReport, StageRow};
 pub use split_hint::SplitHint;
 pub use stats::{CollisionStats, DecodeStats, RunStats};
+pub use types::{typed_path, TypeCounts, TypesReport};
 pub use untwist_core::budget::{
     memory_size as budget_memory_size, set_hard_limit as set_hard_memory_limit,
     timeout_secs as budget_timeout_secs, working_total as budget_working_total, CountingAlloc,

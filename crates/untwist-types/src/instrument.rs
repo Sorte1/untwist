@@ -17,8 +17,10 @@ struct Checks {
 
 impl Checks {
     fn id(&mut self, ty: &Ty) -> usize {
-        self.predicates
-            .push(format!("    function (v) {{ return {}; }},\n", ty.predicate("v")));
+        self.predicates.push(format!(
+            "    function (v) {{ return {}; }},\n",
+            ty.predicate("v")
+        ));
         self.predicates.len() - 1
     }
 

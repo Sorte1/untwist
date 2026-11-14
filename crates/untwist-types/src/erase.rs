@@ -33,7 +33,11 @@ impl<'a> VisitMut<'a> for Strip {
     }
 }
 
-fn parse<'a>(alloc: &'a Allocator, source: &'a str, source_type: SourceType) -> Option<Program<'a>> {
+fn parse<'a>(
+    alloc: &'a Allocator,
+    source: &'a str,
+    source_type: SourceType,
+) -> Option<Program<'a>> {
     let options = ParseOptions {
         allow_return_outside_function: true,
         preserve_parens: false,
@@ -49,7 +53,10 @@ fn parse<'a>(alloc: &'a Allocator, source: &'a str, source_type: SourceType) -> 
     (!failed).then_some(parsed.program)
 }
 
-pub(crate) fn parse_js<'a>(alloc: &'a Allocator, source: &'a str) -> Option<(Program<'a>, SourceType)> {
+pub(crate) fn parse_js<'a>(
+    alloc: &'a Allocator,
+    source: &'a str,
+) -> Option<(Program<'a>, SourceType)> {
     let script = untwist_core::parse::script_source_type();
     if let Some(program) = parse(alloc, source, script) {
         return Some((program, script));

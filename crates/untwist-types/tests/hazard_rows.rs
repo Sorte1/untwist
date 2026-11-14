@@ -174,15 +174,23 @@ fn every_hazard_row_keeps_the_risky_position_bare() {
             for needle in row.absent {
                 let hit = match mode {
                     Mode::Ts => typed.contains(needle),
-                    Mode::Jsdoc => typed.contains(needle.trim_end_matches(": ")) && typed.contains("/**"),
+                    Mode::Jsdoc => {
+                        typed.contains(needle.trim_end_matches(": ")) && typed.contains("/**")
+                    }
                 };
                 if hit {
-                    failures.push(format!("{} ({mode:?}): found {needle:?} in\n{out}", row.hazard));
+                    failures.push(format!(
+                        "{} ({mode:?}): found {needle:?} in\n{out}",
+                        row.hazard
+                    ));
                 }
             }
             for needle in row.present {
                 if !out.contains(needle) {
-                    failures.push(format!("{} ({mode:?}): missing {needle:?} in\n{out}", row.hazard));
+                    failures.push(format!(
+                        "{} ({mode:?}): missing {needle:?} in\n{out}",
+                        row.hazard
+                    ));
                 }
             }
         }

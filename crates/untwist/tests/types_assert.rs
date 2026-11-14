@@ -61,7 +61,10 @@ fn assert_options() -> Options {
 
 fn extension(code: &str) -> &'static str {
     let alloc = oxc_allocator::Allocator::default();
-    match untwist_core::parse::parse_program(&alloc, code).source_type.is_module() {
+    match untwist_core::parse::parse_program(&alloc, code)
+        .source_type
+        .is_module()
+    {
         true => "mjs",
         false => "cjs",
     }
@@ -102,7 +105,10 @@ fn every_proven_type_holds_when_node_runs_the_fixtures() {
             checked += 1;
             let label = path.display().to_string();
             if observed.stderr.contains("__UT_FAIL") {
-                failures.push(format!("{label}: a proven type did not hold\n{}", observed.stderr));
+                failures.push(format!(
+                    "{label}: a proven type did not hold\n{}",
+                    observed.stderr
+                ));
             }
             if observed.stdout != expected.stdout || observed.exit != expected.exit {
                 failures.push(format!(

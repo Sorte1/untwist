@@ -17,7 +17,10 @@ fn a_closed_function_gets_its_parameter_and_return_types() {
 #[test]
 fn a_let_with_a_closed_write_set_is_a_union() {
     let out = ts("(function () {\n  let mode = \"idle\";\n  function go() {\n    mode = \"run\";\n  }\n  go();\n  console.log(mode.length);\n})();\n");
-    assert!(out.contains("let mode: \"idle\" | \"run\" = \"idle\""), "{out}");
+    assert!(
+        out.contains("let mode: \"idle\" | \"run\" = \"idle\""),
+        "{out}"
+    );
 }
 
 #[test]
@@ -41,5 +44,8 @@ fn a_function_reading_arguments_keeps_its_parameters_bare() {
 #[test]
 fn jsdoc_mode_writes_comments() {
     let out = jsdoc("(function () {\n  function twice(n) {\n    return n * 2;\n  }\n  console.log(twice(1));\n})();\n");
-    assert!(out.contains("/** @param {1} n @returns {number} */ function twice(n)"), "{out}");
+    assert!(
+        out.contains("/** @param {1} n @returns {number} */ function twice(n)"),
+        "{out}"
+    );
 }
