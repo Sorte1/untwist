@@ -6,6 +6,7 @@ pub mod function_names;
 pub mod global;
 pub mod inline;
 pub mod js_text;
+pub mod key_names;
 pub mod literal;
 pub mod matcher;
 pub mod naming_slot;

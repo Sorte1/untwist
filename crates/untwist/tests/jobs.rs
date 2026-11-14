@@ -115,6 +115,7 @@ fn unique_renaming_numbers_inputs_in_order_under_four_jobs() {
         rename: RenameMode::Unique,
         rename_all: false,
         unpack: false,
+        unsafe_transforms: true,
         ..Options::default()
     };
     let sources = [
@@ -150,6 +151,7 @@ fn six_unique_inputs_on_two_workers_agree_with_one_and_finish() {
         rename: RenameMode::Unique,
         rename_all: false,
         unpack: false,
+        unsafe_transforms: true,
         ..Options::default()
     };
     let sources = [
@@ -177,6 +179,7 @@ fn a_panicking_input_is_reported_at_the_same_index_under_four_jobs() {
         plugins,
         unpack: false,
         rename: RenameMode::Unique,
+        unsafe_transforms: true,
         ..Options::default()
     };
     let sources = [

@@ -1,5 +1,6 @@
 use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
+use untwist_core::ast_util::key_names::key_names;
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::pins::script_global_symbols;
 use untwist_core::semantic::{
@@ -16,6 +17,7 @@ pub struct Setting {
     pub keep_lexicals: bool,
     pub safe_lane: bool,
     pub classic_script: bool,
+    pub extended: bool,
     pub library_names: bool,
     pub shared_counter: bool,
 }
@@ -27,6 +29,7 @@ impl Setting {
             keep_lexicals: opts.keep_script_lexicals,
             safe_lane: !opts.unsafe_transforms,
             classic_script: !opts.nested_root && !has_module_syntax(program),
+            extended: opts.extended,
             library_names: !opts.rule_disabled(crate::library::rename::NAME),
             shared_counter: false,
         }
@@ -41,6 +44,9 @@ pub fn prepare(
 ) -> Collected {
     let mut collected = collect(program, scoping, rule);
     collected.classic_script = setting.classic_script;
+    if setting.classic_script && setting.extended {
+        collected.global_keys = key_names(program, scoping);
+    }
     pin_script_globals(&mut collected, scoping, setting);
     pin_annex_b_targets(&mut collected, program, scoping);
     if setting.safe_lane {
@@ -66,12 +72,11 @@ fn pin_library_names(collected: &mut Collected, program: &Program<'_>, scoping: 
 
 fn pin_script_globals(collected: &mut Collected, scoping: &Scoping, setting: Setting) {
     pin_shared_globals(collected, scoping);
-    let fixed_by_other_inputs =
-        setting.classic_script && top_level_names_fixed(setting.shared_counter);
-    if !setting.keep_globals && !setting.keep_lexicals && !fixed_by_other_inputs {
+    let keep_every_root = setting.classic_script && top_level_names_fixed(setting.shared_counter);
+    if !setting.keep_globals && !setting.keep_lexicals && !keep_every_root {
         return;
     }
-    if setting.keep_lexicals || fixed_by_other_inputs {
+    if setting.keep_lexicals || keep_every_root {
         collected.pinned.extend(
             scoping
                 .get_bindings(scoping.root_scope_id())

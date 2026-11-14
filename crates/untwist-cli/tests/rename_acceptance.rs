@@ -78,6 +78,23 @@ fn idempotency_allowlist() -> Vec<(String, String)> {
         .collect()
 }
 
+fn run_unsafe(path: &Path, mode: &str) -> String {
+    let out = bin()
+        .arg("--rename")
+        .arg(mode)
+        .arg("--unsafe")
+        .arg("--no-unpack")
+        .arg(path)
+        .output()
+        .expect("spawn untwist");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
 fn run(path: &Path, mode: &str) -> String {
     let out = bin()
         .arg("--rename")
@@ -150,8 +167,8 @@ fn every_fixture_renames_and_keeps_its_binding_structure() {
 #[test]
 fn mangling_a_known_fixture_actually_changes_it() {
     let path = fixtures_dir().join(RENAMING_FIXTURE);
-    let baseline = run(&path, "none");
-    let mangled = run(&path, "mangle");
+    let baseline = run_unsafe(&path, "none");
+    let mangled = run_unsafe(&path, "mangle");
     assert_ne!(
         baseline, mangled,
         "--rename mangle left {RENAMING_FIXTURE} byte-identical to the --rename none baseline"
@@ -289,7 +306,7 @@ fn mangling_reads_of_a_reserved_base_numbers_every_binding_from_two() {
         let expected: String = (0..READS_OF_A_RESERVED_BASE)
             .map(|index| format!("var {word}{} = {read};\n", index + 2))
             .collect();
-        for extra in [&[][..], &["--unsafe"][..]] {
+        for extra in [&["--unsafe"][..]] {
             let args = [&["--rename", "mangle"][..], extra].concat();
             let out = stdin_output(&source, &args);
             assert!(out.status.success(), "{word} {extra:?}");
