@@ -4,6 +4,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
+use untwist_core::semantic::{closed_eval_names, is_closed_eval_at};
 
 use crate::matcher::Factory;
 use crate::scan::{is_direct_eval, is_free, Frame, Policy, Scan, Step, Suspend};
@@ -256,6 +257,21 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
         read.then(|| Captured::Host(name.to_string()))
     }
 
+    pub fn refuse_every_eval(&mut self, call: &CallExpression<'_>) {
+        if self.captured.is_none() && is_direct_eval(self.scoping, &call.callee) {
+            self.captured = Some(Captured::Eval);
+        }
+    }
+
+    fn eval_capture(&self, call: &CallExpression<'_>) -> Option<Captured> {
+        if !is_closed_eval_at(self.scoping, call) {
+            return Some(Captured::Eval);
+        }
+        closed_eval_names(call)?
+            .iter()
+            .find_map(|name| self.host(Reach::Free, name))
+    }
+
     fn outer(&mut self, frame: Frame, what: &'static str) {
         if self.arrow && !frame.receiver() {
             self.captured.get_or_insert(Captured::Outer(what));
@@ -285,7 +301,7 @@ impl<'a> Policy<'a> for Check<'_, '_, 'a> {
 
     fn call(&mut self, _frame: Frame, it: &CallExpression<'a>) -> Step {
         if self.captured.is_none() && is_direct_eval(self.scoping, &it.callee) {
-            self.captured = Some(Captured::Eval);
+            self.captured = self.eval_capture(it);
         }
         Step::Walk
     }
@@ -379,4 +395,67 @@ pub fn captured_by_helper(
     let mut check = Check::statement(scoping, statement, helpers, true);
     Scan::new(&mut check).visit_statement(statement);
     check.captured
+}
+
+pub fn first_host_read<'k, 'a: 'k>(
+    scoping: &Scoping,
+    factories: impl IntoIterator<Item = (String, Factory<'k, 'a>)>,
+    targets: &[&str],
+) -> Option<(String, Captured)> {
+    factories.into_iter().find_map(|(id, factory)| {
+        let renamed: Vec<&str> = targets
+            .iter()
+            .zip(&factory.params.items)
+            .filter(|(target, item)| {
+                **target != SHIELDED_HOST
+                    && !matches!(&item.pattern, BindingPattern::BindingIdentifier(binding) if binding.name == **target)
+            })
+            .map(|(target, _)| *target)
+            .collect();
+        if renamed.is_empty() {
+            return None;
+        }
+        let mut reads = HostReads {
+            scoping,
+            names: &renamed,
+            found: None,
+        };
+        reads.visit_function_body(factory.body);
+        reads
+            .found
+            .map(|name| (id, Captured::Host(name.to_string())))
+    })
+}
+
+const SHIELDED_HOST: &str = "require";
+
+struct HostReads<'s, 'n> {
+    scoping: &'s Scoping,
+    names: &'n [&'n str],
+    found: Option<&'n str>,
+}
+
+impl HostReads<'_, '_> {
+    fn note(&mut self, name: &str) {
+        if self.found.is_none() {
+            self.found = self.names.iter().find(|target| **target == name).copied();
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for HostReads<'_, '_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if is_free(Some(self.scoping), it) {
+            self.note(it.name.as_str());
+        }
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if is_direct_eval(self.scoping, &it.callee) {
+            for name in closed_eval_names(it).unwrap_or_default() {
+                self.note(&name);
+            }
+        }
+        oxc_ast_visit::walk_js::walk_call_expression(self, it);
+    }
 }

@@ -8,7 +8,7 @@ use untwist_core::semantic::build_scoping;
 
 use crate::esbuild::mentions::binds_any;
 use crate::model::{Module, RequireParam};
-use crate::rename::{generate_uid, rename_parameters};
+use crate::rename::{generate_uid, reads_free_name, rename_parameters};
 
 const REQUIRE: &str = "require";
 
@@ -18,10 +18,7 @@ pub struct Shield {
 }
 
 fn reads_free(program: &Program<'_>, name: &str) -> bool {
-    build_scoping(program)
-        .scoping
-        .root_unresolved_references()
-        .contains_key(name)
+    reads_free_name(program, &build_scoping(program).scoping, name)
 }
 
 pub fn shield<'a>(

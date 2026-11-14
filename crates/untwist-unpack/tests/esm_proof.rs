@@ -215,8 +215,8 @@ fn refuses_await_as_an_identifier() {
 }
 
 #[test]
-fn direct_eval_refuses_the_bundle() {
-    unbundled_target("function a() {} eval(\"1\");");
+fn a_direct_eval_that_reads_a_module_binding_refuses_the_bundle() {
+    unbundled_target("function a() {} eval(\"a\");");
 }
 
 #[test]

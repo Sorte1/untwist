@@ -8,6 +8,7 @@ use crate::mappings::Mapping;
 use crate::merge::merge_noted;
 use crate::model::Bundle;
 use crate::{finish_with, notes, turbopack, UnpackOptions};
+use untwist_core::semantic::closed_evals_kept;
 
 const PASS_NAME: &str = "unpack";
 
@@ -90,6 +91,18 @@ fn complete<'a>(
         .filter_map(Option::take)
         .chain(extra)
         .collect()
+}
+
+fn may_eval(text: &str) -> bool {
+    text.contains("eval") || text.contains("\\u")
+}
+
+fn eval_name_rebound(bundle: &Bundle<'_>) -> Option<String> {
+    bundle
+        .modules
+        .iter()
+        .find(|(_, module)| !closed_evals_kept(module.program()))
+        .map(|(id, _)| id.clone())
 }
 
 fn moved_fixed_path(bundle: &Bundle<'_>) -> Option<String> {
@@ -188,6 +201,11 @@ pub fn unpack_named_inputs<'a>(
     notes.extend(finish_with(alloc, &mut bundle, mappings, options));
     if let Some(moved) = moved_fixed_path(&bundle) {
         notes.push(note(notes::group_refused(moved)));
+        return (None, notes);
+    }
+    let may_eval = programs.iter().any(|program| may_eval(program.source_text));
+    if let Some(id) = may_eval.then(|| eval_name_rebound(&bundle)).flatten() {
+        notes.push(note(notes::eval_name_rebound(id)));
         return (None, notes);
     }
     (Some(bundle), notes)

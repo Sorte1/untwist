@@ -97,3 +97,100 @@ const ARROW_FACTORIES_SHARE_THIS: &str = r#"(function (modules) {
 fn a_webpack_bundle_whose_arrow_factory_uses_the_bundles_this_is_not_unpacked() {
     refused(ARROW_FACTORIES_SHARE_THIS, "0", "t\n");
 }
+
+const CLOSED_EVAL_FACTORY: &str = r#"(function (modules) {
+  var installedModules = {};
+  function __webpack_require__(moduleId) {
+    if (installedModules[moduleId]) return installedModules[moduleId].exports;
+    var module = (installedModules[moduleId] = { i: moduleId, l: false, exports: {} });
+    modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+    module.l = true;
+    return module.exports;
+  }
+  return __webpack_require__((__webpack_require__.s = 0));
+})([
+  function (e, t, n) {
+    var seen;
+    try { seen = typeof eval("require;").cache; } catch (error) { seen = error.name; }
+    console.log(seen, n(1));
+  },
+  function (e) { e.exports = "world"; },
+]);
+"#;
+
+const OPEN_EVAL_FACTORY: &str = r#"(function (modules) {
+  var installedModules = {};
+  function __webpack_require__(moduleId) {
+    if (installedModules[moduleId]) return installedModules[moduleId].exports;
+    var module = (installedModules[moduleId] = { i: moduleId, l: false, exports: {} });
+    modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+    module.l = true;
+    return module.exports;
+  }
+  return __webpack_require__((__webpack_require__.s = 0));
+})([
+  function (e, t, n) { eval("var made = n(1)"); console.log(made); },
+  function (e) { e.exports = "world"; },
+]);
+"#;
+
+#[test]
+fn a_webpack_factory_whose_eval_reads_only_globals_is_unpacked_without_capturing_them() {
+    let unpacked = Unpacked::of(CLOSED_EVAL_FACTORY, false);
+    assert!(unpacked.has("bundle.json"), "{:?}", unpacked.notes());
+    unpacked.runs_like_the_bundle("object world\n");
+}
+
+const HOST_READ_FACTORY: &str = r#"(function (modules) {
+  var installedModules = {};
+  function __webpack_require__(moduleId) {
+    if (installedModules[moduleId]) return installedModules[moduleId].exports;
+    var module = (installedModules[moduleId] = { i: moduleId, l: false, exports: {} });
+    modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+    module.l = true;
+    return module.exports;
+  }
+  return __webpack_require__((__webpack_require__.s = 0));
+})([
+  function (e, t, n) { t.marker = 1; console.log(typeof EXPR, n(1)); },
+  function (e) { e.exports = "world"; },
+]);
+"#;
+
+#[test]
+fn a_webpack_factory_reading_a_free_exports_its_parameter_would_take_is_not_unpacked() {
+    for expr in ["exports.marker", "eval(\"exports.marker\")", "module.id"] {
+        let bundle = HOST_READ_FACTORY.replace("EXPR", expr);
+        let expected = if expr == "module.id" {
+            "string world\n"
+        } else {
+            "undefined world\n"
+        };
+        let unpacked = Unpacked::of(&bundle, false);
+        assert!(
+            !unpacked.has("bundle.json"),
+            "{expr}: {:?}",
+            unpacked.notes()
+        );
+        let name = if expr == "module.id" {
+            "module"
+        } else {
+            "exports"
+        };
+        let why = format!("it reads {name}, which every module has for itself");
+        assert!(
+            unpacked
+                .notes()
+                .iter()
+                .any(|note| note.contains(REFUSAL) && note.contains(&why)),
+            "{expr}: {:?}",
+            unpacked.notes()
+        );
+        unpacked.file_runs_like_the_bundle(WHOLE_PROGRAM, expected);
+    }
+}
+
+#[test]
+fn a_webpack_factory_whose_eval_declares_a_var_is_not_unpacked() {
+    refused(OPEN_EVAL_FACTORY, "0", "world\n");
+}

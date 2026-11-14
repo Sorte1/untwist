@@ -14,6 +14,8 @@ pub const ENTRY_CANDIDATES: &str = "top-level require calls and no entry marker 
 pub const REQUIRE_MISSING: &str = "has no module in this bundle";
 pub const UNHANDLED_HELPER: &str = "unhandled webpack helper require.";
 pub const FACTORY_NOT_CLOSED: &str = "is not closed over its own scope; no bundle is written";
+pub const EVAL_NAME_REBOUND: &str =
+    "evaluates code text whose names would reach a binding of the unpacked file; no bundle is written";
 pub const RUNTIME_HELPER_NOT_CLOSED: &str = "cannot move to a runtime module";
 pub const SHAPE_REFUSED: &str = "bundle shape found but not proven; no bundle is written";
 pub const GROUP_REFUSED: &str = "linked inputs refused as a whole; no bundle is written for";
@@ -44,6 +46,7 @@ catalogue!(
     REQUIRE_MISSING,
     UNHANDLED_HELPER,
     FACTORY_NOT_CLOSED,
+    EVAL_NAME_REBOUND,
     RUNTIME_HELPER_NOT_CLOSED,
     SHAPE_REFUSED,
     GROUP_REFUSED,
@@ -140,6 +143,10 @@ pub fn runtime_helper_not_closed(
 
 pub fn shape_refused(kind: impl Display) -> String {
     format!("{kind} {SHAPE_REFUSED}")
+}
+
+pub fn eval_name_rebound(id: impl Display) -> String {
+    format!("module {id} {EVAL_NAME_REBOUND}")
 }
 
 pub fn group_refused(namespace: impl Display) -> String {
