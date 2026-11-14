@@ -1,5 +1,6 @@
 mod boundary;
 mod decoded;
+mod global_writes;
 mod input;
 mod ladder;
 mod layer;

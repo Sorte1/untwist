@@ -45,3 +45,19 @@ temp-optional-loose|var _a; var y = (_a = () => 1) == null ? void 0 : _a.name; c
 temp-logical-object|Object.defineProperty(Function.prototype, "p", { get() { console.log(JSON.stringify(this.name)); return 1; }, set(v) {}, configurable: true }); var _a; (_a = function () {}).p || (_a.p = 1);
 cff-key-fold|function t() { var _0xa = {}; _0xa["abc"] = function (a, b) { return a + b; }; _0xa["def"] = "x"; var _0xb = _0xa; var g = _0xb["abc"]; return [g.name, _0xb["abc"](1, 2), _0xb["def"]]; } console.log(JSON.stringify(t()));
 merge-object-computed-key|var t = "x" + "y"; var o = {}; o[t] = function () {}; console.log(JSON.stringify(o.xy.name));
+code-text-a0|var g = (console.log("head"), function () {}); function show(s) { console.log(eval(s)); } show("JSON.stringify(g.name)");
+code-text-a1|var g = (console.log("head"), function () {}); console.log(globalThis.eval("JSON.stringify(g.name)"));
+code-text-a2|var g = (console.log("head"), function () {}); var F = (function () {}).constructor; console.log(F("return JSON.stringify(g.name)")());
+code-text-a3|var g = (console.log("head"), function () {}); console.log(globalThis.Function("return JSON.stringify(g.name)")());
+code-text-a4|var g = (console.log("head"), function () {}); console.log((0, eval)("JSON.stringify(g.name)"));
+code-text-a5|var g = (console.log("head"), function () {}); console.log(this.eval("JSON.stringify(g.name)"));
+code-text-a6|var g = (console.log("head"), function () {}); console.log(globalThis["eval"]("JSON.stringify(g.name)"));
+code-text-a7|var g = (console.log("head"), function () {}); var c = "constructor"; console.log(show[c]("return JSON.stringify(g.name)")()); function show() {}
+code-text-a8|var g = (console.log("head"), function () {}); console.log(eval("JSON.stringify(g.name)"));
+code-text-b1|var g = (console.log("head"), function () {}); console.log(Reflect.apply(eval, null, ["JSON.stringify(g.name)"]));
+code-text-b2|var g = (console.log("head"), function () {}); console.log(eval.call(null, "JSON.stringify(g.name)"));
+code-text-b3|var g = (console.log("head"), function () {}); console.log(require("vm").runInThisContext("JSON.stringify(g.name)"));
+code-text-b4|var g = (console.log("head"), function () {}); console.log(new (Object.getPrototypeOf(function () {}).constructor)("return JSON.stringify(g.name)")());
+code-text-b5|var g = (console.log("head"), function () {}); console.log(globalThis.eval?.("JSON.stringify(g.name)"));
+code-text-b6|var g = (console.log("head"), function () {}); var e = globalThis.eval; console.log(e("JSON.stringify(g.name)"));
+code-text-b7|var g = (console.log("head"), function () {}); var { eval: e } = globalThis; console.log(e("JSON.stringify(g.name)"));

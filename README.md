@@ -190,7 +190,7 @@ program. Several classic scripts given in one run share one global scope, as scr
 do: a top-level `var`, function, `let`, `const` or `class` of one is treated as read and written by
 the others when another input names it (a free reference or a top-level declaration of its own) or
 reaches globals through a computed key or code text, and is then not inlined away, removed or
-renamed. A built-in name (`eval`, `String`, `atob`, ...) that another input declares at its top level or assigns is not the built-in for any input, so no fold relies on it. When two or more classic scripts are given, or another input may
+renamed. A built-in name (`eval`, `String`, `atob`, ...) that another input declares at its top level, assigns as a bare name, sets as a property of the global object (`this.X =`, `globalThis.X =`, `window["X"] =`, a definer such as `Object.defineProperty(globalThis, ...)`), or declares or assigns in a code text it runs (`eval`, `(0, eval)`, `Function`, a timer string) is not the built-in for any input, so no fold relies on it. A global-object write with a computed key, or a code text that is not a literal, counts for every name. When two or more classic scripts are given, or another input may
 observe the global object's names, no top-level binding of a classic script is renamed
 (`--rename unique`, whose counter is shared by every input, still renames them when only other
 scripts are the reason), and no input's top-level binding takes a name another input binds at the

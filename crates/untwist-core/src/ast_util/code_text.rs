@@ -1,13 +1,25 @@
 use oxc_ast::ast::{
-    Argument, CallExpression, Expression, MemberExpression, NewExpression, Program,
+    Argument, AssignmentTargetPropertyIdentifier, AssignmentTargetPropertyProperty,
+    BindingProperty, CallExpression, ComputedMemberExpression, Expression, IdentifierReference,
+    NewExpression, Program, PropertyKey, StaticMemberExpression,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::BinaryOperator;
 
-const CODE_RUNNERS: [&str; 3] = ["eval", "Function", "execScript"];
+const RUNNERS: [&str; 10] = [
+    "eval",
+    "Function",
+    "execScript",
+    "setTimeout",
+    "setInterval",
+    "constructor",
+    "runInThisContext",
+    "runInNewContext",
+    "runInContext",
+    "compileFunction",
+];
 const TIMERS: [&str; 2] = ["setTimeout", "setInterval"];
-const CONSTRUCTOR: &str = "constructor";
 const NAME: &str = "name";
 
 struct CodeText<'s> {
@@ -22,40 +34,6 @@ pub fn may_run_code_text(program: &Program<'_>, scoping: &Scoping) -> bool {
     };
     scan.visit_program(program);
     scan.found
-}
-
-fn is_free(scoping: &Scoping, expression: &Expression<'_>, names: &[&str]) -> bool {
-    let Expression::Identifier(id) = expression.without_parentheses() else {
-        return false;
-    };
-    names.contains(&id.name.as_str())
-        && id
-            .reference_id
-            .get()
-            .is_none_or(|reference| scoping.get_reference(reference).symbol_id().is_none())
-}
-
-fn names_constructor(expression: &Expression<'_>) -> bool {
-    let Some(member) = expression.without_parentheses().as_member_expression() else {
-        return false;
-    };
-    match member {
-        MemberExpression::StaticMemberExpression(it) => it.property.name == CONSTRUCTOR,
-        MemberExpression::ComputedMemberExpression(it) => match &it.expression {
-            Expression::StringLiteral(literal) => literal.value.as_str() == Some(CONSTRUCTOR),
-            _ => false,
-        },
-        MemberExpression::PrivateFieldExpression(_) => false,
-    }
-}
-
-fn calls_back(first: Option<&Argument<'_>>) -> bool {
-    matches!(
-        first
-            .and_then(Argument::as_expression)
-            .map(Expression::without_parentheses),
-        Some(Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_))
-    )
 }
 
 fn literal_text(expression: &Expression<'_>) -> Option<String> {
@@ -74,6 +52,25 @@ fn literal_text(expression: &Expression<'_>) -> Option<String> {
     }
 }
 
+fn key_may_run(key: &Expression<'_>) -> bool {
+    if matches!(key.without_parentheses(), Expression::NumericLiteral(_)) {
+        return false;
+    }
+    literal_text(key).is_none_or(|name| RUNNERS.contains(&name.as_str()))
+}
+
+fn property_key_may_run(key: &PropertyKey<'_>, computed: bool) -> bool {
+    match key {
+        PropertyKey::StaticIdentifier(id) => RUNNERS.contains(&id.name.as_str()),
+        PropertyKey::PrivateIdentifier(_) => false,
+        _ if !computed => key
+            .as_expression()
+            .and_then(literal_text)
+            .is_some_and(|name| RUNNERS.contains(&name.as_str())),
+        _ => key.as_expression().is_none_or(key_may_run),
+    }
+}
+
 fn texts_read_no_name(arguments: &[Argument<'_>]) -> bool {
     arguments.iter().all(|argument| {
         argument
@@ -83,70 +80,122 @@ fn texts_read_no_name(arguments: &[Argument<'_>]) -> bool {
     })
 }
 
+fn calls_back(first: Option<&Argument<'_>>) -> bool {
+    matches!(
+        first
+            .and_then(Argument::as_expression)
+            .map(Expression::without_parentheses),
+        Some(Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_))
+    )
+}
+
+fn runner_name<'e>(callee: &'e Expression<'_>) -> Option<&'e str> {
+    match callee.without_parentheses() {
+        Expression::Identifier(id) => Some(id.name.as_str()),
+        Expression::StaticMemberExpression(member) => Some(member.property.name.as_str()),
+        _ => None,
+    }
+    .filter(|name| RUNNERS.contains(name))
+}
+
 impl CodeText<'_> {
-    fn runner(&self, callee: &Expression<'_>) -> bool {
-        let direct_eval = matches!(
-            callee.without_parentheses(),
-            Expression::Identifier(id) if id.name == "eval"
-        );
-        direct_eval || names_constructor(callee) || is_free(self.scoping, callee, &CODE_RUNNERS)
+    fn is_free_runner(&self, id: &IdentifierReference<'_>) -> bool {
+        RUNNERS.contains(&id.name.as_str())
+            && id
+                .reference_id
+                .get()
+                .is_none_or(|reference| self.scoping.get_reference(reference).symbol_id().is_none())
     }
 
-    fn runs_text(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
-        if self.runner(callee) {
-            return !texts_read_no_name(arguments);
+    fn harmless_call(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
+        let Some(name) = runner_name(callee) else {
+            return false;
+        };
+        if TIMERS.contains(&name) && calls_back(arguments.first()) {
+            return true;
         }
-        is_free(self.scoping, callee, &TIMERS)
-            && !calls_back(arguments.first())
-            && !texts_read_no_name(arguments.get(..1).unwrap_or_default())
+        let texts = match TIMERS.contains(&name) {
+            true => arguments.get(..1).unwrap_or_default(),
+            false => arguments,
+        };
+        !arguments.is_empty() && texts_read_no_name(texts)
+    }
+
+    fn visit_callee_object<'a>(&mut self, callee: &Expression<'a>) {
+        if let Expression::StaticMemberExpression(member) = callee.without_parentheses() {
+            self.visit_expression(&member.object);
+        }
+    }
+
+    fn visit_run<'a>(&mut self, callee: &Expression<'a>, arguments: &[Argument<'a>]) -> bool {
+        if !self.harmless_call(callee, arguments) {
+            return false;
+        }
+        self.visit_callee_object(callee);
+        for argument in arguments {
+            self.visit_argument(argument);
+        }
+        true
     }
 }
 
 impl<'a> VisitJs<'a> for CodeText<'_> {
     fn visit_expression(&mut self, it: &Expression<'a>) {
-        if self.found {
-            return;
+        if !self.found {
+            walk_js::walk_expression(self, it);
         }
-        if is_free(self.scoping, it, &CODE_RUNNERS) {
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= self.is_free_runner(it);
+    }
+
+    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        if RUNNERS.contains(&it.property.name.as_str()) {
             self.found = true;
             return;
         }
-        walk_js::walk_expression(self, it);
+        walk_js::walk_static_member_expression(self, it);
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        if key_may_run(&it.expression) {
+            self.found = true;
+            return;
+        }
+        walk_js::walk_computed_member_expression(self, it);
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if self.runs_text(&it.callee, &it.arguments) {
-            self.found = true;
-            return;
+        if !self.visit_run(&it.callee, &it.arguments) {
+            walk_js::walk_call_expression(self, it);
         }
-        if self.runner(&it.callee) || is_free(self.scoping, &it.callee, &TIMERS) {
-            self.visit_callee_object(&it.callee);
-            self.visit_arguments(&it.arguments);
-            return;
-        }
-        walk_js::walk_call_expression(self, it);
     }
 
     fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
-        let runner =
-            names_constructor(&it.callee) || is_free(self.scoping, &it.callee, &CODE_RUNNERS);
-        if runner && !texts_read_no_name(&it.arguments) {
-            self.found = true;
-            return;
+        if !self.visit_run(&it.callee, &it.arguments) {
+            walk_js::walk_new_expression(self, it);
         }
-        if runner {
-            self.visit_callee_object(&it.callee);
-            self.visit_arguments(&it.arguments);
-            return;
-        }
-        walk_js::walk_new_expression(self, it);
     }
-}
 
-impl<'a> CodeText<'_> {
-    fn visit_callee_object(&mut self, callee: &Expression<'a>) {
-        if let Some(member) = callee.without_parentheses().as_member_expression() {
-            self.visit_expression(member.object());
-        }
+    fn visit_binding_property(&mut self, it: &BindingProperty<'a>) {
+        self.found |= property_key_may_run(&it.key, it.computed);
+        walk_js::walk_binding_property(self, it);
+    }
+
+    fn visit_assignment_target_property_property(
+        &mut self,
+        it: &AssignmentTargetPropertyProperty<'a>,
+    ) {
+        self.found |= property_key_may_run(&it.name, it.computed);
+        walk_js::walk_assignment_target_property_property(self, it);
+    }
+
+    fn visit_assignment_target_property_identifier(
+        &mut self,
+        it: &AssignmentTargetPropertyIdentifier<'a>,
+    ) {
+        self.found |= RUNNERS.contains(&it.binding.name.as_str());
+        walk_js::walk_assignment_target_property_identifier(self, it);
     }
 }
