@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
-import { expect, openApp, readRepo, repoPath, runAndWait, saved, sha256, test } from './fixtures';
+import { expect, openApp, openDiagnostics, readRepo, repoPath, runAndWait, saved, sha256, test } from './fixtures';
 
 const MODERN = 'fixtures/modern/babel-usage.core-js-3.39.0.rollup-cjs.js';
 const BOUNDARIES = 'fixtures/unpack-rollup-boundaries/synthetic-rollup3-wrapped/index.js';
@@ -63,6 +63,7 @@ test('modern notes are info in Diagnostics and Details lists the modules by reas
   await openApp(page, '#libs=1&modern=es2022');
   await load(page, MODERN);
   await runAndWait(page);
+  await openDiagnostics(page);
   await expect(page.locator('#diag-list .diag-row[data-level="warning"]', { has: page.locator('.diag-src:text-is("modern")') })).toHaveCount(0);
   await page.locator('#details-tab').click();
   const section = page.locator('#details .details-section').filter({ has: page.locator('h3', { hasText: /^Modern$/ }) });
