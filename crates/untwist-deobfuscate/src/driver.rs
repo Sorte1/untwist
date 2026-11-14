@@ -725,6 +725,25 @@ fn finalize_unresolved_machinery<'a>(
     next
 }
 
+fn kept_when_stamps_survive<'a>(
+    alloc: &'a Allocator,
+    program: &mut Program<'a>,
+    (sem, before): (Semantics, &Program<'_>),
+    aggregate: &mut Aggregate,
+) -> Semantics {
+    if !aggregate.stamped || !unstamp::has_survivor(program.source_text, &sem.scoping) {
+        return sem;
+    }
+    *program = before.clone_in(alloc);
+    aggregate.push_note(Note {
+        pass: "deobfuscate",
+        kind: NoteKind::Refusal,
+        message: notes::UNSTAMP_DISABLED.to_string(),
+        span: None,
+    });
+    rebuild_scoping(program, sem.stats)
+}
+
 fn run_undoable_rounds<'a>(
     alloc: &'a Allocator,
     program: &mut Program<'a>,
@@ -920,12 +939,20 @@ fn deobfuscate_with<'a>(
         defer_disabled: opts.defer_disabled.get(),
     };
     clear_kept_order();
+    let snapshot = Allocator::default();
+    let before = opts
+        .rule_disabled(unstamp::UNSTAMP_REMAINING_PASS)
+        .then(|| program.clone_in(&snapshot));
     let sem = run_undoable_rounds(alloc, program, sem, (opts, &shared), &mut aggregate);
     clear_kept_order();
     if opts.round_cap_undo.get() == RoundCapUndo::Requested {
         return (sem, aggregate.finish());
     }
     let sem = finalize_unresolved_machinery(alloc, program, sem, (opts, &shared), &mut aggregate);
+    let sem = match &before {
+        Some(before) => kept_when_stamps_survive(alloc, program, (sem, before), &mut aggregate),
+        None => sem,
+    };
 
     let mut report = aggregate.finish();
     report.heap_charged = shared.heap.borrow().peak();

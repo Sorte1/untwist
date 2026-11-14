@@ -245,6 +245,9 @@ pub const MACHINERY_NAME_UNREADABLE: &str =
 pub const UNSTAMP_BLOCKED: &str =
     "the original name of a refused unit's machinery is now bound by another declaration that a \
      restored name would collide with or capture, so its names could not be restored";
+pub const UNSTAMP_DISABLED: &str =
+    "unstamp-remaining-machinery is disabled and a refused unit's machinery still carries its \
+     stamped names, so the program is kept as it was before deobfuscation";
 pub const UNSTAMP_FREE_REFERENCE: &str =
     "the original name of a refused unit's machinery is also used where nothing declares it, so \
      restoring it would let that reference reach the machinery, and its names were not restored";
@@ -719,6 +722,7 @@ catalogue!(
     MACHINERY_NAME_UNREADABLE,
     DECODED_NAME,
     UNSTAMP_FREE_REFERENCE,
+    UNSTAMP_DISABLED,
     ARRAY_ELEMENT_NOT_FOUND,
     ARRAY_READS_NOT_ALL_SUBSTITUTED,
     ALIAS_REMOVAL_PLAN_INCOMPLETE,
