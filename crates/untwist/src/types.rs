@@ -36,6 +36,8 @@ pub struct TypesReport {
     pub jsx_outputs: Vec<bool>,
     #[serde(skip)]
     pub jsx_modules: Vec<bool>,
+    #[serde(skip)]
+    pub declarations: Vec<Option<String>>,
 }
 
 impl TypesReport {
@@ -51,6 +53,7 @@ impl TypesReport {
             typescript: mode == TypesMode::Ts,
             jsx_outputs: Vec::new(),
             jsx_modules: Vec::new(),
+            declarations: Vec::new(),
         }
     }
 
@@ -64,7 +67,7 @@ impl TypesReport {
     pub fn line(&self) -> String {
         let total = self.total();
         format!(
-            "types ({}): {} annotated, {} redundant, {} refused of {} proven ({} positions; bindings {}/{}, params {}/{}, returns {}/{}); {} of {} files refused; {:.1} ms\n",
+            "types ({}): {} annotated ({} of them tsc infers anyway), {} refused of {} proven ({} positions; bindings {}/{}, params {}/{}, returns {}/{}); {} of {} files refused; {:.1} ms\n",
             self.mode,
             total.annotated,
             total.redundant,
@@ -104,9 +107,28 @@ pub fn typed_path(path: &str, jsx: bool) -> String {
     }
 }
 
+const DECLARATION_EXTENSIONS: [(&str, &str); 3] =
+    [(".js", ".d.ts"), (".mjs", ".d.mts"), (".cjs", ".d.cts")];
+
+pub fn declaration_path(path: &str) -> String {
+    for (from, to) in DECLARATION_EXTENSIONS {
+        if let Some(stem) = path.strip_suffix(from) {
+            return format!("{stem}{to}");
+        }
+    }
+    format!("{path}.d.ts")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::typed_path;
+    use super::{declaration_path, typed_path};
+
+    #[test]
+    fn declaration_files_sit_beside_their_module() {
+        assert_eq!(declaration_path("src/a.js"), "src/a.d.ts");
+        assert_eq!(declaration_path("a.mjs"), "a.d.mts");
+        assert_eq!(declaration_path("modules/12"), "modules/12.d.ts");
+    }
 
     #[test]
     fn typescript_paths_follow_the_javascript_extension() {

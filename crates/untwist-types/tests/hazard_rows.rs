@@ -59,7 +59,7 @@ const ROWS: &[Row] = &[
     Row {
         hazard: "DOM factories stay untyped (an XML document returns a plain Element)",
         source: "(function () {\n  function make(tag) {\n    return document.createElement(tag);\n  }\n  console.log(make(\"canvas\"));\n})();\n",
-        absent: &["HTMLCanvasElement", "): "],
+        absent: &["HTMLCanvasElement", "make(tag): "],
         present: &[],
     },
     Row {
@@ -164,35 +164,29 @@ const ROWS: &[Row] = &[
 fn every_hazard_row_keeps_the_risky_position_bare() {
     let mut failures = Vec::new();
     for row in ROWS {
-        for mode in [Mode::Ts, Mode::Jsdoc] {
-            let out = annotate(row.source, mode).code;
-            let typed: String = out
-                .lines()
-                .filter(|line| !row.source.lines().any(|plain| plain == *line))
-                .collect::<Vec<_>>()
-                .join("\n");
-            for needle in row.absent {
-                let hit = match mode {
-                    Mode::Ts => typed.contains(needle),
-                    Mode::Jsdoc => {
-                        typed.contains(needle.trim_end_matches(": ")) && typed.contains("/**")
-                    }
-                };
-                if hit {
-                    failures.push(format!(
-                        "{} ({mode:?}): found {needle:?} in\n{out}",
-                        row.hazard
-                    ));
-                }
+        let ts = annotate(row.source, Mode::Ts);
+        let jsdoc = annotate(row.source, Mode::Jsdoc);
+        let typed: String = ts
+            .code
+            .lines()
+            .filter(|line| !row.source.lines().any(|plain| plain == *line))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for needle in row.absent {
+            if typed.contains(needle) {
+                failures.push(format!("{}: found {needle:?} in\n{}", row.hazard, ts.code));
             }
-            for needle in row.present {
-                if !out.contains(needle) {
-                    failures.push(format!(
-                        "{} ({mode:?}): missing {needle:?} in\n{out}",
-                        row.hazard
-                    ));
-                }
+        }
+        for needle in row.present {
+            if !ts.code.contains(needle) || !jsdoc.code.contains(needle) {
+                failures.push(format!("{}: missing {needle:?}", row.hazard));
             }
+        }
+        if jsdoc.stats.total().annotated > ts.stats.total().annotated {
+            failures.push(format!(
+                "{}: jsdoc annotated more than ts\n{}",
+                row.hazard, jsdoc.code
+            ));
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));

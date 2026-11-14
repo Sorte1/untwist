@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { flagsFrom } from './flags';
 import { HASH_CAP, MAX_PROBLEMS, parseHash, settingsFromHash, writeHash } from './hash';
-import { changedCount, CLI_DEFAULTS, DEFAULT_FUEL, DEFAULTS, RENAME_MODES, WASM_CHECKS, type Settings } from './settings';
+import { changedCount, CLI_DEFAULTS, DEFAULT_FUEL, DEFAULTS, RENAME_MODES, TYPES_CHOICES, WASM_CHECKS, type Settings } from './settings';
 import cases from './flags.json';
 
 function pick<T>(values: readonly T[], seed: number): T {
@@ -35,6 +35,7 @@ function generated(seed: number): Settings {
     imap: bit(13),
     mem: pick([null, 512, 4096], seed >> 8),
     time: pick([null, 30], seed >> 9),
+    types: pick(TYPES_CHOICES, seed >> 10),
   };
 }
 

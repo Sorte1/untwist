@@ -1,5 +1,6 @@
 mod builtins;
 mod decide;
+mod dts;
 mod emit;
 mod erase;
 mod facts;
@@ -120,6 +121,7 @@ fn analyse(code: &str, mode: Mode, purpose: Purpose) -> Result<Analysis, (Refusa
         .symbol_names()
         .any(|name| EMITTED_TYPE_NAMES.contains(&name));
     let cx = facts::Ctx {
+        exports: facts::export_spans(program),
         program,
         scoping: &scoping,
         nodes: &nodes,
@@ -171,4 +173,41 @@ pub fn instrumented(code: &str) -> Option<String> {
     analyse(code, Mode::Ts, Purpose::Instrument)
         .ok()
         .and_then(|analysis| analysis.typed)
+}
+
+pub fn declarations(code: &str) -> Option<String> {
+    let alloc = Allocator::default();
+    let (program, source_type) = erase::parse_js(&alloc, code)?;
+    let program = alloc.alloc(program);
+    let mut semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(program)
+        .semantic;
+    untwist_core::semantic::repair_blocked_hoists(program, semantic.scoping_mut());
+    let (scoping, nodes) = semantic.into_scoping_and_nodes();
+    if untwist_core::semantic::scope_hazard(&scoping).is_some() {
+        return dts::render(program, &scoping, code, &|_| None);
+    }
+    let module = untwist_core::semantic::has_module_syntax(program) || source_type.is_module();
+    let scanned = scan(program, &scoping, module, false, &RELIANCE);
+    let shadowed = scoping
+        .symbol_names()
+        .any(|name| EMITTED_TYPE_NAMES.contains(&name));
+    let cx = facts::Ctx {
+        exports: facts::export_spans(program),
+        program,
+        scoping: &scoping,
+        nodes: &nodes,
+        module,
+    };
+    let collected = facts::collect(&cx);
+    let mut env = infer::Env::new(
+        &cx,
+        &collected,
+        scanned.verdict == Builtins::Intact,
+        !scanned.promise_written && !shadowed,
+    );
+    env.solve();
+    let lookup = |symbol| env.vals.get(&symbol).and_then(ty::Val::ty).cloned();
+    dts::render(program, &scoping, code, &lookup)
 }

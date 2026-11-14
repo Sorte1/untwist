@@ -26,6 +26,7 @@ const strToU8 = (text: string): Uint8Array => encoder.encode(text);
 const BUNDLE_JSON = 'bundle.json';
 const withoutFinalNewline = (text: string): string => (text.endsWith('\n') ? text.slice(0, -1) : text);
 const DEOBFUSCATED = 'deobfuscated.js';
+const DEOBFUSCATED_TS = 'deobfuscated.ts';
 
 export function zipPlan(bundleJson: string, bundle: BundleInfo, codes: readonly string[], stdout: string): ZipPlan {
   const files: Zippable = Object.assign(Object.create(null) as Zippable, {
@@ -60,7 +61,7 @@ export function mountDownload(store: Store<AppState>, shown: () => string): void
     const index = state.selectedModule;
     const stdout = index === null ? shown() : result.stdout;
     if (!zipping(state) || bundle === null || result.bundleJson === null) {
-      downloadText(DEOBFUSCATED, withoutFinalNewline(stdout), 'text/javascript');
+      downloadText(state.settings.types === 'ts' ? DEOBFUSCATED_TS : DEOBFUSCATED, withoutFinalNewline(stdout), 'text/javascript');
       return;
     }
     const codes = index === null ? result.modules : result.modules.map((code, at) => (at === index ? shown() : code));
@@ -77,6 +78,6 @@ export function mountDownload(store: Store<AppState>, shown: () => string): void
   });
   store.subscribe((state) => {
     button.disabled = state.run.result === null;
-    setText(byId('download-label'), zipping(state) ? 'Download .zip' : 'Download .js');
+    setText(byId('download-label'), zipping(state) ? 'Download .zip' : state.settings.types === 'ts' ? 'Download .ts' : 'Download .js');
   });
 }

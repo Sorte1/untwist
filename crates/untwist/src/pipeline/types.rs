@@ -88,6 +88,18 @@ fn typed(
     }
 }
 
+#[cfg(feature = "types")]
+fn declarations(code: &str) -> Option<String> {
+    std::panic::catch_unwind(|| untwist_types::declarations(code))
+        .ok()
+        .flatten()
+}
+
+#[cfg(not(feature = "types"))]
+fn declarations(_code: &str) -> Option<String> {
+    None
+}
+
 #[cfg(not(feature = "types"))]
 fn typed(
     _code: &mut String,
@@ -124,6 +136,10 @@ impl Pipeline {
                 if mode == TypesMode::Ts && !assert {
                     module.path = crate::types::typed_path(&module.path, jsx);
                 }
+                let declares = mode == TypesMode::Jsdoc && !assert;
+                report
+                    .declarations
+                    .push(declares.then(|| declarations(&module.code)).flatten());
                 report.jsx_modules.push(jsx);
             }
         }

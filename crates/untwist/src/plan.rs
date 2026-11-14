@@ -12,6 +12,7 @@ pub(crate) enum Role {
     Output,
     Listing,
     Module(usize),
+    Declarations,
     Wasm,
     SourceMap,
 }
@@ -409,6 +410,22 @@ impl Planner<'_> {
                 },
                 module.map.as_ref(),
             ));
+            let declarations = result
+                .types
+                .as_ref()
+                .and_then(|report| report.declarations.get(index))
+                .and_then(Option::as_ref);
+            if let Some(text) = declarations {
+                planned.extend(self.admit(
+                    dir,
+                    Candidate {
+                        relative: crate::types::declaration_path(&module.path),
+                        contents: text.clone().into_bytes(),
+                        role: Role::Declarations,
+                        owner: OWNER_MODULE,
+                    },
+                ));
+            }
         }
         planned
     }

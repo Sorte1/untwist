@@ -155,10 +155,23 @@ pub fn declaration_kind(
 }
 
 pub struct Ctx<'s, 'a> {
+    pub exports: Vec<Span>,
     pub program: &'a Program<'a>,
     pub scoping: &'s Scoping,
     pub nodes: &'s AstNodes<'a>,
     pub module: bool,
+}
+
+pub fn export_spans(program: &Program<'_>) -> Vec<Span> {
+    program
+        .body
+        .iter()
+        .filter_map(|statement| match statement {
+            Statement::ExportDeclaration(export) => Some(export.span),
+            Statement::ExportDefaultDeclaration(export) => Some(export.span),
+            _ => None,
+        })
+        .collect()
 }
 
 impl<'a> Ctx<'_, 'a> {

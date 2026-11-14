@@ -100,17 +100,16 @@ pub fn decide(env: &Env<'_, '_>, mode: Mode) -> Decided {
             false => Some(ty.clone()),
         };
         let fine = match inner {
+            _ if decider.inside_object_member(fact.node) => Err("inside an object literal member"),
+            _ if !fact.closed && decider.open_return_written(index, ty) => Ok(ty.widened()),
             _ if !fact.closed => Err("return of a function with unknown callers"),
-            Some(inner) => admissible(&inner),
+            Some(inner) => admissible(&inner).map(|()| ty.clone()),
             None => Err("promise"),
         };
         match fine {
-            Ok(()) => {
-                notes.returns.insert(index, ty.clone());
+            Ok(written) => {
+                notes.returns.insert(index, written);
                 kinds.insert(Target::Return(index), Position::Return);
-            }
-            Err(_) if decider.inferred_alike(index, ty) => {
-                stats.count(Position::Return).redundant += 1;
             }
             Err(reason) => {
                 stats.count(Position::Return).refused += 1;
@@ -142,7 +141,12 @@ pub fn decide(env: &Env<'_, '_>, mode: Mode) -> Decided {
                 continue;
             };
             match decider.judge(target, &ty, &notes) {
-                Verdict::Keep => {}
+                Verdict::Keep => {
+                    redundant.remove(&target);
+                }
+                Verdict::Redundant => {
+                    redundant.insert(target);
+                }
                 verdict => {
                     let wider = ty.widened();
                     let widen = verdict == Verdict::Refuse
@@ -161,9 +165,6 @@ pub fn decide(env: &Env<'_, '_>, mode: Mode) -> Decided {
                         (Target::Return(index), false) => {
                             notes.returns.remove(&index);
                         }
-                    }
-                    if !widen && verdict == Verdict::Redundant {
-                        redundant.insert(target);
                     }
                     if !widen && verdict == Verdict::Refuse {
                         let reason = decider.reason.borrow_mut().take();
@@ -189,10 +190,12 @@ pub fn decide(env: &Env<'_, '_>, mode: Mode) -> Decided {
             Target::Return(index) => notes.returns.contains_key(&index),
         };
         let row = stats.count(position);
-        match (annotated, redundant.contains(&target)) {
-            (true, _) => row.annotated += 1,
-            (false, true) => row.redundant += 1,
-            (false, false) => {
+        match annotated {
+            true => {
+                row.annotated += 1;
+                row.redundant += usize::from(redundant.contains(&target));
+            }
+            false => {
                 row.refused += 1;
                 let reason = reasons
                     .remove(&target)
@@ -234,11 +237,12 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
                 };
                 let nodes = self.cx().nodes;
                 let declaration = nodes.parent_id(declarator.node_id.get());
-                let exported = matches!(
-                    nodes.parent_kind(declaration),
-                    AstKind::ExportNamedDeclaration(_)
-                );
-                if exported {
+                let exported = self
+                    .cx()
+                    .exports
+                    .iter()
+                    .any(|span| span.contains_inclusive(declarator.span));
+                if exported || self.inside_object_member(declarator.node_id.get()) {
                     return false;
                 }
                 match self.mode {
@@ -246,8 +250,20 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
                     Mode::Jsdoc => jsdoc_placeable(nodes, declaration),
                 }
             }
-            SlotKind::Param { .. } => true,
+            SlotKind::Param { function, .. } => {
+                !self.inside_object_member(self.env.facts.functions[function].node)
+            }
         }
+    }
+
+    fn inside_object_member(&self, node: NodeId) -> bool {
+        if self.mode != Mode::Ts {
+            return false;
+        }
+        let nodes = self.cx().nodes;
+        nodes
+            .ancestor_ids(node)
+            .any(|id| matches!(nodes.kind(id), AstKind::ObjectProperty(_)))
     }
 
     fn judge(&self, target: Target, ty: &Ty, notes: &Annotations) -> Verdict {
@@ -264,10 +280,10 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
         let Some(slot) = self.env.facts.slots.get(&symbol) else {
             return Verdict::Refuse;
         };
-        if let SlotKind::Binding { .. } = slot.kind {
-            if viewer.declared_without(symbol) == View::Known(ty.clone()) {
-                return Verdict::Redundant;
-            }
+        let inferred = matches!(slot.kind, SlotKind::Binding { .. })
+            && viewer.declared_without(symbol) == View::Known(ty.clone());
+        if inferred && !ty.has_literals() {
+            return Verdict::Redundant;
         }
         if !slot
             .sources
@@ -285,10 +301,43 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
             }
         }
         self.visiting.borrow_mut().insert(symbol);
-        match self.symbol_reads_ok(viewer, symbol, &View::Known(ty.clone()), 0) {
-            true => Verdict::Keep,
-            false => Verdict::Refuse,
+        match (
+            self.symbol_reads_ok(viewer, symbol, &View::Known(ty.clone()), 0),
+            inferred,
+        ) {
+            (true, true) => Verdict::Redundant,
+            (true, false) => Verdict::Keep,
+            (false, _) => Verdict::Refuse,
         }
+    }
+
+    fn open_return_written(&self, index: usize, ty: &Ty) -> bool {
+        let fact = &self.env.facts.functions[index];
+        let parent = self.cx().nodes.parent_kind(fact.node);
+        if matches!(parent, AstKind::ObjectProperty(_)) || self.compared(fact.symbol) {
+            return false;
+        }
+        let in_class = matches!(parent, AstKind::MethodDefinition(_));
+        let returns_nothing =
+            fact.func.expression_body().is_none() && fact.returns.iter().all(Option::is_none);
+        if returns_nothing && in_class {
+            return false;
+        }
+        self.inferred_alike(index, ty)
+    }
+
+    fn compared(&self, symbol: Option<SymbolId>) -> bool {
+        let Some(symbol) = symbol else {
+            return false;
+        };
+        let cx = self.cx();
+        cx.scoping.get_resolved_references(symbol).any(|reference| {
+            match cx.nodes.parent_kind(reference.node_id()) {
+                AstKind::BinaryExpression(binary) => binary.operator.is_equality(),
+                AstKind::SwitchStatement(_) | AstKind::SwitchCase(_) => true,
+                _ => false,
+            }
+        })
     }
 
     fn inferred_alike(&self, index: usize, ty: &Ty) -> bool {
@@ -377,7 +426,7 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
         };
         let returns_nothing =
             fact.func.expression_body().is_none() && fact.returns.iter().all(Option::is_none);
-        if returns_nothing && inner.is_exactly_undefined() {
+        if fact.closed && returns_nothing && inner.is_exactly_undefined() {
             return Verdict::Redundant;
         }
         let operands = fact
@@ -390,6 +439,12 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
             if !viewer.view(operand).fits(&inner) {
                 return self.refuse("a return the checker would type differently");
             }
+        }
+        if !fact.closed {
+            return match self.open_return_written(index, ty) {
+                true => Verdict::Redundant,
+                false => self.refuse("return of a function with unknown callers"),
+            };
         }
         let class = View::Known(ty.clone());
         let ok = fact

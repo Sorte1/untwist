@@ -53,7 +53,7 @@ function key(entry) {
 
 function delta(root) {
   const annotated = diagnostics(join(root, "annotated"));
-  const plain = diagnostics(join(root, "plain"));
+  const plain = existsSync(join(root, "plain")) ? diagnostics(join(root, "plain")) : new Map();
   const added = [];
   for (const [file, entries] of annotated) {
     const before = new Map();
