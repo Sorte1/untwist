@@ -4,7 +4,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::node::{node, run, skip_allowed, SKIP_MESSAGE};
 
 const RECORD_MARK: &str = "get l()";
-const MODULE_OBJECT: &str = "uses its module object";
+const NO_BUNDLE: &str = "no bundle is written";
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/unpack-record")
@@ -68,7 +68,7 @@ impl Written {
     }
 
     fn refused(&self) -> bool {
-        self.notes.iter().any(|note| note.contains(MODULE_OBJECT))
+        self.notes.iter().any(|note| note.contains(NO_BUNDLE))
     }
 }
 
