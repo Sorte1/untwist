@@ -251,6 +251,11 @@ const SHAPE_FIXTURES: &[(&str, &str, &str)] = &[
         "fixtures/untranspile/terser/spread.safari9.js",
     ),
     (
+        "var-to-let",
+        "sunk-to-first-use",
+        "fixtures/untranspile/terser/spread.safari9.js",
+    ),
+    (
         "function-to-arrow",
         "called-binding",
         "fixtures/behaviour/arrow-shapes.js",

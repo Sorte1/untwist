@@ -16,7 +16,7 @@ use untwist_core::semantic::{
     assumed_hazard, block_function_symbols, is_constant_binding, scope_hazard,
 };
 
-use crate::{var_capture, var_placement};
+use crate::{var_capture, var_placement, var_sink};
 
 pub const PASS: &str = "var-to-let";
 
@@ -25,6 +25,7 @@ pub const SHAPE_FOR_HEAD: &str = "for-head";
 pub const SHAPE_FOR_IN_OF_HEAD: &str = "for-in-of-head";
 pub const PLACED_AT_FIRST_WRITE: &str = "placed-at-first-write";
 pub const HOISTED_TO_TOP: &str = "hoisted-to-top";
+pub const SUNK_TO_FIRST_USE: &str = "sunk-to-first-use";
 
 const REFUSED_NAMES: [&str; 5] = ["let", "yield", "await", "arguments", "eval"];
 const SMALL_NAME_SET: usize = 8;
@@ -639,6 +640,25 @@ impl VarToLet {
         hoisted
     }
 
+    fn sink<'a>(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        let scope = cx.current_scope_id();
+        if cx.opts.keep_var_positions || !is_function_scope(cx.scoping(), scope) {
+            return;
+        }
+        let facts = self.facts(cx.scoping());
+        let plan = var_sink::plan(facts.scoping, stmts, scope, |name| {
+            REFUSED_NAMES.contains(&name) || facts.block_functions.contains(&name_hash(name))
+        });
+        if plan.is_empty() {
+            return;
+        }
+        for _ in 0..plan.moved + plan.merged {
+            note_placement(SUNK_TO_FIRST_USE);
+        }
+        let changed = var_sink::apply(stmts, &plan, cx);
+        cx.changed_by(changed);
+    }
+
     fn convert_head<'a>(
         &mut self,
         stmt: &mut Statement<'a>,
@@ -782,6 +802,9 @@ impl<'a> Pass<'a> for VarToLet {
             return;
         }
         let hoisted = bare && self.place(stmts, cx);
+        if bare {
+            self.sink(stmts, cx);
+        }
         if !pending && !hoisted {
             return;
         }

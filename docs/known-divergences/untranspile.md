@@ -100,6 +100,14 @@ callers is an `--unsafe` rewrite, and each such assumption gets a bullet below.
 
 ## `var-to-let` and `function-to-arrow` (the lexical stage)
 
+- **A bare `var x;` in a function body moves down to the first statement that uses `x`.** A
+  declaration without an initialiser does nothing where it stands (the binding exists from the
+  start of the function), so moving it within the same statement list keeps behaviour. It stays
+  in its list (never into or out of a block or a nested function), never passes a `return` or
+  `throw`, and is merged into a later `var x = e;` in the same list when nothing between them
+  uses `x`. Parameters, Annex B block-function namesakes, `arguments`/`eval`-like names, a
+  direct `eval` or `with`, script top levels and functions whose source text is read keep their
+  declarations where they are.
 - **A direct `eval` keeps every `var` and `let` as written, in every lane.** `--unsafe` otherwise
   assumes a direct `eval` does not observe the local scope (several deobfuscate and unminify passes
   rely on it), but a `let` or `const` made from a `var` turns the eval's own reads and writes into

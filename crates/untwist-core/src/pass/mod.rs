@@ -106,6 +106,8 @@ pub struct PassOptions {
     #[doc(hidden)]
     pub keep_captured_vars: bool,
     #[doc(hidden)]
+    pub keep_var_positions: bool,
+    #[doc(hidden)]
     pub scoping_patched: Cell<bool>,
     #[doc(hidden)]
     pub scoping_canonical: Cell<bool>,
@@ -188,6 +190,7 @@ impl Default for PassOptions {
             keep_script_globals: false,
             keep_script_lexicals: false,
             keep_captured_vars: false,
+            keep_var_positions: false,
             scoping_patched: Cell::new(false),
             scoping_canonical: Cell::new(true),
             shares_init_order: false,
