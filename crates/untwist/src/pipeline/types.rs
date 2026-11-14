@@ -29,7 +29,10 @@ fn absorb(report: &mut TypesReport, stats: untwist_types::TypeStats) {
 }
 
 fn note(notes: &mut Vec<Note>, message: &str) {
-    if notes.iter().any(|held| held.pass == TYPES_PASS && held.message == message) {
+    if notes
+        .iter()
+        .any(|held| held.pass == TYPES_PASS && held.message == message)
+    {
         return;
     }
     notes.push(Note {
@@ -41,7 +44,13 @@ fn note(notes: &mut Vec<Note>, message: &str) {
 }
 
 #[cfg(feature = "types")]
-fn typed(code: &mut String, mode: TypesMode, assert: bool, report: &mut TypesReport, notes: &mut Vec<Note>) -> bool {
+fn typed(
+    code: &mut String,
+    mode: TypesMode,
+    assert: bool,
+    report: &mut TypesReport,
+    notes: &mut Vec<Note>,
+) -> bool {
     let mode = match mode {
         TypesMode::Ts => untwist_types::Mode::Ts,
         TypesMode::Jsdoc => untwist_types::Mode::Jsdoc,
@@ -49,7 +58,12 @@ fn typed(code: &mut String, mode: TypesMode, assert: bool, report: &mut TypesRep
     let held = std::mem::take(code);
     let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if assert {
-            return (untwist_types::instrumented(&held), None, untwist_types::TypeStats::default(), false);
+            return (
+                untwist_types::instrumented(&held),
+                None,
+                untwist_types::TypeStats::default(),
+                false,
+            );
         }
         let out = untwist_types::annotate(&held, mode);
         (Some(out.code), out.refused, out.stats, out.jsx)
@@ -64,7 +78,10 @@ fn typed(code: &mut String, mode: TypesMode, assert: bool, report: &mut TypesRep
             jsx
         }
         Err(_) => {
-            note(notes, "types: the types stage panicked on a file, which was left untyped");
+            note(
+                notes,
+                "types: the types stage panicked on a file, which was left untyped",
+            );
             *code = held;
             false
         }
@@ -72,7 +89,13 @@ fn typed(code: &mut String, mode: TypesMode, assert: bool, report: &mut TypesRep
 }
 
 #[cfg(not(feature = "types"))]
-fn typed(_code: &mut String, _mode: TypesMode, _assert: bool, _report: &mut TypesReport, notes: &mut Vec<Note>) -> bool {
+fn typed(
+    _code: &mut String,
+    _mode: TypesMode,
+    _assert: bool,
+    _report: &mut TypesReport,
+    notes: &mut Vec<Note>,
+) -> bool {
     note(notes, TYPES_NOT_BUILT);
     false
 }

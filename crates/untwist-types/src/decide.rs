@@ -194,7 +194,9 @@ pub fn decide(env: &Env<'_, '_>, mode: Mode) -> Decided {
             (false, true) => row.redundant += 1,
             (false, false) => {
                 row.refused += 1;
-                let reason = reasons.remove(&target).unwrap_or_else(|| "refused".to_string());
+                let reason = reasons
+                    .remove(&target)
+                    .unwrap_or_else(|| "refused".to_string());
                 stats.refuse(reason);
             }
         }
@@ -324,7 +326,9 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
             .iter()
             .rposition(|param| param.initializer.is_none())
             .map_or(0, |last| last + 1);
-        fact.calls.iter().all(|call| call.arguments.len() >= required)
+        fact.calls
+            .iter()
+            .all(|call| call.arguments.len() >= required)
     }
 
     fn param_leaves_calls_alone(&self, viewer: &Viewer<'_, 'f, 'a>, function: usize) -> bool {
@@ -332,14 +336,14 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
             return true;
         }
         let fact = &self.env.facts.functions[function];
-        let returns_value = fact.func.expression_body().is_some()
-            || fact.returns.iter().any(Option::is_some);
+        let returns_value =
+            fact.func.expression_body().is_some() || fact.returns.iter().any(Option::is_some);
         if !returns_value {
             return true;
         }
-        fact.calls.iter().all(|call| {
-            self.context_ok(viewer, call.node_id.get(), &View::Unknown, 0)
-        })
+        fact.calls
+            .iter()
+            .all(|call| self.context_ok(viewer, call.node_id.get(), &View::Unknown, 0))
     }
 
     fn source_fits(&self, viewer: &Viewer<'_, 'f, 'a>, source: &Source<'a>, ty: &Ty) -> bool {
@@ -371,8 +375,8 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
             },
             false => ty.clone(),
         };
-        let returns_nothing = fact.func.expression_body().is_none()
-            && fact.returns.iter().all(Option::is_none);
+        let returns_nothing =
+            fact.func.expression_body().is_none() && fact.returns.iter().all(Option::is_none);
         if returns_nothing && inner.is_exactly_undefined() {
             return Verdict::Redundant;
         }
@@ -528,7 +532,9 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
             AstKind::UnaryExpression(unary) => match unary.operator {
                 UnaryOperator::LogicalNot | UnaryOperator::Typeof | UnaryOperator::Void => true,
                 UnaryOperator::Delete => false,
-                UnaryOperator::UnaryPlus => matches!(class, View::Known(ty) if !ty.any_of(Kind::BigInt)),
+                UnaryOperator::UnaryPlus => {
+                    matches!(class, View::Known(ty) if !ty.any_of(Kind::BigInt))
+                }
                 _ => class.only(Kind::Number),
             },
             AstKind::BinaryExpression(binary) => {
@@ -650,7 +656,9 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
         if operator.is_compare() {
             let numeric = |view: &View| match view {
                 View::Any => true,
-                View::Known(ty) => ty.kinds().all(|kind| matches!(kind, Kind::Number | Kind::BigInt)),
+                View::Known(ty) => ty
+                    .kinds()
+                    .all(|kind| matches!(kind, Kind::Number | Kind::BigInt)),
                 View::Unknown => false,
             };
             let textual = |view: &View| matches!(view, View::Any) || view.only(Kind::String);
@@ -658,7 +666,10 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
         }
         match operator {
             BinaryOperator::In => {
-                on_left && ty.kinds().all(|kind| matches!(kind, Kind::String | Kind::Number))
+                on_left
+                    && ty
+                        .kinds()
+                        .all(|kind| matches!(kind, Kind::String | Kind::Number))
             }
             BinaryOperator::Instanceof => false,
             BinaryOperator::Addition => {
@@ -668,12 +679,9 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
                     View::Known(Ty::number())
                 } else if ty.only(Kind::BigInt) && theirs.only(Kind::BigInt) {
                     View::Known(Ty::bigint())
-                } else if ty.only(Kind::Number)
-                    && (theirs.only(Kind::String) || matches!(theirs, View::Any))
-                {
-                    return true;
                 } else {
-                    return false;
+                    return ty.only(Kind::Number)
+                        && (theirs.only(Kind::String) || matches!(theirs, View::Any));
                 };
                 self.context_ok(viewer, node, &result, depth)
             }
@@ -710,9 +718,7 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
                     None if assign.operator.is_assign() => View::Known(ty.clone()),
                     None => declared.join(class),
                     Some(operator) => match &declared {
-                        View::Known(left) if !compound_ok(operator, left, class) => {
-                            return false
-                        }
+                        View::Known(left) if !compound_ok(operator, left, class) => return false,
                         _ => binary_view(operator, &declared, class),
                     },
                 };
@@ -755,7 +761,8 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
         if !self.visiting.borrow_mut().insert(symbol) {
             return true;
         }
-        let declared = match crate::facts::declaration_kind(self.cx().nodes, declarator).is_const() {
+        let declared = match crate::facts::declaration_kind(self.cx().nodes, declarator).is_const()
+        {
             true => ty.clone(),
             false => ty.widened(),
         };
@@ -886,7 +893,11 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
             AstKind::VariableDeclarator(declarator)
                 if crate::facts::declaration_kind(cx.nodes, declarator).is_const() =>
             {
-                match declarator.init.as_ref().map(Expression::without_parentheses) {
+                match declarator
+                    .init
+                    .as_ref()
+                    .map(Expression::without_parentheses)
+                {
                     Some(Expression::FunctionExpression(function)) => Some(function.node_id.get()),
                     Some(Expression::ArrowFunctionExpression(arrow)) => Some(arrow.node_id.get()),
                     _ => None,
@@ -948,7 +959,12 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
             AstKind::Class(class) => class.body.body.iter().all(|element| match element {
                 ClassElement::MethodDefinition(method) => {
                     method.kind != MethodDefinitionKind::Constructor
-                        || method.value.params.items.iter().all(|param| param.type_annotation.is_none())
+                        || method
+                            .value
+                            .params
+                            .items
+                            .iter()
+                            .all(|param| param.type_annotation.is_none())
                 }
                 _ => true,
             }),
@@ -989,7 +1005,12 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
                 });
                 return arguments_fit
                     && !call.optional
-                    && self.context_ok(viewer, call.node_id.get(), &View::Known(row.lib.ty()), depth);
+                    && self.context_ok(
+                        viewer,
+                        call.node_id.get(),
+                        &View::Known(row.lib.ty()),
+                        depth,
+                    );
             }
         }
         key == "length"
@@ -1002,7 +1023,8 @@ fn compound_ok(operator: BinaryOperator, ty: &Ty, right: &View) -> bool {
     match operator {
         BinaryOperator::Addition => {
             ty.only(Kind::String)
-                || (ty.only(Kind::Number) && (right.only(Kind::Number) || matches!(right, View::Any)))
+                || (ty.only(Kind::Number)
+                    && (right.only(Kind::Number) || matches!(right, View::Any)))
                 || (ty.only(Kind::BigInt) && right.only(Kind::BigInt))
         }
         _ => {
@@ -1025,7 +1047,9 @@ fn comparable(class: &View, theirs: &View) -> bool {
         View::Any => true,
         View::Known(other) => {
             ty.overlaps(&other.widened())
-                || other.kinds().all(|kind| matches!(kind, Kind::Null | Kind::Undefined))
+                || other
+                    .kinds()
+                    .all(|kind| matches!(kind, Kind::Null | Kind::Undefined))
         }
         View::Unknown => false,
     }

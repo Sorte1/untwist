@@ -30,7 +30,9 @@ fn js_files(dir: &Path, found: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
-    let mut paths: Vec<PathBuf> = entries.filter_map(|entry| entry.ok().map(|e| e.path())).collect();
+    let mut paths: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .collect();
     paths.sort();
     for path in paths {
         if path.is_dir() {
@@ -92,7 +94,9 @@ fn every_annotated_fixture_output_strips_back_to_the_untyped_output() {
                 for mode in [Mode::Ts, Mode::Jsdoc] {
                     let typed = annotate(&code, mode);
                     if typed.refused == Some(Refusal::Erasure) {
-                        failures.push(format!("{family}/{label} {name} {mode:?}: refused at erasure"));
+                        failures.push(format!(
+                            "{family}/{label} {name} {mode:?}: refused at erasure"
+                        ));
                     }
                     if typed.code == code {
                         continue;
@@ -110,7 +114,13 @@ fn every_annotated_fixture_output_strips_back_to_the_untyped_output() {
 fn typed_name(family: &str, label: &str, name: &str, extension: &str) -> String {
     let flat: String = format!("{family}__{label}__{name}")
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     format!("{flat}.{extension}")
 }
@@ -157,7 +167,9 @@ fn line(label: &str, stats: &TypeStats) -> String {
 #[ignore = "writes the tsc delta pairs and prints coverage; run with UNTWIST_TYPES_OUT=<dir>"]
 fn coverage_and_tsc_pairs_over_the_fixture_corpus() {
     let out = std::env::var_os("UNTWIST_TYPES_OUT").map(PathBuf::from);
-    let limit = std::env::var("UNTWIST_TYPES_LIMIT").ok().and_then(|n| n.parse().ok());
+    let limit = std::env::var("UNTWIST_TYPES_LIMIT")
+        .ok()
+        .and_then(|n| n.parse().ok());
     let mut all = TypeStats::default();
     let mut lines = Vec::new();
     for family in FAMILIES {

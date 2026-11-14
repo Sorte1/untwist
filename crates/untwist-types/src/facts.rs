@@ -144,7 +144,10 @@ fn in_loop_head(nodes: &AstNodes<'_>, declarator: NodeId) -> bool {
     )
 }
 
-pub fn declaration_kind(nodes: &AstNodes<'_>, declarator: &VariableDeclarator<'_>) -> VariableDeclarationKind {
+pub fn declaration_kind(
+    nodes: &AstNodes<'_>,
+    declarator: &VariableDeclarator<'_>,
+) -> VariableDeclarationKind {
     match nodes.parent_kind(declarator.node_id.get()) {
         AstKind::VariableDeclaration(declaration) => declaration.kind,
         _ => VariableDeclarationKind::Var,
@@ -222,11 +225,15 @@ pub fn collect<'a>(cx: &Ctx<'_, 'a>) -> Facts<'a> {
         match node.kind() {
             AstKind::Function(function) => {
                 facts.by_node.insert(node.id(), facts.functions.len());
-                facts.functions.push(new_fact(FnRef::Function(function), node.id()));
+                facts
+                    .functions
+                    .push(new_fact(FnRef::Function(function), node.id()));
             }
             AstKind::ArrowFunctionExpression(arrow) => {
                 facts.by_node.insert(node.id(), facts.functions.len());
-                facts.functions.push(new_fact(FnRef::Arrow(arrow), node.id()));
+                facts
+                    .functions
+                    .push(new_fact(FnRef::Arrow(arrow), node.id()));
             }
             AstKind::VariableDeclarator(declarator) => {
                 declarators.push((declarator, in_loop_head(cx.nodes, node.id())));
@@ -238,7 +245,9 @@ pub fn collect<'a>(cx: &Ctx<'_, 'a>) -> Facts<'a> {
     for (node, statement) in returns {
         let owner = enclosing_function(cx.nodes, node).and_then(|id| facts.by_node.get(&id));
         if let Some(&owner) = owner {
-            facts.functions[owner].returns.push(statement.argument.as_ref());
+            facts.functions[owner]
+                .returns
+                .push(statement.argument.as_ref());
         }
     }
     for index in 0..facts.functions.len() {
@@ -260,9 +269,13 @@ fn early_reads<'a>(
 ) -> rustc_hash::FxHashSet<SymbolId> {
     let candidates: Vec<(SymbolId, Span)> = declarators
         .iter()
-        .filter(|(declarator, _)| declaration_kind(cx.nodes, declarator) == VariableDeclarationKind::Var)
+        .filter(|(declarator, _)| {
+            declaration_kind(cx.nodes, declarator) == VariableDeclarationKind::Var
+        })
         .filter_map(|(declarator, _)| match &declarator.id {
-            BindingPattern::BindingIdentifier(id) => id.symbol_id.get().map(|s| (s, declarator.span)),
+            BindingPattern::BindingIdentifier(id) => {
+                id.symbol_id.get().map(|s| (s, declarator.span))
+            }
             _ => None,
         })
         .collect();
@@ -284,8 +297,12 @@ fn function_symbol<'a>(cx: &Ctx<'_, 'a>, fact: &FnFact<'a>) -> Option<(SymbolId,
     match parent {
         AstKind::VariableDeclarator(declarator) => match &declarator.id {
             BindingPattern::BindingIdentifier(id) => {
-                let constant = declaration_kind(cx.nodes, declarator) != VariableDeclarationKind::Var
-                    || cx.scoping.get_resolved_references(id.symbol_id.get()?).all(|r| !r.is_write());
+                let constant = declaration_kind(cx.nodes, declarator)
+                    != VariableDeclarationKind::Var
+                    || cx
+                        .scoping
+                        .get_resolved_references(id.symbol_id.get()?)
+                        .all(|r| !r.is_write());
                 id.symbol_id.get().map(|symbol| (symbol, constant))
             }
             _ => None,
@@ -294,7 +311,11 @@ fn function_symbol<'a>(cx: &Ctx<'_, 'a>, fact: &FnFact<'a>) -> Option<(SymbolId,
     }
 }
 
-fn self_name_closed<'a>(cx: &Ctx<'_, 'a>, fact: &FnFact<'a>, calls: &mut Vec<&'a CallExpression<'a>>) -> bool {
+fn self_name_closed<'a>(
+    cx: &Ctx<'_, 'a>,
+    fact: &FnFact<'a>,
+    calls: &mut Vec<&'a CallExpression<'a>>,
+) -> bool {
     let FnRef::Function(function) = fact.func else {
         return true;
     };
@@ -343,7 +364,9 @@ fn settle_function<'a>(cx: &Ctx<'_, 'a>, facts: &mut Facts<'a>, index: usize) {
             _ => None,
         })
         .collect::<Vec<_>>();
-    let spread = calls.iter().any(|call| call.arguments.iter().any(Argument::is_spread));
+    let spread = calls
+        .iter()
+        .any(|call| call.arguments.iter().any(Argument::is_spread));
     let params_open = !closed
         || reads_arguments
         || spread
@@ -474,7 +497,10 @@ fn binding_slot<'a>(
     let mut sources = Vec::new();
     let usable = cx.single_declaration(symbol)
         && (constant || !cx.open_root(symbol))
-        && !cx.scoping.symbol_flags(symbol).contains(SymbolFlags::Function);
+        && !cx
+            .scoping
+            .symbol_flags(symbol)
+            .contains(SymbolFlags::Function);
     if !usable {
         sources.push(Source::Top);
     }
@@ -529,7 +555,10 @@ fn param_slots<'a>(cx: &Ctx<'_, 'a>, facts: &mut Facts<'a>, index: usize) {
             sources.push(Source::Top);
         }
         for call in &fact.calls {
-            let argument = call.arguments.get(position).and_then(Argument::as_expression);
+            let argument = call
+                .arguments
+                .get(position)
+                .and_then(Argument::as_expression);
             sources.push(match (&param.initializer, argument) {
                 (Some(default), argument) => Source::Defaulted(argument, default),
                 (None, Some(argument)) => Source::Expr(argument),

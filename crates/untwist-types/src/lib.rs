@@ -105,7 +105,10 @@ fn analyse(code: &str, mode: Mode, purpose: Purpose) -> Result<Analysis, (Refusa
     if untwist_core::type_space::holds_type_space(program) {
         return Err((Refusal::TypeSyntax, jsx));
     }
-    let mut semantic = SemanticBuilder::new().with_build_nodes(true).build(program).semantic;
+    let mut semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(program)
+        .semantic;
     untwist_core::semantic::repair_blocked_hoists(program, semantic.scoping_mut());
     let (scoping, nodes) = semantic.into_scoping_and_nodes();
     if let Some(hazard) = untwist_core::semantic::scope_hazard(&scoping) {
@@ -113,7 +116,9 @@ fn analyse(code: &str, mode: Mode, purpose: Purpose) -> Result<Analysis, (Refusa
     }
     let module = untwist_core::semantic::has_module_syntax(program) || source_type.is_module();
     let scanned = scan(program, &scoping, module, false, &RELIANCE);
-    let shadowed = scoping.symbol_names().any(|name| EMITTED_TYPE_NAMES.contains(&name));
+    let shadowed = scoping
+        .symbol_names()
+        .any(|name| EMITTED_TYPE_NAMES.contains(&name));
     let cx = facts::Ctx {
         program,
         scoping: &scoping,

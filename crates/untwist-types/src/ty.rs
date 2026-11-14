@@ -324,9 +324,7 @@ fn normalized(members: Vec<Member>) -> Ty {
         .filter(|member| !member.is_literal())
         .cloned()
         .collect();
-    rest.retain(|member| {
-        !member.is_literal() || !bases.iter().any(|base| base.covers(member))
-    });
+    rest.retain(|member| !member.is_literal() || !bases.iter().any(|base| base.covers(member)));
     if let Some(inner) = promise {
         rest.push(Member::Promise(Box::new(inner)));
     }

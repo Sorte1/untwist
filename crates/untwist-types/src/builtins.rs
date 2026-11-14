@@ -87,7 +87,14 @@ const SN: &[Param] = &[Param::Str, Param::Num];
 const A: &[Param] = &[Param::Any];
 const AA: &[Param] = &[Param::Any, Param::Any];
 const NONE: &[Param] = &[];
-const MANY_N: &[Param] = &[Param::Num, Param::Num, Param::Num, Param::Num, Param::Num, Param::Num];
+const MANY_N: &[Param] = &[
+    Param::Num,
+    Param::Num,
+    Param::Num,
+    Param::Num,
+    Param::Num,
+    Param::Num,
+];
 
 pub const ROWS: &[Row] = &[
     call(G, "parseInt", Out::Num, SN),
@@ -183,12 +190,27 @@ pub const ROWS: &[Row] = &[
     call(STR, "padStart", Out::Str, &[Param::Num, Param::Str]),
     call(STR, "padEnd", Out::Str, &[Param::Num, Param::Str]),
     call(STR, "repeat", Out::Str, N),
-    call(STR, "concat", Out::Str, &[Param::Str, Param::Str, Param::Str, Param::Str]),
+    call(
+        STR,
+        "concat",
+        Out::Str,
+        &[Param::Str, Param::Str, Param::Str, Param::Str],
+    ),
     call(STR, "localeCompare", Out::Num, S),
     call(STR, "toString", Out::Str, NONE),
     call(STR, "valueOf", Out::Str, NONE),
-    call(STR, "replace", Out::Str, &[Param::Pattern, Param::Replacement]),
-    call(STR, "replaceAll", Out::Str, &[Param::Pattern, Param::Replacement]),
+    call(
+        STR,
+        "replace",
+        Out::Str,
+        &[Param::Pattern, Param::Replacement],
+    ),
+    call(
+        STR,
+        "replaceAll",
+        Out::Str,
+        &[Param::Pattern, Param::Replacement],
+    ),
     read(STR, "length"),
     call(NUM, "toFixed", Out::Str, N),
     call(NUM, "toPrecision", Out::Str, N),
@@ -235,12 +257,25 @@ pub const RELIANCE: Reliance = Reliance {
         (
             "Number",
             false,
-            &["isInteger", "isFinite", "isNaN", "isSafeInteger", "parseFloat", "parseInt"],
+            &[
+                "isInteger",
+                "isFinite",
+                "isNaN",
+                "isSafeInteger",
+                "parseFloat",
+                "parseInt",
+            ],
         ),
         (
             "Number",
             true,
-            &["toFixed", "toPrecision", "toExponential", "toString", "valueOf"],
+            &[
+                "toFixed",
+                "toPrecision",
+                "toExponential",
+                "toString",
+                "valueOf",
+            ],
         ),
         ("String", false, &["fromCharCode"]),
         (
@@ -289,8 +324,7 @@ pub const RELIANCE: Reliance = Reliance {
 };
 
 pub fn find(owner: Owner, key: &str, called: bool) -> Option<&'static Row> {
-    ROWS
-        .iter()
+    ROWS.iter()
         .find(|row| row.owner == owner && row.key == key && row.call == called)
 }
 
@@ -324,11 +358,15 @@ mod tests {
                 RELIANCE.roots.contains(&root),
                 "{root} is not a relied root"
             );
-            let listed = RELIANCE
-                .members
-                .iter()
-                .any(|(owner, proto, keys)| *owner == root && *proto == prototype && keys.contains(&row.key));
-            assert!(listed, "{root}{} {} is not relied on", if prototype { ".prototype" } else { "" }, row.key);
+            let listed = RELIANCE.members.iter().any(|(owner, proto, keys)| {
+                *owner == root && *proto == prototype && keys.contains(&row.key)
+            });
+            assert!(
+                listed,
+                "{root}{} {} is not relied on",
+                if prototype { ".prototype" } else { "" },
+                row.key
+            );
         }
     }
 
