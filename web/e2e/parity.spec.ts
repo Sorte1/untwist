@@ -130,12 +130,16 @@ test('a bundle that splits only under the assumption offers it, and the button t
 test('the modern presets and a custom baseline set the flag', async ({ page }) => {
   await openApp(page);
   await page.locator('#settings-toggle').click();
-  await page.locator('#modern-preset').selectOption('es2022');
+  const preset = (name: string) => page.locator('#modern-group .seg-btn', { hasText: name });
+  await preset('ES2022').click();
   await expect(page.locator('#query')).toContainText('modern=es2022');
+  await expect(preset('ES2022')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#modern')).toBeHidden();
-  await page.locator('#modern-preset').selectOption('custom');
+  await preset('Custom').click();
+  await expect(preset('Custom')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#modern').fill('node 20');
   await expect(page.locator('#query')).toContainText('modern=node%2020');
-  await page.locator('#modern-preset').selectOption('');
+  await preset('Off').click();
   await expect(page.locator('#query')).not.toContainText('modern=');
+  await expect(page.locator('#modern')).toBeHidden();
 });

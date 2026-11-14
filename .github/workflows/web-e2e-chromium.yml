@@ -1,0 +1,74 @@
+name: Web e2e (Chromium)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/**"
+      - "crates/**"
+      - "fixtures/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/actions/wasm-toolchain/**"
+      - ".github/workflows/web-e2e-chromium.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - "crates/**"
+      - "fixtures/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/actions/wasm-toolchain/**"
+      - ".github/workflows/web-e2e-chromium.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-e2e-chromium-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/wasm-toolchain
+
+      - name: The CLI the e2e rows compare against
+        run: cargo build --release -p untwist-cli
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the site
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Chromium and its system libraries
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: The e2e suite on Chromium
+        working-directory: web
+        env:
+          CI: "1"
+          UNTWIST_BIN: ${{ github.workspace }}/target/release/untwist
+        run: npx playwright test --project=chromium
+
+      - name: Keep the failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: chromium-test-results
+          path: web/test-results
+          retention-days: 7

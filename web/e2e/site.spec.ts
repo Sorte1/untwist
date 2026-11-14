@@ -163,22 +163,22 @@ test.describe('editor themes in dark mode', () => {
     await expect(page.locator('html')).toHaveAttribute('data-editor', 'tokyo-night');
     expect(await codeBackground(page)).toBe('rgb(26, 27, 38)');
     await openSettings(page);
-    await page.locator('#editor-theme-dark').selectOption('one-dark');
+    await page.locator('#editor-theme-dark [data-pick="one-dark"]').click();
     await expect(page.locator('html')).toHaveAttribute('data-editor', 'one-dark');
     expect(await codeBackground(page)).toBe('rgb(40, 44, 52)');
     await page.reload();
     await expect(page.locator('#run')).toBeEnabled({ timeout: 30_000 });
     await expect(page.locator('html')).toHaveAttribute('data-editor', 'one-dark');
-    await expect(page.locator('#editor-theme-dark')).toHaveValue('one-dark');
+    await expect(page.locator('#editor-theme-dark [data-pick="one-dark"]')).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('the built-in palette is still there, and picking a light theme switches to light mode', async ({ page }) => {
     await openApp(page);
     await openSettings(page);
-    await page.locator('#editor-theme-dark').selectOption('untwist');
+    await page.locator('#editor-theme-dark [data-pick="untwist"]').click();
     await expect(page.locator('html')).not.toHaveAttribute('data-editor', /.*/);
     expect(await codeBackground(page)).toBe('rgb(22, 20, 30)');
-    await page.locator('#editor-theme-light').selectOption('solarized-light');
+    await page.locator('#editor-theme-light [data-pick="solarized-light"]').click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect(page.locator('html')).toHaveAttribute('data-editor', 'solarized-light');
     await page.locator('#theme').click();

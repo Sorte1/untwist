@@ -5,7 +5,7 @@ const card = {
   border: '1px solid var(--btn-border)',
   backgroundColor: 'var(--panel)',
   color: 'var(--text)',
-  boxShadow: '0 12px 32px rgba(0,0,0,0.28)',
+  boxShadow: '0 12px 32px var(--shadow)',
   fontSize: '12px',
   overflow: 'hidden',
 };

@@ -24,7 +24,7 @@ button, input {
 }
 
 :focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -433,6 +433,10 @@ button, input {
   background: var(--code);
 }
 
+.seg-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .seg-3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -495,21 +499,20 @@ button, input {
   margin-left: auto;
 }
 
-.select {
-  flex: 0 0 auto;
-  max-width: 190px;
-  height: 30px;
-  padding: 0 6px;
-  border-radius: var(--radius);
-  border: 1px solid var(--btn-border);
-  background: var(--code);
-  color: var(--text);
-  font-size: 12.5px;
+.stack-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.seg-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .modern-custom {
   width: 100%;
-  margin-top: 6px;
+  margin-top: 2px;
 }
 
 .num-input:disabled {
@@ -1402,12 +1405,12 @@ button.diag-row:hover .diag-loc {
 }
 
 .switch:focus-visible, .seg-btn:focus-visible, .mode-btn:focus-visible, .tree-item:focus-visible, .btn-run:focus-visible, .strip-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
 .editor-host:focus-within {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: -2px;
 }
 
@@ -1602,7 +1605,7 @@ button.diag-row:hover .diag-loc {
   }
 
   .settings::backdrop {
-    background: rgba(12, 10, 20, 0.48);
+    background: var(--scrim);
   }
 
   .panes {

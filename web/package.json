@@ -16,7 +16,8 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "size": "node --experimental-strip-types --no-warnings scripts/size.ts",
-    "og-image": "node --experimental-strip-types --no-warnings scripts/og-image.ts"
+    "og-image": "node --experimental-strip-types --no-warnings scripts/og-image.ts",
+    "contrast": "node --experimental-strip-types --no-warnings scripts/contrast.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",
