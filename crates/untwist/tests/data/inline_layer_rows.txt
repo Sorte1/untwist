@@ -181,3 +181,4 @@ keep:v8-rejected-regex-y1784|function f() { try { eval("/\\B{1,2}?/"); console.l
 keep:v8-rejected-regex-y1785|function f() { try { eval("/\\B{1,2}?/u"); console.log("ok"); } catch (e) { console.log(e.name); } } f();
 keep:v8-rejected-regex-y1786|function f() { try { eval("/\\B{1,2}?/i"); console.log("ok"); } catch (e) { console.log(e.name); } } f();
 keep:v8-rejected-regex-y1787|function f() { try { eval("/\\B{1,2}?/iu"); console.log("ok"); } catch (e) { console.log(e.name); } } f();
+peel:case-insensitive-class-regex|function f() { try { eval("console.log(/^[-+]0x[0-9a-f]+$/i.test('-0xAB'), /\\d+/gi.test('7'))"); } catch (e) { console.log(e.name); } } f();
