@@ -104,6 +104,7 @@ impl Unit<'_, '_> {
 pub struct Shaped<'n, 'a> {
     pub units: Vec<Unit<'n, 'a>>,
     pub prefix: PolyHash,
+    pub bindings: u64,
 }
 
 pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> Shaped<'n, 'a> {
@@ -127,10 +128,15 @@ pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> 
         binding: None,
         span: program.span,
     });
+    let bindings = emitter.bindings;
     let Sink::Prefix(prefix) = emitter.sink else {
         unreachable!("the program was shaped into a prefix hash")
     };
-    Shaped { units, prefix }
+    Shaped {
+        units,
+        prefix,
+        bindings,
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -242,6 +248,7 @@ struct Emitter<'n, 'a> {
     pending: Option<(Span, SymbolId)>,
     single: FxHashSet<SymbolId>,
     frames: Vec<Frame>,
+    bindings: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -376,6 +383,7 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
             pending: None,
             single,
             frames: Vec::new(),
+            bindings: 0,
         }
     }
 
@@ -425,7 +433,12 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
     fn push_symbol(&mut self, symbol: SymbolId) {
         self.count += 1;
         match &mut self.sink {
-            Sink::Prefix(prefix) => prefix.push(ID),
+            Sink::Prefix(prefix) => {
+                prefix.push(ID);
+                let span = self.scoping.symbol_span(symbol);
+                let declared = (u64::from(span.start) << 32) | u64::from(span.end);
+                self.bindings = mix(self.bindings.rotate_left(7) ^ declared);
+            }
             Sink::Exact(sink) => {
                 let placeholder = sink.placeholder(self.scoping, symbol);
                 sink.hash.push(placeholder);
