@@ -204,7 +204,12 @@ object, the machinery can still be removed. Outside code that prints that value 
 observing it (`require("util").inspect(globalThis)` keeps the machinery). A removal that relies
 on this premise says so in the report (`the machinery was dropped under the outside-code
 premise`). Nor does any code give `Object.prototype` an accessor for a key the obfuscator
-generated or for a webpack module id, so storing an object under such a key runs no code. And
+generated, so storing an object under such a key runs no code. Nor does any code give
+`Object.prototype` a property, data or accessor, named like a module id or a require request of
+a bundle whose runtime looks modules up in a plain object (webpack 4 and 5 and their chunks,
+browserify, Parcel, Turbopack): such a runtime would find that property in its `{}` cache or
+module map instead of the module, while the written files are loaded by node; unpacking does
+not check for such a write. And
 no value the program tests is `document.all`, so `x != null ? x : y` becomes `x ?? y`: the two
 differ only for that object, which compares loosely equal to `null` without being nullish.
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
