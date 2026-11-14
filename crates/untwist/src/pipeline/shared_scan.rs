@@ -24,7 +24,11 @@ impl Seen {
 
     fn named(&self) -> impl Iterator<Item = &str> {
         let bound = self.bound.iter().filter(|_| self.script);
-        self.free.iter().chain(bound).map(String::as_str)
+        self.free
+            .iter()
+            .chain(bound)
+            .chain(self.global_written.names.iter())
+            .map(String::as_str)
     }
 }
 
@@ -121,10 +125,13 @@ fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGloba
             .enumerate()
             .filter(move |(index, _)| *index != own)
     };
-    let every_name = !all[own].readable || others().any(|(index, _)| reached[index].reached);
+    let every_name = !all[own].readable
+        || all[own].global_written.every
+        || others().any(|(index, _)| reached[index].reached);
     let names = all[own]
         .bound
         .iter()
+        .chain(all[own].global_written.names.iter())
         .filter(|name| others().any(|(_, other)| other.names(name)))
         .cloned()
         .collect();
