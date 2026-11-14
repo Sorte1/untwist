@@ -58,22 +58,51 @@ impl<'a> VisitMut<'a> for Unnamed<'a, '_> {
     }
 }
 
+const LINE_SEPARATOR: &[u8] = "\u{2028}".as_bytes();
+const PARAGRAPH_SEPARATOR: &[u8] = "\u{2029}".as_bytes();
+
+fn line_terminator(bytes: &[u8]) -> Option<usize> {
+    match bytes {
+        [b'\n' | b'\r', ..] => Some(1),
+        _ if bytes.starts_with(LINE_SEPARATOR) || bytes.starts_with(PARAGRAPH_SEPARATOR) => {
+            Some(LINE_SEPARATOR.len())
+        }
+        _ => None,
+    }
+}
+
+fn line_end(bytes: &[u8], at: usize) -> usize {
+    (at..bytes.len())
+        .find(|&end| line_terminator(&bytes[end..]).is_some())
+        .unwrap_or(bytes.len())
+}
+
+fn block_end(bytes: &[u8], at: usize) -> (usize, bool) {
+    let body = &bytes[at + 2..];
+    let close = body.windows(2).position(|pair| pair == b"*/");
+    let inside = close.map_or(body, |end| &body[..end]);
+    let breaks = (0..inside.len()).any(|index| line_terminator(&inside[index..]).is_some());
+    (close.map_or(bytes.len(), |end| at + 2 + end + 2), breaks)
+}
+
 fn skip_trivia(bytes: &[u8], mut at: usize) -> usize {
+    let mut line_start = false;
     loop {
-        match (bytes.get(at), bytes.get(at + 1)) {
-            (Some(b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c), _) => at += 1,
-            (Some(b'/'), Some(b'*')) => {
-                at = bytes[at + 2..]
-                    .windows(2)
-                    .position(|pair| pair == b"*/")
-                    .map_or(bytes.len(), |end| at + 2 + end + 2);
+        let rest = bytes.get(at..).unwrap_or_default();
+        if let Some(width) = line_terminator(rest) {
+            at += width;
+            line_start = true;
+            continue;
+        }
+        match rest {
+            [b' ' | b'\t' | 0x0b | 0x0c, ..] => at += 1,
+            [b'/', b'*', ..] => {
+                let (end, breaks) = block_end(bytes, at);
+                at = end;
+                line_start |= breaks;
             }
-            (Some(b'/'), Some(b'/')) => {
-                at = bytes[at..]
-                    .iter()
-                    .position(|&byte| byte == b'\n')
-                    .map_or(bytes.len(), |end| at + end);
-            }
+            [b'/', b'/', ..] | [b'<', b'!', b'-', b'-', ..] => at = line_end(bytes, at),
+            [b'-', b'-', b'>', ..] if line_start => at = line_end(bytes, at),
             _ => return at,
         }
     }

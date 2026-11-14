@@ -5,14 +5,11 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
 use oxc_span::{GetSpan, SPAN};
 use oxc_syntax::scope::ScopeFlags;
-use untwist_core::ast_util::code_text::may_run_code_text;
 use untwist_core::ast_util::literal::is_safe_literal;
 use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass, StatementKind,
     StatementVariants,
 };
-
-use untwist_rename::function_names::function_names;
 
 use crate::sequence_hazard::is_hoist_order_safe;
 use crate::statement_slot::{hoist_in_front_of_labels, in_single_statement_slot, labelled_loop};
@@ -484,9 +481,7 @@ impl<'a> Pass<'a> for Sequence {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let observed = !cx.opts.unsafe_transforms
-            && (function_names(program, cx.scoping()).name_read
-                || may_run_code_text(program, cx.scoping()));
+        let observed = cx.observe_names(program);
         NAMES_OBSERVED.with(|cell| cell.set(observed));
     }
 

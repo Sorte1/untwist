@@ -644,6 +644,7 @@ impl<'a> Pass<'a> for MergeObjectAssignments {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        cx.observe_names(program);
         self.hazard = scope_hazard(cx.scoping()).is_some();
         if self.hazard {
             return;

@@ -38,7 +38,9 @@ fn outer_of<'a>(
     let Some(outer) = &found.outer else {
         return Some(None);
     };
-    let strict = outer.body.has_use_strict_directive() || program.has_use_strict_directive();
+    let strict = outer.body.has_use_strict_directive()
+        || program.has_use_strict_directive()
+        || program.source_type.is_strict();
     outer::analyse(
         (alloc, program.source_text),
         outer,

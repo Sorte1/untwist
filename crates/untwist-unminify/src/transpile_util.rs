@@ -333,7 +333,7 @@ pub fn assignment_temp_symbol(expr: &Expression<'_>, cx: &Cx<'_, '_>) -> Option<
     let Expression::AssignmentExpression(assignment) = expr else {
         return None;
     };
-    if assignment.operator != AssignmentOperator::Assign {
+    if assignment.operator != AssignmentOperator::Assign || cx.loses_name(&assignment.right) {
         return None;
     }
     let AssignmentTarget::AssignmentTargetIdentifier(identifier) = &assignment.left else {

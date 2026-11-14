@@ -3,6 +3,7 @@ use oxc_ast::ast::*;
 use oxc_span::GetSpan;
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::symbol::SymbolId;
+use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::write_reference_count;
 
@@ -125,7 +126,7 @@ pub(super) fn pure_object(object: &ObjectExpression<'_>) -> bool {
             && !property.computed
             && !property.method
             && matches!(
-                property.value,
+                without_unnamed(&property.value),
                 Expression::FunctionExpression(_)
                     | Expression::ArrowFunctionExpression(_)
                     | Expression::StringLiteral(_)

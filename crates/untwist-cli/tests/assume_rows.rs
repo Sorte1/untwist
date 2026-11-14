@@ -154,11 +154,29 @@ fn outer_wrapper_shapes_under_assumed_modules_run_like_the_bundle() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
-const LANES: [&[&str]; 4] = [
+const LANES: [&[&str]; 7] = [
     &[],
     &["--split-hoisted"],
     &["--split-hoisted", "--split-assume-modules"],
     &["--split-hoisted", "--split-assume-modules", "--unsafe"],
+    &[
+        "--split-hoisted",
+        "--split-assume-modules",
+        "--rename",
+        "smart",
+    ],
+    &[
+        "--split-hoisted",
+        "--split-assume-modules",
+        "--rename",
+        "mangle",
+    ],
+    &[
+        "--split-hoisted",
+        "--split-assume-modules",
+        "--rename",
+        "simple",
+    ],
 ];
 
 const REVIEW_INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assume_review");
@@ -191,7 +209,7 @@ fn review_inputs_run_like_the_bundle_in_every_lane() {
         .map(|entry| entry.expect("entry").path())
         .collect();
     inputs.sort();
-    assert!(inputs.len() >= 7, "found {} inputs", inputs.len());
+    assert!(inputs.len() >= 11, "found {} inputs", inputs.len());
     let work = tempfile::tempdir().expect("tempdir");
     let mut wrong = Vec::new();
     for input in &inputs {

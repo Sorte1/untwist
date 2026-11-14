@@ -43,6 +43,7 @@ impl<'a> Pass<'a> for NullishCoalescingAssignment {
     fn enter_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.temps.reset();
         self.script_root = script_root(node, cx.scoping());
+        cx.observe_names(node);
     }
 
     fn exit_variable_declaration(

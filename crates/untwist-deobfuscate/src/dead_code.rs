@@ -884,7 +884,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
             return;
         };
         let placeholder = Expression::new_null_literal(SPAN, cx);
-        *expr = match std::mem::replace(expr, placeholder) {
+        let chosen = match std::mem::replace(expr, placeholder) {
             Expression::ConditionalExpression(conditional) => {
                 let conditional = conditional.unbox();
                 if keep_consequent {
@@ -903,6 +903,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
             }
             other => other,
         };
+        *expr = cx.unnamed_in_slot(chosen);
         cx.changed();
     }
 
@@ -919,6 +920,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         self.strict = program_is_strict(node);
         self.unsafe_lane = cx.opts.unsafe_transforms;
         self.armed = 0;
+        cx.observe_names(node);
     }
 
     fn exit_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {

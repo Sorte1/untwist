@@ -209,9 +209,13 @@ fn fold_run_into_alias<'a>(run: &mut [Statement<'a>], keys: &[String], cx: &Cx<'
         let Some(value) = take_assigned_value(statement, cx) else {
             return false;
         };
-        object
-            .properties
-            .push(assigned_property(key, value, key_span, property_span, cx));
+        object.properties.push(assigned_property(
+            key,
+            cx.unnamed_value(value),
+            key_span,
+            property_span,
+            cx,
+        ));
     }
     let Some(alias) = alias.first_mut() else {
         return false;

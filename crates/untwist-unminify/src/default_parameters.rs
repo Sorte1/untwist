@@ -45,6 +45,7 @@ impl<'a> Pass<'a> for DefaultParameters {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.frame_read = !cx.opts.unsafe_transforms && reads_function_frame(program, cx.scoping());
+        cx.observe_names(program);
     }
 
     fn exit_function(&mut self, node: &mut Function<'a>, cx: &mut Cx<'a, '_>) {
@@ -370,7 +371,7 @@ fn take_parameter<'a>(
         DefaultForm::True => Some(Expression::new_boolean_literal(span, true, cx)),
         DefaultForm::Expression => match declarator.init.take() {
             Some(Expression::ConditionalExpression(conditional)) => {
-                Some(conditional.unbox().alternate)
+                Some(cx.unnamed_value(conditional.unbox().alternate))
             }
             other => {
                 declarator.init = other;

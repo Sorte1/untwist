@@ -1,9 +1,10 @@
-use untwist::{Options, Pipeline};
-use untwist_testing::node_rows::{self, listed_unsafe_witnesses, node_or_skip, Mode};
+use untwist::{Options, Pipeline, RenameMode};
+use untwist_testing::node::run;
+use untwist_testing::node_rows::{self, listed_unsafe_witnesses, node_or_skip, observed, Mode};
 
 const ROWS: &str = include_str!("data/anonymous_name_rows.txt");
 
-const UNSAFE_WITNESSES: [&str; 16] = [
+const UNSAFE_WITNESSES: [&str; 39] = [
     "var-function",
     "var-class",
     "let-arrow",
@@ -20,7 +21,92 @@ const UNSAFE_WITNESSES: [&str; 16] = [
     "paren-assign-comment",
     "paren-nested",
     "paren-in-value",
+    "fold-conditional-assign",
+    "fold-logical-assign",
+    "fold-declarations",
+    "fold-paren-target",
+    "fold-into-property",
+    "fold-defaults-and-fields",
+    "fold-alternate-and-parens",
+    "fold-void-and-null",
+    "fold-string-comparison",
+    "fold-chained-and",
+    "fold-nested",
+    "default-parameter-from-arguments",
+    "default-parameter-class-arrow",
+    "merge-object-member-function",
+    "fold-in-eval-layer",
+    "temp-nullish-strict",
+    "temp-nullish-loose",
+    "temp-nullish-arrow",
+    "temp-optional-strict",
+    "temp-optional-loose",
+    "temp-logical-object",
+    "cff-key-fold",
+    "merge-object-computed-key",
 ];
+
+const TRIVIA_ROWS: [(&str, &str); 8] = [
+    (
+        "paren-comment-cr",
+        "var f; (f) //x\r= function () {};\rconsole.log(JSON.stringify(f.name));\r",
+    ),
+    (
+        "paren-comment-line-separator",
+        "var f; (f) //x\u{2028}= function () {};\nconsole.log(JSON.stringify(f.name));",
+    ),
+    (
+        "paren-comment-paragraph-separator",
+        "var f; (f) //x\u{2029}= function () {};\nconsole.log(JSON.stringify(f.name));",
+    ),
+    (
+        "paren-html-open-comment",
+        "var f; (f) <!-- x\n= function () {};\nconsole.log(JSON.stringify(f.name));",
+    ),
+    (
+        "paren-html-close-comment",
+        "var f; (f)\n--> x\n= function () {};\nconsole.log(JSON.stringify(f.name));",
+    ),
+    (
+        "paren-html-close-after-block-comment",
+        "var f; (f) /*\u{2028}*/ --> x\n= class {};\nconsole.log(JSON.stringify(f.name));",
+    ),
+    (
+        "paren-html-close-after-cr",
+        "var f; (f) //a\r /* b */ --> c\r= () => 1;\rconsole.log(JSON.stringify(f.name));",
+    ),
+    (
+        "paren-then-plain-assignment",
+        "var f; (f) //x\r; f = function () {};\rconsole.log(JSON.stringify(f.name));",
+    ),
+];
+
+const MODULE_ROWS: [(&str, &str); 2] = [
+    (
+        "fold-export-default-function",
+        "import f from \"./program.mjs\";\nexport default true ? function () {} : 0;\nconsole.log(JSON.stringify(f.name));\n",
+    ),
+    (
+        "fold-export-default-class",
+        "import C from \"./program.mjs\";\nexport default 0 || class {};\nconsole.log(JSON.stringify(C.name));\n",
+    ),
+];
+
+fn module_printed(node: &std::path::Path, dir: &std::path::Path, text: &str) -> String {
+    let path = dir.join("program.mjs");
+    std::fs::write(&path, text).unwrap();
+    run(node, &path)
+        .unwrap()
+        .map_or("did not finish".to_string(), |out| observed(&out))
+}
+
+fn renamed(rename: RenameMode, source: &str) -> String {
+    let options = Options {
+        rename,
+        ..Options::default()
+    };
+    transformed(&options, source)
+}
 
 fn transformed(options: &Options, source: &str) -> String {
     Pipeline::new(options.clone())
@@ -54,7 +140,16 @@ fn an_anonymous_function_behind_a_comma_keeps_its_name_where_node_reads_it() {
     let unsafe_transforms = unsafe_options();
     let run_safe = |source: &str| transformed(&safe, source);
     let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
-    let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];
+    let smart = |source: &str| renamed(RenameMode::Smart, source);
+    let mangle = |source: &str| renamed(RenameMode::Mangle, source);
+    let simple = |source: &str| renamed(RenameMode::Simple, source);
+    let modes: [Mode<'_>; 5] = [
+        ("default", &run_safe),
+        ("rename smart", &smart),
+        ("rename mangle", &mangle),
+        ("rename simple", &simple),
+        ("unsafe", &run_unsafe),
+    ];
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     let (unexplained, witnesses) = listed_unsafe_witnesses(wrong, &UNSAFE_WITNESSES);
     assert!(unexplained.is_empty(), "{}", unexplained.join("\n"));
@@ -70,5 +165,63 @@ fn a_program_that_reads_no_name_still_has_its_sequence_split() {
     {
         let code = transformed(&safe, source);
         assert!(!code.contains("(console.log"), "{label}: {code}");
+        assert!(!code.contains("(0, "), "{label}: {code}");
     }
+}
+
+#[test]
+fn a_parenthesised_target_behind_any_line_terminator_or_html_comment_stays_unnamed() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let programs: Vec<(String, String)> = TRIVIA_ROWS
+        .iter()
+        .map(|(label, program)| (label.to_string(), program.to_string()))
+        .collect();
+    let safe = Options::default();
+    let unsafe_transforms = unsafe_options();
+    let run_safe = |source: &str| transformed(&safe, source);
+    let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
+    let smart = |source: &str| renamed(RenameMode::Smart, source);
+    let mangle = |source: &str| renamed(RenameMode::Mangle, source);
+    let simple = |source: &str| renamed(RenameMode::Simple, source);
+    let modes: [Mode<'_>; 5] = [
+        ("default", &run_safe),
+        ("rename smart", &smart),
+        ("rename mangle", &mangle),
+        ("rename simple", &simple),
+        ("unsafe", &run_unsafe),
+    ];
+    let wrong = node_rows::mismatches(&node, &programs, &modes);
+    let labels: Vec<&str> = TRIVIA_ROWS.iter().map(|(label, _)| *label).collect();
+    let (unexplained, witnesses) = listed_unsafe_witnesses(wrong, &labels);
+    assert!(unexplained.is_empty(), "{}", unexplained.join("\n"));
+    assert!(witnesses.len() <= labels.len(), "{witnesses:?}");
+}
+
+#[test]
+fn a_folded_export_default_keeps_the_name_node_gives_it() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let lanes = [
+        ("default", RenameMode::None),
+        ("rename smart", RenameMode::Smart),
+        ("rename mangle", RenameMode::Mangle),
+        ("rename simple", RenameMode::Simple),
+    ];
+    let mut wrong = Vec::new();
+    for (label, source) in MODULE_ROWS {
+        let before = module_printed(&node, dir.path(), source);
+        for (lane, rename) in lanes {
+            let after = module_printed(&node, dir.path(), &renamed(rename, source));
+            if after != before {
+                wrong.push(format!(
+                    "{label} ({lane}): node {before:?}, output {after:?}"
+                ));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

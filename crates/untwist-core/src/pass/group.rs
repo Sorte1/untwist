@@ -556,6 +556,7 @@ struct SinglePassRunner<'p, 'a> {
 
 impl<'p, 'a> Traverse<'a, ()> for SinglePassRunner<'p, 'a> {
     fn enter_program(&mut self, node: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
+        self.opts.names_observed.set(None);
         let mut cx = Cx {
             tcx: ctx,
             changes: self.count,

@@ -19,6 +19,7 @@ use oxc_syntax::symbol::SymbolId;
 use oxc_traverse::TraverseCtx;
 
 use crate::ast_util::global::is_global_name_at;
+use crate::ast_util::naming_slot::{in_naming_slot, names_observed, unnamed};
 use crate::ast_util::rename::unique_name_avoiding;
 
 pub use driver::{
@@ -97,6 +98,8 @@ pub struct PassOptions {
     pub changes_by_others_before_program_hook: Cell<u32>,
     #[doc(hidden)]
     pub code_text: CodeTextSeen,
+    #[doc(hidden)]
+    pub names_observed: Cell<Option<bool>>,
     #[doc(hidden)]
     pub nested_root: bool,
     #[doc(hidden)]
@@ -186,6 +189,7 @@ impl Default for PassOptions {
             changes_before_program_hook: Cell::new(0),
             changes_by_others_before_program_hook: Cell::new(0),
             code_text: CodeTextSeen::default(),
+            names_observed: Cell::new(None),
             nested_root: false,
             keep_script_globals: false,
             keep_script_lexicals: false,
@@ -265,6 +269,40 @@ impl<'a> Cx<'a, '_> {
 
     pub fn is_program_unchanged_this_traversal(&self) -> bool {
         self.opts.changes_before_program_hook.get() == 0
+    }
+
+    pub fn observe_names(&self, program: &Program<'_>) -> bool {
+        if self.opts.unsafe_transforms {
+            return false;
+        }
+        if let Some(seen) = self.opts.names_observed.get() {
+            return seen;
+        }
+        let seen = names_observed(program, self.tcx.scoping());
+        self.opts.names_observed.set(Some(seen));
+        seen
+    }
+
+    pub fn names_observed(&self) -> bool {
+        !self.opts.unsafe_transforms && self.opts.names_observed.get().unwrap_or(true)
+    }
+
+    pub fn loses_name(&self, value: &Expression<'_>) -> bool {
+        self.names_observed() && value.is_anonymous_function_definition()
+    }
+
+    pub fn unnamed_value(&self, value: Expression<'a>) -> Expression<'a> {
+        match self.names_observed() {
+            true => unnamed(value, &self.tcx.ast),
+            false => value,
+        }
+    }
+
+    pub fn unnamed_in_slot(&self, value: Expression<'a>) -> Expression<'a> {
+        match in_naming_slot(&*self.tcx) {
+            true => self.unnamed_value(value),
+            false => value,
+        }
     }
 
     pub fn ast(&self) -> &AstBuilder<'a> {

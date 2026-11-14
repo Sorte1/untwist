@@ -240,6 +240,7 @@ fn free_names<'a>(
     (alloc, text): (&'a Allocator, &'a str),
     outer: &Wrapper<'_, 'a>,
     inner: usize,
+    strict: bool,
 ) -> FxHashSet<String> {
     let builder = AstBuilder::new(alloc);
     let statements = outer
@@ -249,9 +250,13 @@ fn free_names<'a>(
         .enumerate()
         .filter(|(index, _)| *index != inner)
         .map(|(_, statement)| statement.clone_in(alloc));
+    let goal = match strict {
+        true => SourceType::mjs(),
+        false => SourceType::cjs(),
+    };
     let program = Program::new(
         outer.body.span,
-        SourceType::cjs(),
+        goal,
         text,
         AVec::new_in(&builder),
         None,
@@ -271,13 +276,13 @@ fn free_names<'a>(
 fn outer_reads<'a>(
     alloc: (&'a Allocator, &'a str),
     outer: &Wrapper<'_, 'a>,
-    inner: usize,
+    (inner, strict): (usize, bool),
     found: &mut Outer,
 ) -> bool {
     if !module_safe_text(alloc.1, outer, inner) {
         return false;
     }
-    found.free = free_names(alloc, outer, inner);
+    found.free = free_names(alloc, outer, inner, strict);
     !found
         .free
         .iter()
@@ -291,7 +296,7 @@ pub fn analyse<'a>(
     strict: bool,
 ) -> Option<Outer> {
     let mut found = Outer::default();
-    if !outer_reads(alloc, outer, inner, &mut found) {
+    if !outer_reads(alloc, outer, (inner, strict), &mut found) {
         return None;
     }
     let mut later = Vec::new();
