@@ -9,6 +9,7 @@ pub mod js_text;
 pub mod key_names;
 pub mod literal;
 pub mod matcher;
+mod name_keys;
 pub mod naming_slot;
 pub mod pattern;
 pub mod prop;

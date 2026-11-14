@@ -1,11 +1,13 @@
-use crate::ast_util::js_text::js_text;
+use crate::ast_util::code_text::literal_text;
+use crate::ast_util::name_keys::{
+    call_reads_name, is_never_a_function, key_may_name, member_key, property_key_may_name, reader,
+    NAME,
+};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
-
-const NAME: &str = "name";
 
 #[derive(Default)]
 pub struct FunctionNames {
@@ -33,44 +35,6 @@ fn is_anonymous_function(expr: &Expression<'_>) -> bool {
         Expression::ArrowFunctionExpression(_) => true,
         Expression::ClassExpression(class) => class.id.is_none(),
         _ => false,
-    }
-}
-
-fn is_never_a_function(expr: &Expression<'_>) -> bool {
-    matches!(
-        expr.without_parentheses(),
-        Expression::ObjectExpression(_)
-            | Expression::ArrayExpression(_)
-            | Expression::StringLiteral(_)
-            | Expression::NumericLiteral(_)
-            | Expression::BooleanLiteral(_)
-            | Expression::NullLiteral(_)
-            | Expression::BigIntLiteral(_)
-            | Expression::RegExpLiteral(_)
-            | Expression::TemplateLiteral(_)
-    )
-}
-
-fn is_name_text(expr: &Expression<'_>) -> bool {
-    match expr.without_parentheses() {
-        Expression::StringLiteral(literal) => js_text(literal.value) == NAME,
-        Expression::TemplateLiteral(template) => {
-            template.expressions.is_empty()
-                && template
-                    .quasis
-                    .first()
-                    .and_then(|quasi| quasi.value.cooked)
-                    .is_some_and(|cooked| js_text(cooked) == NAME)
-        }
-        _ => false,
-    }
-}
-
-fn is_name_key(key: &PropertyKey<'_>) -> bool {
-    match key {
-        PropertyKey::StaticIdentifier(id) => id.name.as_str() == NAME,
-        PropertyKey::PrivateIdentifier(_) => false,
-        other => other.as_expression().is_some_and(is_name_text),
     }
 }
 
@@ -118,20 +82,32 @@ impl Walker<'_> {
         }
     }
 
-    fn assigned_member_object<'e, 'a>(
-        target: &'e AssignmentTarget<'a>,
-    ) -> Option<&'e Expression<'a>> {
-        match target {
-            AssignmentTarget::StaticMemberExpression(member) if member.property.name == NAME => {
-                Some(&member.object)
+    fn visit_member_parts<'a>(&mut self, member: &MemberExpression<'a>) {
+        match member {
+            MemberExpression::StaticMemberExpression(it) => self.visit_expression(&it.object),
+            MemberExpression::ComputedMemberExpression(it) => {
+                self.visit_expression(&it.object);
+                self.visit_expression(&it.expression);
             }
-            AssignmentTarget::ComputedMemberExpression(member)
-                if is_name_text(&member.expression) =>
-            {
-                Some(&member.object)
-            }
-            _ => None,
+            MemberExpression::PrivateFieldExpression(it) => self.visit_expression(&it.object),
         }
+    }
+
+    fn visit_reader_call<'a>(&mut self, it: &CallExpression<'a>) -> bool {
+        let Some(member) = it.callee.without_parentheses().as_member_expression() else {
+            return false;
+        };
+        let Some(found) = member_key(member).and_then(|key| reader(&key)) else {
+            return false;
+        };
+        if call_reads_name(found, &it.arguments) {
+            self.out.name_read = true;
+        }
+        self.visit_member_parts(member);
+        for argument in &it.arguments {
+            self.visit_argument(argument);
+        }
+        true
     }
 }
 
@@ -177,8 +153,8 @@ impl<'a> VisitJs<'a> for Walker<'_> {
             }
         }
         if it.operator == AssignmentOperator::Assign {
-            if let Some(object) = Self::assigned_member_object(&it.left) {
-                self.visit_expression(object);
+            if let Some(member) = it.left.as_member_expression() {
+                self.visit_member_parts(member);
                 self.visit_expression(&it.right);
                 return;
             }
@@ -197,7 +173,7 @@ impl<'a> VisitJs<'a> for Walker<'_> {
         &mut self,
         it: &AssignmentTargetPropertyIdentifier<'a>,
     ) {
-        if it.binding.name == NAME {
+        if it.binding.name == NAME || reader(&it.binding.name).is_some() {
             self.out.name_read = true;
         }
         if let Some(init) = &it.init {
@@ -210,30 +186,62 @@ impl<'a> VisitJs<'a> for Walker<'_> {
         &mut self,
         it: &AssignmentTargetPropertyProperty<'a>,
     ) {
-        if is_name_key(&it.name) {
+        if property_key_may_name(&it.name, it.computed) {
             self.out.name_read = true;
         }
         walk_js::walk_assignment_target_property_property(self, it);
     }
 
     fn visit_binding_property(&mut self, it: &BindingProperty<'a>) {
-        if is_name_key(&it.key) {
+        if property_key_may_name(&it.key, it.computed) {
             self.out.name_read = true;
         }
         walk_js::walk_binding_property(self, it);
     }
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
-        if it.property.name == NAME {
+        if it.property.name == NAME || reader(&it.property.name).is_some() {
             self.read_on(&it.object);
         }
         walk_js::walk_static_member_expression(self, it);
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        if is_name_text(&it.expression) {
+        let reads = literal_text(&it.expression).is_some_and(|key| reader(&key).is_some());
+        if reads || key_may_name(&it.expression) {
             self.read_on(&it.object);
         }
         walk_js::walk_computed_member_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if !self.visit_reader_call(it) {
+            walk_js::walk_call_expression(self, it);
+        }
+    }
+
+    fn visit_object_expression(&mut self, it: &ObjectExpression<'a>) {
+        let spreads = it.properties.iter().any(|property| match property {
+            ObjectPropertyKind::SpreadProperty(spread) => !is_never_a_function(&spread.argument),
+            ObjectPropertyKind::ObjectProperty(_) => false,
+        });
+        if spreads {
+            self.out.name_read = true;
+        }
+        walk_js::walk_object_expression(self, it);
+    }
+
+    fn visit_object_pattern(&mut self, it: &ObjectPattern<'a>) {
+        if it.rest.is_some() {
+            self.out.name_read = true;
+        }
+        walk_js::walk_object_pattern(self, it);
+    }
+
+    fn visit_object_assignment_target(&mut self, it: &ObjectAssignmentTarget<'a>) {
+        if it.rest.is_some() {
+            self.out.name_read = true;
+        }
+        walk_js::walk_object_assignment_target(self, it);
     }
 }

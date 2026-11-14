@@ -298,3 +298,80 @@ fn a_name_read_by_a_code_text_keeps_the_function_unnamed_in_the_default_lane() {
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+const NAME_READ_KEY_ROWS: &str = include_str!("data/name_read_key_rows.txt");
+
+const NAME_READ_KEY_WITNESSES: [&str; 25] = [
+    "key-concat",
+    "key-variable",
+    "key-call",
+    "key-template",
+    "key-optional",
+    "key-decoded",
+    "key-in-another-scope",
+    "reflect-get-literal",
+    "reflect-get-variable",
+    "reflect-get-alias",
+    "reflect-get-global",
+    "reflect-apply-get",
+    "reflect-descriptor",
+    "descriptor-alias",
+    "descriptors-all",
+    "destructure-computed",
+    "destructure-get",
+    "names-loop",
+    "own-keys-loop",
+    "entries-enumerable",
+    "assign-enumerable",
+    "spread-enumerable",
+    "for-in-enumerable",
+    "values-destructured",
+    "descriptor-built-method",
+];
+
+fn name_read_key_rows() -> Vec<(String, String)> {
+    NAME_READ_KEY_ROWS
+        .lines()
+        .filter_map(|line| line.split_once('|'))
+        .map(|(label, program)| (label.to_string(), program.to_string()))
+        .collect()
+}
+
+#[test]
+fn a_name_read_through_a_computed_key_or_reflection_keeps_names_in_every_lane() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let programs = name_read_key_rows();
+    assert!(programs.len() >= 20, "found {} rows", programs.len());
+    let safe = Options::default();
+    let unsafe_transforms = unsafe_options();
+    let run_safe = |source: &str| transformed(&safe, source);
+    let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
+    let smart = |source: &str| renamed(RenameMode::Smart, source);
+    let mangle = |source: &str| renamed(RenameMode::Mangle, source);
+    let simple = |source: &str| renamed(RenameMode::Simple, source);
+    let modes: [Mode<'_>; 5] = [
+        ("default", &run_safe),
+        ("rename smart", &smart),
+        ("rename mangle", &mangle),
+        ("rename simple", &simple),
+        ("unsafe", &run_unsafe),
+    ];
+    let wrong = node_rows::mismatches(&node, &programs, &modes);
+    let (unexplained, witnesses) = listed_unsafe_witnesses(wrong, &NAME_READ_KEY_WITNESSES);
+    assert!(unexplained.is_empty(), "{}", unexplained.join("\n"));
+    assert_eq!(witnesses, NAME_READ_KEY_WITNESSES);
+}
+
+#[test]
+fn literal_keys_other_than_name_still_split_the_sequence() {
+    let safe = Options::default();
+    for (label, source) in name_read_key_rows()
+        .iter()
+        .filter(|(label, _)| label.starts_with("no-name-read"))
+    {
+        let code = transformed(&safe, source);
+        assert!(!code.contains("(0, "), "{label}: {code}");
+    }
+}

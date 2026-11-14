@@ -215,9 +215,11 @@ differ only for that object, which compares loosely equal to `null` without bein
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
 premise.
 
-With `--rename`, the safe lane keeps the name of every function and class when the file reads
-`.name` with a static key, since renaming them would change what it reads. A read through a
-computed key (`f[key]`) or through reflection is not seen, as `fn.toString()` is not;
+With `--rename`, the safe lane keeps the name of every function and class when the file may read
+`name`: `.name`, any computed key that is not a number or a literal naming another property
+(`f[key]`, `f["na" + "me"]`), reflection (`Reflect.get`, `getOwnPropertyDescriptor(s)`) and copies
+of a value's own properties (`Object.values`, `Object.assign`, `{ ...f }`), since renaming them
+would change what it reads. A read in `fn.toString()` text is not seen;
 [`docs/known-divergences/rename.md`](docs/known-divergences/rename.md) has the details.
 
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
