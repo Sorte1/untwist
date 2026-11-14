@@ -47,7 +47,7 @@ test('a click in an open module marks the part of the bundle it came from', asyn
   await openApp(page);
   await paste(page, readRepo('fixtures/reference/unpack/webpack-5.js'));
   await runAndWait(page);
-  await page.locator('#module-list .tree-item', { hasText: '3.js' }).click();
+  await page.locator('#module-list .tree-item', { hasText: 'lib.js' }).click();
   await page.locator('#output-editor .cm-line').first().click();
   await expect(linkedText(page, 'input').first()).toHaveText('require.r(exports);');
   const marked = (await linkedText(page, 'input').allTextContents()).map((line) => line.trim());
