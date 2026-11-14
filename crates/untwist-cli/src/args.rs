@@ -265,11 +265,14 @@ pub struct Args {
         long,
         value_enum,
         value_name = "MODE",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "jsdoc",
         conflicts_with = "source_map",
         help = "experimental, opt-in: annotate types that hold for every value on every run, as \
-                TypeScript (ts: writes .ts, or .tsx when JSX is left) or as JSDoc comments \
-                (jsdoc); a position untwist cannot prove stays unannotated, and a file with a \
-                direct eval or a with statement gets no types at all"
+                JSDoc comments (jsdoc, the default for a bare --types: the files stay .js) or as \
+                TypeScript (--types=ts: writes .ts, or .tsx when JSX is left; CommonJS files keep \
+                .js and stay untyped); a position untwist cannot prove stays unannotated"
     )]
     pub types: Option<TypesArg>,
     #[arg(
@@ -431,6 +434,17 @@ impl Args {
 mod tests {
     use super::Args;
     use clap::Parser;
+
+    #[test]
+    fn a_bare_types_flag_means_jsdoc_and_the_mode_needs_an_equals_sign() {
+        let bare = Args::parse_from(["untwist", "--types", "in.js"]);
+        assert_eq!(bare.options().types, Some(untwist::TypesMode::Jsdoc));
+        assert_eq!(bare.files.len(), 1);
+        let ts = Args::parse_from(["untwist", "--types=ts", "in.js"]);
+        assert_eq!(ts.options().types, Some(untwist::TypesMode::Ts));
+        let none = Args::parse_from(["untwist", "in.js"]);
+        assert_eq!(none.options().types, None);
+    }
 
     #[cfg(feature = "test-hooks")]
     #[test]

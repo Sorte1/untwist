@@ -121,7 +121,7 @@ Common flags:
 | `-f, --force` | Overwrite the files in `DIR` that this run writes and remove the ones a previous run left there. Input files are never overwritten. |
 | `--unsafe` | Use the unsafe lane (see below). |
 | `--modern BASELINE` | Opt-in: remove core-js polyfills of features that are native in `BASELINE` (see [Modern mode](#modern-mode)). |
-| `--types ts\|jsdoc` | Experimental, opt-in: annotate only types that hold for every value on every run (see [Proven types](#proven-types)). |
+| `--types[=jsdoc\|ts]` | Experimental, opt-in: annotate only types that hold for every value on every run, as JSDoc (the default) or TypeScript (see [Proven types](#proven-types)). |
 | `--rename MODE` | `none` (default), `mangle`, `simple`, `smart` or `unique`. `-m` is short for `--rename mangle`. |
 | `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx` | Skip a stage. |
 | `--split-hoisted` | Also split Rollup/Vite scope-hoisted bundles, when the split provably keeps behaviour. |
@@ -348,8 +348,8 @@ bundles and wrappers a minifier inlined into their caller are recognised but lef
 
 ## Proven types
 
-`--types ts` writes the output as TypeScript (`.ts`, or `.tsx` when JSX is left) and
-`--types jsdoc` keeps JavaScript and adds `/** @type */`, `@param` and `@returns` comments. It is
+`--types` (or `--types=jsdoc`) keeps JavaScript and adds `/** @type */`, `@param` and `@returns`
+comments; `--types=ts` writes the output as TypeScript (`.ts`, or `.tsx` when JSX is left). It is
 experimental and off unless you ask for it. An annotation is written only when untwist proves
 that every value the position can hold, on every run, has that type; everything else stays as it
 was. `number` includes `NaN` and `-0`, a literal type is never `NaN` or `-0`, and no annotation is
@@ -384,7 +384,7 @@ A file is written as `.ts` only when its TypeScript parse, stripped of the annot
 program as its JavaScript parse (`a < b > (c)` is a comparison in JavaScript and a generic call in
 TypeScript) and it uses no name node's type stripping rejects (`await`, `yield` as identifiers);
 otherwise it keeps its `.js` name and is written untyped. CommonJS files (free `require`,
-`module` or `exports`) keep `.js` under `--types ts` and stay untyped; `--types jsdoc` types them.
+`module` or `exports`) keep `.js` under `--types=ts` and stay untyped; `--types` (JSDoc) types them.
 When split ES modules become `.ts`, the `import`, `export … from`, `import()` and `require`
 specifiers that name them are rewritten to the new names, so the tree runs under node's type
 stripping and checks with `allowImportingTsExtensions`. When a module loads another by a computed
@@ -395,9 +395,13 @@ every part is; otherwise every part is written untyped.
 The types run after every other stage, on the final text, so they describe the program untwist
 prints. The checks behind this live in `crates/untwist-types/tests` (one row per hazard), in the
 node run of the fixtures with every annotation turned into a runtime check, and in
-`tools/types-check`, which runs the pinned `tsc` over every fixture output that would be written as
-`.ts` (or annotated in JSDoc) against the untyped output as `.js` under `checkJs`, and fails on any
-new diagnostic.
+`tools/types-check`, which runs the pinned `tsc` over every annotated fixture output against the
+same text without annotations and fails on any new diagnostic. `--against-js` also compares each
+`.ts` output with the untyped output as `.js` under `checkJs`; the diagnostics it reports come from
+renaming JavaScript to `.ts` (in a `.ts` file every parameter is required, an object literal gets a
+fixed shape, and so on), not from the annotations, so they do not touch the promise that every
+written type holds. JSDoc mode keeps `.js` and has none of them, which is why a bare `--types` and
+the playground's first choice are JSDoc.
 
 ## Playground
 

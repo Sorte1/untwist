@@ -35,7 +35,7 @@ export interface Settings {
 
 export const RENAME_MODES: readonly RenameMode[] = ['none', 'simple', 'smart', 'unique', 'mangle'];
 export const WASM_CHECKS: readonly WasmCheck[] = ['off', 'on', 'auto'];
-export const TYPES_CHOICES: readonly TypesChoice[] = ['off', 'ts', 'jsdoc'];
+export const TYPES_CHOICES: readonly TypesChoice[] = ['off', 'jsdoc', 'ts'];
 export const DEFAULT_FUEL = 50_000_000;
 
 export const DEFAULTS: Settings = {
