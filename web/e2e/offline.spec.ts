@@ -20,6 +20,8 @@ test.afterEach(() => {
   server.patchWorker = null;
 });
 
+test.use({ routeGithub: false });
+
 async function openControlled(page: Page): Promise<void> {
   await page.goto(`${server.url}#unsafe=0`);
   await expect(page.locator('#run')).toBeEnabled({ timeout: 30_000 });

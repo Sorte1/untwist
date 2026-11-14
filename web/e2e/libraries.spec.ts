@@ -88,6 +88,7 @@ test('core-js code fetches the core-js table, names its modules and matches the 
 test('a second run and a reload take the table from the cache', async ({ page }) => {
   const requests = tableRequests(page);
   await openApp(page, LIBS);
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
   await load(page, CORE_JS);
   await runAndWait(page);
   await runAndWait(page);
