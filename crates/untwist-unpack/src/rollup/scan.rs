@@ -56,20 +56,24 @@ fn function_item(items: &[Statement<'_>], span: Span) -> Option<u32> {
     (named || span == function.span).then_some(item)
 }
 
-fn shadowed_functions(items: &[Statement<'_>], declared: &[Span]) -> Option<Vec<u32>> {
+fn shadowed_functions(
+    items: &[Statement<'_>],
+    declared: &[Span],
+) -> Option<(Vec<u32>, Option<u32>)> {
     let functions: Vec<u32> = declared
         .iter()
         .filter_map(|span| function_item(items, *span))
         .collect();
     let last = functions.iter().copied().max();
     match functions.len() {
-        0 => Some(Vec::new()),
-        count if count == declared.len() => Some(
+        0 => Some((Vec::new(), None)),
+        count if count == declared.len() => Some((
             functions
                 .into_iter()
                 .filter(|item| Some(*item) != last)
                 .collect(),
-        ),
+            last,
+        )),
         _ => None,
     }
 }
@@ -94,13 +98,8 @@ fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Option<
             facts.owner[symbol.index()] = ENTRY;
             continue;
         };
-        facts.owner[symbol.index()] = item;
-        facts.declares[item as usize] += 1;
-        let first = &mut facts.first_decl[item as usize];
-        if first.is_none_or(|known| scoping.symbol_span(known).start > span.start) {
-            *first = Some(symbol);
-        }
         let redeclarations = scoping.symbol_redeclarations(symbol);
+        let mut kept = item;
         if !redeclarations.is_empty() {
             let declared: Vec<Span> = std::iter::once(span)
                 .chain(
@@ -109,9 +108,17 @@ fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Option<
                         .map(|redeclaration| redeclaration.span),
                 )
                 .collect();
-            for shadowed in shadowed_functions(items, &declared)? {
+            let (shadowed, last) = shadowed_functions(items, &declared)?;
+            for shadowed in shadowed {
                 facts.dropped[shadowed as usize] = true;
             }
+            kept = last.unwrap_or(item);
+        }
+        facts.owner[symbol.index()] = kept;
+        facts.declares[kept as usize] += 1;
+        let first = &mut facts.first_decl[kept as usize];
+        if first.is_none_or(|known| scoping.symbol_span(known).start > span.start) {
+            *first = Some(symbol);
         }
         for redeclaration in redeclarations {
             match item_of(items, redeclaration.span) {
@@ -119,7 +126,10 @@ fn owners(scoping: &Scoping, items: &[Statement<'_>], scope: ScopeId) -> Option<
                     facts.spans.push((item.min(other), item.max(other)))
                 }
                 Some(_) => {}
-                None => facts.pinned[item as usize] = true,
+                None => {
+                    facts.pinned[item as usize] = true;
+                    facts.pinned[kept as usize] = true;
+                }
             }
         }
     }

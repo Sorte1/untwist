@@ -340,6 +340,13 @@ fn entry_runs(
         }
     }
     let module = |item: u32| (part_of[item as usize], run_of[item as usize]);
+    let reads_entry = facts.uses.iter().any(|&(item, symbol)| {
+        let owner = facts.owner[symbol.index()];
+        run_of[item as usize].is_some() && module(owner) == (None, None)
+    });
+    if reads_entry {
+        return (Vec::new(), vec![None; items.len()], Vec::new());
+    }
     let mut setters: Vec<RunSetter> = Vec::new();
     let mut by_symbol: FxHashMap<oxc_syntax::symbol::SymbolId, usize> = FxHashMap::default();
     for write in &found_writes.plain {
