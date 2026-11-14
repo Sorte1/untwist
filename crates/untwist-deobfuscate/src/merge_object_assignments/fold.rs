@@ -328,7 +328,7 @@ fn merged_property<'a>(
         span,
         PropertyKind::Init,
         key,
-        assignment.right,
+        cx.unnamed_value(assignment.right),
         false,
         false,
         computed,

@@ -10,6 +10,7 @@ use untwist_core::ast_util::inline::{
     returned_expression,
 };
 use untwist_core::ast_util::matcher::call_parts;
+use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::ast_util::prop::{
     identifier_name, literal_member_parts, member_parts, prop_name,
 };
@@ -156,7 +157,7 @@ fn names_are_distinct(names: &[&str]) -> bool {
 }
 
 fn cff_value<'k, 'a>(expr: &'k Expression<'a>) -> Option<CffValue<'k, 'a>> {
-    match expr {
+    match without_unnamed(expr) {
         Expression::StringLiteral(literal) => Some(CffValue::Text(literal)),
         Expression::FunctionExpression(function) => {
             if !is_plain_function(function) {
@@ -640,6 +641,7 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        cx.observe_names(program);
         self.open_sites.clear();
         self.refused_nest = None;
         self.pending.clear();

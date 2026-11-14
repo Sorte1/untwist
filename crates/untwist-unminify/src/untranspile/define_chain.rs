@@ -383,11 +383,7 @@ fn property<'a>(
 }
 
 pub(super) fn unnamed<'a>(value: Expression<'a>, cx: &Cx<'a, '_>) -> Expression<'a> {
-    if !value.is_anonymous_function_definition() {
-        return value;
-    }
-    let zero = Expression::new_numeric_literal(SPAN, 0.0, None, NumberBase::Decimal, cx);
-    Expression::new_sequence_expression(SPAN, AVec::from_iter_in([zero, value], cx), cx)
+    untwist_core::ast_util::naming_slot::unnamed(value, cx.ast())
 }
 
 fn object_slot<'k, 'a>(root: &'k mut Expression<'a>) -> Option<&'k mut ObjectExpression<'a>> {

@@ -175,6 +175,7 @@ impl<'a> PassGroup<'a> {
         node: &mut Program<'a>,
         ctx: &mut TraverseCtx<'a, ()>,
     ) {
+        self.opts.names_observed.set(None);
         self.run_program_hook(
             Interest::ENTER_PROGRAM,
             |pass, node, cx| pass.enter_program(node, cx),
