@@ -101,11 +101,7 @@ fn is_splittable_value(expr: &Expression<'_>) -> bool {
     is_sequence(expr) && !(ends_in_anonymous_definition(expr) && is_unnamed_form(expr))
 }
 
-fn split_value<'a>(
-    expr: &mut Expression<'a>,
-    out: &mut AVec<'a, Statement<'a>>,
-    cx: &Cx<'a, '_>,
-) {
+fn split_value<'a>(expr: &mut Expression<'a>, out: &mut AVec<'a, Statement<'a>>, cx: &Cx<'a, '_>) {
     let keeps_anonymous = ends_in_anonymous_definition(expr);
     hoist_head(expr, out, cx);
     if keeps_anonymous {
@@ -116,9 +112,10 @@ fn split_value<'a>(
 
 fn declarator_has_sequence_init(declaration: &VariableDeclaration<'_>) -> bool {
     declaration.declarations.len() == 1
-        && declaration.declarations.first().is_some_and(|declarator| {
-            declarator.init.as_ref().is_some_and(is_splittable_value)
-        })
+        && declaration
+            .declarations
+            .first()
+            .is_some_and(|declarator| declarator.init.as_ref().is_some_and(is_splittable_value))
 }
 
 fn hoist_declarator<'a>(

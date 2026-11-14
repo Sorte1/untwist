@@ -200,7 +200,11 @@ fn a_decoder_split_from_its_rotator_stays_anonymous_and_decodes() {
         RenameMode::Simple,
     ] {
         let code = renamed(rename, &source);
-        assert_eq!(code.trim(), "console.log(\"beta\", \"alpha\");", "{rename:?}");
+        assert_eq!(
+            code.trim(),
+            "console.log(\"beta\", \"alpha\");",
+            "{rename:?}"
+        );
     }
 }
 
