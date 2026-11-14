@@ -33,6 +33,6 @@ online-style/hex-array-rotate-top.js	gen.mjs	hex-escaped string array, rotate II
 plain/program.js	source	-	-	-	-	d51d15a6d4026da43ad29eea30cc6edd6511c2c3c6e85e8f4318ecc53b2cee29
 vm/js-virtualizer-default.js	js-virtualizer@1.0.2	passes=RemoveUnused,ObfuscateVM,ObfuscateTranspiled, VM module inlined behind a require shim by gen.mjs	-	-	-	a4f2aa6e4e015c7c9dcddec77b3139e356a4a5ab032559324d562ee51915a8be
 vm/js-virtualizer-plain.js	js-virtualizer@1.0.2	passes=[], VM module inlined behind a require shim by gen.mjs	-	-	-	d20e5acc994483cddcc96d37ade9b5b419a29245517aa7f007eb6cb9510c7b81
-webpack-eval/eval-cheap-module-source-map.js	webpack@5.98.0	mode=development devtool=eval-cheap-module-source-map target=node	!eval("	undone	undone	55c5b9fe49b1fe89caa3ab8c7b362437224489c8178837b9488d9db80033a924
-webpack-eval/eval-source-map.js	webpack@5.98.0	mode=development devtool=eval-source-map target=node	!eval("	undone	undone	4764c851c57938b76b97e1ba95a60b323760e616817305f90b57e1b94556a45e
-webpack-eval/eval.js	webpack@5.98.0	mode=development devtool=eval target=node	!eval("	undone	undone	528719983d2dbbe7015cb0bcd74101bc38b18f1e0490f3a4e73b7bfd2e25fa97
+webpack-eval/eval-cheap-module-source-map.js	webpack@5.98.0	mode=development devtool=eval-cheap-module-source-map target=node	!eval("	kept	undone	55c5b9fe49b1fe89caa3ab8c7b362437224489c8178837b9488d9db80033a924
+webpack-eval/eval-source-map.js	webpack@5.98.0	mode=development devtool=eval-source-map target=node	!eval("	kept	undone	4764c851c57938b76b97e1ba95a60b323760e616817305f90b57e1b94556a45e
+webpack-eval/eval.js	webpack@5.98.0	mode=development devtool=eval target=node	!eval("	kept	undone	528719983d2dbbe7015cb0bcd74101bc38b18f1e0490f3a4e73b7bfd2e25fa97

@@ -174,6 +174,7 @@ struct Scan<'s> {
     spelling: OnceCell<FxHashSet<SymbolId>>,
     reaching_text: OnceCell<bool>,
     unplain: OnceCell<FxHashSet<SymbolId>>,
+    enumerated: OnceCell<keys::EnumeratedKeys>,
     strict: bool,
     opaque_key: Cell<bool>,
     scoping: &'s Scoping,
@@ -251,6 +252,7 @@ impl<'s> Scan<'s> {
             spelling: OnceCell::new(),
             reaching_text: OnceCell::new(),
             unplain: OnceCell::new(),
+            enumerated: OnceCell::new(),
             strict,
             opaque_key: Cell::new(false),
             scoping,
@@ -269,6 +271,16 @@ impl Scan<'_> {
         *self
             .reaching_text
             .get_or_init(|| keys::names_a_reaching_key(self.program, &REACHING_KEYS))
+    }
+
+    pub(super) fn enumerated_owner(
+        &self,
+        reference: oxc_syntax::reference::ReferenceId,
+    ) -> Option<SymbolId> {
+        self.enumerated
+            .get_or_init(|| keys::enumerated_keys(self.program, self.scoping))
+            .get(&reference)
+            .copied()
     }
 
     pub(super) fn plain_symbol(&self, symbol: SymbolId) -> bool {

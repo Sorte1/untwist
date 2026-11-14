@@ -146,7 +146,8 @@ impl Scan<'_> {
             Key::Unknown(key) => {
                 self.is_reached(object)
                     || self.is_root(object)
-                    || self.spells(key, |name| self.reached_member(object, Key::Name(name)))
+                    || (!self.reads_enumerated_key(object, key)
+                        && self.spells(key, |name| self.reached_member(object, Key::Name(name))))
             }
         }
     }
@@ -214,6 +215,22 @@ impl Scan<'_> {
                     .collect()
             }
             _ => None,
+        }
+    }
+
+    fn reads_enumerated_key(&self, object: &Expression<'_>, key: &Expression<'_>) -> bool {
+        let (Expression::Identifier(key), Expression::Identifier(object)) =
+            (key.without_parentheses(), object.without_parentheses())
+        else {
+            return false;
+        };
+        let owner = object
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        match (key.reference_id.get(), owner) {
+            (Some(reference), Some(owner)) => self.enumerated_owner(reference) == Some(owner),
+            _ => false,
         }
     }
 

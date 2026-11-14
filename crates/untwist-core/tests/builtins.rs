@@ -268,6 +268,7 @@ fn a_key_that_cannot_spell_a_prototype_name_stays_intact() {
         "x = o[typeof y] + o[!y];",
         "var o = { foo: 1 }; x = o[atob('Zm9v')];",
         "var k = 'dyn'; x = o[k];",
+        "function f(b) { var d = {}; for (var p in b) { if (b.hasOwnProperty(p)) d[p] = b[p]; } return d; }",
         "for (var i = 0; i < n; i++) { x = a[i + 1] + a[1 + i]; }",
         "x = r[Symbol.iterator] || r['@@iterator'];",
         "var { a: b } = o;",
@@ -285,6 +286,8 @@ fn a_key_from_a_parameter_an_enumeration_or_an_opaque_call_aliases_the_built_ins
         "x = cache[id()];",
         "for (var p in b) { d[p] = b[p]; }",
         "function f(o, k) { var v = o[k]; return v; }",
+        "function f(b, c) { for (var p in b) { x = c[p]; } }",
+        "function f(b) { for (var p in b) { b = g(); x = b[p]; } }",
     ] {
         assert_eq!(verdict(source), Builtins::Aliased, "{source}");
         assert!(!first_look_is_intact(source), "{source}");

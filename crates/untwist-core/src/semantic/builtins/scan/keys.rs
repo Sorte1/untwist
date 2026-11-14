@@ -2,8 +2,9 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
+use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::reach::REACHING_KEYS;
 
@@ -405,5 +406,128 @@ impl<'a> VisitJs<'a> for Texts<'_> {
     fn visit_template_element(&mut self, it: &TemplateElement<'a>) {
         let text = it.value.cooked.as_ref().and_then(|cooked| cooked.as_str());
         self.note(text.unwrap_or(it.value.raw.as_str()));
+    }
+}
+
+pub(super) type EnumeratedKeys = FxHashMap<ReferenceId, SymbolId>;
+
+pub(super) fn enumerated_keys(program: &Program<'_>, scoping: &Scoping) -> EnumeratedKeys {
+    let mut loops = ForInLoops {
+        scoping,
+        found: FxHashMap::default(),
+    };
+    loops.visit_program(program);
+    loops.found
+}
+
+fn writes_of(scoping: &Scoping, symbol: SymbolId) -> usize {
+    scoping
+        .get_resolved_reference_ids(symbol)
+        .iter()
+        .filter(|reference| scoping.get_reference(**reference).is_write())
+        .count()
+}
+
+struct ForInLoops<'s> {
+    scoping: &'s Scoping,
+    found: EnumeratedKeys,
+}
+
+impl ForInLoops<'_> {
+    fn symbol_of(&self, id: &IdentifierReference<'_>) -> Option<SymbolId> {
+        let reference = id.reference_id.get()?;
+        self.scoping.get_reference(reference).symbol_id()
+    }
+
+    fn head_symbol(&self, left: &ForStatementLeft<'_>) -> Option<SymbolId> {
+        match left {
+            ForStatementLeft::VariableDeclaration(declaration) => {
+                match declaration.declarations.as_slice() {
+                    [only] => match &only.id {
+                        BindingPattern::BindingIdentifier(id) if only.init.is_none() => {
+                            id.symbol_id.get()
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            }
+            ForStatementLeft::AssignmentTargetIdentifier(id) => self.symbol_of(id),
+            _ => None,
+        }
+    }
+
+    fn subject(&self, right: &Expression<'_>) -> Option<SymbolId> {
+        match right.without_parentheses() {
+            Expression::Identifier(id) => self.symbol_of(id),
+            Expression::AssignmentExpression(assignment) => match &assignment.left {
+                AssignmentTarget::AssignmentTargetIdentifier(id) => self.symbol_of(id),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for ForInLoops<'_> {
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        if let (Some(key), Some(object)) = (self.head_symbol(&it.left), self.subject(&it.right)) {
+            let mut body = BodyWrites {
+                writes: self,
+                key,
+                written: Vec::new(),
+                reads: Vec::new(),
+                dynamic: false,
+            };
+            body.visit_statement(&it.body);
+            let BodyWrites {
+                written,
+                reads,
+                dynamic,
+                ..
+            } = body;
+            let clean = !dynamic
+                && !written.contains(&key)
+                && !written.contains(&object)
+                && writes_of(self.scoping, key) <= 1;
+            if clean {
+                self.found
+                    .extend(reads.into_iter().map(|reference| (reference, object)));
+            }
+        }
+        walk_js::walk_for_in_statement(self, it);
+    }
+}
+
+struct BodyWrites<'w, 's> {
+    writes: &'w ForInLoops<'s>,
+    key: SymbolId,
+    written: Vec<SymbolId>,
+    reads: Vec<ReferenceId>,
+    dynamic: bool,
+}
+
+impl<'a> VisitJs<'a> for BodyWrites<'_, '_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let write = it
+            .reference_id
+            .get()
+            .is_some_and(|reference| self.writes.scoping.get_reference(reference).is_write());
+        let symbol = self.writes.symbol_of(it);
+        if write {
+            self.written.extend(symbol);
+        }
+        if let (Some(reference), Some(true)) = (
+            it.reference_id.get(),
+            symbol.map(|symbol| symbol == self.key),
+        ) {
+            self.reads.push(reference);
+        }
+        self.dynamic |= it.name == "eval";
+    }
+
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.dynamic = true;
+        walk_js::walk_with_statement(self, it);
     }
 }
