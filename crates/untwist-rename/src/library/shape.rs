@@ -12,6 +12,9 @@ use untwist_core::ast_util::js_text::js_text;
 
 use super::hash::{fnv, mix, Exact, PolyHash};
 
+mod chain;
+mod inline;
+
 const TAG_TYPE: u8 = 1;
 const TAG_STR: u8 = 2;
 const TAG_GLOBAL: u8 = 3;
@@ -105,6 +108,7 @@ pub struct Shaped<'n, 'a> {
     pub units: Vec<Unit<'n, 'a>>,
     pub prefix: PolyHash,
     pub bindings: u64,
+    pub inlined: Vec<Span>,
 }
 
 pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> Shaped<'n, 'a> {
@@ -118,6 +122,8 @@ pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> 
     emitter.collect_units = true;
     emitter.visit_program_body(program);
     let len = emitter.count;
+    emitter.emit_deferred();
+    let inlined = std::mem::take(&mut emitter.inlined_spans);
     let mut units = std::mem::take(&mut emitter.units);
     units.push(Unit {
         node: UnitNode::Program(program),
@@ -136,6 +142,7 @@ pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> 
         units,
         prefix,
         bindings,
+        inlined,
     }
 }
 
@@ -146,9 +153,18 @@ pub struct ExactShape {
     pub inner: Vec<SymbolId>,
     pub outer: Vec<SymbolId>,
     pub specific: u32,
+    pub inlined: Vec<(SymbolId, Span)>,
 }
 
 pub fn exact_shape(unit: &Unit<'_, '_>, scoping: &Scoping) -> ExactShape {
+    shape_unit(unit, scoping, false)
+}
+
+pub fn expanded_shape(unit: &Unit<'_, '_>, scoping: &Scoping) -> ExactShape {
+    shape_unit(unit, scoping, true)
+}
+
+fn shape_unit(unit: &Unit<'_, '_>, scoping: &Scoping, expand: bool) -> ExactShape {
     let sink = Sink::Exact(ExactSink {
         hash: Exact::new(),
         loose: PolyHash::new(),
@@ -158,6 +174,7 @@ pub fn exact_shape(unit: &Unit<'_, '_>, scoping: &Scoping) -> ExactShape {
         placeholders: FxHashMap::default(),
         labels: FxHashMap::default(),
         specific: 0,
+        inlined: Vec::new(),
     });
     let mut scan = DefScan::new(scoping);
     match unit.node {
@@ -166,6 +183,7 @@ pub fn exact_shape(unit: &Unit<'_, '_>, scoping: &Scoping) -> ExactShape {
         UnitNode::Program(program) => scan.visit_program(program),
     }
     let mut emitter = Emitter::new(scoping, sink, scan.single_definitions());
+    emitter.expand = expand;
     match unit.node {
         UnitNode::Function(function) => emitter.function_unit(function),
         UnitNode::Arrow(arrow) => emitter.arrow_unit(arrow),
@@ -181,6 +199,7 @@ pub fn exact_shape(unit: &Unit<'_, '_>, scoping: &Scoping) -> ExactShape {
         inner: sink.inner,
         outer: sink.outer,
         specific: sink.specific,
+        inlined: sink.inlined,
     }
 }
 
@@ -193,6 +212,7 @@ struct ExactSink {
     placeholders: FxHashMap<SymbolId, u64>,
     labels: FxHashMap<String, u64>,
     specific: u32,
+    inlined: Vec<(SymbolId, Span)>,
 }
 
 enum Sink {
@@ -249,6 +269,9 @@ struct Emitter<'n, 'a> {
     single: FxHashSet<SymbolId>,
     frames: Vec<Frame>,
     bindings: u64,
+    deferred: Vec<&'n Function<'a>>,
+    inlined_spans: Vec<Span>,
+    expand: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -384,6 +407,9 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
             single,
             frames: Vec::new(),
             bindings: 0,
+            deferred: Vec::new(),
+            inlined_spans: Vec::new(),
+            expand: false,
         }
     }
 
@@ -640,7 +666,7 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
         }
         self.visit_formal_parameters(&function.params);
         if let Some(body) = &function.body {
-            self.emit_list(&body.statements);
+            self.emit_body(&body.statements);
         }
         self.close();
         self.frames.pop();
@@ -657,7 +683,7 @@ impl<'n, 'a: 'n> Emitter<'n, 'a> {
         }
         self.visit_formal_parameters(&arrow.params);
         match &arrow.body {
-            ArrowFunctionBody::FunctionBody(body) => self.emit_list(&body.statements),
+            ArrowFunctionBody::FunctionBody(body) => self.emit_body(&body.statements),
             body => {
                 let expr = body.to_expression();
                 self.open(AstType::ReturnStatement);
@@ -931,6 +957,14 @@ impl<'n, 'a: 'n> VisitJs<'a> for Emitter<'n, 'a> {
         self.visit_expression(left);
         self.visit_expression(right);
         self.close();
+    }
+
+    fn visit_logical_expression(&mut self, it: &LogicalExpression<'a>) {
+        self.emit_logical(it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.emit_call(it);
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {

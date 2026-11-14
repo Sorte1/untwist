@@ -50,6 +50,7 @@ struct Build {
     dir: String,
     bundler: String,
     obfuscated: bool,
+    minified: bool,
     names: BTreeMap<String, String>,
 }
 
@@ -85,6 +86,7 @@ fn read_manifest(path: &Path) -> Result<Manifest> {
             dir: text(&build["dir"]),
             bundler: text(&build["bundler"]),
             obfuscated: text(&build["obfuscator"]) != "none",
+            minified: text(&build["minifier"]) != "none",
             names: string_map(&build["names"]),
         })
         .collect();
@@ -385,6 +387,14 @@ fn attribute(
         .collect()
 }
 
+const GENERATED_STEMS: [&str; 4] = ["fn", "module", "requireModule", "hasRequiredModule"];
+
+fn generated(name: &str) -> bool {
+    let stem = name.trim_end_matches(|ch: char| ch.is_ascii_digit());
+    let numbered = stem.len() < name.len();
+    name.len() <= 2 || GENERATED_STEMS.contains(&stem) || (numbered && stem.len() == 1)
+}
+
 fn is_strong(record: &UnitRecord) -> bool {
     record.loose.0 >= untwist_rename::library::STRONG_LENGTH
         && record.specific >= untwist_rename::library::STRONG_SPECIFIC
@@ -438,6 +448,8 @@ fn observe_file(
         .map(|(record, module, role)| {
             let known = !build.obfuscated;
             let own_known = known || role == Role::Wrapper;
+            let real =
+                |name: Option<String>| name.filter(|name| !build.minified || !generated(name));
             Observed {
                 known,
                 row: Row {
@@ -451,9 +463,15 @@ fn observe_file(
                         .binding
                         .as_deref()
                         .filter(|_| own_known)
-                        .and_then(|name| clean_name(name, rollup, words)),
-                    inner: names(&record.inner, known, rollup, words),
-                    outer: names(&record.outer, known, rollup, words),
+                        .and_then(|name| real(clean_name(name, rollup, words))),
+                    inner: names(&record.inner, known, rollup, words)
+                        .into_iter()
+                        .map(real)
+                        .collect(),
+                    outer: names(&record.outer, known, rollup, words)
+                        .into_iter()
+                        .map(real)
+                        .collect(),
                     specific: record.specific,
                 },
             }
@@ -542,13 +560,21 @@ struct Aggregate {
     outer: Vec<Option<Option<String>>>,
 }
 
+fn name_key(name: &str) -> String {
+    name.chars()
+        .filter(|ch| *ch != '_' && *ch != '$')
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 fn merge_slot(slot: &mut Option<Option<String>>, name: Option<String>) {
     let Some(name) = name else {
         return;
     };
     match slot {
         None => *slot = Some(Some(name)),
-        Some(Some(existing)) if *existing != name => *slot = Some(None),
+        Some(Some(existing)) if name_key(existing) != name_key(&name) => *slot = Some(None),
+        Some(Some(existing)) if name < *existing => *existing = name,
         _ => {}
     }
 }
@@ -601,10 +627,7 @@ fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row> {
         group.loose = row.loose;
         group.specific = row.specific;
         group.versions.insert(row.versions.clone());
-        match (&group.own, row.own) {
-            (_, None) if known => merge_slot(&mut group.own, Some(String::new())),
-            (_, own) => merge_slot(&mut group.own, own),
-        }
+        merge_slot(&mut group.own, row.own);
         if known {
             merge_list(&mut group.inner, row.inner);
             merge_list(&mut group.outer, row.outer);
