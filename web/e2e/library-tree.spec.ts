@@ -7,7 +7,7 @@ import { expect, openApp, paste, readRepo, repoPath, runAndWait, saved, test } f
 
 const CORE_JS = 'fixtures/libraries/core-js/rollup-cjs.terser.js';
 const PLAIN = 'fixtures/reference/unpack/webpack-5.js';
-const SPLIT = '#libs=1&split=1&assume=1';
+const SPLIT = '#libs=1&split=1&assume=1&unsafe=1';
 
 interface BundleJson {
   readonly modules: ReadonlyArray<{ readonly path: string; readonly isEntry: boolean }>;
@@ -15,7 +15,7 @@ interface BundleJson {
 
 function cliTree(dir: string): Map<string, string> {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  execFileSync(bin, ['-f', '--split-hoisted', '--split-assume-modules', '-o', dir, repoPath(CORE_JS)], {
+  execFileSync(bin, ['-f', '--unsafe', '--split-hoisted', '--split-assume-modules', '-o', dir, repoPath(CORE_JS)], {
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },
     maxBuffer: 1 << 28,
   });

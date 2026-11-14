@@ -146,6 +146,7 @@ fn the_text_report_counts_app_and_library_modules_of_a_split_bundle() {
     let dir = tempfile::tempdir().unwrap();
     let out = common::bin()
         .args([
+            "--unsafe",
             "--split-hoisted",
             "--split-assume-modules",
             "--report",
