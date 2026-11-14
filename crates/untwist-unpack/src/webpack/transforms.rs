@@ -7,6 +7,7 @@ use crate::matcher::named_const_member;
 use crate::model::RequireParam;
 use crate::model::{Bundle, BundleKind, Module};
 use crate::runtime::{runtime_binding_import, runtime_id, runtime_path, synthetic_statements};
+use crate::webpack::buildin::drop_polyfill_calls;
 use crate::webpack::canon::standard_helpers;
 use crate::webpack::default_require::convert_default_require;
 use crate::webpack::esm::convert_esm;
@@ -273,6 +274,9 @@ pub fn apply_transforms_with<'a>(
 ) -> Vec<Note> {
     if bundle.kind != BundleKind::Webpack {
         return Vec::new();
+    }
+    if !conservative {
+        drop_polyfill_calls(alloc, bundle);
     }
     let shields = shield_all(alloc, bundle, conservative);
     for module in bundle.modules.values_mut() {

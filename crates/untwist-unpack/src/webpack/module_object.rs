@@ -2,8 +2,10 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashMap;
 
-use crate::matcher::{const_member, Factory};
+use crate::matcher::{const_member, literal_id, Factory};
+use crate::webpack::buildin::Buildin;
 use crate::webpack::runtime_module::own_arguments;
 
 const MODULE_PARAM: usize = 0;
@@ -14,12 +16,40 @@ const ASYNC_MODULE: &str = "a";
 const WASM_MODULE: &str = "v";
 const WASM_EXPORTS: &str = "w";
 const CALL: &str = "call";
+const POLYFILLED_MEMBERS: [&str; 2] = ["exports", "loaded"];
+const HARMONY_MEMBERS: [&str; 1] = ["loaded"];
+const READ_ONLY_MEMBER: &str = "loaded";
 
 struct ModuleUses<'s> {
     scoping: &'s Scoping,
     symbol: SymbolId,
     require: Option<SymbolId>,
+    buildins: &'s FxHashMap<String, Buildin>,
+    aliases: FxHashMap<SymbolId, Buildin>,
+    polyfills: Vec<Buildin>,
     found: Option<String>,
+}
+
+fn immediate<'k, 'a>(call: &'k CallExpression<'a>) -> Option<(&'k Function<'a>, usize)> {
+    if call.optional {
+        return None;
+    }
+    if let Expression::FunctionExpression(function) = call.callee.without_parentheses() {
+        return Some((function, 0));
+    }
+    let callee = const_member(&call.callee, CALL)?;
+    match callee.without_parentheses() {
+        Expression::FunctionExpression(function) => Some((function, 1)),
+        _ => None,
+    }
+}
+
+fn simple_param(function: &Function<'_>, at: usize) -> Option<SymbolId> {
+    let item = function.params.items.get(at)?;
+    match &item.pattern {
+        BindingPattern::BindingIdentifier(id) if item.initializer.is_none() => id.symbol_id.get(),
+        _ => None,
+    }
 }
 
 impl ModuleUses<'_> {
@@ -85,10 +115,140 @@ impl ModuleUses<'_> {
     fn refuse(&mut self, what: impl Into<String>) {
         self.found.get_or_insert_with(|| what.into());
     }
+
+    fn alias(&self, expr: &Expression<'_>) -> Option<Buildin> {
+        let Expression::Identifier(id) = expr.without_parentheses() else {
+            return None;
+        };
+        let symbol = id
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())?;
+        self.aliases.get(&symbol).copied()
+    }
+
+    fn polyfill_call(&self, expr: &Expression<'_>) -> Option<Buildin> {
+        let Expression::CallExpression(call) = expr.without_parentheses() else {
+            return None;
+        };
+        let Expression::CallExpression(inner) = call.callee.without_parentheses() else {
+            return None;
+        };
+        let [argument] = call.arguments.as_slice() else {
+            return None;
+        };
+        let [id] = inner.arguments.as_slice() else {
+            return None;
+        };
+        let shaped = !call.optional
+            && !inner.optional
+            && self.resolves_to(&inner.callee, self.require)
+            && argument
+                .as_expression()
+                .is_some_and(|it| self.is_module(it));
+        let id = literal_id(id.as_expression()?)?;
+        shaped.then(|| self.buildins.get(&id).copied()).flatten()
+    }
+
+    fn held<'k, 'a>(
+        &self,
+        expr: &'k Expression<'a>,
+    ) -> Option<(Buildin, Option<&'k Expression<'a>>, bool)> {
+        if let Some(kind) = self.polyfill_call(expr) {
+            return Some((kind, None, true));
+        }
+        if let Some(kind) = self.alias(expr) {
+            return Some((kind, None, false));
+        }
+        let Expression::LogicalExpression(logical) = expr.without_parentheses() else {
+            return None;
+        };
+        let (kind, _, call) = self.held(&logical.right)?;
+        let plain = logical.operator == LogicalOperator::Or && self.held(&logical.left).is_none();
+        plain.then_some((kind, Some(&logical.left), call))
+    }
+
+    fn handed_on<'a>(&mut self, call: &CallExpression<'a>) -> bool {
+        let Some((function, offset)) = immediate(call) else {
+            return false;
+        };
+        let body = function.body.as_deref();
+        if body.is_none_or(own_arguments) || function.params.rest.is_some() {
+            return false;
+        }
+        let mut handed = Vec::new();
+        for (at, argument) in call.arguments.iter().enumerate() {
+            let held = at
+                .checked_sub(offset)
+                .and_then(|index| Some((simple_param(function, index)?, argument.as_expression()?)))
+                .and_then(|(symbol, expr)| self.held(expr).map(|held| (symbol, held)));
+            handed.push(held);
+        }
+        if handed.iter().all(Option::is_none) {
+            return false;
+        }
+        for (argument, held) in call.arguments.iter().zip(handed) {
+            match held {
+                Some((symbol, (kind, left, call))) => {
+                    self.aliases.insert(symbol, kind);
+                    if call {
+                        self.polyfills.push(kind);
+                    }
+                    if let Some(left) = left {
+                        self.visit_expression(left);
+                    }
+                }
+                None => self.visit_argument(argument),
+            }
+        }
+        self.visit_expression(&call.callee);
+        true
+    }
+
+    fn alias_member(&mut self, kind: Buildin, name: &str) {
+        let allowed = match kind {
+            Buildin::Module => POLYFILLED_MEMBERS.as_slice(),
+            Buildin::Harmony => HARMONY_MEMBERS.as_slice(),
+        };
+        if !allowed.contains(&name) {
+            self.refuse(format!("module.{name} of a webpack module polyfill"));
+        }
+    }
+
+    fn written(&mut self, target: &SimpleAssignmentTarget<'_>) {
+        let SimpleAssignmentTarget::StaticMemberExpression(member) = target else {
+            return;
+        };
+        let Some(kind) = self.alias(&member.object) else {
+            return;
+        };
+        if kind == Buildin::Harmony || member.property.name == READ_ONLY_MEMBER {
+            self.refuse(format!(
+                "a write to module.{} of a webpack module polyfill",
+                member.property.name
+            ));
+        }
+    }
 }
 
 impl<'a> VisitJs<'a> for ModuleUses<'_> {
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let Some(target) = it.left.as_simple_assignment_target() {
+            self.written(target);
+        }
+        walk_js::walk_assignment_expression(self, it);
+    }
+
+    fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
+        self.written(&it.argument);
+        walk_js::walk_update_expression(self, it);
+    }
+
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        if let Some(kind) = self.alias(&it.object) {
+            self.alias_member(kind, it.property.name.as_str());
+            return;
+        }
         if !self.is_module(&it.object) {
             walk_js::walk_static_member_expression(self, it);
             return;
@@ -100,6 +260,9 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.handed_on(it) {
+            return;
+        }
         self.visit_expression(&it.callee);
         for (at, argument) in it.arguments.iter().enumerate() {
             if !self.handed_to_helper(it, at) {
@@ -112,14 +275,15 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
         if self.helper(&it.object, WASM_EXPORTS) && self.module_id(&it.expression) {
             return;
         }
-        if self.is_module(&it.object) {
+        if self.is_module(&it.object) || self.alias(&it.object).is_some() {
             self.refuse("a computed member of module");
         }
         walk_js::walk_computed_member_expression(self, it);
     }
 
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
-        let typeof_module = it.operator == UnaryOperator::Typeof && self.is_module(&it.argument);
+        let typeof_module = it.operator == UnaryOperator::Typeof
+            && (self.is_module(&it.argument) || self.alias(&it.argument).is_some());
         if !typeof_module {
             walk_js::walk_unary_expression(self, it);
         }
@@ -133,6 +297,9 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
         if symbol == Some(self.symbol) {
             self.refuse("module as a value");
         }
+        if symbol.is_some_and(|symbol| self.aliases.contains_key(&symbol)) {
+            self.refuse("a webpack module polyfill as a value");
+        }
     }
 }
 
@@ -143,14 +310,25 @@ fn param_symbol(factory: &Factory<'_, '_>, at: usize) -> Option<SymbolId> {
     }
 }
 
-pub fn module_object_use(scoping: &Scoping, factory: &Factory<'_, '_>) -> Option<String> {
+pub fn module_object_use(
+    scoping: &Scoping,
+    factory: &Factory<'_, '_>,
+    buildins: &FxHashMap<String, Buildin>,
+) -> Option<String> {
     let symbol = param_symbol(factory, MODULE_PARAM)?;
     let mut uses = ModuleUses {
         scoping,
         symbol,
         require: param_symbol(factory, REQUIRE_PARAM),
+        buildins,
+        aliases: FxHashMap::default(),
+        polyfills: Vec::new(),
         found: None,
     };
     uses.visit_function_body(factory.body);
+    let mixed = uses.polyfills.contains(&Buildin::Harmony) && uses.polyfills.len() > 1;
+    if mixed {
+        uses.refuse("two webpack module polyfills on one module");
+    }
     uses.found
 }

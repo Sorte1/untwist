@@ -1,0 +1,13 @@
+# cell	bundler	loader	flags	sha256
+w4-index-dev-web	webpack@4.47.0	browser	mode=development minimize=false target=web	391293373e8782ad131083798df371b986b4e75ab4ef02a07529c20afac9009f
+w4-index-dev-node	webpack@4.47.0	node	mode=development minimize=false target=node	391293373e8782ad131083798df371b986b4e75ab4ef02a07529c20afac9009f
+w4-index-prod-web	webpack@4.47.0	browser	mode=production minimize=false target=web	aae9d2fba540b13da2b16383c2093ff07f3ac217325682397e964ffb3a1b290c
+w4-index-prod-node	webpack@4.47.0	node	mode=production minimize=false target=node	aae9d2fba540b13da2b16383c2093ff07f3ac217325682397e964ffb3a1b290c
+w4-index-min-web	webpack@4.47.0	browser	mode=production minimize=true target=web	d5b7844160a7d08ae136c6a40ab9df657ceb044b8e9128140dbda7ed216143a5
+w4-index-min-node	webpack@4.47.0	node	mode=production minimize=true target=node	d5b7844160a7d08ae136c6a40ab9df657ceb044b8e9128140dbda7ed216143a5
+w4-negative-dev-web	webpack@4.47.0	browser	mode=development minimize=false target=web	a765315985c38ecf909a826db7f41a05b862a248ced6abb48898f2fbc09eaee0
+w4-negative-dev-node	webpack@4.47.0	node	mode=development minimize=false target=node	a765315985c38ecf909a826db7f41a05b862a248ced6abb48898f2fbc09eaee0
+w4-negative-prod-web	webpack@4.47.0	browser	mode=production minimize=false target=web	0846e02031e9e096e48f9d439e05c502213cf59eb421238b97f1cbec10502753
+w4-negative-prod-node	webpack@4.47.0	node	mode=production minimize=false target=node	0846e02031e9e096e48f9d439e05c502213cf59eb421238b97f1cbec10502753
+w4-negative-min-web	webpack@4.47.0	browser	mode=production minimize=true target=web	c40f1a40e6bdda4b1f665920e1b76a20c3b8b92463c19960d850bcf13b901580
+w4-negative-min-node	webpack@4.47.0	node	mode=production minimize=true target=node	c40f1a40e6bdda4b1f665920e1b76a20c3b8b92463c19960d850bcf13b901580
