@@ -221,6 +221,10 @@ heuristics are allowed to run. These are `template-literals` and JSX reconstruct
 program could rebind through a key it cannot resolve.
 A Metro bundle whose file does not hold Metro's own `__d`/`__r` runtime is unpacked on the trust
 that those names are Metro's.
+Reading `.caller` or `.arguments` on a value is assumed never to reach a bundled module's
+function, so such a read does not stop unpacking. The safe lane keeps any bundle whole when the
+program reads either property, because in a written file a module's code is called by node's
+module wrapper, not by the bundle's factory, and that changes what the read returns.
 This decodes more on aggressively protected code. It is the right choice when you trust that the
 input does not tamper with the runtime, and the wrong one for code written to fool analysis.
 

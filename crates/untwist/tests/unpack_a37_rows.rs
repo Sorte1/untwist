@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use untwist::{Options, Pipeline, RenameMode};
 use untwist_testing::node::{node, run, skip_allowed, SKIP_MESSAGE};
 
-const PREMISES: [(&str, &str); 2] = [
+const PREMISES: [(&str, &str); 3] = [
     ("p2.js --unsafe --rename smart", "a method installed by every use and called with a function receiver: the documented --unsafe self-read premise"),
     ("r8.js --unsafe", "--unsafe assumes no .caller/.arguments read reaches a module function"),
+    ("k1.js --unsafe", "--unsafe assumes no .caller/.arguments read reaches a module function"),
 ];
 
 fn root() -> PathBuf {

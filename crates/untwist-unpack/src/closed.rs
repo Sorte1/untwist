@@ -465,6 +465,11 @@ impl<'a> VisitJs<'a> for HostReads<'_, '_> {
 const LEGACY_MEMBERS: [&str; 2] = ["caller", "arguments"];
 
 pub fn legacy_read(program: &Program<'_>) -> Option<&'static str> {
+    let text = program.source_text;
+    let spelled = LEGACY_MEMBERS.iter().any(|name| text.contains(name)) || text.contains("\\u");
+    if !spelled {
+        return None;
+    }
     let mut reads = LegacyReads::default();
     reads.visit_program(program);
     reads.found
