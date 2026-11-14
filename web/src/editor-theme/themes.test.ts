@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { activeEditorTheme, BUILT_IN, DEFAULT_PICKS, EDITOR_THEMES, parsePicks, themesFor, withPick } from './themes';
 
 describe('editor theme picks', () => {
-  it('defaults to Tokyo Night in dark mode and GitHub Light in light mode', () => {
-    expect(parsePicks(null)).toEqual({ dark: 'tokyo-night', light: 'github-light' });
-    expect(activeEditorTheme('dark', DEFAULT_PICKS)).toBe('tokyo-night');
+  it('defaults to GitHub Dark in dark mode and GitHub Light in light mode', () => {
+    expect(parsePicks(null)).toEqual({ dark: 'github-dark', light: 'github-light' });
+    expect(activeEditorTheme('dark', DEFAULT_PICKS)).toBe('github-dark');
     expect(activeEditorTheme('light', DEFAULT_PICKS)).toBe('github-light');
   });
 

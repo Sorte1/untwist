@@ -78,7 +78,7 @@ describe('the inline theme boot script', () => {
   it('falls back to the default theme when storage is blocked', () => {
     const got = boot('', false, null, true);
     expect(got.attributes.get('data-theme')).toBe('dark');
-    expect(got.attributes.get('data-editor')).toBe('tokyo-night');
+    expect(got.attributes.get('data-editor')).toBe('github-dark');
   });
 
   it('is allowed by its hash in script-src and nothing else inline is', () => {
