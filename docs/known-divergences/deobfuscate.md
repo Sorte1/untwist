@@ -727,6 +727,14 @@
   `window`, `globalThis` or `self`) or as obfuscator.io's whole interval IIFE. An IIFE that
   holds other statements loses the interval call and keeps the rest; a `setInterval` of an
   object the program built keeps the protection, with a note.
+  In a classic script, a top-level binding of a protection or a control-flow object is a property
+  of the global object, and code text that runs in the global scope sees a top-level `let` or
+  `const` too. In both modes such a binding is removed only when no code outside the removed statements may
+  reach it by a key that may be its name, observe the global object's names (`"g" in this`,
+  `Object.keys(globalThis)`, a printing call), or run code text (`(0, eval)("typeof g")`,
+  `new Function(…)`). This is the reach and observation check of the decoder machinery below, with the
+  removed code itself left out. Otherwise the protection is kept with the `reference survives`
+  note and the control-flow object with its own note. Pinned by `crates/untwist/tests/a35r3_review_rows.rs`.
 - **A decoder-argument ternary the split cannot take apart reports nothing of its own.**
   `find-decoders` rewrites a decoder whose argument is a ternary into one declaration per branch;
   a branch it cannot split hands its symbols to the external-variable inlining that runs next,

@@ -208,6 +208,7 @@ struct PayloadShape {
 
 impl<'a> Visit<'a> for PayloadShape {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.open |= self.depth == 0 && it.is_declaration();
         self.depth += 1;
         walk::walk_function(self, it, flags);
         self.depth -= 1;

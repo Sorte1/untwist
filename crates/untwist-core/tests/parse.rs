@@ -405,3 +405,37 @@ fn a_function_named_await_in_a_script_stays_a_script() {
     assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
     assert!(!p.source_type.is_module());
 }
+
+#[test]
+fn an_await_in_a_class_heritage_key_or_decorator_is_top_level() {
+    for source in [
+        "class A extends (await (async () => Object)()) {}",
+        "const C = class extends (await Promise.resolve(Object)) {};",
+        "class A { [await (async () => \"k\")()]() {} }",
+        "class A { static [await Promise.resolve(\"k\")] = 1; }",
+        "class A { accessor [await Promise.resolve(\"k\")] = 1; }",
+        "@(await Promise.resolve(f)) class A {}",
+        "class A { @(await Promise.resolve(f)) m() {} }",
+        "await using x = null;",
+        "for (await using x of []) {}",
+    ] {
+        let alloc = Allocator::default();
+        let p = parse_program(&alloc, source);
+        assert!(p.diagnostics.is_empty(), "{source}: {:?}", p.diagnostics);
+        assert!(p.source_type.is_module(), "{source}");
+    }
+}
+
+#[test]
+fn an_await_call_beside_class_body_functions_in_a_script_stays_a_script() {
+    for source in [
+        "function await(x) { return x; }\nclass A { static { var f = async () => await 1; } }\nawait(2);",
+        "function await(x) { return x; }\nclass A { m = async () => await 1; }\nawait(2);",
+        "function await(x) { return x; }\nclass A { async m() { await 1; } }\nawait(2);",
+    ] {
+        let alloc = Allocator::default();
+        let p = parse_program(&alloc, source);
+        assert!(p.diagnostics.is_empty(), "{source}: {:?}", p.diagnostics);
+        assert!(!p.source_type.is_module(), "{source}");
+    }
+}

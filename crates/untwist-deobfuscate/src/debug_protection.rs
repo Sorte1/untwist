@@ -9,7 +9,7 @@ use untwist_core::ast_util::global::{global_is_written, is_global_reference};
 use untwist_core::ast_util::matcher::{call_parts, statement_iife, var_function_or_declaration};
 use untwist_core::pass::{Cx, Interest, Pass};
 
-use crate::bindings::{has_stray_reference, reference_symbol};
+use crate::bindings::{has_stray_reference, reaches_a_script_global, reference_symbol};
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
 use crate::notes;
@@ -175,7 +175,9 @@ fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
     intervals.visit_program(program);
     let mut spans = declarations.spans;
     spans.extend(intervals.spans);
-    if has_stray_reference(program, &declarations.symbols, &spans, scoping) {
+    if has_stray_reference(program, &declarations.symbols, &spans, scoping)
+        || reaches_a_script_global(&declarations.symbols, &spans, program, scoping)
+    {
         return Plan::Refused;
     }
     Plan::Remove(spans)

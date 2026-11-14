@@ -1,7 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
-use oxc_span::GetSpan;
+use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
@@ -269,7 +269,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
     pub(super) fn collect(
         program: &'a Program<'a>,
         scoping: &'s Scoping,
-        tracks_calls: bool,
+        (tracks_calls, exempt): (bool, &[Span]),
         resolve: Resolve<'_>,
     ) -> Self {
         let mut bindings = Self {
@@ -285,7 +285,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             map_rebind: false,
             unsealed_maps: FxHashSet::default(),
             map_uses: native_map::MapUses::default(),
-            sources: Sources::new(program),
+            sources: Sources::new(program, exempt),
             bound_methods: bound_this::bound_methods(program, scoping, resolve),
             calls_of: Vec::new(),
             params: FxHashMap::default(),
@@ -401,7 +401,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
         }
     }
 
-    pub(super) fn reads_a_proven_getter(&self, span: oxc_span::Span) -> bool {
+    pub(super) fn reads_a_proven_getter(&self, span: Span) -> bool {
         self.getter_reads.contains(&super::sites::span_key(span))
     }
 

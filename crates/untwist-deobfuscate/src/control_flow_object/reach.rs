@@ -3,11 +3,13 @@ use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{
     has_module_syntax, may_call_eval, observing_open, open_eval_sites, with_observes,
 };
 
+use crate::bindings::reaches_a_script_global;
 use crate::calls::agnostic::names_reachable_from;
 use crate::notes;
 
@@ -44,17 +46,24 @@ fn globals_reached(
     scoping: &Scoping,
     candidates: &[DeclaredObject],
 ) -> bool {
-    let mut names: Vec<&str> = candidates
+    let script_globals: FxHashSet<SymbolId> = candidates
         .iter()
-        .filter(|candidate| is_script_global(program, scoping, candidate.symbol))
-        .map(|candidate| scoping.symbol_name(candidate.symbol))
+        .map(|candidate| candidate.symbol)
+        .filter(|symbol| is_script_global(program, scoping, *symbol))
+        .collect();
+    let mut names: Vec<&str> = script_globals
+        .iter()
+        .map(|symbol| scoping.symbol_name(*symbol))
         .collect();
     if names.is_empty() {
         return false;
     }
     names.sort_unstable();
     names.dedup();
-    observing_open(|| names_reachable_from(program, scoping, &names))
+    observing_open(|| {
+        names_reachable_from(program, scoping, &names)
+            || reaches_a_script_global(&script_globals, &[], program, scoping)
+    })
 }
 
 impl Reach {

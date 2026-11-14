@@ -109,7 +109,7 @@ pub struct Machinery {
 }
 
 impl Machinery {
-    fn statements(&self) -> Vec<Span> {
+    pub(crate) fn statements(&self) -> Vec<Span> {
         let mut spans = Vec::new();
         spans.extend(self.array);
         spans.extend(self.rotator);

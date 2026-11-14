@@ -2,7 +2,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{block_function_symbols, declared_in_block, AnnexBWrites};
@@ -99,6 +99,44 @@ pub fn has_stray_reference(
     };
     stray.visit_program(program);
     stray.found
+}
+
+pub fn reaches_a_script_global(
+    symbols: &FxHashSet<SymbolId>,
+    removed: &[Span],
+    program: &Program<'_>,
+    scoping: &Scoping,
+) -> bool {
+    if program.source_type.is_module() || untwist_core::semantic::has_module_syntax(program) {
+        return false;
+    }
+    let root = scoping.root_scope_id();
+    let properties = SymbolFlags::FunctionScopedVariable.union(SymbolFlags::Function);
+    let mut names: Vec<&str> = Vec::new();
+    let mut props: Vec<&str> = Vec::new();
+    for symbol in symbols.iter().copied() {
+        if scoping.symbol_scope_id(symbol) != root {
+            continue;
+        }
+        let name = scoping.symbol_name(symbol);
+        names.push(name);
+        if scoping.symbol_flags(symbol).intersects(properties) {
+            props.push(name);
+        }
+    }
+    for list in [&mut names, &mut props] {
+        list.sort_unstable();
+        list.dedup();
+    }
+    let mut outside: Vec<Span> = crate::removal::machinery_units(program)
+        .iter()
+        .flat_map(crate::removal::Machinery::statements)
+        .collect();
+    outside.extend_from_slice(removed);
+    let found = untwist_core::semantic::observing_open(|| {
+        crate::calls::agnostic::names_reached_outside(program, scoping, (&names, &props), &outside)
+    });
+    found.reached || (found.observed && !props.is_empty())
 }
 
 pub fn unexposed_globals<T>(
