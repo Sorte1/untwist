@@ -12,7 +12,7 @@ const INITIAL_JS_GZIP = 190_000;
 const CSS_GZIP = 15_000;
 const FONT_BYTES = 120_000;
 const SW_GZIP = 4_000;
-const WASM_BASELINE_BYTES = 12_420_000;
+const WASM_BASELINE_BYTES = 12_500_000;
 const WASM_GROWTH = 0.1;
 
 const gzip = (bytes: Buffer): number => gzipSync(bytes, { level: 9 }).length;

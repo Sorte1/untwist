@@ -199,6 +199,7 @@ fn merge_webpack<'a>(merged: &mut Bundle<'a>, bundle: Bundle<'a>, notes: &mut Ve
     merged.runs_deferred |= bundle.runs_deferred;
     merged.chunk_started |= bundle.chunk_started;
     merged.chunk_modules.extend(bundle.chunk_modules);
+    merged.chunk_files.extend(bundle.chunk_files);
     merged.startup_chunks.extend(bundle.startup_chunks);
     merged.installed_chunks.extend(bundle.installed_chunks);
     if merged.entry_id.is_none() {

@@ -156,6 +156,15 @@ pub struct Bundle<'a> {
     pub startup_chunks: Vec<String>,
     pub runs_deferred: bool,
     pub chunk_started: bool,
+    pub chunk_files: Vec<ChunkFile>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ChunkFile {
+    pub ids: Vec<String>,
+    pub modules: Vec<String>,
+    pub eager: bool,
+    pub framed: bool,
 }
 
 impl<'a> Bundle<'a> {
@@ -180,6 +189,7 @@ impl<'a> Bundle<'a> {
             startup_chunks: Vec::new(),
             runs_deferred: false,
             chunk_started: false,
+            chunk_files: Vec::new(),
         }
     }
 

@@ -273,7 +273,7 @@ impl<'a> VisitJs<'a> for OwnArguments {
     }
 }
 
-fn own_arguments(body: &FunctionBody<'_>) -> bool {
+pub fn own_arguments(body: &FunctionBody<'_>) -> bool {
     let mut scan = OwnArguments::default();
     scan.visit_function_body(body);
     scan.found

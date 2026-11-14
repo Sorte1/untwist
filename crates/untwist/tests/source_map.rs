@@ -6,6 +6,13 @@ const STRING_ARRAY: &str =
 const CONTROL_FLOW: &str =
     include_str!("../../../fixtures/reference/deobfuscate/obfuscator.io-control-flow.js");
 const WEBPACK_4: &str = include_str!("../../../fixtures/reference/unpack/webpack-4.js");
+const MODULE_VALUE: &str = "console.log(e);";
+const MODULE_EXPORTS: &str = "console.log(e.exports);";
+
+fn webpack_4() -> String {
+    assert!(WEBPACK_4.contains(MODULE_VALUE));
+    WEBPACK_4.replacen(MODULE_VALUE, MODULE_EXPORTS, 1)
+}
 const UNMINIFY: &str = "var a=1,b=2;if(a)b(),a(),c();for(var i=0;i<3;i++)x+=i;";
 
 fn options(source_map: bool) -> Options {
@@ -90,7 +97,8 @@ fn source_text_at(source: &str, (line, column): (u32, u32)) -> &str {
 
 #[test]
 fn the_source_map_flag_leaves_the_output_untouched() {
-    for source in [STRING_ARRAY, CONTROL_FLOW, WEBPACK_4, UNMINIFY] {
+    let webpack = webpack_4();
+    for source in [STRING_ARRAY, CONTROL_FLOW, webpack.as_str(), UNMINIFY] {
         let plain = Pipeline::new(options(false)).run(source);
         let with_map = mapped(source);
         assert_eq!(plain.codes, with_map.codes);
@@ -189,12 +197,13 @@ fn a_folded_call_maps_to_the_call_it_replaced() {
 
 #[test]
 fn every_unpacked_module_gets_a_map_into_the_bundle() {
-    let output = mapped(WEBPACK_4);
+    let source = webpack_4();
+    let output = mapped(&source);
     let bundle = output.bundle.as_ref().expect("the bundle unpacks");
     assert!(!bundle.modules.is_empty());
     for module in &bundle.modules {
         let map = reparsed(module.map.as_ref().expect("a module map"));
-        assert_in_range(&map, &module.code, WEBPACK_4);
+        assert_in_range(&map, &module.code, &source);
         assert_eq!(map.get_source(0), Some(source_map::SOURCE_NAME));
         assert_eq!(map.get_source_content(0), None);
     }
@@ -202,7 +211,8 @@ fn every_unpacked_module_gets_a_map_into_the_bundle() {
 
 #[test]
 fn a_module_string_maps_to_the_same_string_in_the_bundle() {
-    let output = mapped(WEBPACK_4);
+    let source = webpack_4();
+    let output = mapped(&source);
     let bundle = output.bundle.as_ref().expect("the bundle unpacks");
     let module = bundle
         .modules
@@ -213,15 +223,16 @@ fn a_module_string_maps_to_the_same_string_in_the_bundle() {
     let (line, column) = position_of(&module.code, "\"#FBC02D\"");
     let origin = original_at(&map, line, column);
     assert!(
-        source_text_at(WEBPACK_4, origin).starts_with("'#FBC02D'"),
+        source_text_at(&source, origin).starts_with("'#FBC02D'"),
         "{:?}",
-        source_text_at(WEBPACK_4, origin)
+        source_text_at(&source, origin)
     );
 }
 
 #[test]
 fn a_rewritten_require_maps_to_the_module_id_it_replaced() {
-    let output = mapped(WEBPACK_4);
+    let source = webpack_4();
+    let output = mapped(&source);
     let bundle = output.bundle.as_ref().expect("the bundle unpacks");
     let module = bundle
         .modules
@@ -232,9 +243,9 @@ fn a_rewritten_require_maps_to_the_module_id_it_replaced() {
     let (line, column) = position_of(&module.code, "\"./3.js\"");
     let origin = original_at(&map, line, column);
     assert!(
-        source_text_at(WEBPACK_4, origin).starts_with("3)"),
+        source_text_at(&source, origin).starts_with("3)"),
         "{:?}",
-        source_text_at(WEBPACK_4, origin)
+        source_text_at(&source, origin)
     );
 }
 
@@ -336,9 +347,10 @@ fn several_inputs_name_their_own_source() {
 fn written_files_carry_a_map_and_a_link() {
     let dir = tempfile::tempdir().expect("tempdir");
     let input = dir.path().join("bundle.js");
-    std::fs::write(&input, WEBPACK_4).expect("write input");
+    let source = webpack_4();
+    std::fs::write(&input, &source).expect("write input");
     let out_dir = dir.path().join("out");
-    let mut output = mapped(WEBPACK_4);
+    let mut output = mapped(&source);
     output.source_map_link = Some(MapLink::File);
     output
         .write_to_with(&out_dir, std::slice::from_ref(&input), false)

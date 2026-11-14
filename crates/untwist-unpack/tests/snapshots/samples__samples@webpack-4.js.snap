@@ -3,22 +3,4 @@ source: crates/untwist-unpack/tests/samples.rs
 expression: rendered
 input_file: fixtures/reference/unpack/webpack-4.js
 ---
-type: webpack
-entry: 2
-
-=== 1 -> 1.js
-const a = require("./3.js");
-
-=== 2 -> index.js (entry)
-const a = require("./1.js");
-const _module = 1;
-module.exports.color = "#FBC02D";
-{
-  const _module2 = 2;
-  console.log(_module2);
-  console.log(module);
-}
-exports.a = 3;
-
-=== 3 -> 3.js
-module.exports = 4;
+no bundle
