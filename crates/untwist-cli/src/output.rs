@@ -172,6 +172,65 @@ fn elapsed_of(stage: &untwist::StageReport, pass: &str) -> f64 {
         .map_or(0.0, |(_, elapsed)| elapsed.as_secs_f64() * 1000.0)
 }
 
+const NODE_MODULES: &str = "node_modules/";
+
+fn package_of(path: &str) -> Option<&str> {
+    let rest = path.strip_prefix(NODE_MODULES)?;
+    let mut parts = rest.splitn(3, '/');
+    let first = parts.next().filter(|part| !part.is_empty())?;
+    if !first.starts_with('@') {
+        return parts.next().map(|_| first);
+    }
+    let second = parts.next().filter(|part| !part.is_empty())?;
+    parts.next()?;
+    Some(&rest[..first.len() + 1 + second.len()])
+}
+
+fn modules_noun(count: usize) -> &'static str {
+    if count == 1 {
+        "module"
+    } else {
+        "modules"
+    }
+}
+
+fn module_split_line(output: &Output) -> Option<String> {
+    let bundle = output.bundle.as_ref()?;
+    let mut packages: Vec<(&str, usize)> = Vec::new();
+    for module in &bundle.modules {
+        let Some(name) = package_of(&module.path) else {
+            continue;
+        };
+        match packages.iter_mut().find(|(known, _)| *known == name) {
+            Some((_, count)) => *count += 1,
+            None => packages.push((name, 1)),
+        }
+    }
+    if packages.is_empty() {
+        return None;
+    }
+    packages.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+    let libraries = output.libraries();
+    let parts: Vec<String> = packages
+        .iter()
+        .map(|(name, count)| {
+            let range = libraries
+                .iter()
+                .find(|summary| summary.library == *name && !summary.range.is_empty())
+                .map_or(String::new(), |summary| format!(" {}", summary.range));
+            format!("{}{range}: {count}", printable(name))
+        })
+        .collect();
+    let library = packages.iter().map(|(_, count)| count).sum::<usize>();
+    let app = bundle.modules.len() - library;
+    Some(format!(
+        "modules: {app} app {}, {library} library {} ({})\n",
+        modules_noun(app),
+        modules_noun(library),
+        parts.join(", ")
+    ))
+}
+
 pub fn text_report(output: &Output, limits: Limits) -> String {
     let mut text = String::new();
     for stage in &output.stages {
@@ -209,6 +268,9 @@ pub fn text_report(output: &Output, limits: Limits) -> String {
             bundle.modules.len(),
             printable(bundle.entry_id.as_deref().unwrap_or("none"))
         ));
+    }
+    if let Some(line) = module_split_line(output) {
+        text.push_str(&line);
     }
     text.push_str(&format!("parse_errors: {}\n", output.parse_errors));
     if !output.depth_refused.is_empty() {
@@ -341,6 +403,24 @@ mod tests {
         );
         assert!(super::text_report(&out, Limits::default())
             .ends_with("refusal_span: 3:7 GLOBAL_REACH\n"));
+    }
+
+    #[test]
+    fn a_library_package_is_read_from_its_node_modules_path() {
+        use super::package_of;
+        assert_eq!(
+            package_of("node_modules/core-js/internals/export.js"),
+            Some("core-js")
+        );
+        assert_eq!(
+            package_of("node_modules/@babel/runtime/helpers/typeof.js"),
+            Some("@babel/runtime")
+        );
+        assert_eq!(package_of("node_modules/core-js"), None);
+        assert_eq!(package_of("node_modules/@babel/runtime"), None);
+        assert_eq!(package_of("node_modules//a.js"), None);
+        assert_eq!(package_of("src/node_modules/x/a.js"), None);
+        assert_eq!(package_of("index.js"), None);
     }
 
     #[test]

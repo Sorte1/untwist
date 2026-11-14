@@ -136,3 +136,88 @@ fn a_default_lane_alias_refusal_prints_the_unsafe_hint_on_stderr() {
         .any(|note| note.as_str().is_some_and(|text| text.ends_with(hint)));
     assert!(noted, "{}", report["notes"]);
 }
+
+#[test]
+fn the_text_report_counts_app_and_library_modules_of_a_split_bundle() {
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/libraries/core-js/rollup-cjs.terser.js"
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let out = common::bin()
+        .args([
+            "--split-hoisted",
+            "--split-assume-modules",
+            "--report",
+            "text",
+            "-o",
+        ])
+        .arg(dir.path().join("out"))
+        .arg(fixture)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let report = String::from_utf8_lossy(&out.stderr).into_owned();
+    let line = report
+        .lines()
+        .find(|line| line.starts_with("modules: "))
+        .unwrap_or_else(|| panic!("no modules line in {report}"));
+    let (counts, libraries) = line
+        .strip_prefix("modules: ")
+        .and_then(|rest| rest.split_once(" ("))
+        .unwrap_or_else(|| panic!("{line}"));
+    let (app, library) = counts.split_once(", ").unwrap();
+    let app: usize = app.split(' ').next().unwrap().parse().unwrap();
+    let library: usize = library.split(' ').next().unwrap().parse().unwrap();
+    assert!(counts.ends_with("library modules"), "{line}");
+    assert!(library > 0, "{line}");
+    let core_js = libraries
+        .strip_suffix(')')
+        .unwrap()
+        .split(", ")
+        .find(|part| part.starts_with("core-js 3."))
+        .unwrap_or_else(|| panic!("{line}"));
+    let core_js_count: usize = core_js.rsplit(": ").next().unwrap().parse().unwrap();
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join("out/bundle.json")).unwrap())
+            .unwrap();
+    let paths: Vec<&str> = json["modules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|module| module["path"].as_str().unwrap())
+        .collect();
+    let under_core_js = paths
+        .iter()
+        .filter(|path| path.starts_with("node_modules/core-js/"))
+        .count();
+    let under_node_modules = paths
+        .iter()
+        .filter(|path| path.starts_with("node_modules/"))
+        .count();
+    assert_eq!(core_js_count, under_core_js, "{line}");
+    assert_eq!(library, under_node_modules, "{line}");
+    assert_eq!(app + library, paths.len(), "{line}");
+    assert!(dir.path().join("out/node_modules/core-js").is_dir());
+}
+
+#[test]
+fn the_text_report_has_no_modules_line_without_library_modules() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.js");
+    std::fs::write(&input, common::WEBPACK_4).unwrap();
+    let out = common::bin()
+        .args(["--report", "text", "-o"])
+        .arg(dir.path().join("out"))
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let report = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(report.contains("bundle: "), "{report}");
+    assert!(!report.contains("\nmodules: "), "{report}");
+}
