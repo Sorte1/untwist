@@ -52,7 +52,7 @@ struct Extract<'a, 'p, 'b> {
     scoping: Option<Scoping>,
     unproven: &'b mut Option<String>,
     merged: bool,
-    legacy: Option<Option<&'static str>>,
+    legacy: Option<bool>,
     plain: Vec<String>,
 }
 
@@ -74,9 +74,17 @@ fn factory_buildins(factories: &[(String, Factory<'_, '_>)]) -> FxHashMap<String
 }
 
 impl<'a> Extract<'a, '_, '_> {
-    fn legacy(&mut self) -> Option<&'static str> {
+    fn legacy(&mut self) -> bool {
+        if let Some(known) = self.legacy {
+            return known;
+        }
         let source = self.source;
-        *self.legacy.get_or_insert_with(|| legacy_read(source))
+        let scoping = self
+            .scoping
+            .get_or_insert_with(|| build_scoping(source).scoping);
+        let found = legacy_read(source, Some(scoping));
+        self.legacy = Some(found);
+        found
     }
 
     fn closed(&mut self, factories: Option<Vec<(String, Factory<'_, 'a>)>>) -> bool {
@@ -95,9 +103,8 @@ impl<'a> Extract<'a, '_, '_> {
             return true;
         }
         let source = self.source;
-        if let (false, Some(member)) = (self.options.trust_legacy_reads, self.legacy()) {
-            self.unproven
-                .get_or_insert_with(|| crate::notes::legacy_read(member));
+        if !self.options.trust_legacy_reads && self.legacy() {
+            self.unproven.get_or_insert_with(crate::notes::legacy_read);
             return false;
         }
         let scoping = self
@@ -122,7 +129,7 @@ impl<'a> Extract<'a, '_, '_> {
         if self.options.conservative {
             return true;
         }
-        let legacy = self.legacy().is_some();
+        let legacy = !self.options.trust_legacy_reads && self.legacy();
         let (Some(factories), Some(scoping)) = (factories, self.scoping.as_ref()) else {
             return true;
         };
@@ -580,9 +587,18 @@ fn extract_kinds<'a>(
     bodies: &mut Bodies<'a>,
     (options, links, scope): (UnpackOptions, &Links, Scope),
 ) -> Option<Bundle<'a>> {
-    if legacy_refused(program, options, None).is_some() {
+    if legacy_refused(program, options, links.legacy) {
         return None;
     }
+    kinds_of(alloc, program, bodies, (options, links, scope))
+}
+
+fn kinds_of<'a>(
+    alloc: &'a Allocator,
+    program: &Program<'a>,
+    bodies: &mut Bodies<'a>,
+    (options, links, scope): (UnpackOptions, &Links, Scope),
+) -> Option<Bundle<'a>> {
     let frame = Frame::of(program);
     kinds(options, scope).find_map(|(_, _, detect)| {
         attempt(bodies, |bodies| {
@@ -610,7 +626,7 @@ fn extract_with<'a>(
             scoping: None,
             unproven,
             merged: links.merged,
-            legacy: None,
+            legacy: links.legacy,
             plain: Vec::new(),
         },
     };
@@ -625,24 +641,20 @@ fn extract_with<'a>(
     if bundle.is_some() {
         return bundle;
     }
-    if let Some(member) = legacy_refused(program, options, legacy) {
+    if legacy_refused(program, options, legacy) {
         if refused_kind(program, options).is_some() {
-            unproven.get_or_insert_with(|| crate::notes::legacy_read(member));
+            unproven.get_or_insert_with(crate::notes::legacy_read);
         }
         return None;
     }
-    extract_kinds(alloc, program, bodies, (options, links, scope))
+    kinds_of(alloc, program, bodies, (options, links, scope))
 }
 
-fn legacy_refused(
-    program: &Program<'_>,
-    options: UnpackOptions,
-    known: Option<Option<&'static str>>,
-) -> Option<&'static str> {
+fn legacy_refused(program: &Program<'_>, options: UnpackOptions, known: Option<bool>) -> bool {
     if options.trust_legacy_reads || options.conservative {
-        return None;
+        return false;
     }
-    known.unwrap_or_else(|| legacy_read(program))
+    known.unwrap_or_else(|| legacy_read(program, None))
 }
 
 fn cloned<'a>(

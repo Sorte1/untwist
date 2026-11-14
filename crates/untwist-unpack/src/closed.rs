@@ -4,7 +4,8 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
-use untwist_core::semantic::{closed_eval_names, is_closed_eval_at};
+use untwist_core::ast_util::frame_reads::spells_function_frame;
+use untwist_core::semantic::{build_scoping, closed_eval_names, is_closed_eval_at};
 
 use crate::matcher::Factory;
 use crate::scan::{is_direct_eval, is_free, Frame, Policy, Scan, Step, Suspend};
@@ -464,45 +465,16 @@ impl<'a> VisitJs<'a> for HostReads<'_, '_> {
 
 const LEGACY_MEMBERS: [&str; 2] = ["caller", "arguments"];
 
-pub fn legacy_read(program: &Program<'_>) -> Option<&'static str> {
-    let text = program.source_text;
-    let spelled = LEGACY_MEMBERS.iter().any(|name| text.contains(name)) || text.contains("\\u");
-    if !spelled {
-        return None;
-    }
-    let mut reads = LegacyReads::default();
-    reads.visit_program(program);
-    reads.found
+fn spells_legacy(text: &str) -> bool {
+    LEGACY_MEMBERS.iter().any(|name| text.contains(name)) || text.contains("\\u")
 }
 
-#[derive(Default)]
-struct LegacyReads {
-    found: Option<&'static str>,
-}
-
-impl LegacyReads {
-    fn note(&mut self, name: &str) {
-        if self.found.is_none() {
-            self.found = LEGACY_MEMBERS
-                .iter()
-                .find(|legacy| **legacy == name)
-                .copied();
-        }
+pub fn legacy_read(program: &Program<'_>, scoping: Option<&Scoping>) -> bool {
+    if !spells_legacy(program.source_text) {
+        return false;
     }
-}
-
-impl<'a> VisitJs<'a> for LegacyReads {
-    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
-        self.note(it.property.name.as_str());
-        oxc_ast_visit::walk_js::walk_static_member_expression(self, it);
-    }
-
-    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        if let Expression::StringLiteral(key) = it.expression.without_parentheses() {
-            if let Some(name) = key.value.as_str() {
-                self.note(name);
-            }
-        }
-        oxc_ast_visit::walk_js::walk_computed_member_expression(self, it);
+    match scoping {
+        Some(scoping) => spells_function_frame(program, scoping),
+        None => spells_function_frame(program, &build_scoping(program).scoping),
     }
 }
