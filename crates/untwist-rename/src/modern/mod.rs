@@ -1,10 +1,13 @@
 pub mod baseline;
 pub mod collect;
 pub mod compat;
+pub mod dead;
 pub mod edit;
+pub mod inert;
 pub mod lookalike;
 pub mod pass;
 pub mod plan;
+pub mod pure;
 pub mod regions;
 pub mod report;
 pub mod rewrite;

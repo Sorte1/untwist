@@ -3,7 +3,7 @@ use super::plan::{Installer, Keep};
 
 pub fn assumption(baseline: &Baseline) -> String {
     format!(
-        "the output assumes an engine at least as new as {} (--modern {}), with its own built-ins; core-js polyfills of features native there are removed",
+        "the output assumes an engine at least as new as {} (--modern {}), with its own built-ins, read when the code runs and not replaced after core-js loaded; core-js polyfills of features native there are removed",
         baseline.describe(),
         baseline.text()
     )
@@ -34,6 +34,7 @@ fn reason(keep: &Keep) -> String {
         Keep::NotRun => "it is not run as a statement".to_string(),
         Keep::SharedState => "it shares state with other code".to_string(),
         Keep::TextRead => "code may read its function text".to_string(),
+        Keep::RunsKept => "it runs a core-js module that is kept".to_string(),
     }
 }
 

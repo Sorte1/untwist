@@ -9,10 +9,15 @@ pub struct Regions {
 
 impl Regions {
     fn enclosing(&self, span: Span) -> bool {
+        self.enclosing_start(span).is_some()
+    }
+
+    pub fn enclosing_start(&self, span: Span) -> Option<u32> {
         self.spans
             .range(..=span.start)
             .next_back()
-            .is_some_and(|(_, end)| span.end <= *end)
+            .filter(|(_, end)| span.end <= **end)
+            .map(|(start, _)| *start)
     }
 
     pub fn insert(&mut self, span: Span) -> Option<Vec<Span>> {

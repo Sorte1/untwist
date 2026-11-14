@@ -50,6 +50,7 @@ pub struct Facts {
     pub discarded: Vec<Discarded>,
     pub function_binding: FxHashMap<Span, SymbolId>,
     pub trivial: Vec<Span>,
+    pub trivial_true: rustc_hash::FxHashSet<Span>,
     pub dynamic: bool,
 }
 
@@ -313,8 +314,11 @@ impl Collector<'_> {
             Statement::FunctionDeclaration(function) => {
                 if let Some(symbol) = function.id.as_ref().and_then(|id| id.symbol_id.get()) {
                     self.note_decl(symbol, function.span, DeclKind::Function);
-                    if super::trivial::is_trivial(function) {
+                    if let Some(value) = super::trivial::wrapper(function) {
                         self.facts.trivial.push(function.span);
+                        if value == super::trivial::Value::True {
+                            self.facts.trivial_true.insert(function.span);
+                        }
                     }
                 }
                 return;
