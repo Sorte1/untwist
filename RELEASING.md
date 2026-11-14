@@ -11,6 +11,15 @@ build and `npm ci --prefix tools/bundle-matrix --ignore-scripts`, takes about a 
 `--jobs 16` and is too slow for CI with a debug build, so run it before a release. It must end
 with 0 failed and 0 unexpected-pass.
 
+`cargo xtask obf-matrix` runs every file in `fixtures/obfuscated/` and `fixtures/real-shapes/`
+(and the obfuscator.io, corpus-npm and deobfuscate-gaps files) through both lanes, four rename
+modes and three output forms, and checks that each cell runs, decodes, unpacks and never leaves
+more residue in `--unsafe` than in the default lane. `cargo xtask obf-options` and
+`cargo xtask obf-options --dir fixtures/obfuscator-versions` check the option and version
+matrices; write `--baseline` to a scratch file and compare it with the dir's `BASELINE`. All
+three need a release build and node and are not run by CI. Each must end with 0 failed and
+0 unexpected-pass, and a `BASELINE` that moved is refreshed in its own PR.
+
 ## Steps
 
 ```sh
