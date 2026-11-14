@@ -31,6 +31,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `unpack-rolldown/` | rolldown 1.x and Vite 8 output from `tools/rolldown/gen.mjs` (formats, minify, code splitting, keepNames, treeshake) with each cell's stdout; `EXPECT` and `XFAIL` | `crates/untwist-cli/tests/rolldown_tree.rs` |
 | `unpack-gaps/` | Hand-written bundles for known unpacking gaps | `crates/untwist-unpack/tests/` |
 | `untranspile/` | TypeScript, swc, Babel, esbuild and terser output from `tools/untranspile/gen.mjs` (`params/` from `tools/untranspile-params/gen.mjs`), as programs that print | `cargo xtask diff-behaviour`, `crates/untwist-unminify/tests/` |
+| `webpack-buildin/` | webpack 4.47.0 bundles whose modules go through `buildin/module.js` and `buildin/harmony-module.js` (a UMD wrapper, `.loaded` reads, an ESM module handing `module` on; `w4-negative-*` read `.id`, `.children` or a harmony `.exports`), dev, production and minified, web and node, from `tools/webpack-variants/buildin.mjs`, each with its stdout; `MANIFEST` lists each | `crates/untwist/tests/webpack_buildin.rs` |
 | `webpack-eval/` | webpack 4/5 output in every `eval*` devtool, the development default, production with `devtool: eval` and the web target, from `tools/webpack-eval/gen.mjs`; `MANIFEST` lists each | `crates/untwist/tests/webpack_eval.rs` |
 | `webpack-soundness/` | Hand-edited webpack 5.112 inputs (stock runtime from `webpack-variants/`, own entry, chunk or wrapper) that a merged tree would run differently; `EXPECT` says refused or runs | `crates/untwist/tests/webpack_soundness.rs`, which runs input and tree in node |
 | `write-tree/` | Multi-file bundler output (an entry with a lazy chunk) copied from the `bundle-matrix/` cells of the same name, `tools/bundle-matrix/`; `expected/` holds what the original prints | `crates/untwist-cli/tests/write_tree.rs`, which runs the `-o` tree in node |
@@ -49,6 +50,6 @@ javascript-obfuscator 5 emits. Their `.snap` files hold the program before obfus
 
 Put the file in the folder whose test should pick it up, name it after the shape it covers, and make
 it print what it computes so node can check it. Generated folders (`eval/`, `corpus-npm/`,
-`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `rollup-commonjs/`, `unpack-bundlers/`, `unpack-rolldown/`, `bundle-matrix/`, `untranspile/`) are rewritten by their generator, so change the
+`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `rollup-commonjs/`, `unpack-bundlers/`, `unpack-rolldown/`, `bundle-matrix/`, `untranspile/`, `webpack-buildin/`) are rewritten by their generator, so change the
 generator instead. Run the folder's test or differential; add an allowlist entry only for a
 divergence documented in `docs/known-divergences/`.

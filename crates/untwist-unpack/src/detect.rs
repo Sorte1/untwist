@@ -15,6 +15,7 @@ use crate::links::Links;
 use crate::matcher::Factory;
 use crate::model::{body_key, Bodies, BodyKey, Bundle, BundleKind};
 use crate::notes::{factory_not_closed, module_object_used, require_not_shared};
+use crate::webpack::buildin::{polyfill_ids, Buildin};
 use crate::webpack::chunk::{
     chunk_factories, detect_exports_chunk_noted, detect_webpack_chunk_noted,
     exports_chunk_factories, is_exports_chunk, is_webpack_chunk,
@@ -43,6 +44,23 @@ struct Extract<'a, 'p, 'b> {
     scoping: Option<Scoping>,
     unproven: &'b mut Option<String>,
     merged: bool,
+}
+
+fn factory_buildins(factories: &[(String, Factory<'_, '_>)]) -> FxHashMap<String, Buildin> {
+    polyfill_ids(factories.iter().filter_map(|(id, factory)| {
+        if !factory.body.directives.is_empty() {
+            return None;
+        }
+        let first = factory.params.items.first()?;
+        let BindingPattern::BindingIdentifier(module) = &first.pattern else {
+            return None;
+        };
+        Some((
+            id.as_str(),
+            factory.body.statements.as_slice(),
+            module.name.as_str(),
+        ))
+    }))
 }
 
 impl<'a> Extract<'a, '_, '_> {
@@ -82,8 +100,9 @@ impl<'a> Extract<'a, '_, '_> {
         if self.options.conservative {
             return true;
         }
+        let buildins = factory_buildins(&factories);
         let Some((id, what)) = factories.iter().find_map(|(id, factory)| {
-            module_object_use(scoping, factory).map(|what| (id.clone(), what))
+            module_object_use(scoping, factory, &buildins).map(|what| (id.clone(), what))
         }) else {
             return true;
         };
