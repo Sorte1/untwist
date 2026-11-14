@@ -8,6 +8,7 @@ import type { Store } from '../store';
 type BooleanKey = 'unpack' | 'jsx' | 'unsafe' | 'deob' | 'unmin' | 'human' | 'single' | 'libs' | 'split' | 'assume' | 'smap' | 'imap';
 
 const COPIED_MS = 1200;
+const MODERN_CUSTOM = 'custom';
 
 function change(store: Store<AppState>, patch: Partial<Settings>): void {
   store.update((state) => ({ ...state, settings: { ...state.settings, ...patch } }));
@@ -52,16 +53,20 @@ function wireNumbers(store: Store<AppState>): void {
   memory.addEventListener('input', () => change(store, { mem: count(memory.value) }));
   const time = byId<HTMLInputElement>('time-limit');
   time.addEventListener('input', () => change(store, { time: count(time.value) }));
-  const preset = byId<HTMLSelectElement>('modern-preset');
-  preset.addEventListener('change', () => {
-    const custom = preset.value === 'custom';
-    byId('modern').hidden = !custom;
-    if (custom) {
-      byId('modern').focus();
-    } else {
-      change(store, { modern: preset.value });
-    }
-  });
+  for (const button of modernButtons()) {
+    button.addEventListener('click', () => {
+      const preset = button.dataset['preset'] ?? '';
+      const custom = preset === MODERN_CUSTOM;
+      const modern = byId('modern');
+      modern.hidden = !custom;
+      pressModern(preset);
+      if (custom) {
+        modern.focus();
+      } else {
+        change(store, { modern: preset });
+      }
+    });
+  }
   const modern = byId<HTMLInputElement>('modern');
   modern.addEventListener('input', () => {
     modern.setCustomValidity(MODERN_CHARS.test(modern.value) ? '' : 'Use letters, digits, spaces, commas, dots, @, _ or -');
@@ -71,14 +76,21 @@ function wireNumbers(store: Store<AppState>): void {
   });
 }
 
-function paintModern(value: string): void {
-  const preset = byId<HTMLSelectElement>('modern-preset');
-  const modern = byId<HTMLInputElement>('modern');
-  const known = MODERN_PRESETS.includes(value);
-  if (!(preset.value === 'custom' && !modern.hidden)) {
-    preset.value = known ? value : 'custom';
-    modern.hidden = known;
+function modernButtons(): NodeListOf<HTMLButtonElement> {
+  return document.querySelectorAll<HTMLButtonElement>('#modern-group .seg-btn');
+}
+
+function pressModern(preset: string): void {
+  for (const button of modernButtons()) {
+    button.setAttribute('aria-pressed', String(button.dataset['preset'] === preset));
   }
+}
+
+function paintModern(value: string): void {
+  const modern = byId<HTMLInputElement>('modern');
+  const shown = !modern.hidden || !MODERN_PRESETS.includes(value) ? MODERN_CUSTOM : value;
+  modern.hidden = shown !== MODERN_CUSTOM;
+  pressModern(shown);
   if (modern.value !== value) {
     modern.value = value;
   }
