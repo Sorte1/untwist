@@ -85,8 +85,15 @@ fn a_guarded_bundle_directory_helper_moves_to_the_runtime_module() {
 }
 
 #[test]
+fn a_loader_that_is_not_browser_packs_is_no_browserify_bundle() {
+    let source = fixture("browserify-cocos2d.js");
+    let alloc = Allocator::default();
+    assert!(bundle_from(&alloc, &source).is_none());
+}
+
+#[test]
 fn browserify_bundles_are_found() {
-    for name in ["browserify.js", "browserify-2.js", "browserify-cocos2d.js"] {
+    for name in ["browserify.js", "browserify-2.js"] {
         let (kind, entry_id, modules) = detect(name);
         assert_eq!(kind, BundleKind::Browserify, "{name}");
         assert!(entry_id.is_some(), "{name}");

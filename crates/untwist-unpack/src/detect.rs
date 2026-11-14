@@ -8,7 +8,10 @@ use untwist_core::semantic::build_scoping;
 use crate::browserify::detect::BROWSERIFY_PARAMS;
 use crate::browserify::detect::{
     browserify_factories, detect_browserify_with, is_browserify, rebound_require, unlinked_require,
+    unproven_bundle,
 };
+use crate::browserify::host::host_object_use;
+use crate::browserify::notes::{host_object, not_proven};
 use crate::closed::{first_host_read, first_open};
 use crate::frame::Frame;
 use crate::links::Links;
@@ -126,6 +129,39 @@ impl<'a> Extract<'a, '_, '_> {
 }
 
 impl Extract<'_, '_, '_> {
+    fn browserify_proven(&mut self, expr: &Expression<'_>) -> bool {
+        if self.options.conservative {
+            return true;
+        }
+        let Some(unproven) = unproven_bundle(self.source, expr) else {
+            return true;
+        };
+        self.unproven
+            .get_or_insert_with(|| not_proven(unproven.describe()));
+        false
+    }
+
+    fn host_objects_unseen<'k, 'a: 'k>(
+        &mut self,
+        factories: Option<Vec<(String, Factory<'k, 'a>)>>,
+    ) -> bool {
+        let Some(factories) = factories else {
+            return true;
+        };
+        if self.options.conservative {
+            return true;
+        }
+        let source = self.source;
+        let scoping = self
+            .scoping
+            .get_or_insert_with(|| build_scoping(source).scoping);
+        let Some((id, what)) = host_object_use(scoping, factories) else {
+            return true;
+        };
+        self.unproven.get_or_insert_with(|| host_object(id, &what));
+        false
+    }
+
     fn requests_linked(&mut self, expr: &Expression<'_>) -> bool {
         let Some(note) = unlinked_require(expr) else {
             return true;
@@ -179,7 +215,10 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
             });
         }
         if self.bundle.is_none()
+            && is_browserify(expr)
+            && self.browserify_proven(expr)
             && self.closed_as(browserify_factories(expr), &BROWSERIFY_PARAMS)
+            && self.host_objects_unseen(browserify_factories(expr))
             && self.require_kept(browserify_factories(expr))
             && self.requests_linked(expr)
         {

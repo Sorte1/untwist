@@ -7,6 +7,7 @@ use untwist_core::print::pretty_codegen;
 use untwist_unpack::{unpack_inputs, BundleKind, UnpackOptions};
 
 const NOT_CLOSED: &str = "is not closed over its own scope; no bundle is written";
+const NOT_BROWSERIFY: &str = "is not proven to be browserify's output; no bundle is written";
 const REFUSED_SHAPES: usize = 20_000;
 const LINEAR_FACTOR: u32 = 5;
 
@@ -59,7 +60,6 @@ var greeting = "hello";
 "#;
 
 const BROWSERIFY: &str = r#"
-var greeting = "hello";
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({
   1: [function (require, module, exports) { module.exports = BODY; }, { "./world": 2 }],
   2: [function (require, module, exports) { module.exports = "world"; }, {}]
@@ -136,6 +136,9 @@ fn a_bundle_of_closed_factories_is_taken() {
 fn a_factory_that_is_not_closed_refuses_the_bundle_and_names_what_it_reads() {
     for (shape, _, id) in SHAPES {
         for (body, why) in OPEN_BODIES {
+            if shape == BROWSERIFY && body.contains("greeting") {
+                continue;
+            }
             let found = outcome(&shape.replace("BODY", body), UnpackOptions::default());
             assert_eq!(found.kind, None, "{body}\n{shape}");
             assert_eq!(
@@ -146,6 +149,19 @@ fn a_factory_that_is_not_closed_refuses_the_bundle_and_names_what_it_reads() {
             assert!(found.unchanged, "{body}\n{shape}");
         }
     }
+}
+
+#[test]
+fn a_browserify_bundle_beside_other_code_is_refused_before_its_factories_are_read() {
+    let source = format!(
+        "var greeting = \"hello\";\n{}",
+        BROWSERIFY.replace("BODY", "greeting")
+    );
+    let found = outcome(&source, UnpackOptions::default());
+    assert_eq!(found.kind, None);
+    assert_eq!(found.notes.len(), 1, "{:?}", found.notes);
+    assert!(found.notes[0].contains(NOT_BROWSERIFY), "{:?}", found.notes);
+    assert!(found.unchanged);
 }
 
 #[test]

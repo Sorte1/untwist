@@ -5,6 +5,7 @@ use unpacked_tree::Unpacked;
 
 const WHOLE_PROGRAM: &str = "deobfuscated.js";
 const REFUSAL: &str = "module 0 is not closed over its own scope; no bundle is written";
+const BROWSERIFY_REFUSAL: &str = "the bundle is not proven to be browserify's output; no bundle is written: it runs inside other code than browserify's own output";
 
 const READS_ITS_SURROUNDINGS: &str = r#"var greeting = "hello";
 console.log("before bundle");
@@ -43,13 +44,12 @@ const BROWSERIFY_READS_ITS_SURROUNDINGS: &str = r#"var greeting = "hello";
 }, {}, [1]);
 "#;
 
-fn refused(bundle: &str, id: &str, expected: &str) {
+fn refused(bundle: &str, refusal: &str, expected: &str) {
     let unpacked = Unpacked::of(bundle, false);
     assert!(!unpacked.has("index.js"), "{:?}", unpacked.notes());
     assert!(!unpacked.has("bundle.json"), "{:?}", unpacked.notes());
-    let refusal = REFUSAL.replace("module 0", &format!("module {id}"));
     assert!(
-        unpacked.notes().iter().any(|note| note.contains(&refusal)),
+        unpacked.notes().iter().any(|note| note.contains(refusal)),
         "{:?}",
         unpacked.notes()
     );
@@ -60,14 +60,18 @@ fn refused(bundle: &str, id: &str, expected: &str) {
 fn a_webpack_bundle_whose_factory_reads_the_scope_around_it_is_not_unpacked() {
     refused(
         READS_ITS_SURROUNDINGS,
-        "0",
+        REFUSAL,
         "before bundle\nhello A world hello B world\nafter bundle\n",
     );
 }
 
 #[test]
 fn a_browserify_bundle_whose_factory_reads_the_scope_around_it_is_not_unpacked() {
-    refused(BROWSERIFY_READS_ITS_SURROUNDINGS, "1", "hello world\n");
+    refused(
+        BROWSERIFY_READS_ITS_SURROUNDINGS,
+        BROWSERIFY_REFUSAL,
+        "hello world\n",
+    );
 }
 
 #[test]
@@ -95,7 +99,7 @@ const ARROW_FACTORIES_SHARE_THIS: &str = r#"(function (modules) {
 
 #[test]
 fn a_webpack_bundle_whose_arrow_factory_uses_the_bundles_this_is_not_unpacked() {
-    refused(ARROW_FACTORIES_SHARE_THIS, "0", "t\n");
+    refused(ARROW_FACTORIES_SHARE_THIS, REFUSAL, "t\n");
 }
 
 const CLOSED_EVAL_FACTORY: &str = r#"(function (modules) {
