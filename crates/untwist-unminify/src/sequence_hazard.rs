@@ -107,11 +107,10 @@ fn writes_from_elsewhere(scoping: &Scoping, id: ReferenceId, here: ScopeId) -> b
 }
 
 fn is_inside_with(scoping: &Scoping, start: ScopeId, until: ScopeId) -> bool {
-    untwist_core::semantic::with_observes()
-        && scoping
-            .scope_ancestors(start)
-            .take_while(|scope| *scope != until)
-            .any(|scope| scoping.scope_flags(scope).contains(ScopeFlags::With))
+    scoping
+        .scope_ancestors(start)
+        .take_while(|scope| *scope != until)
+        .any(|scope| scoping.scope_flags(scope).contains(ScopeFlags::With))
 }
 
 fn function_scope(scoping: &Scoping, start: ScopeId) -> ScopeId {

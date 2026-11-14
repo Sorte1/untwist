@@ -257,3 +257,27 @@ fn an_interval_behind_a_function_getter_is_removed() {
     );
     assert_eq!(out.trim(), "console.log(1);");
 }
+
+fn const_form_in_a_block(inner: &str) -> String {
+    let declared = DPF
+        .replacen("function dpf(ret)", "const dpf = function (ret)", 1)
+        .replacen("\n}\n", "\n};\n", 1);
+    format!("(function () {{ {{ {declared}{inner} }} console.log(typeof dpf); }})();")
+}
+
+#[test]
+fn a_protection_that_blocks_a_block_function_hoist_is_kept() {
+    let alloc = Allocator::default();
+    let control = const_form_in_a_block("");
+    assert!(!run(&alloc, &control).contains("debuggerProtection"));
+    let alloc = Allocator::default();
+    let blocking = const_form_in_a_block("{ function dpf() {} }");
+    let (out, notes) = run_with_notes(&alloc, &blocking);
+    assert!(out.contains("const dpf"), "{out}");
+    assert!(
+        notes
+            .iter()
+            .any(|note| note.contains("keeps a block function")),
+        "{notes:?}"
+    );
+}

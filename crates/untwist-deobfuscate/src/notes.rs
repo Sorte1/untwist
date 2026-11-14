@@ -382,6 +382,9 @@ pub const INIT_ORDER_OVERFLOW: &str =
     "init-order table not built: the program has more statements, references or function values \
      than a 32-bit index holds, so every candidate that needs the table is refused";
 
+pub const PROTECTION_HOIST_BLOCKER_KEPT: &str =
+    "the protection declares a name that keeps a block function from binding it in the enclosing \
+     function, so removing it would change what that name reads; the block was left in place";
 pub const SELF_DEFENDING_REFERENCE_KEPT: &str =
     "a call controller was found but a reference to it survives outside the statements this pass \
      removes, so the block was left in place";
@@ -713,6 +716,7 @@ catalogue!(
     INIT_ORDER_BUDGET,
     SELF_DEFENDING_REFERENCE_KEPT,
     DEBUG_PROTECTION_REFERENCE_KEPT,
+    PROTECTION_HOIST_BLOCKER_KEPT,
     SCOPE_HAZARD,
     NO_STRING_ARRAY_NOTE,
 );

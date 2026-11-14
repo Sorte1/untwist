@@ -67,7 +67,7 @@ fn an_object_a_scope_hazard_may_reach_is_not_inlined() {
     let wrong = node_rows::mismatches(&node, &programs, &modes);
     let (wrong, witnesses) = node_rows::unsafe_dynamic_code_witnesses(wrong, &programs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    assert_eq!(witnesses.len(), 1, "{witnesses:?}");
+    assert!(witnesses.is_empty(), "{witnesses:?}");
 }
 
 const KEYED_HAZARDS: [(&str, &str); 10] = [

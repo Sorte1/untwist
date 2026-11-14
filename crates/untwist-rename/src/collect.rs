@@ -329,10 +329,8 @@ impl Collector<'_> {
             return;
         }
         for statement in statements {
-            let Statement::FunctionDeclaration(function) = statement else {
-                continue;
-            };
-            let Some(id) = function.id.as_ref() else {
+            let Some(id) = declared_function(statement).and_then(|function| function.id.as_ref())
+            else {
                 continue;
             };
             self.pin(Some(id));
@@ -781,4 +779,12 @@ fn require_source(call: &CallExpression<'_>) -> Option<String> {
         return None;
     };
     Some(js_text(literal.value).into_owned())
+}
+
+fn declared_function<'s, 'a>(statement: &'s Statement<'a>) -> Option<&'s Function<'a>> {
+    match statement {
+        Statement::FunctionDeclaration(function) => Some(function),
+        Statement::LabeledStatement(labeled) => declared_function(&labeled.body),
+        _ => None,
+    }
 }

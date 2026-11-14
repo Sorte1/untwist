@@ -103,7 +103,7 @@ pub fn is_closed_eval_at(scoping: &Scoping, call: &CallExpression<'_>) -> bool {
     })
 }
 
-const STRICT_PREFIX: &str = "\"use strict\";";
+const STRICT_PREFIX: &str = "\"use strict\";\n";
 
 enum Reading {
     Unparsed,
@@ -118,9 +118,8 @@ fn payload_names(text: &str) -> Option<Vec<String>> {
     if !block_functions {
         return Some(names);
     }
-    match read_payload(&format!("{STRICT_PREFIX}{text}"), true) {
-        Reading::Unparsed => {}
-        Reading::Open => return None,
+    match read_payload(&format!("{STRICT_PREFIX}{}", without_hashbang(text)), true) {
+        Reading::Unparsed | Reading::Open => return None,
         Reading::Names(strict, _) => {
             for name in strict {
                 if !names.contains(&name) {
@@ -130,6 +129,14 @@ fn payload_names(text: &str) -> Option<Vec<String>> {
         }
     }
     Some(names)
+}
+
+fn without_hashbang(text: &str) -> &str {
+    if !text.starts_with("#!") {
+        return text;
+    }
+    text.find(['\n', '\r', '\u{2028}', '\u{2029}'])
+        .map_or("", |end| &text[end..])
 }
 
 fn read_payload(text: &str, strict: bool) -> Reading {

@@ -2,11 +2,13 @@ use oxc_allocator::{Allocator, Box as ABox, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
+use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::scope::ScopeFlags;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::edit::StmtEdits;
 use untwist_core::pass::Cx;
+use untwist_core::semantic::hoist_blockers;
 
 const ANONYMOUS: &str = "anonymous";
 const ARGUMENTS: &str = "arguments";
@@ -227,6 +229,15 @@ fn emptied_heads(program: &Program<'_>, spans: &[Span]) -> FxHashSet<Span> {
     };
     heads.visit_program(program);
     heads.found
+}
+
+pub fn removes_hoist_blocker(scoping: &Scoping, spans: &[Span]) -> bool {
+    hoist_blockers(scoping).into_iter().any(|blocker| {
+        let declared = scoping.symbol_span(blocker);
+        spans
+            .iter()
+            .any(|span| span.start <= declared.start && declared.end <= span.end)
+    })
 }
 
 pub fn remove_protection_statements<'a>(

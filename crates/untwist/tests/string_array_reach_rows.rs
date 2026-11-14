@@ -78,7 +78,7 @@ fn a_string_array_reached_only_by_its_own_value_reads_runs_like_node() {
     let (wrong, witnesses) = node_rows::unsafe_dynamic_code_witnesses(wrong, &programs);
     let (wrong, mut paths) = node_rows::listed_unsafe_witnesses(wrong, &DYNAMIC_PATH_WITNESSES);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    assert_eq!(witnesses.len(), 46, "{witnesses:?}");
+    assert_eq!(witnesses.len(), 42, "{witnesses:?}");
     paths.sort();
     let mut want = DYNAMIC_PATH_WITNESSES.to_vec();
     want.sort();
@@ -108,5 +108,5 @@ fn a_shell_wrapped_string_array_is_judged_on_the_scoping_of_the_input() {
     }
     let (wrong, witnesses) = node_rows::unsafe_dynamic_code_witnesses(wrong, &programs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    assert_eq!(witnesses.len(), 2, "{witnesses:?}");
+    assert_eq!(witnesses.len(), 1, "{witnesses:?}");
 }

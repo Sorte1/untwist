@@ -24,6 +24,10 @@ pub fn script_source_type() -> SourceType {
 }
 
 pub fn parse_program<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
+    let as_script = parse_with(alloc, source, script_source_type());
+    if !has_error(&as_script.diagnostics) {
+        return as_script;
+    }
     let (mut as_module, module_syntax) =
         parse_recording(alloc, source, SourceType::mjs().with_jsx(true));
     if !has_error(&as_module.diagnostics) {
@@ -33,7 +37,6 @@ pub fn parse_program<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
         }
         return as_module;
     }
-    let as_script = parse_with(alloc, source, script_source_type());
     if error_count(&as_script.diagnostics) < error_count(&as_module.diagnostics) {
         as_script
     } else {

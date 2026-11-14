@@ -248,6 +248,8 @@ fn a_reachability_chain_past_the_budget() -> String {
     format!("function outer() {{\n{body}}}\nouter();\n")
 }
 
+const A_SELF_DEFENDING_CONTROLLER_THAT_BLOCKS_A_HOIST: &str = "var g = \"outer\";\n(function () { { const g = (function () { let a = true; return function (b, c) { const d = a ? function () { if (c) { const e = c.apply(b, arguments); c = null; return e; } } : function () {}; a = false; return d; }; })(); const h = g(this, function () { return h.toString().search('(((.+)+)+)+$').toString().constructor(h).search('(((.+)+)+)+$'); }); h(); { function g() {} } } log(typeof g); })();";
+
 pub enum Source {
     Whole(&'static str),
     Headed(&'static str),
@@ -953,6 +955,11 @@ pub const CASES: &[Case] = &[
     Case {
         source: Source::Whole(A_DEBUG_PROTECTION_THAT_ESCAPES),
         expects: notes::DEBUG_PROTECTION_REFERENCE_KEPT,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(A_SELF_DEFENDING_CONTROLLER_THAT_BLOCKS_A_HOIST),
+        expects: notes::PROTECTION_HOIST_BLOCKER_KEPT,
         mode: Match::Contains,
     },
     Case {

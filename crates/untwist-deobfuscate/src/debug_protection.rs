@@ -206,6 +206,10 @@ impl<'a> Pass<'a> for DebugProtection {
             }
             Plan::Remove(spans) => spans,
         };
+        if crate::directives::removes_hoist_blocker(cx.scoping(), &spans) {
+            cx.note(notes::PROTECTION_HOIST_BLOCKER_KEPT, None);
+            return;
+        }
         let (wanted, applied) = match remove_protection_statements(program, &spans, cx) {
             Ok(counts) => counts,
             Err(span) => {

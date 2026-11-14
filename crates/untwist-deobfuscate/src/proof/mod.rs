@@ -140,10 +140,9 @@ pub fn builtins_assumed_pristine() -> bool {
 }
 
 pub fn has_with_statement(scoping: &Scoping) -> bool {
-    untwist_core::semantic::with_observes()
-        && scoping
-            .scope_descendants_from_root()
-            .any(|scope| scoping.scope_flags(scope).contains(ScopeFlags::With))
+    scoping
+        .scope_descendants_from_root()
+        .any(|scope| scoping.scope_flags(scope).contains(ScopeFlags::With))
 }
 
 #[derive(Default)]
