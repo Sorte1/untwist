@@ -10,13 +10,14 @@ mod printable;
 mod report;
 mod split_hint;
 mod stats;
+mod types;
 mod wasm;
 mod wasm_graph;
 mod write;
 
 pub use bundle::{BundleListing, BundleOutput, FileOutput, ModuleOutput};
 pub use maps::{MapLink, MAP_SUFFIX};
-pub use options::{Isolation, Options, Progress, ProgressSink, TestHooks, TEST_HOOKS};
+pub use options::{Isolation, Options, Progress, ProgressSink, TestHooks, TypesMode, TEST_HOOKS};
 pub use passes::{pass_named, PassInfo, PASSES};
 pub use pipeline::{
     contained, job_width, Output, Pipeline, ADMIT_PANICKED, ANONYMOUS_SHELL_KEPT,
@@ -28,6 +29,8 @@ pub use pipeline::{
     UNSAFE_LANE_DECODES, WORKER_DIED,
 };
 pub use pipeline::{DecodedSite, Snapshot, SnapshotCode};
+pub use pipeline::{TYPES_NOT_BUILT, TYPES_PASS, TYPES_WITH_SOURCE_MAPS};
+pub use types::{typed_path, TypeCounts, TypesReport};
 #[cfg(feature = "refusal-spans")]
 pub use pipeline::{RefusalSite, SiteAt};
 pub use plan::{input_names, is_safe_relative, PlanRefusal, PlannedFile};

@@ -61,6 +61,22 @@ pub struct TestHooks {
     pub layer_stub: Option<&'static [(&'static str, &'static str)]>,
     pub refusal_spans: bool,
     pub points_to: bool,
+    pub types_assert: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TypesMode {
+    Ts,
+    Jsdoc,
+}
+
+impl TypesMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TypesMode::Ts => "ts",
+            TypesMode::Jsdoc => "jsdoc",
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +114,7 @@ pub struct Options {
     pub source_map: bool,
     pub input_source_maps: Vec<Option<String>>,
     pub input_names: Vec<String>,
+    pub types: Option<TypesMode>,
 }
 
 impl Default for Options {
@@ -136,6 +153,7 @@ impl Default for Options {
             source_map: false,
             input_source_maps: Vec::new(),
             input_names: Vec::new(),
+            types: None,
         }
     }
 }
