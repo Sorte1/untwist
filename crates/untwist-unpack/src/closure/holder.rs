@@ -9,6 +9,8 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use untwist_core::ast_util::naming_slot::{named_as, text_observes_names};
+
 use crate::closure::roles::Role;
 
 const HOLDER: &str = "__closure_vars";
@@ -244,9 +246,20 @@ struct Rewrite<'s, 'a> {
     targets: FxHashSet<SymbolId>,
     holder: &'a str,
     builder: AstBuilder<'a>,
+    text: &'s str,
+    observed: std::cell::Cell<Option<bool>>,
 }
 
 impl<'a> Rewrite<'_, 'a> {
+    fn observed(&self) -> bool {
+        let seen = self
+            .observed
+            .get()
+            .unwrap_or_else(|| text_observes_names(self.text));
+        self.observed.set(Some(seen));
+        seen
+    }
+
     fn target(&self, id: &IdentifierReference<'_>) -> bool {
         id.reference_id
             .get()
@@ -322,6 +335,11 @@ impl<'a> Rewrite<'_, 'a> {
             }
             let Some(init) = declarator.init else {
                 continue;
+            };
+            let init = match is_shared && init.is_anonymous_function_definition() && self.observed()
+            {
+                true => named_as(name, init, &self.builder),
+                false => init,
             };
             let target = match is_shared {
                 true => SimpleAssignmentTarget::new_static_member_expression(
@@ -430,6 +448,7 @@ pub fn rewrite_shared<'a>(
     scoping: &Scoping,
     statements: &mut [Statement<'a>],
     (names, holder): (&FxHashSet<String>, &str),
+    text: &str,
 ) {
     let root = scoping.root_scope_id();
     let targets = scoping
@@ -443,6 +462,8 @@ pub fn rewrite_shared<'a>(
         targets,
         holder: alloc.alloc_str(holder),
         builder: AstBuilder::new(alloc),
+        text,
+        observed: std::cell::Cell::new(None),
     };
     for statement in statements {
         rewrite.visit_statement(statement);

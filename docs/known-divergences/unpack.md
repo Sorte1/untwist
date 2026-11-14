@@ -321,3 +321,5 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   same name that it writes (Annex B) also keep their names, and so does such a function when
   code outside its block reads the name. Glue inside a function, in an ES module or in an
   unpacked module file is named as before.
+
+- **Unpacking keeps the name a bundle gives a function.** When the bundle reads `name` (the same check the cleanup passes use): Closure Library's shared `var x = function () {}`, written as a member of `__closure_vars`, becomes `__closure_vars.x = { x: function () {} }.x`, so it is still named `x`; SystemJS `_export("double", function () {})`, written as `double = …`, becomes `double = (0, function () {})`, so it stays unnamed. A webpack var-injection argument that is an anonymous function, class or arrow is always written as `var a = (0, function () {})`, since a parameter gives its argument no name.
