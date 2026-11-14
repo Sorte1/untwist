@@ -77,14 +77,21 @@ function isAbortedWorkerLoad(text: string): boolean {
 }
 
 type Fixtures = { pageErrors: string[]; githubApi: void };
+type Options = { routeGithub: boolean };
 
 export const GITHUB_API = 'https://api.github.com/**';
 export const STUB_STARS = 321;
+const STARS_KEY = 'untwist.githubStars';
 
-export const test = base.extend<Fixtures>({
+export const test = base.extend<Fixtures & Options>({
+  routeGithub: [true, { option: true }],
   githubApi: [
-    async ({ context }, use) => {
-      await context.route(GITHUB_API, (route) => route.fulfill({ json: { stargazers_count: STUB_STARS } }));
+    async ({ context, routeGithub }, use) => {
+      if (routeGithub) {
+        await context.route(GITHUB_API, (route) => route.fulfill({ json: { stargazers_count: STUB_STARS } }));
+      } else {
+        await context.addInitScript(([key, count]) => localStorage.setItem(key, JSON.stringify({ count, at: Date.now() })), [STARS_KEY, STUB_STARS] as const);
+      }
       await use();
     },
     { auto: true },
