@@ -1,0 +1,9 @@
+{
+  "name": "untwist-types-check",
+  "private": true,
+  "description": "Pinned TypeScript for the --types tsc delta check",
+  "type": "module",
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

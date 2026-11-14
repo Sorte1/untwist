@@ -102,6 +102,17 @@ pub fn input_names(inputs: &[PathBuf]) -> Vec<String> {
     }
 }
 
+fn typed_output(result: &Output, name: String, index: Option<usize>) -> String {
+    let Some(report) = result.types.as_ref().filter(|report| report.typescript) else {
+        return name;
+    };
+    let jsx = match index {
+        Some(index) => report.jsx_outputs.get(index).copied().unwrap_or(false),
+        None => report.jsx_outputs.iter().any(|jsx| *jsx),
+    };
+    crate::types::typed_path(&name, jsx)
+}
+
 fn mirrored_name(result: &Output, index: usize) -> Option<&str> {
     let names = &result.bundle.as_ref()?.mirrored_inputs;
     (names.len() == result.codes.len())
@@ -320,10 +331,11 @@ impl Planner<'_> {
 
     fn output_name(&mut self, index: usize, result: &Output, inputs: &[PathBuf]) -> Option<String> {
         if let Some(name) = mirrored_name(result, index) {
-            return Some(name.to_string());
+            return Some(typed_output(result, name.to_string(), Some(index)));
         }
         let total = result.codes.len();
         let base = deobfuscated_name(index, total, inputs.get(index).map(PathBuf::as_path));
+        let base = typed_output(result, base, Some(index));
         let name = self.free_output_name(&base);
         if name.is_none() {
             self.refused.push(PlanRefusal::SuffixesExhausted(base));
@@ -424,7 +436,7 @@ fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
     };
     let mut planner = Planner::default();
     let output = Candidate {
-        relative: DEOBFUSCATED.to_string(),
+        relative: typed_output(result, DEOBFUSCATED.to_string(), None),
         contents,
         role: Role::Output,
         owner: OWNER_OUTPUT,
@@ -522,6 +534,7 @@ mod tests {
             wasm_panicked: false,
             source_maps: Vec::new(),
             source_map_link: None,
+            types: None,
         }
     }
 
