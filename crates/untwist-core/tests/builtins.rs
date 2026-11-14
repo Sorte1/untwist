@@ -260,17 +260,11 @@ fn a_prototype_read_through_a_pattern_or_a_spelled_key_is_aliased() {
 #[test]
 fn a_key_that_cannot_spell_a_prototype_name_stays_intact() {
     for source in [
-        "var a = [1, 2]; for (var i = 0; i < a.length; i++) { x = a[i]; }",
         "var a = [1, 2], n = 0; n += 1; x = a[n * 2] + a[n - 1] + a[-n];",
-        "var a = [1, 2], j = 0, k = j; x = a[k];",
         "var o = { ab: 1 }; x = o['a' + 'b'];",
-        "x = [][[]];",
-        "x = o[typeof y] + o[!y];",
-        "var o = { foo: 1 }; x = o[atob('Zm9v')];",
-        "var k = 'dyn'; x = o[k];",
-        "function f(b) { var d = {}; for (var p in b) { if (b.hasOwnProperty(p)) d[p] = b[p]; } return d; }",
-        "for (var i = 0; i < n; i++) { x = a[i + 1] + a[1 + i]; }",
-        "x = r[Symbol.iterator] || r['@@iterator'];",
+        "x = o[0] + o['x'] + o[`y`] + o['a' + 1];",
+        "const k = 'dyn'; x = o[k];",
+        "const k = 'dy' + 'n'; x = o[k];",
         "var { a: b } = o;",
         "({ a } = o);",
     ] {
@@ -287,9 +281,37 @@ fn a_key_from_a_parameter_an_enumeration_or_an_opaque_call_aliases_the_built_ins
         "for (var p in b) { d[p] = b[p]; }",
         "function f(o, k) { var v = o[k]; return v; }",
         "function f(b, c) { for (var p in b) { x = c[p]; } }",
+        "var a = [1, 2]; for (var i = 0; i < a.length; i++) { x = a[i]; }",
+        "var k = 'dyn'; x = o[k];",
+        "let k = 'dyn'; x = o[k];",
+        "const k = '__pro' + 'to__'; x = [][k];",
+        "const k = 'constructor'; x = (function () {})[k];",
+        "x = r[Symbol.iterator];",
+        "x = o[atob('Zm9v')];",
+        "x = [][[]];",
+        "x = o[typeof y];",
+        "function f(b) { var d = {}; for (var p in b) { d[p] = b[p]; } return d; }",
+        "var R = Reflect;",
+        "var { getPrototypeOf } = Reflect;",
+        "x = (0, Reflect).getPrototypeOf([]);",
+        "function g() { return Reflect; }",
         "function f(b) { for (var p in b) { b = g(); x = b[p]; } }",
     ] {
         assert_eq!(verdict(source), Builtins::Aliased, "{source}");
         assert!(!first_look_is_intact(source), "{source}");
     }
+}
+
+#[test]
+fn a_long_chain_of_computed_reads_is_scanned_in_linear_time() {
+    let depth = 400;
+    let chain = "[i]".repeat(depth);
+    let source = format!("var a = [], i = 0; var v = a{chain}; x = a{chain}.y;");
+    let started = std::time::Instant::now();
+    assert_eq!(verdict(&source), Builtins::Aliased);
+    let spent = started.elapsed();
+    assert!(
+        spent < std::time::Duration::from_secs(2),
+        "{depth} levels took {spent:?}"
+    );
 }

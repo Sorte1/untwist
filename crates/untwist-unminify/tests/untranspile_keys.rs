@@ -59,7 +59,8 @@ fn a_later_key_with_no_certain_spelling_keeps_the_redefinition_last() {
         let source = format!(
             "{DEFINE_HELPERS}function run() {{ var o = _defineProperty({object}, 3); return JSON.stringify(o); }}\nconsole.log(run());\n"
         );
-        let code = agrees(&source);
+        let code = lane(&source, true);
+        untwist_testing::node::assert_node_agrees(&source, &code);
         assert!(!code.contains("_defineProperty({"), "{object}\n{code}");
     }
 }

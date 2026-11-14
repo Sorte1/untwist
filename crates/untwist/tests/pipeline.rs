@@ -208,12 +208,25 @@ fn no_deobfuscate_skips_the_cleanup_stage() {
     assert!(out.stages.iter().all(|stage| stage.stage != "cleanup"));
 }
 
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
+}
+
+#[test]
+fn the_default_pipeline_keeps_a_call_used_as_a_computed_key() {
+    let out = Pipeline::new(Options::default()).run(A_COMPUTED_MEMBER_THE_CLEANUP_STAGE_DECODES);
+    assert!(out.code().contains("atob(\"Zm9v\")"), "{}", out.code());
+}
+
 const A_LITERAL_MERGE_OBJECT_ASSIGNMENTS_INLINES: &str =
     "var o = { foo: 1 };\nconsole.log(o[atob(\"Zm9v\")]);";
 
 #[test]
-fn the_default_pipeline_reads_through_a_literal_merge_object_assignments_builds() {
-    let out = Pipeline::new(Options::default()).run(A_LITERAL_MERGE_OBJECT_ASSIGNMENTS_INLINES);
+fn the_unsafe_pipeline_reads_through_a_literal_merge_object_assignments_builds() {
+    let out = Pipeline::new(unsafe_lane()).run(A_LITERAL_MERGE_OBJECT_ASSIGNMENTS_INLINES);
     assert!(out.code().contains("console.log(1)"), "{}", out.code());
 }
 
@@ -222,7 +235,7 @@ const A_CLEANUP_RESULT_UNMINIFY_CAN_SIMPLIFY: &str =
 
 #[test]
 fn a_cleanup_result_unminify_can_simplify_is_simplified_in_the_same_run() {
-    let out = Pipeline::new(Options::default()).run(A_CLEANUP_RESULT_UNMINIFY_CAN_SIMPLIFY);
+    let out = Pipeline::new(unsafe_lane()).run(A_CLEANUP_RESULT_UNMINIFY_CAN_SIMPLIFY);
     assert!(out.code().contains(".foo"), "{}", out.code());
     assert!(!out.code().contains("[\"foo\"]"), "{}", out.code());
     assert_eq!(
@@ -238,7 +251,7 @@ fn a_cleanup_result_unminify_can_simplify_is_simplified_in_the_same_run() {
 
 #[test]
 fn a_settle_round_is_numbered_so_no_consumer_keys_on_the_first() {
-    let out = Pipeline::new(Options::default()).run(A_CLEANUP_RESULT_UNMINIFY_CAN_SIMPLIFY);
+    let out = Pipeline::new(unsafe_lane()).run(A_CLEANUP_RESULT_UNMINIFY_CAN_SIMPLIFY);
     let rounds: Vec<u32> = out
         .stages
         .iter()
@@ -255,7 +268,7 @@ fn a_settle_round_is_numbered_so_no_consumer_keys_on_the_first() {
 
 #[test]
 fn the_pipeline_settles_when_cleanup_feeds_unminify() {
-    let pipeline = Pipeline::new(Options::default());
+    let pipeline = Pipeline::new(unsafe_lane());
     let first = pipeline.run(A_CLEANUP_RESULT_UNMINIFY_CAN_SIMPLIFY);
     let second = pipeline.run(first.code());
     for stage in &second.stages {
@@ -275,7 +288,7 @@ const A_COMPUTED_MEMBER_THE_CLEANUP_STAGE_DECODES: &str = "console.log(x[atob(\"
 fn conservative_leaves_the_decoded_computed_member_where_reference_leaves_it() {
     let out = Pipeline::new(Options {
         extended: false,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(A_COMPUTED_MEMBER_THE_CLEANUP_STAGE_DECODES);
     assert_eq!(out.code().trim(), "console.log(x[\"foo\"]);");
@@ -289,8 +302,8 @@ fn conservative_leaves_the_decoded_computed_member_where_reference_leaves_it() {
 }
 
 #[test]
-fn the_default_pipeline_simplifies_the_decoded_computed_member() {
-    let pipeline = Pipeline::new(Options::default());
+fn the_unsafe_pipeline_simplifies_the_decoded_computed_member() {
+    let pipeline = Pipeline::new(unsafe_lane());
     let first = pipeline.run(A_COMPUTED_MEMBER_THE_CLEANUP_STAGE_DECODES);
     assert_eq!(first.code().trim(), "console.log(x.foo);");
     let second = pipeline.run(first.code());
@@ -307,7 +320,7 @@ fn the_default_pipeline_simplifies_the_decoded_computed_member() {
 
 #[test]
 fn a_refusal_the_settle_round_repeats_is_reported_once() {
-    let out = Pipeline::new(Options::default())
+    let out = Pipeline::new(unsafe_lane())
         .run("var o = { foo: 1 };\nconsole.log(o[atob(\"Zm9v\")]);\ng(atob(\"-\"));");
     let refusals = out
         .notes
@@ -321,7 +334,7 @@ fn a_refusal_the_settle_round_repeats_is_reported_once() {
 fn a_renamed_pipeline_settles_too() {
     let pipeline = Pipeline::new(Options {
         rename: untwist::RenameMode::Mangle,
-        ..Options::default()
+        ..unsafe_lane()
     });
     let first = pipeline.run(A_CLEANUP_RESULT_UNMINIFY_CAN_SIMPLIFY);
     let second = pipeline.run(first.code());

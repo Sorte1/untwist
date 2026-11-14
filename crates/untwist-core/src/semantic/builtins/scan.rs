@@ -4,8 +4,8 @@ use oxc_semantic::Scoping;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
-use std::cell::{Cell, OnceCell};
+use rustc_hash::FxHashMap;
+use std::cell::{OnceCell, RefCell};
 
 use super::{Builtins, Reliance, Scanned};
 use crate::semantic::{is_foreign_global, program_is_strict};
@@ -39,6 +39,8 @@ const DEFINERS: [(&str, &str); 8] = [
 const LEGACY_DEFINERS: [&str; 2] = ["__defineGetter__", "__defineSetter__"];
 
 const PROMISE: &str = "Promise";
+
+const REFLECT: &str = "Reflect";
 
 fn literal_key<'k>(expression: &'k Expression<'_>) -> Option<&'k str> {
     match expression.without_parentheses() {
@@ -171,12 +173,8 @@ impl Frame {
 
 struct Scan<'s> {
     program: &'s Program<'s>,
-    spelling: OnceCell<FxHashSet<SymbolId>>,
-    reaching_text: OnceCell<bool>,
-    unplain: OnceCell<FxHashSet<SymbolId>>,
-    enumerated: OnceCell<keys::EnumeratedKeys>,
-    strict: bool,
-    opaque_key: Cell<bool>,
+    consts: OnceCell<keys::ConstKeys>,
+    reached: RefCell<FxHashMap<usize, bool>>,
     scoping: &'s Scoping,
     reliance: &'s Reliance,
     writes_only: bool,
@@ -190,6 +188,7 @@ fn names_a_foreign_root(scoping: &Scoping, reliance: &Reliance) -> bool {
     scoping.root_unresolved_references().keys().any(|name| {
         let name = name.as_str();
         let relied = reliance.roots.contains(&name)
+            || name == REFLECT
             || GLOBAL_OBJECTS.contains(&name)
             || reach::CODE_RUNNERS.contains(&name);
         relied && is_foreign_global(name)
@@ -210,33 +209,20 @@ pub fn scan(
     writes_only: bool,
     reliance: &Reliance,
 ) -> Scanned {
-    let run = |strict: bool| {
-        let mut scan = Scan::new(program, scoping, module, reliance, strict);
-        scan.writes_only = writes_only;
-        scan.visit_program(program);
-        scan
-    };
-    let lenient = run(false);
-    let verdict = match lenient.verdict {
-        Builtins::Intact if lenient.opaque_key.get() => run(true).verdict.min_aliased(),
-        verdict => verdict,
-    };
+    let mut scan = Scan::new(program, scoping, module, reliance);
+    scan.writes_only = writes_only;
+    scan.visit_program(program);
     Scanned {
-        verdict,
-        promise_written: lenient.promise_written,
+        verdict: scan.verdict,
+        promise_written: scan.promise_written,
     }
 }
 
 pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: &Reliance) -> bool {
-    let run = |strict: bool| {
-        let mut scan = Scan::new(program, scoping, module, reliance, strict);
-        scan.first_only = true;
-        scan.visit_program(program);
-        scan
-    };
-    let lenient = run(false);
-    lenient.verdict == Builtins::Intact
-        && (!lenient.opaque_key.get() || run(true).verdict == Builtins::Intact)
+    let mut scan = Scan::new(program, scoping, module, reliance);
+    scan.first_only = true;
+    scan.visit_program(program);
+    scan.verdict == Builtins::Intact
 }
 
 impl<'s> Scan<'s> {
@@ -245,16 +231,11 @@ impl<'s> Scan<'s> {
         scoping: &'s Scoping,
         module: bool,
         reliance: &'s Reliance,
-        strict: bool,
     ) -> Self {
         Self {
             program,
-            spelling: OnceCell::new(),
-            reaching_text: OnceCell::new(),
-            unplain: OnceCell::new(),
-            enumerated: OnceCell::new(),
-            strict,
-            opaque_key: Cell::new(false),
+            consts: OnceCell::new(),
+            reached: RefCell::new(FxHashMap::default()),
             scoping,
             reliance,
             writes_only: false,
@@ -267,33 +248,11 @@ impl<'s> Scan<'s> {
 }
 
 impl Scan<'_> {
-    pub(super) fn names_a_reaching_key(&self) -> bool {
-        *self
-            .reaching_text
-            .get_or_init(|| keys::names_a_reaching_key(self.program, &REACHING_KEYS))
-    }
-
-    pub(super) fn enumerated_owner(
-        &self,
-        reference: oxc_syntax::reference::ReferenceId,
-    ) -> Option<SymbolId> {
-        self.enumerated
-            .get_or_init(|| keys::enumerated_keys(self.program, self.scoping))
-            .get(&reference)
-            .copied()
-    }
-
-    pub(super) fn plain_symbol(&self, symbol: SymbolId) -> bool {
-        !self
-            .unplain
-            .get_or_init(|| keys::unplain_symbols(self.program, self.scoping))
-            .contains(&symbol)
-    }
-
-    pub(super) fn spelling_symbol(&self, symbol: SymbolId) -> bool {
-        self.spelling
-            .get_or_init(|| keys::spelling_symbols(self.program, self.scoping))
-            .contains(&symbol)
+    pub(super) fn const_key(&self, symbol: SymbolId) -> Option<String> {
+        self.consts
+            .get_or_init(|| keys::const_keys(self.program, self.scoping))
+            .get(&symbol)
+            .cloned()
     }
 
     fn pattern_key_reaches(&self, computed: bool, key: &PropertyKey<'_>) -> bool {
@@ -303,7 +262,9 @@ impl Scan<'_> {
                 Some(Key::Name(name)) => Some(name),
                 Some(Key::Other) | None => return false,
                 Some(Key::Unknown(expression)) => {
-                    return self.spells(expression, |name| self.pattern_name_reaches(name))
+                    return self
+                        .known_key(expression)
+                        .is_none_or(|name| self.pattern_name_reaches(&name))
                 }
             },
             (false, PropertyKey::StaticIdentifier(id)) => Some(id.name.as_str()),
@@ -314,7 +275,7 @@ impl Scan<'_> {
     }
 
     fn pattern_name_reaches(&self, name: &str) -> bool {
-        REACHING_KEYS.contains(&name) || self.names_a_root(name)
+        REACHING_KEYS.contains(&name) || name == REFLECT || self.names_a_root(name)
     }
 
     fn pattern_read(&mut self, reaches: bool) {
@@ -383,12 +344,15 @@ impl Scan<'_> {
         if self.is_builtin(expression) || self.is_global_object(expression) {
             return true;
         }
-        matches!(
-            expression.without_parentheses(),
-            Expression::StaticMemberExpression(member)
-                if GLOBAL_OBJECTS.contains(&member.property.name.as_str())
+        match expression.without_parentheses() {
+            Expression::Identifier(id) => self.global_named(id, &[REFLECT]),
+            Expression::StaticMemberExpression(member) => {
+                let name = member.property.name.as_str();
+                (GLOBAL_OBJECTS.contains(&name) || name == REFLECT)
                     && self.is_global_object(&member.object)
-        )
+            }
+            _ => false,
+        }
     }
 
     fn reaches_builtin(&self, expression: &Expression<'_>) -> bool {

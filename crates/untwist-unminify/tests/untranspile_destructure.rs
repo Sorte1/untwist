@@ -74,10 +74,18 @@ fn swc_and_typescript_destructuring_helpers_become_array_patterns() {
 }
 
 #[test]
-fn the_default_mode_rewrites_only_literal_sources() {
+fn the_default_mode_keeps_sliced_to_array_when_its_helper_reads_an_opaque_key() {
     let code = helpers(&fixture("hand/destructure-temp.js"), false);
-    assert!(code.contains("var [one, , three] = [1, 2, 3];"), "{code}");
-    assert!(code.contains("var [x, y] = \"xy\";"), "{code}");
+    assert!(code.contains("_slicedToArray([1, 2, 3], 3)"), "{code}");
+    let unsafe_code = helpers(&fixture("hand/destructure-temp.js"), true);
+    assert!(
+        unsafe_code.contains("var [one, , three] = [1, 2, 3];"),
+        "{unsafe_code}"
+    );
+    assert!(
+        unsafe_code.contains("var [x, y] = \"xy\";"),
+        "{unsafe_code}"
+    );
     let babel = helpers(&fixture("babel/destructure.7.29.js"), false);
     assert!(babel.contains("_slicedToArray(_Set, 2)"), "{babel}");
 }

@@ -1,9 +1,8 @@
 use oxc_ast::ast::*;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 
-use super::keys::{classify, Class};
+use super::keys::literal_text;
 use super::{Scan, This, GLOBAL_OBJECTS};
-use crate::source_map::decode_base64;
 
 pub(super) const REACHING_KEYS: [&str; 4] = [
     "__proto__",
@@ -92,6 +91,17 @@ pub(super) fn member_of<'e, 'a>(
     }
 }
 
+fn last_of_sequence<'e, 'a>(expression: &'e Expression<'a>) -> &'e Expression<'a> {
+    let mut current = expression.without_parentheses();
+    while let Expression::SequenceExpression(sequence) = current {
+        match sequence.expressions.last() {
+            Some(last) => current = last.without_parentheses(),
+            None => break,
+        }
+    }
+    current
+}
+
 pub(super) fn call_of<'e, 'a>(expression: &'e Expression<'a>) -> Option<&'e CallExpression<'a>> {
     match expression.without_parentheses() {
         Expression::CallExpression(call) => Some(call),
@@ -108,7 +118,7 @@ impl Scan<'_> {
         let Some((object, Key::Name(name))) = member_of(expression) else {
             return false;
         };
-        let Expression::Identifier(owner) = object.without_parentheses() else {
+        let Expression::Identifier(owner) = last_of_sequence(object) else {
             return false;
         };
         PROTOTYPE_READERS
@@ -117,6 +127,16 @@ impl Scan<'_> {
     }
 
     pub(super) fn is_reached(&self, expression: &Expression<'_>) -> bool {
+        let address = std::ptr::from_ref(expression.without_parentheses()).addr();
+        if let Some(known) = self.reached.borrow().get(&address) {
+            return *known;
+        }
+        let reached = self.reached_now(expression);
+        self.reached.borrow_mut().insert(address, reached);
+        reached
+    }
+
+    fn reached_now(&self, expression: &Expression<'_>) -> bool {
         if matches!(
             expression.without_parentheses(),
             Expression::ThisExpression(_)
@@ -135,123 +155,33 @@ impl Scan<'_> {
         match key {
             Key::Name(name) if REACHING_KEYS.contains(&name) => true,
             Key::Name(name) if self.names_a_root(name) => true,
-            Key::Name(name) if GLOBAL_OBJECTS.contains(&name) => {
-                self.is_reached(object) || self.is_root(object)
-            }
+            Key::Name(name) if GLOBAL_OBJECTS.contains(&name) => self.is_root(object),
             Key::Name("prototype") => self.is_reached(object),
             Key::Name(name) if FORWARDING_KEYS.contains(&name) => {
                 self.is_reached(object) || self.reads_prototypes(object)
             }
             Key::Name(_) | Key::Other => false,
             Key::Unknown(key) => {
-                self.is_reached(object)
-                    || self.is_root(object)
-                    || (!self.reads_enumerated_key(object, key)
-                        && self.spells(key, |name| self.reached_member(object, Key::Name(name))))
+                self.is_root(object)
+                    || self
+                        .known_key(key)
+                        .is_none_or(|name| self.reached_member(object, Key::Name(&name)))
             }
         }
     }
 
-    fn folded_text(&self, expression: &Expression<'_>) -> Option<String> {
-        match expression.without_parentheses() {
-            Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
-            Expression::BooleanLiteral(literal) => Some(literal.value.to_string()),
-            Expression::NullLiteral(_) => Some("null".to_string()),
-            Expression::NumericLiteral(literal)
-                if literal.value.fract() == 0.0 && literal.value.abs() < 1e15 =>
-            {
-                Some(format!("{}", literal.value as i64))
-            }
-            Expression::ArrayExpression(array) if array.elements.is_empty() => Some(String::new()),
-            Expression::TemplateLiteral(template) => {
-                let mut text = String::new();
-                for (index, quasi) in template.quasis.iter().enumerate() {
-                    text.push_str(quasi.value.cooked.as_ref()?.as_str()?);
-                    if let Some(inner) = template.expressions.get(index) {
-                        text.push_str(&self.folded_text(inner)?);
-                    }
-                }
-                Some(text)
-            }
-            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
-                Some(self.folded_text(&binary.left)? + &self.folded_text(&binary.right)?)
-            }
-            Expression::CallExpression(call) => self.folded_call(call),
-            _ => None,
+    pub(super) fn known_key(&self, key: &Expression<'_>) -> Option<String> {
+        if let Some(text) = literal_text(key) {
+            return Some(text);
         }
-    }
-
-    fn folded_call(&self, call: &CallExpression<'_>) -> Option<String> {
-        let literals: Option<Vec<&Expression<'_>>> = call
-            .arguments
-            .iter()
-            .map(|argument| argument.as_expression())
-            .collect();
-        let literals = literals?;
-        match call.callee.without_parentheses() {
-            Expression::Identifier(id) if self.global_named(id, &["atob"]) => {
-                let [Expression::StringLiteral(text)] = literals.as_slice() else {
-                    return None;
-                };
-                let bytes = decode_base64(text.value.as_str()?)?;
-                Some(bytes.into_iter().map(char::from).collect())
-            }
-            Expression::StaticMemberExpression(member)
-                if member.property.name == "fromCharCode"
-                    && matches!(member.object.without_parentheses(),
-                        Expression::Identifier(id) if self.global_named(id, &["String"])) =>
-            {
-                literals
-                    .iter()
-                    .map(|argument| match argument.without_parentheses() {
-                        Expression::NumericLiteral(number)
-                            if number.value.fract() == 0.0
-                                && (0.0..65536.0).contains(&number.value) =>
-                        {
-                            char::from_u32(number.value as u32)
-                        }
-                        _ => None,
-                    })
-                    .collect()
-            }
-            _ => None,
-        }
-    }
-
-    fn reads_enumerated_key(&self, object: &Expression<'_>, key: &Expression<'_>) -> bool {
-        let (Expression::Identifier(key), Expression::Identifier(object)) =
-            (key.without_parentheses(), object.without_parentheses())
-        else {
-            return false;
+        let Expression::Identifier(id) = key.without_parentheses() else {
+            return None;
         };
-        let owner = object
+        let symbol = id
             .reference_id
             .get()
-            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
-        match (key.reference_id.get(), owner) {
-            (Some(reference), Some(owner)) => self.enumerated_owner(reference) == Some(owner),
-            _ => false,
-        }
-    }
-
-    pub(super) fn spells(&self, key: &Expression<'_>, named: impl Fn(&str) -> bool) -> bool {
-        if let Some(text) = self.folded_text(key) {
-            return named(&text);
-        }
-        let mut deps = Vec::new();
-        let class = classify(self.scoping, key, &mut deps);
-        let spelled = class == Class::Spelling
-            || deps.iter().any(|symbol| self.spelling_symbol(*symbol))
-            || ((class == Class::Opaque || !deps.is_empty()) && self.names_a_reaching_key());
-        if spelled {
-            return true;
-        }
-        let plain = class == Class::Plain && deps.iter().all(|symbol| self.plain_symbol(*symbol));
-        if plain {
-            return false;
-        }
-        self.opaque_key.set(true);
-        self.strict
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())?;
+        self.const_key(symbol)
     }
 
     pub(super) fn names_a_root(&self, name: &str) -> bool {
