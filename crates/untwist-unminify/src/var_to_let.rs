@@ -26,7 +26,6 @@ pub const SHAPE_FOR_IN_OF_HEAD: &str = "for-in-of-head";
 pub const PLACED_AT_FIRST_WRITE: &str = "placed-at-first-write";
 pub const HOISTED_TO_TOP: &str = "hoisted-to-top";
 pub const SUNK_TO_FIRST_USE: &str = "sunk-to-first-use";
-pub const MERGED_INTO_DECLARATION: &str = "merged-into-declaration";
 
 const REFUSED_NAMES: [&str; 5] = ["let", "yield", "await", "arguments", "eval"];
 const SMALL_NAME_SET: usize = 8;
@@ -643,7 +642,7 @@ impl VarToLet {
 
     fn sink<'a>(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
         let scope = cx.current_scope_id();
-        if !is_function_scope(cx.scoping(), scope) {
+        if cx.opts.keep_var_positions || !is_function_scope(cx.scoping(), scope) {
             return;
         }
         let facts = self.facts(cx.scoping());
@@ -653,11 +652,8 @@ impl VarToLet {
         if plan.is_empty() {
             return;
         }
-        for _ in 0..plan.moved {
+        for _ in 0..plan.moved + plan.merged {
             note_placement(SUNK_TO_FIRST_USE);
-        }
-        for _ in 0..plan.merged {
-            note_placement(MERGED_INTO_DECLARATION);
         }
         let changed = var_sink::apply(stmts, &plan, cx);
         cx.changed_by(changed);

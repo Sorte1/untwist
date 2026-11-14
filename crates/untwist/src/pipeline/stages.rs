@@ -130,7 +130,7 @@ impl Pipeline {
         let settle_from = (changes, slot);
         let sem = self.settle(site, sem, unminify.as_deref(), settle_from, &mut runs);
         let (sem, _) = self.final_machinery_stage(site, sem);
-        match self.lexical_stage(site, sem) {
+        match self.lexical_stage(site, sem, reservation.shared.is_some()) {
             Some(sem) => {
                 let sem = self.rename_stage(site, sem, reservation);
                 let sem = self.modern_stage(site, sem);
@@ -204,15 +204,22 @@ impl Pipeline {
         Some(ctors)
     }
 
-    fn lexical_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Option<Semantics> {
+    fn lexical_stage<'a>(
+        &self,
+        site: &mut StageCx<'a, '_>,
+        sem: Semantics,
+        several: bool,
+    ) -> Option<Semantics> {
         if !self.options.unminify {
             return Some(sem);
         }
         let started = self.begin("lexical");
+        let keep_captured_vars = self.options.unpack
+            && (self.options.split_assume_modules
+                || untwist_unpack::holds_a_bundle_with(site.program, self.unpack_options()));
         let opts = PassOptions {
-            keep_captured_vars: self.options.unpack
-                && (self.options.split_assume_modules
-                    || untwist_unpack::holds_a_bundle_with(site.program, self.unpack_options())),
+            keep_captured_vars,
+            keep_var_positions: keep_captured_vars || (self.options.unpack && several),
             ..site.pass_opts.clone()
         };
         let mut group = PassGroup::from_ctors(&lexical_ctors(), opts);
