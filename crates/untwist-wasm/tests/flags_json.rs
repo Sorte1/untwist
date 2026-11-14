@@ -1,5 +1,5 @@
 use serde_json::Value;
-use untwist::{RenameMode, WasmCheck};
+use untwist::{RenameMode, TypesMode, WasmCheck};
 use untwist_wasm::{map_flags, options_from};
 
 const CASES: &str = include_str!("../../../web/src/settings/flags.json");
@@ -49,6 +49,14 @@ fn wasm_check(settings: &Value) -> WasmCheck {
         .unwrap_or_default()
 }
 
+fn types(settings: &Value) -> Option<TypesMode> {
+    match settings.get("types").and_then(Value::as_str) {
+        Some("ts") => Some(TypesMode::Ts),
+        Some("jsdoc") => Some(TypesMode::Jsdoc),
+        _ => None,
+    }
+}
+
 #[test]
 fn every_flag_string_the_site_emits_parses_to_the_intended_options() {
     let cases: Vec<Value> = serde_json::from_str(CASES).expect("flags.json parses");
@@ -85,6 +93,7 @@ fn every_flag_string_the_site_emits_parses_to_the_intended_options() {
             "{flags}"
         );
         assert_eq!(options.wasm_check, wasm_check(settings), "{flags}");
+        assert_eq!(options.types, types(settings), "{flags}");
         let split = flag(settings, "split", false);
         assert_eq!(options.split_hoisted, split, "{flags}");
         assert_eq!(

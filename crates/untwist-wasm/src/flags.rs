@@ -1,11 +1,12 @@
 use std::vec::IntoIter;
 
-use untwist::{MapLink, Options, Output, RenameMode, WasmCheck};
+use untwist::{MapLink, Options, Output, RenameMode, TypesMode, WasmCheck};
 
 pub const DEFAULT_MAX_MEMORY: u64 = 1 << 30;
 
-const VALUE_FLAGS: [&str; 10] = [
+const VALUE_FLAGS: [&str; 11] = [
     "--modern",
+    "--types",
     "--rename",
     "--wasm-check",
     "--max-iterations",
@@ -139,6 +140,13 @@ fn valued(mut options: Options, flag: &str, word: &str) -> Result<Options, Strin
             options.modern = Some(
                 untwist::parse_modern_baseline(word).map_err(|error| format!("{flag}: {error}"))?,
             );
+        }
+        "--types" => {
+            options.types = Some(match word {
+                "ts" => TypesMode::Ts,
+                "jsdoc" => TypesMode::Jsdoc,
+                other => return Err(format!("unknown types mode {other} (ts or jsdoc)")),
+            });
         }
         "--max-iterations" => options.max_iterations = Some(number(word, flag)?),
         "--fuel" => options.fuel = Some(fuel(word)?),

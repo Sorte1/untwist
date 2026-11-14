@@ -1,7 +1,7 @@
 import { byId, setText } from '../dom';
 import { flagsFrom } from '../settings/flags';
 import { writeHash } from '../settings/hash';
-import { DEFAULT_FUEL, MODERN_CHARS, MODERN_PRESETS, RENAME_HINTS, WASM_CHECK_HINTS, type RenameMode, type Settings, type WasmCheck } from '../settings/settings';
+import { DEFAULT_FUEL, MODERN_CHARS, MODERN_PRESETS, RENAME_HINTS, TYPES_HINTS, WASM_CHECK_HINTS, type RenameMode, type Settings, type TypesChoice, type WasmCheck } from '../settings/settings';
 import type { AppState } from '../state';
 import type { Store } from '../store';
 
@@ -34,6 +34,9 @@ function wireToggles(store: Store<AppState>): void {
   }
   for (const button of document.querySelectorAll<HTMLButtonElement>('#wasm-check-group .seg-btn')) {
     button.addEventListener('click', () => change(store, { wasm: button.dataset['check'] as WasmCheck }));
+  }
+  for (const button of document.querySelectorAll<HTMLButtonElement>('#types-group .seg-btn')) {
+    button.addEventListener('click', () => change(store, { types: button.dataset['types'] as TypesChoice }));
   }
 }
 
@@ -135,6 +138,10 @@ function paint(settings: Settings): void {
     button.setAttribute('aria-pressed', String(button.dataset['check'] === settings.wasm));
   }
   setText(byId('wasm-check-hint'), WASM_CHECK_HINTS[settings.wasm]);
+  for (const button of document.querySelectorAll<HTMLButtonElement>('#types-group .seg-btn')) {
+    button.setAttribute('aria-pressed', String(button.dataset['types'] === settings.types));
+  }
+  setText(byId('types-hint'), TYPES_HINTS[settings.types]);
   const fuel = byId<HTMLInputElement>('fuel');
   byId<HTMLInputElement>('fuel-inf').checked = settings.fuel === null;
   fuel.disabled = settings.fuel === null;

@@ -24,9 +24,10 @@ fn a_let_with_a_closed_write_set_is_a_union() {
 }
 
 #[test]
-fn a_const_literal_is_redundant() {
-    let source = "(function () {\n  const a = 1;\n  console.log(a);\n})();\n";
-    assert_eq!(ts(source), source);
+fn a_type_the_checker_infers_anyway_is_still_written() {
+    let out = ts("(function () {\n  const a = 1;\n  console.log(a);\n})();\n");
+    assert!(out.contains("const a: 1 = 1"), "{out}");
+    assert!(out.contains("(function (): undefined {"), "{out}");
 }
 
 #[test]
@@ -48,4 +49,30 @@ fn jsdoc_mode_writes_comments() {
         out.contains("/** @param {1} n @returns {number} */ function twice(n)"),
         "{out}"
     );
+}
+
+#[test]
+fn a_module_gets_a_declaration_file_with_its_proven_exports() {
+    let source = "const label = \"a\";\nlet count = 1;\nfunction bump() {\n  count += 1;\n}\nexport { label, count, bump };\nexport const seen = count > 0;\nexport * from \"./other.js\";\nexport default label;\n";
+    let dts = untwist_types::declarations(source).unwrap();
+    assert!(
+        dts.contains("declare const __untwist_export_0: \"a\";"),
+        "{dts}"
+    );
+    assert!(
+        dts.contains("declare const __untwist_export_1: number;"),
+        "{dts}"
+    );
+    assert!(
+        dts.contains("declare const __untwist_export_2: unknown;"),
+        "{dts}"
+    );
+    assert!(
+        dts.contains("declare const __untwist_export_3: boolean;"),
+        "{dts}"
+    );
+    assert!(dts.contains("export * from \"./other.js\";"), "{dts}");
+    assert!(dts.contains("__untwist_export_0 as label"), "{dts}");
+    assert!(dts.contains(" as default"), "{dts}");
+    assert!(untwist_types::declarations("var a = 1;\nmodule.exports = a;\n").is_none());
 }

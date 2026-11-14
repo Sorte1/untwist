@@ -6,7 +6,7 @@ import type { Store } from '../store';
 import { currentBundle } from './module-tree';
 import { codeEditing } from './editing';
 import { mountLanguage } from './language-mount';
-import { baseExtensions, makeEditor, outputLook } from './editor';
+import { baseExtensions, languageOf, makeEditor, outputLook } from './editor';
 import { outputEdits } from './output-edits';
 import { libraryFolding } from './library-folds';
 
@@ -16,7 +16,7 @@ export function shownText(state: AppState): { readonly text: string; readonly na
   const result = state.run.result;
   const index = state.selectedModule;
   if (result === null || index === null) {
-    return { text: result?.stdout ?? '', name: 'output.js' };
+    return { text: result?.stdout ?? '', name: state.settings.types === 'ts' ? 'output.ts' : 'output.js' };
   }
   const bundle = currentBundle(state);
   return { text: result.modules[index] ?? '', name: bundle?.modules[index]?.path ?? `module ${index}` };
@@ -40,10 +40,11 @@ function mountCopy(view: EditorView): void {
 
 export function mountOutputPane(store: Store<AppState>, module: Promise<WebAssembly.Module>): EditorView {
   const gate = new Compartment();
+  const language = new Compartment();
   const edits = outputEdits();
   const folding = libraryFolding();
   const editing = codeEditing(module);
-  const view = makeEditor(byId('output-editor'), 'Output code', [baseExtensions(true), editing.extension, gate.of([]), outputLook, edits.extension]);
+  const view = makeEditor(byId('output-editor'), 'Output code', [baseExtensions(true, undefined, language.of(languageOf(store.get().settings.types === 'ts'))), editing.extension, gate.of([]), outputLook, edits.extension]);
   editing.attach(view, byId('output-editor'));
   mountCopy(view);
   mountLanguage(store, view, gate, module, 'output');
@@ -52,6 +53,10 @@ export function mountOutputPane(store: Store<AppState>, module: Promise<WebAssem
     view.focus();
   });
   store.subscribe((state, previous) => {
+    if (state.settings.types !== previous.settings.types) {
+      const typescript = state.settings.types === 'ts';
+      view.dispatch({ effects: [language.reconfigure(languageOf(typescript)), ...(typescript ? [gate.reconfigure([])] : [])] });
+    }
     const result = state.run.result;
     if (result !== previous.run.result || state.selectedModule !== previous.selectedModule) {
       const shown = shownText(state);

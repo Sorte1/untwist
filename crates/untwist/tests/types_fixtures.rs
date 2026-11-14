@@ -144,7 +144,7 @@ fn percent(part: usize, whole: usize) -> f64 {
 fn line(label: &str, stats: &TypeStats) -> String {
     let total = stats.total();
     format!(
-        "{label:<18} positions {:>6} proven {:>6} ({:>5.1}%) annotated {:>5} ({:>5.1}%) redundant {:>5} refused {:>5} | bindings {}/{} params {}/{} returns {}/{} | files {} refused {}",
+        "{label:<18} positions {:>6} proven {:>6} ({:>5.1}%) annotated {:>5} ({:>5.1}%) of-which-inferred {:>5} refused {:>5} | bindings {}/{} params {}/{} returns {}/{} | files {} refused {}",
         total.eligible,
         total.proven,
         percent(total.proven, total.eligible),
@@ -176,6 +176,12 @@ fn coverage_and_tsc_pairs_over_the_fixture_corpus() {
         let mut stats = TypeStats::default();
         for (label, source) in family_inputs(family, limit) {
             for (name, code) in outputs(&source) {
+                if let (Some(out), Some(declared)) = (&out, untwist_types::declarations(&code)) {
+                    let dir = out.join("dts").join("annotated");
+                    std::fs::create_dir_all(&dir).unwrap();
+                    let file = typed_name(family, &label, &name, "d.ts");
+                    std::fs::write(dir.join(file), declared).unwrap();
+                }
                 for mode in [Mode::Ts, Mode::Jsdoc] {
                     let typed = annotate(&code, mode);
                     if mode == Mode::Ts {
