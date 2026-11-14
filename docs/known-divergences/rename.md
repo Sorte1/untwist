@@ -206,7 +206,8 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   parameter default or assignment whose value is an anonymous function, arrow or class. A file
   may read `name` when it has any of: a static key (`f.name`, `f["name"]`, `const { name } = f`,
   `({ name } = f)`); a computed member read or destructuring key that is not a number, a
-  boolean-valued test or a literal naming another property (`f[key]`, `f["na" + "me"]`,
+  boolean-valued test, a literal naming another property or (for a member read) a counter
+  variable that is only ever declared with a number and written with `++`, `--` or arithmetic (`f[key]`, `f["na" + "me"]`,
   `` f[`na${m}`] ``, `f[decode(1)]`, `const { [k]: v } = f`; a plain `f[k] = v` write is not a
   read); a `get` or `getOwnPropertyDescriptor` call on any receiver with such a key, a literal
   `"name"` or a spread argument (`Reflect.get(f, k)`, `Object.getOwnPropertyDescriptor(f, "name")`),

@@ -301,7 +301,7 @@ fn a_name_read_by_a_code_text_keeps_the_function_unnamed_in_the_default_lane() {
 
 const NAME_READ_KEY_ROWS: &str = include_str!("data/name_read_key_rows.txt");
 
-const NAME_READ_KEY_WITNESSES: [&str; 25] = [
+const NAME_READ_KEY_WITNESSES: [&str; 32] = [
     "key-concat",
     "key-variable",
     "key-call",
@@ -327,6 +327,13 @@ const NAME_READ_KEY_WITNESSES: [&str; 25] = [
     "for-in-enumerable",
     "values-destructured",
     "descriptor-built-method",
+    "counter-reassigned",
+    "counter-for-in",
+    "counter-closure",
+    "counter-destructured",
+    "counter-redeclared",
+    "counter-catch",
+    "counter-plus-string",
 ];
 
 fn name_read_key_rows() -> Vec<(String, String)> {

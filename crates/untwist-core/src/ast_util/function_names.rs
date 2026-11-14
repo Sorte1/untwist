@@ -1,3 +1,5 @@
+use crate::ast_util::code_text::is_number;
+use crate::ast_util::name_keys::numeric_counters;
 use crate::ast_util::name_keys::{
     call_reads_name, is_never_a_function, key_may_name, key_text, member_key,
     property_key_may_name, reader, NAME,
@@ -5,8 +7,10 @@ use crate::ast_util::name_keys::{
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_syntax::operator::BinaryOperator;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashSet;
 
 #[derive(Default)]
 pub struct FunctionNames {
@@ -16,9 +20,11 @@ pub struct FunctionNames {
 
 pub fn function_names(program: &Program<'_>, scoping: &Scoping) -> FunctionNames {
     let mut walker = Walker {
+        program,
         scoping,
         out: FunctionNames::default(),
         first_read: false,
+        numeric: None,
     };
     walker.visit_program(program);
     walker.out
@@ -26,18 +32,22 @@ pub fn function_names(program: &Program<'_>, scoping: &Scoping) -> FunctionNames
 
 pub fn reads_function_names(program: &Program<'_>, scoping: &Scoping) -> bool {
     let mut walker = Walker {
+        program,
         scoping,
         out: FunctionNames::default(),
         first_read: true,
+        numeric: None,
     };
     walker.visit_program(program);
     walker.out.name_read
 }
 
-struct Walker<'s> {
+struct Walker<'s, 'p> {
+    program: &'s Program<'p>,
     scoping: &'s Scoping,
     out: FunctionNames,
     first_read: bool,
+    numeric: Option<FxHashSet<SymbolId>>,
 }
 
 fn is_anonymous_function(expr: &Expression<'_>) -> bool {
@@ -59,7 +69,7 @@ fn names_on_assignment(operator: AssignmentOperator) -> bool {
     )
 }
 
-impl Walker<'_> {
+impl Walker<'_, '_> {
     fn give(&mut self, id: &BindingIdentifier<'_>) {
         if let Some(symbol) = id.symbol_id.get() {
             self.out.givers.push(symbol);
@@ -85,6 +95,32 @@ impl Walker<'_> {
         if let Some(symbol) = symbol {
             self.out.givers.push(symbol);
         }
+    }
+
+    fn is_numeric(&mut self, key: &Expression<'_>) -> bool {
+        match key.without_parentheses() {
+            Expression::Identifier(id) => {
+                let symbol = id
+                    .reference_id
+                    .get()
+                    .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+                let Some(symbol) = symbol else {
+                    return false;
+                };
+                let (program, scoping) = (self.program, self.scoping);
+                self.numeric
+                    .get_or_insert_with(|| numeric_counters(program, scoping))
+                    .contains(&symbol)
+            }
+            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+                self.is_numeric_operand(&binary.left) && self.is_numeric_operand(&binary.right)
+            }
+            _ => false,
+        }
+    }
+
+    fn is_numeric_operand(&mut self, operand: &Expression<'_>) -> bool {
+        is_number(operand) || self.is_numeric(operand)
     }
 
     fn read_on(&mut self, object: &Expression<'_>) {
@@ -122,7 +158,7 @@ impl Walker<'_> {
     }
 }
 
-impl<'a> VisitJs<'a> for Walker<'_> {
+impl<'a> VisitJs<'a> for Walker<'_, '_> {
     fn visit_statement(&mut self, it: &Statement<'a>) {
         if !(self.first_read && self.out.name_read) {
             walk_js::walk_statement(self, it);
@@ -231,7 +267,10 @@ impl<'a> VisitJs<'a> for Walker<'_> {
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
         let reads = key_text(&it.expression).is_some_and(|key| reader(&key).is_some());
-        if reads || key_may_name(&it.expression) {
+        let may_name = || key_may_name(&it.expression);
+        if reads
+            || (may_name() && !is_never_a_function(&it.object) && !self.is_numeric(&it.expression))
+        {
             self.read_on(&it.object);
         }
         walk_js::walk_computed_member_expression(self, it);

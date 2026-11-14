@@ -216,7 +216,7 @@ differ only for that object, which compares loosely equal to `null` without bein
 premise.
 
 With `--rename`, the safe lane keeps the name of every function and class when the file may read
-`name`: `.name`, any computed key that is not a number or a literal naming another property
+`name`: `.name`, any computed key that is not a number, a numeric loop counter or a literal naming another property
 (`f[key]`, `f["na" + "me"]`), reflection (`Reflect.get`, `getOwnPropertyDescriptor(s)`) and copies
 of a value's own properties (`Object.values`, `Object.assign`, `{ ...f }`), since renaming them
 would change what it reads. A read in `fn.toString()` text is not seen;
