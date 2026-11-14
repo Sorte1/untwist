@@ -14,7 +14,7 @@ pub const ENTRY_CANDIDATES: &str = "top-level require calls and no entry marker 
 pub const REQUIRE_MISSING: &str = "has no module in this bundle";
 pub const UNHANDLED_HELPER: &str = "unhandled webpack helper require.";
 pub const FACTORY_NOT_CLOSED: &str = "is not closed over its own scope; no bundle is written";
-pub const LEGACY_READ: &str = "a read of a function's caller or arguments could reach the module functions the unpacked files replace; no bundle is written";
+pub const LEGACY_READ: &str = "in the written files node's module wrapper, not the bundle's module function, would be the caller such a read can see; no bundle is written (--unsafe assumes such reads never reach a module)";
 pub const EVAL_NAME_REBOUND: &str =
     "evaluates code text whose names would reach a binding of the unpacked file; no bundle is written";
 pub const RUNTIME_HELPER_NOT_CLOSED: &str = "cannot move to a runtime module";

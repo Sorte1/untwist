@@ -554,6 +554,9 @@ fn extract_kinds<'a>(
     bodies: &mut Bodies<'a>,
     (options, links, scope): (UnpackOptions, &Links, Scope),
 ) -> Option<Bundle<'a>> {
+    if legacy_refused(program, options, None).is_some() {
+        return None;
+    }
     let frame = Frame::of(program);
     kinds(options, scope).find_map(|(_, _, detect)| {
         attempt(bodies, |bodies| {
@@ -585,8 +588,34 @@ fn extract_with<'a>(
         },
     };
     detector.visit_program(program);
-    let Extract { bodies, bundle, .. } = detector.finder;
-    bundle.or_else(|| extract_kinds(alloc, program, bodies, (options, links, scope)))
+    let Extract {
+        bodies,
+        bundle,
+        unproven,
+        legacy,
+        ..
+    } = detector.finder;
+    if bundle.is_some() {
+        return bundle;
+    }
+    if let Some(member) = legacy_refused(program, options, legacy) {
+        if refused_kind(program, options).is_some() {
+            unproven.get_or_insert_with(|| crate::notes::legacy_read(member));
+        }
+        return None;
+    }
+    extract_kinds(alloc, program, bodies, (options, links, scope))
+}
+
+fn legacy_refused(
+    program: &Program<'_>,
+    options: UnpackOptions,
+    known: Option<Option<&'static str>>,
+) -> Option<&'static str> {
+    if options.trust_legacy_reads || options.conservative {
+        return None;
+    }
+    known.unwrap_or_else(|| legacy_read(program))
 }
 
 fn cloned<'a>(
