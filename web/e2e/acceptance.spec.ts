@@ -31,9 +31,11 @@ const CASES: readonly Case[] = [
   { file: 'fixtures/unminify/booleans-and-sequences.js', hash: '#rename=mangle&deob=0', flags: '--rename mangle --no-deobfuscate' },
 ];
 
+const PLAYGROUND_DEFAULT = ['--disable', 'library-names,library-rename'];
+
 function cli(flags: string, file: string): string {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  return execFileSync(bin, [...flags.split(' ').filter((word) => word !== ''), repoPath(file)], {
+  return execFileSync(bin, [...flags.split(' ').filter((word) => word !== ''), ...PLAYGROUND_DEFAULT, repoPath(file)], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },

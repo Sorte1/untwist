@@ -5,7 +5,7 @@ import { DEFAULT_FUEL, RENAME_HINTS, WASM_CHECK_HINTS, type RenameMode, type Set
 import type { AppState } from '../state';
 import type { Store } from '../store';
 
-type BooleanKey = 'unpack' | 'jsx' | 'unsafe' | 'deob' | 'unmin' | 'human' | 'single';
+type BooleanKey = 'unpack' | 'jsx' | 'unsafe' | 'deob' | 'unmin' | 'human' | 'single' | 'libs';
 
 const COPIED_MS = 1200;
 

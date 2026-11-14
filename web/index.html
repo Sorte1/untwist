@@ -50,6 +50,11 @@
 </section>
 
 <section class="set-group">
+<h3 class="set-title">Libraries</h3>
+<div class="opt" id="libs-opt"><span class="opt-text"><span class="opt-name">Library names</span><span class="hint" id="libs-hint">Detect known libraries such as core-js, comment and fold them, and fetch extra name tables when the code needs them. Off by default: the scan and the downloads add time.</span></span><button type="button" role="switch" class="switch" data-key="libs" aria-checked="false" aria-label="Library names" aria-describedby="libs-hint"><span></span></button></div>
+</section>
+
+<section class="set-group">
 <h3 class="set-title" id="rename-title">Rename identifiers</h3>
 <div role="group" aria-labelledby="rename-title" class="seg seg-4" id="rename-group">
 <button type="button" class="seg-btn" data-mode="none" aria-pressed="true">none</button><button type="button" class="seg-btn" data-mode="simple" aria-pressed="false">simple</button><button type="button" class="seg-btn" data-mode="smart" aria-pressed="false">smart</button><button type="button" class="seg-btn" data-mode="unique" aria-pressed="false">unique</button><button type="button" class="seg-btn" data-mode="mangle" aria-pressed="false">mangle</button>
@@ -174,8 +179,10 @@
 <div class="running" id="running" hidden>
 <svg class="running-mark" width="56" height="56" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke-linecap="round"><path class="strand strand-b" d="M3 16C7.5 16 8 8 12.5 8H21"></path><path class="strand-gap" d="M3 8C7.5 8 8 16 12.5 16H21"></path><path class="strand strand-a" d="M3 8C7.5 8 8 16 12.5 16H21"></path></g></svg>
 <span class="running-title">Untwisting · <span id="running-elapsed">0.00 s</span></span>
+<p class="running-attempt" id="running-attempt" role="status" hidden></p>
 <ol class="run-steps" id="run-steps" aria-label="Progress"></ol>
 <span class="running-stage" id="running-stage" role="status"></span>
+<div class="run-bar" role="progressbar" aria-label="Current stage, no percentage is known"><span></span></div>
 <span class="muted">Running in a worker; the page stays responsive.</span>
 </div>
 </section>
@@ -185,7 +192,7 @@
 </main>
 
 <footer class="strip">
-<span class="status"><span class="dot" id="status-dot"></span><span id="status-label">Loading engine</span></span>
+<span class="status"><span class="dot" id="status-dot"></span><span id="status-label">Loading engine</span><span class="status-stage" id="status-stage"></span></span>
 <span class="elapsed" id="elapsed" aria-live="polite">0.00 s</span>
 <span class="chip chip-skipped" id="skipped-chip" tabindex="0" hidden></span>
 <p class="mode-warning" id="mode-warning"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.75 14.75 13.5H1.25z"></path><path d="M8 6v3.5M8 11.5v.01"></path></svg><span class="mode-warning-text"><strong>Unsafe</strong> <span id="mode-warning-text"></span></span></p>

@@ -160,6 +160,13 @@ impl Pipeline {
     }
 
     fn library_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) -> Semantics {
+        if self
+            .options
+            .disabled_passes
+            .contains(&untwist_rename::library::pass::NAME)
+        {
+            return sem;
+        }
         let passes = vec![untwist_rename::library::pass::boxed()];
         self.stage_group("library", passes, site, (sem, site.pass_opts.clone()))
     }

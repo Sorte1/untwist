@@ -1,4 +1,10 @@
-import { CLI_DEFAULTS, type Settings } from './settings';
+import { CLI_DEFAULTS, LIBRARY_PASSES, type Settings } from './settings';
+
+function disabled(settings: Settings): string {
+  const named = settings.off.split(',').filter((name) => name !== '');
+  const extra = settings.libs ? [] : LIBRARY_PASSES.filter((name) => !named.includes(name));
+  return [...named, ...extra].join(',');
+}
 
 export function flagsFrom(settings: Settings): string {
   const words: string[] = [];
@@ -17,7 +23,8 @@ export function flagsFrom(settings: Settings): string {
   add(settings.human, '--keep-human-names');
   add(settings.iter !== null, '--max-iterations', String(settings.iter));
   add(settings.single, '--single-file');
-  add(settings.off !== '', '--disable', settings.off);
+  const off = disabled(settings);
+  add(off !== '', '--disable', off);
   add(settings.wasm !== 'off', '--wasm-check', settings.wasm);
   return words.join(' ');
 }

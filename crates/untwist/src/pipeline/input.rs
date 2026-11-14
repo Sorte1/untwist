@@ -360,6 +360,7 @@ impl Pipeline {
         if layering.start_run() {
             fresh_tree_state(room.as_ref());
         }
+        self.options.progress(Progress::StageBegins("parse"));
         let alloc = Allocator::default();
         let mut parsed = match first {
             true => parse_program(&alloc, text),
@@ -412,6 +413,9 @@ impl Pipeline {
             self.stage_layer(tree, (layer, undo), layering, result)
         }));
         let replay = matches!(staged, Ok(Staged::Replay));
+        if self.options.decoded_strings || self.options.refusal_spans {
+            self.options.progress(Progress::StageBegins("locate"));
+        }
         #[cfg(feature = "refusal-spans")]
         if let Some((layer, recorder)) = recorder.filter(|_| !replay) {
             let sites = super::refusal_spans::located(text, layer, recorder.finish());
@@ -430,6 +434,7 @@ impl Pipeline {
                     result.statement_spans = Some(statement_spans(&parsed.program));
                 }
                 result.readers = PendingReaders::of(&parsed.program);
+                self.options.progress(Progress::StageBegins("print"));
                 let printed = self.printed(&alloc, &mut parsed.program, errors == 0);
                 if let Some(origins) = origins {
                     result.mapped = (layering.peeled() == 0)

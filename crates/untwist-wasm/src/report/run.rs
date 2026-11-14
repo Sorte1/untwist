@@ -317,13 +317,24 @@ mod tests {
         let rows = stage_rows(&staged.report_json());
         assert!(!rows.is_empty());
         assert_eq!(rows, stage_rows(&plain.report_json()));
-        assert_eq!(names.first(), Some(&"prepare"), "{names:?}");
+        assert_eq!(names.first(), Some(&"parse"), "{names:?}");
+        assert_eq!(names.get(1), Some(&"prepare"), "{names:?}");
+        assert!(names.contains(&"print"), "{names:?}");
         let at = |stage: &str| names.iter().position(|name| *name == stage);
         for stage in ["deobfuscate", "unminify", "rename", "cleanup", "unpack"] {
             assert!(at(stage).is_some(), "{stage} missing from {names:?}");
         }
         assert!(at("deobfuscate") < at("unminify"), "{names:?}");
         assert!(at("cleanup") < at("unpack"), "{names:?}");
+    }
+
+    #[test]
+    fn a_run_without_library_names_skips_the_library_stage() {
+        let (with, _) = stages_of(DECODED, "");
+        assert!(with.contains(&"library"), "{with:?}");
+        let (without, _) = stages_of(DECODED, "--disable library-names,library-rename");
+        assert!(!without.contains(&"library"), "{without:?}");
+        assert_eq!(without.first(), Some(&"parse"), "{without:?}");
     }
 
     #[test]

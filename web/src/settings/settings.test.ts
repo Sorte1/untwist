@@ -27,14 +27,23 @@ function generated(seed: number): Settings {
     wrap: bit(10),
     theme: pick([null, 'dark', 'light'] as const, seed >> 4),
     input: bit(9) ? 'hidden' : 'shown',
+    libs: bit(11),
   };
 }
 
 describe('flagsFrom', () => {
   it('emits nothing for the CLI defaults, and --unsafe for the site defaults, which open in Unsafe', () => {
     expect(flagsFrom(CLI_DEFAULTS)).toBe('');
-    expect(flagsFrom(DEFAULTS)).toBe('--unsafe');
-    expect(CLI_DEFAULTS).toEqual({ ...DEFAULTS, unsafe: false });
+    expect(flagsFrom(DEFAULTS)).toBe('--unsafe --disable library-names,library-rename');
+    expect(CLI_DEFAULTS).toEqual({ ...DEFAULTS, unsafe: false, libs: true });
+  });
+
+  it('leaves library naming out unless Library names is on, merging with the passes already off', () => {
+    expect(DEFAULTS.libs).toBe(false);
+    expect(flagsFrom({ ...CLI_DEFAULTS, libs: false })).toBe('--disable library-names,library-rename');
+    expect(flagsFrom({ ...CLI_DEFAULTS, libs: false, off: 'dead-code' })).toBe('--disable dead-code,library-names,library-rename');
+    expect(flagsFrom({ ...CLI_DEFAULTS, libs: false, off: 'library-names' })).toBe('--disable library-names,library-rename');
+    expect(flagsFrom({ ...CLI_DEFAULTS, libs: true, off: 'dead-code' })).toBe('--disable dead-code');
   });
 
   it('emits the flag words of every case in the fixture shared with the cargo test', () => {

@@ -21,6 +21,7 @@ export interface Settings {
   readonly wrap: boolean;
   readonly theme: ThemeChoice | null;
   readonly input: InputVisibility;
+  readonly libs: boolean;
 }
 
 export const RENAME_MODES: readonly RenameMode[] = ['none', 'simple', 'smart', 'unique', 'mangle'];
@@ -44,14 +45,17 @@ export const DEFAULTS: Settings = {
   wrap: false,
   theme: null,
   input: 'shown',
+  libs: false,
 };
 
-export const CLI_DEFAULTS: Settings = { ...DEFAULTS, unsafe: false };
+export const CLI_DEFAULTS: Settings = { ...DEFAULTS, unsafe: false, libs: true };
+
+export const LIBRARY_PASSES: readonly string[] = ['library-names', 'library-rename'];
 
 export const RENAME_HINTS: Readonly<Record<RenameMode, string>> = {
   none: 'Keep identifiers exactly as in the input (the default).',
   simple: 'Per-function a, b, … sequences.',
-  smart: 'Names from evidence: the original names of matched library code such as core-js, i for loop counters, item and index in callbacks, err in catch, canvas for createElement("canvas"); human-written names stay.',
+  smart: 'Names from evidence: the original names of matched library code such as core-js (with Library names on), i for loop counters, item and index in callbacks, err in catch, canvas for createElement("canvas"); human-written names stay.',
   unique: 'Program-wide readable names such as fn1, arr2, handler3.',
   mangle: 'Short mangled names (a, b, … aa, ab) chosen program-wide.',
 };
@@ -66,7 +70,7 @@ export function sameSettings(a: Settings, b: Settings): boolean {
   return (Object.keys(DEFAULTS) as Array<keyof Settings>).every((key) => a[key] === b[key]);
 }
 
-const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'jsx', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'off', 'wasm'];
+const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'jsx', 'libs', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'off', 'wasm'];
 
 export function changedCount(settings: Settings): number {
   return PANEL_KEYS.filter((key) => settings[key] !== DEFAULTS[key]).length;

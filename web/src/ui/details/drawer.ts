@@ -110,7 +110,7 @@ function exportBar(result: RunResult, report: Report, flags: string): HTMLElemen
   return bar;
 }
 
-export function renderDrawer(container: HTMLElement, result: RunResult | null, flags: string): void {
+export function renderDrawer(container: HTMLElement, result: RunResult | null, flags: string, timeline: readonly Pair[] = []): void {
   const report = result === null ? null : parseReport(result.report);
   if (result === null || report === null) {
     container.replaceChildren(make('p', 'diag-note', 'Run something to see its report.'));
@@ -129,6 +129,7 @@ export function renderDrawer(container: HTMLElement, result: RunResult | null, f
     section('Rename', pairs(renamePairs(report))),
     section('Warnings by class', pairs(warningClassPairs(diagnosticsOf(result.report, result.stderr)))),
     section('Resources', pairs(resourcePairs(report, result, stageMs))),
+    ...(timeline.length === 0 ? [] : [section('Run timeline', pairs([...timeline]))]),
     section('Refusals', refusals(report.notes)),
   );
 }

@@ -59,4 +59,35 @@ describe('the library tables', () => {
     expect(await tables.wanted('IE_PROTO')).toEqual([]);
     expect(seen).toEqual(['/libraries/index.json', '/libraries/index.json']);
   });
+
+  it('hand the cancel signal to the scan and to the table download', async () => {
+    const signals: Array<AbortSignal | undefined> = [];
+    const scan: Scanner = async (text, keyed, signal) => {
+      signals.push(signal);
+      return scanAll(text, keyed);
+    };
+    const fetcher: typeof fetch = async (input, init) => {
+      signals.push(init?.signal ?? undefined);
+      return server({ '/libraries/index.json': index([ENTRY]), '/libraries/core-js.table': BYTES })(input, init);
+    };
+    const tables = new LibraryTables(BASE, scan, fetcher);
+    const abort = new AbortController();
+    const wanted = await tables.wanted('IE_PROTO', [], abort.signal);
+    await tables.load(wanted, abort.signal);
+    expect(signals.filter((signal) => signal === abort.signal)).toHaveLength(2);
+  });
+
+  it('count a download stopped by cancel as failed, and fetch it again on the next run', async () => {
+    const abort = new AbortController();
+    const fetcher: typeof fetch = async (input, init) => {
+      if (init?.signal?.aborted === true) {
+        throw new DOMException('cancelled', 'AbortError');
+      }
+      return server({ '/libraries/core-js.table': BYTES })(input, init);
+    };
+    const tables = new LibraryTables(BASE, scanAll, fetcher);
+    abort.abort();
+    expect(await tables.load([ENTRY], abort.signal)).toEqual({ tables: [], failed: ['core-js'] });
+    expect((await tables.load([ENTRY])).tables.map((table) => table.id)).toEqual(['core-js']);
+  });
 });

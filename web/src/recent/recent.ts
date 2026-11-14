@@ -93,10 +93,10 @@ export function ago(time: number, now: number): string {
 
 export function settingsLine(hash: string): string {
   const settings = parseHash(hash).settings;
-  const flags = flagsFrom(settings)
+  const flags = flagsFrom({ ...settings, libs: true })
     .split(' ')
     .filter((word) => word !== '' && word !== '--unsafe')
     .join(' ');
   const mode = modeLabel(modeOf(settings));
-  return flags === '' ? mode : `${mode} · ${flags}`;
+  return [mode, ...(settings.libs ? ['library names'] : []), ...(flags === '' ? [] : [flags])].join(' · ');
 }
