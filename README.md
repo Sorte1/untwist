@@ -190,14 +190,14 @@ program. Several classic scripts given in one run share one global scope, as scr
 do: a top-level `var`, function, `let`, `const` or `class` of one is treated as read and written by
 the others when another input names it (a free reference or a top-level declaration of its own) or
 reaches globals through a computed key or code text, and is then not inlined away, removed or
-renamed. A built-in name (`eval`, `String`, `atob`, ...) that another input declares at its top level, assigns as a bare name, sets as a property of the global object (`this.X =`, `globalThis.X =`, `window["X"] =`, a definer such as `Object.defineProperty(globalThis, ...)`), or declares or assigns in a code text it runs (`eval`, `(0, eval)`, `Function`, a timer string) is not the built-in for any input, so no fold relies on it. A global-object write with a computed key, or a code text that is not a literal, counts for every name. When two or more classic scripts are given, or another input may
+renamed. A built-in name (`eval`, `String`, `atob`, ...) that another input declares at its top level, assigns as a bare name, sets as a property of the global object (`this.X =`, `globalThis.X =`, `window["X"] =`, a definer such as `Object.defineProperty(globalThis, ...)`), or declares or assigns in a code text it runs (`eval`, `(0, eval)`, `Function`, a timer string) is not the built-in for any input, so no fold relies on it. A global-object write with a computed key, or a code text that is not a literal, counts for every name. An input whose own built-in scan is not clean (it uses a built-in, the global object or a code runner outside the listed harmless shapes, or patches a built-in member) counts for every name too. When two or more classic scripts are given, or another input may
 observe the global object's names, no top-level binding of a classic script is renamed
 (`--rename unique`, whose counter is shared by every input, still renames them when only other
 scripts are the reason), and no input's top-level binding takes a name another input binds at the
 top level or reads free. Inputs that share no names come out as they would alone, apart from
 those top-level names. A module (a file with `import`, `export`,
 `import.meta` or top-level `await`) is closed apart from its exports. Code from outside the file
-(`require` results, host functions, other scripts) writes no built-in. It also does not depend on
+(`require` results, host functions, scripts not given to Untwist) writes no built-in. It also does not depend on
 the names the obfuscator picked for the string array and its decoders, because that code was
 written before those names existed. So when such code is handed a value that may hold the global
 object, the machinery can still be removed. Outside code that prints that value still counts as
