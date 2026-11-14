@@ -11,6 +11,8 @@ use oxc_span::SourceType;
 use oxc_str::Ident;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 
+use super::annex_b::block_function_symbols;
+use super::blocked_hoists::repair_blocked_hoists;
 use crate::parse::{has_error, parse_with};
 
 const OPAQUE_NAMES: [&str; 2] = ["eval", "arguments"];
@@ -48,6 +50,15 @@ pub fn observers() -> Observers {
     OBSERVERS.with(Cell::get)
 }
 
+pub fn observing_open<R>(run: impl FnOnce() -> R) -> R {
+    if observers() != Observers::None {
+        return run();
+    }
+    let previous = OBSERVERS.with(|cell| cell.replace(Observers::Open));
+    let _restore = ObserversGuard { previous };
+    run()
+}
+
 pub fn with_observes() -> bool {
     observers() != Observers::None
 }
@@ -75,23 +86,57 @@ pub fn closed_eval_names(call: &CallExpression<'_>) -> Option<Vec<String>> {
     payload_names(literal.value.as_str()?)
 }
 
+const STRICT_PREFIX: &str = "\"use strict\";";
+
+enum Reading {
+    Unparsed,
+    Open,
+    Names(Vec<String>, bool),
+}
+
 fn payload_names(text: &str) -> Option<Vec<String>> {
+    let Reading::Names(mut names, block_functions) = read_payload(text, false) else {
+        return None;
+    };
+    if !block_functions {
+        return Some(names);
+    }
+    match read_payload(&format!("{STRICT_PREFIX}{text}"), true) {
+        Reading::Unparsed => {}
+        Reading::Open => return None,
+        Reading::Names(strict, _) => {
+            for name in strict {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+        }
+    }
+    Some(names)
+}
+
+fn read_payload(text: &str, strict: bool) -> Reading {
     let alloc = Allocator::default();
     let parsed = parse_with(&alloc, text, SourceType::script());
-    if has_error(&parsed.diagnostics) || !parsed.program.directives.is_empty() {
-        return None;
+    if has_error(&parsed.diagnostics) {
+        return Reading::Unparsed;
+    }
+    if parsed.program.directives.len() != usize::from(strict) {
+        return Reading::Open;
     }
     let mut shape = PayloadShape::default();
     shape.visit_program(&parsed.program);
     if shape.open {
-        return None;
+        return Reading::Open;
     }
-    let scoping = SemanticBuilder::new()
+    let mut scoping = SemanticBuilder::new()
         .build(&parsed.program)
         .semantic
         .into_scoping();
+    let block_functions = !block_function_symbols(&scoping).is_empty();
+    repair_blocked_hoists(&parsed.program, &mut scoping);
     if declares_outside_functions(&scoping) || has_dynamic_scope(&scoping) {
-        return None;
+        return Reading::Open;
     }
     let mut names = Vec::new();
     for (name, references) in scoping.root_unresolved_references() {
@@ -100,11 +145,11 @@ fn payload_names(text: &str) -> Option<Vec<String>> {
             .iter()
             .any(|reference| scoping.get_reference(*reference).is_write());
         if writes || OPAQUE_NAMES.contains(&name) {
-            return None;
+            return Reading::Open;
         }
         names.push(name.to_string());
     }
-    Some(names)
+    Reading::Names(names, block_functions)
 }
 
 fn declares_outside_functions(scoping: &Scoping) -> bool {
@@ -188,7 +233,7 @@ pub fn settle_eval_scopes(program: &Program<'_>, scoping: &mut Scoping) {
     }
 }
 
-fn open_eval_sites(program: &Program<'_>, scoping: &Scoping) -> Vec<ScopeId> {
+pub fn open_eval_sites(program: &Program<'_>, scoping: &Scoping) -> Vec<ScopeId> {
     let mut sites = EvalSites {
         scoping,
         scopes: vec![scoping.root_scope_id()],

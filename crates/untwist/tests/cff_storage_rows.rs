@@ -3,7 +3,14 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/cff_storage_rows.txt");
 
-const UNSAFE_DYNAMIC_CODE: &[&str] = &["reach-w1", "reach-w2", "reach-ev4", "reach-ev5"];
+const UNSAFE_DYNAMIC_CODE: &[&str] = &[
+    "reach-w1",
+    "reach-ev4",
+    "reach-eval-payload-blocked-hoist",
+    "reach-eval-payload-strict-caller",
+    "reach-eval-payload-class-member",
+    "reach-with-declares-and-replaces",
+];
 
 struct Row<'r> {
     label: &'r str,

@@ -2,7 +2,7 @@ use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::pins::script_global_symbols;
-use untwist_core::semantic::{has_module_syntax, is_shared_global, AnnexBWrites};
+use untwist_core::semantic::{has_module_syntax, hoist_blockers, is_shared_global, AnnexBWrites};
 
 use crate::collect::{collect, Collected};
 use crate::function_names::function_names;
@@ -96,6 +96,7 @@ fn pin_annex_b_targets(collected: &mut Collected, program: &Program<'_>, scoping
         collected.pinned.insert(function.function);
         collected.pinned.extend(function.target);
     }
+    collected.pinned.extend(hoist_blockers(scoping));
 }
 
 fn pin_function_names(collected: &mut Collected, program: &Program<'_>, scoping: &Scoping) {

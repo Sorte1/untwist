@@ -4,7 +4,7 @@ use oxc_span::Span;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::Cx;
-use untwist_core::semantic::{has_module_syntax, with_observes};
+use untwist_core::semantic::{has_module_syntax, observing_open, open_eval_sites, with_observes};
 
 use crate::calls::agnostic::names_reachable_from;
 use crate::notes;
@@ -12,14 +12,19 @@ use crate::notes;
 use super::declared::DeclaredObject;
 
 struct Reach {
+    eval_sites: Vec<ScopeId>,
     with_scopes: Vec<ScopeId>,
     global: bool,
 }
 
-fn with_scopes(scoping: &Scoping) -> Vec<ScopeId> {
-    if !with_observes() {
+fn assumed_eval_sites(program: &Program<'_>, scoping: &Scoping) -> Vec<ScopeId> {
+    if with_observes() || !scoping.root_unresolved_references().contains_key("eval") {
         return Vec::new();
     }
+    open_eval_sites(program, scoping)
+}
+
+fn with_scopes(scoping: &Scoping) -> Vec<ScopeId> {
     scoping
         .scope_descendants_from_root()
         .filter(|scope| scoping.scope_flags(*scope).contains(ScopeFlags::With))
@@ -47,7 +52,7 @@ fn globals_reached(
     }
     names.sort_unstable();
     names.dedup();
-    names_reachable_from(program, scoping, &names)
+    observing_open(|| names_reachable_from(program, scoping, &names))
 }
 
 impl Reach {
@@ -58,15 +63,17 @@ impl Reach {
         symbol: SymbolId,
     ) -> Option<&'static str> {
         let declared = scoping.symbol_scope_id(symbol);
-        if scoping.scope_flags(declared).contains_direct_eval() {
+        let under = |sites: &[ScopeId]| {
+            sites.iter().any(|site| {
+                scoping
+                    .scope_ancestors(*site)
+                    .any(|scope| scope == declared)
+            })
+        };
+        if scoping.scope_flags(declared).contains_direct_eval() || under(&self.eval_sites) {
             return Some(notes::CONTROL_FLOW_DIRECT_EVAL);
         }
-        let under_with = self.with_scopes.iter().any(|with| {
-            scoping
-                .scope_ancestors(*with)
-                .any(|scope| scope == declared)
-        });
-        if under_with {
+        if under(&self.with_scopes) {
             return Some(notes::CONTROL_FLOW_WITH);
         }
         (self.global && is_script_global(program, scoping, symbol))
@@ -84,6 +91,7 @@ pub(super) fn refuse_dynamic_reach(
     }
     let scoping = cx.scoping();
     let reach = Reach {
+        eval_sites: assumed_eval_sites(program, scoping),
         with_scopes: with_scopes(scoping),
         global: globals_reached(program, scoping, candidates),
     };
