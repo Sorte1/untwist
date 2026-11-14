@@ -8,6 +8,7 @@ use crate::facts::{Ctx, Facts, FnRef, Source};
 use crate::ty::{Kind, Ty, Val};
 
 const ROUNDS: usize = 64;
+const EVAL_DEPTH: usize = 192;
 
 pub struct Env<'f, 'a> {
     pub cx: &'f Ctx<'f, 'a>,
@@ -16,6 +17,7 @@ pub struct Env<'f, 'a> {
     pub returns: Vec<Val>,
     pub builtins: bool,
     pub promises: bool,
+    depth: std::cell::Cell<usize>,
 }
 
 pub fn global_name<'a>(cx: &Ctx<'_, 'a>, ident: &IdentifierReference<'a>) -> Option<&'a str> {
@@ -101,6 +103,7 @@ impl<'f, 'a> Env<'f, 'a> {
             returns: vec![Val::Bottom; facts.functions.len()],
             builtins,
             promises,
+            depth: std::cell::Cell::new(0),
         }
     }
 
@@ -215,6 +218,17 @@ impl<'f, 'a> Env<'f, 'a> {
     }
 
     pub fn eval(&self, expression: &Expression<'a>) -> Val {
+        let depth = self.depth.get();
+        if depth > EVAL_DEPTH {
+            return Val::Top;
+        }
+        self.depth.set(depth + 1);
+        let val = self.eval_at(expression);
+        self.depth.set(depth);
+        val
+    }
+
+    fn eval_at(&self, expression: &Expression<'a>) -> Val {
         match expression {
             Expression::StringLiteral(literal) => match literal.value.as_str() {
                 Some(text) => Val::Known(Ty::string_literal(text)),

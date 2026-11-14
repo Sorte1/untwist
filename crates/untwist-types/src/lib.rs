@@ -11,7 +11,6 @@ mod view;
 
 use oxc_allocator::Allocator;
 use oxc_semantic::SemanticBuilder;
-use untwist_core::parse::{has_error, parse_program, SourceType};
 use untwist_core::semantic::builtins::{scan, Builtins};
 
 pub use builtins::RELIANCE;
@@ -86,19 +85,22 @@ impl Annotated {
 }
 
 struct Analysis {
-    notes: view::Annotations,
+    typed: Option<String>,
     stats: TypeStats,
-    edits: Vec<emit::Edit>,
-    instrumented: Option<String>,
+    jsx: bool,
 }
 
-fn analyse(code: &str, mode: Mode, instrument: bool) -> Result<(Analysis, SourceType, bool), (Refusal, bool)> {
+enum Purpose {
+    Annotate,
+    Instrument,
+}
+
+fn analyse(code: &str, mode: Mode, purpose: Purpose) -> Result<Analysis, (Refusal, bool)> {
     let alloc = Allocator::default();
-    let parsed = parse_program(&alloc, code);
-    if has_error(&parsed.diagnostics) {
+    let Some((program, source_type)) = erase::parse_js(&alloc, code) else {
         return Err((Refusal::Parse, false));
-    }
-    let program = alloc.alloc(parsed.program);
+    };
+    let program = alloc.alloc(program);
     let jsx = emit::has_jsx(program);
     if untwist_core::type_space::holds_type_space(program) {
         return Err((Refusal::TypeSyntax, jsx));
@@ -109,8 +111,7 @@ fn analyse(code: &str, mode: Mode, instrument: bool) -> Result<(Analysis, Source
     if let Some(hazard) = untwist_core::semantic::scope_hazard(&scoping) {
         return Err((Refusal::Hazard(hazard), jsx));
     }
-    let module = untwist_core::semantic::has_module_syntax(program)
-        || parsed.source_type.is_module();
+    let module = untwist_core::semantic::has_module_syntax(program) || source_type.is_module();
     let scanned = scan(program, &scoping, module, false, &RELIANCE);
     let shadowed = scoping.symbol_names().any(|name| EMITTED_TYPE_NAMES.contains(&name));
     let cx = facts::Ctx {
@@ -128,60 +129,41 @@ fn analyse(code: &str, mode: Mode, instrument: bool) -> Result<(Analysis, Source
     );
     env.solve();
     let decided = decide::decide(&env, mode);
-    let edits = emit::edits(&env, &decided.notes, mode, code);
-    let instrumented = instrument.then(|| instrument::instrument(&env, &decided.notes, code));
     let mut stats = decided.stats;
     stats.files = 1;
-    Ok((
-        Analysis {
-            notes: decided.notes,
-            stats,
-            edits,
-            instrumented,
-        },
-        parsed.source_type,
-        jsx,
-    ))
+    let nothing = decided.notes.symbols.is_empty() && decided.notes.returns.is_empty();
+    let typed = match (purpose, nothing) {
+        (Purpose::Instrument, _) => Some(instrument::instrument(&env, &decided.notes, code)),
+        (Purpose::Annotate, true) => None,
+        (Purpose::Annotate, false) => {
+            let typed = emit::apply(code, emit::edits(&env, &decided.notes, mode, code));
+            if !erase::same_after_strip(program, &typed, source_type, mode, jsx) {
+                return Err((Refusal::Erasure, jsx));
+            }
+            Some(typed)
+        }
+    };
+    Ok(Analysis { typed, stats, jsx })
 }
 
 pub fn annotate(code: &str, mode: Mode) -> Annotated {
     if code.trim().is_empty() {
         return Annotated::unchanged(code, None, false);
     }
-    let (analysis, source_type, jsx) = match analyse(code, mode, false) {
-        Ok(done) => done,
-        Err((refusal, jsx)) => return Annotated::unchanged(code, Some(refusal), jsx),
-    };
-    if analysis.notes.symbols.is_empty() && analysis.notes.returns.is_empty() {
-        return Annotated {
-            code: code.to_string(),
+    match analyse(code, mode, Purpose::Annotate) {
+        Ok(analysis) => Annotated {
+            code: analysis.typed.unwrap_or_else(|| code.to_string()),
             stats: analysis.stats,
-            jsx,
+            jsx: analysis.jsx,
             refused: None,
-        };
-    }
-    let typed = emit::apply(code, analysis.edits);
-    if erase::erases_as(code, &typed, source_type, mode, jsx).is_err() {
-        let mut stats = analysis.stats;
-        stats.files_refused = 1;
-        return Annotated {
-            code: code.to_string(),
-            stats,
-            jsx,
-            refused: Some(Refusal::Erasure),
-        };
-    }
-    Annotated {
-        code: typed,
-        stats: analysis.stats,
-        jsx,
-        refused: None,
+        },
+        Err((refusal, jsx)) => Annotated::unchanged(code, Some(refusal), jsx),
     }
 }
 
 #[doc(hidden)]
 pub fn instrumented(code: &str) -> Option<String> {
-    analyse(code, Mode::Ts, true)
+    analyse(code, Mode::Ts, Purpose::Instrument)
         .ok()
-        .and_then(|(analysis, _, _)| analysis.instrumented)
+        .and_then(|analysis| analysis.typed)
 }
