@@ -5,7 +5,7 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
-use oxc_syntax::operator::BinaryOperator;
+use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 
 const RUNNERS: [&str; 10] = [
     "eval",
@@ -52,8 +52,28 @@ fn literal_text(expression: &Expression<'_>) -> Option<String> {
     }
 }
 
+fn is_number(expression: &Expression<'_>) -> bool {
+    match expression.without_parentheses() {
+        Expression::NumericLiteral(_) | Expression::UpdateExpression(_) => true,
+        Expression::UnaryExpression(unary) => matches!(
+            unary.operator,
+            UnaryOperator::UnaryNegation | UnaryOperator::UnaryPlus | UnaryOperator::BitwiseNot
+        ),
+        Expression::BinaryExpression(binary) => {
+            (binary.operator.is_arithmetic() && binary.operator != BinaryOperator::Addition)
+                || binary.operator.is_bitwise()
+        }
+        Expression::AssignmentExpression(assignment) => match assignment.operator {
+            AssignmentOperator::Assign => is_number(&assignment.right),
+            AssignmentOperator::Addition => false,
+            operator => operator.is_arithmetic() || operator.is_bitwise(),
+        },
+        _ => false,
+    }
+}
+
 fn key_may_run(key: &Expression<'_>) -> bool {
-    if matches!(key.without_parentheses(), Expression::NumericLiteral(_)) {
+    if is_number(key) {
         return false;
     }
     literal_text(key).is_none_or(|name| RUNNERS.contains(&name.as_str()))
@@ -89,10 +109,15 @@ fn calls_back(first: Option<&Argument<'_>>) -> bool {
     )
 }
 
+const OPAQUE_KEY: &str = "constructor";
+
 fn runner_name<'e>(callee: &'e Expression<'_>) -> Option<&'e str> {
     match callee.without_parentheses() {
         Expression::Identifier(id) => Some(id.name.as_str()),
         Expression::StaticMemberExpression(member) => Some(member.property.name.as_str()),
+        Expression::ComputedMemberExpression(member) if key_may_run(&member.expression) => {
+            Some(OPAQUE_KEY)
+        }
         _ => None,
     }
     .filter(|name| RUNNERS.contains(name))
@@ -122,8 +147,13 @@ impl CodeText<'_> {
     }
 
     fn visit_callee_object<'a>(&mut self, callee: &Expression<'a>) {
-        if let Expression::StaticMemberExpression(member) = callee.without_parentheses() {
-            self.visit_expression(&member.object);
+        match callee.without_parentheses() {
+            Expression::StaticMemberExpression(member) => self.visit_expression(&member.object),
+            Expression::ComputedMemberExpression(member) => {
+                self.visit_expression(&member.object);
+                self.visit_expression(&member.expression);
+            }
+            _ => {}
         }
     }
 
