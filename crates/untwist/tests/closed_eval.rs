@@ -124,7 +124,7 @@ fn an_open_eval_still_observes_the_scope_by_default() {
 }
 
 #[test]
-fn under_unsafe_every_eval_is_assumed_not_to_observe() {
+fn under_unsafe_every_eval_is_assumed_not_to_observe_but_a_with_still_is() {
     for (condition, label, patch) in OPEN
         .iter()
         .filter(|(_, label, _)| *label != SPELLS_THE_DECODER)
@@ -133,7 +133,7 @@ fn under_unsafe_every_eval_is_assumed_not_to_observe() {
         assert!(decoded(&out), "({condition}) {label}: {}", out.code());
     }
     let with = program("var o = { q: 1 };\nwith (o) { console.log(q); }");
-    assert!(decoded(&run(&with, Lane::Unsafe)), "with under --unsafe");
+    assert!(!decoded(&run(&with, Lane::Unsafe)), "with under --unsafe");
     assert!(!decoded(&run(&with, Lane::Safe)), "with by default");
 }
 
