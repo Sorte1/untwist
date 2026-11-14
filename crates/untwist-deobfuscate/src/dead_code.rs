@@ -769,7 +769,13 @@ impl<'a> DeadCode<'a> {
             return false;
         }
         let span = node.span;
-        if cx.opts.unsafe_transforms && !decision.literal {
+        let dropped = if decision.value {
+            node.alternate.as_ref()
+        } else {
+            Some(&node.consequent)
+        };
+        let drops_block_function = !self.strict && hoisted_by(dropped).function;
+        if cx.opts.unsafe_transforms && !decision.literal && !drops_block_function {
             self.merge_branch(node.unbox(), span, decision.value, outer, stmts, cx)
         } else {
             self.fold_soundly(node, decision.value, outer, stmts, cx)

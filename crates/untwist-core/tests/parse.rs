@@ -156,3 +156,28 @@ fn a_bare_or_compound_target_is_left_as_written() {
         );
     }
 }
+
+#[test]
+fn an_html_open_comment_in_a_script_stays_a_comment() {
+    let alloc = Allocator::default();
+    let source = "var a = 5, b = 3;\nvar x = a<!--b\n;\nlog(x, b);";
+    let p = parse_program(&alloc, source);
+    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+    assert!(!p.source_type.is_module());
+    assert_eq!(p.program.body.len(), 3);
+}
+
+#[test]
+fn module_syntax_and_top_level_await_still_parse_as_a_module() {
+    for source in [
+        "export const a = 1;",
+        "import 'a';",
+        "await Promise.resolve(1);",
+        "console.log(import.meta.url);",
+    ] {
+        let alloc = Allocator::default();
+        let p = parse_program(&alloc, source);
+        assert!(p.diagnostics.is_empty(), "{source}: {:?}", p.diagnostics);
+        assert!(p.source_type.is_module(), "{source}");
+    }
+}

@@ -509,9 +509,6 @@ pub struct DynamicScopes {
 
 impl DynamicScopes {
     pub fn of(scoping: &Scoping) -> Self {
-        if !untwist_core::semantic::with_observes() {
-            return Self { withs: Vec::new() };
-        }
         let withs = scoping
             .scope_descendants_from_root()
             .filter(|id| scoping.scope_flags(*id).contains(ScopeFlags::With))

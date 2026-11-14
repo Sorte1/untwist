@@ -15,10 +15,9 @@ fn program_has_direct_eval(scoping: &Scoping) -> bool {
 }
 
 fn inside_with(scoping: &Scoping, scope: ScopeId) -> bool {
-    crate::semantic::with_observes()
-        && scoping
-            .scope_ancestors(scope)
-            .any(|ancestor| scoping.scope_flags(ancestor).contains(ScopeFlags::With))
+    scoping
+        .scope_ancestors(scope)
+        .any(|ancestor| scoping.scope_flags(ancestor).contains(ScopeFlags::With))
 }
 
 fn object_environment_may_bind(scoping: &Scoping, scope: ScopeId) -> bool {
