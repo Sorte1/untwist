@@ -12,6 +12,7 @@ pub struct SharedGlobals {
     pub other_scripts: bool,
     pub observed_elsewhere: bool,
     pub named_elsewhere: FxHashSet<String>,
+    pub names_read_elsewhere: bool,
 }
 
 impl SharedGlobals {
@@ -23,6 +24,7 @@ impl SharedGlobals {
             && !self.other_scripts
             && !self.observed_elsewhere
             && self.named_elsewhere.is_empty()
+            && !self.names_read_elsewhere
     }
 
     pub fn foreign_only(self) -> Self {
@@ -92,5 +94,13 @@ pub fn named_by_another_input(name: &str) -> bool {
         cell.borrow()
             .as_ref()
             .is_some_and(|shared| shared.named_elsewhere.contains(name))
+    })
+}
+
+pub fn names_read_by_another_input() -> bool {
+    SHARED_GLOBALS.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .is_some_and(|shared| shared.names_read_elsewhere)
     })
 }

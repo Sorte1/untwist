@@ -219,7 +219,13 @@ fn owned_holder<'a>(
     };
     if !holder.is_empty() {
         let name = holder_name(source.source_text);
-        rewrite_shared(alloc, &scoping, &mut program.body, (&holder, &name));
+        rewrite_shared(
+            alloc,
+            &scoping,
+            &mut program.body,
+            (&holder, &name),
+            source.source_text,
+        );
     }
     Ok((program.body, holder))
 }

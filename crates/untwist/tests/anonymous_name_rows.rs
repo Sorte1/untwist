@@ -4,7 +4,7 @@ use untwist_testing::node_rows::{self, listed_unsafe_witnesses, node_or_skip, ob
 
 const ROWS: &str = include_str!("data/anonymous_name_rows.txt");
 
-const UNSAFE_WITNESSES: [&str; 70] = [
+const UNSAFE_WITNESSES: [&str; 71] = [
     "var-function",
     "var-class",
     "let-arrow",
@@ -75,6 +75,7 @@ const UNSAFE_WITNESSES: [&str; 70] = [
     "code-text-rr2-d7",
     "code-text-rr2-d8",
     "code-text-rr2-d9",
+    "with-name-read",
 ];
 
 const TRIVIA_ROWS: [(&str, &str); 8] = [
