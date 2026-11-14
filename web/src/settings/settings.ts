@@ -80,7 +80,7 @@ export const WASM_CHECK_HINTS: Readonly<Record<WasmCheck, string>> = {
   auto: 'Extract byte arrays and base64 text that hold a WebAssembly module with imports or exports.',
 };
 
-export const MODERN_YEARS: readonly string[] = ['es2017', 'es2018', 'es2019', 'es2020', 'es2021', 'es2022', 'es2023', 'es2024'];
+export const MODERN_PRESETS: readonly string[] = ['', 'es2017', 'es2022', 'chrome 120, firefox 121, safari 17'];
 export const MODERN_CHARS = /^[A-Za-z0-9 ,.@_-]{0,200}$/;
 
 export function sameSettings(a: Settings, b: Settings): boolean {

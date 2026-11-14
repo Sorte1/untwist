@@ -69,3 +69,25 @@ fn an_inline_source_map_ends_the_output() {
         "file maps need a folder"
     );
 }
+
+fn assumed_split(report: &str) -> bool {
+    let json: serde_json::Value = serde_json::from_str(report).unwrap();
+    json["detection"]["assumedSplit"].as_bool().unwrap_or(false)
+}
+
+#[test]
+fn the_report_says_when_only_the_assumption_would_split_the_bundle() {
+    let source = fixture("unpack-rollup-boundaries/synthetic-rollup3-wrapped/index.js");
+    assert!(assumed_split(&run_report(&source, "", false).report_json()));
+    assert!(assumed_split(
+        &run_report(&source, "--split-hoisted", false).report_json()
+    ));
+    let split = run_report(&source, "--split-hoisted --split-assume-modules", false);
+    assert!(!assumed_split(&split.report_json()));
+    assert!(!assumed_split(
+        &run_report(&source, "--no-unpack", false).report_json()
+    ));
+    assert!(!assumed_split(
+        &run_report("var a = !0;", "", false).report_json()
+    ));
+}

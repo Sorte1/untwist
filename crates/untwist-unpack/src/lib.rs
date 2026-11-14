@@ -36,7 +36,7 @@ use oxc_ast::ast::Program;
 use untwist_core::pass::{Note, NoteKind};
 
 pub use detect::{
-    holds_a_bundle, holds_a_bundle_with, unpack_program, unpack_program_taking,
+    holds_a_bundle, holds_a_bundle_with, splits_with, unpack_program, unpack_program_taking,
     unpack_program_taking_with, unpack_program_with,
 };
 pub use inputs::{unpack_inputs, unpack_named_inputs};

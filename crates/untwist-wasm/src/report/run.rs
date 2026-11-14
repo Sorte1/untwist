@@ -1,4 +1,4 @@
-use untwist::{Isolation, Options, Pipeline, ProgressSink, SnapshotCode};
+use untwist::{Isolation, Options, Pipeline, ProgressSink, SnapshotCode, SplitHint};
 use untwist_eval::budget::default_fuel;
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -112,6 +112,7 @@ fn report_with(source: &str, options: Options, wasm: &WasmFiles, maps: MapFlags)
         .unwrap_or_else(|| default_fuel(options.unsafe_transforms));
     let (fuel, max_iterations) = (Some(fuel), options.max_iterations);
     let before = limits::fired();
+    let hint = SplitHint::of(&options);
     let mut result = Pipeline::new(with_input_map(options, source, maps)).run(source);
     let fired = limits::fired().since(before);
     link_inline(&mut result, maps);
@@ -129,6 +130,7 @@ fn report_with(source: &str, options: Options, wasm: &WasmFiles, maps: MapFlags)
         limits: &limits,
         fuel,
         max_iterations,
+        assumed_split: hint.splits_when_assumed(&result),
     };
     let report = report_json(&result, &facts);
     let bundle_json = result

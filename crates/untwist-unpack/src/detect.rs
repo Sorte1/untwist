@@ -744,6 +744,19 @@ fn taking<'a>(
     cloned(alloc, program, context)
 }
 
+pub fn splits_with<'a>(
+    alloc: &'a Allocator,
+    program: &Program<'a>,
+    options: UnpackOptions,
+) -> bool {
+    if !holds_a_bundle_with(program, options) {
+        return false;
+    }
+    let mut planned = Bodies::Planned(Vec::new());
+    let context = (options, &Links::default(), Scope::Top);
+    extract_with(alloc, program, (&mut planned, &mut None), context).is_some()
+}
+
 pub fn holds_a_bundle(program: &Program<'_>) -> bool {
     holds_a_bundle_with(program, UnpackOptions::default())
 }

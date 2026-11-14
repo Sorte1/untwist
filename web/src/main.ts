@@ -23,6 +23,7 @@ import { mountLoader } from './ui/load-input';
 import { mountInputPane } from './ui/input-pane';
 import { mountModeSwitch } from './ui/mode-switch';
 import { mountStringsBanner } from './ui/strings-banner';
+import { mountSplitBanner } from './ui/split-banner';
 import { mountModuleTree } from './ui/module-tree';
 import { mountModuleSearch } from './ui/module-search';
 import { mountOptions } from './ui/options';
@@ -199,6 +200,7 @@ function main(): void {
   mountDiagnosticsPanel();
   mountModeSwitch(store);
   mountStringsBanner(store, start, inputView);
+  mountSplitBanner(store, start);
   mountStringsTab(store, inputView);
   mountLibrariesTab(store, outputView, libraries, run);
   mountLinks(store, inputView, outputView);

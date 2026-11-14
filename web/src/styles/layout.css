@@ -495,6 +495,23 @@ button, input {
   margin-left: auto;
 }
 
+.select {
+  flex: 0 0 auto;
+  max-width: 190px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: var(--radius);
+  border: 1px solid var(--btn-border);
+  background: var(--code);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.modern-custom {
+  width: 100%;
+  margin-top: 6px;
+}
+
 .num-input:disabled {
   opacity: 0.5;
 }
@@ -1447,6 +1464,11 @@ button.diag-row:hover .diag-loc {
 
 .strings-banner svg {
   flex: 0 0 auto;
+}
+
+.split-banner {
+  background: var(--panel);
+  color: var(--text);
 }
 
 .wasm-bar {

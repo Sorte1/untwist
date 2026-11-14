@@ -49,12 +49,11 @@
 <div class="opt" id="split-opt"><span class="opt-text"><span class="opt-name">Split hoisted bundles</span><span class="hint" id="split-hint">Also split Rollup and Vite output into modules by its top-level declarations (--split-hoisted)</span></span><button type="button" role="switch" class="switch" data-key="split" aria-checked="false" aria-label="Split hoisted bundles" aria-describedby="split-hint"><span></span></button></div>
 <div class="opt" id="assume-opt"><span class="opt-text"><span class="opt-name">Assume ES modules</span><span class="hint" id="assume-hint">With the split, read the tree as ES modules: splits wrapped bundles, Rollup commonjs wrappers and inferred module boundaries; drops classic-script timing and document.currentScript (--split-assume-modules)</span></span><button type="button" role="switch" class="switch" data-key="assume" aria-checked="false" aria-label="Assume ES modules" aria-describedby="assume-hint"><span></span></button></div>
 <div class="opt" id="jsx-opt"><span class="opt-text"><span class="opt-name">Decompile JSX</span><span class="hint" id="jsx-hint">Turn createElement calls back into JSX</span></span><button type="button" role="switch" class="switch" data-key="jsx" aria-checked="true" aria-label="Decompile JSX" aria-describedby="jsx-hint"><span></span></button></div>
-<div class="fuel-row" title="Opt-in: remove core-js polyfills of features native in this baseline and use the native form of the core-js helpers left; the output then assumes such an engine (--modern)">
-<label for="modern">Modern baseline</label>
-<input id="modern" type="text" class="num-input" list="modern-years" placeholder="off, or es2022 / chrome 120, safari 17" spellcheck="false" autocomplete="off" aria-describedby="modern-hint">
-<datalist id="modern-years"><option value="es2017"></option><option value="es2018"></option><option value="es2019"></option><option value="es2020"></option><option value="es2021"></option><option value="es2022"></option><option value="es2023"></option><option value="es2024"></option></datalist>
+<div class="opt modern-opt" id="modern-opt" title="--modern: only modules recognised exactly as core-js are touched; the output then assumes such an engine with its own built-ins">
+<span class="opt-text"><label class="opt-name" for="modern-preset">Modern baseline</label><span class="hint" id="modern-hint">Replace core-js polyfills with native features for these browsers</span></span>
+<select id="modern-preset" class="select" aria-describedby="modern-hint"><option value="">Off</option><option value="es2017">ES2017</option><option value="es2022">ES2022</option><option value="chrome 120, firefox 121, safari 17">Chrome 120 / Firefox 121 / Safari 17</option><option value="custom">Custom…</option></select>
 </div>
-<span class="hint" id="modern-hint">Remove core-js polyfills the engines in the baseline have natively. Empty is off.</span>
+<input id="modern" type="text" class="num-input modern-custom" placeholder="es2024 or chrome 120, safari 17, node 20" spellcheck="false" autocomplete="off" aria-label="Custom modern baseline" hidden>
 </section>
 
 <section class="set-group">
@@ -180,6 +179,11 @@
 <p class="strings-banner-text"><strong id="strings-banner-text"></strong> <span id="strings-banner-detail"></span></p>
 <button type="button" class="btn btn-small" id="refusal-why" aria-expanded="false" aria-controls="refusal-why-panel">Why?</button>
 <button type="button" class="btn btn-small" id="run-unsafe">Run in Unsafe</button>
+</div>
+<div class="strings-banner split-banner" id="split-banner" role="status" hidden>
+<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 3.5h11M2.5 8h5M2.5 12.5h5M10.5 8h3M10.5 12.5h3"></path></svg>
+<p class="strings-banner-text"><strong id="split-banner-text"></strong></p>
+<button type="button" class="btn btn-small" id="split-assume">Turn on and rerun</button>
 </div>
 <div class="wasm-bar" id="wasm-bar" role="region" aria-label="WebAssembly modules" hidden></div>
 <div class="refusal-why" id="refusal-why-panel" role="region" aria-label="Why the decoder calls were left in place" hidden></div>
