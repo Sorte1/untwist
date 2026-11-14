@@ -118,23 +118,32 @@ fn problems(row: &Row, out: &Output) -> Vec<String> {
 }
 
 #[test]
-fn every_eval_devtool_bundle_is_inlined_once_and_unpacked_as_webpack_in_both_lanes() {
+fn every_eval_devtool_bundle_is_inlined_once_and_unpacked_as_webpack_under_unsafe() {
     let rows = rows();
     assert!(rows.len() >= 39, "{} rows", rows.len());
     let mut wrong = Vec::new();
     for row in &rows {
-        let text = source(row);
-        for unsafe_transforms in [false, true] {
-            let out = unpacked(unsafe_transforms, &text);
-            for problem in problems(row, &out) {
-                wrong.push(format!(
-                    "{} unsafe={unsafe_transforms}: {problem}",
-                    row.path
-                ));
-            }
+        let out = unpacked(true, &source(row));
+        for problem in problems(row, &out) {
+            wrong.push(format!("{}: {problem}", row.path));
         }
     }
     assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+#[test]
+fn the_default_lane_keeps_the_eval_layers_because_the_runtime_reads_modules_under_an_opaque_key() {
+    let peeled: Vec<String> = rows()
+        .iter()
+        .filter(|row| {
+            unpacked(false, &source(row))
+                .stages
+                .iter()
+                .any(|stage| stage.stage == INLINE_LAYER_PASS)
+        })
+        .map(|row| row.path.clone())
+        .collect();
+    assert!(peeled.is_empty(), "{peeled:#?}");
 }
 
 #[test]

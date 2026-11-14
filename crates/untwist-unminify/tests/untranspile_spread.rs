@@ -91,7 +91,10 @@ fn babel_keeps_the_runtime_dependent_spreads_in_the_default_mode() {
         code.contains("_objectSpread(_objectSpread({}, o1)"),
         "{code}"
     );
-    assert!(code.contains("[...\"xy\"].join(\"-\")"), "{code}");
+    assert!(
+        code.contains("_toConsumableArray(\"xy\").join(\"-\")"),
+        "{code}"
+    );
     assert!(code.contains("function _toConsumableArray"), "{code}");
 }
 
@@ -126,14 +129,17 @@ fn typescript_spread_array_keeps_holes_and_non_arrays() {
 }
 
 #[test]
-fn typescript_inlines_a_literal_array_in_the_default_mode() {
+fn typescript_keeps_spread_array_in_the_default_mode_when_a_helper_reads_an_opaque_key() {
     let script = run(&fixture("ts/spread.es5.js"), false);
     assert!(
         script.contains("__spreadArray([undefined], [2020, 0, 2], false)"),
         "{script}"
     );
     let code = run(&as_module(&fixture("ts/spread.es5.js")), false);
-    assert!(code.contains("[undefined, 2020, 0, 2]"), "{code}");
+    assert!(
+        code.contains("__spreadArray([undefined], [2020, 0, 2], false)"),
+        "{code}"
+    );
     assert!(code.contains("__spreadArray([], a, true)"), "{code}");
 }
 
@@ -280,15 +286,16 @@ fn a_safe_site_after_unsafe_ones_still_fires_in_the_default_mode() {
 }
 
 #[test]
-fn a_formatted_program_converts_its_safe_spreads_in_the_default_mode() {
+fn a_formatted_program_keeps_its_spreads_in_the_default_mode_when_a_helper_reads_an_opaque_key() {
     let code = run(&as_module(&fixture("hand/formatted-spread.js")), false);
-    assert!(code.contains("var safeArray = [0, 3, 4];"), "{code}");
     assert!(
-        code.contains("var safeObject = {\n  a: 1,\n  b: 2\n};"),
+        code.contains(
+            "var safeArray = __spreadArray(__spreadArray([], [0], false), [3, 4], false);"
+        ),
         "{code}"
     );
     assert!(
-        code.contains("var array = __spreadArray(__spreadArray([], xs, true), [5], false);"),
+        code.contains("var safeObject = __spreadValues(__spreadValues({}, { a: 1 }), { b: 2 });"),
         "{code}"
     );
 }

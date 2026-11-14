@@ -61,6 +61,12 @@ base/webpack5-dev-eval	default	recognised	xfail	bm-webpack-eval-devtool: devtool
 base/webpack5-dev-eval	split	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
 base/webpack5-dev-eval-source-map	default	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
 base/webpack5-dev-eval-source-map	split	recognised	xfail	bm-webpack-eval-devtool: devtool eval* modules are eval strings, refused as not closed
+mini/webpack4-dev-eval	default	recognised	xfail	bm-webpack-eval-default-scan: the runtime reads modules under an opaque key, which the default-lane built-in scan counts as maybe reaching a prototype, so the eval layers stay
+mini/webpack4-dev-eval	split	recognised	xfail	bm-webpack-eval-default-scan: the runtime reads modules under an opaque key, which the default-lane built-in scan counts as maybe reaching a prototype, so the eval layers stay
+mini/webpack5-dev-eval	default	recognised	xfail	bm-webpack-eval-default-scan: the runtime reads modules under an opaque key, which the default-lane built-in scan counts as maybe reaching a prototype, so the eval layers stay
+mini/webpack5-dev-eval	split	recognised	xfail	bm-webpack-eval-default-scan: the runtime reads modules under an opaque key, which the default-lane built-in scan counts as maybe reaching a prototype, so the eval layers stay
+mini/webpack5-dev-eval-source-map	default	recognised	xfail	bm-webpack-eval-default-scan: the runtime reads modules under an opaque key, which the default-lane built-in scan counts as maybe reaching a prototype, so the eval layers stay
+mini/webpack5-dev-eval-source-map	split	recognised	xfail	bm-webpack-eval-default-scan: the runtime reads modules under an opaque key, which the default-lane built-in scan counts as maybe reaching a prototype, so the eval layers stay
 base/webpack5-esm-output	*	recognised	xfail	bm-webpack-esm-output: output.module puts the entry at the top level of an ES module; not proven
 base/webpack5-federation	*	recognised	xfail	bm-webpack-federation: module federation share scopes and remotes are not recorded loader forms
 base/webpack5-prod-node+obf-cff	unsafe	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms

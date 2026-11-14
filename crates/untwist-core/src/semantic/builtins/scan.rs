@@ -5,7 +5,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, 
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
-use std::cell::OnceCell;
+use std::cell::{Cell, OnceCell};
 
 use super::{Builtins, Reliance, Scanned};
 use crate::semantic::{is_foreign_global, program_is_strict};
@@ -173,6 +173,10 @@ struct Scan<'s> {
     program: &'s Program<'s>,
     spelling: OnceCell<FxHashSet<SymbolId>>,
     reaching_text: OnceCell<bool>,
+    unplain: OnceCell<FxHashSet<SymbolId>>,
+    enumerated: OnceCell<keys::EnumeratedKeys>,
+    strict: bool,
+    opaque_key: Cell<bool>,
     scoping: &'s Scoping,
     reliance: &'s Reliance,
     writes_only: bool,
@@ -206,40 +210,60 @@ pub fn scan(
     writes_only: bool,
     reliance: &Reliance,
 ) -> Scanned {
-    let mut scan = Scan {
-        program,
-        spelling: OnceCell::new(),
-        reaching_text: OnceCell::new(),
-        scoping,
-        reliance,
-        writes_only,
-        first_only: false,
-        frames: vec![Frame::of_program(program, module)],
-        verdict: first_verdict(scoping, reliance),
-        promise_written: false,
+    let run = |strict: bool| {
+        let mut scan = Scan::new(program, scoping, module, reliance, strict);
+        scan.writes_only = writes_only;
+        scan.visit_program(program);
+        scan
     };
-    scan.visit_program(program);
+    let lenient = run(false);
+    let verdict = match lenient.verdict {
+        Builtins::Intact if lenient.opaque_key.get() => run(true).verdict.min_aliased(),
+        verdict => verdict,
+    };
     Scanned {
-        verdict: scan.verdict,
-        promise_written: scan.promise_written,
+        verdict,
+        promise_written: lenient.promise_written,
     }
 }
 
 pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: &Reliance) -> bool {
-    let mut scan = Scan {
-        program,
-        spelling: OnceCell::new(),
-        reaching_text: OnceCell::new(),
-        scoping,
-        reliance,
-        writes_only: false,
-        first_only: true,
-        frames: vec![Frame::of_program(program, module)],
-        verdict: first_verdict(scoping, reliance),
-        promise_written: false,
+    let run = |strict: bool| {
+        let mut scan = Scan::new(program, scoping, module, reliance, strict);
+        scan.first_only = true;
+        scan.visit_program(program);
+        scan
     };
-    scan.visit_program(program);
-    scan.verdict == Builtins::Intact
+    let lenient = run(false);
+    lenient.verdict == Builtins::Intact
+        && (!lenient.opaque_key.get() || run(true).verdict == Builtins::Intact)
+}
+
+impl<'s> Scan<'s> {
+    fn new(
+        program: &'s Program<'s>,
+        scoping: &'s Scoping,
+        module: bool,
+        reliance: &'s Reliance,
+        strict: bool,
+    ) -> Self {
+        Self {
+            program,
+            spelling: OnceCell::new(),
+            reaching_text: OnceCell::new(),
+            unplain: OnceCell::new(),
+            enumerated: OnceCell::new(),
+            strict,
+            opaque_key: Cell::new(false),
+            scoping,
+            reliance,
+            writes_only: false,
+            first_only: false,
+            frames: vec![Frame::of_program(program, module)],
+            verdict: first_verdict(scoping, reliance),
+            promise_written: false,
+        }
+    }
 }
 
 impl Scan<'_> {
@@ -247,6 +271,23 @@ impl Scan<'_> {
         *self
             .reaching_text
             .get_or_init(|| keys::names_a_reaching_key(self.program, &REACHING_KEYS))
+    }
+
+    pub(super) fn enumerated_owner(
+        &self,
+        reference: oxc_syntax::reference::ReferenceId,
+    ) -> Option<SymbolId> {
+        self.enumerated
+            .get_or_init(|| keys::enumerated_keys(self.program, self.scoping))
+            .get(&reference)
+            .copied()
+    }
+
+    pub(super) fn plain_symbol(&self, symbol: SymbolId) -> bool {
+        !self
+            .unplain
+            .get_or_init(|| keys::unplain_symbols(self.program, self.scoping))
+            .contains(&symbol)
     }
 
     pub(super) fn spelling_symbol(&self, symbol: SymbolId) -> bool {

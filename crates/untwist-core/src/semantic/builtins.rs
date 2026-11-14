@@ -16,6 +16,13 @@ pub enum Builtins {
 }
 
 impl Builtins {
+    fn min_aliased(self) -> Self {
+        match self {
+            Builtins::Intact => Builtins::Intact,
+            _ => Builtins::Aliased,
+        }
+    }
+
     pub fn allows_safe(self, unsafe_transforms: bool) -> bool {
         self == Builtins::Intact || (unsafe_transforms && self == Builtins::Aliased)
     }
