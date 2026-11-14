@@ -1,0 +1,14 @@
+{
+  "id": "stats-js",
+  "keys": [
+    "canvas",
+    "function",
+    "object",
+    "position:fixed;top:0;left:0;cursor:pointer;opacity:0.9;z-index:10000",
+    "px Helvetica,Arial,sans-serif",
+    "undefined",
+    "use strict",
+    "width:80px;height:48px"
+  ],
+  "label": "stats.js"
+}

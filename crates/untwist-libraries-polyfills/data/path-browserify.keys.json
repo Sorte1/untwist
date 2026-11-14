@@ -1,0 +1,14 @@
+{
+  "id": "path-browserify",
+  "keys": [
+    "\"ext\" argument must be a string",
+    "Arguments to path.join must be strings",
+    "Arguments to path.resolve must be strings",
+    "Path must be a string. Received ",
+    "The \"pathObject\" argument must be of type Object. Received type ",
+    "object",
+    "string",
+    "use strict"
+  ],
+  "label": "path-browserify"
+}

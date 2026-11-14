@@ -1,0 +1,22 @@
+{
+  "id": "tweenjs-tween-js",
+  "keys": [
+    "18.4.2",
+    "18.5.0",
+    "18.6.4",
+    "25.0.0",
+    "Can not call Tween.to() while Tween is already started or paused. Stop the Tween first.",
+    "Found invalid interpolation list. Skipping.",
+    "__esModule",
+    "default",
+    "exports",
+    "function",
+    "number",
+    "object",
+    "string",
+    "tween.group() without args has been removed, use group.add(tween) instead.",
+    "undefined",
+    "use strict"
+  ],
+  "label": "@tweenjs/tween.js"
+}

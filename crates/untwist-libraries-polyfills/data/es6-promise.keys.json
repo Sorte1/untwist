@@ -1,0 +1,25 @@
+{
+  "id": "es6-promise",
+  "keys": [
+    " unknown promise",
+    "A promises callback cannot return that same promise.",
+    "Array Methods must be provided an Array",
+    "Failed to construct 'Promise': Please use the 'new' operator, this object constructor cannot be called as a function.",
+    "Settle: ",
+    "You cannot resolve a promise with itself",
+    "You must pass a resolver function as the first argument to the promise constructor",
+    "You must pass an array to race.",
+    "[object Array]",
+    "[object Promise]",
+    "[object process]",
+    "default",
+    "function",
+    "isArray",
+    "object",
+    "polyfill failed because global object is unavailable in this environment",
+    "return this",
+    "undefined",
+    "use strict"
+  ],
+  "label": "es6-promise"
+}

@@ -1,0 +1,26 @@
+{
+  "id": "events",
+  "keys": [
+    " listeners added. Use emitter.setMaxListeners() to increase limit",
+    "(node) warning: possible EventEmitter memory leak detected. %d listeners added. Use emitter.setMaxListeners() to increase limit.",
+    "MaxListenersExceededWarning",
+    "Possible EventEmitter memory leak detected. ",
+    "The \"emitter\" argument must be of type EventEmitter. Received type ",
+    "The \"listener\" argument must be of type Function. Received type ",
+    "The value of \"defaultMaxListeners\" is out of range. It must be a non-negative number. Received ",
+    "The value of \"n\" is out of range. It must be a non-negative number. Received ",
+    "Uncaught, unspecified \"error\" event.",
+    "Uncaught, unspecified \"error\" event. (",
+    "Unhandled error.",
+    "defaultMaxListeners",
+    "function",
+    "listener must be a function",
+    "n must be a positive number",
+    "newListener",
+    "number",
+    "object",
+    "removeListener",
+    "use strict"
+  ],
+  "label": "events"
+}

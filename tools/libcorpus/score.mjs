@@ -13,7 +13,7 @@ const only = new RegExp(option("--only", "."));
 const [shard, shards] = option("--shard", "0/1").split("/").map(Number);
 const BUNDLERS = ["webpack", "rollup", "esbuild", "vite"];
 const POST = { none: ".js", terser: ".min.js", obfuscator: ".obf.js" };
-const COMMENT = /^\s*\/\/ (\S+) (\d[\d.,~–-]*): (.+?)\s*$/gm;
+const COMMENT = /^\s*\/\/ (\S+) (\d[\d.~–-]*(?:, \d[\d.~–-]*)*): (.+?)\s*$/gm;
 
 const minor = (version) => version.split(".").slice(0, 2).map(Number);
 const before = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1]);
@@ -28,6 +28,7 @@ const labelOf = (lib) => LABELS[lib] ?? lib;
 const stem = (file) => file.replace(/\.(c|m)?js$/, "");
 
 function untwist(input, lane, saved) {
+  if (args.includes("--from-saved") && existsSync(saved)) return readFileSync(saved, "utf8");
   const flags = lane === "unsafe" ? ["--unsafe"] : [];
   try {
     const text = execFileSync(UNTWIST, [...flags, input], { encoding: "utf8", maxBuffer: 1 << 30, stdio: ["ignore", "pipe", "pipe"], timeout: 600_000 });
@@ -40,7 +41,7 @@ function untwist(input, lane, saved) {
 
 function score(truthFile, output) {
   const truth = readFileSync(truthFile, "utf8").split("\n").filter(Boolean).map((line) => line.split("\t"));
-  const comments = [...output.matchAll(COMMENT)].map((match) => ({ label: match[1], range: match[2], modules: match[3].split(" | ").map(stem), module: match[3] }));
+  const comments = [...output.matchAll(COMMENT)].map((match) => ({ label: match[1], range: match[2].replace(/, /g, ","), modules: match[3].split(", same code in ")[0].split(" | ").map(stem), module: match[3] }));
   const versions = new Map(truth.map(([lib, version]) => [labelOf(lib), version]));
   const wrong = [];
   const ok = [];
@@ -65,7 +66,16 @@ function score(truthFile, output) {
 }
 
 const rows = [];
-const work = apps().filter((app, index) => only.test(app.id) && index % shards === shard);
+const major = (version) => (version.startsWith("0.") ? version.split(".").slice(0, 2).join(".") : version.split(".")[0]);
+const latest = new Map();
+for (const app of apps()) {
+  const key = `${app.lib}@${major(app.version)}`;
+  const cmp = (a, b) => a.split(".").map(Number).reduce((acc, n, i) => acc || n - Number(b.split(".")[i] ?? 0), 0);
+  if (!latest.has(key) || cmp(app.version, latest.get(key)) > 0) latest.set(key, app.version);
+}
+const sample = args.includes("--latest-per-major");
+const work = apps().filter((app) => !sample || !/--whole(-dev)?$/.test(app.id) || latest.get(`${app.lib}@${major(app.version)}`) === app.version)
+  .filter((app, index) => only.test(app.id) && index % shards === shard);
 for (const app of work) {
   for (const bundler of BUNDLERS) {
     const truthFile = join(OUT, "bundles", app.id, `${bundler}.modules.tsv`);

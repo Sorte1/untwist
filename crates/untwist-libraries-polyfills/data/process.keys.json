@@ -1,0 +1,12 @@
+{
+  "id": "process",
+  "keys": [
+    "browser",
+    "clearTimeout has not been defined",
+    "function",
+    "process.binding is not supported",
+    "process.chdir is not supported",
+    "setTimeout has not been defined"
+  ],
+  "label": "process"
+}

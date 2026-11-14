@@ -1,0 +1,14 @@
+{
+  "id": "eventemitter3",
+  "keys": [
+    "Cannot find module '",
+    "MODULE_NOT_FOUND",
+    "The listener must be a function",
+    "default",
+    "function",
+    "object",
+    "undefined",
+    "use strict"
+  ],
+  "label": "eventemitter3"
+}

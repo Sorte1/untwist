@@ -1,0 +1,25 @@
+{
+  "id": "promise-polyfill",
+  "keys": [
+    " is not iterable(cannot read property Symbol(Symbol.iterator))",
+    "A promise cannot be resolved with itself.",
+    "AggregateError",
+    "All promises were rejected",
+    "Possible Unhandled Promise Rejection:",
+    "Promise",
+    "Promise.all accepts an array",
+    "Promise.any accepts an array",
+    "Promise.race accepts an array",
+    "Promises must be constructed via new",
+    "default",
+    "fulfilled",
+    "function",
+    "not a function",
+    "object",
+    "rejected",
+    "unable to locate global object",
+    "undefined",
+    "use strict"
+  ],
+  "label": "promise-polyfill"
+}

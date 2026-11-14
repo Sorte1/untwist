@@ -1,0 +1,14 @@
+{
+  "id": "base64-js",
+  "keys": [
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+    "Cannot find module '",
+    "Invalid string. Length must be a multiple of 4",
+    "MODULE_NOT_FOUND",
+    "function",
+    "object",
+    "undefined",
+    "use strict"
+  ],
+  "label": "base64-js"
+}

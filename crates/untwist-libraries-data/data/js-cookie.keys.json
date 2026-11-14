@@ -1,0 +1,16 @@
+{
+  "id": "js-cookie",
+  "keys": [
+    "; domain=",
+    "; expires=",
+    "; path=",
+    "; secure",
+    "__proto__",
+    "function",
+    "number",
+    "object",
+    "undefined",
+    "use strict"
+  ],
+  "label": "js-cookie"
+}

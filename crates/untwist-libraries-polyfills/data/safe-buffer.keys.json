@@ -1,0 +1,10 @@
+{
+  "id": "safe-buffer",
+  "keys": [
+    "Argument must be a number",
+    "Argument must not be a number",
+    "number",
+    "string"
+  ],
+  "label": "safe-buffer"
+}
