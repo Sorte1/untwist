@@ -1,0 +1,14 @@
+a26rr2-alias|var g = globalThis; g.eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
+a26rr2-chain|globalThis.globalThis.eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
+a26rr2-chain2|window = this; window.self = this; window.self.eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
+a26rr2-seq|(0, globalThis).eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
+a26rr2-logical|(1 && globalThis).eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
+a26rr2-setter|globalThis.__defineSetter__("eval", function () {}); @@ function f() { return eval("1 + 1"); } console.log(f());
+a26rr2-reflect_set|Reflect.set(globalThis, "eval", function () { console.log("foreign eval"); return "console.log('F')"; }); @@ function f() { return eval("1 + 1"); } console.log(f());
+a26rr2-ctor_text|[].filter.constructor("atob = function () { console.log('foreign atob'); return 'console.log(7)'; }")(); @@ eval(atob("Y29uc29sZS5sb2coMSk="));
+a26rr2-eval_call|eval.call(null, "var atob = function () { console.log('foreign atob'); return 'console.log(7)'; };"); @@ eval(atob("Y29uc29sZS5sb2coMSk="));
+a26rr2-eval_alias|var e = eval; e("var atob = function () { console.log('foreign atob'); return 'console.log(7)'; };"); @@ eval(atob("Y29uc29sZS5sb2coMSk="));
+a26rr2-x_string_fcc|String.fromCharCode = function () { return "console.log('F')"; }; @@ eval(String.fromCharCode(99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 52, 41));
+a26rr2-x_string_proto|var S = String; S.fromCharCode = function () { return "console.log('F')"; }; @@ eval(String.fromCharCode(99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 52, 41));
+a26rr2-x_array_proto|Array.prototype.toString = function () { return "'+'patched"; }; @@ function f() { eval("console.log('or" + [] + "ig')"); } f();
+a26rr2-x_array_proto2|[].__proto__.toString = function () { return "'+'patched"; }; @@ function f() { eval("console.log('or" + [] + "ig')"); } f();

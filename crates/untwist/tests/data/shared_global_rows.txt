@@ -19,17 +19,3 @@ ref-other-script-sets-string-through-window-key|globalThis["String"] = { fromCha
 ref-other-script-declares-through-indirect-eval|(0, eval)("var JSON = { parse: function () { return 'foreign'; } }"); @@ console.log(JSON.parse("1"));
 ref-other-script-sets-unescape-in-a-function-through-this|(function () { this.unescape = function () { return "console.log('F')"; }; })(); @@ eval(unescape("%63onsole.log(3)"));
 ref-other-script-sets-function-through-a-computed-global-key|var k = "Func" + "tion"; globalThis[k] = function () { return function () { console.log("foreign"); }; }; @@ Function("console.log(2)")();
-ref-a26rr2-alias|var g = globalThis; g.eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
-ref-a26rr2-chain|globalThis.globalThis.eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
-ref-a26rr2-chain2|window = this; window.self = this; window.self.eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
-ref-a26rr2-seq|(0, globalThis).eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
-ref-a26rr2-logical|(1 && globalThis).eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ function f() { return eval("1 + 1"); } console.log(f());
-ref-a26rr2-setter|globalThis.__defineSetter__("eval", function () {}); @@ function f() { return eval("1 + 1"); } console.log(f());
-ref-a26rr2-reflect_set|Reflect.set(globalThis, "eval", function () { console.log("foreign eval"); return "console.log('F')"; }); @@ function f() { return eval("1 + 1"); } console.log(f());
-ref-a26rr2-ctor_text|[].filter.constructor("atob = function () { console.log('foreign atob'); return 'console.log(7)'; }")(); @@ eval(atob("Y29uc29sZS5sb2coMSk="));
-ref-a26rr2-eval_call|eval.call(null, "var atob = function () { console.log('foreign atob'); return 'console.log(7)'; };"); @@ eval(atob("Y29uc29sZS5sb2coMSk="));
-ref-a26rr2-eval_alias|var e = eval; e("var atob = function () { console.log('foreign atob'); return 'console.log(7)'; };"); @@ eval(atob("Y29uc29sZS5sb2coMSk="));
-ref-a26rr2-x_string_fcc|String.fromCharCode = function () { return "console.log('F')"; }; @@ eval(String.fromCharCode(99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 52, 41));
-ref-a26rr2-x_string_proto|var S = String; S.fromCharCode = function () { return "console.log('F')"; }; @@ eval(String.fromCharCode(99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 52, 41));
-ref-a26rr2-x_array_proto|Array.prototype.toString = function () { return "'+'patched"; }; @@ function f() { eval("console.log('or" + [] + "ig')"); } f();
-ref-a26rr2-x_array_proto2|[].__proto__.toString = function () { return "'+'patched"; }; @@ function f() { eval("console.log('or" + [] + "ig')"); } f();
