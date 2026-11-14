@@ -1,5 +1,6 @@
 use oxc_allocator::Allocator;
 use std::collections::HashSet;
+use untwist_core::ast_util::naming_slot::reads_names;
 use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{has_error, parse_program};
 use untwist_core::semantic::{build_scoping, SharedGlobals};
@@ -15,6 +16,7 @@ struct Seen {
     written: HashSet<String>,
     global_written: GlobalWrites,
     readable: bool,
+    names_read: bool,
 }
 
 impl Seen {
@@ -44,6 +46,7 @@ fn unreadable() -> Seen {
         written: HashSet::new(),
         global_written: GlobalWrites::default(),
         readable: false,
+        names_read: true,
     }
 }
 
@@ -74,6 +77,7 @@ fn seen(source: &str) -> Seen {
             .collect(),
         global_written: global_writes(&parsed.program),
         readable: !has_error(&parsed.diagnostics),
+        names_read: reads_names(&parsed.program, &scoping),
     }
 }
 
@@ -151,7 +155,9 @@ fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGloba
         .flat_map(|(_, other)| other.named())
         .map(str::to_string)
         .collect();
+    let names_read_elsewhere = others().any(|(_, other)| other.names_read);
     SharedGlobals {
+        names_read_elsewhere,
         every_name,
         names,
         every_foreign,

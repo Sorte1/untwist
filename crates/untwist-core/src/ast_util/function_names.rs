@@ -218,6 +218,11 @@ impl<'a> VisitJs<'a> for Walker<'_> {
         walk_js::walk_binding_property(self, it);
     }
 
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.out.name_read = true;
+        walk_js::walk_with_statement(self, it);
+    }
+
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
         if it.property.name == NAME {
             self.read_on(&it.object);

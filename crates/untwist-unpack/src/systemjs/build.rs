@@ -6,6 +6,7 @@ use oxc_span::{GetSpan, SourceType, Span};
 use oxc_str::{Ident, Str};
 use oxc_syntax::operator::AssignmentOperator;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::naming_slot::{text_observes_names, unnamed};
 
 use super::exports::{context_import, declarator_export, is_export_call, value, Value};
 use super::layout::{Bind, Declare, Layout};
@@ -16,6 +17,17 @@ use crate::runtime::{js_string, synthetic_statements};
 pub struct Shared<'n, 'a> {
     pub names: &'n FxHashSet<&'a str>,
     pub prefix: Option<String>,
+    pub text: &'a str,
+    pub names_read: Option<bool>,
+}
+
+impl Shared<'_, '_> {
+    fn names_read(&mut self) -> bool {
+        let text = self.text;
+        *self
+            .names_read
+            .get_or_insert_with(|| text_observes_names(text))
+    }
 }
 
 const UNBINDABLE: [&str; 51] = [
@@ -151,6 +163,12 @@ impl<'a> Rewrite<'a, '_, '_> {
             [Argument::StringLiteral(name), argument] => {
                 let name = name.value.as_str()?;
                 let expression = argument.take_in(&self.builder).into_expression();
+                let expression = match expression.is_anonymous_function_definition()
+                    && self.shared.names_read()
+                {
+                    true => unnamed(expression, &self.builder),
+                    false => expression,
+                };
                 Some(self.single(name, expression))
             }
             [Argument::ObjectExpression(object)] => {
@@ -505,6 +523,8 @@ pub fn relink_dynamic<'a>(
     let mut shared = Shared {
         names: &names,
         prefix: None,
+        text: "",
+        names_read: Some(true),
     };
     let renames = FxHashMap::default();
     let maps = Maps {
