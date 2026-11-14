@@ -628,7 +628,7 @@ rolldown/cjs-corejs--plain.js	unsafe	27	1	0
 rolldown/cjs-corejs--terser.js	default	27	1	52
 rolldown/cjs-corejs--terser.js	unsafe	27	1	52
 rolldown/cjs-corejs-min--plain.js	default	26	1	50
-rolldown/cjs-corejs-min--plain.js	unsafe	26	1	71
+rolldown/cjs-corejs-min--plain.js	unsafe	26	1	50
 rolldown/cjs-synthetic--obf-strings.js	default	0	0	0
 rolldown/cjs-synthetic--obf-strings.js	unsafe	8	1	12
 rolldown/cjs-synthetic--plain.js	default	8	1	0
@@ -644,7 +644,7 @@ rolldown/esm-corejs--plain.js	unsafe	27	1	0
 rolldown/esm-corejs--terser.js	default	27	1	52
 rolldown/esm-corejs--terser.js	unsafe	27	1	52
 rolldown/esm-corejs-min--plain.js	default	26	1	50
-rolldown/esm-corejs-min--plain.js	unsafe	26	1	71
+rolldown/esm-corejs-min--plain.js	unsafe	26	1	50
 rolldown/esm-synthetic--obf-strings.js	default	0	0	0
 rolldown/esm-synthetic--obf-strings.js	unsafe	8	1	12
 rolldown/esm-synthetic--plain.js	default	8	1	0
@@ -652,7 +652,7 @@ rolldown/esm-synthetic--plain.js	unsafe	8	1	0
 rolldown/esm-synthetic--terser.js	default	8	1	12
 rolldown/esm-synthetic--terser.js	unsafe	8	1	12
 rolldown/esm-synthetic-min--plain.js	default	8	1	12
-rolldown/esm-synthetic-min--plain.js	unsafe	8	1	18
+rolldown/esm-synthetic-min--plain.js	unsafe	8	1	12
 rolldown/iife-corejs--obf-strings.js	default	0	0	0
 rolldown/iife-corejs--obf-strings.js	unsafe	27	1	80
 rolldown/iife-corejs--plain.js	default	27	1	0
@@ -672,7 +672,7 @@ rolldown/iife-synthetic-min--plain.js	unsafe	8	1	21
 vite/vite5-app-corejs--plain.js	default	0	1	0
 vite/vite5-app-corejs--plain.js	unsafe	0	1	0
 vite/vite5-app-corejs-min--plain.js	default	0	1	0
-vite/vite5-app-corejs-min--plain.js	unsafe	0	1	1
+vite/vite5-app-corejs-min--plain.js	unsafe	0	1	0
 vite/vite5-app-synthetic--plain.js	default	7	2	0
 vite/vite5-app-synthetic--plain.js	unsafe	7	2	0
 vite/vite5-app-synthetic-min--plain.js	default	7	2	0
@@ -720,11 +720,11 @@ vite/vite7-lib-synthetic-min--plain.js	unsafe	9	2	29
 vite/vite8-app-corejs--plain.js	default	26	1	0
 vite/vite8-app-corejs--plain.js	unsafe	26	1	0
 vite/vite8-app-corejs-min--plain.js	default	26	1	50
-vite/vite8-app-corejs-min--plain.js	unsafe	26	1	71
+vite/vite8-app-corejs-min--plain.js	unsafe	26	1	50
 vite/vite8-app-synthetic--plain.js	default	8	1	0
 vite/vite8-app-synthetic--plain.js	unsafe	8	1	0
 vite/vite8-app-synthetic-min--plain.js	default	8	1	12
-vite/vite8-app-synthetic-min--plain.js	unsafe	8	1	18
+vite/vite8-app-synthetic-min--plain.js	unsafe	8	1	12
 vite/vite8-lib-corejs--plain.js	default	26	1	0
 vite/vite8-lib-corejs--plain.js	unsafe	26	1	0
 vite/vite8-lib-corejs-min--plain.js	default	26	1	72

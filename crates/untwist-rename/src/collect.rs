@@ -147,6 +147,7 @@ pub fn collect(program: &Program<'_>, scoping: &Scoping, rule: OuterRule) -> Col
         strict: Strictness::default(),
         recorded: FxHashMap::default(),
         withs: Vec::new(),
+        with_observed: FxHashSet::default(),
         hazards: Hazards::default(),
         out: Collected::default(),
     };
@@ -154,15 +155,17 @@ pub fn collect(program: &Program<'_>, scoping: &Scoping, rule: OuterRule) -> Col
     let Collector {
         recorded,
         hazards,
+        with_observed,
         mut out,
         ..
     } = collector;
     out.by_symbol = recorded;
     out.hazard = hazards.name();
-    out.assumed_unobserved = observers() == Observers::None;
-    if out.assumed_unobserved {
+    out.assumed_unobserved = observers() == Observers::None && with_observed.is_empty();
+    if observers() == Observers::None {
         out.observed.clear();
     }
+    out.observed.extend(with_observed);
     out.pinned.extend(out.observed.iter().copied());
     if scoping.root_unresolved_references().contains_key("eval") {
         out.eval_names = eval_payload_names(program);
@@ -185,6 +188,7 @@ struct Collector<'s> {
     strict: Strictness,
     recorded: FxHashMap<SymbolId, usize>,
     withs: Vec<Option<ScopeId>>,
+    with_observed: FxHashSet<SymbolId>,
     hazards: Hazards,
     out: Collected,
 }
@@ -268,7 +272,7 @@ impl Collector<'_> {
                 .any(|scope| scope == with)
         });
         if !inside {
-            self.out.observed.insert(symbol);
+            self.with_observed.insert(symbol);
         }
     }
 
