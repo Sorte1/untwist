@@ -291,20 +291,36 @@ fn safe(source: &str) -> String {
 }
 
 #[test]
-fn a_declarator_keeps_the_sequence_that_hides_an_anonymous_function_when_a_name_is_read() {
+fn a_declarator_split_keeps_its_anonymous_function_unnamed_when_a_name_is_read() {
     let source =
         "let h = (a(), () => 1); var f = (b(), function () {}); console.log(f.name, h.name);";
     assert_eq!(
         safe(source),
-        "let h = (a(), () => 1);\nvar f = (b(), function () {});\nconsole.log(f.name, h.name);"
+        "a();\nlet h = (0, () => 1);\nb();\nvar f = (0, function () {});\nconsole.log(f.name, h.name);"
     );
 }
 
 #[test]
-fn an_assignment_keeps_the_sequence_that_hides_an_anonymous_class_when_a_name_is_read() {
+fn an_assignment_split_keeps_its_anonymous_class_unnamed_when_a_name_is_read() {
     assert_eq!(
         safe("f = (a(), class {}); const { name } = f;"),
-        "f = (a(), class {});\nconst { name } = f;"
+        "a();\nf = (0, class {});\nconst { name } = f;"
+    );
+}
+
+#[test]
+fn an_unnamed_value_is_not_split_again() {
+    assert_eq!(
+        safe("var f = (0, function () {}); f = (0, class {}); console.log(f.name);"),
+        "var f = (0, function () {});\nf = (0, class {});\nconsole.log(f.name);"
+    );
+}
+
+#[test]
+fn a_member_target_gives_no_name_so_its_value_moves_out_plainly() {
+    assert_eq!(
+        safe("var o = {}; o.m = (a(), function () {}); console.log(o.m.name);"),
+        "var o = {};\na();\no.m = function () {};\nconsole.log(o.m.name);"
     );
 }
 
