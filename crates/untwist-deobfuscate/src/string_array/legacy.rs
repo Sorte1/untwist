@@ -10,6 +10,7 @@ use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
 use untwist_core::ast_util::matcher::{
     call_parts, iife, is_literal_argument, is_plain_declaration, statement_iife,
 };
+use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 use untwist_core::ast_util::search::statements_at;
@@ -377,7 +378,7 @@ pub(super) fn decoder_function<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k Fu
             let [declarator] = declaration.declarations.as_slice() else {
                 return None;
             };
-            match declarator.init.as_ref() {
+            match declarator.init.as_ref().map(without_unnamed) {
                 Some(Expression::FunctionExpression(function)) => Some(function),
                 _ => None,
             }

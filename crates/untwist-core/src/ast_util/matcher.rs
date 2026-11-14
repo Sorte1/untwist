@@ -3,6 +3,7 @@ use oxc_ast::ast::*;
 use oxc_syntax::operator::UnaryOperator;
 
 use super::literal::is_truthy_literal;
+use super::naming_slot::without_unnamed;
 
 pub struct FnDecl<'k, 'a> {
     pub name: &'k str,
@@ -38,7 +39,9 @@ pub fn var_function_or_declaration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<Fn
             let BindingPattern::BindingIdentifier(id) = &declarator.id else {
                 return None;
             };
-            let Some(Expression::FunctionExpression(function)) = &declarator.init else {
+            let Expression::FunctionExpression(function) =
+                without_unnamed(declarator.init.as_ref()?)
+            else {
                 return None;
             };
             Some(FnDecl {
