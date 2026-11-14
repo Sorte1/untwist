@@ -1,6 +1,6 @@
 import { explainLimit } from '../../limits';
 import type { DiagnosticRow } from '../diagnostics-model';
-import { moduleLabel, type LibraryRow } from '../../libraries/libraries';
+import { moduleLabel, rangeLabel, type LibraryRow } from '../../libraries/libraries';
 import type { Report, RunStats, StageRow } from './report';
 import type { LibraryTablesUsed } from '../../engine/types';
 
@@ -44,7 +44,7 @@ export function libraryPairs(rows: readonly LibraryRow[]): Pair[] {
   if (rows.length === 0) {
     return [{ label: 'Libraries', value: 'none detected' }];
   }
-  return rows.map((row) => ({ label: row.library, value: row.range === '' ? moduleLabel(row.modules) : `${row.range} · ${moduleLabel(row.modules)}` }));
+  return rows.map((row) => ({ label: row.library, value: row.range === '' ? moduleLabel(row.modules) : `${rangeLabel(row)} · ${moduleLabel(row.modules)}` }));
 }
 
 export function tablePairs(used: LibraryTablesUsed | undefined): Pair[] {

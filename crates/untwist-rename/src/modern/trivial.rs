@@ -25,16 +25,6 @@ fn returned<'s>(statement: &'s Statement<'_>) -> Option<&'s str> {
     }
 }
 
-fn guard<'s>(statement: &'s Statement<'_>) -> Option<(&'s str, &'s str)> {
-    let Statement::IfStatement(stmt) = statement else {
-        return None;
-    };
-    if stmt.alternate.is_some() {
-        return None;
-    }
-    Some((identifier(&stmt.test)?, returned(&stmt.consequent)?))
-}
-
 fn assignment<'s, 'a>(statement: &'s Statement<'a>) -> Option<(&'s str, &'s Expression<'a>)> {
     let Statement::ExpressionStatement(stmt) = statement else {
         return None;
@@ -92,6 +82,111 @@ fn truthy(expr: &Expression<'_>) -> bool {
     }
 }
 
+fn exports_value<'e, 'a>(
+    statement: &'e Statement<'a>,
+    exports: &str,
+) -> Option<&'e Expression<'a>> {
+    let (target, right) = assignment(statement)?;
+    (target == exports && literal(right)).then_some(right)
+}
+
+fn returned_value<'e, 'a>(
+    statement: &'e Statement<'a>,
+    exports: &str,
+) -> Option<&'e Expression<'a>> {
+    let Statement::ReturnStatement(ret) = statement else {
+        return None;
+    };
+    let Expression::AssignmentExpression(assign) = ret.argument.as_ref()?.without_parentheses()
+    else {
+        return None;
+    };
+    let AssignmentTarget::AssignmentTargetIdentifier(target) = &assign.left else {
+        return None;
+    };
+    let assigns = assign.operator == AssignmentOperator::Assign && target.name == exports;
+    (assigns && literal(&assign.right)).then_some(&assign.right)
+}
+
+fn sets_flag(statement: &Statement<'_>, state: &str) -> bool {
+    assignment(statement).is_some_and(|(flagged, set)| flagged == state && flag(set))
+}
+
+fn value_of<'e, 'a: 'e>(
+    values: impl IntoIterator<Item = Option<&'e Expression<'a>>>,
+) -> Option<Value> {
+    let values: Vec<&Expression<'a>> = values.into_iter().collect::<Option<_>>()?;
+    match values.as_slice() {
+        [] => None,
+        values if values.iter().any(|right| truthy(right)) => Some(Value::True),
+        _ => Some(Value::Other),
+    }
+}
+
+fn initialised(tail: &[Statement<'_>], state: &str, exports: &str) -> Option<Value> {
+    let [second, middle @ .., last] = tail else {
+        return None;
+    };
+    if !sets_flag(second, state) {
+        return None;
+    }
+    let assigned = middle
+        .iter()
+        .map(|statement| exports_value(statement, exports));
+    match returned(last) {
+        Some(name) if name == exports => value_of(assigned),
+        _ => value_of(assigned.chain(std::iter::once(returned_value(last, exports)))),
+    }
+}
+
+fn guarded(statements: &[Statement<'_>]) -> Option<Value> {
+    let (Statement::IfStatement(guard), rest) = statements.split_first()? else {
+        return None;
+    };
+    let state = identifier(&guard.test)?;
+    let exports = returned(&guard.consequent)?;
+    if state == exports {
+        return None;
+    }
+    let tail = match (&guard.alternate, rest) {
+        (None, rest) => rest,
+        (Some(Statement::BlockStatement(block)), []) => block.body.as_slice(),
+        _ => return None,
+    };
+    initialised(tail, state, exports)
+}
+
+fn negated(statements: &[Statement<'_>]) -> Option<Value> {
+    let [Statement::IfStatement(guard), last] = statements else {
+        return None;
+    };
+    if guard.alternate.is_some() {
+        return None;
+    }
+    let Expression::UnaryExpression(not) = guard.test.without_parentheses() else {
+        return None;
+    };
+    if not.operator != UnaryOperator::LogicalNot {
+        return None;
+    }
+    let state = identifier(&not.argument)?;
+    let exports = returned(last)?;
+    let Statement::BlockStatement(block) = &guard.consequent else {
+        return None;
+    };
+    let [second, middle @ ..] = block.body.as_slice() else {
+        return None;
+    };
+    if state == exports || !sets_flag(second, state) {
+        return None;
+    }
+    value_of(
+        middle
+            .iter()
+            .map(|statement| exports_value(statement, exports)),
+    )
+}
+
 pub fn wrapper(function: &Function<'_>) -> Option<Value> {
     if !function.params.items.is_empty()
         || function.params.rest.is_some()
@@ -104,26 +199,5 @@ pub fn wrapper(function: &Function<'_>) -> Option<Value> {
     if !body.directives.is_empty() {
         return None;
     }
-    let [first, second, middle @ .., last] = body.statements.as_slice() else {
-        return None;
-    };
-    let (state, exports) = guard(first)?;
-    if state == exports || returned(last)? != exports {
-        return None;
-    }
-    let (flagged, set) = assignment(second)?;
-    if flagged != state || !flag(set) || middle.is_empty() {
-        return None;
-    }
-    let mut value = Value::Other;
-    for statement in middle {
-        let (target, right) = assignment(statement)?;
-        if target != exports || !literal(right) {
-            return None;
-        }
-        if truthy(right) {
-            value = Value::True;
-        }
-    }
-    Some(value)
+    guarded(&body.statements).or_else(|| negated(&body.statements))
 }

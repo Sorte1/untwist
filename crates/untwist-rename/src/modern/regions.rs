@@ -5,6 +5,7 @@ use oxc_span::Span;
 #[derive(Default, Debug)]
 pub struct Regions {
     spans: BTreeMap<u32, u32>,
+    empty: bool,
 }
 
 impl Regions {
@@ -21,6 +22,10 @@ impl Regions {
     }
 
     pub fn insert(&mut self, span: Span) -> Option<Vec<Span>> {
+        if span.is_empty() {
+            self.empty = true;
+            return None;
+        }
         if self.enclosing(span) {
             return None;
         }
@@ -47,6 +52,10 @@ impl Regions {
 
     pub fn is_empty(&self) -> bool {
         self.spans.is_empty()
+    }
+
+    pub fn has_unplaced(&self) -> bool {
+        self.empty
     }
 
     pub fn len(&self) -> usize {

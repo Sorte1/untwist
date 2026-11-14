@@ -291,7 +291,9 @@ code that changes built-ins between the two points.
 
 The report lists every removed and kept module with the reason and every rewritten call
 kind, and says that the output assumes such an engine with its own built-ins; the output starts with
-a comment saying the same.
+a comment saying the same. These are informational notes: one summary line counts the removed and
+kept modules (the kept ones by reason), and the playground shows the per-module list in Details,
+grouped by reason, instead of in Diagnostics.
 
 Modern mode is part of the CLI, the Rust library (cargo feature `modern`, on by default), the
 WebAssembly build and the playground (Settings, Modern baseline), where the core-js table is

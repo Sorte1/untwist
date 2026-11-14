@@ -220,6 +220,7 @@ pub fn plan(program: &Program<'_>, inputs: &Inputs<'_>) -> FxHashMap<Span, Site>
         aliases: FxHashMap::default(),
         sites: FxHashMap::default(),
         callees: FxHashSet::default(),
+        calls: FxHashMap::default(),
         deleted: FxHashSet::default(),
         dominating: FxHashMap::default(),
         budget: inputs
@@ -231,7 +232,9 @@ pub fn plan(program: &Program<'_>, inputs: &Inputs<'_>) -> FxHashMap<Span, Site>
     };
     planner.visit_program(program);
     let callees = std::mem::take(&mut planner.callees);
+    let calls = std::mem::take(&mut planner.calls);
     let mut sites = planner.sites;
+    sites.retain(|span, _| !span.is_empty() && calls.get(span) == Some(&1));
     for (span, site) in &mut sites {
         if let Site::Member { unbound, .. } = site {
             *unbound = callees.contains(span);
@@ -247,8 +250,9 @@ struct Planner<'p, 'i> {
     aliases: FxHashMap<SymbolId, (Alias, Set)>,
     sites: FxHashMap<Span, Site>,
     callees: FxHashSet<Span>,
+    calls: FxHashMap<Span, usize>,
     deleted: FxHashSet<Span>,
-    dominating: FxHashMap<Span, Set>,
+    dominating: FxHashMap<SymbolId, Set>,
     budget: usize,
 }
 
@@ -387,7 +391,7 @@ impl Planner<'_, '_> {
         if !self.usable(symbol) {
             return;
         }
-        let Some(set) = self.dominating.get(&declarator.span).copied() else {
+        let Some(set) = self.dominating.get(&symbol).copied() else {
             return;
         };
         let Some(decl) = self.inputs.facts.decls.get(&symbol) else {
@@ -583,9 +587,9 @@ impl<'a> Visit<'a> for Planner<'_, '_> {
                     BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
                     _ => None,
                 };
-                if symbol.is_some_and(|symbol| prefix.set_before(symbol)) {
+                if let Some(symbol) = symbol.filter(|symbol| prefix.set_before(*symbol)) {
                     let end = declarator.span.end;
-                    self.dominating.insert(declarator.span, Set { scope, end });
+                    self.dominating.insert(symbol, Set { scope, end });
                 }
                 prefix.declarator(declarator);
             }
@@ -609,6 +613,7 @@ impl<'a> Visit<'a> for Planner<'_, '_> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        *self.calls.entry(it.span).or_default() += 1;
         if let Expression::CallExpression(inner) = it.callee.without_parentheses() {
             self.callees.insert(inner.span);
         }

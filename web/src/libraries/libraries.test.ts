@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commentShape, libraryComment, librariesOf } from './libraries';
+import { commentShape, libraryComment, librariesOf, rangeLabel } from './libraries';
 
 const known = new Set(['core-js', '@babel/runtime']);
 
@@ -19,9 +19,16 @@ describe('the library list of a report', () => {
       ],
     });
     expect(librariesOf(report)).toEqual([
-      { library: 'core-js', range: '3.39', modules: 243 },
-      { library: 'tslib', range: '2.6–2.8', modules: 1 },
+      { library: 'core-js', range: '3.39', disagree: false, modules: 243 },
+      { library: 'tslib', range: '2.6–2.8', disagree: false, modules: 1 },
     ]);
+  });
+
+  it('shows the union range of matches that disagree on the version', () => {
+    const report = JSON.stringify({ libraries: [{ library: '@babel/runtime', range: '7.0–8.1', disagree: true, modules: 16 }] });
+    const [row] = librariesOf(report);
+    expect(row?.disagree).toBe(true);
+    expect(row === undefined ? '' : rangeLabel(row)).toBe('7.0–8.1, matches disagree');
   });
 });
 

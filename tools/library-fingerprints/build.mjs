@@ -118,6 +118,7 @@ async function bundleWebpack(entry, file) {
 async function minify(code, minifier) {
   if (minifier === "none") return code;
   if (minifier === "terser") return (await require("terser").minify(code, { mangle: false, compress: true })).code;
+  if (minifier === "terser-mangle") return (await require("terser").minify(code, { mangle: true, compress: true })).code;
   if (minifier === "esbuild") return (await require("esbuild").transform(code, { minifySyntax: true, minifyWhitespace: true, minifyIdentifiers: false })).code;
   if (minifier === "swc") return (await require("@swc/core").minify(code, { mangle: false, compress: true })).code;
   throw new Error(`unknown minifier ${minifier}`);

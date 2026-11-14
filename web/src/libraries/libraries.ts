@@ -3,6 +3,7 @@ import { reportField } from '../report-json';
 export interface LibraryRow {
   readonly library: string;
   readonly range: string;
+  readonly disagree: boolean;
   readonly modules: number;
 }
 
@@ -25,12 +26,12 @@ function rowOf(value: unknown): LibraryRow | null {
   if (typeof value !== 'object' || value === null) {
     return null;
   }
-  const { library, range, modules } = value as Record<string, unknown>;
+  const { library, range, disagree, modules } = value as Record<string, unknown>;
   if (typeof library !== 'string' || library === '' || typeof range !== 'string') {
     return null;
   }
   const count = typeof modules === 'number' && Number.isSafeInteger(modules) && modules >= 0 ? modules : 0;
-  return { library, range, modules: count };
+  return { library, range, disagree: disagree === true, modules: count };
 }
 
 export function librariesOf(report: string): LibraryRow[] {
@@ -77,6 +78,10 @@ export function libraryComment(line: string, known: ReadonlySet<string>): Librar
     return null;
   }
   return known.has(comment.library) || comment.also.some((same) => known.has(same.library)) ? comment : null;
+}
+
+export function rangeLabel(row: LibraryRow): string {
+  return row.disagree ? `${row.range}, matches disagree` : row.range;
 }
 
 export function moduleLabel(count: number): string {

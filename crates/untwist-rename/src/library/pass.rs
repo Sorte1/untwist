@@ -6,7 +6,7 @@ use untwist_core::pass::{Cx, Interest, Pass};
 use super::annotate::annotate;
 use super::annotate::one_line;
 use super::{
-    intersect_ranges, match_program, parse_ranges, ranges_text, Hit, Ranges, VERSIONS_DISAGREE,
+    intersect_ranges, match_program, parse_ranges, ranges_text, union_ranges, Hit, Ranges,
 };
 
 pub const NAME: &str = "library-names";
@@ -39,31 +39,67 @@ pub fn commented<'h>(hits: &[&'h Hit]) -> Vec<&'h Hit> {
 #[derive(Default)]
 struct Summary<'h> {
     modules: FxHashSet<&'h [String]>,
-    ranges: Option<Ranges>,
+    common: Option<Ranges>,
+    all: Ranges,
 }
 
 impl<'h> Summary<'h> {
     fn add(&mut self, hit: &'h Hit) {
         self.modules.insert(hit.modules.as_slice());
-        self.ranges = Some(match self.ranges.take() {
+        self.common = Some(match self.common.take() {
             None => hit.ranges.clone(),
             Some(known) => intersect_ranges(&known, &hit.ranges),
         });
+        self.all = union_ranges(&self.all, &hit.ranges);
     }
 
-    fn range(&self) -> String {
-        ranges_text(self.ranges.as_deref().unwrap_or_default())
+    fn window(&self) -> Window {
+        window(self.common.as_deref().unwrap_or_default(), &self.all)
+    }
+}
+
+struct Window {
+    range: String,
+    disagree: bool,
+}
+
+fn window(common: &[(String, String)], all: &[(String, String)]) -> Window {
+    match (common.is_empty(), all.is_empty()) {
+        (false, _) => Window {
+            range: ranges_text(common),
+            disagree: false,
+        },
+        (true, false) => Window {
+            range: ranges_text(all),
+            disagree: true,
+        },
+        (true, true) => Window {
+            range: String::new(),
+            disagree: false,
+        },
     }
 }
 
 const NOTE_PREFIX: &str = "library: ";
 const NOTE_SUFFIX: &str = " recognised";
+const DISAGREE: &str = " (matches disagree)";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LibrarySummary {
     pub library: String,
     pub range: String,
+    pub disagree: bool,
     pub modules: usize,
+}
+
+fn note_text(library: &str, window: &Window, count: usize) -> String {
+    let noun = if count == 1 { "module" } else { "modules" };
+    let range = match (window.range.is_empty(), window.disagree) {
+        (true, _) => String::new(),
+        (false, false) => format!(" {}", window.range),
+        (false, true) => format!(" {}{DISAGREE}", window.range),
+    };
+    format!("{NOTE_PREFIX}{library}{range}, {count} {noun}{NOTE_SUFFIX}")
 }
 
 pub fn parse_note(message: &str) -> Option<LibrarySummary> {
@@ -71,50 +107,69 @@ pub fn parse_note(message: &str) -> Option<LibrarySummary> {
         .strip_prefix(NOTE_PREFIX)?
         .strip_suffix(NOTE_SUFFIX)?;
     let (name, count) = body.rsplit_once(", ")?;
-    let (library, range) = name.rsplit_once('@')?;
     let modules = count.split(' ').next()?.parse().ok()?;
+    let (library, range) = name.split_once(' ').unwrap_or((name, ""));
+    let (range, disagree) = match range.strip_suffix(DISAGREE) {
+        Some(range) => (range, true),
+        None => (range, false),
+    };
     Some(LibrarySummary {
         library: library.to_string(),
         range: range.to_string(),
+        disagree,
         modules,
     })
 }
 
-fn combined_range(ranges: &[String]) -> String {
-    let mut window: Option<Ranges> = None;
-    for range in ranges {
-        if range == VERSIONS_DISAGREE {
-            return VERSIONS_DISAGREE.to_string();
-        }
-        let parsed = parse_ranges(range);
-        window = Some(match window {
-            None => parsed,
+#[derive(Default)]
+struct Merged {
+    common: Option<Ranges>,
+    all: Ranges,
+    disagree: bool,
+    modules: usize,
+}
+
+impl Merged {
+    fn add(&mut self, summary: &LibrarySummary) {
+        let parsed = parse_ranges(&summary.range);
+        self.disagree |= summary.disagree;
+        self.common = Some(match self.common.take() {
+            None => parsed.clone(),
             Some(known) => intersect_ranges(&known, &parsed),
         });
+        self.all = union_ranges(&self.all, &parsed);
+        self.modules += summary.modules;
     }
-    ranges_text(window.as_deref().unwrap_or_default())
+
+    fn window(&self) -> Window {
+        match self.disagree {
+            true => window(&[], &self.all),
+            false => window(self.common.as_deref().unwrap_or_default(), &self.all),
+        }
+    }
 }
 
 pub fn summaries<'n>(messages: impl IntoIterator<Item = &'n str>) -> Vec<LibrarySummary> {
     let mut order: Vec<String> = Vec::new();
-    let mut grouped: FxHashMap<String, (Vec<String>, usize)> = FxHashMap::default();
+    let mut grouped: FxHashMap<String, Merged> = FxHashMap::default();
     for summary in messages.into_iter().filter_map(parse_note) {
         if !grouped.contains_key(&summary.library) {
             order.push(summary.library.clone());
         }
-        let entry = grouped.entry(summary.library).or_default();
-        if !entry.0.contains(&summary.range) {
-            entry.0.push(summary.range);
-        }
-        entry.1 += summary.modules;
+        grouped
+            .entry(summary.library.clone())
+            .or_default()
+            .add(&summary);
     }
     order
         .into_iter()
         .map(|library| {
-            let (ranges, modules) = &grouped[&library];
+            let merged = &grouped[&library];
+            let window = merged.window();
             LibrarySummary {
-                range: combined_range(ranges),
-                modules: *modules,
+                range: window.range,
+                disagree: window.disagree,
+                modules: merged.modules,
                 library,
             }
         })
@@ -134,13 +189,7 @@ pub fn summary_notes(hits: &[&Hit]) -> Vec<String> {
         .into_iter()
         .map(|label| {
             let summary = &libraries[label];
-            let count = summary.modules.len();
-            let noun = if count == 1 { "module" } else { "modules" };
-            format!(
-                "{NOTE_PREFIX}{}@{}, {count} {noun}{NOTE_SUFFIX}",
-                one_line(label),
-                summary.range()
-            )
+            note_text(&one_line(label), &summary.window(), summary.modules.len())
         })
         .collect()
 }
@@ -166,7 +215,7 @@ impl<'a> Pass<'a> for LibraryNamesPass {
         let alloc = cx.allocator();
         annotate(program, &commented(&hits), alloc);
         for note in summary_notes(&hits) {
-            cx.note(note, None);
+            cx.progress(note, None);
         }
     }
 }

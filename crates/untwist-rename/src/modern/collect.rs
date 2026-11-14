@@ -260,6 +260,9 @@ impl Collector<'_> {
         let Some(call) = discarded_call(expr) else {
             return;
         };
+        if expr.span().is_empty() {
+            return;
+        }
         if let Some(callee) = self.callee(call) {
             self.facts.discarded.push(Discarded {
                 span: expr.span(),
@@ -269,6 +272,9 @@ impl Collector<'_> {
     }
 
     fn note_decl(&mut self, symbol: SymbolId, region: Span, kind: DeclKind) {
+        if region.is_empty() {
+            return;
+        }
         let global = self.global(symbol);
         self.facts.decls.insert(
             symbol,
@@ -314,7 +320,9 @@ impl Collector<'_> {
             Statement::FunctionDeclaration(function) => {
                 if let Some(symbol) = function.id.as_ref().and_then(|id| id.symbol_id.get()) {
                     self.note_decl(symbol, function.span, DeclKind::Function);
-                    if let Some(value) = super::trivial::wrapper(function) {
+                    if let Some(value) =
+                        super::trivial::wrapper(function).filter(|_| !function.span.is_empty())
+                    {
                         self.facts.trivial.push(function.span);
                         if value == super::trivial::Value::True {
                             self.facts.trivial_true.insert(function.span);
@@ -359,7 +367,7 @@ impl<'a> Visit<'a> for Collector<'_> {
     }
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        if it.is_declaration() {
+        if it.is_declaration() && !it.span.is_empty() {
             if let Some(symbol) = it.id.as_ref().and_then(|id| id.symbol_id.get()) {
                 self.facts.function_binding.insert(it.span, symbol);
             }
@@ -373,7 +381,9 @@ impl<'a> Visit<'a> for Collector<'_> {
                 .init
                 .as_ref()
                 .and_then(|init| function_span(init).or_else(|| wrapped_function(init)));
-            if let (Some(symbol), Some(span)) = (id.symbol_id.get(), span) {
+            if let (Some(symbol), Some(span)) =
+                (id.symbol_id.get(), span.filter(|span| !span.is_empty()))
+            {
                 self.facts.function_binding.insert(span, symbol);
             }
         }

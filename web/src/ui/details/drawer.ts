@@ -6,6 +6,7 @@ import { diagnosticsOf } from '../diagnostics-model';
 import { librariesOf } from '../../libraries/libraries';
 import { detectionPairs, libraryPairs, limitPairs, tablePairs, ms, passesOf, renamePairs, resourcePairs, warningClassPairs, type Pair } from './rows';
 import { virtualList } from './virtual-list';
+import { modernBody, modernGroups, modernSummary } from './modern';
 
 const ROW_HEIGHT = 26;
 const VISIBLE_ROWS = 12;
@@ -117,6 +118,8 @@ export function renderDrawer(container: HTMLElement, result: RunResult | null, f
     return;
   }
   const stageMs = stageTotalMs(report);
+  const modern = modernGroups(result.report);
+  const modernNote = modernSummary(report.notes);
   container.replaceChildren(
     exportBar(result, report, flags),
     section('Stages', stageTable(report.stages)),
@@ -125,6 +128,7 @@ export function renderDrawer(container: HTMLElement, result: RunResult | null, f
   container.lastElementChild?.append(
     section('Detection', pairs(detectionPairs(report))),
     section('Libraries', pairs([...libraryPairs(librariesOf(result.report)), ...tablePairs(result.libraryTables)])),
+    ...(modern.length === 0 && modernNote === null ? [] : [section('Modern', modernBody(modernNote, modern))]),
     section('Limits', pairs(limitPairs(report))),
     section('Rename', pairs(renamePairs(report))),
     section('Warnings by class', pairs(warningClassPairs(diagnosticsOf(result.report, result.stderr)))),

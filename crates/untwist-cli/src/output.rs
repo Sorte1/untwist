@@ -46,6 +46,8 @@ struct OutputJson<'a> {
 struct LibraryJson {
     library: String,
     range: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    disagree: bool,
     modules: usize,
 }
 
@@ -56,6 +58,7 @@ fn libraries_json(output: &Output) -> Vec<LibraryJson> {
         .map(|summary| LibraryJson {
             library: summary.library,
             range: summary.range,
+            disagree: summary.disagree,
             modules: summary.modules,
         })
         .collect()
