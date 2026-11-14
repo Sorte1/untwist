@@ -10,11 +10,24 @@ struct Watched {
     declared_at: usize,
     seen: usize,
     late_only: bool,
+    first: Option<usize>,
+}
+
+impl Watched {
+    fn at(declared_at: usize) -> Self {
+        Self {
+            declared_at,
+            seen: 0,
+            late_only: true,
+            first: None,
+        }
+    }
 }
 
 struct CaptureScan<'s> {
     scoping: &'s Scoping,
     watched: FxHashMap<SymbolId, Watched>,
+    unseen: usize,
     statement: usize,
     closures: usize,
     expression_closure: bool,
@@ -45,6 +58,10 @@ impl<'a> VisitJs<'a> for CaptureScan<'_> {
             (self.statement, self.closures > 0, self.expression_closure);
         if let Some(watched) = self.watched.get_mut(&symbol) {
             watched.seen += 1;
+            if watched.first.is_none() {
+                watched.first = Some(statement);
+                self.unseen = self.unseen.saturating_sub(1);
+            }
             if captured && (!expression || statement <= watched.declared_at) {
                 watched.late_only = false;
             }
@@ -68,28 +85,26 @@ impl<'a> VisitJs<'a> for CaptureScan<'_> {
     }
 }
 
+fn scan<'s>(scoping: &'s Scoping, watched: &[(SymbolId, usize)]) -> CaptureScan<'s> {
+    CaptureScan {
+        scoping,
+        watched: watched
+            .iter()
+            .map(|&(symbol, declared_at)| (symbol, Watched::at(declared_at)))
+            .collect(),
+        unseen: watched.len(),
+        statement: 0,
+        closures: 0,
+        expression_closure: false,
+    }
+}
+
 pub(crate) fn captures_follow<'a>(
     scoping: &Scoping,
     stmts: &AVec<'a, Statement<'a>>,
     watched: &[(SymbolId, usize)],
 ) -> FxHashMap<SymbolId, bool> {
-    let mut scan = CaptureScan {
-        scoping,
-        watched: watched
-            .iter()
-            .map(|&(symbol, declared_at)| {
-                let entry = Watched {
-                    declared_at,
-                    seen: 0,
-                    late_only: true,
-                };
-                (symbol, entry)
-            })
-            .collect(),
-        statement: 0,
-        closures: 0,
-        expression_closure: false,
-    };
+    let mut scan = scan(scoping, watched);
     for (index, stmt) in stmts.iter().enumerate() {
         scan.statement = index;
         scan.visit_statement(stmt);
@@ -100,5 +115,25 @@ pub(crate) fn captures_follow<'a>(
             let complete = watched.seen == scoping.get_resolved_reference_ids(symbol).len();
             (symbol, watched.late_only && complete)
         })
+        .collect()
+}
+
+pub(crate) fn first_uses<'a>(
+    scoping: &Scoping,
+    stmts: &AVec<'a, Statement<'a>>,
+    watched: &[SymbolId],
+) -> FxHashMap<SymbolId, usize> {
+    let pairs: Vec<(SymbolId, usize)> = watched.iter().map(|symbol| (*symbol, 0)).collect();
+    let mut scan = scan(scoping, &pairs);
+    for (index, stmt) in stmts.iter().enumerate() {
+        if scan.unseen == 0 {
+            break;
+        }
+        scan.statement = index;
+        scan.visit_statement(stmt);
+    }
+    scan.watched
+        .into_iter()
+        .filter_map(|(symbol, watched)| Some((symbol, watched.first?)))
         .collect()
 }

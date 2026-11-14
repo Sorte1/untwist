@@ -1,6 +1,5 @@
 use oxc_allocator::{TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
-use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::scope::ScopeId;
@@ -8,10 +7,9 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::Cx;
 
-struct Candidate<'a> {
+struct Candidate {
     at: usize,
     symbol: SymbolId,
-    name: &'a str,
     span: Span,
     target: Option<usize>,
     alive: bool,
@@ -69,13 +67,13 @@ fn initialises(stmt: &Statement<'_>, symbol: SymbolId) -> bool {
     })
 }
 
-fn candidates<'a>(
+fn candidates(
     scoping: &Scoping,
-    stmts: &AVec<'a, Statement<'a>>,
+    stmts: &AVec<'_, Statement<'_>>,
     var_scope: ScopeId,
     refused: &impl Fn(&str) -> bool,
-) -> Vec<Candidate<'a>> {
-    let mut found: Vec<Candidate<'a>> = Vec::new();
+) -> Vec<Candidate> {
+    let mut found: Vec<Candidate> = Vec::new();
     let mut seen: FxHashSet<SymbolId> = FxHashSet::default();
     let mut doubled: FxHashSet<SymbolId> = FxHashSet::default();
     let body = body_span(stmts);
@@ -100,7 +98,6 @@ fn candidates<'a>(
         found.push(Candidate {
             at,
             symbol,
-            name: id.name.as_str(),
             span: stmt.span(),
             target: None,
             alive: true,
@@ -110,85 +107,44 @@ fn candidates<'a>(
     found
 }
 
-struct Touches<'s, 'c, 'a> {
-    scoping: &'s Scoping,
-    names: FxHashMap<&'a str, usize>,
-    candidates: &'c mut [Candidate<'a>],
-    statement: usize,
-    open: usize,
+fn statement_holding(stmts: &AVec<'_, Statement<'_>>, span: Span) -> Option<usize> {
+    stmts.iter().position(|stmt| within(stmt.span(), span))
 }
 
-impl Touches<'_, '_, '_> {
-    fn touch(&mut self, name: &str, symbol: Option<SymbolId>) {
-        let Some(&index) = self.names.get(name) else {
-            return;
-        };
-        let statement = self.statement;
-        let Some(candidate) = self.candidates.get_mut(index) else {
-            return;
-        };
-        if symbol != Some(candidate.symbol) || statement == candidate.at {
-            return;
-        }
-        if !candidate.alive || candidate.target.is_some() {
-            return;
-        }
-        if statement < candidate.at {
-            candidate.alive = false;
-        } else {
-            candidate.target = Some(statement);
-        }
-        self.open = self.open.saturating_sub(1);
-    }
-}
-
-impl<'a> VisitJs<'a> for Touches<'_, '_, 'a> {
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if !self.names.contains_key(it.name.as_str()) {
-            return;
-        }
-        let symbol = it
-            .reference_id
-            .get()
-            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
-        self.touch(it.name.as_str(), symbol);
-    }
-
-    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
-        if self.names.contains_key(it.name.as_str()) {
-            self.touch(it.name.as_str(), it.symbol_id.get());
-        }
-    }
-}
-
-fn find_targets<'a>(
+fn first_declaration(
     scoping: &Scoping,
-    stmts: &AVec<'a, Statement<'a>>,
-    candidates: &mut [Candidate<'a>],
-) {
-    let names = candidates
-        .iter()
-        .enumerate()
-        .map(|(index, candidate)| (candidate.name, index))
-        .collect::<FxHashMap<_, _>>();
-    if names.len() != candidates.len() {
-        candidates.iter_mut().for_each(|c| c.alive = false);
-        return;
-    }
-    let open = candidates.len();
-    let mut touches = Touches {
-        scoping,
-        names,
-        candidates,
-        statement: 0,
-        open,
-    };
-    for (index, stmt) in stmts.iter().enumerate() {
-        if touches.open == 0 {
-            break;
+    stmts: &AVec<'_, Statement<'_>>,
+    candidate: &Candidate,
+) -> Option<Option<usize>> {
+    let mut first = None;
+    for declaration in scoping.symbol_redeclarations(candidate.symbol) {
+        if within(candidate.span, declaration.span) {
+            continue;
         }
-        touches.statement = index;
-        touches.visit_statement(stmt);
+        let at = statement_holding(stmts, declaration.span)?;
+        first = Some(first.map_or(at, |seen: usize| seen.min(at)));
+    }
+    Some(first)
+}
+
+fn find_targets(scoping: &Scoping, stmts: &AVec<'_, Statement<'_>>, candidates: &mut [Candidate]) {
+    let symbols: Vec<SymbolId> = candidates.iter().map(|c| c.symbol).collect();
+    let uses = crate::var_capture::first_uses(scoping, stmts, &symbols);
+    for candidate in candidates.iter_mut() {
+        let Some(declared) = first_declaration(scoping, stmts, candidate) else {
+            candidate.alive = false;
+            continue;
+        };
+        let used = uses.get(&candidate.symbol).copied();
+        let first = match (used, declared) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        match first {
+            Some(at) if at < candidate.at => candidate.alive = false,
+            Some(at) => candidate.target = Some(at),
+            None => {}
+        }
     }
 }
 
@@ -244,7 +200,7 @@ pub(crate) fn plan(
     }
     find_targets(scoping, stmts, &mut found);
     let exits = next_exits(stmts);
-    let moving: Vec<(&Candidate<'_>, usize)> = found
+    let moving: Vec<(&Candidate, usize)> = found
         .iter()
         .filter(|candidate| candidate.alive)
         .filter_map(|candidate| {
