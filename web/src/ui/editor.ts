@@ -12,6 +12,9 @@ const highlight = HighlightStyle.define([
   { tag: [tags.number], color: 'var(--num)' },
   { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: 'var(--fn)' },
   { tag: [tags.comment, tags.lineComment, tags.blockComment], color: 'var(--com)' },
+  { tag: [tags.propertyName], color: 'var(--prop, var(--plain))' },
+  { tag: [tags.typeName, tags.className, tags.namespace], color: 'var(--type, var(--plain))' },
+  { tag: [tags.operator], color: 'var(--op, var(--plain))' },
 ]);
 
 const look = EditorView.theme({
@@ -20,7 +23,7 @@ const look = EditorView.theme({
   '.cm-scroller': { fontFamily: 'var(--mono)', lineHeight: '20px', padding: '10px 0' },
   '.cm-content': { padding: '0', caretColor: 'var(--pane-strand, var(--text))' },
   '.cm-line': { padding: '0 16px 0 0' },
-  '.cm-gutters': { backgroundColor: 'var(--code)', color: 'var(--faint)', border: 'none' },
+  '.cm-gutters': { backgroundColor: 'var(--code)', color: 'var(--gutter, var(--faint))', border: 'none' },
   '.cm-lineNumbers .cm-gutterElement': { minWidth: '44px', padding: '0 14px 0 0', boxSizing: 'border-box' },
   '.cm-activeLine': { backgroundColor: 'transparent' },
   '&.cm-focused .cm-activeLine': { backgroundColor: 'var(--active-line)' },

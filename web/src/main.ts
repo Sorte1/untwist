@@ -1,5 +1,8 @@
 import './styles/tokens.css';
+import './styles/editor-themes.css';
+import './styles/site.css';
 import './styles/layout.css';
+import { byId } from './dom';
 import { Cancelled, Engine, REPORT_EXTRAS } from './engine/engine';
 import { initialState, runCancelled, runFailed, runFinished, runStarted, stagesAdded, stagesClosed, ticked, type AppState, type InputState } from './state';
 import { FOLDS_MARK, MARK, type StageMark } from './progress';
@@ -17,10 +20,12 @@ import { mountDownload } from './ui/download';
 import { mountDiagnostics } from './ui/diagnostics';
 import { mountDiagnosticsPanel } from './ui/diagnostics-panel';
 import { mountDropOverlay } from './ui/drop-overlay';
+import { mountEditorTheme } from './ui/editor-theme';
 import { mountExamplesMenu } from './ui/examples-menu';
 import { mountFocusMode } from './ui/focus-mode';
 import { mountLoader } from './ui/load-input';
 import { mountInputPane } from './ui/input-pane';
+import { mountIntro } from './ui/intro';
 import { mountModeSwitch } from './ui/mode-switch';
 import { mountStringsBanner } from './ui/strings-banner';
 import { mountSplitBanner } from './ui/split-banner';
@@ -46,6 +51,7 @@ import { mountWasmBar } from './ui/wasm-bar';
 
 const TICK_MS = 100;
 const PAINT_WAIT_MS = 100;
+const IDLE_WAIT_MS = 3000;
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -144,12 +150,33 @@ function runner(store: Store<AppState>, start: (input: InputState, flags: string
   };
 }
 
+function whenIdle(task: () => void): void {
+  const idle = window.requestIdleCallback as typeof window.requestIdleCallback | undefined;
+  if (idle === undefined) {
+    window.setTimeout(task, PAINT_WAIT_MS);
+  } else {
+    idle.call(window, task, { timeout: IDLE_WAIT_MS });
+  }
+}
+
+function showStarsLater(engineReady: Promise<unknown>): void {
+  const show = () =>
+    whenIdle(() => {
+      import('./github/stars').then(
+        ({ showStars }) => showStars(byId('github-link'), byId('github-stars')),
+        () => undefined,
+      );
+    });
+  engineReady.then(show, show);
+}
+
 function main(): void {
   const parsed = initialSettings(window.location.hash);
   const store = createStore(initialState(preferredTheme(), parsed.settings, parsed.problems));
   const libraries = new LibraryTables();
   const engine = new Engine(undefined, true, libraries);
   applyTheme(store.get().theme);
+  mountEditorTheme(store);
   store.subscribe((state, previous) => {
     if (state.theme !== previous.theme) {
       applyTheme(state.theme);
@@ -185,6 +212,7 @@ function main(): void {
   mountDiffView(store, () => outputView.state.doc.toString());
   mountStatusBar(store);
   mountRunProgress(store);
+  mountIntro(store);
   mountDiagnostics(store, inputView);
   mountFocusMode(store);
   const loader = mountLoader(store, run);
@@ -222,6 +250,7 @@ function main(): void {
     (error: unknown) => store.update((state) => ({ ...state, engine: 'failed', engineError: message(error) })),
   );
   registerServiceWorker(engine.ready());
+  showStarsLater(engine.ready());
 }
 
 main();

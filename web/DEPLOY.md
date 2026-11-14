@@ -31,7 +31,13 @@ Every asset name except `index.html`, `_headers` and the font licences carries a
 
 - `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`
   everywhere, so a future threaded build can use `SharedArrayBuffer`. Everything the page
-  loads is same-origin: the fonts are self-hosted and nothing is fetched elsewhere.
+  loads is same-origin: the fonts are self-hosted. The one request elsewhere is the GitHub
+  star count (`api.github.com`, a CORS fetch once the engine is ready and the page is idle,
+  cached in `localStorage` for six hours); without it the GitHub link shows no count.
+- `X-Robots-Tag: noindex` on `*.pages.dev` (the production alias and every preview), so only
+  `untwist.dev` is indexed. `robots.txt` allows everything and points at `sitemap.xml`; the
+  canonical URL in `index.html` is `https://untwist.dev/`. `og.png` is the social card, made by
+  `npm run og-image`.
 - `index.html` is `no-cache`; `/assets/*` is cached for a year as immutable.
 - The engine sits in `/assets/wasm/` and is served as `application/wasm`, which
   `WebAssembly.compileStreaming` needs.

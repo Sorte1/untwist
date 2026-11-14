@@ -1,0 +1,142 @@
+.bar .gh-link {
+  flex: 0 0 auto;
+  min-width: 32px;
+  justify-content: center;
+  padding: 0 8px;
+  border-color: var(--border);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.bar .gh-link:hover {
+  background: var(--sel);
+}
+
+.bar .gh-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.gh-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 7px;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.gh-stars::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  clip-path: polygon(50% 0, 61.8% 35.4%, 100% 36.3%, 69.1% 59.5%, 80.2% 95.6%, 50% 74%, 19.8% 95.6%, 30.9% 59.5%, 0 36.3%, 38.2% 35.4%);
+}
+
+.gh-mark {
+  flex: 0 0 auto;
+}
+
+.gh-stars[hidden] {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .bar .gh-link {
+    width: 32px;
+    padding: 0;
+  }
+
+  .gh-stars {
+    display: none;
+  }
+}
+
+.intro {
+  position: absolute;
+  inset: 40px 0 27px 0;
+  z-index: 2;
+  display: flex;
+  overflow: auto;
+  padding: 28px 28px 20px;
+  background: var(--code);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.intro[hidden] {
+  display: none;
+}
+
+.intro-body {
+  max-width: 600px;
+  margin: auto;
+}
+
+.intro-title {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.intro-lead {
+  margin: 0 0 20px;
+  color: var(--text);
+}
+
+.intro-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.intro-list h2 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.intro-list p {
+  margin: 0;
+}
+
+.intro-cli {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--hair);
+}
+
+.intro-cli code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--sel);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.intro-cli a {
+  color: var(--info);
+}
+
+@container (max-width: 560px) {
+  .intro {
+    padding: 18px 16px;
+  }
+
+  .intro-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

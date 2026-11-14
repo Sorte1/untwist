@@ -3,7 +3,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'tokens.css'), 'utf8');
+const HERE = dirname(fileURLToPath(import.meta.url));
+const CSS = readFileSync(join(HERE, 'tokens.css'), 'utf8');
+const EDITOR_CSS = readFileSync(join(HERE, 'editor-themes.css'), 'utf8');
+const EDITOR_TEXT = ['plain', 'kw', 'str', 'num', 'fn', 'com', 'prop', 'type', 'op', 'gutter', 'faint', 'text', 'muted', 'warn', 'info', 'err', 'ok', 'del-mark', 'add-mark'];
+const UI_ON_CODE = ['faint', 'text', 'muted', 'warn', 'info', 'err', 'ok', 'del-mark', 'add-mark'];
 const CODE_TEXT = ['text', 'plain', 'kw', 'str', 'num', 'fn', 'com', 'faint'];
 const CODE_SURFACES = ['code', 'selection', 'diff-del-tint', 'diff-add-tint'];
 const UI_TEXT = ['text', 'muted', 'warn', 'info', 'err', 'ok', 'del-mark', 'add-mark'];
@@ -16,9 +20,9 @@ const PAIRS: ReadonlyArray<readonly [readonly string[], readonly string[]]> = [
   [HOVER_TEXT, HOVER_SURFACES],
 ];
 
-function palette(selector: string): Map<string, string> {
-  const start = CSS.indexOf(selector);
-  const block = CSS.slice(start, CSS.indexOf('}', start));
+function palette(selector: string, css = CSS): Map<string, string> {
+  const start = css.indexOf(selector);
+  const block = css.slice(start, css.indexOf('}', start));
   return new Map([...block.matchAll(/--([a-z-]+):\s*(#[0-9A-Fa-f]{6})/g)].map((match) => [match[1] ?? '', match[2] ?? '']));
 }
 
@@ -51,6 +55,24 @@ describe('text contrast (WCAG AA, 4.5:1)', () => {
       const colours = palette(theme);
       expect(contrast(colours.get('on-accent') ?? '', colours.get('accent') ?? '')).toBeGreaterThan(4.5);
       expect(contrast(colours.get('warn') ?? '', colours.get('warn-bg') ?? '')).toBeGreaterThan(4.5);
+    });
+  }
+
+  const editorThemes = [...EDITOR_CSS.matchAll(/:root\[data-editor='([a-z-]+)'\]/g)].map((match) => match[1] ?? '');
+
+  it('has an editor theme block for every theme in the picker', () => {
+    expect(editorThemes.sort()).toEqual(['catppuccin-latte', 'catppuccin-mocha', 'github-dark', 'github-light', 'one-dark', 'solarized-light', 'tokyo-night']);
+  });
+
+  for (const id of editorThemes) {
+    it(`holds for every code colour and the UI text drawn on the code surfaces of the ${id} editor theme`, () => {
+      const own = palette(`[data-editor='${id}']`, EDITOR_CSS);
+      const base = palette(contrast(own.get('code') ?? '', '#000000') > 10 ? "[data-theme='light']" : "[data-theme='dark']");
+      const colours = new Map([...base, ...own]);
+      const failing = EDITOR_TEXT.flatMap((fg) =>
+        CODE_SURFACES.map((bg) => [fg, bg, contrast(colours.get(fg) ?? '', colours.get(bg) ?? '')] as const),
+      ).filter(([fg, bg, ratio]) => !(ratio >= 4.5) && !(UI_ON_CODE.includes(fg) && bg !== 'code'));
+      expect(failing).toEqual([]);
     });
   }
 });
