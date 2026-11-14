@@ -2,7 +2,10 @@ use untwist::{Options, Pipeline, RenameMode};
 
 #[test]
 fn a_rename_mode_matches_each_program_once() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/libraries/tslib/rollup-cjs.js");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/libraries/tslib/rollup-cjs.js"
+    );
     let source = std::fs::read_to_string(path).expect("reading the tslib fixture");
     for rename in [RenameMode::Smart, RenameMode::Unique, RenameMode::Simple] {
         let options = Options {

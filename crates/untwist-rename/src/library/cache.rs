@@ -107,7 +107,12 @@ fn remapped(entry: &Entry, scoping: &Scoping) -> Option<LibraryNames> {
     })
 }
 
-fn reuse(entry: &Entry, table: &Arc<Table>, key: Key, scoping: &Scoping) -> Option<Arc<LibraryNames>> {
+fn reuse(
+    entry: &Entry,
+    table: &Arc<Table>,
+    key: Key,
+    scoping: &Scoping,
+) -> Option<Arc<LibraryNames>> {
     let same_table = entry
         .table
         .upgrade()
