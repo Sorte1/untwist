@@ -91,3 +91,16 @@ fn the_report_says_when_only_the_assumption_would_split_the_bundle() {
         &run_report("var a = !0;", "", false).report_json()
     ));
 }
+
+#[test]
+fn an_input_too_deep_to_parse_gets_no_split_hint_and_keeps_the_stack() {
+    let depth = 100_000;
+    let source = format!("var x = {}1{};", "[".repeat(depth), "]".repeat(depth));
+    let report = std::thread::Builder::new()
+        .stack_size(2 << 20)
+        .spawn(move || run_report(&source, "", false).report_json())
+        .unwrap()
+        .join()
+        .unwrap();
+    assert!(!assumed_split(&report));
+}

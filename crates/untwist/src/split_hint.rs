@@ -1,5 +1,6 @@
 use oxc_allocator::Allocator;
 
+use crate::pipeline::admits_reparse;
 use crate::{Options, Output};
 
 #[derive(Clone, Copy, Debug)]
@@ -30,6 +31,9 @@ impl SplitHint {
         let [code] = output.codes.as_slice() else {
             return false;
         };
+        if !admits_reparse(code) {
+            return false;
+        }
         let alloc = Allocator::default();
         let parsed = untwist_core::parse::parse_program(&alloc, code);
         untwist_unpack::splits_with(&alloc, &parsed.program, self.unpack)
