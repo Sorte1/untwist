@@ -54,6 +54,8 @@ struct ModuleUses<'s> {
     computed_kept: bool,
     faithful: bool,
     record_read: bool,
+    depth: u32,
+    repeated: bool,
     found: Option<String>,
 }
 
@@ -235,6 +237,7 @@ impl ModuleUses<'_> {
                     self.aliases.insert(symbol, kind);
                     if call {
                         self.polyfills.push(kind);
+                        self.repeated |= self.depth > 0;
                     }
                     if let Some(left) = left {
                         self.visit_expression(left);
@@ -374,6 +377,11 @@ impl ModuleUses<'_> {
         let Some(symbol) = id.symbol_id.get() else {
             return false;
         };
+        let own = self.scoping.symbol_span(symbol) == id.span
+            && self.scoping.symbol_redeclarations(symbol).is_empty();
+        if !own {
+            return false;
+        }
         let unread = self
             .scoping
             .get_resolved_references(symbol)
@@ -384,6 +392,35 @@ impl ModuleUses<'_> {
                     .scope_flags(scope)
                     .intersects(ScopeFlags::DirectEval | ScopeFlags::With)
             })
+    }
+
+    fn receiver(&mut self, callee: &Expression<'_>) {
+        let (object, name) = match callee.without_parentheses() {
+            Expression::StaticMemberExpression(member) => {
+                (&member.object, Some(member.property.name.as_str()))
+            }
+            Expression::ComputedMemberExpression(member) => {
+                (&member.object, self.kept_key(&member.expression))
+            }
+            Expression::ChainExpression(chain) => match &chain.expression {
+                ChainElement::StaticMemberExpression(member) => {
+                    (&member.object, Some(member.property.name.as_str()))
+                }
+                ChainElement::ComputedMemberExpression(member) => {
+                    (&member.object, self.kept_key(&member.expression))
+                }
+                _ => return,
+            },
+            _ => return,
+        };
+        let Some(held) = self.held_object(object) else {
+            return;
+        };
+        let copied = name
+            .is_some_and(|name| !self.readable(held, name) && self.read_through_record(held, name));
+        if !copied {
+            self.refuse("a member of module as a call receiver");
+        }
     }
 
     fn writable(&self, held: Held, name: &str) -> bool {
@@ -477,6 +514,7 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
         if self.handed_on(it) {
             return;
         }
+        self.receiver(&it.callee);
         self.visit_expression(&it.callee);
         for (at, argument) in it.arguments.iter().enumerate() {
             if !self.handed_to_helper(it, at) {
@@ -503,6 +541,41 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
         walk_js::walk_computed_member_expression(self, it);
     }
 
+    fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
+        self.receiver(&it.tag);
+        walk_js::walk_tagged_template_expression(self, it);
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.depth += 1;
+        walk_js::walk_function(self, it, flags);
+        self.depth -= 1;
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.depth += 1;
+        walk_js::walk_arrow_function_expression(self, it);
+        self.depth -= 1;
+    }
+
+    fn visit_class(&mut self, it: &Class<'a>) {
+        self.depth += 1;
+        walk_js::walk_class(self, it);
+        self.depth -= 1;
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        self.depth += 1;
+        walk_js::walk_for_in_statement(self, it);
+        self.depth -= 1;
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.depth += 1;
+        walk_js::walk_for_of_statement(self, it);
+        self.depth -= 1;
+    }
+
     fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
         self.visit_discarded(&it.expression);
     }
@@ -523,19 +596,24 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
     }
 
     fn visit_while_statement(&mut self, it: &WhileStatement<'a>) {
+        self.depth += 1;
         self.visit_test(&it.test);
         self.visit_statement(&it.body);
+        self.depth -= 1;
     }
 
     fn visit_do_while_statement(&mut self, it: &DoWhileStatement<'a>) {
+        self.depth += 1;
         self.visit_statement(&it.body);
         self.visit_test(&it.test);
+        self.depth -= 1;
     }
 
     fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
         if let Some(init) = &it.init {
             self.visit_for_statement_init(init);
         }
+        self.depth += 1;
         if let Some(test) = &it.test {
             self.visit_test(test);
         }
@@ -543,6 +621,7 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
             self.visit_expression(update);
         }
         self.visit_statement(&it.body);
+        self.depth -= 1;
     }
 
     fn visit_conditional_expression(&mut self, it: &ConditionalExpression<'a>) {
@@ -625,11 +704,13 @@ pub fn module_object_use(
         computed_kept: false,
         faithful: trust_builtins && record.l,
         record_read: false,
+        depth: 0,
+        repeated: false,
         found: None,
     };
     uses.visit_function_body(factory.body);
     let mixed = uses.polyfills.contains(&Buildin::Harmony) && uses.polyfills.len() > 1;
-    if mixed || uses.record_read && uses.polyfills.len() != 1 {
+    if mixed || uses.record_read && (uses.polyfills.len() != 1 || uses.repeated) {
         uses.refuse("two webpack module polyfills on one module");
     }
     match uses.found {
@@ -660,6 +741,8 @@ pub fn module_param_use(
         computed_kept: true,
         faithful: false,
         record_read: false,
+        depth: 0,
+        repeated: false,
         found: None,
     };
     uses.visit_function_body(body);
