@@ -81,6 +81,8 @@ struct Detection<'a> {
     bundle: Option<&'a str>,
     modules: usize,
     families: Vec<FamilyRow>,
+    #[serde(rename = "assumedSplit", skip_serializing_if = "std::ops::Not::not")]
+    assumed_split: bool,
 }
 
 #[derive(Serialize)]
@@ -148,6 +150,7 @@ pub struct RunFacts<'a> {
     pub limits: &'a str,
     pub fuel: Option<u64>,
     pub max_iterations: Option<u32>,
+    pub assumed_split: bool,
 }
 
 fn build_id() -> String {
@@ -376,6 +379,7 @@ pub fn report_json(output: &Output, facts: &RunFacts<'_>) -> String {
             bundle: bundle.map(|b| b.kind.as_str()),
             modules: bundle.map_or(0, |b| b.modules.len()),
             families: families(&output.stages),
+            assumed_split: facts.assumed_split,
         },
         sizes: Sizes {
             input_bytes: facts.source.len(),

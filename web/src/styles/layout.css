@@ -409,15 +409,18 @@ button, input {
   background: var(--on-accent);
 }
 
-#jsx-opt[data-inactive] .switch[aria-checked='true'] {
+#jsx-opt[data-inactive] .switch[aria-checked='true'],
+#assume-opt[data-inactive] .switch[aria-checked='true'] {
   background: var(--track);
 }
 
-#jsx-opt[data-inactive] .switch[aria-checked='true'] span {
+#jsx-opt[data-inactive] .switch[aria-checked='true'] span,
+#assume-opt[data-inactive] .switch[aria-checked='true'] span {
   background: var(--knob);
 }
 
-#jsx-opt[data-inactive] .hint {
+#jsx-opt[data-inactive] .hint,
+#assume-opt[data-inactive] .hint {
   color: var(--warn);
 }
 
@@ -490,6 +493,23 @@ button, input {
 .num-short {
   width: 88px;
   margin-left: auto;
+}
+
+.select {
+  flex: 0 0 auto;
+  max-width: 190px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: var(--radius);
+  border: 1px solid var(--btn-border);
+  background: var(--code);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.modern-custom {
+  width: 100%;
+  margin-top: 6px;
 }
 
 .num-input:disabled {
@@ -1444,6 +1464,11 @@ button.diag-row:hover .diag-loc {
 
 .strings-banner svg {
   flex: 0 0 auto;
+}
+
+.split-banner {
+  background: var(--panel);
+  color: var(--text);
 }
 
 .wasm-bar {

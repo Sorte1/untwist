@@ -10,6 +10,7 @@ import {
   progressOf,
   stageLine,
   tablesMark,
+  tablesOn,
   timelineRows,
   type StageMark,
 } from './progress';
@@ -44,7 +45,24 @@ describe('librariesOn', () => {
   });
 });
 
+describe('tablesOn', () => {
+  it('fetches library tables for library names and for a modern baseline', () => {
+    expect(tablesOn('')).toBe(true);
+    expect(tablesOn(OFF)).toBe(false);
+    expect(tablesOn(`${OFF} --modern es2022`)).toBe(true);
+    expect(tablesOn(`${OFF} --modern "chrome 120, safari 17"`)).toBe(true);
+  });
+});
+
 describe('expectedPhases', () => {
+  it('shows the table fetch and the modern stage when a baseline is set', () => {
+    const phases = expectedPhases(`${OFF} --modern es2022`);
+    expect(phases[0]).toBe('tables');
+    expect(phases).toContain('modern');
+    expect(phases).not.toContain('library');
+    expect(expectedPhases(OFF)).not.toContain('modern');
+  });
+
   it('follows the flags of the run, in the order the engine first reaches them', () => {
     expect(expectedPhases(`--unsafe ${OFF}`)).toEqual(['start', 'parse', 'prepare', 'deobfuscate', 'unminify', 'jsx', 'cleanup', 'print', 'unpack', 'transfer']);
     expect(expectedPhases(`--rename unique ${OFF}`)).toContain('rename');

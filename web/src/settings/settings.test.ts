@@ -28,6 +28,13 @@ function generated(seed: number): Settings {
     theme: pick([null, 'dark', 'light'] as const, seed >> 4),
     input: bit(9) ? 'hidden' : 'shown',
     libs: bit(11),
+    split: bit(3),
+    assume: bit(14),
+    modern: pick(['', 'es2022', 'chrome 120, firefox 121'], seed >> 7),
+    smap: bit(12),
+    imap: bit(13),
+    mem: pick([null, 512, 4096], seed >> 8),
+    time: pick([null, 30], seed >> 9),
   };
 }
 
@@ -57,6 +64,24 @@ describe('flagsFrom', () => {
     expect(flagsFrom({ ...CLI_DEFAULTS, fuel: null })).toBe('--fuel unlimited');
     expect(flagsFrom({ ...CLI_DEFAULTS, fuel: DEFAULT_FUEL })).toBe('');
     expect(flagsFrom({ ...CLI_DEFAULTS, fuel: 1000 })).toBe('--fuel 1000');
+  });
+
+  it('splits scope-hoisted bundles only when asked, and assumes modules only with the split', () => {
+    expect(flagsFrom({ ...CLI_DEFAULTS, split: true })).toBe('--split-hoisted');
+    expect(flagsFrom({ ...CLI_DEFAULTS, split: true, assume: true })).toBe('--split-hoisted --split-assume-modules');
+    expect(flagsFrom({ ...CLI_DEFAULTS, assume: true })).toBe('');
+  });
+
+  it('quotes a modern baseline with spaces and leaves an empty one out', () => {
+    expect(flagsFrom({ ...CLI_DEFAULTS, modern: 'es2022' })).toBe('--modern es2022');
+    expect(flagsFrom({ ...CLI_DEFAULTS, modern: ' chrome 120, firefox 121 ' })).toBe('--modern "chrome 120, firefox 121"');
+    expect(flagsFrom({ ...CLI_DEFAULTS, modern: '  ' })).toBe('');
+  });
+
+  it('maps through the input map only with the output map on', () => {
+    expect(flagsFrom({ ...CLI_DEFAULTS, smap: true })).toBe('--source-map=inline');
+    expect(flagsFrom({ ...CLI_DEFAULTS, smap: true, imap: true })).toBe('--source-map=inline --input-source-map=inline');
+    expect(flagsFrom({ ...CLI_DEFAULTS, imap: true })).toBe('');
   });
 
   it('never emits -j', () => {
@@ -94,6 +119,13 @@ describe('the settings hash', () => {
     expect(parseHash('#rename=simple').settings.unsafe).toBe(true);
     expect(parseHash('#unsafe=0').settings.unsafe).toBe(false);
     expect(parseHash('#unsafe=1').settings.unsafe).toBe(true);
+  });
+
+  it('refuses a modern baseline with quotes or other stray characters', () => {
+    expect(parseHash('#modern=chrome%20120%2C%20firefox%20121').settings.modern).toBe('chrome 120, firefox 121');
+    const parsed = parseHash('#modern=es2022%22%20--unsafe');
+    expect(parsed.settings.modern).toBe('');
+    expect(parsed.problems).toHaveLength(1);
   });
 
   it('falls back to the default on an unknown key or an invalid value, with one problem each', () => {

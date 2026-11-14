@@ -136,11 +136,15 @@ export function librariesOn(flags: string): boolean {
   return !disabledPasses(flags).includes('library-names');
 }
 
+export function tablesOn(flags: string): boolean {
+  return librariesOn(flags) || words(flags).includes('--modern');
+}
+
 export function expectedPhases(flags: string, options: ProgressOptions = { libraries: librariesOn(flags), editor: false }): Phase[] {
   const list = words(flags);
   const off = (flag: string) => list.includes(flag);
   const shown: Readonly<Record<Phase, boolean>> = {
-    tables: options.libraries,
+    tables: options.libraries || off('--modern'),
     start: true,
     parse: true,
     prepare: true,
@@ -149,7 +153,7 @@ export function expectedPhases(flags: string, options: ProgressOptions = { libra
     jsx: !off('--no-jsx'),
     cleanup: !off('--no-deobfuscate'),
     rename: renames(list),
-    modern: false,
+    modern: off('--modern'),
     library: options.libraries,
     locate: false,
     print: true,

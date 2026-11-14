@@ -8,6 +8,7 @@ mod plan;
 mod plugin;
 mod printable;
 mod report;
+mod split_hint;
 mod stats;
 mod wasm;
 mod wasm_graph;
@@ -33,6 +34,7 @@ pub use plan::{input_names, is_safe_relative, PlanRefusal, PlannedFile};
 pub use plugin::{PluginCtor, Plugins, Stage};
 pub use printable::printable;
 pub use report::{stage_rows, StageReport, StageRow};
+pub use split_hint::SplitHint;
 pub use stats::{CollisionStats, DecodeStats, RunStats};
 pub use untwist_core::budget::{
     memory_size as budget_memory_size, set_hard_limit as set_hard_memory_limit,

@@ -19,6 +19,14 @@
   { "settings": { "wasm": "off" }, "flags": "" },
   { "settings": { "wasm": "auto" }, "flags": "--wasm-check auto" },
   { "settings": { "wasm": "on" }, "flags": "--wasm-check on" },
+  { "settings": { "split": true }, "flags": "--split-hoisted" },
+  { "settings": { "split": true, "assume": true }, "flags": "--split-hoisted --split-assume-modules" },
+  { "settings": { "modern": "es2022" }, "flags": "--modern es2022" },
+  { "settings": { "modern": "chrome 120, firefox 121" }, "flags": "--modern \"chrome 120, firefox 121\"" },
+  { "settings": { "smap": true }, "flags": "--source-map=inline" },
+  { "settings": { "smap": true, "imap": true }, "flags": "--source-map=inline --input-source-map=inline" },
+  { "settings": { "mem": 512 }, "flags": "--max-memory 512MiB" },
+  { "settings": { "time": 30 }, "flags": "--timeout 30" },
   {
     "settings": { "unpack": false, "jsx": false, "unsafe": true, "rename": "unique", "fuel": 7, "deob": false, "unmin": false, "human": true, "iter": 2, "single": true, "off": "layers" },
     "flags": "--no-unpack --no-jsx --unsafe --rename unique --fuel 7 --no-deobfuscate --no-unminify --keep-human-names --max-iterations 2 --single-file --disable layers"
