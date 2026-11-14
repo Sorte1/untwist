@@ -21,6 +21,7 @@ fn a_prototype_reached_through_a_pattern_or_a_spelled_key_keeps_the_eval() {
     assert!(programs.len() >= 9, "found {} rows", programs.len());
     let peeled: Vec<&str> = programs
         .iter()
+        .filter(|(label, _)| !label.starts_with("control-"))
         .filter(|(_, source)| {
             run(source)
                 .stages

@@ -212,9 +212,9 @@ computed key (`f[key]`) or through reflection is not seen, as `fn.toString()` is
 
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
 patched, even when the program visibly patches one, a direct `eval` reads and writes no local
-variable (the lexical passes still refuse a program whose `eval` may), a computed key that comes
-only from a parameter, a member read, an enumeration, a global or a call does not spell `__proto__`
-or `constructor` unless the program names one of them as a string, and a few passes that rest on
+variable (the lexical passes still refuse a program whose `eval` may), a built-in prototype that the
+program reaches through a value it reads (`[].__proto__`, `o[key]`, `Reflect.getPrototypeOf(x)`)
+is not patched through that value, and a few passes that rest on
 heuristics are allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).
 `dead-code`, which deletes branches behind constant comparisons, runs in both lanes.
 `fold-pure-calls` also folds calls to a pure helper that is passed around as a value or that the
