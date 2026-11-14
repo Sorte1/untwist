@@ -101,3 +101,31 @@ test('Source map appends the same inline map as --source-map inline', async ({ p
   await runAndWait(page);
   expect(sha256(await outputText(page))).toBe(sha256(expected));
 });
+
+test('a bundle that splits only under the assumption offers it, and the button turns it on and reruns', async ({ page }) => {
+  const files = cliTree(['--split-hoisted', '--split-assume-modules'], BOUNDARIES, test.info().outputPath('cli'));
+  const modules = (JSON.parse(files.get('bundle.json') ?? '{}') as { modules: unknown[] }).modules;
+  await openApp(page, '#libs=1');
+  await load(page, BOUNDARIES);
+  await runAndWait(page);
+  await expect(page.locator('#split-banner')).toBeVisible();
+  await expect(page.locator('#split-banner-text')).toHaveText("This bundle can be split with 'Assume ES modules'.");
+  await page.locator('#split-assume').click();
+  await expect(page.locator('#status-label')).toHaveText(/Done/, { timeout: 120_000 });
+  await expect(page.locator('#module-count')).toHaveText(`bundle · ${modules.length} modules`);
+  await expect(page.locator('#split-banner')).toBeHidden();
+  await expect(page.locator('#query')).toContainText('split=1&assume=1');
+});
+
+test('the modern presets and a custom baseline set the flag', async ({ page }) => {
+  await openApp(page);
+  await page.locator('#settings-toggle').click();
+  await page.locator('#modern-preset').selectOption('es2022');
+  await expect(page.locator('#query')).toContainText('modern=es2022');
+  await expect(page.locator('#modern')).toBeHidden();
+  await page.locator('#modern-preset').selectOption('custom');
+  await page.locator('#modern').fill('node 20');
+  await expect(page.locator('#query')).toContainText('modern=node%2020');
+  await page.locator('#modern-preset').selectOption('');
+  await expect(page.locator('#query')).not.toContainText('modern=');
+});
