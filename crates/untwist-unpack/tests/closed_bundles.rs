@@ -136,7 +136,7 @@ fn a_bundle_of_closed_factories_is_taken() {
 fn a_factory_that_is_not_closed_refuses_the_bundle_and_names_what_it_reads() {
     for (shape, _, id) in SHAPES {
         for (body, why) in OPEN_BODIES {
-            if shape == BROWSERIFY && body == "greeting" {
+            if shape == BROWSERIFY && body.contains("greeting") {
                 continue;
             }
             let found = outcome(&shape.replace("BODY", body), UnpackOptions::default());

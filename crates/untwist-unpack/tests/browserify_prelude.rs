@@ -167,16 +167,15 @@ fn a_standalone_wrapper_that_is_not_browserifys_is_refused() {
 #[test]
 fn a_module_that_reads_nodes_module_object_refuses_the_bundle() {
     for (body, what) in [
-        ("if (!module.parent) console.log(1);", "reads module.parent"),
-        ("console.log(module.id, module.loaded);", "reads module.id"),
-        ("console.log(module.filename);", "reads module.filename"),
-        ("console.log(module.children);", "reads module.children"),
-        ("console.log(module.paths);", "reads module.paths"),
-        ("console.log(module.require);", "reads module.require"),
-        ("console.log(module?.exports);", "reads module.exports"),
+        ("if (!module.parent) console.log(1);", "uses module.parent"),
+        ("console.log(module.id, module.loaded);", "uses module.id"),
+        ("console.log(module.filename);", "uses module.filename"),
+        ("console.log(module.children);", "uses module.children"),
+        ("console.log(module.paths);", "uses module.paths"),
+        ("console.log(module.require);", "uses module.require"),
         (
             "console.log(module[\"id\"]);",
-            "reads a computed property of module",
+            "uses a computed member of module",
         ),
         (
             "console.log(Object.keys(module));",
@@ -209,6 +208,7 @@ fn module_exports_and_typeof_checks_are_what_both_give() {
         "module.exports = 2;",
         "module.exports.a = 2; exports.b = 3;",
         "module[\"exports\"] = 2;",
+        "console.log(module?.exports);",
         "if (typeof module === \"object\" && typeof require === \"function\") module.exports = 2;",
         "(function (module) { console.log(module.parent); })({});",
         "this.a = module.exports === exports;",

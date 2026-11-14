@@ -27,6 +27,8 @@ struct ModuleUses<'s> {
     buildins: &'s FxHashMap<String, Buildin>,
     aliases: FxHashMap<SymbolId, Buildin>,
     polyfills: Vec<Buildin>,
+    kept: &'s [&'s str],
+    computed_kept: bool,
     found: Option<String>,
 }
 
@@ -254,7 +256,7 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
             return;
         }
         let name = it.property.name.as_str();
-        if !KEPT_MEMBERS.contains(&name) {
+        if !self.kept.contains(&name) {
             self.refuse(format!("module.{name}"));
         }
     }
@@ -273,6 +275,11 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
         if self.helper(&it.object, WASM_EXPORTS) && self.module_id(&it.expression) {
+            return;
+        }
+        let kept_key = self.computed_kept
+            && matches!(&it.expression, Expression::StringLiteral(key) if self.kept.iter().any(|kept| key.value == *kept));
+        if kept_key && self.is_module(&it.object) {
             return;
         }
         if self.is_module(&it.object) || self.alias(&it.object).is_some() {
@@ -323,6 +330,8 @@ pub fn module_object_use(
         buildins,
         aliases: FxHashMap::default(),
         polyfills: Vec::new(),
+        kept: &KEPT_MEMBERS,
+        computed_kept: false,
         found: None,
     };
     uses.visit_function_body(factory.body);
@@ -330,5 +339,27 @@ pub fn module_object_use(
     if mixed {
         uses.refuse("two webpack module polyfills on one module");
     }
+    uses.found
+}
+
+pub fn module_param_use(
+    scoping: &Scoping,
+    body: &FunctionBody<'_>,
+    module: SymbolId,
+    kept: &[&str],
+) -> Option<String> {
+    let buildins = FxHashMap::default();
+    let mut uses = ModuleUses {
+        scoping,
+        symbol: module,
+        require: None,
+        buildins: &buildins,
+        aliases: FxHashMap::default(),
+        polyfills: Vec::new(),
+        kept,
+        computed_kept: true,
+        found: None,
+    };
+    uses.visit_function_body(body);
     uses.found
 }
