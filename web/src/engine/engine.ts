@@ -3,7 +3,7 @@ import RunWorker from './run.worker.ts?worker';
 import type { LibraryTablesUsed, RunResult, WorkerReply } from './types';
 import type { SuppliedWasm } from '../wasm/wasm';
 import type { LibraryTables, LoadedTable, TableTiming } from '../libraries/tables';
-import { librariesOn, MARK, tablesMark, type StageMark } from '../progress';
+import { MARK, tablesOn, tablesMark, type StageMark } from '../progress';
 import { sizeLabel } from '../dom';
 
 export const REPORT_EXTRAS = 'refusals strings links';
@@ -113,7 +113,7 @@ export class Engine {
     const signal = this.#abort.signal;
     const mark = marker(onProgress);
     const attempt: Attempt = { flags, extras, wasm, onProgress };
-    const libraries = librariesOn(flags) ? this.#libraries : null;
+    const libraries = tablesOn(flags) ? this.#libraries : null;
     const prepared = await this.#prepare(libraries, source, [], NO_TABLES, { mark, generation, signal, name: MARK.scan });
     const result = await this.#runTrapped(source, attempt, prepared.tables);
     if (libraries === null) {

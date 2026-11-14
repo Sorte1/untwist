@@ -43,6 +43,15 @@ test.use({ acceptDownloads: true });
 test('Modern baseline removes core-js polyfills exactly as --modern does', async ({ page }) => {
   const expected = cli(['--modern', 'es2022'], MODERN);
   expect(expected).not.toBe(cli([], MODERN));
+  await openApp(page, '#libs=1&modern=es2022');
+  await load(page, MODERN);
+  await runAndWait(page);
+  expect(sha256(await outputText(page))).toBe(sha256(expected));
+});
+
+test('Modern baseline fetches the core-js table with Library names off', async ({ page }) => {
+  const expected = cli(['--disable', 'library-names,library-rename', '--modern', 'es2022'], MODERN);
+  expect(expected).not.toBe(cli(['--disable', 'library-names,library-rename'], MODERN));
   await openApp(page, '#modern=es2022');
   await load(page, MODERN);
   await runAndWait(page);
@@ -51,7 +60,7 @@ test('Modern baseline removes core-js polyfills exactly as --modern does', async
 
 test('a baseline of engines with spaces reaches the engine whole', async ({ page }) => {
   const expected = cli(['--modern', 'chrome 120, firefox 121'], MODERN);
-  await openApp(page, `#modern=${encodeURIComponent('chrome 120, firefox 121')}`);
+  await openApp(page, `#libs=1&modern=${encodeURIComponent('chrome 120, firefox 121')}`);
   await load(page, MODERN);
   await runAndWait(page);
   expect(sha256(await outputText(page))).toBe(sha256(expected));
@@ -62,7 +71,7 @@ test('Split hoisted bundles with Assume ES modules gives the CLI tree, inferred 
   const files = cliTree(args, BOUNDARIES, test.info().outputPath('cli'));
   const modules = (JSON.parse(files.get('bundle.json') ?? '{}') as { modules: unknown[] }).modules;
   expect(modules.length).toBeGreaterThanOrEqual(10);
-  await openApp(page, '#split=1&assume=1');
+  await openApp(page, '#libs=1&split=1&assume=1');
   await load(page, BOUNDARIES);
   await runAndWait(page);
   await expect(page.locator('#module-count')).toHaveText(`bundle · ${modules.length} modules`);
@@ -78,7 +87,7 @@ test('Split hoisted bundles with Assume ES modules gives the CLI tree, inferred 
 });
 
 test('Assume ES modules does nothing without the split, as on the CLI', async ({ page }) => {
-  await openApp(page, '#assume=1');
+  await openApp(page, '#libs=1&assume=1');
   await load(page, BOUNDARIES);
   await runAndWait(page);
   expect(sha256(await outputText(page))).toBe(sha256(cli([], BOUNDARIES)));
@@ -87,7 +96,7 @@ test('Assume ES modules does nothing without the split, as on the CLI', async ({
 test('Source map appends the same inline map as --source-map inline', async ({ page }) => {
   const expected = cli(['--source-map', 'inline'], PLAIN);
   expect(expected).toContain(MAP_COMMENT);
-  await openApp(page, '#smap=1');
+  await openApp(page, '#libs=1&smap=1');
   await load(page, PLAIN);
   await runAndWait(page);
   expect(sha256(await outputText(page))).toBe(sha256(expected));
