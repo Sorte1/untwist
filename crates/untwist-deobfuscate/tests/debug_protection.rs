@@ -275,7 +275,9 @@ fn a_protection_that_blocks_a_block_function_hoist_is_kept() {
     let (out, notes) = run_with_notes(&alloc, &blocking);
     assert!(out.contains("const dpf"), "{out}");
     assert!(
-        notes.iter().any(|note| note.contains("keeps a block function")),
+        notes
+            .iter()
+            .any(|note| note.contains("keeps a block function")),
         "{notes:?}"
     );
 }
