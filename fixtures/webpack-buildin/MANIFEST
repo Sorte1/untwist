@@ -11,3 +11,9 @@ w4-negative-prod-web	webpack@4.47.0	browser	mode=production minimize=false targe
 w4-negative-prod-node	webpack@4.47.0	node	mode=production minimize=false target=node	0846e02031e9e096e48f9d439e05c502213cf59eb421238b97f1cbec10502753
 w4-negative-min-web	webpack@4.47.0	browser	mode=production minimize=true target=web	c40f1a40e6bdda4b1f665920e1b76a20c3b8b92463c19960d850bcf13b901580
 w4-negative-min-node	webpack@4.47.0	node	mode=production minimize=true target=node	c40f1a40e6bdda4b1f665920e1b76a20c3b8b92463c19960d850bcf13b901580
+w4-record-dev-web	webpack@4.47.0	browser	mode=development minimize=false target=web	69c752b56a202c03bbb89d93e5b91a5d4c6c641be9636fafb79d39bbba6e7003
+w4-record-dev-node	webpack@4.47.0	node	mode=development minimize=false target=node	69c752b56a202c03bbb89d93e5b91a5d4c6c641be9636fafb79d39bbba6e7003
+w4-record-prod-web	webpack@4.47.0	browser	mode=production minimize=false target=web	5560de92824444179da4a90a4d376ab9033a7fa12439f1638bb1d8eb7a454407
+w4-record-prod-node	webpack@4.47.0	node	mode=production minimize=false target=node	5560de92824444179da4a90a4d376ab9033a7fa12439f1638bb1d8eb7a454407
+w4-record-min-web	webpack@4.47.0	browser	mode=production minimize=true target=web	df754b113b4bd3f9cdb862d8021ccca1a0b77bdfc786f1208a978cdd27b405ec
+w4-record-min-node	webpack@4.47.0	node	mode=production minimize=true target=node	df754b113b4bd3f9cdb862d8021ccca1a0b77bdfc786f1208a978cdd27b405ec

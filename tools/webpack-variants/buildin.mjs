@@ -18,7 +18,7 @@ const MODES = {
   min: { mode: "production", optimization: { minimize: true } },
 };
 const TARGETS = { web: "browser", node: "node" };
-const APPS = { index: "./index.js", negative: "./negative.js" };
+const APPS = { index: "./index.js", negative: "./negative.js", record: "./record.js" };
 
 function compile(webpack, config) {
   return new Promise((done, fail) => {

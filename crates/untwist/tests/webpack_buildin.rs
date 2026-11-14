@@ -8,7 +8,7 @@ use untwist_testing::node::{node, run, skip_allowed, SKIP_MESSAGE};
 use untwist_unpack::webpack::buildin::{buildin_kind, buildin_text};
 use untwist_unpack::webpack::detect4::webpack4_factories;
 
-const POLYFILL_MARK: &str = "webpackPolyfill";
+const POLYFILL_MARKS: [&str; 2] = ["webpackPolyfill = 1", "webpackPolyfill=1"];
 const MODULE_OBJECT: &str = "uses its module object";
 
 fn fixtures() -> PathBuf {
@@ -76,7 +76,8 @@ fn polyfill_forms(text: &str) -> Vec<Option<String>> {
                 continue;
             };
             let statements = factory.body.statements.as_slice();
-            if !factory.body.span.source_text(text).contains(POLYFILL_MARK) {
+            let body = factory.body.span.source_text(text);
+            if !POLYFILL_MARKS.iter().any(|mark| body.contains(mark)) {
                 continue;
             }
             let form = buildin_text(statements, &module.name)
@@ -167,6 +168,24 @@ fn a_webpack_4_bundle_whose_modules_go_through_the_module_polyfill_is_unpacked_a
                 .map(|entry| entry.path())
                 .find(|path| path.file_name().is_some_and(|file| file == "index.js"))
                 .expect("index.js");
+            if let Some(out) = printed(&entry) {
+                assert_eq!(out, stdout, "{name} unsafe={unsafe_transforms}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_module_that_reads_the_polyfill_past_exports_runs_alike_with_webpacks_record() {
+    for (name, code, stdout) in cells("w4-record-") {
+        for unsafe_transforms in [false, true] {
+            let (dir, notes) = written(&code, lane(unsafe_transforms, true));
+            let split = dir.path().join("bundle.json").exists();
+            assert_eq!(split, unsafe_transforms, "{name}: {notes:?}");
+            let entry = match split {
+                true => dir.path().join("index.js"),
+                false => dir.path().join("deobfuscated.js"),
+            };
             if let Some(out) = printed(&entry) {
                 assert_eq!(out, stdout, "{name} unsafe={unsafe_transforms}");
             }

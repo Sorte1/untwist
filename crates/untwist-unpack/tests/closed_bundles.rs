@@ -96,6 +96,7 @@ const CONSERVATIVE: UnpackOptions = UnpackOptions {
     conservative: true,
     trust_free_loader: false,
     trust_legacy_reads: false,
+    trust_builtins: false,
 };
 
 struct Outcome {

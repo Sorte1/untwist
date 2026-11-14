@@ -46,6 +46,7 @@ impl Pipeline {
             conservative: !self.options.extended(),
             trust_free_loader: self.options.unsafe_transforms,
             trust_legacy_reads: self.options.unsafe_transforms,
+            trust_builtins: self.options.unsafe_transforms,
         }
     }
 

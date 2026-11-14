@@ -16,6 +16,7 @@ const ON: UnpackOptions = UnpackOptions {
     conservative: false,
     trust_free_loader: false,
     trust_legacy_reads: false,
+    trust_builtins: false,
 };
 
 fn files(bundle: Option<Bundle<'_>>, alloc: &Allocator) -> Option<Files> {

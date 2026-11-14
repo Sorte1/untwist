@@ -1,6 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 
@@ -19,6 +20,20 @@ const ASYNC_MODULE: &str = "a";
 const WASM_MODULE: &str = "v";
 const WASM_EXPORTS: &str = "w";
 const CALL: &str = "call";
+const OBJECT_PROTOTYPE: [&str; 12] = [
+    "constructor",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "toLocaleString",
+    "toString",
+    "valueOf",
+    "__proto__",
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Held {
@@ -37,7 +52,13 @@ struct ModuleUses<'s> {
     polyfills: Vec<Buildin>,
     kept: &'s [&'s str],
     computed_kept: bool,
+    faithful: bool,
+    record_read: bool,
     found: Option<String>,
+}
+
+pub struct PolyfillUse {
+    pub record: bool,
 }
 
 fn immediate<'k, 'a>(call: &'k CallExpression<'a>) -> Option<(&'k Function<'a>, usize)> {
@@ -96,7 +117,7 @@ impl ModuleUses<'_> {
             if ID_MEMBERS.contains(&member.property.name.as_str()) && self.is_module(&member.object))
     }
 
-    fn silent_call(call: &CallExpression<'_>) -> bool {
+    fn silent_call(&self, call: &CallExpression<'_>) -> bool {
         let Some(callee) = const_member(&call.callee, CALL) else {
             return false;
         };
@@ -105,6 +126,7 @@ impl ModuleUses<'_> {
         };
         let silent = function.params.items.is_empty() && function.params.rest.is_none();
         silent
+            && (!self.legacy || self.strict(function))
             && function
                 .body
                 .as_ref()
@@ -112,12 +134,12 @@ impl ModuleUses<'_> {
     }
 
     fn handed_to_helper(&self, call: &CallExpression<'_>, at: usize) -> bool {
-        if at > 0 && Self::silent_call(call) {
+        if at > 0 && self.silent_call(call) {
             return call
                 .arguments
                 .get(at)
                 .and_then(Argument::as_expression)
-                .is_some_and(|argument| self.is_module(argument));
+                .is_some_and(|argument| self.held_object(argument).is_some());
         }
         let Some(argument) = call.arguments.get(at).and_then(Argument::as_expression) else {
             return false;
@@ -299,6 +321,71 @@ impl ModuleUses<'_> {
         }
     }
 
+    fn read_through_record(&self, held: Held, name: &str) -> bool {
+        self.faithful
+            && matches!(held, Held::Polyfilled(_))
+            && !ID_MEMBERS.contains(&name)
+            && !OBJECT_PROTOTYPE.contains(&name)
+    }
+
+    fn visit_test<'a>(&mut self, expr: &Expression<'a>) {
+        if self.held_object(expr).is_some() {
+            return;
+        }
+        match expr.without_parentheses() {
+            Expression::LogicalExpression(logical) => {
+                self.visit_test(&logical.left);
+                self.visit_test(&logical.right);
+            }
+            Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::LogicalNot => {
+                self.visit_test(&unary.argument);
+            }
+            other => self.visit_expression(other),
+        }
+    }
+
+    fn visit_discarded<'a>(&mut self, expr: &Expression<'a>) {
+        if self.held_object(expr).is_some() {
+            return;
+        }
+        match expr.without_parentheses() {
+            Expression::LogicalExpression(logical) => {
+                self.visit_test(&logical.left);
+                self.visit_discarded(&logical.right);
+            }
+            Expression::ConditionalExpression(conditional) => {
+                self.visit_test(&conditional.test);
+                self.visit_discarded(&conditional.consequent);
+                self.visit_discarded(&conditional.alternate);
+            }
+            Expression::SequenceExpression(sequence) => {
+                for expression in &sequence.expressions {
+                    self.visit_discarded(expression);
+                }
+            }
+            other => self.visit_expression(other),
+        }
+    }
+
+    fn never_read(&self, declarator: &VariableDeclarator<'_>) -> bool {
+        let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+            return false;
+        };
+        let Some(symbol) = id.symbol_id.get() else {
+            return false;
+        };
+        let unread = self
+            .scoping
+            .get_resolved_references(symbol)
+            .all(|reference| !reference.is_read());
+        unread
+            && !self.scoping.scope_descendants_from_root().any(|scope| {
+                self.scoping
+                    .scope_flags(scope)
+                    .intersects(ScopeFlags::DirectEval | ScopeFlags::With)
+            })
+    }
+
     fn writable(&self, held: Held, name: &str) -> bool {
         name == EXPORTS
             && match held {
@@ -373,6 +460,10 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
             return;
         };
         let name = it.property.name.as_str();
+        if !self.readable(held, name) && self.read_through_record(held, name) {
+            self.record_read = true;
+            return;
+        }
         if !self.readable(held, name) {
             let what = match held {
                 Held::Record => format!("module.{name}"),
@@ -412,7 +503,68 @@ impl<'a> VisitJs<'a> for ModuleUses<'_> {
         walk_js::walk_computed_member_expression(self, it);
     }
 
+    fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
+        self.visit_discarded(&it.expression);
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        match &it.init {
+            Some(init) if self.never_read(it) => self.visit_discarded(init),
+            _ => walk_js::walk_variable_declarator(self, it),
+        }
+    }
+
+    fn visit_if_statement(&mut self, it: &IfStatement<'a>) {
+        self.visit_test(&it.test);
+        self.visit_statement(&it.consequent);
+        if let Some(alternate) = &it.alternate {
+            self.visit_statement(alternate);
+        }
+    }
+
+    fn visit_while_statement(&mut self, it: &WhileStatement<'a>) {
+        self.visit_test(&it.test);
+        self.visit_statement(&it.body);
+    }
+
+    fn visit_do_while_statement(&mut self, it: &DoWhileStatement<'a>) {
+        self.visit_statement(&it.body);
+        self.visit_test(&it.test);
+    }
+
+    fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
+        if let Some(init) = &it.init {
+            self.visit_for_statement_init(init);
+        }
+        if let Some(test) = &it.test {
+            self.visit_test(test);
+        }
+        if let Some(update) = &it.update {
+            self.visit_expression(update);
+        }
+        self.visit_statement(&it.body);
+    }
+
+    fn visit_conditional_expression(&mut self, it: &ConditionalExpression<'a>) {
+        self.visit_test(&it.test);
+        self.visit_expression(&it.consequent);
+        self.visit_expression(&it.alternate);
+    }
+
+    fn visit_logical_expression(&mut self, it: &LogicalExpression<'a>) {
+        if it.operator != LogicalOperator::And {
+            walk_js::walk_logical_expression(self, it);
+            return;
+        }
+        self.visit_test(&it.left);
+        self.visit_expression(&it.right);
+    }
+
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        if it.operator == UnaryOperator::LogicalNot {
+            self.visit_test(&it.argument);
+            return;
+        }
         let held = self.held_object(&it.argument).is_some();
         if it.operator == UnaryOperator::Typeof && held {
             return;
@@ -455,9 +607,11 @@ fn param_symbol(factory: &Factory<'_, '_>, at: usize) -> Option<SymbolId> {
 pub fn module_object_use(
     scoping: &Scoping,
     factory: &Factory<'_, '_>,
-    (buildins, record, legacy): (&FxHashMap<String, Buildin>, Record, bool),
-) -> Option<String> {
-    let symbol = param_symbol(factory, MODULE_PARAM)?;
+    (buildins, record, legacy, trust_builtins): (&FxHashMap<String, Buildin>, Record, bool, bool),
+) -> Result<PolyfillUse, String> {
+    let Some(symbol) = param_symbol(factory, MODULE_PARAM) else {
+        return Ok(PolyfillUse { record: false });
+    };
     let mut uses = ModuleUses {
         scoping,
         symbol,
@@ -469,14 +623,21 @@ pub fn module_object_use(
         polyfills: Vec::new(),
         kept: &KEPT_MEMBERS,
         computed_kept: false,
+        faithful: trust_builtins && record.l,
+        record_read: false,
         found: None,
     };
     uses.visit_function_body(factory.body);
     let mixed = uses.polyfills.contains(&Buildin::Harmony) && uses.polyfills.len() > 1;
-    if mixed {
+    if mixed || uses.record_read && uses.polyfills.len() != 1 {
         uses.refuse("two webpack module polyfills on one module");
     }
-    uses.found
+    match uses.found {
+        Some(found) => Err(found),
+        None => Ok(PolyfillUse {
+            record: uses.record_read,
+        }),
+    }
 }
 
 pub fn module_param_use(
@@ -497,6 +658,8 @@ pub fn module_param_use(
         polyfills: Vec::new(),
         kept,
         computed_kept: true,
+        faithful: false,
+        record_read: false,
         found: None,
     };
     uses.visit_function_body(body);

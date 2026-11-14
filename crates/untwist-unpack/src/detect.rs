@@ -53,6 +53,7 @@ struct Extract<'a, 'p, 'b> {
     unproven: &'b mut Option<String>,
     merged: bool,
     legacy: Option<Option<&'static str>>,
+    plain: Vec<String>,
 }
 
 fn factory_buildins(factories: &[(String, Factory<'_, '_>)]) -> FxHashMap<String, Buildin> {
@@ -117,6 +118,7 @@ impl<'a> Extract<'a, '_, '_> {
         factories: Option<Vec<(String, Factory<'_, 'a>)>>,
         record: Record,
     ) -> bool {
+        self.plain.clear();
         if self.options.conservative {
             return true;
         }
@@ -125,15 +127,35 @@ impl<'a> Extract<'a, '_, '_> {
             return true;
         };
         let buildins = factory_buildins(&factories);
-        let Some((id, what)) = factories.iter().find_map(|(id, factory)| {
-            module_object_use(scoping, factory, (&buildins, record, legacy))
-                .map(|what| (id.clone(), what))
-        }) else {
-            return true;
-        };
-        self.unproven
-            .get_or_insert_with(|| module_object_used(id, what));
-        false
+        let lane = (&buildins, record, legacy, self.options.trust_builtins);
+        let mut plain = Vec::new();
+        for (id, factory) in &factories {
+            match module_object_use(scoping, factory, lane) {
+                Ok(uses) if !uses.record => plain.push(id.clone()),
+                Ok(_) => {}
+                Err(what) => {
+                    self.unproven
+                        .get_or_insert_with(|| module_object_used(id, what));
+                    return false;
+                }
+            }
+        }
+        self.plain = plain;
+        true
+    }
+
+    fn marked(&mut self, bundle: Option<Bundle<'a>>) -> Option<Bundle<'a>> {
+        let mut bundle = bundle?;
+        let plain = std::mem::take(&mut self.plain);
+        if matches!(self.bodies, Bodies::Taken(_)) {
+            return Some(bundle);
+        }
+        for id in plain {
+            if let Some(module) = bundle.modules.get_mut(&id) {
+                module.node_module = true;
+            }
+        }
+        Some(bundle)
     }
 
     fn require_kept(&mut self, factories: Option<Vec<(String, Factory<'_, 'a>)>>) -> bool {
@@ -204,9 +226,10 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
             && self.module_kept(webpack5_factories(body), webpack5_record(body))
         {
             let proving = Proving::new(self.scoping.as_ref(), self.unproven);
-            self.bundle = attempt(self.bodies, |bodies| {
+            let found = attempt(self.bodies, |bodies| {
                 detect_webpack5_noted(alloc, source, body, bodies, options, proving)
             });
+            self.bundle = self.marked(found);
         }
         if self.bundle.is_none()
             && self.closed(exports_chunk_factories(source, body))
@@ -214,9 +237,10 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
         {
             let proving =
                 Proving::new(self.scoping.as_ref(), self.unproven).with_merged(self.merged);
-            self.bundle = attempt(self.bodies, |bodies| {
+            let found = attempt(self.bodies, |bodies| {
                 detect_exports_chunk_noted(alloc, source, body, bodies, options, proving)
             });
+            self.bundle = self.marked(found);
         }
     }
 
@@ -226,9 +250,10 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
             && self.module_kept(webpack4_factories(expr), webpack4_record(expr))
         {
             let proving = Proving::new(self.scoping.as_ref(), self.unproven);
-            self.bundle = attempt(self.bodies, |bodies| {
+            let found = attempt(self.bodies, |bodies| {
                 detect_webpack4_noted(alloc, source, expr, bodies, options, proving)
             });
+            self.bundle = self.marked(found);
         }
         if self.bundle.is_none()
             && self.closed(chunk_factories(expr))
@@ -236,9 +261,10 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
         {
             let proving =
                 Proving::new(self.scoping.as_ref(), self.unproven).with_merged(self.merged);
-            self.bundle = attempt(self.bodies, |bodies| {
+            let found = attempt(self.bodies, |bodies| {
                 detect_webpack_chunk_noted(alloc, source, expr, bodies, options, proving)
             });
+            self.bundle = self.marked(found);
         }
         if self.bundle.is_none()
             && is_browserify(expr)
@@ -585,6 +611,7 @@ fn extract_with<'a>(
             unproven,
             merged: links.merged,
             legacy: None,
+            plain: Vec::new(),
         },
     };
     detector.visit_program(program);
@@ -774,7 +801,7 @@ fn taking<'a>(
     unproven: &mut Option<String>,
 ) -> Option<Bundle<'a>> {
     let mut planned = Bodies::Planned(Vec::new());
-    extract_with(alloc, program, (&mut planned, unproven), context)?;
+    let plan = extract_with(alloc, program, (&mut planned, unproven), context)?;
     let Bodies::Planned(keys) = planned else {
         return None;
     };
@@ -786,7 +813,13 @@ fn taking<'a>(
     taker.visit_program(program);
     let held = taker.taken.len();
     let mut taken = Bodies::Taken(taker.taken);
-    if let Some(bundle) = extract_with(alloc, program, (&mut taken, &mut None), context) {
+    if let Some(mut bundle) = extract_with(alloc, program, (&mut taken, &mut None), context) {
+        for (id, module) in bundle.modules.iter_mut() {
+            module.node_module = plan
+                .modules
+                .get(id)
+                .is_some_and(|planned| planned.node_module);
+        }
         return Some(bundle);
     }
     let Bodies::Taken(pool) = taken else {
