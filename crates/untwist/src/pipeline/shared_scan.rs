@@ -6,7 +6,8 @@ use untwist_core::semantic::{build_scoping, SharedGlobals};
 use untwist_deobfuscate::calls::agnostic::{names_reached_from, NamesReached};
 use untwist_eval::stack;
 
-use super::global_writes::{global_writes, GlobalWrites};
+use super::global_writes::{global_writes, GlobalWrites, EVERY_ROOT};
+use untwist_core::semantic::builtins::{self, Builtins};
 
 struct Seen {
     script: bool,
@@ -72,7 +73,14 @@ fn seen(source: &str) -> Seen {
             .filter(|(_, ids)| ids.iter().any(|id| scoping.get_reference(*id).is_write()))
             .map(|(name, _)| name.as_str().to_string())
             .collect(),
-        global_written: global_writes(&parsed.program),
+        global_written: {
+            let mut written = global_writes(&parsed.program);
+            let module = parsed.program.source_type.is_module();
+            written.every |= builtins::scan(&parsed.program, &scoping, module, false, &EVERY_ROOT)
+                .verdict
+                != Builtins::Intact;
+            written
+        },
         readable: !has_error(&parsed.diagnostics),
     }
 }

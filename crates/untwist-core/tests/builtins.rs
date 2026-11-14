@@ -34,8 +34,8 @@ fn a_program_that_only_calls_the_member_is_intact() {
 }
 
 #[test]
-fn a_write_to_a_member_nobody_relies_on_is_intact() {
-    assert_eq!(verdict("Math.floor = function () {};"), Builtins::Intact);
+fn a_write_to_a_member_nobody_relies_on_is_not_intact() {
+    assert_eq!(verdict("Math.floor = function () {};"), Builtins::Aliased);
 }
 
 #[test]
@@ -72,8 +72,12 @@ fn a_root_used_as_a_value_is_aliased() {
 }
 
 #[test]
-fn a_root_outside_the_reliance_is_not_watched() {
-    assert_eq!(verdict("var O = Object; JSON.parse = f;"), Builtins::Intact);
+fn a_root_outside_the_reliance_is_still_a_root() {
+    assert_eq!(
+        verdict("var O = Object; JSON.parse = f;"),
+        Builtins::Aliased
+    );
+    assert_eq!(verdict("JSON.parse = f;"), Builtins::Aliased);
 }
 
 #[test]
@@ -181,7 +185,6 @@ fn reading_through_a_reached_prototype_without_letting_it_go_is_intact() {
         "y = Object.prototype.hasOwnProperty.call(o, k);",
         "y = x.__proto__.toString.call(o);",
         "y = o instanceof x.constructor;",
-        "y = Object.getPrototypeOf(x) === Array.prototype;",
         "setTimeout(function () {}, 1); setTimeout(() => 1); function tick() {} setInterval(tick, 5); setTimeout(o.f.bind(o));",
         "x.constructor.count = 1;",
         "\"Object\" === t && r.constructor && (t = r.constructor.name);",
@@ -196,7 +199,6 @@ fn reading_through_a_reached_prototype_without_letting_it_go_is_intact() {
         "if (x.constructor === Array) {}",
         "y = x.constructor.name;",
         "y = x.__proto__.toString.call(o);",
-        "y = Object.getPrototypeOf(x) === Array.prototype;",
     ] {
         assert_eq!(
             verdict_for(source, &ARRAY_CONCAT),
@@ -314,4 +316,69 @@ fn a_long_chain_of_computed_reads_is_scanned_in_linear_time() {
         spent < std::time::Duration::from_secs(2),
         "{depth} levels took {spent:?}"
     );
+}
+
+#[test]
+fn a_built_in_outside_its_listed_harmless_shapes_is_not_intact() {
+    for source in [
+        "(0 || [].__proto__).toString = f;",
+        "(1 ? [].__proto__ : 0).toString = f;",
+        "(1 && Array).prototype.toString = f;",
+        "(1 && Reflect).getPrototypeOf([]).toString = f;",
+        "({}).constructor.getPrototypeOf([]).toString = f;",
+        "globalThis.Object.getPrototypeOf([]).toString = f;",
+        "with ([]) { constructor.prototype.toString = f; }",
+        "var G = __lookupGetter__.call({}, '__proto__');",
+        "constructor.getPrototypeOf([]).toString = f;",
+        "if (!Array.prototype.toJSON) { Array.prototype.toJSON = f; }",
+        "Object.prototype.toJSON ||= f;",
+        "import('data:text/javascript,1');",
+        "Function.call(null, 'x')();",
+        "eval.call(null, 'x');",
+        "var p = Array['prototype'];",
+        "var p = Array?.prototype;",
+        "var p = Array[`prototype`];",
+        "Array.prototype.push(1);",
+        "y = Object.getPrototypeOf(x) === Array.prototype;",
+    ] {
+        assert_ne!(
+            verdict_for(source, &ARRAY_CONCAT),
+            Builtins::Intact,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_script_var_named_like_a_built_in_is_the_built_in() {
+    assert_eq!(
+        verdict_for("var Array; Array.prototype.concat = f;", &ARRAY_CONCAT),
+        Builtins::Written
+    );
+    assert_eq!(
+        verdict_for("var Reflect;", &ARRAY_CONCAT),
+        Builtins::Aliased
+    );
+}
+
+#[test]
+fn listed_harmless_shapes_stay_intact() {
+    for source in [
+        "y = Object.keys(o).map(f);",
+        "y = Array.isArray(a) && Array.from(a);",
+        "y = Object.prototype.hasOwnProperty.call(o, k);",
+        "y = Array.prototype.slice.call(arguments);",
+        "y = Function.prototype.call.bind(Object.prototype.toString);",
+        "y = typeof Symbol === 'function' && Symbol.iterator;",
+        "y = new Map(); z = x instanceof Array;",
+        "y = Math.max(1, 2) + Number.MAX_SAFE_INTEGER + JSON.stringify(o).length;",
+        "window.addEventListener('x', f); y = window.location.href;",
+        "y = String.fromCharCode(97) + String(x);",
+    ] {
+        assert_eq!(
+            verdict_for(source, &ARRAY_CONCAT),
+            Builtins::Intact,
+            "{source}"
+        );
+    }
 }

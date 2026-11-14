@@ -1,6 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 
+use super::allow::Root;
 use super::keys::literal_text;
 use super::{Scan, This, GLOBAL_OBJECTS};
 
@@ -20,6 +21,8 @@ const PROTOTYPE_READERS: [(&str, &str); 3] = [
 ];
 
 pub(super) const CODE_RUNNERS: [&str; 3] = ["eval", "Function", "execScript"];
+
+const PROTOTYPE_READER_NAMES: [&str; 2] = ["getPrototypeOf", "get"];
 
 const CONTEXT_RUNNERS: [&str; 4] = [
     "runInThisContext",
@@ -156,10 +159,17 @@ impl Scan<'_> {
             Key::Name(name) if REACHING_KEYS.contains(&name) => true,
             Key::Name(name) if self.names_a_root(name) => true,
             Key::Name(name) if GLOBAL_OBJECTS.contains(&name) => self.is_root(object),
-            Key::Name("prototype") => self.is_reached(object),
+            Key::Name("prototype") => self.is_reached(object) || self.is_named_root(object),
             Key::Name(name) if FORWARDING_KEYS.contains(&name) => {
-                self.is_reached(object) || self.reads_prototypes(object)
+                self.is_reached(object)
+                    || self.reads_prototypes(object)
+                    || self.is_code_runner_name(object)
+                    || matches!(
+                        self.allow_root(object),
+                        Some(Root::Builtin(_) | Root::Global | Root::Runner(_))
+                    )
             }
+            Key::Name(name) if PROTOTYPE_READER_NAMES.contains(&name) => self.is_root(object),
             Key::Name(_) | Key::Other => false,
             Key::Unknown(key) => {
                 self.is_root(object)

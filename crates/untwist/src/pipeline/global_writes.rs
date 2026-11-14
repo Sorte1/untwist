@@ -8,6 +8,7 @@ use oxc_syntax::operator::UnaryOperator;
 use std::collections::HashSet;
 use untwist_core::parse::{has_error, parse_program};
 use untwist_core::semantic::build_scoping;
+use untwist_core::semantic::builtins::Reliance;
 
 const GLOBAL_OBJECTS: [&str; 7] = [
     "globalThis",
@@ -44,6 +45,38 @@ struct Walk<'w> {
     script: bool,
     text_depth: u32,
 }
+
+pub(super) static EVERY_ROOT: Reliance = Reliance {
+    roots: &[
+        "Object",
+        "Array",
+        "Function",
+        "String",
+        "Number",
+        "Boolean",
+        "Symbol",
+        "JSON",
+        "Math",
+        "RegExp",
+        "Promise",
+        "Reflect",
+        "Date",
+        "atob",
+        "btoa",
+        "unescape",
+        "escape",
+        "decodeURI",
+        "decodeURIComponent",
+        "encodeURI",
+        "encodeURIComponent",
+        "parseInt",
+        "parseFloat",
+        "undefined",
+        "Infinity",
+        "NaN",
+    ],
+    members: &[],
+};
 
 pub(super) fn global_writes(program: &Program<'_>) -> GlobalWrites {
     let mut out = GlobalWrites::default();

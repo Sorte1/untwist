@@ -3,15 +3,18 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashMap;
 use std::cell::{OnceCell, RefCell};
 
 use super::{Builtins, Reliance, Scanned};
 use crate::semantic::{is_foreign_global, program_is_strict};
 
+mod allow;
 mod keys;
 mod reach;
+
+use allow::Root;
 
 use reach::{call_of, key_of, member_of, Key, REACHING_KEYS};
 
@@ -41,6 +44,25 @@ const LEGACY_DEFINERS: [&str; 2] = ["__defineGetter__", "__defineSetter__"];
 const PROMISE: &str = "Promise";
 
 const REFLECT: &str = "Reflect";
+
+const TEXT_MODULE_SCHEMES: [&str; 3] = ["data:", "blob:", "javascript:"];
+
+fn is_text_module(specifier: &str) -> bool {
+    let lower = specifier.trim_start().to_ascii_lowercase();
+    TEXT_MODULE_SCHEMES
+        .iter()
+        .any(|scheme| lower.starts_with(scheme))
+}
+
+fn names_a_module(source: &Expression<'_>) -> bool {
+    match source.without_parentheses() {
+        Expression::StringLiteral(literal) => literal
+            .value
+            .as_str()
+            .is_some_and(|text| !is_text_module(text)),
+        _ => false,
+    }
+}
 
 fn literal_key<'k>(expression: &'k Expression<'_>) -> Option<&'k str> {
     match expression.without_parentheses() {
@@ -179,6 +201,7 @@ struct Scan<'s> {
     reliance: &'s Reliance,
     writes_only: bool,
     first_only: bool,
+    module: bool,
     frames: Vec<Frame>,
     verdict: Builtins,
     promise_written: bool,
@@ -195,9 +218,30 @@ fn names_a_foreign_root(scoping: &Scoping, reliance: &Reliance) -> bool {
     })
 }
 
-fn first_verdict(scoping: &Scoping, reliance: &Reliance) -> Builtins {
-    match names_a_foreign_root(scoping, reliance) {
-        true => Builtins::Written,
+fn declares_a_root_in_a_script(scoping: &Scoping, reliance: &Reliance, module: bool) -> bool {
+    !module
+        && scoping
+            .get_bindings(scoping.root_scope_id())
+            .iter()
+            .any(|(name, symbol)| {
+                let name = name.as_str();
+                let rootish = reliance.roots.contains(&name)
+                    || allow::BUILTIN_ROOTS.contains(&name)
+                    || GLOBAL_OBJECTS.contains(&name)
+                    || reach::CODE_RUNNERS.contains(&name);
+                rootish
+                    && scoping
+                        .symbol_flags(*symbol)
+                        .intersects(SymbolFlags::FunctionScopedVariable | SymbolFlags::Function)
+            })
+}
+
+fn first_verdict(scoping: &Scoping, reliance: &Reliance, module: bool) -> Builtins {
+    if names_a_foreign_root(scoping, reliance) {
+        return Builtins::Written;
+    }
+    match declares_a_root_in_a_script(scoping, reliance, module) {
+        true => Builtins::Aliased,
         false => Builtins::Intact,
     }
 }
@@ -240,8 +284,9 @@ impl<'s> Scan<'s> {
             reliance,
             writes_only: false,
             first_only: false,
+            module,
             frames: vec![Frame::of_program(program, module)],
-            verdict: first_verdict(scoping, reliance),
+            verdict: first_verdict(scoping, reliance, module),
             promise_written: false,
         }
     }
@@ -306,11 +351,23 @@ impl Scan<'_> {
     }
 
     fn global_named(&self, id: &IdentifierReference<'_>, names: &[&str]) -> bool {
-        names.contains(&id.name.as_str())
-            && id
-                .reference_id
-                .get()
-                .is_none_or(|reference| self.scoping.get_reference(reference).symbol_id().is_none())
+        if !names.contains(&id.name.as_str()) {
+            return false;
+        }
+        let symbol = id
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        symbol.is_none_or(|symbol| self.is_script_global(symbol))
+    }
+
+    fn is_script_global(&self, symbol: SymbolId) -> bool {
+        !self.module
+            && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
+            && self
+                .scoping
+                .symbol_flags(symbol)
+                .intersects(SymbolFlags::FunctionScopedVariable | SymbolFlags::Function)
     }
 
     fn is_global_object(&self, expression: &Expression<'_>) -> bool {
@@ -344,15 +401,10 @@ impl Scan<'_> {
         if self.is_builtin(expression) || self.is_global_object(expression) {
             return true;
         }
-        match expression.without_parentheses() {
-            Expression::Identifier(id) => self.global_named(id, &[REFLECT]),
-            Expression::StaticMemberExpression(member) => {
-                let name = member.property.name.as_str();
-                (GLOBAL_OBJECTS.contains(&name) || name == REFLECT)
-                    && self.is_global_object(&member.object)
-            }
-            _ => false,
-        }
+        matches!(
+            self.allow_root(expression),
+            Some(Root::Builtin(_) | Root::Prototype(_) | Root::Global)
+        )
     }
 
     fn reaches_builtin(&self, expression: &Expression<'_>) -> bool {
@@ -557,7 +609,10 @@ impl Scan<'_> {
 
     fn visit_unless_root(&mut self, expression: &Expression<'_>) {
         match expression.without_parentheses() {
-            Expression::LogicalExpression(logical) if installs_if_missing(logical).is_none() => {
+            Expression::LogicalExpression(logical) => {
+                if installs_if_missing(logical).is_some() {
+                    self.not_allowed();
+                }
                 self.visit_unless_root(&logical.left);
                 self.visit_unless_root(&logical.right);
                 return;
@@ -582,6 +637,40 @@ impl Scan<'_> {
         } else if self.is_reached(expression) {
             self.visit_reached(expression);
         }
+    }
+
+    fn not_allowed(&mut self) {
+        if !self.writes_only {
+            self.aliased();
+        }
+    }
+
+    fn visit_member_object(&mut self, object: &Expression<'_>, key: Key<'_>) {
+        let stripped = object.without_parentheses();
+        if let Some(root) = self.allow_root(stripped) {
+            if !self.read_allowed(root, key) {
+                self.not_allowed();
+            }
+            if let Some((inner, inner_key)) = member_of(stripped) {
+                self.visit_member_object(inner, inner_key);
+                if let Expression::ComputedMemberExpression(member) = stripped {
+                    self.visit_expression(&member.expression);
+                }
+            }
+            return;
+        }
+        match stripped {
+            Expression::LogicalExpression(_)
+            | Expression::ConditionalExpression(_)
+            | Expression::SequenceExpression(_)
+            | Expression::AssignmentExpression(_) => self.visit_expression(object),
+            _ => self.visit_unless_root(object),
+        }
+    }
+
+    fn calls_through_a_prototype(&self, callee: &Expression<'_>) -> bool {
+        member_of(callee.without_parentheses())
+            .is_some_and(|(object, _)| matches!(self.allow_root(object), Some(Root::Prototype(_))))
     }
 
     fn visit_reached(&mut self, expression: &Expression<'_>) {
@@ -670,12 +759,36 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
-        self.visit_unless_root(&it.object);
+        self.visit_member_object(&it.object, Key::Name(it.property.name.as_str()));
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        self.visit_unless_root(&it.object);
+        self.visit_member_object(&it.object, key_of(&it.expression));
         self.visit_expression(&it.expression);
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if REACHING_KEYS.contains(&it.name.as_str()) && self.global_named(it, &REACHING_KEYS) {
+            self.not_allowed();
+        }
+    }
+
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.not_allowed();
+        walk_js::walk_with_statement(self, it);
+    }
+
+    fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {
+        if !names_a_module(&it.source) {
+            self.not_allowed();
+        }
+        walk_js::walk_import_expression(self, it);
+    }
+
+    fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
+        if it.source.value.as_str().is_some_and(is_text_module) {
+            self.not_allowed();
+        }
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
@@ -689,6 +802,9 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         }
         if self.runs_code(&it.callee, &it.arguments) {
             self.aliased();
+        }
+        if self.calls_through_a_prototype(&it.callee) {
+            self.not_allowed();
         }
         if !self.reads_prototypes(&it.callee) {
             self.visit_callee(&it.callee);
@@ -752,6 +868,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
             .as_simple_assignment_target()
             .is_some_and(|target| target_path(target, &mut Vec::new()));
         if installs {
+            self.not_allowed();
             self.visit_expression(&it.right);
             return;
         }
@@ -760,6 +877,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
 
     fn visit_if_statement(&mut self, it: &IfStatement<'a>) {
         if let Some(value) = guarded_install(it) {
+            self.not_allowed();
             self.visit_expression(value);
             return;
         }
@@ -788,6 +906,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
 
     fn visit_logical_expression(&mut self, it: &LogicalExpression<'a>) {
         if let Some(value) = installs_if_missing(it) {
+            self.not_allowed();
             self.visit_expression(value);
             return;
         }
@@ -818,6 +937,13 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         if written {
             self.written();
             return;
+        }
+        let on_root = it.as_member_expression().is_some_and(|member| {
+            self.allow_root(member.object())
+                .is_some_and(|root| root != Root::Global)
+        });
+        if on_root {
+            self.not_allowed();
         }
         walk_js::walk_simple_assignment_target(self, it);
     }
