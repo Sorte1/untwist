@@ -1,4 +1,4 @@
-use untwist_eval::builtins::{regexp, regexp_syntax};
+use untwist_eval::builtins::regexp_syntax;
 
 const PORTABLE_FLAGS: &str = "gimsuy";
 
@@ -7,7 +7,14 @@ const PORTABLE_GROUP_OPENERS: [char; 4] = [':', '=', '!', '<'];
 pub(super) fn holds_everywhere(pattern: &str, flags: &str) -> bool {
     portable_flags(flags)
         && portable_syntax(pattern)
-        && (regexp_syntax::admitted(pattern, flags) || regexp::engine_accepts(pattern, flags))
+        && regexp_syntax::admitted(pattern, grammar_flags(flags))
+}
+
+fn grammar_flags(flags: &str) -> &'static str {
+    match flags.contains('u') {
+        true => "u",
+        false => "",
+    }
 }
 
 fn portable_flags(flags: &str) -> bool {

@@ -44,7 +44,7 @@ fn every_refused_row_diverges_from_node_once_the_rotator_checks_are_dropped() {
         })
         .collect();
     assert!(sabotage.len() >= 2, "found {} rows", sabotage.len());
-    let run = |source: &str| transformed(false, source);
+    let run = |source: &str| transformed(true, source);
     trust_minified_rotators_for_tests(true);
     trust_wrapper_constants_for_tests(true);
     let modes: [Mode<'_>; 1] = [("mutant", &run)];
@@ -76,7 +76,7 @@ fn refused_cookie_rows_are_lifted_once_the_rotator_checks_are_dropped() {
     trust_wrapper_constants_for_tests(true);
     let kept: Vec<String> = cookie
         .iter()
-        .filter(|(_, source)| transformed(false, source).contains("arr0 = "))
+        .filter(|(_, source)| transformed(true, source).contains("arr0 = "))
         .map(|(label, _)| label.clone())
         .collect();
     trust_minified_rotators_for_tests(false);

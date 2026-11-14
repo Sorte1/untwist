@@ -13,3 +13,9 @@ ref-new-name-is-not-another-scripts-name|var o = { width: Math.random() < 2 ? 1 
 ref-two-scripts-pick-the-same-new-name|var o = { width: Math.random() < 2 ? 1 : 0 }; var q = o.width; function show() { console.log(q); } @@ var p = { width: 7, height: Math.random() }; var z = p.width; show();
 ref-three-scripts-wrappers-and-names|var a, b; a || (a = 1, b = { v: 1 }); var o = { width: 1 }; var q = o.width; @@ var c, d; c || (c = 1, d = { v: 2 }); var p = { width: 7 }; var z = p.width; @@ var e, f; e || (e = 1, f = { v: 3 }); console.log(q, z, d && d.v, f && f.v, typeof width);
 ref-three-scripts-free-name-in-the-last|var o = { height: Math.random() < 2 ? 1 : 0 }; var q = o.height; @@ function noop() {} @@ console.log(q, typeof height);
+ref-other-script-sets-eval-through-this|this.eval = function () { console.log("foreign eval"); return "console.log('F')"; }; @@ (function () { console.log(eval("1 + 1")); })();
+ref-other-script-sets-atob-through-globalthis|globalThis.atob = function () { return "console.log('F')"; }; @@ eval(atob("Y29uc29sZS5sb2coMSk="));
+ref-other-script-sets-string-through-window-key|globalThis["String"] = { fromCharCode: function () { return "foreign"; } }; @@ console.log(String.fromCharCode(97, 98));
+ref-other-script-declares-through-indirect-eval|(0, eval)("var JSON = { parse: function () { return 'foreign'; } }"); @@ console.log(JSON.parse("1"));
+ref-other-script-sets-unescape-in-a-function-through-this|(function () { this.unescape = function () { return "console.log('F')"; }; })(); @@ eval(unescape("%63onsole.log(3)"));
+ref-other-script-sets-function-through-a-computed-global-key|var k = "Func" + "tion"; globalThis[k] = function () { return function () { console.log("foreign"); }; }; @@ Function("console.log(2)")();

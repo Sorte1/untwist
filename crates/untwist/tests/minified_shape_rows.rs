@@ -3,7 +3,7 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/minified_shape_rows.txt");
 const SELF_DEFENDING: &str = "self-defending";
-const PREFIXES: [&str; 3] = ["dec-", "guard-", "ref-"];
+const PREFIXES: [&str; 4] = ["dec-", "unsafe-dec-", "guard-", "ref-"];
 
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
@@ -41,7 +41,8 @@ fn every_row_has_a_known_prefix() {
 fn each_rows_decode_decision_matches_its_label_in_both_lanes() {
     for lane in [false, true] {
         for (label, source) in rows() {
-            let should_decode = label.starts_with("dec-");
+            let should_decode =
+                label.starts_with("dec-") || (lane && label.starts_with("unsafe-dec-"));
             let code = transformed(lane, &source);
             assert_eq!(
                 decoded(&code),

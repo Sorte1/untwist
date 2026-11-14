@@ -6,11 +6,14 @@ use untwist_core::semantic::{build_scoping, SharedGlobals};
 use untwist_deobfuscate::calls::agnostic::{names_reached_from, NamesReached};
 use untwist_eval::stack;
 
+use super::global_writes::{global_writes, GlobalWrites};
+
 struct Seen {
     script: bool,
     bound: HashSet<String>,
     free: HashSet<String>,
     written: HashSet<String>,
+    global_written: GlobalWrites,
     readable: bool,
 }
 
@@ -21,7 +24,11 @@ impl Seen {
 
     fn named(&self) -> impl Iterator<Item = &str> {
         let bound = self.bound.iter().filter(|_| self.script);
-        self.free.iter().chain(bound).map(String::as_str)
+        self.free
+            .iter()
+            .chain(bound)
+            .chain(self.global_written.names.iter())
+            .map(String::as_str)
     }
 }
 
@@ -35,6 +42,7 @@ fn unreadable() -> Seen {
         bound: HashSet::new(),
         free: HashSet::new(),
         written: HashSet::new(),
+        global_written: GlobalWrites::default(),
         readable: false,
     }
 }
@@ -64,6 +72,7 @@ fn seen(source: &str) -> Seen {
             .filter(|(_, ids)| ids.iter().any(|id| scoping.get_reference(*id).is_write()))
             .map(|(name, _)| name.as_str().to_string())
             .collect(),
+        global_written: global_writes(&parsed.program),
         readable: !has_error(&parsed.diagnostics),
     }
 }
@@ -116,18 +125,23 @@ fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGloba
             .enumerate()
             .filter(move |(index, _)| *index != own)
     };
-    let every_name = !all[own].readable || others().any(|(index, _)| reached[index].reached);
+    let every_name = !all[own].readable
+        || all[own].global_written.every
+        || others().any(|(index, _)| reached[index].reached);
     let names = all[own]
         .bound
         .iter()
+        .chain(all[own].global_written.names.iter())
         .filter(|name| others().any(|(_, other)| other.names(name)))
         .cloned()
         .collect();
-    let every_foreign = others().any(|(_, other)| !other.readable);
+    let every_foreign = others().any(|(_, other)| !other.readable || other.global_written.every);
     let foreign = others()
         .flat_map(|(_, other)| {
             let bound = other.bound.iter().filter(|_| other.script);
-            bound.chain(other.written.iter())
+            bound
+                .chain(other.written.iter())
+                .chain(other.global_written.names.iter())
         })
         .cloned()
         .collect();
