@@ -269,7 +269,6 @@ fn a_key_that_cannot_spell_a_prototype_name_stays_intact() {
         "var o = { foo: 1 }; x = o[atob('Zm9v')];",
         "var k = 'dyn'; x = o[k];",
         "for (var i = 0; i < n; i++) { x = a[i + 1] + a[1 + i]; }",
-        "for (var p in b) { d[p] = b[p]; } throw new TypeError('is not a constructor');",
         "x = r[Symbol.iterator] || r['@@iterator'];",
         "var { a: b } = o;",
         "({ a } = o);",
@@ -279,13 +278,15 @@ fn a_key_that_cannot_spell_a_prototype_name_stays_intact() {
 }
 
 #[test]
-fn a_key_from_a_parameter_an_enumeration_or_an_opaque_call_is_not_taken_to_spell_a_prototype_name()
-{
+fn a_key_from_a_parameter_an_enumeration_or_an_opaque_call_aliases_the_built_ins() {
     for source in [
         "function f(k) { return [][k]; }",
         "for (var k in o) { x = o[k]; }",
         "x = cache[id()];",
+        "for (var p in b) { d[p] = b[p]; }",
+        "function f(o, k) { var v = o[k]; return v; }",
     ] {
-        assert_eq!(verdict(source), Builtins::Intact, "{source}");
+        assert_eq!(verdict(source), Builtins::Aliased, "{source}");
+        assert!(!first_look_is_intact(source), "{source}");
     }
 }

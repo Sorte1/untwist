@@ -223,9 +223,18 @@ impl Scan<'_> {
         }
         let mut deps = Vec::new();
         let class = classify(self.scoping, key, &mut deps);
-        class == Class::Spelling
+        let spelled = class == Class::Spelling
             || deps.iter().any(|symbol| self.spelling_symbol(*symbol))
-            || ((class == Class::Opaque || !deps.is_empty()) && self.names_a_reaching_key())
+            || ((class == Class::Opaque || !deps.is_empty()) && self.names_a_reaching_key());
+        if spelled {
+            return true;
+        }
+        let plain = class == Class::Plain && deps.iter().all(|symbol| self.plain_symbol(*symbol));
+        if plain {
+            return false;
+        }
+        self.opaque_key.set(true);
+        self.strict
     }
 
     pub(super) fn names_a_root(&self, name: &str) -> bool {

@@ -186,24 +186,36 @@ fn produces_strings(callee: &Expression<'_>) -> bool {
 const FORWARDERS: [&str; 3] = ["call", "apply", "bind"];
 
 pub(super) fn spelling_symbols(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
+    let writes = collect(program, scoping);
+    closed(writes.spelling, &writes.deps)
+}
+
+pub(super) fn unplain_symbols(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
+    let writes = collect(program, scoping);
+    closed(writes.unplain, &writes.deps)
+}
+
+fn collect<'s>(program: &Program<'_>, scoping: &'s Scoping) -> Writes<'s> {
     let mut writes = Writes {
         scoping,
         spelling: FxHashSet::default(),
+        unplain: FxHashSet::default(),
         deps: Vec::new(),
     };
     writes.visit_program(program);
-    let Writes {
-        mut spelling, deps, ..
-    } = writes;
+    writes
+}
+
+fn closed(mut set: FxHashSet<SymbolId>, deps: &[(SymbolId, SymbolId)]) -> FxHashSet<SymbolId> {
     loop {
-        let before = spelling.len();
-        for (symbol, dep) in &deps {
-            if spelling.contains(dep) {
-                spelling.insert(*symbol);
+        let before = set.len();
+        for (symbol, dep) in deps {
+            if set.contains(dep) {
+                set.insert(*symbol);
             }
         }
-        if spelling.len() == before {
-            return spelling;
+        if set.len() == before {
+            return set;
         }
     }
 }
@@ -211,6 +223,7 @@ pub(super) fn spelling_symbols(program: &Program<'_>, scoping: &Scoping) -> FxHa
 struct Writes<'s> {
     scoping: &'s Scoping,
     spelling: FxHashSet<SymbolId>,
+    unplain: FxHashSet<SymbolId>,
     deps: Vec<(SymbolId, SymbolId)>,
 }
 
@@ -225,6 +238,9 @@ impl Writes<'_> {
         for symbol in symbols {
             if class == Class::Spelling {
                 self.spelling.insert(*symbol);
+            }
+            if class != Class::Plain {
+                self.unplain.insert(*symbol);
             }
             self.deps.extend(deps.iter().map(|dep| (*symbol, *dep)));
         }
@@ -285,13 +301,38 @@ impl<'a> VisitJs<'a> for PatternSymbols<'_, '_> {
     fn visit_expression(&mut self, _it: &Expression<'a>) {}
 }
 
+impl Writes<'_> {
+    fn mark_unplain(&mut self, symbols: Vec<SymbolId>) {
+        self.unplain.extend(symbols);
+    }
+}
+
 impl<'a> VisitJs<'a> for Writes<'_> {
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        let symbols = self.pattern_symbols(&it.id);
         if let Some(init) = &it.init {
-            let symbols = self.pattern_symbols(&it.id);
             self.apply(&symbols, init);
         }
-        walk_js::walk_variable_declarator(self, it);
+        match &it.id {
+            BindingPattern::BindingIdentifier(_) => {}
+            pattern => {
+                self.mark_unplain(symbols);
+                self.visit_binding_pattern(pattern);
+            }
+        }
+        if let Some(init) = &it.init {
+            self.visit_expression(init);
+        }
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.unplain.extend(it.symbol_id.get());
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        let symbols = self.left_symbols(&it.left);
+        self.mark_unplain(symbols);
+        walk_js::walk_for_in_statement(self, it);
     }
 
     fn visit_assignment_pattern(&mut self, it: &AssignmentPattern<'a>) {
@@ -324,6 +365,9 @@ impl<'a> VisitJs<'a> for Writes<'_> {
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
         let symbols = self.target_symbols(&it.left);
+        if !matches!(it.left, AssignmentTarget::AssignmentTargetIdentifier(_)) {
+            self.unplain.extend(symbols.iter().copied());
+        }
         match it.operator {
             AssignmentOperator::Addition if is_numeric_shape(&it.right) => {}
             AssignmentOperator::Addition => self.apply_class(&symbols, Class::Spelling, &[]),
