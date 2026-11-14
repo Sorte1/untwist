@@ -33,9 +33,13 @@ pub fn resolved(cx: &Ctx<'_, '_>, ident: &IdentifierReference<'_>) -> Option<Sym
     cx.scoping.get_reference(reference).symbol_id()
 }
 
+fn never_bigint(ty: &Ty) -> bool {
+    !ty.any_of(Kind::BigInt) && ty.promise_free()
+}
+
 fn numeric(a: &Ty, b: &Ty) -> Ty {
-    let a_number = !a.any_of(Kind::BigInt);
-    let b_number = !b.any_of(Kind::BigInt);
+    let a_number = never_bigint(a);
+    let b_number = never_bigint(b);
     if a_number || b_number {
         return Ty::number();
     }
@@ -46,7 +50,7 @@ fn numeric(a: &Ty, b: &Ty) -> Ty {
 }
 
 fn numeric_one(a: &Ty) -> Ty {
-    match (a.any_of(Kind::BigInt), a.only(Kind::BigInt)) {
+    match (!never_bigint(a), a.only(Kind::BigInt)) {
         (false, _) => Ty::number(),
         (true, true) => Ty::bigint(),
         (true, false) => Ty::number().join(&Ty::bigint()),
@@ -79,8 +83,8 @@ pub fn binary_result(operator: BinaryOperator, left: &Val, right: &Val) -> Val {
     }
     match (left, right) {
         (Val::Bottom, _) | (_, Val::Bottom) => Val::Bottom,
-        (Val::Known(a), _) if !a.any_of(Kind::BigInt) => Val::Known(Ty::number()),
-        (_, Val::Known(b)) if !b.any_of(Kind::BigInt) => Val::Known(Ty::number()),
+        (Val::Known(a), _) if never_bigint(a) => Val::Known(Ty::number()),
+        (_, Val::Known(b)) if never_bigint(b) => Val::Known(Ty::number()),
         (Val::Known(a), Val::Known(b)) => Val::Known(numeric(a, b)),
         _ => Val::Known(Ty::number().join(&Ty::bigint())),
     }

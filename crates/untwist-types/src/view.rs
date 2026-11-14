@@ -318,7 +318,7 @@ impl<'e, 'f, 'a> Viewer<'e, 'f, 'a> {
             return View::Unknown;
         };
         let fact = &self.env.facts.functions[index];
-        if fact.closed && fact.symbol.is_none() {
+        if fact.iife {
             return View::Unknown;
         }
         match nodes.parent_kind(function_node) {

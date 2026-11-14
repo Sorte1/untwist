@@ -995,7 +995,7 @@ impl<'e, 'f, 'a> Decider<'e, 'f, 'a> {
                     View::Known(declared) if declared.contains(ty)
                 ),
                 None => {
-                    let iife = fact.closed && fact.symbol.is_none();
+                    let iife = fact.iife;
                     !iife || matches!(viewer.symbol(symbol, 0), View::Any)
                 }
             },

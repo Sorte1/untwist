@@ -35,6 +35,8 @@ pub struct TypeStats {
     pub returns: Counts,
     pub files: usize,
     pub files_refused: usize,
+    pub near_eval: usize,
+    pub erasure_dropped: usize,
     pub reasons: BTreeMap<String, usize>,
 }
 
@@ -60,6 +62,8 @@ impl TypeStats {
         self.returns.absorb(other.returns);
         self.files += other.files;
         self.files_refused += other.files_refused;
+        self.near_eval += other.near_eval;
+        self.erasure_dropped += other.erasure_dropped;
     }
 
     pub fn total(&self) -> Counts {

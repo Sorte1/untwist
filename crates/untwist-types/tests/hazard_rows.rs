@@ -9,9 +9,9 @@ struct Row {
 
 const ROWS: &[Row] = &[
     Row {
-        hazard: "direct eval reaches every binding",
-        source: "(function () {\n  function f(n) {\n    return n * 2;\n  }\n  eval(\"\");\n  f(1);\n})();\n",
-        absent: &[": "],
+        hazard: "an open direct eval reaches every binding on its scope chain",
+        source: "(function (code) {\n  function f(n) {\n    return n * 2;\n  }\n  eval(code);\n  f(1);\n})(\"\");\n",
+        absent: &["n: ", "f(n): "],
         present: &[],
     },
     Row {
@@ -193,9 +193,16 @@ fn every_hazard_row_keeps_the_risky_position_bare() {
 }
 
 #[test]
-fn eval_and_with_refuse_the_whole_file() {
-    let eval = annotate("(function () {\n  eval(\"\");\n})();\n", Mode::Ts);
-    assert_eq!(eval.refused, Some(Refusal::Hazard("direct eval")));
+fn a_direct_eval_skips_only_its_scope_chain_and_with_refuses_the_whole_file() {
+    let source = "(function () {\n  let far = 0;\n  far += 1;\n  console.log(far);\n})();\n(function (code) {\n  let near = 1;\n  eval(code);\n  console.log(near);\n})(\"near = 's'\");\n";
+    let eval = annotate(source, Mode::Ts);
+    assert_eq!(eval.refused, None);
+    assert!(eval.code.contains("let far: number = 0"), "{}", eval.code);
+    assert!(!eval.code.contains("near: "), "{}", eval.code);
+    assert!(eval.stats.near_eval >= 1, "{:?}", eval.stats);
+    let closed = annotate("(function (require) {\n  let kept = 1;\n  const w = eval(\"require;\");\n  console.log(kept, w);\n})(1);\n", Mode::Ts);
+    assert!(closed.code.contains("kept: 1 ="), "{}", closed.code);
+    assert!(!closed.code.contains("require: "), "{}", closed.code);
     let with = annotate("(function (o) {\n  with (o) {\n  }\n})({});\n", Mode::Ts);
     assert_eq!(with.refused, Some(Refusal::Hazard("with statement")));
 }

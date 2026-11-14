@@ -38,6 +38,15 @@ fn parse<'a>(
     source: &'a str,
     source_type: SourceType,
 ) -> Option<Program<'a>> {
+    parse_allowing(alloc, source, source_type, false)
+}
+
+fn parse_allowing<'a>(
+    alloc: &'a Allocator,
+    source: &'a str,
+    source_type: SourceType,
+    grammar_errors: bool,
+) -> Option<Program<'a>> {
     let options = ParseOptions {
         allow_return_outside_function: true,
         preserve_parens: false,
@@ -50,7 +59,7 @@ fn parse<'a>(
         .diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == oxc_diagnostics::Severity::Error);
-    (!failed).then_some(parsed.program)
+    (grammar_errors || !failed).then_some(parsed.program)
 }
 
 pub(crate) fn parse_js<'a>(
@@ -83,7 +92,12 @@ pub(crate) fn same_after_strip(
     jsx: bool,
 ) -> bool {
     let alloc = Allocator::default();
-    let Some(mut annotated) = parse(&alloc, typed, typed_source_type(plain_type, mode, jsx)) else {
+    let Some(mut annotated) = parse_allowing(
+        &alloc,
+        typed,
+        typed_source_type(plain_type, mode, jsx),
+        true,
+    ) else {
         return false;
     };
     Strip.visit_program(&mut annotated);

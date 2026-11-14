@@ -368,7 +368,15 @@ compared with a value outside it, which the checker narrows away), so the annota
 no worse than the same file without annotations under `strict` with `noImplicitAny` off. Every
 annotated file is parsed again, stripped of its annotations and compared with the untyped
 output; if they differ the file is written without types. `--report` counts the annotated,
-redundant and refused positions. The flag cannot be combined with `--source-map`.
+redundant and refused positions. The flag cannot be combined with `--source-map`. A file is written as `.ts` only after its
+TypeScript parse was shown to be the same program as its JavaScript parse (`a < b > (c)` is a
+comparison in JavaScript and a generic call in TypeScript); otherwise it keeps its `.js` name. When
+split modules become `.ts`, the `import`, `export … from` and `require` specifiers that name them are
+rewritten to the new names, so the tree runs under node's type stripping and checks with
+`allowImportingTsExtensions`; when a module loads another by a computed name, every file keeps its
+`.js` name. With several inputs or split modules, the built-in results count only when no file
+patches a built-in, and a file that loads code text (`import()` of anything but a relative module,
+`document.write`, script elements) turns them off for all files.
 
 The types run after every other stage, on the final text, so they describe the program untwist
 prints. The checks behind this live in `crates/untwist-types/tests` (one row per hazard), in the

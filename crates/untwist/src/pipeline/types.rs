@@ -8,9 +8,18 @@ use crate::types::TypesReport;
 pub const TYPES_PASS: &str = "types";
 
 pub const TYPES_WITH_SOURCE_MAPS: &str =
-    "types: not added, because annotations would move the code under the source map";
+    "not added, because annotations would move the code under the source map";
 
-pub const TYPES_NOT_BUILT: &str = "types: this build of untwist has no types stage";
+pub const TYPES_NOT_BUILT: &str = "this build of untwist has no types stage";
+
+pub const TYPES_KEPT_JS_NAMES: &str =
+    "a module loads another by a computed name, so the TypeScript files keep their .js names";
+
+#[cfg(feature = "types")]
+type Realm = Option<untwist_types::Realm>;
+
+#[cfg(not(feature = "types"))]
+type Realm = Option<()>;
 
 #[cfg(feature = "types")]
 fn absorb(report: &mut TypesReport, stats: untwist_types::TypeStats) {
@@ -26,6 +35,7 @@ fn absorb(report: &mut TypesReport, stats: untwist_types::TypeStats) {
     report.returns.absorb(counts(stats.returns));
     report.files += stats.files;
     report.files_refused += stats.files_refused;
+    report.near_eval += stats.near_eval;
 }
 
 fn note(notes: &mut Vec<Note>, message: &str) {
@@ -37,35 +47,45 @@ fn note(notes: &mut Vec<Note>, message: &str) {
     }
     notes.push(Note {
         pass: TYPES_PASS,
-        kind: NoteKind::Refusal,
+        kind: NoteKind::Progress,
         message: message.to_string(),
         span: None,
     });
 }
 
+struct Typed {
+    jsx: bool,
+    typescript: bool,
+}
+
+#[cfg(feature = "types")]
+fn realm_of(texts: &[&str]) -> Realm {
+    (texts.len() > 1).then(|| untwist_types::realm(texts))
+}
+
+#[cfg(not(feature = "types"))]
+fn realm_of(_texts: &[&str]) -> Realm {
+    None
+}
+
 #[cfg(feature = "types")]
 fn typed(
     code: &mut String,
-    mode: TypesMode,
-    assert: bool,
+    (mode, assert, realm): (TypesMode, bool, Realm),
     report: &mut TypesReport,
     notes: &mut Vec<Note>,
-) -> bool {
-    let mode = match mode {
+) -> Typed {
+    let typed_mode = match mode {
         TypesMode::Ts => untwist_types::Mode::Ts,
         TypesMode::Jsdoc => untwist_types::Mode::Jsdoc,
     };
     let held = std::mem::take(code);
     let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if assert {
-            return (
-                untwist_types::instrumented(&held),
-                None,
-                untwist_types::TypeStats::default(),
-                false,
-            );
+            let checked = untwist_types::instrumented(&held);
+            return (checked, None, untwist_types::TypeStats::default(), false);
         }
-        let out = untwist_types::annotate(&held, mode);
+        let out = untwist_types::annotate_in(&held, typed_mode, realm);
         (Some(out.code), out.refused, out.stats, out.jsx)
     }));
     match ran {
@@ -75,41 +95,49 @@ fn typed(
                 note(notes, refused.message());
             }
             *code = typed_code.unwrap_or(held);
-            jsx
+            Typed {
+                jsx,
+                typescript: mode == TypesMode::Ts && !assert && refused.is_none(),
+            }
         }
         Err(_) => {
             note(
                 notes,
-                "types: the types stage panicked on a file, which was left untyped",
+                "the types stage panicked on a file, which was left untyped",
             );
             *code = held;
-            false
+            Typed {
+                jsx: false,
+                typescript: false,
+            }
         }
     }
-}
-
-#[cfg(feature = "types")]
-fn declarations(code: &str) -> Option<String> {
-    std::panic::catch_unwind(|| untwist_types::declarations(code))
-        .ok()
-        .flatten()
-}
-
-#[cfg(not(feature = "types"))]
-fn declarations(_code: &str) -> Option<String> {
-    None
 }
 
 #[cfg(not(feature = "types"))]
 fn typed(
     _code: &mut String,
-    _mode: TypesMode,
-    _assert: bool,
+    _: (TypesMode, bool, Realm),
     _report: &mut TypesReport,
     notes: &mut Vec<Note>,
-) -> bool {
+) -> Typed {
     note(notes, TYPES_NOT_BUILT);
-    false
+    Typed {
+        jsx: false,
+        typescript: false,
+    }
+}
+
+#[cfg(feature = "types")]
+fn declarations(code: &str, realm: Realm) -> Option<String> {
+    std::panic::catch_unwind(|| untwist_types::declarations_in(code, realm))
+        .ok()
+        .flatten()
+}
+
+#[cfg(not(feature = "types"))]
+fn declarations(_code: &str, _realm: Realm) -> Option<String> {
+    None
 }
 
 impl Pipeline {
@@ -125,25 +153,66 @@ impl Pipeline {
         let started = Instant::now();
         let assert = self.options.hooks().types_assert;
         let mut report = TypesReport::new(mode);
+        let realm = {
+            let mut texts: Vec<&str> = output.codes.iter().map(String::as_str).collect();
+            if let Some(bundle) = &output.bundle {
+                texts.extend(bundle.modules.iter().map(|module| module.code.as_str()));
+            }
+            realm_of(&texts)
+        };
+        let how = (mode, assert, realm);
         let notes = &mut output.notes;
         for code in &mut output.codes {
-            let jsx = typed(code, mode, assert, &mut report, notes);
-            report.jsx_outputs.push(jsx);
+            let done = typed(code, how, &mut report, notes);
+            report.jsx_outputs.push(done.jsx);
+            report.ts_outputs.push(done.typescript);
         }
+        let mut renamed = Vec::new();
         if let Some(bundle) = output.bundle.as_mut() {
-            for module in &mut bundle.modules {
-                let jsx = typed(&mut module.code, mode, assert, &mut report, notes);
-                if mode == TypesMode::Ts && !assert {
-                    module.path = crate::types::typed_path(&module.path, jsx);
+            for (index, module) in bundle.modules.iter_mut().enumerate() {
+                let done = typed(&mut module.code, how, &mut report, notes);
+                report.ts_modules.push(done.typescript);
+                if done.typescript && !self.options.single_file {
+                    renamed.push((index, crate::types::typed_path(&module.path, done.jsx)));
                 }
                 let declares = mode == TypesMode::Jsdoc && !assert;
-                report
-                    .declarations
-                    .push(declares.then(|| declarations(&module.code)).flatten());
-                report.jsx_modules.push(jsx);
+                report.declarations.push(
+                    declares
+                        .then(|| declarations(&module.code, realm))
+                        .flatten(),
+                );
+                report.jsx_modules.push(done.jsx);
             }
+        }
+        let mut held = std::mem::take(&mut output.notes);
+        crate::types::rename_modules(output, &renamed, &mut held);
+        output.notes = held;
+        if report.near_eval > 0 {
+            let message = format!("{} positions skipped near a direct eval", report.near_eval);
+            let mut held = std::mem::take(&mut output.notes);
+            note(&mut held, &message);
+            output.notes = held;
         }
         report.elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
         output.types = Some(report);
     }
+}
+
+#[cfg(feature = "types")]
+pub(crate) fn specifier_list(code: &str) -> Option<Vec<(u32, u32, Option<String>)>> {
+    untwist_types::specifiers(code).map(|found| {
+        found
+            .into_iter()
+            .map(|specifier| (specifier.start, specifier.end, specifier.value))
+            .collect()
+    })
+}
+
+#[cfg(not(feature = "types"))]
+pub(crate) fn specifier_list(_code: &str) -> Option<Vec<(u32, u32, Option<String>)>> {
+    None
+}
+
+pub(crate) fn kept_names_note(notes: &mut Vec<Note>) {
+    note(notes, TYPES_KEPT_JS_NAMES);
 }

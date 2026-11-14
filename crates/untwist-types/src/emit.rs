@@ -13,6 +13,7 @@ const RANK_PARAM: u8 = 1;
 const RANK_CLOSE: u8 = 2;
 const RANK_RETURN: u8 = 3;
 
+#[derive(Clone)]
 pub struct Edit {
     pub at: u32,
     pub rank: u8,

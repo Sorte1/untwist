@@ -42,7 +42,8 @@ use ladder::Ladder;
 #[cfg(feature = "refusal-spans")]
 pub use refusal_spans::{RefusalSite, SiteAt};
 pub use snapshots::{Snapshot, SnapshotCode};
-pub use types::{TYPES_NOT_BUILT, TYPES_PASS, TYPES_WITH_SOURCE_MAPS};
+pub(crate) use types::{kept_names_note, specifier_list};
+pub use types::{TYPES_KEPT_JS_NAMES, TYPES_NOT_BUILT, TYPES_PASS, TYPES_WITH_SOURCE_MAPS};
 
 pub use notes::{
     ADMIT_PANICKED, ANONYMOUS_SHELL_KEPT, ANONYMOUS_SHELL_SCOPED, ANONYMOUS_SHELL_STRIPPED,

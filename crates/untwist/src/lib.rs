@@ -31,7 +31,7 @@ pub use pipeline::{
 pub use pipeline::{DecodedSite, Snapshot, SnapshotCode};
 #[cfg(feature = "refusal-spans")]
 pub use pipeline::{RefusalSite, SiteAt};
-pub use pipeline::{TYPES_NOT_BUILT, TYPES_PASS, TYPES_WITH_SOURCE_MAPS};
+pub use pipeline::{TYPES_KEPT_JS_NAMES, TYPES_NOT_BUILT, TYPES_PASS, TYPES_WITH_SOURCE_MAPS};
 pub use plan::{input_names, is_safe_relative, PlanRefusal, PlannedFile};
 pub use plugin::{PluginCtor, Plugins, Stage};
 pub use printable::printable;

@@ -107,11 +107,25 @@ fn typed_output(result: &Output, name: String, index: Option<usize>) -> String {
     let Some(report) = result.types.as_ref().filter(|report| report.typescript) else {
         return name;
     };
-    let jsx = match index {
-        Some(index) => report.jsx_outputs.get(index).copied().unwrap_or(false),
-        None => report.jsx_outputs.iter().any(|jsx| *jsx),
+    let (typescript, jsx) = match index {
+        Some(index) => (
+            report.ts_outputs.get(index).copied().unwrap_or(false),
+            report.jsx_outputs.get(index).copied().unwrap_or(false),
+        ),
+        None => (
+            !report.ts_outputs.is_empty()
+                && report
+                    .ts_outputs
+                    .iter()
+                    .chain(&report.ts_modules)
+                    .all(|ts| *ts),
+            report.jsx_outputs.iter().any(|jsx| *jsx),
+        ),
     };
-    crate::types::typed_path(&name, jsx)
+    match typescript {
+        true => crate::types::typed_path(&name, jsx),
+        false => name,
+    }
 }
 
 fn mirrored_name(result: &Output, index: usize) -> Option<&str> {
