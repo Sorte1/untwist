@@ -418,13 +418,16 @@ fn hoist_assignment_sequence<'a>(expr: &mut Expression<'a>, cx: &Cx<'a, '_>) -> 
         ) {
             return false;
         }
-        if !is_splittable_value(&assign.right)
-            || !is_hoistable_target(&assign.left)
-            || !is_hoist_order_safe(assign, cx)
-        {
+        let names_value = assign.operator == AssignmentOperator::Assign
+            && matches!(assign.left, AssignmentTarget::AssignmentTargetIdentifier(_));
+        let splittable = match names_value {
+            true => is_splittable_value(&assign.right),
+            false => is_sequence(&assign.right),
+        };
+        if !splittable || !is_hoistable_target(&assign.left) || !is_hoist_order_safe(assign, cx) {
             return false;
         }
-        let keeps_anonymous = ends_in_anonymous_definition(&assign.right);
+        let keeps_anonymous = names_value && ends_in_anonymous_definition(&assign.right);
         let Some((leading, last)) = take_sequence_parts(&mut assign.right, cx) else {
             return false;
         };
