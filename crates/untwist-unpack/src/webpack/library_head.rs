@@ -1,17 +1,15 @@
-use std::sync::LazyLock;
-
 use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_mut, VisitMut};
 use oxc_span::{SourceType, Span};
 use oxc_str::Ident;
-use rustc_hash::FxHashSet;
 use untwist_core::parse::parse_with;
 
 use crate::canon::program_shape;
+use crate::webpack::library_head_forms::HEAD_FORMS;
+use crate::webpack::machinery::form_digest;
 
-const RECORDED: &str = include_str!("../../tests/data/webpack_library_heads.txt");
 const SECTION: &str = "//# ";
 const PLACEHOLDER: &str = "__webpack_bundle__";
 const NAME: &str = "#name";
@@ -20,12 +18,10 @@ const SYSTEM: &str = "System";
 const REGISTER: &str = "register";
 const KEPT: [&str; 3] = ["exports", "amd", REGISTER];
 
-static HEADS: LazyLock<FxHashSet<String>> = LazyLock::new(recorded_heads);
-
-fn recorded_heads() -> FxHashSet<String> {
-    let mut heads = FxHashSet::default();
+pub fn recorded_head_digests(recorded: &str) -> Vec<String> {
+    let mut digests = Vec::new();
     let mut current = String::new();
-    for line in RECORDED.lines().chain([SECTION]) {
+    for line in recorded.lines().chain([SECTION]) {
         if !line.starts_with(SECTION) {
             current.push_str(line);
             current.push('\n');
@@ -35,15 +31,19 @@ fn recorded_heads() -> FxHashSet<String> {
             let alloc = Allocator::default();
             let text = alloc.alloc_str(&current);
             let mut program = parse_with(&alloc, text, SourceType::cjs()).program;
-            heads.insert(shape(&alloc, &mut program));
+            digests.extend(shape(&alloc, &mut program, None).map(|text| form_digest(&text)));
         }
         current.clear();
     }
-    heads
+    digests.sort_unstable();
+    digests.dedup();
+    digests
 }
 
 struct Names<'a> {
     builder: AstBuilder<'a>,
+    bootstrap: Option<Span>,
+    found: usize,
 }
 
 fn names_module(call: &CallExpression<'_>) -> bool {
@@ -100,6 +100,20 @@ impl<'a> Names<'a> {
 }
 
 impl<'a> VisitMut<'a> for Names<'a> {
+    fn visit_expression(&mut self, it: &mut Expression<'a>) {
+        let bootstrap = matches!((&*it, self.bootstrap), (Expression::CallExpression(call), Some(span)) if call.span == span);
+        if bootstrap {
+            self.found += 1;
+            *it = Expression::new_identifier(
+                Span::default(),
+                Ident::from_str_in(PLACEHOLDER, &self.builder),
+                &self.builder,
+            );
+            return;
+        }
+        walk_mut::walk_expression(self, it);
+    }
+
     fn visit_statements(&mut self, it: &mut oxc_allocator::Vec<'a, Statement<'a>>) {
         let taken = std::mem::replace(it, oxc_allocator::Vec::new_in(&self.builder));
         let mut kept = Vec::with_capacity(taken.len());
@@ -146,17 +160,26 @@ impl<'a> VisitMut<'a> for Names<'a> {
     }
 }
 
-fn shape<'a>(alloc: &'a Allocator, program: &mut Program<'a>) -> String {
+fn shape<'a>(
+    alloc: &'a Allocator,
+    program: &mut Program<'a>,
+    bootstrap: Option<Span>,
+) -> Option<String> {
     let mut names = Names {
         builder: AstBuilder::new(alloc),
+        bootstrap,
+        found: 0,
     };
     names.visit_program(program);
+    if bootstrap.is_some() && names.found != 1 {
+        return None;
+    }
     let printed = program_shape(alloc, program);
     let members = printed
         .replace(&format!("[\"{NAME}\"]"), &format!(".{NAME}"))
         .replace(&format!("[`{NAME}`]"), &format!(".{NAME}"))
         .replace(&format!("['{NAME}']"), &format!(".{NAME}"));
-    functions(&members)
+    Some(functions(&members))
 }
 
 fn functions(text: &str) -> String {
@@ -199,38 +222,12 @@ fn canonical_params(params: &str) -> bool {
         })
 }
 
-struct Bootstrap<'a> {
-    builder: AstBuilder<'a>,
-    span: Span,
-    found: usize,
-}
-
-impl<'a> VisitMut<'a> for Bootstrap<'a> {
-    fn visit_expression(&mut self, it: &mut Expression<'a>) {
-        if matches!(it, Expression::CallExpression(call) if call.span == self.span) {
-            self.found += 1;
-            *it = Expression::new_identifier(
-                Span::default(),
-                Ident::from_str_in(PLACEHOLDER, &self.builder),
-                &self.builder,
-            );
-            return;
-        }
-        walk_mut::walk_expression(self, it);
-    }
-}
-
 pub fn recorded_head(source: &Program<'_>, bootstrap: Span) -> bool {
     if bootstrap.is_empty() {
         return false;
     }
     let alloc = Allocator::default();
     let mut program = source.clone_in(&alloc);
-    let mut replace = Bootstrap {
-        builder: AstBuilder::new(&alloc),
-        span: bootstrap,
-        found: 0,
-    };
-    replace.visit_program(&mut program);
-    replace.found == 1 && HEADS.contains(&shape(&alloc, &mut program))
+    shape(&alloc, &mut program, Some(bootstrap))
+        .is_some_and(|text| HEAD_FORMS.contains(&form_digest(&text).as_str()))
 }
