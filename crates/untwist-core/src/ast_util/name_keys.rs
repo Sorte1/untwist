@@ -63,8 +63,24 @@ fn spells_no_text(expr: &Expression<'_>) -> bool {
     }
 }
 
+pub(crate) fn key_text<'e>(expr: &'e Expression<'_>) -> Option<Cow<'e, str>> {
+    match expr.without_parentheses() {
+        Expression::StringLiteral(literal) => literal.value.as_str().map(Cow::Borrowed),
+        Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
+            .quasis
+            .first()
+            .and_then(|quasi| quasi.value.cooked.as_ref())
+            .and_then(|cooked| cooked.as_str())
+            .map(Cow::Borrowed),
+        Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+            literal_text(expr).map(Cow::Owned)
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn key_may_name(key: &Expression<'_>) -> bool {
-    !(is_number(key) || spells_no_text(key) || literal_text(key).is_some_and(|text| text != NAME))
+    !(is_number(key) || spells_no_text(key) || key_text(key).is_some_and(|text| text != NAME))
 }
 
 fn is_reading_name(name: &str) -> bool {
@@ -75,21 +91,17 @@ pub(crate) fn property_key_may_name(key: &PropertyKey<'_>, computed: bool) -> bo
     match key {
         PropertyKey::StaticIdentifier(id) => is_reading_name(&id.name),
         PropertyKey::PrivateIdentifier(_) => false,
-        _ => key
-            .as_expression()
-            .is_none_or(|expr| match literal_text(expr) {
-                Some(text) => is_reading_name(&text),
-                None => computed && key_may_name(expr),
-            }),
+        _ => key.as_expression().is_none_or(|expr| match key_text(expr) {
+            Some(text) => is_reading_name(&text),
+            None => computed && key_may_name(expr),
+        }),
     }
 }
 
 pub(crate) fn member_key<'e>(member: &'e MemberExpression<'_>) -> Option<Cow<'e, str>> {
     match member {
         MemberExpression::StaticMemberExpression(it) => Some(Cow::Borrowed(&it.property.name)),
-        MemberExpression::ComputedMemberExpression(it) => {
-            literal_text(&it.expression).map(Cow::Owned)
-        }
+        MemberExpression::ComputedMemberExpression(it) => key_text(&it.expression),
         MemberExpression::PrivateFieldExpression(_) => None,
     }
 }

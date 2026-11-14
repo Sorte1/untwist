@@ -1,7 +1,6 @@
-use crate::ast_util::code_text::literal_text;
 use crate::ast_util::name_keys::{
-    call_reads_name, is_never_a_function, key_may_name, member_key, property_key_may_name, reader,
-    NAME,
+    call_reads_name, is_never_a_function, key_may_name, key_text, member_key,
+    property_key_may_name, reader, NAME,
 };
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
@@ -19,14 +18,26 @@ pub fn function_names(program: &Program<'_>, scoping: &Scoping) -> FunctionNames
     let mut walker = Walker {
         scoping,
         out: FunctionNames::default(),
+        first_read: false,
     };
     walker.visit_program(program);
     walker.out
 }
 
+pub fn reads_function_names(program: &Program<'_>, scoping: &Scoping) -> bool {
+    let mut walker = Walker {
+        scoping,
+        out: FunctionNames::default(),
+        first_read: true,
+    };
+    walker.visit_program(program);
+    walker.out.name_read
+}
+
 struct Walker<'s> {
     scoping: &'s Scoping,
     out: FunctionNames,
+    first_read: bool,
 }
 
 fn is_anonymous_function(expr: &Expression<'_>) -> bool {
@@ -112,6 +123,18 @@ impl Walker<'_> {
 }
 
 impl<'a> VisitJs<'a> for Walker<'_> {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        if !(self.first_read && self.out.name_read) {
+            walk_js::walk_statement(self, it);
+        }
+    }
+
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        if !(self.first_read && self.out.name_read) {
+            walk_js::walk_expression(self, it);
+        }
+    }
+
     fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
         self.out.name_read = true;
         walk_js::walk_with_statement(self, it);
@@ -207,7 +230,7 @@ impl<'a> VisitJs<'a> for Walker<'_> {
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        let reads = literal_text(&it.expression).is_some_and(|key| reader(&key).is_some());
+        let reads = key_text(&it.expression).is_some_and(|key| reader(&key).is_some());
         if reads || key_may_name(&it.expression) {
             self.read_on(&it.object);
         }

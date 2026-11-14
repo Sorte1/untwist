@@ -6,7 +6,7 @@ use oxc_span::SPAN;
 use oxc_traverse::{Ancestor, TraverseCtx};
 
 use crate::ast_util::code_text::may_run_code_text;
-use crate::ast_util::function_names::function_names;
+use crate::ast_util::function_names::reads_function_names;
 use crate::semantic::{build_scoping, has_module_syntax, names_read_by_another_input};
 
 const PROTO: &str = "__proto__";
@@ -15,7 +15,7 @@ const MODULE: &str = "module";
 const EXPORTS: &str = "exports";
 
 pub fn reads_names(program: &Program<'_>, scoping: &Scoping) -> bool {
-    function_names(program, scoping).name_read || may_run_code_text(program, scoping)
+    reads_function_names(program, scoping) || may_run_code_text(program, scoping)
 }
 
 fn exports_values(program: &Program<'_>, scoping: &Scoping) -> bool {
