@@ -37,7 +37,7 @@ test('a module with a span is compared with its slice of the bundle; one without
   await paste(page, readRepo('fixtures/reference/unpack/webpack-5.js'));
   await runAndWait(page);
   await page.locator('#view-diff').click();
-  await page.locator('#module-list .tree-item', { hasText: '3.js' }).click();
+  await page.locator('#module-list .tree-item', { hasText: 'lib.js' }).click();
   const count = await chunks(page);
   expect(count).toBeGreaterThan(0);
   expect(await changedLines(page)).toBeGreaterThan(0);

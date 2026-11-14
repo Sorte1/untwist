@@ -205,7 +205,7 @@ test('go to definition follows a required module to its export', async ({ page }
   await expect(page.locator(STATUS)).toHaveText('Language features · ready');
   await cursorAt(page, '_0__.c)', 5);
   await page.keyboard.press('F12');
-  await expect(page.locator('#output-meta')).toContainText('802.js');
+  await expect(page.locator('#output-meta')).toContainText('say.js');
   await page.keyboard.type('Z');
   await expect.poll(() => outputText(page)).toContain('function Z(line)');
 });

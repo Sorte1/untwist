@@ -10,7 +10,7 @@ const MINIFIED: &str = "(function (modules) {\n  var cache = {};\n  function r(i
 #[test]
 fn a_parameter_named_require_keeps_its_arguments() {
     let unpacked = Unpacked::of(NAMED, false);
-    let module = unpacked.file("1.js");
+    let module = unpacked.file("lib.js");
     assert!(
         module.contains("require(\"./utils\") + require(7)"),
         "{module}"
@@ -21,7 +21,7 @@ fn a_parameter_named_require_keeps_its_arguments() {
 #[test]
 fn a_parameter_named_require_keeps_its_arguments_in_the_reference_lane() {
     let unpacked = Unpacked::of(NAMED, true);
-    let module = unpacked.file("1.js");
+    let module = unpacked.file("lib.js");
     assert!(
         module.contains("require(\"./utils\") + require(7)"),
         "{module}"

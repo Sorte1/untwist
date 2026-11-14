@@ -18,7 +18,7 @@ fn unpacked(modules: &str) -> Unpacked {
 #[test]
 fn a_wrapper_beside_other_statements_keeps_its_own_scope() {
     let unpacked = unpacked(BESIDE_OTHER_STATEMENTS);
-    let module = unpacked.file("1.js");
+    let module = unpacked.file("lib.js");
     assert!(module.contains(".call(this, 1, 2)"), "{module}");
     unpacked.runs_like_the_bundle("outer inner12 set true\n");
 }
@@ -26,7 +26,7 @@ fn a_wrapper_beside_other_statements_keeps_its_own_scope() {
 #[test]
 fn the_wrapper_around_a_whole_module_is_spliced() {
     let unpacked = unpacked(WHOLE_MODULE);
-    let module = unpacked.file("1.js");
+    let module = unpacked.file("lib.js");
     assert!(!module.contains(".call("), "{module}");
     assert!(module.contains("var __dirname = \"/\";"), "{module}");
     unpacked.runs_like_the_bundle("function / true\n");
@@ -35,7 +35,7 @@ fn the_wrapper_around_a_whole_module_is_spliced() {
 #[test]
 fn a_wrapper_the_splice_would_change_stays_a_call() {
     let unpacked = unpacked(UNPROVEN);
-    for path in ["1.js", "2.js", "3.js"] {
+    for path in ["hoisted.js", "extra.js", "counted.js"] {
         let module = unpacked.file(path);
         assert!(module.contains(".call(this, "), "{path}: {module}");
     }

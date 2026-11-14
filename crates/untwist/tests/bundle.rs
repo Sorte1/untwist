@@ -15,11 +15,11 @@ fn a_detected_bundle_is_exposed_on_the_output() {
             .iter()
             .map(|module| (module.id.as_str(), module.path.as_str(), module.is_entry))
             .collect::<Vec<_>>(),
-        vec![("0", "index.js", true), ("1", "1.js", false)]
+        vec![("0", "index.js", true), ("1", "lib.js", false)]
     );
     assert_eq!(
         bundle.entry().map(|module| module.code.trim_end()),
-        Some("const lib = require(\"./1.js\");\nconsole.log(lib);")
+        Some("const lib = require(\"./lib.js\");\nconsole.log(lib);")
     );
 }
 
@@ -44,7 +44,7 @@ fn files_carry_bundle_json_and_one_file_per_module() {
             .iter()
             .map(|file| file.path.as_str())
             .collect::<Vec<_>>(),
-        vec!["bundle.json", "index.js", "1.js"]
+        vec!["bundle.json", "index.js", "lib.js"]
     );
     let json: serde_json::Value = serde_json::from_str(&files[0].code).expect("valid json");
     assert_eq!(json["type"], "webpack");

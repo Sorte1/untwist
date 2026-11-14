@@ -7,8 +7,8 @@ type: webpack
 entry: <none>
 
 === 0 -> 0.js
-const json = require("./1.js");
+const json = require("./json.js");
 console.log(json);
 
-=== 1 -> 1.js
+=== 1 -> json.js
 module.exports = { foo: "bar" };

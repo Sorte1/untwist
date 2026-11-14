@@ -1,7 +1,7 @@
 use oxc_allocator::Allocator;
 use untwist_core::parse::parse_program;
 use untwist_core::print::pretty_codegen;
-use untwist_unpack::{unpack_program_with, UnpackOptions};
+use untwist_unpack::{finish_with, unpack_program_with, UnpackOptions};
 
 const ASSUMED: UnpackOptions = UnpackOptions {
     split_hoisted: true,
@@ -39,12 +39,17 @@ fn bundle(body: &str) -> String {
 fn modules(source: &str) -> Option<Vec<(String, String)>> {
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, source);
-    let bundle = unpack_program_with(&alloc, &parsed.program, ASSUMED)?;
+    let mut bundle = unpack_program_with(&alloc, &parsed.program, ASSUMED)?;
+    finish_with(&alloc, &mut bundle, &[], ASSUMED);
     Some(
         bundle
             .modules
-            .iter()
-            .map(|(id, module)| (id.clone(), pretty_codegen(module.program())))
+            .values()
+            .map(|module| {
+                let path = module.path.as_str();
+                let name = path.strip_suffix(".js").unwrap_or(path).to_string();
+                (name, pretty_codegen(module.program()))
+            })
             .collect(),
     )
 }
@@ -63,12 +68,12 @@ fn independent_libraries_before_the_entry_become_modules_named_after_their_class
     let ids: Vec<&str> = found.iter().map(|(id, _)| id.as_str()).collect();
     assert_eq!(ids, ["Color", "Vector", "index"], "{found:?}");
     let entry = text_of(&found, "index");
-    let color = entry.find("\"Color\"").expect("color import");
-    let vector = entry.find("\"Vector\"").expect("vector import");
+    let color = entry.find("\"./Color.js\"").expect("color import");
+    let vector = entry.find("\"./Vector.js\"").expect("vector import");
     assert!(color < vector, "{entry}");
     let color_module = text_of(&found, "Color");
     assert!(
-        color_module.starts_with("import \"Vector\";"),
+        color_module.starts_with("import \"./Vector.js\";"),
         "{color_module}"
     );
     assert!(
@@ -93,7 +98,7 @@ fn a_write_from_another_module_goes_through_a_setter_in_the_declaring_module() {
         entry.contains("set_current({ current: function() {} }.current)"),
         "{entry}"
     );
-    assert!(entry.contains("from \"Store\""), "{entry}");
+    assert!(entry.contains("from \"./Store.js\""), "{entry}");
 }
 
 #[test]

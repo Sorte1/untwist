@@ -255,6 +255,16 @@ pub(super) fn comments_of(source: &Program<'_>, items: &[Statement<'_>]) -> Vec<
     let mut comments = Vec::new();
     for item in items {
         let span = item.span();
+        let leading = source
+            .comments
+            .partition_point(|c| c.span.end <= span.start && c.attached_to < span.start);
+        comments.extend(
+            source.comments[leading..]
+                .iter()
+                .take_while(|c| c.span.end <= span.start && c.attached_to == span.start)
+                .filter(|c| c.is_leading())
+                .cloned(),
+        );
         let from = source
             .comments
             .partition_point(|c| c.span.start < span.start);
@@ -265,6 +275,8 @@ pub(super) fn comments_of(source: &Program<'_>, items: &[Statement<'_>]) -> Vec<
                 .cloned(),
         );
     }
+    comments.sort_unstable_by_key(|c| c.span.start);
+    comments.dedup_by_key(|c| c.span.start);
     comments
 }
 

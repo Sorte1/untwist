@@ -31,12 +31,12 @@ fn write_to_writes_the_bundle_and_its_modules() {
             untwist::DEOBFUSCATED.to_string(),
             untwist::BUNDLE_JSON.to_string(),
             "index.js".to_string(),
-            "1.js".to_string()
+            "lib.js".to_string()
         ]
     );
     assert!(dir.path().join(untwist::BUNDLE_JSON).is_file());
     assert_eq!(
-        std::fs::read_to_string(dir.path().join("1.js"))
+        std::fs::read_to_string(dir.path().join("lib.js"))
             .unwrap()
             .trim_end(),
         "module.exports = 1;"
@@ -310,14 +310,14 @@ fn a_second_write_without_force_is_a_conflict_and_changes_nothing() {
 #[test]
 fn an_existing_file_at_a_module_path_is_a_conflict_before_anything_is_written() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("1.js"), "keep me").unwrap();
+    std::fs::write(dir.path().join("lib.js"), "keep me").unwrap();
     let out = Pipeline::new(Options::default()).run(WEBPACK_4);
 
     let error = out.write_to(dir.path()).expect_err("the file exists");
 
-    assert_eq!(conflict_of(&error).paths, vec!["1.js".to_string()]);
+    assert_eq!(conflict_of(&error).paths, vec!["lib.js".to_string()]);
     assert_eq!(
-        std::fs::read_to_string(dir.path().join("1.js")).unwrap(),
+        std::fs::read_to_string(dir.path().join("lib.js")).unwrap(),
         "keep me"
     );
     assert!(!dir.path().join(untwist::DEOBFUSCATED).exists());
@@ -339,7 +339,7 @@ fn listed_paths(dir: &std::path::Path) -> Vec<String> {
 #[test]
 fn a_forced_write_never_replaces_an_input_file() {
     let dir = tempfile::tempdir().unwrap();
-    let input = dir.path().join("1.js");
+    let input = dir.path().join("lib.js");
     std::fs::write(&input, "the input").unwrap();
     let out = Pipeline::new(Options::default()).run(WEBPACK_4);
 
@@ -350,9 +350,9 @@ fn a_forced_write_never_replaces_an_input_file() {
     assert_eq!(std::fs::read_to_string(&input).unwrap(), "the input");
     assert_eq!(
         report.refused,
-        vec![PlanRefusal::InputFile("1.js".to_string())]
+        vec![PlanRefusal::InputFile("lib.js".to_string())]
     );
-    assert!(!report.files.contains(&"1.js".to_string()));
+    assert!(!report.files.contains(&"lib.js".to_string()));
     assert_eq!(listed_paths(dir.path()), vec!["index.js".to_string()]);
 }
 
@@ -397,7 +397,7 @@ fn bundle_json_lists_only_the_modules_that_were_written() {
 
     assert_eq!(
         listed_paths(dir.path()),
-        vec!["index.js".to_string(), "1.js".to_string()]
+        vec!["index.js".to_string(), "lib.js".to_string()]
     );
     assert_eq!(report.unwritten_modules, vec![1]);
 }
@@ -444,12 +444,12 @@ fn a_file_that_cannot_be_written_is_refused_and_the_rest_is_written() {
             untwist::DEOBFUSCATED.to_string(),
             untwist::BUNDLE_JSON.to_string(),
             "index.js".to_string(),
-            "1.js".to_string()
+            "lib.js".to_string()
         ]
     );
     assert_eq!(
         listed_paths(dir.path()),
-        vec!["index.js".to_string(), "1.js".to_string()]
+        vec!["index.js".to_string(), "lib.js".to_string()]
     );
 }
 

@@ -272,13 +272,13 @@ fn a_member_of_a_required_webpack_module_resolves_to_that_modules_export() {
         .collect();
     let user = codes
         .iter()
-        .find(|code| code.contains("require(\"./802.js\")"))
+        .find(|code| code.contains("require(\"./say.js\")"))
         .unwrap();
     let member = user.find("_0__.c)").map(|byte| &user[..byte + 5]).unwrap();
     let pos = u32::try_from(member.encode_utf16().count()).unwrap();
     let definition: serde_json::Value =
         serde_json::from_str(&analyze(user).definition(pos).unwrap()).unwrap();
-    assert_eq!(definition["module"], "./802.js");
+    assert_eq!(definition["module"], "./say.js");
     assert_eq!(definition["name"], "c");
     let target = codes
         .iter()

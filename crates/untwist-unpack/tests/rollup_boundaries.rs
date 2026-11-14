@@ -6,10 +6,12 @@ use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_span::GetSpan;
 use untwist_core::parse::parse_program;
-use untwist_unpack::{unpack_program_with, UnpackOptions};
+use untwist_unpack::{finish_with, unpack_program_with, UnpackOptions};
 
 const DIR: &str = "fixtures/unpack-rollup-boundaries";
 const SCORES: &str = "SCORES";
+const NAMES: &str = "NAMES";
+const UNNAMED: [&str; 2] = ["module", "chunk_module"];
 const BLESS: &str = "UNTWIST_BLESS";
 const HOST: &str = "hostConfig";
 const ASSUMED: UnpackOptions = UnpackOptions {
@@ -123,6 +125,92 @@ struct Score {
     cuts: usize,
     hits: usize,
     modules: usize,
+    names: Vec<(String, String, Option<String>)>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Verdict {
+    Exact,
+    Defined,
+    Generic,
+    Misleading,
+}
+
+fn stem_of(path: &str) -> String {
+    let file = path.rsplit('/').next().unwrap_or(path);
+    let stem = file.strip_suffix(".js").unwrap_or(file);
+    let stem = match stem.rsplit_once('-') {
+        Some((base, suffix)) if suffix.bytes().all(|b| b.is_ascii_digit()) => base,
+        _ => stem,
+    };
+    stem.to_ascii_lowercase()
+}
+
+fn verdict(path: &str, label: &str, origin: Option<&str>) -> Verdict {
+    let stem = stem_of(path);
+    let generic = UNNAMED.iter().any(|prefix| {
+        stem.strip_prefix(prefix)
+            .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+    });
+    if generic {
+        return Verdict::Generic;
+    }
+    if stem == stem_of(label) {
+        return Verdict::Exact;
+    }
+    match origin == Some(label) {
+        true => Verdict::Defined,
+        false => Verdict::Misleading,
+    }
+}
+
+fn same(binding: &str, name: &str) -> bool {
+    let base = match binding.rsplit_once('$') {
+        Some((base, suffix)) if suffix.bytes().all(|b| b.is_ascii_digit()) => base,
+        _ => binding,
+    };
+    binding == name || base == name
+}
+
+fn binds(statement: &Statement<'_>, name: &str) -> bool {
+    let id = |id: Option<&BindingIdentifier<'_>>| id.is_some_and(|id| same(&id.name, name));
+    let vars = |declaration: &VariableDeclaration<'_>| {
+        declaration
+            .declarations
+            .iter()
+            .any(|declarator| id(declarator.id.get_binding_identifier()))
+    };
+    match statement {
+        Statement::FunctionDeclaration(function) => id(function.id.as_ref()),
+        Statement::ClassDeclaration(class) => id(class.id.as_ref()),
+        Statement::VariableDeclaration(declaration) => vars(declaration),
+        Statement::ExportDeclaration(export) => match &export.declaration {
+            Declaration::FunctionDeclaration(function) => id(function.id.as_ref()),
+            Declaration::ClassDeclaration(class) => id(class.id.as_ref()),
+            Declaration::VariableDeclaration(declaration) => vars(declaration),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+fn declared_at(program: &Program<'_>, name: &str) -> Option<u32> {
+    program
+        .body
+        .iter()
+        .find(|statement| binds(statement, name))
+        .map(|statement| statement.span().start)
+}
+
+fn majority(labels: Vec<&str>) -> Option<String> {
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for label in labels {
+        *counts.entry(label).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .max_by_key(|(_, count)| *count)
+        .map(|(label, _)| label.to_string())
 }
 
 fn score(cell: &str) -> Score {
@@ -141,7 +229,10 @@ fn score(cell: &str) -> Score {
         .iter()
         .map(|(at, label)| (*at, label.as_str()))
         .collect();
-    let bundle = unpack_program_with(&alloc, &parsed.program, ASSUMED);
+    let mut bundle = unpack_program_with(&alloc, &parsed.program, ASSUMED);
+    if let Some(bundle) = &mut bundle {
+        finish_with(&alloc, bundle, &[], ASSUMED);
+    }
     let mut placed: BTreeMap<u32, String> = BTreeMap::new();
     let modules = bundle.as_ref().map_or(1, |bundle| bundle.modules.len());
     if let Some(bundle) = &bundle {
@@ -169,11 +260,37 @@ fn score(cell: &str) -> Score {
             }
         }
     }
+    let mut names = Vec::new();
+    if let Some(bundle) = &bundle {
+        for (id, module) in &bundle.modules {
+            if module.is_entry || module.path.as_str() == "chunk_shared.js" || id == "shell" {
+                continue;
+            }
+            let inside = placed
+                .iter()
+                .filter(|(_, owner)| *owner == id)
+                .filter_map(|(at, _)| label_of.get(at).copied())
+                .collect();
+            if let Some(label) = majority(inside) {
+                let file = module.path.as_str().rsplit('/').next().unwrap_or_default();
+                let name = file.strip_suffix(".js").unwrap_or(file);
+                let name = match name.rsplit_once('-') {
+                    Some((base, suffix)) if suffix.bytes().all(|b| b.is_ascii_digit()) => base,
+                    _ => name,
+                };
+                let origin = declared_at(module.program(), name)
+                    .and_then(|at| label_of.get(&at))
+                    .map(|label| label.to_string());
+                names.push((module.path.as_str().to_string(), label, origin));
+            }
+        }
+    }
     let mut result = Score {
         truth: 0,
         cuts: 0,
         hits: 0,
         modules,
+        names,
     };
     let order: Vec<&(u32, String)> = labels.iter().collect();
     for pair in order.windows(2) {
@@ -237,5 +354,52 @@ fn inferred_module_boundaries_score_against_rollups_own_source_map() {
     assert_eq!(
         committed, text,
         "boundary scores moved (rerun with {BLESS}=1 to accept)"
+    );
+}
+
+#[test]
+fn inferred_module_names_score_against_rollups_own_source_map() {
+    let mut lines = Vec::new();
+    let mut totals: BTreeMap<Verdict, usize> = BTreeMap::new();
+    for cell in cells() {
+        let found = score(&cell);
+        let mut counts: BTreeMap<Verdict, usize> = BTreeMap::new();
+        let mut wrong = Vec::new();
+        for (path, label, origin) in &found.names {
+            let verdict = verdict(path, label, origin.as_deref());
+            *counts.entry(verdict).or_default() += 1;
+            *totals.entry(verdict).or_default() += 1;
+            if verdict == Verdict::Misleading {
+                wrong.push(format!("{path}={label}"));
+            }
+        }
+        let count = |verdict| counts.get(&verdict).copied().unwrap_or_default();
+        lines.push(format!(
+            "{cell}\texact {}\tdefined {}\tgeneric {}\tmisleading {}\t{}",
+            count(Verdict::Exact),
+            count(Verdict::Defined),
+            count(Verdict::Generic),
+            count(Verdict::Misleading),
+            wrong.join(" ")
+        ));
+    }
+    let total = |verdict| totals.get(&verdict).copied().unwrap_or_default();
+    lines.push(format!(
+        "total\texact {}\tdefined {}\tgeneric {}\tmisleading {}",
+        total(Verdict::Exact),
+        total(Verdict::Defined),
+        total(Verdict::Generic),
+        total(Verdict::Misleading)
+    ));
+    let text = format!("{}\n", lines.join("\n"));
+    let path = root().join(DIR).join(NAMES);
+    if std::env::var_os(BLESS).is_some() {
+        std::fs::write(&path, &text).expect("write NAMES");
+        return;
+    }
+    let committed = std::fs::read_to_string(&path).unwrap_or_default();
+    assert_eq!(
+        committed, text,
+        "module names moved (rerun with {BLESS}=1 to accept)"
     );
 }

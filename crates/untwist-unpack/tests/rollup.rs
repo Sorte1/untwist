@@ -219,9 +219,9 @@ fn the_entry_imports_every_chunk_in_source_order() {
     );
     let files = split(&source).expect("a split");
     let index = code(&files, "index.js");
-    let a = index.find("import \"./chunk_a1.js\";").expect(index);
-    let b = index.find("import \"./chunk_b1.js\";").expect(index);
-    let c = index.find("import \"./chunk_c1.js\";").expect(index);
+    let a = index.find("import \"./chunk_module1.js\";").expect(index);
+    let b = index.find("import \"./chunk_module2.js\";").expect(index);
+    let c = index.find("import \"./chunk_module3.js\";").expect(index);
     assert!(a < b && b < c, "{index}");
 }
 
@@ -305,7 +305,10 @@ fn chunk_ids_are_unique_ignoring_case() {
          console.log(\"entry\");",
     );
     let files = split(&source).expect("a split");
-    assert_eq!(paths(&files), ["chunk_a.js", "chunk_A-2.js", "index.js"]);
+    assert_eq!(
+        paths(&files),
+        ["chunk_module1.js", "chunk_module2.js", "index.js"]
+    );
 }
 
 #[test]
@@ -441,10 +444,15 @@ fn a_segment_with_one_declaration_folds_into_its_neighbour() {
     let files = split(&source).expect("a split");
     assert_eq!(
         paths(&files),
-        ["chunk_f1.js", "chunk_shout.js", "chunk_mul.js", "index.js"]
+        [
+            "chunk_module1.js",
+            "chunk_shout.js",
+            "chunk_mul.js",
+            "index.js"
+        ]
     );
     assert!(
-        code(&files, "chunk_f1.js").contains("function add"),
+        code(&files, "chunk_module1.js").contains("function add"),
         "{files:?}"
     );
 }

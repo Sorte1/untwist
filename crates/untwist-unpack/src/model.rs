@@ -73,6 +73,7 @@ pub struct Module<'a> {
     pub unsafe_path_source: Option<String>,
     pub runtime_require: RequireParam,
     pub node_module: bool,
+    pub named_path: bool,
     program: Program<'a>,
 }
 
@@ -86,6 +87,7 @@ impl<'a> Module<'a> {
             unsafe_path_source: None,
             runtime_require: RequireParam::Default,
             node_module: false,
+            named_path: false,
             program,
         };
         module.assign_default_path(is_entry);
