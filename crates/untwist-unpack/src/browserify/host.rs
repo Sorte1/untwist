@@ -14,7 +14,6 @@ const KEPT_MEMBERS: [&str; 1] = ["exports"];
 struct Uses<'s> {
     scoping: &'s Scoping,
     require: SymbolId,
-    require_rebound: bool,
     found: Option<String>,
 }
 
@@ -73,7 +72,7 @@ impl<'a> VisitJs<'a> for Uses<'_> {
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if self.resolves(it) && !self.require_rebound {
+        if self.resolves(it) {
             self.found("uses require other than by calling it".to_string());
         }
     }
@@ -88,12 +87,9 @@ fn param(params: &FormalParameters<'_>, index: usize) -> Option<SymbolId> {
 
 fn require_use(scoping: &Scoping, factory: &Factory<'_, '_>) -> Option<String> {
     let require = param(factory.params, REQUIRE_PARAM)?;
-    let require_rebound =
-        scoping.symbol_is_mutated(require) || !scoping.symbol_redeclarations(require).is_empty();
     let mut uses = Uses {
         scoping,
         require,
-        require_rebound,
         found: None,
     };
     uses.visit_function_body(factory.body);

@@ -131,6 +131,7 @@ fn is_unsafe_lane_hint(note: &untwist::Note) -> bool {
 }
 
 const STDERR: &str = "write to stderr";
+const MODULE_EXTENSION: &str = "mjs";
 
 fn report_wasm(err: &mut dyn Write, result: &Output) -> io::Result<()> {
     for note in result.notes.iter().filter(|note| note.pass == "wasm") {
@@ -381,6 +382,10 @@ fn run_on(args: &Args, session: &mut Session<'_>, sources: &[String]) -> Result<
     let mut options = std::mem::take(&mut session.options);
     options.input_source_maps = input_source_maps(args, sources)?;
     options.input_names = untwist::input_names(&args.files);
+    options.module_goal = args.files.iter().any(|path| {
+        path.extension()
+            .is_some_and(|extension| extension == MODULE_EXTENSION)
+    });
     let mut result = Pipeline::new(options).run_many(&borrowed);
     result.source_map_link = args.source_map;
     if args.source_map.is_some() && args.output.is_none() {

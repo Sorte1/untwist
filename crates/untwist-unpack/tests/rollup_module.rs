@@ -9,6 +9,7 @@ const ON: UnpackOptions = UnpackOptions {
     trust_free_loader: false,
     trust_legacy_reads: false,
     trust_builtins: false,
+    module_goal: false,
 };
 
 const BODY: &str = "function a() { return 1; }

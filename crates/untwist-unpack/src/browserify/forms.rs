@@ -67,6 +67,17 @@ pub const PRELUDE_FORMS: &[&str] = &[
     "3b8b4b821f8b187c03921eb56aaee49db4c5d24da572252300bb62f245d79d82",
 ];
 
+pub const RETURNLESS_FORMS: &[&str] = &[
+    "ad73d031e7d6eebb6dc565709b2cf420f556292a42144996add71e53253c7f9e",
+    "6a1c50d5eee33a7459e2e6e452906f9399707822b19b811f292ccf997038ca3e",
+    "bdaa2903fcdb3cddc61d1bb1e99f89ea57bf45f38f8064c2ff5850e7bcdd7316",
+    "c2e172c81d8df9cbed632f5406cea09f3ae84121a761fb76d08837f9167579f1",
+    "d6becd44ff06f09ba05f188a05ca74dee09d8118a9f7a839c711d531b245a86f",
+    "279e21ec85af9022e9471ceebc7d89487d0a23665063e16345b633b4a4a1bd52",
+    "6d32599cb39d7c0ffa479b1b59811a664941a04e43102018dd3dcd2fc9669c8e",
+    "611279dace5787a8e4d6c28e99d0ef344df6831fa92fc196487c02b8e053a780",
+];
+
 pub const HEAD_FORMS: &[(usize, &str, &str)] = &[
     (
         240,

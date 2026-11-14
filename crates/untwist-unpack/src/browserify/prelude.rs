@@ -1,17 +1,26 @@
 use oxc_ast::ast::*;
 
-use crate::browserify::forms::{HEAD_FORMS, PRELUDE_FORMS};
+use crate::browserify::forms::{HEAD_FORMS, PRELUDE_FORMS, RETURNLESS_FORMS};
 use crate::canon::function_shape;
 use crate::webpack::machinery::form_digest;
 
 pub const NAME: &str = "%NAME%";
 const CALLED: &str = "()";
+const PRELUDE_FREE: [&str; 2] = ["require", "Error"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unproven {
     Prelude,
     Placement,
     Head,
+    Returnless,
+    ModuleGoal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Form {
+    Returns,
+    Returnless,
 }
 
 impl Unproven {
@@ -20,6 +29,10 @@ impl Unproven {
             Self::Prelude => "its prelude is not one of browser-pack's",
             Self::Placement => "it runs inside other code than browserify's own output",
             Self::Head => "its standalone wrapper is not one of browserify's",
+            Self::Returnless => {
+                "its prelude returns nothing, so the standalone wrapper's call of it throws"
+            }
+            Self::ModuleGoal => "it runs as an ES module, strict, where the written files are not",
         }
     }
 }
@@ -37,9 +50,17 @@ pub fn prelude_text(callee: &Expression<'_>, source_text: &str) -> Option<String
     }
 }
 
-pub fn prelude_proven(callee: &Expression<'_>, source_text: &str) -> bool {
-    prelude_text(callee, source_text)
-        .is_some_and(|text| PRELUDE_FORMS.contains(&form_digest(&text).as_str()))
+pub fn prelude_form(callee: &Expression<'_>, source_text: &str) -> Option<Form> {
+    let digest = form_digest(&prelude_text(callee, source_text)?);
+    let digest = digest.as_str();
+    match (
+        PRELUDE_FORMS.contains(&digest),
+        RETURNLESS_FORMS.contains(&digest),
+    ) {
+        (false, _) => None,
+        (true, false) => Some(Form::Returns),
+        (true, true) => Some(Form::Returnless),
+    }
 }
 
 fn identifier_name(text: &str) -> bool {
@@ -116,7 +137,8 @@ fn shadow_only(statement: &Statement<'_>) -> bool {
         return false;
     };
     declaration.declarations.iter().all(|declarator| {
-        declarator.init.is_none() && matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+        declarator.init.is_none()
+            && matches!(&declarator.id, BindingPattern::BindingIdentifier(id) if !PRELUDE_FREE.contains(&id.name.as_str()))
     })
 }
 
@@ -132,7 +154,10 @@ fn bare(params: &FormalParameters<'_>) -> bool {
 fn factory_body<'k, 'a>(factory: &'k Expression<'a>) -> Option<Body<'k, 'a>> {
     match factory.without_parentheses() {
         Expression::FunctionExpression(function) => {
-            let plain = !function.r#async && !function.generator && bare(&function.params);
+            let plain = function.id.is_none()
+                && !function.r#async
+                && !function.generator
+                && bare(&function.params);
             plain.then_some(Body::Block(function.body.as_deref()?))
         }
         Expression::ArrowFunctionExpression(arrow) if !arrow.r#async && bare(&arrow.params) => {
@@ -181,6 +206,9 @@ pub fn frame<'k, 'a>(
     program: &'k Program<'a>,
     bundle: &Expression<'a>,
 ) -> Result<Frame<'k, 'a>, Unproven> {
+    if program.source_type.is_module() {
+        return Err(Unproven::ModuleGoal);
+    }
     if !program.directives.is_empty() {
         return Err(Unproven::Placement);
     }
