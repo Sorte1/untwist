@@ -91,3 +91,5 @@ base/webpack5-umd	*	recognised	xfail	bm-webpack-library-entry: the library's inl
 mini/webpack5-esm-output	*	recognised	xfail	bm-webpack-esm-output: output.module puts the entry at the top level of an ES module; not proven
 mini/webpack5-prod-node+swc-min	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
 mini/webpack5-prod-node+uglify	*	recognised	xfail	bm-webpack-minified-runtime: a runtime minified by uglify, swc or webpack 4 terser is not one of the recorded forms
+mini/parcel-nohoist-min	default	recognised	xfail	bm-parcel-foreign-globals: the lazy chunk reads the global object as a value, so in the default lane every global name of the entry counts as one another input may replace, and the parcel runtime is not proven
+mini/parcel-nohoist-min	split	recognised	xfail	bm-parcel-foreign-globals: the lazy chunk reads the global object as a value, so in the default lane every global name of the entry counts as one another input may replace, and the parcel runtime is not proven
