@@ -192,10 +192,7 @@ fn a_source_that_may_hold_an_own_proto_is_kept_in_the_default_mode() {
     let source = fixture("hand/assign-proto-source.js");
     let safe = run(&as_module(&source), false);
     assert!(safe.contains("__assign(__assign({}, source)"), "{safe}");
-    assert!(
-        safe.contains("var plain = {\n  a: 1,\n  b: 2\n};"),
-        "{safe}"
-    );
+    assert!(safe.contains("__assign(__assign({}, { a: 1 })"), "{safe}");
     let unsafe_code = run(&source, true);
     assert!(unsafe_code.contains("...source"), "{unsafe_code}");
 }
@@ -259,29 +256,35 @@ fn a_helper_named_like_babel_with_another_body_is_noted() {
 }
 
 #[test]
-fn helpers_inside_a_function_are_swept_in_the_default_mode() {
+fn helpers_inside_a_function_are_swept_under_unsafe() {
     let source =
         format!("(function () {{\n{PATCHED}console.log(_toConsumableArray([1, 2]), !0);\n}})();\n");
-    let code = run(&source, false);
+    let code = run(&source, true);
     assert!(code.contains("console.log([1, 2], true);"), "{code}");
     assert!(!code.contains("function _"), "{code}");
 }
 
 #[test]
-fn script_level_helpers_stay_in_the_default_mode() {
+fn script_level_helpers_and_their_calls_stay_in_the_default_mode() {
     let source = format!("{PATCHED}console.log(_toConsumableArray([1, 2]), !0);\n");
     let code = run(&source, false);
-    assert!(code.contains("console.log([1, 2], true);"), "{code}");
+    assert!(
+        code.contains("console.log(_toConsumableArray([1, 2]), true);"),
+        "{code}"
+    );
     assert!(code.contains("function _toConsumableArray"), "{code}");
 }
 
 #[test]
-fn a_safe_site_after_unsafe_ones_still_fires_in_the_default_mode() {
+fn every_site_keeps_its_helper_in_the_default_mode_when_the_helper_reads_an_opaque_key() {
     let source = format!(
         "(function () {{\n{PATCHED}console.log(_toConsumableArray(list()));\nconsole.log(_toConsumableArray(list()), !0);\nconsole.log(_toConsumableArray([3, 4]));\nfunction list() {{ return [1]; }}\n}})();\n"
     );
     let code = run(&source, false);
-    assert!(code.contains("console.log([3, 4]);"), "{code}");
+    assert!(
+        code.contains("console.log(_toConsumableArray([3, 4]));"),
+        "{code}"
+    );
     assert!(code.contains("_toConsumableArray(list())"), "{code}");
 }
 
@@ -393,7 +396,7 @@ fn a_shared_helper_in_a_module_is_still_recognised() {
     let source = format!(
         "{TSLIB_ASSIGN}export function run(v) {{ var r = __assign({{ a: 1 }}, {{ b: v }}); return JSON.stringify(r); }}\n"
     );
-    let code = default_lane(&source);
+    let code = run(&source, true);
     assert!(code.contains("a: 1,\n    b: v\n"), "{code}");
     assert!(!code.contains("__assign("), "{code}");
 }
@@ -427,7 +430,7 @@ fn a_script_helper_nothing_replaces_still_converts() {
     let source = format!(
         "{PATCHED}globalThis.other = 1;\nfunction run(a, b) {{ return _toConsumableArray([a, b]).join(\",\"); }}\n"
     );
-    let code = default_lane(&source);
+    let code = run(&source, true);
     assert!(code.contains("return [a, b].join"), "{code}");
 }
 
@@ -454,7 +457,7 @@ fn a_var_helper_at_the_top_of_a_module_still_converts() {
     let source = format!(
         "import x from \"x\";\nvar a = 1, b = {{ c: [2] }};\n{TSLIB_SPREAD_ARRAY}\nexport function run(a, b) {{ return __spreadArray([a], [b], false).length + x; }}\n"
     );
-    let code = default_lane(&source);
+    let code = run(&source, true);
     assert!(code.contains("return [a, b].length"), "{code}");
 }
 

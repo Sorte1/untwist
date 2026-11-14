@@ -76,5 +76,6 @@ keep:kept-eval-may-declare-eval|function f(s) { eval(s); return eval("1+1"); } c
 keep:top-level-kept-eval-declares-eval|eval("var eval = function (s) { return 'patched ' + s; }"); function f() { console.log(eval("1 + 1")); } f();
 keep:kept-eval-in-outer-function|function outer(s) { eval(s); function inner() { return eval("1+1"); } return inner(); } console.log(outer("var eval = function () { return 'outer patched'; }"));
 unsafe-peel:peeled-text-runs-eval|function f(s) { eval("eval(s)"); return eval("2+2"); } console.log(f("var eval = function () { return 'from text'; }"));
-peel:numeric-index-keeps-folding|var a = [1, 2, 3], t = 0; for (var i = 0; i < a.length; i++) { t += a[i]; } var b = a[i - 1] + a[t % 3]; function f() { eval("console.log('or" + [] + "ig', " + "t, b)"); } f();
+unsafe-peel:var-index-keeps-the-eval-by-default|var a = [1, 2, 3], t = 0; for (var i = 0; i < a.length; i++) { t += a[i]; } var b = a[i - 1] + a[t % 3]; function f() { eval("console.log('or" + [] + "ig', " + "t, b)"); } f();
 peel:literal-key-concatenation-keeps-folding|var o = { ab: 1 }; var v = o['a' + 'b']; function f() { eval("console.log('or" + [] + "ig', v)"); } f();
+peel:const-key-keeps-folding|var a = [1, 2, 3]; const k = 1; var b = a[k] + a[0] + a[2 - 1]; function f() { eval("console.log('or" + [] + "ig', b)"); } f();
