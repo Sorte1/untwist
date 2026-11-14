@@ -153,3 +153,61 @@ fn outer_wrapper_shapes_under_assumed_modules_run_like_the_bundle() {
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+const LANES: [&[&str]; 4] = [
+    &[],
+    &["--split-hoisted"],
+    &["--split-hoisted", "--split-assume-modules"],
+    &["--split-hoisted", "--split-assume-modules", "--unsafe"],
+];
+
+const REVIEW_INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assume_review");
+
+fn tree_output(node: &Path, input: &Path, out: &Path, flags: &[&str]) -> Option<String> {
+    let status = common::bin()
+        .args(flags)
+        .arg("-f")
+        .arg("-o")
+        .arg(out)
+        .arg(input)
+        .output()
+        .expect("run untwist");
+    assert!(
+        status.status.success(),
+        "{}: untwist failed: {}",
+        input.display(),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    run_tree(node, out)
+}
+
+#[test]
+fn review_inputs_run_like_the_bundle_in_every_lane() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let mut inputs: Vec<_> = std::fs::read_dir(REVIEW_INPUTS)
+        .expect("review inputs")
+        .map(|entry| entry.expect("entry").path())
+        .collect();
+    inputs.sort();
+    assert!(inputs.len() >= 7, "found {} inputs", inputs.len());
+    let work = tempfile::tempdir().expect("tempdir");
+    let mut wrong = Vec::new();
+    for input in &inputs {
+        let name = input.file_stem().expect("stem").to_string_lossy();
+        let expected = run_with(&node, &[], input)
+            .expect("run node")
+            .map(|observed| format!("{:?}\n{}", observed.exit, observed.stdout));
+        for (lane, flags) in LANES.iter().enumerate() {
+            let out = work.path().join(format!("{name}-{lane}"));
+            let observed = tree_output(&node, input, &out, flags);
+            if observed != expected {
+                wrong.push(format!(
+                    "{name} {flags:?}: bundle {expected:?}, tree {observed:?}"
+                ));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}

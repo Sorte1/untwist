@@ -20,6 +20,7 @@ use crate::runtime::synthetic_statements;
 
 pub const SHELL_ID: &str = "shell";
 const SETTER_PREFIX: &str = "set_";
+const SETTER_PARAMETER: &str = "value";
 
 fn fresh(text: &str, base: String, taken: &FxHashSet<String>) -> String {
     let mut name = base;
@@ -27,6 +28,14 @@ fn fresh(text: &str, base: String, taken: &FxHashSet<String>) -> String {
         name.push('_');
     }
     name
+}
+
+fn setter_definition(setter: &str, name: &str) -> String {
+    let mut parameter = String::from(SETTER_PARAMETER);
+    while parameter == name {
+        parameter.push('_');
+    }
+    format!("function {setter}({parameter}) {{\n  return {name} = {parameter};\n}}\n")
 }
 
 pub struct Layout {
@@ -152,10 +161,7 @@ pub fn layout(scoping: &Scoping, facts: &Facts, plan: &Plan, text: &str) -> Layo
         let owner = run_slot(first_run, plan.runs.len(), found.run);
         let setter = fresh(text, format!("{SETTER_PREFIX}{}", found.name), &taken);
         taken.insert(setter.clone());
-        definitions[owner].push_str(&format!(
-            "function {setter}(value) {{\n  return {} = value;\n}}\n",
-            found.name
-        ));
+        definitions[owner].push_str(&setter_definition(&setter, &found.name));
         exports[owner].push(setter.clone());
         for &(item, at_start, named) in &found.writes {
             edges.push((at(item), owner, setter.clone()));
@@ -213,9 +219,8 @@ pub fn layout(scoping: &Scoping, facts: &Facts, plan: &Plan, text: &str) -> Layo
 fn shell_text(names: &[String], setters: &[(String, String)]) -> String {
     let mut text = format!("export var {};\n", names.join(", "));
     for (name, setter) in setters {
-        text.push_str(&format!(
-            "export function {setter}(value) {{\n  return {name} = value;\n}}\n"
-        ));
+        text.push_str("export ");
+        text.push_str(&setter_definition(setter, name));
     }
     text
 }
