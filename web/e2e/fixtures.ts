@@ -76,9 +76,19 @@ function isAbortedWorkerLoad(text: string): boolean {
   return ABORTED_WORKER_LOAD.test(text) || ABORTED_DRIVER_WORKER.test(text);
 }
 
-type Fixtures = { pageErrors: string[] };
+type Fixtures = { pageErrors: string[]; githubApi: void };
+
+export const GITHUB_API = 'https://api.github.com/**';
+export const STUB_STARS = 321;
 
 export const test = base.extend<Fixtures>({
+  githubApi: [
+    async ({ context }, use) => {
+      await context.route(GITHUB_API, (route) => route.fulfill({ json: { stargazers_count: STUB_STARS } }));
+      await use();
+    },
+    { auto: true },
+  ],
   pageErrors: [
     async ({ page }, use) => {
       const errors: string[] = [];

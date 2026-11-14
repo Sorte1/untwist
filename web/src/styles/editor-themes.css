@@ -1,0 +1,125 @@
+:root[data-editor='tokyo-night'] {
+  --code: #1A1B26;
+  --plain: #C0CAF5;
+  --kw: #BB9AF7;
+  --str: #9ECE6A;
+  --num: #FF9E64;
+  --fn: #7AA2F7;
+  --com: #8C95C4;
+  --prop: #73DACA;
+  --type: #2AC3DE;
+  --op: #89DDFF;
+  --gutter: #8C95C4;
+  --selection: #222D4A;
+  --active-line: rgba(192, 202, 245, 0.05);
+  --diff-del-tint: #2A1E2D;
+  --diff-add-tint: #1B2729;
+}
+
+:root[data-editor='one-dark'] {
+  --code: #282C34;
+  --plain: #ABB2BF;
+  --kw: #CD87E4;
+  --str: #98C379;
+  --num: #D19A66;
+  --fn: #61AFEF;
+  --com: #979CA6;
+  --prop: #EA7E85;
+  --type: #E5C07B;
+  --op: #56B6C2;
+  --gutter: #979CA6;
+  --selection: #2F343E;
+  --active-line: rgba(171, 178, 191, 0.06);
+  --diff-del-tint: #322830;
+  --diff-add-tint: #263130;
+}
+
+:root[data-editor='github-dark'] {
+  --code: #0D1117;
+  --plain: #E6EDF3;
+  --kw: #FF7B72;
+  --str: #A5D6FF;
+  --num: #79C0FF;
+  --fn: #D2A8FF;
+  --com: #8B949E;
+  --prop: #79C0FF;
+  --type: #FFA657;
+  --op: #FF7B72;
+  --gutter: #8B949E;
+  --selection: #1C2B41;
+  --active-line: rgba(230, 237, 243, 0.05);
+  --diff-del-tint: #25171C;
+  --diff-add-tint: #12261E;
+}
+
+:root[data-editor='catppuccin-mocha'] {
+  --code: #1E1E2E;
+  --plain: #CDD6F4;
+  --kw: #CBA6F7;
+  --str: #A6E3A1;
+  --num: #FAB387;
+  --fn: #89B4FA;
+  --com: #9CA1BA;
+  --prop: #B4BEFE;
+  --type: #F9E2AF;
+  --op: #89DCEB;
+  --gutter: #9CA1BA;
+  --selection: #2E2F40;
+  --active-line: rgba(205, 214, 244, 0.05);
+  --diff-del-tint: #2F2232;
+  --diff-add-tint: #213030;
+}
+
+:root[data-editor='github-light'] {
+  --code: #FFFFFF;
+  --plain: #1F2328;
+  --kw: #CF222E;
+  --str: #0A3069;
+  --num: #0550AE;
+  --fn: #7A46D8;
+  --com: #59636E;
+  --prop: #0550AE;
+  --type: #953800;
+  --op: #CF222E;
+  --gutter: #59636E;
+  --selection: #E3F2FF;
+  --active-line: rgba(31, 35, 40, 0.04);
+  --diff-del-tint: #FFEFED;
+  --diff-add-tint: #E6FFEC;
+}
+
+:root[data-editor='solarized-light'] {
+  --code: #FDF6E3;
+  --plain: #4A5D64;
+  --kw: #5E6C00;
+  --str: #17706A;
+  --num: #B0296C;
+  --fn: #1D69A0;
+  --com: #5B6B6E;
+  --prop: #5751A8;
+  --type: #835F00;
+  --op: #A63C10;
+  --gutter: #5B6B6E;
+  --selection: #EEE8D5;
+  --active-line: rgba(88, 110, 117, 0.06);
+  --diff-del-tint: #F9E6DA;
+  --diff-add-tint: #EAF0D6;
+}
+
+:root[data-editor='catppuccin-latte'] {
+  --code: #EFF1F5;
+  --plain: #4C4F69;
+  --kw: #7A2FDB;
+  --str: #2B6F1E;
+  --num: #AD4300;
+  --fn: #1A55CC;
+  --com: #5D6075;
+  --prop: #5A4FCF;
+  --type: #8A5200;
+  --op: #076883;
+  --gutter: #5D6075;
+  --selection: #E2E5EC;
+  --active-line: rgba(76, 79, 105, 0.05);
+  --diff-del-tint: #F5E1E6;
+  --diff-add-tint: #E1EEDF;
+}

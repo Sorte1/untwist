@@ -4,12 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>Untwist</title>
+<title>untwist: JavaScript deobfuscator and unbundler online</title>
+<meta name="description" content="untwist is a fast JavaScript deobfuscator and unbundler. Undo obfuscator.io, unminify code and split webpack, Rollup and Browserify bundles into modules, right in your browser.">
+<link rel="canonical" href="https://untwist.dev/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="untwist">
+<meta property="og:url" content="https://untwist.dev/">
+<meta property="og:title" content="untwist: JavaScript deobfuscator and unbundler online">
+<meta property="og:description" content="untwist is a fast JavaScript deobfuscator and unbundler. Undo obfuscator.io, unminify code and split webpack, Rollup and Browserify bundles into modules, right in your browser.">
+<meta property="og:image" content="https://untwist.dev/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="untwist, a fast JavaScript deobfuscator and unbundler">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="untwist: JavaScript deobfuscator and unbundler online">
+<meta name="twitter:description" content="untwist is a fast JavaScript deobfuscator and unbundler. Undo obfuscator.io, unminify code and split webpack, Rollup and Browserify bundles into modules, right in your browser.">
+<meta name="twitter:image" content="https://untwist.dev/og.png">
+<meta name="twitter:image:alt" content="untwist, a fast JavaScript deobfuscator and unbundler">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-<meta name="theme-color" content="#1C1A25">
+<meta name="theme-color" content="#1C1A25" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ECEAF2" media="(prefers-color-scheme: light)">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"untwist","alternateName":"untwist playground","url":"https://untwist.dev/","description":"untwist is a fast JavaScript deobfuscator and unbundler. Undo obfuscator.io, unminify code and split webpack, Rollup and Browserify bundles into modules, right in your browser.","image":"https://untwist.dev/og.png","applicationCategory":"DeveloperApplication","operatingSystem":"Any","browserRequirements":"Requires JavaScript and WebAssembly","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Deobfuscate javascript-obfuscator (obfuscator.io) output","Unpack webpack, Browserify, esbuild, Parcel, Rollup and Vite bundles","Unminify and untranspile JavaScript","Rename mangled identifiers","Runs locally in the browser as WebAssembly"],"sameAs":["https://github.com/Sorte1/untwist","https://crates.io/crates/untwist-cli"]}</script>
 <script type="module" src="/src/main.ts"></script>
 </head>
 <body>
@@ -78,6 +97,13 @@
 <span class="hint" id="wasm-on-note">On can be slow on large files.</span>
 </section>
 
+<section class="set-group">
+<h3 class="set-title">Editor theme</h3>
+<div class="opt"><label class="opt-name" for="editor-theme-dark">Dark mode</label><select id="editor-theme-dark" class="select"><option value="tokyo-night">Tokyo Night</option><option value="github-dark">GitHub Dark</option><option value="one-dark">One Dark</option><option value="catppuccin-mocha">Catppuccin Mocha</option><option value="untwist">Untwist</option></select></div>
+<div class="opt"><label class="opt-name" for="editor-theme-light">Light mode</label><select id="editor-theme-light" class="select"><option value="github-light">GitHub Light</option><option value="solarized-light">Solarized Light</option><option value="catppuccin-latte">Catppuccin Latte</option><option value="untwist">Untwist</option></select></div>
+<span class="hint">The theme follows your system's light or dark setting; the sun and moon button switches it. Kept in this browser only.</span>
+</section>
+
 <section class="set-group" title="Evaluator steps the string-array decoder may spend per decode unit. The default is 50,000,000; Cancel still stops a long run.">
 <h3 class="set-title"><label for="fuel">Fuel limit</label></h3>
 <div class="fuel-row">
@@ -138,6 +164,7 @@
 
 <button type="button" class="btn btn-bar btn-cancel" id="cancel" disabled hidden><svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1.5"></rect></svg><span class="btn-text">Cancel</span></button>
 <button type="button" class="btn-run" id="run" disabled><svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 2.5v11l9-5.5z"></path></svg><span id="run-label">Run</span><span class="changed-dot" id="settings-changed" title="Settings changed since the last run" hidden></span><span class="kbd">Ctrl ↵</span></button>
+<a class="btn btn-bar gh-link" id="github-link" href="https://github.com/Sorte1/untwist" target="_blank" rel="noopener noreferrer" aria-label="untwist on GitHub" title="untwist on GitHub"><svg class="gh-mark" width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path></svg><span class="gh-stars" id="github-stars" hidden></span></a>
 </header>
 
 <main class="workspace">
@@ -200,6 +227,19 @@
 <div class="pane-body diff-body" id="diff"></div>
 </div>
 <div class="pane-foot"><span id="output-meta">output.js · 0 lines</span><span id="download-note" hidden></span><span id="diff-note" hidden></span><span class="edit-meta" id="output-edit-meta"><span class="edit-mark" id="output-edit-mark" hidden></span><span class="edit-problems" id="output-problems" hidden></span><span id="output-lang" hidden></span></span><div class="grow"></div><button type="button" class="btn library-code" id="library-code" aria-pressed="false" hidden><span id="library-code-label">Show library code</span></button><span class="edit-actions" id="output-edit-actions" hidden><button type="button" class="btn" id="reset-output" title="Run replaces your edits">Reset to output</button></span></div>
+<article class="intro" id="intro" aria-labelledby="intro-title">
+<div class="intro-body">
+<h1 class="intro-title" id="intro-title">JavaScript deobfuscator and unbundler</h1>
+<p class="intro-lead">untwist turns obfuscated, minified or bundled JavaScript back into readable source. Paste code, drop a file or pick an example, then press Run.</p>
+<ul class="intro-list">
+<li><h2>Deobfuscate</h2><p>Undoes javascript-obfuscator (obfuscator.io) output: decodes string arrays with their rotators and base64 or RC4 decoders, inlines proxy objects, unflattens control flow and strips self-defending and debug-protection code.</p></li>
+<li><h2>Unbundle</h2><p>Splits webpack 4 and 5, Browserify, esbuild, Parcel and other bundles into one file per module and rewrites their require and import paths. Rollup and Vite output can be split too.</p></li>
+<li><h2>Make it readable</h2><p>Unminifies, turns transpiler helpers back into native syntax, rebuilds JSX, names known libraries such as core-js and renames mangled identifiers on request.</p></li>
+<li><h2>Private</h2><p>Runs locally in your browser as WebAssembly. Your code is never uploaded and never executed.</p></li>
+</ul>
+<p class="intro-cli">Command line: <code>cargo install untwist-cli</code> · <a href="https://github.com/Sorte1/untwist">Source on GitHub</a></p>
+</div>
+</article>
 <div class="running" id="running" hidden>
 <svg class="running-mark" width="56" height="56" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke-linecap="round"><path class="strand strand-b" d="M3 16C7.5 16 8 8 12.5 8H21"></path><path class="strand-gap" d="M3 8C7.5 8 8 16 12.5 16H21"></path><path class="strand strand-a" d="M3 8C7.5 8 8 16 12.5 16H21"></path></g></svg>
 <span class="running-title">Untwisting · <span id="running-elapsed">0.00 s</span></span>
