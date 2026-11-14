@@ -561,13 +561,20 @@ struct Aggregate {
     outer: Vec<Option<Option<String>>>,
 }
 
+fn name_key(name: &str) -> String {
+    name.chars()
+        .filter(|ch| *ch != '_' && *ch != '$')
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 fn merge_slot(slot: &mut Option<Option<String>>, name: Option<String>) {
     let Some(name) = name else {
         return;
     };
     match slot {
         None => *slot = Some(Some(name)),
-        Some(Some(existing)) if *existing != name => *slot = Some(None),
+        Some(Some(existing)) if name_key(existing) != name_key(&name) => *slot = Some(None),
         _ => {}
     }
 }

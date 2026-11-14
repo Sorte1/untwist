@@ -7,7 +7,8 @@ use crate::generate::to_identifier;
 use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
 use crate::simple::is_renameable;
-use crate::text_reads::{text_read_bindings, TextReads};
+use crate::smart::lane_self_reads;
+use crate::text_reads::{text_read_bindings_with, SelfReads, TextReads};
 use crate::unique::{await_turn, is_taken, next_number, take_names, SharedUniqueState};
 use crate::RenameConfig;
 use std::cell::RefCell;
@@ -58,6 +59,7 @@ impl<'a> Pass<'a> for LibraryRename {
             state
         });
         let chosen: RefCell<Vec<(String, String, u32)>> = RefCell::new(Vec::new());
+        let self_reads = lane_self_reads(cx.opts.unsafe_transforms);
         run_mode(
             &mut self.done,
             program,
@@ -65,7 +67,8 @@ impl<'a> Pass<'a> for LibraryRename {
             HazardNote::Suppress,
             OuterRule::UsedEnclosing,
             |program, collected, scoping| {
-                let (plan, names) = decide_names(program, collected, scoping, config, shared);
+                let (plan, names) =
+                    decide_names(program, collected, scoping, (config, self_reads), shared);
                 *chosen.borrow_mut() = names;
                 plan
             },
@@ -105,21 +108,28 @@ pub fn decide(
     scoping: &Scoping,
     config: RenameConfig,
 ) -> RenamePlan {
-    decide_names(program, collected, scoping, config, None).0
+    decide_names(
+        program,
+        collected,
+        scoping,
+        (config, SelfReads::Unknown),
+        None,
+    )
+    .0
 }
 
 fn decide_names(
     program: &Program<'_>,
     collected: &Collected,
     scoping: &Scoping,
-    config: RenameConfig,
+    (config, self_reads): (RenameConfig, SelfReads),
     shared: Option<&SharedUniqueState>,
 ) -> (RenamePlan, Vec<(String, String, u32)>) {
     let found = &collected.library;
     if found.names.is_empty() {
         return (RenamePlan::new(), Vec::new());
     }
-    let text_read = match text_read_bindings(program, scoping) {
+    let text_read = match text_read_bindings_with(program, scoping, self_reads) {
         TextReads::Bindings(pinned) => pinned,
         TextReads::Unknown => {
             let mut plan = RenamePlan::new();
