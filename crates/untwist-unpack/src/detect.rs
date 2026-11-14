@@ -11,7 +11,9 @@ use crate::browserify::detect::{
     unproven_bundle,
 };
 use crate::browserify::host::host_object_use;
-use crate::browserify::notes::{host_object, not_proven};
+use crate::browserify::notes::{host_object, not_proven, unloaded};
+use crate::browserify::prelude::Unproven;
+use crate::browserify::requests::unloaded_module;
 use crate::closed::{first_host_read, first_open, legacy_read};
 use crate::frame::Frame;
 use crate::links::Links;
@@ -184,7 +186,11 @@ impl Extract<'_, '_, '_> {
         if self.options.conservative {
             return true;
         }
-        let Some(unproven) = unproven_bundle(self.source, expr) else {
+        let unproven = match self.options.module_goal {
+            true => Some(Unproven::ModuleGoal),
+            false => unproven_bundle(self.source, expr),
+        };
+        let Some(unproven) = unproven else {
             return true;
         };
         self.unproven
@@ -210,6 +216,21 @@ impl Extract<'_, '_, '_> {
             return true;
         };
         self.unproven.get_or_insert_with(|| host_object(id, &what));
+        false
+    }
+
+    fn requests_loaded(&mut self, expr: &Expression<'_>) -> bool {
+        if self.options.conservative {
+            return true;
+        }
+        let Some(scoping) = self.scoping.as_ref() else {
+            return true;
+        };
+        let Some(found) = unloaded_module(scoping, expr) else {
+            return true;
+        };
+        self.unproven
+            .get_or_insert_with(|| unloaded(found.id, &found.what));
         false
     }
 
@@ -279,6 +300,7 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
             && self.closed_as(browserify_factories(expr), &BROWSERIFY_PARAMS)
             && self.host_objects_unseen(browserify_factories(expr))
             && self.require_kept(browserify_factories(expr))
+            && self.requests_loaded(expr)
             && self.requests_linked(expr)
         {
             self.bundle = attempt(self.bodies, |bodies| {

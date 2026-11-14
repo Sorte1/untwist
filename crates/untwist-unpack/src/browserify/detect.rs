@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::prop_name;
 
 use crate::browserify::link::leaves_require_unbound;
-use crate::browserify::prelude::{frame, head_proven, prelude_proven, Frame, Unproven};
+use crate::browserify::prelude::{frame, head_proven, prelude_form, Form, Frame, Unproven};
 use crate::browserify::tree::{dependency_tree, infer_index_directories, resolve_dependency_tree};
 use crate::matcher::{
     anonymous_factory, argument_expression, call_parts, literal_id, param_names, Factory,
@@ -19,7 +19,21 @@ use crate::UnpackOptions;
 
 pub const BROWSERIFY_PARAMS: [&str; 3] = ["require", "module", "exports"];
 const REQUIRE_PARAM: usize = 0;
-const PROTO: &str = "__proto__";
+pub(crate) const INHERITED_KEYS: [&str; 12] = [
+    "__proto__",
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+    "constructor",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "toLocaleString",
+    "toString",
+    "valueOf",
+];
+const PROTO: &str = INHERITED_KEYS[0];
 const UNLINKED_REQUEST: &str =
     "it calls its renamed require with a request the unpacked files cannot link";
 
@@ -96,11 +110,24 @@ fn dependency_list(object: &ObjectExpression<'_>) -> Option<Vec<(String, String)
     Some(dependencies)
 }
 
-struct ModuleEntry<'k, 'a> {
-    id: String,
-    params: &'k FormalParameters<'a>,
-    body: &'k FunctionBody<'a>,
-    dependencies: Vec<(String, String)>,
+pub(crate) struct ModuleEntry<'k, 'a> {
+    pub(crate) id: String,
+    pub(crate) function: &'k Function<'a>,
+    pub(crate) params: &'k FormalParameters<'a>,
+    pub(crate) body: &'k FunctionBody<'a>,
+    pub(crate) dependencies: Vec<(String, String)>,
+}
+
+fn plain_params(params: &FormalParameters<'_>) -> bool {
+    params.rest.is_none()
+        && params.items.iter().all(|item| {
+            item.initializer.is_none()
+                && matches!(item.pattern, BindingPattern::BindingIdentifier(_))
+        })
+}
+
+pub(crate) fn runs_like_a_file(function: &Function<'_>) -> bool {
+    !function.r#async && !function.generator && plain_params(&function.params)
 }
 
 fn module_entry<'k, 'a>(property: &'k ObjectPropertyKind<'a>) -> Option<ModuleEntry<'k, 'a>> {
@@ -128,6 +155,7 @@ fn module_entry<'k, 'a>(property: &'k ObjectPropertyKind<'a>) -> Option<ModuleEn
     };
     Some(ModuleEntry {
         id,
+        function,
         params: &function.params,
         body: function.body.as_deref()?,
         dependencies: dependency_list(deps)?,
@@ -183,9 +211,9 @@ fn standalone_entry(entry: &Expression<'_>, entries: &Entries) -> bool {
 pub fn unproven_bundle(source: &Program<'_>, expr: &Expression<'_>) -> Option<Unproven> {
     let (callee, _) = call_parts(expr)?;
     let (_, entries) = browserify(expr)?;
-    if !prelude_proven(callee, source.source_text) {
+    let Some(form) = prelude_form(callee, source.source_text) else {
         return Some(Unproven::Prelude);
-    }
+    };
     match frame(source, expr) {
         Err(unproven) => Some(unproven),
         Ok(Frame::Plain) => None,
@@ -193,9 +221,24 @@ pub fn unproven_bundle(source: &Program<'_>, expr: &Expression<'_>) -> Option<Un
             if !standalone_entry(entry, &entries) {
                 return Some(Unproven::Placement);
             }
+            if form == Form::Returnless {
+                return Some(Unproven::Returnless);
+            }
             (!head_proven(head, source.source_text)).then_some(Unproven::Head)
         }
     }
+}
+
+pub(crate) fn module_entries<'k, 'a>(
+    expr: &'k Expression<'a>,
+) -> Option<(Vec<ModuleEntry<'k, 'a>>, Entries)> {
+    let (files, entries) = browserify(expr)?;
+    let modules = files
+        .properties
+        .iter()
+        .map(module_entry)
+        .collect::<Option<Vec<_>>>()?;
+    Some((modules, entries))
 }
 
 pub fn is_browserify(expr: &Expression<'_>) -> bool {
@@ -236,9 +279,6 @@ pub fn rebound_require<'k, 'a: 'k>(
         let BindingPattern::BindingIdentifier(binding) = &item.pattern else {
             return None;
         };
-        if binding.name == BROWSERIFY_PARAMS[REQUIRE_PARAM] {
-            return None;
-        }
         let symbol = binding.symbol_id.get()?;
         let rebound =
             scoping.symbol_is_mutated(symbol) || !scoping.symbol_redeclarations(symbol).is_empty();

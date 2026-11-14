@@ -98,6 +98,7 @@ pub struct Options {
     pub source_map: bool,
     pub input_source_maps: Vec<Option<String>>,
     pub input_names: Vec<String>,
+    pub module_goal: bool,
 }
 
 impl Default for Options {
@@ -136,6 +137,7 @@ impl Default for Options {
             source_map: false,
             input_source_maps: Vec::new(),
             input_names: Vec::new(),
+            module_goal: false,
         }
     }
 }

@@ -11,6 +11,7 @@ use untwist_core::ast_util::prop::number_key;
 use untwist_core::pass::{Note, NoteKind};
 use untwist_core::semantic::build_scoping;
 
+use crate::browserify::detect::INHERITED_KEYS;
 use crate::browserify::notes;
 use crate::model::{Bundle, Module, RequireParam};
 use crate::runtime::{js_string, synthetic_statements};
@@ -18,21 +19,7 @@ use crate::scan::is_free;
 use crate::specifier::ModulePaths;
 
 const REQUIRE: &str = "require";
-const FALSY_IDS: [&str; 2] = ["", "0"];
-const INHERITED_KEYS: [&str; 12] = [
-    "__proto__",
-    "__defineGetter__",
-    "__defineSetter__",
-    "__lookupGetter__",
-    "__lookupSetter__",
-    "constructor",
-    "hasOwnProperty",
-    "isPrototypeOf",
-    "propertyIsEnumerable",
-    "toLocaleString",
-    "toString",
-    "valueOf",
-];
+pub(crate) const FALSY_IDS: [&str; 2] = ["", "0"];
 
 enum Mapped {
     Linked(String),

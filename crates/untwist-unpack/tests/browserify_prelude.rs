@@ -5,7 +5,7 @@ use oxc_ast::ast::{Expression, Program};
 use oxc_ast_visit::{walk_js, VisitJs};
 use untwist_core::parse::parse_program;
 use untwist_unpack::browserify::detect::is_browserify;
-use untwist_unpack::browserify::forms::{HEAD_FORMS, PRELUDE_FORMS};
+use untwist_unpack::browserify::forms::{HEAD_FORMS, PRELUDE_FORMS, RETURNLESS_FORMS};
 use untwist_unpack::browserify::notes::{HOST_OBJECT, NOT_PROVEN};
 use untwist_unpack::browserify::prelude::{frame, head_text, prelude_text, Frame, NAME};
 use untwist_unpack::webpack::machinery::form_digest;
@@ -263,6 +263,25 @@ fn recorded_texts() -> Vec<(String, String)> {
             (role.to_string(), unescaped)
         })
         .collect()
+}
+
+fn returns_its_require(text: &str) -> bool {
+    let text = text.strip_suffix("()").unwrap_or(text);
+    text.rsplit_once("return #").is_some_and(|(_, tail)| {
+        tail.trim_end_matches('}')
+            .chars()
+            .all(|c| c.is_ascii_digit())
+    })
+}
+
+#[test]
+fn the_returnless_forms_are_the_recorded_preludes_that_return_nothing() {
+    let returnless: Vec<String> = recorded_texts()
+        .iter()
+        .filter(|(role, text)| role == "PRELUDE" && !returns_its_require(text))
+        .map(|(_, text)| form_digest(text))
+        .collect();
+    assert_eq!(returnless, RETURNLESS_FORMS);
 }
 
 #[test]

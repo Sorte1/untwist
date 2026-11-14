@@ -7,6 +7,8 @@ pub const REQUIRE_LEFT_UNBOUND: &str = "renamed require that the written file do
 pub const NOT_PROVEN: &str = "is not proven to be browserify's output; no bundle is written";
 pub const HOST_OBJECT: &str =
     "which browserify does not give its modules and node does; no bundle is written";
+pub const UNLOADED: &str =
+    "so the written files would not load what the bundle loads; no bundle is written";
 
 crate::notes::kind_notes!(
     NOTES,
@@ -14,7 +16,8 @@ crate::notes::kind_notes!(
     UNMAPPED_MODULE_ID,
     REQUIRE_LEFT_UNBOUND,
     NOT_PROVEN,
-    HOST_OBJECT
+    HOST_OBJECT,
+    UNLOADED
 );
 
 pub fn later_entries_not_run(count: usize) -> String {
@@ -39,4 +42,8 @@ pub fn not_proven(why: &str) -> String {
 
 pub fn host_object(id: impl Display, what: &str) -> String {
     format!("module {id}: it {what}, {HOST_OBJECT}")
+}
+
+pub fn unloaded(id: impl Display, what: &str) -> String {
+    format!("module {id}: {what}, {UNLOADED}")
 }

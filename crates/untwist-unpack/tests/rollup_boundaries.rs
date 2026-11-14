@@ -21,6 +21,7 @@ const ASSUMED: UnpackOptions = UnpackOptions {
     trust_free_loader: false,
     trust_legacy_reads: false,
     trust_builtins: false,
+    module_goal: false,
 };
 
 fn root() -> PathBuf {

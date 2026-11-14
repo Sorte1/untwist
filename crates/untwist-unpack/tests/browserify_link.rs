@@ -1,9 +1,7 @@
 use oxc_allocator::Allocator;
 use untwist_core::parse::parse_program;
 use untwist_core::print::pretty_codegen;
-use untwist_unpack::browserify::notes::{
-    LATER_ENTRIES_NOT_RUN, REQUIRE_LEFT_UNBOUND, UNMAPPED_MODULE_ID,
-};
+use untwist_unpack::browserify::notes::{LATER_ENTRIES_NOT_RUN, REQUIRE_LEFT_UNBOUND, UNLOADED};
 use untwist_unpack::{unpack, BundleKind};
 
 const PRELUDE: &str = "(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c=\"function\"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error(\"Cannot find module '\"+i+\"'\");throw a.code=\"MODULE_NOT_FOUND\",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u=\"function\"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()";
@@ -87,26 +85,46 @@ fn a_module_reached_by_two_requests_is_one_file_for_both() {
 }
 
 #[test]
-fn a_local_require_and_a_computed_or_unmapped_request_stay_as_written() {
+fn a_local_require_and_a_node_builtin_request_stay_as_written() {
     let split = split(
-        "{1:[function(require,module,exports){function load(require){return require(\"./a\")}var name=\"./a\";require(name);require(\"fs\");load(function(){});require(\"./a\")},{\"./a\":2}],2:[function(require,module,exports){},{}]},{},[1]",
+        "{1:[function(require,module,exports){function load(require){return require(\"./a\")}require(\"fs\");require(\"node:path\");load(function(){});require(\"./a\")},{\"./a\":2}],2:[function(require,module,exports){},{}]},{},[1]",
     );
     assert_eq!(
         split.code("index.js"),
-        "function load(require) {\n  return require(\"./a\");\n}\nvar name = \"./a\";\nrequire(name);\nrequire(\"fs\");\nload(function() {});\nrequire(\"./a.js\");"
+        "function load(require) {\n  return require(\"./a\");\n}\nrequire(\"fs\");\nrequire(\"node:path\");\nload(function() {});\nrequire(\"./a.js\");"
     );
     assert!(split.notes.is_empty(), "{:?}", split.notes);
 }
 
+fn refused_as_unloaded(arguments: &str) {
+    let notes = refusal(arguments).expect("the bundle is refused");
+    assert!(
+        notes.iter().any(|note| note.contains(UNLOADED)),
+        "{arguments}: {notes:?}"
+    );
+}
+
 #[test]
-fn a_request_mapped_to_an_id_the_bundle_does_not_hold_stays_as_written() {
-    let split = split(
-        "{1:[function(require,module,exports){require(\"./gone\");require(\"./zero\")},{\"./gone\":9,\"./zero\":0}]},{},[1]",
-    );
-    assert_eq!(
-        split.code("index.js"),
-        "require(\"./gone\");\nrequire(\"./zero\");"
-    );
+fn a_request_left_as_written_that_node_could_resolve_in_the_tree_refuses_the_bundle() {
+    for arguments in [
+        "{1:[function(require,module,exports){var name=\"./a\";require(name)},{\"./a\":2}],2:[function(require,module,exports){},{}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"./a\");require(\"./c\")},{\"./a\":2,\"./c\":3}],2:[function(require,module,exports){},{}],3:[function(require,module,exports){require(\"./a\")},{}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"./c\")},{\"./c\":3,\"./a\":2}],2:[function(require,module,exports){},{}],3:[function(require,module,exports){require(\"./a\")},{\"./a\":undefined}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"dep\")},{}],2:[function(require,module,exports){},{}]},{},[1]",
+        "{1:[function(require,module,exports){require()},{}]},{},[1]",
+    ] {
+        refused_as_unloaded(arguments);
+    }
+}
+
+#[test]
+fn a_request_mapped_to_an_id_the_bundle_does_not_hold_refuses_the_bundle() {
+    for arguments in [
+        "{1:[function(require,module,exports){require(\"./gone\")},{\"./gone\":9}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"./zero\")},{\"./zero\":0}],0:[function(require,module,exports){},{}]},{},[1]",
+    ] {
+        refused_as_unloaded(arguments);
+    }
 }
 
 #[test]
@@ -145,23 +163,44 @@ fn a_numeric_request_in_the_map_links_like_its_string_form() {
 }
 
 #[test]
-fn a_request_the_map_inherits_from_object_prototype_stays_as_written() {
-    let split = split(
-        "{1:[function(require,module,exports){require(\"toString\");require(\"constructor\")},{}],toString:[function(require,module,exports){},{}],constructor:[function(require,module,exports){},{}]},{},[1]",
-    );
-    assert_eq!(
-        split.code("index.js"),
-        "require(\"toString\");\nrequire(\"constructor\");"
+fn a_name_object_prototype_holds_refuses_the_bundle() {
+    for arguments in [
+        "{1:[function(require,module,exports){require(\"constructor\")},{}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"x\")},{\"x\":\"toString\"}],toString:[function(require,module,exports){},{}]},{},[1]",
+        "{constructor:[function(require,module,exports){},{}]},{},[\"constructor\"]",
+    ] {
+        refused_as_unloaded(arguments);
+    }
+}
+
+#[test]
+fn a_request_mapped_to_a_falsy_id_refuses_the_bundle() {
+    refused_as_unloaded(
+        "{main:[function(require,module,exports){require(\"helper\")},{\"helper\":0}],helper:[function(require,module,exports){},{}]},{},[\"main\"]",
     );
 }
 
 #[test]
-fn a_request_mapped_to_a_falsy_id_that_names_a_module_id_is_noted() {
-    let split = split(
-        "{main:[function(require,module,exports){require(\"helper\")},{\"helper\":0}],helper:[function(require,module,exports){},{}]},{},[\"main\"]",
-    );
-    assert_eq!(split.code("index.js"), "require(\"helper\");");
-    assert!(split.notes(UNMAPPED_MODULE_ID), "{:?}", split.notes);
+fn an_entry_that_is_not_a_module_refuses_the_bundle() {
+    for arguments in [
+        "{1:[function(require,module,exports){},{}]},{},[\"os\",1]",
+        "{1:[function(require,module,exports){},{}]},{},[1,9]",
+    ] {
+        refused_as_unloaded(arguments);
+    }
+}
+
+#[test]
+fn a_factory_browserify_does_not_run_like_a_file_refuses_the_bundle() {
+    for factory in [
+        "function*(require,module,exports){}",
+        "async function(require,module,exports){}",
+        "function(require,module,[exports]){}",
+        "function(require,module,exports,extra=1){}",
+        "function(require,module,...rest){}",
+    ] {
+        refused_as_unloaded(&format!("{{1:[{factory},{{}}]}},{{}},[1]"));
+    }
 }
 
 #[test]
@@ -180,8 +219,7 @@ fn the_entry_file_runs_every_later_entry_in_order() {
 fn later_entries_that_cannot_be_run_from_the_entry_file_are_noted() {
     for arguments in [
         "{1:[function(require,module,exports){if(exports.done)return;console.log(1)},{}],7:[function(require,module,exports){},{}]},{},[1,7]",
-        "{1:[function(require,module,exports){var require=null;console.log(1)},{}],7:[function(require,module,exports){},{}]},{},[1,7]",
-        "{1:[function(require,module,exports){console.log(1)},{}],7:[function(require,module,exports){},{}]},{},[1,9]",
+        "{1:[function(require,module,exports){function f(){var require=null}console.log(1)},{}],7:[function(require,module,exports){},{}]},{},[1,7]",
     ] {
         let split = split(arguments);
         assert!(!split.code("index.js").contains("7.js"), "{arguments}");
@@ -214,7 +252,7 @@ fn a_renamed_require_left_with_a_computed_request_refuses_the_bundle() {
     assert!(
         notes
             .iter()
-            .any(|note| note.contains("module 1") && note.contains("cannot link")),
+            .any(|note| note.contains("module 1") && note.contains("no bundle is written")),
         "{notes:?}"
     );
 }
@@ -290,9 +328,15 @@ fn a_module_that_only_calls_its_require_parameter_is_unpacked() {
 }
 
 #[test]
-fn a_require_parameter_named_require_may_be_declared_again() {
-    assert!(refusal(
-        "{1:[function(require,module,exports){var require=require(\"./a\");module.exports=require},{\"./a\":2}],2:[function(require,module,exports){module.exports=1},{}]},{},[1]",
-    )
-    .is_none());
+fn a_require_parameter_named_require_declared_or_assigned_again_refuses_the_bundle() {
+    for body in [
+        "var require=require(\"./a\");module.exports=require",
+        "var require;module.exports=require(\"./a\")",
+        "require=function(x){return x};module.exports=require(\"./a\")",
+    ] {
+        assert!(
+            refusal(&format!("{{1:[function(require,module,exports){{{body}}},{{\"./a\":2}}],2:[function(require,module,exports){{module.exports=1}},{{}}]}},{{}},[1]")).is_some(),
+            "{body}"
+        );
+    }
 }

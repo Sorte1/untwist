@@ -47,6 +47,7 @@ impl Pipeline {
             trust_free_loader: self.options.unsafe_transforms,
             trust_legacy_reads: self.options.unsafe_transforms,
             trust_builtins: self.options.unsafe_transforms,
+            module_goal: self.options.module_goal,
         }
     }
 
