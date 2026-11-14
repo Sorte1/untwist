@@ -99,14 +99,13 @@ fn inputs_that_share_no_names_come_out_as_they_do_alone() {
 
 #[test]
 fn a_script_global_never_takes_a_name_a_module_input_reads_free() {
-    let script = "var o = { width: Math.random() < 2 ? 1 : 0 };\nvar q = o.width;\nfunction show() { console.log(q); }\nshow();\n";
-    let module = "import x from \"./x.js\";\nconsole.log(typeof width, x);\n";
-    for unsafe_transforms in [false, true] {
-        let alone = Pipeline::new(lane(unsafe_transforms, RenameMode::Smart)).run(script);
-        assert!(alone.code().contains("var width ="), "{}", alone.code());
-        let codes = Pipeline::new(lane(unsafe_transforms, RenameMode::Smart))
-            .run_many(&[script, module])
-            .codes;
-        assert!(!codes[0].contains("var width ="), "{}", codes[0]);
-    }
+    let script =
+        "var _0xa = Math.random() < 2 ? 1 : 0;\nfunction show() { console.log(_0xa); }\nshow();\n";
+    let module = "import x from \"./x.js\";\nconsole.log(typeof a, x);\n";
+    let alone = Pipeline::new(lane(true, RenameMode::Simple)).run(script);
+    assert!(alone.code().contains("var a ="), "{}", alone.code());
+    let codes = Pipeline::new(lane(true, RenameMode::Simple))
+        .run_many(&[script, module])
+        .codes;
+    assert!(!codes[0].contains("var a ="), "{}", codes[0]);
 }

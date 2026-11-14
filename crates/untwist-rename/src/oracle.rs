@@ -1,6 +1,6 @@
 use oxc_semantic::Scoping;
 use oxc_syntax::scope::ScopeId;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::host_globals::is_host_global_property;
 use untwist_core::semantic::named_by_another_input;
@@ -162,7 +162,15 @@ impl<'s> NameOracle<'s> {
         self.collected.classic_script
             && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
             && self.scoping.symbol_name(symbol) != name
-            && (is_host_global_property(name) || named_by_another_input(name))
+            && (is_host_global_property(name)
+                || (self.collected.global_keys.contains(name)
+                    && self.lands_on_the_global_object(symbol))
+                || named_by_another_input(name))
+    }
+
+    fn lands_on_the_global_object(&self, symbol: SymbolId) -> bool {
+        let declared = SymbolFlags::FunctionScopedVariable.union(SymbolFlags::Function);
+        self.scoping.symbol_flags(symbol).intersects(declared)
     }
 
     fn uid_refusal(&self, name: &str, symbol: SymbolId) -> Option<Reason> {

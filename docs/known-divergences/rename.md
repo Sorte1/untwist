@@ -211,11 +211,7 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   value: `console.log(f)`, `console.dir`, `util.inspect` and the devtools show
   `[Function: newName]` or `NewClass { … }` for a function, a class or an instance, and
   `console.log(globalThis)` lists the global object's names. Like error stack traces, what the
-  host prints is outside the promise, so no guard looks for it. The global-name guard likewise
-  takes a call to a built-in or host function (`String`, `JSON.stringify`, `setTimeout`,
-  `clearInterval`, ...) to not list the global object's names; calls through `Object`,
-  `Reflect`, `Function`, `Proxy`, `eval`, `require` or the global object, calls that are handed
-  one of those, and calls of a function held in a variable still count.
+  host prints is outside the promise, so no guard looks for it.
 - **Function source under `smart`.** `smart` keeps every name inside or referenced by a function
   whose source the program reads (`'' + f`, `` `${f}` ``, `String(f)`, `f.toString()`), and leaves
   the whole program unrenamed when a function may read its own source through a method call on
@@ -228,16 +224,21 @@ Not divergences from the reference deobfuscator, but worth recording about the o
 - **Hoisting and the host's global object.** A sloppy block function and a `var` or parameter
   of the same name in its function are one binding to Annex B, so both keep their names. A `var`
   written inside a block or catch body counts where it hoists to, so no block-scoped binding in
-  that body takes its name and it takes none of theirs. In a classic script, every top-level
-  `var` and function keeps its name in every mode and both lanes when the file may read it off
-  the global object (`window.x`, `globalThis[k]`, `this.f()` at the top level, indirect `eval`)
-  or may observe the global object's names (`"x" in globalThis`, `hasOwnProperty`,
-  `Object.hasOwn`, `Object.keys`, `getOwnPropertyNames`, `Reflect.ownKeys`, `for…in`,
-  `getOwnPropertyDescriptor`); a key that is not a literal keeps them all. When several classic
-  scripts are given together they share one global scope, so no top-level binding of a classic
-  script is renamed in that run (`unique` still renames them: its counter is shared by every
-  input, so two inputs never hand out the same name), and no top-level binding of any input takes
-  a name another input binds at the top level or reads free. In a classic script, shorthand
+  that body takes its name and it takes none of theirs. In the safe lane no top-level binding of a
+  classic script is renamed, in any mode, by the wrapper pass or by library naming: a top-level
+  `var` or function is a property of the global object, and code can read it or test for it in
+  ways no scan sees in full (`this`, an alias, an inherited `hasOwnProperty`, `.constructor`,
+  another script). Locals and a module's top-level bindings are renamed as before. With
+  `--unsafe` they are renamed on the premise that no code observes a script global through the
+  global object or by its name; renaming still keeps every name the file may read off the global
+  object (`window.x`, `globalThis[k]`, `this.f()` at the top level, indirect `eval`) or whose
+  name it tests or lists with a spelling the scan sees (`"x" in globalThis`, `hasOwnProperty`,
+  `Object.keys`, ...). In both lanes a new top-level name is never a string, property name or
+  key that occurs in the file (so it cannot become the property the program asks about), a free
+  global of the file, or such a name in any other input of the run. When several classic scripts
+  are given together they share one global scope, so under `--unsafe` no top-level binding of a
+  classic script is renamed in that run either (`unique` still renames them: its counter is
+  shared by every input, so two inputs never hand out the same name). In a classic script, shorthand
   restoration leaves top-level `var` and function bindings alone (each is a property of the
   global object), and no mode gives a top-level binding the name of a browser or Node global
   property (`status`, `location`, `top`, `name`, `onload`, ...). When code built from text can

@@ -41,7 +41,11 @@ pub fn render(
     );
     let mut notes = Vec::new();
     let sem = build_scoping(&parsed.program);
-    let mut group = PassGroup::new(rename_passes(config), PassOptions::default());
+    let opts = PassOptions {
+        extended: config.extended,
+        ..PassOptions::default()
+    };
+    let mut group = PassGroup::new(rename_passes(config), opts);
     let (sem, report) = run_to_fixpoint(&alloc, &mut parsed.program, sem, &mut group);
     assert!(
         report.converged(),
