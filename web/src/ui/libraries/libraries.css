@@ -1,0 +1,136 @@
+.libraries-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  padding: 8px 14px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.diagnostics:has(.libraries-panel:not([hidden])) {
+  max-height: 64vh;
+}
+
+.lib-list {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.lib-tables {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.lib-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.lib-note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  max-width: 70ch;
+}
+
+.lib-item {
+  border-bottom: 1px solid var(--border);
+}
+
+.lib-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.lib-name {
+  font-weight: 600;
+}
+
+.lib-range {
+  font-size: 12px;
+}
+
+.lib-count {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.lib-modules {
+  margin: 0 0 6px;
+  padding: 0 0 0 14px;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.lib-jump {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lib-jump:hover, .lib-jump:focus-visible {
+  background: var(--code);
+}
+
+.lib-module-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.lib-module-at {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.lib-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.lib-table th {
+  padding: 3px 8px 3px 0;
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.lib-table td {
+  padding: 3px 8px 3px 0;
+  border-top: 1px solid var(--border);
+}
+
+.lib-table-row[data-state='skipped'] {
+  color: var(--muted);
+}
+
+.lib-table-row[data-state='failed'] .lib-table-state {
+  color: var(--warn);
+}
+
+.lib-table-size, .lib-table-ms {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lib-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}

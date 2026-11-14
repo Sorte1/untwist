@@ -2,7 +2,7 @@ import wasmUrl from './pkg/untwist_wasm_bg.wasm?url';
 import RunWorker from './run.worker.ts?worker';
 import type { LibraryTablesUsed, RunResult, WorkerReply } from './types';
 import type { SuppliedWasm } from '../wasm/wasm';
-import type { LibraryTables, LoadedTable } from '../libraries/tables';
+import type { LibraryTables, LoadedTable, TableTiming } from '../libraries/tables';
 import { librariesOn, MARK, tablesMark, type StageMark } from '../progress';
 import { sizeLabel } from '../dom';
 
@@ -26,6 +26,7 @@ interface Prepared {
   readonly failed: readonly string[];
   readonly scanMs: number;
   readonly loadMs: number;
+  readonly timings: readonly TableTiming[];
 }
 
 interface PrepareStep {
@@ -35,7 +36,7 @@ interface PrepareStep {
   readonly name: string;
 }
 
-const NO_TABLES: Prepared = { tables: [], failed: [], scanMs: 0, loadMs: 0 };
+const NO_TABLES: Prepared = { tables: [], failed: [], scanMs: 0, loadMs: 0, timings: [] };
 
 export type OnProgress = (mark: StageMark) => void;
 
@@ -146,6 +147,7 @@ export class Engine {
     return {
       tables: [...known.tables, ...fetched.tables],
       failed: [...known.failed, ...fetched.failed],
+      timings: [...known.timings, ...fetched.timings],
       scanMs,
       loadMs: known.loadMs + performance.now() - loadStarted,
     };
@@ -248,5 +250,6 @@ function used(prepared: Prepared, result: RunResult, reran: boolean): LibraryTab
     reran,
     scanMs: prepared.scanMs,
     loadMs: prepared.loadMs,
+    timings: prepared.timings,
   };
 }
