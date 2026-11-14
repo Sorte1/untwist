@@ -7,7 +7,7 @@ use untwist_deobfuscate::calls::agnostic::{names_reached_from, NamesReached};
 use untwist_eval::stack;
 
 use super::global_writes::{global_writes, GlobalWrites, EVERY_ROOT};
-use untwist_core::semantic::builtins::{self, Builtins};
+use untwist_core::semantic::builtins;
 
 struct Seen {
     script: bool,
@@ -48,7 +48,7 @@ fn unreadable() -> Seen {
     }
 }
 
-fn seen(source: &str) -> Seen {
+fn seen(source: &str, unsafe_transforms: bool) -> Seen {
     if !fits_this_stack(source) {
         return unreadable();
     }
@@ -76,9 +76,9 @@ fn seen(source: &str) -> Seen {
         global_written: {
             let mut written = global_writes(&parsed.program);
             let module = parsed.program.source_type.is_module();
-            written.every |= builtins::scan(&parsed.program, &scoping, module, false, &EVERY_ROOT)
-                .verdict
-                != Builtins::Intact;
+            let verdict =
+                builtins::scan(&parsed.program, &scoping, module, false, &EVERY_ROOT).verdict;
+            written.every |= !verdict.allows_safe(unsafe_transforms);
             written
         },
         readable: !has_error(&parsed.diagnostics),
@@ -105,11 +105,17 @@ fn other_script_names(all: &[Seen], own: usize) -> Vec<&str> {
     names
 }
 
-pub(super) fn shared_globals(sources: &[&str]) -> Vec<Option<SharedGlobals>> {
+pub(super) fn shared_globals(
+    sources: &[&str],
+    unsafe_transforms: bool,
+) -> Vec<Option<SharedGlobals>> {
     if sources.len() < 2 {
         return vec![None; sources.len()];
     }
-    let all: Vec<Seen> = sources.iter().map(|source| seen(source)).collect();
+    let all: Vec<Seen> = sources
+        .iter()
+        .map(|source| seen(source, unsafe_transforms))
+        .collect();
     let reached: Vec<NamesReached> = sources
         .iter()
         .enumerate()

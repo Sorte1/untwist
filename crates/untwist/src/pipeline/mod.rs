@@ -137,7 +137,7 @@ struct Batch<'s> {
 }
 
 impl<'s> Batch<'s> {
-    fn new(sources: &'s [&'s str], limits: Limits) -> Self {
+    fn new(sources: &'s [&'s str], limits: Limits, unsafe_transforms: bool) -> Self {
         let rename_state = shared_state();
         let slots = (0..sources.len())
             .map(|index| reserve(&rename_state, index))
@@ -149,7 +149,7 @@ impl<'s> Batch<'s> {
             stack: StackReserve::default(),
             stats: std::sync::Mutex::default(),
             limits,
-            shared: shared_scan::shared_globals(sources),
+            shared: shared_scan::shared_globals(sources, unsafe_transforms),
         }
     }
 
@@ -340,7 +340,7 @@ impl Pipeline {
 
     fn run_batch(&self, sources: &[&str], trust_the_reflow: bool) -> Output {
         let ladder = Ladder::new(self.options.hooks());
-        let batch = Batch::new(sources, self.limits());
+        let batch = Batch::new(sources, self.limits(), self.options.unsafe_transforms);
         let pooled = self.run_pooled(&batch, &ladder);
         ladder::on_a_worker_stack(&ladder, |_| {
             let mut results = pooled.unwrap_or_else(|| self.run_sequentially(&batch));
