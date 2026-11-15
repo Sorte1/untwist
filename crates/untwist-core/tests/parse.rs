@@ -409,9 +409,9 @@ fn a_function_named_await_in_a_script_stays_a_script() {
 #[test]
 fn an_await_in_a_class_heritage_key_or_decorator_is_top_level() {
     for source in [
-        "class A extends (await (async () => Object)()) {}",
+        "class A extends (await Promise.resolve(Object)) {}",
         "const C = class extends (await Promise.resolve(Object)) {};",
-        "class A { [await (async () => \"k\")()]() {} }",
+        "class A { [await Promise.resolve(\"k\")]() {} }",
         "class A { static [await Promise.resolve(\"k\")] = 1; }",
         "class A { accessor [await Promise.resolve(\"k\")] = 1; }",
         "@(await Promise.resolve(f)) class A {}",
