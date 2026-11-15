@@ -53,8 +53,8 @@ engine as WebAssembly, and your code never leaves the page.
   `__commonJSMin` factories and the plugin's interop helpers (`commonjsGlobal`, `getDefaultExportFromCjs`,
   `getAugmentedNamespace`, `commonjsRequire`) get their names back when minification or obfuscation took them:
   `requireModule3`, `hasRequiredModule3`, `module3`, or the module's own name when one survives. Only names change;
-  every wrapper still runs on its first call. In the safe lane a wrapper function whose value may reach a `name` read
-  (rename.md, "CommonJS wrapper names") keeps its name. `--disable name-commonjs-wrappers` turns it off.
+  every wrapper still runs on its first call. Without `--rename`, a wrapper function keeps its name unless its value
+  never leaves its call sites (rename.md, "CommonJS wrapper names"). `--disable name-commonjs-wrappers` turns it off.
 - **Libraries.** Recognises core-js 3 (`internals/*` and `modules/*`, every minor 3.0 to 3.51),
   regenerator-runtime, tslib, Babel helpers (`@babel/runtime` and inlined) and `@swc/helpers` by the exact shape
   of their functions, minified, mangled or obfuscated, and puts `// core-js 3.38–3.51: internals/global-this.js`
@@ -218,11 +218,19 @@ differ only for that object, which compares loosely equal to `null` without bein
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
 premise.
 
-With `--rename`, the safe lane keeps the name of every function and class when the file may read
-`name`: `.name`, any computed key that is not a number, a numeric loop counter or a literal naming another property
-(`f[key]`, `f["na" + "me"]`), reflection (`Reflect.get`, `getOwnPropertyDescriptor(s)`) and copies
-of a value's own properties (`Object.values`, `Object.assign`, `{ ...f }`), since renaming them
-would change what it reads. A read in `fn.toString()` text is not seen;
+The safe lane never changes the `name` of a function or class unless you ask for renaming. Built-ins
+and the host read `name` with no key in the program (`Error.prototype.toString`, WebCrypto
+algorithm objects, DOM sinks), so whether a program reads names cannot be decided from its text:
+every pass and every unpack rewrite keeps each function's and class's `name`, writing
+`(0, function () {})`, `{ old: fn }.old` or `let renamed = class old {}` where a value would
+otherwise gain or lose one, and leaving the code as it was (or the bundle whole) where no such form
+exists. With `--rename` (any mode), a function's or class's name, and anything derived from it
+(`Error.prototype.toString`, host APIs reading `name`), may change: renaming the binding that gives
+the name is what was asked for. The renamer still keeps, as a best effort, the name of a function or
+class when it sees the file read `name` (`.name`, a computed key that is not a number, a numeric
+loop counter or a literal naming another property, reflection, copies of own properties, code text),
+but that is not a promise. The other passes keep names under `--rename` as they do without it, so a
+function a pass moves keeps the name it had.
 [`docs/known-divergences/rename.md`](docs/known-divergences/rename.md) has the details.
 
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
