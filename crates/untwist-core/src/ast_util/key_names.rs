@@ -1,11 +1,12 @@
 use oxc_ast::ast::{
-    Argument, BinaryExpression, CallExpression, Expression, IdentifierName, ImportExpression,
-    Program, StringLiteral, TemplateElement, TemplateLiteral,
+    Argument, BinaryExpression, BindingPattern, CallExpression, Expression, IdentifierName,
+    ImportExpression, Program, StringLiteral, TemplateElement, TemplateLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::BinaryOperator;
-use rustc_hash::FxHashSet;
+use oxc_syntax::symbol::SymbolId;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 const REQUIRE: &str = "require";
 
@@ -78,21 +79,100 @@ impl<'a> Visit<'a> for KeyNames<'_> {
 
 const ESCAPE_LEVELS: usize = 4;
 
+const RESOLVE_DEPTH: u8 = 8;
+const INIT_PASSES: usize = 3;
+
 pub fn text_names(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<String> {
     let mut texts = TextNames {
         scoping,
         names: FxHashSet::default(),
+        inits: FxHashMap::default(),
+        pending: false,
     };
+    for _ in 0..INIT_PASSES {
+        let mut inits = Inits {
+            texts: &mut texts,
+            grew: false,
+        };
+        inits.visit_program(program);
+        let again = inits.grew && texts.pending;
+        texts.pending = false;
+        if !again {
+            break;
+        }
+    }
     texts.visit_program(program);
     texts.names
+}
+
+struct Inits<'t, 's> {
+    texts: &'t mut TextNames<'s>,
+    grew: bool,
+}
+
+impl<'a> Visit<'a> for Inits<'_, '_> {
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
+            let symbol = id.symbol_id.get();
+            let known = symbol.is_some_and(|symbol| self.texts.inits.contains_key(&symbol));
+            if let (Some(symbol), false) = (symbol, known) {
+                if let Some(text) = self.texts.resolved_text(init, RESOLVE_DEPTH) {
+                    self.texts.inits.insert(symbol, text);
+                    self.grew = true;
+                }
+            }
+        }
+        walk::walk_variable_declarator(self, it);
+    }
 }
 
 struct TextNames<'s> {
     scoping: &'s Scoping,
     names: FxHashSet<String>,
+    inits: FxHashMap<SymbolId, String>,
+    pending: bool,
 }
 
 impl TextNames<'_> {
+    fn resolved_text(&mut self, expression: &Expression<'_>, depth: u8) -> Option<String> {
+        let next = depth.checked_sub(1)?;
+        match expression.without_parentheses() {
+            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+                let left = self.resolved_text(&binary.left, next)?;
+                Some(left + &self.resolved_text(&binary.right, next)?)
+            }
+            Expression::TemplateLiteral(template) => self.template_text(template, next),
+            Expression::Identifier(id) => {
+                let symbol = self
+                    .scoping
+                    .get_reference(id.reference_id.get()?)
+                    .symbol_id()?;
+                let written = self
+                    .scoping
+                    .get_resolved_references(symbol)
+                    .any(|reference| reference.is_write());
+                if written {
+                    return None;
+                }
+                let text = self.inits.get(&symbol).cloned();
+                self.pending |= text.is_none();
+                text
+            }
+            other => literal_text(other),
+        }
+    }
+
+    fn template_text(&mut self, template: &TemplateLiteral<'_>, depth: u8) -> Option<String> {
+        let mut text = String::new();
+        for (index, quasi) in template.quasis.iter().enumerate() {
+            text.push_str(quasi.value.cooked.as_ref()?.as_str()?);
+            if let Some(substitution) = template.expressions.get(index) {
+                text.push_str(&self.resolved_text(substitution, depth)?);
+            }
+        }
+        Some(text)
+    }
+
     fn add(&mut self, text: &str) {
         let mut current = text.to_string();
         for _ in 0..ESCAPE_LEVELS {
@@ -223,9 +303,21 @@ impl<'a> Visit<'a> for TextNames<'_> {
         }
     }
 
+    fn visit_template_literal(&mut self, it: &TemplateLiteral<'a>) {
+        if !it.expressions.is_empty() {
+            if let Some(text) = self.template_text(it, RESOLVE_DEPTH) {
+                self.add(&text);
+            }
+        }
+        walk::walk_template_literal(self, it);
+    }
+
     fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
         let folded = (it.operator == BinaryOperator::Addition)
-            .then(|| literal_text(&it.left).zip(literal_text(&it.right)))
+            .then(|| {
+                self.resolved_text(&it.left, RESOLVE_DEPTH)
+                    .zip(self.resolved_text(&it.right, RESOLVE_DEPTH))
+            })
             .flatten();
         let Some((left, right)) = folded else {
             walk::walk_binary_expression(self, it);
@@ -234,6 +326,21 @@ impl<'a> Visit<'a> for TextNames<'_> {
         self.add(&(left + &right));
         self.visit_leaves(&it.left);
         self.visit_leaves(&it.right);
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        let bound = match (&it.id, &it.init) {
+            (BindingPattern::BindingIdentifier(id), Some(init)) if literal_text(init).is_none() => {
+                id.symbol_id
+                    .get()
+                    .and_then(|symbol| self.inits.get(&symbol).cloned())
+            }
+            _ => None,
+        };
+        if let Some(text) = bound {
+            self.add(&text);
+        }
+        walk::walk_variable_declarator(self, it);
     }
 }
 

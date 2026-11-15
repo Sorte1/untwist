@@ -300,9 +300,8 @@ pub fn script_lexicals_reachable_by_code<'a>(program: &'a Program<'a>, scoping: 
         runner_texts: true,
         ..reach_watch(watch)
     };
-    reach_of(&settle(program, scoping, (None, &[], watch)).0)
-        .reach_by_code
-        .is_some()
+    let found = reach_of(&settle(program, scoping, (None, &[], watch)).0);
+    found.reach.or(found.reach_by_code).is_some()
 }
 
 fn text_reach<'a>(

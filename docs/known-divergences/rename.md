@@ -280,10 +280,15 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   top-level binding: any literal text passed to `Function`, `eval`, a timer or a `constructor`
   that reads a runner or a global-object name (`Function("return eval")()(s)`,
   `Function("return [eval]")()[0](s)`, `(function () {}).constructor("return eval")()(s)`),
-  so its call result is treated like a direct runner call. In both lanes a new top-level name is
+  so its call result is treated like a direct runner call. Under `--unsafe` a keyed read of the
+  global object (or of a function, for `constructor`) whose key the scan cannot resolve keeps
+  `let`, `const` and `class` names too, since the value read may be `eval` or `Function`. In both
+  lanes a new top-level name is
   never a string, property name or key that occurs in the file (so it cannot become the property
   the program asks about), a word that a string or template of the file spells, after its
-  escapes are read (so `Function("return typeof a")` and `Function("a = 5")` keep asking about
+  escapes are read and with `+` chains and templates joined through never-written bindings
+  whose value is such a text (`const p = "LN"; Function("return typeof v" + p + "1")` spells
+  `vLN1`) (so `Function("return typeof a")` and `Function("a = 5")` keep asking about
   the same global; this holds for top-level `let`, `const` and `class` too), a free global of
   the file, or such a name in any other input of the run. When several classic scripts
   are given together they share one global scope, so under `--unsafe` no top-level binding of a
@@ -297,7 +302,12 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   script's top-level declarations as well: `fold-pure-calls` still folds the calls of a top-level
   pure function, and `inline-object-props` still inlines the reads of a top-level object, but
   both leave the declaration in place, and `merge-object-assignments` does not move a top-level
-  object into its only use.
+  object into its only use. Two removals still rest on the premise that one input file is a
+  closed program, so a script outside the run that reads these names finds them gone: a
+  stateful fold removes a top-level counter and the function that bumps it (`var c = 0;
+  function next() { c = c + 1; return c; }`, keeping the declarations would leave the counter
+  at its old value), and the string-array decoder removes a top-level array and the function
+  that looks it up.
 - **CommonJS wrapper names** (`name-commonjs-wrappers`, on in every mode and both lanes). It
   renames only the bindings of a recognised wrapper and only when no code can see the old
   name: every function whose text holds one of them is an IIFE, a discarded function

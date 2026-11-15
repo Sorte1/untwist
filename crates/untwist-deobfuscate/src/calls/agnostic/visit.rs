@@ -83,6 +83,10 @@ impl<'s, 'a> Sites<'s, 'a> {
         {
             let function = function.without_parentheses();
             self.direct.insert(span_key(function.span()));
+            if let Some(forwarded) = function.as_member_expression() {
+                let keys = self.member_keys(forwarded);
+                self.reach_reflective_read(forwarded, &keys);
+            }
             self.note_forwarded_reader(function, call.span);
             self.check_forwarded_runner(call, function, forward);
         }
@@ -555,6 +559,7 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         let escaped = !self.direct.contains(&start) && !self.tests.contains(&start);
         if escaped {
             self.note_script_read(&parent_keys);
+            self.reach_reflective_read(it, &parent_keys);
         }
         if escaped
             && parent_keys.iter().any(|key| self.key_origin(key).any())

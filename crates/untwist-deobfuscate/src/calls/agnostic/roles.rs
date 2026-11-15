@@ -26,6 +26,29 @@ pub(super) const READERS: [&str; 5] = [
     "__lookupSetter__",
 ];
 
+pub(super) const REFLECTIVE_WRITERS: [&str; 8] = [
+    "set",
+    "defineProperty",
+    "deleteProperty",
+    "setPrototypeOf",
+    "assign",
+    "defineProperties",
+    "__defineGetter__",
+    "__defineSetter__",
+];
+
+pub(super) const VIEW_READERS: [&str; 5] = [
+    "get",
+    "getOwnPropertyDescriptor",
+    "getOwnPropertyDescriptors",
+    "values",
+    "entries",
+];
+
+pub(super) fn reflective_access(name: &str) -> bool {
+    REFLECTIVE_WRITERS.contains(&name) || VIEW_READERS.contains(&name)
+}
+
 pub(super) const TARGETED_READERS: [&str; 2] = ["get", "getOwnPropertyDescriptor"];
 
 pub(super) const RUNNERS: [&str; 14] = [
