@@ -163,41 +163,6 @@ pub fn timer_text_refused(argument: Option<&Argument<'_>>) -> Option<&'static st
     }
 }
 
-fn names_a_literal(expr: &Expression<'_>) -> bool {
-    matches!(
-        expr.without_parentheses(),
-        Expression::ArrayExpression(_)
-            | Expression::StringLiteral(_)
-            | Expression::TemplateLiteral(_)
-            | Expression::NumericLiteral(_)
-            | Expression::BooleanLiteral(_)
-            | Expression::RegExpLiteral(_)
-            | Expression::ObjectExpression(_)
-    )
-}
-
-pub fn function_literal(expr: &Expression<'_>) -> bool {
-    match expr.without_parentheses() {
-        Expression::FunctionExpression(_)
-        | Expression::ArrowFunctionExpression(_)
-        | Expression::ClassExpression(_) => true,
-        Expression::StaticMemberExpression(member) => names_a_literal(&member.object),
-        Expression::ComputedMemberExpression(member) => names_a_literal(&member.object),
-        Expression::CallExpression(call) => {
-            let prototype_of = matches!(call.callee.without_parentheses(),
-                Expression::StaticMemberExpression(member)
-                    if member.property.name == "getPrototypeOf");
-            prototype_of
-                && call
-                    .arguments
-                    .first()
-                    .and_then(Argument::as_expression)
-                    .is_some_and(function_literal)
-        }
-        _ => false,
-    }
-}
-
 pub fn global_object<'k>(expr: &'k Expression<'_>) -> Option<&'k str> {
     match expr.without_parentheses() {
         Expression::Identifier(id) if GLOBAL_OBJECTS.contains(&id.name.as_str()) => {

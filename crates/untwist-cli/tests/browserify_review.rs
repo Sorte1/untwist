@@ -8,13 +8,14 @@ use untwist_testing::node_rows::node_or_skip;
 const DEFAULT: &[&str] = &[];
 const UNSAFE: &[&str] = &["--unsafe"];
 const LANES: [&[&str]; 2] = [DEFAULT, UNSAFE];
-const PREMISE_ROWS: [(&str, &[&str]); 15] = [
+const PREMISE_ROWS: [(&str, &[&str]); 16] = [
     ("a23", UNSAFE),
     ("r5bs3", UNSAFE),
     ("r5ev1", UNSAFE),
     ("r5ev2", UNSAFE),
     ("r5ev6", UNSAFE),
     ("r5ev7", UNSAFE),
+    ("r5ev15", UNSAFE),
     ("r5pr9", UNSAFE),
     ("r5pr10", UNSAFE),
     ("r5im2", UNSAFE),
@@ -229,7 +230,7 @@ fn host_route_probes_run_like_their_bundles_in_both_lanes() {
         return;
     };
     let inputs = inputs(ROUTE_INPUTS);
-    assert!(inputs.len() >= 100, "found {} inputs", inputs.len());
+    assert!(inputs.len() >= 101, "found {} inputs", inputs.len());
     let wrong = parity_failures(&node, &inputs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

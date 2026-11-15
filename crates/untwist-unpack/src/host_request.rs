@@ -11,10 +11,9 @@ use untwist_core::semantic::build_scoping;
 use crate::browserify::requests::package_name;
 use crate::closed::calls_host_require;
 use crate::host_text::{
-    creator_import, function_literal, function_text_refused, global_object, member_name,
-    runtime_line, script_text_refused, timer_text_refused, RuntimeLine, CODE_BUILTIN, CONSTRUCTOR,
-    EVAL, FUNCTION, MODULE, MODULE_MEMBERS, OWN_FILE_NAMES, PROCESS_MEMBERS, REQUIRE_MEMBERS,
-    TIMERS,
+    creator_import, function_text_refused, global_object, member_name, runtime_line,
+    script_text_refused, timer_text_refused, RuntimeLine, CODE_BUILTIN, CONSTRUCTOR, EVAL,
+    FUNCTION, MODULE, MODULE_MEMBERS, OWN_FILE_NAMES, PROCESS_MEMBERS, REQUIRE_MEMBERS, TIMERS,
 };
 use crate::model::{Bundle, BundleKind, LeftImport, Module, RequireParam};
 use crate::scan::{is_direct_eval, is_free};
@@ -269,9 +268,6 @@ impl<'s> HostUses<'s> {
         let name = member_name(member)?;
         let on_global = global_object(member.object()).is_some();
         match name {
-            CONSTRUCTOR if function_literal(member.object()) => {
-                Some(function_text_refused(arguments).map(|why| ("a function's constructor", why)))
-            }
             FUNCTION if on_global => {
                 Some(function_text_refused(arguments).map(|why| (FUNCTION, why)))
             }
@@ -292,7 +288,7 @@ impl<'s> HostUses<'s> {
         let object = member.object();
         let name = member_name(member);
         let refused = match name {
-            Some(CONSTRUCTOR) if function_literal(object) => Some("a function's constructor"),
+            Some(CONSTRUCTOR) => Some("a .constructor member, which may be a function's"),
             Some(FUNCTION | EVAL) if global_object(object).is_some() => Some("a code runner"),
             _ => None,
         };
@@ -499,7 +495,7 @@ impl Mentions<'_> {
                 return name
                     .is_none_or(|name| [FUNCTION, EVAL].contains(&name) || TIMERS.contains(&name));
             }
-            _ => return name == Some(CONSTRUCTOR) && function_literal(object),
+            _ => return name == Some(CONSTRUCTOR),
         };
         name.is_none_or(|name| !allowed.contains(&name))
     }
@@ -782,6 +778,12 @@ mod tests {
             "var e = eval;",
             "var F = Function;",
             "(function () {}).constructor('return process')();",
+            "(function () {}).constructor('return 1')();",
+            "var f = function () {}; var F = f.constructor; F('return 1');",
+            "f.constructor('return 1')();",
+            "new this.constructor(1);",
+            "x.constructor === Object;",
+            "x['constructor'];",
             "var F = (function () {}).constructor;",
             "[]['filter']['constructor']('return require')();",
             "setTimeout(\"import('./a.js')\");",
@@ -799,6 +801,7 @@ mod tests {
         for text in [
             "typeof import.meta;",
             "typeof import.meta.url;",
+            "typeof x.constructor;",
             "process.env.NODE_ENV; process.nextTick(f); process.platform;",
             "module.exports = 1; typeof module;",
             "typeof require;",
