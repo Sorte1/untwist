@@ -104,9 +104,22 @@ fn assert_contains(label: &str, code: &str, wanted: &str) {
 #[test]
 fn every_wrapper_shape_is_named_from_evidence_or_a_stable_number() {
     for (label, source, wanted) in NAMED {
-        let code = safe(source);
+        let code = lane(true)(source);
         for wanted in *wanted {
             assert_contains(label, &code, wanted);
+        }
+    }
+}
+
+#[test]
+fn the_default_lane_names_a_wrappers_bindings_but_no_function() {
+    for (label, source, wanted) in NAMED {
+        let code = safe(source);
+        for wanted in *wanted {
+            match wanted.starts_with("function ") && !source.contains(wanted) {
+                true => assert!(!code.contains(wanted), "{label}: {wanted:?} in\n{code}"),
+                false => assert_contains(label, &code, wanted),
+            }
         }
     }
 }

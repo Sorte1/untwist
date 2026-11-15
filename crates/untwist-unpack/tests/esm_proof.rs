@@ -36,7 +36,11 @@ fn printed_with(text: &str, options: UnpackOptions) -> Option<Vec<String>> {
 }
 
 fn unpacked(factories: &[&str]) -> Vec<String> {
-    printed_with(&source(HELPERS, factories), UnpackOptions::default()).expect("a bundle")
+    let trusting = UnpackOptions {
+        trust_names: true,
+        ..UnpackOptions::default()
+    };
+    printed_with(&source(HELPERS, factories), trusting).expect("a bundle")
 }
 
 fn converted(code: &str) -> bool {

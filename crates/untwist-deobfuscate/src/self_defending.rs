@@ -4,6 +4,7 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::AssignmentOperator;
+use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::literal::{is_false_literal, is_true_literal};
@@ -334,7 +335,7 @@ fn shell_statements<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k AVec<'a, Stat
     Some(&function.body.as_ref()?.statements)
 }
 
-fn set_flag<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
+fn set_flag<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k IdentifierReference<'a>> {
     let Statement::ExpressionStatement(stmt) = stmt else {
         return None;
     };
@@ -345,23 +346,47 @@ fn set_flag<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
         return None;
     };
     (assignment.operator == AssignmentOperator::Assign && is_true_literal(&assignment.right))
-        .then_some(target.name.as_str())
+        .then_some(&**target)
 }
 
-fn returner(expr: &Expression<'_>, flags: &[&str]) -> bool {
+fn returner_flag<'f>(expr: &Expression<'_>, flags: &[&'f str]) -> Option<&'f str> {
     let (params, body) = match without_unnamed(expr.without_parentheses()).without_parentheses() {
         Expression::FunctionExpression(function) if function.id.is_none() => {
             (&function.params, function.body.as_deref())
         }
         Expression::ArrowFunctionExpression(arrow) if !arrow.r#async => match &arrow.body {
             ArrowFunctionBody::FunctionBody(body) => (&arrow.params, Some(&**body)),
-            _ => return false,
+            _ => return None,
         },
-        _ => return false,
+        _ => return None,
     };
     flags
         .iter()
-        .any(|flag| returner_matches(params, body, flag))
+        .copied()
+        .find(|flag| returner_matches(params, body, flag))
+}
+
+fn returner(expr: &Expression<'_>, flags: &[&str]) -> bool {
+    returner_flag(expr, flags).is_some()
+}
+
+fn flag_of_statement<'f>(stmt: &Statement<'_>, flags: &[&'f str]) -> Option<&'f str> {
+    if let Some((_, Some(init))) = single_declarator(stmt) {
+        return returner_flag(init, flags)
+            .or_else(|| call_parts(init).and_then(|(callee, _)| returner_flag(callee, flags)));
+    }
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return None;
+    };
+    let (outer, _) = call_parts(&stmt.expression)?;
+    let (inner, _) = call_parts(outer.without_parentheses())?;
+    returner_flag(inner, flags)
+}
+
+struct FlagUse {
+    reference: Option<ReferenceId>,
+    set_at: Span,
+    returner_at: Span,
 }
 
 fn flag_controller(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
@@ -375,6 +400,7 @@ struct Controllers {
     inline: bool,
     returner_calls: Vec<Span>,
     returner_variables: FxHashSet<SymbolId>,
+    flags: Vec<FlagUse>,
 }
 
 fn returner_variable(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
@@ -399,8 +425,22 @@ fn inline_controller_call(stmt: &Statement<'_>) -> bool {
 
 impl<'a> VisitJs<'a> for Controllers {
     fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
-        let flags: Vec<&str> = it.iter().filter_map(set_flag).collect();
+        let set: Vec<(&IdentifierReference<'a>, Span)> = it
+            .iter()
+            .filter_map(|stmt| set_flag(stmt).map(|target| (target, stmt.span())))
+            .collect();
+        let flags: Vec<&str> = set.iter().map(|(target, _)| target.name.as_str()).collect();
         for stmt in it {
+            if let Some(flag) = flag_of_statement(stmt, &flags) {
+                self.flags
+                    .extend(set.iter().filter(|(target, _)| target.name == flag).map(
+                        |(target, at)| FlagUse {
+                            reference: target.reference_id.get(),
+                            set_at: *at,
+                            returner_at: stmt.span(),
+                        },
+                    ));
+            }
             if let Some(symbol) = controller_declaration(stmt) {
                 self.found.insert(symbol);
             }
@@ -590,6 +630,34 @@ fn removed_declaration(spans: &[Span], declared: Span) -> bool {
         .any(|span| span.start <= declared.start && declared.end <= span.end)
 }
 
+fn flag_read_elsewhere(
+    program: &Program<'_>,
+    flags: &[FlagUse],
+    spans: &[Span],
+    scoping: &Scoping,
+) -> bool {
+    let removed: Vec<&FlagUse> = flags
+        .iter()
+        .filter(|flag| removed_declaration(spans, flag.returner_at))
+        .collect();
+    if removed.is_empty() {
+        return false;
+    }
+    let mut symbols = FxHashSet::default();
+    for flag in &removed {
+        let symbol = flag
+            .reference
+            .and_then(|reference| scoping.get_reference(reference).symbol_id());
+        let Some(symbol) = symbol else {
+            return true;
+        };
+        symbols.insert(symbol);
+    }
+    let mut ignored = spans.to_vec();
+    ignored.extend(removed.iter().map(|flag| flag.set_at));
+    has_stray_reference(program, &symbols, &ignored, scoping)
+}
+
 fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     let mut controllers = Controllers::default();
     controllers.visit_program(program);
@@ -632,7 +700,9 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     spans.extend(bare.spans);
     let mut tracked = proven.clone();
     tracked.extend(variables);
-    if has_stray_reference(program, &tracked, &spans, scoping) {
+    if has_stray_reference(program, &tracked, &spans, scoping)
+        || flag_read_elsewhere(program, &controllers.flags, &spans, scoping)
+    {
         return Plan::Refused;
     }
     match (spans.is_empty(), kept) {

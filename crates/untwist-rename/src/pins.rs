@@ -137,7 +137,7 @@ fn pin_function_names(
     let read = always || names.name_read || untwist_core::semantic::names_read_by_another_input();
     if read {
         for giver in names.givers {
-            if collected.pinned.insert(giver) {
+            if collected.pinned.insert(giver) && !always {
                 collected.name_pinned.insert(giver);
             }
         }

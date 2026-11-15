@@ -53,8 +53,9 @@ engine as WebAssembly, and your code never leaves the page.
   `__commonJSMin` factories and the plugin's interop helpers (`commonjsGlobal`, `getDefaultExportFromCjs`,
   `getAugmentedNamespace`, `commonjsRequire`) get their names back when minification or obfuscation took them:
   `requireModule3`, `hasRequiredModule3`, `module3`, or the module's own name when one survives. Only names change;
-  every wrapper still runs on its first call. Without `--rename`, a wrapper function keeps its name unless its value
-  never leaves its call sites (rename.md, "CommonJS wrapper names"). `--disable name-commonjs-wrappers` turns it off.
+  every wrapper still runs on its first call. Without `--rename` every function keeps its name, the wrapper functions
+  and interop helpers included; only the flag, holder and parameter bindings are renamed (rename.md, "CommonJS
+  wrapper names"). `--disable name-commonjs-wrappers` turns it off.
 - **Libraries.** Recognises core-js 3 (`internals/*` and `modules/*`, every minor 3.0 to 3.51),
   regenerator-runtime, tslib, Babel helpers (`@babel/runtime` and inlined) and `@swc/helpers` by the exact shape
   of their functions, minified, mangled or obfuscated, and puts `// core-js 3.38–3.51: internals/global-this.js`

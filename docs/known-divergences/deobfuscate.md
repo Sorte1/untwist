@@ -686,6 +686,12 @@
   program are judged on their own. A callback whose strings are still encoded when the
   protections stage runs (`atob(…)`, a split string) only matches after cleanup has folded
   them, so the stage runs a second time after cleanup when cleanup changed the program.
+  A controller that keeps its flag outside itself (`o = true; var r = (n, t) => { …; o = false;
+  return e; }`, also terser's `var o, r = (o = true, …)` and `(0, …)`) is removed, in both
+  modes, only when nothing but the `o = true` statement and the controller reads or writes `o`:
+  the controller sets it to `false` when it runs, so a later read of `o` (directly, through a
+  closure, or by an undeclared global `o`) keeps every call of the controller and the
+  controller, with the same note.
   `--unsafe` trusts the controller shape, as the reference deobfuscator does, so a domain lock
   or a hand-written function run through such a helper is removed there. `debug-protection`
   removes, in both modes, a function only when its body is the protection template, and an

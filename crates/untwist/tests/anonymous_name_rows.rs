@@ -508,3 +508,53 @@ fn the_default_lane_keeps_every_name_a_built_in_or_host_may_read() {
     assert!(unexplained.is_empty(), "{}", unexplained.join("\n"));
     assert_eq!(premise, RR4_RENAME_PREMISE);
 }
+
+const RR5_ROWS: &str = include_str!("data/name_guard_rr5_rows.txt");
+
+const RR5_RENAME_PREMISE: [&str; 14] = [
+    "rr5-c03", "rr5-c05", "rr5-c09", "rr5-c20", "rr5-c26", "rr5-c40", "rr5-c42", "rr5-c44",
+    "rr5-c45", "rr5-c46", "rr5-c47", "rr5-c48", "rr5-c49", "rr5-c50",
+];
+
+const RR5_UNSAFE_WITNESSES: [&str; 24] = [
+    "rr5-c01", "rr5-c02", "rr5-c03", "rr5-c08", "rr5-c10", "rr5-c11", "rr5-c20", "rr5-c27",
+    "rr5-c40", "rr5-c42", "rr5-c44", "rr5-c45", "rr5-c46", "rr5-c47", "rr5-c49", "rr5-c53",
+    "rr5-c54", "rr5-c55", "rr5-c60", "rr5-c61", "rr5-c62", "rr5-c66", "rr5-c75", "rr5-c78",
+];
+
+#[test]
+fn the_default_lane_keeps_wrapper_names_and_self_defending_flags() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let programs: Vec<(String, String)> = RR5_ROWS
+        .lines()
+        .filter_map(|line| line.split_once('|'))
+        .map(|(label, program)| (label.to_string(), program.to_string()))
+        .collect();
+    assert!(programs.len() >= 70, "found {} rows", programs.len());
+    let safe = Options::default();
+    let run_safe = |source: &str| transformed(&safe, source);
+    let smart = |source: &str| renamed(RenameMode::Smart, source);
+    let mangle = |source: &str| renamed(RenameMode::Mangle, source);
+    let simple = |source: &str| renamed(RenameMode::Simple, source);
+    let unique = |source: &str| renamed(RenameMode::Unique, source);
+    let unsafe_transforms = unsafe_options();
+    let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
+    let renaming: [Mode<'_>; 5] = [
+        ("default", &run_safe),
+        ("rename smart", &smart),
+        ("rename mangle", &mangle),
+        ("rename simple", &simple),
+        ("rename unique", &unique),
+    ];
+    let wrong = node_rows::mismatches(&node, &programs, &renaming);
+    let (unexplained, premise) = rename_premise_rows(wrong, &RR5_RENAME_PREMISE);
+    assert!(unexplained.is_empty(), "{}", unexplained.join("\n"));
+    assert_eq!(premise, RR5_RENAME_PREMISE);
+    let unsafe_lane: [Mode<'_>; 1] = [("unsafe", &run_unsafe)];
+    let wrong = node_rows::mismatches(&node, &programs, &unsafe_lane);
+    let (unexplained, witnesses) = listed_unsafe_witnesses(wrong, &RR5_UNSAFE_WITNESSES);
+    assert!(unexplained.is_empty(), "{}", unexplained.join("\n"));
+    assert_eq!(witnesses, RR5_UNSAFE_WITNESSES);
+}

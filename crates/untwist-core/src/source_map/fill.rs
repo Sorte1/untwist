@@ -6,6 +6,7 @@ use oxc_span::Span;
 
 use super::origins::Origins;
 use crate::ast_util::respan::SYNTHETIC_BASE;
+use crate::reflow::PLACED;
 
 const NO_PARENT: u32 = u32::MAX;
 
@@ -70,7 +71,10 @@ impl<'a> VisitMut<'a> for Collect<'_> {
     fn visit_span(&mut self, it: &mut Span) {
         let index = u32::try_from(self.entries.len()).unwrap_or(NO_PARENT);
         let parent = self.parent();
-        let span = self.forced(*it);
+        let span = match *it == PLACED {
+            true => PLACED,
+            false => self.forced(*it),
+        };
         self.entries.push(Entry { span, parent });
         if let Some(frame @ None) = self.frames.last_mut() {
             *frame = Some(index);
@@ -120,6 +124,7 @@ fn settled(entries: &[Entry], is_real: impl Fn(Span) -> bool) -> Vec<Span> {
     let mut spans: Vec<Span> = Vec::with_capacity(entries.len());
     for (index, entry) in entries.iter().enumerate() {
         let span = match (is_real(entry.span), first[index]) {
+            _ if entry.span == PLACED => Span::default(),
             (true, _) => entry.span,
             (false, Some(found)) => found,
             (false, None) => spans
@@ -165,7 +170,8 @@ fn staggered(spans: Vec<Span>, entries: &[Entry], text: &str) -> Vec<Span> {
     let mut depth = vec![0usize; spans.len()];
     for index in (1..spans.len().saturating_sub(1)).rev() {
         let nested = entries[index + 1].parent as usize == index;
-        if nested && !spans[index].is_empty() && spans[index + 1].start == spans[index].start {
+        let shared = !spans[index + 1].is_empty() && spans[index + 1].start == spans[index].start;
+        if nested && !spans[index].is_empty() && shared {
             depth[index] = if depth[index + 1] == 1 { 2 } else { 1 };
         }
     }
