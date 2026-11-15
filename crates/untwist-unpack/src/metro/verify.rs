@@ -123,6 +123,13 @@ impl Contexts {
         }
     }
 
+    fn tagged(&mut self, it: &TaggedTemplateExpression<'_>) {
+        if let Some(member) = it.tag.without_parentheses().as_member_expression() {
+            self.method_objects
+                .extend(self.watched_span(member.object()));
+        }
+    }
+
     fn static_member(&mut self, it: &StaticMemberExpression<'_>) {
         if let Some(span) = self.watched_span(&it.object) {
             if !it.optional {
@@ -283,6 +290,10 @@ impl<'a> Policy<'a> for Rules<'_, '_, '_, 'a> {
         let eval = is_direct_eval(self.scoping, &it.callee);
         self.refuse_factory(eval);
         Step::Walk
+    }
+
+    fn tagged(&mut self, it: &TaggedTemplateExpression<'a>) {
+        self.contexts.tagged(it);
     }
 
     fn static_member(&mut self, it: &StaticMemberExpression<'a>) -> Step {

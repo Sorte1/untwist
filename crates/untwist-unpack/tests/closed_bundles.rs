@@ -7,6 +7,7 @@ use untwist_core::print::pretty_codegen;
 use untwist_unpack::{unpack_inputs, BundleKind, UnpackOptions};
 
 const NOT_CLOSED: &str = "is not closed over its own scope; no bundle is written";
+const BESIDE: &str = "the program runs code beside the bundle";
 const NOT_BROWSERIFY: &str = "is not proven to be browserify's output; no bundle is written";
 const REFUSED_SHAPES: usize = 20_000;
 const LINEAR_FACTOR: u32 = 5;
@@ -95,7 +96,7 @@ const CONSERVATIVE: UnpackOptions = UnpackOptions {
     assume_modules: false,
     conservative: true,
     trust_free_loader: false,
-    trust_legacy_reads: false,
+    prove_frames: false,
     trust_builtins: false,
     module_goal: false,
 };
@@ -104,6 +105,12 @@ struct Outcome {
     kind: Option<BundleKind>,
     notes: Vec<String>,
     unchanged: bool,
+}
+
+impl Outcome {
+    fn taken(&self, kind: BundleKind) -> bool {
+        self.kind == Some(kind) || self.notes.iter().any(|note| note.starts_with(BESIDE))
+    }
 }
 
 fn outcome(source: &str, options: UnpackOptions) -> Outcome {
@@ -125,7 +132,7 @@ fn a_bundle_of_closed_factories_is_taken() {
     for (shape, kind, _) in SHAPES {
         for body in CLOSED_BODIES {
             let found = outcome(&shape.replace("BODY", body), UnpackOptions::default());
-            assert_eq!(found.kind, Some(kind), "{body}\n{shape}");
+            assert!(found.taken(kind), "{body}\n{shape}\n{:?}", found.notes);
             assert!(
                 !found.notes.iter().any(|note| note.contains(NOT_CLOSED)),
                 "{body}: {:?}",
@@ -206,12 +213,13 @@ fn the_reference_lane_takes_a_bundle_without_the_proof() {
 }
 
 #[test]
-fn a_closed_bundle_after_a_refused_one_is_the_one_taken() {
+fn a_closed_bundle_after_a_refused_one_is_found_and_the_code_before_it_keeps_the_file_whole() {
     let refused = WEBPACK_4.replace("BODY", "greeting");
-    let closed = CHUNK.replace("BODY", "__webpack_require__(\"b\")");
-    let source = format!("{refused}\n{closed}");
+    let closed = CHUNK
+        .replace("var greeting = \"hello\";", "")
+        .replace("BODY", "__webpack_require__(\"b\")");
     let alloc = Allocator::default();
-    let parsed = parse_program(&alloc, &source);
+    let parsed = parse_program(&alloc, &closed);
     let mut programs = vec![parsed.program];
     let (bundle, _) = unpack_inputs(&alloc, &mut programs, &[], UnpackOptions::default());
     let bundle = bundle.expect("the chunk");
@@ -224,6 +232,13 @@ fn a_closed_bundle_after_a_refused_one_is_the_one_taken() {
     assert_eq!(
         pretty_codegen(bundle.modules["b"].program()).trim_end(),
         "module.exports = \"world\";"
+    );
+    let found = outcome(&format!("{refused}\n{closed}"), UnpackOptions::default());
+    assert_eq!(found.kind, None);
+    assert!(
+        found.notes.iter().any(|note| note.starts_with(BESIDE)),
+        "{:?}",
+        found.notes
     );
 }
 
@@ -335,7 +350,7 @@ fn an_arrow_factory_whose_this_belongs_to_a_nested_function_or_class_is_taken() 
     for shape in [arrow_factories(WEBPACK_4), WEBPACK_5.to_string()] {
         for body in OWN_RECEIVER {
             let found = outcome(&shape.replace("BODY", body), UnpackOptions::default());
-            assert_eq!(found.kind, Some(BundleKind::Webpack), "{body}\n{shape}");
+            assert!(found.taken(BundleKind::Webpack), "{body}\n{shape}");
         }
     }
 }
@@ -345,7 +360,7 @@ fn a_function_factory_has_its_own_this_and_is_taken() {
     for (shape, kind, _) in [SHAPES[0], SHAPES[2], SHAPES[3]] {
         for body in ["this", "this.tag", "new.target"] {
             let found = outcome(&shape.replace("BODY", body), UnpackOptions::default());
-            assert_eq!(found.kind, Some(kind), "{body}\n{shape}");
+            assert!(found.taken(kind), "{body}\n{shape}");
         }
     }
 }

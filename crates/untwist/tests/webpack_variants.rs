@@ -69,12 +69,26 @@ fn cells() -> Vec<Cell> {
     cells
 }
 
-fn lane(deobfuscate: bool) -> Options {
+const FRAME_NOTES: [&str; 2] = [
+    "the bundle is not strict code",
+    "would be written as a sloppy file",
+];
+
+fn lane(deobfuscate: bool, unsafe_transforms: bool) -> Options {
     Options {
         deobfuscate,
         unminify: deobfuscate,
+        unsafe_transforms,
         ..Options::default()
     }
+}
+
+fn kept_whole_for_its_frames(written: &Written) -> bool {
+    !written.bundled
+        && written
+            .notes
+            .iter()
+            .any(|note| FRAME_NOTES.iter().any(|frame| note.contains(frame)))
 }
 
 struct Written {
@@ -100,13 +114,21 @@ fn unpacked(cell: &Cell, options: Options) -> Written {
     }
 }
 
-fn check(cell: &Cell, deobfuscate: bool, node: Option<&PathBuf>) -> Option<String> {
-    let written = unpacked(cell, lane(deobfuscate));
-    let lane = if deobfuscate {
-        "default"
-    } else {
-        "unpack-only"
+fn check(
+    cell: &Cell,
+    (deobfuscate, unsafe_transforms): (bool, bool),
+    node: Option<&PathBuf>,
+) -> Option<String> {
+    let written = unpacked(cell, lane(deobfuscate, unsafe_transforms));
+    let lane = match (deobfuscate, unsafe_transforms) {
+        (true, false) => "default",
+        (false, false) => "unpack-only",
+        (true, true) => "--unsafe",
+        (false, true) => "unpack-only --unsafe",
     };
+    if !unsafe_transforms && kept_whole_for_its_frames(&written) {
+        return None;
+    }
     match &cell.expect {
         Expect::RunsWhenDeobfuscated if !deobfuscate => {
             if written.bundled && written.dir.path().join(ENTRY).exists() {
@@ -176,7 +198,10 @@ fn every_webpack_variant_unpacks_and_runs_as_its_expect_row_says() {
     let node = node_or_skip();
     let failures: Vec<String> = cells()
         .iter()
-        .flat_map(|cell| [false, true].map(|deobfuscate| check(cell, deobfuscate, node.as_ref())))
+        .flat_map(|cell| {
+            [(false, false), (true, false), (false, true), (true, true)]
+                .map(|lane| check(cell, lane, node.as_ref()))
+        })
         .flatten()
         .collect();
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));

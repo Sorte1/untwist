@@ -102,7 +102,14 @@ fn a_wasm_dir_file_matches_webpacks_hashed_module_name_exactly() {
     );
     let out_dir = dir.path().join("out");
     let out = bin()
-        .args(["--report", "json", "--wasm-check", "auto", "--wasm-dir"])
+        .args([
+            "--unsafe",
+            "--report",
+            "json",
+            "--wasm-check",
+            "auto",
+            "--wasm-dir",
+        ])
         .arg(&wasm_dir)
         .arg("-o")
         .arg(&out_dir)

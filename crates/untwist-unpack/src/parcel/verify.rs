@@ -20,7 +20,7 @@ use super::{
 };
 use crate::matcher::{expression_statement, param_names};
 use crate::runtime::{first_unclosed_helper, helper_symbols};
-use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step};
+use crate::scan::{is_direct_eval, receiver_object, Frame, Policy, Scan, Step};
 
 const REQUIRE: &str = "require";
 
@@ -130,6 +130,11 @@ impl Rules<'_, '_> {
         matches!(expr, Expression::Identifier(id) if self.module_param.is_some() && self.symbol(id) == self.module_param)
     }
 
+    fn module_receiver(&self, callee: &Expression<'_>) -> bool {
+        self.mode == Mode::Factory
+            && receiver_object(callee).is_some_and(|object| self.is_module(object))
+    }
+
     fn root_site(&self, callee: &Expression<'_>) -> Option<Option<ScopeId>> {
         let Expression::StaticMemberExpression(root) = callee else {
             return None;
@@ -226,7 +231,8 @@ impl<'a> Policy<'a> for Rules<'_, '_> {
     }
 
     fn call(&mut self, _frame: Frame, it: &CallExpression<'a>) -> Step {
-        if is_direct_eval(self.scoping, &it.callee) {
+        let receiver = self.load != Some(it.span) && self.module_receiver(&it.callee);
+        if receiver || is_direct_eval(self.scoping, &it.callee) {
             self.ok = false;
             return Step::Skip;
         }
@@ -247,6 +253,10 @@ impl<'a> Policy<'a> for Rules<'_, '_> {
             true => Step::Skip,
             false => Step::Walk,
         }
+    }
+
+    fn tagged(&mut self, it: &TaggedTemplateExpression<'a>) {
+        self.ok &= !self.module_receiver(&it.tag);
     }
 
     fn unary(&mut self, it: &UnaryExpression<'a>) -> Step {

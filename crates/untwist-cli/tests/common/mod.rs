@@ -36,3 +36,10 @@ pub const A_DECODER_THAT_SPENDS_OVER_50M_STEPS: &str = "\
 function a() { var h = ['He', 'llo']; a = function () { return h; }; return a(); }
 function b(c, d) { var e = a(); b = function (f, g) { f = f - 0x0; var s = 0; for (var i = 0; i < 180; i++) { for (var j = 0; j < 180; j++) { for (var k = 0; k < 180; k++) { s = s + 1; } } } return e[f]; }; return b(c, d); }
 console.log(b(0x0) + b(0x1));";
+
+pub fn frame_refused(stderr: &str) -> bool {
+    stderr.lines().any(|line| {
+        line.contains("the bundle is not strict code")
+            || line.contains("would be written as a sloppy file")
+    })
+}

@@ -273,6 +273,7 @@ impl Pipeline {
             let prior = Prior {
                 guards: &parts.guards,
                 maps: &parts.source_maps,
+                goals: &parts.module_goals,
             };
             return self.unpack_final_texts(&parts.codes, prior, guard, stages, notes, panicked);
         }
@@ -292,9 +293,17 @@ impl Pipeline {
             .filter(|(index, _)| !parts.depth_refused.contains(index))
             .map(|(_, map)| map.clone())
             .collect();
+        let goals: Vec<bool> = parts
+            .module_goals
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| !parts.depth_refused.contains(index))
+            .map(|(_, goal)| *goal)
+            .collect();
         let prior = Prior {
             guards: &parts.guards,
             maps: &maps,
+            goals: &goals,
         };
         self.unpack_final_texts(&texts, prior, guard, stages, notes, panicked)
     }

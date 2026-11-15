@@ -212,7 +212,7 @@ fn the_text_report_has_no_modules_line_without_library_modules() {
     let input = dir.path().join("in.js");
     std::fs::write(&input, common::WEBPACK_4).unwrap();
     let out = common::bin()
-        .args(["--report", "text", "-o"])
+        .args(["--unsafe", "--report", "text", "-o"])
         .arg(dir.path().join("out"))
         .arg(&input)
         .output()

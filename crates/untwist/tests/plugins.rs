@@ -35,7 +35,7 @@ fn with(stage: Stage) -> Options {
     plugins.register(stage, double as untwist::PluginCtor);
     Options {
         plugins,
-        ..Options::default()
+        ..unsafe_lane()
     }
 }
 
@@ -64,7 +64,7 @@ fn every_hook_point_exists_and_is_reported() {
 
 #[test]
 fn no_plugin_means_no_plugin_stage() {
-    let out = Pipeline::new(Options::default()).run("x(1);");
+    let out = Pipeline::new(unsafe_lane()).run("x(1);");
     assert!(!out
         .stages
         .iter()
@@ -112,7 +112,7 @@ fn after_parse_sees_what_prepare_destroys_and_after_prepare_does_not() {
         Pipeline::new(Options {
             plugins,
             unpack: false,
-            ..Options::default()
+            ..unsafe_lane()
         })
         .run("x(), y();")
         .notes
@@ -143,7 +143,7 @@ fn every_hook_is_reported_where_it_runs() {
     }
     let out = Pipeline::new(Options {
         plugins,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(WEBPACK_4);
     let names: Vec<&str> = out.stages.iter().map(|stage| stage.stage).collect();
@@ -191,7 +191,7 @@ fn after_unpack_reports_a_module_that_did_not_converge() {
     let out = Pipeline::new(Options {
         plugins,
         max_iterations: Some(2),
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(WEBPACK_4);
     let row = out
@@ -211,7 +211,7 @@ fn after_unpack_concatenates_every_modules_iterations() {
     let out = Pipeline::new(Options {
         plugins,
         max_iterations: Some(2),
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(WEBPACK_4);
     let row = out
@@ -269,8 +269,15 @@ fn deobfuscate_prepares_again_after_an_after_prepare_plugin_edits() {
         plugins,
         unminify: false,
         unpack: false,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run("var a = f(), b = g();\nh(a, b);");
     assert_eq!(out.code(), "var a = f();\nvar b = g();\nh(a, b);");
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

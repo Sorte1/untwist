@@ -74,6 +74,7 @@ pub struct Module<'a> {
     pub runtime_require: RequireParam,
     pub node_module: bool,
     pub named_path: bool,
+    pub strict_source: bool,
     program: Program<'a>,
 }
 
@@ -88,6 +89,7 @@ impl<'a> Module<'a> {
             runtime_require: RequireParam::Default,
             node_module: false,
             named_path: false,
+            strict_source: false,
             program,
         };
         module.assign_default_path(is_entry);
@@ -162,6 +164,7 @@ pub struct Bundle<'a> {
     pub chunk_started: bool,
     pub chunk_files: Vec<ChunkFile>,
     pub left_requests: Vec<(String, Option<String>)>,
+    pub around: Option<crate::beside::Around<'a>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -196,6 +199,7 @@ impl<'a> Bundle<'a> {
             chunk_started: false,
             chunk_files: Vec::new(),
             left_requests: Vec::new(),
+            around: None,
         }
     }
 
@@ -294,7 +298,7 @@ pub fn module_from_body_with<'a>(
         source.source_text,
         comments,
         None,
-        AVec::new_in(&builder),
+        body.directives.clone_in(alloc),
         statements,
         &builder,
     )

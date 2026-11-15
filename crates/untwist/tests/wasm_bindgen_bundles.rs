@@ -59,7 +59,7 @@ fn supply(name: &str, bytes: Vec<u8>) -> WasmSupply {
 }
 
 fn settled(source: &str, supply: &WasmSupply) -> Output {
-    let mut out = Pipeline::new(Options::default()).run(source);
+    let mut out = Pipeline::new(unsafe_lane()).run(source);
     out.settle_wasm(supply, true);
     out
 }
@@ -237,4 +237,11 @@ fn two_functions_calling_the_same_export_keep_their_names() {
     assert!(glue.contains("function l(e, t) {"), "{glue}");
     assert!(glue.contains("function k(e) {"), "{glue}");
     assert!(glue.contains("function greet(e) {"), "{glue}");
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

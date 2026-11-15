@@ -24,7 +24,7 @@ const HOSTILE_IDS: &str = "(function(modules){var cache={};function __webpack_re
 
 #[test]
 fn an_escape_character_in_the_entry_id_is_printed_escaped() {
-    let out = stdin_output(HOSTILE_IDS, &["-v"]);
+    let out = stdin_output(HOSTILE_IDS, &["--unsafe", "-v"]);
     let stderr = stderr_of(&out);
     assert!(stderr.contains("entry ./i\\u{1b}[31mX)"), "{stderr}");
     assert_printable(&stderr);
@@ -32,7 +32,7 @@ fn an_escape_character_in_the_entry_id_is_printed_escaped() {
 
 #[test]
 fn hostile_module_ids_reach_neither_stderr_nor_the_single_file_output_raw() {
-    let out = stdin_output(HOSTILE_IDS, &["-v", "--single-file"]);
+    let out = stdin_output(HOSTILE_IDS, &["--unsafe", "-v", "--single-file"]);
     assert_printable(&stderr_of(&out));
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(!stdout.contains('\u{1b}'), "{stdout}");
@@ -48,6 +48,7 @@ fn hostile_module_ids_in_refusals_and_notes_of_an_output_tree_are_printed_escape
     let input = dir.path().join("in.js");
     std::fs::write(&input, HOSTILE_IDS).unwrap();
     let out = bin()
+        .arg("--unsafe")
         .arg("-v")
         .arg("-o")
         .arg(dir.path().join("out"))

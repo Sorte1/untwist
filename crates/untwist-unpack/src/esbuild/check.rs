@@ -9,7 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::closed::HOST_NAMES;
 use crate::esbuild::layout::FactoryDecl;
-use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step};
+use crate::scan::{is_direct_eval, receiver_object, Frame, Policy, Scan, Step};
 
 pub struct Proof<'s> {
     pub scoping: &'s Scoping,
@@ -122,6 +122,11 @@ impl Check<'_, '_> {
         }
     }
 
+    fn module_receiver(&self, callee: &Expression<'_>) -> bool {
+        matches!(self.mode, Mode::Factory { .. })
+            && receiver_object(callee).is_some_and(|object| self.is_module(object))
+    }
+
     fn is_typeof_host(&self, expr: &Expression<'_>) -> bool {
         let (Mode::Entry, Expression::Identifier(id)) = (self.mode, expr) else {
             return false;
@@ -192,7 +197,7 @@ impl<'a> Policy<'a> for Check<'_, '_> {
     }
 
     fn call(&mut self, frame: Frame, it: &CallExpression<'a>) -> Step {
-        if is_direct_eval(self.proof.scoping, &it.callee) {
+        if is_direct_eval(self.proof.scoping, &it.callee) || self.module_receiver(&it.callee) {
             self.ok = false;
             return Step::Skip;
         }
@@ -210,6 +215,10 @@ impl<'a> Policy<'a> for Check<'_, '_> {
             true => Step::Skip,
             false => Step::Walk,
         }
+    }
+
+    fn tagged(&mut self, it: &TaggedTemplateExpression<'a>) {
+        self.ok &= !self.module_receiver(&it.tag);
     }
 
     fn unary(&mut self, it: &UnaryExpression<'a>) -> Step {

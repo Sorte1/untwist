@@ -125,7 +125,7 @@ fn emscripten_single_file_names_the_glue_from_the_wasm_name_section() {
 
 #[test]
 fn webpack_inline_wasm_is_extracted_per_module_and_the_hashed_async_module_is_listed() {
-    let out = settled(&fixture("webpack.js"));
+    let out = bundle_settled(&fixture("webpack.js"));
     let bundle = out.bundle.as_ref().expect("the webpack bundle unpacks");
     let module = |path: &str| {
         bundle
@@ -347,8 +347,16 @@ fn module_code<'o>(out: &'o Output, path: &str) -> &'o str {
         .unwrap()
 }
 
-fn settled_with(source: &str, supply: &WasmSupply) -> Output {
-    let mut out = run(source);
+fn bundle_settled(source: &str) -> Output {
+    bundle_settled_with(source, &WasmSupply::default())
+}
+
+fn bundle_settled_with(source: &str, supply: &WasmSupply) -> Output {
+    let mut out = Pipeline::new(Options {
+        wasm_check: WasmCheck::Auto,
+        ..unsafe_lane()
+    })
+    .run(source);
     out.settle_wasm(supply, true);
     out
 }
@@ -356,7 +364,7 @@ fn settled_with(source: &str, supply: &WasmSupply) -> Output {
 #[test]
 fn webpack_async_wasm_names_the_glue_in_the_modules_it_imports_from_and_exports_to() {
     let supply = supplied("3f2a91c0d1e2b3a4.module.wasm", "webpack.wasm");
-    let out = settled_with(&fixture("webpack-async.js"), &supply);
+    let out = bundle_settled_with(&fixture("webpack-async.js"), &supply);
     assert!(out.wasm_unresolved.is_empty());
     assert_eq!(out.wasm[0].renamed, 2);
     let env = module_code(&out, "src/env.js");
@@ -371,7 +379,7 @@ fn webpack_async_wasm_names_the_glue_in_the_modules_it_imports_from_and_exports_
 #[test]
 fn webpack_sync_wasm_names_the_glue_through_the_runtime_import_objects() {
     let supply = supplied("9c8b7a6f5e4d3c2b.module.wasm", "webpack.wasm");
-    let out = settled_with(&fixture("webpack-sync.js"), &supply);
+    let out = bundle_settled_with(&fixture("webpack-sync.js"), &supply);
     assert!(out.wasm_unresolved.is_empty());
     assert_eq!(out.wasm[0].renamed, 2);
     assert!(module_code(&out, "src/env.js").contains("function log(e)"));
@@ -384,7 +392,11 @@ fn webpack_sync_wasm_names_the_glue_through_the_runtime_import_objects() {
 #[test]
 fn the_combined_output_keeps_its_names_when_its_copy_of_a_module_differs() {
     let supply = supplied("9c8b7a6f5e4d3c2b.module.wasm", "webpack.wasm");
-    let mut out = run(&fixture("webpack-sync.js"));
+    let mut out = Pipeline::new(Options {
+        wasm_check: WasmCheck::Auto,
+        ..unsafe_lane()
+    })
+    .run(&fixture("webpack-sync.js"));
     let combined = out.codes[0]
         .replace("function o(e)", "function q(e)")
         .replace("() => o", "() => q");
@@ -404,7 +416,7 @@ fn a_module_rename_in_the_combined_output_stays_inside_its_module_function() {
         "      function o(e) {",
         "      const c = 5;\n      console.log(c);\n      function o(e) {",
     );
-    let out = settled_with(&source, &supply);
+    let out = bundle_settled_with(&source, &supply);
     let code = out.code();
     assert!(code.contains("const add = r.add;"), "{code}");
     assert!(code.contains("console.log(add(1, 2)"), "{code}");
@@ -418,7 +430,7 @@ fn a_module_rename_in_the_combined_output_stays_inside_its_module_function() {
 #[test]
 fn a_bundle_module_that_does_not_cover_the_cross_module_glue_names_nothing() {
     let supply = supplied("3f2a91c0d1e2b3a4.module.wasm", "bindgen.wasm");
-    let out = settled_with(&fixture("webpack-async.js"), &supply);
+    let out = bundle_settled_with(&fixture("webpack-async.js"), &supply);
     assert_eq!(out.wasm[0].renamed, 0);
     assert!(module_code(&out, "src/env.js").contains("function o(e)"));
     assert!(module_code(&out, "index.js").contains("const a = o.add;"));
@@ -625,7 +637,7 @@ const OTHER_MODULE: (&str, &str) = ("other.js", "var o={a:{z:1}};console.log(o)"
 #[test]
 fn glue_names_found_in_a_bundle_module_also_apply_in_the_combined_output() {
     let source = webpack_bundle(&[("em.js", &fixture("emscripten-nameless.js")), OTHER_MODULE]);
-    let out = settled(&source);
+    let out = bundle_settled(&source);
     assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
     assert_eq!(out.wasm.len(), 1);
     assert_eq!(out.wasm[0].renamed, 5);
@@ -650,7 +662,7 @@ fn two_bundle_modules_with_their_own_wasm_name_their_glue_in_the_combined_output
         ("em.js", &fixture("emscripten-nameless.js")),
         ("named.js", &fixture("emscripten.js")),
     ]);
-    let out = settled(&source);
+    let out = bundle_settled(&source);
     assert!(wasm_notes(&out).is_empty(), "{:?}", wasm_notes(&out));
     assert_eq!(out.wasm.len(), 2);
     let code = out.code();
@@ -669,7 +681,7 @@ fn two_bundle_modules_with_their_own_wasm_name_their_glue_in_the_combined_output
 fn a_bundle_module_whose_wasm_does_not_cover_its_glue_names_nothing_in_the_combined_output() {
     let glue = fixture("emscripten-nameless.js").replace("Z.e)(e)", "Z.q)(e)");
     let source = webpack_bundle(&[("em.js", &glue), OTHER_MODULE]);
-    let out = settled(&source);
+    let out = bundle_settled(&source);
     assert_eq!(out.wasm[0].renamed, 0);
     let code = out.code();
     assert!(code.contains("Yb(4);"), "{code}");
@@ -680,4 +692,11 @@ fn a_bundle_module_whose_wasm_does_not_cover_its_glue_names_nothing_in_the_combi
         notes[0].contains("does not match the glue in src/em.js"),
         "{notes:?}"
     );
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

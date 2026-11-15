@@ -160,11 +160,12 @@ fn entry_path(listing: &serde_json::Value) -> String {
         .to_string()
 }
 
-fn written(cell: &Cell, flags: &[&str]) -> (tempfile::TempDir, PathBuf) {
+fn written(cell: &Cell, flags: &[&str]) -> (tempfile::TempDir, PathBuf, bool) {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("out");
     let run = bin()
         .args(flags)
+        .arg("-v")
         .arg("-o")
         .arg(&out)
         .args(inputs(cell))
@@ -177,14 +178,20 @@ fn written(cell: &Cell, flags: &[&str]) -> (tempfile::TempDir, PathBuf) {
         cell.name,
         String::from_utf8_lossy(&run.stderr)
     );
-    (dir, out)
+    let kept_whole = flags == DEFAULT
+        && !out.join("bundle.json").exists()
+        && common::frame_refused(&String::from_utf8_lossy(&run.stderr));
+    (dir, out, kept_whole)
 }
 
 #[test]
 fn reminified_and_reshaped_bundles_are_unpacked_in_every_lane() {
     for cell in CELLS {
         for flags in cell.lanes {
-            let (_dir, out) = written(cell, flags);
+            let (_dir, out, kept_whole) = written(cell, flags);
+            if kept_whole {
+                continue;
+            }
             let listing = listing(&out);
             let label = format!("{}/{} {flags:?}", cell.app, cell.name);
             assert_eq!(listing["type"], cell.family, "{label}");
@@ -208,8 +215,14 @@ fn the_written_tree_prints_what_the_bundle_printed() {
     };
     for cell in CELLS {
         for flags in cell.lanes {
-            let (_dir, out) = written(cell, flags);
-            let entry = entry_path(&listing(&out));
+            let (_dir, out, kept_whole) = written(cell, flags);
+            if kept_whole && inputs(cell).len() > 1 {
+                continue;
+            }
+            let entry = match kept_whole {
+                true => "deobfuscated.js".to_string(),
+                false => entry_path(&listing(&out)),
+            };
             let ran = node::run(&node, &out.join(entry))
                 .unwrap()
                 .expect("node finished in time");

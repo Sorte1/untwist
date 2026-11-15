@@ -47,7 +47,6 @@ struct ModuleUses<'s> {
     require: Option<SymbolId>,
     buildins: &'s FxHashMap<String, Buildin>,
     record: Record,
-    legacy: bool,
     aliases: FxHashMap<SymbolId, Buildin>,
     polyfills: Vec<Buildin>,
     kept: &'s [&'s str],
@@ -128,7 +127,6 @@ impl ModuleUses<'_> {
         };
         let silent = function.params.items.is_empty() && function.params.rest.is_none();
         silent
-            && (!self.legacy || self.strict(function))
             && function
                 .body
                 .as_ref()
@@ -217,9 +215,6 @@ impl ModuleUses<'_> {
         if body.is_none_or(own_arguments) || !plain_params(function) {
             return false;
         }
-        if self.legacy && !self.sealed(function) {
-            return false;
-        }
         let mut handed = Vec::new();
         for (at, argument) in call.arguments.iter().enumerate() {
             let held = at
@@ -248,61 +243,6 @@ impl ModuleUses<'_> {
         }
         self.visit_expression(&call.callee);
         true
-    }
-
-    fn strict(&self, function: &Function<'_>) -> bool {
-        function
-            .scope_id
-            .get()
-            .is_some_and(|scope| self.scoping.scope_flags(scope).is_strict_mode())
-    }
-
-    fn inert(&self, expr: &Expression<'_>, params: &[SymbolId]) -> bool {
-        match expr.without_parentheses() {
-            Expression::ThisExpression(_)
-            | Expression::BooleanLiteral(_)
-            | Expression::NumericLiteral(_)
-            | Expression::StringLiteral(_)
-            | Expression::NullLiteral(_) => true,
-            Expression::Identifier(id) => id
-                .reference_id
-                .get()
-                .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
-                .is_some_and(|symbol| params.contains(&symbol)),
-            Expression::LogicalExpression(logical) => {
-                self.inert(&logical.left, params) && self.inert(&logical.right, params)
-            }
-            other => self.held(other).is_some(),
-        }
-    }
-
-    fn sealed(&self, function: &Function<'_>) -> bool {
-        if self.strict(function) {
-            return true;
-        }
-        let Some(body) = function.body.as_deref() else {
-            return false;
-        };
-        let params: Vec<SymbolId> = (0..function.params.items.len())
-            .filter_map(|at| simple_param(function, at))
-            .collect();
-        body.statements.iter().all(|statement| {
-            let Statement::ExpressionStatement(statement) = statement else {
-                return false;
-            };
-            let Expression::CallExpression(call) = statement.expression.without_parentheses()
-            else {
-                return false;
-            };
-            immediate(call).is_some_and(|(callee, _)| {
-                self.strict(callee)
-                    && call.arguments.iter().all(|argument| {
-                        argument
-                            .as_expression()
-                            .is_some_and(|it| self.inert(it, &params))
-                    })
-            })
-        })
     }
 
     fn held_object(&self, expr: &Expression<'_>) -> Option<Held> {
@@ -686,7 +626,7 @@ fn param_symbol(factory: &Factory<'_, '_>, at: usize) -> Option<SymbolId> {
 pub fn module_object_use(
     scoping: &Scoping,
     factory: &Factory<'_, '_>,
-    (buildins, record, legacy, trust_builtins): (&FxHashMap<String, Buildin>, Record, bool, bool),
+    (buildins, record, trust_builtins): (&FxHashMap<String, Buildin>, Record, bool),
 ) -> Result<PolyfillUse, String> {
     let Some(symbol) = param_symbol(factory, MODULE_PARAM) else {
         return Ok(PolyfillUse { record: false });
@@ -697,7 +637,6 @@ pub fn module_object_use(
         require: param_symbol(factory, REQUIRE_PARAM),
         buildins,
         record,
-        legacy,
         aliases: FxHashMap::default(),
         polyfills: Vec::new(),
         kept: &KEPT_MEMBERS,
@@ -710,8 +649,11 @@ pub fn module_object_use(
     };
     uses.visit_function_body(factory.body);
     let mixed = uses.polyfills.contains(&Buildin::Harmony) && uses.polyfills.len() > 1;
-    if mixed || uses.record_read && (uses.polyfills.len() != 1 || uses.repeated) {
+    if mixed || uses.record_read && uses.polyfills.len() != 1 {
         uses.refuse("two webpack module polyfills on one module");
+    }
+    if uses.record_read && uses.repeated {
+        uses.refuse("a webpack module polyfill call that can run more than once");
     }
     match uses.found {
         Some(found) => Err(found),
@@ -734,7 +676,6 @@ pub fn module_param_use(
         require: None,
         buildins: &buildins,
         record: Record::default(),
-        legacy: false,
         aliases: FxHashMap::default(),
         polyfills: Vec::new(),
         kept,

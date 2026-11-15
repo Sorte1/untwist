@@ -4,12 +4,12 @@ use untwist_core::pass::{Note, NoteKind};
 
 use crate::browserify::notes as browserify_notes;
 use crate::browserify::resolve::left_request_reaching;
-use crate::closed::legacy_read;
 use crate::detect::{refused_kind, unpack_program_linked};
 use crate::links::{groups, Groups, Links};
 use crate::mappings::Mapping;
 use crate::merge::merge_noted;
 use crate::model::Bundle;
+use crate::strict::{keep_strictness, mark_from_inputs, sloppy_written_module};
 use crate::{finish_with, notes, turbopack, UnpackOptions};
 use untwist_core::semantic::closed_evals_kept;
 
@@ -57,18 +57,12 @@ fn detected<'a>(
         .collect()
 }
 
-fn linked_legacy(programs: &[Program<'_>], options: UnpackOptions) -> Option<bool> {
-    let checked = programs.len() > 1 && !options.trust_legacy_reads && !options.conservative;
-    checked.then(|| programs.iter().any(|program| legacy_read(program, None)))
-}
-
 fn complete<'a>(
     alloc: &'a Allocator,
     programs: &mut [Program<'a>],
     groups: &Groups,
     found: &mut [Option<Bundle<'a>>],
     notes: &mut Vec<Note>,
-    legacy: Option<bool>,
 ) -> Vec<Bundle<'a>> {
     let mut extra = Vec::new();
     for group in &groups.members {
@@ -78,7 +72,6 @@ fn complete<'a>(
                 .is_some_and(|bundle| bundle.link.as_deref() == Some(group.namespace.as_str()))
         });
         let root = match (&group.turbopack, whole) {
-            (Some(_), true) if legacy == Some(true) => None,
             (Some(server), true) => turbopack::loader_bundle(alloc, programs, server),
             (None, true) => continue,
             (_, false) => None,
@@ -187,11 +180,7 @@ pub fn unpack_named_inputs<'a>(
         true => names,
         false => &[],
     };
-    let mut groups = groups(programs, names);
-    let legacy = linked_legacy(programs, options);
-    for view in &mut groups.views {
-        view.legacy = legacy;
-    }
+    let groups = groups(programs, names);
     let mut notes = Vec::new();
     let mut refused_any = false;
     let mut found = detected(
@@ -201,7 +190,13 @@ pub fn unpack_named_inputs<'a>(
         options,
         (&mut notes, &mut refused_any),
     );
-    let bundles = complete(alloc, programs, &groups, &mut found, &mut notes, legacy);
+    let bundles = complete(alloc, programs, &groups, &mut found, &mut notes);
+    if bundles.len() > 1 && bundles.iter().any(|bundle| bundle.around.is_some()) {
+        notes.push(note(notes::code_beside_entry(
+            "the bundle is joined from several inputs",
+        )));
+        return (None, notes);
+    }
     let (merged, merge_notes) = merge_noted(alloc, bundles);
     notes.extend(merge_notes);
     let Some(mut bundle) = merged else {
@@ -221,6 +216,10 @@ pub fn unpack_named_inputs<'a>(
         )));
         return (None, notes);
     }
+    if let Err(why) = crate::beside::keep_around(alloc, &mut bundle) {
+        notes.push(note(why));
+        return (None, notes);
+    }
     if let Some(moved) = moved_fixed_path(&bundle) {
         notes.push(note(notes::group_refused(moved)));
         return (None, notes);
@@ -228,6 +227,19 @@ pub fn unpack_named_inputs<'a>(
     let may_eval = programs.iter().any(|program| may_eval(program.source_text));
     if let Some(id) = may_eval.then(|| eval_name_rebound(&bundle)).flatten() {
         notes.push(note(notes::eval_name_rebound(id)));
+        return (None, notes);
+    }
+    if options.conservative {
+        return (Some(bundle), notes);
+    }
+    mark_from_inputs(programs, &mut bundle);
+    keep_strictness(alloc, &mut bundle);
+    if let Some(id) = options
+        .prove_frames
+        .then(|| sloppy_written_module(&bundle))
+        .flatten()
+    {
+        notes.push(note(notes::sloppy_file(id)));
         return (None, notes);
     }
     (Some(bundle), notes)

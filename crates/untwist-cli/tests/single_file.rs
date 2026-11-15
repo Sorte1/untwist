@@ -9,6 +9,7 @@ fn single_file_flag_writes_one_module_file() {
     std::fs::write(&input, WEBPACK_4).unwrap();
     let outdir = dir.path().join("out");
     let out = bin()
+        .arg("--unsafe")
         .arg("--single-file")
         .arg("-o")
         .arg(&outdir)
@@ -31,7 +32,7 @@ fn single_file_flag_writes_one_module_file() {
 
 #[test]
 fn single_file_flag_prints_the_concatenation_to_stdout() {
-    let out = stdin_output(WEBPACK_4, &["--single-file"]);
+    let out = stdin_output(WEBPACK_4, &["--unsafe", "--single-file"]);
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     assert!(
@@ -74,7 +75,10 @@ fn single_file_with_one_input_and_no_bundle_stays_bare() {
 
 #[test]
 fn single_file_json_report_puts_the_concatenation_in_code() {
-    let out = stdin_output(WEBPACK_4, &["--single-file", "--report", "json"]);
+    let out = stdin_output(
+        WEBPACK_4,
+        &["--unsafe", "--single-file", "--report", "json"],
+    );
     assert!(out.status.success());
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let code = v["code"].as_str().expect("code is a string");

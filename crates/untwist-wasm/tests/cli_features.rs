@@ -85,10 +85,14 @@ fn a_bad_baseline_is_a_usage_error() {
 #[test]
 fn the_assumed_module_split_infers_rollup_boundaries_in_the_wasm_build() {
     let source = fixture("unpack-rollup-boundaries/synthetic-rollup3-wrapped/index.js");
-    let split = run_report(&source, "--split-hoisted --split-assume-modules", false);
+    let split = run_report(
+        &source,
+        "--unsafe --split-hoisted --split-assume-modules",
+        false,
+    );
     assert_eq!(split.code(), 0, "{}", split.stderr());
     assert_eq!(split.module_count(), 10);
-    assert_eq!(run_report(&source, "", false).module_count(), 0);
+    assert_eq!(run_report(&source, "--unsafe", false).module_count(), 0);
 }
 
 #[test]
@@ -116,11 +120,17 @@ fn assumed_split(report: &str) -> bool {
 #[test]
 fn the_report_says_when_only_the_assumption_would_split_the_bundle() {
     let source = fixture("unpack-rollup-boundaries/synthetic-rollup3-wrapped/index.js");
-    assert!(assumed_split(&run_report(&source, "", false).report_json()));
     assert!(assumed_split(
-        &run_report(&source, "--split-hoisted", false).report_json()
+        &run_report(&source, "--unsafe", false).report_json()
     ));
-    let split = run_report(&source, "--split-hoisted --split-assume-modules", false);
+    assert!(assumed_split(
+        &run_report(&source, "--unsafe --split-hoisted", false).report_json()
+    ));
+    let split = run_report(
+        &source,
+        "--unsafe --split-hoisted --split-assume-modules",
+        false,
+    );
     assert!(!assumed_split(&split.report_json()));
     assert!(!assumed_split(
         &run_report(&source, "--no-unpack", false).report_json()

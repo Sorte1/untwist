@@ -78,14 +78,28 @@ fn decoded(out: &Output) -> bool {
     text(out).contains("\"hello from module\"")
 }
 
+fn kept_whole_for_its_frames(out: &Output) -> bool {
+    out.bundle.is_none()
+        && out
+            .notes
+            .iter()
+            .any(|note| note.message.contains("the bundle is not strict code"))
+}
+
 fn modules(out: &Output) -> usize {
     out.bundle.as_ref().map_or(0, |bundle| bundle.modules.len())
 }
 
 #[test]
 fn a_loop_or_case_binding_that_shadows_require_does_not_block_unpacking() {
-    let out = Pipeline::new(Options::default()).run(SHADOWED_REQUIRE);
+    let out = Pipeline::new(Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    })
+    .run(SHADOWED_REQUIRE);
     assert_eq!(modules(&out), 3, "{}", out.code());
+    let safe = Pipeline::new(Options::default()).run(SHADOWED_REQUIRE);
+    assert!(kept_whole_for_its_frames(&safe), "{:?}", safe.notes);
 }
 
 #[test]
@@ -102,13 +116,18 @@ fn unsafe_decodes_and_unpacks_the_obfuscated_bootstrap_in_every_rename_and_outpu
 }
 
 #[test]
-fn the_safe_lane_decodes_and_unpacks_the_obfuscated_bootstrap_in_every_rename_and_output_mode() {
+fn the_safe_lane_decodes_the_obfuscated_bootstrap_and_keeps_it_whole_in_every_rename_and_output_mode(
+) {
     for rename in RENAMES {
         for unpack in [false, true] {
             let out = run(false, rename, unpack);
             assert!(decoded(&out), "{rename:?} unpack {unpack}: {}", text(&out));
             if unpack {
-                assert_eq!(modules(&out), 2, "{rename:?}: {}", out.code());
+                assert!(
+                    kept_whole_for_its_frames(&out),
+                    "{rename:?}: {:?}",
+                    out.notes
+                );
             }
         }
     }

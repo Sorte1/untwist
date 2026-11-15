@@ -1,5 +1,6 @@
 pub mod amd;
 pub mod assign;
+pub mod beside;
 pub mod browserify;
 pub mod bun;
 mod canon;
@@ -26,6 +27,7 @@ pub mod runtime;
 pub mod scan;
 pub mod share;
 pub mod specifier;
+pub mod strict;
 pub mod systemjs;
 pub mod turbopack;
 pub mod umd;
@@ -53,7 +55,7 @@ pub struct UnpackOptions {
     pub assume_modules: bool,
     pub conservative: bool,
     pub trust_free_loader: bool,
-    pub trust_legacy_reads: bool,
+    pub prove_frames: bool,
     pub trust_builtins: bool,
     pub module_goal: bool,
 }

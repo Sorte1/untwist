@@ -14,7 +14,7 @@ pub const ENTRY_CANDIDATES: &str = "top-level require calls and no entry marker 
 pub const REQUIRE_MISSING: &str = "has no module in this bundle";
 pub const UNHANDLED_HELPER: &str = "unhandled webpack helper require.";
 pub const FACTORY_NOT_CLOSED: &str = "is not closed over its own scope; no bundle is written";
-pub const LEGACY_READ: &str = "in the written files node's module wrapper, not the bundle's module function, would be the caller such a read can see; no bundle is written (--unsafe assumes such reads never reach a module)";
+pub const SLOPPY_FRAME: &str = "a function the modules call could read its caller (`.caller`, `arguments.callee.caller`, a stack frame's `getFunction()`), which is the bundle's own function in the bundle and node's module wrapper in the written files; no bundle is written (--unsafe assumes no such read reaches a module)";
 pub const EVAL_NAME_REBOUND: &str =
     "evaluates code text whose names would reach a binding of the unpacked file; no bundle is written";
 pub const RUNTIME_HELPER_NOT_CLOSED: &str = "cannot move to a runtime module";
@@ -48,7 +48,7 @@ catalogue!(
     UNHANDLED_HELPER,
     FACTORY_NOT_CLOSED,
     EVAL_NAME_REBOUND,
-    LEGACY_READ,
+    SLOPPY_FRAME,
     RUNTIME_HELPER_NOT_CLOSED,
     SHAPE_REFUSED,
     GROUP_REFUSED,
@@ -147,8 +147,22 @@ pub fn shape_refused(kind: impl Display) -> String {
     format!("{kind} {SHAPE_REFUSED}")
 }
 
-pub fn legacy_read() -> String {
-    format!("the program reads a function's caller or arguments: {LEGACY_READ}")
+pub fn sloppy_bundle(what: impl Display) -> String {
+    format!("the bundle is not strict code, {what} is sloppy: {SLOPPY_FRAME}")
+}
+
+pub fn code_beside(line: usize, why: impl Display) -> String {
+    format!("the program runs code beside the bundle (line {line}) that the written files cannot hold: it {why}; no bundle is written")
+}
+
+pub fn code_beside_entry(why: impl Display) -> String {
+    format!("the program runs code beside the bundle that the written entry cannot hold: {why}; no bundle is written")
+}
+
+pub fn sloppy_file(id: impl Display) -> String {
+    format!(
+        "module {id} would be written as a sloppy file (no \"use strict\" and not an ES module): {SLOPPY_FRAME}"
+    )
 }
 
 pub fn eval_name_rebound(id: impl Display) -> String {

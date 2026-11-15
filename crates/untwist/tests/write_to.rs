@@ -8,7 +8,7 @@ use untwist::{BundleOutput, ModuleOutput, Options, Pipeline, PlanRefusal};
 #[test]
 fn write_to_writes_the_deobfuscated_file() {
     let dir = tempfile::tempdir().unwrap();
-    let out = Pipeline::new(Options::default()).run("var a=!0;");
+    let out = Pipeline::new(unsafe_lane()).run("var a=!0;");
     let report = out.write_to(dir.path()).expect("write");
     assert_eq!(report.files, vec![untwist::DEOBFUSCATED.to_string()]);
     assert_eq!(
@@ -22,7 +22,7 @@ fn write_to_writes_the_deobfuscated_file() {
 #[test]
 fn write_to_writes_the_bundle_and_its_modules() {
     let dir = tempfile::tempdir().unwrap();
-    let out = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let out = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     let report = out.write_to(dir.path()).expect("write");
     assert!(report.refused.is_empty(), "{:?}", report.refused);
     assert_eq!(
@@ -47,7 +47,7 @@ fn write_to_writes_the_bundle_and_its_modules() {
 fn write_to_refuses_a_traversing_module_path() {
     let root = tempfile::tempdir().unwrap();
     let dir = root.path().join("out");
-    let mut out = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let mut out = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     let bundle = out.bundle.as_mut().expect("a bundle was detected");
     bundle.modules.push(ModuleOutput {
         id: "escape".to_string(),
@@ -76,7 +76,7 @@ fn write_to_refuses_a_traversing_module_path() {
 #[test]
 fn several_inputs_get_distinct_deobfuscated_names() {
     let dir = tempfile::tempdir().unwrap();
-    let out = Pipeline::new(Options::default()).run_many(&["a();", "b();"]);
+    let out = Pipeline::new(unsafe_lane()).run_many(&["a();", "b();"]);
     let inputs = vec![PathBuf::from("a/bundle.js"), PathBuf::from("b/bundle.js")];
     let report = out
         .write_to_with(dir.path(), &inputs, false)
@@ -95,7 +95,7 @@ fn single_file_output_concatenates_every_module_under_a_banner() {
     let dir = tempfile::tempdir().unwrap();
     let out = Pipeline::new(Options {
         single_file: true,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(WEBPACK_4);
     let bundle = out.bundle.as_ref().expect("a bundle was detected").clone();
@@ -139,7 +139,7 @@ fn single_file_output_without_a_bundle_is_just_the_code() {
     let dir = tempfile::tempdir().unwrap();
     let out = Pipeline::new(Options {
         single_file: true,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run("var a=!0;");
     let report = out.write_to(dir.path()).expect("write");
@@ -156,7 +156,7 @@ fn single_file_output_without_a_bundle_is_just_the_code() {
 fn concatenated_banners_several_inputs_without_a_bundle_and_leaves_one_bare() {
     let options = Options {
         single_file: true,
-        ..Options::default()
+        ..unsafe_lane()
     };
     let two = Pipeline::new(options.clone()).run_many(&["a();", "b();"]);
     assert_eq!(
@@ -170,7 +170,7 @@ fn concatenated_banners_several_inputs_without_a_bundle_and_leaves_one_bare() {
 #[test]
 fn force_single_file_write_cleans_up_a_prior_per_module_run() {
     let dir = tempfile::tempdir().unwrap();
-    let first = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let first = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     let first_report = first.write_to(dir.path()).expect("write");
     let module_paths: Vec<String> = first_report
         .files
@@ -187,7 +187,7 @@ fn force_single_file_write_cleans_up_a_prior_per_module_run() {
 
     let second = Pipeline::new(Options {
         single_file: true,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(WEBPACK_4);
     let second_report = second.write_to_with(dir.path(), &[], true).expect("write");
@@ -214,7 +214,7 @@ fn force_single_file_write_cleans_up_a_prior_per_module_run() {
 #[test]
 fn a_module_colliding_with_the_deobfuscated_output_is_refused_not_overwritten() {
     let dir = tempfile::tempdir().unwrap();
-    let mut out = Pipeline::new(Options::default()).run("var a=!0;");
+    let mut out = Pipeline::new(unsafe_lane()).run("var a=!0;");
     out.bundle = Some(BundleOutput {
         kind: "webpack".to_string(),
         entry_id: None,
@@ -247,7 +247,7 @@ fn a_module_colliding_with_the_deobfuscated_output_is_refused_not_overwritten() 
 #[test]
 fn a_write_into_a_fresh_directory_leaves_nothing_stale() {
     let dir = tempfile::tempdir().unwrap();
-    let out = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let out = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     let report = out.write_to(dir.path()).expect("write");
     assert!(report.stale.is_empty(), "{:?}", report.stale);
 }
@@ -255,7 +255,7 @@ fn a_write_into_a_fresh_directory_leaves_nothing_stale() {
 #[test]
 fn a_non_force_write_lists_the_module_files_a_previous_run_left_behind() {
     let dir = tempfile::tempdir().unwrap();
-    let first = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let first = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     let first_report = first.write_to(dir.path()).expect("write");
     let module_paths: Vec<String> = first_report
         .files
@@ -270,7 +270,7 @@ fn a_non_force_write_lists_the_module_files_a_previous_run_left_behind() {
         "the first run wrote no module files"
     );
     std::fs::remove_file(dir.path().join(untwist::DEOBFUSCATED)).unwrap();
-    let second = Pipeline::new(Options::default()).run("var a=!0;");
+    let second = Pipeline::new(unsafe_lane()).run("var a=!0;");
 
     let report = second.write_to(dir.path()).expect("write");
 
@@ -293,7 +293,7 @@ fn conflict_of(error: &anyhow::Error) -> &untwist::OutputConflict {
 #[test]
 fn a_second_write_without_force_is_a_conflict_and_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
-    let out = Pipeline::new(Options::default()).run("var a=!0;");
+    let out = Pipeline::new(unsafe_lane()).run("var a=!0;");
     out.write_to(dir.path()).expect("write");
     let target = dir.path().join(untwist::DEOBFUSCATED);
     std::fs::write(&target, "edited by hand").unwrap();
@@ -311,7 +311,7 @@ fn a_second_write_without_force_is_a_conflict_and_changes_nothing() {
 fn an_existing_file_at_a_module_path_is_a_conflict_before_anything_is_written() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("lib.js"), "keep me").unwrap();
-    let out = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let out = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
 
     let error = out.write_to(dir.path()).expect_err("the file exists");
 
@@ -341,7 +341,7 @@ fn a_forced_write_never_replaces_an_input_file() {
     let dir = tempfile::tempdir().unwrap();
     let input = dir.path().join("lib.js");
     std::fs::write(&input, "the input").unwrap();
-    let out = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let out = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
 
     let report = out
         .write_to_with(dir.path(), std::slice::from_ref(&input), true)
@@ -366,7 +366,7 @@ fn a_forced_write_never_removes_an_input_file_an_earlier_listing_names() {
         r#"{"type":"webpack","entryId":"0","modules":[{"id":"9","path":"in.js"}]}"#,
     )
     .unwrap();
-    let out = Pipeline::new(Options::default()).run("var a=!0;");
+    let out = Pipeline::new(unsafe_lane()).run("var a=!0;");
 
     let report = out
         .write_to_with(dir.path(), std::slice::from_ref(&input), true)
@@ -379,7 +379,7 @@ fn a_forced_write_never_removes_an_input_file_an_earlier_listing_names() {
 #[test]
 fn bundle_json_lists_only_the_modules_that_were_written() {
     let dir = tempfile::tempdir().unwrap();
-    let mut out = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let mut out = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     let bundle = out.bundle.as_mut().expect("a bundle was detected");
     bundle.modules.insert(
         1,
@@ -413,7 +413,7 @@ fn a_file_that_cannot_be_written_is_refused_and_the_rest_is_written() {
     if std::fs::write(locked.join("probe"), "").is_ok() {
         return;
     }
-    let mut out = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let mut out = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     let bundle = out.bundle.as_mut().expect("a bundle was detected");
     bundle.modules.insert(
         1,
@@ -475,7 +475,7 @@ fn bundle_of(paths: &[&str]) -> BundleOutput {
 }
 
 fn written_with_modules(dir: &std::path::Path, paths: &[&str]) -> untwist::WriteReport {
-    let mut out = Pipeline::new(Options::default()).run("var a=!0;");
+    let mut out = Pipeline::new(unsafe_lane()).run("var a=!0;");
     out.bundle = Some(bundle_of(paths));
     out.write_to(dir).expect("write")
 }
@@ -583,14 +583,21 @@ fn the_unpacker_reserves_the_names_the_writer_uses_itself() {
 #[test]
 fn a_force_write_leaves_nothing_stale_because_it_removed_it() {
     let dir = tempfile::tempdir().unwrap();
-    let first = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let first = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     first.write_to(dir.path()).expect("write");
     let second = Pipeline::new(Options {
         single_file: true,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(WEBPACK_4);
     let report = second.write_to_with(dir.path(), &[], true).expect("write");
     assert!(report.stale.is_empty(), "{:?}", report.stale);
     assert!(report.refused.is_empty(), "{:?}", report.refused);
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

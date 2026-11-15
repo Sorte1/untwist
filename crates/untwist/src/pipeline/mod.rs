@@ -190,6 +190,7 @@ struct OutputParts {
     #[cfg(feature = "refusal-spans")]
     refusal_sites: Vec<RefusalSite>,
     source_maps: Vec<Option<OwnedSourceMap>>,
+    module_goals: Vec<bool>,
 }
 
 impl OutputParts {
@@ -217,6 +218,7 @@ impl OutputParts {
             parts.statement_spans = result.statement_spans.filter(|_| !several);
             parts.unbundled &= result.refused || result.unbundled;
             parts.source_maps.push(result.source_map);
+            parts.module_goals.push(result.module_goal);
             parts.codes.push(result.code);
             parts.stages.extend(result.stages);
             parts.notes.extend(result.notes);

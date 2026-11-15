@@ -2,6 +2,7 @@ use oxc_allocator::{Allocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, walk_js_mut, VisitJs, VisitJsMut};
 use oxc_semantic::Scoping;
+use oxc_span::{GetSpan, Span};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
 
@@ -14,12 +15,13 @@ use crate::browserify::host::host_object_use;
 use crate::browserify::notes::{host_object, not_proven, unloaded};
 use crate::browserify::prelude::Unproven;
 use crate::browserify::requests::unloaded_module;
-use crate::closed::{first_host_read, first_open, legacy_read};
+use crate::closed::{first_host_read, first_open};
 use crate::frame::Frame;
 use crate::links::Links;
 use crate::matcher::Factory;
 use crate::model::{body_key, Bodies, BodyKey, Bundle, BundleKind};
 use crate::notes::{factory_not_closed, module_object_used, require_not_shared};
+use crate::strict::{first_sloppy_function, mark_strict_sources};
 use crate::webpack::buildin::{polyfill_ids, Buildin};
 use crate::webpack::chunk::{
     chunk_factories, detect_exports_chunk_noted, detect_webpack_chunk_noted,
@@ -54,8 +56,8 @@ struct Extract<'a, 'p, 'b> {
     scoping: Option<Scoping>,
     unproven: &'b mut Option<String>,
     merged: bool,
-    legacy: Option<bool>,
     plain: Vec<String>,
+    site: Option<Span>,
 }
 
 fn factory_buildins(factories: &[(String, Factory<'_, '_>)]) -> FxHashMap<String, Buildin> {
@@ -76,19 +78,6 @@ fn factory_buildins(factories: &[(String, Factory<'_, '_>)]) -> FxHashMap<String
 }
 
 impl<'a> Extract<'a, '_, '_> {
-    fn legacy(&mut self) -> bool {
-        if let Some(known) = self.legacy {
-            return known;
-        }
-        let source = self.source;
-        let scoping = self
-            .scoping
-            .get_or_insert_with(|| build_scoping(source).scoping);
-        let found = legacy_read(source, Some(scoping));
-        self.legacy = Some(found);
-        found
-    }
-
     fn closed(&mut self, factories: Option<Vec<(String, Factory<'_, 'a>)>>) -> bool {
         self.closed_as(factories, &WEBPACK_PARAMS)
     }
@@ -105,10 +94,6 @@ impl<'a> Extract<'a, '_, '_> {
             return true;
         }
         let source = self.source;
-        if !self.options.trust_legacy_reads && self.legacy() {
-            self.unproven.get_or_insert_with(crate::notes::legacy_read);
-            return false;
-        }
         let scoping = self
             .scoping
             .get_or_insert_with(|| build_scoping(source).scoping);
@@ -131,12 +116,11 @@ impl<'a> Extract<'a, '_, '_> {
         if self.options.conservative {
             return true;
         }
-        let legacy = !self.options.trust_legacy_reads && self.legacy();
         let (Some(factories), Some(scoping)) = (factories, self.scoping.as_ref()) else {
             return true;
         };
         let buildins = factory_buildins(&factories);
-        let lane = (&buildins, record, legacy, self.options.trust_builtins);
+        let lane = (&buildins, record, self.options.trust_builtins);
         let mut plain = Vec::new();
         for (id, factory) in &factories {
             match module_object_use(scoping, factory, lane) {
@@ -249,6 +233,26 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
     }
 
     fn statements(&mut self, body: &[Statement<'a>]) {
+        self.find_statements(body);
+        let whole = std::ptr::eq(body.as_ptr(), self.source.body.as_ptr());
+        if self.bundle.is_some() && !whole {
+            self.site = body
+                .first()
+                .zip(body.last())
+                .map(|(first, last)| Span::new(first.span().start, last.span().end));
+        }
+    }
+
+    fn expression(&mut self, expr: &Expression<'a>) {
+        self.find_expression(expr);
+        if self.bundle.is_some() {
+            self.site = Some(expr.span());
+        }
+    }
+}
+
+impl<'a> Extract<'a, '_, '_> {
+    fn find_statements(&mut self, body: &[Statement<'a>]) {
         let (alloc, source, options) = (self.alloc, self.source, self.options);
         if self.closed(webpack5_factories(body))
             && self.module_kept(webpack5_factories(body), webpack5_record(body))
@@ -272,7 +276,7 @@ impl<'a> Finder<'a> for Extract<'a, '_, '_> {
         }
     }
 
-    fn expression(&mut self, expr: &Expression<'a>) {
+    fn find_expression(&mut self, expr: &Expression<'a>) {
         let (alloc, source, options) = (self.alloc, self.source, self.options);
         if self.closed(webpack4_factories(expr))
             && self.module_kept(webpack4_factories(expr), webpack4_record(expr))
@@ -609,10 +613,12 @@ fn extract_kinds<'a>(
     bodies: &mut Bodies<'a>,
     (options, links, scope): (UnpackOptions, &Links, Scope),
 ) -> Option<Bundle<'a>> {
-    if legacy_refused(program, options, links.legacy) {
+    if sloppy_refused(program, options).is_some() {
         return None;
     }
-    kinds_of(alloc, program, bodies, (options, links, scope))
+    let mut bundle = kinds_of(alloc, program, bodies, (options, links, scope))?;
+    mark_strict_sources(program, &mut bundle);
+    Some(bundle)
 }
 
 fn kinds_of<'a>(
@@ -638,6 +644,14 @@ fn extract_with<'a>(
     if scope == Scope::Nested {
         return extract_kinds(alloc, program, bodies, (options, links, scope));
     }
+    if !matches!(bodies, Bodies::Taken(_)) {
+        if let Some(what) = sloppy_refused(program, options) {
+            if holds_a_bundle_with(program, options) {
+                unproven.get_or_insert_with(|| crate::notes::sloppy_bundle(what));
+            }
+            return None;
+        }
+    }
     let mut detector = Detector {
         finder: Extract {
             alloc,
@@ -648,35 +662,36 @@ fn extract_with<'a>(
             scoping: None,
             unproven,
             merged: links.merged,
-            legacy: links.legacy,
             plain: Vec::new(),
+            site: None,
         },
     };
     detector.visit_program(program);
     let Extract {
         bodies,
         bundle,
-        unproven,
-        legacy,
+        scoping,
+        site,
         ..
     } = detector.finder;
-    if bundle.is_some() {
-        return bundle;
-    }
-    if legacy_refused(program, options, legacy) {
-        if refused_kind(program, options).is_some() {
-            unproven.get_or_insert_with(crate::notes::legacy_read);
+    if let Some(mut bundle) = bundle {
+        if let Some(site) = site.filter(|_| !options.conservative) {
+            let scoping = scoping.unwrap_or_else(|| build_scoping(program).scoping);
+            bundle.around = crate::beside::around(alloc, program, site, &scoping);
         }
-        return None;
+        mark_strict_sources(program, &mut bundle);
+        return Some(bundle);
     }
-    kinds_of(alloc, program, bodies, (options, links, scope))
+    let mut bundle = kinds_of(alloc, program, bodies, (options, links, scope))?;
+    mark_strict_sources(program, &mut bundle);
+    Some(bundle)
 }
 
-fn legacy_refused(program: &Program<'_>, options: UnpackOptions, known: Option<bool>) -> bool {
-    if options.trust_legacy_reads || options.conservative {
-        return false;
+fn sloppy_refused(program: &Program<'_>, options: UnpackOptions) -> Option<String> {
+    if !options.prove_frames || options.conservative {
+        return None;
     }
-    known.unwrap_or_else(|| legacy_read(program, None))
+    first_sloppy_function(program)
 }
 
 fn cloned<'a>(
@@ -718,13 +733,20 @@ fn refeed<'a>(
     };
     let none = Links::default();
     let context = (options, &none, Scope::Nested);
+    let strict = module.strict_source;
     let program = module.program_mut();
     let nested = if taken {
         taking(alloc, program, context, &mut None)
     } else {
         cloned(alloc, program, context)
     };
-    nested.unwrap_or(bundle)
+    let Some(mut nested) = nested else {
+        return bundle;
+    };
+    for module in nested.modules.values_mut() {
+        module.strict_source |= strict;
+    }
+    nested
 }
 
 pub fn unpack_program<'a>(alloc: &'a Allocator, program: &Program<'a>) -> Option<Bundle<'a>> {

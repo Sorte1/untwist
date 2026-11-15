@@ -4,8 +4,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
-use untwist_core::ast_util::frame_reads::spells_function_frame;
-use untwist_core::semantic::{build_scoping, closed_eval_names, is_closed_eval_at};
+use untwist_core::semantic::{closed_eval_names, is_closed_eval_at};
 
 use crate::matcher::Factory;
 use crate::scan::{is_direct_eval, is_free, Frame, Policy, Scan, Step, Suspend};
@@ -460,21 +459,5 @@ impl<'a> VisitJs<'a> for HostReads<'_, '_> {
             }
         }
         oxc_ast_visit::walk_js::walk_call_expression(self, it);
-    }
-}
-
-const LEGACY_MEMBERS: [&str; 2] = ["caller", "arguments"];
-
-fn spells_legacy(text: &str) -> bool {
-    LEGACY_MEMBERS.iter().any(|name| text.contains(name)) || text.contains("\\u")
-}
-
-pub fn legacy_read(program: &Program<'_>, scoping: Option<&Scoping>) -> bool {
-    if !spells_legacy(program.source_text) {
-        return false;
-    }
-    match scoping {
-        Some(scoping) => spells_function_frame(program, scoping),
-        None => spells_function_frame(program, &build_scoping(program).scoping),
     }
 }

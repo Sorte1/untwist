@@ -50,6 +50,7 @@ pub(super) struct InputResult {
     pub(super) guards: GuardRecord,
     pub(super) readers: PendingReaders,
     pub(super) unbundled: bool,
+    pub(super) module_goal: bool,
     pub(super) snapshots: Snapshots,
     pub(super) decoded_strings: Vec<super::DecodedSite>,
     pub(super) statement_spans: Option<Vec<(u32, u32)>>,
@@ -366,6 +367,7 @@ impl Pipeline {
             true => parse_program(&alloc, text),
             false => parse_with(&alloc, text, SourceType::script()),
         };
+        result.module_goal |= first && parsed.program.source_type.is_module();
         let errors = match parse_outcome(text, &parsed, first, result) {
             Ok(errors) => errors,
             Err(step) => return step,

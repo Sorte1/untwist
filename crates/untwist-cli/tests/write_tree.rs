@@ -69,6 +69,19 @@ fn observed(node: &Path, file: &Path) -> String {
 }
 
 fn written(cell: &Cell, flags: &[&str]) -> (tempfile::TempDir, PathBuf) {
+    let (dir, out, _) = written_noted(cell, flags);
+    (dir, out)
+}
+
+fn split_in_either_lane(cell: &Cell) -> (tempfile::TempDir, PathBuf) {
+    let (dir, out, kept_whole) = written_noted(cell, &[]);
+    match kept_whole {
+        true => written(cell, &["--unsafe"]),
+        false => (dir, out),
+    }
+}
+
+fn written_noted(cell: &Cell, flags: &[&str]) -> (tempfile::TempDir, PathBuf, bool) {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("out");
     let inputs = cell
@@ -77,6 +90,7 @@ fn written(cell: &Cell, flags: &[&str]) -> (tempfile::TempDir, PathBuf) {
         .map(|input| fixtures().join(cell.name).join(input));
     let run = bin()
         .args(flags)
+        .arg("-v")
         .arg("-o")
         .arg(&out)
         .args(inputs)
@@ -88,7 +102,10 @@ fn written(cell: &Cell, flags: &[&str]) -> (tempfile::TempDir, PathBuf) {
         cell.name,
         String::from_utf8_lossy(&run.stderr)
     );
-    (dir, out)
+    let kept_whole = !flags.contains(&"--unsafe")
+        && !out.join("bundle.json").exists()
+        && common::frame_refused(&String::from_utf8_lossy(&run.stderr));
+    (dir, out, kept_whole)
 }
 
 fn listing(out: &Path) -> serde_json::Value {
@@ -142,10 +159,10 @@ fn every_written_tree_runs_like_the_inputs() {
     for cell in CELLS {
         let want = expected(cell);
         for flags in FLAGS {
-            let (_dir, out) = written(cell, flags);
+            let (_dir, out, kept_whole) = written_noted(cell, flags);
             if !out.join("bundle.json").is_file() {
                 assert!(
-                    !flags.is_empty(),
+                    !flags.is_empty() || kept_whole,
                     "{}: the default lane unpacks it",
                     cell.name
                 );
@@ -167,7 +184,7 @@ fn an_entry_module_beside_chunk_inputs_runs_like_the_inputs() {
         return;
     };
     for cell in CELLS.iter().filter(|cell| cell.entry_module_runs) {
-        let (_dir, out) = written(cell, &[]);
+        let (_dir, out) = split_in_either_lane(cell);
         let paths = module_paths(&out);
         let (entry, _) = paths.iter().find(|(_, is_entry)| *is_entry).unwrap();
         assert_eq!(
@@ -182,7 +199,7 @@ fn an_entry_module_beside_chunk_inputs_runs_like_the_inputs() {
 #[test]
 fn a_partial_bundle_writes_each_input_under_its_own_name() {
     for cell in CELLS {
-        let (_dir, out) = written(cell, &[]);
+        let (_dir, out) = split_in_either_lane(cell);
         let paths = module_paths(&out);
         assert_eq!(has_deobfuscated_file(&out), !cell.mirrored, "{}", cell.name);
         if !cell.mirrored {

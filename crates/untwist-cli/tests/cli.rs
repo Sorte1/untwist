@@ -344,7 +344,13 @@ fn output_dir_gets_bundle_json_and_one_file_per_module() {
     let input = dir.path().join("in.js");
     std::fs::write(&input, WEBPACK_BUNDLE).unwrap();
     let outdir = dir.path().join("out");
-    let out = bin().arg("-o").arg(&outdir).arg(&input).output().unwrap();
+    let out = bin()
+        .arg("--unsafe")
+        .arg("-o")
+        .arg(&outdir)
+        .arg(&input)
+        .output()
+        .unwrap();
     assert!(out.status.success());
     assert!(outdir.join("deobfuscated.js").is_file());
     assert!(outdir.join("index.js").is_file());
@@ -374,6 +380,7 @@ fn force_replaces_stale_module_files_but_keeps_unrelated_ones() {
     std::fs::write(outdir.join("stale.js"), "stale").unwrap();
     std::fs::write(outdir.join("notes.txt"), "keep me").unwrap();
     let out = bin()
+        .arg("--unsafe")
         .arg("-o")
         .arg(&outdir)
         .arg("-f")
@@ -396,6 +403,7 @@ fn json_report_includes_the_bundle_and_the_written_files() {
     std::fs::write(&input, WEBPACK_BUNDLE).unwrap();
     let outdir = dir.path().join("out");
     let out = bin()
+        .arg("--unsafe")
         .arg("-o")
         .arg(&outdir)
         .arg("--report")
@@ -500,7 +508,13 @@ fn a_module_path_through_a_symlink_is_refused() {
     let outdir = dir.path().join("out");
     std::fs::create_dir(&outdir).unwrap();
     std::os::unix::fs::symlink(outside.path(), outdir.join("sub")).unwrap();
-    let out = bin().arg("-o").arg(&outdir).arg(&input).output().unwrap();
+    let out = bin()
+        .arg("--unsafe")
+        .arg("-o")
+        .arg(&outdir)
+        .arg(&input)
+        .output()
+        .unwrap();
     assert!(out.status.success());
     assert!(!outside.path().join("helper.js").exists());
     assert!(String::from_utf8_lossy(&out.stderr)
@@ -539,6 +553,7 @@ fn a_hard_linked_target_file_is_not_written_through() {
     std::fs::write(&victim, "keep me").unwrap();
     std::fs::hard_link(&victim, outdir.join("lib.js")).unwrap();
     let out = bin()
+        .arg("--unsafe")
         .arg("-o")
         .arg(&outdir)
         .arg("-f")
