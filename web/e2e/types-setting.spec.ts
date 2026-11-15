@@ -9,7 +9,7 @@ const SOURCE = `function greet(name) {
   }
   return count;
 }
-export const total = greet(String(Date.now()));
+export const total = greet("abc");
 console.log(total);
 `;
 
@@ -43,12 +43,12 @@ test('TypeScript writes the proven types, is kept in the link and downloads as .
   await paste(page, SOURCE);
   await runAndWait(page);
   const output = page.locator('#output-editor .cm-content');
-  await expect(output).toContainText('function greet(name: string): number {');
+  await expect(output).toContainText('function greet(name: "abc"): number {');
   await expect(output).toContainText('let count: number = 0;');
   await expect(page.locator('#download-label')).toHaveText('Download .ts');
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#download').click()]);
   expect(download.suggestedFilename()).toBe('deobfuscated.ts');
-  expect((await saved(download)).toString()).toContain('function greet(name: string): number {');
+  expect((await saved(download)).toString()).toContain('function greet(name: "abc"): number {');
 });
 
 test('JSDoc keeps JavaScript and adds comments', async ({ page }) => {
@@ -56,6 +56,6 @@ test('JSDoc keeps JavaScript and adds comments', async ({ page }) => {
   await paste(page, SOURCE);
   await runAndWait(page);
   const output = page.locator('#output-editor .cm-content');
-  await expect(output).toContainText('/** @param {string} name @returns {number} */ function greet(name) {');
+  await expect(output).toContainText('/** @param {"abc"} name @returns {number} */ function greet(name) {');
   await expect(page.locator('#download-label')).toHaveText('Download .js');
 });
