@@ -78,3 +78,23 @@ impl<'a> VisitJs<'a> for RunnerRoute {
         walk_js::walk_computed_member_expression(self, it);
     }
 }
+
+const JOINERS: [&str; 6] = ["+", "[", "${", "\\", "concat", "join"];
+
+const QUOTES: [char; 3] = ['"', '\'', '`'];
+
+pub(super) fn lexically_reaches(text: &str, (names, props): (&[&str], &[&str])) -> bool {
+    let named = |list: &[&str]| {
+        list.iter()
+            .any(|name| !name.is_empty() && text.contains(name))
+    };
+    let joined = text.contains(QUOTES) && JOINERS.iter().any(|joiner| text.contains(joiner));
+    named(names)
+        || named(props)
+        || named(&REFLECTIVE_ROOTS)
+        || named(&RUNNER_KEYS)
+        || named(&super::roles::REFLECTIVE_WRITERS)
+        || named(&super::roles::VIEW_READERS)
+        || joined
+        || text.contains("fromCharCode")
+}

@@ -263,8 +263,11 @@ pub(super) fn names_reach_text(
                 .is_some()
         })
         .collect();
+    if parsed.is_empty() {
+        return super::inert_text::lexically_reaches(text, watched);
+    }
     let Some(clean) = parsed.iter().find(|form| !has_early_errors(form)) else {
-        return !parsed.is_empty();
+        return true;
     };
     parsed_reaches(clean, watched, (depth - 1, runner_texts)).unwrap_or(true)
 }

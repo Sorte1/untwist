@@ -287,7 +287,10 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   generator constructors the parameters and body joined as the engine joins them
   (`function anonymous(a,b\n) {\nbody\n}`, read as an unnamed function since the body sees no
   `anonymous` binding), so `Function("a = [eval", "0][0]", "return a")()` is seen. A text that
-  parses under none of them throws before it runs and reaches nothing; one that parses only with
+  parses under none of them is judged on its raw characters, since node may accept what the
+  parser rejects (`if (0) g() = 1; ...`): it reaches every binding when it contains a watched
+  name, a name of the list above, or quotes with `+`, `[`, `${`, an escape, `concat`, `join` or
+  `fromCharCode` that could join into one, and reaches nothing otherwise; one that parses only with
   early errors under every goal counts as reaching every binding, since the engine might accept
   what the early-error check rejects. A text call whose value is only tested or discarded hands back nothing, and the
   global-object getter (`Function("return this")()` and obfuscator.io's
