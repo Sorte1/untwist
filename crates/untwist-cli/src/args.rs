@@ -262,6 +262,20 @@ pub struct Args {
     )]
     pub input_source_map: Option<String>,
     #[arg(
+        long,
+        value_enum,
+        value_name = "MODE",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "jsdoc",
+        conflicts_with = "source_map",
+        help = "experimental, opt-in: annotate types that hold for every value on every run, as \
+                JSDoc comments (jsdoc, the default for a bare --types: the files stay .js) or as \
+                TypeScript (--types=ts: writes .ts, or .tsx when JSX is left; CommonJS files keep \
+                .js and stay untyped); a position untwist cannot prove stays unannotated"
+    )]
+    pub types: Option<TypesArg>,
+    #[arg(
         long = "list-passes",
         help = "print every pass the engine can run, with its stage, and exit"
     )]
@@ -311,6 +325,21 @@ fn fuel_steps(word: &str) -> Result<u64, String> {
 pub enum ReportFormat {
     Text,
     Json,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum TypesArg {
+    Ts,
+    Jsdoc,
+}
+
+impl TypesArg {
+    pub fn mode(self) -> untwist::TypesMode {
+        match self {
+            TypesArg::Ts => untwist::TypesMode::Ts,
+            TypesArg::Jsdoc => untwist::TypesMode::Jsdoc,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -395,6 +424,7 @@ impl Args {
             disabled_passes: self.disable.clone(),
             wasm_check: self.wasm_check.check(),
             source_map: self.source_map.is_some(),
+            types: self.types.map(TypesArg::mode),
             ..untwist::Options::default()
         }
     }
@@ -404,6 +434,17 @@ impl Args {
 mod tests {
     use super::Args;
     use clap::Parser;
+
+    #[test]
+    fn a_bare_types_flag_means_jsdoc_and_the_mode_needs_an_equals_sign() {
+        let bare = Args::parse_from(["untwist", "--types", "in.js"]);
+        assert_eq!(bare.options().types, Some(untwist::TypesMode::Jsdoc));
+        assert_eq!(bare.files.len(), 1);
+        let ts = Args::parse_from(["untwist", "--types=ts", "in.js"]);
+        assert_eq!(ts.options().types, Some(untwist::TypesMode::Ts));
+        let none = Args::parse_from(["untwist", "in.js"]);
+        assert_eq!(none.options().types, None);
+    }
 
     #[cfg(feature = "test-hooks")]
     #[test]

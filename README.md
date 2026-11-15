@@ -121,6 +121,7 @@ Common flags:
 | `-f, --force` | Overwrite the files in `DIR` that this run writes and remove the ones a previous run left there. Input files are never overwritten. |
 | `--unsafe` | Use the unsafe lane (see below). |
 | `--modern BASELINE` | Opt-in: remove core-js polyfills of features that are native in `BASELINE` (see [Modern mode](#modern-mode)). |
+| `--types[=jsdoc\|ts]` | Experimental, opt-in: annotate only types that hold for every value on every run, as JSDoc (the default) or TypeScript (see [Proven types](#proven-types)). |
 | `--rename MODE` | `none` (default), `mangle`, `simple`, `smart` or `unique`. `-m` is short for `--rename mangle`. |
 | `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx` | Skip a stage. |
 | `--split-hoisted` | Also split Rollup/Vite scope-hoisted bundles, when the split provably keeps behaviour. |
@@ -214,7 +215,8 @@ files are loaded by node; unpacking does not check for such a write. Nor does an
 those runtimes start their modules through `.call` (webpack 5 only where a module uses `this` as its
 exports), which node's loader does not use for a written file. And
 no value the program tests is `document.all`, so `x != null ? x : y` becomes `x ?? y`: the two
-differ only for that object, which compares loosely equal to `null` without being nullish.
+differ only for that object, which compares loosely equal to `null` without being nullish. Untwist also assumes no debugger or inspector session changes the program's values while it
+runs; every lane and every proof rests on this.
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
 premise.
 
@@ -344,6 +346,66 @@ Today this covers Rollup bundles built with `@rollup/plugin-commonjs` and `stric
 once), in one program (with `--split-hoisted` every wrapper becomes its own module and they are
 left as they are). Scope-hoisted Rollup output, webpack module maps, esbuild `__commonJS`
 bundles and wrappers a minifier inlined into their caller are recognised but left as they are.
+
+## Proven types
+
+`--types` (or `--types=jsdoc`) keeps JavaScript and adds `/** @type */`, `@param` and `@returns`
+comments; `--types=ts` writes the output as TypeScript (`.ts`, or `.tsx` when JSX is left). It is
+experimental and off unless you ask for it. An annotation is written only when untwist proves
+that every value the position can hold, on every run, has that type; everything else stays as it
+was. `number` includes `NaN` and `-0`, a literal type is never `NaN` or `-0`, and no annotation is
+ever `any` or `unknown`.
+
+What it proves today is only what needs no premise about the rest of the realm: literals and the
+closed set of values a local binding is written with, the results of operators, function returns
+(an `async` function's as `Promise<…>`), and the parameters of a strict function (module code,
+class code or code under `"use strict"`) whose every call is visible. `.caller`, `.arguments` and
+the stack-trace API never hand out a strict function, so no code outside the run can call one with
+other values. A function is never treated that way when it is exported, reads `arguments`, is
+called with a spread, or is reached any other way, and no function at all when any input or module
+of the run can read a function's frame (`.caller`, `.arguments`, stack-trace functions, a `with`
+statement, or code text that could). A sloppy function's parameters stay untyped, and so do the
+results of built-ins such as `Math.floor`, `parseInt` or `"".slice`: both would rest on proving
+that no code in the realm patches a built-in or reaches a frame, which this version does not try.
+A direct `eval` (also through a local binding named `eval`) leaves untyped every binding it can
+reach, and in sloppy code it also turns off the types that rest on global names it could shadow
+(`undefined`, `NaN`, `Infinity`); a constant-string `eval` that only reads leaves out only the
+names it reads. A `with` statement leaves the file untyped, and so does an arithmetic, bitwise, `-` or `~`
+operator (other than `+`) applied to an object, array, function, class or regular expression
+literal or a binding declared with one (the TypeScript checker reports such operands differently
+once any type is written); an operator result is typed only when every operand is a proven
+primitive. Script-level `var`s, exported
+bindings, objects, arrays, classes and the DOM get no types.
+
+Every proven type is written, also when TypeScript would infer it anyway, unless writing it would
+give the TypeScript checker a new error (for example a literal type compared with a value outside
+it, which the checker narrows away), so the annotated file checks no worse than the untyped
+output under `strict` with `noImplicitAny` off. `--report` counts the annotated positions, how
+many of them TypeScript infers anyway, and the refused ones. The flag cannot be combined with
+`--source-map`.
+
+A file is written as `.ts` only when its TypeScript parse, stripped of the annotations, is the same
+program as its JavaScript parse (`a < b > (c)` is a comparison in JavaScript and a generic call in
+TypeScript) and it uses no name node's type stripping rejects (`await`, `yield` as identifiers);
+otherwise it keeps its `.js` name and is written untyped. CommonJS files (free `require`,
+`module` or `exports`) keep `.js` under `--types=ts` and stay untyped; `--types` (JSDoc) types them.
+When split ES modules become `.ts`, the `import`, `export … from`, `import()` and `require`
+specifiers that name them are rewritten to the new names, so the tree runs under node's type
+stripping and checks with `allowImportingTsExtensions`. When a module loads another by a computed
+name, or uses `require` other than as a call with one literal, or `import.meta`, every file keeps
+its `.js` name and its untyped text. With `--single-file`, the joined file is TypeScript only when
+every part is; otherwise every part is written untyped.
+
+The types run after every other stage, on the final text, so they describe the program untwist
+prints. The checks behind this live in `crates/untwist-types/tests` (one row per hazard), in the
+node run of the fixtures with every annotation turned into a runtime check, and in
+`tools/types-check`, which runs the pinned `tsc` over every annotated fixture output against the
+same text without annotations and fails on any new diagnostic. `--against-js` also compares each
+`.ts` output with the untyped output as `.js` under `checkJs`; the diagnostics it reports come from
+renaming JavaScript to `.ts` (in a `.ts` file every parameter is required, an object literal gets a
+fixed shape, and so on), not from the annotations, so they do not touch the promise that every
+written type holds. JSDoc mode keeps `.js` and has none of them, which is why a bare `--types` and
+the playground's first choice are JSDoc.
 
 ## Playground
 

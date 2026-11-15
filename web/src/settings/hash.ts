@@ -1,6 +1,6 @@
 import { LINK_CODE_CAP, SHARED_KEYS } from '../share/link';
 import { offList } from './passes';
-import { DEFAULTS, MODERN_CHARS, RENAME_MODES, WASM_CHECKS, type Settings } from './settings';
+import { DEFAULTS, MODERN_CHARS, RENAME_MODES, TYPES_CHOICES, WASM_CHECKS, type Settings } from './settings';
 
 export interface Parsed {
   readonly settings: Settings;
@@ -60,6 +60,7 @@ const CODECS: Readonly<Record<Key, Codec>> = {
   single: flag,
   off: { read: offList, write: (value) => String(value) },
   wasm: choice(WASM_CHECKS),
+  types: choice(TYPES_CHOICES),
   split: flag,
   assume: flag,
   modern: { read: (raw) => (MODERN_CHARS.test(raw) ? raw : undefined), write: (value) => String(value) },

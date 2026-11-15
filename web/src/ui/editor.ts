@@ -1,4 +1,4 @@
-import { javascriptLanguage } from '@codemirror/lang-javascript';
+import { javascriptLanguage, tsxLanguage } from '@codemirror/lang-javascript';
 import { HighlightStyle, LanguageSupport, syntaxHighlighting } from '@codemirror/language';
 import { EditorState, Prec, Transaction, type Extension } from '@codemirror/state';
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, highlightSpecialChars, keymap, lineNumbers } from '@codemirror/view';
@@ -51,7 +51,11 @@ export function access(editable: boolean): Extension {
   return [EditorState.readOnly.of(!editable), EditorView.editable.of(editable)];
 }
 
-export function baseExtensions(editable: boolean, gate: Extension = access(editable)): Extension[] {
+export function languageOf(typescript: boolean): Extension {
+  return new LanguageSupport(typescript ? tsxLanguage : javascriptLanguage);
+}
+
+export function baseExtensions(editable: boolean, gate: Extension = access(editable), language: Extension = languageOf(false)): Extension[] {
   return [
     lineNumbers(),
     highlightActiveLine(),
@@ -59,7 +63,7 @@ export function baseExtensions(editable: boolean, gate: Extension = access(edita
     highlightSpecialChars(),
     drawSelection(),
     highlightSelectionMatches(),
-    new LanguageSupport(javascriptLanguage),
+    language,
     syntaxHighlighting(highlight),
     look,
     gate,

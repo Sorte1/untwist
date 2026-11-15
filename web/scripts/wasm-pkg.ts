@@ -25,7 +25,7 @@ function build(): string {
   const cargoTarget = resolve(process.env.CARGO_TARGET_DIR ?? join(REPO, 'target'));
   const out = join(cargoTarget, 'wasm-pkg');
   const env = { ...process.env, UNTWIST_BUILD_ID: process.env.UNTWIST_BUILD_ID ?? buildId() };
-  run('cargo', ['build', '--release', '--target', 'wasm32-unknown-unknown', '-p', 'untwist-wasm'], env);
+  run('cargo', ['build', '--release', '--target', 'wasm32-unknown-unknown', '-p', 'untwist-wasm', '--features', 'types'], env);
   const wasm = join(cargoTarget, 'wasm32-unknown-unknown/release/untwist_wasm.wasm');
   run('wasm-bindgen', ['--target', 'web', '--out-dir', out, wasm]);
   const module = join(out, 'untwist_wasm_bg.wasm');

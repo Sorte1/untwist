@@ -59,8 +59,10 @@ pub const PSEUDO_GLOBALS: [&str; 8] = [
     "globalThis",
 ];
 
+pub const TYPE_NAMES: [&str; 1] = ["Promise"];
+
 pub fn is_reserved(name: &str) -> bool {
-    RESERVED_WORDS.contains(&name) || PSEUDO_GLOBALS.contains(&name)
+    RESERVED_WORDS.contains(&name) || PSEUDO_GLOBALS.contains(&name) || TYPE_NAMES.contains(&name)
 }
 
 #[derive(Default)]

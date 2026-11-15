@@ -76,7 +76,7 @@ test('the keyboard reaches every control with a visible focus ring, and leaves t
   await page.locator('#settings-toggle').focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#settings')).toBeVisible();
-  const settings = await tabCycle(page, 34);
+  const settings = await tabCycle(page, 37);
   const settingIds = new Set(settings.map((item) => item.id));
   for (const id of ['settings-close', 'unpack', 'jsx', 'none', 'mangle', 'fuel', 'fuel-inf', 'copy-link']) {
     expect(settingIds, id).toContain(id);
