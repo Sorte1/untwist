@@ -13,7 +13,10 @@ struct ObjectOperands<'s, 'a> {
 fn is_arithmetic(operator: BinaryOperator) -> bool {
     !(operator.is_equality()
         || operator.is_compare()
-        || matches!(operator, BinaryOperator::In | BinaryOperator::Instanceof))
+        || matches!(
+            operator,
+            BinaryOperator::In | BinaryOperator::Instanceof | BinaryOperator::Addition
+        ))
 }
 
 fn is_object_literal(expression: &Expression<'_>) -> bool {
@@ -24,7 +27,6 @@ fn is_object_literal(expression: &Expression<'_>) -> bool {
             | Expression::FunctionExpression(_)
             | Expression::ArrowFunctionExpression(_)
             | Expression::ClassExpression(_)
-            | Expression::NewExpression(_)
             | Expression::RegExpLiteral(_)
     )
 }
@@ -74,7 +76,7 @@ impl<'a> Visit<'a> for ObjectOperands<'_, 'a> {
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
         let numeric = matches!(
             it.operator,
-            UnaryOperator::UnaryPlus | UnaryOperator::UnaryNegation | UnaryOperator::BitwiseNot
+            UnaryOperator::UnaryNegation | UnaryOperator::BitwiseNot
         );
         self.found |= numeric && self.is_object(&it.argument);
         walk::walk_unary_expression(self, it);
