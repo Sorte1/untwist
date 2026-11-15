@@ -1,0 +1,3 @@
+# cell	bundler	loader	flags	sha256
+w5-none	webpack@5.112.2	browser	mode=none devtool=false target=web	336a5cc85d6b416c060621c19ed0623fbcca489e4814932667ec3240add77448
+w5-dev	webpack@5.112.2	browser	mode=development devtool=false target=web	644efc494621e35e977ebd59fb91cf3992b3a7e451b2d9125412309992c54d0b
