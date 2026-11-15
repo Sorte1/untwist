@@ -618,7 +618,7 @@
   id, a chunk id or a require request of a webpack, browserify, Parcel or Turbopack bundle
   ([`unpack.md`](unpack.md), "No code gives `Object.prototype` a property named like a module id, a chunk id or a request"),
   and that no code replaces `Function.prototype.call`, `apply` or `bind`, through which those runtimes
-  start every module ([`unpack.md`](unpack.md), "No code replaces `Function.prototype.call`, `apply` or `bind`").
+  start their modules (webpack 5 only where a module uses `this` as its exports) ([`unpack.md`](unpack.md), "No code replaces `Function.prototype.call`, `apply` or `bind`").
 - **In the conservative comparison mode a string literal that a removed protection helper had demoted becomes a
   directive.** When the protections stage removes a helper from the head of a statement list,
   the reference deobfuscator prints the string-literal statements that now lead it as a directive prologue, and

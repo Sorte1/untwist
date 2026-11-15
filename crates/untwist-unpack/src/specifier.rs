@@ -42,7 +42,23 @@ impl ModulePaths {
             .filter(|module| module.named_path)
             .map(|module| normalize_posix(module.path.as_str()))
             .collect();
-        Self { named, ..paths }
+        let mut taken = paths.taken;
+        taken.extend(
+            bundle
+                .mirrored_inputs
+                .iter()
+                .map(|input| normalize_posix(input))
+                .flat_map(|input| {
+                    with_ancestors(&input)
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                }),
+        );
+        Self {
+            named,
+            taken,
+            ..paths
+        }
     }
 
     pub fn from_pairs<'p>(pairs: impl IntoIterator<Item = (&'p str, &'p str)>) -> Self {

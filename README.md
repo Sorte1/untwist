@@ -211,8 +211,8 @@ request of a bundle whose runtime looks modules or chunks up in a plain object (
 and their chunks, browserify, Parcel, Turbopack): such a runtime would find that property in its
 `{}` cache, module map or installed-chunk table instead of the module or chunk, while the written
 files are loaded by node; unpacking does not check for such a write. Nor does any code replace `Function.prototype.call`, `apply` or `bind`:
-those runtimes start every module through `.call`, which node's loader does not use for a written
-file. And
+those runtimes start their modules through `.call` (webpack 5 only where a module uses `this` as its
+exports), which node's loader does not use for a written file. And
 no value the program tests is `document.all`, so `x != null ? x : y` becomes `x ?? y`: the two
 differ only for that object, which compares loosely equal to `null` without being nullish.
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every

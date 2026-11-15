@@ -6,6 +6,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::semantic::{closed_eval_names, is_closed_eval_at};
 
+use crate::browserify::requests::leaves_the_bundle;
 use crate::matcher::Factory;
 use crate::scan::{is_direct_eval, is_free, Frame, Policy, Scan, Step, Suspend};
 
@@ -14,6 +15,7 @@ pub enum Captured {
     Binding(String),
     Parameter(String),
     Host(String),
+    HostUse(String),
     Arguments,
     Eval,
     With,
@@ -27,6 +29,9 @@ impl Captured {
             Self::Binding(name) => format!("it reads {name}, a binding of the bundle's scope"),
             Self::Parameter(name) => format!("it reads {name}, a factory parameter no module maps"),
             Self::Host(name) => format!("it reads {name}, which every module has for itself"),
+            Self::HostUse(what) => {
+                format!("it uses the host's require ({what}), which a written file answers for its own path")
+            }
             Self::Arguments => "it reads the factory's own arguments".to_string(),
             Self::Eval => "it calls eval directly".to_string(),
             Self::With => "it holds a with statement".to_string(),
@@ -86,6 +91,8 @@ fn global_fallback(scoping: &Scoping, it: &ConditionalExpression<'_>) -> bool {
 }
 
 pub const HOST_NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
+
+const FILE_NAMES: [&str; 2] = ["__filename", "__dirname"];
 
 const KNOWN_PARAMS: usize = 8;
 
@@ -216,6 +223,7 @@ pub struct Check<'s, 'k, 'a> {
     region: Region<'k, 'a>,
     helpers: &'s FxHashSet<SymbolId>,
     hosts: bool,
+    host_require: bool,
     arrow: bool,
     captured: Option<Captured>,
 }
@@ -227,6 +235,7 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             region: Region::factory(factory, allowed.mapped_params),
             helpers: allowed.helpers,
             hosts: false,
+            host_require: false,
             arrow: factory.arrow,
             captured: None,
         }
@@ -243,6 +252,7 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             region: Region::statement(statement),
             helpers,
             hosts,
+            host_require: false,
             arrow: false,
             captured: None,
         }
@@ -253,8 +263,8 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
     }
 
     fn host(&self, reach: Reach, name: &str) -> Option<Captured> {
-        let read = self.hosts && reach == Reach::Free && HOST_NAMES.contains(&name);
-        read.then(|| Captured::Host(name.to_string()))
+        let named = FILE_NAMES.contains(&name) || (self.hosts && HOST_NAMES.contains(&name));
+        (reach == Reach::Free && named).then(|| Captured::Host(name.to_string()))
     }
 
     pub fn refuse_every_eval(&mut self, call: &CallExpression<'_>) {
@@ -268,8 +278,10 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             return Some(Captured::Eval);
         }
         closed_eval_names(call)?
-            .iter()
-            .find_map(|name| self.host(Reach::Free, name))
+            .into_iter()
+            .filter(|name| !(self.host_require && name == SHIELDED_HOST))
+            .find(|name| HOST_NAMES.contains(&name.as_str()))
+            .map(Captured::Host)
     }
 
     fn outer(&mut self, frame: Frame, what: &'static str) {
@@ -355,7 +367,19 @@ pub fn captured_by_factory(
     factory: Factory<'_, '_>,
     allowed: &Allowed<'_>,
 ) -> Option<Captured> {
-    let mut check = Check::factory(scoping, factory, allowed);
+    captured_with(scoping, factory, allowed, false)
+}
+
+fn captured_with(
+    scoping: &Scoping,
+    factory: Factory<'_, '_>,
+    allowed: &Allowed<'_>,
+    host_require: bool,
+) -> Option<Captured> {
+    let mut check = Check {
+        host_require,
+        ..Check::factory(scoping, factory, allowed)
+    };
     let mut scan = Scan::new(&mut check);
     scan.visit_formal_parameters(factory.params);
     scan.visit_function_body(factory.body);
@@ -365,7 +389,7 @@ pub fn captured_by_factory(
 pub fn first_open<'k, 'a: 'k>(
     scoping: &Scoping,
     factories: impl IntoIterator<Item = (String, Factory<'k, 'a>)>,
-    mapped_params: usize,
+    (mapped_params, host_require): (usize, bool),
 ) -> Option<(String, Captured)> {
     let helpers = FxHashSet::default();
     let allowed = Allowed {
@@ -373,7 +397,7 @@ pub fn first_open<'k, 'a: 'k>(
         helpers: &helpers,
     };
     factories.into_iter().find_map(|(id, factory)| {
-        captured_by_factory(scoping, factory, &allowed).map(|captured| (id, captured))
+        captured_with(scoping, factory, &allowed, host_require).map(|captured| (id, captured))
     })
 }
 
@@ -460,4 +484,189 @@ impl<'a> VisitJs<'a> for HostReads<'_, '_> {
         }
         oxc_ast_visit::walk_js::walk_call_expression(self, it);
     }
+}
+const NODE_REQUIRE_MEMBERS: [&str; 7] = [
+    "resolve",
+    "main",
+    "cache",
+    "extensions",
+    "call",
+    "apply",
+    "bind",
+];
+
+struct HostRequire<'s> {
+    scoping: &'s Scoping,
+    found: Option<String>,
+    requests: Vec<String>,
+}
+
+impl HostRequire<'_> {
+    fn note(&mut self, what: String) {
+        self.found.get_or_insert(what);
+    }
+
+    fn is_host_require(&self, expr: &Expression<'_>) -> bool {
+        is_host_require_name(self.scoping, expr)
+    }
+
+    fn judge(&mut self, call: &CallExpression<'_>) {
+        let request = match call.arguments.as_slice() {
+            [Argument::StringLiteral(literal)] => literal.value.as_str(),
+            _ => None,
+        };
+        let Some(request) = request else {
+            return self.note("a request that is not one literal".to_string());
+        };
+        match call.optional || !leaves_the_bundle(request) {
+            true => self.note(format!("require({request:?})")),
+            false => self.requests.push(request.to_string()),
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for HostRequire<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        let reads = is_direct_eval(self.scoping, &it.callee)
+            && closed_eval_names(it)
+                .is_some_and(|names| names.iter().any(|name| name == SHIELDED_HOST));
+        if reads {
+            match evals_host_require(self.scoping, it) {
+                true => self.note("read as a value".to_string()),
+                false => self.note("read through eval".to_string()),
+            }
+            return;
+        }
+        let callee = it.callee.without_parentheses();
+        if !calls_host_require(self.scoping, callee) {
+            oxc_ast_visit::walk_js::walk_call_expression(self, it);
+            return;
+        }
+        self.judge(it);
+        if let Expression::ConditionalExpression(choice) = callee {
+            self.visit_expression(&choice.test);
+            for branch in [&choice.consequent, &choice.alternate] {
+                if !self.is_host_require(branch.without_parentheses()) {
+                    self.visit_expression(branch);
+                }
+            }
+        }
+        for argument in &it.arguments {
+            self.visit_argument(argument);
+        }
+    }
+
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        if it.operator == UnaryOperator::Typeof {
+            let (prefix, last) = match it.argument.without_parentheses() {
+                Expression::SequenceExpression(sequence) => match sequence.expressions.split_last()
+                {
+                    Some((last, prefix)) => (prefix, last),
+                    None => (&[][..], &it.argument),
+                },
+                argument => (&[][..], argument),
+            };
+            if self.is_host_require(last.without_parentheses()) {
+                for expression in prefix {
+                    self.visit_expression(expression);
+                }
+                return;
+            }
+        }
+        let deleted = it.operator == UnaryOperator::Delete
+            && it
+                .argument
+                .without_parentheses()
+                .as_member_expression()
+                .is_some_and(|member| self.is_host_require(member.object()));
+        if deleted {
+            self.note("a deleted member".to_string());
+        }
+        oxc_ast_visit::walk_js::walk_unary_expression(self, it);
+    }
+
+    fn visit_simple_assignment_target(&mut self, it: &SimpleAssignmentTarget<'a>) {
+        let written = it
+            .as_member_expression()
+            .is_some_and(|member| self.is_host_require(member.object()));
+        if written {
+            self.note("a write to a member".to_string());
+        }
+        oxc_ast_visit::walk_js::walk_simple_assignment_target(self, it);
+    }
+
+    fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
+        if !self.is_host_require(it.object()) {
+            oxc_ast_visit::walk_js::walk_member_expression(self, it);
+            return;
+        }
+        match it {
+            MemberExpression::StaticMemberExpression(member) => {
+                let name = member.property.name.as_str();
+                if NODE_REQUIRE_MEMBERS.contains(&name) || member.optional {
+                    self.note(format!("require.{name}"));
+                }
+            }
+            _ => self.note("a computed member".to_string()),
+        }
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if it.name == SHIELDED_HOST && is_free(Some(self.scoping), it) {
+            self.note("read as a value".to_string());
+        }
+    }
+}
+
+fn evals_host_require(scoping: &Scoping, call: &CallExpression<'_>) -> bool {
+    let [Argument::StringLiteral(payload)] = call.arguments.as_slice() else {
+        return false;
+    };
+    let text = payload.value.as_str().unwrap_or_default().trim();
+    let name = text.strip_suffix(';').unwrap_or(text).trim();
+    name == SHIELDED_HOST
+        && is_direct_eval(scoping, &call.callee)
+        && is_closed_eval_at(scoping, call)
+}
+
+fn is_host_require_name(scoping: &Scoping, expr: &Expression<'_>) -> bool {
+    match expr {
+        Expression::Identifier(id) => id.name == SHIELDED_HOST && is_free(Some(scoping), id),
+        Expression::CallExpression(call) => !call.optional && evals_host_require(scoping, call),
+        _ => false,
+    }
+}
+
+fn calls_host_require(scoping: &Scoping, callee: &Expression<'_>) -> bool {
+    match callee.without_parentheses() {
+        Expression::ConditionalExpression(choice) => [&choice.consequent, &choice.alternate]
+            .into_iter()
+            .any(|branch| is_host_require_name(scoping, branch.without_parentheses())),
+        callee => is_host_require_name(scoping, callee),
+    }
+}
+
+pub fn first_host_require_use<'k, 'a: 'k>(
+    scoping: &Scoping,
+    factories: impl IntoIterator<Item = (String, Factory<'k, 'a>)>,
+) -> Option<(String, Captured)> {
+    factories.into_iter().find_map(|(id, factory)| {
+        let mut uses = HostRequire {
+            scoping,
+            found: None,
+            requests: Vec::new(),
+        };
+        uses.visit_function_body(factory.body);
+        uses.found.map(|what| (id, Captured::HostUse(what)))
+    })
+}
+
+pub fn host_require_requests(scoping: &Scoping, program: &Program<'_>) -> Vec<String> {
+    let mut uses = HostRequire {
+        scoping,
+        found: None,
+        requests: Vec::new(),
+    };
+    uses.visit_program(program);
+    uses.requests
 }

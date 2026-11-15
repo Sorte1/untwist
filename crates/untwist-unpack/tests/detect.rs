@@ -25,7 +25,6 @@ fn every_webpack_shape_is_found_through_its_wrapper() {
         ("webpack-4.js", Some("2")),
         ("webpack-object.js", Some("386")),
         ("webpack-var-injection.js", Some("0")),
-        ("webpack-5.js", Some("2")),
         ("webpack-5-method.js", Some("2")),
         ("webpack-jsonp-chunk.js", None),
         ("webpack-5-json.js", None),
@@ -36,6 +35,13 @@ fn every_webpack_shape_is_found_through_its_wrapper() {
         assert_eq!(entry_id.as_deref(), entry, "{name}");
         assert!(!modules.is_empty(), "{name}");
     }
+}
+
+#[test]
+fn a_module_that_reads_members_of_the_hosts_require_refuses_the_bundle() {
+    let source = fixture("webpack-5.js");
+    let alloc = Allocator::default();
+    assert!(bundle_from(&alloc, &source).is_none());
 }
 
 #[test]

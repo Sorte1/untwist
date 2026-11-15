@@ -115,7 +115,7 @@ const CLOSED_EVAL_FACTORY: &str = r#"(function (modules) {
 })([
   function (e, t, n) {
     var seen;
-    try { seen = typeof eval("require;").cache; } catch (error) { seen = error.name; }
+    try { seen = typeof eval("Math;").max; } catch (error) { seen = error.name; }
     console.log(seen, n(1));
   },
   function (e) { e.exports = "world"; },
@@ -142,7 +142,7 @@ const OPEN_EVAL_FACTORY: &str = r#"(function (modules) {
 fn a_webpack_factory_whose_eval_reads_only_globals_is_unpacked_without_capturing_them() {
     let unpacked = Unpacked::of(CLOSED_EVAL_FACTORY, false);
     assert!(unpacked.has("bundle.json"), "{:?}", unpacked.notes());
-    unpacked.runs_like_the_bundle("object world\n");
+    unpacked.runs_like_the_bundle("function world\n");
 }
 
 const HOST_READ_FACTORY: &str = r#"(function (modules) {

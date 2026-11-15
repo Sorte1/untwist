@@ -3,6 +3,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use untwist_core::pass::{Note, NoteKind};
 
+use crate::closed::host_require_requests;
 use crate::matcher::named_const_member;
 use crate::model::RequireParam;
 use crate::model::{Bundle, BundleKind, Module};
@@ -205,6 +206,27 @@ fn attach_runtime<'a>(
     Some(())
 }
 
+fn host_requests(bundle: &Bundle<'_>) -> Vec<(String, Option<String>)> {
+    let mut left = Vec::new();
+    for (id, module) in &bundle.modules {
+        if module.runtime_require == RequireParam::Default {
+            continue;
+        }
+        let program = module.program();
+        if !name_in_use(program, "require") {
+            continue;
+        }
+        let scoping = build_scoping(program).scoping;
+        let requests = host_require_requests(&scoping, program);
+        left.extend(
+            requests
+                .into_iter()
+                .map(|request| (id.clone(), Some(request))),
+        );
+    }
+    left
+}
+
 fn reads_free_require(program: &Program<'_>) -> bool {
     build_scoping(program)
         .scoping
@@ -277,6 +299,8 @@ pub fn apply_transforms_with<'a>(
     }
     if !conservative {
         drop_polyfill_calls(alloc, bundle);
+        let left = host_requests(bundle);
+        bundle.left_requests.extend(left);
     }
     let shields = shield_all(alloc, bundle, conservative);
     for module in bundle.modules.values_mut() {
