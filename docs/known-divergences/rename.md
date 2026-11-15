@@ -276,11 +276,25 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   global object or by its name; renaming still keeps every name the file may read off the global
   object (`window.x`, `globalThis[k]`, `this.f()` at the top level, indirect `eval`) or whose
   name it tests or lists with a spelling the scan sees (`"x" in globalThis`, `hasOwnProperty`,
-  `Object.keys`, ...). A code text whose result may be a code runner counts as reaching every
-  top-level binding: any literal text passed to `Function`, `eval`, a timer or a `constructor`
-  that reads a runner or a global-object name (`Function("return eval")()(s)`,
-  `Function("return [eval]")()[0](s)`, `(function () {}).constructor("return eval")()(s)`),
-  so its call result is treated like a direct runner call. Under `--unsafe` a keyed read of the
+  `Object.keys`, ...). A code text counts as reaching every top-level binding when it may hand
+  back a code runner: when it names a runner or `constructor`, names `Reflect`, `Object`,
+  `Proxy` or a reflective writer or value reader (`set`, `defineProperty`, `get`, `values`, ...),
+  or holds a string that is or could join into such a name (`Function("return eval")()(s)`,
+  `Function("return [eval]")()[0](s)`, `Function("return Reflect.set")()`,
+  `Function("return Reflect.get(function () {}, 'const' + 'ructor')")()`); its call result is
+  then treated like a direct runner call. A text is parsed under every goal its runner may use:
+  a script for `eval` and string timers, and for `Function` and the async, generator and async
+  generator constructors the parameters and body joined as the engine joins them
+  (`function anonymous(a,b\n) {\nbody\n}`, read as an unnamed function since the body sees no
+  `anonymous` binding), so `Function("a = [eval", "0][0]", "return a")()` is seen. A text that
+  parses under none of them is judged on its raw characters, since node may accept what the
+  parser rejects (`if (0) g() = 1; ...`): it reaches every binding when it contains a watched
+  name, a name of the list above, or quotes with `+`, `[`, `${`, an escape, `concat`, `join` or
+  `fromCharCode` that could join into one, and reaches nothing otherwise; one that parses only with
+  early errors under every goal counts as reaching every binding, since the engine might accept
+  what the early-error check rejects. A text call whose value is only tested or discarded hands back nothing, and the
+  global-object getter (`Function("return this")()` and obfuscator.io's
+  `constructor("return this")` form) is exempt. Under `--unsafe` a keyed read of the
   global object (or of a function, for `constructor`) whose key the scan cannot resolve keeps
   `let`, `const` and `class` names too, since the value read may be `eval` or `Function`. In both
   lanes a new top-level name is
