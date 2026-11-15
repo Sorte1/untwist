@@ -96,6 +96,9 @@ impl Realm {
 
 struct Loaders<'p, 's> {
     found: bool,
+    global_this: bool,
+    sloppy: Vec<bool>,
+    module: bool,
     allowed: Vec<u32>,
     place: Place<'p>,
     scoping: &'s Scoping,
@@ -238,9 +241,23 @@ impl<'a> Visit<'a> for Loaders<'_, '_> {
     }
 
     fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+        let strict = it.scope_id.get().is_some_and(|scope| {
+            self.scoping
+                .scope_flags(scope)
+                .contains(oxc_syntax::scope::ScopeFlags::StrictMode)
+        });
         self.functions += 1;
+        self.sloppy.push(!strict);
         walk::walk_function(self, it, flags);
+        self.sloppy.pop();
         self.functions -= 1;
+    }
+
+    fn visit_this_expression(&mut self, _it: &ThisExpression) {
+        self.global_this |= match self.sloppy.last() {
+            Some(sloppy) => *sloppy,
+            None => !self.module,
+        };
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
@@ -259,16 +276,27 @@ impl<'a> Visit<'a> for Loaders<'_, '_> {
     }
 }
 
-pub(crate) fn loads_code(program: &Program<'_>, scoping: &Scoping, place: Place<'_>) -> bool {
+struct Loading {
+    code: bool,
+    global_this: bool,
+}
+
+fn loading(program: &Program<'_>, scoping: &Scoping, place: Place<'_>, module: bool) -> Loading {
     let mut loaders = Loaders {
         found: false,
+        global_this: false,
+        sloppy: Vec::new(),
+        module,
         allowed: Vec::new(),
         place,
         scoping,
         functions: 0,
     };
     loaders.visit_program(program);
-    loaders.found
+    Loading {
+        code: loaders.found,
+        global_this: loaders.global_this,
+    }
 }
 
 fn declares_a_global_name(program: &Program<'_>, scoping: &Scoping, module: bool) -> bool {
@@ -300,13 +328,16 @@ pub(crate) fn of_program(
     place: Place<'_>,
 ) -> Realm {
     let scanned = scan(program, scoping, module, false, &RELIANCE);
-    let loads = loads_code(program, scoping, place);
+    let module = module || untwist_core::semantic::has_module_syntax(program);
+    let seen = loading(program, scoping, place, module);
+    let frames = crate::facts::frames_reachable(program, scoping);
+    let loads = seen.code || frames;
     let declares = declares_a_global_name(program, scoping, module);
     Realm {
         builtins: scanned.verdict == Builtins::Intact && !loads && !declares,
         promises: !scanned.promise_written && !loads && !declares,
-        closed_calls: !crate::facts::frames_reachable(program, scoping) && !has_with(scoping),
-        self_contained: !loads,
+        closed_calls: !frames && !has_with(scoping),
+        self_contained: !loads && !seen.global_this,
     }
 }
 

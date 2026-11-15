@@ -215,7 +215,8 @@ files are loaded by node; unpacking does not check for such a write. Nor does an
 those runtimes start their modules through `.call` (webpack 5 only where a module uses `this` as its
 exports), which node's loader does not use for a written file. And
 no value the program tests is `document.all`, so `x != null ? x : y` becomes `x ?? y`: the two
-differ only for that object, which compares loosely equal to `null` without being nullish.
+differ only for that object, which compares loosely equal to `null` without being nullish. Untwist also assumes no debugger or inspector session changes the program's values while it
+runs; every lane and every proof rests on this.
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
 premise.
 
@@ -362,7 +363,7 @@ with a spread, or is reached any other way, and no function at all when any inpu
 the run can read a function's frame (`.caller`, `.arguments`, stack-trace functions, a `with`
 statement, or code text that could). When the run calls code it does not hold (a module that is
 not one of its inputs, the browser, node), only strict functions keep these types: `.caller` and
-the stack-trace API never hand out a strict function. A direct `eval` (also through a local binding named `eval`) leaves untyped every
+the stack-trace API never hand out a strict function. The same holds when any sloppy code can see the global object through `this` (a sloppy function called plainly, a callback given no `thisArg`, the top level of a classic script), since outside code reached through it can read frames. A direct `eval` (also through a local binding named `eval`) leaves untyped every
 binding it can reach, and in sloppy code it also turns off the types that rest on global names it
 could shadow (`undefined`, `NaN`, `Infinity` and the built-ins); a constant-string `eval` that
 only reads leaves out only the names it reads. A `with` statement leaves the file untyped.
@@ -376,7 +377,7 @@ every reachable member is known not to load or run code (`Math`, `JSON`, `Number
 `importScripts`, timers or anything else), `module` appears only as `module.exports`, `Error` and
 its subclasses only as a constructor, an `instanceof` operand or an `extends` clause, `arguments`
 only inside a function, every `import`, `export … from`, `import()` and free `require` names a
-module of the same run by a relative literal, and the file does not use `import.meta`.
+module of the same run by a relative literal, and the file does not use `import.meta`. A file that can read a function's frame counts as loading code too.
 
 Every proven type is written, also when TypeScript would infer it anyway, unless writing it would
 give the TypeScript checker a new error (for example a literal type compared with a value outside

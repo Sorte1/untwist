@@ -312,3 +312,68 @@ fn a_local_require_keeps_its_arguments_when_modules_become_typescript() {
     assert_eq!(String::from_utf8_lossy(&observed.stdout), expected.stdout);
     drop(dir);
 }
+
+fn a40r3(name: &str) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../untwist-types/tests/probes/a40r3")
+        .join(name);
+    std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("{}: {err}", path.display()))
+}
+
+#[test]
+fn a_caller_read_through_the_global_object_breaks_no_type_in_node() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("peek.js"),
+        "module.exports = (g) => g.caller;\n",
+    )
+    .unwrap();
+    let outside = "globalThis.peekOutside = (g) => g.caller;\n";
+    let mut failures = Vec::new();
+    for (name, prelude) in [
+        ("h-h1.js", ""),
+        ("h-h2.js", ""),
+        ("h-h3.js", outside),
+        ("h-h4.js", outside),
+    ] {
+        let source = a40r3(name);
+        let expected = node_run(
+            &node,
+            dir.path(),
+            &format!("plain-{name}"),
+            &format!("{prelude}{source}"),
+        );
+        assert!(
+            expected.stdout.contains("string"),
+            "{name}: {:?} {:?}",
+            expected.stdout,
+            expected.stderr
+        );
+        for mode in [TypesMode::Ts, TypesMode::Jsdoc] {
+            let options = typed(mode).with_test_hooks(TestHooks {
+                types_assert: true,
+                ..TestHooks::default()
+            });
+            let code = Pipeline::new(options).run(&source).code().to_string();
+            let observed = node_run(
+                &node,
+                dir.path(),
+                &format!("{mode:?}-{name}"),
+                &format!("{prelude}{code}"),
+            );
+            if observed.stderr.contains("__UT_FAIL") {
+                failures.push(format!("{name} {mode:?}: a type did not hold\n{code}"));
+            }
+            if observed.stdout != expected.stdout {
+                failures.push(format!(
+                    "{name} {mode:?}: printed {:?}, node printed {:?}",
+                    observed.stdout, expected.stdout
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
