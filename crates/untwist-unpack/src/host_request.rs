@@ -319,6 +319,20 @@ impl<'s> HostUses<'s> {
     }
 }
 
+fn meta_root<'k, 'a>(expr: &'k Expression<'a>) -> &'k Expression<'a> {
+    match expr.without_parentheses() {
+        Expression::StaticMemberExpression(member)
+            if matches!(
+                member.object.without_parentheses(),
+                Expression::ImportMeta(_)
+            ) =>
+        {
+            &member.object
+        }
+        other => other,
+    }
+}
+
 type Refused = Option<(&'static str, &'static str)>;
 
 const CODE_BUILTIN_TEXTS: &str = "a built-in that runs code texts";
@@ -396,7 +410,9 @@ impl<'a> VisitJs<'a> for HostUses<'_> {
 
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
         if it.operator == UnaryOperator::Typeof {
-            self.clear(it.argument.without_parentheses().span());
+            let argument = it.argument.without_parentheses();
+            self.clear(argument.span());
+            self.clear(meta_root(argument).span());
         }
         walk_js::walk_unary_expression(self, it);
     }
@@ -782,6 +798,7 @@ mod tests {
     fn own_file_names_are_read_only_from_the_allow_list() {
         for text in [
             "typeof import.meta;",
+            "typeof import.meta.url;",
             "process.env.NODE_ENV; process.nextTick(f); process.platform;",
             "module.exports = 1; typeof module;",
             "typeof require;",
