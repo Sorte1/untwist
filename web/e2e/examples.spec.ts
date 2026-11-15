@@ -60,6 +60,29 @@ test('each example loads, runs and prints what the CLI prints', async ({ page })
   }
 });
 
+async function unpacks(page: Page, name: string): Promise<void> {
+  await page.locator('#examples').click();
+  await page.locator('#examples-menu [role=option]', { hasText: name }).click();
+  await expect(page.locator('#example-name')).toHaveText(name);
+  await finished(page);
+  await expect(page.locator('#module-tree'), name).toBeVisible();
+  await expect(page.locator('#module-count'), name).toHaveText(/^bundle · \d+ modules$/);
+}
+
+test('every bundle example unpacks in the default Unsafe mode', async ({ page }) => {
+  const bundles = manifest.filter((example) => / bundle$/.test(example.name));
+  expect(bundles.length).toBeGreaterThanOrEqual(4);
+  await openApp(page, '#unsafe=1');
+  for (const example of bundles) {
+    await unpacks(page, example.name);
+  }
+});
+
+test('the webpack 5 example unpacks in Safe mode too', async ({ page }) => {
+  await openApp(page, '#unsafe=0');
+  await unpacks(page, 'webpack 5 bundle');
+});
+
 test('the examples are lazy chunks, not part of the initial load', async () => {
   const chunks = JSON.parse(readFileSync(join(DIST, '.vite/manifest.json'), 'utf8')) as Record<string, { file: string; isEntry?: boolean; imports?: string[] }>;
   const initial = new Set<string>();

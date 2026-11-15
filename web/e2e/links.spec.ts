@@ -45,12 +45,12 @@ test('an input edited after the run is not linked', async ({ page }) => {
 
 test('a click in an open module marks the part of the bundle it came from', async ({ page }) => {
   await openApp(page);
-  await paste(page, readRepo('fixtures/reference/unpack/webpack-5.js'));
+  await paste(page, readRepo('fixtures/webpack-strict/w5-dev.js'));
   await runAndWait(page);
-  await page.locator('#module-list .tree-item', { hasText: 'lib.js' }).click();
-  await page.locator('#output-editor .cm-line').first().click();
-  await expect(linkedText(page, 'input').first()).toHaveText('require.r(exports);');
+  await page.locator('#module-list .tree-item', { hasText: 'shop/cart.js' }).click();
+  await page.locator('#output-editor .cm-line', { hasText: '__webpack_require__.r(exports);' }).click();
+  await expect(linkedText(page, 'input').first()).toHaveText('__webpack_require__.r(__webpack_exports__);');
   const marked = (await linkedText(page, 'input').allTextContents()).map((line) => line.trim());
-  expect(marked).toContain("version: '2.0.0',");
-  expect(marked.join('\n')).not.toContain('foo: () => b');
+  expect(marked).toContain('add(name, price, quantity = 1) {');
+  expect(marked.join('\n')).not.toContain('function formatPrice');
 });

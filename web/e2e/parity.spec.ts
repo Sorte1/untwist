@@ -91,11 +91,11 @@ test('a baseline of engines with spaces reaches the engine whole', async ({ page
 });
 
 test('Split hoisted bundles with Assume ES modules gives the CLI tree, inferred boundaries included', async ({ page }) => {
-  const args = ['--split-hoisted', '--split-assume-modules'];
+  const args = ['--unsafe', '--split-hoisted', '--split-assume-modules'];
   const files = cliTree(args, BOUNDARIES, test.info().outputPath('cli'));
   const modules = (JSON.parse(files.get('bundle.json') ?? '{}') as { modules: unknown[] }).modules;
   expect(modules.length).toBeGreaterThanOrEqual(10);
-  await openApp(page, '#libs=1&split=1&assume=1');
+  await openApp(page, '#unsafe=1&libs=1&split=1&assume=1');
   await load(page, BOUNDARIES);
   await runAndWait(page);
   await expect(page.locator('#module-count')).toHaveText(`bundle · ${modules.length} modules`);
@@ -127,9 +127,9 @@ test('Source map appends the same inline map as --source-map inline on stdin', a
 });
 
 test('a bundle that splits only under the assumption offers it, and the button turns it on and reruns', async ({ page }) => {
-  const files = cliTree(['--split-hoisted', '--split-assume-modules'], BOUNDARIES, test.info().outputPath('cli'));
+  const files = cliTree(['--unsafe', '--split-hoisted', '--split-assume-modules'], BOUNDARIES, test.info().outputPath('cli'));
   const modules = (JSON.parse(files.get('bundle.json') ?? '{}') as { modules: unknown[] }).modules;
-  await openApp(page, '#libs=1');
+  await openApp(page, '#unsafe=1&libs=1');
   await load(page, BOUNDARIES);
   await runAndWait(page);
   await expect(page.locator('#split-banner')).toBeVisible();

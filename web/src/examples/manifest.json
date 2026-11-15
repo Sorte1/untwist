@@ -13,15 +13,15 @@
   },
   {
     "name": "webpack 5 bundle",
-    "source": "fixtures/reference/unpack/webpack-5.js",
-    "licence": "fixtures/LICENSE-reference",
-    "bytes": 2448
+    "source": "fixtures/webpack-strict/w5-dev.js",
+    "licence": "fixtures/unpack-bundlers/licenses/LICENSE-webpack",
+    "bytes": 6108
   },
   {
     "name": "webpack 4 bundle",
-    "source": "fixtures/reference/unpack/webpack-4.js",
-    "licence": "fixtures/LICENSE-reference",
-    "bytes": 1801
+    "source": "fixtures/unpack-bundlers/webpack/webpack4-dev-paths.js",
+    "licence": "fixtures/unpack-bundlers/licenses/LICENSE-webpack",
+    "bytes": 14602
   },
   {
     "name": "Vite / Rollup bundle",

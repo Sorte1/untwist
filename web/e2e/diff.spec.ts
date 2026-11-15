@@ -34,20 +34,15 @@ test('with no bundle the diff sets the input against the output, and the view is
 
 test('a module with a span is compared with its slice of the bundle; one without gets a note', async ({ page }) => {
   await openApp(page);
-  await paste(page, readRepo('fixtures/reference/unpack/webpack-5.js'));
+  await paste(page, readRepo('fixtures/webpack-strict/w5-dev.js'));
   await runAndWait(page);
   await page.locator('#view-diff').click();
-  await page.locator('#module-list .tree-item', { hasText: 'lib.js' }).click();
+  await page.locator('#module-list .tree-item', { hasText: 'shop/cart.js' }).click();
   const count = await chunks(page);
   expect(count).toBeGreaterThan(0);
   expect(await changedLines(page)).toBeGreaterThan(0);
   expect(await sideText(page, 'a')).toMatch(/^\{/);
   await expect(page.locator('#diff-note')).toBeHidden();
-  await page.locator('#view-output').click();
-  await page.locator('#clear-input').click();
-  await paste(page, readRepo('fixtures/unpack-bundlers/webpack/min-webpack5-locals.js'));
-  await runAndWait(page);
-  await page.locator('#view-diff').click();
   await page.locator('#module-list .tree-item', { hasText: '_runtime/webpack.js' }).click();
   await expect(page.locator('#diff-note')).toHaveText(/no span in the bundle text/);
 });

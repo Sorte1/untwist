@@ -21,12 +21,13 @@ export interface Entry extends Pick {
 }
 
 const REFERENCE_LICENCE = 'fixtures/LICENSE-reference';
+const WEBPACK_LICENCE = 'fixtures/unpack-bundlers/licenses/LICENSE-webpack';
 
 export const PICKS: readonly Pick[] = [
   { name: 'obfuscator.io — string array', source: 'fixtures/reference/deobfuscate/obfuscator.io.js', licence: REFERENCE_LICENCE },
   { name: 'obfuscator.io — control flow', source: 'fixtures/reference/deobfuscate/obfuscator.io-control-flow.js', licence: REFERENCE_LICENCE },
-  { name: 'webpack 5 bundle', source: 'fixtures/reference/unpack/webpack-5.js', licence: REFERENCE_LICENCE },
-  { name: 'webpack 4 bundle', source: 'fixtures/reference/unpack/webpack-4.js', licence: REFERENCE_LICENCE },
+  { name: 'webpack 5 bundle', source: 'fixtures/webpack-strict/w5-dev.js', licence: WEBPACK_LICENCE },
+  { name: 'webpack 4 bundle', source: 'fixtures/unpack-bundlers/webpack/webpack4-dev-paths.js', licence: WEBPACK_LICENCE },
   { name: 'Vite / Rollup bundle', source: 'fixtures/unpack-bundlers/rollup/vite-iife.js', licence: 'fixtures/unpack-bundlers/licenses/LICENSE-vite' },
   { name: 'Browserify bundle', source: 'fixtures/reference/unpack/browserify.js', licence: REFERENCE_LICENCE },
   { name: 'React createElement calls (JSX)', source: 'fixtures/jsx/classic.js', licence: null },

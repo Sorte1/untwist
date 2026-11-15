@@ -196,7 +196,7 @@ test('a large output under the 32 MiB cap, game.js, gets the features and refere
 });
 
 test('go to definition follows a required module to its export', async ({ page }) => {
-  await openApp(page);
+  await openApp(page, '#unsafe=1');
   await paste(page, readRepo('fixtures/unpack-bundlers/webpack/webpack5-prod.js'));
   await runAndWait(page);
   await page.locator('#module-list .tree-item', { hasText: 'index.js' }).first().click();

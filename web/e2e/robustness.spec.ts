@@ -89,7 +89,7 @@ test('a link with 200,000 unknown settings starts and lists only a few of them',
 
 test('a bundle with thousands of modules lists one page of them and shows more on request', async ({ page }) => {
   const modules = Array.from({ length: 1_200 }, (_, at) => `${at}:function(a,b,c){}`).join(',');
-  await openApp(page);
+  await openApp(page, '#unsafe=1');
   await paste(page, `(self.webpackChunkx=self.webpackChunkx||[]).push([[15],{${modules}}]);`);
   await runAndWait(page);
   await expect(page.locator('#module-count')).toHaveText('bundle · 1200 modules');
