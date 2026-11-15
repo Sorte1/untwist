@@ -4,7 +4,8 @@ use untwist_core::ast_util::key_names::{key_names, text_names};
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::pins::script_global_symbols;
 use untwist_core::semantic::{
-    has_module_syntax, hoist_blockers, is_shared_global, top_level_names_fixed, AnnexBWrites,
+    has_module_syntax, hoist_blockers, is_shared_global, misbound_catch_vars,
+    top_level_names_fixed, AnnexBWrites,
 };
 
 use crate::collect::{collect, Collected};
@@ -52,6 +53,7 @@ pub fn prepare(
         collected.text_names = text_names(program, scoping);
     }
     pin_annex_b_targets(&mut collected, program, scoping);
+    collected.pinned.extend(misbound_catch_vars(scoping));
     if setting.safe_lane {
         pin_function_names(
             &mut collected,

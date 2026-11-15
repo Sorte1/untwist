@@ -14,7 +14,7 @@ use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
 };
 use untwist_core::semantic::unbound::is_unbound_name;
-use untwist_core::semantic::{program_is_strict, scope_hazard};
+use untwist_core::semantic::{misbound_catch_vars, program_is_strict, scope_hazard};
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 use crate::constant_test::literal_truthiness;
@@ -326,10 +326,21 @@ fn still_needed<'a>(
         return names;
     }
     let references = references_in(dropped);
+    let misbound = if names
+        .iter()
+        .filter_map(|(_, symbol)| *symbol)
+        .any(|symbol| scoping.symbol_flags(symbol).is_catch_variable())
+    {
+        misbound_catch_vars(scoping)
+    } else {
+        FxHashSet::default()
+    };
     names
         .into_iter()
         .filter(|(_, symbol)| {
-            symbol.is_none_or(|symbol| seen_elsewhere(symbol, &references, scoping))
+            symbol.is_none_or(|symbol| {
+                misbound.contains(&symbol) || seen_elsewhere(symbol, &references, scoping)
+            })
         })
         .collect()
 }
