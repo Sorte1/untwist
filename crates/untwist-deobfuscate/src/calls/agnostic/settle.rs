@@ -28,6 +28,7 @@ pub(super) struct Watch<'k> {
     pub(super) observe: bool,
     pub(super) defer: bool,
     pub(super) printers_quiet: bool,
+    pub(super) runner_texts: bool,
 }
 
 const LINEAR_LOOKUP: usize = 16;

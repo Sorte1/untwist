@@ -17,6 +17,7 @@ use crate::init_order::{
     InitOrder, LentOrder,
 };
 use crate::notes;
+use untwist_core::semantic::pins::keeps_script_top_level;
 
 mod keyed;
 mod spans;
@@ -217,7 +218,7 @@ fn admits(
 
 fn inline_declared_object<'a>(
     values: &Values<'_>,
-    candidate: &Declared,
+    (candidate, kept): (&Declared, bool),
     Reads { reads, unknown }: Reads<'_>,
     cx: &mut Cx<'a, '_>,
     edits: &mut spans::Edits<'a>,
@@ -225,7 +226,7 @@ fn inline_declared_object<'a>(
 ) {
     let substituted = substitute_reads(values, candidate, reads, cx, edits);
     if substituted == reads.len() {
-        if unknown == 0 {
+        if unknown == 0 && !kept {
             removals.remove(candidate.statement);
         }
         return;
@@ -374,7 +375,13 @@ impl<'a> Pass<'a> for InlineObjectProps {
         );
         let mut edits = spans::Edits::default();
         let mut removals = StmtEdits::new();
+        let keeps_root = keeps_script_top_level(program, cx.opts);
         for (candidate, reads) in admitted {
+            let kept = keeps_root && {
+                let scoping = cx.scoping();
+                scoping.symbol_scope_id(candidate.symbol) == scoping.root_scope_id()
+            };
+            let candidate = (candidate, kept);
             inline_declared_object(&values, candidate, reads, cx, &mut edits, &mut removals);
         }
         if !self.superset_only {

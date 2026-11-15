@@ -31,8 +31,12 @@ fn unsafe_lane(source: &str) -> String {
 }
 
 fn both(source: &str) -> String {
-    let folded = safe(source);
-    assert_eq!(folded, unsafe_lane(source), "the lanes differ on {source}");
+    let folded = unsafe_lane(source);
+    let kept = safe(source);
+    assert!(
+        kept.ends_with(&folded),
+        "the safe lane does not fold like the unsafe lane on {source}: {kept}"
+    );
     folded
 }
 

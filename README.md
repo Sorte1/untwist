@@ -230,8 +230,13 @@ patched, even when the program visibly patches one, a direct `eval` reads and wr
 variable (the lexical passes still refuse a program whose `eval` may), a built-in prototype that the
 program reaches through a value it reads (`[].__proto__`, `o[key]`, `Reflect.getPrototypeOf(x)`)
 is not patched through that value, no code observes a classic script's top-level `var` or
-function through the global object or by its name (so renaming may rename them; the safe lane
-never does), and a few passes that rest on
+function through the global object or by its name other than in the ways the scan sees (so
+renaming may rename them; the safe lane never does). The scan sees property reads off the global
+object and code built from text: a literal text that names a top-level binding, a text that is
+not a literal, or a text that may hand back a code runner (`Function("return eval")()(s)`, a
+`constructor`, a timer) keeps every top-level binding's name, `let`, `const` and `class`
+included, and no new top-level name is a word that a string of the file spells
+(`Function("return typeof a")`). A few passes that rest on
 heuristics are allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).
 `dead-code`, which deletes branches behind constant comparisons, runs in both lanes.
 `fold-pure-calls` also folds calls to a pure helper that is passed around as a value or that the

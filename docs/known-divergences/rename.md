@@ -246,9 +246,16 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   global object or by its name; renaming still keeps every name the file may read off the global
   object (`window.x`, `globalThis[k]`, `this.f()` at the top level, indirect `eval`) or whose
   name it tests or lists with a spelling the scan sees (`"x" in globalThis`, `hasOwnProperty`,
-  `Object.keys`, ...). In both lanes a new top-level name is never a string, property name or
-  key that occurs in the file (so it cannot become the property the program asks about), a free
-  global of the file, or such a name in any other input of the run. When several classic scripts
+  `Object.keys`, ...). A code text whose result may be a code runner counts as reaching every
+  top-level binding: any literal text passed to `Function`, `eval`, a timer or a `constructor`
+  that reads a runner or a global-object name (`Function("return eval")()(s)`,
+  `Function("return [eval]")()[0](s)`, `(function () {}).constructor("return eval")()(s)`),
+  so its call result is treated like a direct runner call. In both lanes a new top-level name is
+  never a string, property name or key that occurs in the file (so it cannot become the property
+  the program asks about), a word that a string or template of the file spells, after its
+  escapes are read (so `Function("return typeof a")` and `Function("a = 5")` keep asking about
+  the same global; this holds for top-level `let`, `const` and `class` too), a free global of
+  the file, or such a name in any other input of the run. When several classic scripts
   are given together they share one global scope, so under `--unsafe` no top-level binding of a
   classic script is renamed in that run either (`unique` still renames them: its counter is
   shared by every input, so two inputs never hand out the same name). In a classic script, shorthand
@@ -256,7 +263,11 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   global object), and no mode gives a top-level binding the name of a browser or Node global
   property (`status`, `location`, `top`, `name`, `onload`, ...). When code built from text can
   reach the script's globals, top-level `let`, `const` and `class` keep their names too, since
-  indirect `eval` and `Function` resolve them.
+  indirect `eval` and `Function` resolve them. In the safe lane the other passes keep a classic
+  script's top-level declarations as well: `fold-pure-calls` still folds the calls of a top-level
+  pure function, and `inline-object-props` still inlines the reads of a top-level object, but
+  both leave the declaration in place, and `merge-object-assignments` does not move a top-level
+  object into its only use.
 - **CommonJS wrapper names** (`name-commonjs-wrappers`, on in every mode and both lanes). It
   renames only the bindings of a recognised wrapper and only when no code can see the old
   name: every function whose text holds one of them is an IIFE, a discarded function

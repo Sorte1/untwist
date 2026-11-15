@@ -357,11 +357,15 @@ fn game_js_rebuilds_its_scoping_at_most_four_times() {
 }
 
 fn stale_under(mutant: fn(bool), source: &str) -> bool {
+    stale_with(mutant, source, Options::default())
+}
+
+fn stale_with(mutant: fn(bool), source: &str, options: Options) -> bool {
     forget_failures();
     let before = refresh_counts_for_tests();
     mutant(true);
     check_patches_for_tests(true);
-    let out = Pipeline::new(Options::default()).run(source);
+    let out = Pipeline::new(options).run(source);
     check_patches_for_tests(false);
     mutant(false);
     let after = refresh_counts_for_tests();
@@ -393,12 +397,16 @@ fn a_patch_that_leaves_a_removed_binding_linked_turns_s1_red_on_a_named_fixture(
         .find(|(label, _)| label.ends_with("rename-derived-names.js"))
         .map(|(_, source)| source)
         .unwrap_or_else(|| panic!("{UNLINKED}"));
+    let removing = || Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    };
     assert!(
-        !stale_under(|_| {}, &source),
+        !stale_with(|_| {}, &source, removing()),
         "{UNLINKED}: the clean patch went stale"
     );
     assert!(
-        stale_under(keep_one_dead_binding_for_tests, &source),
+        stale_with(keep_one_dead_binding_for_tests, &source, removing()),
         "{UNLINKED}: the linked binding went unseen"
     );
 }

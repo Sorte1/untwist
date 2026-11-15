@@ -169,7 +169,8 @@ fn function_and_class_names_survive_when_the_program_reads_name() {
 
 #[test]
 fn functions_are_renamed_when_nothing_reads_name() {
-    let source = "function _0x2() { return 1; } console.log(_0x2());";
+    let source =
+        "(function () { function _0x2() { return Math.random(); } console.log(_0x2() < 2); })();";
     for mode in MODES {
         let code = renamed(source, mode, true);
         assert!(!code.contains("_0x2"), "{mode:?}: {code}");

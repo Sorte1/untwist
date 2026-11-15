@@ -12,6 +12,7 @@ use untwist_core::ast_util::prop::prop_name;
 use untwist_core::ast_util::readonly::{scan_symbol_uses, PropRead, SymbolUses};
 use untwist_core::ast_util::respan::synthetic_spans_exhausted;
 use untwist_core::pass::{Cx, Interest, Pass};
+use untwist_core::semantic::pins::keeps_script_top_level;
 use untwist_core::semantic::{is_constant_binding, read_reference_count, scope_hazard};
 
 use crate::bindings::{
@@ -427,7 +428,11 @@ fn plan_inline(
         program,
         cx,
     );
-    let reachable = unexposed_globals(reachable, |(_, symbol)| *symbol, program, cx.scoping());
+    let mut reachable = unexposed_globals(reachable, |(_, symbol)| *symbol, program, cx.scoping());
+    if keeps_script_top_level(program, cx.opts) {
+        let root = cx.scoping().root_scope_id();
+        reachable.retain(|(_, symbol)| cx.scoping().symbol_scope_id(*symbol) != root);
+    }
     if reachable.is_empty() {
         return Vec::new();
     }

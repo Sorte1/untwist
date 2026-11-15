@@ -1,6 +1,6 @@
 use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
-use untwist_core::ast_util::key_names::key_names;
+use untwist_core::ast_util::key_names::{key_names, text_names};
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::pins::script_global_symbols;
 use untwist_core::semantic::{
@@ -44,10 +44,11 @@ pub fn prepare(
 ) -> Collected {
     let mut collected = collect(program, scoping, rule);
     collected.classic_script = setting.classic_script;
-    if setting.classic_script && setting.extended {
-        collected.global_keys = key_names(program, scoping);
-    }
     pin_script_globals(&mut collected, scoping, setting);
+    if setting.classic_script && setting.extended && root_renameable(&collected, scoping) {
+        collected.global_keys = key_names(program, scoping);
+        collected.text_names = text_names(program, scoping);
+    }
     pin_annex_b_targets(&mut collected, program, scoping);
     if setting.safe_lane {
         pin_function_names(&mut collected, program, scoping);
@@ -56,6 +57,13 @@ pub fn prepare(
         pin_library_names(&mut collected, program, scoping);
     }
     collected
+}
+
+fn root_renameable(collected: &Collected, scoping: &Scoping) -> bool {
+    scoping
+        .get_bindings(scoping.root_scope_id())
+        .values()
+        .any(|symbol| !collected.pinned.contains(symbol))
 }
 
 fn pin_library_names(collected: &mut Collected, program: &Program<'_>, scoping: &Scoping) {

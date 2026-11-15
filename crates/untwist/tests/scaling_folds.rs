@@ -62,7 +62,10 @@ fn a_folded_nest_of_pure_calls_is_one_literal() {
         "w(".repeat(40),
         ",1)".repeat(40)
     ));
-    assert_eq!(out.code().trim(), "x = 41;");
+    assert_eq!(
+        out.code().trim(),
+        "function w(a, b) {\n  return a + b;\n}\nx = 41;"
+    );
 }
 
 #[test]

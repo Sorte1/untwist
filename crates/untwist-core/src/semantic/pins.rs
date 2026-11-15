@@ -9,3 +9,13 @@ pub fn script_global_symbols(scoping: &Scoping) -> impl Iterator<Item = SymbolId
         .map(|(_, symbol)| *symbol)
         .filter(move |symbol| scoping.symbol_flags(*symbol).intersects(declared))
 }
+
+pub fn keeps_script_top_level(
+    program: &oxc_ast::ast::Program<'_>,
+    opts: &crate::pass::PassOptions,
+) -> bool {
+    opts.extended
+        && !opts.unsafe_transforms
+        && !opts.nested_root
+        && !super::has_module_syntax(program)
+}
