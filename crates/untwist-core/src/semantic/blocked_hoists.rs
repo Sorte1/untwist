@@ -412,6 +412,38 @@ pub fn hoist_blockers(scoping: &Scoping) -> Vec<SymbolId> {
     blockers
 }
 
+pub fn hoist_shadowing_catches(scoping: &Scoping) -> Vec<SymbolId> {
+    let symbols = block_function_symbols(scoping);
+    if symbols.is_empty() {
+        return Vec::new();
+    }
+    let owners = ScopeOwners::new(scoping);
+    let mut catches: Vec<SymbolId> = symbols
+        .into_iter()
+        .filter_map(|function| Some((function, owners.declaring_block(function)?)))
+        .filter(|(function, block)| scoping.symbol_scope_id(*function) != *block)
+        .flat_map(|(function, block)| shadowing_catches_of(scoping, function, block))
+        .collect();
+    catches.sort_unstable();
+    catches.dedup();
+    catches
+}
+
+fn shadowing_catches_of(scoping: &Scoping, function: SymbolId, block: ScopeId) -> Vec<SymbolId> {
+    let name = scoping.symbol_ident(function);
+    scoping
+        .scope_ancestors(block)
+        .skip(1)
+        .take_while(|scope| !scoping.scope_flags(*scope).is_var())
+        .filter_map(|scope| scoping.get_binding(scope, name))
+        .filter(|bound| {
+            scoping
+                .symbol_flags(*bound)
+                .contains(SymbolFlags::CatchVariable)
+        })
+        .collect()
+}
+
 fn blockers_of(scoping: &Scoping, function: SymbolId, block: ScopeId) -> Vec<SymbolId> {
     let name = scoping.symbol_ident(function);
     let mut found = Vec::new();
