@@ -10,6 +10,9 @@ pub const HOST_OBJECT: &str =
 pub const UNLOADED: &str =
     "so the written files would not load what the bundle loads; no bundle is written";
 
+pub const LEFT_REQUEST_REACHES: &str =
+    "left as written, which node would resolve to a file of the written tree; no bundle is written";
+
 crate::notes::kind_notes!(
     NOTES,
     LATER_ENTRIES_NOT_RUN,
@@ -17,7 +20,8 @@ crate::notes::kind_notes!(
     REQUIRE_LEFT_UNBOUND,
     NOT_PROVEN,
     HOST_OBJECT,
-    UNLOADED
+    UNLOADED,
+    LEFT_REQUEST_REACHES
 );
 
 pub fn later_entries_not_run(count: usize) -> String {
@@ -46,4 +50,15 @@ pub fn host_object(id: impl Display, what: &str) -> String {
 
 pub fn unloaded(id: impl Display, what: &str) -> String {
     format!("module {id}: {what}, {UNLOADED}")
+}
+
+pub fn left_request_reaches(id: impl Display, request: Option<&str>, path: &str) -> String {
+    match request {
+        Some(request) => {
+            format!("module {id}: require({request:?}) is {LEFT_REQUEST_REACHES} ({path})")
+        }
+        None => {
+            format!("module {id}: a require call with no literal request is {LEFT_REQUEST_REACHES}")
+        }
+    }
 }

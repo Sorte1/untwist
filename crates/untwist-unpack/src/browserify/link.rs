@@ -65,6 +65,7 @@ struct Requires<'a, 'r> {
     specifiers: &'r Specifiers,
     paths: &'r ModulePaths,
     unmapped: Vec<String>,
+    left: Vec<Option<String>>,
 }
 
 impl<'a> Requires<'a, '_> {
@@ -102,10 +103,12 @@ impl<'a> Requires<'a, '_> {
             return;
         }
         let Some(argument) = it.arguments.first_mut() else {
+            self.left.push(None);
             return;
         };
-        let Some(specifier) = request_key(argument).and_then(|request| self.specifier(request))
-        else {
+        let request = request_key(argument);
+        let Some(specifier) = request.clone().and_then(|request| self.specifier(request)) else {
+            self.left.push(request);
             return;
         };
         let span = argument.span();
@@ -130,6 +133,7 @@ impl<'a> VisitMut<'a> for Requires<'a, '_> {
 struct Linked {
     unmapped: Vec<String>,
     unbound: bool,
+    left: Vec<Option<String>>,
 }
 
 fn link_module<'a>(
@@ -143,6 +147,7 @@ fn link_module<'a>(
         return Linked {
             unmapped: Vec::new(),
             unbound: true,
+            left: Vec::new(),
         };
     }
     let specifiers = specifiers(module, paths);
@@ -155,11 +160,16 @@ fn link_module<'a>(
         specifiers: &specifiers,
         paths,
         unmapped: Vec::new(),
+        left: Vec::new(),
     };
     requires.visit_program(module.program_mut());
-    let unmapped = requires.unmapped;
+    let Requires { unmapped, left, .. } = requires;
     let unbound = name != REQUIRE && still_uses(module.program(), name);
-    Linked { unmapped, unbound }
+    Linked {
+        unmapped,
+        unbound,
+        left,
+    }
 }
 
 struct NameUse<'n> {
@@ -340,6 +350,7 @@ pub fn transforms<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note
         .collect();
     let mut unmapped: Vec<(String, String)> = Vec::new();
     let mut unbound: Vec<String> = Vec::new();
+    let mut left: Vec<(String, Option<String>)> = Vec::new();
     let takes_the_bundle_require =
         |module: &Module<'a>| module.runtime_require != RequireParam::Absent;
     for (id, module) in bundle.modules.iter_mut() {
@@ -357,7 +368,9 @@ pub fn transforms<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Vec<Note
         if linked.unbound {
             unbound.push(id.clone());
         }
+        left.extend(linked.left.into_iter().map(|request| (id.clone(), request)));
     }
+    bundle.left_requests = left;
     let unmapped_note = unmapped
         .first()
         .map(|(id, request)| note(notes::unmapped_module_id(id, request, unmapped.len())));

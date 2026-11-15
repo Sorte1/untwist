@@ -1,7 +1,9 @@
 use oxc_allocator::Allocator;
 use untwist_core::parse::parse_program;
 use untwist_core::print::pretty_codegen;
-use untwist_unpack::browserify::notes::{LATER_ENTRIES_NOT_RUN, REQUIRE_LEFT_UNBOUND, UNLOADED};
+use untwist_unpack::browserify::notes::{
+    LATER_ENTRIES_NOT_RUN, LEFT_REQUEST_REACHES, REQUIRE_LEFT_UNBOUND, UNLOADED,
+};
 use untwist_unpack::{unpack, BundleKind};
 
 const PRELUDE: &str = "(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c=\"function\"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error(\"Cannot find module '\"+i+\"'\");throw a.code=\"MODULE_NOT_FOUND\",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u=\"function\"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()";
@@ -110,11 +112,53 @@ fn a_request_left_as_written_that_node_could_resolve_in_the_tree_refuses_the_bun
         "{1:[function(require,module,exports){var name=\"./a\";require(name)},{\"./a\":2}],2:[function(require,module,exports){},{}]},{},[1]",
         "{1:[function(require,module,exports){require(\"./a\");require(\"./c\")},{\"./a\":2,\"./c\":3}],2:[function(require,module,exports){},{}],3:[function(require,module,exports){require(\"./a\")},{}]},{},[1]",
         "{1:[function(require,module,exports){require(\"./c\")},{\"./c\":3,\"./a\":2}],2:[function(require,module,exports){},{}],3:[function(require,module,exports){require(\"./a\")},{\"./a\":undefined}]},{},[1]",
-        "{1:[function(require,module,exports){require(\"dep\")},{}],2:[function(require,module,exports){},{}]},{},[1]",
         "{1:[function(require,module,exports){require()},{}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"./a\")},{\"./a\":2,\"./a\":undefined}],2:[function(require,module,exports){},{}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"./a\")},{\"./a\":2}],2:[function(require,module,exports){},{}],2:[function(require,module,exports){},{}]},{},[1]",
+        "{1:[function(t,e,n){t(\"./a\");require(\"./a\")},{\"./a\":2}],2:[function(t,e,n){},{}]},{},[1]",
+        "{1:[function(t,e,n){var host=typeof require;t(\"./a\")},{\"./a\":2}],2:[function(t,e,n){},{}]},{},[1]",
+        "{1:[function(){require(\"./a\")},{\"./a\":2}],2:[function(require,module,exports){},{}]},{},[1]",
     ] {
         refused_as_unloaded(arguments);
     }
+}
+
+#[test]
+fn a_package_request_left_as_written_that_reaches_a_written_file_refuses_the_bundle() {
+    for arguments in [
+        "{1:[function(require,module,exports){require(\"./node_modules/dep/index.js\");require(\"dep\")},{\"./node_modules/dep/index.js\":2}],2:[function(require,module,exports){},{}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"a\");require(\"dep\")},{\"a\":2}],2:[function(require,module,exports){require(\"../dep\")},{\"../dep\":3}],3:[function(require,module,exports){},{}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"a/../dep\");require(\"dep\")},{\"a/../dep\":2}],2:[function(require,module,exports){},{}]},{},[1]",
+        "{1:[function(require,module,exports){require(\"dep\")},{}],\"node_modules/dep/index\":[function(require,module,exports){},{}]},{},[1]",
+    ] {
+        let notes = refusal(arguments).expect("the bundle is refused");
+        assert!(
+            notes.iter().any(|note| note.contains(LEFT_REQUEST_REACHES)),
+            "{arguments}: {notes:?}"
+        );
+    }
+}
+
+#[test]
+fn a_package_request_no_written_file_answers_stays_as_written() {
+    let split = split(
+        "{1:[function(require,module,exports){require(\"dep\");require(\"./a\")},{\"./a\":2}],2:[function(require,module,exports){},{}],3:[function(require,module,exports){},{}]},{},[1]",
+    );
+    assert_eq!(
+        split.code("index.js"),
+        "require(\"dep\");\nrequire(\"./a.js\");"
+    );
+}
+
+#[test]
+fn a_library_module_is_not_moved_into_a_package_a_request_left_as_written_names() {
+    let split = split(
+        "{1:[function(require,module,exports){require(\"./3\");require(\"foo\")},{\"./3\":3}],3:[function(require,module,exports){\n// foo 1.0.0: index.js\nmodule.exports=3;\n},{}]},{},[1]",
+    );
+    assert_eq!(
+        split.code("index.js"),
+        "require(\"./3.js\");\nrequire(\"foo\");"
+    );
 }
 
 #[test]
@@ -130,7 +174,7 @@ fn a_request_mapped_to_an_id_the_bundle_does_not_hold_refuses_the_bundle() {
 #[test]
 fn a_factory_that_names_its_require_differently_links_through_the_hosts() {
     let split = split(
-        "{1:[function(t,e,n){var host=typeof require;t(\"./a\")},{\"./a\":2}],2:[function(t,e,n){},{}]},{},[1]",
+        "{1:[function(t,e,n){var host=typeof t;t(\"./a\")},{\"./a\":2}],2:[function(t,e,n){},{}]},{},[1]",
     );
     assert_eq!(
         split.code("index.js"),
@@ -236,14 +280,6 @@ fn a_return_inside_a_nested_function_does_not_stop_the_entry() {
 }
 
 #[test]
-fn a_factory_that_takes_no_require_keeps_the_hosts_requests() {
-    let split = split(
-        "{1:[function(){require(\"./a\")},{\"./a\":2}],2:[function(require,module,exports){},{}]},{},[1]",
-    );
-    assert_eq!(split.code("index.js"), "require(\"./a\");");
-}
-
-#[test]
 fn a_renamed_require_left_with_a_computed_request_refuses_the_bundle() {
     let notes = refusal(
         "{1:[function(t,e,n){var host=typeof require;var name=\"./a\";t(name);t(\"./a\")},{\"./a\":2}],2:[function(t,e,n){},{}]},{},[1]",
@@ -275,9 +311,8 @@ fn a_renamed_require_with_a_request_that_names_no_module_refuses_the_bundle() {
 
 #[test]
 fn a_renamed_require_that_is_fully_linked_is_not_noted() {
-    let split = split(
-        "{1:[function(t,e,n){var host=typeof require;t(\"./a\")},{\"./a\":2}],2:[function(t,e,n){},{}]},{},[1]",
-    );
+    let split =
+        split("{1:[function(t,e,n){t(\"./a\")},{\"./a\":2}],2:[function(t,e,n){},{}]},{},[1]");
     assert!(!split.notes(REQUIRE_LEFT_UNBOUND), "{:?}", split.notes);
 }
 

@@ -9,11 +9,12 @@ const DEFAULT: &[&str] = &[];
 const UNSAFE: &[&str] = &["--unsafe"];
 const LANES: [&[&str]; 2] = [DEFAULT, UNSAFE];
 const PREMISE_ROWS: [(&str, &[&str]); 1] = [("a23", UNSAFE)];
+const DISPATCH_PREMISE_ROWS: [&str; 2] = ["e1", "e2"];
 const PROTOTYPE_PREMISE_ROWS: [&str; 9] = ["a27", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"];
 const PROTOTYPE_PREMISE_TREE: &str = "Some(0)\ntwo\n";
 const INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/browserify_review");
 const MODULE_EXTENSION: &str = "mjs";
-const UNPACKED: [&str; 6] = ["a10", "a19c", "a26", "a30", "a36", "b10"];
+const UNPACKED: [&str; 6] = ["a19c", "a26", "a36", "b10", "c10", "c5"];
 
 fn inputs() -> Vec<PathBuf> {
     let mut inputs: Vec<PathBuf> = std::fs::read_dir(INPUTS)
@@ -91,6 +92,12 @@ fn review_probes_run_like_the_browserify_bundle_in_both_lanes() {
             let unpacked = out.join("bundle.json").exists();
             if PROTOTYPE_PREMISE_ROWS.contains(&name.as_ref()) {
                 if !unpacked || seen.as_deref() != Some(PROTOTYPE_PREMISE_TREE) {
+                    wrong.push(format!("{name} {flags:?}: premise row gave {seen:?}"));
+                }
+                continue;
+            }
+            if DISPATCH_PREMISE_ROWS.contains(&name.as_ref()) {
+                if !unpacked || seen == expected {
                     wrong.push(format!("{name} {flags:?}: premise row gave {seen:?}"));
                 }
                 continue;

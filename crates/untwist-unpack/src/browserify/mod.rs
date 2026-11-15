@@ -5,4 +5,5 @@ pub mod link;
 pub mod notes;
 pub mod prelude;
 pub mod requests;
+pub mod resolve;
 pub mod tree;
