@@ -12,6 +12,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::naming_slot::{named_as, text_observes_names};
 use untwist_core::semantic::{
     build_scoping, eval_payload_names, hoist_shadowing_catches, misbound_catch_vars,
+    open_eval_sites,
 };
 
 use crate::closed::HOST_NAMES;
@@ -360,22 +361,36 @@ fn apply_renames<'a>(
 
 struct Hazards {
     misbound: OnceCell<FxHashSet<SymbolId>>,
-    dynamic: Vec<ScopeId>,
+    sites: Vec<ScopeId>,
+    capturing: Vec<ScopeId>,
+}
+
+fn var_scope_of(scoping: &Scoping, scope: ScopeId) -> ScopeId {
+    scoping
+        .scope_ancestors(scope)
+        .find(|ancestor| scoping.scope_flags(*ancestor).is_var())
+        .unwrap_or(scope)
 }
 
 impl Hazards {
-    fn of(scoping: &Scoping) -> Self {
-        let dynamic = scoping
+    fn of(program: &Program<'_>, scoping: &Scoping) -> Self {
+        let evals = match scoping.root_unresolved_references().contains_key("eval") {
+            true => open_eval_sites(program, scoping),
+            false => Vec::new(),
+        };
+        let withs: Vec<ScopeId> = scoping
             .scope_descendants_from_root()
-            .filter(|scope| {
-                scoping
-                    .scope_flags(*scope)
-                    .intersects(ScopeFlags::DirectEval | ScopeFlags::With)
-            })
+            .filter(|scope| scoping.scope_flags(*scope).contains(ScopeFlags::With))
+            .collect();
+        let capturing = evals
+            .iter()
+            .map(|site| var_scope_of(scoping, *site))
+            .chain(withs.iter().copied())
             .collect();
         Self {
             misbound: OnceCell::new(),
-            dynamic,
+            sites: evals.into_iter().chain(withs).collect(),
+            capturing,
         }
     }
 
@@ -390,11 +405,11 @@ impl Hazards {
     fn under_dynamic(&self, scoping: &Scoping, scope: ScopeId) -> bool {
         scoping
             .scope_ancestors(scope)
-            .any(|ancestor| self.dynamic.contains(&ancestor))
+            .any(|ancestor| self.capturing.contains(&ancestor))
     }
 
     fn holds_dynamic(&self, scoping: &Scoping, scope: ScopeId) -> bool {
-        self.dynamic
+        self.sites
             .iter()
             .any(|inner| scoping.scope_ancestors(*inner).any(|outer| outer == scope))
     }
@@ -505,7 +520,7 @@ fn rename_parameters_as<'a>(
     let evaluated = evaluated_names(program, &scoping);
     let mut used: FxHashSet<String> = evaluated.clone();
     let mut free: FxHashMap<&str, Ident<'a>> = FxHashMap::default();
-    let hazards = Hazards::of(&scoping);
+    let hazards = Hazards::of(program, &scoping);
 
     let pairs = original.len().min(renamed.len());
     let mut fresh = Vec::new();

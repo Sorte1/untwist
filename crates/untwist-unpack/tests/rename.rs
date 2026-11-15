@@ -220,6 +220,7 @@ fn a_direct_eval_or_with_statement_near_the_target_refuses_the_rename() {
         "function f(require) { eval(s); return require; } n(0);",
         "with (o) { n(0); }",
         "function f() { var require = 1; with (o) { return require; } } n(0);",
+        "function f() { eval(s); return n(0); }",
     ] {
         assert!(
             rename_refusal(source, &["e", "t", "n"], &WEBPACK).is_some(),
@@ -235,6 +236,8 @@ fn a_rename_without_a_collision_or_hazard_is_not_refused() {
         "function f(require) { return require; } n(0);",
         "function f() { try {} catch (require) { { function g() {} } n(0); } }",
         "function f(require) { eval(s); return require; }",
+        "function f() { eval(s); } n(0);",
+        "function f() { eval(\"Math;\"); return n(0); }",
     ] {
         assert_eq!(
             rename_refusal(source, &["e", "t", "n"], &WEBPACK),
