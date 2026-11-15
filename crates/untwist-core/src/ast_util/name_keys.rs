@@ -1,11 +1,10 @@
 use std::borrow::Cow;
 
 use oxc_ast::ast::*;
-use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use crate::ast_util::code_text::{is_number, literal_text};
 
@@ -142,115 +141,68 @@ struct Counts {
     numeric_writes: u32,
 }
 
-struct Counters<'s> {
-    scoping: &'s Scoping,
+#[derive(Default)]
+pub(crate) struct CounterBook {
     counts: FxHashMap<SymbolId, Counts>,
 }
 
-pub(crate) fn numeric_counters(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
-    let mut counters = Counters {
-        scoping,
-        counts: FxHashMap::default(),
-    };
-    counters.visit_program(program);
-    counters
-        .counts
-        .into_iter()
-        .filter(|(symbol, counts)| {
-            let writes = scoping
-                .get_resolved_references(*symbol)
-                .filter(|reference| reference.is_write())
-                .count();
-            counts.bindings == counts.numeric_bindings
-                && counts.numeric_bindings > 0
-                && writes == counts.numeric_writes as usize
-        })
-        .map(|(symbol, _)| symbol)
-        .collect()
-}
-
-fn numeric_assignment(operator: AssignmentOperator, right: &Expression<'_>) -> bool {
+pub(crate) fn numeric_assignment(operator: AssignmentOperator, right: &Expression<'_>) -> bool {
     match operator {
         AssignmentOperator::Assign | AssignmentOperator::Addition => is_number(right),
         operator => operator.is_arithmetic() || operator.is_bitwise(),
     }
 }
 
-impl Counters<'_> {
-    fn entry(&mut self, symbol: Option<SymbolId>) -> Option<&mut Counts> {
-        symbol.map(|symbol| self.counts.entry(symbol).or_default())
-    }
-
-    fn referenced(&self, id: &IdentifierReference<'_>) -> Option<SymbolId> {
-        id.reference_id
-            .get()
-            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
-    }
-
-    fn numeric_write(&mut self, target: Option<&IdentifierReference<'_>>) {
-        let symbol = target.and_then(|id| self.referenced(id));
-        if let Some(counts) = self.entry(symbol) {
-            counts.numeric_writes += 1;
+pub(crate) fn numeric_declarator(it: &VariableDeclarator<'_>) -> Option<SymbolId> {
+    match &it.id {
+        BindingPattern::BindingIdentifier(id) if it.init.as_ref().is_none_or(is_number) => {
+            id.symbol_id.get()
         }
+        _ => None,
     }
 }
 
-impl<'a> VisitJs<'a> for Counters<'_> {
-    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
-        if let Some(counts) = self.entry(it.symbol_id.get()) {
-            counts.bindings += 1;
-        }
-    }
-
-    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
-        if let BindingPattern::BindingIdentifier(id) = &it.id {
-            if it.init.as_ref().is_none_or(is_number) {
-                if let Some(counts) = self.entry(id.symbol_id.get()) {
-                    counts.numeric_bindings += 1;
-                }
-            }
-        }
-        walk_js::walk_variable_declarator(self, it);
-    }
-
-    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
-        self.visit_for_head(&it.left);
-        walk_js::walk_for_in_statement(self, it);
-    }
-
-    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
-        self.visit_for_head(&it.left);
-        walk_js::walk_for_of_statement(self, it);
-    }
-
-    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
-        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
-            if numeric_assignment(it.operator, &it.right) {
-                self.numeric_write(Some(id));
-            }
-        }
-        walk_js::walk_assignment_expression(self, it);
-    }
-
-    fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
-        if let SimpleAssignmentTarget::AssignmentTargetIdentifier(id) = &it.argument {
-            self.numeric_write(Some(id));
-        }
-        walk_js::walk_update_expression(self, it);
-    }
+pub(crate) fn head_bindings(left: &ForStatementLeft<'_>) -> Vec<SymbolId> {
+    let ForStatementLeft::VariableDeclaration(declaration) = left else {
+        return Vec::new();
+    };
+    declaration
+        .declarations
+        .iter()
+        .filter_map(|declarator| match &declarator.id {
+            BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
+            _ => None,
+        })
+        .collect()
 }
 
-impl Counters<'_> {
-    fn visit_for_head(&mut self, left: &ForStatementLeft<'_>) {
-        let ForStatementLeft::VariableDeclaration(declaration) = left else {
-            return;
+impl CounterBook {
+    fn entry(&mut self, symbol: SymbolId) -> &mut Counts {
+        self.counts.entry(symbol).or_default()
+    }
+
+    pub(crate) fn bind(&mut self, symbol: SymbolId) {
+        self.entry(symbol).bindings += 1;
+    }
+
+    pub(crate) fn bind_numeric(&mut self, symbol: SymbolId) {
+        self.entry(symbol).numeric_bindings += 1;
+    }
+
+    pub(crate) fn write_numeric(&mut self, symbol: SymbolId) {
+        self.entry(symbol).numeric_writes += 1;
+    }
+
+    pub(crate) fn is_counter(&self, scoping: &Scoping, symbol: SymbolId) -> bool {
+        let Some(counts) = self.counts.get(&symbol) else {
+            return false;
         };
-        for declarator in &declaration.declarations {
-            if let BindingPattern::BindingIdentifier(id) = &declarator.id {
-                if let Some(counts) = self.entry(id.symbol_id.get()) {
-                    counts.bindings += 1;
-                }
-            }
-        }
+        let writes = scoping
+            .get_resolved_references(symbol)
+            .filter(|reference| reference.is_write())
+            .count();
+        counts.bindings == counts.numeric_bindings
+            && counts.numeric_bindings > 0
+            && writes == counts.numeric_writes as usize
     }
 }

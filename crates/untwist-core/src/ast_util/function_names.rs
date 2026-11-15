@@ -1,8 +1,10 @@
 use crate::ast_util::code_text::is_number;
-use crate::ast_util::name_keys::numeric_counters;
 use crate::ast_util::name_keys::{
     call_reads_name, is_never_a_function, key_may_name, key_text, member_key,
     property_key_may_name, reader, NAME,
+};
+use crate::ast_util::name_keys::{
+    head_bindings, numeric_assignment, numeric_declarator, CounterBook,
 };
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
@@ -23,9 +25,10 @@ pub fn function_names(program: &Program<'_>, scoping: &Scoping) -> FunctionNames
         out: FunctionNames::default(),
         first_read: false,
         counters: Vec::new(),
+        book: CounterBook::default(),
     };
     walker.visit_program(program);
-    walker.settle_counters(program);
+    walker.settle_counters();
     walker.out
 }
 
@@ -35,9 +38,10 @@ pub fn reads_function_names(program: &Program<'_>, scoping: &Scoping) -> bool {
         out: FunctionNames::default(),
         first_read: true,
         counters: Vec::new(),
+        book: CounterBook::default(),
     };
     walker.visit_program(program);
-    walker.settle_counters(program);
+    walker.settle_counters();
     walker.out.name_read
 }
 
@@ -46,6 +50,7 @@ struct Walker<'s> {
     out: FunctionNames,
     first_read: bool,
     counters: Vec<SymbolId>,
+    book: CounterBook,
 }
 
 fn is_anonymous_function(expr: &Expression<'_>) -> bool {
@@ -125,13 +130,33 @@ impl Walker<'_> {
         true
     }
 
-    fn settle_counters(&mut self, program: &Program<'_>) {
-        if self.out.name_read || self.counters.is_empty() {
+    fn settle_counters(&mut self) {
+        if self.out.name_read {
             return;
         }
-        let numeric = numeric_counters(program, self.scoping);
-        if self.counters.iter().any(|symbol| !numeric.contains(symbol)) {
+        let (book, scoping) = (&self.book, self.scoping);
+        if self
+            .counters
+            .iter()
+            .any(|symbol| !book.is_counter(scoping, *symbol))
+        {
             self.out.name_read = true;
+        }
+    }
+
+    fn write_counter(&mut self, id: &IdentifierReference<'_>) {
+        let symbol = id
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        if let Some(symbol) = symbol {
+            self.book.write_numeric(symbol);
+        }
+    }
+
+    fn bind_head(&mut self, left: &ForStatementLeft<'_>) {
+        for symbol in head_bindings(left) {
+            self.book.bind(symbol);
         }
     }
 
@@ -202,7 +227,33 @@ impl<'a> VisitJs<'a> for Walker<'_> {
         walk_js::walk_class(self, it);
     }
 
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        if let Some(symbol) = it.symbol_id.get() {
+            self.book.bind(symbol);
+        }
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        self.bind_head(&it.left);
+        walk_js::walk_for_in_statement(self, it);
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.bind_head(&it.left);
+        walk_js::walk_for_of_statement(self, it);
+    }
+
+    fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
+        if let SimpleAssignmentTarget::AssignmentTargetIdentifier(id) = &it.argument {
+            self.write_counter(id);
+        }
+        walk_js::walk_update_expression(self, it);
+    }
+
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let Some(symbol) = numeric_declarator(it) {
+            self.book.bind_numeric(symbol);
+        }
         self.give_pattern(&it.id, it.init.as_ref());
         walk_js::walk_variable_declarator(self, it);
     }
@@ -218,6 +269,11 @@ impl<'a> VisitJs<'a> for Walker<'_> {
     }
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
+            if numeric_assignment(it.operator, &it.right) {
+                self.write_counter(id);
+            }
+        }
         if names_on_assignment(it.operator) {
             if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
                 self.give_reference(id, &it.right);
