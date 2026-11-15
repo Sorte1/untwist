@@ -15,7 +15,7 @@ use crate::browserify::host::host_object_use;
 use crate::browserify::notes::{host_object, not_proven, unloaded};
 use crate::browserify::prelude::Unproven;
 use crate::browserify::requests::unloaded_module;
-use crate::closed::{first_host_read, first_open};
+use crate::closed::{first_host_read, first_host_require_use, first_open};
 use crate::frame::Frame;
 use crate::links::Links;
 use crate::matcher::Factory;
@@ -97,7 +97,12 @@ impl<'a> Extract<'a, '_, '_> {
         let scoping = self
             .scoping
             .get_or_insert_with(|| build_scoping(source).scoping);
+        let host_require = || match targets == WEBPACK_PARAMS {
+            true => first_host_require_use(scoping, factories.iter().cloned()),
+            false => None,
+        };
         let open = first_host_read(scoping, factories.iter().cloned(), targets)
+            .or_else(host_require)
             .or_else(|| first_open(scoping, factories, MAPPED_PARAMS));
         let Some((id, captured)) = open else {
             return true;

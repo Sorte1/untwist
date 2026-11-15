@@ -13,11 +13,18 @@ const DISPATCH_PREMISE_ROWS: [&str; 2] = ["e1", "e2"];
 const PROTOTYPE_PREMISE_ROWS: [&str; 9] = ["a27", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"];
 const PROTOTYPE_PREMISE_TREE: &str = "Some(0)\ntwo\n";
 const INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/browserify_review");
+const HOST_INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/host_names_review");
+const MIRRORED: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/browserify_review_mirrored"
+);
+const MIRRORED_BUNDLE: &str = "ma.js";
+const MIRRORED_INPUT: &str = "lib/node_modules/foo/index.js";
 const MODULE_EXTENSION: &str = "mjs";
-const UNPACKED: [&str; 6] = ["a19c", "a26", "a36", "b10", "c10", "c5"];
+const UNPACKED: [&str; 8] = ["a19c", "a26", "a36", "b10", "c10", "c5", "w12", "w7"];
 
-fn inputs() -> Vec<PathBuf> {
-    let mut inputs: Vec<PathBuf> = std::fs::read_dir(INPUTS)
+fn inputs(dir: &str) -> Vec<PathBuf> {
+    let mut inputs: Vec<PathBuf> = std::fs::read_dir(dir)
         .expect("review inputs")
         .map(|entry| entry.expect("entry").path())
         .collect();
@@ -73,24 +80,18 @@ fn premise(name: &str, flags: &[&str]) -> bool {
         .any(|(row, lane)| *row == name && *lane == flags)
 }
 
-#[test]
-fn review_probes_run_like_the_browserify_bundle_in_both_lanes() {
-    let Some(node) = node_or_skip() else {
-        return;
-    };
-    let inputs = inputs();
-    assert!(inputs.len() >= 42, "found {} inputs", inputs.len());
+fn parity_failures(node: &Path, inputs: &[PathBuf]) -> Vec<String> {
     let work = tempfile::tempdir().expect("tempdir");
     let mut wrong = Vec::new();
-    for input in &inputs {
+    for input in inputs {
         let name = input.file_stem().expect("stem").to_string_lossy();
-        let expected = observed(&node, input);
+        let expected = observed(node, input);
         for (lane, flags) in LANES.iter().enumerate() {
             if premise(&name, flags) {
                 continue;
             }
             let out = work.path().join(format!("{name}-{lane}"));
-            let (seen, stderr) = tree_output(&node, input, &out, flags);
+            let (seen, stderr) = tree_output(node, input, &out, flags);
             let unpacked = out.join("bundle.json").exists();
             let kept_whole = *flags == DEFAULT && common::frame_refused(&stderr);
             if PROTOTYPE_PREMISE_ROWS.contains(&name.as_ref()) {
@@ -115,5 +116,58 @@ fn review_probes_run_like_the_browserify_bundle_in_both_lanes() {
             }
         }
     }
+    wrong
+}
+
+#[test]
+fn review_probes_run_like_the_browserify_bundle_in_both_lanes() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let inputs = inputs(INPUTS);
+    assert!(inputs.len() >= 42, "found {} inputs", inputs.len());
+    let wrong = parity_failures(&node, &inputs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn host_name_probes_run_like_their_bundles_in_both_lanes() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let inputs = inputs(HOST_INPUTS);
+    assert!(inputs.len() >= 14, "found {} inputs", inputs.len());
+    let wrong = parity_failures(&node, &inputs);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn a_mirrored_input_does_not_capture_a_linked_package_in_both_lanes() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = Path::new(MIRRORED);
+    let expected = observed(&node, &dir.join(MIRRORED_BUNDLE));
+    let work = tempfile::tempdir().expect("tempdir");
+    for (lane, flags) in LANES.iter().enumerate() {
+        let out = work.path().join(format!("m4-{lane}"));
+        let status = common::bin()
+            .current_dir(dir)
+            .args(*flags)
+            .args(["-v", "-f", "-o"])
+            .arg(&out)
+            .args([MIRRORED_BUNDLE, MIRRORED_INPUT])
+            .output()
+            .expect("run untwist");
+        assert!(status.status.success(), "{flags:?}: untwist failed");
+        let stderr = String::from_utf8_lossy(&status.stderr);
+        let kept_whole = *flags == DEFAULT && common::frame_refused(&stderr);
+        let unpacked = out.join("bundle.json").exists();
+        assert!(unpacked || kept_whole, "{flags:?}: no bundle written");
+        if !unpacked {
+            continue;
+        }
+        let seen = observed(&node, &out.join("index.js"));
+        assert_eq!(seen, expected, "{flags:?}");
+    }
 }

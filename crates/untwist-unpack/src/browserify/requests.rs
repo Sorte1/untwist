@@ -6,9 +6,11 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::number_key;
 use untwist_core::host_globals::NODE_BUILTIN_MODULES;
+use untwist_core::semantic::closed_eval_names;
 
 use crate::browserify::detect::{module_entries, runs_like_a_file, ModuleEntry, INHERITED_KEYS};
 use crate::browserify::link::FALSY_IDS;
+use crate::scan::is_direct_eval;
 
 const NODE_SCHEME: &str = "node:";
 const SCOPE_PREFIX: char = '@';
@@ -56,7 +58,7 @@ struct Tree<'s> {
     ids: FxHashSet<&'s str>,
 }
 
-fn leaves_the_bundle(request: &str) -> bool {
+pub(crate) fn leaves_the_bundle(request: &str) -> bool {
     is_builtin(request) || package_name(request).is_some()
 }
 
@@ -147,6 +149,12 @@ impl OuterRequire<'_> {
 impl<'a> VisitJs<'a> for OuterRequire<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         self.found |= it.name == REQUIRE && !self.bound_inside(it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.found |= is_direct_eval(self.scoping, &it.callee)
+            && closed_eval_names(it).is_some_and(|names| names.iter().any(|name| name == REQUIRE));
+        walk_js::walk_call_expression(self, it);
     }
 }
 

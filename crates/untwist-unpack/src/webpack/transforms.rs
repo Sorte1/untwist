@@ -205,6 +205,49 @@ fn attach_runtime<'a>(
     Some(())
 }
 
+struct HostRequests<'s> {
+    scoping: &'s oxc_semantic::Scoping,
+    requests: Vec<String>,
+}
+
+impl<'a> VisitJs<'a> for HostRequests<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        let host = matches!(&it.callee, Expression::Identifier(id)
+            if id.name == "require" && crate::scan::is_free(Some(self.scoping), id));
+        if let (true, [Argument::StringLiteral(literal)]) = (host, it.arguments.as_slice()) {
+            self.requests
+                .extend(literal.value.as_str().map(str::to_string));
+        }
+        walk_js::walk_call_expression(self, it);
+    }
+}
+
+fn host_requests(bundle: &Bundle<'_>) -> Vec<(String, Option<String>)> {
+    let mut left = Vec::new();
+    for (id, module) in &bundle.modules {
+        if module.runtime_require == RequireParam::Default {
+            continue;
+        }
+        let program = module.program();
+        if !name_in_use(program, "require") {
+            continue;
+        }
+        let scoping = build_scoping(program).scoping;
+        let mut found = HostRequests {
+            scoping: &scoping,
+            requests: Vec::new(),
+        };
+        found.visit_program(program);
+        left.extend(
+            found
+                .requests
+                .into_iter()
+                .map(|request| (id.clone(), Some(request))),
+        );
+    }
+    left
+}
+
 fn reads_free_require(program: &Program<'_>) -> bool {
     build_scoping(program)
         .scoping
@@ -277,6 +320,8 @@ pub fn apply_transforms_with<'a>(
     }
     if !conservative {
         drop_polyfill_calls(alloc, bundle);
+        let left = host_requests(bundle);
+        bundle.left_requests.extend(left);
     }
     let shields = shield_all(alloc, bundle, conservative);
     for module in bundle.modules.values_mut() {

@@ -6,6 +6,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::semantic::{closed_eval_names, is_closed_eval_at};
 
+use crate::browserify::requests::leaves_the_bundle;
 use crate::matcher::Factory;
 use crate::scan::{is_direct_eval, is_free, Frame, Policy, Scan, Step, Suspend};
 
@@ -14,6 +15,7 @@ pub enum Captured {
     Binding(String),
     Parameter(String),
     Host(String),
+    HostUse(String),
     Arguments,
     Eval,
     With,
@@ -27,6 +29,9 @@ impl Captured {
             Self::Binding(name) => format!("it reads {name}, a binding of the bundle's scope"),
             Self::Parameter(name) => format!("it reads {name}, a factory parameter no module maps"),
             Self::Host(name) => format!("it reads {name}, which every module has for itself"),
+            Self::HostUse(what) => {
+                format!("it uses the host's require ({what}), which a written file answers for its own path")
+            }
             Self::Arguments => "it reads the factory's own arguments".to_string(),
             Self::Eval => "it calls eval directly".to_string(),
             Self::With => "it holds a with statement".to_string(),
@@ -86,6 +91,8 @@ fn global_fallback(scoping: &Scoping, it: &ConditionalExpression<'_>) -> bool {
 }
 
 pub const HOST_NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
+
+const FILE_NAMES: [&str; 2] = ["__filename", "__dirname"];
 
 const KNOWN_PARAMS: usize = 8;
 
@@ -253,8 +260,8 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
     }
 
     fn host(&self, reach: Reach, name: &str) -> Option<Captured> {
-        let read = self.hosts && reach == Reach::Free && HOST_NAMES.contains(&name);
-        read.then(|| Captured::Host(name.to_string()))
+        let named = FILE_NAMES.contains(&name) || (self.hosts && HOST_NAMES.contains(&name));
+        (reach == Reach::Free && named).then(|| Captured::Host(name.to_string()))
     }
 
     pub fn refuse_every_eval(&mut self, call: &CallExpression<'_>) {
@@ -268,8 +275,9 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             return Some(Captured::Eval);
         }
         closed_eval_names(call)?
-            .iter()
-            .find_map(|name| self.host(Reach::Free, name))
+            .into_iter()
+            .find(|name| HOST_NAMES.contains(&name.as_str()))
+            .map(Captured::Host)
     }
 
     fn outer(&mut self, frame: Frame, what: &'static str) {
@@ -460,4 +468,119 @@ impl<'a> VisitJs<'a> for HostReads<'_, '_> {
         }
         oxc_ast_visit::walk_js::walk_call_expression(self, it);
     }
+}
+const NODE_REQUIRE_MEMBERS: [&str; 7] = [
+    "resolve",
+    "main",
+    "cache",
+    "extensions",
+    "call",
+    "apply",
+    "bind",
+];
+
+struct HostRequire<'s> {
+    scoping: &'s Scoping,
+    found: Option<String>,
+}
+
+impl HostRequire<'_> {
+    fn note(&mut self, what: String) {
+        self.found.get_or_insert(what);
+    }
+
+    fn is_host_require(&self, expr: &Expression<'_>) -> bool {
+        matches!(expr, Expression::Identifier(id)
+            if id.name == SHIELDED_HOST && is_free(Some(self.scoping), id))
+    }
+
+    fn judge(call: &CallExpression<'_>) -> Option<String> {
+        let [Argument::StringLiteral(literal)] = call.arguments.as_slice() else {
+            return Some("a request that is not one literal".to_string());
+        };
+        let request = literal.value.as_str()?;
+        match call.optional || !leaves_the_bundle(request) {
+            true => Some(format!("require({request:?})")),
+            false => None,
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for HostRequire<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if !self.is_host_require(&it.callee) {
+            oxc_ast_visit::walk_js::walk_call_expression(self, it);
+            return;
+        }
+        if let Some(what) = Self::judge(it) {
+            self.note(what);
+        }
+        for argument in &it.arguments {
+            self.visit_argument(argument);
+        }
+    }
+
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        let typeof_require =
+            it.operator == UnaryOperator::Typeof && self.is_host_require(&it.argument);
+        if typeof_require {
+            return;
+        }
+        let deleted = it.operator == UnaryOperator::Delete
+            && it
+                .argument
+                .without_parentheses()
+                .as_member_expression()
+                .is_some_and(|member| self.is_host_require(member.object()));
+        if deleted {
+            self.note("a deleted member".to_string());
+        }
+        oxc_ast_visit::walk_js::walk_unary_expression(self, it);
+    }
+
+    fn visit_simple_assignment_target(&mut self, it: &SimpleAssignmentTarget<'a>) {
+        let written = it
+            .as_member_expression()
+            .is_some_and(|member| self.is_host_require(member.object()));
+        if written {
+            self.note("a write to a member".to_string());
+        }
+        oxc_ast_visit::walk_js::walk_simple_assignment_target(self, it);
+    }
+
+    fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
+        if !self.is_host_require(it.object()) {
+            oxc_ast_visit::walk_js::walk_member_expression(self, it);
+            return;
+        }
+        match it {
+            MemberExpression::StaticMemberExpression(member) => {
+                let name = member.property.name.as_str();
+                if NODE_REQUIRE_MEMBERS.contains(&name) || member.optional {
+                    self.note(format!("require.{name}"));
+                }
+            }
+            _ => self.note("a computed member".to_string()),
+        }
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if it.name == SHIELDED_HOST && is_free(Some(self.scoping), it) {
+            self.note("read as a value".to_string());
+        }
+    }
+}
+
+pub fn first_host_require_use<'k, 'a: 'k>(
+    scoping: &Scoping,
+    factories: impl IntoIterator<Item = (String, Factory<'k, 'a>)>,
+) -> Option<(String, Captured)> {
+    factories.into_iter().find_map(|(id, factory)| {
+        let mut uses = HostRequire {
+            scoping,
+            found: None,
+        };
+        uses.visit_function_body(factory.body);
+        uses.found.map(|what| (id, Captured::HostUse(what)))
+    })
 }
