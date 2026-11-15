@@ -1,11 +1,17 @@
-use crate::ast_util::js_text::js_text;
+use crate::ast_util::code_text::is_number;
+use crate::ast_util::name_keys::{
+    call_reads_name, is_never_a_function, key_may_name, key_text, member_key,
+    property_key_may_name, reader, NAME,
+};
+use crate::ast_util::name_keys::{
+    head_bindings, numeric_assignment, numeric_declarator, CounterBook,
+};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_syntax::operator::BinaryOperator;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
-
-const NAME: &str = "name";
 
 #[derive(Default)]
 pub struct FunctionNames {
@@ -17,14 +23,34 @@ pub fn function_names(program: &Program<'_>, scoping: &Scoping) -> FunctionNames
     let mut walker = Walker {
         scoping,
         out: FunctionNames::default(),
+        first_read: false,
+        counters: Vec::new(),
+        book: CounterBook::default(),
     };
     walker.visit_program(program);
+    walker.settle_counters();
     walker.out
+}
+
+pub fn reads_function_names(program: &Program<'_>, scoping: &Scoping) -> bool {
+    let mut walker = Walker {
+        scoping,
+        out: FunctionNames::default(),
+        first_read: true,
+        counters: Vec::new(),
+        book: CounterBook::default(),
+    };
+    walker.visit_program(program);
+    walker.settle_counters();
+    walker.out.name_read
 }
 
 struct Walker<'s> {
     scoping: &'s Scoping,
     out: FunctionNames,
+    first_read: bool,
+    counters: Vec<SymbolId>,
+    book: CounterBook,
 }
 
 fn is_anonymous_function(expr: &Expression<'_>) -> bool {
@@ -33,44 +59,6 @@ fn is_anonymous_function(expr: &Expression<'_>) -> bool {
         Expression::ArrowFunctionExpression(_) => true,
         Expression::ClassExpression(class) => class.id.is_none(),
         _ => false,
-    }
-}
-
-fn is_never_a_function(expr: &Expression<'_>) -> bool {
-    matches!(
-        expr.without_parentheses(),
-        Expression::ObjectExpression(_)
-            | Expression::ArrayExpression(_)
-            | Expression::StringLiteral(_)
-            | Expression::NumericLiteral(_)
-            | Expression::BooleanLiteral(_)
-            | Expression::NullLiteral(_)
-            | Expression::BigIntLiteral(_)
-            | Expression::RegExpLiteral(_)
-            | Expression::TemplateLiteral(_)
-    )
-}
-
-fn is_name_text(expr: &Expression<'_>) -> bool {
-    match expr.without_parentheses() {
-        Expression::StringLiteral(literal) => js_text(literal.value) == NAME,
-        Expression::TemplateLiteral(template) => {
-            template.expressions.is_empty()
-                && template
-                    .quasis
-                    .first()
-                    .and_then(|quasi| quasi.value.cooked)
-                    .is_some_and(|cooked| js_text(cooked) == NAME)
-        }
-        _ => false,
-    }
-}
-
-fn is_name_key(key: &PropertyKey<'_>) -> bool {
-    match key {
-        PropertyKey::StaticIdentifier(id) => id.name.as_str() == NAME,
-        PropertyKey::PrivateIdentifier(_) => false,
-        other => other.as_expression().is_some_and(is_name_text),
     }
 }
 
@@ -112,30 +100,114 @@ impl Walker<'_> {
         }
     }
 
+    fn counter_symbols(&self, key: &Expression<'_>, found: &mut Vec<SymbolId>) -> bool {
+        match key.without_parentheses() {
+            Expression::Identifier(id) => {
+                let symbol = id
+                    .reference_id
+                    .get()
+                    .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+                symbol.map(|symbol| found.push(symbol)).is_some()
+            }
+            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+                self.counter_operand(&binary.left, found)
+                    && self.counter_operand(&binary.right, found)
+            }
+            _ => false,
+        }
+    }
+
+    fn counter_operand(&self, operand: &Expression<'_>, found: &mut Vec<SymbolId>) -> bool {
+        is_number(operand) || self.counter_symbols(operand, found)
+    }
+
+    fn defers_to_counters(&mut self, key: &Expression<'_>) -> bool {
+        let mut found = Vec::new();
+        if !self.counter_symbols(key, &mut found) {
+            return false;
+        }
+        self.counters.extend(found);
+        true
+    }
+
+    fn settle_counters(&mut self) {
+        if self.out.name_read {
+            return;
+        }
+        let (book, scoping) = (&self.book, self.scoping);
+        if self
+            .counters
+            .iter()
+            .any(|symbol| !book.is_counter(scoping, *symbol))
+        {
+            self.out.name_read = true;
+        }
+    }
+
+    fn write_counter(&mut self, id: &IdentifierReference<'_>) {
+        let symbol = id
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        if let Some(symbol) = symbol {
+            self.book.write_numeric(symbol);
+        }
+    }
+
+    fn bind_head(&mut self, left: &ForStatementLeft<'_>) {
+        for symbol in head_bindings(left) {
+            self.book.bind(symbol);
+        }
+    }
+
     fn read_on(&mut self, object: &Expression<'_>) {
         if !is_never_a_function(object) {
             self.out.name_read = true;
         }
     }
 
-    fn assigned_member_object<'e, 'a>(
-        target: &'e AssignmentTarget<'a>,
-    ) -> Option<&'e Expression<'a>> {
-        match target {
-            AssignmentTarget::StaticMemberExpression(member) if member.property.name == NAME => {
-                Some(&member.object)
+    fn visit_member_parts<'a>(&mut self, member: &MemberExpression<'a>) {
+        match member {
+            MemberExpression::StaticMemberExpression(it) => self.visit_expression(&it.object),
+            MemberExpression::ComputedMemberExpression(it) => {
+                self.visit_expression(&it.object);
+                self.visit_expression(&it.expression);
             }
-            AssignmentTarget::ComputedMemberExpression(member)
-                if is_name_text(&member.expression) =>
-            {
-                Some(&member.object)
-            }
-            _ => None,
+            MemberExpression::PrivateFieldExpression(it) => self.visit_expression(&it.object),
         }
+    }
+
+    fn visit_reader_call<'a>(&mut self, it: &CallExpression<'a>) -> bool {
+        let Some(member) = it.callee.without_parentheses().as_member_expression() else {
+            return false;
+        };
+        let Some(found) = member_key(member).and_then(|key| reader(&key)) else {
+            return false;
+        };
+        if call_reads_name(found, &it.arguments) {
+            self.out.name_read = true;
+        }
+        self.visit_member_parts(member);
+        for argument in &it.arguments {
+            self.visit_argument(argument);
+        }
+        true
     }
 }
 
 impl<'a> VisitJs<'a> for Walker<'_> {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        if !(self.first_read && self.out.name_read) {
+            walk_js::walk_statement(self, it);
+        }
+    }
+
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        if !(self.first_read && self.out.name_read) {
+            walk_js::walk_expression(self, it);
+        }
+    }
+
     fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
         self.out.name_read = true;
         walk_js::walk_with_statement(self, it);
@@ -155,7 +227,33 @@ impl<'a> VisitJs<'a> for Walker<'_> {
         walk_js::walk_class(self, it);
     }
 
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        if let Some(symbol) = it.symbol_id.get() {
+            self.book.bind(symbol);
+        }
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        self.bind_head(&it.left);
+        walk_js::walk_for_in_statement(self, it);
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.bind_head(&it.left);
+        walk_js::walk_for_of_statement(self, it);
+    }
+
+    fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
+        if let SimpleAssignmentTarget::AssignmentTargetIdentifier(id) = &it.argument {
+            self.write_counter(id);
+        }
+        walk_js::walk_update_expression(self, it);
+    }
+
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let Some(symbol) = numeric_declarator(it) {
+            self.book.bind_numeric(symbol);
+        }
         self.give_pattern(&it.id, it.init.as_ref());
         walk_js::walk_variable_declarator(self, it);
     }
@@ -171,14 +269,19 @@ impl<'a> VisitJs<'a> for Walker<'_> {
     }
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
+            if numeric_assignment(it.operator, &it.right) {
+                self.write_counter(id);
+            }
+        }
         if names_on_assignment(it.operator) {
             if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
                 self.give_reference(id, &it.right);
             }
         }
         if it.operator == AssignmentOperator::Assign {
-            if let Some(object) = Self::assigned_member_object(&it.left) {
-                self.visit_expression(object);
+            if let Some(member) = it.left.as_member_expression() {
+                self.visit_member_parts(member);
                 self.visit_expression(&it.right);
                 return;
             }
@@ -197,7 +300,7 @@ impl<'a> VisitJs<'a> for Walker<'_> {
         &mut self,
         it: &AssignmentTargetPropertyIdentifier<'a>,
     ) {
-        if it.binding.name == NAME {
+        if it.binding.name == NAME || reader(&it.binding.name).is_some() {
             self.out.name_read = true;
         }
         if let Some(init) = &it.init {
@@ -210,30 +313,67 @@ impl<'a> VisitJs<'a> for Walker<'_> {
         &mut self,
         it: &AssignmentTargetPropertyProperty<'a>,
     ) {
-        if is_name_key(&it.name) {
+        if property_key_may_name(&it.name, it.computed) {
             self.out.name_read = true;
         }
         walk_js::walk_assignment_target_property_property(self, it);
     }
 
     fn visit_binding_property(&mut self, it: &BindingProperty<'a>) {
-        if is_name_key(&it.key) {
+        if property_key_may_name(&it.key, it.computed) {
             self.out.name_read = true;
         }
         walk_js::walk_binding_property(self, it);
     }
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
-        if it.property.name == NAME {
+        if it.property.name == NAME || reader(&it.property.name).is_some() {
             self.read_on(&it.object);
         }
         walk_js::walk_static_member_expression(self, it);
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        if is_name_text(&it.expression) {
+        let reads = key_text(&it.expression).is_some_and(|key| reader(&key).is_some());
+        let may_name = || key_may_name(&it.expression);
+        if reads
+            || (may_name()
+                && !is_never_a_function(&it.object)
+                && !self.defers_to_counters(&it.expression))
+        {
             self.read_on(&it.object);
         }
         walk_js::walk_computed_member_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if !self.visit_reader_call(it) {
+            walk_js::walk_call_expression(self, it);
+        }
+    }
+
+    fn visit_object_expression(&mut self, it: &ObjectExpression<'a>) {
+        let spreads = it.properties.iter().any(|property| match property {
+            ObjectPropertyKind::SpreadProperty(spread) => !is_never_a_function(&spread.argument),
+            ObjectPropertyKind::ObjectProperty(_) => false,
+        });
+        if spreads {
+            self.out.name_read = true;
+        }
+        walk_js::walk_object_expression(self, it);
+    }
+
+    fn visit_object_pattern(&mut self, it: &ObjectPattern<'a>) {
+        if it.rest.is_some() {
+            self.out.name_read = true;
+        }
+        walk_js::walk_object_pattern(self, it);
+    }
+
+    fn visit_object_assignment_target(&mut self, it: &ObjectAssignmentTarget<'a>) {
+        if it.rest.is_some() {
+            self.out.name_read = true;
+        }
+        walk_js::walk_object_assignment_target(self, it);
     }
 }

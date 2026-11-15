@@ -54,7 +54,7 @@ pub fn may_run_code_text(program: &Program<'_>, _scoping: &Scoping) -> bool {
     scan.found
 }
 
-fn literal_text(expression: &Expression<'_>) -> Option<String> {
+pub(crate) fn literal_text(expression: &Expression<'_>) -> Option<String> {
     match expression.without_parentheses() {
         Expression::StringLiteral(literal) => literal.value.as_str().map(str::to_string),
         Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
@@ -70,7 +70,7 @@ fn literal_text(expression: &Expression<'_>) -> Option<String> {
     }
 }
 
-fn is_number(expression: &Expression<'_>) -> bool {
+pub(crate) fn is_number(expression: &Expression<'_>) -> bool {
     match expression.without_parentheses() {
         Expression::NumericLiteral(_) | Expression::UpdateExpression(_) => true,
         Expression::UnaryExpression(unary) => matches!(

@@ -53,7 +53,8 @@ engine as WebAssembly, and your code never leaves the page.
   `__commonJSMin` factories and the plugin's interop helpers (`commonjsGlobal`, `getDefaultExportFromCjs`,
   `getAugmentedNamespace`, `commonjsRequire`) get their names back when minification or obfuscation took them:
   `requireModule3`, `hasRequiredModule3`, `module3`, or the module's own name when one survives. Only names change;
-  every wrapper still runs on its first call. `--disable name-commonjs-wrappers` turns it off.
+  every wrapper still runs on its first call. In the safe lane a wrapper function whose value may reach a `name` read
+  (rename.md, "CommonJS wrapper names") keeps its name. `--disable name-commonjs-wrappers` turns it off.
 - **Libraries.** Recognises core-js 3 (`internals/*` and `modules/*`, every minor 3.0 to 3.51),
   regenerator-runtime, tslib, Babel helpers (`@babel/runtime` and inlined) and `@swc/helpers` by the exact shape
   of their functions, minified, mangled or obfuscated, and puts `// core-js 3.38–3.51: internals/global-this.js`
@@ -217,9 +218,11 @@ differ only for that object, which compares loosely equal to `null` without bein
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
 premise.
 
-With `--rename`, the safe lane keeps the name of every function and class when the file reads
-`.name` with a static key, since renaming them would change what it reads. A read through a
-computed key (`f[key]`) or through reflection is not seen, as `fn.toString()` is not;
+With `--rename`, the safe lane keeps the name of every function and class when the file may read
+`name`: `.name`, any computed key that is not a number, a numeric loop counter or a literal naming another property
+(`f[key]`, `f["na" + "me"]`), reflection (`Reflect.get`, `getOwnPropertyDescriptor(s)`) and copies
+of a value's own properties (`Object.values`, `Object.assign`, `{ ...f }`), since renaming them
+would change what it reads. A read in `fn.toString()` text is not seen;
 [`docs/known-divergences/rename.md`](docs/known-divergences/rename.md) has the details.
 
 The **unsafe lane** (`--unsafe`) makes the assumptions webcrack makes: built-in objects are not
