@@ -70,9 +70,11 @@ fn the_controls_without_a_symbol_key_are_not_refused_for_one() {
 }
 
 #[test]
-fn a_class_member_keyed_by_a_well_known_symbol_also_leaves_the_file_untyped() {
+fn a_class_member_keyed_by_a_well_known_symbol_keeps_the_types() {
     let source = "class A {\n  [Symbol.iterator]() {\n    return [][Symbol.iterator]();\n  }\n}\nconst n = 1;\nconsole.log(new A(), n);\nexport {};\n";
-    assert_eq!(annotate(source, Mode::Ts).refused, Some(Refusal::SymbolKey));
+    let out = annotate(source, Mode::Ts);
+    assert_eq!(out.refused, None);
+    assert!(out.code.contains("const n: 1 = 1"), "{}", out.code);
 }
 
 #[test]

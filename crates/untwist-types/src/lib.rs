@@ -65,7 +65,7 @@ impl Refusal {
             Refusal::Hazard(_) => "a file has a with statement, which can reach every binding, so it was left untyped",
             Refusal::Erasure => "a file reads differently as TypeScript, so it was left untyped and keeps its .js name",
             Refusal::CommonJs => "a CommonJS file keeps its .js name, so --types ts leaves it untyped (--types jsdoc types it)",
-            Refusal::SymbolKey => "a file has an object or class member keyed by a well-known symbol, whose type errors the TypeScript checker reports differently once types are written, so it was left untyped",
+            Refusal::SymbolKey => "a file has an object literal keyed by a well-known symbol, whose type errors the TypeScript checker reports differently once types are written, so it was left untyped",
         }
     }
 }

@@ -28,21 +28,6 @@ impl<'a> Visit<'a> for SymbolKeys {
         self.found |= it.computed && is_symbol_member(&it.key);
         walk::walk_object_property(self, it);
     }
-
-    fn visit_method_definition(&mut self, it: &MethodDefinition<'a>) {
-        self.found |= it.computed && is_symbol_member(&it.key);
-        walk::walk_method_definition(self, it);
-    }
-
-    fn visit_property_definition(&mut self, it: &PropertyDefinition<'a>) {
-        self.found |= it.computed && is_symbol_member(&it.key);
-        walk::walk_property_definition(self, it);
-    }
-
-    fn visit_accessor_property(&mut self, it: &AccessorProperty<'a>) {
-        self.found |= it.computed && is_symbol_member(&it.key);
-        walk::walk_accessor_property(self, it);
-    }
 }
 
 pub(crate) fn has_well_known_symbol_key(program: &Program<'_>) -> bool {
