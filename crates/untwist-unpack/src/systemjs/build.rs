@@ -103,6 +103,7 @@ struct Rewrite<'a, 'r, 'n> {
     targets: &'r FxHashMap<String, String>,
     idents: FxHashSet<&'a str>,
     created: Vec<(Span, String)>,
+    key_named: FxHashSet<String>,
     renames: &'r FxHashMap<Span, String>,
 }
 
@@ -127,7 +128,7 @@ impl<'a> Rewrite<'a, '_, '_> {
         }
     }
 
-    fn single(&mut self, name: &str, mut expression: Expression<'a>) -> Expression<'a> {
+    fn single(&mut self, name: &str, mut expression: Expression<'a>, span: Span) -> Expression<'a> {
         self.visit_expression(&mut expression);
         let local = match value(&expression) {
             Value::Write(id) | Value::Read(id) => id.name.to_string(),
@@ -137,7 +138,6 @@ impl<'a> Rewrite<'a, '_, '_> {
                 }
                 let local = name.to_string();
                 self.add(name, &local);
-                let span = expression.span();
                 self.created.push((span, local.clone()));
                 let target = AssignmentTarget::new_assignment_target_identifier(
                     span,
@@ -157,19 +157,22 @@ impl<'a> Rewrite<'a, '_, '_> {
         expression
     }
 
+    fn unnamed_if_read(&mut self, value: Expression<'a>) -> Expression<'a> {
+        match value.is_anonymous_function_definition() && self.shared.names_read() {
+            true => unnamed(value, &self.builder),
+            false => value,
+        }
+    }
+
     fn exported(&mut self, call: &mut CallExpression<'a>) -> Option<Expression<'a>> {
         let span = call.span;
         match call.arguments.as_mut_slice() {
             [Argument::StringLiteral(name), argument] => {
                 let name = name.value.as_str()?;
                 let expression = argument.take_in(&self.builder).into_expression();
-                let expression = match expression.is_anonymous_function_definition()
-                    && self.shared.names_read()
-                {
-                    true => unnamed(expression, &self.builder),
-                    false => expression,
-                };
-                Some(self.single(name, expression))
+                let span = expression.span();
+                let expression = self.unnamed_if_read(expression);
+                Some(self.single(name, expression, span))
             }
             [Argument::ObjectExpression(object)] => {
                 let mut values = AVec::new_in(&self.builder);
@@ -183,7 +186,11 @@ impl<'a> Rewrite<'a, '_, '_> {
                         .and_then(|name| name.into_cow_str())?
                         .to_string();
                     let expression = property.value.take_in(&self.builder);
-                    values.push(self.single(&name, expression));
+                    if expression.is_anonymous_function_definition() {
+                        self.key_named.insert(name.clone());
+                    }
+                    let span = expression.span();
+                    values.push(self.single(&name, expression, span));
                 }
                 Some(match values.len() {
                     1 => values.pop()?,
@@ -236,8 +243,8 @@ impl<'a> VisitMut<'a> for Rewrite<'a, '_, '_> {
                     .map(|argument| argument.take_in(&self.builder).into_expression()),
                 _ => None,
             };
-            if value.is_some() {
-                it.init = value;
+            if let Some(value) = value {
+                it.init = Some(self.unnamed_if_read(value));
             }
         }
         walk_mut::walk_variable_declarator(self, it);
@@ -402,6 +409,7 @@ fn rewriter<'a, 'r, 'n>(
         targets: maps.targets,
         idents: FxHashSet::default(),
         created: Vec::new(),
+        key_named: FxHashSet::default(),
         renames: maps.renames,
     }
 }
@@ -421,7 +429,7 @@ fn rewritten<'a>(
     (source, declare): (&Program<'a>, &Declare<'_, 'a>),
     program: &mut Program<'a>,
     shared: &mut Shared<'_, 'a>,
-) -> Rewritten {
+) -> Option<Rewritten> {
     let (targets, renames) = (FxHashMap::default(), FxHashMap::default());
     let names = (declare.export_name(), declare.context_name());
     let maps = Maps {
@@ -436,6 +444,7 @@ fn rewritten<'a>(
         dynamic,
         idents,
         created,
+        key_named,
         ..
     } = rewrite;
     let collided: FxHashSet<String> = fresh
@@ -444,7 +453,10 @@ fn rewritten<'a>(
         .cloned()
         .collect();
     if collided.is_empty() {
-        return (exports, fresh, dynamic);
+        return Some((exports, fresh, dynamic));
+    }
+    if collided.iter().any(|name| key_named.contains(name)) && shared.names_read() {
+        return None;
     }
     let text = source.source_text;
     let prefix = shared
@@ -469,7 +481,7 @@ fn rewritten<'a>(
             *local = format!("{prefix}{local}");
         }
     }
-    (exports, fresh, dynamic)
+    Some((exports, fresh, dynamic))
 }
 
 pub fn module<'a>(
@@ -495,7 +507,7 @@ pub fn module<'a>(
         &alloc,
     );
     let (exports, fresh, dynamic) =
-        rewritten(alloc, (source, &register.declare), &mut program, shared);
+        rewritten(alloc, (source, &register.declare), &mut program, shared)?;
     let prologue = prologue_text(layout, at, &fresh);
     let first = match prologue.is_empty() {
         true => AVec::new_in(&alloc),

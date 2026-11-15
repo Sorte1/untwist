@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::hash::BuildHasher;
+
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
@@ -5,8 +8,7 @@ use oxc_semantic::Scoping;
 use oxc_span::SPAN;
 use oxc_traverse::{Ancestor, TraverseCtx};
 
-use crate::ast_util::code_text::may_run_code_text;
-use crate::ast_util::function_names::reads_function_names;
+use crate::ast_util::function_names::reads_names_or_code_text;
 use crate::semantic::{build_scoping, has_module_syntax, names_read_by_another_input};
 
 const PROTO: &str = "__proto__";
@@ -15,7 +17,7 @@ const MODULE: &str = "module";
 const EXPORTS: &str = "exports";
 
 pub fn reads_names(program: &Program<'_>, scoping: &Scoping) -> bool {
-    reads_function_names(program, scoping) || may_run_code_text(program, scoping)
+    reads_names_or_code_text(program, scoping)
 }
 
 fn exports_values(program: &Program<'_>, scoping: &Scoping) -> bool {
@@ -29,10 +31,33 @@ pub fn names_observed(program: &Program<'_>, scoping: &Scoping) -> bool {
         || reads_names(program, scoping)
 }
 
-pub fn text_observes_names(text: &str) -> bool {
+thread_local! {
+    static TEXT_SEEN: RefCell<Option<(u64, usize, bool)>> = const { RefCell::new(None) };
+}
+
+fn text_reads_names(text: &str) -> bool {
     let alloc = oxc_allocator::Allocator::default();
     let parsed = crate::parse::parse_program(&alloc, text);
-    names_observed(&parsed.program, &build_scoping(&parsed.program).scoping)
+    let scoping = build_scoping(&parsed.program).scoping;
+    exports_values(&parsed.program, &scoping) || reads_names(&parsed.program, &scoping)
+}
+
+pub fn text_observes_names(text: &str) -> bool {
+    if names_read_by_another_input() {
+        return true;
+    }
+    let key = (rustc_hash::FxBuildHasher.hash_one(text), text.len());
+    let cached = TEXT_SEEN.with(|cell| {
+        cell.borrow()
+            .filter(|(hash, len, _)| (*hash, *len) == key)
+            .map(|(_, _, read)| read)
+    });
+    if let Some(read) = cached {
+        return read;
+    }
+    let read = text_reads_names(text);
+    TEXT_SEEN.with(|cell| *cell.borrow_mut() = Some((key.0, key.1, read)));
+    read
 }
 
 pub fn named_as<'a>(

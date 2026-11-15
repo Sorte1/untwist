@@ -8,7 +8,7 @@ use untwist_core::semantic::{
 };
 
 use crate::collect::{collect, Collected};
-use crate::function_names::function_names;
+use crate::function_names::function_names_or_code_text;
 use crate::oracle::OuterRule;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -119,8 +119,9 @@ fn pin_annex_b_targets(collected: &mut Collected, program: &Program<'_>, scoping
 }
 
 fn pin_function_names(collected: &mut Collected, program: &Program<'_>, scoping: &Scoping) {
-    let names = function_names(program, scoping);
-    if names.name_read || untwist_core::semantic::names_read_by_another_input() {
+    let names = function_names_or_code_text(program, scoping);
+    let read = names.name_read || untwist_core::semantic::names_read_by_another_input();
+    if read {
         for giver in names.givers {
             if collected.pinned.insert(giver) {
                 collected.name_pinned.insert(giver);

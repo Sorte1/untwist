@@ -12,6 +12,8 @@ pub const LATER_ENTRY_IGNORED: &str = "from a later chunk ignored; keeping";
 pub const SECOND_SELF_CONTAINED: &str = "chunk merge: skipped a second self-contained";
 pub const ENTRY_CANDIDATES: &str = "top-level require calls and no entry marker is assigned";
 pub const REQUIRE_MISSING: &str = "has no module in this bundle";
+pub const RENAMED_FUNCTION_NAME: &str =
+    "a module binding that gives a function its name would be renamed while the bundle may read names; not unpacked";
 pub const UNHANDLED_HELPER: &str = "unhandled webpack helper require.";
 pub const FACTORY_NOT_CLOSED: &str = "is not closed over its own scope; no bundle is written";
 pub const SLOPPY_FRAME: &str = "a function the modules call could read its caller (`.caller`, `arguments.callee.caller`, a stack frame's `getFunction()`), which is the bundle's own function in the bundle and node's module wrapper in the written files; no bundle is written (--unsafe assumes no such read reaches a module)";
@@ -45,6 +47,7 @@ catalogue!(
     SECOND_SELF_CONTAINED,
     ENTRY_CANDIDATES,
     REQUIRE_MISSING,
+    RENAMED_FUNCTION_NAME,
     UNHANDLED_HELPER,
     FACTORY_NOT_CLOSED,
     EVAL_NAME_REBOUND,

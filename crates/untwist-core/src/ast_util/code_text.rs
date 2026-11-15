@@ -1,12 +1,15 @@
 use oxc_ast::ast::{
-    Argument, AssignmentTargetPropertyIdentifier, AssignmentTargetPropertyProperty,
-    BindingProperty, CallExpression, ComputedMemberExpression, Expression, IdentifierReference,
-    ImportDeclaration, ImportExpression, NewExpression, Program, PropertyKey,
-    StaticMemberExpression,
+    Argument, AssignmentExpression, AssignmentTarget, AssignmentTargetPropertyIdentifier,
+    AssignmentTargetPropertyProperty, BindingProperty, CallExpression, ComputedMemberExpression,
+    Expression, IdentifierReference, ImportDeclaration, ImportExpression, NewExpression, Program,
+    PropertyKey, StaticMemberExpression,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+
+use crate::ast_util::name_keys::counter_symbols;
 
 const RUNNERS: [&str; 10] = [
     "eval",
@@ -44,14 +47,38 @@ const TEXT_HAZARDS: [&str; 18] = [
     "compileFunction",
 ];
 
-struct CodeText {
+struct CodeText<'s> {
+    scoping: Option<&'s Scoping>,
     found: bool,
+    counters: Vec<SymbolId>,
 }
 
 pub fn may_run_code_text(program: &Program<'_>, _scoping: &Scoping) -> bool {
-    let mut scan = CodeText { found: false };
+    let mut scan = CodeText {
+        scoping: None,
+        found: false,
+        counters: Vec::new(),
+    };
     scan.visit_program(program);
     scan.found
+}
+
+pub(crate) struct CodeTextScan {
+    pub(crate) found: bool,
+    pub(crate) counters: Vec<SymbolId>,
+}
+
+pub(crate) fn code_text_scan(program: &Program<'_>, scoping: &Scoping) -> CodeTextScan {
+    let mut scan = CodeText {
+        scoping: Some(scoping),
+        found: false,
+        counters: Vec::new(),
+    };
+    scan.visit_program(program);
+    CodeTextScan {
+        found: scan.found,
+        counters: scan.counters,
+    }
 }
 
 pub(crate) fn literal_text(expression: &Expression<'_>) -> Option<String> {
@@ -127,13 +154,32 @@ fn names_a_module_file(source: Option<&str>) -> bool {
     })
 }
 
-fn calls_back(first: Option<&Argument<'_>>) -> bool {
-    matches!(
-        first
-            .and_then(Argument::as_expression)
-            .map(Expression::without_parentheses),
-        Some(Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_))
-    )
+fn names_a_declared_function(scoping: &Scoping, id: &IdentifierReference<'_>) -> bool {
+    let symbol = id
+        .reference_id
+        .get()
+        .and_then(|reference| scoping.get_reference(reference).symbol_id());
+    symbol.is_some_and(|symbol| {
+        let flags = scoping.symbol_flags(symbol);
+        flags.is_function()
+            && !flags.intersects(SymbolFlags::Variable)
+            && !scoping
+                .get_resolved_references(symbol)
+                .any(|reference| reference.is_write())
+    })
+}
+
+fn calls_back(first: Option<&Argument<'_>>, scoping: Option<&Scoping>) -> bool {
+    match first
+        .and_then(Argument::as_expression)
+        .map(Expression::without_parentheses)
+    {
+        Some(Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_)) => true,
+        Some(Expression::Identifier(id)) => {
+            scoping.is_some_and(|scoping| names_a_declared_function(scoping, id))
+        }
+        _ => false,
+    }
 }
 
 const OPAQUE_KEY: &str = "constructor";
@@ -150,7 +196,7 @@ fn runner_name<'e>(callee: &'e Expression<'_>) -> Option<&'e str> {
     .filter(|name| RUNNERS.contains(name))
 }
 
-impl CodeText {
+impl CodeText<'_> {
     fn is_runner(id: &IdentifierReference<'_>) -> bool {
         RUNNERS.contains(&id.name.as_str())
     }
@@ -159,7 +205,7 @@ impl CodeText {
         let Some(name) = runner_name(callee) else {
             return false;
         };
-        if TIMERS.contains(&name) && calls_back(arguments.first()) {
+        if TIMERS.contains(&name) && calls_back(arguments.first(), self.scoping) {
             return true;
         }
         let texts = match TIMERS.contains(&name) {
@@ -192,7 +238,7 @@ impl CodeText {
     }
 }
 
-impl<'a> VisitJs<'a> for CodeText {
+impl<'a> VisitJs<'a> for CodeText<'_> {
     fn visit_expression(&mut self, it: &Expression<'a>) {
         if !self.found {
             walk_js::walk_expression(self, it);
@@ -212,11 +258,31 @@ impl<'a> VisitJs<'a> for CodeText {
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        if key_may_run(&it.expression) {
+        let deferred = |scan: &mut Self| {
+            scan.scoping
+                .is_some_and(|scoping| counter_symbols(scoping, &it.expression, &mut scan.counters))
+        };
+        if key_may_run(&it.expression) && !deferred(self) {
             self.found = true;
             return;
         }
         walk_js::walk_computed_member_expression(self, it);
+    }
+
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        let written = match (&it.left, it.operator) {
+            (AssignmentTarget::ComputedMemberExpression(member), AssignmentOperator::Assign) => {
+                Some(member)
+            }
+            _ => None,
+        };
+        let Some(member) = written else {
+            walk_js::walk_assignment_expression(self, it);
+            return;
+        };
+        self.visit_expression(&member.object);
+        self.visit_expression(&member.expression);
+        self.visit_expression(&it.right);
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {

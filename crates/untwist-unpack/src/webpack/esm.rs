@@ -5,6 +5,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_str::{Ident, Str};
 use oxc_syntax::operator::AssignmentOperator;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::naming_slot::{named_as, text_observes_names, unnamed};
 use untwist_core::ast_util::prop::{identifier_name, number_key};
 
 use crate::matcher::{argument_expression, call_parts, const_member, expression_statement};
@@ -111,6 +112,7 @@ struct EsmPlan<'a> {
     inserts: FxHashMap<usize, Vec<Statement<'a>>>,
     folds: FxHashMap<usize, Vec<(String, Expression<'a>)>>,
     exports: FxHashMap<usize, ExportForm>,
+    keep_names: bool,
 }
 
 struct DefineEntry<'a> {
@@ -316,6 +318,15 @@ fn plan_exports<'a>(alloc: &'a Allocator, program: &Program<'a>) -> EsmPlan<'a> 
         let Some((target, entries, bulk)) = define_entries(alloc, &program.body[index]) else {
             continue;
         };
+        plan.keep_names = plan.keep_names || text_observes_names(program.source_text);
+        let keep_names = plan.keep_names;
+        let entries = entries.into_iter().map(|entry| DefineEntry {
+            value: match keep_names {
+                true => unnamed(entry.value, &builder),
+                false => entry.value,
+            },
+            ..entry
+        });
         plan.drops.insert(index);
         let fold_target = bulk
             .then(|| find_empty_object_declaration(&program.body, &target))
@@ -386,10 +397,14 @@ fn declaration_from_statement(stmt: Statement<'_>) -> Result<Declaration<'_>, St
 }
 
 fn default_export_from_variable<'a>(
-    init: Expression<'a>,
+    (name, init): (Option<&'a str>, Expression<'a>),
     span: Span,
     builder: &AstBuilder<'a>,
 ) -> Statement<'a> {
+    let init = match name {
+        Some(name) => named_as(name, init, builder),
+        None => init,
+    };
     Statement::new_export_default_declaration(
         span,
         ExportDefaultDeclarationKind::from(init),
@@ -399,7 +414,7 @@ fn default_export_from_variable<'a>(
 
 fn export_statement<'a>(
     stmt: Statement<'a>,
-    form: ExportForm,
+    (form, keep_names): (ExportForm, bool),
     builder: &AstBuilder<'a>,
 ) -> Statement<'a> {
     let span = stmt.span();
@@ -421,12 +436,15 @@ fn export_statement<'a>(
             builder,
         ),
         Statement::VariableDeclaration(mut declaration) => {
-            match declaration
-                .declarations
-                .first_mut()
-                .and_then(|declarator| declarator.init.take())
-            {
-                Some(init) => default_export_from_variable(init, span, builder),
+            let Some(declarator) = declaration.declarations.first_mut() else {
+                return Statement::VariableDeclaration(declaration);
+            };
+            let name = match &declarator.id {
+                BindingPattern::BindingIdentifier(id) if keep_names => Some(id.name.as_str()),
+                _ => None,
+            };
+            match declarator.init.take() {
+                Some(init) => default_export_from_variable((name, init), span, builder),
                 None => Statement::VariableDeclaration(declaration),
             }
         }
@@ -469,7 +487,7 @@ fn apply_plan_statement<'a>(
     }
     match plan.exports.remove(&index) {
         Some(form) => {
-            body.push(export_statement(stmt, form, builder));
+            body.push(export_statement(stmt, (form, plan.keep_names), builder));
             changes += 1;
         }
         None => body.push(stmt),

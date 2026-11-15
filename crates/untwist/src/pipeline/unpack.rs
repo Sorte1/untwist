@@ -5,6 +5,7 @@ use untwist_core::clock::StageInstant as Instant;
 use untwist_core::parse::SourceType;
 use untwist_core::pass::{Note, NoteKind, StopReason};
 use untwist_core::reflow::{GuardRecord, PendingReaders};
+use untwist_core::semantic::assume_shared_globals;
 use untwist_core::source_map::{self, Mapped, Origins, OwnedSourceMap, Recording, Through};
 
 use super::boundary::Boundary;
@@ -13,6 +14,7 @@ use super::notes::{
     guard_notes, SOURCE_READER_UNGUARDED_MODULE, UNPACK_PANICKED, UNPACK_TEXT_UNPARSABLE,
 };
 use super::refusal::UNPACK_TEXT_TOO_DEEP;
+use super::shared_scan::names_read_in_any;
 use super::stages::round_of;
 use super::Pipeline;
 use crate::bundle::BundleOutput;
@@ -169,6 +171,7 @@ impl Pipeline {
         notes: &mut Vec<Note>,
     ) -> Option<untwist_unpack::Bundle<'a>> {
         let started = Instant::now();
+        let _names = names_read_in_any(programs).map(|shared| assume_shared_globals(Some(shared)));
         let options = untwist_unpack::UnpackOptions {
             module_goal,
             ..self.unpack_options()

@@ -183,6 +183,7 @@ pub fn unpack_named_inputs<'a>(
     let groups = groups(programs, names);
     let mut notes = Vec::new();
     let mut refused_any = false;
+    crate::rename::clear_name_hazard();
     let mut found = detected(
         alloc,
         programs,
@@ -191,6 +192,10 @@ pub fn unpack_named_inputs<'a>(
         (&mut notes, &mut refused_any),
     );
     let bundles = complete(alloc, programs, &groups, &mut found, &mut notes);
+    if crate::rename::took_name_hazard() {
+        notes.push(note(notes::RENAMED_FUNCTION_NAME.to_string()));
+        return (None, notes);
+    }
     if bundles.len() > 1 && bundles.iter().any(|bundle| bundle.around.is_some()) {
         notes.push(note(notes::code_beside_entry(
             "the bundle is joined from several inputs",

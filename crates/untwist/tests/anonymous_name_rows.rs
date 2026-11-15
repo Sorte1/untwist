@@ -382,3 +382,71 @@ fn literal_keys_other_than_name_still_split_the_sequence() {
         assert!(!code.contains("(0, "), "{label}: {code}");
     }
 }
+
+const NX4_ROWS: &str = include_str!("data/name_read_nx4_rows.txt");
+
+fn nx4_rows() -> Vec<(String, String)> {
+    NX4_ROWS
+        .lines()
+        .filter_map(|line| line.split_once('|'))
+        .map(|(label, program)| (label.to_string(), program.to_string()))
+        .collect()
+}
+
+const NX4_WITNESSES: [&str; 6] = [
+    "nx4-d-05proto",
+    "nx4-d-06protoget",
+    "nx4-d-07protokey",
+    "nx4-d-08arrproto",
+    "nx4-d-09strproto",
+    "nx4-d-10numproto",
+];
+
+#[test]
+fn a_name_read_through_globals_code_text_or_a_prototype_keeps_names_in_every_lane() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let programs = nx4_rows();
+    assert!(programs.len() >= 20, "found {} rows", programs.len());
+    let safe = Options::default();
+    let unsafe_transforms = unsafe_options();
+    let run_safe = |source: &str| transformed(&safe, source);
+    let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
+    let smart = |source: &str| renamed(RenameMode::Smart, source);
+    let mangle = |source: &str| renamed(RenameMode::Mangle, source);
+    let simple = |source: &str| renamed(RenameMode::Simple, source);
+    let modes: [Mode<'_>; 5] = [
+        ("default", &run_safe),
+        ("rename smart", &smart),
+        ("rename mangle", &mangle),
+        ("rename simple", &simple),
+        ("unsafe", &run_unsafe),
+    ];
+    let wrong = node_rows::mismatches(&node, &programs, &modes);
+    let (unexplained, witnesses) = listed_unsafe_witnesses(wrong, &NX4_WITNESSES);
+    assert!(unexplained.is_empty(), "{}", unexplained.join("\n"));
+    assert_eq!(witnesses, NX4_WITNESSES);
+}
+
+#[test]
+fn a_local_loop_counter_key_still_lets_rename_rename_functions() {
+    let (_, source) = nx4_rows()
+        .into_iter()
+        .find(|(label, _)| label == "nx4-counter-local")
+        .unwrap();
+    let code = renamed(RenameMode::Mangle, &source);
+    assert!(!code.contains("foo"), "{code}");
+    assert!(!code.contains("bar"), "{code}");
+}
+
+#[test]
+fn a_top_level_counter_of_a_script_keeps_function_names() {
+    let (_, source) = nx4_rows()
+        .into_iter()
+        .find(|(label, _)| label == "nx4-counter-top-level")
+        .unwrap();
+    let code = renamed(RenameMode::Mangle, &source);
+    assert!(code.contains("function foo"), "{code}");
+    assert!(code.contains("bar"), "{code}");
+}

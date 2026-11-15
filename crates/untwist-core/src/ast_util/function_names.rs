@@ -1,15 +1,14 @@
-use crate::ast_util::code_text::is_number;
+use crate::ast_util::code_text::code_text_scan;
 use crate::ast_util::name_keys::{
     call_reads_name, is_never_a_function, key_may_name, key_text, member_key,
-    property_key_may_name, reader, NAME,
+    never_reaches_a_function, property_key_may_name, reader, NAME,
 };
 use crate::ast_util::name_keys::{
-    head_bindings, numeric_assignment, numeric_declarator, CounterBook,
+    counter_symbols, head_bindings, numeric_assignment, numeric_declarator, CounterBook,
 };
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
-use oxc_syntax::operator::BinaryOperator;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 
@@ -19,29 +18,36 @@ pub struct FunctionNames {
     pub name_read: bool,
 }
 
-pub fn function_names(program: &Program<'_>, scoping: &Scoping) -> FunctionNames {
+fn walked<'s>(program: &Program<'_>, scoping: &'s Scoping, first_read: bool) -> Walker<'s> {
     let mut walker = Walker {
         scoping,
         out: FunctionNames::default(),
-        first_read: false,
+        first_read,
         counters: Vec::new(),
         book: CounterBook::default(),
     };
     walker.visit_program(program);
     walker.settle_counters();
+    walker
+}
+
+pub fn function_names(program: &Program<'_>, scoping: &Scoping) -> FunctionNames {
+    walked(program, scoping, false).out
+}
+
+pub fn function_names_or_code_text(program: &Program<'_>, scoping: &Scoping) -> FunctionNames {
+    let mut walker = walked(program, scoping, false);
+    walker.settle_code_text(program);
     walker.out
 }
 
 pub fn reads_function_names(program: &Program<'_>, scoping: &Scoping) -> bool {
-    let mut walker = Walker {
-        scoping,
-        out: FunctionNames::default(),
-        first_read: true,
-        counters: Vec::new(),
-        book: CounterBook::default(),
-    };
-    walker.visit_program(program);
-    walker.settle_counters();
+    walked(program, scoping, true).out.name_read
+}
+
+pub fn reads_names_or_code_text(program: &Program<'_>, scoping: &Scoping) -> bool {
+    let mut walker = walked(program, scoping, true);
+    walker.settle_code_text(program);
     walker.out.name_read
 }
 
@@ -100,46 +106,22 @@ impl Walker<'_> {
         }
     }
 
-    fn counter_symbols(&self, key: &Expression<'_>, found: &mut Vec<SymbolId>) -> bool {
-        match key.without_parentheses() {
-            Expression::Identifier(id) => {
-                let symbol = id
-                    .reference_id
-                    .get()
-                    .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
-                symbol.map(|symbol| found.push(symbol)).is_some()
-            }
-            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
-                self.counter_operand(&binary.left, found)
-                    && self.counter_operand(&binary.right, found)
-            }
-            _ => false,
-        }
-    }
-
-    fn counter_operand(&self, operand: &Expression<'_>, found: &mut Vec<SymbolId>) -> bool {
-        is_number(operand) || self.counter_symbols(operand, found)
-    }
-
     fn defers_to_counters(&mut self, key: &Expression<'_>) -> bool {
-        let mut found = Vec::new();
-        if !self.counter_symbols(key, &mut found) {
-            return false;
-        }
-        self.counters.extend(found);
-        true
+        counter_symbols(self.scoping, key, &mut self.counters)
     }
 
     fn settle_counters(&mut self) {
+        if !self.out.name_read && !self.book.all_counters(self.scoping, &self.counters) {
+            self.out.name_read = true;
+        }
+    }
+
+    fn settle_code_text(&mut self, program: &Program<'_>) {
         if self.out.name_read {
             return;
         }
-        let (book, scoping) = (&self.book, self.scoping);
-        if self
-            .counters
-            .iter()
-            .any(|symbol| !book.is_counter(scoping, *symbol))
-        {
+        let scan = code_text_scan(program, self.scoping);
+        if scan.found || !self.book.all_counters(self.scoping, &scan.counters) {
             self.out.name_read = true;
         }
     }
@@ -154,6 +136,18 @@ impl Walker<'_> {
         }
     }
 
+    fn note_block_function(&mut self, it: &Function<'_>, id: &BindingIdentifier<'_>) {
+        let in_block = id.symbol_id.get().is_some_and(|symbol| {
+            !self
+                .scoping
+                .scope_flags(self.scoping.symbol_scope_id(symbol))
+                .is_var()
+        });
+        if it.is_declaration() && in_block {
+            self.book.block_function(&id.name);
+        }
+    }
+
     fn bind_head(&mut self, left: &ForStatementLeft<'_>) {
         for symbol in head_bindings(left) {
             self.book.bind(symbol);
@@ -161,7 +155,7 @@ impl Walker<'_> {
     }
 
     fn read_on(&mut self, object: &Expression<'_>) {
-        if !is_never_a_function(object) {
+        if !never_reaches_a_function(object) {
             self.out.name_read = true;
         }
     }
@@ -216,6 +210,7 @@ impl<'a> VisitJs<'a> for Walker<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         if let Some(id) = &it.id {
             self.give(id);
+            self.note_block_function(it, id);
         }
         walk_js::walk_function(self, it, flags);
     }
@@ -338,7 +333,7 @@ impl<'a> VisitJs<'a> for Walker<'_> {
         let may_name = || key_may_name(&it.expression);
         if reads
             || (may_name()
-                && !is_never_a_function(&it.object)
+                && !never_reaches_a_function(&it.object)
                 && !self.defers_to_counters(&it.expression))
         {
             self.read_on(&it.object);
