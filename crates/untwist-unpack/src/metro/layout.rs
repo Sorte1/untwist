@@ -22,6 +22,7 @@ impl<'k, 'a> Def<'k, 'a> {
             params: &self.function.params,
             body: self.function.body.as_deref()?,
             arrow: false,
+            plain: crate::matcher::runs_like_a_file(self.function),
         })
     }
 

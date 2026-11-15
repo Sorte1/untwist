@@ -278,7 +278,7 @@ pub fn factory_closed(proof: &Proof<'_>, factory: &FactoryDecl<'_, '_>) -> bool 
         ok: true,
     };
     Scan::new(&mut check).visit_function_body(function.body);
-    check.ok
+    function.plain && check.ok
 }
 
 pub fn entry_sound<'a>(

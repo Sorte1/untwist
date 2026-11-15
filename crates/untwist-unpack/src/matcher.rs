@@ -8,6 +8,19 @@ pub struct Factory<'k, 'a> {
     pub params: &'k FormalParameters<'a>,
     pub body: &'k FunctionBody<'a>,
     pub arrow: bool,
+    pub plain: bool,
+}
+
+pub fn plain_params(params: &FormalParameters<'_>) -> bool {
+    params.rest.is_none()
+        && params.items.iter().all(|item| {
+            item.initializer.is_none()
+                && matches!(item.pattern, BindingPattern::BindingIdentifier(_))
+        })
+}
+
+pub fn runs_like_a_file(function: &Function<'_>) -> bool {
+    !function.r#async && !function.generator && plain_params(&function.params)
 }
 
 #[inline]
@@ -64,6 +77,7 @@ pub fn anonymous_factory<'k, 'a>(expr: &'k Expression<'a>) -> Option<Factory<'k,
                 params: &function.params,
                 body: function.body.as_deref()?,
                 arrow: false,
+                plain: runs_like_a_file(function),
             })
         }
         Expression::ArrowFunctionExpression(arrow) => {
@@ -74,6 +88,7 @@ pub fn anonymous_factory<'k, 'a>(expr: &'k Expression<'a>) -> Option<Factory<'k,
                 params: &arrow.params,
                 body,
                 arrow: true,
+                plain: !arrow.r#async && plain_params(&arrow.params),
             })
         }
         _ => None,

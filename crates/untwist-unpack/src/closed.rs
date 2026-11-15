@@ -6,7 +6,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::semantic::{closed_eval_names, is_closed_eval_at};
 
-use crate::browserify::requests::leaves_the_bundle;
+use crate::host_request::leaves_alike;
 use crate::matcher::Factory;
 use crate::scan::{is_direct_eval, is_free, Frame, Policy, Scan, Step, Suspend};
 
@@ -21,6 +21,7 @@ pub enum Captured {
     With,
     Outer(&'static str),
     Context(&'static str),
+    Shape,
 }
 
 impl Captured {
@@ -40,6 +41,9 @@ impl Captured {
             }
             Self::Context(what) => {
                 format!("it uses {what} of the bundle, which the runtime module does not share")
+            }
+            Self::Shape => {
+                "its factory is async, a generator or takes a pattern, rest or default parameter, so it does not run like a file".to_string()
             }
         }
     }
@@ -237,7 +241,7 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             hosts: false,
             host_require: false,
             arrow: factory.arrow,
-            captured: None,
+            captured: (!factory.plain).then_some(Captured::Shape),
         }
     }
 
@@ -446,6 +450,7 @@ pub fn first_host_read<'k, 'a: 'k>(
             names: &renamed,
             found: None,
         };
+        reads.visit_formal_parameters(factory.params);
         reads.visit_function_body(factory.body);
         reads
             .found
@@ -485,20 +490,9 @@ impl<'a> VisitJs<'a> for HostReads<'_, '_> {
         oxc_ast_visit::walk_js::walk_call_expression(self, it);
     }
 }
-const NODE_REQUIRE_MEMBERS: [&str; 7] = [
-    "resolve",
-    "main",
-    "cache",
-    "extensions",
-    "call",
-    "apply",
-    "bind",
-];
-
 struct HostRequire<'s> {
     scoping: &'s Scoping,
     found: Option<String>,
-    requests: Vec<String>,
 }
 
 impl HostRequire<'_> {
@@ -518,9 +512,8 @@ impl HostRequire<'_> {
         let Some(request) = request else {
             return self.note("a request that is not one literal".to_string());
         };
-        match call.optional || !leaves_the_bundle(request) {
-            true => self.note(format!("require({request:?})")),
-            false => self.requests.push(request.to_string()),
+        if call.optional || !leaves_alike(request) {
+            self.note(format!("require({request:?})"));
         }
     }
 }
@@ -602,10 +595,7 @@ impl<'a> VisitJs<'a> for HostRequire<'_> {
         }
         match it {
             MemberExpression::StaticMemberExpression(member) => {
-                let name = member.property.name.as_str();
-                if NODE_REQUIRE_MEMBERS.contains(&name) || member.optional {
-                    self.note(format!("require.{name}"));
-                }
+                self.note(format!("require.{}", member.property.name));
             }
             _ => self.note("a computed member".to_string()),
         }
@@ -637,7 +627,7 @@ fn is_host_require_name(scoping: &Scoping, expr: &Expression<'_>) -> bool {
     }
 }
 
-fn calls_host_require(scoping: &Scoping, callee: &Expression<'_>) -> bool {
+pub(crate) fn calls_host_require(scoping: &Scoping, callee: &Expression<'_>) -> bool {
     match callee.without_parentheses() {
         Expression::ConditionalExpression(choice) => [&choice.consequent, &choice.alternate]
             .into_iter()
@@ -654,19 +644,9 @@ pub fn first_host_require_use<'k, 'a: 'k>(
         let mut uses = HostRequire {
             scoping,
             found: None,
-            requests: Vec::new(),
         };
+        uses.visit_formal_parameters(factory.params);
         uses.visit_function_body(factory.body);
         uses.found.map(|what| (id, Captured::HostUse(what)))
     })
-}
-
-pub fn host_require_requests(scoping: &Scoping, program: &Program<'_>) -> Vec<String> {
-    let mut uses = HostRequire {
-        scoping,
-        found: None,
-        requests: Vec::new(),
-    };
-    uses.visit_program(program);
-    uses.requests
 }

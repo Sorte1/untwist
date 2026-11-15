@@ -6,6 +6,7 @@ use crate::browserify::notes as browserify_notes;
 use crate::browserify::resolve::left_request_reaching;
 use crate::detect::{refused_kind, unpack_program_linked};
 use crate::goal::written_module_syntax;
+use crate::host_request::{host_uses, unproven_import, HostUse};
 use crate::links::{groups, Groups, Links};
 use crate::mappings::Mapping;
 use crate::merge::merge_noted;
@@ -179,6 +180,21 @@ fn renamed_a_function_name(notes: &mut Vec<Note>) -> bool {
     renamed
 }
 
+fn input_names(bundle: &Bundle<'_>, names: &[String]) -> Vec<String> {
+    bundle
+        .inputs
+        .iter()
+        .filter_map(|input| names.get(*input).cloned())
+        .collect()
+}
+
+fn host_checked(bundle: &mut Bundle<'_>, options: UnpackOptions) -> Result<(), HostUse> {
+    match options.conservative {
+        true => Ok(()),
+        false => host_uses(bundle),
+    }
+}
+
 pub fn unpack_named_inputs<'a>(
     alloc: &'a Allocator,
     programs: &mut [Program<'a>],
@@ -229,6 +245,11 @@ pub fn unpack_named_inputs<'a>(
         return (None, notes);
     }
     bundle.mirrored_inputs = mirrored_inputs(&mut bundle, names);
+    bundle.input_names = input_names(&bundle, names);
+    if let Err(found) = host_checked(&mut bundle, options) {
+        notes.push(note(notes::host_route(&found.id, &found.what)));
+        return (None, notes);
+    }
     notes.extend(finish_with(alloc, &mut bundle, mappings, options));
     if renamed_a_function_name(&mut notes) {
         return (None, notes);
@@ -243,6 +264,10 @@ pub fn unpack_named_inputs<'a>(
     }
     if !options.conservative {
         mark_from_inputs(programs, &mut bundle);
+    }
+    if let Some(found) = unproven_import(&bundle) {
+        notes.push(note(notes::host_route(&found.id, &found.what)));
+        return (None, notes);
     }
     if let Err(why) = crate::beside::keep_around(alloc, &mut bundle) {
         notes.push(note(why));

@@ -140,6 +140,7 @@ fn closed_and_shaped(scoping: &Scoping, callback: &Callback<'_, '_>) -> bool {
         params: callback.params,
         body: callback.body,
         arrow: matches!(callback.expr, Expression::ArrowFunctionExpression(_)),
+        plain: crate::matcher::plain_params(callback.params),
     };
     let mut sound = Sound {
         check: Check::factory(scoping, factory, &allowed),
