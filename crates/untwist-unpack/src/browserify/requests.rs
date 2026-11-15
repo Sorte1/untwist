@@ -152,7 +152,7 @@ impl<'a> VisitJs<'a> for OuterRequire<'_> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        self.found |= is_direct_eval(self.scoping, &it.callee)
+        self.found |= is_direct_eval(&it.callee)
             && closed_eval_names(it).is_some_and(|names| names.iter().any(|name| name == REQUIRE));
         walk_js::walk_call_expression(self, it);
     }

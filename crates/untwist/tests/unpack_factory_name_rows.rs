@@ -5,7 +5,7 @@ use untwist_testing::node::{node, run, skip_allowed, SKIP_MESSAGE};
 
 const MISBOUND: &str = "a factory parameter would be renamed to a name bound inside the module where the binding cannot be proven";
 
-const SPLITS: [&str; 56] = [
+const SPLITS: [&str; 74] = [
     "a41r3-w0 --unsafe",
     "a41r3-w11 --unsafe",
     "a41r3-w12",
@@ -22,6 +22,18 @@ const SPLITS: [&str; 56] = [
     "esb-m1s --unsafe",
     "esb-x1 --unsafe",
     "esb-x1s --unsafe",
+    "esbS-e2s",
+    "esbS-e2s --unsafe",
+    "esbS-m2s",
+    "esbS-m2s --unsafe",
+    "mtr-m1 --unsafe --no-unminify",
+    "mtr-m12 --unsafe --no-unminify",
+    "mtr-m13 --unsafe --no-unminify",
+    "mtr-m1s --unsafe --no-unminify",
+    "mtr-m4 --unsafe --no-unminify",
+    "mtr-m9 --unsafe --no-unminify",
+    "mtr-x1 --unsafe --no-unminify",
+    "mtr-x1s --unsafe --no-unminify",
     "pcl-m1 --unsafe",
     "pcl-m1s --unsafe",
     "pcl-n5 --unsafe",
@@ -62,6 +74,12 @@ const SPLITS: [&str; 56] = [
     "wp5-x1 --unsafe",
     "wp5-x1s",
     "wp5-x1s --unsafe",
+    "wp5i-e1s",
+    "wp5i-e1s --unsafe",
+    "wp5i-n1s",
+    "wp5i-n1s --unsafe",
+    "wp5i-n2s",
+    "wp5i-n2s --unsafe",
 ];
 
 const REFUSALS: [&str; 13] = [
@@ -79,6 +97,8 @@ const REFUSALS: [&str; 13] = [
     "wp5-n4 --unsafe",
     "wp5-x2 --unsafe",
 ];
+
+const BOUND_EVAL: &str = "-u1";
 
 fn probes() -> Vec<PathBuf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/unpack-factory-names");
@@ -112,10 +132,11 @@ struct Written {
     notes: String,
 }
 
-fn written(path: &Path, unsafe_transforms: bool, dir: &Path) -> Written {
+fn written(path: &Path, (unsafe_transforms, unminify): (bool, bool), dir: &Path) -> Written {
     let source = std::fs::read_to_string(path).expect("probe");
     let options = Options {
         unsafe_transforms,
+        unminify,
         input_names: vec![name_of(path, false)],
         ..Options::default()
     };
@@ -136,6 +157,11 @@ fn written(path: &Path, unsafe_transforms: bool, dir: &Path) -> Written {
 fn shape_wrong(row: &str, written: &Written) -> Option<String> {
     if SPLITS.contains(&row) && !written.tree {
         return Some(format!("{row}: expected a written tree: {}", written.notes));
+    }
+    if row.contains(BOUND_EVAL) && written.tree {
+        return Some(format!(
+            "{row}: a direct eval through a local eval binding must keep the bundle whole"
+        ));
     }
     let refused = !written.tree && written.notes.contains(MISBOUND);
     if REFUSALS.contains(&row) && !refused {
@@ -162,10 +188,19 @@ fn every_factory_name_probe_prints_and_exits_the_same_after_untwist_in_both_lane
     for path in probes() {
         let expected = observed(&node, &path);
         let name = name_of(&path, true);
-        for (flags, unsafe_transforms) in [("", false), ("--unsafe", true)] {
+        let metro = name.starts_with("mtr-");
+        let lanes = [
+            ("", (false, true)),
+            ("--unsafe", (true, true)),
+            ("--unsafe --no-unminify", (true, false)),
+        ];
+        let lanes = lanes
+            .iter()
+            .filter(|(flags, _)| metro || !flags.contains("no-unminify"));
+        for (flags, lane) in lanes {
             let row = format!("{name} {flags}").trim().to_string();
             let dir = tempfile::tempdir().expect("temp dir");
-            let written = written(&path, unsafe_transforms, dir.path());
+            let written = written(&path, *lane, dir.path());
             let got = observed(&node, &written.entry);
             wrong.extend(shape_wrong(&row, &written));
             rows += 1;
@@ -176,6 +211,6 @@ fn every_factory_name_probe_prints_and_exits_the_same_after_untwist_in_both_lane
             }
         }
     }
-    assert!(rows >= 198, "{rows}");
+    assert!(rows >= 272, "{rows}");
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

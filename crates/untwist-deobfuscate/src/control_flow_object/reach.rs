@@ -4,7 +4,9 @@ use oxc_span::Span;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::pass::Cx;
-use untwist_core::semantic::{has_module_syntax, observing_open, open_eval_sites, with_observes};
+use untwist_core::semantic::{
+    has_module_syntax, may_call_eval, observing_open, open_eval_sites, with_observes,
+};
 
 use crate::calls::agnostic::names_reachable_from;
 use crate::notes;
@@ -18,7 +20,7 @@ struct Reach {
 }
 
 fn assumed_eval_sites(program: &Program<'_>, scoping: &Scoping) -> Vec<ScopeId> {
-    if with_observes() || !scoping.root_unresolved_references().contains_key("eval") {
+    if with_observes() || !may_call_eval(scoping) {
         return Vec::new();
     }
     open_eval_sites(program, scoping)

@@ -12,7 +12,7 @@ use untwist_core::ast_util::js_text::js_text;
 use untwist_core::ast_util::prop::member_parts;
 use untwist_core::machinery_name::is_machinery_name;
 use untwist_core::semantic::{
-    closed_eval_names, eval_payload_names, observers, Observers, Strictness,
+    closed_eval_names, eval_payload_names, may_call_eval, observers, Observers, Strictness,
 };
 use untwist_eval::coerce::number_to_string;
 
@@ -171,7 +171,7 @@ pub fn collect(program: &Program<'_>, scoping: &Scoping, rule: OuterRule) -> Col
     }
     out.observed.extend(with_observed);
     out.pinned.extend(out.observed.iter().copied());
-    if scoping.root_unresolved_references().contains_key("eval") {
+    if may_call_eval(scoping) {
         out.eval_names = eval_payload_names(program);
     }
     out.rule = rule;

@@ -318,6 +318,8 @@ impl<'a> VisitJs<'a> for Prescan<'_> {
             if id.name == "eval" && closed_runner_read(it, self.scoping).is_some() {
                 self.closed_reads.insert(it.span.start);
                 self.globals.note_closed_eval(id.span.start);
+            } else if id.name == "eval" && !it.optional {
+                self.globals.open_eval = true;
             }
         }
         walk_js::walk_call_expression(self, it);

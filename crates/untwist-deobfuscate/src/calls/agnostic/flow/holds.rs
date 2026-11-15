@@ -8,6 +8,7 @@ use oxc_span::Span;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::semantic::may_call_eval;
 
 use crate::calls::agnostic::bind::{reads_arguments, Bindings};
 use crate::value_flow::{flow_rule_disabled, FUNCTION_VALUES};
@@ -117,9 +118,7 @@ impl<'s, 'a> Holds<'s, 'a> {
         bindings: &'s Bindings<'s, 'a>,
         script: bool,
     ) -> Self {
-        let open = bindings.scoped_lookup
-            || !bindings.tracks_calls()
-            || scoping.root_unresolved_references().contains_key("eval");
+        let open = bindings.scoped_lookup || !bindings.tracks_calls() || may_call_eval(scoping);
         Self {
             scoping,
             bindings,

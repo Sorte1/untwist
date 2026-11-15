@@ -11,7 +11,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::naming_slot::{named_as, text_observes_names};
 use untwist_core::semantic::{
-    build_scoping, eval_payload_names, hoist_shadowing_catches, misbound_catch_vars,
+    build_scoping, eval_payload_names, hoist_shadowing_catches, may_call_eval, misbound_catch_vars,
     open_eval_sites,
 };
 
@@ -47,7 +47,7 @@ pub fn reads_free_name(program: &Program<'_>, scoping: &Scoping, name: &str) -> 
 }
 
 fn evaluated_names(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<String> {
-    if !scoping.root_unresolved_references().contains_key("eval") {
+    if !may_call_eval(scoping) {
         return FxHashSet::default();
     }
     eval_payload_names(program).into_iter().collect()
@@ -374,7 +374,7 @@ fn var_scope_of(scoping: &Scoping, scope: ScopeId) -> ScopeId {
 
 impl Hazards {
     fn of(program: &Program<'_>, scoping: &Scoping) -> Self {
-        let evals = match scoping.root_unresolved_references().contains_key("eval") {
+        let evals = match may_call_eval(scoping) {
             true => open_eval_sites(program, scoping),
             false => Vec::new(),
         };

@@ -78,9 +78,6 @@ fn eval_text(call: &CallExpression<'_>, scoping: &Scoping) -> Option<DirectEval>
         .reference_id
         .get()
         .map(|id| scoping.get_reference(id));
-    if reference.is_some_and(|reference| reference.symbol_id().is_some()) {
-        return None;
-    }
     let scope = reference.map(|reference| reference.scope_id());
     let text = match call.arguments.as_slice() {
         [Argument::StringLiteral(text)] => text

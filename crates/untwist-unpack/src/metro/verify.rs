@@ -287,7 +287,7 @@ impl<'a> Policy<'a> for Rules<'_, '_, '_, 'a> {
 
     fn call(&mut self, _frame: Frame, it: &CallExpression<'a>) -> Step {
         self.contexts.call(it);
-        let eval = is_direct_eval(self.scoping, &it.callee);
+        let eval = is_direct_eval(&it.callee);
         self.refuse_factory(eval);
         Step::Walk
     }

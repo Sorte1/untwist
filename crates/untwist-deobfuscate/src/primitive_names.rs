@@ -5,7 +5,7 @@ use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
-use untwist_core::semantic::is_constant_binding;
+use untwist_core::semantic::{is_constant_binding, may_call_eval};
 
 use crate::call_checks::is_under_with;
 use crate::wrapper_args::{is_arithmetic, keeps_its_operand};
@@ -304,7 +304,6 @@ impl PrimitiveNames {
 }
 
 const ARGUMENTS: &str = "arguments";
-const EVAL: &str = "eval";
 
 fn reads_arguments(scoping: &Scoping, function: ScopeId) -> bool {
     let unresolved = scoping.root_unresolved_references();
@@ -323,7 +322,7 @@ fn reads_arguments(scoping: &Scoping, function: ScopeId) -> bool {
 pub fn is_stable(scoping: &Scoping, symbol: SymbolId) -> bool {
     scoping.symbol_scope_id(symbol) != scoping.root_scope_id()
         && is_constant_binding(scoping, symbol)
-        && !scoping.root_unresolved_references().contains_key(EVAL)
+        && !may_call_eval(scoping)
         && !reads_arguments(scoping, scoping.symbol_scope_id(symbol))
 }
 

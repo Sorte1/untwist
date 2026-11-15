@@ -76,6 +76,11 @@ pub fn assumed_hazard(scoping: &Scoping) -> Option<&'static str> {
         .then_some("with statement")
 }
 
+pub fn may_call_eval(scoping: &Scoping) -> bool {
+    scoping.root_unresolved_references().contains_key("eval")
+        || scoping.symbol_names().any(|name| name == "eval")
+}
+
 pub fn closed_eval_names(call: &CallExpression<'_>) -> Option<Vec<String>> {
     if call.optional || !call.callee.is_specific_id("eval") {
         return None;

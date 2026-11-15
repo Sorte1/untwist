@@ -141,11 +141,8 @@ pub fn receiver_object<'k, 'a>(callee: &'k Expression<'a>) -> Option<&'k Express
     Some(member.object().without_parentheses())
 }
 
-pub fn is_direct_eval(scoping: &Scoping, callee: &Expression<'_>) -> bool {
-    let Expression::Identifier(id) = callee.without_parentheses() else {
-        return false;
-    };
-    id.name == "eval" && is_free(Some(scoping), id)
+pub fn is_direct_eval(callee: &Expression<'_>) -> bool {
+    matches!(callee.without_parentheses(), Expression::Identifier(id) if id.name == "eval")
 }
 
 impl<'a, P: Policy<'a> + ?Sized> VisitJs<'a> for Scan<'_, P> {

@@ -162,7 +162,7 @@ impl<'s> HostUses<'s> {
 
 impl<'a> VisitJs<'a> for HostUses<'_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if is_direct_eval(self.scoping, &it.callee) && payload_imports(it) {
+        if is_direct_eval(&it.callee) && payload_imports(it) {
             self.note("import() through eval".to_string());
         }
         if !it.optional && self.calls_host(&it.callee) {
