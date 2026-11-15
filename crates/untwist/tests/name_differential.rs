@@ -30,7 +30,8 @@ const EVERY_FILE: [&str; 13] = [
     "self-defending",
     "builtin-replaced",
 ];
-const SAMPLED: [(&str, usize); 1] = [("untranspile", 16)];
+const SAMPLED: [(&str, usize); 2] = [("untranspile", 16), ("unpack-bundlers", 1)];
+const UNMAPPED_CEILING: f64 = 0.75;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Inferred {
@@ -275,11 +276,20 @@ fn offset(text: &str, starts: &[usize], (line, column): (u32, u32)) -> Option<u3
     (units == column).then_some(text.len() as u32)
 }
 
+#[derive(Default)]
+struct Tally {
+    compared: usize,
+    unmapped: usize,
+    untokened: usize,
+    trees: usize,
+    unmapped_modules: usize,
+}
+
 fn differences(
     label: &str,
     (input, output): (&str, &str),
     map: &OwnedSourceMap,
-    compared: &mut usize,
+    tally: &mut Tally,
 ) -> Vec<String> {
     let in_alloc = Allocator::default();
     let in_program = parse_program(&in_alloc, input).program;
@@ -292,23 +302,24 @@ fn differences(
     let mut wrong = Vec::new();
     for (start, name) in &after {
         let (line, column) = position(output, &out_starts, *start as usize);
-        let Some(token) = map.lookup_token(&table, line, column) else {
+        let source = map
+            .lookup_token(&table, line, column)
+            .filter(|token| (token.get_dst_line(), token.get_dst_col()) == (line, column))
+            .map(|token| (token.get_src_line(), token.get_src_col()));
+        let Some(source) = source else {
+            tally.untokened += 1;
+            tally.unmapped += 1;
             continue;
         };
-        if (token.get_dst_line(), token.get_dst_col()) != (line, column) {
-            continue;
-        }
-        let source = (token.get_src_line(), token.get_src_col());
-        let Some(original) = offset(input, &in_starts, source) else {
-            continue;
-        };
-        let Some(was) = before.get(&original) else {
+        let was = offset(input, &in_starts, source).and_then(|original| before.get(&original));
+        let Some(was) = was else {
+            tally.unmapped += 1;
             continue;
         };
         if *was == Inferred::Unknown || *name == Inferred::Unknown {
             continue;
         }
-        *compared += 1;
+        tally.compared += 1;
         if was == name {
             continue;
         }
@@ -361,62 +372,109 @@ fn reads_function_names(text: &str) -> bool {
     reads_names(&program, &scoping)
 }
 
-fn lane_differences(
-    label: &str,
-    options: &Options,
-    input: &str,
-    compared: &mut usize,
-) -> Vec<String> {
+fn lane_differences(label: &str, options: &Options, input: &str, tally: &mut Tally) -> Vec<String> {
     let output = Pipeline::new(options.clone()).run(input);
-    if output.bundle.is_some() || output.codes.len() != 1 {
+    if let Some(bundle) = &output.bundle {
+        tally.trees += 1;
+        let mut wrong = Vec::new();
+        for module in &bundle.modules {
+            match &module.map {
+                Some(map) => wrong.extend(differences(
+                    &format!("{label} {}", module.path),
+                    (input, &module.code),
+                    map,
+                    tally,
+                )),
+                None => tally.unmapped_modules += 1,
+            }
+        }
+        return wrong;
+    }
+    if output.codes.len() != 1 {
         return Vec::new();
     }
     let Some(Some(map)) = output.source_maps.first() else {
+        tally.unmapped_modules += 1;
         return Vec::new();
     };
-    differences(label, (input, output.code()), map, compared)
+    differences(label, (input, output.code()), map, tally)
 }
 
-fn lanes() -> Vec<(&'static str, Options)> {
+struct Lane {
+    name: &'static str,
+    options: Options,
+    renames: bool,
+}
+
+fn lanes() -> Vec<Lane> {
     let with = |rename| Options {
         rename,
         source_map: true,
         ..Options::default()
     };
+    let lane = |name, rename| Lane {
+        name,
+        options: with(rename),
+        renames: rename != RenameMode::None,
+    };
     vec![
-        ("default", with(RenameMode::None)),
-        ("rename smart", with(RenameMode::Smart)),
-        ("rename mangle", with(RenameMode::Mangle)),
+        lane("default", RenameMode::None),
+        lane("rename smart", RenameMode::Smart),
+        lane("rename mangle", RenameMode::Mangle),
+        lane("rename simple", RenameMode::Simple),
+        lane("rename unique", RenameMode::Unique),
     ]
 }
 
+fn lane_input(lane: &Lane, text: &str) -> Option<String> {
+    if !lane.renames {
+        return Some(text.to_string());
+    }
+    let input = format!("{text}{NAME_READ}");
+    reads_function_names(&input).then_some(input)
+}
+
 #[test]
-fn every_function_keeps_its_inferred_name_where_the_program_may_read_names() {
+fn every_function_keeps_its_inferred_name_in_the_default_lane_and_where_rename_pins_it() {
     let files = corpus();
     assert!(files.len() > 300, "found {} fixtures", files.len());
-    let lanes = lanes();
     let mut wrong = Vec::new();
-    let mut compared = 0;
-    for path in &files {
-        let Ok(text) = std::fs::read_to_string(path) else {
-            continue;
-        };
-        let input = format!("{text}{NAME_READ}");
-        if !reads_function_names(&input) {
-            continue;
-        }
-        let relative = path.strip_prefix(FIXTURES).unwrap_or(path).display();
-        for (lane, options) in &lanes {
+    let mut report = Vec::new();
+    for lane in lanes() {
+        let mut tally = Tally::default();
+        for path in &files {
+            let Ok(text) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            let Some(input) = lane_input(&lane, &text) else {
+                continue;
+            };
+            let relative = path.strip_prefix(FIXTURES).unwrap_or(path).display();
             wrong.extend(lane_differences(
-                &format!("{relative} ({lane})"),
-                options,
+                &format!("{relative} ({})", lane.name),
+                &lane.options,
                 &input,
-                &mut compared,
+                &mut tally,
             ));
         }
+        let seen = tally.compared + tally.unmapped;
+        let share = tally.unmapped as f64 / seen.max(1) as f64;
+        report.push(format!(
+            "{}: compared {}, unmapped output functions {} ({:.1} %, {} with no token at their start), trees {}, outputs without a map {}",
+            lane.name,
+            tally.compared,
+            tally.unmapped,
+            share * 100.0,
+            tally.untokened,
+            tally.trees,
+            tally.unmapped_modules
+        ));
+        assert!(tally.compared > 2000, "{}", report.join("\n"));
+        assert!(share < UNMAPPED_CEILING, "{}", report.join("\n"));
+        assert!(lane.renames || tally.trees > 0, "{}", report.join("\n"));
     }
+    eprintln!("{}", report.join("\n"));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    assert!(compared > 2000, "compared {compared} functions");
 }
 
 #[test]
@@ -424,9 +482,68 @@ fn the_check_sees_a_renamed_function() {
     let input = "var f =\nfunction () {};\nconsole.log(f.name);\n";
     let output = "var g =\nfunction () {};\nconsole.log(g.name);\n";
     let map = untwist_core::source_map::identity(input);
-    let mut compared = 0;
-    let wrong = differences("probe", (input, output), &map, &mut compared);
-    assert_eq!(compared, 1);
+    let mut tally = Tally::default();
+    let wrong = differences("probe", (input, output), &map, &mut tally);
+    assert_eq!(tally.compared, 1);
     assert_eq!(wrong.len(), 1, "{wrong:?}");
     assert!(wrong[0].contains("\"f\""), "{wrong:?}");
+}
+
+const MODEL_ROWS: [&str; 14] = [
+    "var a = function () {}; console.log(JSON.stringify(a.name));",
+    "var b = class {}; console.log(JSON.stringify(b.name));",
+    "var c = () => 0; console.log(JSON.stringify(c.name));",
+    "var d; d = function () {}; console.log(JSON.stringify(d.name));",
+    "var e; (e) = function () {}; console.log(JSON.stringify(e.name));",
+    "var o = { p: function () {}, ['q']: () => 0, get r() { return 0; }, s() {} }; console.log(JSON.stringify([o.p.name, o.q.name, Object.getOwnPropertyDescriptor(o, 'r').get.name, o.s.name]));",
+    "function f(g = function () {}) { return g.name; } console.log(JSON.stringify([f.name, f()]));",
+    "var [h = class {}] = []; var { i = () => 0 } = {}; console.log(JSON.stringify([h.name, i.name]));",
+    "var j = (0, function () {}); console.log(JSON.stringify(j.name));",
+    "var k = { __proto__: function () {} }; console.log(JSON.stringify(Object.getPrototypeOf(k).name));",
+    "class L { static m = function () {}; #n = () => 0; get n() { return this.#n; } } console.log(JSON.stringify([L.name, L.m.name, new L().n.name, Object.getOwnPropertyDescriptor(L.prototype, 'n').get.name]));",
+    "var p; p ||= function () {}; var q = 1; q &&= class {}; var r; r ??= () => 0; console.log(JSON.stringify([p.name, q.name, r.name]));",
+    "var s = { 1: function () {}, 'a b': class {} }; console.log(JSON.stringify([s[1].name, s['a b'].name]));",
+    "var t = true ? function () {} : 0; var u = (1, function () {}); console.log(JSON.stringify([t.name, u.name]));",
+];
+
+fn model_names(text: &str) -> Vec<String> {
+    let alloc = Allocator::default();
+    let program = parse_program(&alloc, text).program;
+    let mut found: Vec<(u32, Inferred)> = inferred_names(&program).into_iter().collect();
+    found.sort_by_key(|(start, _)| *start);
+    found
+        .into_iter()
+        .filter_map(|(_, name)| match name {
+            Inferred::Name(name) => Some(name),
+            Inferred::Unknown => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_name_model_agrees_with_node() {
+    if untwist_testing::node_rows::node_or_skip().is_none() {
+        return;
+    }
+    let mut wrong = Vec::new();
+    for row in MODEL_ROWS {
+        let printed = untwist_testing::node::printed_by_node(row).unwrap_or_default();
+        let model = model_names(row);
+        let named: Vec<&String> = model.iter().filter(|name| !name.is_empty()).collect();
+        let shown: Vec<String> = printed
+            .trim()
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .split(',')
+            .map(|part| part.trim_matches('"').to_string())
+            .filter(|part| !part.is_empty())
+            .collect();
+        let shown: Vec<&String> = shown.iter().collect();
+        if named != shown {
+            wrong.push(format!(
+                "{row}: node printed {printed:?}, the model gives {model:?}"
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

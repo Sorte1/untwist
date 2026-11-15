@@ -9,11 +9,16 @@ use untwist_testing::node_rows::node_or_skip;
 const DATA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/naming_review");
 const PACKAGE: &str = "{\"type\":\"module\"}\n";
 
-const LANES: [&[&str]; 4] = [
+const LANES: [&[&str]; 5] = [
     &[],
     &["--rename", "smart"],
     &["--rename", "mangle"],
     &["--rename", "simple"],
+    &["--rename", "unique"],
+];
+
+const RR4_WHOLE: [&str; 14] = [
+    "e12", "e14", "e18", "e19", "e2", "e20", "e3", "e6", "e7", "w2", "w3", "w4", "w6", "w8",
 ];
 
 fn data(name: &str) -> PathBuf {
@@ -41,7 +46,12 @@ fn lane_args(flags: &[&str]) -> Vec<OsString> {
     flags.iter().map(OsString::from).collect()
 }
 
-fn tree(node: &Path, input: &Path, out: &Path, flags: &[&str], module: bool) -> Option<String> {
+struct Written {
+    printed: Option<String>,
+    tree: bool,
+}
+
+fn tree(node: &Path, input: &Path, out: &Path, flags: &[&str], module: bool) -> Written {
     let mut args = lane_args(flags);
     args.extend([
         OsString::from("-f"),
@@ -51,7 +61,8 @@ fn tree(node: &Path, input: &Path, out: &Path, flags: &[&str], module: bool) -> 
     ]);
     untwist(&args);
     let entry = out.join("index.js");
-    match (entry.exists(), module) {
+    let tree = entry.exists();
+    let printed = match (tree, module) {
         (true, true) => {
             std::fs::write(out.join("package.json"), PACKAGE).expect("package.json");
             Some(printed(node, &entry))
@@ -59,7 +70,8 @@ fn tree(node: &Path, input: &Path, out: &Path, flags: &[&str], module: bool) -> 
         (true, false) => Some(printed(node, &entry)),
         (false, true) => None,
         (false, false) => Some(printed(node, &out.join("deobfuscated.js"))),
-    }
+    };
+    Written { printed, tree }
 }
 
 fn name_lines(printed: &str, marker: &str) -> String {
@@ -155,87 +167,104 @@ fn unpacked_trees_keep_the_names_the_bundle_gives() {
             "closure-shared-var.js",
             false,
             "eval",
+            true,
         ),
         (
             "closure-shared-var.js",
             "closure-shared-var.js",
             false,
             "base",
+            true,
         ),
         (
             "webpack-var-injection.js",
             "webpack-var-injection.js",
             false,
             "inj",
+            true,
         ),
         (
             "systemjs-export-call.js",
             "systemjs-loader.cjs",
             true,
             "helpers-function",
+            true,
         ),
         (
             "systemjs-declarator-export.js",
             "systemjs-declarator-export.loader.cjs",
             true,
             "area",
+            true,
         ),
         (
             "systemjs-object-default.js",
             "systemjs-object-default.loader.cjs",
             true,
             "area",
+            false,
         ),
         (
             "systemjs-default-collision.js",
             "systemjs-default-collision.loader.cjs",
             true,
             "area",
+            true,
         ),
         (
             "closure-assigned-var.js",
             "closure-assigned-var.js",
             false,
             "base",
+            true,
         ),
         (
             "closure-assigned-var.js",
             "closure-assigned-var.js",
             false,
             "eval b",
+            true,
         ),
         (
             "esbuild-parameter-target.js",
             "esbuild-parameter-target.js",
             false,
             "pn",
+            true,
         ),
         (
             "esbuild-inner-exports.js",
             "esbuild-inner-exports.js",
             false,
             "pn",
+            true,
         ),
         (
             "webpack-inner-exports.js",
             "webpack-inner-exports.js",
             false,
             "pn",
+            true,
         ),
         (
             "metro-parameter-target.js",
             "metro-parameter-target.js",
             false,
             "pn",
+            false,
         ),
     ];
     let mut wrong = Vec::new();
-    for (index, (input, runner, module, marker)) in cases.into_iter().enumerate() {
+    for (index, (input, runner, module, marker, splits)) in cases.into_iter().enumerate() {
         let expected = name_lines(&printed(&node, &data(runner)), marker);
         assert!(!expected.is_empty(), "{input}: no {marker} line");
         for (lane, flags) in LANES.iter().enumerate() {
             let out = work.path().join(format!("{index}-{lane}"));
-            let Some(observed) = tree(&node, &data(input), &out, flags, module) else {
+            let written = tree(&node, &data(input), &out, flags, module);
+            if flags.is_empty() && written.tree != splits {
+                wrong.push(format!("{input} {flags:?}: tree written {}", written.tree));
+            }
+            let Some(observed) = written.printed else {
                 continue;
             };
             let observed = name_lines(&observed, marker);
@@ -282,6 +311,7 @@ fn a_name_read_in_another_input_keeps_the_names_an_unpacked_bundle_gives() {
         untwist(&args);
         let entry = out.join("index.js");
         if !entry.exists() {
+            wrong.push(format!("{flags:?}: no tree written"));
             continue;
         }
         let entry = std::fs::canonicalize(&entry).expect("entry");
@@ -292,6 +322,48 @@ fn a_name_read_in_another_input_keeps_the_names_an_unpacked_bundle_gives() {
         );
         if observed != expected {
             wrong.push(format!("{flags:?}: inputs {expected:?}, tree {observed:?}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+fn rr4_inputs() -> Vec<PathBuf> {
+    let mut inputs: Vec<PathBuf> = std::fs::read_dir(data("rr4"))
+        .expect("rr4 dir")
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "js"))
+        .collect();
+    inputs.sort();
+    inputs
+}
+
+#[test]
+fn factory_and_shield_renames_keep_every_name_a_strict_bundle_gives() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let work = tempfile::tempdir().expect("tempdir");
+    let inputs = rr4_inputs();
+    assert!(inputs.len() >= 30, "found {} inputs", inputs.len());
+    let mut wrong = Vec::new();
+    for (index, input) in inputs.iter().enumerate() {
+        let label = input.file_stem().unwrap().to_string_lossy().to_string();
+        let expected = name_lines(&printed(&node, input), "pn");
+        assert!(!expected.is_empty(), "{label}: no pn line");
+        let splits = !RR4_WHOLE.contains(&label.as_str());
+        for (lane, flags) in LANES.iter().enumerate() {
+            let out = work.path().join(format!("rr4-{index}-{lane}"));
+            let written = tree(&node, input, &out, flags, false);
+            if flags.is_empty() && written.tree != splits {
+                wrong.push(format!("{label} {flags:?}: tree written {}", written.tree));
+            }
+            let observed = name_lines(&written.printed.unwrap_or_default(), "pn");
+            if observed != expected {
+                wrong.push(format!(
+                    "{label} {flags:?}: bundle {expected:?}, output {observed:?}"
+                ));
+            }
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));

@@ -641,7 +641,6 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        cx.observe_names(program);
         self.open_sites.clear();
         self.refused_nest = None;
         self.pending.clear();

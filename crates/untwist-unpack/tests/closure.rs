@@ -429,7 +429,10 @@ fn a_var_shared_across_segments_moves_to_the_holder() {
         "{a}"
     );
     assert!(a.contains("var own;"), "{a}");
-    assert!(a.contains("__closure_vars.shared = function(x)"), "{a}");
+    assert!(
+        a.contains("__closure_vars.shared = { shared: function(x)"),
+        "{a}"
+    );
     assert!(a.contains("own = 2"), "{a}");
     assert!(!a.contains("var later"), "{a}");
     let b = code(&files, "b.js");
@@ -490,7 +493,7 @@ fn a_shared_var_read_by_setup_moves_too() {
         segment("b", "console.log(early());"),
     ));
     let files = split_both(&source);
-    assert!(code(&files, "index.js").contains("__closure_vars.early = function()"));
+    assert!(code(&files, "index.js").contains("__closure_vars.early = { early: function()"));
     assert!(code(&files, "a.js").contains("__closure_vars.later = 5;"));
 }
 

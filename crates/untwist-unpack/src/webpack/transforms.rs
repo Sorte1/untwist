@@ -84,17 +84,10 @@ fn shield_all<'a>(
         .collect()
 }
 
-fn restore_all<'a>(
-    alloc: &'a Allocator,
-    bundle: &mut Bundle<'a>,
-    shields: &[Option<Shield>],
-    converted: &Converted,
-) {
-    let none = FxHashSet::default();
-    for (index, (module, shield)) in bundle.modules.values_mut().zip(shields).enumerate() {
+fn restore_all<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>, shields: &[Option<Shield>]) {
+    for (module, shield) in bundle.modules.values_mut().zip(shields) {
         if let Some(shield) = shield {
-            let spans = rewritten(converted, index).map_or(&none, |rewritten| &rewritten.converted);
-            restore(alloc, module, shield, spans);
+            restore(alloc, module, shield);
         }
     }
 }
@@ -330,7 +323,7 @@ pub fn apply_transforms_with<'a>(
     for (id, module) in &bundle.modules {
         notes.extend(helper_notes(id, module));
     }
-    restore_all(alloc, bundle, &shields, &converted);
+    restore_all(alloc, bundle, &shields);
     if let Some(indices) = plan.filter(|_| bindings.iter().any(Option::is_some)) {
         attach_runtime(alloc, bundle, &indices, &bindings);
     }

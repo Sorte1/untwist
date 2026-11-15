@@ -19,7 +19,7 @@ use oxc_syntax::symbol::SymbolId;
 use oxc_traverse::TraverseCtx;
 
 use crate::ast_util::global::is_global_name_at;
-use crate::ast_util::naming_slot::{in_naming_slot, names_observed, unnamed};
+use crate::ast_util::naming_slot::{in_naming_slot, unnamed};
 use crate::ast_util::rename::unique_name_avoiding;
 
 pub use driver::{
@@ -99,7 +99,7 @@ pub struct PassOptions {
     #[doc(hidden)]
     pub code_text: CodeTextSeen,
     #[doc(hidden)]
-    pub names_observed: Cell<Option<bool>>,
+    pub keep_function_names: bool,
     #[doc(hidden)]
     pub nested_root: bool,
     #[doc(hidden)]
@@ -189,7 +189,7 @@ impl Default for PassOptions {
             changes_before_program_hook: Cell::new(0),
             changes_by_others_before_program_hook: Cell::new(0),
             code_text: CodeTextSeen::default(),
-            names_observed: Cell::new(None),
+            keep_function_names: false,
             nested_root: false,
             keep_script_globals: false,
             keep_script_lexicals: false,
@@ -271,20 +271,8 @@ impl<'a> Cx<'a, '_> {
         self.opts.changes_before_program_hook.get() == 0
     }
 
-    pub fn observe_names(&self, program: &Program<'_>) -> bool {
-        if self.opts.unsafe_transforms {
-            return false;
-        }
-        if let Some(seen) = self.opts.names_observed.get() {
-            return seen;
-        }
-        let seen = names_observed(program, self.tcx.scoping());
-        self.opts.names_observed.set(Some(seen));
-        seen
-    }
-
     pub fn names_observed(&self) -> bool {
-        !self.opts.unsafe_transforms && self.opts.names_observed.get().unwrap_or(true)
+        !self.opts.unsafe_transforms
     }
 
     pub fn loses_name(&self, value: &Expression<'_>) -> bool {

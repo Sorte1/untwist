@@ -55,6 +55,7 @@ impl Pipeline {
             trust_free_loader: self.options.unsafe_transforms,
             prove_frames: !self.options.unsafe_transforms,
             trust_builtins: self.options.unsafe_transforms,
+            trust_names: self.options.unsafe_transforms,
             module_goal: self.options.module_goal,
         }
     }
@@ -171,7 +172,12 @@ impl Pipeline {
         notes: &mut Vec<Note>,
     ) -> Option<untwist_unpack::Bundle<'a>> {
         let started = Instant::now();
-        let _names = names_read_in_any(programs).map(|shared| assume_shared_globals(Some(shared)));
+        let _names = self
+            .options
+            .unsafe_transforms
+            .then(|| names_read_in_any(programs))
+            .flatten()
+            .map(|shared| assume_shared_globals(Some(shared)));
         let options = untwist_unpack::UnpackOptions {
             module_goal,
             ..self.unpack_options()

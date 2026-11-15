@@ -99,6 +99,7 @@ const CONSERVATIVE: UnpackOptions = UnpackOptions {
     trust_free_loader: false,
     prove_frames: false,
     trust_builtins: false,
+    trust_names: false,
     module_goal: false,
 };
 

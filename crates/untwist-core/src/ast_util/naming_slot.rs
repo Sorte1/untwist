@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::hash::BuildHasher;
 
 use oxc_allocator::Vec as AVec;
@@ -25,14 +25,25 @@ fn exports_values(program: &Program<'_>, scoping: &Scoping) -> bool {
     has_module_syntax(program) || free.contains_key(MODULE) || free.contains_key(EXPORTS)
 }
 
-pub fn names_observed(program: &Program<'_>, scoping: &Scoping) -> bool {
-    names_read_by_another_input()
-        || exports_values(program, scoping)
-        || reads_names(program, scoping)
-}
-
 thread_local! {
     static TEXT_SEEN: RefCell<Option<(u64, usize, bool)>> = const { RefCell::new(None) };
+    static SCANNED: Cell<bool> = const { Cell::new(false) };
+}
+
+pub struct NameScanGuard {
+    before: bool,
+}
+
+impl Drop for NameScanGuard {
+    fn drop(&mut self) {
+        SCANNED.with(|cell| cell.set(self.before));
+    }
+}
+
+pub fn scan_name_reads(scanned: bool) -> NameScanGuard {
+    NameScanGuard {
+        before: SCANNED.with(|cell| cell.replace(scanned)),
+    }
 }
 
 fn text_reads_names(text: &str) -> bool {
@@ -43,7 +54,7 @@ fn text_reads_names(text: &str) -> bool {
 }
 
 pub fn text_observes_names(text: &str) -> bool {
-    if names_read_by_another_input() {
+    if !SCANNED.with(Cell::get) || names_read_by_another_input() {
         return true;
     }
     let key = (rustc_hash::FxBuildHasher.hash_one(text), text.len());

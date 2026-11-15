@@ -189,13 +189,17 @@ fn an_anonymous_function_behind_a_comma_keeps_its_name_where_node_reads_it() {
 }
 
 #[test]
-fn a_program_that_reads_no_name_still_has_its_sequence_split() {
+fn a_program_that_reads_no_name_has_its_sequence_split_and_keeps_the_name_unless_unsafe() {
     let safe = Options::default();
+    let unsafe_transforms = unsafe_options();
     for (label, source) in rows()
         .iter()
         .filter(|(label, _)| label.starts_with("no-name-read"))
     {
         let code = transformed(&safe, source);
+        assert!(!code.contains("(console.log"), "{label}: {code}");
+        assert!(code.contains("(0, "), "{label}: {code}");
+        let code = transformed(&unsafe_transforms, source);
         assert!(!code.contains("(console.log"), "{label}: {code}");
         assert!(!code.contains("(0, "), "{label}: {code}");
     }
@@ -372,13 +376,16 @@ fn a_name_read_through_a_computed_key_or_reflection_keeps_names_in_every_lane() 
 }
 
 #[test]
-fn literal_keys_other_than_name_still_split_the_sequence() {
+fn literal_keys_other_than_name_drop_the_wrapper_only_under_unsafe() {
     let safe = Options::default();
+    let unsafe_transforms = unsafe_options();
     for (label, source) in name_read_key_rows()
         .iter()
         .filter(|(label, _)| label.starts_with("no-name-read"))
     {
         let code = transformed(&safe, source);
+        assert!(code.contains("(0, "), "{label}: {code}");
+        let code = transformed(&unsafe_transforms, source);
         assert!(!code.contains("(0, "), "{label}: {code}");
     }
 }
@@ -449,4 +456,55 @@ fn a_top_level_counter_of_a_script_keeps_function_names() {
     let code = renamed(RenameMode::Mangle, &source);
     assert!(code.contains("function foo"), "{code}");
     assert!(code.contains("bar"), "{code}");
+}
+
+const RR4_ROWS: &str = include_str!("data/name_guard_rr4_rows.txt");
+
+const RR4_RENAME_PREMISE: [&str; 2] = ["rr4-10", "rr4-r2"];
+
+fn rename_premise_rows(wrong: Vec<String>, labels: &[&str]) -> (Vec<String>, Vec<String>) {
+    let mut unexplained = Vec::new();
+    let mut premise = Vec::new();
+    for row in wrong {
+        let listed = labels
+            .iter()
+            .find(|label| row.starts_with(&format!("{label} (rename ")));
+        match listed {
+            Some(label) => premise.push(label.to_string()),
+            None => unexplained.push(row),
+        }
+    }
+    premise.sort();
+    premise.dedup();
+    (unexplained, premise)
+}
+
+#[test]
+fn the_default_lane_keeps_every_name_a_built_in_or_host_may_read() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let programs: Vec<(String, String)> = RR4_ROWS
+        .lines()
+        .filter_map(|line| line.split_once('|'))
+        .map(|(label, program)| (label.to_string(), program.to_string()))
+        .collect();
+    assert!(programs.len() >= 40, "found {} rows", programs.len());
+    let safe = Options::default();
+    let run_safe = |source: &str| transformed(&safe, source);
+    let smart = |source: &str| renamed(RenameMode::Smart, source);
+    let mangle = |source: &str| renamed(RenameMode::Mangle, source);
+    let simple = |source: &str| renamed(RenameMode::Simple, source);
+    let unique = |source: &str| renamed(RenameMode::Unique, source);
+    let modes: [Mode<'_>; 5] = [
+        ("default", &run_safe),
+        ("rename smart", &smart),
+        ("rename mangle", &mangle),
+        ("rename simple", &simple),
+        ("rename unique", &unique),
+    ];
+    let wrong = node_rows::mismatches(&node, &programs, &modes);
+    let (unexplained, premise) = rename_premise_rows(wrong, &RR4_RENAME_PREMISE);
+    assert!(unexplained.is_empty(), "{}", unexplained.join("\n"));
+    assert_eq!(premise, RR4_RENAME_PREMISE);
 }

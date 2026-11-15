@@ -25,6 +25,9 @@ pub fn generate_uid(base: &str, scoping: &Scoping, used: &FxHashSet<String>) -> 
         };
         let taken = used.contains(&candidate)
             || scoping
+                .root_unresolved_references()
+                .contains_key(candidate.as_str())
+            || scoping
                 .symbol_ids()
                 .any(|symbol| scoping.symbol_name(symbol) == candidate);
         if !taken {

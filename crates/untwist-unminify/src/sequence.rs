@@ -502,8 +502,8 @@ impl<'a> Pass<'a> for Sequence {
             .on_statements(ACTED_ON_STATEMENTS)
     }
 
-    fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let observed = cx.observe_names(program);
+    fn enter_program(&mut self, _program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        let observed = cx.names_observed();
         NAMES_OBSERVED.with(|cell| cell.set(observed));
     }
 

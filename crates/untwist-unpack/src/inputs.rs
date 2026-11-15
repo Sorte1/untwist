@@ -12,6 +12,7 @@ use crate::merge::merge_noted;
 use crate::model::Bundle;
 use crate::strict::{keep_strictness, mark_from_inputs, sloppy_written_module};
 use crate::{finish_with, notes, turbopack, UnpackOptions};
+use untwist_core::ast_util::naming_slot::scan_name_reads;
 use untwist_core::semantic::closed_evals_kept;
 
 const PASS_NAME: &str = "unpack";
@@ -170,6 +171,14 @@ fn mirrored_inputs(bundle: &mut Bundle<'_>, names: &[String]) -> Vec<String> {
     }
 }
 
+fn renamed_a_function_name(notes: &mut Vec<Note>) -> bool {
+    let renamed = crate::rename::took_name_hazard();
+    if renamed {
+        notes.push(note(notes::RENAMED_FUNCTION_NAME.to_string()));
+    }
+    renamed
+}
+
 pub fn unpack_named_inputs<'a>(
     alloc: &'a Allocator,
     programs: &mut [Program<'a>],
@@ -184,6 +193,7 @@ pub fn unpack_named_inputs<'a>(
     let groups = groups(programs, names);
     let mut notes = Vec::new();
     let mut refused_any = false;
+    let _names = scan_name_reads(options.trust_names);
     crate::rename::clear_name_hazard();
     let mut found = detected(
         alloc,
@@ -193,8 +203,7 @@ pub fn unpack_named_inputs<'a>(
         (&mut notes, &mut refused_any),
     );
     let bundles = complete(alloc, programs, &groups, &mut found, &mut notes);
-    if crate::rename::took_name_hazard() {
-        notes.push(note(notes::RENAMED_FUNCTION_NAME.to_string()));
+    if renamed_a_function_name(&mut notes) {
         return (None, notes);
     }
     if bundles.len() > 1 && bundles.iter().any(|bundle| bundle.around.is_some()) {
@@ -212,12 +221,18 @@ pub fn unpack_named_inputs<'a>(
     let Some(mut bundle) = merged else {
         return (None, notes);
     };
+    if renamed_a_function_name(&mut notes) {
+        return (None, notes);
+    }
     if let Err(why) = chunks_checked(&bundle, options, refused_any) {
         notes.push(note(why));
         return (None, notes);
     }
     bundle.mirrored_inputs = mirrored_inputs(&mut bundle, names);
     notes.extend(finish_with(alloc, &mut bundle, mappings, options));
+    if renamed_a_function_name(&mut notes) {
+        return (None, notes);
+    }
     if let Some(reached) = left_request_reaching(&bundle) {
         notes.push(note(browserify_notes::left_request_reaches(
             &reached.id,

@@ -46,6 +46,10 @@ fn messages(notes: Vec<Note>) -> Vec<String> {
 }
 
 fn run(sources: &[String]) -> Run {
+    run_with(sources, UnpackOptions::default())
+}
+
+fn run_with(sources: &[String], options: UnpackOptions) -> Run {
     let alloc = Allocator::default();
     let mut programs: Vec<Program<'_>> = sources
         .iter()
@@ -55,7 +59,7 @@ fn run(sources: &[String]) -> Run {
             parsed.program
         })
         .collect();
-    let (bundle, notes) = unpack_inputs(&alloc, &mut programs, &[], UnpackOptions::default());
+    let (bundle, notes) = unpack_inputs(&alloc, &mut programs, &[], options);
     let notes = messages(notes);
     let Some(bundle) = bundle else {
         return Run {
@@ -148,9 +152,32 @@ fn each_part_alone_writes_no_bundle_and_says_why() {
     }
 }
 
+const NAMES_TRUSTED: UnpackOptions = UnpackOptions {
+    split_hoisted: false,
+    assume_modules: false,
+    conservative: false,
+    trust_free_loader: false,
+    prove_frames: false,
+    trust_builtins: false,
+    trust_names: true,
+    module_goal: false,
+};
+
 fn hoist_with(index: impl Fn(String) -> String, chunk: impl Fn(String) -> String) -> Run {
     let [root, lazy] = HOIST.map(fixture);
-    run(&[index(root), chunk(lazy)])
+    run_with(&[index(root), chunk(lazy)], NAMES_TRUSTED)
+}
+
+#[test]
+fn a_helper_copy_under_another_name_is_refused_where_names_are_kept() {
+    let [root, lazy] = HOIST.map(fixture);
+    let lazy = lazy.replace(
+        LAZY_ANCHOR,
+        &format!("{LAZY_ANCHOR}\nvar kept = $parcel$export;"),
+    );
+    let run = run(&[root, lazy]);
+    assert_eq!(run.kind, None, "{:?}", run.files);
+    assert!(run.noted("a module binding that gives a function its name would be renamed"));
 }
 
 #[test]
