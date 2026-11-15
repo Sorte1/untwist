@@ -126,20 +126,25 @@ test('core-js hidden by a string array is found in the output and run again with
   expect(await downloadedLibraries(page)).toEqual(cliLibraries(CORE_JS_OBFUSCATED));
 });
 
-test('the run says it is loading tables, and still finishes when a table is broken', async ({ page }) => {
-  let release: () => void = () => undefined;
-  const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route(TABLE, async (route) => {
-    await held;
-    await route.fulfill({ status: 200, contentType: 'application/octet-stream', body: Buffer.from('not a table') });
+test.describe('without the service worker', () => {
+  test('the run says it is loading tables, and still finishes when a table is broken', async ({ page }) => {
+    await page.addInitScript(() => {
+      delete (Navigator.prototype as { serviceWorker?: unknown }).serviceWorker;
+    });
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(TABLE, async (route) => {
+      await held;
+      await route.fulfill({ status: 200, contentType: 'application/octet-stream', body: Buffer.from('not a table') });
+    });
+    await openApp(page, LIBS);
+    await load(page, CORE_JS);
+    await expect(page.locator('#running-stage')).toHaveText(/^Fetching library tables: core-js \([\d.]+ (KB|MB)\)…$/);
+    release();
+    await expect(page.locator('#status-label')).toHaveText(/Done|Stopped by limit/, { timeout: 120_000 });
+    await openDetails(page);
+    const section = librariesSection(page);
+    await expect(section).toContainText('Tables not loaded');
+    await expect(section.locator('dt', { hasText: /^core-js$/ })).toHaveCount(0);
   });
-  await openApp(page, LIBS);
-  await load(page, CORE_JS);
-  await expect(page.locator('#running-stage')).toHaveText(/^Fetching library tables: core-js \([\d.]+ (KB|MB)\)…$/);
-  release();
-  await expect(page.locator('#status-label')).toHaveText(/Done|Stopped by limit/, { timeout: 120_000 });
-  await openDetails(page);
-  const section = librariesSection(page);
-  await expect(section).toContainText('Tables not loaded');
-  await expect(section.locator('dt', { hasText: /^core-js$/ })).toHaveCount(0);
 });

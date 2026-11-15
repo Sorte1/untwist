@@ -301,6 +301,13 @@ fn returned<'k>(statement: &'k Statement<'_>) -> Option<(&'k str, Span)> {
     }
 }
 
+fn after_exports_object(body: &[Statement<'_>], exports: &[(&str, Span)]) -> bool {
+    match body {
+        [.., before, _] => exports.iter().any(|(_, span)| *span == before.span()),
+        _ => false,
+    }
+}
+
 pub fn site<'k, 'a>(
     source: &'k Program<'a>,
     (body, container): (&'k [Statement<'a>], &'k Expression<'a>),
@@ -316,7 +323,7 @@ pub fn site<'k, 'a>(
     let expression = last_expression(body)?;
     let entry = entry_body(expression)?;
     let around = enclosing(source, body)?;
-    if around.strict && !strict(&entry.directives) {
+    if around.strict && !strict(&entry.directives) && !after_exports_object(body, &exports) {
         return None;
     }
     let module_code = around

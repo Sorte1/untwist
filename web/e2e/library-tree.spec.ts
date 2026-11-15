@@ -6,7 +6,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import { expect, openApp, paste, readRepo, repoPath, runAndWait, saved, test } from './fixtures';
 
 const CORE_JS = 'fixtures/libraries/core-js/rollup-cjs.terser.js';
-const PLAIN = 'fixtures/reference/unpack/webpack-5.js';
+const PLAIN = 'fixtures/webpack-strict/w5-dev.js';
 const SPLIT = '#libs=1&split=1&assume=1&unsafe=1';
 
 interface BundleJson {

@@ -84,7 +84,9 @@ Untwist's unpack stage is verified against the reference deobfuscator by `cargo 
   `__esModule` observation, no interop target, every consumer a plain member read) and keeps its
   `require`s, so evaluation order is unchanged; every other module stays CommonJS with its helpers
   in `_runtime/webpack.js`. The webpack 5 inline entry is written as `index.js` under the same
-  rules. The conservative comparison mode keeps the reference deobfuscator's conversion, so `diff-unpack` is unchanged; several default
+  rules. In a bootstrap that is strict code, an inline entry IIFE without its own `"use strict"`
+  counts as the entry only right after the entry's exports object (`let __webpack_exports__ = {};`),
+  as webpack writes it when every module is strict; it is written with `"use strict"`. The conservative comparison mode keeps the reference deobfuscator's conversion, so `diff-unpack` is unchanged; several default
   the reference deobfuscator snapshots were re-pinned for it.
 
 - **A factory parameter is not renamed onto a name its body already reads free.**

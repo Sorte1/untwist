@@ -5,7 +5,7 @@ import type { Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
 import { expect, openApp, paste, readRepo, repoPath, runAndWait, saved, test } from './fixtures';
 
-const FIXTURE = 'fixtures/reference/unpack/webpack-5.js';
+const FIXTURE = 'fixtures/webpack-strict/w5-dev.js';
 
 interface BundleJson {
   readonly modules: ReadonlyArray<{ readonly path: string; readonly isEntry: boolean }>;
