@@ -255,10 +255,18 @@ pub(super) fn names_reach_text(
             .iter()
             .map(|head| format!("({head} () {{\n{text}\n}});")),
     );
-    forms
+    let parsed: Vec<&String> = forms
         .iter()
-        .filter_map(|form| parsed_reaches(form, watched, (depth - 1, runner_texts)))
-        .any(|reached| reached)
+        .filter(|form| {
+            crate::proof::with_parsed_text(form, |_| ())
+                .flatten()
+                .is_some()
+        })
+        .collect();
+    let Some(clean) = parsed.iter().find(|form| !has_early_errors(form)) else {
+        return !parsed.is_empty();
+    };
+    parsed_reaches(clean, watched, (depth - 1, runner_texts)).unwrap_or(true)
 }
 
 fn parsed_reaches(
@@ -267,13 +275,6 @@ fn parsed_reaches(
     judgement: TextJudgement,
 ) -> Option<bool> {
     let names = watched.0;
-    if crate::proof::with_parsed_text(form, |_| ())
-        .flatten()
-        .is_some()
-        && has_early_errors(form)
-    {
-        return Some(true);
-    }
     let judged = crate::proof::with_parsed_text(form, |program| {
         let mut named = Named {
             names,
