@@ -6,8 +6,6 @@ use super::roles::{reflective_access, READERS, RUNNERS};
 use super::sites::Sites;
 use super::AKey;
 
-const KEYED_READERS: [&str; 2] = ["get", "getOwnPropertyDescriptor"];
-
 const CONTAINER_READERS: [&str; 4] = [
     "getOwnPropertyDescriptors",
     "values",
