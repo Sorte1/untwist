@@ -23,6 +23,8 @@ const PN_UNSAFE_NAMES: &[&str] = &[
     "rx4-sa6.js",
     "rx4-sa7.js",
     "rx4-sa8.js",
+    "rx5-rd-t17.js",
+    "rx5-rd-t18.js",
 ];
 
 const UNSAFE_PREMISE_MULTI: &[(&str, RenameMode)] =

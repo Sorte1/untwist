@@ -5,6 +5,7 @@ use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 
 use super::live::opaque_branch;
+use super::roles::reflective_access;
 use super::sites::Sites;
 use super::AKey;
 use oxc_syntax::operator::BinaryOperator;
@@ -99,6 +100,11 @@ impl<'a> Sites<'_, 'a> {
     pub(super) fn hit_text(&mut self, span: Span) {
         self.hit(span);
         self.out.reach_text.get_or_insert(span);
+    }
+
+    fn hit_reflective(&mut self, span: Span) {
+        self.mark_source(span, "a reflective writer or reader used as a value");
+        self.hit(span);
     }
 
     fn hit_dynamic(&mut self, span: Span) {
@@ -469,15 +475,47 @@ impl<'a> Sites<'_, 'a> {
                 self.reach_enumerated(expr, call.span);
             }
         }
+        let reflective = unknown
+            || names_one_of(keys, &VALUE_KEYED)
+            || names_one_of(keys, &OWN_WRITERS)
+            || names_one_of(keys, &BATCH_WRITERS);
+        if reflective && call.arguments.iter().any(Argument::is_spread) {
+            return self.hit_reflective(call.span);
+        }
         if unknown || names_one_of(keys, &VALUE_KEYED) {
             let base = call.arguments.first().and_then(Argument::as_expression);
             self.reach_base_keyed(base, keyed_argument(call, 1), call.span);
+        }
+        if unknown || names_one_of(keys, &["set"]) {
+            let receiver = call.arguments.get(3).and_then(Argument::as_expression);
+            self.reach_base_keyed(receiver, keyed_argument(call, 1), call.span);
         }
         if unknown || names_one_of(keys, &OWN_WRITERS) {
             self.reach_base_keyed(Some(member.object()), keyed_argument(call, 0), call.span);
         }
         if unknown || names_one_of(keys, &BATCH_WRITERS) {
             self.reach_batch(call);
+        }
+    }
+
+    pub(super) fn reach_reflective_read(
+        &mut self,
+        member: &MemberExpression<'a>,
+        keys: &[AKey<'a>],
+    ) {
+        let span = member.span();
+        if !self.watching(span) {
+            return;
+        }
+        let named = keys
+            .iter()
+            .any(|key| matches!(key, AKey::Named(name) if reflective_access(name)));
+        let opaque_builtin = keys
+            .iter()
+            .any(|key| !matches!(key, AKey::Named(_) | AKey::Index))
+            && self.ambient_base(member.object()).is_some();
+        if (named || opaque_builtin) && self.flow.sink_of(span).is_some() {
+            self.hit_reflective(span);
         }
     }
 
@@ -589,6 +627,13 @@ impl<'a> Sites<'_, 'a> {
         if !self.watching(object.span) {
             return;
         }
+        let takes = object
+            .properties
+            .iter()
+            .any(|property| takes_reflective(&property.key));
+        if takes && !self.proven_non_global(base) {
+            return self.hit_reflective(object.span);
+        }
         let hit = (object.rest.is_some() && dynamic_paths())
             || object
                 .properties
@@ -620,6 +665,17 @@ impl<'a> Sites<'_, 'a> {
     ) {
         if !self.watching(target.span) {
             return;
+        }
+        let takes = target.properties.iter().any(|property| match property {
+            AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(id) => {
+                reflective_access(&id.binding.name)
+            }
+            AssignmentTargetProperty::AssignmentTargetPropertyProperty(p) => {
+                takes_reflective(&p.name)
+            }
+        });
+        if takes && !self.proven_non_global(base) {
+            return self.hit_reflective(target.span);
         }
         let hit = (target.rest.is_some() && dynamic_paths())
             || target
@@ -658,4 +714,10 @@ impl<'a> Sites<'_, 'a> {
             }
         }
     }
+}
+
+fn takes_reflective(key: &PropertyKey<'_>) -> bool {
+    key.static_name()
+        .and_then(|name| name.into_cow_str())
+        .is_some_and(|name| reflective_access(&name))
 }

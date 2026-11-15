@@ -511,7 +511,16 @@
   `Symbol.<name>` key counts as unknown) when such a write may have the key `Symbol`, and the realm
   roots `String`, `Array`, `Object`, `Function`, `Number`, `RegExp` and `Symbol` count as rebound
   when such a write, on a base that is not a syntactic reference to a realm prototype, may have
-  their name (a root is first rebound through such a base, or by assigning its name). **Hidden
+  their name (a root is first rebound through such a base, or by assigning its name). The
+  reflective writers and the readers that hand out a property's value (`set`, `defineProperty`,
+  `deleteProperty`, `setPrototypeOf`, `assign`, `defineProperties`, `__defineGetter__`,
+  `__defineSetter__`, `get`, `getOwnPropertyDescriptor(s)`, `values`, `entries`) are judged by
+  their arguments only in a plain call with no spread argument; `Reflect.set`'s receiver is judged
+  like its target. Any other use whose value goes somewhere, an alias (`var S = Reflect.set`,
+  `var { set } = Reflect`, `(0, Reflect.set)`, `[Reflect.set][0]`), a forwarder (`.call`,
+  `.apply`, `.bind`, `Reflect.apply(Reflect.set, …)`), a spread argument list, or a key the check
+  cannot resolve on `Reflect` or `Object`, reaches every name the check asks about and makes the
+  program a source, in both lanes. **Hidden
   call:** every top-level function of a script is read as also called with unknown arguments: its
   body is read as written, besides its visible calls, which are still read with their arguments in
   place. A helper that writes nothing outside its own locals and fresh objects changes nothing; one
