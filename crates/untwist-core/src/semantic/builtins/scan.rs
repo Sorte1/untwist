@@ -846,6 +846,12 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         });
     }
 
+    fn visit_super(&mut self, _it: &Super) {
+        if !self.writes_only && self.this_value() == This::MaybeGlobal {
+            self.aliased();
+        }
+    }
+
     fn visit_class(&mut self, it: &Class<'a>) {
         let frame = Frame {
             strict: true,

@@ -17,7 +17,7 @@ use oxc_semantic::SemanticBuilder;
 
 pub use builtins::RELIANCE;
 pub use erase::erases;
-pub use realm::{normalized, realm, realm_in, Realm};
+pub use realm::{normalized, realm, realm_in, Realm, RunText};
 pub use specifiers::{specifiers, Specifier};
 pub use stats::{Counts, TypeStats};
 
@@ -190,6 +190,7 @@ fn solved<R>(
             let alone = realm::Place {
                 dir: "",
                 known: &[],
+                commonjs: false,
             };
             realm::of_program(program, scoping, prepared.module, alone)
         }

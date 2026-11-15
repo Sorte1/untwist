@@ -58,7 +58,20 @@ fn strict_code_keeps_its_closed_calls_beside_a_sloppy_this() {
 }
 
 #[test]
-fn the_probe_controls_are_typed_without_the_hazard() {
+fn the_strict_probe_control_is_typed_without_the_hazard() {
+    let calls = "(function () {\n  \"use strict\";\n  function g() { if (!g.done) { g.done = true; } }\n  function f(a) { console.log(typeof a); g(); return a; }\n  const r = f(1);\n  console.log(typeof r);\n})();\n";
+    for mode in [Mode::Jsdoc, Mode::Ts] {
+        let typed = annotate(calls, mode).code;
+        assert!(
+            ["a: 1", "{1} a"].iter().any(|n| typed.contains(n)),
+            "{mode:?}\n{typed}"
+        );
+    }
+}
+
+#[cfg(feature = "realm-premise")]
+#[test]
+fn the_premised_controls_are_typed_without_the_hazard() {
     let builtins = "(function () { const r = Math.random(); const p = parseInt(\"12\"); console.log(typeof r, typeof p); })();\n";
     let calls = "(function () {\n  function g() { if (!g.done) { g.done = true; } }\n  function f(a) { console.log(typeof a); g(); return a; }\n  const r = f(1);\n  console.log(typeof r);\n})();\n";
     for mode in [Mode::Jsdoc, Mode::Ts] {

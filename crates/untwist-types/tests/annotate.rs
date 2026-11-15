@@ -10,7 +10,7 @@ fn jsdoc(source: &str) -> String {
 
 #[test]
 fn a_closed_function_gets_its_parameter_and_return_types() {
-    let out = ts("(function () {\n  function twice(n) {\n    return n * 2;\n  }\n  console.log(twice(1), twice(2));\n})();\n");
+    let out = ts("(function () {\n  \"use strict\";\n  function twice(n) {\n    return n * 2;\n  }\n  console.log(twice(1), twice(2));\n})();\n");
     assert!(out.contains("function twice(n: 1 | 2): number"), "{out}");
 }
 
@@ -25,7 +25,7 @@ fn a_let_with_a_closed_write_set_is_a_union() {
 
 #[test]
 fn a_type_the_checker_infers_anyway_is_still_written() {
-    let out = ts("(function () {\n  const a = 1;\n  console.log(a);\n})();\n");
+    let out = ts("(function () {\n  \"use strict\";\n  const a = 1;\n  console.log(a);\n})();\n");
     assert!(out.contains("const a: 1 = 1"), "{out}");
     assert!(out.contains("(function (): undefined {"), "{out}");
 }
@@ -44,7 +44,7 @@ fn a_function_reading_arguments_keeps_its_parameters_bare() {
 
 #[test]
 fn jsdoc_mode_writes_comments() {
-    let out = jsdoc("(function () {\n  function twice(n) {\n    return n * 2;\n  }\n  console.log(twice(1));\n})();\n");
+    let out = jsdoc("(function () {\n  \"use strict\";\n  function twice(n) {\n    return n * 2;\n  }\n  console.log(twice(1));\n})();\n");
     assert!(
         out.contains("/** @param {1} n @returns {number} */ function twice(n)"),
         "{out}"

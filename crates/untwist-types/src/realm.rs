@@ -52,7 +52,6 @@ const QUIET_GLOBALS: &[&str] = &[
     "NaN",
     "Infinity",
     "console",
-    "exports",
 ];
 
 const ERROR_GLOBALS: &[&str] = &[
@@ -67,6 +66,10 @@ const ERROR_GLOBALS: &[&str] = &[
 ];
 
 const SHAPED_GLOBALS: &[&str] = &["module", "require", "arguments"];
+
+const COMMONJS_GLOBALS: &[&str] = &["exports", "module", "require"];
+
+const PREMISED_ROWS: bool = cfg!(feature = "realm-premise");
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Realm {
@@ -109,6 +112,14 @@ struct Loaders<'p, 's> {
 pub struct Place<'p> {
     pub dir: &'p str,
     pub known: &'p [String],
+    pub commonjs: bool,
+}
+
+#[derive(Clone, Copy)]
+pub struct RunText<'t> {
+    pub code: &'t str,
+    pub dir: &'t str,
+    pub commonjs: bool,
 }
 
 const RESOLVED_SUFFIXES: [&str; 6] = ["", ".js", ".mjs", ".cjs", ".jsx", "/index.js"];
@@ -166,6 +177,13 @@ impl Loaders<'_, '_> {
         }
     }
 
+    fn saw_receiver(&mut self) {
+        self.global_this |= match self.sloppy.last() {
+            Some(sloppy) => *sloppy,
+            None => !self.module,
+        };
+    }
+
     fn source(&mut self, source: &StringLiteral<'_>) {
         let place = self.place;
         self.found |= source.value.as_str().is_none_or(|text| !place.holds(text));
@@ -197,7 +215,7 @@ impl<'a> Visit<'a> for Loaders<'_, '_> {
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if let Expression::Identifier(callee) = it.callee.without_parentheses() {
-            if callee.name == "require" && self.free(callee) {
+            if callee.name == "require" && self.place.commonjs && self.free(callee) {
                 let local = it.arguments.len() == 1
                     && it
                         .arguments
@@ -234,7 +252,7 @@ impl<'a> Visit<'a> for Loaders<'_, '_> {
     }
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
-        if it.property.name == "exports" {
+        if it.property.name == "exports" && self.place.commonjs {
             self.allow(&it.object, &["module"]);
         }
         walk::walk_static_member_expression(self, it);
@@ -254,15 +272,17 @@ impl<'a> Visit<'a> for Loaders<'_, '_> {
     }
 
     fn visit_this_expression(&mut self, _it: &ThisExpression) {
-        self.global_this |= match self.sloppy.last() {
-            Some(sloppy) => *sloppy,
-            None => !self.module,
-        };
+        self.saw_receiver();
+    }
+
+    fn visit_super(&mut self, _it: &Super) {
+        self.saw_receiver();
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         let name = it.name.as_str();
-        if !self.free(it) || QUIET_GLOBALS.contains(&name) {
+        let quiet = QUIET_GLOBALS.contains(&name) || (self.place.commonjs && name == "exports");
+        if !self.free(it) || quiet {
             return;
         }
         let shaped = match name {
@@ -309,6 +329,7 @@ fn declares_a_global_name(program: &Program<'_>, scoping: &Scoping, module: bool
         QUIET_GLOBALS.contains(&name)
             || ERROR_GLOBALS.contains(&name)
             || SHAPED_GLOBALS.contains(&name)
+            || COMMONJS_GLOBALS.contains(&name)
             || crate::builtins::RELIANCE.roots.contains(&name)
     })
 }
@@ -329,15 +350,28 @@ pub(crate) fn of_program(
 ) -> Realm {
     let scanned = scan(program, scoping, module, false, &RELIANCE);
     let module = module || untwist_core::semantic::has_module_syntax(program);
+    let place = Place {
+        commonjs: place.commonjs && !module,
+        ..place
+    };
     let seen = loading(program, scoping, place, module);
     let frames = crate::facts::frames_reachable(program, scoping);
     let loads = seen.code || frames;
     let declares = declares_a_global_name(program, scoping, module);
-    Realm {
+    let premised = Realm {
         builtins: scanned.verdict == Builtins::Intact && !loads && !declares,
         promises: !scanned.promise_written && !loads && !declares,
         closed_calls: !frames && !has_with(scoping),
         self_contained: !loads && !seen.global_this,
+    };
+    if PREMISED_ROWS {
+        return premised;
+    }
+    Realm {
+        builtins: false,
+        promises: !declares,
+        self_contained: false,
+        ..premised
     }
 }
 
@@ -356,11 +390,18 @@ fn of_text(code: &str, place: Place<'_>) -> Realm {
 }
 
 pub fn realm(texts: &[&str]) -> Realm {
-    let placed: Vec<(&str, &str)> = texts.iter().map(|text| (*text, "")).collect();
+    let placed: Vec<RunText<'_>> = texts
+        .iter()
+        .map(|code| RunText {
+            code,
+            dir: "",
+            commonjs: false,
+        })
+        .collect();
     realm_in(&placed, &[])
 }
 
-pub fn realm_in(texts: &[(&str, &str)], known: &[String]) -> Realm {
+pub fn realm_in(texts: &[RunText<'_>], known: &[String]) -> Realm {
     texts.iter().fold(
         Realm {
             builtins: true,
@@ -368,6 +409,13 @@ pub fn realm_in(texts: &[(&str, &str)], known: &[String]) -> Realm {
             closed_calls: true,
             self_contained: true,
         },
-        |held, (text, dir)| held.meet(of_text(text, Place { dir, known })),
+        |held, text| {
+            let place = Place {
+                dir: text.dir,
+                known,
+                commonjs: text.commonjs,
+            };
+            held.meet(of_text(text.code, place))
+        },
     )
 }

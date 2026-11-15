@@ -1,14 +1,17 @@
 use oxc_ast::ast::{
     Argument, AssignmentTargetPropertyIdentifier, AssignmentTargetPropertyProperty,
-    BindingProperty, CallExpression, ComputedMemberExpression, Expression, IdentifierReference,
-    ImportExpression, MemberExpression, ObjectExpression, ObjectPropertyKind, Program, PropertyKey,
-    Statement, StaticMemberExpression, StringLiteral, TemplateLiteral,
+    BindingIdentifier, BindingProperty, CallExpression, ComputedMemberExpression, Expression,
+    IdentifierName, IdentifierReference, ImportExpression, MemberExpression, ObjectExpression,
+    ObjectPropertyKind, Program, PropertyKey, Statement, StaticMemberExpression, StringLiteral,
+    TemplateLiteral,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 
 const FRAME_PROPERTIES: [&str; 2] = ["arguments", "caller"];
 const ARGUMENTS_PROPERTY: [&str; 1] = ["arguments"];
+const CALLER: &str = "caller";
+const PROTOTYPE_SETTERS: [&str; 2] = ["__proto__", "setPrototypeOf"];
 
 const KEYED_READERS: [(&str, usize); 3] = [
     ("get", 1),
@@ -27,6 +30,56 @@ const CODE_REACHING_MEMBERS: [&str; 5] = [
     "compileFunction",
 ];
 const TEXT_MODULE_SCHEMES: [&str; 2] = ["data:", "blob:"];
+
+#[derive(Default)]
+struct PrototypeSetters {
+    found: bool,
+}
+
+impl PrototypeSetters {
+    fn spelled(&mut self, name: &str) {
+        self.found |= PROTOTYPE_SETTERS.contains(&name);
+    }
+
+    fn contained(&mut self, text: &str) {
+        self.found |= PROTOTYPE_SETTERS.iter().any(|name| text.contains(name));
+    }
+}
+
+impl<'a> VisitJs<'a> for PrototypeSetters {
+    fn visit_identifier_name(&mut self, it: &IdentifierName<'a>) {
+        self.spelled(it.name.as_str());
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.spelled(it.name.as_str());
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.spelled(it.name.as_str());
+    }
+
+    fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
+        if let Some(text) = it.value.as_str() {
+            self.contained(text);
+        }
+    }
+
+    fn visit_template_literal(&mut self, it: &TemplateLiteral<'a>) {
+        for quasi in &it.quasis {
+            self.contained(quasi.value.raw.as_str());
+            if let Some(cooked) = quasi
+                .value
+                .cooked
+                .as_ref()
+                .and_then(|cooked| cooked.as_str())
+            {
+                self.contained(cooked);
+            }
+        }
+        walk_js::walk_template_literal(self, it);
+    }
+}
 
 fn is_plain_object(object: &ObjectExpression<'_>) -> bool {
     object.properties.iter().all(|property| match property {
@@ -90,12 +143,17 @@ fn reaches_code(name: &str) -> bool {
 
 struct FrameReads<'s> {
     names: &'static [&'static str],
+    prototype_set: bool,
     code_text: bool,
     scoping: &'s Scoping,
     found: bool,
 }
 
 impl FrameReads<'_> {
+    fn is_never_a_function(&self, object: &Expression<'_>) -> bool {
+        !self.prototype_set && is_never_a_function(object)
+    }
+
     fn is_frame_property(&self, name: &str) -> bool {
         self.names.contains(&name)
     }
@@ -207,7 +265,8 @@ impl<'a> VisitJs<'a> for FrameReads<'_> {
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
         let name = it.property.name.as_str();
-        let frame = self.is_frame_property(name) && !is_never_a_function(&it.object);
+        let frame = self.is_frame_property(name)
+            && (name == CALLER || !self.is_never_a_function(&it.object));
         if frame || self.is_suspect_name(name) {
             self.found = true;
             return;
@@ -216,7 +275,9 @@ impl<'a> VisitJs<'a> for FrameReads<'_> {
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        let frame = !self.names_another_key(&it.expression) && !is_never_a_function(&it.object);
+        let caller = literal_key_name(&it.expression) == Some(CALLER);
+        let frame = !self.names_another_key(&it.expression)
+            && (caller || !self.is_never_a_function(&it.object));
         let suspect =
             literal_key_name(&it.expression).is_some_and(|name| self.is_suspect_name(name));
         if frame || suspect {
@@ -314,8 +375,11 @@ fn scan(
     names: &'static [&'static str],
     code_text: bool,
 ) -> bool {
+    let mut setters = PrototypeSetters::default();
+    setters.visit_program(program);
     let mut reads = FrameReads {
         names,
+        prototype_set: setters.found,
         code_text,
         scoping,
         found: false,

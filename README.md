@@ -356,28 +356,22 @@ that every value the position can hold, on every run, has that type; everything 
 was. `number` includes `NaN` and `-0`, a literal type is never `NaN` or `-0`, and no annotation is
 ever `any` or `unknown`.
 
-What it proves today: literals and the closed set of values a local binding is written with, the
-results of operators, function returns, and the parameters of a function whose every call is
-visible. A function is never treated that way when it is exported, reads `arguments`, is called
-with a spread, or is reached any other way, and no function at all when any input or module of
-the run can read a function's frame (`.caller`, `.arguments`, stack-trace functions, a `with`
-statement, or code text that could). When the run calls code it does not hold (a module that is
-not one of its inputs, the browser, node), only strict functions keep these types: `.caller` and
-the stack-trace API never hand out a strict function. The same holds when any sloppy code can see the global object through `this` (a sloppy function called plainly, a callback given no `thisArg`, the top level of a classic script), since outside code reached through it can read frames. A direct `eval` (also through a local binding named `eval`) leaves untyped every
-binding it can reach, and in sloppy code it also turns off the types that rest on global names it
-could shadow (`undefined`, `NaN`, `Infinity` and the built-ins); a constant-string `eval` that
-only reads leaves out only the names it reads. A `with` statement leaves the file untyped.
-Script-level `var`s, exported bindings, objects, arrays, classes and the DOM get no types.
-
-Results of built-ins such as `Math.floor`, `parseInt` or `"".slice` count only when no input or
-module of the run patches a built-in or declares one of their names at the top of a script, and
-every file is shown not to load other code: each global it names is on a short list of ones whose
-every reachable member is known not to load or run code (`Math`, `JSON`, `Number`, `String`,
-`Array`, `Object`, `console`, `exports`, … but not `document`, `window`, `self`, `location`,
-`importScripts`, timers or anything else), `module` appears only as `module.exports`, `Error` and
-its subclasses only as a constructor, an `instanceof` operand or an `extends` clause, `arguments`
-only inside a function, every `import`, `export … from`, `import()` and free `require` names a
-module of the same run by a relative literal, and the file does not use `import.meta`. A file that can read a function's frame counts as loading code too.
+What it proves today is only what needs no premise about the rest of the realm: literals and the
+closed set of values a local binding is written with, the results of operators, function returns
+(an `async` function's as `Promise<…>`), and the parameters of a strict function (module code,
+class code or code under `"use strict"`) whose every call is visible. `.caller`, `.arguments` and
+the stack-trace API never hand out a strict function, so no code outside the run can call one with
+other values. A function is never treated that way when it is exported, reads `arguments`, is
+called with a spread, or is reached any other way, and no function at all when any input or module
+of the run can read a function's frame (`.caller`, `.arguments`, stack-trace functions, a `with`
+statement, or code text that could). A sloppy function's parameters stay untyped, and so do the
+results of built-ins such as `Math.floor`, `parseInt` or `"".slice`: both would rest on proving
+that no code in the realm patches a built-in or reaches a frame, which this version does not try.
+A direct `eval` (also through a local binding named `eval`) leaves untyped every binding it can
+reach, and in sloppy code it also turns off the types that rest on global names it could shadow
+(`undefined`, `NaN`, `Infinity`); a constant-string `eval` that only reads leaves out only the
+names it reads. A `with` statement leaves the file untyped. Script-level `var`s, exported
+bindings, objects, arrays, classes and the DOM get no types.
 
 Every proven type is written, also when TypeScript would infer it anyway, unless writing it would
 give the TypeScript checker a new error (for example a literal type compared with a value outside

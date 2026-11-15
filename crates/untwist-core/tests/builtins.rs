@@ -315,3 +315,11 @@ fn a_long_chain_of_computed_reads_is_scanned_in_linear_time() {
         "{depth} levels took {spent:?}"
     );
 }
+
+#[test]
+fn super_in_a_sloppy_method_may_hand_the_global_object_to_a_getter() {
+    let source = "const o = { __proto__: { get x() { \"use strict\"; return this; } }, m() { return super.x; } };\nconst m = o.m;\nm();\nx = Math.round(1.5);\n";
+    assert_eq!(verdict(source), Builtins::Aliased);
+    let strict = "\"use strict\";\nconst o = { __proto__: { get x() { return this; } }, m() { return super.x; } };\nconst m = o.m;\nm();\nx = Math.round(1.5);\n";
+    assert_eq!(verdict(strict), Builtins::Intact);
+}

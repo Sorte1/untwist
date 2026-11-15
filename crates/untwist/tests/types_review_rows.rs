@@ -377,3 +377,56 @@ fn a_caller_read_through_the_global_object_breaks_no_type_in_node() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
+
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let path = entry.unwrap().path();
+        std::fs::copy(&path, to.join(path.file_name().unwrap())).unwrap();
+    }
+}
+
+#[test]
+fn every_fourth_review_probe_holds_its_types_when_node_runs_it() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../untwist-types/tests/probes/a40r4");
+    let work = tempfile::tempdir().unwrap();
+    let mut failures = Vec::new();
+    let mut ran = 0;
+    for dir in std::fs::read_dir(&root).unwrap() {
+        let dir = dir.unwrap().path();
+        let copy = work.path().join(dir.file_name().unwrap());
+        copy_dir(&dir, &copy);
+        for file in std::fs::read_dir(&dir).unwrap() {
+            let path = file.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if ["patch", "peek", "run"]
+                .iter()
+                .any(|helper| name.starts_with(helper))
+            {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).unwrap();
+            let expected = node_run(&node, &copy, &format!("plain-{name}"), &source);
+            let direct = untwist_types::instrumented(&source).unwrap_or_else(|| source.clone());
+            let piped = Pipeline::new(checked()).run(&source).code().to_string();
+            for (lane, code) in [("direct", direct), ("pipeline", piped)] {
+                let observed = node_run(&node, &copy, &format!("{lane}-{name}"), &code);
+                ran += 1;
+                if observed.stderr.contains("__UT_FAIL") {
+                    failures.push(format!("{name} {lane}: a type did not hold\n{code}"));
+                }
+                if observed.stdout != expected.stdout {
+                    failures.push(format!(
+                        "{name} {lane}: printed {:?}, node printed {:?}",
+                        observed.stdout, expected.stdout
+                    ));
+                }
+            }
+        }
+    }
+    assert!(ran > 100, "{ran}");
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}

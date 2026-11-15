@@ -60,16 +60,24 @@ struct Typed {
 
 #[cfg(feature = "types")]
 fn realm_of(output: &Output) -> Realm {
-    let mut texts: Vec<(&str, &str)> = output
+    let mut texts: Vec<untwist_types::RunText<'_>> = output
         .codes
         .iter()
-        .map(|code| (code.as_str(), ""))
+        .map(|code| untwist_types::RunText {
+            code,
+            dir: "",
+            commonjs: false,
+        })
         .collect();
     let mut known = Vec::new();
     if let Some(bundle) = &output.bundle {
         for module in &bundle.modules {
             let dir = module.path.rfind('/').map_or("", |at| &module.path[..at]);
-            texts.push((module.code.as_str(), dir));
+            texts.push(untwist_types::RunText {
+                code: &module.code,
+                dir,
+                commonjs: !module.path.ends_with(".mjs"),
+            });
             known.push(untwist_types::normalized("", &module.path).unwrap_or_default());
         }
     }

@@ -128,7 +128,7 @@ fn a_sabotaged_predicate_is_caught_by_the_node_check() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let source = "(function () {\n  function twice(n) {\n    return n * 2;\n  }\n  console.log(twice(1) + twice(2));\n})();\n";
+    let source = "(function () {\n  \"use strict\";\n  function twice(n) {\n    return n * 2;\n  }\n  console.log(twice(1) + twice(2));\n})();\n";
     let instrumented = untwist_types::instrumented(source).unwrap();
     assert!(instrumented.contains("__ut(("), "{instrumented}");
     let sabotaged = instrumented.replace("=== \"number\"", "=== \"string\"");
