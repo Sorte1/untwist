@@ -492,6 +492,12 @@ pub fn build_requests_named<'p>(
     }
     let sites = local_indices(&stamped, &members);
     let mut collected = collect_base(program, decoder_units_of(&sites));
+    if !collected.decoder_values.is_empty() {
+        let dead = crate::removal::dead_alias_values(program, Some(scoping));
+        collected
+            .decoder_values
+            .retain(|(_, span)| !dead.contains(span));
+    }
     let evidence = evidence(program, &stamped, &orphans, &collected, &sites, scoping);
     let mut escaped_by_unit = escaped_decoders_by_unit(&collected, &sites);
     let mut plan = DecodePlan {

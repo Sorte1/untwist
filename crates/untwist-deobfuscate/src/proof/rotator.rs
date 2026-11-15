@@ -328,12 +328,23 @@ fn first_active<'s, 'a>(
     if prefix.iter().all(trivially_inert) {
         return None;
     }
+    let aliases = match scope {
+        None => crate::removal::dead_alias_statements(program, Some(scoping)),
+        Some(_) => FxHashSet::default(),
+    };
+    let inert = |statement: &Statement<'a>| {
+        trivially_inert(statement) || aliases.contains(&statement.span())
+    };
+    if prefix.iter().all(inert) {
+        return None;
+    }
     let literals = match scope {
         None => LiteralBindings::new(program, scoping),
         Some(_) => LiteralBindings::of(prefix, scoping, scope),
     };
     prefix.iter().find(|statement| {
-        !literals.inert_statement(scoping, statement)
+        !aliases.contains(&statement.span())
+            && !literals.inert_statement(scoping, statement)
             && !foreign.is_some_and(|(units, judged)| {
                 units.admits(program, scoping, &literals, statement, judged)
             })

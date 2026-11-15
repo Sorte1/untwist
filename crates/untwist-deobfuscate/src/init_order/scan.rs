@@ -428,6 +428,7 @@ fn expression_cannot_call(expr: &Expression<'_>) -> bool {
         Expression::ParenthesizedExpression(inner) => expression_cannot_call(&inner.expression),
         Expression::ArrayExpression(array) => array.elements.iter().all(element_cannot_call),
         Expression::ObjectExpression(object) => object.properties.iter().all(property_cannot_call),
+        Expression::Identifier(id) => crate::stamp::decoder_index(&id.name).is_some(),
         _ => false,
     }
 }
