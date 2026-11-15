@@ -16,6 +16,15 @@ const RENAMES: [(&str, RenameMode); 5] = [
 
 const UNSAFE_PREMISE_SINGLE: &str = "q-";
 
+const PN_UNSAFE_NAMES: &[&str] = &[
+    "rx4-sa2.js",
+    "rx4-sa4.js",
+    "rx4-sa5.js",
+    "rx4-sa6.js",
+    "rx4-sa7.js",
+    "rx4-sa8.js",
+];
+
 const UNSAFE_PREMISE_MULTI: &[(&str, RenameMode)] =
     &[("u2", RenameMode::Unique), ("rx3-n3", RenameMode::Simple)];
 
@@ -32,6 +41,10 @@ fn options(rename: RenameMode, unsafe_transforms: bool) -> Options {
         unpack: false,
         ..Options::default()
     }
+}
+
+fn under_unsafe_premise(label: &str) -> bool {
+    label.starts_with(UNSAFE_PREMISE_SINGLE) || PN_UNSAFE_NAMES.contains(&label)
 }
 
 fn singles() -> Vec<(String, String)> {
@@ -55,7 +68,7 @@ fn single_rows(unsafe_transforms: bool) -> Vec<String> {
     };
     let programs: Vec<(String, String)> = singles()
         .into_iter()
-        .filter(|(label, _)| !unsafe_transforms || !label.starts_with(UNSAFE_PREMISE_SINGLE))
+        .filter(|(label, _)| !unsafe_transforms || !under_unsafe_premise(label))
         .collect();
     let mut wrong = Vec::new();
     for (label, rename) in RENAMES {
