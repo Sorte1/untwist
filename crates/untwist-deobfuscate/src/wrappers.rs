@@ -638,6 +638,7 @@ fn variable_alias_plan<'a>(
 
 fn keeps_script_global_aliases(program: &Program<'_>, cx: &Cx<'_, '_>) -> bool {
     !cx.opts.nested_root
+        && !cx.opts.unsafe_transforms
         && observers() != Observers::None
         && !program.source_type.is_module()
         && !has_module_syntax(program)

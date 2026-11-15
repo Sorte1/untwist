@@ -123,7 +123,7 @@ pub fn reaches_a_script_global_once_removed<'a>(
     program: &Program<'a>,
     cx: &Cx<'a, '_>,
 ) -> bool {
-    if observers() == Observers::None {
+    if cx.opts.unsafe_transforms || observers() == Observers::None {
         return false;
     }
     let Some((names, props)) = script_global_names(symbols, program, cx.scoping()) else {
