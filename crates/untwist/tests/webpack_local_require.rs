@@ -34,7 +34,9 @@ fn a_parameter_named_require_is_not_renamed_to_the_runtime() {
     let unpacked = Unpacked::of(MINIFIED, false);
     let entry = unpacked.entry();
     assert!(
-        entry.contains("require(\"./utils\") + require(1)"),
+        entry.contains(
+            "function load(_require2) {\n  return _require2(\"./utils\") + _require2(1);"
+        ),
         "{entry}"
     );
     unpacked.runs_like_the_bundle("function function\n<./utils><1> 7\n");
