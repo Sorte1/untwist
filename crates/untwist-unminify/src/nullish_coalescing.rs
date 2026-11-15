@@ -42,9 +42,8 @@ impl<'a> Pass<'a> for NullishCoalescing {
             .on_expressions(ACTED_ON_EXPRESSIONS)
     }
 
-    fn enter_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+    fn enter_program(&mut self, _node: &mut Program<'a>, _cx: &mut Cx<'a, '_>) {
         self.temps.reset();
-        cx.observe_names(node);
     }
 
     fn exit_variable_declaration(

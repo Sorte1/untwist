@@ -1,3 +1,4 @@
+"use strict";
 this._s = this._s || {};
 (function (_) {
   var window = this;

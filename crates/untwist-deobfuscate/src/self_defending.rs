@@ -8,6 +8,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::literal::{is_false_literal, is_true_literal};
 use untwist_core::ast_util::matcher::{anonymous_function, call_parts, iife};
+use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
 
@@ -348,7 +349,7 @@ fn set_flag<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
 }
 
 fn returner(expr: &Expression<'_>, flags: &[&str]) -> bool {
-    let (params, body) = match expr.without_parentheses() {
+    let (params, body) = match without_unnamed(expr.without_parentheses()).without_parentheses() {
         Expression::FunctionExpression(function) if function.id.is_none() => {
             (&function.params, function.body.as_deref())
         }

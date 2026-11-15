@@ -313,6 +313,7 @@ impl Pipeline {
         let opts = PassOptions {
             keep_script_globals,
             keep_script_lexicals,
+            keep_function_names: self.options.rename == RenameMode::None,
             ..site.pass_opts.clone()
         };
         let passes = vec![untwist_rename::commonjs::boxed()];

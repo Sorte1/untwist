@@ -20,6 +20,7 @@ pub struct Setting {
     pub extended: bool,
     pub library_names: bool,
     pub shared_counter: bool,
+    pub keep_function_names: bool,
 }
 
 impl Setting {
@@ -32,6 +33,7 @@ impl Setting {
             extended: opts.extended,
             library_names: !opts.rule_disabled(crate::library::rename::NAME),
             shared_counter: false,
+            keep_function_names: opts.keep_function_names,
         }
     }
 }
@@ -51,7 +53,12 @@ pub fn prepare(
     }
     pin_annex_b_targets(&mut collected, program, scoping);
     if setting.safe_lane {
-        pin_function_names(&mut collected, program, scoping);
+        pin_function_names(
+            &mut collected,
+            program,
+            scoping,
+            setting.keep_function_names,
+        );
     }
     if setting.library_names {
         pin_library_names(&mut collected, program, scoping);
@@ -118,9 +125,14 @@ fn pin_annex_b_targets(collected: &mut Collected, program: &Program<'_>, scoping
     collected.pinned.extend(hoist_blockers(scoping));
 }
 
-fn pin_function_names(collected: &mut Collected, program: &Program<'_>, scoping: &Scoping) {
+fn pin_function_names(
+    collected: &mut Collected,
+    program: &Program<'_>,
+    scoping: &Scoping,
+    always: bool,
+) {
     let names = function_names_or_code_text(program, scoping);
-    let read = names.name_read || untwist_core::semantic::names_read_by_another_input();
+    let read = always || names.name_read || untwist_core::semantic::names_read_by_another_input();
     if read {
         for giver in names.givers {
             if collected.pinned.insert(giver) {

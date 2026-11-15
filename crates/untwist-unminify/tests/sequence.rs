@@ -325,10 +325,10 @@ fn a_member_target_gives_no_name_so_its_value_moves_out_plainly() {
 }
 
 #[test]
-fn an_anonymous_function_moves_out_of_the_sequence_when_no_name_is_read() {
+fn an_anonymous_function_stays_unnamed_when_no_name_read_is_seen() {
     assert_eq!(
         safe("var f = (a(), function () {}); g = (b(), () => 1);"),
-        "a();\nvar f = function () {};\nb();\ng = () => 1;"
+        "a();\nvar f = (0, function () {});\nb();\ng = (0, () => 1);"
     );
 }
 

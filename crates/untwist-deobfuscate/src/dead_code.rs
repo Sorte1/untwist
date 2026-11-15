@@ -988,7 +988,6 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         self.strict = program_is_strict(node);
         self.unsafe_lane = cx.opts.unsafe_transforms;
         self.armed = 0;
-        cx.observe_names(node);
     }
 
     fn exit_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {

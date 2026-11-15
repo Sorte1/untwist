@@ -14,7 +14,6 @@ const REQUIRE: &str = "require";
 
 pub struct Shield {
     host: String,
-    runtime: Option<String>,
 }
 
 fn reads_free(program: &Program<'_>, name: &str) -> bool {
@@ -41,27 +40,19 @@ pub fn shield<'a>(
         Some(name) => rename_parameters(alloc, program, &[REQUIRE, name], &[&host, REQUIRE]),
         None => rename_parameters(alloc, program, &[REQUIRE], &[&host]),
     };
-    Some(Shield { host, runtime })
+    Some(Shield { host })
 }
 
 struct Restore<'a, 's> {
     alloc: &'a Allocator,
     shield: &'s Shield,
-    converted: &'s FxHashSet<u32>,
     scoping: Option<Scoping>,
 }
 
 impl<'a> VisitMut<'a> for Restore<'a, '_> {
     fn visit_identifier_reference(&mut self, it: &mut IdentifierReference<'a>) {
-        if !crate::scan::is_free(self.scoping.as_ref(), it) {
-            return;
-        }
-        if it.name == self.shield.host.as_str() {
+        if it.name == self.shield.host.as_str() && crate::scan::is_free(self.scoping.as_ref(), it) {
             it.name = Ident::from_str_in(REQUIRE, &self.alloc);
-        } else if it.name == REQUIRE && !self.converted.contains(&it.span.start) {
-            if let Some(runtime) = &self.shield.runtime {
-                it.name = Ident::from_str_in(runtime, &self.alloc);
-            }
         }
     }
 
@@ -70,18 +61,12 @@ impl<'a> VisitMut<'a> for Restore<'a, '_> {
     }
 }
 
-pub fn restore<'a>(
-    alloc: &'a Allocator,
-    module: &mut Module<'a>,
-    shield: &Shield,
-    converted: &FxHashSet<u32>,
-) {
+pub fn restore<'a>(alloc: &'a Allocator, module: &mut Module<'a>, shield: &Shield) {
     let program = module.program();
     let bound = binds_any(program, [REQUIRE, shield.host.as_str()].into_iter());
     let mut restore = Restore {
         alloc,
         shield,
-        converted,
         scoping: bound.then(|| build_scoping(program).scoping),
     };
     restore.visit_program(module.program_mut());

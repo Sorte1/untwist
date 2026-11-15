@@ -199,9 +199,20 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   CommonJS/AMD wrapper names `require`, `module`, `exports` and `define` are exempt from
   `rename_all` in `Simple` and `Unique`: renaming a wrapper's `require` to `cb1`
   turned every `require("./sum")` base into a callee-derived `cb2` on the next run.
-- **Function and class names.** Renaming a binding that gives a function or class its name
-  changes what `.name` returns. So in the safe lane, when the file may read `name` on a value
-  that may reach a function, every such binding keeps its name in every mode:
+- **Function and class names.** Premise: under `--rename` (smart, mangle, simple, unique), a
+  function's or class's name, and anything derived from it (`Error.prototype.toString`, host APIs
+  that read `name` such as a WebCrypto algorithm object or a DOM sink running text), may change.
+  Renaming the binding that gives a function or class its name changes what `.name` returns, and
+  that is what the mode was asked to do. No scan can decide whether a program reads names: a
+  built-in reads `name` with no key in the program (`Error.prototype.toString.call(f)`,
+  `String(f)` once `f`'s prototype is an error's), a host reads it from a dictionary argument
+  (`crypto.subtle.generateKey(f, …)`), and a page runs text handed to `document.write` or
+  `innerHTML`. Without `--rename` nothing is renamed that gives a name, and every pass and unpack
+  rewrite keeps every function's and class's `name` unconditionally (unminify.md, `sequence`).
+  The premise covers renamed bindings only: under `--rename` the other passes still keep the name
+  of a function they move. As a best effort that is no longer a soundness claim, the renamer keeps,
+  in the safe lane, when the file may read `name` on a value that may reach a function, every such
+  binding's name in every mode:
   function and class declarations, named function and class expressions, and a variable,
   parameter default or assignment whose value is an anonymous function, arrow or class. A file
   may read `name` when it has any of: a static key (`f.name`, `f["name"]`, `const { name } = f`,
@@ -294,8 +305,9 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   classic script, not at the top level), or a callback handed to a recognised
   `__commonJSMin`; none of those functions reads its own `arguments`; and in sloppy code no
   `.caller` read exists other than one compared with `==`/`===`. A direct `eval` or `with`
-  anywhere turns it off. The wrapper function itself is renamed past the safe lane's `.name`
-  guard only on those terms, since its value never leaves its call sites. Error stack traces
+  anywhere turns it off. Without `--rename` every function keeps its name; the wrapper function
+  itself is renamed only on those terms, since its value never leaves its call sites, so no
+  built-in, host or code text can be handed it to read its `name`. Error stack traces
   show the new names, and a read through a computed key that is not a literal (`f[key]` that
   is `caller` at run time) is not seen, as for the rename modes.
 - **Text-only reads.** Names a function's source shows after renaming (a function stringified

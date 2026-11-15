@@ -20,6 +20,7 @@ impl SplitHint {
                 trust_free_loader: options.unsafe_transforms,
                 prove_frames: !options.unsafe_transforms,
                 trust_builtins: options.unsafe_transforms,
+                trust_names: options.unsafe_transforms,
                 module_goal: options.module_goal,
             },
         }

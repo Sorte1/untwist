@@ -114,7 +114,7 @@ fn named_registers_link_by_path() {
     let lib = code_of(&files, "lib.js");
     assert!(lib.contains("let counter = 0;"), "{lib}");
     assert!(lib.contains("var total, double;"), "{lib}");
-    assert!(lib.contains("double = function"), "{lib}");
+    assert!(lib.contains("double = (0, function"), "{lib}");
     assert!(
         lib.ends_with("export { greet, counter, total, double };"),
         "{lib}"

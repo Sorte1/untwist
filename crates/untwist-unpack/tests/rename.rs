@@ -72,7 +72,7 @@ fn rename_one(source: &str, from: &str, to: &str) -> String {
 fn renaming_a_binding_moves_the_conflicting_one_aside() {
     assert_eq!(
         rename_one("class f {}\nlet counter = 1;\nf = 2;\n", "f", "counter"),
-        "class counter {}\nlet _counter = 1;\ncounter = 2;"
+        "let counter = class f {};\nlet _counter = 1;\ncounter = 2;"
     );
 }
 

@@ -58,6 +58,7 @@ pub struct UnpackOptions {
     pub trust_free_loader: bool,
     pub prove_frames: bool,
     pub trust_builtins: bool,
+    pub trust_names: bool,
     pub module_goal: bool,
 }
 
