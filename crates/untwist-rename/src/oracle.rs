@@ -163,6 +163,7 @@ impl<'s> NameOracle<'s> {
             && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
             && self.scoping.symbol_name(symbol) != name
             && (is_host_global_property(name)
+                || self.collected.text_names.contains(name)
                 || (self.collected.global_keys.contains(name)
                     && self.lands_on_the_global_object(symbol))
                 || named_by_another_input(name))

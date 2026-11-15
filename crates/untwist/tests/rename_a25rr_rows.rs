@@ -16,7 +16,10 @@ const RENAMES: [(&str, RenameMode); 5] = [
 
 const UNSAFE_PREMISE_SINGLE: &str = "q-";
 
-const UNSAFE_PREMISE_MULTI: &[(&str, RenameMode)] = &[("u2", RenameMode::Unique)];
+const UNSAFE_PREMISE_MULTI: &[(&str, RenameMode)] =
+    &[("u2", RenameMode::Unique), ("rx3-n3", RenameMode::Simple)];
+
+const OBSERVED_INPUT: &str = "a.js";
 
 fn data() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join(DATA)
@@ -109,8 +112,8 @@ struct Case {
     inputs: Vec<(String, String)>,
 }
 
-fn cases() -> Vec<Case> {
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(data().join("multi"))
+fn cases(kind: &str) -> Vec<Case> {
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(data().join(kind))
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .collect();
@@ -175,7 +178,7 @@ fn multi_rows(unsafe_transforms: bool) -> Vec<String> {
     };
     let temp = tempfile::tempdir().unwrap();
     let mut wrong = Vec::new();
-    for case in cases() {
+    for case in cases("multi") {
         let before = printed(
             &node,
             &temp.path().join(&case.label).join("in"),
@@ -220,5 +223,51 @@ fn multi_input_probes_print_the_same_in_node_in_the_default_lane() {
 #[test]
 fn multi_input_probes_outside_the_unsafe_premise_print_the_same_under_unsafe() {
     let wrong = multi_rows(true);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+fn observed_rows() -> Vec<String> {
+    let Some(node) = node_or_skip() else {
+        return Vec::new();
+    };
+    let temp = tempfile::tempdir().unwrap();
+    let mut wrong = Vec::new();
+    for case in cases("observed") {
+        let before = printed(
+            &node,
+            &temp.path().join(&case.label).join("in"),
+            &case.inputs,
+        );
+        for (mode, rename) in RENAMES {
+            let outputs: Vec<(String, String)> = case
+                .inputs
+                .iter()
+                .map(|(name, text)| match name == OBSERVED_INPUT {
+                    true => (
+                        name.clone(),
+                        Pipeline::new(options(rename, false))
+                            .run(text)
+                            .code()
+                            .to_string(),
+                    ),
+                    false => (name.clone(), text.clone()),
+                })
+                .collect();
+            let dir = temp.path().join(&case.label).join(mode.replace(' ', "-"));
+            let after = printed(&node, &dir, &outputs);
+            if after != before {
+                wrong.push(format!(
+                    "{} ({mode}): node printed {before:?}, the output and the unchanged observer printed {after:?}",
+                    case.label
+                ));
+            }
+        }
+    }
+    wrong
+}
+
+#[test]
+fn the_default_lane_keeps_every_top_level_binding_another_script_may_observe() {
+    let wrong = observed_rows();
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

@@ -17,12 +17,19 @@ fn run_with_notes<'a>(alloc: &'a Allocator, source: &'a str) -> (String, Vec<Str
     )
 }
 
+fn function_level() -> PassOptions {
+    PassOptions {
+        nested_root: true,
+        ..PassOptions::default()
+    }
+}
+
 fn run_superset<'a>(alloc: &'a Allocator, source: &'a str) -> (String, Vec<String>) {
     let (code, report) = untwist_testing::transform_report(
         alloc,
         source,
         &[untwist_deobfuscate::merge_object_assignments::boxed],
-        PassOptions::default(),
+        function_level(),
     );
     assert!(
         report.converged(),
@@ -407,7 +414,7 @@ fn inline_single_use_literals(count: usize) -> (String, std::time::Duration) {
         &alloc,
         &source,
         &[untwist_deobfuscate::merge_object_assignments::boxed],
-        PassOptions::default(),
+        function_level(),
     );
     let elapsed = started.elapsed();
     assert!(report.converged(), "{:?}", report.stop);
@@ -942,4 +949,17 @@ fn every_assignment_run_in_a_statement_list_folds_in_one_iteration() {
     assert!(!code.contains(".z ="), "{code}");
     assert!(!code.contains(".w ="), "{code}");
     assert_eq!(report.iterations, 2, "{code}\n{:?}", report.per_pass);
+}
+
+#[test]
+fn a_top_level_object_of_a_classic_script_stays_declared_in_the_default_lane() {
+    let source = "const o = {};\no.a = 1;\nuse(o);";
+    let alloc = Allocator::default();
+    let (code, _) = untwist_testing::transform_report(
+        &alloc,
+        source,
+        &[untwist_deobfuscate::merge_object_assignments::boxed],
+        PassOptions::default(),
+    );
+    assert_eq!(code.trim(), "const o = { a: 1 };\nuse(o);");
 }

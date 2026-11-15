@@ -115,6 +115,7 @@ pub struct Collected {
     pub assumed_unobserved: bool,
     pub classic_script: bool,
     pub global_keys: FxHashSet<String>,
+    pub text_names: FxHashSet<String>,
     pub library: std::sync::Arc<crate::library::LibraryNames>,
     pub(crate) rule: OuterRule,
 }

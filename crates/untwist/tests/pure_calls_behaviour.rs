@@ -94,7 +94,10 @@ fn fixture(name: &str) -> String {
 fn every_folded_fixture_prints_the_folded_call_in_the_default_lane() {
     for (name, expected) in FOLDED {
         let code = default_lane(&fixture(name));
-        assert_eq!(code.trim(), *expected, "{name}");
+        let kept = code.trim().strip_suffix(*expected);
+        assert!(kept.is_some(), "{name}: {code}");
+        let declarations = kept.unwrap_or_default();
+        assert!(!declarations.contains("console.log"), "{name}: {code}");
     }
 }
 

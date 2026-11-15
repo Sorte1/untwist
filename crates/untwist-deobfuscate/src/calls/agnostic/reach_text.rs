@@ -115,7 +115,8 @@ impl<'a> Sites<'_, 'a> {
     fn names_reach(&self, text: &str) -> bool {
         let watched = (self.watch.names, self.watch.props);
         if !self.watch.defer {
-            return names_reach_text(text, watched, self.watch.depth);
+            let judged = (self.watch.depth, self.watch.runner_texts);
+            return names_reach_text(text, watched, judged);
         }
         if names_reach_at_once(text, watched.0, self.watch.depth) {
             return true;
@@ -177,18 +178,28 @@ fn names_reach_at_once(text: &str, names: &[&str], depth: u8) -> bool {
     depth == 0 || crate::proof::names_a_token(text, names)
 }
 
-pub(super) fn names_reach_text(text: &str, watched: (&[&str], &[&str]), depth: u8) -> bool {
+type TextJudgement = (u8, bool);
+
+pub(super) fn names_reach_text(
+    text: &str,
+    watched: (&[&str], &[&str]),
+    (depth, runner_texts): TextJudgement,
+) -> bool {
     if names_reach_at_once(text, watched.0, depth) {
         return true;
     }
     let wrapped = format!("(function () {{\n{text}\n}});");
     [text, wrapped.as_str()]
         .iter()
-        .find_map(|form| parsed_reaches(form, watched, depth - 1))
+        .find_map(|form| parsed_reaches(form, watched, (depth - 1, runner_texts)))
         .unwrap_or(false)
 }
 
-fn parsed_reaches(form: &str, watched: (&[&str], &[&str]), depth: u8) -> Option<bool> {
+fn parsed_reaches(
+    form: &str,
+    watched: (&[&str], &[&str]),
+    judgement: TextJudgement,
+) -> Option<bool> {
     let names = watched.0;
     let judged = crate::proof::with_parsed_text(form, |program| {
         let mut named = Named {
@@ -197,10 +208,10 @@ fn parsed_reaches(form: &str, watched: (&[&str], &[&str]), depth: u8) -> Option<
             plain: true,
         };
         named.visit_program(program);
-        if named.found {
+        if named.found || (judgement.1 && may_hand_out_a_runner(program)) {
             return (true, Vec::new());
         }
-        judge_text(program, named.plain, watched, depth)
+        judge_text(program, named.plain, watched, judgement)
     });
     match judged {
         None => Some(true),
@@ -209,9 +220,13 @@ fn parsed_reaches(form: &str, watched: (&[&str], &[&str]), depth: u8) -> Option<
             reached
                 || pending
                     .iter()
-                    .any(|text| names_reach_text(text, watched, depth)),
+                    .any(|text| names_reach_text(text, watched, judgement)),
         ),
     }
+}
+
+fn may_hand_out_a_runner(program: &Program<'_>) -> bool {
+    untwist_core::ast_util::code_text::may_run_code_text(program, &Scoping::default())
 }
 
 type Judged = (bool, Vec<String>);
@@ -220,14 +235,14 @@ fn judge_text<'a>(
     program: &'a Program<'a>,
     plain: bool,
     watched: (&[&str], &[&str]),
-    depth: u8,
+    judgement: TextJudgement,
 ) -> Judged {
     if !plain {
         let sem = untwist_core::semantic::build_scoping(program);
-        return super::text_reach(program, &sem.scoping, watched, depth);
+        return super::text_reach(program, &sem.scoping, watched, judgement);
     }
-    let judged = super::text_reach(program, &root_only_scoping(program), watched, depth);
-    compare_with_built(program, &judged, watched, depth);
+    let judged = super::text_reach(program, &root_only_scoping(program), watched, judgement);
+    compare_with_built(program, &judged, watched, judgement);
     judged
 }
 
@@ -259,13 +274,13 @@ fn compare_with_built<'a>(
     program: &'a Program<'a>,
     judged: &Judged,
     watched: (&[&str], &[&str]),
-    depth: u8,
+    judgement: TextJudgement,
 ) {
     if COMPARED.with(Cell::get).is_none() {
         return;
     }
     let sem = untwist_core::semantic::build_scoping(program);
-    let built = super::text_reach(program, &sem.scoping, watched, depth);
+    let built = super::text_reach(program, &sem.scoping, watched, judgement);
     let differs = usize::from(built != *judged);
     COMPARED.with(|cell| {
         if let Some((compared, differing)) = cell.get() {

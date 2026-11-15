@@ -1,6 +1,6 @@
 use oxc_allocator::Allocator;
 use std::collections::HashSet;
-use untwist_core::ast_util::key_names::key_names;
+use untwist_core::ast_util::key_names::{key_names, text_names};
 use untwist_core::ast_util::naming_slot::reads_names;
 use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{has_error, parse_program};
@@ -80,7 +80,10 @@ fn seen(source: &str) -> Seen {
             .map(|(name, _)| name.as_str().to_string())
             .collect(),
         global_written: global_writes(&parsed.program),
-        keys: key_names(&parsed.program, &scoping).into_iter().collect(),
+        keys: key_names(&parsed.program, &scoping)
+            .into_iter()
+            .chain(text_names(&parsed.program, &scoping))
+            .collect(),
         readable: !has_error(&parsed.diagnostics),
         names_read: reads_names(&parsed.program, &scoping),
     }

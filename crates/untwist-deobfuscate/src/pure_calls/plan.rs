@@ -7,6 +7,7 @@ use oxc_span::SPAN;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::PassOptions;
+use untwist_core::semantic::pins::keeps_script_top_level;
 use untwist_core::semantic::{has_module_syntax, is_constant_binding};
 use untwist_eval::fold::{const_to_expression, Const};
 use untwist_eval::value::JsString;
@@ -53,6 +54,10 @@ pub(super) fn plan<'p>(
     }
     let all: Vec<Span> = folds.iter().map(|(span, _, _)| *span).collect();
     let mut screened = unreached(candidates, folds, (program, scoping), opts);
+    if keeps_script_top_level(program, opts) {
+        let root = scoping.get_bindings(scoping.root_scope_id()).values();
+        screened.declared_kept.extend(root.copied());
+    }
     let kept = kept_nests(&all, &mut screened, &parents);
     if screened.folds.is_empty() {
         return None;

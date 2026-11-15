@@ -164,6 +164,7 @@ fn reach_watch<'k>(reach: ReachWatch<'k>) -> settle::Watch<'k> {
         observe: reach.observe,
         defer: false,
         printers_quiet: false,
+        runner_texts: false,
     }
 }
 
@@ -227,6 +228,7 @@ fn names_reach<'a>(
 ) -> GlobalReach {
     let watch = settle::Watch {
         printers_quiet: true,
+        runner_texts: true,
         ..reach_watch(reach)
     };
     reach_of(&settle(program, scoping, (None, &[], watch)).0)
@@ -293,7 +295,11 @@ pub fn script_lexicals_reachable_by_code<'a>(program: &'a Program<'a>, scoping: 
         fns: &[],
         observe: false,
     };
-    global_reach(program, scoping, (None, &[]), watch)
+    let watch = settle::Watch {
+        runner_texts: true,
+        ..reach_watch(watch)
+    };
+    reach_of(&settle(program, scoping, (None, &[], watch)).0)
         .reach_by_code
         .is_some()
 }
@@ -302,7 +308,7 @@ fn text_reach<'a>(
     program: &'a Program<'a>,
     scoping: &Scoping,
     (names, props): (&[&str], &[&str]),
-    depth: u8,
+    (depth, runner_texts): (u8, bool),
 ) -> (bool, Vec<String>) {
     let watch = settle::Watch {
         names,
@@ -312,6 +318,7 @@ fn text_reach<'a>(
         observe: true,
         defer: true,
         printers_quiet: false,
+        runner_texts,
     };
     let found = settle(program, scoping, (None, &[], watch)).0;
     let reached = found
