@@ -1,0 +1,1 @@
+(function () { var r = Function("return this")(); var f = new Function("return 7"); console.log(typeof r, f(), f.toString === undefined); var p = new Function("x", "y", "return x * y"); console.log(p(2, 3), p.name); })();

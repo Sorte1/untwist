@@ -1,0 +1,1 @@
+(function () { var x = function () {}, y = x, z = y; var a = class {}, b = a; var w = (() => { return function () {}; })(); var v = (function () { return () => 1; })(); var u = function inner() {}; var t = u; console.log([z.name, b.name, w.name, v.name, t.name, new b().constructor.name].join("|")); })();

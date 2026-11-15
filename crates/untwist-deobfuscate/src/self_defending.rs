@@ -5,6 +5,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::reference::ReferenceId;
+use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::literal::{is_false_literal, is_true_literal};
@@ -16,6 +17,7 @@ use untwist_core::pass::{Cx, Interest, Pass};
 use crate::bindings::{has_stray_reference, reference_symbol};
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
+use crate::flag_home::{is_private_local, Homes, ARGUMENTS, DIRECT_EVAL};
 use crate::notes;
 use crate::protection_shape::{is_protection_callback, Roles};
 
@@ -401,6 +403,7 @@ struct Controllers {
     returner_calls: Vec<Span>,
     returner_variables: FxHashSet<SymbolId>,
     flags: Vec<FlagUse>,
+    homes: Homes,
 }
 
 fn returner_variable(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
@@ -459,6 +462,40 @@ impl<'a> VisitJs<'a> for Controllers {
             }
         }
         walk_js::walk_statements(self, it);
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        let scope = it.scope_id.get();
+        self.homes.enter(scope, it.params.span, false);
+        walk_js::walk_function(self, it, flags);
+        self.homes.leave(scope);
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        let scope = it.scope_id.get();
+        self.homes.enter(scope, it.params.span, true);
+        walk_js::walk_arrow_function_expression(self, it);
+        self.homes.leave(scope);
+    }
+
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.homes.reaches_every_frame();
+        walk_js::walk_with_statement(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if let Expression::Identifier(callee) = it.callee.without_parentheses() {
+            if callee.name == DIRECT_EVAL {
+                self.homes.reaches_every_frame();
+            }
+        }
+        walk_js::walk_call_expression(self, it);
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if it.name == ARGUMENTS {
+            self.homes.reads_arguments();
+        }
     }
 }
 
@@ -632,7 +669,7 @@ fn removed_declaration(spans: &[Span], declared: Span) -> bool {
 
 fn flag_read_elsewhere(
     program: &Program<'_>,
-    flags: &[FlagUse],
+    (flags, homes): (&[FlagUse], &Homes),
     spans: &[Span],
     scoping: &Scoping,
 ) -> bool {
@@ -651,6 +688,9 @@ fn flag_read_elsewhere(
         let Some(symbol) = symbol else {
             return true;
         };
+        if !is_private_local(homes, scoping, symbol) {
+            return true;
+        }
         symbols.insert(symbol);
     }
     let mut ignored = spans.to_vec();
@@ -701,7 +741,12 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     let mut tracked = proven.clone();
     tracked.extend(variables);
     if has_stray_reference(program, &tracked, &spans, scoping)
-        || flag_read_elsewhere(program, &controllers.flags, &spans, scoping)
+        || flag_read_elsewhere(
+            program,
+            (&controllers.flags, &controllers.homes),
+            &spans,
+            scoping,
+        )
     {
         return Plan::Refused;
     }

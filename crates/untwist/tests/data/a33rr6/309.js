@@ -1,0 +1,1 @@
+(function () { var f = function () { return this; }.bind(null); var g = function () { return 1; }.bind(this); var h = (function () {}).bind(); var k = function () { return arguments.length; }; var m = function () { return new.target; }; console.log([f.name, g.name, h.name, k.name, m.name, k.length, typeof k.prototype, typeof g.prototype].join("|")); })();

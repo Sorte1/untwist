@@ -705,7 +705,11 @@
   modes, only when nothing but the `o = true` statement and the controller reads or writes `o`:
   the controller sets it to `false` when it runs, so a later read of `o` (directly, through a
   closure, or by an undeclared global `o`) keeps every call of the controller and the
-  controller, with the same note.
+  controller, with the same note. Some reads name no binding (`globalThis.o` or another script
+  for a top-level `var`, `arguments[0]` or `caller.arguments` for a parameter, a `with` object,
+  an importer for an export, a direct `eval`), so `o` must also be a `var`, `let` or `const`
+  declared inside a function, not a parameter, in a function with no `with` statement, no direct
+  `eval` and no use of its own `arguments`; any other flag keeps the controller.
   `--unsafe` trusts the controller shape, as the reference deobfuscator does, so a domain lock
   or a hand-written function run through such a helper is removed there. `debug-protection`
   removes, in both modes, a function only when its body is the protection template, and an

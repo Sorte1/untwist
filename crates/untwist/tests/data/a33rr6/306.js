@@ -1,0 +1,1 @@
+(function () { var _ref = { }, _ref$a = _ref.a, a = _ref$a === void 0 ? function () {} : _ref$a, b = _ref.b === undefined ? () => 1 : _ref.b; var c = (void 0, function () {}); var d = (function () {}); var e = !0 && function () {}; var g = [function () {}][0]; console.log([a.name, b.name, c.name, d.name, e.name, g.name].join("|")); })();

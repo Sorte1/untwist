@@ -1,0 +1,1 @@
+(function () { var f = new Function("a", "return a + 1"); var g = Function("return 5"); var o = { h: new Function("return 6") }; console.log([f(1), g(), o.h(), f.name, g.name, o.h.name, Error.prototype.toString.call(f)].join("|")); })();

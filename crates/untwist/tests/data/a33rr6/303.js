@@ -1,0 +1,1 @@
+(function () { var o = {}; o.a = function () {}; o["b"] = () => 1; var p = {}; p.c = class {}; Object.defineProperty(p, "d", { value: function () {} }); var k = "e"; var q = { [k]: function () {} }; q[k + "2"] = function () {}; console.log([o.a.name, o.b.name, p.c.name, p.d.name, q.e.name, q.e2.name].join("|")); })();
