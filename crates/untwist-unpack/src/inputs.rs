@@ -198,9 +198,13 @@ pub fn unpack_named_inputs<'a>(
         return (None, notes);
     }
     if bundles.len() > 1 && bundles.iter().any(|bundle| bundle.around.is_some()) {
-        notes.push(note(notes::code_beside_entry(
-            "the bundle is joined from several inputs",
-        )));
+        let refused = bundles.iter().find_map(|bundle| match &bundle.around {
+            Some(crate::beside::Around::Refused(why)) => Some(why.clone()),
+            _ => None,
+        });
+        notes.push(note(refused.unwrap_or_else(|| {
+            notes::code_beside_entry("the bundle is joined from several inputs")
+        })));
         return (None, notes);
     }
     let (merged, merge_notes) = merge_noted(alloc, bundles);
