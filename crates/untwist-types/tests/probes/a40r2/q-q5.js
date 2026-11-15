@@ -1,0 +1,2 @@
+module.children.length; module.constructor.createRequire(module.filename)("./patch.js");
+(function () { const r = Math.random(); const p = parseInt("12"); console.log(typeof r, typeof p); })();

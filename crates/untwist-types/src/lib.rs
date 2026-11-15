@@ -201,6 +201,7 @@ fn solved<R>(
     let cx = facts::Ctx {
         exports: facts::export_spans(program),
         frames_reachable: !realm.closed_calls,
+        self_contained: realm.self_contained,
         annexed: facts::annexed_symbols(scoping, &prepared.nodes),
         tainted,
         injecting,

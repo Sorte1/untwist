@@ -260,3 +260,55 @@ fn a_caller_read_in_another_input_closes_nothing_in_the_pipeline() {
     let output = Pipeline::new(typed(TypesMode::Ts)).run_many(&[&helper, &user]);
     assert!(!output.codes[1].contains("a: 1"), "{}", output.codes[1]);
 }
+
+#[test]
+fn a_local_require_keeps_its_arguments_when_modules_become_typescript() {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../untwist-types/tests/probes/a40r2/es3.js");
+    let source = std::fs::read_to_string(path).unwrap();
+    let output = Pipeline::new(Options {
+        split_hoisted: true,
+        ..typed(TypesMode::Ts)
+    })
+    .run(&source);
+    let texts: Vec<&str> = output
+        .codes
+        .iter()
+        .map(String::as_str)
+        .chain(
+            output
+                .bundle
+                .iter()
+                .flat_map(|bundle| bundle.modules.iter().map(|m| m.code.as_str())),
+        )
+        .collect();
+    let joined = texts.join("\n");
+    assert!(joined.contains("require(\"./chunk_add.js\")"), "{joined}");
+    assert!(joined.contains("require(\"./chunk_add\")"), "{joined}");
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let expected = node_run(
+        &node,
+        tempfile::tempdir().unwrap().path(),
+        "es3.js",
+        &source,
+    );
+    let (dir, files) = written(&output);
+    let entry = files
+        .iter()
+        .find(|file| {
+            file.file_name()
+                .is_some_and(|f| f == "index.ts" || f == "index.js")
+        })
+        .cloned()
+        .unwrap_or_else(|| panic!("no index in {files:?}"));
+    let observed = Command::new(&node)
+        .arg("--experimental-strip-types")
+        .arg("--no-warnings")
+        .arg(&entry)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&observed.stdout), expected.stdout);
+    drop(dir);
+}

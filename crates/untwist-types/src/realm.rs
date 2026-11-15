@@ -23,12 +23,6 @@ const QUIET_GLOBALS: &[&str] = &[
     "WeakMap",
     "WeakSet",
     "BigInt",
-    "Error",
-    "TypeError",
-    "RangeError",
-    "SyntaxError",
-    "ReferenceError",
-    "URIError",
     "Reflect",
     "Proxy",
     "ArrayBuffer",
@@ -58,17 +52,28 @@ const QUIET_GLOBALS: &[&str] = &[
     "NaN",
     "Infinity",
     "console",
-    "arguments",
-    "require",
-    "module",
     "exports",
 ];
+
+const ERROR_GLOBALS: &[&str] = &[
+    "Error",
+    "TypeError",
+    "RangeError",
+    "SyntaxError",
+    "ReferenceError",
+    "URIError",
+    "EvalError",
+    "AggregateError",
+];
+
+const SHAPED_GLOBALS: &[&str] = &["module", "require", "arguments"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Realm {
     pub builtins: bool,
     pub promises: bool,
     pub closed_calls: bool,
+    pub self_contained: bool,
 }
 
 impl Realm {
@@ -76,6 +81,7 @@ impl Realm {
         builtins: false,
         promises: false,
         closed_calls: false,
+        self_contained: false,
     };
 
     pub fn meet(self, other: Realm) -> Realm {
@@ -83,14 +89,17 @@ impl Realm {
             builtins: self.builtins && other.builtins,
             promises: self.promises && other.promises,
             closed_calls: self.closed_calls && other.closed_calls,
+            self_contained: self.self_contained && other.self_contained,
         }
     }
 }
 
-struct Loaders<'p> {
+struct Loaders<'p, 's> {
     found: bool,
-    callees: Vec<u32>,
+    allowed: Vec<u32>,
     place: Place<'p>,
+    scoping: &'s Scoping,
+    functions: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -138,14 +147,29 @@ fn literal_text<'e>(expression: &'e Expression<'_>) -> Option<&'e str> {
     }
 }
 
-impl Loaders<'_> {
+impl Loaders<'_, '_> {
+    fn free(&self, ident: &IdentifierReference<'_>) -> bool {
+        ident
+            .reference_id
+            .get()
+            .is_none_or(|reference| self.scoping.get_reference(reference).symbol_id().is_none())
+    }
+
+    fn allow(&mut self, expression: &Expression<'_>, names: &[&str]) {
+        if let Expression::Identifier(ident) = expression.without_parentheses() {
+            if names.contains(&ident.name.as_str()) {
+                self.allowed.push(ident.span.start);
+            }
+        }
+    }
+
     fn source(&mut self, source: &StringLiteral<'_>) {
         let place = self.place;
         self.found |= source.value.as_str().is_none_or(|text| !place.holds(text));
     }
 }
 
-impl<'a> Visit<'a> for Loaders<'_> {
+impl<'a> Visit<'a> for Loaders<'_, '_> {
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
         self.source(&it.source);
     }
@@ -170,8 +194,7 @@ impl<'a> Visit<'a> for Loaders<'_> {
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if let Expression::Identifier(callee) = it.callee.without_parentheses() {
-            if callee.name == "require" {
-                self.callees.push(callee.span.start);
+            if callee.name == "require" && self.free(callee) {
                 let local = it.arguments.len() == 1
                     && it
                         .arguments
@@ -179,34 +202,95 @@ impl<'a> Visit<'a> for Loaders<'_> {
                         .and_then(Argument::as_expression)
                         .and_then(literal_text)
                         .is_some_and(|text| self.place.holds(text));
-                self.found |= !local;
+                if local {
+                    self.allowed.push(callee.span.start);
+                }
             }
         }
+        self.allow(&it.callee, ERROR_GLOBALS);
         walk::walk_call_expression(self, it);
     }
 
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if it.name == "require" && !self.callees.contains(&it.span.start) {
-            self.found = true;
+    fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
+        self.allow(&it.callee, ERROR_GLOBALS);
+        walk::walk_new_expression(self, it);
+    }
+
+    fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
+        if it.operator == oxc_syntax::operator::BinaryOperator::Instanceof {
+            self.allow(&it.right, ERROR_GLOBALS);
         }
+        walk::walk_binary_expression(self, it);
+    }
+
+    fn visit_class(&mut self, it: &Class<'a>) {
+        if let Some(heritage) = &it.heritage {
+            self.allow(&heritage.expression, ERROR_GLOBALS);
+        }
+        walk::walk_class(self, it);
+    }
+
+    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        if it.property.name == "exports" {
+            self.allow(&it.object, &["module"]);
+        }
+        walk::walk_static_member_expression(self, it);
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+        self.functions += 1;
+        walk::walk_function(self, it, flags);
+        self.functions -= 1;
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let name = it.name.as_str();
+        if !self.free(it) || QUIET_GLOBALS.contains(&name) {
+            return;
+        }
+        let shaped = match name {
+            "arguments" => self.functions > 0,
+            _ if SHAPED_GLOBALS.contains(&name) || ERROR_GLOBALS.contains(&name) => {
+                self.allowed.contains(&it.span.start)
+            }
+            _ => false,
+        };
+        self.found |= !shaped;
     }
 }
 
 pub(crate) fn loads_code(program: &Program<'_>, scoping: &Scoping, place: Place<'_>) -> bool {
-    let free_unknown = scoping
-        .root_unresolved_references()
-        .keys()
-        .any(|name| !QUIET_GLOBALS.contains(&name.as_str()));
-    if free_unknown {
-        return true;
-    }
     let mut loaders = Loaders {
         found: false,
-        callees: Vec::new(),
+        allowed: Vec::new(),
         place,
+        scoping,
+        functions: 0,
     };
     loaders.visit_program(program);
     loaders.found
+}
+
+fn declares_a_global_name(program: &Program<'_>, scoping: &Scoping, module: bool) -> bool {
+    if module || untwist_core::semantic::has_module_syntax(program) {
+        return false;
+    }
+    let root = scoping.root_scope_id();
+    scoping.get_bindings(root).keys().any(|name| {
+        let name = name.as_str();
+        QUIET_GLOBALS.contains(&name)
+            || ERROR_GLOBALS.contains(&name)
+            || SHAPED_GLOBALS.contains(&name)
+            || crate::builtins::RELIANCE.roots.contains(&name)
+    })
+}
+
+fn has_with(scoping: &Scoping) -> bool {
+    scoping.scope_descendants_from_root().any(|scope| {
+        scoping
+            .scope_flags(scope)
+            .contains(oxc_syntax::scope::ScopeFlags::With)
+    })
 }
 
 pub(crate) fn of_program(
@@ -217,10 +301,12 @@ pub(crate) fn of_program(
 ) -> Realm {
     let scanned = scan(program, scoping, module, false, &RELIANCE);
     let loads = loads_code(program, scoping, place);
+    let declares = declares_a_global_name(program, scoping, module);
     Realm {
-        builtins: scanned.verdict == Builtins::Intact && !loads,
-        promises: !scanned.promise_written && !loads,
-        closed_calls: !crate::facts::frames_reachable(program, scoping),
+        builtins: scanned.verdict == Builtins::Intact && !loads && !declares,
+        promises: !scanned.promise_written && !loads && !declares,
+        closed_calls: !crate::facts::frames_reachable(program, scoping) && !has_with(scoping),
+        self_contained: !loads,
     }
 }
 
@@ -249,6 +335,7 @@ pub fn realm_in(texts: &[(&str, &str)], known: &[String]) -> Realm {
             builtins: true,
             promises: true,
             closed_calls: true,
+            self_contained: true,
         },
         |held, (text, dir)| held.meet(of_text(text, Place { dir, known })),
     )

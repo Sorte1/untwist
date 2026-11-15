@@ -74,6 +74,13 @@ impl<'a> FnRef<'a> {
         }
     }
 
+    pub fn scope(self) -> Option<oxc_syntax::scope::ScopeId> {
+        match self {
+            FnRef::Function(function) => function.scope_id.get(),
+            FnRef::Arrow(arrow) => arrow.scope_id.get(),
+        }
+    }
+
     pub fn expression_body(self) -> Option<&'a Expression<'a>> {
         match self {
             FnRef::Arrow(arrow) => arrow.body.as_expression(),
@@ -159,6 +166,7 @@ pub fn declaration_kind(
 pub struct Ctx<'s, 'a> {
     pub exports: Vec<Span>,
     pub frames_reachable: bool,
+    pub self_contained: bool,
     pub annexed: FxHashSet<SymbolId>,
     pub tainted: FxHashSet<SymbolId>,
     pub injecting: FxHashSet<oxc_syntax::scope::ScopeId>,
@@ -530,7 +538,12 @@ fn settle_function<'a>(cx: &Ctx<'_, 'a>, facts: &mut Facts<'a>, index: usize) {
         .exports
         .iter()
         .any(|span| span.contains_inclusive(fact.func.span()));
-    let closed = reachable && !cx.frames_reachable && !exported;
+    let strict = fact.func.scope().is_some_and(|scope| {
+        cx.scoping
+            .scope_flags(scope)
+            .contains(ScopeFlags::StrictMode)
+    });
+    let closed = reachable && !cx.frames_reachable && !exported && (strict || cx.self_contained);
     let constructible = constructible(cx, fact);
     let returns_typed = !is_generator(fact.func)
         && !is_accessor(cx, fact)
@@ -678,7 +691,8 @@ fn binding_slot<'a>(
     };
     let constant = declaration_kind(cx.nodes, declarator).is_const();
     let mut sources = Vec::new();
-    let usable = cx.single_declaration(symbol)
+    let usable = id.name != "arguments"
+        && cx.single_declaration(symbol)
         && (constant || !cx.open_root(symbol))
         && !cx
             .scoping

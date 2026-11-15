@@ -359,19 +359,24 @@ What it proves today: literals and the closed set of values a local binding is w
 results of operators, function returns, and the parameters of a function whose every call is
 visible. A function is never treated that way when it is exported, reads `arguments`, is called
 with a spread, or is reached any other way, and no function at all when any input or module of
-the run can read a function's frame (`.caller`, `.arguments`, stack-trace functions, or code text
-that could). A direct `eval` (also through a local binding named `eval`) leaves untyped every
+the run can read a function's frame (`.caller`, `.arguments`, stack-trace functions, a `with`
+statement, or code text that could). When the run calls code it does not hold (a module that is
+not one of its inputs, the browser, node), only strict functions keep these types: `.caller` and
+the stack-trace API never hand out a strict function. A direct `eval` (also through a local binding named `eval`) leaves untyped every
 binding it can reach, and in sloppy code it also turns off the types that rest on global names it
 could shadow (`undefined`, `NaN`, `Infinity` and the built-ins); a constant-string `eval` that
 only reads leaves out only the names it reads. A `with` statement leaves the file untyped.
 Script-level `var`s, exported bindings, objects, arrays, classes and the DOM get no types.
 
 Results of built-ins such as `Math.floor`, `parseInt` or `"".slice` count only when no input or
-module of the run patches a built-in and every file is shown not to load other code: each global
-it names is on a short list of ones that cannot (`Math`, `JSON`, `Number`, `String`, `Array`,
-`Object`, `console`, `require`, … but not `document`, `window`, `self`, `location`,
-`importScripts`, timers or anything else), every `import`, `export … from`, `import()` and
-`require` names a relative module by a literal, and the file does not use `import.meta`.
+module of the run patches a built-in or declares one of their names at the top of a script, and
+every file is shown not to load other code: each global it names is on a short list of ones whose
+every reachable member is known not to load or run code (`Math`, `JSON`, `Number`, `String`,
+`Array`, `Object`, `console`, `exports`, … but not `document`, `window`, `self`, `location`,
+`importScripts`, timers or anything else), `module` appears only as `module.exports`, `Error` and
+its subclasses only as a constructor, an `instanceof` operand or an `extends` clause, `arguments`
+only inside a function, every `import`, `export … from`, `import()` and free `require` names a
+module of the same run by a relative literal, and the file does not use `import.meta`.
 
 Every proven type is written, also when TypeScript would infer it anyway, unless writing it would
 give the TypeScript checker a new error (for example a literal type compared with a value outside

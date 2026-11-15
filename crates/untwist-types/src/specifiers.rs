@@ -12,12 +12,22 @@ pub struct Specifier {
     pub value: Option<String>,
 }
 
-struct Collect {
+struct Collect<'s> {
     found: Vec<Specifier>,
     callees: Vec<u32>,
+    scoping: &'s oxc_semantic::Scoping,
 }
 
-impl Collect {
+impl Collect<'_> {
+    fn free(&self, ident: &IdentifierReference<'_>) -> bool {
+        ident
+            .reference_id
+            .get()
+            .is_none_or(|reference| self.scoping.get_reference(reference).symbol_id().is_none())
+    }
+}
+
+impl Collect<'_> {
     fn literal(&mut self, literal: &StringLiteral<'_>) {
         self.found.push(Specifier {
             start: literal.span.start,
@@ -41,7 +51,7 @@ impl Collect {
     }
 }
 
-impl<'a> Visit<'a> for Collect {
+impl<'a> Visit<'a> for Collect<'_> {
     fn visit_import_meta(&mut self, it: &ImportMeta) {
         self.found.push(Specifier {
             start: it.span.start,
@@ -51,7 +61,7 @@ impl<'a> Visit<'a> for Collect {
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if it.name == "require" && !self.callees.contains(&it.span.start) {
+        if it.name == "require" && self.free(it) && !self.callees.contains(&it.span.start) {
             self.found.push(Specifier {
                 start: it.span.start,
                 end: it.span.end,
@@ -80,7 +90,7 @@ impl<'a> Visit<'a> for Collect {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         let requires = matches!(
             it.callee.without_parentheses(),
-            Expression::Identifier(id) if id.name == "require"
+            Expression::Identifier(id) if id.name == "require" && self.free(id)
         );
         if requires {
             self.callees.push(it.callee.span().start);
@@ -101,10 +111,16 @@ impl<'a> Visit<'a> for Collect {
 pub fn specifiers(code: &str, typescript: bool) -> Option<Vec<Specifier>> {
     let alloc = Allocator::default();
     let program = erase::parse_any(&alloc, code, typescript)?;
+    let program = alloc.alloc(program);
+    let scoping = oxc_semantic::SemanticBuilder::new()
+        .build(program)
+        .semantic
+        .into_scoping();
     let mut collect = Collect {
         found: Vec::new(),
         callees: Vec::new(),
+        scoping: &scoping,
     };
-    collect.visit_program(&program);
+    collect.visit_program(program);
     Some(collect.found)
 }
