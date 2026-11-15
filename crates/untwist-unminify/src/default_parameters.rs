@@ -1,11 +1,15 @@
 use crate::transpile_util::{is_undefined_identifier, reference_symbol};
 use oxc_allocator::{Box as ABox, Vec as AVec};
 use oxc_ast::ast::*;
+use oxc_semantic::Scoping;
 use oxc_span::SPAN;
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use rustc_hash::FxHashSet;
 use untwist_core::ast_util::frame_reads::reads_function_frame;
 use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::pass::{Cx, Interest, Locality, Pass};
+use untwist_core::semantic::catch_var_declarations;
 
 mod guards;
 
@@ -16,6 +20,20 @@ const MAX_PARAMETER_INDEX: usize = 256;
 #[derive(Default)]
 pub struct DefaultParameters {
     frame_read: bool,
+    catch_var_scopes: Option<FxHashSet<ScopeId>>,
+}
+
+impl DefaultParameters {
+    fn declares_catch_vars(&mut self, scope: ScopeId, scoping: &Scoping) -> bool {
+        self.catch_var_scopes
+            .get_or_insert_with(|| {
+                catch_var_declarations(scoping)
+                    .into_iter()
+                    .map(|(scope, _)| scope)
+                    .collect()
+            })
+            .contains(&scope)
+    }
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -45,6 +63,7 @@ impl<'a> Pass<'a> for DefaultParameters {
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         self.frame_read = !cx.opts.unsafe_transforms && reads_function_frame(program, cx.scoping());
+        self.catch_var_scopes = None;
         cx.observe_names(program);
     }
 
@@ -55,6 +74,9 @@ impl<'a> Pass<'a> for DefaultParameters {
         let Some(host) = guards::host(node, cx) else {
             return;
         };
+        if self.declares_catch_vars(host.scope(), cx.scoping()) {
+            return;
+        }
         let Function { params, body, .. } = node;
         let Some(body) = body.as_deref_mut() else {
             return;

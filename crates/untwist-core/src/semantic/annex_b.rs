@@ -172,6 +172,24 @@ fn is_hoisted_by(
         && declaring(symbol).is_some()
 }
 
+pub fn catch_var_declarations(scoping: &Scoping) -> Vec<(ScopeId, SymbolId)> {
+    scoping
+        .symbol_ids()
+        .filter(|symbol| {
+            scoping
+                .symbol_flags(*symbol)
+                .contains(SymbolFlags::CatchVariable)
+        })
+        .filter(|symbol| !scoping.symbol_redeclarations(*symbol).is_empty())
+        .filter_map(|symbol| {
+            let scope = scoping
+                .scope_ancestors(scoping.symbol_scope_id(symbol))
+                .find(|scope| scoping.scope_flags(*scope).is_var())?;
+            Some((scope, symbol))
+        })
+        .collect()
+}
+
 pub fn block_function_symbols(scoping: &Scoping) -> FxHashSet<SymbolId> {
     let in_block: FxHashSet<NodeId> = scoping
         .scope_descendants_from_root()
