@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    ArrowFunctionExpression, AwaitExpression, Class, ForOfStatement, Function, Program, Statement,
-    VariableDeclaration,
+    AccessorProperty, ArrowFunctionExpression, AwaitExpression, ForOfStatement, Function, Program,
+    PropertyDefinition, Statement, StaticBlock, VariableDeclaration,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_diagnostics::{OxcDiagnostic, Severity};
@@ -191,7 +191,17 @@ impl<'a> VisitJs<'a> for TopLevelAwait {
 
     fn visit_arrow_function_expression(&mut self, _: &ArrowFunctionExpression<'a>) {}
 
-    fn visit_class(&mut self, _: &Class<'a>) {}
+    fn visit_static_block(&mut self, _: &StaticBlock<'a>) {}
+
+    fn visit_property_definition(&mut self, it: &PropertyDefinition<'a>) {
+        self.visit_decorators(&it.decorators);
+        self.visit_property_key(&it.key);
+    }
+
+    fn visit_accessor_property(&mut self, it: &AccessorProperty<'a>) {
+        self.visit_decorators(&it.decorators);
+        self.visit_property_key(&it.key);
+    }
 }
 
 fn has_top_level_await(program: &Program<'_>) -> bool {
