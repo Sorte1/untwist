@@ -3,6 +3,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::scope::ScopeFlags;
+use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 
 use crate::model::{Bundle, Module};
 
@@ -157,7 +158,7 @@ fn inside(module: &Module<'_>, regions: &[Region]) -> bool {
         .body
         .iter()
         .map(GetSpan::span)
-        .filter(|span| !span.is_empty())
+        .filter(|span| !span.is_empty() && span.start < SYNTHETIC_BASE)
         .peekable();
     spans.peek().is_some() && spans.all(|span| regions.iter().any(|region| region.encloses(span)))
 }
