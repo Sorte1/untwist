@@ -381,7 +381,11 @@ fn a_shadowing_require_parameter_is_not_routed() {
     let out = unpacked(&[
         "\"use strict\"; n.r(t); var ns = {}; n.r(ns); function f(require) { return require.r; } console.log(f);",
     ]);
-    assert!(out[0].contains("return require.r;"), "{}", out[0]);
+    assert!(
+        out[0].contains("function f(_require) {\n  return _require.r;"),
+        "{}",
+        out[0]
+    );
     assert!(out[0].contains("__webpack_require__.r(ns)"), "{}", out[0]);
 }
 
