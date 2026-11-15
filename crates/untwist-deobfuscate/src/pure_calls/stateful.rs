@@ -16,7 +16,7 @@ use untwist_eval::value::JsString;
 
 use super::eval::{literal_argument, MAX_STRING};
 use crate::bindings::{block_function_names, resolved_symbol};
-use crate::calls::agnostic::{global_reach, ReachWatch};
+use crate::calls::agnostic::{global_reach_with_texts, ReachWatch};
 use crate::mutants::straight_line_guards_dropped;
 use body::{Func, State};
 use order::{Fold, Walk};
@@ -132,7 +132,7 @@ fn unreached(
         fns: &[],
         observe: true,
     };
-    let found = global_reach(program, scoping, (Some(&resolve), &[]), watch);
+    let found = global_reach_with_texts(program, scoping, Some(&resolve), watch);
     found.reach.is_none() && found.observed.is_none()
 }
 

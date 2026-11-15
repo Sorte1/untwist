@@ -17,7 +17,7 @@ use super::eval::{Machine, Shape};
 use super::scan::{declared, Declared, Func};
 use super::uses::{uses, Arg, Role, Site, Uses};
 use crate::bindings::block_function_names;
-use crate::calls::agnostic::{global_reach, ReachWatch};
+use crate::calls::agnostic::{global_reach_with_texts, ReachWatch};
 
 pub(super) struct Plan {
     pub(super) folds: Vec<(Span, Const)>,
@@ -292,7 +292,7 @@ fn root_reached<'p>(
         fns: &[],
         observe: true,
     };
-    let found = global_reach(program, scoping, (Some(&resolve), &[]), watch);
+    let found = global_reach_with_texts(program, scoping, Some(&resolve), watch);
     if found.reach.is_some() {
         return Reached::Rebound;
     }

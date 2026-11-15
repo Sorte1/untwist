@@ -520,7 +520,9 @@
   `var { set } = Reflect`, `(0, Reflect.set)`, `[Reflect.set][0]`), a forwarder (`.call`,
   `.apply`, `.bind`, `Reflect.apply(Reflect.set, …)`), a spread argument list, or a key the check
   cannot resolve on `Reflect` or `Object`, reaches every name the check asks about and makes the
-  program a source, in both lanes. **Hidden
+  program a source, in both lanes. Code text that may hand back a code runner reaches every
+  name (see [rename.md](rename.md)); `fold-pure-calls` judges code text this way in both lanes.
+  **Hidden
   call:** every top-level function of a script is read as also called with unknown arguments: its
   body is read as written, besides its visible calls, which are still read with their arguments in
   place. A helper that writes nothing outside its own locals and fresh objects changes nothing; one

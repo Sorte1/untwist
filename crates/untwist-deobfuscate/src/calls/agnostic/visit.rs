@@ -35,6 +35,15 @@ impl<'s, 'a> Sites<'s, 'a> {
         (RUNNERS.contains(&id.name.as_str()) && self.fresh.symbol(id).is_none()).then_some(id.span)
     }
 
+    fn loads_a_module(&self, callee: &Expression<'a>) -> bool {
+        match callee.without_parentheses() {
+            Expression::Identifier(id) => id.name == "require" && self.fresh.symbol(id).is_none(),
+            other => other.as_member_expression().is_some_and(|member| {
+                matches!(self.member_keys(member).as_slice(), [AKey::Named(name)] if name == "require")
+            }),
+        }
+    }
+
     fn keys_are(&self, member: &MemberExpression<'a>, allowed: &[&str]) -> bool {
         let keys = self.member_keys(member);
         !keys.is_empty()
@@ -308,6 +317,16 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         walk_js::walk_simple_assignment_target(self, it);
     }
 
+    fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
+        let discarded = match it.expression.without_parentheses() {
+            Expression::CallExpression(call) => Some(call.span),
+            _ => None,
+        };
+        let outer = std::mem::replace(&mut self.discarded_call, discarded);
+        walk_js::walk_expression_statement(self, it);
+        self.discarded_call = outer;
+    }
+
     fn visit_object_expression(&mut self, it: &ObjectExpression<'a>) {
         self.reach_object(it);
         if self.in_machinery(it.span) {
@@ -489,8 +508,16 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         self.note_text_node_call(it);
         if let Some(kind) = self.runner_callee(&it.callee) {
             if !self.creation_only.contains(&span_key(it.span)) {
-                self.reach_text(it.span, &it.arguments);
-                if closed_runner_read(it, self.fresh.scoping).is_some() {
+                let closed_read = closed_runner_read(it, self.fresh.scoping).is_some();
+                let unused = self.tests.contains(&span_key(it.span))
+                    || self.discarded_call == Some(it.span)
+                    || closed_read;
+                if self.loads_a_module(&it.callee) || (unused && !kind.function()) {
+                    self.reach_unused_text(it.span, &it.arguments);
+                } else {
+                    self.reach_text(it.span, &it.arguments, kind.function());
+                }
+                if closed_read {
                     self.mark_closed_runner_read(it.span);
                 } else {
                     self.check_text(it.span, &it.arguments, kind);
@@ -534,7 +561,7 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         }
         self.note_text_node_new(it);
         if let Some(kind) = self.runner_callee(&it.callee) {
-            self.reach_text(it.span, &it.arguments);
+            self.reach_text(it.span, &it.arguments, kind.function());
             self.check_text(it.span, &it.arguments, kind);
         } else if !self.fresh.is_user_function(&it.callee) {
             let new = self.alloc(it);
@@ -567,6 +594,10 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
             && !self.fresh.bindings.reads_a_proven_getter(it.span())
         {
             let has_sink = self.flow.sink_of(it.span()).is_some();
+            self.named_runner_escaped |= has_sink
+                && parent_keys
+                    .iter()
+                    .any(|key| matches!(key, AKey::Named(_)) && self.key_origin(key).runner);
             for key in parent_keys.iter() {
                 self.mark_origin_sink(self.key_origin(key), it.span(), "escaped read", has_sink);
             }
@@ -587,6 +618,7 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
                 runner: true,
                 ..Origin::default()
             };
+            self.named_runner_escaped = true;
             self.mark_origin(origin, it.span, "escaped runner name");
         }
     }

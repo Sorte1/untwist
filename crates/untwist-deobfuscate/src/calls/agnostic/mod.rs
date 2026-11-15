@@ -12,6 +12,7 @@ mod forward;
 mod fresh;
 mod global_text;
 mod holds;
+mod inert_text;
 mod instance;
 mod judge;
 mod keys;
@@ -166,6 +167,7 @@ fn reach_watch<'k>(reach: ReachWatch<'k>) -> settle::Watch<'k> {
         defer: false,
         printers_quiet: false,
         runner_texts: true,
+        texts_in_every_lane: false,
     }
 }
 
@@ -199,6 +201,19 @@ pub fn global_reach<'a>(
 ) -> GlobalReach {
     let found = settle(program, scoping, (resolve, machinery, reach_watch(reach))).0;
     reach_of(&found)
+}
+
+pub fn global_reach_with_texts<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    resolve: Option<&FxHashMap<Span, &JsString>>,
+    reach: ReachWatch<'_>,
+) -> GlobalReach {
+    let watch = settle::Watch {
+        texts_in_every_lane: true,
+        ..reach_watch(reach)
+    };
+    reach_of(&settle(program, scoping, (resolve, &[], watch)).0)
 }
 
 pub fn globals_reachable_by_key<'a>(program: &'a Program<'a>, scoping: &Scoping) -> bool {
@@ -319,6 +334,7 @@ fn text_reach<'a>(
         defer: true,
         printers_quiet: false,
         runner_texts,
+        texts_in_every_lane: false,
     };
     let found = settle(program, scoping, (None, &[], watch)).0;
     let reached = found

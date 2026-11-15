@@ -385,7 +385,9 @@ impl<'s, 'a> Sites<'s, 'a> {
             && !self.creation_only.contains(&span_key(call.span))
             && !self.table_dispatch(&call.callee)
         {
-            self.reach_text(call.span, &call.arguments);
+            if self.judges_every_call_as_text() {
+                self.reach_text(call.span, &call.arguments, self.unbounded_text().function());
+            }
             self.check_text(call.span, &call.arguments, self.unbounded_text());
         }
         if unbounded {
@@ -434,7 +436,9 @@ impl<'s, 'a> Sites<'s, 'a> {
         let tagged = std::mem::take(&mut self.tagged);
         if self.out.runner_unbounded.is_some() {
             for new in news {
-                self.reach_text(new.span, &new.arguments);
+                if self.judges_every_call_as_text() {
+                    self.reach_text(new.span, &new.arguments, self.unbounded_text().function());
+                }
                 self.check_text(new.span, &new.arguments, self.unbounded_text());
             }
             for template in tagged {

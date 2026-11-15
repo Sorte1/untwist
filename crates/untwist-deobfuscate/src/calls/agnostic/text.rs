@@ -206,7 +206,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             return;
         };
         self.mark_source(call.span, "a forwarded runner");
-        self.reach_forwarded(call, forward);
+        self.reach_forwarded(call, forward, kind.function());
         if !self.forwarded_unsafe(call, forward, kind) {
             return;
         }

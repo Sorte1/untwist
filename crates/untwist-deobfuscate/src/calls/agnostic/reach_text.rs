@@ -16,22 +16,41 @@ use super::sites::{Forward, Sites};
 pub(super) const TEXT_DEPTH: u8 = 4;
 
 impl<'a> Sites<'_, 'a> {
-    pub(super) fn reach_forwarded(&mut self, call: &CallExpression<'a>, forward: Forward) {
+    pub(super) fn reach_forwarded(
+        &mut self,
+        call: &CallExpression<'a>,
+        forward: Forward,
+        function: bool,
+    ) {
         if !self.watching_text(call.span) {
             return;
         }
-        let reached = (forward.call && self.texts_reach(call.arguments.iter().skip(1)))
+        let passed: Vec<Option<&Expression<'a>>> = call
+            .arguments
+            .iter()
+            .skip(1)
+            .map(Argument::as_expression)
+            .collect();
+        let reached = (forward.call
+            && match function {
+                true => self.joined_reaches(&passed),
+                false => self.texts_reach(call.arguments.iter().skip(1)),
+            })
             || ((forward.apply || forward.reflect) && {
                 let listed = if forward.reflect { 2 } else { 1 };
-                self.list_reaches(call.arguments.get(listed))
+                self.list_reaches(call.arguments.get(listed), function)
             });
         if reached {
             self.hit_text(call.span);
         }
     }
 
+    pub(super) fn judges_every_call_as_text(&self) -> bool {
+        observers() != Observers::None || self.named_runner_escaped
+    }
+
     fn watching_text(&self, span: Span) -> bool {
-        observers() != Observers::None && self.watching(span)
+        (observers() != Observers::None || self.watch.texts_in_every_lane) && self.watching(span)
     }
 
     pub(super) fn mark_opaque_text(&mut self, span: Span) {
@@ -49,7 +68,7 @@ impl<'a> Sites<'_, 'a> {
         self.watching_text(span) && self.text_reaches(text)
     }
 
-    fn list_reaches(&self, list: Option<&Argument<'a>>) -> bool {
+    fn list_reaches(&self, list: Option<&Argument<'a>>, function: bool) -> bool {
         let Some(list) = list else {
             return false;
         };
@@ -58,10 +77,37 @@ impl<'a> Sites<'_, 'a> {
         else {
             return true;
         };
-        array.elements.iter().any(|element| {
-            element
-                .as_expression()
-                .is_none_or(|expr| self.text_reaches(expr))
+        let elements: Vec<Option<&Expression<'a>>> = array
+            .elements
+            .iter()
+            .map(ArrayExpressionElement::as_expression)
+            .collect();
+        match function {
+            true => self.joined_reaches(&elements),
+            false => elements
+                .iter()
+                .any(|element| element.is_none_or(|expr| self.text_reaches(expr))),
+        }
+    }
+
+    fn joined_reaches(&self, texts: &[Option<&Expression<'a>>]) -> bool {
+        if texts.is_empty() {
+            return false;
+        }
+        let resolved: Option<Vec<String>> = texts
+            .iter()
+            .map(|text| text.and_then(|expr| self.text_value(expr, KEY_DEPTH)))
+            .collect();
+        let Some(resolved) = resolved else {
+            return true;
+        };
+        let Some((body, params)) = resolved.split_last() else {
+            return false;
+        };
+        let params = params.join(",");
+        FUNCTION_HEADS.iter().any(|head| {
+            let source = format!("({head} ({params}\n) {{\n{body}\n}});");
+            self.names_reach(&source)
         })
     }
 
@@ -76,7 +122,13 @@ impl<'a> Sites<'_, 'a> {
         })
     }
 
-    pub(super) fn reach_text(&mut self, span: Span, arguments: &[Argument<'a>]) {
+    pub(super) fn reach_unused_text(&mut self, span: Span, arguments: &[Argument<'a>]) {
+        self.result_unused.set(true);
+        self.reach_text(span, arguments, false);
+        self.result_unused.set(false);
+    }
+
+    pub(super) fn reach_text(&mut self, span: Span, arguments: &[Argument<'a>], function: bool) {
         if !self.watching_text(span) {
             return;
         }
@@ -87,7 +139,13 @@ impl<'a> Sites<'_, 'a> {
         if first_fn {
             return;
         }
-        if self.texts_reach(arguments.iter()) {
+        let texts: Vec<Option<&Expression<'a>>> =
+            arguments.iter().map(Argument::as_expression).collect();
+        let reached = match function {
+            true => self.joined_reaches(&texts),
+            false => self.texts_reach(arguments.iter()),
+        };
+        if reached {
             self.hit_text(span);
         }
     }
@@ -115,7 +173,10 @@ impl<'a> Sites<'_, 'a> {
     fn names_reach(&self, text: &str) -> bool {
         let watched = (self.watch.names, self.watch.props);
         if !self.watch.defer {
-            let judged = (self.watch.depth, self.watch.runner_texts);
+            let judged = (
+                self.watch.depth,
+                self.watch.runner_texts && !self.result_unused.get(),
+            );
             return names_reach_text(text, watched, judged);
         }
         if names_reach_at_once(text, watched.0, self.watch.depth) {
@@ -188,11 +249,16 @@ pub(super) fn names_reach_text(
     if names_reach_at_once(text, watched.0, depth) {
         return true;
     }
-    let wrapped = format!("(function () {{\n{text}\n}});");
-    [text, wrapped.as_str()]
+    let mut forms = vec![text.to_string()];
+    forms.extend(
+        FUNCTION_HEADS
+            .iter()
+            .map(|head| format!("({head} () {{\n{text}\n}});")),
+    );
+    forms
         .iter()
-        .find_map(|form| parsed_reaches(form, watched, (depth - 1, runner_texts)))
-        .unwrap_or(false)
+        .filter_map(|form| parsed_reaches(form, watched, (depth - 1, runner_texts)))
+        .any(|reached| reached)
 }
 
 fn parsed_reaches(
@@ -201,6 +267,13 @@ fn parsed_reaches(
     judgement: TextJudgement,
 ) -> Option<bool> {
     let names = watched.0;
+    if crate::proof::with_parsed_text(form, |_| ())
+        .flatten()
+        .is_some()
+        && has_early_errors(form)
+    {
+        return Some(true);
+    }
     let judged = crate::proof::with_parsed_text(form, |program| {
         let mut named = Named {
             names,
@@ -208,10 +281,14 @@ fn parsed_reaches(
             plain: true,
         };
         named.visit_program(program);
-        if named.found || (judgement.1 && may_hand_out_a_runner(program)) {
+        if named.found {
             return (true, Vec::new());
         }
-        judge_text(program, named.plain, watched, judgement)
+        let judged = judge_text(program, named.plain, watched, judgement);
+        match judgement.1 && may_hand_out_a_runner(program) {
+            true => (true, Vec::new()),
+            false => judged,
+        }
     });
     match judged {
         None => Some(true),
@@ -225,8 +302,18 @@ fn parsed_reaches(
     }
 }
 
+const FUNCTION_HEADS: [&str; 4] = ["function", "async function", "function*", "async function*"];
+
+fn has_early_errors(form: &str) -> bool {
+    crate::proof::with_parsed_text(form, |program| {
+        !untwist_core::parse::early_errors(program).is_empty()
+    })
+    .flatten()
+    .unwrap_or(false)
+}
+
 fn may_hand_out_a_runner(program: &Program<'_>) -> bool {
-    untwist_core::ast_util::code_text::may_run_code_text(program, &Scoping::default())
+    super::inert_text::may_hand_back_a_runner(program)
         && !super::global_text::returns_the_global_object(program)
 }
 
