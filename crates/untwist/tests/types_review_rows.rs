@@ -444,3 +444,50 @@ fn every_fourth_review_probe_holds_its_types_when_node_runs_it() {
     assert!(ran > 100, "{ran}");
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
+
+#[test]
+fn every_sixth_review_probe_holds_its_types_when_node_runs_it() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../untwist-types/tests/probes/a40r6");
+    let work = tempfile::tempdir().unwrap();
+    let mut failures = Vec::new();
+    let mut ran = 0;
+    for dir in std::fs::read_dir(&root).unwrap() {
+        let dir = dir.unwrap().path();
+        let copy = work.path().join(dir.file_name().unwrap());
+        copy_dir(&dir, &copy);
+        for file in std::fs::read_dir(&dir).unwrap() {
+            let path = file.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            let source = std::fs::read_to_string(&path).unwrap();
+            let expected = node_run(&node, &copy, &format!("plain-{name}"), &source);
+            let annotated = Pipeline::new(typed(TypesMode::Jsdoc))
+                .run(&source)
+                .code()
+                .to_string();
+            let observed = node_run(&node, &copy, &format!("jsdoc-{name}"), &annotated);
+            if observed.stdout != expected.stdout {
+                failures.push(format!(
+                    "{name} jsdoc: printed {:?}, node printed {:?}",
+                    observed.stdout, expected.stdout
+                ));
+            }
+            let checked = untwist_types::instrumented(&source).unwrap_or_else(|| source.clone());
+            let observed = node_run(&node, &copy, &format!("checked-{name}"), &checked);
+            ran += 1;
+            if observed.stderr.contains("__UT_FAIL") {
+                failures.push(format!("{name}: a type did not hold\n{checked}"));
+            }
+            if observed.stdout != expected.stdout {
+                failures.push(format!(
+                    "{name}: printed {:?}, node printed {:?}",
+                    observed.stdout, expected.stdout
+                ));
+            }
+        }
+    }
+    assert!(ran > 40, "{ran}");
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}

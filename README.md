@@ -370,11 +370,10 @@ that no code in the realm patches a built-in or reaches a frame, which this vers
 A direct `eval` (also through a local binding named `eval`) leaves untyped every binding it can
 reach, and in sloppy code it also turns off the types that rest on global names it could shadow
 (`undefined`, `NaN`, `Infinity`); a constant-string `eval` that only reads leaves out only the
-names it reads. A `with` statement leaves the file untyped, and so does an arithmetic, bitwise, `-` or `~`
-operator (other than `+`) applied to an object, array, function, class or regular expression
-literal or a binding declared with one (the TypeScript checker reports such operands differently
-once any type is written); an operator result is typed only when every operand is a proven
-primitive. Script-level `var`s, exported
+names it reads. A `with` statement leaves the file untyped, and so does an object literal or class member whose
+computed key is `Symbol.<name>` (tsc 7.0.2 reports the type errors around such an object only in
+part, and differently from run to run, until a type is written); an operator result is typed only
+when every operand is a proven primitive. Script-level `var`s, exported
 bindings, objects, arrays, classes and the DOM get no types.
 
 Every proven type is written, also when TypeScript would infer it anyway, unless writing it would
@@ -400,7 +399,9 @@ The types run after every other stage, on the final text, so they describe the p
 prints. The checks behind this live in `crates/untwist-types/tests` (one row per hazard), in the
 node run of the fixtures with every annotation turned into a runtime check, and in
 `tools/types-check`, which runs the pinned `tsc` over every annotated fixture output against the
-same text without annotations and fails on any new diagnostic. `--against-js` also compares each
+same text without annotations and fails on any new diagnostic. It runs `tsc` three times on each
+side (`TYPES_CHECK_RUNS` sets the count) and compares the most each side ever reports, so a
+diagnostic the checker drops in some runs can neither hide a new one nor pass for one. `--against-js` also compares each
 `.ts` output with the untyped output as `.js` under `checkJs`; the diagnostics it reports come from
 renaming JavaScript to `.ts` (in a `.ts` file every parameter is required, an object literal gets a
 fixed shape, and so on), not from the annotations, so they do not touch the promise that every

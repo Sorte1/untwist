@@ -26,6 +26,7 @@ const compilerOptions = {
 };
 
 const BATCH = 200;
+const RUNS = Math.max(1, Number(process.env.TYPES_CHECK_RUNS ?? 3));
 const SHOWN = 400;
 const codes = new Map();
 
@@ -82,6 +83,31 @@ function key(entry) {
   return `${entry.row}:${entry.code}`;
 }
 
+function tally(entries) {
+  const counts = new Map();
+  for (const entry of entries) {
+    const held = counts.get(key(entry));
+    if (held) held.count += 1;
+    else counts.set(key(entry), { count: 1, entry });
+  }
+  return counts;
+}
+
+async function union(dir, names) {
+  const merged = new Map();
+  for (let run = 0; run < RUNS; run += 1) {
+    for (const [file, entries] of await diagnostics(dir, names)) {
+      if (!merged.has(file)) merged.set(file, new Map());
+      const held = merged.get(file);
+      for (const [at, seen] of tally(entries)) {
+        const before = held.get(at);
+        if (!before || before.count < seen.count) held.set(at, seen);
+      }
+    }
+  }
+  return merged;
+}
+
 async function delta(root) {
   const annotatedDir = join(root, "annotated");
   const plainDir = join(root, PLAIN);
@@ -89,32 +115,28 @@ async function delta(root) {
   const plainByStem = new Map(sources(plainDir).map((name) => [stem(name), name]));
   const added = [];
   const texts = new Map();
+  const report = (file, entry) => {
+    if (added.length >= SHOWN) {
+      added.push(null);
+      return;
+    }
+    const real = annotatedNames.find((name) => stem(name) === file) ?? file;
+    if (!texts.has(real)) texts.set(real, readFileSync(join(annotatedDir, real), "utf8").split("\n"));
+    const text = texts.get(real)[entry.row - 1] ?? "";
+    added.push(`${file}:${entry.row} ${entry.code} ${entry.message}\n    ${text.trim().slice(0, 200)}`);
+    codes.set(entry.code, (codes.get(entry.code) ?? 0) + 1);
+  };
   for (let at = 0; at < annotatedNames.length; at += BATCH) {
     texts.clear();
     const batch = annotatedNames.slice(at, at + BATCH);
-    const annotated = await diagnostics(annotatedDir, batch);
+    const annotated = await union(annotatedDir, batch);
     const plainNames = batch.map((name) => plainByStem.get(stem(name))).filter(Boolean);
-    const plain = await diagnostics(plainDir, plainNames);
-    for (const [file, entries] of annotated) {
-      const before = new Map();
-      for (const entry of plain.get(file) ?? []) {
-        before.set(key(entry), (before.get(key(entry)) ?? 0) + 1);
-      }
-      for (const entry of entries) {
-        const left = before.get(key(entry)) ?? 0;
-        if (left > 0) {
-          before.set(key(entry), left - 1);
-          continue;
-        }
-        if (added.length >= SHOWN) {
-          added.push(null);
-          continue;
-        }
-        const real = batch.find((name) => stem(name) === file) ?? file;
-        if (!texts.has(real)) texts.set(real, readFileSync(join(annotatedDir, real), "utf8").split("\n"));
-        const text = texts.get(real)[entry.row - 1] ?? "";
-        added.push(`${file}:${entry.row} ${entry.code} ${entry.message}\n    ${text.trim().slice(0, 200)}`);
-        codes.set(entry.code, (codes.get(entry.code) ?? 0) + 1);
+    const plain = await union(plainDir, plainNames);
+    for (const [file, counts] of annotated) {
+      const before = plain.get(file) ?? new Map();
+      for (const [at, { count, entry }] of counts) {
+        const extra = count - (before.get(at)?.count ?? 0);
+        for (let left = 0; left < extra; left += 1) report(file, entry);
       }
     }
   }
@@ -126,7 +148,7 @@ const against = args.indexOf("--against-js");
 const PLAIN = against === -1 ? "plain" : "plain-js";
 const roots = args.filter((arg) => arg !== "--against-js");
 if (roots.length === 0) {
-  console.error("usage: node check.mjs [--against-js] <pairs-dir>...   (each holds annotated/, plain/ and plain-js/)");
+  console.error("usage: node check.mjs [--against-js] <pairs-dir>...   (each holds annotated/, plain/ and plain-js/; TYPES_CHECK_RUNS tsc runs per side, default 3)");
   process.exit(2);
 }
 let failed = false;

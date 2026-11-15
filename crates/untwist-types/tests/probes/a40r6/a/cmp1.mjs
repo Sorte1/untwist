@@ -1,0 +1,10 @@
+const a = { valueOf() { return 1; } };
+const f = function () {};
+const r = /x/;
+const n = 5;
+const b = a < 1;
+const c = f > r;
+const d = [1] <= n;
+const e = a in { 1: 1 };
+const k = n * 2;
+console.log(b, c, d, e, k);

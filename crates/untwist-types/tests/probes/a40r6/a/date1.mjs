@@ -1,0 +1,12 @@
+const d = new Date(0);
+const e = new Date(5);
+const n = 5;
+const a = d < e;
+const b = d >= n;
+const c = e - d;
+const f = d + 1;
+const g = +d;
+const h = -d;
+const k = n * 2;
+let t = 0; t += e - d;
+console.log(a, b, c, typeof f, g, h, k, t);

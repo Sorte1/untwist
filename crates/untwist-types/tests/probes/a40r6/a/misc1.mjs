@@ -1,0 +1,12 @@
+const s = { [Symbol.toPrimitive]() { return 1; } };
+const n = 5;
+const e = s + 1;
+const g = 1 + s;
+const h = (0, s) - 1;
+const i = (n ? s : s) * 2;
+const j = (s || 1) - 1;
+const b = s < 1;
+const c = !s;
+const t = typeof s;
+const k = n * 2;
+console.log(e, g, h, i, j, k, b, c, t);

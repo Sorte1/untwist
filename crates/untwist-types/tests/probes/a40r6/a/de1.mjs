@@ -1,0 +1,10 @@
+const { s } = { s: { [Symbol.toPrimitive]() { return 1; } } };
+const [t] = [{ [Symbol.toPrimitive]() { return 1; } }];
+const n = 5;
+const e = s + 1;
+const g = 1 + s;
+const h = s - 1;
+const i = t * 2;
+const b = s < t;
+const k = n * 2;
+console.log(e, g, h, i, k, b);

@@ -69,11 +69,7 @@ fn a_file_with_an_object_operand_is_left_untyped_and_says_why() {
         let source = probe(name);
         for mode in [Mode::Jsdoc, Mode::Ts] {
             let out = annotate(&source, mode);
-            assert_eq!(
-                out.refused,
-                Some(Refusal::ObjectArithmetic),
-                "{name} {mode:?}"
-            );
+            assert_eq!(out.refused, Some(Refusal::SymbolKey), "{name} {mode:?}");
             assert_eq!(out.code, source, "{name} {mode:?}");
         }
     }
