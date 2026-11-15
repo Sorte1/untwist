@@ -273,6 +273,9 @@ pub fn host_uses(bundle: &mut Bundle<'_>) -> Result<(), HostUse> {
     let mut left = Vec::new();
     let mut imports = Vec::new();
     for (id, module) in &bundle.modules {
+        if bundle.fixed_paths.contains(id) {
+            continue;
+        }
         let program = module.program();
         let host_require = names_host_require(bundle, id, module);
         if !mentions(program, host_require, shim.as_deref()) {
