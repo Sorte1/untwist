@@ -316,6 +316,13 @@ impl<'a> Extract<'a, '_, '_> {
             self.bundle = attempt(self.bodies, |bodies| {
                 detect_browserify_with(alloc, source, expr, bodies, options)
             });
+            let standalone = matches!(
+                crate::browserify::prelude::frame(source, expr),
+                Ok(crate::browserify::prelude::Frame::Standalone { .. })
+            );
+            if let Some(bundle) = self.bundle.as_mut() {
+                bundle.recorded_wrapper = standalone;
+            }
         }
     }
 }
@@ -683,7 +690,8 @@ fn extract_with<'a>(
     if let Some(mut bundle) = bundle {
         if let Some(site) = site.filter(|_| !options.conservative) {
             let scoping = scoping.unwrap_or_else(|| build_scoping(program).scoping);
-            bundle.around = crate::beside::around(alloc, program, site, &scoping);
+            bundle.around =
+                crate::beside::around(alloc, program, (site, bundle.recorded_wrapper), &scoping);
         }
         mark_strict_sources(program, &mut bundle);
         return Some(bundle);

@@ -3,11 +3,13 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
+use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::ScopeFlags;
 use untwist_core::semantic::build_scoping;
 
-use crate::model::Bundle;
+use crate::model::{Bundle, Module};
 use crate::scan::is_direct_eval;
+use crate::strict::written_as_strict;
 
 const WRAPPER_NAMES: [&str; 5] = ["module", "exports", "require", "__filename", "__dirname"];
 
@@ -55,6 +57,12 @@ impl Loose<'_> {
     fn at_top(&self) -> bool {
         self.functions + self.arrows == 0
     }
+
+    fn visit_key<'a>(&mut self, key: &PropertyKey<'a>, computed: bool) {
+        if computed {
+            self.visit_property_key(key);
+        }
+    }
 }
 
 impl<'a> VisitJs<'a> for Loose<'_> {
@@ -81,7 +89,41 @@ impl<'a> VisitJs<'a> for Loose<'_> {
     }
 
     fn visit_class(&mut self, it: &Class<'a>) {
-        self.in_function(false, |this| walk_js::walk_class(this, it));
+        self.visit_decorators(&it.decorators);
+        if let Some(heritage) = &it.heritage {
+            self.visit_class_heritage(heritage);
+        }
+        for element in &it.body.body {
+            self.visit_class_element(element);
+        }
+    }
+
+    fn visit_class_element(&mut self, it: &ClassElement<'a>) {
+        match it {
+            ClassElement::MethodDefinition(method) => {
+                self.visit_decorators(&method.decorators);
+                self.visit_key(&method.key, method.computed);
+                self.visit_function(&method.value, ScopeFlags::Function);
+            }
+            ClassElement::PropertyDefinition(property) => {
+                self.visit_decorators(&property.decorators);
+                self.visit_key(&property.key, property.computed);
+                if let Some(value) = &property.value {
+                    self.in_function(false, |this| this.visit_expression(value));
+                }
+            }
+            ClassElement::AccessorProperty(property) => {
+                self.visit_decorators(&property.decorators);
+                self.visit_key(&property.key, property.computed);
+                if let Some(value) = &property.value {
+                    self.in_function(false, |this| this.visit_expression(value));
+                }
+            }
+            ClassElement::StaticBlock(block) => {
+                self.in_function(false, |this| walk_js::walk_static_block(this, block));
+            }
+            ClassElement::TSIndexSignature(_) => {}
+        }
     }
 
     fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
@@ -152,16 +194,123 @@ fn refused(program: &Program<'_>, statement: &Statement<'_>, why: &str) -> Strin
     crate::notes::code_beside(line, why)
 }
 
+fn inert(argument: &Argument<'_>) -> bool {
+    match argument {
+        Argument::ThisExpression(_)
+        | Argument::StringLiteral(_)
+        | Argument::NumericLiteral(_)
+        | Argument::BooleanLiteral(_)
+        | Argument::NullLiteral(_) => true,
+        Argument::Identifier(id) => matches!(id.name.as_str(), "undefined" | "globalThis"),
+        _ => false,
+    }
+}
+
+fn spanned(statements: &[Statement<'_>]) -> Option<Span> {
+    let (first, last) = statements.first().zip(statements.last())?;
+    Some(Span::new(first.span().start, last.span().end))
+}
+
+fn body_holds_only(statements: &[Statement<'_>], site: Span) -> bool {
+    if spanned(statements) == Some(site) {
+        return true;
+    }
+    let mut kept = statements
+        .iter()
+        .filter(|statement| !matches!(statement, Statement::EmptyStatement(_)));
+    match (kept.next(), kept.next()) {
+        (Some(statement), None) => statement_holds_only(statement, site, true),
+        _ => false,
+    }
+}
+
+fn called_body_holds_only(call: &CallExpression<'_>, site: Span) -> bool {
+    if call.optional || !call.arguments.iter().all(inert) {
+        return false;
+    }
+    let callee = match call.callee.without_parentheses() {
+        Expression::StaticMemberExpression(member)
+            if !member.optional && matches!(member.property.name.as_str(), "call" | "apply") =>
+        {
+            member.object.without_parentheses()
+        }
+        callee => callee,
+    };
+    match callee {
+        Expression::FunctionExpression(function) => function
+            .body
+            .as_ref()
+            .is_some_and(|body| body_holds_only(&body.statements, site)),
+        Expression::ArrowFunctionExpression(arrow) => match &arrow.body {
+            ArrowFunctionBody::FunctionBody(body) => body_holds_only(&body.statements, site),
+            body => body
+                .as_expression()
+                .is_some_and(|expression| holds_only(expression, site)),
+        },
+        _ => false,
+    }
+}
+
+fn holds_only(expression: &Expression<'_>, site: Span) -> bool {
+    if expression.span() == site {
+        return true;
+    }
+    let expression = expression.without_parentheses();
+    if expression.span() == site {
+        return true;
+    }
+    match expression {
+        Expression::UnaryExpression(unary) => {
+            matches!(
+                unary.operator,
+                UnaryOperator::LogicalNot
+                    | UnaryOperator::Void
+                    | UnaryOperator::UnaryNegation
+                    | UnaryOperator::UnaryPlus
+                    | UnaryOperator::BitwiseNot
+            ) && holds_only(&unary.argument, site)
+        }
+        Expression::CallExpression(call) => called_body_holds_only(call, site),
+        _ => false,
+    }
+}
+
+fn statement_holds_only(statement: &Statement<'_>, site: Span, in_function: bool) -> bool {
+    match statement {
+        Statement::ExpressionStatement(statement) => holds_only(&statement.expression, site),
+        Statement::ReturnStatement(statement) if in_function => statement
+            .argument
+            .as_ref()
+            .is_some_and(|argument| holds_only(argument, site)),
+        _ => false,
+    }
+}
+
+fn umd_factory_holds_only(statement: &Statement<'_>, site: Span) -> bool {
+    crate::umd::wrapper::node_factory(statement).is_some_and(|factory| {
+        factory.params.items.is_empty()
+            && factory.params.rest.is_none()
+            && body_holds_only(&factory.body.statements, site)
+    })
+}
+
 pub fn around<'a>(
     alloc: &'a Allocator,
     program: &Program<'a>,
-    site: Span,
+    (site, wrapped): (Span, bool),
     scoping: &Scoping,
 ) -> Option<Around<'a>> {
     let body = &program.body;
     let at = body
         .iter()
         .position(|statement| statement.span().contains_inclusive(site))?;
+    let whole = wrapped
+        || statement_holds_only(&body[at], site, false)
+        || umd_factory_holds_only(&body[at], site);
+    if !whole {
+        let line = line(program.source_text, body[at].span());
+        return Some(Around::Refused(crate::notes::bundle_statement_shared(line)));
+    }
     let kept = |statement: &&Statement<'a>| !matches!(statement, Statement::EmptyStatement(_));
     let before: Vec<&Statement<'a>> = body[..at].iter().filter(kept).collect();
     let after: Vec<&Statement<'a>> = body[at + 1..].iter().filter(kept).collect();
@@ -224,11 +373,12 @@ fn returns_early(program: &Program<'_>) -> bool {
     top.found
 }
 
-fn entry_takes(beside: &Beside<'_>, program: &Program<'_>) -> Result<(), String> {
+fn entry_takes(beside: &Beside<'_>, module: &Module<'_>) -> Result<(), String> {
+    let program = module.program();
     if program.body.iter().any(Statement::is_module_declaration) {
         return Err("the entry module is written as an ES module, whose imports run first".into());
     }
-    if program.has_use_strict_directive() != beside.strict {
+    if written_as_strict(module) != beside.strict {
         return Err("the entry module and that code differ in strictness".into());
     }
     if returns_early(program) {
@@ -266,7 +416,7 @@ pub fn keep_around<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) -> Result<
     let Some(module) = bundle.modules.get_mut(&entry) else {
         return refuse("the bundle has no entry module");
     };
-    if let Err(why) = entry_takes(&beside, module.program()) {
+    if let Err(why) = entry_takes(&beside, module) {
         return refuse(&why);
     }
     let program = module.program_mut();

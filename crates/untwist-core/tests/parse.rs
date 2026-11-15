@@ -1,5 +1,5 @@
 use oxc_allocator::Allocator;
-use untwist_core::parse::{parse_program, strip_bookmarklet};
+use untwist_core::parse::{parse_named_module, parse_program, strip_bookmarklet};
 use untwist_core::semantic::build_scoping;
 
 #[test]
@@ -182,13 +182,30 @@ fn module_syntax_and_top_level_await_still_parse_as_a_module() {
     }
 }
 
+const AWAIT_CALL: &str = "var f = \"outer\";\nfunction t(){ { function f(){ return 1 } } return typeof f; }\nconsole.log(await (async () => t())());";
+
 #[test]
-fn a_top_level_await_call_is_read_as_a_module() {
+fn a_script_that_parses_with_an_await_call_stays_a_script_as_in_node() {
     let alloc = Allocator::default();
-    let source = "var f = \"outer\";\nfunction t(){ { function f(){ return 1 } } return typeof f; }\nconsole.log(await (async () => t())());";
-    let p = parse_program(&alloc, source);
+    let p = parse_program(&alloc, AWAIT_CALL);
+    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+    assert!(!p.source_type.is_module());
+}
+
+#[test]
+fn a_named_module_is_parsed_as_a_module_from_the_start() {
+    let alloc = Allocator::default();
+    let p = parse_named_module(&alloc, AWAIT_CALL);
     assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
     assert!(p.source_type.is_module());
+}
+
+#[test]
+fn a_named_module_that_only_parses_as_a_script_falls_back_to_the_script() {
+    let alloc = Allocator::default();
+    let p = parse_named_module(&alloc, "var await = 1;");
+    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+    assert!(!p.source_type.is_module());
 }
 
 #[test]

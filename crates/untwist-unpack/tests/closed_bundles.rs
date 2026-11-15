@@ -8,6 +8,7 @@ use untwist_unpack::{unpack_inputs, BundleKind, UnpackOptions};
 
 const NOT_CLOSED: &str = "is not closed over its own scope; no bundle is written";
 const BESIDE: &str = "the program runs code beside the bundle";
+const BUNDLE_STATEMENT: &str = "the bundle sits inside a top-level statement";
 const NOT_BROWSERIFY: &str = "is not proven to be browserify's output; no bundle is written";
 const REFUSED_SHAPES: usize = 20_000;
 const LINEAR_FACTOR: u32 = 5;
@@ -109,7 +110,11 @@ struct Outcome {
 
 impl Outcome {
     fn taken(&self, kind: BundleKind) -> bool {
-        self.kind == Some(kind) || self.notes.iter().any(|note| note.starts_with(BESIDE))
+        self.kind == Some(kind)
+            || self
+                .notes
+                .iter()
+                .any(|note| note.starts_with(BESIDE) || note.starts_with(BUNDLE_STATEMENT))
     }
 }
 

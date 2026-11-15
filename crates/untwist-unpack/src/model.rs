@@ -165,6 +165,7 @@ pub struct Bundle<'a> {
     pub chunk_files: Vec<ChunkFile>,
     pub left_requests: Vec<(String, Option<String>)>,
     pub around: Option<crate::beside::Around<'a>>,
+    pub recorded_wrapper: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -200,6 +201,7 @@ impl<'a> Bundle<'a> {
             chunk_files: Vec::new(),
             left_requests: Vec::new(),
             around: None,
+            recorded_wrapper: false,
         }
     }
 

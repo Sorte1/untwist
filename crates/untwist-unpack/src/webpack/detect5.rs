@@ -165,6 +165,7 @@ pub fn detect_webpack5_noted<'a>(
         proving.prove(source, &shape)?;
     }
     let mut bundle = Bundle::new(BundleKind::Webpack, entry_id);
+    bundle.recorded_wrapper = entry.as_ref().is_some_and(|entry| entry.recorded_head);
     if !options.conservative {
         bundle.deferred = deferred;
     }

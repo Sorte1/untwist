@@ -252,8 +252,9 @@ strict code and every written module file is strict (an ES module, or a file tha
 webpack 4 and CommonJS bundles, are kept whole in the safe lane. The unsafe lane assumes no read
 of a function's caller or arguments reaches a bundled module's function and splits them anyway.
 An input is taken as an ES module, as node 22 takes it, when it is named `.mjs` or when its own text
-(before any pass runs) has module syntax: `import`/`export`, `import.meta` or top-level `await`, also
-in code a later pass removes. Any other `.js` input is a script or CommonJS. The module code of a
+(before any pass runs) does not parse as a script but parses as a module: `import`/`export`,
+`import.meta` or a top-level `await x`, also in code a later pass removes. Any other `.js` input is a
+script or CommonJS, also one that parses only by calling a global named `await` (`await (x)`). The module code of a
 bundle in an ES module input is strict, so its written module files get `"use strict"` (or are ES
 modules themselves), and when the passes remove the only module syntax of such an input, its
 output ends with `export {};` so that node still runs it as a module.

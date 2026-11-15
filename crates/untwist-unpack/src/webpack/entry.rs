@@ -40,6 +40,7 @@ pub struct Site<'k, 'a> {
     exports: Vec<(&'k str, Span)>,
     pub returned: Option<(&'k str, Span)>,
     pub unrecorded_head: bool,
+    pub recorded_head: bool,
 }
 
 fn last_expression<'k, 'a>(body: &'k [Statement<'a>]) -> Option<&'k Expression<'a>> {
@@ -328,6 +329,7 @@ pub fn site<'k, 'a>(
     let unrecorded_head = around
         .bootstrap
         .is_some_and(|bootstrap| !recorded_head(source, bootstrap));
+    let recorded_head = around.bootstrap.is_some() && !unrecorded_head;
     let mut declared = FxHashSet::default();
     declared_in(body, &mut declared);
     for top in &around.top {
@@ -344,6 +346,7 @@ pub fn site<'k, 'a>(
         exports,
         returned,
         unrecorded_head,
+        recorded_head,
     })
 }
 

@@ -6,7 +6,9 @@ use oxc_ast::ast::Program;
 use untwist_core::ast_util::respan::reset_synthetic_spans;
 use untwist_core::ast_util::statements::statement_spans;
 use untwist_core::depth::{limits_for, scan};
-use untwist_core::parse::{has_error, parse_program, parse_with, Parsed, SourceType};
+use untwist_core::parse::{
+    has_error, parse_named_module, parse_program, parse_with, Parsed, SourceType,
+};
 use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions, RoundCapUndo};
 use untwist_core::print::pretty_codegen;
 use untwist_core::reflow::{print_placing, Check, GuardRecord, PendingReaders, Printed};
@@ -152,12 +154,25 @@ fn settle(
 }
 
 impl Pipeline {
+    fn module_named(&self, index: usize) -> bool {
+        self.options.module_goal
+            || self
+                .options
+                .input_names
+                .get(index)
+                .is_some_and(|name| name.ends_with(".mjs"))
+    }
+
     pub(super) fn run_input(
         &self,
         index: usize,
         raw: &str,
         reservation: Reservation<'_>,
     ) -> InputResult {
+        let reservation = Reservation {
+            module_named: self.module_named(index),
+            ..reservation
+        };
         let announced = !self.options.isolation.refused.contains(&index);
         if announced {
             self.options.progress(Progress::InputBegins(index));
@@ -184,12 +199,7 @@ impl Pipeline {
         let (peak, hit) = (budget.peak(), untwist_core::budget::hit());
         drop(budget);
         let mut result = processed.unwrap_or_else(|note| InputResult::refused(&source, note));
-        result.module_goal |= self.options.module_goal
-            || self
-                .options
-                .input_names
-                .get(index)
-                .is_some_and(|name| name.ends_with(".mjs"));
+        result.module_goal |= reservation.module_named;
         if !result.refused {
             result.code = kept_module_goal(std::mem::take(&mut result.code), result.module_goal);
         }
@@ -390,9 +400,10 @@ impl Pipeline {
         }
         self.options.progress(Progress::StageBegins("parse"));
         let alloc = Allocator::default();
-        let mut parsed = match first {
-            true => parse_program(&alloc, text),
-            false => parse_with(&alloc, text, SourceType::script()),
+        let mut parsed = match (first, reservation.module_named) {
+            (true, true) => parse_named_module(&alloc, text),
+            (true, false) => parse_program(&alloc, text),
+            (false, _) => parse_with(&alloc, text, SourceType::script()),
         };
         result.module_goal |= first && parsed.program.source_type.is_module();
         let errors = match parse_outcome(text, &parsed, first, result) {
@@ -726,6 +737,7 @@ mod tests {
             stats: &stats,
             limits: untwist_core::budget::Limits::default(),
             shared: None,
+            module_named: false,
         };
         let printed = pipeline
             .process(

@@ -249,6 +249,12 @@ impl<'a> Policy<'a> for Check<'_, '_> {
         }
     }
 
+    fn import_meta(&mut self) {
+        if matches!(self.mode, Mode::Factory { .. }) {
+            self.ok = false;
+        }
+    }
+
     fn with(&mut self) {
         self.ok = false;
     }
