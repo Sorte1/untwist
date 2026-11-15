@@ -1,0 +1,1 @@
+define(["exports", "path"], function (e, p) { "use strict"; console.log("eval", p.sep); e.f = function () {}; e = function () {}; var exports = class {}; console.log(Error.prototype.toString.call(e), Error.prototype.toString.call(exports)); });

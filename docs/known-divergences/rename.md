@@ -305,11 +305,14 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   classic script, not at the top level), or a callback handed to a recognised
   `__commonJSMin`; none of those functions reads its own `arguments`; and in sloppy code no
   `.caller` read exists other than one compared with `==`/`===`. A direct `eval` or `with`
-  anywhere turns it off. Without `--rename` every function keeps its name; the wrapper function
-  itself is renamed only on those terms, since its value never leaves its call sites, so no
-  built-in, host or code text can be handed it to read its `name`. Error stack traces
-  show the new names, and a read through a computed key that is not a literal (`f[key]` that
-  is `caller` at run time) is not seen, as for the rename modes.
+  anywhere turns it off. Without `--rename` no function is renamed, the wrapper function and
+  the interop helpers (`commonjsRequire`, `getDefaultExportFromCjs`, `__commonJSMin`) included:
+  sloppy code can be handed any function through `caller` (`var { caller: c } = w`,
+  `Reflect.get(w, "caller")`, a reader in another input) and read its `name`, so only the flag,
+  holder and parameter bindings get names back there. With `--rename` the wrapper function is
+  renamed on those terms; error stack traces then show the new names, and a read through a
+  computed key that is not a literal (`f[key]` that is `caller` at run time) is not seen, as for
+  the rename modes.
 - **Text-only reads.** Names a function's source shows after renaming (a function stringified
   through a parameter, `[f].join()`, `Reflect.apply(Function.prototype.toString, f, [])`, a
   wrapper inside a named IIFE, a class static block or a stringifying `__commonJS` look-alike)

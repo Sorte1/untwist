@@ -18,6 +18,7 @@ use super::{apply, reflow_recorded_in, Edit, Scan};
 use crate::print::pretty_codegen;
 use lines::{bracketed, site, Placed};
 use targets::located;
+pub(crate) use walk::PLACED;
 use walk::{restore, Event, Placer};
 
 pub type Check<'c> = &'c mut dyn FnMut(&Program<'_>) -> bool;

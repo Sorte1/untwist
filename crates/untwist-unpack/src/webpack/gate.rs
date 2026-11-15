@@ -10,6 +10,7 @@ use crate::webpack::runtime_module::{uses_in, Needs};
 use crate::UnpackOptions;
 
 const BIND: &str = "bind";
+const FUNCTION_METHODS: [&str; 3] = [BIND, "call", "apply"];
 const RUNTIME_NAME: &str = "webpack";
 const RUNTIME_FILE: &str = "webpack.js";
 
@@ -24,10 +25,34 @@ fn claims_runtime(id: &str) -> bool {
             .is_some_and(|path| path.as_str() == runtime_path(BundleKind::Webpack))
 }
 
+fn routed_names(
+    id: &str,
+    names: impl IntoIterator<Item = String>,
+    trust_names: bool,
+) -> Result<Vec<String>, String> {
+    let mut names: Vec<String> = names.into_iter().collect();
+    names.sort_unstable();
+    if trust_names {
+        names.retain(|name| name != BIND);
+        return Ok(names);
+    }
+    match names
+        .iter()
+        .find(|name| FUNCTION_METHODS.contains(&name.as_str()))
+    {
+        Some(name) => Err(require_not_shared(
+            id,
+            format!("require.{name} would hand out node's require, whose name differs"),
+        )),
+        None => Ok(names),
+    }
+}
+
 fn used_names(
     id: &str,
     require: &str,
     factory: &crate::matcher::Factory<'_, '_>,
+    trust_names: bool,
 ) -> Result<Vec<String>, String> {
     let uses = uses_in(require, &factory.body.statements);
     if uses.bare {
@@ -36,9 +61,7 @@ fn used_names(
     if uses.computed {
         return Err(require_not_shared(id, "reaches it through a computed key"));
     }
-    let mut names: Vec<String> = uses.names.into_iter().filter(|name| name != BIND).collect();
-    names.sort_unstable();
-    Ok(names)
+    routed_names(id, uses.names, trust_names)
 }
 
 pub fn unrouted(id: &str, names: &[String], needs: Option<&Needs>) -> Result<(), String> {
@@ -61,8 +84,9 @@ fn shared_use(
     require: &str,
     factory: &crate::matcher::Factory<'_, '_>,
     needs: Option<&Needs>,
+    trust_names: bool,
 ) -> Result<(), String> {
-    unrouted(id, &used_names(id, require, factory)?, needs)
+    unrouted(id, &used_names(id, require, factory, trust_names)?, needs)
 }
 
 pub fn chunk_uses(
@@ -88,7 +112,7 @@ pub fn chunk_uses(
         if !text.contains(require) && !text.contains("\\u") {
             continue;
         }
-        used_names(&id, require, &factory)?;
+        used_names(&id, require, &factory, options.trust_names)?;
     }
     Ok(())
 }
@@ -109,7 +133,10 @@ pub fn module_require<'b>(
     }
 }
 
-pub fn chunk_modules_routed(bundle: &crate::model::Bundle<'_>) -> Result<(), String> {
+pub fn chunk_modules_routed(
+    bundle: &crate::model::Bundle<'_>,
+    trust_names: bool,
+) -> Result<(), String> {
     let needs = bundle.runtime.as_ref().map(Needs::of);
     for id in &bundle.chunk_modules {
         let Some(module) = bundle.modules.get(id) else {
@@ -125,8 +152,7 @@ pub fn chunk_modules_routed(bundle: &crate::model::Bundle<'_>) -> Result<(), Str
                 "passes it on or reaches it through a computed key",
             ));
         }
-        let mut names: Vec<String> = uses.names.into_iter().filter(|name| name != BIND).collect();
-        names.sort_unstable();
+        let names = routed_names(id, uses.names, trust_names)?;
         unrouted(id, &names, needs.as_ref())?;
     }
     Ok(())
@@ -157,7 +183,7 @@ pub fn routable(
         if !text.contains(require) && !text.contains("\\u") {
             continue;
         }
-        shared_use(&id, require, &factory, needs.as_ref())?;
+        shared_use(&id, require, &factory, needs.as_ref(), options.trust_names)?;
     }
     Ok(())
 }

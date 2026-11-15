@@ -31,7 +31,9 @@ const EVERY_FILE: [&str; 13] = [
     "builtin-replaced",
 ];
 const SAMPLED: [(&str, usize); 2] = [("untranspile", 16), ("unpack-bundlers", 1)];
-const UNMAPPED_CEILING: f64 = 0.75;
+const UNMAPPED_CEILING: f64 = 0.15;
+const ANONYMOUS_FLOOR: usize = 3000;
+const ARROW_FLOOR: usize = 800;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Inferred {
@@ -39,9 +41,17 @@ enum Inferred {
     Unknown,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Shape {
+    Arrow(u32),
+    Anonymous,
+    Other,
+}
+
 struct Names<'t> {
     text: &'t str,
     found: FxHashMap<u32, Inferred>,
+    shapes: FxHashMap<u32, Shape>,
 }
 
 fn strip<'e, 'a>(expr: &'e Expression<'a>) -> &'e Expression<'a> {
@@ -109,6 +119,11 @@ impl<'a> Visit<'a> for Names<'_> {
         let name = it.id.as_ref().map_or(Inferred::Name(String::new()), |id| {
             Inferred::Name(id.name.to_string())
         });
+        let shape = match it.id.is_none() && it.is_expression() {
+            true => Shape::Anonymous,
+            false => Shape::Other,
+        };
+        self.shapes.insert(it.span.start, shape);
         if it.id.is_some() {
             self.found.insert(it.span.start, name);
         } else {
@@ -134,6 +149,7 @@ impl<'a> Visit<'a> for Names<'_> {
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.shapes.insert(it.span.start, Shape::Arrow(it.span.end));
         self.record(it.span.start, Inferred::Name(String::new()));
         walk::walk_arrow_function_expression(self, it);
     }
@@ -240,13 +256,56 @@ impl<'a> Visit<'a> for Names<'_> {
     }
 }
 
-fn inferred_names(program: &Program<'_>) -> FxHashMap<u32, Inferred> {
+fn named<'a>(program: &'a Program<'a>) -> Names<'a> {
     let mut names = Names {
         text: program.source_text,
         found: FxHashMap::default(),
+        shapes: FxHashMap::default(),
     };
     names.visit_program(program);
-    names.found
+    names
+}
+
+fn inferred_names(program: &Program<'_>) -> FxHashMap<u32, Inferred> {
+    named(program).found
+}
+
+fn innermost_arrow(shapes: &FxHashMap<u32, Shape>, at: u32) -> Option<u32> {
+    shapes
+        .iter()
+        .filter_map(|(start, shape)| match shape {
+            Shape::Arrow(end) if *start <= at && at < *end => Some((*start, *end - *start)),
+            _ => None,
+        })
+        .min_by_key(|(_, len)| *len)
+        .map(|(start, _)| start)
+}
+
+struct Tokens {
+    starts: Vec<(u32, (u32, u32))>,
+}
+
+impl Tokens {
+    fn of(map: &OwnedSourceMap, output: &str, starts: &[usize]) -> Self {
+        let mut found: Vec<(u32, (u32, u32))> = map
+            .get_tokens()
+            .filter(|token| token.get_source_id().is_some())
+            .filter_map(|token| {
+                let at = offset(output, starts, (token.get_dst_line(), token.get_dst_col()))?;
+                Some((at, (token.get_src_line(), token.get_src_col())))
+            })
+            .collect();
+        found.sort_by_key(|(at, _)| *at);
+        Self { starts: found }
+    }
+
+    fn first_within(&self, start: u32, end: u32) -> Option<(u32, u32)> {
+        let at = self.starts.partition_point(|(offset, _)| *offset < start);
+        self.starts
+            .get(at)
+            .filter(|(offset, _)| *offset < end)
+            .map(|(_, source)| *source)
+    }
 }
 
 fn line_starts(text: &str) -> Vec<usize> {
@@ -279,6 +338,8 @@ fn offset(text: &str, starts: &[usize], (line, column): (u32, u32)) -> Option<u3
 #[derive(Default)]
 struct Tally {
     compared: usize,
+    anonymous: usize,
+    arrows: usize,
     unmapped: usize,
     untokened: usize,
     trees: usize,
@@ -295,24 +356,35 @@ fn differences(
     let in_program = parse_program(&in_alloc, input).program;
     let out_alloc = Allocator::default();
     let out_program = parse_program(&out_alloc, output).program;
-    let before = inferred_names(&in_program);
-    let after = inferred_names(&out_program);
+    let before = named(&in_program);
+    let after = named(&out_program);
     let (in_starts, out_starts) = (line_starts(input), line_starts(output));
     let table = map.generate_lookup_table();
+    let tokens = Tokens::of(map, output, &out_starts);
     let mut wrong = Vec::new();
-    for (start, name) in &after {
+    for (start, name) in &after.found {
         let (line, column) = position(output, &out_starts, *start as usize);
-        let source = map
+        let shape = after.shapes.get(start).copied().unwrap_or(Shape::Other);
+        let exact = map
             .lookup_token(&table, line, column)
             .filter(|token| (token.get_dst_line(), token.get_dst_col()) == (line, column))
             .map(|token| (token.get_src_line(), token.get_src_col()));
-        let Some(source) = source else {
-            tally.untokened += 1;
+        let original = exact.and_then(|source| offset(input, &in_starts, source));
+        let original = match (original, shape) {
+            (Some(at), _) if before.found.contains_key(&at) => Some(at),
+            (_, Shape::Arrow(end)) => tokens
+                .first_within(*start, end)
+                .and_then(|source| offset(input, &in_starts, source))
+                .and_then(|at| innermost_arrow(&before.shapes, at)),
+            (original, _) => original,
+        };
+        let Some(original) = original else {
+            tally.untokened += usize::from(exact.is_none());
             tally.unmapped += 1;
             continue;
         };
-        let was = offset(input, &in_starts, source).and_then(|original| before.get(&original));
-        let Some(was) = was else {
+        let source = position(input, &in_starts, original as usize);
+        let Some(was) = before.found.get(&original) else {
             tally.unmapped += 1;
             continue;
         };
@@ -320,6 +392,11 @@ fn differences(
             continue;
         }
         tally.compared += 1;
+        match shape {
+            Shape::Arrow(_) => tally.arrows += 1,
+            Shape::Anonymous => tally.anonymous += 1,
+            Shape::Other => {}
+        }
         if was == name {
             continue;
         }
@@ -460,9 +537,11 @@ fn every_function_keeps_its_inferred_name_in_the_default_lane_and_where_rename_p
         let seen = tally.compared + tally.unmapped;
         let share = tally.unmapped as f64 / seen.max(1) as f64;
         report.push(format!(
-            "{}: compared {}, unmapped output functions {} ({:.1} %, {} with no token at their start), trees {}, outputs without a map {}",
+            "{}: compared {} ({} anonymous function expressions, {} arrows), unmapped output functions {} ({:.1} %, {} with no token at their start), trees {}, outputs without a map {}",
             lane.name,
             tally.compared,
+            tally.anonymous,
+            tally.arrows,
             tally.unmapped,
             share * 100.0,
             tally.untokened,
@@ -471,6 +550,8 @@ fn every_function_keeps_its_inferred_name_in_the_default_lane_and_where_rename_p
         ));
         assert!(tally.compared > 2000, "{}", report.join("\n"));
         assert!(share < UNMAPPED_CEILING, "{}", report.join("\n"));
+        assert!(tally.anonymous > ANONYMOUS_FLOOR, "{}", report.join("\n"));
+        assert!(tally.arrows > ARROW_FLOOR, "{}", report.join("\n"));
         assert!(lane.renames || tally.trees > 0, "{}", report.join("\n"));
     }
     eprintln!("{}", report.join("\n"));
@@ -487,6 +568,27 @@ fn the_check_sees_a_renamed_function() {
     assert_eq!(tally.compared, 1);
     assert_eq!(wrong.len(), 1, "{wrong:?}");
     assert!(wrong[0].contains("\"f\""), "{wrong:?}");
+}
+
+#[test]
+fn the_check_compares_anonymous_function_expressions_and_arrows_through_the_map() {
+    let input = "var o = { p: function () {} };\nvar f = function () {}, g = (a, b) => a, h = () => 1;\nx(function () {});\n";
+    let options = Options {
+        source_map: true,
+        ..Options::default()
+    };
+    let output = Pipeline::new(options).run(input);
+    let map = output
+        .source_maps
+        .first()
+        .cloned()
+        .flatten()
+        .expect("a map");
+    let mut tally = Tally::default();
+    let wrong = differences("probe", (input, output.code()), &map, &mut tally);
+    assert!(wrong.is_empty(), "{wrong:?}");
+    assert_eq!((tally.anonymous, tally.arrows), (3, 2), "{}", output.code());
+    assert_eq!(tally.unmapped, 0, "{}", output.code());
 }
 
 const MODEL_ROWS: [&str; 14] = [

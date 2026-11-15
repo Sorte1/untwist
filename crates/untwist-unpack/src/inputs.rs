@@ -149,7 +149,7 @@ fn chunks_checked(
     {
         return Err(notes::chunk_framed(file.ids.join(", ")));
     }
-    crate::webpack::gate::chunk_modules_routed(bundle)?;
+    crate::webpack::gate::chunk_modules_routed(bundle, options.trust_names)?;
     crate::webpack::loads::chunks_supplied(bundle)
 }
 

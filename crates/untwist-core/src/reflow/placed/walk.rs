@@ -15,7 +15,7 @@ use crate::guard_shape::{holder_read_target, may_be_a_guard, read_target};
 use crate::print::{function_text, pretty_function_text};
 
 pub(super) const MARKER: &str = "\u{E000}";
-const PLACED: Span = Span::new(u32::MAX, u32::MAX);
+pub(crate) const PLACED: Span = Span::new(u32::MAX, u32::MAX);
 
 pub(super) struct Shape {
     pub(super) count: usize,

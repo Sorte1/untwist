@@ -9,6 +9,7 @@ fn modules(source: &str, conservative: bool) -> Vec<(String, String)> {
     let program = prepared(&alloc, source);
     let options = UnpackOptions {
         conservative,
+        trust_names: true,
         ..UnpackOptions::default()
     };
     let mut bundle = unpack_program_with(&alloc, &program, options).expect("a bundle");

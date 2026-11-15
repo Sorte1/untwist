@@ -1,0 +1,1 @@
+define(["module", "path"], function (m, p) { "use strict"; var module = function () {}; var path = () => 1; var require = class {}; m.exports = { a: module, b: path, c: require, d: function () {} }; });

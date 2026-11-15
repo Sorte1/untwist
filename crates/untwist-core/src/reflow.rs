@@ -15,6 +15,7 @@ mod rounds;
 use crate::guard_shape::{holder_read_target, may_be_a_guard};
 use guards::{splice_guards, Guard};
 pub use guards::{GuardRecord, GuardTally};
+pub(crate) use placed::PLACED;
 #[cfg(feature = "test-hooks")]
 pub use placed::{flip_bundle_answer_for_tests, misplace_an_edit_for_tests};
 pub use placed::{print_placing, Check, Printed};

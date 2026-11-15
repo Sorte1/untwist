@@ -36,13 +36,20 @@ fn printed(source: &str) -> String {
 }
 
 fn unpacked(files: &[(String, String)]) -> Result<Outcome, Vec<String>> {
+    unpacked_with(files, UnpackOptions::default())
+}
+
+fn unpacked_with(
+    files: &[(String, String)],
+    options: UnpackOptions,
+) -> Result<Outcome, Vec<String>> {
     let alloc = Allocator::default();
     let texts: Vec<String> = files.iter().map(|(_, source)| printed(source)).collect();
     let mut programs: Vec<Program<'_>> = texts
         .iter()
         .map(|source| parse_program(&alloc, source).program)
         .collect();
-    let (bundle, notes) = unpack_inputs(&alloc, &mut programs, &[], UnpackOptions::default());
+    let (bundle, notes) = unpack_inputs(&alloc, &mut programs, &[], options);
     let Some(bundle) = bundle else {
         return Err(notes.into_iter().map(|note| note.message).collect());
     };
@@ -188,8 +195,22 @@ fn chunks_are_not_written_alone_when_their_runtime_was_refused() {
 
 #[test]
 fn a_webpack4_split_bundle_starts_its_deferred_entry() {
-    let outcome = unpacked(&cell("w4-web-split")).unwrap_or_else(|notes| panic!("{notes:?}"));
+    let trusting = UnpackOptions {
+        trust_names: true,
+        ..UnpackOptions::default()
+    };
+    let outcome =
+        unpacked_with(&cell("w4-web-split"), trusting).unwrap_or_else(|notes| panic!("{notes:?}"));
     assert!(module(&outcome, "3").is_some());
+}
+
+#[test]
+fn a_webpack4_split_bundle_whose_chunks_bind_require_is_refused_where_names_are_kept() {
+    let notes = unpacked(&cell("w4-web-split")).err().expect("refused");
+    assert!(
+        notes.iter().any(|note| note.contains("require.bind")),
+        "{notes:?}"
+    );
 }
 
 #[test]
