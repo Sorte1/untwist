@@ -216,11 +216,11 @@ fn a_typed_module_tree_never_holds_typescript_in_a_js_file() {
         return;
     };
     let mut failures = Vec::new();
-    for name in ["wp8.js", "wp11.js", "wp12.js"] {
+    for (name, splits) in [("wp8.js", false), ("wp11.js", true), ("wp12.js", true)] {
         let source = a40r(name);
         let expected = node_run(&node, tempfile::tempdir().unwrap().path(), name, &source);
         let output = Pipeline::new(unpacked(TypesMode::Ts)).run(&source);
-        assert!(output.bundle.is_some(), "{name} unpacks");
+        assert_eq!(output.bundle.is_some(), splits, "{name}");
         let (dir, files) = written(&output);
         failures.extend(checks_as_javascript(&node, &files));
         let entry = files
