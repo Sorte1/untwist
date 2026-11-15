@@ -73,12 +73,23 @@ fn plus(a: &Ty, b: &Ty) -> Val {
     Val::Known(numeric(a, b))
 }
 
+fn primitive(val: &Val) -> bool {
+    match val {
+        Val::Known(ty) => ty.promise_free(),
+        Val::Bottom => true,
+        Val::Top => false,
+    }
+}
+
 pub fn binary_result(operator: BinaryOperator, left: &Val, right: &Val) -> Val {
     if operator.is_equality()
         || operator.is_compare()
         || matches!(operator, BinaryOperator::In | BinaryOperator::Instanceof)
     {
         return Val::Known(Ty::boolean());
+    }
+    if !primitive(left) || !primitive(right) {
+        return Val::Top;
     }
     if operator == BinaryOperator::ShiftRightZeroFill {
         return strict2(left, right, |_, _| Val::Known(Ty::number()));
@@ -301,13 +312,14 @@ impl<'f, 'a> Env<'f, 'a> {
             UnaryOperator::Void => Val::Known(Ty::undefined()),
             UnaryOperator::UnaryPlus => match self.eval(&unary.argument) {
                 Val::Bottom => Val::Bottom,
-                _ => Val::Known(Ty::number()),
+                held if primitive(&held) => Val::Known(Ty::number()),
+                _ => Val::Top,
             },
             UnaryOperator::UnaryNegation | UnaryOperator::BitwiseNot => {
                 match self.eval(&unary.argument) {
                     Val::Bottom => Val::Bottom,
-                    Val::Known(ty) => Val::Known(numeric_one(&ty)),
-                    Val::Top => Val::Known(Ty::number().join(&Ty::bigint())),
+                    Val::Known(ty) if ty.promise_free() => Val::Known(numeric_one(&ty)),
+                    _ => Val::Top,
                 }
             }
         }
@@ -339,9 +351,9 @@ impl<'f, 'a> Env<'f, 'a> {
             _ => Val::Top,
         };
         match held {
-            Val::Known(ty) => Val::Known(numeric_one(&ty)),
+            Val::Known(ty) if ty.promise_free() => Val::Known(numeric_one(&ty)),
             Val::Bottom => Val::Bottom,
-            Val::Top => Val::Known(Ty::number().join(&Ty::bigint())),
+            _ => Val::Top,
         }
     }
 

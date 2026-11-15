@@ -6,6 +6,7 @@ mod erase;
 mod facts;
 mod infer;
 mod instrument;
+mod operands;
 mod realm;
 mod specifiers;
 mod stats;
@@ -53,6 +54,7 @@ pub enum Refusal {
     Hazard(&'static str),
     Erasure,
     CommonJs,
+    ObjectArithmetic,
 }
 
 impl Refusal {
@@ -63,6 +65,7 @@ impl Refusal {
             Refusal::Hazard(_) => "a file has a with statement, which can reach every binding, so it was left untyped",
             Refusal::Erasure => "a file reads differently as TypeScript, so it was left untyped and keeps its .js name",
             Refusal::CommonJs => "a CommonJS file keeps its .js name, so --types ts leaves it untyped (--types jsdoc types it)",
+            Refusal::ObjectArithmetic => "a file applies an arithmetic operator to an object, which the TypeScript checker reports differently once types are written, so it was left untyped",
         }
     }
 }
@@ -273,6 +276,12 @@ fn analyse(
     };
     if has_with(&prepared.scoping) {
         return Err((Refusal::Hazard("with statement"), jsx));
+    }
+    let writing = !matches!(purpose, Purpose::Instrument);
+    if writing
+        && operands::has_object_arithmetic(prepared.program, &prepared.scoping, &prepared.nodes)
+    {
+        return Err((Refusal::ObjectArithmetic, jsx));
     }
     let annotating = matches!(purpose, Purpose::Annotate) && mode == Mode::Ts;
     if annotating && is_commonjs(&prepared.scoping) {

@@ -23,6 +23,8 @@ const NODE_PROBES: &[&str] = &[
     "a40r/ev8.js",
     "a40r/fi1.js",
     "a40r/t8b.js",
+    "a40r5/u1.mjs",
+    "a40r5/s11.mjs",
 ];
 
 fn probe(name: &str) -> String {

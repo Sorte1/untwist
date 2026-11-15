@@ -370,7 +370,10 @@ that no code in the realm patches a built-in or reaches a frame, which this vers
 A direct `eval` (also through a local binding named `eval`) leaves untyped every binding it can
 reach, and in sloppy code it also turns off the types that rest on global names it could shadow
 (`undefined`, `NaN`, `Infinity`); a constant-string `eval` that only reads leaves out only the
-names it reads. A `with` statement leaves the file untyped. Script-level `var`s, exported
+names it reads. A `with` statement leaves the file untyped, and so does an arithmetic, bitwise or unary
+numeric operator applied to an object (the TypeScript checker reports such operands differently
+once any type is written); an operator result is typed only when every operand is a proven
+primitive. Script-level `var`s, exported
 bindings, objects, arrays, classes and the DOM get no types.
 
 Every proven type is written, also when TypeScript would infer it anyway, unless writing it would
