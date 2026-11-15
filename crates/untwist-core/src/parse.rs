@@ -10,7 +10,10 @@ use oxc_diagnostics::{OxcDiagnostic, Severity};
 use oxc_parser::{ParseOptions, Parser};
 pub use oxc_span::SourceType;
 
+mod early;
 mod unnamed;
+mod wrapper_names;
+pub use early::early_errors;
 use oxc_syntax::scope::ScopeFlags;
 
 pub struct Parsed<'a> {
@@ -23,13 +26,19 @@ pub fn script_source_type() -> SourceType {
     SourceType::cjs().with_jsx(true)
 }
 
+fn module_source_type() -> SourceType {
+    SourceType::mjs().with_jsx(true)
+}
+
 pub fn parse_program<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
     let as_script = parse_with(alloc, source, script_source_type());
     if !has_error(&as_script.diagnostics) {
-        return as_script;
+        return match wrapper_names::lexical_wrapper_name(&as_script.program) {
+            Some(name) => wrapper_goal(alloc, source, as_script, &name),
+            None => as_script,
+        };
     }
-    let (mut as_module, module_syntax) =
-        parse_recording(alloc, source, SourceType::mjs().with_jsx(true));
+    let (mut as_module, module_syntax) = parse_recording(alloc, source, module_source_type());
     if !has_error(&as_module.diagnostics) {
         if !module_syntax && !has_top_level_await(&as_module.program) {
             as_module.source_type = script_source_type();
@@ -44,12 +53,26 @@ pub fn parse_program<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
     }
 }
 
-pub fn parse_named_module<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
-    let as_module = parse_with(alloc, source, SourceType::mjs().with_jsx(true));
-    match has_error(&as_module.diagnostics) {
-        true => parse_program(alloc, source),
-        false => as_module,
+fn wrapper_goal<'a>(
+    alloc: &'a Allocator,
+    source: &'a str,
+    mut as_script: Parsed<'a>,
+    name: &str,
+) -> Parsed<'a> {
+    let as_module = parse_with(alloc, source, module_source_type());
+    if !has_error(&as_module.diagnostics) {
+        return as_module;
     }
+    as_script.diagnostics.push(OxcDiagnostic::error(format!(
+        "Identifier '{name}' has already been declared: node runs this file in its CommonJS \
+         wrapper, whose parameter {name} the top-level declaration redeclares, and the file does \
+         not parse as an ES module either"
+    )));
+    as_script
+}
+
+pub fn parse_named_module<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
+    parse_with(alloc, source, module_source_type())
 }
 
 pub fn parse_with<'a>(
@@ -66,7 +89,7 @@ fn parse_recording<'a>(
     source_type: SourceType,
 ) -> (Parsed<'a>, bool) {
     let options = ParseOptions {
-        allow_return_outside_function: true,
+        allow_return_outside_function: !source_type.is_module(),
         preserve_parens: false,
         ..ParseOptions::default()
     };

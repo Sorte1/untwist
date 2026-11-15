@@ -6,14 +6,7 @@ use untwist_testing::node::{node, run, skip_allowed, SKIP_MESSAGE};
 const BUN_PREMISE: &str =
     "a Bun @bun-cjs file is read as Bun runs it; node only evaluates the wrapper expression";
 
-const EARLY_ERROR: &str =
-    "node rejects the input with an early SyntaxError (a legacy octal literal in strict code); untwist reads it";
-
-const PREMISES: [(&str, &str); 3] = [
-    ("unpack-a37rr3/bun1.js --unsafe", BUN_PREMISE),
-    ("unpack-a37rr3/n8.js", EARLY_ERROR),
-    ("unpack-a37rr3/n8.js --unsafe", EARLY_ERROR),
-];
+const PREMISES: [(&str, &str); 1] = [("unpack-a37rr3/bun1.js --unsafe", BUN_PREMISE)];
 
 const SPLITS: [&str; 6] = [
     "unpack-a37rr3/n15.js",

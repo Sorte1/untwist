@@ -13,6 +13,7 @@ pub use super::refusal::OVER_MEMORY_REFUSED;
 pub use super::refusal::OVER_TIME_REFUSED;
 pub use super::refusal::PARENTHESES_TOO_DEEP;
 pub use super::refusal::PRINT_TOO_LARGE;
+pub use super::refusal::SYNTAX_ERROR_REFUSED;
 pub use super::refusal::TOO_LARGE_FOR_THE_BUDGET;
 pub use super::refusal::TYPESCRIPT_IN_JAVASCRIPT;
 pub use super::refusal::UNPACK_TEXT_TOO_DEEP;
@@ -132,6 +133,7 @@ catalogue!(
     PRINT_TOO_LARGE,
     UNPACK_TEXT_TOO_DEEP,
     TYPESCRIPT_IN_JAVASCRIPT,
+    SYNTAX_ERROR_REFUSED,
     WORKER_DIED,
     OVER_MEMORY_REFUSED,
     OVER_TIME_REFUSED,

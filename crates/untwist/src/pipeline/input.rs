@@ -7,7 +7,7 @@ use untwist_core::ast_util::respan::reset_synthetic_spans;
 use untwist_core::ast_util::statements::statement_spans;
 use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{
-    has_error, parse_named_module, parse_program, parse_with, Parsed, SourceType,
+    early_errors, has_error, parse_named_module, parse_program, parse_with, Parsed, SourceType,
 };
 use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions, RoundCapUndo};
 use untwist_core::print::pretty_codegen;
@@ -261,6 +261,7 @@ impl Pipeline {
             Some(Ok(code))
         }));
         let outcome = match outcome {
+            Ok(None) if result.parse_errors > 0 => return result.refused_for_syntax(source),
             Ok(None) => return InputResult::refused(source, TYPESCRIPT_IN_JAVASCRIPT),
             Ok(Some(Err(note))) => return InputResult::refused(source, note),
             Ok(Some(Ok(code))) => Ok(code),
@@ -576,19 +577,30 @@ fn parse_outcome(
     first: bool,
     result: &mut InputResult,
 ) -> Result<usize, Step> {
+    let parse_failed = has_error(&parsed.diagnostics);
     if !first {
-        return match has_error(&parsed.diagnostics) {
+        return match parse_failed || !early_errors(&parsed.program).is_empty() {
             true => Err(Step::Kept(Refusal::Unparsable)),
             false => Ok(0),
         };
     }
-    let (diagnostics, errors) = summarize_diagnostics(text, &parsed.diagnostics);
-    if errors > 0 && holds_type_space(&parsed.program) {
+    if parse_failed && holds_type_space(&parsed.program) {
         return Err(Step::Done(None));
     }
+    let early = match parse_failed {
+        true => Vec::new(),
+        false => early_errors(&parsed.program),
+    };
+    let (mut diagnostics, errors) = summarize_diagnostics(text, &parsed.diagnostics);
+    let (early_diagnostics, early_count) = summarize_diagnostics(text, &early);
+    diagnostics.extend(early_diagnostics);
+    let errors = errors + early_count;
     result.parse_diagnostics = diagnostics;
     result.parse_errors = u32::try_from(errors).unwrap_or(u32::MAX);
-    Ok(errors)
+    match errors {
+        0 => Ok(0),
+        _ => Err(Step::Done(None)),
+    }
 }
 
 enum Staged {

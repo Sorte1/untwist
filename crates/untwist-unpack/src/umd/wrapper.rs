@@ -11,16 +11,22 @@ use crate::matcher::{
 
 const RESERVED_PARAMS: [&str; 4] = ["define", "exports", "module", "require"];
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Define {
+    Absent,
+    Unknown,
+}
+
 pub struct Umd<'k, 'a> {
     pub callback: Callback<'k, 'a>,
     pub pairs: Vec<Dependency>,
     pub returns: Returns,
 }
 
-fn typeof_of(expr: &Expression<'_>) -> Option<&'static str> {
+fn typeof_of(expr: &Expression<'_>, define: Define) -> Option<&'static str> {
     match expr.without_parentheses() {
         Expression::Identifier(id) => match id.name.as_str() {
-            "define" => Some("undefined"),
+            "define" if define == Define::Absent => Some("undefined"),
             "exports" | "module" => Some("object"),
             _ => None,
         },
@@ -33,7 +39,7 @@ fn typeof_of(expr: &Expression<'_>) -> Option<&'static str> {
     }
 }
 
-fn compared(binary: &BinaryExpression<'_>) -> Option<bool> {
+fn compared(binary: &BinaryExpression<'_>, define: Define) -> Option<bool> {
     let equal = match binary.operator {
         BinaryOperator::StrictEquality | BinaryOperator::Equality => true,
         BinaryOperator::StrictInequality | BinaryOperator::Inequality => false,
@@ -49,20 +55,20 @@ fn compared(binary: &BinaryExpression<'_>) -> Option<bool> {
     if probe.operator != UnaryOperator::Typeof {
         return None;
     }
-    Some((literal.value == typeof_of(&probe.argument)?) == equal)
+    Some((literal.value == typeof_of(&probe.argument, define)?) == equal)
 }
 
-fn truth(expr: &Expression<'_>) -> Option<bool> {
+fn truth(expr: &Expression<'_>, define: Define) -> Option<bool> {
     match expr.without_parentheses() {
         Expression::BooleanLiteral(literal) => Some(literal.value),
         Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::LogicalNot => {
-            truth(&unary.argument).map(|value| !value)
+            truth(&unary.argument, define).map(|value| !value)
         }
-        Expression::BinaryExpression(binary) => compared(binary),
+        Expression::BinaryExpression(binary) => compared(binary, define),
         Expression::LogicalExpression(logical) => match logical.operator {
-            LogicalOperator::And if !truth(&logical.left)? => Some(false),
-            LogicalOperator::Or if truth(&logical.left)? => Some(true),
-            LogicalOperator::And | LogicalOperator::Or => truth(&logical.right),
+            LogicalOperator::And if !truth(&logical.left, define)? => Some(false),
+            LogicalOperator::Or if truth(&logical.left, define)? => Some(true),
+            LogicalOperator::And | LogicalOperator::Or => truth(&logical.right, define),
             LogicalOperator::Coalesce => None,
         },
         Expression::Identifier(id) => match id.name.as_str() {
@@ -78,36 +84,43 @@ fn truth(expr: &Expression<'_>) -> Option<bool> {
     }
 }
 
-fn reach_expression<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k Expression<'a>> {
+fn reach_expression<'k, 'a>(
+    expr: &'k Expression<'a>,
+    define: Define,
+) -> Option<&'k Expression<'a>> {
     match expr.without_parentheses() {
         Expression::ConditionalExpression(conditional) => {
-            let branch = if truth(&conditional.test)? {
+            let branch = if truth(&conditional.test, define)? {
                 &conditional.consequent
             } else {
                 &conditional.alternate
             };
-            reach_expression(branch)
+            reach_expression(branch, define)
         }
         Expression::LogicalExpression(logical) if logical.operator == LogicalOperator::And => {
-            truth(&logical.left)?
+            truth(&logical.left, define)?
                 .then_some(&logical.right)
-                .and_then(reach_expression)
+                .and_then(|right| reach_expression(right, define))
         }
         Expression::LogicalExpression(logical) if logical.operator == LogicalOperator::Or => {
-            (!truth(&logical.left)?)
+            (!truth(&logical.left, define)?)
                 .then_some(&logical.right)
-                .and_then(reach_expression)
+                .and_then(|right| reach_expression(right, define))
         }
         other => Some(other),
     }
 }
 
-fn reach<'k, 'a>(statement: &'k Statement<'a>) -> Option<&'k Expression<'a>> {
+fn reach<'k, 'a>(statement: &'k Statement<'a>, define: Define) -> Option<&'k Expression<'a>> {
     match statement {
-        Statement::IfStatement(branch) if truth(&branch.test)? => reach(&branch.consequent),
-        Statement::IfStatement(branch) => reach(branch.alternate.as_ref()?),
-        Statement::BlockStatement(block) if block.body.len() == 1 => reach(&block.body[0]),
-        Statement::ExpressionStatement(statement) => reach_expression(&statement.expression),
+        Statement::IfStatement(branch) if truth(&branch.test, define)? => {
+            reach(&branch.consequent, define)
+        }
+        Statement::IfStatement(branch) => reach(branch.alternate.as_ref()?, define),
+        Statement::BlockStatement(block) if block.body.len() == 1 => reach(&block.body[0], define),
+        Statement::ExpressionStatement(statement) => {
+            reach_expression(&statement.expression, define)
+        }
         _ => None,
     }
 }
@@ -211,6 +224,15 @@ fn inert_root(expr: &Expression<'_>) -> bool {
     }
 }
 
+fn bare_names<'a>(params: &FormalParameters<'a>) -> Option<Vec<&'a str>> {
+    let names = crate::matcher::param_names(params);
+    let bare = params.rest.is_none()
+        && names.len() == params.items.len()
+        && params.items.iter().all(|item| item.initializer.is_none())
+        && distinct(&names);
+    bare.then_some(names)
+}
+
 pub fn plain_wrapper(frame: &Frame<'_, '_>) -> bool {
     let Some(Statement::ExpressionStatement(statement)) = frame.top.first() else {
         return false;
@@ -226,8 +248,7 @@ pub fn plain_wrapper(frame: &Frame<'_, '_>) -> bool {
         Expression::ArrowFunctionExpression(arrow) => (!arrow.r#async, &arrow.params),
         _ => return false,
     };
-    let names = crate::matcher::param_names(params);
-    plain && names.len() == params.items.len() && distinct(&names)
+    plain && bare_names(params).is_some()
 }
 
 pub fn parts<'k, 'a>(frame: &Frame<'k, 'a>) -> Option<Umd<'k, 'a>> {
@@ -263,19 +284,18 @@ pub fn parts<'k, 'a>(frame: &Frame<'k, 'a>) -> Option<Umd<'k, 'a>> {
     }
     let callback = callback(argument.as_expression()?)?;
     let params = wrapper.function.params;
-    if params.rest.is_some() || params.items.len() < wrapper.arguments.len().min(position + 1) {
+    if params.items.len() < wrapper.arguments.len().min(position + 1) {
         return None;
     }
-    let names = crate::matcher::param_names(params);
-    if names.len() != params.items.len() || names.iter().any(|name| RESERVED_PARAMS.contains(name))
-    {
+    let names = bare_names(params)?;
+    if names.iter().any(|name| RESERVED_PARAMS.contains(name)) {
         return None;
     }
     let factory = *names.get(position)?;
     let [only] = wrapper.body() else {
         return None;
     };
-    let (returns, call) = invocation(reach(only)?, factory)?;
+    let (returns, call) = invocation(reach(only, Define::Absent)?, factory)?;
     let dependencies: Vec<String> = call
         .arguments
         .iter()
@@ -303,11 +323,8 @@ pub fn node_factory<'k, 'a>(statement: &'k Statement<'a>) -> Option<Callback<'k,
     if call.optional || function.r#async || function.generator {
         return None;
     }
-    let names = crate::matcher::param_names(&function.params);
-    let plain = names.len() == function.params.items.len()
-        && function.params.rest.is_none()
-        && distinct(&names)
-        && !names.iter().any(|name| RESERVED_PARAMS.contains(name));
+    let names = bare_names(&function.params)?;
+    let plain = !names.iter().any(|name| RESERVED_PARAMS.contains(name));
     let mut functions = call.arguments.iter().enumerate().filter(|(_, argument)| {
         argument_expression(argument).is_some_and(|expression| callback(expression).is_some())
     });
@@ -321,7 +338,7 @@ pub fn node_factory<'k, 'a>(statement: &'k Statement<'a>) -> Option<Callback<'k,
         return None;
     };
     let factory = *names.get(position)?;
-    let (returns, invoked) = invocation(reach(only)?, factory)?;
+    let (returns, invoked) = invocation(reach(only, Define::Unknown)?, factory)?;
     let assigned = matches!(returns, Returns::Assigned) && invoked.arguments.is_empty();
     (plain && roots_inert && assigned)
         .then(|| callback(argument_expression(argument)?))

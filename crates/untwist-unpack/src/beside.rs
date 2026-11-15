@@ -195,15 +195,14 @@ fn refused(program: &Program<'_>, statement: &Statement<'_>, why: &str) -> Strin
 }
 
 fn inert(argument: &Argument<'_>) -> bool {
-    match argument {
+    matches!(
+        argument,
         Argument::ThisExpression(_)
-        | Argument::StringLiteral(_)
-        | Argument::NumericLiteral(_)
-        | Argument::BooleanLiteral(_)
-        | Argument::NullLiteral(_) => true,
-        Argument::Identifier(id) => matches!(id.name.as_str(), "undefined" | "globalThis"),
-        _ => false,
-    }
+            | Argument::StringLiteral(_)
+            | Argument::NumericLiteral(_)
+            | Argument::BooleanLiteral(_)
+            | Argument::NullLiteral(_)
+    )
 }
 
 fn spanned(statements: &[Statement<'_>]) -> Option<Span> {
@@ -224,29 +223,45 @@ fn body_holds_only(statements: &[Statement<'_>], site: Span) -> bool {
     }
 }
 
+fn bare(params: &FormalParameters<'_>) -> bool {
+    params.items.is_empty() && params.rest.is_none()
+}
+
 fn called_body_holds_only(call: &CallExpression<'_>, site: Span) -> bool {
     if call.optional || !call.arguments.iter().all(inert) {
         return false;
     }
     let callee = match call.callee.without_parentheses() {
-        Expression::StaticMemberExpression(member)
-            if !member.optional && matches!(member.property.name.as_str(), "call" | "apply") =>
-        {
-            member.object.without_parentheses()
+        Expression::StaticMemberExpression(member) if !member.optional => {
+            let called = match member.property.name.as_str() {
+                "call" => true,
+                "apply" => call.arguments.len() <= 1,
+                _ => false,
+            };
+            match called {
+                true => member.object.without_parentheses(),
+                false => return false,
+            }
         }
+        Expression::StaticMemberExpression(_) => return false,
         callee => callee,
     };
     match callee {
-        Expression::FunctionExpression(function) => function
-            .body
-            .as_ref()
-            .is_some_and(|body| body_holds_only(&body.statements, site)),
-        Expression::ArrowFunctionExpression(arrow) => match &arrow.body {
-            ArrowFunctionBody::FunctionBody(body) => body_holds_only(&body.statements, site),
-            body => body
-                .as_expression()
-                .is_some_and(|expression| holds_only(expression, site)),
-        },
+        Expression::FunctionExpression(function) if !function.r#async && !function.generator => {
+            bare(&function.params)
+                && function
+                    .body
+                    .as_ref()
+                    .is_some_and(|body| body_holds_only(&body.statements, site))
+        }
+        Expression::ArrowFunctionExpression(arrow) if !arrow.r#async && bare(&arrow.params) => {
+            match &arrow.body {
+                ArrowFunctionBody::FunctionBody(body) => body_holds_only(&body.statements, site),
+                body => body
+                    .as_expression()
+                    .is_some_and(|expression| holds_only(expression, site)),
+            }
+        }
         _ => false,
     }
 }
@@ -263,11 +278,7 @@ fn holds_only(expression: &Expression<'_>, site: Span) -> bool {
         Expression::UnaryExpression(unary) => {
             matches!(
                 unary.operator,
-                UnaryOperator::LogicalNot
-                    | UnaryOperator::Void
-                    | UnaryOperator::UnaryNegation
-                    | UnaryOperator::UnaryPlus
-                    | UnaryOperator::BitwiseNot
+                UnaryOperator::LogicalNot | UnaryOperator::Void
             ) && holds_only(&unary.argument, site)
         }
         Expression::CallExpression(call) => called_body_holds_only(call, site),

@@ -1,7 +1,7 @@
 use untwist::{
     Isolation, Options, Output, Pipeline, TestHooks, NESTED_TOO_DEEP, PARENTHESES_TOO_DEEP,
-    PIPELINE_NOTES, PRINT_TOO_LARGE, TYPESCRIPT_IN_JAVASCRIPT, UNPACK_PANICKED,
-    UNPACK_TEXT_TOO_DEEP, WORKER_DIED,
+    PIPELINE_NOTES, PRINT_TOO_LARGE, SYNTAX_ERROR_REFUSED, TYPESCRIPT_IN_JAVASCRIPT,
+    UNPACK_PANICKED, UNPACK_TEXT_TOO_DEEP, WORKER_DIED,
 };
 
 const TYPESCRIPT: &str = "import x = require('y');\n";
@@ -128,9 +128,10 @@ fn a_type_node_past_the_scan_is_refused_after_the_parse() {
     assert_refused_alone(&output, source, TYPESCRIPT_IN_JAVASCRIPT);
 }
 
-fn assert_parse_failed(output: &Output) {
+fn assert_parse_failed(output: &Output, source: &str) {
     assert!(output.parse_errors > 0);
-    assert!(output.depth_refused.is_empty());
+    assert_eq!(output.depth_refusals(), [(0, SYNTAX_ERROR_REFUSED)]);
+    assert_eq!(output.code(), source);
     assert!(output.panicked.is_empty());
 }
 
@@ -145,7 +146,7 @@ fn a_default_interface_in_javascript_fails_the_parse_without_the_scan() {
         ..Options::default()
     })
     .run(source);
-    assert_parse_failed(&output);
+    assert_parse_failed(&output, source);
 }
 
 #[test]
@@ -153,7 +154,7 @@ fn a_default_interface_in_a_block_fails_the_parse() {
     let source =
         "export {}\n{ export default interface I { m(b = J); } }\nvar J = g();\nconsole.log(1);\n";
     let output = Pipeline::new(Options::default()).run(source);
-    assert_parse_failed(&output);
+    assert_parse_failed(&output, source);
 }
 
 #[test]
@@ -192,6 +193,7 @@ fn every_refusal_note_is_catalogued_and_reached() {
         PARENTHESES_TOO_DEEP,
         PRINT_TOO_LARGE,
         TYPESCRIPT_IN_JAVASCRIPT,
+        SYNTAX_ERROR_REFUSED,
         WORKER_DIED,
         UNPACK_TEXT_TOO_DEEP,
     ];

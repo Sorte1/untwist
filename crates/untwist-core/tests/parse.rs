@@ -1,5 +1,7 @@
 use oxc_allocator::Allocator;
-use untwist_core::parse::{parse_named_module, parse_program, strip_bookmarklet};
+use untwist_core::parse::{
+    early_errors, has_error, parse_named_module, parse_program, strip_bookmarklet,
+};
 use untwist_core::semantic::build_scoping;
 
 #[test]
@@ -201,11 +203,91 @@ fn a_named_module_is_parsed_as_a_module_from_the_start() {
 }
 
 #[test]
-fn a_named_module_that_only_parses_as_a_script_falls_back_to_the_script() {
+fn a_named_module_that_only_parses_as_a_script_reports_the_module_error_as_node_does() {
     let alloc = Allocator::default();
     let p = parse_named_module(&alloc, "var await = 1;");
-    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
-    assert!(!p.source_type.is_module());
+    assert!(has_error(&p.diagnostics));
+    assert!(p.source_type.is_module());
+}
+
+#[test]
+fn a_top_level_return_is_an_error_in_a_module_and_allowed_in_a_script() {
+    let alloc = Allocator::default();
+    assert!(has_error(
+        &parse_named_module(&alloc, "return;").diagnostics
+    ));
+    assert!(!has_error(&parse_program(&alloc, "return;").diagnostics));
+}
+
+#[test]
+fn a_lexical_declaration_of_a_commonjs_wrapper_name_takes_the_module_goal_as_in_node() {
+    for source in [
+        "const require = 1;",
+        "let exports;",
+        "let module = 2;",
+        "const __filename = 1;",
+        "let __dirname;",
+        "class module {}",
+        "class exports {}",
+        "let [exports] = [1];",
+        "let { a: require } = {};",
+    ] {
+        let alloc = Allocator::default();
+        let p = parse_program(&alloc, source);
+        assert!(p.diagnostics.is_empty(), "{source}: {:?}", p.diagnostics);
+        assert!(p.source_type.is_module(), "{source}");
+    }
+}
+
+#[test]
+fn other_declarations_of_a_wrapper_name_stay_commonjs_as_in_node() {
+    for source in [
+        "var module;",
+        "function __filename() {}",
+        "{ let module; }",
+        "let arguments;",
+        "function f() { let exports; }",
+    ] {
+        let alloc = Allocator::default();
+        let p = parse_program(&alloc, source);
+        assert!(p.diagnostics.is_empty(), "{source}: {:?}", p.diagnostics);
+        assert!(!p.source_type.is_module(), "{source}");
+    }
+}
+
+#[test]
+fn a_redeclared_wrapper_name_that_does_not_parse_as_a_module_is_an_error() {
+    for source in [
+        "const exports = 0; with ({}) {}",
+        "const exports = 0; return;",
+        "const exports = 0; var a = 010;",
+    ] {
+        let alloc = Allocator::default();
+        let p = parse_program(&alloc, source);
+        let rejected = has_error(&p.diagnostics) || !early_errors(&p.program).is_empty();
+        assert!(rejected, "{source}");
+    }
+}
+
+#[test]
+fn early_errors_are_reported_for_strict_code_and_not_for_sloppy_code() {
+    for (source, rejected) in [
+        ("\"use strict\"; var a = 010;", true),
+        ("var a = 010;", false),
+        ("\"use strict\"; with ({}) {}", true),
+        ("with ({}) {}", false),
+        ("function f(a, a) { \"use strict\"; }", true),
+        ("function f(a, a) {}", false),
+        ("let a; let a;", true),
+        ("{ function f() {} function f() {} }", false),
+        ("\"use strict\"; { function f() {} function f() {} }", true),
+        ("class A { m() { return 010; } }", true),
+    ] {
+        let alloc = Allocator::default();
+        let p = parse_program(&alloc, source);
+        assert!(p.diagnostics.is_empty(), "{source}: {:?}", p.diagnostics);
+        assert_eq!(!early_errors(&p.program).is_empty(), rejected, "{source}");
+    }
 }
 
 #[test]

@@ -189,7 +189,15 @@ fixture that then joins the differential.
   one-line print and the pass-through are for the lanes and programs where it does not.
 - **A file is read as a script unless only the module goal makes sense of it, as node 22 reads a `.js` file.**
   Untwist parses the input as a classic script first, so `<!--` and `-->` stay comments (Annex B.1.1). It takes the
-  module goal when the input is named `.mjs` (parsed as a module from the start), or when the script parse fails and
-  the module parse succeeds (`import`, `export`, `import.meta`, `await x`). A text that parses as a script stays one,
+  module goal when the input is named `.mjs` (parsed as a module from the start), when the script parse fails and
+  the module parse succeeds (`import`, `export`, `import.meta`, `await x`), or when the script declares one of the
+  names of node's CommonJS wrapper (`require`, `exports`, `module`, `__filename`, `__dirname`) with a top-level `let`,
+  `const` or `class`: node 22 runs a `.js` file as the body of a function with those parameters, the declaration
+  fails there, and node then runs the file as an ES module. A text that parses as a script stays one otherwise,
   also when it calls a global named `await` (`await (f)()`), as in node, which then throws for the undefined
   `await`. Such a module needs a `.mjs` name or module syntax to be read as one.
+- **An input that node rejects with a SyntaxError is passed through unchanged, with an error.** This covers the
+  early errors oxc's parser and semantic checker report (a legacy octal literal or escape, `with`, `delete x`, an
+  assignment to `eval` or a duplicate parameter in strict code, a redeclared `let`, an undefined label, ...), a
+  `.mjs` input that does not parse as a module, and a `.js` input that redeclares a wrapper name as above and does
+  not parse as a module either. Untwist does not deobfuscate such a text, since node never runs any of it.
