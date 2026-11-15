@@ -1,0 +1,14 @@
+const a = 1n; const b = 2;
+const p = process.argv.length > 99;
+const x = p ? a : b;
+const c = x * x;
+const d = -x;
+let y = x; y++;
+const e = a + "s";
+const f = a < b;
+const g = a == b;
+const h = typeof (a * a);
+const i = a ** 2n;
+const j = b >>> 1;
+const k = x + x;
+console.log(c, d, y, e, f, g, h, i, j, k);
