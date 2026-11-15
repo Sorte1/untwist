@@ -634,7 +634,7 @@ mod tests {
 
     #[test]
     fn a_bundle_hands_out_each_module_code_once_split() {
-        let source = include_str!("../../../../fixtures/reference/unpack/webpack-5.js");
+        let source = include_str!("../../../../fixtures/reference/unpack/webpack-5-object.js");
         let out = run_report(source, "--unsafe", false);
         assert!(out.module_count() > 0);
         assert!(out.module_code(0).is_some());
@@ -674,7 +674,7 @@ mod tests {
 
     #[test]
     fn module_spans_slice_the_processed_bundle_text_in_utf16_units() {
-        let source = include_str!("../../../../fixtures/reference/unpack/webpack-5.js");
+        let source = include_str!("../../../../fixtures/reference/unpack/webpack-5-object.js");
         let accented = format!("\"é😀\";\n{source}");
         assert_ne!(accented, source);
         for input in [source, accented.as_str()] {
