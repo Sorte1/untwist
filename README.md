@@ -405,8 +405,16 @@ prints. The checks behind this live in `crates/untwist-types/tests` (one row per
 node run of the fixtures with every annotation turned into a runtime check, and in
 `tools/types-check`, which runs the pinned `tsc` over every annotated fixture output against the
 same text without annotations and fails on any new diagnostic. It runs `tsc` three times on each
-side (`TYPES_CHECK_RUNS` sets the count) and compares the most each side ever reports, so a
-diagnostic the checker drops in some runs can neither hide a new one nor pass for one. `--against-js` also compares each
+side (`TYPES_CHECK_RUNS` sets the count) and compares each annotated run with its own plain run,
+so a new diagnostic in any one run fails the check, and more runs can only find more.
+
+Known limitation: tsc 7.0.2 may report fewer diagnostics for unannotated code whose types carry
+well-known-symbol keys (`[Symbol.iterator]`, `[Symbol.toPrimitive]`, ...), and which ones it drops
+changes from run to run. A typed file can then show diagnostics that the plain file's run left out.
+The annotations themselves are still true. A file with an object literal keyed by a literal
+`Symbol.<name>` is left untyped to make this rarer, but an aliased `Symbol` or a copy of such an
+object through a spread is not caught. See
+[`docs/known-divergences/types.md`](docs/known-divergences/types.md). `--against-js` also compares each
 `.ts` output with the untyped output as `.js` under `checkJs`; the diagnostics it reports come from
 renaming JavaScript to `.ts` (in a `.ts` file every parameter is required, an object literal gets a
 fixed shape, and so on), not from the annotations, so they do not touch the promise that every
