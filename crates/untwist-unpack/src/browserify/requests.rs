@@ -1,6 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::number_key;
@@ -11,6 +12,7 @@ use crate::browserify::link::FALSY_IDS;
 
 const NODE_SCHEME: &str = "node:";
 const SCOPE_PREFIX: char = '@';
+const REQUIRE: &str = "require";
 
 pub struct Unloaded {
     pub id: String,
@@ -32,7 +34,7 @@ fn plain_segment(segment: &str) -> bool {
     !segment.is_empty() && segment != "." && segment != ".."
 }
 
-fn package_name(request: &str) -> Option<&str> {
+pub(crate) fn package_name(request: &str) -> Option<&str> {
     if request.starts_with(['.', '/']) || request.contains('\\') {
         return None;
     }
@@ -52,45 +54,15 @@ fn package_name(request: &str) -> Option<&str> {
 
 struct Tree<'s> {
     ids: FxHashSet<&'s str>,
-    packages: FxHashSet<&'s str>,
-    every_module_reached: bool,
 }
 
-impl Tree<'_> {
-    fn leaves_the_tree(&self, request: &str) -> bool {
-        self.every_module_reached
-            && package_name(request).is_some_and(|name| !self.packages.contains(name))
-    }
+fn leaves_the_bundle(request: &str) -> bool {
+    is_builtin(request) || package_name(request).is_some()
 }
 
-fn reached_from<'s>(entry: &'s str, modules: &'s [ModuleEntry<'_, '_>]) -> FxHashSet<&'s str> {
-    let mut reached: FxHashSet<&str> = FxHashSet::default();
-    let mut stack = vec![entry];
-    while let Some(id) = stack.pop() {
-        if !reached.insert(id) {
-            continue;
-        }
-        let dependencies = modules
-            .iter()
-            .filter(|module| module.id == id)
-            .flat_map(|module| module.dependencies.iter());
-        stack.extend(dependencies.map(|(dependency, _)| dependency.as_str()));
-    }
-    reached
-}
-
-fn tree<'s>(entry: &'s str, modules: &'s [ModuleEntry<'_, '_>]) -> Tree<'s> {
-    let reached = reached_from(entry, modules);
+fn tree<'s>(modules: &'s [ModuleEntry<'_, '_>]) -> Tree<'s> {
     Tree {
         ids: modules.iter().map(|module| module.id.as_str()).collect(),
-        packages: modules
-            .iter()
-            .flat_map(|module| module.dependencies.iter())
-            .filter_map(|(_, request)| package_name(request))
-            .collect(),
-        every_module_reached: modules
-            .iter()
-            .all(|module| reached.contains(module.id.as_str())),
     }
 }
 
@@ -125,8 +97,7 @@ impl Calls<'_> {
                 "it requires {request:?}, a name its dependency map inherits"
             ));
         }
-        let outside = is_builtin(&request) || self.tree.leaves_the_tree(&request);
-        if outside || self.tree.ids.contains(request.as_str()) {
+        if leaves_the_bundle(&request) || self.tree.ids.contains(request.as_str()) {
             return None;
         }
         Some(format!(
@@ -150,6 +121,43 @@ impl<'a> VisitJs<'a> for Calls<'_> {
         }
         walk_js::walk_call_expression(self, it);
     }
+}
+
+struct OuterRequire<'s> {
+    scoping: &'s Scoping,
+    factory: Option<ScopeId>,
+    found: bool,
+}
+
+impl OuterRequire<'_> {
+    fn bound_inside(&self, reference: &IdentifierReference<'_>) -> bool {
+        let symbol = reference
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        let (Some(symbol), Some(factory)) = (symbol, self.factory) else {
+            return false;
+        };
+        self.scoping
+            .scope_ancestors(self.scoping.symbol_scope_id(symbol))
+            .any(|scope| scope == factory)
+    }
+}
+
+impl<'a> VisitJs<'a> for OuterRequire<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= it.name == REQUIRE && !self.bound_inside(it);
+    }
+}
+
+fn reads_outer_require(scoping: &Scoping, module: &ModuleEntry<'_, '_>) -> bool {
+    let mut outer = OuterRequire {
+        scoping,
+        factory: module.function.scope_id.get(),
+        found: false,
+    };
+    outer.visit_function_body(module.body);
+    outer.found
 }
 
 fn require_symbol(module: &ModuleEntry<'_, '_>) -> Option<SymbolId> {
@@ -187,8 +195,17 @@ fn module_fault(
             "its factory is async, a generator or takes a pattern or default parameter".to_string(),
         );
     }
+    if let Some(request) = &module.repeated {
+        return Some(format!("its dependency map names {request:?} twice"));
+    }
     if let Some(fault) = map_fault(module, &tree.ids) {
         return Some(fault);
+    }
+    if reads_outer_require(scoping, module) {
+        return Some(
+            "it reads a require its factory does not bind, which the written file would take from node"
+                .to_string(),
+        );
     }
     let mut calls = Calls {
         scoping,
@@ -201,9 +218,21 @@ fn module_fault(
     calls.found
 }
 
+fn repeated_id<'s>(modules: &'s [ModuleEntry<'_, '_>]) -> Option<&'s str> {
+    let mut seen = FxHashSet::default();
+    modules
+        .iter()
+        .map(|module| module.id.as_str())
+        .find(|id| !seen.insert(*id))
+}
+
 pub fn unloaded_module(scoping: &Scoping, expr: &Expression<'_>) -> Option<Unloaded> {
     let (modules, (entry, later)) = module_entries(expr)?;
-    let tree = tree(&entry, &modules);
+    if let Some(id) = repeated_id(&modules) {
+        let what = "the bundle names its id twice".to_string();
+        return Some(unloaded(id, what));
+    }
+    let tree = tree(&modules);
     let entries = std::iter::once(Some(&entry)).chain(later.iter().map(Option::as_ref));
     for id in entries {
         let Some(id) = id else {

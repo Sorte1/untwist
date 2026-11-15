@@ -2,6 +2,8 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
 use untwist_core::pass::{Note, NoteKind};
 
+use crate::browserify::notes as browserify_notes;
+use crate::browserify::resolve::left_request_reaching;
 use crate::closed::legacy_read;
 use crate::detect::{refused_kind, unpack_program_linked};
 use crate::links::{groups, Groups, Links};
@@ -211,6 +213,14 @@ pub fn unpack_named_inputs<'a>(
     }
     bundle.mirrored_inputs = mirrored_inputs(&mut bundle, names);
     notes.extend(finish_with(alloc, &mut bundle, mappings, options));
+    if let Some(reached) = left_request_reaching(&bundle) {
+        notes.push(note(browserify_notes::left_request_reaches(
+            &reached.id,
+            reached.request.as_deref(),
+            &reached.path,
+        )));
+        return (None, notes);
+    }
     if let Some(moved) = moved_fixed_path(&bundle) {
         notes.push(note(notes::group_refused(moved)));
         return (None, notes);

@@ -85,8 +85,15 @@ fn is_prelude(expr: &Expression<'_>) -> bool {
     init && returns
 }
 
-fn dependency_list(object: &ObjectExpression<'_>) -> Option<Vec<(String, String)>> {
+struct Dependencies {
+    pairs: Vec<(String, String)>,
+    repeated: Option<String>,
+}
+
+fn dependency_list(object: &ObjectExpression<'_>) -> Option<Dependencies> {
     let mut dependencies = Vec::with_capacity(object.properties.len());
+    let mut seen = FxHashSet::default();
+    let mut repeated = None;
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
             return None;
@@ -102,12 +109,18 @@ fn dependency_list(object: &ObjectExpression<'_>) -> Option<Vec<(String, String)
         if request == PROTO {
             return None;
         }
+        if !seen.insert(request.clone()) {
+            repeated.get_or_insert_with(|| request.clone());
+        }
         if matches!(&property.value, Expression::Identifier(id) if id.name == "undefined") {
             continue;
         }
         dependencies.push((literal_id(&property.value)?, request));
     }
-    Some(dependencies)
+    Some(Dependencies {
+        pairs: dependencies,
+        repeated,
+    })
 }
 
 pub(crate) struct ModuleEntry<'k, 'a> {
@@ -116,6 +129,7 @@ pub(crate) struct ModuleEntry<'k, 'a> {
     pub(crate) params: &'k FormalParameters<'a>,
     pub(crate) body: &'k FunctionBody<'a>,
     pub(crate) dependencies: Vec<(String, String)>,
+    pub(crate) repeated: Option<String>,
 }
 
 fn plain_params(params: &FormalParameters<'_>) -> bool {
@@ -153,12 +167,14 @@ fn module_entry<'k, 'a>(property: &'k ObjectPropertyKind<'a>) -> Option<ModuleEn
     let Expression::ObjectExpression(deps) = array.elements.get(1)?.as_expression()? else {
         return None;
     };
+    let dependencies = dependency_list(deps)?;
     Some(ModuleEntry {
         id,
         function,
         params: &function.params,
         body: function.body.as_deref()?,
-        dependencies: dependency_list(deps)?,
+        dependencies: dependencies.pairs,
+        repeated: dependencies.repeated,
     })
 }
 

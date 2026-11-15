@@ -161,6 +161,7 @@ pub struct Bundle<'a> {
     pub runs_deferred: bool,
     pub chunk_started: bool,
     pub chunk_files: Vec<ChunkFile>,
+    pub left_requests: Vec<(String, Option<String>)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -194,6 +195,7 @@ impl<'a> Bundle<'a> {
             runs_deferred: false,
             chunk_started: false,
             chunk_files: Vec::new(),
+            left_requests: Vec::new(),
         }
     }
 

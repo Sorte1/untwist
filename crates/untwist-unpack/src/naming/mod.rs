@@ -159,6 +159,30 @@ impl Taken {
     }
 }
 
+fn library_package(path: &str) -> Option<String> {
+    let inside = path.strip_prefix(NODE_MODULES)?.strip_prefix('/')?;
+    crate::browserify::requests::package_name(inside).map(str::to_lowercase)
+}
+
+fn outside_left_packages(
+    bundle: &Bundle<'_>,
+    planned: Vec<Option<(String, bool)>>,
+) -> Vec<Option<(String, bool)>> {
+    let libraries = planned.iter().flatten().any(|(_, library)| *library);
+    if bundle.kind != BundleKind::Browserify || !libraries {
+        return planned;
+    }
+    let left = crate::browserify::resolve::left_packages(bundle);
+    planned
+        .into_iter()
+        .map(|plan| {
+            plan.filter(|(path, library)| {
+                !library || library_package(path).is_none_or(|package| !left.contains(&package))
+            })
+        })
+        .collect()
+}
+
 pub fn name_modules(bundle: &mut Bundle<'_>) {
     let kind = bundle.kind;
     let guesses: Vec<Option<Guess>> = bundle
@@ -179,6 +203,7 @@ pub fn name_modules(bundle: &mut Bundle<'_>) {
         .zip(&guesses)
         .map(|((id, module), guessed)| wanted((*guessed)?, id, module, (&counts, &importers)))
         .collect();
+    let planned = outside_left_packages(bundle, planned);
     if planned.iter().all(Option::is_none) {
         return;
     }
