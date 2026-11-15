@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, OnceCell};
 
 use oxc_allocator::{Allocator, TakeIn};
 use oxc_ast::ast::*;
@@ -6,13 +6,17 @@ use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_mut, VisitJs, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_str::Ident;
-use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::naming_slot::{named_as, text_observes_names};
-use untwist_core::semantic::{build_scoping, eval_payload_names};
+use untwist_core::semantic::{
+    build_scoping, eval_payload_names, hoist_shadowing_catches, misbound_catch_vars,
+    open_eval_sites,
+};
 
 use crate::closed::HOST_NAMES;
+use crate::notes::{MISBOUND_RENAME, RENAMED_FUNCTION_NAME};
 
 const MAX_UID_ATTEMPTS: u32 = 1000;
 
@@ -50,15 +54,15 @@ fn evaluated_names(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<String
 }
 
 thread_local! {
-    static NAME_HAZARD: Cell<bool> = const { Cell::new(false) };
+    static NAME_HAZARD: Cell<Option<&'static str>> = const { Cell::new(None) };
 }
 
-pub fn clear_name_hazard() {
-    NAME_HAZARD.with(|cell| cell.set(false));
+pub fn clear_rename_hazard() {
+    NAME_HAZARD.with(|cell| cell.set(None));
 }
 
-pub fn took_name_hazard() -> bool {
-    NAME_HAZARD.with(|cell| cell.replace(false))
+pub fn took_rename_hazard() -> Option<&'static str> {
+    NAME_HAZARD.with(|cell| cell.replace(None))
 }
 
 struct Apply<'a, 'r> {
@@ -121,7 +125,11 @@ impl<'a> Apply<'a, '_> {
     fn keep_declared_name(&mut self, id: Option<&BindingIdentifier<'a>>) {
         let renamed = id.and_then(|id| self.renamed_binding(id)).is_some();
         if renamed && self.names_read() {
-            NAME_HAZARD.with(|cell| cell.set(true));
+            NAME_HAZARD.with(|cell| {
+                if cell.get().is_none() {
+                    cell.set(Some(RENAMED_FUNCTION_NAME));
+                }
+            });
         }
     }
 }
@@ -351,27 +359,101 @@ fn apply_renames<'a>(
     apply.changes
 }
 
+struct Hazards {
+    misbound: OnceCell<FxHashSet<SymbolId>>,
+    sites: Vec<ScopeId>,
+    capturing: Vec<ScopeId>,
+}
+
+fn var_scope_of(scoping: &Scoping, scope: ScopeId) -> ScopeId {
+    scoping
+        .scope_ancestors(scope)
+        .find(|ancestor| scoping.scope_flags(*ancestor).is_var())
+        .unwrap_or(scope)
+}
+
+impl Hazards {
+    fn of(program: &Program<'_>, scoping: &Scoping) -> Self {
+        let evals = match scoping.root_unresolved_references().contains_key("eval") {
+            true => open_eval_sites(program, scoping),
+            false => Vec::new(),
+        };
+        let withs: Vec<ScopeId> = scoping
+            .scope_descendants_from_root()
+            .filter(|scope| scoping.scope_flags(*scope).contains(ScopeFlags::With))
+            .collect();
+        let capturing = evals
+            .iter()
+            .map(|site| var_scope_of(scoping, *site))
+            .chain(withs.iter().copied())
+            .collect();
+        Self {
+            misbound: OnceCell::new(),
+            sites: evals.into_iter().chain(withs).collect(),
+            capturing,
+        }
+    }
+
+    fn misbound(&self, scoping: &Scoping) -> &FxHashSet<SymbolId> {
+        self.misbound.get_or_init(|| {
+            let mut misbound = misbound_catch_vars(scoping);
+            misbound.extend(hoist_shadowing_catches(scoping));
+            misbound
+        })
+    }
+
+    fn under_dynamic(&self, scoping: &Scoping, scope: ScopeId) -> bool {
+        scoping
+            .scope_ancestors(scope)
+            .any(|ancestor| self.capturing.contains(&ancestor))
+    }
+
+    fn holds_dynamic(&self, scoping: &Scoping, scope: ScopeId) -> bool {
+        self.sites
+            .iter()
+            .any(|inner| scoping.scope_ancestors(*inner).any(|outer| outer == scope))
+    }
+
+    fn refuses(&self, scoping: &Scoping, targets: &[SymbolId]) -> bool {
+        targets.iter().any(|symbol| {
+            self.misbound(scoping).contains(symbol)
+                || self.holds_dynamic(scoping, scoping.symbol_scope_id(*symbol))
+        })
+    }
+}
+
+fn refuse_rename() {
+    NAME_HAZARD.with(|cell| {
+        if cell.get().is_none() {
+            cell.set(Some(MISBOUND_RENAME));
+        }
+    });
+}
+
 fn collect_collisions<'a>(
     alloc: &'a Allocator,
     scoping: &Scoping,
-    original: &str,
-    renamed: &str,
-    symbols: &mut FxHashMap<SymbolId, Ident<'a>>,
-    used: &mut FxHashSet<String>,
-) {
+    (original, renamed): (&str, &str),
+    hazards: &Hazards,
+    (symbols, used): (&mut FxHashMap<SymbolId, Ident<'a>>, &mut FxHashSet<String>),
+) -> bool {
     if original == renamed {
-        return;
+        return true;
     }
     let Some(reference_ids) = scoping.root_unresolved_references().get(original) else {
-        return;
+        return true;
     };
-    let mut ordered: Vec<_> = reference_ids.iter().copied().collect();
-    ordered.sort_unstable();
-    for reference_id in ordered {
-        let scope_id = scoping.get_reference(reference_id).scope_id();
-        let Some(symbol) = scoping.find_binding(scope_id, Ident::from(renamed)) else {
-            continue;
-        };
+    let under_dynamic = reference_ids.iter().any(|reference| {
+        hazards.under_dynamic(scoping, scoping.get_reference(*reference).scope_id())
+    });
+    let targets: Vec<SymbolId> = scoping
+        .symbol_ids()
+        .filter(|symbol| scoping.symbol_name(*symbol) == renamed)
+        .collect();
+    if under_dynamic || hazards.refuses(scoping, &targets) {
+        return false;
+    }
+    for symbol in targets {
         if symbols.contains_key(&symbol) {
             continue;
         }
@@ -379,6 +461,7 @@ fn collect_collisions<'a>(
         used.insert(uid.clone());
         symbols.insert(symbol, Ident::from_str_in(&uid, &alloc));
     }
+    true
 }
 
 fn uncaptured_target(
@@ -437,6 +520,7 @@ fn rename_parameters_as<'a>(
     let evaluated = evaluated_names(program, &scoping);
     let mut used: FxHashSet<String> = evaluated.clone();
     let mut free: FxHashMap<&str, Ident<'a>> = FxHashMap::default();
+    let hazards = Hazards::of(program, &scoping);
 
     let pairs = original.len().min(renamed.len());
     let mut fresh = Vec::new();
@@ -449,7 +533,11 @@ fn rename_parameters_as<'a>(
             })
             .flatten();
         let to = uid.as_deref().unwrap_or(renamed[index]);
-        collect_collisions(alloc, &scoping, from, to, &mut symbols, &mut used);
+        let collisions = (&mut symbols, &mut used);
+        if !collect_collisions(alloc, &scoping, (from, to), &hazards, collisions) {
+            refuse_rename();
+            return (0, fresh);
+        }
         if from != to {
             free.insert(from, Ident::from_str_in(to, &alloc));
         }
