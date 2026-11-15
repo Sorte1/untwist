@@ -1,6 +1,7 @@
 use oxc_allocator::Allocator;
 use untwist_core::parse::{
-    early_errors, has_error, parse_named_module, parse_program, strip_bookmarklet,
+    early_errors, has_error, parse_failure, parse_named_module, parse_named_script, parse_program,
+    strip_bookmarklet, ParseFailure,
 };
 use untwist_core::semantic::build_scoping;
 
@@ -264,7 +265,7 @@ fn a_redeclared_wrapper_name_that_does_not_parse_as_a_module_is_an_error() {
     ] {
         let alloc = Allocator::default();
         let p = parse_program(&alloc, source);
-        let rejected = has_error(&p.diagnostics) || !early_errors(&p.program).is_empty();
+        let rejected = has_error(&p.diagnostics) || !early_errors(&p.program).is_clean();
         assert!(rejected, "{source}");
     }
 }
@@ -282,11 +283,98 @@ fn early_errors_are_reported_for_strict_code_and_not_for_sloppy_code() {
         ("{ function f() {} function f() {} }", false),
         ("\"use strict\"; { function f() {} function f() {} }", true),
         ("class A { m() { return 010; } }", true),
+        ("class A { x = 010; }", false),
+        ("class A { static { var o = { 010: 1 }; } }", false),
+        ("class A { x = () => 010; }", true),
+        ("\"use strict\"; class A { x = 010; }", true),
+        ("{ function g() {} } { var g; }", false),
+        ("{ function g() {} } let g;", false),
+        ("{ function g() {} var g; }", true),
+        ("{ function g() {} } let g; let g;", true),
+        ("try {} catch (e) { function e() {} }", true),
+        ("if (0) { /(/; }", true),
+        ("/(?<a>x)|(?<a>y)/;", true),
+        ("/(?i:a)/;", true),
+        ("var a; [(a = 1)] = [];", true),
+        ("var a; [(a)] = [1];", false),
+        ("((a)) => 1;", true),
+        ("if (0) { using x = null; }", true),
+        ("var z = 1 || @dec class {};", true),
+        ("class A { accessor x = 1; }", true),
     ] {
         let alloc = Allocator::default();
         let p = parse_program(&alloc, source);
         assert!(p.diagnostics.is_empty(), "{source}: {:?}", p.diagnostics);
-        assert_eq!(!early_errors(&p.program).is_empty(), rejected, "{source}");
+        assert_eq!(!early_errors(&p.program).is_clean(), rejected, "{source}");
+    }
+}
+
+#[test]
+fn an_html_comment_opener_in_module_code_is_an_early_error_as_in_node() {
+    let alloc = Allocator::default();
+    let module = parse_named_module(&alloc, "var a = 1, b = 5; a<!--b\n;");
+    assert!(module.diagnostics.is_empty());
+    assert!(!early_errors(&module.program).is_clean());
+    let script = parse_program(&alloc, "var a = 1, b = 5; a<!--b\n;");
+    assert!(early_errors(&script.program).is_clean());
+}
+
+#[test]
+fn a_script_that_parses_only_as_a_module_without_module_syntax_keeps_its_script_error() {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, "var a = 1, b = 5; var c = (a<!--b);");
+    assert!(has_error(&parsed.diagnostics));
+    assert!(!parsed.program.source_type.is_module());
+}
+
+#[test]
+fn a_cjs_input_never_takes_the_module_goal() {
+    let alloc = Allocator::default();
+    for source in [
+        "const exports = 0;",
+        "await 0;",
+        "import.meta;",
+        "export {};",
+    ] {
+        let parsed = parse_named_script(&alloc, source);
+        assert!(has_error(&parsed.diagnostics), "{source}");
+        assert!(!parsed.program.source_type.is_module(), "{source}");
+    }
+    let parsed = parse_named_script(&alloc, "var exports = 1;");
+    assert!(!has_error(&parsed.diagnostics));
+}
+
+#[test]
+fn a_parse_failure_node_runs_is_labelled_a_parser_limit() {
+    for (source, failure) in [
+        ("function f() {} if (0) f() = 1;", ParseFailure::Unsupported),
+        (
+            "function f() {} if (0) for (f() in {}) ;",
+            ParseFailure::Unsupported,
+        ),
+        ("var yield; for (yield of [1]) ;", ParseFailure::Unsupported),
+        (
+            "function f() {} if (0) [f()] = [];",
+            ParseFailure::SyntaxError,
+        ),
+        (
+            "function f() {} if (0) f() &&= 1;",
+            ParseFailure::SyntaxError,
+        ),
+        (
+            "function f() {} if (0) new f() = 1;",
+            ParseFailure::SyntaxError,
+        ),
+        ("var a = 1 +;", ParseFailure::SyntaxError),
+    ] {
+        let alloc = Allocator::default();
+        let parsed = parse_program(&alloc, source);
+        assert!(has_error(&parsed.diagnostics), "{source}");
+        assert_eq!(
+            parse_failure(source, &parsed.diagnostics),
+            failure,
+            "{source}"
+        );
     }
 }
 

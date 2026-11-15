@@ -1,7 +1,7 @@
 use untwist::{
-    Isolation, Options, Output, Pipeline, TestHooks, NESTED_TOO_DEEP, PARENTHESES_TOO_DEEP,
-    PIPELINE_NOTES, PRINT_TOO_LARGE, SYNTAX_ERROR_REFUSED, TYPESCRIPT_IN_JAVASCRIPT,
-    UNPACK_PANICKED, UNPACK_TEXT_TOO_DEEP, WORKER_DIED,
+    Isolation, Options, Output, Pipeline, TestHooks, ANNEX_B_UNMODELLED, NESTED_TOO_DEEP,
+    PARENTHESES_TOO_DEEP, PARSE_UNSUPPORTED, PIPELINE_NOTES, PRINT_TOO_LARGE, SYNTAX_ERROR_REFUSED,
+    TYPESCRIPT_IN_JAVASCRIPT, UNPACK_PANICKED, UNPACK_TEXT_TOO_DEEP, WORKER_DIED,
 };
 
 const TYPESCRIPT: &str = "import x = require('y');\n";
@@ -194,6 +194,8 @@ fn every_refusal_note_is_catalogued_and_reached() {
         PRINT_TOO_LARGE,
         TYPESCRIPT_IN_JAVASCRIPT,
         SYNTAX_ERROR_REFUSED,
+        PARSE_UNSUPPORTED,
+        ANNEX_B_UNMODELLED,
         WORKER_DIED,
         UNPACK_TEXT_TOO_DEEP,
     ];
@@ -448,4 +450,20 @@ mod budget {
             .filter_map(|name| agrees(&node, name))
             .collect()
     }
+}
+
+#[test]
+fn a_parse_failure_node_runs_is_passed_through_as_a_parser_limit() {
+    let source = "function f() {}\nif (0) f() = 1;\nconsole.log(\"ran\");\n";
+    let output = Pipeline::new(Options::default()).run(source);
+    assert!(output.parse_errors > 0);
+    assert_eq!(output.depth_refusals(), [(0, PARSE_UNSUPPORTED)]);
+    assert_eq!(output.code(), source);
+}
+
+#[test]
+fn a_function_in_an_if_beside_a_same_named_let_is_passed_through_unmodelled() {
+    let source = "if (1) function g() {}\nlet g = 1;\nconsole.log(g);\n";
+    let output = Pipeline::new(Options::default()).run(source);
+    assert_refused_alone(&output, source, ANNEX_B_UNMODELLED);
 }
