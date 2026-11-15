@@ -37,9 +37,11 @@ impl Written {
             .values()
             .map(|module| format!("{}{MAP_SUFFIX}", module.path.as_str()));
         let reserved = RESERVED_FILES.iter().map(|name| name.to_string());
+        let mirrored = bundle.mirrored_inputs.iter().cloned();
         let files = modules
             .chain(maps)
             .chain(reserved)
+            .chain(mirrored)
             .map(|path| path.to_lowercase())
             .collect();
         Self { files }
