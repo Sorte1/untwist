@@ -1,12 +1,15 @@
 use oxc_ast::ast::{
     Argument, AssignmentTargetPropertyIdentifier, AssignmentTargetPropertyProperty,
-    BindingIdentifier, BindingProperty, CallExpression, ComputedMemberExpression, Expression,
-    IdentifierName, IdentifierReference, ImportExpression, MemberExpression, ObjectExpression,
-    ObjectPropertyKind, Program, PropertyKey, Statement, StaticMemberExpression, StringLiteral,
-    TemplateLiteral,
+    BindingIdentifier, BindingPattern, BindingProperty, CallExpression, ComputedMemberExpression,
+    Expression, IdentifierName, IdentifierReference, ImportExpression, MemberExpression,
+    ObjectExpression, ObjectPropertyKind, Program, PropertyKey, Statement, StaticMemberExpression,
+    StringLiteral, TemplateLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashSet;
 
 const FRAME_PROPERTIES: [&str; 2] = ["arguments", "caller"];
 const ARGUMENTS_PROPERTY: [&str; 1] = ["arguments"];
@@ -141,17 +144,70 @@ fn reaches_code(name: &str) -> bool {
     CODE_RUNNERS.contains(&name) || TIMERS.contains(&name) || CODE_REACHING_MEMBERS.contains(&name)
 }
 
+struct LiteralBindings<'s> {
+    scoping: &'s Scoping,
+    found: FxHashSet<SymbolId>,
+}
+
+impl<'a> VisitJs<'a> for LiteralBindings<'_> {
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        let symbol = match (&it.id, &it.init) {
+            (BindingPattern::BindingIdentifier(id), Some(init)) if is_never_a_function(init) => {
+                id.symbol_id.get()
+            }
+            _ => None,
+        };
+        let never_written = |symbol: SymbolId| {
+            self.scoping.symbol_flags(symbol).is_variable()
+                && !self.scoping.symbol_flags(symbol).is_function()
+                && self.scoping.symbol_redeclarations(symbol).is_empty()
+                && self
+                    .scoping
+                    .get_resolved_references(symbol)
+                    .all(|reference| !reference.is_write())
+        };
+        if let Some(symbol) = symbol.filter(|&symbol| never_written(symbol)) {
+            self.found.insert(symbol);
+        }
+        walk_js::walk_variable_declarator(self, it);
+    }
+}
+
+fn literal_bindings(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
+    let with = scoping
+        .scope_descendants_from_root()
+        .any(|scope| scoping.scope_flags(scope).contains(ScopeFlags::With));
+    if with {
+        return FxHashSet::default();
+    }
+    let mut bindings = LiteralBindings {
+        scoping,
+        found: FxHashSet::default(),
+    };
+    bindings.visit_program(program);
+    bindings.found
+}
+
 struct FrameReads<'s> {
     names: &'static [&'static str],
     prototype_set: bool,
     code_text: bool,
     scoping: &'s Scoping,
+    literal_bindings: FxHashSet<SymbolId>,
     found: bool,
 }
 
 impl FrameReads<'_> {
     fn is_never_a_function(&self, object: &Expression<'_>) -> bool {
-        !self.prototype_set && is_never_a_function(object)
+        if self.prototype_set {
+            return false;
+        }
+        match object.without_parentheses() {
+            Expression::Identifier(id) => self
+                .resolves(id)
+                .is_some_and(|symbol| self.literal_bindings.contains(&symbol)),
+            other => is_never_a_function(other),
+        }
     }
 
     fn is_frame_property(&self, name: &str) -> bool {
@@ -373,15 +429,20 @@ fn scan(
     program: &Program<'_>,
     scoping: &Scoping,
     names: &'static [&'static str],
-    code_text: bool,
+    (code_text, through_bindings): (bool, bool),
 ) -> bool {
     let mut setters = PrototypeSetters::default();
     setters.visit_program(program);
+    let literal_bindings = match through_bindings && !setters.found {
+        true => literal_bindings(program, scoping),
+        false => FxHashSet::default(),
+    };
     let mut reads = FrameReads {
         names,
         prototype_set: setters.found,
         code_text,
         scoping,
+        literal_bindings,
         found: false,
     };
     reads.visit_program(program);
@@ -389,9 +450,13 @@ fn scan(
 }
 
 pub fn reads_function_frame(program: &Program<'_>, scoping: &Scoping) -> bool {
-    scan(program, scoping, &FRAME_PROPERTIES, true)
+    scan(program, scoping, &FRAME_PROPERTIES, (true, false))
+}
+
+pub fn reads_function_frame_through_bindings(program: &Program<'_>, scoping: &Scoping) -> bool {
+    scan(program, scoping, &FRAME_PROPERTIES, (true, true))
 }
 
 pub fn reads_arguments_property(program: &Program<'_>, scoping: &Scoping) -> bool {
-    scan(program, scoping, &ARGUMENTS_PROPERTY, false)
+    scan(program, scoping, &ARGUMENTS_PROPERTY, (false, false))
 }

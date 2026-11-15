@@ -15,20 +15,14 @@ const MODES: [(&str, Lane); 6] = [
     ("rename unique", Lane::Rename(RenameMode::Unique)),
 ];
 
-const CALLER_THROUGH_A_PROXY: [&str; 4] = ["130", "131", "134", "136"];
-
 const RENAME_PREMISE: [&str; 8] = ["40", "42", "44", "45", "46", "47", "48", "49"];
 
-const UNSAFE_WITNESSES: [&str; 13] = [
-    "101", "103", "108", "303", "306", "313", "40", "42", "44", "45", "46", "47", "49",
+const UNSAFE_WITNESSES: [&str; 17] = [
+    "101", "103", "108", "130", "131", "134", "136", "303", "306", "313", "40", "42", "44", "45",
+    "46", "47", "49",
 ];
 
 fn expected_mismatches() -> Vec<String> {
-    let every_lane = CALLER_THROUGH_A_PROXY.iter().flat_map(|label| {
-        MODES
-            .iter()
-            .map(move |(mode, _)| format!("{label} ({mode})"))
-    });
     let renamed = RENAME_PREMISE.iter().flat_map(|label| {
         MODES
             .iter()
@@ -38,7 +32,7 @@ fn expected_mismatches() -> Vec<String> {
     let unsafe_lane = UNSAFE_WITNESSES
         .iter()
         .map(|label| format!("{label} (unsafe)"));
-    let mut expected: Vec<String> = every_lane.chain(renamed).chain(unsafe_lane).collect();
+    let mut expected: Vec<String> = renamed.chain(unsafe_lane).collect();
     expected.sort();
     expected.dedup();
     expected
@@ -162,4 +156,10 @@ fn a_flag_that_is_not_a_private_local_keeps_the_controller() {
             assert!(code.contains("apply"), "{label} ({name}): {code}");
         }
     }
+}
+#[test]
+fn a_call_proxy_is_kept_when_sloppy_code_may_read_its_caller() {
+    let source = std::fs::read_to_string(Path::new(DATA).join("130.js")).unwrap();
+    let code = transformed(Lane::Default, &source);
+    assert!(code.contains("abcde"), "{code}");
 }

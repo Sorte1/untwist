@@ -27,6 +27,7 @@ use crate::wrapper_calls::arguments_are_substitutable;
 
 mod dead;
 mod declared;
+mod frame;
 mod hoisted;
 mod inner_first;
 mod keys;
@@ -46,6 +47,13 @@ const INERT_BINDING: SymbolFlags = SymbolFlags::FunctionScopedVariable.union(Sym
 pub(super) enum Refusal {
     Shape,
     LogicalArgument,
+    Frame,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct FrameSite {
+    pub(super) reachable: bool,
+    pub(super) site_is_strict: bool,
 }
 
 pub(super) enum SiteSafety {
@@ -417,8 +425,14 @@ fn reference_route(function: &Function<'_>, arguments: &AVec<'_, Argument<'_>>) 
 fn call_site_is_safe(
     function: &Function<'_>,
     arguments: &AVec<'_, Argument<'_>>,
+    frame_site: FrameSite,
     cx: &Cx<'_, '_>,
 ) -> SiteSafety {
+    if frame_site.reachable
+        && frame::exposes_a_frame(function, arguments, frame_site.site_is_strict, cx.scoping())
+    {
+        return SiteSafety::Refused(Refusal::Frame);
+    }
     if function.params.rest.is_some() {
         return shape_verdict(forwarded_callee_is_safe(arguments));
     }
@@ -529,6 +543,8 @@ pub struct ControlFlowObject<'a> {
     open_sites: Vec<Span>,
     refused_nest: Option<Span>,
     pending: FxHashSet<Span>,
+    frame_read: bool,
+    frame_refused: bool,
 }
 
 pub(super) const MAX_NEST: usize = 256;
@@ -582,10 +598,21 @@ impl<'a> ControlFlowObject<'a> {
         else {
             return true;
         };
-        match call_site_is_safe(function, arguments, cx) {
+        let frame_site = FrameSite {
+            reachable: self.frame_read,
+            site_is_strict: cx
+                .scoping()
+                .scope_flags(cx.current_scope_id())
+                .is_strict_mode(),
+        };
+        match call_site_is_safe(function, arguments, frame_site, cx) {
             SiteSafety::Safe => {}
             SiteSafety::Refused(Refusal::LogicalArgument) => {
                 self.logical_refusals.record(span, &name);
+                return true;
+            }
+            SiteSafety::Refused(Refusal::Frame) => {
+                self.frame_refused = true;
                 return true;
             }
             SiteSafety::Refused(Refusal::Shape) => return true,
@@ -644,7 +671,10 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
         self.open_sites.clear();
         self.refused_nest = None;
         self.pending.clear();
-        let applied = inline_declared_objects(program, cx);
+        self.frame_refused = false;
+        self.frame_read =
+            !cx.opts.unsafe_transforms && frame::frame_read_reachable(program, cx.scoping());
+        let applied = inline_declared_objects(program, cx, self.frame_read);
         cx.changed_by(applied);
     }
 
@@ -740,5 +770,8 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
             );
         }
         emit_logical_refusals(std::mem::take(&mut self.logical_refusals), cx);
+        if std::mem::take(&mut self.frame_refused) {
+            cx.note(notes::CONTROL_FLOW_FRAME_READ, None);
+        }
     }
 }

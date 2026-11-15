@@ -26,8 +26,9 @@ use super::dead::{
 use super::nested::{insert_nested, PlannedEdit, Recipe};
 use super::reach::refuse_dynamic_reach;
 use super::{
-    call_site_is_safe, cff_props, emit_logical_refusals, inline_site, nested_past_the_limit,
-    object_declaration, CffValue, Refusal, SiteSafety, PASS,
+    call_site_is_safe, cff_props, emit_logical_refusals, frame::proxy_parent_is_strict,
+    inline_site, nested_past_the_limit, object_declaration, CffValue, FrameSite, Refusal,
+    SiteSafety, PASS,
 };
 
 pub struct DeclaredObject {
@@ -93,6 +94,7 @@ struct Located<'p, 'l> {
     calls: &'l FxHashMap<Span, CallArgs<'p>>,
     objects: &'l ObjectsAt<'p>,
     branches: OnceCell<Branches<'p>>,
+    frame_read: bool,
 }
 
 impl<'p> Located<'p, '_> {
@@ -157,10 +159,12 @@ struct CandidatePlan<'a, 'p> {
 struct ReadRefusals {
     uncalled: RepeatedSites,
     logical: RepeatedSites,
+    frame: bool,
 }
 
 fn substitute_function<'a, 'p>(
     calls: &FxHashMap<Span, CallArgs<'p>>,
+    frame_read: bool,
     function: &'p Function<'p>,
     read: &PropRead,
     cx: &mut Cx<'a, '_>,
@@ -170,10 +174,18 @@ fn substitute_function<'a, 'p>(
         refusals.uncalled.record(read.member_span, "");
         return None;
     };
-    match call_site_is_safe(function, arguments, cx) {
+    let frame_site = FrameSite {
+        reachable: frame_read,
+        site_is_strict: proxy_parent_is_strict(function, cx.scoping()),
+    };
+    match call_site_is_safe(function, arguments, frame_site, cx) {
         SiteSafety::Safe => {}
         SiteSafety::Refused(Refusal::LogicalArgument) => {
             refusals.logical.record(read.member_span, &read.name);
+            return None;
+        }
+        SiteSafety::Refused(Refusal::Frame) => {
+            refusals.frame = true;
             return None;
         }
         SiteSafety::Refused(Refusal::Shape) => return None,
@@ -190,6 +202,7 @@ fn substitute_function<'a, 'p>(
 
 fn substitute_read<'a, 'p>(
     calls: &FxHashMap<Span, CallArgs<'p>>,
+    frame_read: bool,
     value: &CffValue<'p, 'p>,
     read: &PropRead,
     cx: &mut Cx<'a, '_>,
@@ -204,7 +217,9 @@ fn substitute_read<'a, 'p>(
             )),
             recipe: None,
         }),
-        CffValue::Function(function) => substitute_function(calls, function, read, cx, refusals),
+        CffValue::Function(function) => {
+            substitute_function(calls, frame_read, function, read, cx, refusals)
+        }
     }
 }
 
@@ -247,7 +262,9 @@ fn plan_candidate<'a, 'p>(
             );
             continue;
         };
-        if let Some(edit) = substitute_read(calls, value, read, cx, &mut refusals) {
+        if let Some(edit) =
+            substitute_read(calls, located.frame_read, value, read, cx, &mut refusals)
+        {
             edits.push(edit);
         }
     }
@@ -258,6 +275,9 @@ fn plan_candidate<'a, 'p>(
         cx,
     );
     emit_logical_refusals(refusals.logical, cx);
+    if refusals.frame {
+        cx.note(notes::CONTROL_FLOW_FRAME_READ, Some(candidate.statement));
+    }
     Some(CandidatePlan {
         statement: candidate.statement,
         edits,
@@ -407,7 +427,11 @@ fn scanned_candidates(
     scan_symbol_uses(program, cx.scoping(), &wanted).uses
 }
 
-pub(super) fn inline_declared_objects<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) -> usize {
+pub(super) fn inline_declared_objects<'a>(
+    program: &mut Program<'a>,
+    cx: &mut Cx<'a, '_>,
+    frame_read: bool,
+) -> usize {
     let mut candidates = collect_candidates(program, cx.opts.extended);
     if candidates.is_empty() {
         return 0;
@@ -431,6 +455,7 @@ pub(super) fn inline_declared_objects<'a>(program: &mut Program<'a>, cx: &mut Cx
         calls: &calls,
         objects: &objects,
         branches: OnceCell::new(),
+        frame_read,
     };
     let plans: Vec<CandidatePlan<'a, '_>> = candidates
         .iter()

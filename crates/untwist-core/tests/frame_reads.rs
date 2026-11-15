@@ -1,5 +1,7 @@
 use oxc_allocator::Allocator;
-use untwist_core::ast_util::frame_reads::{reads_arguments_property, reads_function_frame};
+use untwist_core::ast_util::frame_reads::{
+    reads_arguments_property, reads_function_frame, reads_function_frame_through_bindings,
+};
 use untwist_core::parse::parse_program;
 use untwist_core::semantic::build_scoping;
 
@@ -8,6 +10,13 @@ fn reads(source: &str) -> bool {
     let parsed = parse_program(&alloc, source);
     let sem = build_scoping(&parsed.program);
     reads_function_frame(&parsed.program, &sem.scoping)
+}
+
+fn reads_through_bindings(source: &str) -> bool {
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    let sem = build_scoping(&parsed.program);
+    reads_function_frame_through_bindings(&parsed.program, &sem.scoping)
 }
 
 fn reads_arguments(source: &str) -> bool {
@@ -77,4 +86,33 @@ fn plain_literals_keep_their_exemption() {
         assert!(!reads(source), "{source}");
     }
     assert!(!reads_arguments("function f(i) { return [1, 2][i]; }"));
+}
+
+#[test]
+fn a_computed_read_on_a_binding_that_only_holds_a_literal_reads_no_frame() {
+    for source in [
+        "var a = [1, 2]; for (var i = 0; i < a.length; i++) console.log(a[i]);",
+        "const o = { x: 1 }; function g(k) { return o[k]; }",
+        "let s = \"abc\"; function g(k) { return s[k]; }",
+    ] {
+        assert!(reads(source), "{source}");
+        assert!(!reads_through_bindings(source), "{source}");
+    }
+}
+
+#[test]
+fn a_computed_read_on_a_binding_that_may_hold_a_function_reads_a_frame() {
+    for source in [
+        "var a = [1]; a = function () {}; function g(k) { return a[k]; }",
+        "var a = [1]; var a = function () {}; function g(k) { return a[k]; }",
+        "var a = [1]; for (var a of [function () {}]) {} function g(k) { return a[k]; }",
+        "var a = [1]; function a() {} function g(k) { return a[k]; }",
+        "function g(a, k) { var a = []; return a[k]; }",
+        "var a = {}; a.__proto__ = function () {}; function g(k) { return a[k]; }",
+        "var a = {}; Object.setPrototypeOf(a, g); function g(k) { return a[k]; }",
+        "var a = []; function g(k) { with ({ a: g }) { return a[k]; } }",
+        "var a = []; function g(k, f) { return f[k]; }",
+    ] {
+        assert!(reads_through_bindings(source), "{source}");
+    }
 }

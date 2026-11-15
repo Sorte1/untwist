@@ -848,6 +848,13 @@
   `arguments.length` defaults in the safe lane. Under `--unsafe`, `function-to-arrow` and
   `default-parameters` do not look for such reads, and `var-transformation` looks only for an
   `arguments` property read by the same key rules (code text excluded).
+  `control-flow-object` asks the same question in the safe lane before it inlines a property
+  call: when a frame read may be reached (the reads above, `arguments.callee`, a `callee` string,
+  where a computed key on a binding that only ever holds an array, object or primitive literal
+  does not count) and the property may call sloppy code (a call of an argument that is not a
+  strict function, or an operator that may run `valueOf` on an argument that is not a literal),
+  the call is kept with the note `control-flow object call kept: the property may call sloppy
+  code …`, since inlining removes the property's frame that `f.caller` would return.
 - **`dead-assignment-elimination` collapses only a declaration and an assignment that sit in the
   binding's own statement list.** The empty `var` and its single write must both be members of the
   owner list — the owning function's body statements, or the program's top level — and never of a

@@ -300,6 +300,9 @@ pub const CONTROL_FLOW_WITH: &str =
 pub const CONTROL_FLOW_GLOBAL_REACH: &str =
     "control-flow object kept: it is a script global, and code that may hold the global object, \
      or code from text, may read or replace it by name";
+pub const CONTROL_FLOW_FRAME_READ: &str =
+    "control-flow object call kept: the property may call sloppy code, and the program may read \
+     a function's caller, which would see the property's frame";
 pub const LOGICAL_FORWARDER_ARGUMENT: &str =
     "control-flow object kept: the property forwards to a logical operator, which evaluates its \
      right operand only when the left is falsy, and an argument is neither a literal nor a \
@@ -693,6 +696,7 @@ catalogue!(
     CONTROL_FLOW_WITH,
     CONTROL_FLOW_GLOBAL_REACH,
     CONTROL_FLOW_RENAMED_BEFORE_INSERTION,
+    CONTROL_FLOW_FRAME_READ,
     LOGICAL_FORWARDER_ARGUMENT,
     SWITCH_SEQUENCE,
     SWITCH_FALLTHROUGH,
