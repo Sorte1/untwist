@@ -102,7 +102,7 @@ impl<'a> Sites<'_, 'a> {
         self.out.reach_text.get_or_insert(span);
     }
 
-    fn hit_reflective(&mut self, span: Span) {
+    pub(super) fn hit_reflective(&mut self, span: Span) {
         self.mark_source(span, "a reflective writer or reader used as a value");
         self.hit(span);
     }
@@ -466,6 +466,7 @@ impl<'a> Sites<'_, 'a> {
         if !self.watching(call.span) || self.table_dispatch(&call.callee) {
             return;
         }
+        self.reach_reader_call(call, member, keys);
         let unknown = keys.iter().any(open);
         if unknown || (dynamic_paths() && names_one_of(keys, &VALUE_ENUMERATORS)) {
             self.reach_arguments(call);
@@ -631,6 +632,12 @@ impl<'a> Sites<'_, 'a> {
             .properties
             .iter()
             .any(|property| takes_reflective(&property.key));
+        let computed = object
+            .properties
+            .iter()
+            .filter(|property| property.computed)
+            .map(|property| property.key.as_expression());
+        let takes = takes || self.destructures_a_namespace(base, object.rest.is_some(), computed);
         if takes && !self.proven_non_global(base) {
             return self.hit_reflective(object.span);
         }
@@ -674,6 +681,16 @@ impl<'a> Sites<'_, 'a> {
                 takes_reflective(&p.name)
             }
         });
+        let computed = target
+            .properties
+            .iter()
+            .filter_map(|property| match property {
+                AssignmentTargetProperty::AssignmentTargetPropertyProperty(p) if p.computed => {
+                    Some(p.name.as_expression())
+                }
+                _ => None,
+            });
+        let takes = takes || self.destructures_a_namespace(base, target.rest.is_some(), computed);
         if takes && !self.proven_non_global(base) {
             return self.hit_reflective(target.span);
         }
@@ -710,6 +727,7 @@ impl<'a> Sites<'_, 'a> {
         }
         for property in &object.properties {
             if let ObjectPropertyKind::SpreadProperty(spread) = property {
+                self.reach_spread_namespace(spread);
                 self.reach_enumerated(&spread.argument, spread.span());
             }
         }
