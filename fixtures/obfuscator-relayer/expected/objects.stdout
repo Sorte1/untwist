@@ -1,0 +1,6 @@
+fruit 19 3
+describe inner at depth 2
+area 24 18 12
+settings true 3
+json {"total":49,"ok":true}
+entries 2

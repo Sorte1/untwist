@@ -1,0 +1,51 @@
+# obfuscator-io option matrix baseline, written by cargo xtask obf-options --baseline
+# safe, unsafe and webcrack count fixtures that are perfect: they run, keep no obfuscator machinery, simplify every expression back and print what the original prints
+# cell	fixtures	safe	unsafe	webcrack	parity-gaps	causes (lane runs)
+cff-n1	5	5/5	5/5	-	0	-
+cff-n2	5	5/5	5/5	-	0	-
+cff-n3	5	5/5	5/5	-	0	-
+cff-n4	5	5/5	5/5	-	0	-
+dead-n1	5	5/5	5/5	-	0	-
+dead-n2	5	5/5	5/5	-	0	-
+dead-n3	5	5/5	5/5	-	0	-
+dead-n4	5	5/5	5/5	-	0	-
+keys-n1	5	4/5	4/5	-	0	object-keys-not-merged (2)
+keys-n2	5	4/5	4/5	-	0	object-keys-not-merged (2)
+keys-n3	5	4/5	4/5	-	0	object-keys-not-merged (2)
+keys-n4	5	4/5	4/5	-	0	object-keys-not-merged (2)
+medium-unguarded-n1	5	4/5	4/5	-	0	object-keys-not-merged (2)
+medium-unguarded-n2	5	4/5	4/5	-	0	object-keys-not-merged (2)
+preset-default-n1	5	5/5	5/5	-	0	-
+preset-default-n2	5	5/5	5/5	-	0	-
+preset-default-n3	5	5/5	5/5	-	0	-
+preset-default-n4	5	5/5	5/5	-	0	-
+preset-high-n1	5	0/5	4/5	-	0	builtin-alias-patched (3), object-keys-not-merged (1), safe-global-key-reach (2)
+preset-low-n1	5	5/5	5/5	-	0	-
+preset-low-n2	5	5/5	5/5	-	0	-
+preset-low-n3	5	5/5	5/5	-	0	-
+preset-low-n4	5	5/5	5/5	-	0	-
+preset-medium-n1	5	0/5	4/5	-	0	builtin-alias-patched (4), object-keys-not-merged (1), safe-global-key-reach (1)
+rename-globals-n1	5	5/5	5/5	-	0	-
+rename-globals-n2	5	5/5	5/5	-	0	-
+rename-globals-n3	5	5/5	5/5	-	0	-
+rename-globals-n4	5	5/5	5/5	-	0	-
+self-n1	5	5/5	5/5	-	0	-
+self-n2	5	5/5	5/5	-	0	-
+self-n3	5	5/5	5/5	-	0	-
+self-n4	5	5/5	5/5	-	0	-
+split-n1	5	5/5	5/5	-	0	-
+split-n2	5	5/5	5/5	-	0	-
+split-n3	5	5/5	5/5	-	0	-
+split-n4	5	5/5	5/5	-	0	-
+strings-base64-n1	5	5/5	5/5	-	0	-
+strings-base64-n2	5	5/5	5/5	-	0	-
+strings-base64-n3	5	5/5	5/5	-	0	-
+strings-base64-n4	5	5/5	5/5	-	0	-
+strings-rc4-n1	5	5/5	5/5	-	0	-
+strings-rc4-n2	5	5/5	5/5	-	0	-
+strings-rc4-n3	5	5/5	5/5	-	0	-
+strings-rc4-n4	5	5/5	5/5	-	0	-
+# cause	cells	fixtures	lane-runs	parity-gap-cells	reason
+object-keys-not-merged	8	8	14	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...) or a value may throw or run code (a member read, arithmetic on a binding)
+builtin-alias-patched	2	7	7	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
+safe-global-key-reach	2	3	3	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
