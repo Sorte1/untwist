@@ -109,15 +109,7 @@ impl Pipeline {
 
     fn module_goals(&self, detected: &[bool], inputs: usize) -> Vec<bool> {
         (0..inputs)
-            .map(|index| {
-                self.options.module_goal
-                    || detected.get(index).copied().unwrap_or(false)
-                    || self
-                        .options
-                        .input_names
-                        .get(index)
-                        .is_some_and(|name| name.ends_with(".mjs"))
-            })
+            .map(|index| self.options.module_goal || detected.get(index).copied().unwrap_or(false))
             .collect()
     }
 

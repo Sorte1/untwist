@@ -118,6 +118,24 @@ impl Drop for WasmInputNesting {
     }
 }
 
+const MODULE_WORDS: [&str; 3] = ["import", "export", "await"];
+const MODULE_MARK: &str = "\nexport {};\n";
+
+fn kept_module_goal(code: String, module_goal: bool) -> String {
+    if !module_goal {
+        return code;
+    }
+    let spelled = MODULE_WORDS.iter().any(|word| code.contains(word));
+    let module = spelled && {
+        let alloc = Allocator::default();
+        parse_program(&alloc, &code).program.source_type.is_module()
+    };
+    match module {
+        true => code,
+        false => code + MODULE_MARK,
+    }
+}
+
 fn settle(
     outcome: Result<String, Box<dyn std::any::Any + Send>>,
     source: &str,
@@ -166,6 +184,15 @@ impl Pipeline {
         let (peak, hit) = (budget.peak(), untwist_core::budget::hit());
         drop(budget);
         let mut result = processed.unwrap_or_else(|note| InputResult::refused(&source, note));
+        result.module_goal |= self.options.module_goal
+            || self
+                .options
+                .input_names
+                .get(index)
+                .is_some_and(|name| name.ends_with(".mjs"));
+        if !result.refused {
+            result.code = kept_module_goal(std::mem::take(&mut result.code), result.module_goal);
+        }
         result.note_budget(peak, hit);
         let taken = crate::stats::RunStats::taken();
         let mut sink = stats_sink

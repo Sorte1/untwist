@@ -250,7 +250,8 @@ An input is taken as an ES module, as node 22 takes it, when it is named `.mjs` 
 (before any pass runs) has module syntax: `import`/`export`, `import.meta` or top-level `await`, also
 in code a later pass removes. Any other `.js` input is a script or CommonJS. The module code of a
 bundle in an ES module input is strict, so its written module files get `"use strict"` (or are ES
-modules themselves).
+modules themselves), and when the passes remove the only module syntax of such an input, its
+output ends with `export {};` so that node still runs it as a module.
 This decodes more on aggressively protected code. It is the right choice when you trust that the
 input does not tamper with the runtime, and the wrong one for code written to fool analysis.
 
