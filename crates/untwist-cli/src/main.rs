@@ -132,6 +132,7 @@ fn is_unsafe_lane_hint(note: &untwist::Note) -> bool {
 
 const STDERR: &str = "write to stderr";
 const MODULE_EXTENSION: &str = "mjs";
+const SCRIPT_EXTENSION: &str = "cjs";
 
 fn report_wasm(err: &mut dyn Write, result: &Output) -> io::Result<()> {
     for note in result.notes.iter().filter(|note| note.pass == "wasm") {
@@ -377,14 +378,19 @@ fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
     run_on(args, session, &sources)
 }
 
+fn only_extension(args: &Args, wanted: &str) -> bool {
+    matches!(args.files.as_slice(), [only] if only
+        .extension()
+        .is_some_and(|extension| extension == wanted))
+}
+
 fn run_on(args: &Args, session: &mut Session<'_>, sources: &[String]) -> Result<u8> {
     let borrowed: Vec<&str> = sources.iter().map(String::as_str).collect();
     let mut options = std::mem::take(&mut session.options);
     options.input_source_maps = input_source_maps(args, sources)?;
     options.input_names = untwist::input_names(&args.files);
-    options.module_goal = matches!(args.files.as_slice(), [only] if only
-        .extension()
-        .is_some_and(|extension| extension == MODULE_EXTENSION));
+    options.module_goal = only_extension(args, MODULE_EXTENSION);
+    options.script_goal = only_extension(args, SCRIPT_EXTENSION);
     let mut result = Pipeline::new(options).run_many(&borrowed);
     result.source_map_link = args.source_map;
     if args.source_map.is_some() && args.output.is_none() {

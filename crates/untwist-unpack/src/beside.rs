@@ -297,7 +297,38 @@ fn statement_holds_only(statement: &Statement<'_>, site: Span, in_function: bool
     }
 }
 
-fn umd_factory_holds_only(statement: &Statement<'_>, site: Span) -> bool {
+fn inert_initializer(init: Option<&Expression<'_>>) -> bool {
+    matches!(
+        init.map(Expression::without_parentheses),
+        None | Some(
+            Expression::NullLiteral(_)
+                | Expression::BooleanLiteral(_)
+                | Expression::NumericLiteral(_)
+                | Expression::StringLiteral(_)
+                | Expression::FunctionExpression(_)
+                | Expression::ArrowFunctionExpression(_)
+        )
+    )
+}
+
+fn runs_nothing(statement: &Statement<'_>) -> bool {
+    match statement {
+        Statement::EmptyStatement(_) | Statement::FunctionDeclaration(_) => true,
+        Statement::VariableDeclaration(declaration) => {
+            declaration.kind == VariableDeclarationKind::Var
+                && declaration
+                    .declarations
+                    .iter()
+                    .all(|declarator| inert_initializer(declarator.init.as_ref()))
+        }
+        _ => false,
+    }
+}
+
+fn umd_factory_holds_only(before: &[Statement<'_>], statement: &Statement<'_>, site: Span) -> bool {
+    if !before.iter().all(runs_nothing) {
+        return false;
+    }
     crate::umd::wrapper::node_factory(statement).is_some_and(|factory| {
         factory.params.items.is_empty()
             && factory.params.rest.is_none()
@@ -317,7 +348,7 @@ pub fn around<'a>(
         .position(|statement| statement.span().contains_inclusive(site))?;
     let whole = wrapped
         || statement_holds_only(&body[at], site, false)
-        || umd_factory_holds_only(&body[at], site);
+        || umd_factory_holds_only(&body[..at], &body[at], site);
     if !whole {
         let line = line(program.source_text, body[at].span());
         return Some(Around::Refused(crate::notes::bundle_statement_shared(line)));

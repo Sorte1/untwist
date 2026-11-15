@@ -7,7 +7,8 @@ use untwist_core::ast_util::respan::reset_synthetic_spans;
 use untwist_core::ast_util::statements::statement_spans;
 use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{
-    early_errors, has_error, parse_named_module, parse_program, parse_with, Parsed, SourceType,
+    early_errors, has_error, parse_failure, parse_named_module, parse_named_script, parse_program,
+    parse_with, Early, ParseFailure, Parsed, SourceType,
 };
 use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions, RoundCapUndo};
 use untwist_core::print::pretty_codegen;
@@ -33,7 +34,10 @@ use super::notes::{
 use super::shell::{scope_shell_body, strip_shell};
 use super::snapshots::Snapshots;
 use super::stages::StageCx;
-use super::{summarize_diagnostics, Pipeline, Reservation, PANICKED, TYPESCRIPT_IN_JAVASCRIPT};
+use super::{
+    summarize_diagnostics, Pipeline, Reservation, ANNEX_B_UNMODELLED, PANICKED, PARSE_UNSUPPORTED,
+    TYPESCRIPT_IN_JAVASCRIPT,
+};
 use crate::options::Progress;
 use crate::report::StageReport;
 
@@ -44,6 +48,7 @@ pub(super) struct InputResult {
     pub(super) notes: Vec<Note>,
     pub(super) parse_diagnostics: Vec<String>,
     pub(super) parse_errors: u32,
+    pub(super) parse_refusal: Option<&'static str>,
     pub(super) panicked: bool,
     pub(super) refused: bool,
     pub(super) heap_peak: u64,
@@ -154,13 +159,19 @@ fn settle(
 }
 
 impl Pipeline {
+    fn named(&self, index: usize, extension: &str) -> bool {
+        self.options
+            .input_names
+            .get(index)
+            .is_some_and(|name| name.ends_with(extension))
+    }
+
     fn module_named(&self, index: usize) -> bool {
-        self.options.module_goal
-            || self
-                .options
-                .input_names
-                .get(index)
-                .is_some_and(|name| name.ends_with(".mjs"))
+        self.options.module_goal || self.named(index, ".mjs")
+    }
+
+    fn script_named(&self, index: usize) -> bool {
+        !self.module_named(index) && (self.options.script_goal || self.named(index, ".cjs"))
     }
 
     pub(super) fn run_input(
@@ -171,6 +182,7 @@ impl Pipeline {
     ) -> InputResult {
         let reservation = Reservation {
             module_named: self.module_named(index),
+            script_named: self.script_named(index),
             ..reservation
         };
         let announced = !self.options.isolation.refused.contains(&index);
@@ -262,7 +274,10 @@ impl Pipeline {
         }));
         let outcome = match outcome {
             Ok(None) if result.parse_errors > 0 => return result.refused_for_syntax(source),
-            Ok(None) => return InputResult::refused(source, TYPESCRIPT_IN_JAVASCRIPT),
+            Ok(None) => {
+                let note = result.parse_refusal.unwrap_or(TYPESCRIPT_IN_JAVASCRIPT);
+                return InputResult::refused(source, note);
+            }
             Ok(Some(Err(note))) => return InputResult::refused(source, note),
             Ok(Some(Ok(code))) => Ok(code),
             Err(panic) => Err(panic),
@@ -401,10 +416,11 @@ impl Pipeline {
         }
         self.options.progress(Progress::StageBegins("parse"));
         let alloc = Allocator::default();
-        let mut parsed = match (first, reservation.module_named) {
-            (true, true) => parse_named_module(&alloc, text),
-            (true, false) => parse_program(&alloc, text),
-            (false, _) => parse_with(&alloc, text, SourceType::script()),
+        let mut parsed = match (first, reservation.module_named, reservation.script_named) {
+            (true, true, _) => parse_named_module(&alloc, text),
+            (true, false, true) => parse_named_script(&alloc, text),
+            (true, false, false) => parse_program(&alloc, text),
+            (false, _, _) => parse_with(&alloc, text, SourceType::script()),
         };
         result.module_goal |= first && parsed.program.source_type.is_module();
         let errors = match parse_outcome(text, &parsed, first, result) {
@@ -579,7 +595,7 @@ fn parse_outcome(
 ) -> Result<usize, Step> {
     let parse_failed = has_error(&parsed.diagnostics);
     if !first {
-        return match parse_failed || !early_errors(&parsed.program).is_empty() {
+        return match parse_failed || !early_errors(&parsed.program).is_clean() {
             true => Err(Step::Kept(Refusal::Unparsable)),
             false => Ok(0),
         };
@@ -588,8 +604,20 @@ fn parse_outcome(
         return Err(Step::Done(None));
     }
     let early = match parse_failed {
-        true => Vec::new(),
-        false => early_errors(&parsed.program),
+        true => {
+            let failure = parse_failure(text, &parsed.diagnostics);
+            result.parse_refusal =
+                (failure == ParseFailure::Unsupported).then_some(PARSE_UNSUPPORTED);
+            Vec::new()
+        }
+        false => match early_errors(&parsed.program) {
+            Early::Clean => Vec::new(),
+            Early::SyntaxError(found) => found,
+            Early::UnmodelledAnnexB(_) => {
+                result.parse_refusal = Some(ANNEX_B_UNMODELLED);
+                return Err(Step::Done(None));
+            }
+        },
     };
     let (mut diagnostics, errors) = summarize_diagnostics(text, &parsed.diagnostics);
     let (early_diagnostics, early_count) = summarize_diagnostics(text, &early);
@@ -750,6 +778,7 @@ mod tests {
             limits: untwist_core::budget::Limits::default(),
             shared: None,
             module_named: false,
+            script_named: false,
         };
         let printed = pipeline
             .process(

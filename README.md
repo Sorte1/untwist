@@ -273,10 +273,19 @@ An input is taken as an ES module, as node 22 takes it, when it is named `.mjs`,
 (before any pass runs) does not parse as a script but parses as a module (`import`/`export`,
 `import.meta` or a top-level `await x`, also in code a later pass removes), or when it declares
 `require`, `exports`, `module`, `__filename` or `__dirname` with a top-level `let`, `const` or `class`,
-which node's CommonJS wrapper does not allow. Any other `.js` input is a
-script or CommonJS, also one that parses only by calling a global named `await` (`await (x)`). An
-input that node rejects with a SyntaxError (an early error such as a legacy octal literal in strict
-code) is passed through unchanged with an error. The module code of a
+which node's CommonJS wrapper does not allow. A `.cjs` input is always a script, as in node. Any
+other `.js` input is a script or CommonJS, also one that parses only by calling a global named
+`await` (`await (x)`). An input that node 22 rejects with a SyntaxError is passed through unchanged
+with an error: an early error (a legacy octal literal in strict code, an invalid regular
+expression pattern, a parenthesised destructuring target), syntax node 22 does not read (`using`,
+decorators, `accessor`, `import defer`/`source`, `assert` import attributes, regular expression
+modifiers and repeated group names), and `<!--` in module code. Only the checks that a corpus of
+probes run against node 22 shows node also makes refuse an input, so for example a legacy octal
+literal directly in a sloppy file's class body, which V8 accepts, is read. An input that node runs
+but untwist's parser cannot read (a call as an assignment target, `for (yield of ...)`) is passed
+through unchanged with an error that says so, and a function declared directly in an `if` beside a
+same-named `let`, `const` or `class` is passed through unchanged because untwist's binder does not
+model its scope. The module code of a
 bundle in an ES module input is strict, so its written module files get `"use strict"` (or are ES
 modules themselves), and when the passes remove the only module syntax of such an input, its
 output ends with `export {};` so that node still runs it as a module.

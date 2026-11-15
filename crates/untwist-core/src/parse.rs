@@ -13,7 +13,7 @@ pub use oxc_span::SourceType;
 mod early;
 mod unnamed;
 mod wrapper_names;
-pub use early::early_errors;
+pub use early::{early_errors, parse_failure, Early, ParseFailure};
 use oxc_syntax::scope::ScopeFlags;
 
 pub struct Parsed<'a> {
@@ -38,13 +38,12 @@ pub fn parse_program<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
             None => as_script,
         };
     }
-    let (mut as_module, module_syntax) = parse_recording(alloc, source, module_source_type());
+    let (as_module, module_syntax) = parse_recording(alloc, source, module_source_type());
     if !has_error(&as_module.diagnostics) {
-        if !module_syntax && !has_top_level_await(&as_module.program) {
-            as_module.source_type = script_source_type();
-            as_module.program.source_type = as_module.source_type;
-        }
-        return as_module;
+        return match module_syntax || has_top_level_await(&as_module.program) {
+            true => as_module,
+            false => as_script,
+        };
     }
     if error_count(&as_script.diagnostics) < error_count(&as_module.diagnostics) {
         as_script
@@ -63,12 +62,29 @@ fn wrapper_goal<'a>(
     if !has_error(&as_module.diagnostics) {
         return as_module;
     }
-    as_script.diagnostics.push(OxcDiagnostic::error(format!(
-        "Identifier '{name}' has already been declared: node runs this file in its CommonJS \
-         wrapper, whose parameter {name} the top-level declaration redeclares, and the file does \
-         not parse as an ES module either"
-    )));
+    as_script.diagnostics.push(wrapper_redeclared(
+        name,
+        ", and the file does not parse as an ES module either",
+    ));
     as_script
+}
+
+pub fn parse_named_script<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {
+    let mut as_script = parse_with(alloc, source, script_source_type());
+    if has_error(&as_script.diagnostics) {
+        return as_script;
+    }
+    if let Some(name) = wrapper_names::lexical_wrapper_name(&as_script.program) {
+        as_script.diagnostics.push(wrapper_redeclared(&name, "."));
+    }
+    as_script
+}
+
+fn wrapper_redeclared(name: &str, tail: &str) -> OxcDiagnostic {
+    OxcDiagnostic::error(format!(
+        "Identifier '{name}' has already been declared: node runs this file in its CommonJS \
+         wrapper, whose parameter {name} the top-level declaration redeclares{tail}"
+    ))
 }
 
 pub fn parse_named_module<'a>(alloc: &'a Allocator, source: &'a str) -> Parsed<'a> {

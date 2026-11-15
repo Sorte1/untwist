@@ -18,6 +18,7 @@ pub use super::refusal::TOO_LARGE_FOR_THE_BUDGET;
 pub use super::refusal::TYPESCRIPT_IN_JAVASCRIPT;
 pub use super::refusal::UNPACK_TEXT_TOO_DEEP;
 pub use super::refusal::WORKER_DIED;
+pub use super::refusal::{ANNEX_B_UNMODELLED, PARSE_UNSUPPORTED};
 
 pub const PANICKED: &str = "this input panicked part-way through a pass; its output is the tree \
      as far as the passes got and may not run; the other inputs continued";
@@ -134,6 +135,8 @@ catalogue!(
     UNPACK_TEXT_TOO_DEEP,
     TYPESCRIPT_IN_JAVASCRIPT,
     SYNTAX_ERROR_REFUSED,
+    PARSE_UNSUPPORTED,
+    ANNEX_B_UNMODELLED,
     WORKER_DIED,
     OVER_MEMORY_REFUSED,
     OVER_TIME_REFUSED,
