@@ -10,6 +10,7 @@ mod filtered;
 mod flow;
 mod forward;
 mod fresh;
+mod global_text;
 mod holds;
 mod instance;
 mod judge;
@@ -129,7 +130,7 @@ pub fn agnostic<'a>(
     settle(
         program,
         scoping,
-        (resolve, machinery, settle::Watch::default()),
+        (resolve, machinery, settle::Watch::runners()),
     )
     .0
 }
@@ -164,7 +165,7 @@ fn reach_watch<'k>(reach: ReachWatch<'k>) -> settle::Watch<'k> {
         observe: reach.observe,
         defer: false,
         printers_quiet: false,
-        runner_texts: false,
+        runner_texts: true,
     }
 }
 
@@ -333,7 +334,7 @@ pub fn exposed_script_globals<'a>(
     program: &'a Program<'a>,
     scoping: &Scoping,
 ) -> Option<FxHashSet<SymbolId>> {
-    let (out, rebound) = settle(program, scoping, (None, &[], settle::Watch::default()));
+    let (out, rebound) = settle(program, scoping, (None, &[], settle::Watch::runners()));
     if out.saturated || out.code_text.is_some() {
         return None;
     }
