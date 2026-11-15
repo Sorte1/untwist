@@ -1,11 +1,15 @@
-use oxc_allocator::Allocator;
+use std::cell::Cell;
+
+use oxc_allocator::{Allocator, TakeIn};
 use oxc_ast::ast::*;
+use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_mut, VisitJs, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_str::Ident;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::naming_slot::{named_as, text_observes_names};
 use untwist_core::semantic::{build_scoping, eval_payload_names};
 
 use crate::closed::HOST_NAMES;
@@ -42,11 +46,81 @@ fn evaluated_names(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<String
     eval_payload_names(program).into_iter().collect()
 }
 
+thread_local! {
+    static NAME_HAZARD: Cell<bool> = const { Cell::new(false) };
+}
+
+pub fn clear_name_hazard() {
+    NAME_HAZARD.with(|cell| cell.set(false));
+}
+
+pub fn took_name_hazard() -> bool {
+    NAME_HAZARD.with(|cell| cell.replace(false))
+}
+
 struct Apply<'a, 'r> {
+    builder: AstBuilder<'a>,
     free: &'r FxHashMap<&'r str, Ident<'a>>,
     symbols: &'r FxHashMap<SymbolId, Ident<'a>>,
     scoping: &'r Scoping,
+    text: &'a str,
+    names_read: Option<bool>,
     changes: usize,
+}
+
+fn naming_operator(operator: AssignmentOperator) -> bool {
+    matches!(
+        operator,
+        AssignmentOperator::Assign
+            | AssignmentOperator::LogicalOr
+            | AssignmentOperator::LogicalAnd
+            | AssignmentOperator::LogicalNullish
+    )
+}
+
+impl<'a> Apply<'a, '_> {
+    fn names_read(&mut self) -> bool {
+        let text = self.text;
+        *self
+            .names_read
+            .get_or_insert_with(|| text_observes_names(text))
+    }
+
+    fn renamed_binding(&self, id: &BindingIdentifier<'a>) -> Option<&'a str> {
+        let symbol = id.symbol_id.get()?;
+        self.symbols
+            .contains_key(&symbol)
+            .then_some(id.name.as_str())
+    }
+
+    fn renamed_reference(&self, id: &IdentifierReference<'a>) -> Option<&'a str> {
+        let symbol = id
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        let renamed = match symbol {
+            Some(symbol) => self.symbols.contains_key(&symbol),
+            None => self.free.contains_key(id.name.as_str()),
+        };
+        renamed.then_some(id.name.as_str())
+    }
+
+    fn keep_name(&mut self, name: Option<&'a str>, value: &mut Expression<'a>) {
+        let Some(name) = name else {
+            return;
+        };
+        if value.is_anonymous_function_definition() && self.names_read() {
+            let taken = value.take_in(&self.builder);
+            *value = named_as(name, taken, &self.builder);
+        }
+    }
+
+    fn keep_declared_name(&mut self, id: Option<&BindingIdentifier<'a>>) {
+        let renamed = id.and_then(|id| self.renamed_binding(id)).is_some();
+        if renamed && self.names_read() {
+            NAME_HAZARD.with(|cell| cell.set(true));
+        }
+    }
 }
 
 impl<'a> VisitMut<'a> for Apply<'a, '_> {
@@ -79,6 +153,199 @@ impl<'a> VisitMut<'a> for Apply<'a, '_> {
         }
         walk_mut::walk_binding_identifier(self, it);
     }
+
+    fn visit_variable_declarator(&mut self, it: &mut VariableDeclarator<'a>) {
+        if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &mut it.init) {
+            let name = self.renamed_binding(id);
+            self.keep_name(name, init);
+        }
+        walk_mut::walk_variable_declarator(self, it);
+    }
+
+    fn visit_assignment_expression(&mut self, it: &mut AssignmentExpression<'a>) {
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
+            if naming_operator(it.operator) {
+                let name = self.renamed_reference(id);
+                self.keep_name(name, &mut it.right);
+            }
+        }
+        walk_mut::walk_assignment_expression(self, it);
+    }
+
+    fn visit_assignment_pattern(&mut self, it: &mut AssignmentPattern<'a>) {
+        if let BindingPattern::BindingIdentifier(id) = &it.left {
+            let name = self.renamed_binding(id);
+            self.keep_name(name, &mut it.right);
+        }
+        walk_mut::walk_assignment_pattern(self, it);
+    }
+
+    fn visit_formal_parameter(&mut self, it: &mut FormalParameter<'a>) {
+        if let (BindingPattern::BindingIdentifier(id), Some(init)) =
+            (&it.pattern, &mut it.initializer)
+        {
+            let name = self.renamed_binding(id);
+            self.keep_name(name, init);
+        }
+        walk_mut::walk_formal_parameter(self, it);
+    }
+
+    fn visit_assignment_target_with_default(&mut self, it: &mut AssignmentTargetWithDefault<'a>) {
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.binding {
+            let name = self.renamed_reference(id);
+            self.keep_name(name, &mut it.init);
+        }
+        walk_mut::walk_assignment_target_with_default(self, it);
+    }
+
+    fn visit_assignment_target_property(&mut self, it: &mut AssignmentTargetProperty<'a>) {
+        if let AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(shorthand) = it {
+            if let Some(name) = self.renamed_reference(&shorthand.binding) {
+                *it = self.spelled_out(shorthand, name);
+            }
+        }
+        walk_mut::walk_assignment_target_property(self, it);
+    }
+
+    fn visit_statement(&mut self, it: &mut Statement<'a>) {
+        if let Some(statement) = self.class_as_let(it) {
+            *it = statement;
+        }
+        walk_mut::walk_statement(self, it);
+    }
+
+    fn visit_function(&mut self, it: &mut Function<'a>, flags: ScopeFlags) {
+        self.keep_declared_name(it.id.as_ref());
+        walk_mut::walk_function(self, it, flags);
+    }
+
+    fn visit_class(&mut self, it: &mut Class<'a>) {
+        self.keep_declared_name(it.id.as_ref());
+        walk_mut::walk_class(self, it);
+    }
+}
+
+struct Mentions<'r, 'a, 'b> {
+    apply: &'r Apply<'a, 'b>,
+    name: &'r str,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for Mentions<'_, 'a, '_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= it.name == self.name || self.apply.renamed_reference(it).is_some();
+    }
+}
+
+impl<'a> Apply<'a, '_> {
+    fn class_as_let(&mut self, it: &mut Statement<'a>) -> Option<Statement<'a>> {
+        let Statement::ClassDeclaration(class) = it else {
+            return None;
+        };
+        let id = class.id.as_ref()?;
+        let (name, symbol) = (self.renamed_binding(id)?, id.symbol_id.get()?);
+        if !self.names_read() {
+            return None;
+        }
+        let mut mentions = Mentions {
+            apply: self,
+            name,
+            found: false,
+        };
+        mentions.visit_class(class);
+        if mentions.found {
+            return None;
+        }
+        let Statement::ClassDeclaration(mut class) = it.take_in(&self.builder) else {
+            return None;
+        };
+        let span = class.span;
+        let id_span = class.id.as_ref().map_or(span, |id| id.span);
+        class.r#type = ClassType::ClassExpression;
+        class.id = Some(BindingIdentifier::new(id_span, name, &self.builder));
+        let declarator = VariableDeclarator::new(
+            span,
+            BindingPattern::new_binding_identifier_with_symbol_id(
+                id_span,
+                name,
+                symbol,
+                &self.builder,
+            ),
+            None,
+            Some(Expression::ClassExpression(class)),
+            false,
+            &self.builder,
+        );
+        Some(Statement::new_variable_declaration(
+            span,
+            VariableDeclarationKind::Let,
+            oxc_allocator::Vec::from_iter_in([declarator], &self.builder),
+            false,
+            &self.builder,
+        ))
+    }
+
+    fn spelled_out(
+        &mut self,
+        shorthand: &mut AssignmentTargetPropertyIdentifier<'a>,
+        name: &'a str,
+    ) -> AssignmentTargetProperty<'a> {
+        let span = shorthand.span;
+        let binding = &shorthand.binding;
+        let target = match binding.reference_id.get() {
+            Some(reference) => {
+                AssignmentTarget::new_assignment_target_identifier_with_reference_id(
+                    binding.span,
+                    binding.name,
+                    reference,
+                    &self.builder,
+                )
+            }
+            None => AssignmentTarget::new_assignment_target_identifier(
+                binding.span,
+                binding.name,
+                &self.builder,
+            ),
+        };
+        let target = match shorthand.init.take() {
+            Some(mut init) => {
+                self.keep_name(Some(name), &mut init);
+                AssignmentTargetMaybeDefault::new_assignment_target_with_default(
+                    span,
+                    target,
+                    init,
+                    &self.builder,
+                )
+            }
+            None => AssignmentTargetMaybeDefault::from(target),
+        };
+        AssignmentTargetProperty::new_assignment_target_property_property(
+            span,
+            PropertyKey::new_static_identifier(span, name, &self.builder),
+            target,
+            false,
+            &self.builder,
+        )
+    }
+}
+
+fn apply_renames<'a>(
+    alloc: &'a Allocator,
+    program: &mut Program<'a>,
+    scoping: &Scoping,
+    (free, symbols): (&FxHashMap<&str, Ident<'a>>, &FxHashMap<SymbolId, Ident<'a>>),
+) -> usize {
+    let mut apply = Apply {
+        builder: AstBuilder::new(alloc),
+        free,
+        symbols,
+        scoping,
+        text: program.source_text,
+        names_read: None,
+        changes: 0,
+    };
+    apply.visit_program(program);
+    apply.changes
 }
 
 fn collect_collisions<'a>(
@@ -191,14 +458,8 @@ fn rename_parameters_as<'a>(
         return (0, fresh);
     }
 
-    let mut apply = Apply {
-        free: &free,
-        symbols: &symbols,
-        scoping: &scoping,
-        changes: 0,
-    };
-    apply.visit_program(program);
-    (apply.changes, fresh)
+    let changes = apply_renames(alloc, program, &scoping, (&free, &symbols));
+    (changes, fresh)
 }
 
 pub fn rename_binding<'a>(
@@ -225,14 +486,7 @@ pub fn rename_binding<'a>(
     }
     symbols.insert(target, Ident::from_str_in(to, &alloc));
     let free: FxHashMap<&str, Ident<'a>> = FxHashMap::default();
-    let mut apply = Apply {
-        free: &free,
-        symbols: &symbols,
-        scoping: &scoping,
-        changes: 0,
-    };
-    apply.visit_program(program);
-    apply.changes > 0
+    apply_renames(alloc, program, &scoping, (&free, &symbols)) > 0
 }
 
 struct WrapperNames<'n> {
@@ -316,12 +570,5 @@ pub fn rename_wrapper_bindings<'a>(
         return 0;
     }
     let free: FxHashMap<&str, Ident<'a>> = FxHashMap::default();
-    let mut apply = Apply {
-        free: &free,
-        symbols: &symbols,
-        scoping: &scoping,
-        changes: 0,
-    };
-    apply.visit_program(program);
-    apply.changes
+    apply_renames(alloc, program, &scoping, (&free, &symbols))
 }

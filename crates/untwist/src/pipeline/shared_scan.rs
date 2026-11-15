@@ -203,3 +203,16 @@ fn foreign_of(all: &[Seen], own: usize) -> SharedGlobals {
     }
     shared
 }
+
+pub(super) fn names_read_in_any(programs: &[oxc_ast::ast::Program<'_>]) -> Option<SharedGlobals> {
+    if programs.len() < 2 {
+        return None;
+    }
+    let read = programs
+        .iter()
+        .any(|program| reads_names(program, &build_scoping(program).scoping));
+    read.then(|| SharedGlobals {
+        names_read_elsewhere: true,
+        ..SharedGlobals::default()
+    })
+}

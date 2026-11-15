@@ -70,7 +70,7 @@ fn a_named_single_define_renames_and_exports_the_declaration() {
     );
     assert_eq!(
         code,
-        "export class counter {}\nlet _counter = 1;\ncounter = 2;"
+        "export let counter = class f {};\nlet _counter = 1;\ncounter = 2;"
     );
     assert!(is_esm);
 }

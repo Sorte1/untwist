@@ -201,7 +201,7 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   turned every `require("./sum")` base into a callee-derived `cb2` on the next run.
 - **Function and class names.** Renaming a binding that gives a function or class its name
   changes what `.name` returns. So in the safe lane, when the file may read `name` on a value
-  that is not an object, array or literal, every such binding keeps its name in every mode:
+  that may reach a function, every such binding keeps its name in every mode:
   function and class declarations, named function and class expressions, and a variable,
   parameter default or assignment whose value is an anonymous function, arrow or class. A file
   may read `name` when it has any of: a static key (`f.name`, `f["name"]`, `const { name } = f`,
@@ -218,9 +218,28 @@ Not divergences from the reference deobfuscator, but worth recording about the o
   `{ ...f }` of such a value or any object rest pattern (a `name` made enumerable is copied); or
   a `with` statement. Listing keys alone (`Object.keys`, `getOwnPropertyNames`, `Reflect.ownKeys`,
   `for…in`) is not a read, since every function has an own `name`; reading a value through a
-  listed key goes through one of the forms above. A file with no such read is renamed as before,
-  and `--unsafe` renames them anyway. The limit, like `fn.toString()`: a read that only code text
-  outside the program performs is not seen (another input of the same run is). The host also reads `name` when it prints a
+  listed key goes through one of the forms above. A counter must be a local binding whose every
+  write the scan sees: a variable at the top level of a file (a classic script's top-level names
+  live on the global object and any script can assign them), a variable named `arguments`, a name
+  a block-level function declaration also uses (Annex B copies the function into the variable
+  without a write reference) and any counter in a file with a direct `eval` is not one. A read
+  that reaches a function only through the prototype chain counts: only an object literal with no
+  `__proto__: value` (or whose `__proto__` value is again such a literal or `null`) and `null` are
+  receivers that never reach one, since `({ __proto__: f }).name` reads `f`'s name and the
+  prototypes of arrays, strings, numbers, booleans, regexps and templates can be set to a function
+  by any input (`Object.setPrototypeOf(String.prototype, f)`, `Array.prototype.__proto__ = f`).
+  Readers that only see own properties (`getOwnPropertyDescriptor(s)`, `values`, `entries`,
+  `assign` sources, object spread) still skip every object, array and literal. Code text the
+  program may run counts as a read (the `sequence` rule in unminify.md: a free `eval`,
+  `Function`, timer with a text, `vm` runner or `constructor`, reached in any form), so
+  `Function("f", "return f.name")(g)` keeps `g`'s name. A file with no such read is renamed as
+  before, and `--unsafe` renames them anyway. The limit, like `fn.toString()`: a read that only
+  code text outside the run performs is not seen (another input of the same run is, and so is
+  code text the program itself runs). An exported function renamed behind `export { f as g }` and
+  read by an importer that is not an input is such an outside read. The text of an engine error
+  message that quotes a function or class name (`Class constructor C cannot be invoked without
+  'new'`, `C is not a function`) is not a `name` read: like a stack trace, it is engine text,
+  so it may change when a binding is renamed or an anonymous class or function gets a name. The host also reads `name` when it prints a
   value: `console.log(f)`, `console.dir`, `util.inspect` and the devtools show
   `[Function: newName]` or `NewClass { … }` for a function, a class or an instance, and
   `console.log(globalThis)` lists the global object's names. Like error stack traces, what the

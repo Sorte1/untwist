@@ -174,6 +174,60 @@ fn unpacked_trees_keep_the_names_the_bundle_gives() {
             true,
             "helpers-function",
         ),
+        (
+            "systemjs-declarator-export.js",
+            "systemjs-declarator-export.loader.cjs",
+            true,
+            "area",
+        ),
+        (
+            "systemjs-object-default.js",
+            "systemjs-object-default.loader.cjs",
+            true,
+            "area",
+        ),
+        (
+            "systemjs-default-collision.js",
+            "systemjs-default-collision.loader.cjs",
+            true,
+            "area",
+        ),
+        (
+            "closure-assigned-var.js",
+            "closure-assigned-var.js",
+            false,
+            "base",
+        ),
+        (
+            "closure-assigned-var.js",
+            "closure-assigned-var.js",
+            false,
+            "eval b",
+        ),
+        (
+            "esbuild-parameter-target.js",
+            "esbuild-parameter-target.js",
+            false,
+            "pn",
+        ),
+        (
+            "esbuild-inner-exports.js",
+            "esbuild-inner-exports.js",
+            false,
+            "pn",
+        ),
+        (
+            "webpack-inner-exports.js",
+            "webpack-inner-exports.js",
+            false,
+            "pn",
+        ),
+        (
+            "metro-parameter-target.js",
+            "metro-parameter-target.js",
+            false,
+            "pn",
+        ),
     ];
     let mut wrong = Vec::new();
     for (index, (input, runner, module, marker)) in cases.into_iter().enumerate() {
@@ -190,6 +244,54 @@ fn unpacked_trees_keep_the_names_the_bundle_gives() {
                     "{input} {flags:?}: bundle {expected:?}, tree {observed:?}"
                 ));
             }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn a_name_read_in_another_input_keeps_the_names_an_unpacked_bundle_gives() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let work = tempfile::tempdir().expect("tempdir");
+    let runner = data("realm-runner.cjs");
+    let (bundle, reader) = (
+        data("closure-two-inputs-a.js"),
+        data("closure-two-inputs-b.js"),
+    );
+    let realm = |first: &std::ffi::OsStr, then: &std::ffi::OsStr, last: &Path| {
+        let args = [runner.as_os_str(), first, then];
+        run_with(&node, &args, last)
+            .expect("run node")
+            .map_or("did not finish".to_string(), |out| out.stdout)
+    };
+    let expected = realm(std::ffi::OsStr::new("-"), bundle.as_os_str(), &reader);
+    assert!(expected.contains("sharedFn"), "{expected}");
+    let mut wrong = Vec::new();
+    for (lane, flags) in LANES.iter().enumerate() {
+        let out = work.path().join(format!("out-{lane}"));
+        let mut args = lane_args(flags);
+        args.extend([
+            OsString::from("-f"),
+            OsString::from("-o"),
+            out.as_os_str().to_owned(),
+            bundle.as_os_str().to_owned(),
+            reader.as_os_str().to_owned(),
+        ]);
+        untwist(&args);
+        let entry = out.join("index.js");
+        if !entry.exists() {
+            continue;
+        }
+        let entry = std::fs::canonicalize(&entry).expect("entry");
+        let observed = realm(
+            entry.as_os_str(),
+            std::ffi::OsStr::new("--"),
+            &out.join("closure-two-inputs-b.js"),
+        );
+        if observed != expected {
+            wrong.push(format!("{flags:?}: inputs {expected:?}, tree {observed:?}"));
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));

@@ -1,4 +1,4 @@
-use oxc_allocator::{Allocator, Vec as AVec};
+use oxc_allocator::{Allocator, TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
@@ -423,6 +423,29 @@ impl<'a> VisitMut<'a> for Rewrite<'_, 'a> {
     fn visit_tagged_template_expression(&mut self, it: &mut TaggedTemplateExpression<'a>) {
         self.callee(&mut it.tag);
         walk_mut::walk_tagged_template_expression(self, it);
+    }
+
+    fn visit_assignment_expression(&mut self, it: &mut AssignmentExpression<'a>) {
+        let named = match &it.left {
+            AssignmentTarget::AssignmentTargetIdentifier(id) if self.target(id) => {
+                Some(id.name.as_str())
+            }
+            _ => None,
+        };
+        let naming = matches!(
+            it.operator,
+            AssignmentOperator::Assign
+                | AssignmentOperator::LogicalOr
+                | AssignmentOperator::LogicalAnd
+                | AssignmentOperator::LogicalNullish
+        );
+        if let Some(name) = named.filter(|_| naming) {
+            if it.right.is_anonymous_function_definition() && self.observed() {
+                let right = it.right.take_in(&self.builder);
+                it.right = named_as(name, right, &self.builder);
+            }
+        }
+        walk_mut::walk_assignment_expression(self, it);
     }
 
     fn visit_simple_assignment_target(&mut self, it: &mut SimpleAssignmentTarget<'a>) {
