@@ -491,3 +491,92 @@ fn every_sixth_review_probe_holds_its_types_when_node_runs_it() {
     assert!(ran > 40, "{ran}");
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
+
+fn write_annotated(from: &Path, to: &Path, mode: untwist_types::Mode) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let path = entry.unwrap().path();
+        let source = std::fs::read_to_string(&path).unwrap();
+        let code = untwist_types::annotate(&source, mode).code;
+        std::fs::write(to.join(path.file_name().unwrap()), code).unwrap();
+    }
+}
+
+fn observed(node: &Path, file: &Path, strip: bool) -> (String, bool) {
+    let mut command = Command::new(node);
+    if strip {
+        command
+            .arg("--experimental-strip-types")
+            .arg("--no-warnings");
+    }
+    let out = command.arg(file).output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    (
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        stderr.contains("__UT_FAIL"),
+    )
+}
+
+#[test]
+fn every_seventh_review_probe_runs_alike_and_holds_its_types() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../untwist-types/tests/probes/a40r7");
+    let work = tempfile::tempdir().unwrap();
+    let mut failures = Vec::new();
+    let mut ran = 0;
+    let mut annotated = 0;
+    for dir in std::fs::read_dir(&root).unwrap() {
+        let dir = dir.unwrap().path();
+        let name = dir.file_name().unwrap().to_string_lossy().into_owned();
+        let jsdoc = work.path().join(format!("jsdoc-{name}"));
+        write_annotated(&dir, &jsdoc, untwist_types::Mode::Jsdoc);
+        for file in std::fs::read_dir(&dir).unwrap() {
+            let path = file.unwrap().path();
+            let probe = path.file_name().unwrap().to_string_lossy().into_owned();
+            let source = std::fs::read_to_string(&path).unwrap();
+            let (expected, _) = observed(&node, &path, false);
+            let (commented, _) = observed(&node, &jsdoc.join(&probe), false);
+            if commented != expected {
+                failures.push(format!(
+                    "{name}/{probe} jsdoc: printed {commented:?}, node printed {expected:?}"
+                ));
+            }
+            let alone = !source.contains("from \"./") && !source.contains("import(\"./");
+            if alone {
+                let typed = work
+                    .path()
+                    .join(format!("{name}-{}.mts", probe.trim_end_matches(".mjs")));
+                std::fs::write(
+                    &typed,
+                    untwist_types::annotate(&source, untwist_types::Mode::Ts).code,
+                )
+                .unwrap();
+                let (stripped, _) = observed(&node, &typed, true);
+                if stripped != expected {
+                    failures.push(format!(
+                        "{name}/{probe} ts: printed {stripped:?}, node printed {expected:?}"
+                    ));
+                }
+            }
+            if std::fs::read_to_string(jsdoc.join(&probe)).unwrap() != source {
+                annotated += 1;
+            }
+            let checked = jsdoc.join(format!("checked-{probe}"));
+            let instrumented =
+                untwist_types::instrumented(&source).unwrap_or_else(|| source.clone());
+            std::fs::write(&checked, &instrumented).unwrap();
+            let (_, failed) = observed(&node, &checked, false);
+            ran += 1;
+            if failed {
+                failures.push(format!(
+                    "{name}/{probe}: a type did not hold\n{instrumented}"
+                ));
+            }
+        }
+    }
+    assert!(ran >= 60, "{ran}");
+    assert!(annotated >= 30, "{annotated}");
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}

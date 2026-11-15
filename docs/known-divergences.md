@@ -19,3 +19,4 @@ files are deliberate differences, not bugs. One file per area:
 - [Limits](known-divergences/limits.md)
 - [Untranspile](known-divergences/untranspile.md)
 - [Layers](known-divergences/layers.md)
+- [Types](known-divergences/types.md)

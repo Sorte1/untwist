@@ -93,19 +93,14 @@ function tally(entries) {
   return counts;
 }
 
-async function union(dir, names) {
-  const merged = new Map();
+async function runs(dir, names) {
+  const all = [];
   for (let run = 0; run < RUNS; run += 1) {
-    for (const [file, entries] of await diagnostics(dir, names)) {
-      if (!merged.has(file)) merged.set(file, new Map());
-      const held = merged.get(file);
-      for (const [at, seen] of tally(entries)) {
-        const before = held.get(at);
-        if (!before || before.count < seen.count) held.set(at, seen);
-      }
-    }
+    const counted = new Map();
+    for (const [file, entries] of await diagnostics(dir, names)) counted.set(file, tally(entries));
+    all.push(counted);
   }
-  return merged;
+  return all;
 }
 
 async function delta(root) {
@@ -129,15 +124,22 @@ async function delta(root) {
   for (let at = 0; at < annotatedNames.length; at += BATCH) {
     texts.clear();
     const batch = annotatedNames.slice(at, at + BATCH);
-    const annotated = await union(annotatedDir, batch);
+    const annotated = await runs(annotatedDir, batch);
     const plainNames = batch.map((name) => plainByStem.get(stem(name))).filter(Boolean);
-    const plain = await union(plainDir, plainNames);
-    for (const [file, counts] of annotated) {
-      const before = plain.get(file) ?? new Map();
-      for (const [at, { count, entry }] of counts) {
-        const extra = count - (before.get(at)?.count ?? 0);
-        for (let left = 0; left < extra; left += 1) report(file, entry);
+    const plain = await runs(plainDir, plainNames);
+    const worst = new Map();
+    for (let run = 0; run < RUNS; run += 1) {
+      for (const [file, counts] of annotated[run]) {
+        const before = plain[run].get(file) ?? new Map();
+        for (const [at, { count, entry }] of counts) {
+          const extra = count - (before.get(at)?.count ?? 0);
+          const id = `${file}\u0000${at}`;
+          if (extra > 0 && (worst.get(id)?.extra ?? 0) < extra) worst.set(id, { file, entry, extra });
+        }
       }
+    }
+    for (const { file, entry, extra } of worst.values()) {
+      for (let left = 0; left < extra; left += 1) report(file, entry);
     }
   }
   return added;
@@ -148,7 +150,7 @@ const against = args.indexOf("--against-js");
 const PLAIN = against === -1 ? "plain" : "plain-js";
 const roots = args.filter((arg) => arg !== "--against-js");
 if (roots.length === 0) {
-  console.error("usage: node check.mjs [--against-js] <pairs-dir>...   (each holds annotated/, plain/ and plain-js/; TYPES_CHECK_RUNS tsc runs per side, default 3)");
+  console.error("usage: node check.mjs [--against-js] <pairs-dir>...   (each holds annotated/, plain/ and plain-js/; TYPES_CHECK_RUNS paired tsc runs, default 3)");
   process.exit(2);
 }
 let failed = false;
