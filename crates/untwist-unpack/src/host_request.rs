@@ -221,6 +221,7 @@ fn shim_name<'b>(bundle: &'b Bundle<'_>) -> Option<&'b str> {
 }
 
 struct Mentions<'n> {
+    host_require: bool,
     shim: Option<&'n str>,
     found: bool,
 }
@@ -228,7 +229,19 @@ struct Mentions<'n> {
 impl<'a> VisitJs<'a> for Mentions<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         let name = it.name.as_str();
-        self.found |= matches!(name, REQUIRE | PROCESS | "eval") || self.shim == Some(name);
+        let host = self.host_require && (name == REQUIRE || self.shim == Some(name));
+        self.found |= host || name == "eval";
+    }
+
+    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        self.found |=
+            names_process(&it.object) && LOADER_MEMBERS.contains(&it.property.name.as_str());
+        walk_js::walk_static_member_expression(self, it);
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        self.found |= names_process(&it.object);
+        walk_js::walk_computed_member_expression(self, it);
     }
 
     fn visit_import_expression(&mut self, _it: &ImportExpression<'a>) {
@@ -236,8 +249,16 @@ impl<'a> VisitJs<'a> for Mentions<'_> {
     }
 }
 
-fn mentions(program: &Program<'_>, shim: Option<&str>) -> bool {
-    let mut mentions = Mentions { shim, found: false };
+fn names_process(expr: &Expression<'_>) -> bool {
+    matches!(expr.without_parentheses(), Expression::Identifier(id) if id.name == PROCESS)
+}
+
+fn mentions(program: &Program<'_>, host_require: bool, shim: Option<&str>) -> bool {
+    let mut mentions = Mentions {
+        host_require,
+        shim,
+        found: false,
+    };
     mentions.visit_program(program);
     mentions.found
 }
@@ -253,11 +274,11 @@ pub fn host_uses(bundle: &mut Bundle<'_>) -> Result<(), HostUse> {
     let mut imports = Vec::new();
     for (id, module) in &bundle.modules {
         let program = module.program();
-        if !mentions(program, shim.as_deref()) {
+        let host_require = names_host_require(bundle, id, module);
+        if !mentions(program, host_require, shim.as_deref()) {
             continue;
         }
         let scoping = build_scoping(program).scoping;
-        let host_require = names_host_require(bundle, id, module);
         let mut uses = HostUses::new(&scoping, host_require, shim.as_deref());
         uses.visit_program(program);
         let (requests, relative, found) = uses.into_parts();
