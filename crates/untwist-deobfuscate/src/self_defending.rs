@@ -15,7 +15,9 @@ use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
 
-use crate::bindings::{has_stray_reference, reaches_a_script_global_once_removed, reference_symbol};
+use crate::bindings::{
+    has_stray_reference, reaches_a_script_global_once_removed, reference_symbol,
+};
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
 use crate::flag_home::{is_private_local, Homes, ARGUMENTS, DIRECT_EVAL};

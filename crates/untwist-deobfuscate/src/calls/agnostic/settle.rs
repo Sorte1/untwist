@@ -189,12 +189,8 @@ fn settle_ordered<'a>(
     } else {
         &[]
     };
-    let mut bindings = Bindings::collect(
-        program,
-        scoping,
-        (!watch.names.is_empty(), exempt),
-        resolve,
-    );
+    let mut bindings =
+        Bindings::collect(program, scoping, (!watch.names.is_empty(), exempt), resolve);
     let flow = Flow::new(program, scoping, resolve);
     let filters = std::rc::Rc::clone(&bindings.filters);
     let globals = script_globals(program, scoping);

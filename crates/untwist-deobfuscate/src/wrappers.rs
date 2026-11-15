@@ -676,7 +676,8 @@ fn drop_unread_kept_aliases(plan: &mut VariablePlan<'_>, scoping: &Scoping) {
     if unread.is_empty() {
         return;
     }
-    plan.chosen.retain(|(symbol, _, _)| !unread.contains(symbol));
+    plan.chosen
+        .retain(|(symbol, _, _)| !unread.contains(symbol));
     plan.aliases.retain(|symbol, _| !unread.contains(symbol));
 }
 
@@ -697,7 +698,11 @@ struct KeptBindings<'k, 'a> {
 
 impl<'a> VisitMut<'a> for KeptBindings<'_, 'a> {
     fn visit_binding_identifier(&mut self, it: &mut BindingIdentifier<'a>) {
-        if let Some(name) = it.symbol_id.get().and_then(|symbol| self.names.get(&symbol)) {
+        if let Some(name) = it
+            .symbol_id
+            .get()
+            .and_then(|symbol| self.names.get(&symbol))
+        {
             it.name = *name;
         }
     }

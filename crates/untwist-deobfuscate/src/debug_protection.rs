@@ -9,7 +9,9 @@ use untwist_core::ast_util::global::{global_is_written, is_global_reference};
 use untwist_core::ast_util::matcher::{call_parts, statement_iife, var_function_or_declaration};
 use untwist_core::pass::{Cx, Interest, Pass};
 
-use crate::bindings::{has_stray_reference, reaches_a_script_global_once_removed, reference_symbol};
+use crate::bindings::{
+    has_stray_reference, reaches_a_script_global_once_removed, reference_symbol,
+};
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
 use crate::notes;

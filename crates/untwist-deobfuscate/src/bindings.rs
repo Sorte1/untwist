@@ -1,13 +1,13 @@
-use oxc_ast::ast::*;
 use oxc_allocator::{CloneIn, GetAllocator, Vec as AVec};
+use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
 use oxc_semantic::{Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
-use untwist_core::semantic::{observers, Observers};
 use untwist_core::semantic::{block_function_symbols, declared_in_block, AnnexBWrites};
+use untwist_core::semantic::{observers, Observers};
 
 pub fn resolved_symbol(reference: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
     scoping
@@ -131,7 +131,10 @@ pub fn reaches_a_script_global_once_removed<'a>(
     };
     let mut pruned = program.clone_in(cx.allocator());
     Prune { removed }.visit_program(&mut pruned);
-    let scoping = SemanticBuilder::new().build(&pruned).semantic.into_scoping();
+    let scoping = SemanticBuilder::new()
+        .build(&pruned)
+        .semantic
+        .into_scoping();
     names_reached_beside_machinery(&pruned, &scoping, (&names, &props), &[])
 }
 
