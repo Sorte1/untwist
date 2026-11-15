@@ -44,6 +44,10 @@ pub fn host(function: &Function<'_>, cx: &Cx<'_, '_>) -> Option<Host> {
 }
 
 impl Host {
+    pub fn scope(&self) -> ScopeId {
+        self.scope
+    }
+
     pub fn may_precede_defaults(&self, init: Option<&Expression<'_>>) -> bool {
         match init.map(Expression::without_parentheses) {
             None => true,

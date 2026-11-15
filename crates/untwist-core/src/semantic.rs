@@ -25,8 +25,8 @@ mod strictness;
 pub mod unbound;
 
 pub use annex_b::{
-    block_function_symbols, declared_in_block, declaring_block, is_constant_binding_in,
-    is_hoisted_block_function, AnnexBFunction, AnnexBWrites, ScopeOwners,
+    block_function_symbols, catch_var_declarations, declared_in_block, declaring_block,
+    is_constant_binding_in, is_hoisted_block_function, AnnexBFunction, AnnexBWrites, ScopeOwners,
 };
 pub use blocked_hoists::{hoist_blockers, repair_blocked_hoists};
 pub use observers::{

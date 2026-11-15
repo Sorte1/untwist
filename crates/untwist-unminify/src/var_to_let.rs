@@ -13,7 +13,8 @@ use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
 };
 use untwist_core::semantic::{
-    assumed_hazard, block_function_symbols, is_constant_binding, scope_hazard,
+    assumed_hazard, block_function_symbols, catch_var_declarations, is_constant_binding,
+    scope_hazard,
 };
 
 use crate::{var_capture, var_placement, var_sink};
@@ -80,6 +81,7 @@ pub struct VarToLet {
     class_scopes: FxHashSet<ScopeId>,
     switch_scopes: FxHashSet<ScopeId>,
     block_functions: Option<FxHashSet<u64>>,
+    catch_vars: Option<FxHashSet<(ScopeId, u64)>>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -144,6 +146,7 @@ struct Facts<'f> {
     scoping: &'f Scoping,
     class_scopes: &'f FxHashSet<ScopeId>,
     block_functions: &'f FxHashSet<u64>,
+    catch_vars: &'f FxHashSet<(ScopeId, u64)>,
 }
 
 fn name_hash(name: &str) -> u64 {
@@ -156,6 +159,13 @@ fn block_function_names(scoping: &Scoping) -> FxHashSet<u64> {
     block_function_symbols(scoping)
         .into_iter()
         .map(|symbol| name_hash(scoping.symbol_name(symbol)))
+        .collect()
+}
+
+fn catch_var_names(scoping: &Scoping) -> FxHashSet<(ScopeId, u64)> {
+    catch_var_declarations(scoping)
+        .into_iter()
+        .map(|(scope, symbol)| (scope, name_hash(scoping.symbol_name(symbol))))
         .collect()
 }
 
@@ -236,6 +246,13 @@ fn bindings_clear(scoping: &Scoping, symbol: SymbolId, name: Ident<'_>, scope: S
 }
 
 impl Facts<'_> {
+    fn refuses(&self, var_scope: ScopeId, name: &str) -> bool {
+        REFUSED_NAMES.contains(&name)
+            || self.block_functions.contains(&name_hash(name))
+            || (!self.catch_vars.is_empty()
+                && self.catch_vars.contains(&(var_scope, name_hash(name))))
+    }
+
     fn reaches_without_closure(&self, from: ScopeId, scope: ScopeId) -> bool {
         let closure = ScopeFlags::Function | ScopeFlags::ClassStaticBlock;
         for ancestor in self.scoping.scope_ancestors(from) {
@@ -268,8 +285,7 @@ impl Facts<'_> {
             && scoping.symbol_redeclarations(symbol).is_empty()
             && scoping.symbol_scope_id(symbol) != scoping.root_scope_id()
             && (captures || self.references_stay_inside(symbol, scope))
-            && !REFUSED_NAMES.contains(&text)
-            && !self.block_functions.contains(&name_hash(text))
+            && !self.refuses(scoping.symbol_scope_id(symbol), text)
             && bindings_clear(scoping, symbol, name, scope)
     }
 
@@ -556,6 +572,7 @@ impl VarToLet {
         self.class_scopes.clear();
         self.switch_scopes.clear();
         self.block_functions = None;
+        self.catch_vars = None;
         self.pending.clear();
         self.bare.clear();
     }
@@ -564,10 +581,14 @@ impl VarToLet {
         let block_functions = self
             .block_functions
             .get_or_insert_with(|| block_function_names(scoping));
+        let catch_vars = self
+            .catch_vars
+            .get_or_insert_with(|| catch_var_names(scoping));
         Facts {
             scoping,
             class_scopes: &self.class_scopes,
             block_functions,
+            catch_vars,
         }
     }
 
@@ -623,7 +644,7 @@ impl VarToLet {
         }
         let facts = self.facts(cx.scoping());
         let plan = var_placement::plan(facts.scoping, stmts, scope, |name| {
-            REFUSED_NAMES.contains(&name) || facts.block_functions.contains(&name_hash(name))
+            facts.refuses(scope, name)
         });
         if plan.is_empty() {
             return false;
@@ -647,7 +668,7 @@ impl VarToLet {
         }
         let facts = self.facts(cx.scoping());
         let plan = var_sink::plan(facts.scoping, stmts, scope, |name| {
-            REFUSED_NAMES.contains(&name) || facts.block_functions.contains(&name_hash(name))
+            facts.refuses(scope, name)
         });
         if plan.is_empty() {
             return;
