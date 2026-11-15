@@ -623,11 +623,11 @@ fn variable_alias_plan<'a>(
     }
 
     collect_leftovers(&sites, &targets, &facts, cx.scoping(), &mut plan);
-    if !keeps_machinery && keeps_script_global_aliases(program, cx) {
+    let checked = !cx.opts.rule_disabled(ALIAS_FORM_CHECKS);
+    if !keeps_machinery && checked && keeps_script_global_aliases(program, cx) {
         plan.kept_statements = script_global_statements(&sites, &forms.objects, cx.scoping());
         drop_unread_kept_aliases(&mut plan, cx.scoping());
     }
-    let checked = !cx.opts.rule_disabled(ALIAS_FORM_CHECKS);
     if !keeps_machinery {
         plan.objects = object_rewrites(program, &forms.objects, &targets, &facts, cx, &mut plan);
     }
@@ -679,6 +679,27 @@ fn drop_unread_kept_aliases(plan: &mut VariablePlan<'_>, scoping: &Scoping) {
     plan.chosen
         .retain(|(symbol, _, _)| !unread.contains(symbol));
     plan.aliases.retain(|symbol, _| !unread.contains(symbol));
+}
+
+fn kept_init<'a>(
+    program: &Program<'a>,
+    plan: &VariablePlan<'a>,
+    (symbol, statement, expression): (SymbolId, Span, Option<Span>),
+) -> Option<(Span, Ident<'a>)> {
+    if expression.is_some() {
+        return None;
+    }
+    let Some(Statement::VariableDeclaration(declaration)) = statement_at(program, statement) else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    let init = declarator.init.as_ref()?;
+    if matches!(init, Expression::Identifier(_)) {
+        return None;
+    }
+    Some((init.span(), *plan.aliases.get(&symbol)?))
 }
 
 fn kept_bindings<'a>(plan: &VariablePlan<'a>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {
@@ -917,6 +938,8 @@ fn inline_variable_aliases<'a>(
     for site in plan.chosen.iter().copied() {
         if !plan.kept_statements.contains(&site.1) {
             apply_alias_site(program, &plan, site, cx, &mut edits, &mut removals);
+        } else if let Some((init, name)) = kept_init(program, &plan, site) {
+            edits.insert(init, Expression::new_identifier(init, name, &*cx));
         }
     }
     for (statement, members, name) in &plan.objects {

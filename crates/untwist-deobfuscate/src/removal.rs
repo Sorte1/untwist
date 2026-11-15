@@ -216,10 +216,10 @@ fn dead_aliases(
         .collect();
     let mut found: FxHashMap<usize, Vec<(Span, String)>> = FxHashMap::default();
     for alias in dead_root_aliases(program, scoping, |name| decoders.get(name).copied()) {
-        found
-            .entry(alias.owner)
-            .or_default()
-            .push((alias.statement, alias.name.to_string()));
+        let unit = found.entry(alias.owner).or_default();
+        if !unit.iter().any(|(span, _)| *span == alias.statement) {
+            unit.push((alias.statement, alias.name.to_string()));
+        }
     }
     found
 }
@@ -268,7 +268,7 @@ fn dead_root_aliases<'p>(
         let [declarator] = declaration.declarations.as_slice() else {
             continue;
         };
-        let (BindingPattern::BindingIdentifier(id), Some(Expression::Identifier(init))) =
+        let (BindingPattern::BindingIdentifier(id), Some(init)) =
             (&declarator.id, &declarator.init)
         else {
             continue;
@@ -276,11 +276,22 @@ fn dead_root_aliases<'p>(
         if declaration.kind.is_using() {
             continue;
         }
-        if let Some(owner) = owner_of(init.name.as_str()) {
+        let values = alias_values(init);
+        let owner = values
+            .first()
+            .and_then(|value| owner_of(value.name.as_str()));
+        let Some(owner) = owner.filter(|owner| {
+            values
+                .iter()
+                .all(|value| owner_of(value.name.as_str()) == Some(*owner))
+        }) else {
+            continue;
+        };
+        for value in values {
             candidates.push(DeadAlias {
                 owner,
                 statement: declaration.span,
-                value: init.span,
+                value: value.span,
                 name: id.name.as_str(),
                 symbol: id.symbol_id.get(),
             });
@@ -300,6 +311,29 @@ fn dead_root_aliases<'p>(
     read.visit_program(program);
     candidates.retain(|alias| !read.read.contains(alias.name));
     candidates
+}
+
+fn alias_values<'e, 'a>(init: &'e Expression<'a>) -> Vec<&'e IdentifierReference<'a>> {
+    match init {
+        Expression::Identifier(value) => vec![value],
+        Expression::ObjectExpression(object) => {
+            let mut values = Vec::new();
+            for property in &object.properties {
+                let ObjectPropertyKind::ObjectProperty(property) = property else {
+                    return Vec::new();
+                };
+                let Expression::Identifier(value) = &property.value else {
+                    return Vec::new();
+                };
+                if property.computed || property.method || property.kind != PropertyKind::Init {
+                    return Vec::new();
+                }
+                values.push(&**value);
+            }
+            values
+        }
+        _ => Vec::new(),
+    }
 }
 
 struct NamesRead<'n, 's> {
