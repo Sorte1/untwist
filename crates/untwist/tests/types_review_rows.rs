@@ -39,6 +39,13 @@ fn typed(mode: TypesMode) -> Options {
     }
 }
 
+fn unpacked(mode: TypesMode) -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..typed(mode)
+    }
+}
+
 fn checked() -> Options {
     typed(TypesMode::Ts).with_test_hooks(TestHooks {
         types_assert: true,
@@ -120,7 +127,7 @@ fn written(output: &untwist::Output) -> (tempfile::TempDir, Vec<PathBuf>) {
 #[test]
 fn a_typescript_module_tree_runs_where_the_javascript_one_does() {
     let source = probe("wp.js");
-    let typed_out = Pipeline::new(typed(TypesMode::Ts)).run(&source);
+    let typed_out = Pipeline::new(unpacked(TypesMode::Ts)).run(&source);
     let bundle = typed_out.bundle.as_ref().expect("the probe unpacks");
     for module in &bundle.modules {
         assert!(!module.code.contains("r: number"), "{}", module.code);
@@ -133,7 +140,11 @@ fn a_typescript_module_tree_runs_where_the_javascript_one_does() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let plain_out = Pipeline::new(Options::default()).run(&source);
+    let plain_out = Pipeline::new(Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    })
+    .run(&source);
     let (plain_dir, plain_files) = written(&plain_out);
     let (typed_dir, typed_files) = written(&typed_out);
     let entry = |files: &[PathBuf], ext: &str| {
@@ -206,7 +217,8 @@ fn a_typed_module_tree_never_holds_typescript_in_a_js_file() {
     for name in ["wp8.js", "wp11.js", "wp12.js"] {
         let source = a40r(name);
         let expected = node_run(&node, tempfile::tempdir().unwrap().path(), name, &source);
-        let output = Pipeline::new(typed(TypesMode::Ts)).run(&source);
+        let output = Pipeline::new(unpacked(TypesMode::Ts)).run(&source);
+        assert!(output.bundle.is_some(), "{name} unpacks");
         let (dir, files) = written(&output);
         failures.extend(checks_as_javascript(&node, &files));
         let entry = files
@@ -236,7 +248,7 @@ fn a_typed_module_tree_never_holds_typescript_in_a_js_file() {
     }
     let single = Pipeline::new(Options {
         single_file: true,
-        ..typed(TypesMode::Ts)
+        ..unpacked(TypesMode::Ts)
     })
     .run(&a40r("wp16.js"));
     let (dir, files) = written(&single);
