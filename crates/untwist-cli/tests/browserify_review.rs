@@ -21,7 +21,9 @@ const MIRRORED: &str = concat!(
 const MIRRORED_BUNDLE: &str = "ma.js";
 const MIRRORED_INPUT: &str = "lib/node_modules/foo/index.js";
 const MODULE_EXTENSION: &str = "mjs";
-const UNPACKED: [&str; 8] = ["a19c", "a26", "a36", "b10", "c10", "c5", "w12", "w7"];
+const UNPACKED: [&str; 10] = [
+    "a19c", "a26", "a36", "b10", "c10", "c5", "w12", "w13", "w16", "w7",
+];
 
 fn inputs(dir: &str) -> Vec<PathBuf> {
     let mut inputs: Vec<PathBuf> = std::fs::read_dir(dir)

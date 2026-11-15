@@ -223,6 +223,7 @@ pub struct Check<'s, 'k, 'a> {
     region: Region<'k, 'a>,
     helpers: &'s FxHashSet<SymbolId>,
     hosts: bool,
+    host_require: bool,
     arrow: bool,
     captured: Option<Captured>,
 }
@@ -234,6 +235,7 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             region: Region::factory(factory, allowed.mapped_params),
             helpers: allowed.helpers,
             hosts: false,
+            host_require: false,
             arrow: factory.arrow,
             captured: None,
         }
@@ -250,6 +252,7 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
             region: Region::statement(statement),
             helpers,
             hosts,
+            host_require: false,
             arrow: false,
             captured: None,
         }
@@ -276,6 +279,7 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
         }
         closed_eval_names(call)?
             .into_iter()
+            .filter(|name| !(self.host_require && name == SHIELDED_HOST))
             .find(|name| HOST_NAMES.contains(&name.as_str()))
             .map(Captured::Host)
     }
@@ -363,7 +367,19 @@ pub fn captured_by_factory(
     factory: Factory<'_, '_>,
     allowed: &Allowed<'_>,
 ) -> Option<Captured> {
-    let mut check = Check::factory(scoping, factory, allowed);
+    captured_with(scoping, factory, allowed, false)
+}
+
+fn captured_with(
+    scoping: &Scoping,
+    factory: Factory<'_, '_>,
+    allowed: &Allowed<'_>,
+    host_require: bool,
+) -> Option<Captured> {
+    let mut check = Check {
+        host_require,
+        ..Check::factory(scoping, factory, allowed)
+    };
     let mut scan = Scan::new(&mut check);
     scan.visit_formal_parameters(factory.params);
     scan.visit_function_body(factory.body);
@@ -373,7 +389,7 @@ pub fn captured_by_factory(
 pub fn first_open<'k, 'a: 'k>(
     scoping: &Scoping,
     factories: impl IntoIterator<Item = (String, Factory<'k, 'a>)>,
-    mapped_params: usize,
+    (mapped_params, host_require): (usize, bool),
 ) -> Option<(String, Captured)> {
     let helpers = FxHashSet::default();
     let allowed = Allowed {
@@ -381,7 +397,7 @@ pub fn first_open<'k, 'a: 'k>(
         helpers: &helpers,
     };
     factories.into_iter().find_map(|(id, factory)| {
-        captured_by_factory(scoping, factory, &allowed).map(|captured| (id, captured))
+        captured_with(scoping, factory, &allowed, host_require).map(|captured| (id, captured))
     })
 }
 
@@ -490,8 +506,7 @@ impl HostRequire<'_> {
     }
 
     fn is_host_require(&self, expr: &Expression<'_>) -> bool {
-        matches!(expr, Expression::Identifier(id)
-            if id.name == SHIELDED_HOST && is_free(Some(self.scoping), id))
+        is_host_require_name(self.scoping, expr)
     }
 
     fn judge(call: &CallExpression<'_>) -> Option<String> {
@@ -508,12 +523,31 @@ impl HostRequire<'_> {
 
 impl<'a> VisitJs<'a> for HostRequire<'_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if !self.is_host_require(&it.callee) {
+        let reads = is_direct_eval(self.scoping, &it.callee)
+            && closed_eval_names(it)
+                .is_some_and(|names| names.iter().any(|name| name == SHIELDED_HOST));
+        if reads {
+            match evals_host_require(self.scoping, it) {
+                true => self.note("read as a value".to_string()),
+                false => self.note("read through eval".to_string()),
+            }
+            return;
+        }
+        let callee = it.callee.without_parentheses();
+        if !calls_host_require(self.scoping, callee) {
             oxc_ast_visit::walk_js::walk_call_expression(self, it);
             return;
         }
         if let Some(what) = Self::judge(it) {
             self.note(what);
+        }
+        if let Expression::ConditionalExpression(choice) = callee {
+            self.visit_expression(&choice.test);
+            for branch in [&choice.consequent, &choice.alternate] {
+                if !self.is_host_require(branch.without_parentheses()) {
+                    self.visit_expression(branch);
+                }
+            }
         }
         for argument in &it.arguments {
             self.visit_argument(argument);
@@ -521,10 +555,21 @@ impl<'a> VisitJs<'a> for HostRequire<'_> {
     }
 
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
-        let typeof_require =
-            it.operator == UnaryOperator::Typeof && self.is_host_require(&it.argument);
-        if typeof_require {
-            return;
+        if it.operator == UnaryOperator::Typeof {
+            let (prefix, last) = match it.argument.without_parentheses() {
+                Expression::SequenceExpression(sequence) => match sequence.expressions.split_last()
+                {
+                    Some((last, prefix)) => (prefix, last),
+                    None => (&[][..], &it.argument),
+                },
+                argument => (&[][..], argument),
+            };
+            if self.is_host_require(last.without_parentheses()) {
+                for expression in prefix {
+                    self.visit_expression(expression);
+                }
+                return;
+            }
         }
         let deleted = it.operator == UnaryOperator::Delete
             && it
@@ -568,6 +613,34 @@ impl<'a> VisitJs<'a> for HostRequire<'_> {
         if it.name == SHIELDED_HOST && is_free(Some(self.scoping), it) {
             self.note("read as a value".to_string());
         }
+    }
+}
+
+fn evals_host_require(scoping: &Scoping, call: &CallExpression<'_>) -> bool {
+    let [Argument::StringLiteral(payload)] = call.arguments.as_slice() else {
+        return false;
+    };
+    let text = payload.value.as_str().unwrap_or_default().trim();
+    let name = text.strip_suffix(';').unwrap_or(text).trim();
+    name == SHIELDED_HOST
+        && is_direct_eval(scoping, &call.callee)
+        && is_closed_eval_at(scoping, call)
+}
+
+fn is_host_require_name(scoping: &Scoping, expr: &Expression<'_>) -> bool {
+    match expr {
+        Expression::Identifier(id) => id.name == SHIELDED_HOST && is_free(Some(scoping), id),
+        Expression::CallExpression(call) => !call.optional && evals_host_require(scoping, call),
+        _ => false,
+    }
+}
+
+pub fn calls_host_require(scoping: &Scoping, callee: &Expression<'_>) -> bool {
+    match callee.without_parentheses() {
+        Expression::ConditionalExpression(choice) => [&choice.consequent, &choice.alternate]
+            .into_iter()
+            .any(|branch| is_host_require_name(scoping, branch.without_parentheses())),
+        callee => is_host_require_name(scoping, callee),
     }
 }
 

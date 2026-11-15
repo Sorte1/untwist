@@ -3,6 +3,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use untwist_core::pass::{Note, NoteKind};
 
+use crate::closed::calls_host_require;
 use crate::matcher::named_const_member;
 use crate::model::RequireParam;
 use crate::model::{Bundle, BundleKind, Module};
@@ -212,8 +213,7 @@ struct HostRequests<'s> {
 
 impl<'a> VisitJs<'a> for HostRequests<'_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        let host = matches!(&it.callee, Expression::Identifier(id)
-            if id.name == "require" && crate::scan::is_free(Some(self.scoping), id));
+        let host = calls_host_require(self.scoping, &it.callee);
         if let (true, [Argument::StringLiteral(literal)]) = (host, it.arguments.as_slice()) {
             self.requests
                 .extend(literal.value.as_str().map(str::to_string));

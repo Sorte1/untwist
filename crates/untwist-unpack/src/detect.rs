@@ -97,13 +97,14 @@ impl<'a> Extract<'a, '_, '_> {
         let scoping = self
             .scoping
             .get_or_insert_with(|| build_scoping(source).scoping);
-        let host_require = || match targets == WEBPACK_PARAMS {
+        let webpack = targets == WEBPACK_PARAMS;
+        let host_require = || match webpack {
             true => first_host_require_use(scoping, factories.iter().cloned()),
             false => None,
         };
         let open = first_host_read(scoping, factories.iter().cloned(), targets)
             .or_else(host_require)
-            .or_else(|| first_open(scoping, factories, MAPPED_PARAMS));
+            .or_else(|| first_open(scoping, factories, (MAPPED_PARAMS, webpack)));
         let Some((id, captured)) = open else {
             return true;
         };
