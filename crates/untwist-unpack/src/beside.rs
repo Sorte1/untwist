@@ -7,6 +7,7 @@ use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::ScopeFlags;
 use untwist_core::semantic::build_scoping;
 
+use crate::host_request::{beside_uses, BesideUses};
 use crate::model::{Bundle, Module};
 use crate::scan::is_direct_eval;
 use crate::strict::written_as_strict;
@@ -16,6 +17,7 @@ const WRAPPER_NAMES: [&str; 5] = ["module", "exports", "require", "__filename", 
 pub struct Beside<'a> {
     pub before: Vec<Statement<'a>>,
     pub after: Vec<Statement<'a>>,
+    pub uses: BesideUses,
     free: Vec<String>,
     strict: bool,
 }
@@ -341,6 +343,7 @@ pub fn around<'a>(
     program: &Program<'a>,
     (site, wrapped): (Span, bool),
     scoping: &Scoping,
+    checks_own: bool,
 ) -> Option<Around<'a>> {
     let body = &program.body;
     let at = body
@@ -379,7 +382,16 @@ pub fn around<'a>(
         if let Some(why) = loose.why.take() {
             return Some(Around::Refused(refused(program, statement, &why)));
         }
+        if let Err(what) = beside_uses(&[statement], scoping, checks_own) {
+            return Some(Around::Refused(refused(
+                program,
+                statement,
+                &format!("uses {what}"),
+            )));
+        }
     }
+    let statements: Vec<&Statement<'a>> = before.iter().chain(&after).copied().collect();
+    let uses = beside_uses(&statements, scoping, checks_own).ok()?;
     let cloned = |list: Vec<&Statement<'a>>| -> Vec<Statement<'a>> {
         list.into_iter()
             .map(|statement| statement.clone_in(alloc))
@@ -388,6 +400,7 @@ pub fn around<'a>(
     Some(Around::Kept(Beside {
         before: cloned(before),
         after: cloned(after),
+        uses,
         free: loose.free,
         strict: program.source_type.is_module() || program.has_use_strict_directive(),
     }))

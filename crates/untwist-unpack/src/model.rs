@@ -165,9 +165,16 @@ pub struct Bundle<'a> {
     pub chunk_started: bool,
     pub chunk_files: Vec<ChunkFile>,
     pub left_requests: Vec<(String, Option<String>)>,
-    pub left_imports: Vec<(String, String)>,
+    pub left_imports: Vec<LeftImport>,
     pub around: Option<crate::beside::Around<'a>>,
     pub recorded_wrapper: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct LeftImport {
+    pub id: String,
+    pub request: String,
+    pub what: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -179,6 +186,13 @@ pub struct ChunkFile {
 }
 
 impl<'a> Bundle<'a> {
+    pub fn beside_uses(&self) -> Option<&crate::host_request::BesideUses> {
+        match &self.around {
+            Some(crate::beside::Around::Kept(beside)) => Some(&beside.uses),
+            _ => None,
+        }
+    }
+
     pub fn new(kind: BundleKind, entry_id: Option<String>) -> Self {
         Self {
             kind,

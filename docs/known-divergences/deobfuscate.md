@@ -631,8 +631,12 @@
   and that no code replaces `Function.prototype.call`, `apply` or `bind`, through which those runtimes
   start their modules (webpack 5 only where a module uses `this` as its exports) ([`unpack.md`](unpack.md), "No code replaces `Function.prototype.call`, `apply` or `bind`"),
   and that no code reaches node's module objects or loader through `process` taken as a value
-  (`var p = process; p.mainModule`), since only `process.mainModule`, `process.getBuiltinModule`
-  and computed members of `process` are refused ([`unpack.md`](unpack.md), "A request a module leaves to node must resolve alike from the bundle and from the written tree").
+  (`var p = process; p.mainModule`) or read off the global object (`globalThis.process.mainModule`,
+  `global.process`), since only `process.mainModule`, `process.getBuiltinModule`
+  and computed members of a free `process` are refused; under `--unsafe` the unpack stage also
+  assumes that no code text reaches `import()`, the module objects or the loader, that the program
+  does not read its own file name or the main module's path, and that the inputs given beside a
+  bundle are the files its relative imports load ([`unpack.md`](unpack.md), "A request a module leaves to node must resolve alike from the bundle and from the written tree").
 - **In the conservative comparison mode a string literal that a removed protection helper had demoted becomes a
   directive.** When the protections stage removes a helper from the head of a statement list,
   the reference deobfuscator prints the string-literal statements that now lead it as a directive prologue, and

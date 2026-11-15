@@ -8,9 +8,26 @@ use untwist_testing::node_rows::node_or_skip;
 const DEFAULT: &[&str] = &[];
 const UNSAFE: &[&str] = &["--unsafe"];
 const LANES: [&[&str]; 2] = [DEFAULT, UNSAFE];
-const PREMISE_ROWS: [(&str, &[&str]); 1] = [("a23", UNSAFE)];
-const DISPATCH_PREMISE_ROWS: [&str; 3] = ["e1", "e2", "r4n10"];
+const PREMISE_ROWS: [(&str, &[&str]); 15] = [
+    ("a23", UNSAFE),
+    ("r5bs3", UNSAFE),
+    ("r5ev1", UNSAFE),
+    ("r5ev2", UNSAFE),
+    ("r5ev6", UNSAFE),
+    ("r5ev7", UNSAFE),
+    ("r5pr9", UNSAFE),
+    ("r5pr10", UNSAFE),
+    ("r5im2", UNSAFE),
+    ("r5pr14", UNSAFE),
+    ("r5bfyev", UNSAFE),
+    ("r5esbfn", UNSAFE),
+    ("r5esbfns", UNSAFE),
+    ("r5esbargv", UNSAFE),
+    ("r5esbargvs", UNSAFE),
+];
+const DISPATCH_PREMISE_ROWS: [&str; 7] = ["e1", "e2", "r4n10", "r5pr1", "r5pr2", "r5pr4", "r5pr11"];
 const PROTOTYPE_PREMISE_ROWS: [&str; 9] = ["a27", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"];
+const OWN_NAME_ROWS: [&str; 2] = ["r5im2", "r5pr16"];
 const PROTOTYPE_PREMISE_TREE: &str = "Some(0)\ntwo\n";
 const INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/browserify_review");
 const HOST_INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/host_names_review");
@@ -124,6 +141,14 @@ fn parity_failures(node: &Path, inputs: &[PathBuf]) -> Vec<String> {
                 }
                 continue;
             }
+            if OWN_NAME_ROWS.contains(&name.as_ref()) {
+                if *flags == DEFAULT && unpacked {
+                    wrong.push(format!(
+                        "{name} {flags:?}: split a module that reads its own name"
+                    ));
+                }
+                continue;
+            }
             if DISPATCH_PREMISE_ROWS.contains(&name.as_ref()) {
                 if !kept_whole && (!unpacked || seen == expected) {
                     wrong.push(format!("{name} {flags:?}: premise row gave {seen:?}"));
@@ -204,7 +229,7 @@ fn host_route_probes_run_like_their_bundles_in_both_lanes() {
         return;
     };
     let inputs = inputs(ROUTE_INPUTS);
-    assert!(inputs.len() >= 44, "found {} inputs", inputs.len());
+    assert!(inputs.len() >= 100, "found {} inputs", inputs.len());
     let wrong = parity_failures(&node, &inputs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
@@ -256,7 +281,7 @@ fn entry_of(out: &Path) -> PathBuf {
 }
 
 #[test]
-fn a_relative_import_is_kept_only_when_it_names_the_same_mirrored_input() {
+fn a_relative_import_is_kept_only_under_unsafe_when_it_names_the_same_mirrored_input() {
     let Some(node) = node_or_skip() else {
         return;
     };
@@ -274,11 +299,11 @@ fn a_relative_import_is_kept_only_when_it_names_the_same_mirrored_input() {
             .output()
             .expect("run untwist");
         assert!(status.status.success(), "{flags:?}: untwist failed");
-        assert!(
-            joined.join("bundle.json").exists(),
-            "{flags:?}: no bundle written"
-        );
-        assert_eq!(observed(&node, &entry_of(&joined)), expected, "{flags:?}");
+        let split = joined.join("bundle.json").exists();
+        assert_eq!(split, *flags == UNSAFE, "{flags:?}: split joined");
+        if split {
+            assert_eq!(observed(&node, &entry_of(&joined)), expected, "{flags:?}");
+        }
         let alone = work.path().join(format!("alone-{lane}"));
         let status = common::bin()
             .current_dir(dir)

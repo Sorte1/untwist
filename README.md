@@ -216,7 +216,7 @@ files are loaded by node; unpacking does not check for such a write. Nor does an
 those runtimes start their modules through `.call` (webpack 5 only where a module uses `this` as its
 exports), which node's loader does not use for a written file. Nor does any code reach node's
 module objects or loader through `process` taken as a value (`var p = process; p.mainModule`,
-`globalThis.process`): a module that names `process.mainModule`, `process.getBuiltinModule`, a
+`globalThis.process.mainModule`): a module that names `process.mainModule`, `process.getBuiltinModule`, a
 computed member of `process`, or requests the `module` or `process` built-in is not split, but an
 alias is not followed, since most bundles pass `process` around. And
 no value the program tests is `document.all`, so `x != null ? x : y` becomes `x ?? y`: the two
@@ -269,6 +269,13 @@ strict code and every written module file is strict (an ES module, or a file tha
 `undefined` for `getFunction()` on strict frames. Bundles with sloppy code, which covers most
 webpack 4 and CommonJS bundles, are kept whole in the safe lane. The unsafe lane assumes no read
 of a function's caller or arguments reaches a bundled module's function and splits them anyway.
+The unsafe lane also splits a bundle whose modules import files given beside it, on the premise
+that the inputs given beside a bundle are the files its relative imports load and that the bundle's
+input is not imported back by name; the safe lane keeps any bundle with a relative `import()`,
+`import` or `export … from` whole. It assumes no code text (`Function`, indirect `eval`, a timer
+string) reaches `import()`, node's module objects or loader, and that the program does not read its
+own file name or the main module's path (`import.meta.url`, `__filename`, `require.main`,
+`process.argv`); the safe lane refuses those.
 An input is taken as an ES module, as node 22 takes it, when it is named `.mjs`, when its own text
 (before any pass runs) does not parse as a script but parses as a module (`import`/`export`,
 `import.meta` or a top-level `await x`, also in code a later pass removes), or when it declares
