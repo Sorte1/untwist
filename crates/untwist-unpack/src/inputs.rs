@@ -5,6 +5,7 @@ use untwist_core::pass::{Note, NoteKind};
 use crate::browserify::notes as browserify_notes;
 use crate::browserify::resolve::left_request_reaching;
 use crate::detect::{refused_kind, unpack_program_linked};
+use crate::goal::written_module_syntax;
 use crate::links::{groups, Groups, Links};
 use crate::mappings::Mapping;
 use crate::merge::merge_noted;
@@ -221,6 +222,9 @@ pub fn unpack_named_inputs<'a>(
         )));
         return (None, notes);
     }
+    if !options.conservative {
+        mark_from_inputs(programs, &mut bundle);
+    }
     if let Err(why) = crate::beside::keep_around(alloc, &mut bundle) {
         notes.push(note(why));
         return (None, notes);
@@ -237,7 +241,10 @@ pub fn unpack_named_inputs<'a>(
     if options.conservative {
         return (Some(bundle), notes);
     }
-    mark_from_inputs(programs, &mut bundle);
+    if let Some((id, what)) = written_module_syntax(&bundle) {
+        notes.push(note(notes::module_syntax_written(id, what)));
+        return (None, notes);
+    }
     keep_strictness(alloc, &mut bundle);
     if let Some(id) = options
         .prove_frames

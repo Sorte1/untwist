@@ -124,6 +124,7 @@ struct Reservation<'r> {
     stats: &'r std::sync::Mutex<crate::stats::RunStats>,
     limits: Limits,
     shared: Option<&'r untwist_core::semantic::SharedGlobals>,
+    module_named: bool,
 }
 
 struct Batch<'s> {
@@ -161,6 +162,7 @@ impl<'s> Batch<'s> {
             stats: &self.stats,
             limits: self.limits,
             shared: self.shared.get(index).and_then(Option::as_ref),
+            module_named: false,
         }
     }
 }

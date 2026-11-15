@@ -92,26 +92,32 @@ pub fn first_sloppy_function(program: &Program<'_>) -> Option<String> {
 }
 
 struct StrictRegions {
-    regions: Vec<Span>,
+    regions: Vec<Region>,
+}
+
+impl StrictRegions {
+    fn own(&mut self, span: Span) {
+        self.regions.push(Region { span, whole: false });
+    }
 }
 
 impl<'a> VisitJs<'a> for StrictRegions {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         match it.has_use_strict_directive() {
-            true => self.regions.push(it.span),
+            true => self.own(it.span),
             false => walk_js::walk_function(self, it, flags),
         }
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
         match it.has_use_strict_directive() {
-            true => self.regions.push(it.span),
+            true => self.own(it.span),
             false => walk_js::walk_arrow_function_expression(self, it),
         }
     }
 
     fn visit_class(&mut self, it: &Class<'a>) {
-        self.regions.push(it.span);
+        self.own(it.span);
     }
 }
 
@@ -119,9 +125,12 @@ fn wholly_strict(program: &Program<'_>) -> bool {
     program.source_type.is_module() || program.has_use_strict_directive()
 }
 
-fn strict_regions(program: &Program<'_>) -> Vec<Span> {
+fn strict_regions(program: &Program<'_>) -> Vec<Region> {
     if wholly_strict(program) {
-        return vec![program.span];
+        return vec![Region {
+            span: program.span,
+            whole: true,
+        }];
     }
     let mut found = StrictRegions {
         regions: Vec::new(),
@@ -130,11 +139,27 @@ fn strict_regions(program: &Program<'_>) -> Vec<Span> {
     found.regions
 }
 
-fn inside(module: &Module<'_>, regions: &[Span]) -> bool {
-    module.program().body.iter().any(|statement| {
-        let span = statement.span();
-        !span.is_empty() && regions.iter().any(|region| region.contains_inclusive(span))
-    })
+#[derive(Clone, Copy)]
+struct Region {
+    span: Span,
+    whole: bool,
+}
+
+impl Region {
+    fn encloses(self, span: Span) -> bool {
+        self.span.contains_inclusive(span) && (self.whole || self.span != span)
+    }
+}
+
+fn inside(module: &Module<'_>, regions: &[Region]) -> bool {
+    let mut spans = module
+        .program()
+        .body
+        .iter()
+        .map(GetSpan::span)
+        .filter(|span| !span.is_empty())
+        .peekable();
+    spans.peek().is_some() && spans.all(|span| regions.iter().any(|region| region.encloses(span)))
 }
 
 pub fn mark_strict_sources(program: &Program<'_>, bundle: &mut Bundle<'_>) {
@@ -168,7 +193,7 @@ pub fn mark_from_inputs(programs: &[Program<'_>], bundle: &mut Bundle<'_>) {
         }
         return;
     }
-    let regions: Vec<(usize, Vec<Span>)> = programs
+    let regions: Vec<(usize, Vec<Region>)> = programs
         .iter()
         .map(|program| {
             (
@@ -187,13 +212,25 @@ pub fn mark_from_inputs(programs: &[Program<'_>], bundle: &mut Bundle<'_>) {
     }
 }
 
-fn written_strict(module: &Module<'_>) -> bool {
-    let program = module.program();
+pub fn written_as_module(module: &Module<'_>) -> bool {
     let path = module.path.as_str();
-    program.has_use_strict_directive()
-        || path.ends_with(".mjs")
-        || path.ends_with(".json")
-        || (!path.ends_with(".cjs") && program.body.iter().any(Statement::is_module_declaration))
+    path.ends_with(".mjs")
+        || (!path.ends_with(".cjs")
+            && module
+                .program()
+                .body
+                .iter()
+                .any(Statement::is_module_declaration))
+}
+
+fn written_strict(module: &Module<'_>) -> bool {
+    module.program().has_use_strict_directive()
+        || module.path.as_str().ends_with(".json")
+        || written_as_module(module)
+}
+
+pub fn written_as_strict(module: &Module<'_>) -> bool {
+    module.strict_source || written_strict(module)
 }
 
 fn use_strict(alloc: &Allocator) -> Option<Directive<'_>> {

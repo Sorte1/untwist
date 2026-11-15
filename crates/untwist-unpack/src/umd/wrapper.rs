@@ -288,3 +288,42 @@ pub fn parts<'k, 'a>(frame: &Frame<'k, 'a>) -> Option<Umd<'k, 'a>> {
         returns,
     })
 }
+
+pub fn node_factory<'k, 'a>(statement: &'k Statement<'a>) -> Option<Callback<'k, 'a>> {
+    let Statement::ExpressionStatement(statement) = statement else {
+        return None;
+    };
+    let expression = unwrap_statement_expression(&statement.expression).without_parentheses();
+    let Expression::CallExpression(call) = expression else {
+        return None;
+    };
+    let Expression::FunctionExpression(function) = call.callee.without_parentheses() else {
+        return None;
+    };
+    if call.optional || function.r#async || function.generator {
+        return None;
+    }
+    let names = crate::matcher::param_names(&function.params);
+    let plain = names.len() == function.params.items.len()
+        && function.params.rest.is_none()
+        && distinct(&names)
+        && !names.iter().any(|name| RESERVED_PARAMS.contains(name));
+    let mut functions = call.arguments.iter().enumerate().filter(|(_, argument)| {
+        argument_expression(argument).is_some_and(|expression| callback(expression).is_some())
+    });
+    let ((position, argument), None) = (functions.next()?, functions.next()) else {
+        return None;
+    };
+    let roots_inert = call.arguments.iter().enumerate().all(|(index, argument)| {
+        index == position || argument_expression(argument).is_some_and(inert_root)
+    });
+    let [only] = function.body.as_ref()?.statements.as_slice() else {
+        return None;
+    };
+    let factory = *names.get(position)?;
+    let (returns, invoked) = invocation(reach(only)?, factory)?;
+    let assigned = matches!(returns, Returns::Assigned) && invoked.arguments.is_empty();
+    (plain && roots_inert && assigned)
+        .then(|| callback(argument_expression(argument)?))
+        .flatten()
+}

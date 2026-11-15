@@ -158,6 +158,10 @@ pub fn code_beside(line: usize, why: impl Display) -> String {
     format!("the program runs code beside the bundle (line {line}) that the written files cannot hold: it {why}; no bundle is written")
 }
 
+pub fn bundle_statement_shared(line: usize) -> String {
+    format!("the bundle sits inside a top-level statement (line {line}) that runs other code too, which the written files cannot hold; no bundle is written")
+}
+
 pub fn code_beside_entry(why: impl Display) -> String {
     format!("the program runs code beside the bundle that the written entry cannot hold: {why}; no bundle is written")
 }
@@ -165,6 +169,12 @@ pub fn code_beside_entry(why: impl Display) -> String {
 pub fn sloppy_file(id: impl Display) -> String {
     format!(
         "module {id} would be written as a sloppy file (no \"use strict\" and not an ES module): {SLOPPY_FRAME}"
+    )
+}
+
+pub fn module_syntax_written(file: impl Display, what: impl Display) -> String {
+    format!(
+        "{file} would be written with {what}, which node runs only in an ES module and the written file cannot keep as the input had it; no bundle is written"
     )
 }
 
