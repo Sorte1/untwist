@@ -172,12 +172,12 @@ fn mirrored_inputs(bundle: &mut Bundle<'_>, names: &[String]) -> Vec<String> {
     }
 }
 
-fn renamed_a_function_name(notes: &mut Vec<Note>) -> bool {
-    let renamed = crate::rename::took_name_hazard();
-    if renamed {
-        notes.push(note(notes::RENAMED_FUNCTION_NAME.to_string()));
-    }
-    renamed
+fn rename_refused(notes: &mut Vec<Note>) -> bool {
+    let Some(why) = crate::rename::took_rename_hazard() else {
+        return false;
+    };
+    notes.push(note(why.to_string()));
+    true
 }
 
 fn input_names(bundle: &Bundle<'_>, names: &[String]) -> Vec<String> {
@@ -210,7 +210,7 @@ pub fn unpack_named_inputs<'a>(
     let mut notes = Vec::new();
     let mut refused_any = false;
     let _names = scan_name_reads(options.trust_names);
-    crate::rename::clear_name_hazard();
+    crate::rename::clear_rename_hazard();
     let mut found = detected(
         alloc,
         programs,
@@ -219,7 +219,7 @@ pub fn unpack_named_inputs<'a>(
         (&mut notes, &mut refused_any),
     );
     let bundles = complete(alloc, programs, &groups, &mut found, &mut notes);
-    if renamed_a_function_name(&mut notes) {
+    if rename_refused(&mut notes) {
         return (None, notes);
     }
     if bundles.len() > 1 && bundles.iter().any(|bundle| bundle.around.is_some()) {
@@ -237,7 +237,7 @@ pub fn unpack_named_inputs<'a>(
     let Some(mut bundle) = merged else {
         return (None, notes);
     };
-    if renamed_a_function_name(&mut notes) {
+    if rename_refused(&mut notes) {
         return (None, notes);
     }
     if let Err(why) = chunks_checked(&bundle, options, refused_any) {
@@ -251,7 +251,7 @@ pub fn unpack_named_inputs<'a>(
         return (None, notes);
     }
     notes.extend(finish_with(alloc, &mut bundle, mappings, options));
-    if renamed_a_function_name(&mut notes) {
+    if rename_refused(&mut notes) {
         return (None, notes);
     }
     if let Some(reached) = left_request_reaching(&bundle) {

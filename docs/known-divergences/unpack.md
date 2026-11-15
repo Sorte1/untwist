@@ -147,6 +147,18 @@ under node by `cargo xtask diff-unpack-behaviour` in default and unpack-only mod
   is not one of the factory's own parameters, gets the binding renamed (`_require`, ...) in the
   written CommonJS file: node's wrapper binds those names, so a `let` would no longer parse and an
   uninitialised `var` would read the wrapper's value instead of `undefined`.
+- **A factory parameter renamed to `require`, `module` or `exports` moves every binding of that
+  name aside.** When a factory parameter takes the name (webpack, browserify, Parcel, Turbopack,
+  esbuild, Metro, the webpack require shield and the shared-runtime fold), every binding of that
+  name anywhere in the module gets a fresh name (`_require`, `_require2`, ...), not only the one
+  nearest a use, so an outer `function f(require)` around an inner one cannot capture the new
+  `require` call. Where the binding cannot be proven, the bundle is refused with `a factory
+  parameter would be renamed to a name bound inside the module where the binding cannot be proven
+  (...); not unpacked`: a catch parameter beside a sloppy block function of the same name (the
+  parser binds the block's reads to the catch parameter), a `var` redeclaring a catch parameter
+  that the parser binds to the wrong scope, a direct `eval` or `with` statement inside the scope
+  of such a binding, or a use of the parameter inside a direct `eval` or `with` scope. Rows:
+  `crates/untwist/tests/unpack_factory_name_rows.rs`, both lanes, node parity.
 - **esbuild's `__require` shim in an ES-module bundle.** Without the `createRequire` banner the
   shim finds no `require` and throws "Dynamic require ... is not supported"; such a bundle is not
   split, since a written CommonJS file would load the module instead.

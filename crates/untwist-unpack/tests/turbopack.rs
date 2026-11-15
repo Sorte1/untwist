@@ -409,3 +409,14 @@ fn a_browser_chunk_carries_the_runtime_premise_note() {
         result.notes
     );
 }
+
+#[test]
+fn a_binding_named_like_a_renamed_parameter_refuses() {
+    for body in [
+        "(e,t,r)=>{function f(exports){return exports}r.k=f(1)}",
+        "(e,t,r)=>{function f(exports){return function(exports){r.k=exports;return r.k}(2)+exports}r.v=f(1)}",
+        "function(e,t,r){function f(){try{throw 1}catch(exports){{function exports(){}r.k=typeof exports}}}f()}",
+    ] {
+        refused(&chunk(body));
+    }
+}

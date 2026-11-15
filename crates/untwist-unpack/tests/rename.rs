@@ -4,7 +4,9 @@ use common::parse;
 use oxc_allocator::Allocator;
 use untwist_core::print::{print, PrintStyle};
 use untwist_unpack::rename::rename_binding;
-use untwist_unpack::rename::{rename_parameters, rename_parameters_uncaptured};
+use untwist_unpack::rename::{
+    clear_rename_hazard, rename_parameters, rename_parameters_uncaptured, took_rename_hazard,
+};
 
 const WEBPACK: [&str; 3] = ["module", "exports", "require"];
 const BROWSERIFY: [&str; 3] = ["require", "module", "exports"];
@@ -142,5 +144,120 @@ fn a_swap_between_parameters_is_not_a_host_name() {
     assert_eq!(
         rename_uncaptured(source, &["exports", "module"], &["module", "exports"]),
         "module.a = exports;"
+    );
+}
+
+fn rename_refusal(source: &str, original: &[&str], renamed: &[&str]) -> Option<&'static str> {
+    let alloc = Allocator::default();
+    let mut program = parse(&alloc, source);
+    let before = print(&program, PrintStyle::Pretty);
+    clear_rename_hazard();
+    let changes = rename_parameters(&alloc, &mut program, original, renamed);
+    let refused = took_rename_hazard();
+    if refused.is_some() {
+        assert_eq!(changes, 0, "{source}");
+        assert_eq!(print(&program, PrintStyle::Pretty), before, "{source}");
+    }
+    refused
+}
+
+#[test]
+fn every_binding_named_like_the_target_moves_aside_not_only_the_nearest() {
+    let source = "function f(require) {\n  return function (require) {\n    return n(0).v + require;\n  }(2) + require;\n}\n";
+    assert_eq!(
+        rename(source, &["e", "t", "n"], &WEBPACK),
+        "function f(_require) {\n  return function (_require2) {\n    return require(0).v + _require2;\n  }(2) + _require;\n}"
+    );
+}
+
+#[test]
+fn a_binding_off_every_reference_path_moves_aside_too() {
+    let source = "function g(module) {\n  return module;\n}\nn(0);\nfunction h() {\n  var require = 1;\n  return require;\n}\n";
+    assert_eq!(
+        rename(source, &["e", "t", "n"], &WEBPACK),
+        "function g(module) {\n  return module;\n}\nrequire(0);\nfunction h() {\n  var _require = 1;\n  return _require;\n}"
+    );
+}
+
+#[test]
+fn a_catch_parameter_in_a_var_scope_binding_moves_aside_with_it() {
+    let source = "function f() {\n  var require = 1;\n  try {\n    throw 2;\n  } catch (require) {\n    return n(0).v + require;\n  }\n}\n";
+    assert_eq!(
+        rename(source, &["e", "t", "n"], &WEBPACK),
+        "function f() {\n  var _require = 1;\n  try {\n    throw 2;\n  } catch (_require2) {\n    return require(0).v + _require2;\n  }\n}"
+    );
+}
+
+#[test]
+fn a_catch_parameter_beside_a_same_named_block_function_refuses_the_rename() {
+    for (source, original, renamed) in [
+        (
+            "function f() { try {} catch (require) { { function require() {} n(0); } } }",
+            &["e", "t", "n"][..],
+            &WEBPACK[..],
+        ),
+        (
+            "function f() { try {} catch (require) { { function require() {} } n(0); } }",
+            &["e", "t", "n"][..],
+            &WEBPACK[..],
+        ),
+        (
+            "function f() { try {} catch (exports) { { function exports() {} } c.k = 1; } }",
+            &["a", "b", "c"][..],
+            &BROWSERIFY[..],
+        ),
+    ] {
+        assert!(
+            rename_refusal(source, original, renamed).is_some(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_direct_eval_or_with_statement_near_the_target_refuses_the_rename() {
+    for source in [
+        "function f(require) { eval(s); return require; } n(0);",
+        "with (o) { n(0); }",
+        "function f() { var require = 1; with (o) { return require; } } n(0);",
+    ] {
+        assert!(
+            rename_refusal(source, &["e", "t", "n"], &WEBPACK).is_some(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_rename_without_a_collision_or_hazard_is_not_refused() {
+    for source in [
+        "n(0);",
+        "function f(require) { return require; } n(0);",
+        "function f() { try {} catch (require) { { function g() {} } n(0); } }",
+        "function f(require) { eval(s); return require; }",
+    ] {
+        assert_eq!(
+            rename_refusal(source, &["e", "t", "n"], &WEBPACK),
+            None,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn metro_parameters_move_every_colliding_binding_aside() {
+    let canonical = [
+        "global",
+        "require",
+        "_$$_IMPORT_DEFAULT",
+        "_$$_IMPORT_ALL",
+        "module",
+        "exports",
+        "_dependencyMap",
+    ];
+    let source = "function f(require) {\n  return function (require) {\n    return r(d[0]) + require;\n  }(2) + require;\n}\n";
+    assert_eq!(
+        rename(source, &["g", "r", "i", "a", "m", "e", "d"], &canonical),
+        "function f(_require) {\n  return function (_require2) {\n    return require(_dependencyMap[0]) + _require2;\n  }(2) + _require;\n}"
     );
 }

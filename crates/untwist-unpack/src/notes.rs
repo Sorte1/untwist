@@ -14,6 +14,8 @@ pub const ENTRY_CANDIDATES: &str = "top-level require calls and no entry marker 
 pub const REQUIRE_MISSING: &str = "has no module in this bundle";
 pub const RENAMED_FUNCTION_NAME: &str =
     "a module binding that gives a function its name would be renamed while the bundle may read names; not unpacked";
+pub const MISBOUND_RENAME: &str =
+    "a factory parameter would be renamed to a name bound inside the module where the binding cannot be proven (a catch parameter next to a block function of the same name, a direct eval or a with statement); not unpacked";
 pub const UNHANDLED_HELPER: &str = "unhandled webpack helper require.";
 pub const FACTORY_NOT_CLOSED: &str = "is not closed over its own scope; no bundle is written";
 pub const SLOPPY_FRAME: &str = "a function the modules call could read its caller (`.caller`, `arguments.callee.caller`, a stack frame's `getFunction()`), which is the bundle's own function in the bundle and node's module wrapper in the written files; no bundle is written (--unsafe assumes no such read reaches a module)";
@@ -50,6 +52,7 @@ catalogue!(
     ENTRY_CANDIDATES,
     REQUIRE_MISSING,
     RENAMED_FUNCTION_NAME,
+    MISBOUND_RENAME,
     UNHANDLED_HELPER,
     FACTORY_NOT_CLOSED,
     EVAL_NAME_REBOUND,
