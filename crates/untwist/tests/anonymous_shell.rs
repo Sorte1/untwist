@@ -1,4 +1,4 @@
-use untwist::{Options, Output, Pipeline, ANONYMOUS_SHELL_KEPT};
+use untwist::{Options, Output, Pipeline, ANONYMOUS_SHELL_KEPT, SYNTAX_ERROR_REFUSED};
 use untwist_core::pass::NoteKind;
 use untwist_deobfuscate::directives::ShellRefusal;
 
@@ -91,18 +91,30 @@ fn a_shell_whose_parameter_is_read_inside_a_nested_function_is_stripped_too() {
 
 #[test]
 fn a_shell_whose_parameter_name_is_declared_at_the_body_top_level_is_left_alone() {
+    let out = run("(function anonymous(a, b) {\n  function b() {}\n  use(b);\n})");
+    assert_kept(&out, ShellRefusal::ParameterDeclared);
+}
+
+#[test]
+fn a_shell_whose_parameter_is_redeclared_lexically_is_refused_as_node_rejects_it() {
     for declaration in [
-        "function b() {}",
         "let b = 1;",
         "const b = 1;",
         "class b {}",
         "let { b } = x;",
         "const [a, b] = x;",
     ] {
-        let out = run(&format!(
-            "(function anonymous(a, b) {{\n  {declaration}\n  use(b);\n}})"
-        ));
-        assert_kept(&out, ShellRefusal::ParameterDeclared);
+        let source = format!("(function anonymous(a, b) {{\n  {declaration}\n  use(b);\n}})");
+        let out = run(&source);
+        assert!(out.parse_errors > 0, "{declaration}");
+        assert_eq!(out.code(), source);
+        assert!(
+            out.notes
+                .iter()
+                .any(|note| note.message == SYNTAX_ERROR_REFUSED),
+            "{:?}",
+            out.notes
+        );
     }
 }
 

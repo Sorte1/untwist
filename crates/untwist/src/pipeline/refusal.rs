@@ -52,6 +52,9 @@ pub const UNPACK_TEXT_TOO_DEEP: &str = "a final text nests too deeply to parse a
 pub const TYPESCRIPT_IN_JAVASCRIPT: &str = "this input uses TypeScript syntax that untwist does \
      not read in JavaScript; it is passed through unchanged";
 
+pub const SYNTAX_ERROR_REFUSED: &str = "node rejects this input with a SyntaxError before any \
+     of it runs; it is passed through unchanged";
+
 pub const WORKER_DIED: &str = "processing this input stopped the worker process, which ran out \
      of stack or memory; it is passed through unchanged";
 
@@ -73,11 +76,12 @@ const MIB: u64 = 1 << 20;
 
 const ADMIT_PANIC_HOOK: &str = "a test hook panicked in admit";
 
-const INPUT_REFUSALS: [&str; 9] = [
+const INPUT_REFUSALS: [&str; 10] = [
     NESTED_TOO_DEEP,
     PARENTHESES_TOO_DEEP,
     PRINT_TOO_LARGE,
     TYPESCRIPT_IN_JAVASCRIPT,
+    SYNTAX_ERROR_REFUSED,
     WORKER_DIED,
     OVER_MEMORY_REFUSED,
     OVER_TIME_REFUSED,
@@ -133,6 +137,14 @@ impl InputResult {
             notes: vec![pipeline_refusal(message)],
             refused: true,
             ..InputResult::default()
+        }
+    }
+
+    pub(super) fn refused_for_syntax(self, source: &str) -> Self {
+        InputResult {
+            parse_diagnostics: self.parse_diagnostics,
+            parse_errors: self.parse_errors,
+            ..InputResult::refused(source, SYNTAX_ERROR_REFUSED)
         }
     }
 }

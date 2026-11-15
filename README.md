@@ -251,10 +251,14 @@ strict code and every written module file is strict (an ES module, or a file tha
 `undefined` for `getFunction()` on strict frames. Bundles with sloppy code, which covers most
 webpack 4 and CommonJS bundles, are kept whole in the safe lane. The unsafe lane assumes no read
 of a function's caller or arguments reaches a bundled module's function and splits them anyway.
-An input is taken as an ES module, as node 22 takes it, when it is named `.mjs` or when its own text
-(before any pass runs) does not parse as a script but parses as a module: `import`/`export`,
-`import.meta` or a top-level `await x`, also in code a later pass removes. Any other `.js` input is a
-script or CommonJS, also one that parses only by calling a global named `await` (`await (x)`). The module code of a
+An input is taken as an ES module, as node 22 takes it, when it is named `.mjs`, when its own text
+(before any pass runs) does not parse as a script but parses as a module (`import`/`export`,
+`import.meta` or a top-level `await x`, also in code a later pass removes), or when it declares
+`require`, `exports`, `module`, `__filename` or `__dirname` with a top-level `let`, `const` or `class`,
+which node's CommonJS wrapper does not allow. Any other `.js` input is a
+script or CommonJS, also one that parses only by calling a global named `await` (`await (x)`). An
+input that node rejects with a SyntaxError (an early error such as a legacy octal literal in strict
+code) is passed through unchanged with an error. The module code of a
 bundle in an ES module input is strict, so its written module files get `"use strict"` (or are ES
 modules themselves), and when the passes remove the only module syntax of such an input, its
 output ends with `export {};` so that node still runs it as a module.
