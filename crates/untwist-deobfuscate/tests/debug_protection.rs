@@ -78,12 +78,12 @@ fn an_interval_on_an_intact_global_is_removed_as_a_statement() {
 fn an_iife_that_does_other_work_loses_only_its_interval_call() {
     let alloc = Allocator::default();
     let source = format!(
-        "{DPF}(function () {{\n  console.log(\"real work\");\n  globalThis.started = true;\n  globalThis.setInterval(dpf, 4000);\n}})();\nconsole.log(globalThis.started);"
+        "{DPF}(function () {{\n  console.log(\"real work\");\n  globalThis.started = true;\n  globalThis.setInterval(dpf, 4000);\n}})();\nconsole.log(globalThis.started === true);"
     );
     let out = run(&alloc, &source);
     assert_eq!(
         out.trim(),
-        "(function () {\n  console.log(\"real work\");\n  globalThis.started = true;\n})();\nconsole.log(globalThis.started);"
+        "(function () {\n  console.log(\"real work\");\n  globalThis.started = true;\n})();\nconsole.log(globalThis.started === true);"
     );
 }
 
