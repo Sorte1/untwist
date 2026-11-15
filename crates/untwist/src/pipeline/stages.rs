@@ -6,6 +6,7 @@ use untwist_core::pass::{
     PassOptions, RoundCapUndo, RunReport,
 };
 use untwist_core::semantic::Semantics;
+use untwist_deobfuscate::decoded::settle_layered_observations;
 use untwist_deobfuscate::driver::{run_cleanup_settling, CleanupSlot, PreparedSlot};
 use untwist_deobfuscate::{
     drop_cleared_observation, run_deobfuscate_prepared, run_final_machinery, run_machinery_sweep,
@@ -397,6 +398,7 @@ impl Pipeline {
         site: &mut StageCx<'a, '_>,
         sem: Semantics,
     ) -> (Semantics, bool) {
+        settle_layered_observations(site.program, &sem.scoping);
         if !self.options.deobfuscate {
             return (sem, false);
         }

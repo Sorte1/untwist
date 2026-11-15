@@ -8,10 +8,17 @@ use crate::ast_util::literal::undefined_expression;
 
 pub fn returned_expression<'k, 'a>(function: &'k Function<'a>) -> Option<&'k Expression<'a>> {
     let body = function.body.as_ref()?;
-    if body.statements.len() != 1 {
+    let [only] = body.statements.as_slice() else {
         return None;
+    };
+    let mut statement = only;
+    while let Statement::BlockStatement(block) = statement {
+        let [inner] = block.body.as_slice() else {
+            return None;
+        };
+        statement = inner;
     }
-    let Statement::ReturnStatement(statement) = body.statements.first()? else {
+    let Statement::ReturnStatement(statement) = statement else {
         return None;
     };
     statement.argument.as_ref()

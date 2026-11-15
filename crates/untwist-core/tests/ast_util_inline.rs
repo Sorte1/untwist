@@ -108,3 +108,12 @@ fn a_body_that_reads_the_receiver_is_not_inlined() {
         assert_eq!(try_inline(source), None, "{source}");
     }
 }
+
+#[test]
+fn a_return_wrapped_in_single_statement_blocks_is_inlined() {
+    assert_eq!(
+        inline("function w(a, b) { { { return a(b); } } }\nw(f, 2);"),
+        "f(2)"
+    );
+    assert!(try_inline("function w(a, b) { { g(); return a(b); } }\nw(f, 2);").is_none());
+}

@@ -49,6 +49,10 @@ impl NoteSet {
         }
     }
 
+    pub(crate) fn holds_message(&self, message: &str) -> bool {
+        self.notes.iter().any(|note| note.message == message)
+    }
+
     pub(crate) fn into_current(self, settled: u32) -> Vec<Note> {
         self.notes
             .into_iter()

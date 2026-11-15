@@ -843,6 +843,21 @@ pub fn run_final_machinery<'a>(
     run_to_fixpoint(alloc, program, sem, &mut group)
 }
 
+fn unguard_rotators<'a>(
+    alloc: &'a Allocator,
+    program: &mut Program<'a>,
+    sem: Semantics,
+    opts: &PassOptions,
+    aggregate: &Aggregate,
+) -> (Semantics, bool) {
+    if !aggregate.notes.holds_message(notes::ROTATOR_NOT_SEALED) {
+        return (sem, false);
+    }
+    let mut group = group_of(&protections_ctors(), opts.clone());
+    let (sem, report) = run_to_fixpoint(alloc, program, sem, &mut group);
+    (sem, report.total_changes > 0)
+}
+
 fn run_rounds<'a>(
     alloc: &'a Allocator,
     program: &mut Program<'a>,
@@ -862,7 +877,12 @@ fn run_rounds<'a>(
         sem = next;
         aggregate.rounds += 1;
         let retry = changes == 0 && aggregate.deferred && !opts.defer_disabled.get();
-        if changes == 0 && !retry {
+        let (next, unguarded) = match changes == 0 && !retry {
+            true => unguard_rotators(alloc, program, sem, opts, aggregate),
+            false => (sem, false),
+        };
+        sem = next;
+        if changes == 0 && !retry && !unguarded {
             opts.defer_disabled.set(disabled);
             return sem;
         }
@@ -954,6 +974,7 @@ fn deobfuscate_with<'a>(
         None => sem,
     };
 
+    crate::decoded::settle_layered(program, &sem.scoping);
     let mut report = aggregate.finish();
     report.heap_charged = shared.heap.borrow().peak();
     (sem, report)

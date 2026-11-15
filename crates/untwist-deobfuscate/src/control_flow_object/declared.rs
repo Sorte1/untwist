@@ -413,9 +413,19 @@ pub(super) fn inline_declared_objects<'a>(program: &mut Program<'a>, cx: &mut Cx
         return 0;
     }
     let order = scan_init_order(program, cx);
-    let scanned = scanned_candidates(program, &candidates, cx);
+    let mut scanned = scanned_candidates(program, &candidates, cx);
     #[cfg(debug_assertions)]
     crate::fused::check::record_order_and_uses("declared-objects", &order, &scanned);
+    for candidate in &candidates {
+        let unreferenced = is_constant_binding(cx.scoping(), candidate.symbol)
+            && cx
+                .scoping()
+                .get_resolved_reference_ids(candidate.symbol)
+                .is_empty();
+        if unreferenced {
+            scanned.entry(candidate.symbol).or_default();
+        }
+    }
     candidates.retain(|candidate| scanned.contains_key(&candidate.symbol));
     refuse_annex_b_bindings(
         &mut candidates,

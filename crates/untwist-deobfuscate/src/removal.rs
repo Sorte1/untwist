@@ -100,6 +100,19 @@ fn record_observed(reach: &crate::calls::agnostic::GlobalReach) {
     crate::refusal_spans::extend(reach.source.as_slice());
 }
 
+fn layered_names_waived(program: &Program<'_>, scoping: &Scoping, stamped: &Stamped<'_>) -> bool {
+    let root = scoping.root_scope_id();
+    let originals: Option<Vec<&str>> = stamped
+        .arrays
+        .iter()
+        .chain(stamped.decoders.iter())
+        .filter_map(|entry| entry.symbol)
+        .filter(|symbol| scoping.symbol_scope_id(*symbol) == root)
+        .map(|symbol| original_name(program.source_text, scoping, symbol))
+        .collect();
+    originals.is_some_and(|names| crate::legacy_reach::waive_observation(&names))
+}
+
 #[derive(Default)]
 pub struct Machinery {
     pub unit: usize,
@@ -692,8 +705,10 @@ impl RemoveDecoderMachinery {
         }
         let found = self.observed_span(program, cx, (&stamped, &units));
         if let Some(span) = found.observed {
-            cx.note(notes::MACHINERY_NAME_OBSERVED.to_string(), Some(span));
-            return Vec::new();
+            if !layered_names_waived(program, cx.scoping(), &stamped) {
+                cx.note(notes::MACHINERY_NAME_OBSERVED.to_string(), Some(span));
+                return Vec::new();
+            }
         }
         if let Some(span) = found.outside_premise {
             cx.progress(notes::MACHINERY_REMOVED_UNDER_OUTSIDE_PREMISE, Some(span));
