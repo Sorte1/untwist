@@ -498,6 +498,7 @@ const NODE_REQUIRE_MEMBERS: [&str; 7] = [
 struct HostRequire<'s> {
     scoping: &'s Scoping,
     found: Option<String>,
+    requests: Vec<String>,
 }
 
 impl HostRequire<'_> {
@@ -509,14 +510,17 @@ impl HostRequire<'_> {
         is_host_require_name(self.scoping, expr)
     }
 
-    fn judge(call: &CallExpression<'_>) -> Option<String> {
-        let [Argument::StringLiteral(literal)] = call.arguments.as_slice() else {
-            return Some("a request that is not one literal".to_string());
+    fn judge(&mut self, call: &CallExpression<'_>) {
+        let request = match call.arguments.as_slice() {
+            [Argument::StringLiteral(literal)] => literal.value.as_str(),
+            _ => None,
         };
-        let request = literal.value.as_str()?;
+        let Some(request) = request else {
+            return self.note("a request that is not one literal".to_string());
+        };
         match call.optional || !leaves_the_bundle(request) {
-            true => Some(format!("require({request:?})")),
-            false => None,
+            true => self.note(format!("require({request:?})")),
+            false => self.requests.push(request.to_string()),
         }
     }
 }
@@ -538,9 +542,7 @@ impl<'a> VisitJs<'a> for HostRequire<'_> {
             oxc_ast_visit::walk_js::walk_call_expression(self, it);
             return;
         }
-        if let Some(what) = Self::judge(it) {
-            self.note(what);
-        }
+        self.judge(it);
         if let Expression::ConditionalExpression(choice) = callee {
             self.visit_expression(&choice.test);
             for branch in [&choice.consequent, &choice.alternate] {
@@ -635,7 +637,7 @@ fn is_host_require_name(scoping: &Scoping, expr: &Expression<'_>) -> bool {
     }
 }
 
-pub fn calls_host_require(scoping: &Scoping, callee: &Expression<'_>) -> bool {
+fn calls_host_require(scoping: &Scoping, callee: &Expression<'_>) -> bool {
     match callee.without_parentheses() {
         Expression::ConditionalExpression(choice) => [&choice.consequent, &choice.alternate]
             .into_iter()
@@ -652,8 +654,19 @@ pub fn first_host_require_use<'k, 'a: 'k>(
         let mut uses = HostRequire {
             scoping,
             found: None,
+            requests: Vec::new(),
         };
         uses.visit_function_body(factory.body);
         uses.found.map(|what| (id, Captured::HostUse(what)))
     })
+}
+
+pub fn host_require_requests(scoping: &Scoping, program: &Program<'_>) -> Vec<String> {
+    let mut uses = HostRequire {
+        scoping,
+        found: None,
+        requests: Vec::new(),
+    };
+    uses.visit_program(program);
+    uses.requests
 }

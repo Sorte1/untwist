@@ -3,7 +3,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use untwist_core::pass::{Note, NoteKind};
 
-use crate::closed::calls_host_require;
+use crate::closed::host_require_requests;
 use crate::matcher::named_const_member;
 use crate::model::RequireParam;
 use crate::model::{Bundle, BundleKind, Module};
@@ -206,22 +206,6 @@ fn attach_runtime<'a>(
     Some(())
 }
 
-struct HostRequests<'s> {
-    scoping: &'s oxc_semantic::Scoping,
-    requests: Vec<String>,
-}
-
-impl<'a> VisitJs<'a> for HostRequests<'_> {
-    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        let host = calls_host_require(self.scoping, &it.callee);
-        if let (true, [Argument::StringLiteral(literal)]) = (host, it.arguments.as_slice()) {
-            self.requests
-                .extend(literal.value.as_str().map(str::to_string));
-        }
-        walk_js::walk_call_expression(self, it);
-    }
-}
-
 fn host_requests(bundle: &Bundle<'_>) -> Vec<(String, Option<String>)> {
     let mut left = Vec::new();
     for (id, module) in &bundle.modules {
@@ -233,14 +217,9 @@ fn host_requests(bundle: &Bundle<'_>) -> Vec<(String, Option<String>)> {
             continue;
         }
         let scoping = build_scoping(program).scoping;
-        let mut found = HostRequests {
-            scoping: &scoping,
-            requests: Vec::new(),
-        };
-        found.visit_program(program);
+        let requests = host_require_requests(&scoping, program);
         left.extend(
-            found
-                .requests
+            requests
                 .into_iter()
                 .map(|request| (id.clone(), Some(request))),
         );
