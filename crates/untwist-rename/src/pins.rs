@@ -4,8 +4,8 @@ use untwist_core::ast_util::key_names::{key_names, text_names};
 use untwist_core::pass::PassOptions;
 use untwist_core::semantic::pins::script_global_symbols;
 use untwist_core::semantic::{
-    has_module_syntax, hoist_blockers, hoist_shadowing_catches, is_shared_global, misbound_catch_vars,
-    top_level_names_fixed, AnnexBWrites,
+    has_module_syntax, hoist_blockers, hoist_shadowing_catches, is_shared_global,
+    misbound_catch_vars, top_level_names_fixed, AnnexBWrites,
 };
 
 use crate::collect::{collect, Collected};
