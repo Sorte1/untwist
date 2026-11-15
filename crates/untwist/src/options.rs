@@ -116,6 +116,7 @@ pub struct Options {
     pub input_names: Vec<String>,
     pub module_goal: bool,
     pub types: Option<TypesMode>,
+    pub script_goal: bool,
 }
 
 impl Default for Options {
@@ -156,6 +157,7 @@ impl Default for Options {
             input_names: Vec::new(),
             module_goal: false,
             types: None,
+            script_goal: false,
         }
     }
 }

@@ -12,7 +12,7 @@ const CLASS_AWAIT: [&str; 6] = [
     "p15 --unsafe",
 ];
 
-const SPLITS: [&str; 20] = [
+const SPLITS: [&str; 14] = [
     "s1",
     "s1 --unsafe",
     "s2",
@@ -23,21 +23,15 @@ const SPLITS: [&str; 20] = [
     "s4 --unsafe",
     "s5",
     "s5 --unsafe",
-    "s9",
-    "s9 --unsafe",
     "s11",
     "s11 --unsafe",
-    "s13",
-    "s13 --unsafe",
-    "s14",
-    "s14 --unsafe",
     "p11",
     "p11 --unsafe",
 ];
 
 const PLACEMENT: &str = "the bundle sits inside a top-level statement";
 
-const REFUSALS: [&str; 32] = [
+const REFUSALS: [&str; 38] = [
     "w1",
     "w1 --unsafe",
     "w2",
@@ -70,6 +64,12 @@ const REFUSALS: [&str; 32] = [
     "s10 --unsafe",
     "s12",
     "s12 --unsafe",
+    "s13",
+    "s13 --unsafe",
+    "s9",
+    "s9 --unsafe",
+    "s14",
+    "s14 --unsafe",
 ];
 
 const SYNTAX_ERRORS: [&str; 71] = [

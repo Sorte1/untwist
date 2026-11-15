@@ -1,0 +1,1610 @@
+{"name": "l0:1", "ext": "js", "source": "new.target;\nconsole.log(\"ran\");\n"}
+{"name": "l0:2", "ext": "js", "source": "var x = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l0:3", "ext": "js", "source": "\"use strict\"; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l1:1", "ext": "js", "source": "using x = null;\nconsole.log(\"ran\");\n"}
+{"name": "l1:2", "ext": "js", "source": "{ using x = null; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:3", "ext": "js", "source": "function f() { using x = null; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:4", "ext": "js", "source": "@dec class A {}\nconsole.log(\"ran\");\n"}
+{"name": "l1:5", "ext": "js", "source": "class A { @dec m() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l1:6", "ext": "js", "source": "/(?i:a)/;\nconsole.log(\"ran\");\n"}
+{"name": "l1:7", "ext": "js", "source": "/(/;\nconsole.log(\"ran\");\n"}
+{"name": "l1:8", "ext": "js", "source": "/a**/;\nconsole.log(\"ran\");\n"}
+{"name": "l1:9", "ext": "js", "source": "/\\u{110000}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:10", "ext": "js", "source": "/(?<a>.)(?<a>.)/;\nconsole.log(\"ran\");\n"}
+{"name": "l1:11", "ext": "js", "source": "/\\k<a>/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:12", "ext": "js", "source": "/[b-a]/;\nconsole.log(\"ran\");\n"}
+{"name": "l1:13", "ext": "js", "source": "/a{2,1}/;\nconsole.log(\"ran\");\n"}
+{"name": "l1:14", "ext": "js", "source": "/\\p{Foo}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:15", "ext": "js", "source": "/[\\d-a]/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:16", "ext": "js", "source": "/\\1(a)/;\nconsole.log(\"ran\");\n"}
+{"name": "l1:17", "ext": "js", "source": "/(?<n>a)\\k<m>/;\nconsole.log(\"ran\");\n"}
+{"name": "l1:18", "ext": "js", "source": "/a/v; /[a&&&b]/v;\nconsole.log(\"ran\");\n"}
+{"name": "l1:19", "ext": "js", "source": "/{1}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:20", "ext": "js", "source": "/\\c/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:21", "ext": "js", "source": "/(?<=a)+/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:22", "ext": "js", "source": "/(?=a)+/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:23", "ext": "js", "source": "/(?=a)+/;\nconsole.log(\"ran\");\n"}
+{"name": "l1:24", "ext": "js", "source": "/\\-/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:25", "ext": "js", "source": "/]/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:26", "ext": "js", "source": "/}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l1:27", "ext": "js", "source": "new RegExp(\"(\");\nconsole.log(\"ran\");\n"}
+{"name": "l1:28", "ext": "js", "source": "var a = 1_000; var b = 1__0;\nconsole.log(\"ran\");\n"}
+{"name": "l1:29", "ext": "js", "source": "var b = 1_;\nconsole.log(\"ran\");\n"}
+{"name": "l1:30", "ext": "js", "source": "var b = 0_1;\nconsole.log(\"ran\");\n"}
+{"name": "l1:31", "ext": "js", "source": "var b = 09.5; var c = 08n;\nconsole.log(\"ran\");\n"}
+{"name": "l1:32", "ext": "js", "source": "var b = 0b12;\nconsole.log(\"ran\");\n"}
+{"name": "l1:33", "ext": "js", "source": "var c = 1n; var d = 1.5n;\nconsole.log(\"ran\");\n"}
+{"name": "l1:34", "ext": "js", "source": "var d = 01n;\nconsole.log(\"ran\");\n"}
+{"name": "l1:35", "ext": "js", "source": "var e = 3in [];\nconsole.log(\"ran\");\n"}
+{"name": "l1:36", "ext": "js", "source": "var e = 3.in;\nconsole.log(\"ran\");\n"}
+{"name": "l1:37", "ext": "js", "source": "\"\\u{110000}\";\nconsole.log(\"ran\");\n"}
+{"name": "l1:38", "ext": "js", "source": "\"\\x4\";\nconsole.log(\"ran\");\n"}
+{"name": "l1:39", "ext": "js", "source": "'\\u12';\nconsole.log(\"ran\");\n"}
+{"name": "l1:40", "ext": "js", "source": "`\\u{g}`;\nconsole.log(\"ran\");\n"}
+{"name": "l1:41", "ext": "js", "source": "tag`\\u{g}`;\nconsole.log(\"ran\");\n"}
+{"name": "l1:42", "ext": "js", "source": "var \\u0061wait = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l1:43", "ext": "js", "source": "var v\\u0061r = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l1:44", "ext": "js", "source": "v\\u0061r x = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l1:45", "ext": "js", "source": "var a\\u{2F} = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l1:46", "ext": "js", "source": "var x = { get a(b) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l1:47", "ext": "js", "source": "var x = { set a() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l1:48", "ext": "js", "source": "var x = { set a(...b) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l1:49", "ext": "js", "source": "class A { get a(b) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l1:50", "ext": "js", "source": "class A { static prototype() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l1:51", "ext": "js", "source": "class A { static prototype = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:52", "ext": "js", "source": "class A { constructor = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:53", "ext": "js", "source": "class A { \"constructor\" = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:54", "ext": "js", "source": "class A { get constructor() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l1:55", "ext": "js", "source": "class A { async constructor() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l1:56", "ext": "js", "source": "class A { *constructor() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l1:57", "ext": "js", "source": "class A { static constructor() {} static get constructor() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l1:58", "ext": "js", "source": "class A { #constructor; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:59", "ext": "js", "source": "class A { ['constructor'] = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:60", "ext": "js", "source": "class A { static #a; #a; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:61", "ext": "js", "source": "class A { get #a() {} set #a(v) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l1:62", "ext": "js", "source": "class A { get #a() {} static set #a(v) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l1:63", "ext": "js", "source": "class A { #a; m() { delete this.#a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:64", "ext": "js", "source": "class A { #a; m() { delete this?.#a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:65", "ext": "js", "source": "class A { #a; m() { delete (this.#a); } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:66", "ext": "js", "source": "class A { #a; m() { delete this.#a.b; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:67", "ext": "js", "source": "class A { m() { #a in this; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:68", "ext": "js", "source": "class A { #a; m() { #a in this; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:69", "ext": "js", "source": "class A { #a; m() { 1 + #a in this; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:70", "ext": "js", "source": "class A { #a; m() { #a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:71", "ext": "js", "source": "class A extends B { constructor() { super(); } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:72", "ext": "js", "source": "class A { constructor() { super(); } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:73", "ext": "js", "source": "class A { m() { super.x; } static { super.y; } x = super.z; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:74", "ext": "js", "source": "class A { x = super(); }\nconsole.log(\"ran\");\n"}
+{"name": "l1:75", "ext": "js", "source": "class A { static { await; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:76", "ext": "js", "source": "class A { static { var await; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:77", "ext": "js", "source": "class A { static { await 0; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:78", "ext": "js", "source": "class A { static { return; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:79", "ext": "js", "source": "class A { static { arguments; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:80", "ext": "js", "source": "class A { static { function f() { arguments; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:81", "ext": "js", "source": "class A { static { () => arguments; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:82", "ext": "js", "source": "class A { x = () => arguments; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:83", "ext": "js", "source": "class A { x = function() { arguments; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:84", "ext": "js", "source": "class A { [arguments] = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l1:85", "ext": "js", "source": "class A { static { yield; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:86", "ext": "js", "source": "function* g() { class A { static { yield; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:87", "ext": "js", "source": "function* g() { class A { [yield] = 1; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:88", "ext": "js", "source": "function* g() { class A { x = yield; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:89", "ext": "js", "source": "async function f() { class A { [await 0] = 1; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:90", "ext": "js", "source": "async function f() { class A { x = await 0; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:91", "ext": "js", "source": "async function f() { class A { static { await 0; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:92", "ext": "js", "source": "var o = { m() { super.x; } };\nconsole.log(\"ran\");\n"}
+{"name": "l1:93", "ext": "js", "source": "var o = { m: function() { super.x; } };\nconsole.log(\"ran\");\n"}
+{"name": "l1:94", "ext": "js", "source": "var o = { m() { super(); } };\nconsole.log(\"ran\");\n"}
+{"name": "l1:95", "ext": "js", "source": "function f() { new.target; } var g = () => new.target;\nconsole.log(\"ran\");\n"}
+{"name": "l1:96", "ext": "js", "source": "var o = { f() { new.target } }; class B { x = new.target; static { new.target; } }\nconsole.log(\"ran\");\n"}
+{"name": "l1:97", "ext": "js", "source": "super.x;\nconsole.log(\"ran\");\n"}
+{"name": "l1:98", "ext": "js", "source": "() => super.x;\nconsole.log(\"ran\");\n"}
+{"name": "l1:99", "ext": "js", "source": "import.meta;\nconsole.log(\"ran\");\n"}
+{"name": "l1:100", "ext": "js", "source": "function f() { import.meta; }\nconsole.log(\"ran\");\n"}
+{"name": "l2:1", "ext": "js", "source": "if (0) { /(/; }\nconsole.log(\"ran\");\n"}
+{"name": "l2:2", "ext": "js", "source": "if (false) { var r = /[b-a]/; }\nconsole.log(\"ran\");\n"}
+{"name": "l2:3", "ext": "js", "source": "console.log(typeof /(/);\nconsole.log(\"ran\");\n"}
+{"name": "l2:4", "ext": "js", "source": "console.log(!/(/);\nconsole.log(\"ran\");\n"}
+{"name": "l2:5", "ext": "js", "source": "console.log(/(/ ? 1 : 2);\nconsole.log(\"ran\");\n"}
+{"name": "l2:6", "ext": "js", "source": "function unused() { return /(/; }\nconsole.log(\"ran\");\n"}
+{"name": "l2:7", "ext": "js", "source": "(function () { return; /(/; })();\nconsole.log(\"ran\");\n"}
+{"name": "l2:8", "ext": "js", "source": "function f() { return 1; /a**/; } f();\nconsole.log(\"ran\");\n"}
+{"name": "l2:9", "ext": "js", "source": "while (false) { /(?<a>.)(?<a>.)/; }\nconsole.log(\"ran\");\n"}
+{"name": "l2:10", "ext": "js", "source": "var x = true ? 1 : /(/;\nconsole.log(\"ran\");\n"}
+{"name": "l2:11", "ext": "js", "source": "var y = 1 || /(/;\nconsole.log(\"ran\");\n"}
+{"name": "l2:12", "ext": "js", "source": "if (0) { using x = null; }\nconsole.log(\"ran\");\n"}
+{"name": "l2:13", "ext": "js", "source": "function g() { return 1; using x = null; } g();\nconsole.log(\"ran\");\n"}
+{"name": "l2:14", "ext": "js", "source": "if (0) { @dec class A {} }\nconsole.log(\"ran\");\n"}
+{"name": "l2:15", "ext": "js", "source": "var z = 1 || @dec class {};\nconsole.log(\"ran\");\n"}
+{"name": "l2:16", "ext": "js", "source": "0 && /(/;\nconsole.log(\"ran\");\n"}
+{"name": "l2:17", "ext": "js", "source": "void /(/;\nconsole.log(\"ran\");\n"}
+{"name": "l2:18", "ext": "js", "source": "/(/, console.log(\"x\");\nconsole.log(\"ran\");\n"}
+{"name": "l3:1", "ext": "js", "source": "{ let f; function f(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l3:2", "ext": "js", "source": "{ function f(){} var f; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:3", "ext": "js", "source": "var f; function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:4", "ext": "js", "source": "let f; function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:5", "ext": "js", "source": "function o(){ var f; function f(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l3:6", "ext": "js", "source": "function o(a){ function a(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l3:7", "ext": "js", "source": "function o(){ let a; { var a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l3:8", "ext": "js", "source": "function o(a){ { var a; } { let a; } { function a(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l3:9", "ext": "js", "source": "var o = (a) => { let a; };\nconsole.log(\"ran\");\n"}
+{"name": "l3:10", "ext": "js", "source": "function o(a = 1){ var a; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:11", "ext": "js", "source": "function o(a = 1){ let a; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:12", "ext": "js", "source": "function o() { let arguments; } function p(arguments) {} function q(){ var arguments; let b; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:13", "ext": "js", "source": "function o(...a){ var a; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:14", "ext": "js", "source": "try {} catch (e) { function e(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l3:15", "ext": "js", "source": "try {} catch (e) { { function e(){} } { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "l3:16", "ext": "js", "source": "try {} catch ({e}) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:17", "ext": "js", "source": "try {} catch ([e]) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:18", "ext": "js", "source": "try {} catch (e) { for (var e in {}) ; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:19", "ext": "js", "source": "try {} catch (e) { for (var e;0;) ; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:20", "ext": "js", "source": "try {} catch { let e; var f; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:21", "ext": "js", "source": "switch (0) { case 0: let a; case 1: let a; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:22", "ext": "js", "source": "switch (0) { case 0: function a(){} case 1: var a; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:23", "ext": "js", "source": "switch (0) { case 0: let a; } switch (0) { case 0: let a; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:24", "ext": "js", "source": "for (let i;0;) { var i; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:25", "ext": "js", "source": "for (let i;0;) { let i; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:26", "ext": "js", "source": "for (let i of []) { var i; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:27", "ext": "js", "source": "for (var i;0;) { let i; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:28", "ext": "js", "source": "for (let [a, a] of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:29", "ext": "js", "source": "for (let in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:30", "ext": "js", "source": "for (let of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:31", "ext": "js", "source": "for (let.x in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:32", "ext": "js", "source": "for (async of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:33", "ext": "js", "source": "for ((async) of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:34", "ext": "js", "source": "for (async of => 1;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:35", "ext": "js", "source": "async function af() { for await (async of []) ; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:36", "ext": "js", "source": "for (yield of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:37", "ext": "js", "source": "for (let[a] in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:38", "ext": "js", "source": "let = 1; var let; let\nx = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l3:39", "ext": "js", "source": "var yield; function yield(){} yield: 1;\nconsole.log(\"ran\");\n"}
+{"name": "l3:40", "ext": "js", "source": "function* g(){ function h(){ yield; } }\nconsole.log(\"ran\");\n"}
+{"name": "l3:41", "ext": "js", "source": "function* g() { var o = { yield }; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:42", "ext": "js", "source": "function* g(){ function yield(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l3:43", "ext": "js", "source": "function* yield(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:44", "ext": "js", "source": "(function* yield(){});\nconsole.log(\"ran\");\n"}
+{"name": "l3:45", "ext": "js", "source": "async function await(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:46", "ext": "js", "source": "(async function await(){});\nconsole.log(\"ran\");\n"}
+{"name": "l3:47", "ext": "js", "source": "async function f(){ function await(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l3:48", "ext": "js", "source": "async function f() { function g(){ var await; } }\nconsole.log(\"ran\");\n"}
+{"name": "l3:49", "ext": "js", "source": "async (await) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l3:50", "ext": "js", "source": "function f(await){} var fa = (await) => 1; var fb = (a = await) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l3:51", "ext": "js", "source": "async function f(a = await 1){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:52", "ext": "js", "source": "function* g(a = yield){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:53", "ext": "js", "source": "async function f(){ (a = await 1) => 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:54", "ext": "js", "source": "function* g(){ (a = yield) => 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:55", "ext": "js", "source": "async function f() { function g(a = await) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l3:56", "ext": "js", "source": "function* g(){ function h(a = yield){} }\nconsole.log(\"ran\");\n"}
+{"name": "l3:57", "ext": "js", "source": "async function f(){ var o = { await: 1 }; o.await; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:58", "ext": "js", "source": "async function f(){ await: 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:59", "ext": "js", "source": "function* g(){ yield\n* 2; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:60", "ext": "js", "source": "eval = 1; arguments++; function eval(){} var eval; try{}catch(eval){} ({eval} = {}); function fe(eval, arguments){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:61", "ext": "js", "source": "class eval {}\nconsole.log(\"ran\");\n"}
+{"name": "l3:62", "ext": "js", "source": "class A { m(eval){} }\nconsole.log(\"ran\");\n"}
+{"name": "l3:63", "ext": "js", "source": "class A { m() { var eval; } }\nconsole.log(\"ran\");\n"}
+{"name": "l3:64", "ext": "js", "source": "class A { m(){ arguments = 1; } }\nconsole.log(\"ran\");\n"}
+{"name": "l3:65", "ext": "js", "source": "class A extends (eval = 1, Object) {}\nconsole.log(\"ran\");\n"}
+{"name": "l3:66", "ext": "js", "source": "a: a: ;\nconsole.log(\"ran\");\n"}
+{"name": "l3:67", "ext": "js", "source": "a: { a: ; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:68", "ext": "js", "source": "a: function f(){ a: ; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:69", "ext": "js", "source": "a: () => { a: ; };\nconsole.log(\"ran\");\n"}
+{"name": "l3:70", "ext": "js", "source": "x: while(0) { (function(){ break x; }); }\nconsole.log(\"ran\");\n"}
+{"name": "l3:71", "ext": "js", "source": "x: while(0) { class A { m(){ continue x; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l3:72", "ext": "js", "source": "x: { continue x; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:73", "ext": "js", "source": "x: y: while(0) continue x;\nconsole.log(\"ran\");\n"}
+{"name": "l3:74", "ext": "js", "source": "x: { y: while(0) continue x; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:75", "ext": "js", "source": "while(0) { x: { continue; } }\nconsole.log(\"ran\");\n"}
+{"name": "l3:76", "ext": "js", "source": "switch(0){ case 0: continue; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:77", "ext": "js", "source": "while(0) switch(0){ case 0: continue; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:78", "ext": "js", "source": "break;\nconsole.log(\"ran\");\n"}
+{"name": "l3:79", "ext": "js", "source": "{ break; }\nconsole.log(\"ran\");\n"}
+{"name": "l3:80", "ext": "js", "source": "x: break x;\nconsole.log(\"ran\");\n"}
+{"name": "l3:81", "ext": "js", "source": "x: if (1) break x;\nconsole.log(\"ran\");\n"}
+{"name": "l3:82", "ext": "js", "source": "while (0) function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:83", "ext": "js", "source": "while (0) x: function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:84", "ext": "js", "source": "if (0) x: function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:85", "ext": "js", "source": "if (0) function f(){} else function g(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:86", "ext": "js", "source": "if (0) function* f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:87", "ext": "js", "source": "if (0) async function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:88", "ext": "js", "source": "if (0) class A {}\nconsole.log(\"ran\");\n"}
+{"name": "l3:89", "ext": "js", "source": "if (0) let x;\nconsole.log(\"ran\");\n"}
+{"name": "l3:90", "ext": "js", "source": "if (0) let\nx;\nconsole.log(\"ran\");\n"}
+{"name": "l3:91", "ext": "js", "source": "if (0) const x = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l3:92", "ext": "js", "source": "x: async function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:93", "ext": "js", "source": "x: function* g(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:94", "ext": "js", "source": "x: class A{}\nconsole.log(\"ran\");\n"}
+{"name": "l3:95", "ext": "js", "source": "x: let y;\nconsole.log(\"ran\");\n"}
+{"name": "l3:96", "ext": "js", "source": "do function f(){} while(0);\nconsole.log(\"ran\");\n"}
+{"name": "l3:97", "ext": "js", "source": "for(;0;) function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:98", "ext": "js", "source": "if (0) ; else function g(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:99", "ext": "js", "source": "if (0) { } else x: y: function g(){}\nconsole.log(\"ran\");\n"}
+{"name": "l3:100", "ext": "js", "source": "x: y: function g(){}\nconsole.log(\"ran\");\n"}
+{"name": "l4:1", "ext": "js", "source": "for (yield of [1]) console.log(yield);\nconsole.log(\"ran\");\n"}
+{"name": "l4:2", "ext": "js", "source": "for (yield in {a: 1}) console.log(yield);\nconsole.log(\"ran\");\n"}
+{"name": "l4:3", "ext": "js", "source": "for (yield.x of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:4", "ext": "js", "source": "for (yield;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:5", "ext": "js", "source": "for (yield = 1;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:6", "ext": "js", "source": "var q = [yield] = [1];\nconsole.log(\"ran\");\n"}
+{"name": "l4:7", "ext": "js", "source": "for ([yield] of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:8", "ext": "js", "source": "for ({yield} of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:9", "ext": "js", "source": "for (await of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:10", "ext": "js", "source": "for (await in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:11", "ext": "js", "source": "for (let in {}) ; for (static of []) ; for (implements in {}) ; for (async in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:12", "ext": "js", "source": "for (arguments of []) ; for (eval of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:13", "ext": "js", "source": "for (of of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:14", "ext": "js", "source": "for (of in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:15", "ext": "js", "source": "for (var of of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:16", "ext": "js", "source": "for (var of in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:17", "ext": "js", "source": "for (let of in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:18", "ext": "js", "source": "for (let of = 1;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:19", "ext": "js", "source": "for (let of;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:20", "ext": "js", "source": "for (of;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:21", "ext": "js", "source": "for (get of []) ; for (set in {}) ; for (accessor of []) ; for (using of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:22", "ext": "js", "source": "for (using in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:23", "ext": "js", "source": "for (using;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:24", "ext": "js", "source": "for (using = 1;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:25", "ext": "js", "source": "for (using.x of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:26", "ext": "js", "source": "for (using[0] of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:27", "ext": "js", "source": "for (using\nof of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:28", "ext": "js", "source": "var using; using\nx = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l4:29", "ext": "js", "source": "using\n[x] = [1];\nconsole.log(\"ran\");\n"}
+{"name": "l4:30", "ext": "js", "source": "var using = [], x; using[x] = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l4:31", "ext": "js", "source": "var using; using = 1; using.a; using(1);\nconsole.log(\"ran\");\n"}
+{"name": "l4:32", "ext": "js", "source": "var using = function(){}; using(1);\nconsole.log(\"ran\");\n"}
+{"name": "l4:33", "ext": "js", "source": "var using = {}; using in {}; using instanceof Object;\nconsole.log(\"ran\");\n"}
+{"name": "l4:34", "ext": "js", "source": "var using, of; for (using of of) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:35", "ext": "js", "source": "var await; await\n0; await(0); +await; [await]; ({await});\nconsole.log(\"ran\");\n"}
+{"name": "l4:36", "ext": "js", "source": "var await; await: 1;\nconsole.log(\"ran\");\n"}
+{"name": "l4:37", "ext": "js", "source": "var await = 1; var fx = () => await;\nconsole.log(\"ran\");\n"}
+{"name": "l4:38", "ext": "js", "source": "var await = [1]; await[0]; await.x; await\\`x\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l4:39", "ext": "js", "source": "var async; async\nfunction f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l4:40", "ext": "js", "source": "var async = 1; async\n(1);\nconsole.log(\"ran\");\n"}
+{"name": "l4:41", "ext": "js", "source": "var async = (x) => x; async(1); async\n(1);\nconsole.log(\"ran\");\n"}
+{"name": "l4:42", "ext": "js", "source": "var async; async\nx => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l4:43", "ext": "js", "source": "var async; var o = { async, async: 1, async(){}, async async(){}, async *async(){}, get async(){ return 1 }, set async(v){} };\nconsole.log(\"ran\");\n"}
+{"name": "l4:44", "ext": "js", "source": "var of, get, set, target, meta, from, as, accessor, type, of2; of = get = set;\nconsole.log(\"ran\");\n"}
+{"name": "l4:45", "ext": "js", "source": "var let = [0]; let[0] = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l4:46", "ext": "js", "source": "var let; let\n[a] = [1];\nconsole.log(\"ran\");\n"}
+{"name": "l4:47", "ext": "js", "source": "var let; let\n{}\nconsole.log(\"ran\");\n"}
+{"name": "l4:48", "ext": "js", "source": "var let; let\nlet;\nconsole.log(\"ran\");\n"}
+{"name": "l4:49", "ext": "js", "source": "var let; (let)[0]; let(0); let.x;\nconsole.log(\"ran\");\n"}
+{"name": "l4:50", "ext": "js", "source": "var let = {}; let instanceof Object; let in {};\nconsole.log(\"ran\");\n"}
+{"name": "l4:51", "ext": "js", "source": "var let; for (let;0;) ; for (let = 0;0;) ; for (let.x;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:52", "ext": "js", "source": "var let; for (let in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:53", "ext": "js", "source": "var let; for (let.x of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:54", "ext": "js", "source": "var let; for (let[0] of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:55", "ext": "js", "source": "var let; for ((let) of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:56", "ext": "js", "source": "var let; for ((let)[0] of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l4:57", "ext": "js", "source": "var static, implements, interface, package, private, protected, public; static = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l4:58", "ext": "js", "source": "var o = { static: 1, let: 2, yield: 3, await: 4, enum: 5, class: 6, new: 7 }; o.class; o.new; o.enum;\nconsole.log(\"ran\");\n"}
+{"name": "l4:59", "ext": "js", "source": "var enum;\nconsole.log(\"ran\");\n"}
+{"name": "l4:60", "ext": "js", "source": "var o = { enum };\nconsole.log(\"ran\");\n"}
+{"name": "l4:61", "ext": "js", "source": "var o = { class };\nconsole.log(\"ran\");\n"}
+{"name": "l4:62", "ext": "js", "source": "var o = { yield, await, let, static, async, of }; var yield, await, let, static, async, of;\nconsole.log(\"ran\");\n"}
+{"name": "l4:63", "ext": "js", "source": "function yield() {} function await() {} function let() {} function static() {} function async() {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:1", "ext": "js", "source": "function f(){ \"\\01\"; \"use strict\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:2", "ext": "js", "source": "function f() { \"use strict\"; 010; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:3", "ext": "js", "source": "function f(a = 010) { }\nconsole.log(\"ran\");\n"}
+{"name": "l5:4", "ext": "js", "source": "function f() { 010; \"use strict\"; with({}){} }\nconsole.log(\"ran\");\n"}
+{"name": "l5:5", "ext": "js", "source": "function f(){ (\"use strict\"); with({}){} }\nconsole.log(\"ran\");\n"}
+{"name": "l5:6", "ext": "js", "source": "(\"use strict\"); with({}){}\nconsole.log(\"ran\");\n"}
+{"name": "l5:7", "ext": "js", "source": "\"use strict\" + 1; with({}){}\nconsole.log(\"ran\");\n"}
+{"name": "l5:8", "ext": "js", "source": "\"use strict\", 1; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:9", "ext": "js", "source": "\"use\\x20strict\"; with({}){}\nconsole.log(\"ran\");\n"}
+{"name": "l5:10", "ext": "js", "source": "'use strict'; with({}){}\nconsole.log(\"ran\");\n"}
+{"name": "l5:11", "ext": "js", "source": "\"use strict\"\nwith({}){}\nconsole.log(\"ran\");\n"}
+{"name": "l5:12", "ext": "js", "source": "\"use strict\"\n.length; with({}){}\nconsole.log(\"ran\");\n"}
+{"name": "l5:13", "ext": "js", "source": "\"use strict\"\n[0]; with({}){}\nconsole.log(\"ran\");\n"}
+{"name": "l5:14", "ext": "js", "source": "\"use strict\"\n+ 1; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:15", "ext": "js", "source": "\"use strict\"\n\\`x\\`; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:16", "ext": "js", "source": "\"use strict\"\n(1); with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:17", "ext": "js", "source": "\"use strict\"\n? 1 : 2; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:18", "ext": "js", "source": "\"use strict\"\nin {}; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:19", "ext": "js", "source": "\"use strict\"\ninstanceof Object; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:20", "ext": "js", "source": "\"use strict\"\n= 1; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:21", "ext": "js", "source": "\"use strict\"\n, 1; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:22", "ext": "js", "source": "\"use strict\"\n?.x; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:23", "ext": "js", "source": "\"use strict\"\n/ 1; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:24", "ext": "js", "source": "\"use strict\"\n++\nx; var x; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:25", "ext": "js", "source": "\"a\"; \"use strict\"; with({}){}\nconsole.log(\"ran\");\n"}
+{"name": "l5:26", "ext": "js", "source": "\"use strict\" /* c */ ; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:27", "ext": "js", "source": "/* c */ \"use strict\"; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:28", "ext": "js", "source": "function f(){ 'use strict' } with({}){}\nconsole.log(\"ran\");\n"}
+{"name": "l5:29", "ext": "js", "source": "\"USE STRICT\"; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:30", "ext": "js", "source": "\"use strict \"; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:31", "ext": "js", "source": "\"use asm\"; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:32", "ext": "js", "source": "\"\\08\"; \"use strict\";\nconsole.log(\"ran\");\n"}
+{"name": "l5:33", "ext": "js", "source": "function f(eval) { \"use strict\" }\nconsole.log(\"ran\");\n"}
+{"name": "l5:34", "ext": "js", "source": "function eval() { \"use strict\" }\nconsole.log(\"ran\");\n"}
+{"name": "l5:35", "ext": "js", "source": "function static() { \"use strict\" }\nconsole.log(\"ran\");\n"}
+{"name": "l5:36", "ext": "js", "source": "(function yield() { \"use strict\" });\nconsole.log(\"ran\");\n"}
+{"name": "l5:37", "ext": "js", "source": "({ m(a = 1) { \"use strict\" } });\nconsole.log(\"ran\");\n"}
+{"name": "l5:38", "ext": "js", "source": "var g = (a = 1) => { \"use strict\" };\nconsole.log(\"ran\");\n"}
+{"name": "l5:39", "ext": "js", "source": "var g = (a) => { \"use strict\"; return this; };\nconsole.log(\"ran\");\n"}
+{"name": "l5:40", "ext": "js", "source": "function f({a}) { \"use strict\" }\nconsole.log(\"ran\");\n"}
+{"name": "l5:41", "ext": "js", "source": "function f(...a) { \"use strict\" }\nconsole.log(\"ran\");\n"}
+{"name": "l5:42", "ext": "js", "source": "var g = () => { \"use strict\"; with ({}) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l5:43", "ext": "js", "source": "function f() { \"use strict\"; return function() { with ({}) {} }; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:44", "ext": "js", "source": "function f() { \"use strict\"; } function g2() { with ({}) {} var a = 010; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:45", "ext": "js", "source": "class A { m() { \"use strict\"; } } with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l5:46", "ext": "js", "source": "var o = { get x() { \"use strict\"; return 010; } };\nconsole.log(\"ran\");\n"}
+{"name": "l5:47", "ext": "js", "source": "var o = { set x(a = 1) { \"use strict\"; } };\nconsole.log(\"ran\");\n"}
+{"name": "l5:48", "ext": "js", "source": "function f() { \"use strict\"; var o = { static: 1 }; o.static; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:49", "ext": "js", "source": "function f() { \"use strict\"; return { let: 1, yield: 2 }.let; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:50", "ext": "js", "source": "function f() { \"use strict\"; yield: 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:51", "ext": "js", "source": "function f() { \"use strict\"; let: 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:52", "ext": "js", "source": "function f() { \"use strict\"; var a; delete (a); }\nconsole.log(\"ran\");\n"}
+{"name": "l5:53", "ext": "js", "source": "function f() { \"use strict\"; var a; delete ((a)); }\nconsole.log(\"ran\");\n"}
+{"name": "l5:54", "ext": "js", "source": "function f() { \"use strict\"; var a; delete a.b; delete a[0]; delete (a.b); delete (a, 1); delete 1; delete this; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:55", "ext": "js", "source": "function f() { \"use strict\"; (eval) = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:56", "ext": "js", "source": "function f() { \"use strict\"; [eval] = []; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:57", "ext": "js", "source": "function f() { \"use strict\"; ({ a: arguments } = {}); }\nconsole.log(\"ran\");\n"}
+{"name": "l5:58", "ext": "js", "source": "function f() { \"use strict\"; ({ arguments = 1 } = {}); }\nconsole.log(\"ran\");\n"}
+{"name": "l5:59", "ext": "js", "source": "function f() { \"use strict\"; ({ ...eval } = {}); }\nconsole.log(\"ran\");\n"}
+{"name": "l5:60", "ext": "js", "source": "function f() { \"use strict\"; [...arguments] = []; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:61", "ext": "js", "source": "function f() { \"use strict\"; for (eval in {}) ; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:62", "ext": "js", "source": "function f() { \"use strict\"; for (arguments of []) ; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:63", "ext": "js", "source": "function f() { \"use strict\"; eval++; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:64", "ext": "js", "source": "function f() { \"use strict\"; --arguments; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:65", "ext": "js", "source": "function f() { \"use strict\"; eval += 1; arguments ??= 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:66", "ext": "js", "source": "function f() { \"use strict\"; eval.x = 1; arguments[0] = 1; eval(\"\"); arguments.length; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:67", "ext": "js", "source": "function f() { \"use strict\"; var o = { eval: 1, arguments: 2, eval() {}, get arguments() {} }; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:68", "ext": "js", "source": "function f() { \"use strict\"; class A { eval() {} static arguments = 1; } }\nconsole.log(\"ran\");\n"}
+{"name": "l5:69", "ext": "js", "source": "function f() { \"use strict\"; var g = (eval) => 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:70", "ext": "js", "source": "function f() { \"use strict\"; var g = eval => 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:71", "ext": "js", "source": "function f() { \"use strict\"; var g = async (arguments) => 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:72", "ext": "js", "source": "function f() { \"use strict\"; var g = ({ eval }) => 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:73", "ext": "js", "source": "function f() { \"use strict\"; var g = (...eval) => 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:74", "ext": "js", "source": "function f() { \"use strict\"; function g(a, a) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l5:75", "ext": "js", "source": "function f() { \"use strict\"; var g = function eval() {}; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:76", "ext": "js", "source": "function f() { \"use strict\"; var g = function arguments() {}; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:77", "ext": "js", "source": "function f() { \"use strict\"; try {} catch (eval) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l5:78", "ext": "js", "source": "function f() { \"use strict\"; try {} catch ({ eval }) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l5:79", "ext": "js", "source": "function f() { \"use strict\"; let eval; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:80", "ext": "js", "source": "function f() { \"use strict\"; const { arguments: a } = {}; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:81", "ext": "js", "source": "function f() { \"use strict\"; 08; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:82", "ext": "js", "source": "function f() { \"use strict\"; 09.5; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:83", "ext": "js", "source": "function f() { \"use strict\"; 0; 0.5; 0e1; 0x10; 0o10; 0b10; 0n; \"\\0\"; \"\\0a\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:84", "ext": "js", "source": "function f() { \"use strict\"; \"\\00\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:85", "ext": "js", "source": "function f() { \"use strict\"; \"\\08\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:86", "ext": "js", "source": "function f() { \"use strict\"; \"\\9\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:87", "ext": "js", "source": "function f() { \"use strict\"; /\\07/; /\\8/; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:88", "ext": "js", "source": "function f() { \"use strict\"; if (1) function g() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l5:89", "ext": "js", "source": "function f() { \"use strict\"; { function g() {} function g() {} } }\nconsole.log(\"ran\");\n"}
+{"name": "l5:90", "ext": "js", "source": "function f() { \"use strict\"; { function g() {} } { function g() {} } }\nconsole.log(\"ran\");\n"}
+{"name": "l5:91", "ext": "js", "source": "function f() { \"use strict\"; l: function g() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l5:92", "ext": "js", "source": "function f() { \"use strict\"; var public; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:93", "ext": "js", "source": "function f() { \"use strict\"; var o = { public }; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:94", "ext": "js", "source": "function f() { \"use strict\"; var enum; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:95", "ext": "js", "source": "function f() { \"use strict\"; function g(interface) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l5:96", "ext": "js", "source": "function f() { \"use strict\"; var { a: package } = {}; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:97", "ext": "js", "source": "function f() { \"use strict\"; var [...private] = []; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:98", "ext": "js", "source": "function f() { \"use strict\"; protected = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:99", "ext": "js", "source": "function f() { \"use strict\"; implements: 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:100", "ext": "js", "source": "function f() { \"use strict\"; x.static; x?.let; class A { static static() {} let() {} } }\nconsole.log(\"ran\");\n"}
+{"name": "l5:101", "ext": "js", "source": "function f() { \"use strict\"; with (x) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l5:102", "ext": "js", "source": "function f() { \"use strict\"; return this === undefined; } \nconsole.log(\"ran\");\n"}
+{"name": "l5:103", "ext": "js", "source": "function f() { \"use strict\"; var arguments; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:104", "ext": "js", "source": "function f() { \"use strict\"; function g() { arguments = 1; } }\nconsole.log(\"ran\");\n"}
+{"name": "l5:105", "ext": "js", "source": "function f() { \"use strict\"; arguments; eval; typeof eval; }\nconsole.log(\"ran\");\n"}
+{"name": "l5:106", "ext": "js", "source": "function f() { \"use strict\"; for (var i = 0 in {}) ; }\nconsole.log(\"ran\");\n"}
+{"name": "l6:1", "ext": "js", "source": "({ a = 1 });\nconsole.log(\"ran\");\n"}
+{"name": "l6:2", "ext": "js", "source": "({ a = 1 } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:3", "ext": "js", "source": "var g = ({ a = 1 }) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:4", "ext": "js", "source": "({ __proto__: 1, \"__proto__\": 2 });\nconsole.log(\"ran\");\n"}
+{"name": "l6:5", "ext": "js", "source": "({ __proto__: 1, [\"__proto__\"]: 2 });\nconsole.log(\"ran\");\n"}
+{"name": "l6:6", "ext": "js", "source": "({ __proto__: 1, __proto__() {} });\nconsole.log(\"ran\");\n"}
+{"name": "l6:7", "ext": "js", "source": "({ __proto__: 1, get __proto__() { return 1; } });\nconsole.log(\"ran\");\n"}
+{"name": "l6:8", "ext": "js", "source": "var __proto__; ({ __proto__, __proto__: 1 });\nconsole.log(\"ran\");\n"}
+{"name": "l6:9", "ext": "js", "source": "var g = ({ __proto__: a, __proto__: b }) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:10", "ext": "js", "source": "var a, b; [{ __proto__: a, __proto__: b }] = [{}];\nconsole.log(\"ran\");\n"}
+{"name": "l6:11", "ext": "js", "source": "var a, b; for ({ __proto__: a, __proto__: b } of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:12", "ext": "js", "source": "var x; x = { __proto__: 1, __proto__: 2 };\nconsole.log(\"ran\");\n"}
+{"name": "l6:13", "ext": "js", "source": "var x, y; ({ a: { __proto__: x, __proto__: y } } = {a: {}});\nconsole.log(\"ran\");\n"}
+{"name": "l6:14", "ext": "js", "source": "var x, y; ({ a: { __proto__: x, __proto__: y } });\nconsole.log(\"ran\");\n"}
+{"name": "l6:15", "ext": "js", "source": "var x, y; [{ __proto__: x, __proto__: y }.z] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:16", "ext": "js", "source": "var x, y; ({ __proto__: x, __proto__: y }.z = 1);\nconsole.log(\"ran\");\n"}
+{"name": "l6:17", "ext": "js", "source": "var x, y; ({ __proto__: x, __proto__: y }) ? 1 : 2;\nconsole.log(\"ran\");\n"}
+{"name": "l6:18", "ext": "js", "source": "var g = async ({ __proto__: x, __proto__: y }) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:19", "ext": "js", "source": "var x, y; function async() {} async({ __proto__: x, __proto__: y });\nconsole.log(\"ran\");\n"}
+{"name": "l6:20", "ext": "js", "source": "var x, y; ({ __proto__: x, __proto__: y } = {}) ? 1 : 2;\nconsole.log(\"ran\");\n"}
+{"name": "l6:21", "ext": "js", "source": "var x, y; (({ __proto__: x, __proto__: y }) => 1)({});\nconsole.log(\"ran\");\n"}
+{"name": "l6:22", "ext": "js", "source": "var x, y; ({ __proto__: x, __proto__: y }) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:23", "ext": "js", "source": "var x, y; [{ __proto__: x, __proto__: y }];\nconsole.log(\"ran\");\n"}
+{"name": "l6:24", "ext": "js", "source": "var x, y; [{ __proto__: x, __proto__: y }] = [{}];\nconsole.log(\"ran\");\n"}
+{"name": "l6:25", "ext": "js", "source": "var x, y; [[{ __proto__: x, __proto__: y }]] = [[{}]];\nconsole.log(\"ran\");\n"}
+{"name": "l6:26", "ext": "js", "source": "var x, y; [...{ __proto__: x, __proto__: y }] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:27", "ext": "js", "source": "var x, y; ({ ...{ __proto__: x, __proto__: y } } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:28", "ext": "js", "source": "var x, y; ({ a: [{ __proto__: x, __proto__: y }] } = {a: [{}]});\nconsole.log(\"ran\");\n"}
+{"name": "l6:29", "ext": "js", "source": "var x, y; ({ a: [{ __proto__: x, __proto__: y }] });\nconsole.log(\"ran\");\n"}
+{"name": "l6:30", "ext": "js", "source": "var x, y; ({ a = { __proto__: x, __proto__: y } } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:31", "ext": "js", "source": "var x, y; [x = { __proto__: 1, __proto__: 2 }] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:32", "ext": "js", "source": "var g = (a = { __proto__: 1, __proto__: 2 }) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:33", "ext": "js", "source": "var g = ({ a = { __proto__: 1, __proto__: 2 } }) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:34", "ext": "js", "source": "var x; ({ __proto__: x, __proto__: x } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:35", "ext": "js", "source": "var x; ({ \"__proto__\": x, '__proto__': x } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:36", "ext": "js", "source": "({ \"__proto__\": 1, '__proto__': 2 });\nconsole.log(\"ran\");\n"}
+{"name": "l6:37", "ext": "js", "source": "({ __proto__: 1, __\\u0070roto__: 2 });\nconsole.log(\"ran\");\n"}
+{"name": "l6:38", "ext": "js", "source": "({ '__proto__': 1, '__\\x70roto__': 2 });\nconsole.log(\"ran\");\n"}
+{"name": "l6:39", "ext": "js", "source": "({ __proto__: 1, __proto__: 2 }) + 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:40", "ext": "js", "source": "JSON.stringify({ __proto__: null, ...{ __proto__: 1 } });\nconsole.log(\"ran\");\n"}
+{"name": "l6:41", "ext": "js", "source": "var a; (a) = 1; (a.b) = 1; [(a)] = []; ({a: (a)} = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:42", "ext": "js", "source": "var a; [(a = 1)] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:43", "ext": "js", "source": "var a, b; ({a: (b = 1)} = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:44", "ext": "js", "source": "var a; ({a}) = {};\nconsole.log(\"ran\");\n"}
+{"name": "l6:45", "ext": "js", "source": "var a; ([a]) = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:46", "ext": "js", "source": "var a, b; (a, b) = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:47", "ext": "js", "source": "function f(){} if (0) f() = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:48", "ext": "js", "source": "function f(){} if (0) f()++;\nconsole.log(\"ran\");\n"}
+{"name": "l6:49", "ext": "js", "source": "function f(){} if (0) for (f() in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:50", "ext": "js", "source": "function f(){} if (0) f() += 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:51", "ext": "js", "source": "function f(){} if (0) [f()] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:52", "ext": "js", "source": "function f(){} if (0) ({ a: f() } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:53", "ext": "js", "source": "function f(){} if (0) for (f() of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:54", "ext": "js", "source": "function f(){} if (0) ++f();\nconsole.log(\"ran\");\n"}
+{"name": "l6:55", "ext": "js", "source": "function f(){} if (0) f() &&= 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:56", "ext": "js", "source": "function f(){} if (0) f()\\`x\\` = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:57", "ext": "js", "source": "function f(){ \"use strict\"; if (0) f() = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l6:58", "ext": "js", "source": "function f(){} if (0) (f()) = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:59", "ext": "js", "source": "function async(){} if (0) async() = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:60", "ext": "js", "source": "function f() { if (0) new.target = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l6:61", "ext": "js", "source": "if (0) this = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:62", "ext": "js", "source": "if (0) 1++;\nconsole.log(\"ran\");\n"}
+{"name": "l6:63", "ext": "js", "source": "var a, b; if (0) (a, b)++;\nconsole.log(\"ran\");\n"}
+{"name": "l6:64", "ext": "js", "source": "var a, b; if (0) (a = b) = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:65", "ext": "js", "source": "var a, b; if (0) (a + b) = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:66", "ext": "js", "source": "if (0) (() => 1)++;\nconsole.log(\"ran\");\n"}
+{"name": "l6:67", "ext": "js", "source": "var a; if (0) ++a++;\nconsole.log(\"ran\");\n"}
+{"name": "l6:68", "ext": "js", "source": "var a; if (0) delete a;\nconsole.log(\"ran\");\n"}
+{"name": "l6:69", "ext": "js", "source": "var a; if (0) a = a = 1 = a;\nconsole.log(\"ran\");\n"}
+{"name": "l6:70", "ext": "js", "source": "var a; if (0) a?.b++;\nconsole.log(\"ran\");\n"}
+{"name": "l6:71", "ext": "js", "source": "var a; if (0) (a?.b) = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:72", "ext": "js", "source": "var a = {b: {}}; (a?.b).c = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l6:73", "ext": "js", "source": "var a; if (0) [a?.b] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:74", "ext": "js", "source": "var a; if (0) ({ x: a?.b } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:75", "ext": "js", "source": "var a; if (0) for (a?.b of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:76", "ext": "js", "source": "var a; if (0) for (a?.b in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:77", "ext": "js", "source": "var a; if (0) [...a, b] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:78", "ext": "js", "source": "var a; if (0) ({ ...a, b } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:79", "ext": "js", "source": "var a; if (0) [a, ...b,] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:80", "ext": "js", "source": "var a, b; [a, ...[b]] = [1, 2]; ({ ...a.b } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:81", "ext": "js", "source": "var a; if (0) ({ ...{ a } } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:82", "ext": "js", "source": "var a; if (0) ({ ...[a] } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:83", "ext": "js", "source": "var a; if (0) [...a = 1] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:84", "ext": "js", "source": "var a; ({ a: a = 1, [\"b\"]: a, 1: a, 1n: a, \"c\": a } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:85", "ext": "js", "source": "var a; if (0) ({ get a() {} } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:86", "ext": "js", "source": "var a; if (0) ({ a() {} } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:87", "ext": "js", "source": "var a; if (0) ({ a: 1 } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:88", "ext": "js", "source": "var a; if (0) ({ a: this } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:89", "ext": "js", "source": "var a; if (0) [this] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:90", "ext": "js", "source": "var a; if (0) [a, 1] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:91", "ext": "js", "source": "var a; if (0) [a + 1] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:92", "ext": "js", "source": "var a; if (0) [() => 1] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:93", "ext": "js", "source": "var a; if (0) [new.target] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:94", "ext": "js", "source": "var a; if (0) [import.meta] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:95", "ext": "js", "source": "var a; if (0) [a\\`x\\`] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:96", "ext": "js", "source": "var a; if (0) [(a, a)] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:97", "ext": "js", "source": "var a; if (0) [(a) => 1] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:98", "ext": "js", "source": "var a; if (0) [((a))] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:99", "ext": "js", "source": "var a; if (0) [([a])] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:100", "ext": "js", "source": "var a; if (0) [({a})] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:101", "ext": "js", "source": "var a; if (0) [([a].x)] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:102", "ext": "js", "source": "var a; if (0) [({a}.x)] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l6:103", "ext": "js", "source": "var a; if (0) ({ a: ([a]) } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l6:104", "ext": "js", "source": "var a; if (0) for ((a) of []) ; if (0) for ((a.b) in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:105", "ext": "js", "source": "var a; if (0) for (([a]) of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:106", "ext": "js", "source": "var a; if (0) for (({a}) in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:107", "ext": "js", "source": "for (var a = 1 of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:108", "ext": "js", "source": "for (let a = 1 in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:109", "ext": "js", "source": "for (var [a] = 1 in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:110", "ext": "js", "source": "for (var a, b in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:111", "ext": "js", "source": "var a; for (a = 1 in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:112", "ext": "js", "source": "var a; for ((a = 1) in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:113", "ext": "js", "source": "var a; for (a = 1, a in {};0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:114", "ext": "js", "source": "for (var a = (1 in {});0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:115", "ext": "js", "source": "for (var a = 1 in {};0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:116", "ext": "js", "source": "for (var a = [1 in {}];0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:117", "ext": "js", "source": "for (var a = () => 1 in {};0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:118", "ext": "js", "source": "for (var a = function(){ 1 in {} };0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:119", "ext": "js", "source": "for (var a = \\`${1 in {}}\\`;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:120", "ext": "js", "source": "for (var a = {b: 1 in {}};0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:121", "ext": "js", "source": "for (var a = x ? 1 in {} : 2;0;) ; var x;\nconsole.log(\"ran\");\n"}
+{"name": "l6:122", "ext": "js", "source": "for (const a;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:123", "ext": "js", "source": "for (const a of []) ; for (const b in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:124", "ext": "js", "source": "for (const a = 1, b;0;) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:125", "ext": "js", "source": "for (let a, b of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:126", "ext": "js", "source": "for (var a of [], []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:127", "ext": "js", "source": "for (var a in {}, {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:128", "ext": "js", "source": "var a; for (a of 1, 2) ;\nconsole.log(\"ran\");\n"}
+{"name": "l6:129", "ext": "js", "source": "var a; for (a in 1, 2) ;\nconsole.log(\"ran\");\n"}
+{"name": "l7:1", "ext": "js", "source": "var g = (a, a) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:2", "ext": "js", "source": "var g = a => { let a; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:3", "ext": "js", "source": "var g = (a)\n=> 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:4", "ext": "js", "source": "var g = async\n(a) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:5", "ext": "js", "source": "var g = async a\n=> 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:6", "ext": "js", "source": "var g = () => {} ();\nconsole.log(\"ran\");\n"}
+{"name": "l7:7", "ext": "js", "source": "var g = () => {}\n+1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:8", "ext": "js", "source": "var g = () => {}\n/1/;\nconsole.log(\"ran\");\n"}
+{"name": "l7:9", "ext": "js", "source": "var g = () => {}\n(1);\nconsole.log(\"ran\");\n"}
+{"name": "l7:10", "ext": "js", "source": "var g = () => {}\n[1];\nconsole.log(\"ran\");\n"}
+{"name": "l7:11", "ext": "js", "source": "var g = () => {}\n\\`x\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l7:12", "ext": "js", "source": "var g = () => {}\n.x;\nconsole.log(\"ran\");\n"}
+{"name": "l7:13", "ext": "js", "source": "var g = () => {}, h = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:14", "ext": "js", "source": "var g = a => {} ? 1 : 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:15", "ext": "js", "source": "var g = 1 ? a => {} : 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:16", "ext": "js", "source": "var g = 1 ? (a) => {} : b => {};\nconsole.log(\"ran\");\n"}
+{"name": "l7:17", "ext": "js", "source": "var g = 1 ? (a) : (b) => {}; var a;\nconsole.log(\"ran\");\n"}
+{"name": "l7:18", "ext": "js", "source": "var g = 1 ? (a) => (b) : (c) => {};\nconsole.log(\"ran\");\n"}
+{"name": "l7:19", "ext": "js", "source": "var a, b; var g = a ? (b) : (c) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:20", "ext": "js", "source": "var a, b; var g = a ? (b) => (1) : 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:21", "ext": "js", "source": "var a, b, c; var g = a ? b ? (c) => 1 : 2 : 3;\nconsole.log(\"ran\");\n"}
+{"name": "l7:22", "ext": "js", "source": "var a, b, c; var g = a ? (b) ? (c) => 1 : 2 : 3;\nconsole.log(\"ran\");\n"}
+{"name": "l7:23", "ext": "js", "source": "var a, b; var g = a ? (b = 1) => 1 : 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:24", "ext": "js", "source": "var a, b; var g = a ? ({b}) : ({c}) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:25", "ext": "js", "source": "var g = (a, ...b) => 1; var h = (a,) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:26", "ext": "js", "source": "var g = (...a, b) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:27", "ext": "js", "source": "var g = (,) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:28", "ext": "js", "source": "var g = (...a,) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:29", "ext": "js", "source": "var g = ((a)) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:30", "ext": "js", "source": "var g = ([a]) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:31", "ext": "js", "source": "var g = ([(a)]) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:32", "ext": "js", "source": "var g = ({a: (b)}) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:33", "ext": "js", "source": "var b; var g = (a = (b)) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:34", "ext": "js", "source": "var g = (a.b) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:35", "ext": "js", "source": "var g = async (a.b) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:36", "ext": "js", "source": "var g = (a = yield) => 1; var yield;\nconsole.log(\"ran\");\n"}
+{"name": "l7:37", "ext": "js", "source": "var g = async (a = await) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:38", "ext": "js", "source": "var g = async(yield) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:39", "ext": "js", "source": "var g = (a, b) => { \"use strict\"; }; var h = () => ({}).x; var i = () => ({} = {});\nconsole.log(\"ran\");\n"}
+{"name": "l7:40", "ext": "js", "source": "var g = () => {}.x;\nconsole.log(\"ran\");\n"}
+{"name": "l7:41", "ext": "js", "source": "var g = () => ({}.x) || 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:42", "ext": "js", "source": "var g = () => 1 || 2, h = () => 1, 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:43", "ext": "js", "source": "var g = x => y => z => 1; var h = async x => await x; var i = async (x) => { await x; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:44", "ext": "js", "source": "var g = async x => { var await; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:45", "ext": "js", "source": "var g = x => { var await; }; var h = async () => { var o = () => { }; function q(await) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l7:46", "ext": "js", "source": "var g = async () => { var o = (await) => { }; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:47", "ext": "js", "source": "var g = async () => { var o = async function await() {}; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:48", "ext": "js", "source": "var g = async () => { var o = function await() {}; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:49", "ext": "js", "source": "var g = async () => { function await() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l7:50", "ext": "js", "source": "var g = async () => { class await {} };\nconsole.log(\"ran\");\n"}
+{"name": "l7:51", "ext": "js", "source": "var g = async function () { var o = { await() {}, get await() {}, async await() {} }; class A { await() {} static await = 1; } };\nconsole.log(\"ran\");\n"}
+{"name": "l7:52", "ext": "js", "source": "var g = function* () { var o = { yield() {}, *yield() {} }; class A { yield() {} } yield; yield 1; yield* []; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:53", "ext": "js", "source": "var g = function* () { yield\n1; var a = yield; var b = [yield, yield]; var c = { a: yield }; (yield); f(yield, yield 1); function f() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l7:54", "ext": "js", "source": "var g = function* () { 1 + yield; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:55", "ext": "js", "source": "var g = function* () { yield ? 1 : 2; (yield) ? 1 : 2; yield in {}; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:56", "ext": "js", "source": "var g = function* () { yield = 1; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:57", "ext": "js", "source": "var g = function* () { var a = yield => 1; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:58", "ext": "js", "source": "var g = function* () { var a = (yield) => 1; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:59", "ext": "js", "source": "var g = function* () { var a = (a = yield 1) => 1; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:60", "ext": "js", "source": "var g = function* () { function* h(a = yield) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l7:61", "ext": "js", "source": "var g = function* () { class A { [yield]() {} } };\nconsole.log(\"ran\");\n"}
+{"name": "l7:62", "ext": "js", "source": "var g = function* () { class A extends (yield) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l7:63", "ext": "js", "source": "var g = function* () { class A { x = yield; } };\nconsole.log(\"ran\");\n"}
+{"name": "l7:64", "ext": "js", "source": "var g = function* () { var a = function* yield() {}; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:65", "ext": "js", "source": "var g = function* () { var a = function yield() {}; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:66", "ext": "js", "source": "var g = function* () { void yield; typeof yield; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:67", "ext": "js", "source": "var g = function* () { yield / 2; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:68", "ext": "js", "source": "var g = function* () { yield\n/ 2; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:69", "ext": "js", "source": "var g = function* () { yield /a/g; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:70", "ext": "js", "source": "var g = async function () { await /a/g; await -1; await +1; await !1; await await 1; await (1); await [1]; await \\`x\\`; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:71", "ext": "js", "source": "var g = async function () { await; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:72", "ext": "js", "source": "var g = async function () { await 1 ** 2; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:73", "ext": "js", "source": "var g = async function () { (await 1) ** 2; await (1 ** 2); };\nconsole.log(\"ran\");\n"}
+{"name": "l7:74", "ext": "js", "source": "var g = async function* () { yield await 1; await (yield 1); yield* await 1; for await (var x of []) ; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:75", "ext": "js", "source": "var g = async function () { for await (var x in {}) ; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:76", "ext": "js", "source": "var g = async function () { for await (;;) ; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:77", "ext": "js", "source": "var g = function () { for await (var x of []) ; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:78", "ext": "js", "source": "var g = async function () { for await (let x of [], []) ; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:79", "ext": "js", "source": "var g = async function () { for await (x.y of []) ; for await ([x] of []) ; var x; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:80", "ext": "js", "source": "var g = async function () { for await (async of []) ; var async; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:81", "ext": "js", "source": "var g = async function () { for (async of []) ; var async; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:82", "ext": "js", "source": "var g = async function () { for await (let of []) ; };\nconsole.log(\"ran\");\n"}
+{"name": "l7:83", "ext": "js", "source": "-1 ** 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:84", "ext": "js", "source": "(-1) ** 2; (+1) ** 2; (typeof 1) ** 2; (void 0) ** 2; (!1) ** 2; (~1) ** 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:85", "ext": "js", "source": "var a = 1; a++ ** 2; ++a ** 2; a-- ** 2; --a ** 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:86", "ext": "js", "source": "!1 ** 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:87", "ext": "js", "source": "typeof 1 ** 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:88", "ext": "js", "source": "var a = {}; delete a.b ** 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:89", "ext": "js", "source": "void 0 ** 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:90", "ext": "js", "source": "~1 ** 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:91", "ext": "js", "source": "+1 ** 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:92", "ext": "js", "source": "2 ** -1; 2 ** +1; 2 ** !1; 2 ** typeof 1; 2 ** 3 ** 2; (2 ** 3) ** 2; var a; a **= 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:93", "ext": "js", "source": "var a, b, c; a ?? b || c;\nconsole.log(\"ran\");\n"}
+{"name": "l7:94", "ext": "js", "source": "var a, b, c; a || b ?? c;\nconsole.log(\"ran\");\n"}
+{"name": "l7:95", "ext": "js", "source": "var a, b, c; (a ?? b) || c; a ?? (b || c); a ?? b | c; (a && b) ?? c; a ?? (b && c); a ?? b ?? c; a ?? b ? 1 : 2;\nconsole.log(\"ran\");\n"}
+{"name": "l7:96", "ext": "js", "source": "var a, b, c; a && b ?? c;\nconsole.log(\"ran\");\n"}
+{"name": "l7:97", "ext": "js", "source": "var a, b, c; a ?? b && c;\nconsole.log(\"ran\");\n"}
+{"name": "l7:98", "ext": "js", "source": "var a, b, c; a ?? b || c ?? a;\nconsole.log(\"ran\");\n"}
+{"name": "l7:99", "ext": "js", "source": "var a; a?.b\\`x\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l7:100", "ext": "js", "source": "var a; a?.\\`x\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l7:101", "ext": "js", "source": "var a; new a?.b();\nconsole.log(\"ran\");\n"}
+{"name": "l7:102", "ext": "js", "source": "var a = {b(){}}; (a?.b)\\`x\\`; new (a?.b)(); (a?.b.c); (a?.b)(); \nconsole.log(\"ran\");\n"}
+{"name": "l7:103", "ext": "js", "source": "var a; a?.b.c\\`x\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l7:104", "ext": "js", "source": "var a; a?.b?.c(1)?.[0]?.d; a?.[0]; a?.(1); a ?.b; a?. b; var q = a?.5:2; var r = a?.5e1:2; var s = a ?.5 : 1;\nconsole.log(\"ran\");\n"}
+{"name": "l7:105", "ext": "js", "source": "class A { m() { super?.x; } }\nconsole.log(\"ran\");\n"}
+{"name": "l7:106", "ext": "js", "source": "function f() { new.target?.x; new.target.x; new . target; new\ntarget; }\nconsole.log(\"ran\");\n"}
+{"name": "l7:107", "ext": "js", "source": "function f() { new\n.target; }\nconsole.log(\"ran\");\n"}
+{"name": "l7:108", "ext": "js", "source": "if (0) import?.(\"x\");\nconsole.log(\"ran\");\n"}
+{"name": "l7:109", "ext": "js", "source": "if (0) import(\"x\"); if (0) import(\"x\", {with: {type: \"json\"}}); if (0) import(\"x\",); if (0) import(\"x\", {},);\nconsole.log(\"ran\");\n"}
+{"name": "l7:110", "ext": "js", "source": "if (0) import();\nconsole.log(\"ran\");\n"}
+{"name": "l7:111", "ext": "js", "source": "if (0) import(\"a\", \"b\", \"c\");\nconsole.log(\"ran\");\n"}
+{"name": "l7:112", "ext": "js", "source": "if (0) import(...a);\nconsole.log(\"ran\");\n"}
+{"name": "l7:113", "ext": "js", "source": "if (0) new import(\"x\");\nconsole.log(\"ran\");\n"}
+{"name": "l7:114", "ext": "js", "source": "if (0) new (import(\"x\"));\nconsole.log(\"ran\");\n"}
+{"name": "l7:115", "ext": "js", "source": "if (0) import(\"x\").then(); if (0) import(\"x\")\\`y\\`; if (0) import(a = 1, b = 2); var a, b;\nconsole.log(\"ran\");\n"}
+{"name": "l7:116", "ext": "js", "source": "if (0) import.source(\"x\");\nconsole.log(\"ran\");\n"}
+{"name": "l7:117", "ext": "js", "source": "if (0) import.defer(\"x\");\nconsole.log(\"ran\");\n"}
+{"name": "l7:118", "ext": "js", "source": "if (0) import.foo;\nconsole.log(\"ran\");\n"}
+{"name": "l8:1", "ext": "js", "source": "class A { constructor(){} \"constructor\"(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:2", "ext": "js", "source": "class A { constructor(){} [\"constructor\"](){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:3", "ext": "js", "source": "class A { static constructor(){} static constructor(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:4", "ext": "js", "source": "class A { static 'prototype'(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:5", "ext": "js", "source": "class B {} class A extends B { constructor(){ (() => super())(); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:6", "ext": "js", "source": "class B {} class A extends B { m(){ super(); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:7", "ext": "js", "source": "class B {} class A extends B { static { super(); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:8", "ext": "js", "source": "class B {} class A extends B { constructor() { function f(){ super(); } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:9", "ext": "js", "source": "class B {} class A extends B { constructor(){ super(); class C { [super.x]() {} } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:10", "ext": "js", "source": "class B {} class A extends B { constructor(){ class C { [super()]() {} } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:11", "ext": "js", "source": "class B {} class A extends B { constructor(){ super(); var o = { m() { super.x; } }; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:12", "ext": "js", "source": "class B {} class A extends B { constructor(){ var o = { m() { super(); } }; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:13", "ext": "js", "source": "class B {} class A extends B { constructor(){ class C extends (super(), Object) {} } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:14", "ext": "js", "source": "class B {} class A extends B { constructor(){ class C { x = super(); } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:15", "ext": "js", "source": "class B {} class A extends B { constructor(){ class C { x = super.y; static { super.z; } } super(); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:16", "ext": "js", "source": "class A { [super.x]() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:17", "ext": "js", "source": "class A { m() { class B { [super.x]() {} } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:18", "ext": "js", "source": "class A { static async *#m(){} #a; static t(o){ return #a in o; } m() { class B { n(o) { return o.#a + o.#z; } } } #z; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:19", "ext": "js", "source": "class A { m(o){ o.#b; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:20", "ext": "js", "source": "function f(o){ o.#a; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:21", "ext": "js", "source": "class A { #a; m(){ this.#a?.b; this?.#a; a?.#a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:22", "ext": "js", "source": "class A { #a; m() { delete this.x?.#a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:23", "ext": "js", "source": "class A { #a; m() { delete this.#a?.b; delete this.#a.b; delete this.#a[0]; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:24", "ext": "js", "source": "class A { #a; m() { delete ((this.#a)); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:25", "ext": "js", "source": "class A { #a; m() { delete (this?.#a); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:26", "ext": "js", "source": "class A { #a; m() { delete this.#a\n; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:27", "ext": "js", "source": "class A { #a; #a(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:28", "ext": "js", "source": "class A { static get #a(){} set #a(v){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:29", "ext": "js", "source": "class A { get #a(){} get #a(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:30", "ext": "js", "source": "class A { static get #a(){} static set #a(v){} get #b(){} set #b(v){} #c() {} static #d = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:31", "ext": "js", "source": "class A { 'a'; 'a'; get b(){} get b(){} static b; 1; 1(){} [1]; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:32", "ext": "js", "source": "class A { async\nm(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:33", "ext": "js", "source": "class A { get\nm(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:34", "ext": "js", "source": "class A { static\nm(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:35", "ext": "js", "source": "class A { static async\nm(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:36", "ext": "js", "source": "class A { get; set; static; async; accessor; static static; static get; static async; of; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:37", "ext": "js", "source": "class A { accessor x }\nconsole.log(\"ran\");\n"}
+{"name": "l8:38", "ext": "js", "source": "class A { accessor\nx }\nconsole.log(\"ran\");\n"}
+{"name": "l8:39", "ext": "js", "source": "class A { static accessor x = 1 }\nconsole.log(\"ran\");\n"}
+{"name": "l8:40", "ext": "js", "source": "class A { accessor() {} static accessor() {} get accessor() {} accessor = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:41", "ext": "js", "source": "class A { x = 1\n*gen(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:42", "ext": "js", "source": "class A { x\n['y'](){} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:43", "ext": "js", "source": "class A { x = 1; ['y'](){} static = 1; static static = 2; static async = 3; static *gen(){} static async *ag() {} static get [1]() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:44", "ext": "js", "source": "class A { static { var a; let a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:45", "ext": "js", "source": "class A { static { break; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:46", "ext": "js", "source": "l: while(0) { class A { static { break l; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:47", "ext": "js", "source": "class A { static { l: { break l; } while (0) { break; continue; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:48", "ext": "js", "source": "class A { static { await: 1; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:49", "ext": "js", "source": "class A { static { function await(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:50", "ext": "js", "source": "class A { static { (function await(){}); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:51", "ext": "js", "source": "class A { static { ({ await }); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:52", "ext": "js", "source": "class A { static { ({ await: 1 }); x.await; async function f(){ await 0; } function g() { await; } } } var x = {};\nconsole.log(\"ran\");\n"}
+{"name": "l8:53", "ext": "js", "source": "class A { static { () => await; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:54", "ext": "js", "source": "class A { static { class B { [await]; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:55", "ext": "js", "source": "class A { static { class B { x = await; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:56", "ext": "js", "source": "class A { static { class await {} } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:57", "ext": "js", "source": "class A { static { var o = { await() {} }; class B { await() {} } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:58", "ext": "js", "source": "class A { static { try {} catch (await) {} } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:59", "ext": "js", "source": "class A { static { var g = (await) => 1; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:60", "ext": "js", "source": "class A { static { var g = async () => await 0; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:61", "ext": "js", "source": "class A { static { var g = function () { var await; return; }; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:62", "ext": "js", "source": "class A { static { var g = () => { return; }; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:63", "ext": "js", "source": "class A { static { this.x; new.target; super.y; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:64", "ext": "js", "source": "class A { static { } static { } static {} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:65", "ext": "js", "source": "class A { static {} = 1 }\nconsole.log(\"ran\");\n"}
+{"name": "l8:66", "ext": "js", "source": "class A { static x = arguments; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:67", "ext": "js", "source": "class A { x = { m(){ arguments; } }; y = function() { arguments; }; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:68", "ext": "js", "source": "class A { x = class { [arguments]; }; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:69", "ext": "js", "source": "class A { x = class { y = arguments; }; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:70", "ext": "js", "source": "class A { x = typeof arguments; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:71", "ext": "js", "source": "class A { x = (a = arguments) => 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:72", "ext": "js", "source": "class A { [(() => arguments)()] = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:73", "ext": "js", "source": "class A { static { var o = { m() { arguments; } }; (function () { arguments; }); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:74", "ext": "js", "source": "class A { static { class B { [arguments]() {} } } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:75", "ext": "js", "source": "class A { x = eval; y = eval(\"1\"); }\nconsole.log(\"ran\");\n"}
+{"name": "l8:76", "ext": "js", "source": "class A extends B = 1 {}\nconsole.log(\"ran\");\n"}
+{"name": "l8:77", "ext": "js", "source": "class A extends (B, C) {} var B, C = Object;\nconsole.log(\"ran\");\n"}
+{"name": "l8:78", "ext": "js", "source": "class A extends B, C {}\nconsole.log(\"ran\");\n"}
+{"name": "l8:79", "ext": "js", "source": "class A extends class {} {} class C extends function () {} {} class D extends (0, Object) {} class E extends null {}\nconsole.log(\"ran\");\n"}
+{"name": "l8:80", "ext": "js", "source": "class A extends () => {} {}\nconsole.log(\"ran\");\n"}
+{"name": "l8:81", "ext": "js", "source": "class A extends async function () {} {}\nconsole.log(\"ran\");\n"}
+{"name": "l8:82", "ext": "js", "source": "class A extends a ? b : c {}\nconsole.log(\"ran\");\n"}
+{"name": "l8:83", "ext": "js", "source": "class A extends a.b {} var a = { b: Object }; class C extends a[\"b\"] {} class D extends a?.b {} class E extends new.target {}\nconsole.log(\"ran\");\n"}
+{"name": "l8:84", "ext": "js", "source": "class A { constructor() {} ; ;; static {} ; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:85", "ext": "js", "source": "class A { m() {} n() {}, }\nconsole.log(\"ran\");\n"}
+{"name": "l8:86", "ext": "js", "source": "class A { get constructor() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:87", "ext": "js", "source": "class A { set constructor(v) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:88", "ext": "js", "source": "class A { static get constructor() {} static async constructor() {} static *constructor() {} static constructor = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:89", "ext": "js", "source": "class A { \"constructor\"() {} \"constructor\"() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:90", "ext": "js", "source": "class A { [\"constructor\"] = 1; static [\"prototype\"]; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:91", "ext": "js", "source": "class A { constructor() {} static constructor() {} [\"constructor\"]() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:92", "ext": "js", "source": "class A { \\u0063onstructor() {} constructor() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l8:93", "ext": "js", "source": "class A { #\\u0061; m() { this.#a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:94", "ext": "js", "source": "class A { # a; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:95", "ext": "js", "source": "class A { #a; m() { this.# a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:96", "ext": "js", "source": "class A { #a; m() { this.#a = 1; this.#a++; [this.#a] = []; ({ x: this.#a } = {}); for (this.#a of []) ; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:97", "ext": "js", "source": "class A { #m() {} n() { this.#m = 1; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:98", "ext": "js", "source": "class A { get #g() {} n() { this.#g = 1; this.#g++; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:99", "ext": "js", "source": "class A { #a; static m(o) { return #a in #a in o; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:100", "ext": "js", "source": "class A { #a; static m(o) { return (#a) in o; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:101", "ext": "js", "source": "class A { #a; static m(o) { return #a in o in o; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:102", "ext": "js", "source": "class A { #a; static m(o) { return 1 in #a in o; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:103", "ext": "js", "source": "class A { #a; static m(o) { return #a in o && #a in o || !(#a in o); } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:104", "ext": "js", "source": "class A { #a; static m(o) { return !#a in o; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:105", "ext": "js", "source": "class A { #a; static m(o) { for (#a in o;0;) ; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:106", "ext": "js", "source": "class A { #a; static m(o) { for (var x = #a in o;0;) ; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:107", "ext": "js", "source": "class A { #a; static m(o) { return #a instanceof o; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:108", "ext": "js", "source": "class A { #a; static m(o) { return o.x.#a.#a?.#a; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:109", "ext": "js", "source": "class A { #a; static m(o) { return o?.#a\\`x\\`; } }\nconsole.log(\"ran\");\n"}
+{"name": "l8:110", "ext": "js", "source": "var a = class A { static x = A; }; var b = class yield {};\nconsole.log(\"ran\");\n"}
+{"name": "l8:111", "ext": "js", "source": "var b = class await {}; var c = class let {};\nconsole.log(\"ran\");\n"}
+{"name": "l8:112", "ext": "js", "source": "var b = class static {};\nconsole.log(\"ran\");\n"}
+{"name": "l8:113", "ext": "js", "source": "class let {}\nconsole.log(\"ran\");\n"}
+{"name": "l8:114", "ext": "js", "source": "class async {} class of {} class get {} class accessor {} class using {}\nconsole.log(\"ran\");\n"}
+{"name": "l8:115", "ext": "js", "source": "var o = { get a(b) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:116", "ext": "js", "source": "var o = { set a() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:117", "ext": "js", "source": "var o = { set a(...b) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:118", "ext": "js", "source": "var o = { set a(b, c) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:119", "ext": "js", "source": "var o = { set a(b = 1) {}, set c([d]) {}, set e({f}) {}, get g() {}, get [\"h\"]() {}, get 1() {}, get 1n() {}, set \"s\"(v) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:120", "ext": "js", "source": "var o = { async get a() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:121", "ext": "js", "source": "var o = { get *a() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:122", "ext": "js", "source": "var o = { async *a() {}, async a() {}, *b() {}, async: 1, get: 2, set: 3, static: 4, get get() {}, set set(v) {}, async async() {}, async get() {}, async set() {}, get async() {}, static() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:123", "ext": "js", "source": "var o = { a, b = 1 }; var a;\nconsole.log(\"ran\");\n"}
+{"name": "l8:124", "ext": "js", "source": "var o = { a: 1, a: 2, get a() {}, set a(v) {}, a() {}, [\"a\"]: 3 };\nconsole.log(\"ran\");\n"}
+{"name": "l8:125", "ext": "js", "source": "var o = { *a\n() {}, async\nb() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:126", "ext": "js", "source": "var o = { async\n*b() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:127", "ext": "js", "source": "var o = { get\na() {}, set\nb(v) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:128", "ext": "js", "source": "var o = { a() { super.x; }, get b() { return super.y; }, set c(v) { super.z = v; }, *d() { super.w; }, async e() { super.v; }, f: () => 1 };\nconsole.log(\"ran\");\n"}
+{"name": "l8:129", "ext": "js", "source": "var o = { a: () => super.x };\nconsole.log(\"ran\");\n"}
+{"name": "l8:130", "ext": "js", "source": "var o = { a() { return () => super.x; } };\nconsole.log(\"ran\");\n"}
+{"name": "l8:131", "ext": "js", "source": "var o = { a: function () { super.x; } };\nconsole.log(\"ran\");\n"}
+{"name": "l8:132", "ext": "js", "source": "var o = { a() { function g() { super.x; } } };\nconsole.log(\"ran\");\n"}
+{"name": "l8:133", "ext": "js", "source": "var o = { a() { var p = { b: function () { super.x; } }; } };\nconsole.log(\"ran\");\n"}
+{"name": "l8:134", "ext": "js", "source": "var o = { a() { class B { [super.x]() {} static x = super.y; } } };\nconsole.log(\"ran\");\n"}
+{"name": "l8:135", "ext": "js", "source": "var o = { a(b = super.x) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l8:136", "ext": "js", "source": "var o = { a() { super; } };\nconsole.log(\"ran\");\n"}
+{"name": "l8:137", "ext": "js", "source": "var o = { a() { super?.x; } };\nconsole.log(\"ran\");\n"}
+{"name": "l8:138", "ext": "js", "source": "var o = { a() { super(); } };\nconsole.log(\"ran\");\n"}
+{"name": "l8:139", "ext": "js", "source": "var o = { a() { new super.x(); super.x(); super[\"x\"]; super.x\\`y\\`; delete super.x; } };\nconsole.log(\"ran\");\n"}
+{"name": "l8:140", "ext": "js", "source": "function f() { super.x; }\nconsole.log(\"ran\");\n"}
+{"name": "l8:141", "ext": "js", "source": "function f(a = super.x) { }\nconsole.log(\"ran\");\n"}
+{"name": "l8:142", "ext": "js", "source": "var o = { [super.x]: 1 };\nconsole.log(\"ran\");\n"}
+{"name": "l8:143", "ext": "js", "source": "class A { m() { var o = { [super.x]: 1 }; } }\nconsole.log(\"ran\");\n"}
+{"name": "l9:1", "ext": "js", "source": "var a = 1_000, b = 0x1_0, c = 0b1_0, d = 0o1_0, e = 1_0.0_1e1_0, f = 1_0n, g = .0_1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:2", "ext": "js", "source": "var a = 0x_1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:3", "ext": "js", "source": "var a = 1e_1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:4", "ext": "js", "source": "var a = 1_.5;\nconsole.log(\"ran\");\n"}
+{"name": "l9:5", "ext": "js", "source": "var a = 1._5;\nconsole.log(\"ran\");\n"}
+{"name": "l9:6", "ext": "js", "source": "var a = 08_1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:7", "ext": "js", "source": "var a = 0_8;\nconsole.log(\"ran\");\n"}
+{"name": "l9:8", "ext": "js", "source": "var a = 1_e1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:9", "ext": "js", "source": "var a = 1__0;\nconsole.log(\"ran\");\n"}
+{"name": "l9:10", "ext": "js", "source": "var a = 1.e1, b = .5, c = 5., d = 0.0001, e = 0b1n, f = 0o7n, g = 0xFn, h = 0n, i = 1..toString(), j = 1.0.toString(), k = 1 .toString(), l = 0..x;\nconsole.log(\"ran\");\n"}
+{"name": "l9:11", "ext": "js", "source": "var a = 1.toString();\nconsole.log(\"ran\");\n"}
+{"name": "l9:12", "ext": "js", "source": "var a = 1e3n;\nconsole.log(\"ran\");\n"}
+{"name": "l9:13", "ext": "js", "source": "var a = 00n;\nconsole.log(\"ran\");\n"}
+{"name": "l9:14", "ext": "js", "source": "var a = 1.n;\nconsole.log(\"ran\");\n"}
+{"name": "l9:15", "ext": "js", "source": "var a = 0b;\nconsole.log(\"ran\");\n"}
+{"name": "l9:16", "ext": "js", "source": "var a = 0o8;\nconsole.log(\"ran\");\n"}
+{"name": "l9:17", "ext": "js", "source": "var a = 0xg;\nconsole.log(\"ran\");\n"}
+{"name": "l9:18", "ext": "js", "source": "var a = 1a;\nconsole.log(\"ran\");\n"}
+{"name": "l9:19", "ext": "js", "source": "var a = 1in{};\nconsole.log(\"ran\");\n"}
+{"name": "l9:20", "ext": "js", "source": "var a = 1 in{};\nconsole.log(\"ran\");\n"}
+{"name": "l9:21", "ext": "js", "source": "var a = 0x1in{};\nconsole.log(\"ran\");\n"}
+{"name": "l9:22", "ext": "js", "source": "var a = 08in{};\nconsole.log(\"ran\");\n"}
+{"name": "l9:23", "ext": "js", "source": "var a = 08.5; var b = 09e1; var c = 00; var d = 07.5;\nconsole.log(\"ran\");\n"}
+{"name": "l9:24", "ext": "js", "source": "var a = 07.5;\nconsole.log(\"ran\");\n"}
+{"name": "l9:25", "ext": "js", "source": "var a = 08e1, b = 010.toString(), c = 08.0.toString(), d = 08..toString();\nconsole.log(\"ran\");\n"}
+{"name": "l9:26", "ext": "js", "source": "var a = 010.5;\nconsole.log(\"ran\");\n"}
+{"name": "l9:27", "ext": "js", "source": "var a = 1e, b;\nconsole.log(\"ran\");\n"}
+{"name": "l9:28", "ext": "js", "source": "var a = 1e+, b;\nconsole.log(\"ran\");\n"}
+{"name": "l9:29", "ext": "js", "source": "var a = .e1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:30", "ext": "js", "source": "var a = 0B1, b = 0O7, c = 0XF, d = 1E5, e = 1E+5, f = 1e-5;\nconsole.log(\"ran\");\n"}
+{"name": "l9:31", "ext": "js", "source": "var a = \"\\u{10FFFF}\", b = \"\\u{0}\", c = \"\\u{00000061}\", d = '\\0', e = \"\\\n\", f = \"\\\n\", g = \"\u2028\u2029\", h = '\\a\\q', i = \"\\x41\\u0041\";\nconsole.log(\"ran\");\n"}
+{"name": "l9:32", "ext": "js", "source": "var a = \"\\u{}\";\nconsole.log(\"ran\");\n"}
+{"name": "l9:33", "ext": "js", "source": "var a = \"\\u{110000}\";\nconsole.log(\"ran\");\n"}
+{"name": "l9:34", "ext": "js", "source": "var a = \"\\u{1\";\nconsole.log(\"ran\");\n"}
+{"name": "l9:35", "ext": "js", "source": "var a = \"\\x4g\";\nconsole.log(\"ran\");\n"}
+{"name": "l9:36", "ext": "js", "source": "var a = \"\\u004\";\nconsole.log(\"ran\");\n"}
+{"name": "l9:37", "ext": "js", "source": "var a = \"a\nb\";\nconsole.log(\"ran\");\n"}
+{"name": "l9:38", "ext": "js", "source": "var a = \\`a\nb\\${1}\\u{61}\\x41\\0\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:39", "ext": "js", "source": "var a = \\`\\08\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:40", "ext": "js", "source": "var a = \\`\\1\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:41", "ext": "js", "source": "var a = \\`\\u{}\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:42", "ext": "js", "source": "var a = \\`\\xg\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:43", "ext": "js", "source": "var a = \\`\\${}\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:44", "ext": "js", "source": "var a = \\`\\${1}\\${2\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:45", "ext": "js", "source": "var t = (s) => s; t\\`\\08\\1\\u{}\\xg\\u{110000}\\`; t\\`\\${1}\\u\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:46", "ext": "js", "source": "var t = (s) => s; t\\`\\u\\${1}\\`; var u = t\\`a\\`\\`\\u\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:47", "ext": "js", "source": "var a = \\`\\${\\`\\${\\`\\u{61}\\`}\\`}\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:48", "ext": "js", "source": "var a = \\`\\${\\`\\${\\`\\u{6g}\\`}\\`}\\`;\nconsole.log(\"ran\");\n"}
+{"name": "l9:49", "ext": "js", "source": "var \\u0061 = 1, \\u{62} = 2, c\\u0064 = 3, \\u{000063} = 4; a + b + cd;\nconsole.log(\"ran\");\n"}
+{"name": "l9:50", "ext": "js", "source": "var \\u0030a;\nconsole.log(\"ran\");\n"}
+{"name": "l9:51", "ext": "js", "source": "var a\\u0020b;\nconsole.log(\"ran\");\n"}
+{"name": "l9:52", "ext": "js", "source": "var \\u{110000};\nconsole.log(\"ran\");\n"}
+{"name": "l9:53", "ext": "js", "source": "var \\u{0061;\nconsole.log(\"ran\");\n"}
+{"name": "l9:54", "ext": "js", "source": "var a\\u0030 = 1; a0;\nconsole.log(\"ran\");\n"}
+{"name": "l9:55", "ext": "js", "source": "var \\u0061wait = 1; var \\u0079ield = 1; var l\\u0065t = 1; var st\\u0061tic = 1; var \\u0061sync = 1; var o\\u0066 = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:56", "ext": "js", "source": "var v\\u0061r;\nconsole.log(\"ran\");\n"}
+{"name": "l9:57", "ext": "js", "source": "var \\u0069f;\nconsole.log(\"ran\");\n"}
+{"name": "l9:58", "ext": "js", "source": "var \\u0074rue;\nconsole.log(\"ran\");\n"}
+{"name": "l9:59", "ext": "js", "source": "var \\u006eull;\nconsole.log(\"ran\");\n"}
+{"name": "l9:60", "ext": "js", "source": "var \\u0074his;\nconsole.log(\"ran\");\n"}
+{"name": "l9:61", "ext": "js", "source": "var o = { v\\u0061r: 1, \\u0069f: 2 }; o.v\\u0061r; o.\\u0069f; o?.\\u0074his;\nconsole.log(\"ran\");\n"}
+{"name": "l9:62", "ext": "js", "source": "v\\u0061r x;\nconsole.log(\"ran\");\n"}
+{"name": "l9:63", "ext": "js", "source": "l\\u0065t x = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:64", "ext": "js", "source": "var x; l\\u0065t\nx = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:65", "ext": "js", "source": "\\u0061sync function f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l9:66", "ext": "js", "source": "var f = \\u0061sync () => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:67", "ext": "js", "source": "var f = \\u0061sync x => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:68", "ext": "js", "source": "var o = { g\\u0065t x() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l9:69", "ext": "js", "source": "var o = { \\u0061sync m() {} };\nconsole.log(\"ran\");\n"}
+{"name": "l9:70", "ext": "js", "source": "class A { st\\u0061tic m() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l9:71", "ext": "js", "source": "var x; for (x o\\u0066 []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l9:72", "ext": "js", "source": "function f() { n\\u0065w.target; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:73", "ext": "js", "source": "function f() { new.t\\u0061rget; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:74", "ext": "js", "source": "function* g() { yi\\u0065ld 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:75", "ext": "js", "source": "function* g() { var yi\\u0065ld; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:76", "ext": "js", "source": "async function f() { \\u0061wait 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:77", "ext": "js", "source": "async function f() { var \\u0061wait; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:78", "ext": "js", "source": "function f() { \"use strict\"; var yi\\u0065ld; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:79", "ext": "js", "source": "function f() { \"use strict\"; var l\\u0065t; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:80", "ext": "js", "source": "function f() { \"use strict\"; var st\\u0061tic; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:81", "ext": "js", "source": "function f() { \"use strict\"; var \\u0069mplements; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:82", "ext": "js", "source": "var t\\u0072ue;\nconsole.log(\"ran\");\n"}
+{"name": "l9:83", "ext": "js", "source": "x = { \\u0074rue: 1 }; var x;\nconsole.log(\"ran\");\n"}
+{"name": "l9:84", "ext": "js", "source": "var \\u0065num;\nconsole.log(\"ran\");\n"}
+{"name": "l9:85", "ext": "js", "source": "var a = tru\\u0065;\nconsole.log(\"ran\");\n"}
+{"name": "l9:86", "ext": "js", "source": "var a = typ\\u0065of 1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:87", "ext": "js", "source": "var a = 1 \\u0069n {};\nconsole.log(\"ran\");\n"}
+{"name": "l9:88", "ext": "js", "source": "var a = 1 inst\\u0061nceof Object;\nconsole.log(\"ran\");\n"}
+{"name": "l9:89", "ext": "js", "source": "cl\\u0061ss A {}\nconsole.log(\"ran\");\n"}
+{"name": "l9:90", "ext": "js", "source": "function f() { r\\u0065turn; }\nconsole.log(\"ran\");\n"}
+{"name": "l9:91", "ext": "js", "source": "i\\u0066 (1) ;\nconsole.log(\"ran\");\n"}
+{"name": "l9:92", "ext": "js", "source": "var \u2118, \u309b, \u00b7a;\nconsole.log(\"ran\");\n"}
+{"name": "l9:93", "ext": "js", "source": "var a\u00b7, a\u2118, \u212e, \u1885, \u1886;\nconsole.log(\"ran\");\n"}
+{"name": "l9:94", "ext": "js", "source": "var a\u200cb, a\u200db;\nconsole.log(\"ran\");\n"}
+{"name": "l9:95", "ext": "js", "source": "var \u200ca;\nconsole.log(\"ran\");\n"}
+{"name": "l9:96", "ext": "js", "source": "var \ud842\udfb7 = 1, \\u{20BB7}x = 2;\nconsole.log(\"ran\");\n"}
+{"name": "l9:97", "ext": "js", "source": "var \\uD842\\uDFB7;\nconsole.log(\"ran\");\n"}
+{"name": "l9:98", "ext": "js", "source": "var a = /[/]/, b = /\\//, c = /[\\]/]/, d = /a/dgimsuy, e = /a/v, f = /(?<n>a)\\k<n>/, g = /\\k<n>/, h = /a{,1}/, i = /a{1/, j = /]/, k = /}/, l = /\\c/, m = /[\\c]/, n = /\\u{61}/, o = /\\p{L}/, p = /(?=a)*/, q = /\\8/, r = /[a-\\d]/, s = /\\_/, t = /(?<!a)b/, u = /\\p{Script=Greek}/u, v = /[\\p{L}--[a-z]]/v;\nconsole.log(\"ran\");\n"}
+{"name": "l9:99", "ext": "js", "source": "var a = /a/gg;\nconsole.log(\"ran\");\n"}
+{"name": "l9:100", "ext": "js", "source": "var a = /a/uv;\nconsole.log(\"ran\");\n"}
+{"name": "l9:101", "ext": "js", "source": "var a = /a/x;\nconsole.log(\"ran\");\n"}
+{"name": "l9:102", "ext": "js", "source": "var a = /a/\\u0067;\nconsole.log(\"ran\");\n"}
+{"name": "l9:103", "ext": "js", "source": "var a = /a\n/;\nconsole.log(\"ran\");\n"}
+{"name": "l9:104", "ext": "js", "source": "var a = /a/g\\u{67};\nconsole.log(\"ran\");\n"}
+{"name": "l9:105", "ext": "js", "source": "var a = 1, b = 2, c = 3; var d = a / b / c, e = a++ / b, f = a /b/ c, g = (a) / b / c, h = [a] / b / c, i = a\n/b/c;\nconsole.log(\"ran\");\n"}
+{"name": "l9:106", "ext": "js", "source": "var a = 1, g = 1; if (a) /b/g.test(\"\"); while (0) /b/.test(\"\"); for (;0;) /b/.test(\"\"); {} /b/g; (function () {} / 1 / 1); +{} / 1 / 1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:107", "ext": "js", "source": "var a = 1, g = 1, b = 1; a++ / b / g; a\n++\n/b/g;\nconsole.log(\"ran\");\n"}
+{"name": "l9:108", "ext": "js", "source": "var a = 1, g = 1, b = 1; a\n++\nb;\nconsole.log(\"ran\");\n"}
+{"name": "l9:109", "ext": "js", "source": "var a = 1, b = 1; a\n++b; a\n--b;\nconsole.log(\"ran\");\n"}
+{"name": "l9:110", "ext": "js", "source": "var a = 1, b = 1; a++\n++b;\nconsole.log(\"ran\");\n"}
+{"name": "l9:111", "ext": "js", "source": "var a = 1; a ++\n;\nconsole.log(\"ran\");\n"}
+{"name": "l9:112", "ext": "js", "source": "var a = {}; a\n?.b; a\n.b; a\n[0]; a\n\\`x\\`.length;\nconsole.log(\"ran\");\n"}
+{"name": "l9:113", "ext": "js", "source": "var a = 1; var b = a\n(1);\nconsole.log(\"ran\");\n"}
+{"name": "l9:114", "ext": "js", "source": "var f = function () { return\n1; }; var g = function () { throw\n1; };\nconsole.log(\"ran\");\n"}
+{"name": "l9:115", "ext": "js", "source": "var f = function () { l: while (0) { break\nl; continue\nl; } };\nconsole.log(\"ran\");\n"}
+{"name": "l9:116", "ext": "js", "source": "var x = 1; x\n=>x;\nconsole.log(\"ran\");\n"}
+{"name": "l9:117", "ext": "js", "source": "var a = 1; do ; while (0) a; do a; while (0)a; do {} while (0)\na;\nconsole.log(\"ran\");\n"}
+{"name": "l9:118", "ext": "js", "source": "var a = 1; if (a) ; else ; if (a) {} else if (a) ; ; ;\nconsole.log(\"ran\");\n"}
+{"name": "l9:119", "ext": "js", "source": "var a = 1; if (a) else ;\nconsole.log(\"ran\");\n"}
+{"name": "l9:120", "ext": "js", "source": "for (;;) break; while (1) break; do break; while (1); l: for (;;) break l;\nconsole.log(\"ran\");\n"}
+{"name": "l9:121", "ext": "js", "source": "var a; a = b\n++c; var b = 1, c = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l9:122", "ext": "js", "source": "var i; for (i = 0\ni < 1; i++) ;\nconsole.log(\"ran\");\n"}
+{"name": "l9:123", "ext": "js", "source": "{ 1\n2 } 3\nconsole.log(\"ran\");\n"}
+{"name": "l9:124", "ext": "js", "source": "{ 1 2 } 3\nconsole.log(\"ran\");\n"}
+{"name": "l9:125", "ext": "js", "source": "var a = 1 var b = 2\nconsole.log(\"ran\");\n"}
+{"name": "l9:126", "ext": "js", "source": "var a = 1; throw\nconsole.log(\"ran\");\n"}
+{"name": "l9:127", "ext": "js", "source": "debugger; debugger\n; if (0) debugger\nconsole.log(\"ran\");\n"}
+{"name": "l9:128", "ext": "js", "source": "var a = 1;;;; a;;\nconsole.log(\"ran\");\n"}
+{"name": "l10:1", "ext": "js", "source": "var a = `a${1}\\u{61}\\x41\\0`; var t = (s) => s; t`\\08\\1\\u{}\\xg\\u{110000}`; t`${1}\\u`; t`\\u${1}`; var u = t`a``\\u`; var b = `${`${`\\u{61}`}`}`;\nconsole.log(\"ran\");\n"}
+{"name": "l10:2", "ext": "js", "source": "var a = `\\08`;\nconsole.log(\"ran\");\n"}
+{"name": "l10:3", "ext": "js", "source": "var a = `\\1`;\nconsole.log(\"ran\");\n"}
+{"name": "l10:4", "ext": "js", "source": "var a = `\\u{}`;\nconsole.log(\"ran\");\n"}
+{"name": "l10:5", "ext": "js", "source": "var a = `${1}\\xg`;\nconsole.log(\"ran\");\n"}
+{"name": "l10:6", "ext": "js", "source": "var a = `${`${`\\u{6g}`}`}`;\nconsole.log(\"ran\");\n"}
+{"name": "l10:7", "ext": "js", "source": "var a = {}; a\n?.b; a\n.b; a\n[0]; a.x\n`x`.length;\nconsole.log(\"ran\");\n"}
+{"name": "l10:8", "ext": "js", "source": "var a = {b(){}}; (a?.b)`x`; (a?.b.c);\nconsole.log(\"ran\");\n"}
+{"name": "l10:9", "ext": "js", "source": "var a; a?.b`x`;\nconsole.log(\"ran\");\n"}
+{"name": "l10:10", "ext": "js", "source": "var a; a?.b.c`x`;\nconsole.log(\"ran\");\n"}
+{"name": "l10:11", "ext": "js", "source": "var a; if (0) [a`x`] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l10:12", "ext": "js", "source": "for await (const x of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l10:13", "ext": "js", "source": "for await (const x of []) ; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:14", "ext": "js", "source": "async function f() {} for await (var x of []) ; var x;\nconsole.log(\"ran\");\n"}
+{"name": "l10:15", "ext": "js", "source": "await 0;\nconsole.log(\"ran\");\n"}
+{"name": "l10:16", "ext": "js", "source": "await 0; var a = 010;\nconsole.log(\"ran\");\n"}
+{"name": "l10:17", "ext": "js", "source": "if (0) await 0;\nconsole.log(\"ran\");\n"}
+{"name": "l10:18", "ext": "js", "source": "function f() { await 0; }\nconsole.log(\"ran\");\n"}
+{"name": "l10:19", "ext": "js", "source": "var f = () => await 0;\nconsole.log(\"ran\");\n"}
+{"name": "l10:20", "ext": "js", "source": "var f = () => { await 0; };\nconsole.log(\"ran\");\n"}
+{"name": "l10:21", "ext": "js", "source": "class A { m() { await 0; } }\nconsole.log(\"ran\");\n"}
+{"name": "l10:22", "ext": "js", "source": "class A { static { await 0; } }\nconsole.log(\"ran\");\n"}
+{"name": "l10:23", "ext": "js", "source": "class A { x = await 0; }\nconsole.log(\"ran\");\n"}
+{"name": "l10:24", "ext": "js", "source": "var o = { m() { await 0; } };\nconsole.log(\"ran\");\n"}
+{"name": "l10:25", "ext": "js", "source": "await using x = null;\nconsole.log(\"ran\");\n"}
+{"name": "l10:26", "ext": "js", "source": "{ await 0; } label: await 0; try { await 0; } catch {} switch (await 0) { default: await 0; } for (var i = await 0; i < await 0; ) ; `${await 0}`; [await 0]; ({ a: await 0 }); f(await 0, ...await []); function f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:27", "ext": "js", "source": "var x = await 0, y = (await 0)?.z, w = await (await 0);\nconsole.log(\"ran\");\n"}
+{"name": "l10:28", "ext": "js", "source": "var o = { [await 0]: 1 }; var g = function (a = 1) { }(await 0);\nconsole.log(\"ran\");\n"}
+{"name": "l10:29", "ext": "js", "source": "var f = async () => await 0; await f();\nconsole.log(\"ran\");\n"}
+{"name": "l10:30", "ext": "js", "source": "var f = (a = await 0) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l10:31", "ext": "js", "source": "function f(a = await 0) {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:32", "ext": "js", "source": "await 0; function await() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:33", "ext": "js", "source": "await 0; var await;\nconsole.log(\"ran\");\n"}
+{"name": "l10:34", "ext": "js", "source": "await 0; await: 1;\nconsole.log(\"ran\");\n"}
+{"name": "l10:35", "ext": "js", "source": "await 0; function g() { var await; }\nconsole.log(\"ran\");\n"}
+{"name": "l10:36", "ext": "js", "source": "await 0; function g() { arguments; new.target; return; }\nconsole.log(\"ran\");\n"}
+{"name": "l10:37", "ext": "js", "source": "await 0; new.target;\nconsole.log(\"ran\");\n"}
+{"name": "l10:38", "ext": "js", "source": "await 0; arguments;\nconsole.log(\"ran\");\n"}
+{"name": "l10:39", "ext": "js", "source": "await 0; return;\nconsole.log(\"ran\");\n"}
+{"name": "l10:40", "ext": "js", "source": "await 0; delete x; var x;\nconsole.log(\"ran\");\n"}
+{"name": "l10:41", "ext": "js", "source": "await 0; <!-- c\nconsole.log(\"ran\");\n"}
+{"name": "l10:42", "ext": "js", "source": "await 0;\n--> c\nconsole.log(\"ran\");\n"}
+{"name": "l10:43", "ext": "js", "source": "await 0; { function f() {} function f() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l10:44", "ext": "js", "source": "await 0; function f() {} var f;\nconsole.log(\"ran\");\n"}
+{"name": "l10:45", "ext": "js", "source": "await 0; function f() {} function f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:46", "ext": "js", "source": "await 0; var f; function f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:47", "ext": "js", "source": "await 0; let f; { function f() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l10:48", "ext": "js", "source": "await 0; { function f() {} } var f;\nconsole.log(\"ran\");\n"}
+{"name": "l10:49", "ext": "js", "source": "await 0; if (1) function f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:50", "ext": "js", "source": "await 0; l: function f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:51", "ext": "js", "source": "await 0; yield = 1; var yield;\nconsole.log(\"ran\");\n"}
+{"name": "l10:52", "ext": "js", "source": "await 0; var let;\nconsole.log(\"ran\");\n"}
+{"name": "l10:53", "ext": "js", "source": "await 0; this;\nconsole.log(\"ran\");\n"}
+{"name": "l10:54", "ext": "js", "source": "await 0; require; module; exports; __filename;\nconsole.log(\"ran\");\n"}
+{"name": "l10:55", "ext": "js", "source": "import.meta; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:56", "ext": "js", "source": "import.meta; await: 1;\nconsole.log(\"ran\");\n"}
+{"name": "l10:57", "ext": "js", "source": "import.meta; var await;\nconsole.log(\"ran\");\n"}
+{"name": "l10:58", "ext": "js", "source": "import.meta; return;\nconsole.log(\"ran\");\n"}
+{"name": "l10:59", "ext": "js", "source": "import.meta; function f() {} var f;\nconsole.log(\"ran\");\n"}
+{"name": "l10:60", "ext": "js", "source": "import.meta; var a = 010;\nconsole.log(\"ran\");\n"}
+{"name": "l10:61", "ext": "js", "source": "function f() { import.meta; } if (0) f();\nconsole.log(\"ran\");\n"}
+{"name": "l10:62", "ext": "js", "source": "if (0) import.meta.url; console.log(typeof this);\nconsole.log(\"ran\");\n"}
+{"name": "l10:63", "ext": "js", "source": "if (0) import(\"x\"); console.log(typeof this);\nconsole.log(\"ran\");\n"}
+{"name": "l10:64", "ext": "js", "source": "export {}; console.log(typeof this);\nconsole.log(\"ran\");\n"}
+{"name": "l10:65", "ext": "js", "source": "export {}; function f() {} var f;\nconsole.log(\"ran\");\n"}
+{"name": "l10:66", "ext": "js", "source": "export {}; with ({}) {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:67", "ext": "js", "source": "export var a; export var a;\nconsole.log(\"ran\");\n"}
+{"name": "l10:68", "ext": "js", "source": "export var a; export { a };\nconsole.log(\"ran\");\n"}
+{"name": "l10:69", "ext": "js", "source": "var a; export { a, a };\nconsole.log(\"ran\");\n"}
+{"name": "l10:70", "ext": "js", "source": "var a; export { a as b, a as b };\nconsole.log(\"ran\");\n"}
+{"name": "l10:71", "ext": "js", "source": "var a; export { a as b, a as c };\nconsole.log(\"ran\");\n"}
+{"name": "l10:72", "ext": "js", "source": "var a; export { a as default }; export default 1;\nconsole.log(\"ran\");\n"}
+{"name": "l10:73", "ext": "js", "source": "export default 1; export default 2;\nconsole.log(\"ran\");\n"}
+{"name": "l10:74", "ext": "js", "source": "export { zz };\nconsole.log(\"ran\");\n"}
+{"name": "l10:75", "ext": "js", "source": "export { zz as default };\nconsole.log(\"ran\");\n"}
+{"name": "l10:76", "ext": "js", "source": "var a; export { a as \"x y\" }; \nconsole.log(\"ran\");\n"}
+{"name": "l10:77", "ext": "js", "source": "var a; export { a as \"\\uD800\" };\nconsole.log(\"ran\");\n"}
+{"name": "l10:78", "ext": "js", "source": "import {} from \"node:fs\"; import * as ns from \"node:fs\"; import def, { readFile as rf } from \"node:fs\"; import \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:79", "ext": "js", "source": "import { readFile } from \"node:fs\"; var readFile;\nconsole.log(\"ran\");\n"}
+{"name": "l10:80", "ext": "js", "source": "import { readFile } from \"node:fs\"; function readFile() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:81", "ext": "js", "source": "import { readFile } from \"node:fs\"; { var readFile; }\nconsole.log(\"ran\");\n"}
+{"name": "l10:82", "ext": "js", "source": "import { readFile } from \"node:fs\"; { let readFile; }\nconsole.log(\"ran\");\n"}
+{"name": "l10:83", "ext": "js", "source": "import { readFile, readFile } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:84", "ext": "js", "source": "import { readFile as a, writeFile as a } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:85", "ext": "js", "source": "import a, * as a from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:86", "ext": "js", "source": "import { \"readFile\" as rf } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:87", "ext": "js", "source": "import { \"readFile\" } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:88", "ext": "js", "source": "import { default as d } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:89", "ext": "js", "source": "import { default } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:90", "ext": "js", "source": "import { eval } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:91", "ext": "js", "source": "import { arguments as b } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:92", "ext": "js", "source": "import { a as arguments } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:93", "ext": "js", "source": "import { if as iff } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:94", "ext": "js", "source": "import { if } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:95", "ext": "js", "source": "import d from \"node:fs\" with { type: \"json\" };\nconsole.log(\"ran\");\n"}
+{"name": "l10:96", "ext": "js", "source": "import \"node:fs\" with { a: \"1\", a: \"2\" };\nconsole.log(\"ran\");\n"}
+{"name": "l10:97", "ext": "js", "source": "import \"node:fs\" with { a: 1 };\nconsole.log(\"ran\");\n"}
+{"name": "l10:98", "ext": "js", "source": "if (1) import \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:99", "ext": "js", "source": "{ export var a; }\nconsole.log(\"ran\");\n"}
+{"name": "l10:100", "ext": "js", "source": "function f() { export var a; }\nconsole.log(\"ran\");\n"}
+{"name": "l10:101", "ext": "js", "source": "export default function () {} export default class {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:102", "ext": "js", "source": "export default function f() {} f(); export function g() {} export class H {} export const i = 1, j = 2; export let k; export { f as l, g as m };\nconsole.log(\"ran\");\n"}
+{"name": "l10:103", "ext": "js", "source": "export default async function () {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:104", "ext": "js", "source": "export default function* () {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:105", "ext": "js", "source": "export default class extends Object {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:106", "ext": "js", "source": "export default (function () {});\nconsole.log(\"ran\");\n"}
+{"name": "l10:107", "ext": "js", "source": "export default 1, 2;\nconsole.log(\"ran\");\n"}
+{"name": "l10:108", "ext": "js", "source": "export default var a;\nconsole.log(\"ran\");\n"}
+{"name": "l10:109", "ext": "js", "source": "export * from \"node:fs\"; export * as ns from \"node:fs\"; export { readFile } from \"node:fs\"; export { default } from \"node:fs\"; export { default as d2, readFile as \"s t\" } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:110", "ext": "js", "source": "export * as default from \"node:fs\"; export default 1;\nconsole.log(\"ran\");\n"}
+{"name": "l10:111", "ext": "js", "source": "export { if } from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:112", "ext": "js", "source": "export { if };\nconsole.log(\"ran\");\n"}
+{"name": "l10:113", "ext": "js", "source": "var a; export { a as if };\nconsole.log(\"ran\");\n"}
+{"name": "l10:114", "ext": "js", "source": "export let a; let b; export { b as a };\nconsole.log(\"ran\");\n"}
+{"name": "l10:115", "ext": "js", "source": "export const a;\nconsole.log(\"ran\");\n"}
+{"name": "l10:116", "ext": "js", "source": "export function f() {} export function f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:117", "ext": "js", "source": "export async\nfunction f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:118", "ext": "js", "source": "export default async\nfunction f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l10:119", "ext": "js", "source": "export default async function f() {} var f;\nconsole.log(\"ran\");\n"}
+{"name": "l10:120", "ext": "js", "source": "export default class A {} let A;\nconsole.log(\"ran\");\n"}
+{"name": "l10:121", "ext": "js", "source": "import x from \"node:fs\"; x = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l10:122", "ext": "js", "source": "import a from \"node:fs\"; export { a }; import.meta.x; import(\"node:fs\");\nconsole.log(\"ran\");\n"}
+{"name": "l10:123", "ext": "js", "source": "import { a } from \"node:fs\" assert { type: \"json\" };\nconsole.log(\"ran\");\n"}
+{"name": "l10:124", "ext": "js", "source": "import defer * as ns from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l10:125", "ext": "js", "source": "import source s from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l11:1", "ext": "js", "source": "let [...require] = []; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:2", "ext": "js", "source": "let {...module} = {}; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:3", "ext": "js", "source": "const { a: { b: [exports] } } = { a: { b: [1] } }; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:4", "ext": "js", "source": "let a = 1, exports = 2; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:5", "ext": "js", "source": "let a = 1; let b = 2; const c = 3, __dirname = 4; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:6", "ext": "js", "source": "let { exports = 1 } = {}; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:7", "ext": "js", "source": "let [[[__filename]]] = [[[1]]]; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:8", "ext": "js", "source": "var a = class exports {}; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:9", "ext": "js", "source": "var a = function require() {}; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:10", "ext": "js", "source": "function exports() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:11", "ext": "js", "source": "function* module() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:12", "ext": "js", "source": "async function require() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:13", "ext": "js", "source": "var exports; var require = 1; var module, __filename, __dirname; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:14", "ext": "js", "source": "{ let exports; const require = 1; class module {} } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:15", "ext": "js", "source": "for (let exports of []) ; for (const require in {}) ; for (let module = 0; 0;) ; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:16", "ext": "js", "source": "try {} catch (exports) {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:17", "ext": "js", "source": "try {} catch { let module; } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:18", "ext": "js", "source": "switch (0) { case 0: let require; } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:19", "ext": "js", "source": "label: { let exports; } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:20", "ext": "js", "source": "if (1) { let exports; } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:21", "ext": "js", "source": "var f = (exports) => { let require; }; function g(module) { let exports; } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:22", "ext": "js", "source": "class A { static { let exports; } } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:23", "ext": "js", "source": "let exports; let require; const module = 1; class __filename {} let __dirname; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:24", "ext": "js", "source": "let exports; var exports; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:25", "ext": "js", "source": "let exports; function exports() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:26", "ext": "js", "source": "let exports; { var exports; } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:27", "ext": "js", "source": "let exports; { function exports() {} } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:28", "ext": "js", "source": "let exports; if (1) function f() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:29", "ext": "js", "source": "let exports; { function f() {} function f() {} } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:30", "ext": "js", "source": "let exports; function f() {} var f; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:31", "ext": "js", "source": "let exports; var f; function f() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:32", "ext": "js", "source": "let exports; function f() {} function f() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:33", "ext": "js", "source": "let exports; new.target; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:34", "ext": "js", "source": "let exports; arguments; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:35", "ext": "js", "source": "let exports; return; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:36", "ext": "js", "source": "let exports; delete exports; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:37", "ext": "js", "source": "let exports; with ({}) {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:38", "ext": "js", "source": "let exports; var a = 010; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:39", "ext": "js", "source": "let exports; var a = \"\\01\"; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:40", "ext": "js", "source": "let exports; <!-- c console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:41", "ext": "js", "source": "let exports;\n--> c console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:42", "ext": "js", "source": "let exports; await: 1; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:43", "ext": "js", "source": "let exports; var await; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:44", "ext": "js", "source": "let exports; function await() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:45", "ext": "js", "source": "let exports; function f() { var await; return new.target; } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:46", "ext": "js", "source": "let exports; yield = 1; var yield; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:47", "ext": "js", "source": "let exports; var let; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:48", "ext": "js", "source": "let exports; var static; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:49", "ext": "js", "source": "let exports; l: function f() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:50", "ext": "js", "source": "let exports; eval = 1; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:51", "ext": "js", "source": "let exports; function f(a, a) {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:52", "ext": "js", "source": "let exports; this.x = 1; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:53", "ext": "js", "source": "let exports; if (0) await 0; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:54", "ext": "js", "source": "let exports; import.meta; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:55", "ext": "js", "source": "let exports; export {}; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:56", "ext": "js", "source": "let exports; var x = 1; x = this; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:57", "ext": "js", "source": "let exports; var f = function () { return this; }; f(); console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:58", "ext": "js", "source": "let exports; { function g() {} } typeof g; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:59", "ext": "js", "source": "let exports; var o = { get: 1 }; label: for (;;) { break label; } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:60", "ext": "js", "source": "let exports; function f() { \"use strict\"; } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:61", "ext": "js", "source": "let module; module = { exports: {} }; module.exports.a = 1; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:62", "ext": "js", "source": "let require = (x) => x; require(\"fs\"); console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:63", "ext": "js", "source": "const __filename = \"x\"; console.log(__filename, typeof __dirname); console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:64", "ext": "js", "source": "class exports { static x = 1; } console.log(exports.x, typeof module); console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:65", "ext": "js", "source": "let l\\u0065t; let exports; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:66", "ext": "js", "source": "let exp\\u006frts; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:67", "ext": "js", "source": "const \\u{65}xports = 1; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:68", "ext": "js", "source": "class \\u0072equire {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:69", "ext": "js", "source": "let\nexports; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:70", "ext": "js", "source": "let\n[exports] = [1]; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:71", "ext": "js", "source": "var let; let\nexports; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:72", "ext": "js", "source": "let exports\n= 1; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:73", "ext": "js", "source": "const\nrequire\n=\n1; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:74", "ext": "js", "source": "class\nmodule\n{} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:75", "ext": "js", "source": "using exports = null; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:76", "ext": "js", "source": "await using exports = null; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:77", "ext": "js", "source": "var using; using\nexports; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:78", "ext": "js", "source": "let async; async\nfunction exports() {} console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:79", "ext": "js", "source": "let yield; yield\nexports; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:80", "ext": "js", "source": "/* let exports; */ var a; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:81", "ext": "js", "source": "// let exports;\nvar a; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:82", "ext": "js", "source": "\"let exports;\"; var b = `let exports;`; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:83", "ext": "js", "source": "if (0) { let exports; } function f() { let exports; const require = 1; class module {} } console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:84", "ext": "js", "source": "let Exports, REQUIRE, modules, _exports, exports2, $module; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:85", "ext": "js", "source": "let exports; \"use strict\"; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:86", "ext": "js", "source": "\"use strict\"; let exports; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:87", "ext": "js", "source": "#!/usr/bin/env node\nlet exports; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l11:88", "ext": "js", "source": "#!/usr/bin/env node\nvar a; delete a; console.log(typeof this, (function(){ return typeof this })(), typeof require);\nconsole.log(\"ran\");\n"}
+{"name": "l12:1", "ext": "js", "source": "var a = 1, b = 5; var c = (a<!--b);\nconsole.log(\"ran\");\n"}
+{"name": "l12:2", "ext": "js", "source": "var a = 1, b = 5; var c = [a<!--b];\nconsole.log(\"ran\");\n"}
+{"name": "l12:3", "ext": "js", "source": "var a = 1, b = 5; if (a<!--b) console.log(\"in\");\nconsole.log(\"ran\");\n"}
+{"name": "l12:4", "ext": "js", "source": "var a = 1, b = 5; a<!--b\n; console.log(b);\nconsole.log(\"ran\");\n"}
+{"name": "l12:5", "ext": "js", "source": "let exports; var a = 1, b = 5; a<!--b\n; console.log(b);\nconsole.log(\"ran\");\n"}
+{"name": "l12:6", "ext": "js", "source": "var a = 1, b = 5; a<!--b\n; console.log(b); await 0;\nconsole.log(\"ran\");\n"}
+{"name": "l12:7", "ext": "js", "source": "var a = 1, b = 5; a<!--b\n; console.log(b); import.meta;\nconsole.log(\"ran\");\n"}
+{"name": "l12:8", "ext": "js", "source": "var b = 5; var c = [\n--> 0\n];\nconsole.log(\"ran\");\n"}
+{"name": "l12:9", "ext": "js", "source": "var b = 5; /*\n*/ --> c\nconsole.log(\"ran\");\n"}
+{"name": "l12:10", "ext": "js", "source": "var b = 5; b --> 0; console.log(b);\nconsole.log(\"ran\");\n"}
+{"name": "l12:11", "ext": "js", "source": "var b = 5; /* x */ --> c\nconsole.log(\"ran\");\n"}
+{"name": "l12:12", "ext": "js", "source": "var b = 5;\n /* x */ /* y */ --> c\nconsole.log(\"ran\");\n"}
+{"name": "l12:13", "ext": "js", "source": "var b = 5; (b\n--> 0);\nconsole.log(\"ran\");\n"}
+{"name": "l12:14", "ext": "mjs", "source": "var a = 1, b = 5; a<!--b\n; console.log(b);\nconsole.log(\"ran\");\n"}
+{"name": "l12:15", "ext": "mjs", "source": "var a = 1 <!-- c\nconsole.log(\"ran\");\n"}
+{"name": "l12:16", "ext": "mjs", "source": "var b = 5;\n--> c\nconsole.log(\"ran\");\n"}
+{"name": "l12:17", "ext": "js", "source": "{ function f(){} } var f; { function g(){} } let g; let h; { function h(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:18", "ext": "js", "source": "function o(f) { { function f(){} } } try {} catch (f) { { function f(){} } } for (let f;0;) { { function f(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l12:19", "ext": "js", "source": "{ function f(){} { var f; } }\nconsole.log(\"ran\");\n"}
+{"name": "l12:20", "ext": "js", "source": "{ { var f; } function f(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:21", "ext": "js", "source": "{ function f(){} } function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l12:22", "ext": "js", "source": "{ async function f(){} async function f(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:23", "ext": "js", "source": "{ function f(){} function* f(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:24", "ext": "js", "source": "{ function* f(){} function* f(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:25", "ext": "js", "source": "{ class f {} function f(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:26", "ext": "js", "source": "if (1) function f(){} else function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l12:27", "ext": "js", "source": "{ l: function f(){} function f(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:28", "ext": "js", "source": "{ function f(){} l: function f(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:29", "ext": "js", "source": "l: function f(){} function f(){}\nconsole.log(\"ran\");\n"}
+{"name": "l12:30", "ext": "js", "source": "try {} catch (e) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "l12:31", "ext": "js", "source": "try {} catch (e) { let f; { var f; } }\nconsole.log(\"ran\");\n"}
+{"name": "l12:32", "ext": "js", "source": "function f(a){ class a{} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:33", "ext": "js", "source": "function f(a){ const a = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:34", "ext": "js", "source": "function f() { { let a; { var a; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l12:35", "ext": "js", "source": "function f(arguments){ let arguments; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:36", "ext": "js", "source": "function f() { function arguments(){} let b; } (function g(){ let g; }); (function h(h){}); (class A { m(){ let A; } }); class B { static { let B; } } class C { static { var C; } }\nconsole.log(\"ran\");\n"}
+{"name": "l12:37", "ext": "js", "source": "function f(a = 1, b = a){ var b; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:38", "ext": "js", "source": "function f({a}, [a]){}\nconsole.log(\"ran\");\n"}
+{"name": "l12:39", "ext": "js", "source": "function f(a, {a}){}\nconsole.log(\"ran\");\n"}
+{"name": "l12:40", "ext": "js", "source": "function f(a, a, ...b){}\nconsole.log(\"ran\");\n"}
+{"name": "l12:41", "ext": "js", "source": "function f(a, b = 1, a){}\nconsole.log(\"ran\");\n"}
+{"name": "l12:42", "ext": "js", "source": "var g = (a, b, a) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l12:43", "ext": "js", "source": "class A { m(a, a){} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:44", "ext": "js", "source": "function* g(a, a){}\nconsole.log(\"ran\");\n"}
+{"name": "l12:45", "ext": "js", "source": "async function f(a, a){}\nconsole.log(\"ran\");\n"}
+{"name": "l12:46", "ext": "js", "source": "var o = { set x([a, a]) {} };\nconsole.log(\"ran\");\n"}
+{"name": "l12:47", "ext": "js", "source": "if (1) { return; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:48", "ext": "js", "source": "try { return; } finally {}\nconsole.log(\"ran\");\n"}
+{"name": "l12:49", "ext": "js", "source": "l: return;\nconsole.log(\"ran\");\n"}
+{"name": "l12:50", "ext": "js", "source": "while (0) return;\nconsole.log(\"ran\");\n"}
+{"name": "l12:51", "ext": "js", "source": "switch (0) { case 0: return; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:52", "ext": "js", "source": "class A { static { return; } }\nconsole.log(\"ran\");\n"}
+{"name": "l12:53", "ext": "js", "source": "var f = () => return;\nconsole.log(\"ran\");\n"}
+{"name": "l12:54", "ext": "js", "source": "return\n1;\nconsole.log(\"ran\");\n"}
+{"name": "l12:55", "ext": "js", "source": "return; import.meta;\nconsole.log(\"ran\");\n"}
+{"name": "l12:56", "ext": "js", "source": "return; await 0;\nconsole.log(\"ran\");\n"}
+{"name": "l12:57", "ext": "js", "source": "return; export {};\nconsole.log(\"ran\");\n"}
+{"name": "l12:58", "ext": "js", "source": "var f = () => new.target; class A { static x = new.target; [new.target]() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:59", "ext": "js", "source": "var o = { [new.target]: 1 }; function g(a = new.target) {} `${new.target}`;\nconsole.log(\"ran\");\n"}
+{"name": "l12:60", "ext": "js", "source": "new.target = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l12:61", "ext": "js", "source": "arguments; arguments.length; arguments[0]; var f = () => arguments; var arguments;\nconsole.log(\"ran\");\n"}
+{"name": "l12:62", "ext": "js", "source": "let arguments;\nconsole.log(\"ran\");\n"}
+{"name": "l12:63", "ext": "js", "source": "const arguments = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l12:64", "ext": "js", "source": "class arguments {}\nconsole.log(\"ran\");\n"}
+{"name": "l12:65", "ext": "js", "source": "function arguments() {}\nconsole.log(\"ran\");\n"}
+{"name": "l12:66", "ext": "js", "source": "arguments = 1; arguments++; [arguments] = [1]; for (arguments of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l12:67", "ext": "js", "source": "var f = () => { var arguments; }; var g = () => { let arguments; };\nconsole.log(\"ran\");\n"}
+{"name": "l12:68", "ext": "js", "source": "var f = (arguments) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l12:69", "ext": "js", "source": "var x; with (x = {}) { function w() {} var y; let z; class Q {} }\nconsole.log(\"ran\");\n"}
+{"name": "l12:70", "ext": "js", "source": "with ({}) function f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l12:71", "ext": "js", "source": "with ({}) l: function f() {}\nconsole.log(\"ran\");\n"}
+{"name": "l12:72", "ext": "js", "source": "with ({}) let\nx;\nconsole.log(\"ran\");\n"}
+{"name": "l12:73", "ext": "js", "source": "with ({}) class A {}\nconsole.log(\"ran\");\n"}
+{"name": "l12:74", "ext": "js", "source": "with ({}) { } with ({}) ; with ({}) with ({}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l12:75", "ext": "js", "source": "function f() { return f.caller, f.arguments, arguments.callee; } f();\nconsole.log(\"ran\");\n"}
+{"name": "l12:76", "ext": "js", "source": "function f(a, b) { arguments[0] = 1; a = 2; delete arguments[0]; return a; } f(1);\nconsole.log(\"ran\");\n"}
+{"name": "l12:77", "ext": "js", "source": "var undefined; var NaN, Infinity; undefined = 1; NaN++; \nconsole.log(\"ran\");\n"}
+{"name": "l12:78", "ext": "js", "source": "let undefined;\nconsole.log(\"ran\");\n"}
+{"name": "l12:79", "ext": "js", "source": "function undefined() {} \nconsole.log(\"ran\");\n"}
+{"name": "l12:80", "ext": "js", "source": "var f = function (undefined) { var undefined; }; (function () { let undefined; const NaN = 1; class Infinity {} })();\nconsole.log(\"ran\");\n"}
+{"name": "l12:81", "ext": "js", "source": "const undefined = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l12:82", "ext": "js", "source": "class undefined {}\nconsole.log(\"ran\");\n"}
+{"name": "l12:83", "ext": "js", "source": "let NaN; \nconsole.log(\"ran\");\n"}
+{"name": "l12:84", "ext": "js", "source": "let Infinity, globalThis, Object, console2, window, self;\nconsole.log(\"ran\");\n"}
+{"name": "l12:85", "ext": "js", "source": "var a; delete a; delete a.b; delete (a); delete a?.b; delete this; delete 1; delete void 0; delete (a, a);\nconsole.log(\"ran\");\n"}
+{"name": "l12:86", "ext": "js", "source": "var o = { 010: 1, 0x10: 2, 1e3: 3, .5: 4, 5.: 5, 08: 6, 1n: 7, \"a\": 8, 0b1: 9, 0o7: 10 }; class A { 010() {} static 08 = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:87", "ext": "js", "source": "var a = 010 + 08 + 09.5 + 0777 + 00 + 0.5 + 07.e1;\nconsole.log(\"ran\");\n"}
+{"name": "l12:88", "ext": "js", "source": "var a = 07.5;\nconsole.log(\"ran\");\n"}
+{"name": "l12:89", "ext": "js", "source": "var a = 0789.5 + 089e1 + 09.toString().length + 08.5.toFixed().length;\nconsole.log(\"ran\");\n"}
+{"name": "l12:90", "ext": "js", "source": "var s = \"\\0\\1\\7\\00\\07\\000\\377\\400\\8\\9\\08\\018\";\nconsole.log(\"ran\");\n"}
+{"name": "l12:91", "ext": "js", "source": "function f() { \"\\1\"; } function g() { \"use strict\"; } function h() { \"\\0\"; \"use strict\"; \"\\x00\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:92", "ext": "js", "source": "function f() { \"\\8\"; \"use strict\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:93", "ext": "js", "source": "function f() { \"use strict\"; \"\\8\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:94", "ext": "js", "source": "function f() { 'use strict'; \"\\0\"; '\\x00'; \"\\u0000\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l12:95", "ext": "js", "source": "function f() { \"a\"; \"\\07\"; 'use strict'; }\nconsole.log(\"ran\");\n"}
+{"name": "l13:1", "ext": "js", "source": "{ function f(){} } var f;\nconsole.log(\"ran\");\n"}
+{"name": "l13:2", "ext": "js", "source": "{ function g(){} } let g;\nconsole.log(\"ran\");\n"}
+{"name": "l13:3", "ext": "js", "source": "let h; { function h(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l13:4", "ext": "js", "source": "{ function g(){} } const g = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l13:5", "ext": "js", "source": "{ function g(){} } class g {}\nconsole.log(\"ran\");\n"}
+{"name": "l13:6", "ext": "js", "source": "if (1) function g(){} let g;\nconsole.log(\"ran\");\n"}
+{"name": "l13:7", "ext": "js", "source": "switch (0) { case 0: function g(){} } let g;\nconsole.log(\"ran\");\n"}
+{"name": "l13:8", "ext": "js", "source": "{ { function g(){} } } let g;\nconsole.log(\"ran\");\n"}
+{"name": "l13:9", "ext": "js", "source": "function o() { { function g(){} } let g; return g; } console.log(o());\nconsole.log(\"ran\");\n"}
+{"name": "l13:10", "ext": "js", "source": "{ function g(){ return 1; } } let g = 2; console.log(g);\nconsole.log(\"ran\");\n"}
+{"name": "l13:11", "ext": "js", "source": "{ function g(){} } { let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l13:12", "ext": "js", "source": "var o = { 010: 1, 08: 6 };\nconsole.log(\"ran\");\n"}
+{"name": "l13:13", "ext": "js", "source": "var o = { 0x10: 2, 1e3: 3, .5: 4, 5.: 5, 1n: 7, \"a\": 8, 0b1: 9, 0o7: 10 };\nconsole.log(\"ran\");\n"}
+{"name": "l13:14", "ext": "js", "source": "class A { 010() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l13:15", "ext": "js", "source": "class A { static 08 = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l13:16", "ext": "js", "source": "class A { 0x10() {} 1e3() {} .5() {} 1n() {} 0b1() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l13:17", "ext": "js", "source": "var o = { 010() {}, get 011() {}, set 012(v) {}, 013: 1, [014]: 2 }; console.log(Object.keys(o).join());\nconsole.log(\"ran\");\n"}
+{"name": "l13:18", "ext": "js", "source": "var { 010: a } = { 8: 1 }; console.log(a);\nconsole.log(\"ran\");\n"}
+{"name": "l13:19", "ext": "js", "source": "var a; ({ 010: a } = { 8: 2 }); console.log(a);\nconsole.log(\"ran\");\n"}
+{"name": "l13:20", "ext": "js", "source": "function f() { \"use strict\"; var o = { 010: 1 }; }\nconsole.log(\"ran\");\n"}
+{"name": "l13:21", "ext": "js", "source": "var o = { 08: 1, 09.5: 2 }; console.log(Object.keys(o).join());\nconsole.log(\"ran\");\n"}
+{"name": "l13:22", "ext": "js", "source": "var o = { 1_0: 1 }; console.log(Object.keys(o).join());\nconsole.log(\"ran\");\n"}
+{"name": "l14:1", "ext": "js", "source": "{ { function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:2", "ext": "js", "source": "{ function g(){} } let [g] = [1];\nconsole.log(\"ran\");\n"}
+{"name": "l14:3", "ext": "js", "source": "{ function g(){} } for (let g of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l14:4", "ext": "js", "source": "{ function g(){} } try {} catch (g) {}\nconsole.log(\"ran\");\n"}
+{"name": "l14:5", "ext": "js", "source": "function o(g) { { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:6", "ext": "js", "source": "function o() { { function g(){} } let h; var g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:7", "ext": "js", "source": "var o = () => { { function g(){} } let g; };\nconsole.log(\"ran\");\n"}
+{"name": "l14:8", "ext": "js", "source": "class A { m() { { function g(){} } let g; } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:9", "ext": "js", "source": "class A { static { { function g(){} } let g; } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:10", "ext": "js", "source": "\"use strict\"; { function g(){} } let g;\nconsole.log(\"ran\");\n"}
+{"name": "l14:11", "ext": "js", "source": "function o() { \"use strict\"; { function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:12", "ext": "js", "source": "{ function g(){} } import(\"x\").catch(() => 0); let g;\nconsole.log(\"ran\");\n"}
+{"name": "l14:13", "ext": "js", "source": "function o() { if (1) { function g(){} } const g = 1; return g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:14", "ext": "js", "source": "function o() { try { function g(){} } catch (e) {} let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:15", "ext": "js", "source": "function o() { for (;0;) { function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:16", "ext": "js", "source": "function o() { switch (0) { default: function g(){} } class g {} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:17", "ext": "js", "source": "function o() { l: { function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:18", "ext": "js", "source": "function o() { { function g(){} } { function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:19", "ext": "js", "source": "function o() { { function g(){} function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:20", "ext": "js", "source": "function o() { { async function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:21", "ext": "js", "source": "function o() { { function* g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:22", "ext": "js", "source": "function o() { { class g {} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:23", "ext": "js", "source": "function o() { let g; { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:24", "ext": "js", "source": "function o() { { function g(){} } var g; let h; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:25", "ext": "js", "source": "function o() { { function g(){} } function g(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:26", "ext": "js", "source": "function o() { function g(){} { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:27", "ext": "js", "source": "function o(a = () => g) { { function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:28", "ext": "js", "source": "{ function arguments(){} } \nconsole.log(\"ran\");\n"}
+{"name": "l14:29", "ext": "js", "source": "function o() { { function arguments(){} } let x; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:30", "ext": "js", "source": "{ function g(){} } { { let g; { function g(){} } } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:31", "ext": "js", "source": "{ let g; { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:32", "ext": "js", "source": "{ let g; { { function g(){} } } } var h;\nconsole.log(\"ran\");\n"}
+{"name": "l14:33", "ext": "js", "source": "{ const g = 1; { function g(){} } } \nconsole.log(\"ran\");\n"}
+{"name": "l14:34", "ext": "js", "source": "for (let g;0;) { { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:35", "ext": "js", "source": "for (let g;0;) { function g(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:36", "ext": "js", "source": "for (let g of []) { function g(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:37", "ext": "js", "source": "for (let g in {}) { { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:38", "ext": "js", "source": "try {} catch (g) { { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:39", "ext": "js", "source": "try {} catch ({ g }) { { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:40", "ext": "js", "source": "try {} catch ([g]) { { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:41", "ext": "js", "source": "try {} catch ({ g }) { function g(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:42", "ext": "js", "source": "switch (0) { case 0: let g; { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:43", "ext": "js", "source": "{ function g(){} } var g; { let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:44", "ext": "js", "source": "{ function g(){} } { var g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:45", "ext": "js", "source": "{ { function g(){} } var g; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:46", "ext": "js", "source": "{ var g; { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:47", "ext": "js", "source": "{ { var g; } { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:48", "ext": "js", "source": "if (1) { function g(){} } else { function g(){} } var g; function g(){}\nconsole.log(\"ran\");\n"}
+{"name": "l14:49", "ext": "js", "source": "class A { \"\\01\"() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:50", "ext": "js", "source": "class A { static \"\\8\" = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:51", "ext": "js", "source": "class A { m() { return \"\\01\"; } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:52", "ext": "js", "source": "class A { [010]() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:53", "ext": "js", "source": "class A { 08() {} 09.5() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:54", "ext": "js", "source": "class A { m(a = 010) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:55", "ext": "js", "source": "class A extends (010, Object) {}\nconsole.log(\"ran\");\n"}
+{"name": "l14:56", "ext": "js", "source": "var o = { m() { \"use strict\"; }, 010: 1 };\nconsole.log(\"ran\");\n"}
+{"name": "l14:57", "ext": "js", "source": "function f() { \"use strict\"; class A { 010() {} } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:58", "ext": "js", "source": "function f() { \"use strict\"; return { 010: 1 }; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:59", "ext": "js", "source": "function f() { \"use strict\"; return { 08: 1 }; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:60", "ext": "js", "source": "class A { static { var o = { 010: 1 }; } }\nconsole.log(\"ran\");\n"}
+{"name": "l14:61", "ext": "js", "source": "class A { x = { 010: 1 }; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:62", "ext": "js", "source": "class A { x = 010; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:63", "ext": "js", "source": "class A { static 010 = 010; }\nconsole.log(\"ran\");\n"}
+{"name": "l14:64", "ext": "js", "source": "class A { get 010() {} set 010(v) {} static async *010() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:65", "ext": "js", "source": "class A { 0_1() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l14:66", "ext": "js", "source": "class A { 0x1_0() {} 1_0() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l15:1", "ext": "js", "source": "class A { x = () => 010; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:2", "ext": "js", "source": "class A { x = function () { return 010; }; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:3", "ext": "js", "source": "class A { static { (() => 010)(); } }\nconsole.log(\"ran\");\n"}
+{"name": "l15:4", "ext": "js", "source": "class B { m() { return class { x = 010; }; } }\nconsole.log(\"ran\");\n"}
+{"name": "l15:5", "ext": "js", "source": "\"use strict\"; class A { x = 010; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:6", "ext": "js", "source": "function f() { \"use strict\"; class A { x = 010; } }\nconsole.log(\"ran\");\n"}
+{"name": "l15:7", "ext": "js", "source": "class A { x = \"\\8\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:8", "ext": "js", "source": "class A { x = 08; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:9", "ext": "js", "source": "class A extends (function () { return 010, Object; })() {}\nconsole.log(\"ran\");\n"}
+{"name": "l15:10", "ext": "js", "source": "var C = class { x = 010; };\nconsole.log(\"ran\");\n"}
+{"name": "l15:11", "ext": "js", "source": "class A { x = { get y() { return 010; } }; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:12", "ext": "js", "source": "class A { x = 010; } function g() { \"use strict\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:13", "ext": "js", "source": "function h() { class A { x = 010; } }\nconsole.log(\"ran\");\n"}
+{"name": "l15:14", "ext": "js", "source": "class A { static x = \"\\01\"; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:15", "ext": "js", "source": "class A { [\"\\01\"] = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:16", "ext": "js", "source": "class A { [`${010}`] = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:17", "ext": "js", "source": "class A { static { 010; } }\nconsole.log(\"ran\");\n"}
+{"name": "l15:18", "ext": "js", "source": "class A { x = (010); }\nconsole.log(\"ran\");\n"}
+{"name": "l15:19", "ext": "js", "source": "class A { x = class extends (010, Object) {}; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:20", "ext": "js", "source": "/(?<a>x)|(?<a>y)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:21", "ext": "js", "source": "/(?i:a)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:22", "ext": "js", "source": "/(?-i:a)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:23", "ext": "js", "source": "/\\p{RGI_Emoji}/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:24", "ext": "js", "source": "/[\\p{L}--\\p{N}]/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:25", "ext": "js", "source": "/\\k<a>/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:26", "ext": "js", "source": "/\\k<a>(?<a>x)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:27", "ext": "js", "source": "/{/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:28", "ext": "js", "source": "/}/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:29", "ext": "js", "source": "/]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:30", "ext": "js", "source": "/a{/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:31", "ext": "js", "source": "/\\c/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:32", "ext": "js", "source": "/[\\c]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:33", "ext": "js", "source": "/\\8/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:34", "ext": "js", "source": "/\\u{110000}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:35", "ext": "js", "source": "/[a-\\d]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:36", "ext": "js", "source": "/[a-\\d]/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:37", "ext": "js", "source": "/(?=a)*/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:38", "ext": "js", "source": "/(?=a)*/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:39", "ext": "js", "source": "/(?<=a)*/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:40", "ext": "js", "source": "/a{2,1}/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:41", "ext": "js", "source": "/x{99999999999}/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:42", "ext": "js", "source": "/[\\d-a]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:43", "ext": "js", "source": "/\\-/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:44", "ext": "js", "source": "/\\-/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:45", "ext": "js", "source": "/(?<a>.)\\k<b>/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:46", "ext": "js", "source": "/\\p{Script=Greek}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:47", "ext": "js", "source": "/\\p{Script=Foo}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:48", "ext": "js", "source": "/[^\\p{RGI_Emoji}]/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:49", "ext": "js", "source": "/\\q{abc}/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:50", "ext": "js", "source": "/[\\q{abc}]/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:51", "ext": "js", "source": "/(?:)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:52", "ext": "js", "source": "/[]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:53", "ext": "js", "source": "/[^]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:54", "ext": "js", "source": "/\\1(a)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:55", "ext": "js", "source": "/\\2(a)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:56", "ext": "js", "source": "/\\2(a)/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:57", "ext": "js", "source": "/(?<a>a)\\k<a>/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:58", "ext": "js", "source": "/(?<$>a)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:59", "ext": "js", "source": "/(?<a1>a)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:60", "ext": "js", "source": "/(?<1a>a)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:61", "ext": "js", "source": "/[z-a]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:62", "ext": "js", "source": "/a**/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:63", "ext": "js", "source": "/a??/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:64", "ext": "js", "source": "/a+?/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:65", "ext": "js", "source": "/(?<a>.)(?<a>.)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:66", "ext": "js", "source": "/(?<a>.)|(?<a>.)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:67", "ext": "js", "source": "/(?<a>.)(?:(?<a>.)|b)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:68", "ext": "js", "source": "/\\p{L}/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:69", "ext": "js", "source": "/\\P{L}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:70", "ext": "js", "source": "/[\\p{L}]/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:71", "ext": "js", "source": "/\\u{12}/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:72", "ext": "js", "source": "/\\u{12}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:73", "ext": "js", "source": "/\\x/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:74", "ext": "js", "source": "/\\x/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:75", "ext": "js", "source": "/\\u12/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:76", "ext": "js", "source": "/\\u12/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:77", "ext": "js", "source": "/(/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:78", "ext": "js", "source": "/)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:79", "ext": "js", "source": "/[/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:80", "ext": "js", "source": "/a|*/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:81", "ext": "js", "source": "/^*/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:82", "ext": "js", "source": "/$+/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:83", "ext": "js", "source": "/\\b+/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:84", "ext": "js", "source": "/\\b+/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:85", "ext": "js", "source": "/(?!a)+/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:86", "ext": "js", "source": "/(?!a)+/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:87", "ext": "js", "source": "/[\\b]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:88", "ext": "js", "source": "/[\\B]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:89", "ext": "js", "source": "/[\\B]/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:90", "ext": "js", "source": "/\\B/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:91", "ext": "js", "source": "/\\a/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:92", "ext": "js", "source": "/\\a/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:93", "ext": "js", "source": "/[--a]/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:94", "ext": "js", "source": "/[a&&&b]/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:95", "ext": "js", "source": "/[(]/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:96", "ext": "js", "source": "/[a&&b]/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:97", "ext": "js", "source": "/(?<a>.)\\k<a>/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:98", "ext": "js", "source": "/\\0/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:99", "ext": "js", "source": "/\\00/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:100", "ext": "js", "source": "/\\00/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:101", "ext": "js", "source": "/[\\00]/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:102", "ext": "js", "source": "/\\cA/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:103", "ext": "js", "source": "/\\c1/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:104", "ext": "js", "source": "/[\\c1]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:105", "ext": "js", "source": "/\\p/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:106", "ext": "js", "source": "/\\p/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:107", "ext": "js", "source": "/\\p{}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:108", "ext": "js", "source": "/\\p{L/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:109", "ext": "js", "source": "/\\p{General_Category=Letter}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:110", "ext": "js", "source": "/\\p{gc=L}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:111", "ext": "js", "source": "/\\p{Basic_Emoji}/v;\nconsole.log(\"ran\");\n"}
+{"name": "l15:112", "ext": "js", "source": "/\\p{Basic_Emoji}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:113", "ext": "js", "source": "/\\u{1F600}/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:114", "ext": "js", "source": "/[\\u{1F600}-\\u{1F64F}]/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:115", "ext": "js", "source": "/[\\uD83D\\uDE00-\\uD83D\\uDE4F]/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:116", "ext": "js", "source": "/[\ud83d\ude00-\ud83d\ude0f]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:117", "ext": "js", "source": "/[\ud83d\ude0f-\ud83d\ude00]/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:118", "ext": "js", "source": "/[\ud83d\ude0f-\ud83d\ude00]/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:119", "ext": "js", "source": "/(?<\ud835\udc9c>.)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:120", "ext": "js", "source": "/(?<\\u{1d49c}>.)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:121", "ext": "js", "source": "/(?<\\ud835\\udc9c>.)/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:122", "ext": "js", "source": "/(?<\\u{1d49c}>.)/u;\nconsole.log(\"ran\");\n"}
+{"name": "l15:123", "ext": "js", "source": "[(a)] = [1];\nconsole.log(\"ran\");\n"}
+{"name": "l15:124", "ext": "js", "source": "var a; ({a: (b)} = {});\nconsole.log(\"ran\");\n"}
+{"name": "l15:125", "ext": "js", "source": "var a = {}; ({a: (a.c)} = {});\nconsole.log(\"ran\");\n"}
+{"name": "l15:126", "ext": "js", "source": "var a = {}; [(a.b)] = [1];\nconsole.log(\"ran\");\n"}
+{"name": "l15:127", "ext": "js", "source": "var a; [(a = 1)] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l15:128", "ext": "js", "source": "var a; [(a) = 1] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l15:129", "ext": "js", "source": "var a; ((a)) = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:130", "ext": "js", "source": "var a; (a) = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:131", "ext": "js", "source": "var a; ({a}) = {};\nconsole.log(\"ran\");\n"}
+{"name": "l15:132", "ext": "js", "source": "var a; ([a]) = [];\nconsole.log(\"ran\");\n"}
+{"name": "l15:133", "ext": "js", "source": "((a)) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:134", "ext": "js", "source": "(a, (b)) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:135", "ext": "js", "source": "var a; for ((a) of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:136", "ext": "js", "source": "var a; for (([a]) of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:137", "ext": "js", "source": "var a = {}; for ((a.b) in {x: 1}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:138", "ext": "js", "source": "var a; [...(a)] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l15:139", "ext": "js", "source": "var a; [...(a = 1)] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l15:140", "ext": "js", "source": "async ((a)) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:141", "ext": "js", "source": "var a = 1; (a) += 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:142", "ext": "js", "source": "var a; ([a]) += 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:143", "ext": "js", "source": "var b; ({ a: (b) = 1 } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l15:144", "ext": "js", "source": "var a; ({ ...(a) } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l15:145", "ext": "js", "source": "var a = {}; ({ ...(a.b) } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l15:146", "ext": "js", "source": "((async)) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:147", "ext": "js", "source": "var a; [[(a)]] = [[1]];\nconsole.log(\"ran\");\n"}
+{"name": "l15:148", "ext": "js", "source": "var a; [{ b: (a) }] = [{}];\nconsole.log(\"ran\");\n"}
+{"name": "l15:149", "ext": "js", "source": "var a; ({ a: [(a)] } = { a: [] });\nconsole.log(\"ran\");\n"}
+{"name": "l15:150", "ext": "js", "source": "var a; ({ a: ({ b: a }) } = { a: {} });\nconsole.log(\"ran\");\n"}
+{"name": "l15:151", "ext": "js", "source": "var a; [([a])] = [[]];\nconsole.log(\"ran\");\n"}
+{"name": "l15:152", "ext": "js", "source": "var a; for ([(a)] of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:153", "ext": "js", "source": "var a; for ([(a = 1)] of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:154", "ext": "js", "source": "(a = (b)) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:155", "ext": "js", "source": "(a = [(b)]) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:156", "ext": "js", "source": "var b; (a = ([b] = [])) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:157", "ext": "js", "source": "([a]) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:158", "ext": "js", "source": "({a}) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:159", "ext": "js", "source": "([(a)]) => 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:160", "ext": "js", "source": "function f([(a)]) {}\nconsole.log(\"ran\");\n"}
+{"name": "l15:161", "ext": "js", "source": "var [(a)] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l15:162", "ext": "js", "source": "let [(a)] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l15:163", "ext": "js", "source": "try {} catch ([(a)]) {}\nconsole.log(\"ran\");\n"}
+{"name": "l15:164", "ext": "js", "source": "class A { accessor x = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:165", "ext": "js", "source": "class A { static accessor x = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:166", "ext": "js", "source": "class A { accessor = 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:167", "ext": "js", "source": "class A { accessor() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l15:168", "ext": "js", "source": "var accessor = 1; console.log(accessor);\nconsole.log(\"ran\");\n"}
+{"name": "l15:169", "ext": "js", "source": "@dec class A {}\nconsole.log(\"ran\");\n"}
+{"name": "l15:170", "ext": "js", "source": "class A { @dec m() {} }\nconsole.log(\"ran\");\n"}
+{"name": "l15:171", "ext": "js", "source": "var x = @dec class {};\nconsole.log(\"ran\");\n"}
+{"name": "l15:172", "ext": "mjs", "source": "import defer * as x from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l15:173", "ext": "mjs", "source": "import source x from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l15:174", "ext": "mjs", "source": "import x from \"node:fs\" assert { type: \"json\" };\nconsole.log(\"ran\");\n"}
+{"name": "l15:175", "ext": "mjs", "source": "import x from \"node:fs\" with { type: \"json\" };\nconsole.log(\"ran\");\n"}
+{"name": "l15:176", "ext": "mjs", "source": "export * from \"node:fs\" assert { type: \"json\" };\nconsole.log(\"ran\");\n"}
+{"name": "l15:177", "ext": "js", "source": "import(\"node:fs\", { with: {} });\nconsole.log(\"ran\");\n"}
+{"name": "l15:178", "ext": "js", "source": "import(\"node:fs\", { assert: {} });\nconsole.log(\"ran\");\n"}
+{"name": "l15:179", "ext": "js", "source": "import.defer(\"node:fs\");\nconsole.log(\"ran\");\n"}
+{"name": "l15:180", "ext": "js", "source": "import.source(\"node:fs\");\nconsole.log(\"ran\");\n"}
+{"name": "l15:181", "ext": "js", "source": "using x = null;\nconsole.log(\"ran\");\n"}
+{"name": "l15:182", "ext": "js", "source": "{ using x = null; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:183", "ext": "mjs", "source": "await using x = null;\nconsole.log(\"ran\");\n"}
+{"name": "l15:184", "ext": "js", "source": "for (using x of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:185", "ext": "js", "source": "var using = 1; using;\nconsole.log(\"ran\");\n"}
+{"name": "l15:186", "ext": "js", "source": "var using = [1]; using[0];\nconsole.log(\"ran\");\n"}
+{"name": "l15:187", "ext": "js", "source": "var using; for (using of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:188", "ext": "js", "source": "var await = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:189", "ext": "mjs", "source": "var a = 1, b = 5; a<!--b\nconsole.log(\"ran\");\n"}
+{"name": "l15:190", "ext": "js", "source": "var a = 1, b = 5; a<!--b\nconsole.log(\"ran\");\n"}
+{"name": "l15:191", "ext": "mjs", "source": "var a = 1, b = 5; a < !--b;\nconsole.log(\"ran\");\n"}
+{"name": "l15:192", "ext": "mjs", "source": "var a = 3; a-->0;\nconsole.log(\"ran\");\n"}
+{"name": "l15:193", "ext": "mjs", "source": "var a = 3;\n-->0\nconsole.log(\"ran\");\n"}
+{"name": "l15:194", "ext": "js", "source": "var a = 3;\n-->0\nconsole.log(\"ran\");\n"}
+{"name": "l15:195", "ext": "mjs", "source": "var s = \"<!--\";\nconsole.log(\"ran\");\n"}
+{"name": "l15:196", "ext": "mjs", "source": "var s = `<!--`;\nconsole.log(\"ran\");\n"}
+{"name": "l15:197", "ext": "mjs", "source": "var r = /<!--/;\nconsole.log(\"ran\");\n"}
+{"name": "l15:198", "ext": "mjs", "source": "// <!--\nconsole.log(\"ran\");\n"}
+{"name": "l15:199", "ext": "mjs", "source": "/* <!-- */\nconsole.log(\"ran\");\n"}
+{"name": "l15:200", "ext": "mjs", "source": "export {}; <!-- x\nconsole.log(\"ran\");\n"}
+{"name": "l15:201", "ext": "js", "source": "<!-- x\nconsole.log(\"ran\");\n"}
+{"name": "l15:202", "ext": "js", "source": "var a = 1, b = 5; var c = (a<!--b);\nconsole.log(\"ran\");\n"}
+{"name": "l15:203", "ext": "js", "source": "let exports; var a = 1, b = 5; a<!--b\n;\nconsole.log(\"ran\");\n"}
+{"name": "l15:204", "ext": "js", "source": "var a = 1, b = 5; await 0; a<!--b\n;\nconsole.log(\"ran\");\n"}
+{"name": "l15:205", "ext": "js", "source": "var a = 1, b = 5; import.meta; a<!--b\n;\nconsole.log(\"ran\");\n"}
+{"name": "l15:206", "ext": "cjs", "source": "const exports = 0;\nconsole.log(\"ran\");\n"}
+{"name": "l15:207", "ext": "cjs", "source": "await 0;\nconsole.log(\"ran\");\n"}
+{"name": "l15:208", "ext": "cjs", "source": "import.meta;\nconsole.log(\"ran\");\n"}
+{"name": "l15:209", "ext": "cjs", "source": "export {};\nconsole.log(\"ran\");\n"}
+{"name": "l15:210", "ext": "cjs", "source": "let module = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:211", "ext": "cjs", "source": "var exports = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:212", "ext": "cjs", "source": "class require {}\nconsole.log(\"ran\");\n"}
+{"name": "l15:213", "ext": "js", "source": "function f() {} if (0) f() = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:214", "ext": "js", "source": "function f() {} if (0) f()++;\nconsole.log(\"ran\");\n"}
+{"name": "l15:215", "ext": "js", "source": "function f() {} if (0) ++f();\nconsole.log(\"ran\");\n"}
+{"name": "l15:216", "ext": "js", "source": "function f() {} if (0) f() += 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:217", "ext": "js", "source": "function f() {} if (0) (f()) = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:218", "ext": "js", "source": "function f() {} if (0) for (f() in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:219", "ext": "js", "source": "function f() {} if (0) for (f() of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:220", "ext": "js", "source": "function f() {} if (0) [f()] = [];\nconsole.log(\"ran\");\n"}
+{"name": "l15:221", "ext": "js", "source": "function f() {} if (0) f() &&= 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:222", "ext": "js", "source": "function f() {} if (0) f() ||= 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:223", "ext": "js", "source": "function f() {} if (0) f() ??= 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:224", "ext": "js", "source": "function f() {} if (0) ({ a: f() } = {});\nconsole.log(\"ran\");\n"}
+{"name": "l15:225", "ext": "js", "source": "function f() {} if (0) f()--;\nconsole.log(\"ran\");\n"}
+{"name": "l15:226", "ext": "js", "source": "function f() {} if (0) --f();\nconsole.log(\"ran\");\n"}
+{"name": "l15:227", "ext": "js", "source": "function f() {} if (0) f() **= 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:228", "ext": "js", "source": "\"use strict\"; function f() {} if (0) f() = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:229", "ext": "js", "source": "function f() {} if (0) new f() = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:230", "ext": "js", "source": "function f() {} if (0) f()\n= 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:231", "ext": "js", "source": "function f() {} if (0) f().x = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:232", "ext": "js", "source": "var o = {f() { return {}; }}; if (0) o.f() = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:233", "ext": "js", "source": "function f() {} if (0) f()() = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:234", "ext": "js", "source": "function f() {} if (0) f`` = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:235", "ext": "js", "source": "function f() {} if (0) f?.() = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:236", "ext": "js", "source": "var yield; for (yield of [1, 2]) console.log(yield);\nconsole.log(\"ran\");\n"}
+{"name": "l15:237", "ext": "js", "source": "var yield; for (yield in {a: 1}) console.log(yield);\nconsole.log(\"ran\");\n"}
+{"name": "l15:238", "ext": "js", "source": "function* g() { for (yield of []) ; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:239", "ext": "js", "source": "var yield = 1; yield;\nconsole.log(\"ran\");\n"}
+{"name": "l15:240", "ext": "js", "source": "yield 1;\nconsole.log(\"ran\");\n"}
+{"name": "l15:241", "ext": "js", "source": "function f() { yield 1; }\nconsole.log(\"ran\");\n"}
+{"name": "l15:242", "ext": "js", "source": "var yield; for ((yield) of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l15:243", "ext": "js", "source": "var yield; [yield] = [1];\nconsole.log(\"ran\");\n"}
+{"name": "l16:1", "ext": "mjs", "source": "export { zz };\nconsole.log(\"ran\");\n"}
+{"name": "l16:2", "ext": "mjs", "source": "export { zz as default };\nconsole.log(\"ran\");\n"}
+{"name": "l16:3", "ext": "js", "source": "class A { static { for await (x of []) ; } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:4", "ext": "js", "source": "async function f() { class A { static { for await (x of []) ; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:5", "ext": "js", "source": "class A { get #a() {} static set #a(v) {} }\nconsole.log(\"ran\");\n"}
+{"name": "l16:6", "ext": "js", "source": "class A { #a; static #a; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:7", "ext": "js", "source": "class A { static #a() {} #a; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:8", "ext": "mjs", "source": "export class {}\nconsole.log(\"ran\");\n"}
+{"name": "l16:9", "ext": "js", "source": "class {}\nconsole.log(\"ran\");\n"}
+{"name": "l16:10", "ext": "mjs", "source": "export default class {}\nconsole.log(\"ran\");\n"}
+{"name": "l16:11", "ext": "mjs", "source": "class A { static { await using x = null; } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:12", "ext": "js", "source": "function f() { class A { static { await using x = null; } } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:13", "ext": "mjs", "source": "export { x }; var x;\nconsole.log(\"ran\");\n"}
+{"name": "l16:14", "ext": "mjs", "source": "export { x }; function x() {}\nconsole.log(\"ran\");\n"}
+{"name": "l16:15", "ext": "mjs", "source": "export { x }; import x from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "l16:16", "ext": "mjs", "source": "export { x as y, x as z }; var x;\nconsole.log(\"ran\");\n"}
+{"name": "l16:17", "ext": "mjs", "source": "export { x as y, z as y }; var x, z;\nconsole.log(\"ran\");\n"}
+{"name": "l16:18", "ext": "js", "source": "{ function g() { return \"fn\"; } var g; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:19", "ext": "js", "source": "{ function g(){} let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:20", "ext": "js", "source": "{ { function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:21", "ext": "js", "source": "function f() { { function g(){} } let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:22", "ext": "js", "source": "{ function g(){} } const g = 1;\nconsole.log(\"ran\");\n"}
+{"name": "l16:23", "ext": "js", "source": "{ function g(){} } class g {}\nconsole.log(\"ran\");\n"}
+{"name": "l16:24", "ext": "js", "source": "{ function g(){} } var g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:25", "ext": "js", "source": "{ { function g(){} } var g; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:26", "ext": "js", "source": "{ function g(){} } { var g; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:27", "ext": "js", "source": "{ function g(){} } { let g; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:28", "ext": "js", "source": "{ function g(){} } { { var g; } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:29", "ext": "js", "source": "{ function g(){} } for (var g of []) ;\nconsole.log(\"ran\");\n"}
+{"name": "l16:30", "ext": "js", "source": "{ function g(){} } for (var g in {}) ;\nconsole.log(\"ran\");\n"}
+{"name": "l16:31", "ext": "js", "source": "{ function g(){} } try {} catch (g) {}\nconsole.log(\"ran\");\n"}
+{"name": "l16:32", "ext": "js", "source": "{ function g(){} } try {} catch (g) { var g; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:33", "ext": "js", "source": "try {} catch (g) { { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:34", "ext": "js", "source": "try {} catch ([g]) { { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:35", "ext": "js", "source": "switch (1) { case 1: function g(){} } var g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:36", "ext": "js", "source": "switch (1) { case 1: function g(){} } let g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:37", "ext": "js", "source": "{ function g(){} } { function g(){} } let g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:38", "ext": "js", "source": "{ function g(){} function g(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l16:39", "ext": "js", "source": "{ function g(){} async function g(){} }\nconsole.log(\"ran\");\n"}
+{"name": "l16:40", "ext": "js", "source": "{ function* g(){} } var g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:41", "ext": "js", "source": "{ async function g(){} } let g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:42", "ext": "js", "source": "{ async function g(){} } { var g; }\nconsole.log(\"ran\");\n"}
+{"name": "l16:43", "ext": "js", "source": "l: function g(){} var g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:44", "ext": "js", "source": "if (1) function g(){} let g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:45", "ext": "js", "source": "if (1) function g(){} var g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:46", "ext": "js", "source": "if (1) { function g(){} } let g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:47", "ext": "js", "source": "var f = function () { { function g(){} } let g; };\nconsole.log(\"ran\");\n"}
+{"name": "l16:48", "ext": "js", "source": "var f = () => { { function g(){} } { var g; } };\nconsole.log(\"ran\");\n"}
+{"name": "l16:49", "ext": "js", "source": "class A { m() { { function g(){} } let g; } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:50", "ext": "js", "source": "function f(g) { { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:51", "ext": "js", "source": "function f() { var g; { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:52", "ext": "js", "source": "function f() { let g; { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:53", "ext": "js", "source": "function f() { { function g(){} } { let g; } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:54", "ext": "js", "source": "{ let g; { function g(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:55", "ext": "js", "source": "{ { function g(){} } { let g; } }\nconsole.log(\"ran\");\n"}
+{"name": "l16:56", "ext": "js", "source": "{ function g(){} } function g(){}\nconsole.log(\"ran\");\n"}
+{"name": "l16:57", "ext": "js", "source": "{ function g(){} } function* g(){}\nconsole.log(\"ran\");\n"}
+{"name": "l16:58", "ext": "js", "source": "{ function* g(){} } function g(){}\nconsole.log(\"ran\");\n"}
+{"name": "l16:59", "ext": "js", "source": "let g; { function g(){} } console.log(typeof g);\nconsole.log(\"ran\");\n"}
+{"name": "l16:60", "ext": "js", "source": "{ function g(){} } let g = 1; console.log(g);\nconsole.log(\"ran\");\n"}
+{"name": "l16:61", "ext": "js", "source": "{ function g(){} } let g = 1; g = 2;\nconsole.log(\"ran\");\n"}
+{"name": "l16:62", "ext": "js", "source": "\"use strict\"; { function g(){} } let g;\nconsole.log(\"ran\");\n"}
+{"name": "l16:63", "ext": "js", "source": "{ function g(){} } var g = 1; console.log(g);\nconsole.log(\"ran\");\n"}

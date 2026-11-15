@@ -310,7 +310,7 @@ const FUNCTION_HEADS: [&str; 4] = ["function", "async function", "function*", "a
 
 fn has_early_errors(form: &str) -> bool {
     crate::proof::with_parsed_text(form, |program| {
-        !untwist_core::parse::early_errors(program).is_empty()
+        !untwist_core::parse::early_errors(program).is_clean()
     })
     .flatten()
     .unwrap_or(false)

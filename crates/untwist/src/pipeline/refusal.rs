@@ -55,6 +55,14 @@ pub const TYPESCRIPT_IN_JAVASCRIPT: &str = "this input uses TypeScript syntax th
 pub const SYNTAX_ERROR_REFUSED: &str = "node rejects this input with a SyntaxError before any \
      of it runs; it is passed through unchanged";
 
+pub const PARSE_UNSUPPORTED: &str = "untwist's parser does not read this input (node may run \
+     it: oxc rejects a call as an assignment target and `yield` as the target of a for-of loop, \
+     and reads nothing after a parse error); it is passed through unchanged";
+
+pub const ANNEX_B_UNMODELLED: &str = "this input declares a function directly in an `if` beside \
+     a same-named lexical declaration, whose scope untwist's binder does not model; it is passed \
+     through unchanged";
+
 pub const WORKER_DIED: &str = "processing this input stopped the worker process, which ran out \
      of stack or memory; it is passed through unchanged";
 
@@ -76,12 +84,14 @@ const MIB: u64 = 1 << 20;
 
 const ADMIT_PANIC_HOOK: &str = "a test hook panicked in admit";
 
-const INPUT_REFUSALS: [&str; 10] = [
+const INPUT_REFUSALS: [&str; 12] = [
     NESTED_TOO_DEEP,
     PARENTHESES_TOO_DEEP,
     PRINT_TOO_LARGE,
     TYPESCRIPT_IN_JAVASCRIPT,
     SYNTAX_ERROR_REFUSED,
+    PARSE_UNSUPPORTED,
+    ANNEX_B_UNMODELLED,
     WORKER_DIED,
     OVER_MEMORY_REFUSED,
     OVER_TIME_REFUSED,
@@ -141,10 +151,11 @@ impl InputResult {
     }
 
     pub(super) fn refused_for_syntax(self, source: &str) -> Self {
+        let note = self.parse_refusal.unwrap_or(SYNTAX_ERROR_REFUSED);
         InputResult {
             parse_diagnostics: self.parse_diagnostics,
             parse_errors: self.parse_errors,
-            ..InputResult::refused(source, SYNTAX_ERROR_REFUSED)
+            ..InputResult::refused(source, note)
         }
     }
 }

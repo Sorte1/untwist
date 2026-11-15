@@ -8,10 +8,12 @@ use untwist_deobfuscate::notes;
 use untwist_deobfuscate::PROTECTIONS_ORDER;
 
 pub use super::refusal::ADMIT_PANICKED;
+pub use super::refusal::ANNEX_B_UNMODELLED;
 pub use super::refusal::NESTED_TOO_DEEP;
 pub use super::refusal::OVER_MEMORY_REFUSED;
 pub use super::refusal::OVER_TIME_REFUSED;
 pub use super::refusal::PARENTHESES_TOO_DEEP;
+pub use super::refusal::PARSE_UNSUPPORTED;
 pub use super::refusal::PRINT_TOO_LARGE;
 pub use super::refusal::SYNTAX_ERROR_REFUSED;
 pub use super::refusal::TOO_LARGE_FOR_THE_BUDGET;
@@ -134,6 +136,8 @@ catalogue!(
     UNPACK_TEXT_TOO_DEEP,
     TYPESCRIPT_IN_JAVASCRIPT,
     SYNTAX_ERROR_REFUSED,
+    PARSE_UNSUPPORTED,
+    ANNEX_B_UNMODELLED,
     WORKER_DIED,
     OVER_MEMORY_REFUSED,
     OVER_TIME_REFUSED,
