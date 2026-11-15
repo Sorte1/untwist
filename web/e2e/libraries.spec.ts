@@ -127,9 +127,10 @@ test('core-js hidden by a string array is found in the output and run again with
 });
 
 test.describe('without the service worker', () => {
-  test.use({ serviceWorkers: 'block' });
-
   test('the run says it is loading tables, and still finishes when a table is broken', async ({ page }) => {
+    await page.addInitScript(() => {
+      delete (Navigator.prototype as { serviceWorker?: unknown }).serviceWorker;
+    });
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => (release = resolve));
     await page.route(TABLE, async (route) => {
