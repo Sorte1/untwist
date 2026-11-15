@@ -227,6 +227,7 @@ fn parsed_reaches(
 
 fn may_hand_out_a_runner(program: &Program<'_>) -> bool {
     untwist_core::ast_util::code_text::may_run_code_text(program, &Scoping::default())
+        && !super::global_text::returns_the_global_object(program)
 }
 
 type Judged = (bool, Vec<String>);

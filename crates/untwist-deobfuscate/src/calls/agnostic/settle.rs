@@ -47,6 +47,13 @@ fn searched<T: Ord>(list: &[T], item: &T) -> bool {
 }
 
 impl Watch<'_> {
+    pub(super) fn runners() -> Self {
+        Self {
+            runner_texts: true,
+            ..Self::default()
+        }
+    }
+
     #[inline(always)]
     pub(super) fn has_name(&self, name: &str) -> bool {
         listed(self.names, &name)
