@@ -190,6 +190,66 @@ pub fn catch_var_declarations(scoping: &Scoping) -> Vec<(ScopeId, SymbolId)> {
         .collect()
 }
 
+pub fn misbound_catch_vars(scoping: &Scoping) -> FxHashSet<SymbolId> {
+    let declared = catch_var_declarations(scoping);
+    if declared.is_empty() {
+        return FxHashSet::default();
+    }
+    let catches = catch_symbols_by_var_scope(scoping);
+    let mut misbound = FxHashSet::default();
+    for (var_scope, symbol) in declared {
+        let name = scoping.symbol_ident(symbol);
+        let conflicting: Vec<SymbolId> = if scoping.symbol_scope_id(symbol) == var_scope {
+            catches
+                .get(&(var_scope, name.as_str()))
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|other| *other != symbol)
+                .collect()
+        } else {
+            match scoping.get_binding(var_scope, name) {
+                Some(binding) if !is_function_expression_name(scoping, binding) => Vec::new(),
+                binding => binding.into_iter().chain([symbol]).collect(),
+            }
+        };
+        if !conflicting.is_empty() {
+            misbound.insert(symbol);
+            misbound.extend(conflicting);
+        }
+    }
+    misbound
+}
+
+fn catch_symbols_by_var_scope(scoping: &Scoping) -> FxHashMap<(ScopeId, &str), Vec<SymbolId>> {
+    let mut catches: FxHashMap<(ScopeId, &str), Vec<SymbolId>> = FxHashMap::default();
+    for symbol in scoping.symbol_ids() {
+        if !scoping
+            .symbol_flags(symbol)
+            .contains(SymbolFlags::CatchVariable)
+        {
+            continue;
+        }
+        let Some(var_scope) = scoping
+            .scope_ancestors(scoping.symbol_scope_id(symbol))
+            .find(|scope| scoping.scope_flags(*scope).is_var())
+        else {
+            continue;
+        };
+        catches
+            .entry((var_scope, scoping.symbol_name(symbol)))
+            .or_default()
+            .push(symbol);
+    }
+    catches
+}
+
+fn is_function_expression_name(scoping: &Scoping, symbol: SymbolId) -> bool {
+    scoping
+        .symbol_flags(symbol)
+        .contains(SymbolFlags::FunctionExpression)
+}
+
 pub fn block_function_symbols(scoping: &Scoping) -> FxHashSet<SymbolId> {
     let in_block: FxHashSet<NodeId> = scoping
         .scope_descendants_from_root()
