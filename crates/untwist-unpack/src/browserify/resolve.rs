@@ -2,13 +2,12 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::number_key;
-use untwist_core::host_globals::NODE_BUILTIN_MODULES;
 
 use crate::browserify::requests::package_name;
+use crate::host_request::{is_builtin, reaches_the_loader};
 use crate::model::{Bundle, Module, RequireParam};
 use crate::path::{dirname_posix, join_posix, RESERVED_FILES};
 
-const NODE_SCHEME: &str = "node:";
 const NODE_MODULES: &str = "node_modules";
 const FILE_EXTENSIONS: [&str; 4] = ["", ".js", ".json", ".node"];
 const INDEX_FILES: [&str; 3] = ["index.js", "index.json", "index.node"];
@@ -38,10 +37,12 @@ impl Written {
             .map(|module| format!("{}{MAP_SUFFIX}", module.path.as_str()));
         let reserved = RESERVED_FILES.iter().map(|name| name.to_string());
         let mirrored = bundle.mirrored_inputs.iter().cloned();
+        let inputs = bundle.input_names.iter().cloned();
         let files = modules
             .chain(maps)
             .chain(reserved)
             .chain(mirrored)
+            .chain(inputs)
             .map(|path| path.to_lowercase())
             .collect();
         Self { files }
@@ -61,10 +62,6 @@ impl Written {
             .map(|name| join_posix(base, name));
         as_file.chain(as_directory).find(|path| self.holds(path))
     }
-}
-
-fn is_builtin(request: &str) -> bool {
-    request.starts_with(NODE_SCHEME) || NODE_BUILTIN_MODULES.contains(&request)
 }
 
 fn is_relative(request: &str) -> bool {
@@ -96,6 +93,9 @@ fn package_bases(directory: &str, request: &str) -> Vec<String> {
 }
 
 fn resolved(written: &Written, from: &str, request: &str) -> Option<String> {
+    if reaches_the_loader(request) {
+        return Some(request.to_string());
+    }
     if is_builtin(request) {
         return None;
     }
@@ -120,7 +120,9 @@ pub fn left_request_reaching(bundle: &Bundle<'_>) -> Option<Reached> {
     bundle.left_requests.iter().find_map(|(id, request)| {
         let from = bundle.path_of(id)?.as_str();
         let path = match request {
-            Some(request) => resolved(&written, from, request)?,
+            Some(request) => std::iter::once(from)
+                .chain(bundle.input_names.iter().map(String::as_str))
+                .find_map(|from| resolved(&written, from, request))?,
             None => from.to_string(),
         };
         Some(Reached {
@@ -258,6 +260,26 @@ mod tests {
         );
         assert_eq!(resolved(&tree, "index.js", "../x"), None);
         assert!(resolved(&tree, "index.js", "/abs").is_some());
+    }
+
+    #[test]
+    fn a_built_in_that_reaches_the_module_loader_always_refuses() {
+        let tree = written(&["index.js"]);
+        for request in ["module", "node:module", "process", "node:process"] {
+            assert!(resolved(&tree, "index.js", request).is_some(), "{request}");
+        }
+        assert_eq!(resolved(&tree, "index.js", "module/x"), None);
+        assert_eq!(resolved(&tree, "index.js", "path"), None);
+    }
+
+    #[test]
+    fn a_package_beside_an_input_is_found_from_the_input_location() {
+        let tree = written(&["index.js", "app/bundle.js", "app/node_modules/foo/index.js"]);
+        assert_eq!(resolved(&tree, "index.js", "foo"), None);
+        assert_eq!(
+            resolved(&tree, "app/bundle.js", "foo").as_deref(),
+            Some("app/node_modules/foo/index.js")
+        );
     }
 
     #[test]

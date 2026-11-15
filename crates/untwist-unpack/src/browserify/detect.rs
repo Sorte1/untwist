@@ -132,17 +132,7 @@ pub(crate) struct ModuleEntry<'k, 'a> {
     pub(crate) repeated: Option<String>,
 }
 
-fn plain_params(params: &FormalParameters<'_>) -> bool {
-    params.rest.is_none()
-        && params.items.iter().all(|item| {
-            item.initializer.is_none()
-                && matches!(item.pattern, BindingPattern::BindingIdentifier(_))
-        })
-}
-
-pub(crate) fn runs_like_a_file(function: &Function<'_>) -> bool {
-    !function.r#async && !function.generator && plain_params(&function.params)
-}
+pub(crate) use crate::matcher::runs_like_a_file;
 
 fn module_entry<'k, 'a>(property: &'k ObjectPropertyKind<'a>) -> Option<ModuleEntry<'k, 'a>> {
     let ObjectPropertyKind::ObjectProperty(property) = property else {
@@ -280,6 +270,7 @@ pub fn browserify_factories<'k, 'a>(
                 params: entry.params,
                 body: entry.body,
                 arrow: false,
+                plain: runs_like_a_file(entry.function),
             };
             Some((entry.id, factory))
         })

@@ -1,7 +1,7 @@
 use oxc_ast::ast::*;
 use untwist_core::ast_util::prop::prop_name;
 
-use crate::matcher::{anonymous_factory, Factory};
+use crate::matcher::{anonymous_factory, runs_like_a_file, Factory};
 
 pub fn is_module_container(expr: &Expression<'_>) -> bool {
     match expr {
@@ -94,6 +94,7 @@ fn object_property_factory<'k, 'a>(
                 params: &function.params,
                 body: function.body.as_deref()?,
                 arrow: false,
+                plain: runs_like_a_file(function),
             },
             _ => return None,
         }

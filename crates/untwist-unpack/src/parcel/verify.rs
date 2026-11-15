@@ -18,6 +18,7 @@ use super::{
     bare, candidates, is_builtin, moved_helpers, resolve, single_string, ENTRY_ID, HOISTED_NAMES,
     INHERITED, REGISTRY_NAMES, REGISTRY_PARAMS,
 };
+use crate::host_request::reaches_the_loader;
 use crate::matcher::{expression_statement, param_names};
 use crate::runtime::{first_unclosed_helper, helper_symbols};
 use crate::scan::{is_direct_eval, receiver_object, Frame, Policy, Scan, Step};
@@ -116,7 +117,7 @@ impl Rules<'_, '_> {
         };
         let builtin = !self.ids.contains(target);
         self.slot |= builtin;
-        (!builtin || (self.builtins && is_builtin(target)))
+        (!builtin || (self.builtins && is_builtin(target) && !reaches_the_loader(target)))
             && self.require_unbound(site, self.require_param)
     }
 

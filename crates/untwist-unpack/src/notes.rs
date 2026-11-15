@@ -32,6 +32,8 @@ pub const DEFERRED_WITH_RUNTIME: &str =
     "starts modules once the runtime loads, which the written files cannot order; no bundle is written";
 pub const DEFERRED_NOT_RUN: &str =
     "starts these modules only after webpack's runtime loads other files";
+pub const HOST_ROUTE: &str =
+    "which node answers from the file that holds it, so the written file would not load what the bundle loads; no bundle is written";
 pub const DUPLICATE_DIFFERS: &str =
     "is defined differently by two inputs and the load order is unknown; no bundle is written";
 
@@ -62,6 +64,7 @@ catalogue!(
     DEFERRED_WITH_RUNTIME,
     DEFERRED_NOT_RUN,
     DUPLICATE_DIFFERS,
+    HOST_ROUTE,
 );
 
 macro_rules! kind_notes {
@@ -176,6 +179,10 @@ pub fn module_syntax_written(file: impl Display, what: impl Display) -> String {
     format!(
         "{file} would be written with {what}, which node runs only in an ES module and the written file cannot keep as the input had it; no bundle is written"
     )
+}
+
+pub fn host_route(id: impl Display, what: impl Display) -> String {
+    format!("module {id} uses {what}, {HOST_ROUTE}")
 }
 
 pub fn eval_name_rebound(id: impl Display) -> String {

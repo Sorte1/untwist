@@ -157,6 +157,7 @@ pub struct Bundle<'a> {
     pub deferred: Vec<String>,
     pub inputs: Vec<usize>,
     pub mirrored_inputs: Vec<String>,
+    pub input_names: Vec<String>,
     pub installed_chunks: Vec<String>,
     pub chunk_modules: Vec<String>,
     pub startup_chunks: Vec<String>,
@@ -164,6 +165,7 @@ pub struct Bundle<'a> {
     pub chunk_started: bool,
     pub chunk_files: Vec<ChunkFile>,
     pub left_requests: Vec<(String, Option<String>)>,
+    pub left_imports: Vec<(String, String)>,
     pub around: Option<crate::beside::Around<'a>>,
     pub recorded_wrapper: bool,
 }
@@ -193,6 +195,7 @@ impl<'a> Bundle<'a> {
             deferred: Vec::new(),
             inputs: Vec::new(),
             mirrored_inputs: Vec::new(),
+            input_names: Vec::new(),
             installed_chunks: Vec::new(),
             chunk_modules: Vec::new(),
             startup_chunks: Vec::new(),
@@ -200,6 +203,7 @@ impl<'a> Bundle<'a> {
             chunk_started: false,
             chunk_files: Vec::new(),
             left_requests: Vec::new(),
+            left_imports: Vec::new(),
             around: None,
             recorded_wrapper: false,
         }

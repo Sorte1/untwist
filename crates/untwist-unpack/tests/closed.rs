@@ -76,7 +76,7 @@ fn a_factory_that_reads_a_bundle_binding_is_not_closed_and_host_globals_are() {
             None,
             None,
             Some(Captured::Arguments),
-            Some(Captured::Binding("shared".to_string())),
+            Some(Captured::Shape),
             None,
         ]
     );

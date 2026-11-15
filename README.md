@@ -213,7 +213,11 @@ and their chunks, browserify, Parcel, Turbopack): such a runtime would find that
 `{}` cache, module map or installed-chunk table instead of the module or chunk, while the written
 files are loaded by node; unpacking does not check for such a write. Nor does any code replace `Function.prototype.call`, `apply` or `bind`:
 those runtimes start their modules through `.call` (webpack 5 only where a module uses `this` as its
-exports), which node's loader does not use for a written file. And
+exports), which node's loader does not use for a written file. Nor does any code reach node's
+module objects or loader through `process` taken as a value (`var p = process; p.mainModule`,
+`globalThis.process`): a module that names `process.mainModule`, `process.getBuiltinModule`, a
+computed member of `process`, or requests the `module` or `process` built-in is not split, but an
+alias is not followed, since most bundles pass `process` around. And
 no value the program tests is `document.all`, so `x != null ? x : y` becomes `x ?? y`: the two
 differ only for that object, which compares loosely equal to `null` without being nullish. Untwist also assumes no debugger or inspector session changes the program's values while it
 runs; every lane and every proof rests on this.

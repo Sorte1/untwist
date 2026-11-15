@@ -18,24 +18,18 @@ fn unpacked(conservative: bool) -> (tempfile::TempDir, String) {
 }
 
 #[test]
-fn the_default_rename_keeps_the_hosts_require_apart_from_the_runtimes() {
-    let (dir, entry) = unpacked(false);
-    assert!(
-        entry.contains("typeof require.hmd, typeof __webpack_require__.hmd"),
-        "{entry}"
-    );
-    let Some(node) = node() else {
-        let required = std::env::var("UNTWIST_REQUIRE_NODE").ok();
-        assert!(
-            skip_allowed(required.as_deref()),
-            "required: {SKIP_MESSAGE}"
-        );
-        return;
+fn a_member_of_the_hosts_require_keeps_the_bundle_whole_outside_the_conservative_mode() {
+    let options = Options {
+        extended: true,
+        deobfuscate: false,
+        unminify: false,
+        ..unsafe_lane()
     };
-    let unpacked = run(&node, &dir.path().join("index.js"))
-        .expect("spawn")
-        .expect("terminates");
-    assert_eq!(unpacked.stdout, "undefined function\n7\n");
+    let out = Pipeline::new(options).run(BUNDLE);
+    let dir = tempfile::tempdir().expect("temp dir");
+    out.write_to(dir.path()).expect("write");
+    assert!(!dir.path().join("index.js").exists());
+    assert!(dir.path().join("deobfuscated.js").exists());
 }
 
 #[test]

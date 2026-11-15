@@ -243,7 +243,14 @@ fn a_factory_browserify_does_not_run_like_a_file_refuses_the_bundle() {
         "function(require,module,exports,extra=1){}",
         "function(require,module,...rest){}",
     ] {
-        refused_as_unloaded(&format!("{{1:[{factory},{{}}]}},{{}},[1]"));
+        let arguments = format!("{{1:[{factory},{{}}]}},{{}},[1]");
+        let notes = refusal(&arguments).expect("the bundle is refused");
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("does not run like a file")),
+            "{arguments}: {notes:?}"
+        );
     }
 }
 
