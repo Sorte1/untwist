@@ -29,7 +29,7 @@ fn unpacked(modules: &str, extended: bool) -> Unpacked {
         extended,
         deobfuscate: false,
         unminify: false,
-        ..Options::default()
+        ..unsafe_lane()
     };
     let out = Pipeline::new(options).run(&bundle);
     let dir = tempfile::tempdir().expect("temp dir");
@@ -107,4 +107,11 @@ fn the_reference_lane_keeps_the_bare_form() {
         "{}",
         unpacked.file("a/main.js")
     );
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

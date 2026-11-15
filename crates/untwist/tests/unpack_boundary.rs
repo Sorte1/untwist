@@ -27,7 +27,7 @@ fn options() -> Options {
     plugins.register(Stage::AfterUnpack, panicking as untwist::PluginCtor);
     Options {
         plugins,
-        ..Options::default()
+        ..unsafe_lane()
     }
 }
 
@@ -51,13 +51,13 @@ fn a_panic_in_the_unpack_stage_loses_the_bundle_and_nothing_else() {
 fn a_panic_in_the_unpack_stage_is_flagged_on_the_output() {
     let out = Pipeline::new(options()).run_many(&[CHUNK_A, CHUNK_B]);
     assert!(out.unpack_panicked);
-    let clean = Pipeline::new(Options::default()).run_many(&[CHUNK_A, CHUNK_B]);
+    let clean = Pipeline::new(unsafe_lane()).run_many(&[CHUNK_A, CHUNK_B]);
     assert!(!clean.unpack_panicked);
 }
 
 #[test]
 fn without_the_plugin_the_same_inputs_unpack() {
-    let out = Pipeline::new(Options::default()).run_many(&[CHUNK_A, CHUNK_B]);
+    let out = Pipeline::new(unsafe_lane()).run_many(&[CHUNK_A, CHUNK_B]);
     assert!(out.bundle.is_some());
     assert!(!out.notes.iter().any(|note| note.message == UNPACK_PANICKED));
 }
@@ -68,4 +68,11 @@ fn a_single_input_that_panics_while_unpacking_is_still_written() {
     assert!(out.bundle.is_none());
     assert!(out.code().contains("exports"));
     assert_eq!(out.panicked, Vec::<usize>::new());
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

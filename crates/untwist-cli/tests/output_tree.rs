@@ -43,6 +43,7 @@ fn prepared(modules: &[(&str, &str)]) -> Run {
 
 fn unpack(run: &Run, flags: &[&str]) -> Output {
     bin()
+        .arg("--unsafe")
         .arg("-o")
         .arg(&run.outdir)
         .args(flags)
@@ -152,6 +153,7 @@ fn the_current_directory_is_refused_as_the_output_directory() {
     std::fs::write(dir.path().join("in.js"), &source).unwrap();
 
     let out = bin()
+        .arg("--unsafe")
         .current_dir(dir.path())
         .args(["in.js", "-o", "."])
         .output()
@@ -231,6 +233,7 @@ fn force_never_overwrites_an_input_file() {
     std::fs::write(&input, &source).unwrap();
 
     let out = bin()
+        .arg("--unsafe")
         .arg("-o")
         .arg(&outdir)
         .arg("-f")
@@ -267,6 +270,7 @@ fn force_never_deletes_an_input_file_an_earlier_listing_names() {
     .unwrap();
 
     let out = bin()
+        .arg("--unsafe")
         .arg("-o")
         .arg(&outdir)
         .arg("-f")

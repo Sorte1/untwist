@@ -32,7 +32,7 @@ fn an_after_unpack_notes_span_is_an_offset_into_the_final_text() {
     plugins.register(Stage::AfterUnpack, noting as untwist::PluginCtor);
     let out = Pipeline::new(Options {
         plugins,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(WEBPACK_4_ON_ONE_LINE);
     let spans: Vec<_> = out
@@ -53,10 +53,10 @@ fn an_after_unpack_notes_span_is_an_offset_into_the_final_text() {
 
 #[test]
 fn the_codes_do_not_depend_on_unpack() {
-    let with = Pipeline::new(Options::default()).run_many(&[CHUNK_A, CHUNK_B]);
+    let with = Pipeline::new(unsafe_lane()).run_many(&[CHUNK_A, CHUNK_B]);
     let without = Pipeline::new(Options {
         unpack: false,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run_many(&[CHUNK_A, CHUNK_B]);
     assert_eq!(with.codes, without.codes);
@@ -66,7 +66,7 @@ fn the_codes_do_not_depend_on_unpack() {
 
 #[test]
 fn the_second_inputs_stage_rounds_start_at_one() {
-    let out = Pipeline::new(Options::default()).run_many(&[CHUNK_A, CHUNK_B]);
+    let out = Pipeline::new(unsafe_lane()).run_many(&[CHUNK_A, CHUNK_B]);
     let second_input = out
         .stages
         .iter()
@@ -77,4 +77,11 @@ fn the_second_inputs_stage_rounds_start_at_one() {
         .find(|stage| stage.stage == "unminify")
         .expect("the second input's unminify row");
     assert_eq!(unminify.round, 1, "{:?}", out.stages);
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

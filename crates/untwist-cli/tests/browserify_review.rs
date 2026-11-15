@@ -47,9 +47,10 @@ fn written_entry(input: &Path, out: &Path) -> PathBuf {
     renamed
 }
 
-fn tree_output(node: &Path, input: &Path, out: &Path, flags: &[&str]) -> Option<String> {
+fn tree_output(node: &Path, input: &Path, out: &Path, flags: &[&str]) -> (Option<String>, String) {
     let status = common::bin()
         .args(flags)
+        .arg("-v")
         .arg("-f")
         .arg("-o")
         .arg(out)
@@ -62,7 +63,8 @@ fn tree_output(node: &Path, input: &Path, out: &Path, flags: &[&str]) -> Option<
         input.display(),
         String::from_utf8_lossy(&status.stderr)
     );
-    observed(node, &written_entry(input, out))
+    let stderr = String::from_utf8_lossy(&status.stderr).into_owned();
+    (observed(node, &written_entry(input, out)), stderr)
 }
 
 fn premise(name: &str, flags: &[&str]) -> bool {
@@ -88,21 +90,22 @@ fn review_probes_run_like_the_browserify_bundle_in_both_lanes() {
                 continue;
             }
             let out = work.path().join(format!("{name}-{lane}"));
-            let seen = tree_output(&node, input, &out, flags);
+            let (seen, stderr) = tree_output(&node, input, &out, flags);
             let unpacked = out.join("bundle.json").exists();
+            let kept_whole = *flags == DEFAULT && common::frame_refused(&stderr);
             if PROTOTYPE_PREMISE_ROWS.contains(&name.as_ref()) {
-                if !unpacked || seen.as_deref() != Some(PROTOTYPE_PREMISE_TREE) {
+                if !kept_whole && (!unpacked || seen.as_deref() != Some(PROTOTYPE_PREMISE_TREE)) {
                     wrong.push(format!("{name} {flags:?}: premise row gave {seen:?}"));
                 }
                 continue;
             }
             if DISPATCH_PREMISE_ROWS.contains(&name.as_ref()) {
-                if !unpacked || seen == expected {
+                if !kept_whole && (!unpacked || seen == expected) {
                     wrong.push(format!("{name} {flags:?}: premise row gave {seen:?}"));
                 }
                 continue;
             }
-            if UNPACKED.contains(&name.as_ref()) && !unpacked {
+            if UNPACKED.contains(&name.as_ref()) && !unpacked && !kept_whole {
                 wrong.push(format!("{name} {flags:?}: no bundle written"));
             }
             if seen != expected {

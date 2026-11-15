@@ -8,7 +8,7 @@ use untwist_core::semantic::build_scoping;
 
 use super::layout::{Def, Id, Layout};
 use super::{ENTRY_ID, MAX_PARAMS, NAMES};
-use crate::scan::{is_direct_eval, Frame, Policy, Scan, Step};
+use crate::scan::{is_direct_eval, receiver_object, Frame, Policy, Scan, Step};
 
 const REQUIRE: &str = "require";
 
@@ -39,6 +39,10 @@ impl Rules<'_, '_> {
         };
         (!member.optional && self.is_param(&member.object, 0))
             .then(|| member.property.name.as_str())
+    }
+
+    fn module_receiver(&self, callee: &Expression<'_>) -> bool {
+        receiver_object(callee).is_some_and(|object| self.is_param(object, 1))
     }
 
     fn resolved(&self, it: &IdentifierReference<'_>, symbol: SymbolId) -> bool {
@@ -106,6 +110,10 @@ impl<'a> Policy<'a> for Rules<'_, '_> {
     }
 
     fn call(&mut self, _frame: Frame, it: &CallExpression<'a>) -> Step {
+        if self.module_receiver(&it.callee) {
+            self.ok = false;
+            return Step::Skip;
+        }
         if let Some(method) = self.context_member(&it.callee) {
             self.ok &= !it.optional
                 && match method {
@@ -150,7 +158,7 @@ impl<'a> Policy<'a> for Rules<'_, '_> {
     }
 
     fn tagged(&mut self, it: &TaggedTemplateExpression<'a>) {
-        self.ok &= self.context_member(&it.tag).is_none();
+        self.ok &= self.context_member(&it.tag).is_none() && !self.module_receiver(&it.tag);
     }
 
     fn this(&mut self, frame: Frame) {

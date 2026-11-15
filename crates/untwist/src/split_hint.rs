@@ -18,7 +18,7 @@ impl SplitHint {
                 assume_modules: true,
                 conservative: !options.extended(),
                 trust_free_loader: options.unsafe_transforms,
-                trust_legacy_reads: options.unsafe_transforms,
+                prove_frames: !options.unsafe_transforms,
                 trust_builtins: options.unsafe_transforms,
                 module_goal: options.module_goal,
             },

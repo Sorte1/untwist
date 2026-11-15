@@ -8,7 +8,7 @@ fn unpacked(conservative: bool) -> (tempfile::TempDir, String) {
         extended: !conservative,
         deobfuscate: false,
         unminify: false,
-        ..Options::default()
+        ..unsafe_lane()
     };
     let out = Pipeline::new(options).run(BUNDLE);
     let dir = tempfile::tempdir().expect("temp dir");
@@ -61,4 +61,11 @@ fn the_conservative_rename_folds_the_runtime_onto_the_hosts_require_and_node_see
         .expect("terminates");
     assert_eq!(bundle.stdout, "undefined function\n7\n");
     assert_eq!(folded.stdout, "undefined undefined\n7\n");
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

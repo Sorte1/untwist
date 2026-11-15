@@ -10,6 +10,6 @@ ensure-comma	refused	other than by calling it with a chunk id
 ensure-call	refused	other than by calling it with a chunk id
 library-wrapper	refused	not a recorded webpack library wrapper
 library-umd-edited	refused	not a recorded webpack library wrapper
-chunk-framed	refused	runs code besides its push to the chunk list
+chunk-framed	refused	the program runs code beside the bundle
 chunk-conditional	refused	runs code besides its push to the chunk list
 module-parent	refused	uses its module object (module.parent)

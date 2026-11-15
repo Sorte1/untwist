@@ -186,3 +186,39 @@ fn a_turbopack_loader_that_names_one_chunk_twice_is_not_linked() {
     );
     assert_eq!(kind(&sources), None);
 }
+
+fn server_with(body: &str) -> Vec<String> {
+    SERVER
+        .map(|name| {
+            let source = fixture(name);
+            match name.ends_with("app.js") {
+                true => replaced(source, "(e,t,r)=>{var n=e.r(201)", body),
+                false => source,
+            }
+        })
+        .to_vec()
+}
+
+#[test]
+fn a_turbopack_module_that_calls_a_member_of_its_module_is_not_linked() {
+    assert_eq!(kind(&SERVER.map(fixture)), Some(BundleKind::Turbopack));
+    for call in [
+        "t.exports()",
+        "t[\"exports\"]()",
+        "(t.exports)()",
+        "t.exports`x`",
+    ] {
+        let body = format!(
+            "(e,t,r)=>{{t.exports = function () {{ return this; }}; {call}; var n=e.r(201)"
+        );
+        assert_eq!(kind(&server_with(&body)), None, "{call}");
+    }
+    for call in ["t.exports.f()", "(0, t.exports)()", "new t.exports()"] {
+        let body = format!("(e,t,r)=>{{t.exports = function () {{ return this; }}; t.exports.f = t.exports; {call}; var n=e.r(201)");
+        assert_eq!(
+            kind(&server_with(&body)),
+            Some(BundleKind::Turbopack),
+            "{call}"
+        );
+    }
+}

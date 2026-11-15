@@ -38,9 +38,17 @@ fn a_segment_opening_with_a_multi_declarator_var_keeps_its_marker() {
         deobfuscate: false,
         unminify: false,
         jsx: false,
-        ..Options::default()
+        ..unsafe_lane()
     };
     let want = Some(("closure".to_string(), 4));
     assert_eq!(split(unpack_only), want, "unpack-only");
-    assert_eq!(split(Options::default()), want, "default");
+    assert_eq!(split(unsafe_lane()), want, "--unsafe");
+    assert_eq!(split(Options::default()), None, "default");
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

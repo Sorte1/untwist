@@ -18,7 +18,7 @@ const UNMINIFY: &str = "var a=1,b=2;if(a)b(),a(),c();for(var i=0;i<3;i++)x+=i;";
 fn options(source_map: bool) -> Options {
     Options {
         source_map,
-        ..Options::default()
+        ..unsafe_lane()
     }
 }
 
@@ -405,5 +405,12 @@ fn a_map_stays_on_the_code_after_a_string_with_escaped_hidden_characters() {
             "{name}: {:?}",
             source_text_at(source, origin)
         );
+    }
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
     }
 }

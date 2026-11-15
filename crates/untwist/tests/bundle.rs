@@ -5,7 +5,7 @@ use untwist::{Options, Pipeline};
 
 #[test]
 fn a_detected_bundle_is_exposed_on_the_output() {
-    let out = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let out = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     let bundle = out.bundle.as_ref().expect("bundle");
     assert_eq!(bundle.kind, "webpack");
     assert_eq!(bundle.entry_id.as_deref(), Some("0"));
@@ -27,7 +27,7 @@ fn a_detected_bundle_is_exposed_on_the_output() {
 fn no_unpack_leaves_the_bundle_unset() {
     let out = Pipeline::new(Options {
         unpack: false,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(WEBPACK_4);
     assert!(out.bundle.is_none());
@@ -36,7 +36,7 @@ fn no_unpack_leaves_the_bundle_unset() {
 
 #[test]
 fn files_carry_bundle_json_and_one_file_per_module() {
-    let out = Pipeline::new(Options::default()).run(WEBPACK_4);
+    let out = Pipeline::new(unsafe_lane()).run(WEBPACK_4);
     let bundle = out.bundle.as_ref().expect("bundle");
     let files = bundle.files();
     assert_eq!(
@@ -54,14 +54,14 @@ fn files_carry_bundle_json_and_one_file_per_module() {
 
 #[test]
 fn a_program_with_no_bundle_still_reports_the_stage() {
-    let out = Pipeline::new(Options::default()).run("console.log(1);");
+    let out = Pipeline::new(unsafe_lane()).run("console.log(1);");
     assert!(out.bundle.is_none());
     assert!(out.stages.iter().any(|stage| stage.stage == "unpack"));
 }
 
 #[test]
 fn chunk_files_merge_into_one_bundle() {
-    let out = Pipeline::new(Options::default()).run_many(&[CHUNK_A, CHUNK_B]);
+    let out = Pipeline::new(unsafe_lane()).run_many(&[CHUNK_A, CHUNK_B]);
     let bundle = out.bundle.as_ref().expect("bundle");
     assert_eq!(bundle.chunk_ids, vec!["15".to_string(), "16".to_string()]);
     assert_eq!(
@@ -88,7 +88,7 @@ fn chunk_files_merge_into_one_bundle() {
 
 #[test]
 fn a_single_chunk_still_reports_the_missing_target() {
-    let out = Pipeline::new(Options::default()).run(CHUNK_A);
+    let out = Pipeline::new(unsafe_lane()).run(CHUNK_A);
     assert!(out.notes.iter().any(|note| note
         .message
         .contains("require(\"w6GO\") has no module in this bundle")));
@@ -116,7 +116,7 @@ fn without_deobfuscation(source: &str) -> untwist::Output {
     Pipeline::new(Options {
         deobfuscate: false,
         unminify: false,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run(source)
 }
@@ -175,7 +175,7 @@ fn two_bundles_holding_the_same_guard_note_it_once_per_input() {
     let out = Pipeline::new(Options {
         deobfuscate: false,
         unminify: false,
-        ..Options::default()
+        ..unsafe_lane()
     })
     .run_many(&[&source, &source]);
     let expected = format!("{} 1", untwist::GUARD_ON_ONE_LINE);
@@ -195,4 +195,11 @@ fn a_guard_whose_text_unpack_renames_is_noted_once() {
         noted(&out, untwist::GUARD_ON_ONE_LINE),
         vec![expected.as_str()]
     );
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

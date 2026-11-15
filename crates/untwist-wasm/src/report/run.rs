@@ -635,14 +635,14 @@ mod tests {
     #[test]
     fn a_bundle_hands_out_each_module_code_once_split() {
         let source = include_str!("../../../../fixtures/reference/unpack/webpack-5.js");
-        let out = run_report(source, "", false);
+        let out = run_report(source, "--unsafe", false);
         assert!(out.module_count() > 0);
         assert!(out.module_code(0).is_some());
         assert!(out.module_code(out.module_count()).is_none());
     }
 
     fn module_slices(source: &str) -> Vec<(String, String)> {
-        let out = run_report(source, "", false);
+        let out = run_report(source, "--unsafe", false);
         let report: serde_json::Value =
             serde_json::from_str(&out.report_json()).unwrap_or_default();
         let units: Vec<u16> = out.stdout().encode_utf16().collect();
@@ -675,7 +675,7 @@ mod tests {
     #[test]
     fn module_spans_slice_the_processed_bundle_text_in_utf16_units() {
         let source = include_str!("../../../../fixtures/reference/unpack/webpack-5.js");
-        let accented = format!("var accent = \"é😀\";\n{source}");
+        let accented = format!("\"é😀\";\n{source}");
         assert_ne!(accented, source);
         for input in [source, accented.as_str()] {
             let slices = module_slices(input);

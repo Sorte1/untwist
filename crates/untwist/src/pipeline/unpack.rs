@@ -2,6 +2,7 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
 use untwist_core::ast_util::respan::reset_synthetic_spans;
 use untwist_core::clock::StageInstant as Instant;
+use untwist_core::parse::SourceType;
 use untwist_core::pass::{Note, NoteKind, StopReason};
 use untwist_core::reflow::{GuardRecord, PendingReaders};
 use untwist_core::source_map::{self, Mapped, Origins, OwnedSourceMap, Recording, Through};
@@ -22,11 +23,16 @@ use crate::report::StageReport;
 pub(super) struct Prior<'p> {
     pub(super) guards: &'p GuardRecord,
     pub(super) maps: &'p [Option<OwnedSourceMap>],
+    pub(super) goals: &'p [bool],
 }
 
 impl<'p> Prior<'p> {
     pub(super) fn guards(guards: &'p GuardRecord) -> Self {
-        Self { guards, maps: &[] }
+        Self {
+            guards,
+            maps: &[],
+            goals: &[],
+        }
     }
 }
 
@@ -45,7 +51,7 @@ impl Pipeline {
             assume_modules: self.options.split_assume_modules,
             conservative: !self.options.extended(),
             trust_free_loader: self.options.unsafe_transforms,
-            trust_legacy_reads: self.options.unsafe_transforms,
+            prove_frames: !self.options.unsafe_transforms,
             trust_builtins: self.options.unsafe_transforms,
             module_goal: self.options.module_goal,
         }
@@ -66,7 +72,8 @@ impl Pipeline {
         reset_synthetic_spans();
         let _boundary = Boundary::enter();
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let (bundle, pending, readers) = self.unpack_in_arena(codes, guard, stages, notes)?;
+            let (bundle, pending, readers) =
+                self.unpack_in_arena(codes, (guard, prior.goals), stages, notes)?;
             let (mut bundle, tally) = bundle.reflowed(prior.guards);
             let unguarded = readers
                 .iter()
@@ -100,10 +107,16 @@ impl Pipeline {
         }
     }
 
+    fn module_goals(&self, detected: &[bool], inputs: usize) -> Vec<bool> {
+        (0..inputs)
+            .map(|index| self.options.module_goal || detected.get(index).copied().unwrap_or(false))
+            .collect()
+    }
+
     fn unpack_in_arena<T: AsRef<str>>(
         &self,
         codes: &[T],
-        (guard, unbundled): (FinalTextGuard, bool),
+        ((guard, unbundled), goals): ((FinalTextGuard, bool), &[bool]),
         stages: &mut Vec<StageReport>,
         notes: &mut Vec<Note>,
     ) -> Option<(BundleOutput, PendingMaps, Vec<PendingReaders>)> {
@@ -119,12 +132,19 @@ impl Pipeline {
                 return None;
             }
         };
+        let goals = self.module_goals(goals, programs.len());
+        for (program, goal) in programs.iter_mut().zip(&goals) {
+            if *goal {
+                program.source_type = SourceType::mjs();
+            }
+        }
         let texts: Vec<usize> = programs
             .iter()
             .map(|program| program.source_text.as_ptr() as usize)
             .collect();
         let recording = self.options.source_map.then(Recording::start);
-        let mut bundle = self.unpack_stage(&alloc, &mut programs, stages, notes)?;
+        let module_goal = goals.iter().any(|goal| *goal);
+        let mut bundle = self.unpack_stage(&alloc, &mut programs, module_goal, stages, notes)?;
         self.relex_modules(&alloc, &mut bundle, notes);
         self.after_unpack(&alloc, &mut bundle, stages, notes);
         let unreflowed = BundleOutput::unreflowed(&bundle, crate::bundle::single_text_len(codes));
@@ -144,15 +164,20 @@ impl Pipeline {
         &self,
         alloc: &'a Allocator,
         programs: &mut [Program<'a>],
+        module_goal: bool,
         stages: &mut Vec<StageReport>,
         notes: &mut Vec<Note>,
     ) -> Option<untwist_unpack::Bundle<'a>> {
         let started = Instant::now();
+        let options = untwist_unpack::UnpackOptions {
+            module_goal,
+            ..self.unpack_options()
+        };
         let (bundle, unpack_notes) = untwist_unpack::unpack_named_inputs(
             alloc,
             programs,
             &self.options.mappings,
-            self.unpack_options(),
+            options,
             &self.options.input_names,
         );
         notes.extend(unpack_notes);
@@ -271,16 +296,21 @@ mod tests {
 
     #[test]
     fn the_unpack_arena_scope_hands_back_modules_their_reflow_has_not_touched() {
-        let pipeline = Pipeline::new(Options::default());
+        let lane = Options {
+            unsafe_transforms: true,
+            ..Options::default()
+        };
+        let pipeline = Pipeline::new(lane.clone());
         let codes = Pipeline::new(Options {
             unpack: false,
-            ..Options::default()
+            ..lane
         })
         .run(WEBPACK_4_ANONYMOUS)
         .codes;
         reset_synthetic_spans();
         let guard = (FinalTextGuard::PremiseP1, false);
-        let unreflowed = pipeline.unpack_in_arena(&codes, guard, &mut Vec::new(), &mut Vec::new());
+        let unreflowed =
+            pipeline.unpack_in_arena(&codes, (guard, &[]), &mut Vec::new(), &mut Vec::new());
         let finished = pipeline.unpack_final_texts(
             &codes,
             Prior::guards(&GuardRecord::default()),

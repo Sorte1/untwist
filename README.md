@@ -243,10 +243,20 @@ heuristics are allowed to run. These are `template-literals` and JSX reconstruct
 program could rebind through a key it cannot resolve.
 A Metro bundle whose file does not hold Metro's own `__d`/`__r` runtime is unpacked on the trust
 that those names are Metro's.
-Reading `.caller` or `.arguments` on a value is assumed never to reach a bundled module's
-function, so such a read does not stop unpacking. The safe lane keeps any bundle whole when the
-program reads either property, because in a written file a module's code is called by node's
-module wrapper, not by the bundle's factory, and that changes what the read returns.
+A function's caller (`.caller`, `arguments.callee.caller`, a stack frame's `getFunction()`) is
+the bundle's own function in the bundle and node's module wrapper in a written file. The safe lane
+splits a bundle only when no code can see that frame: every function in the bundle's input is
+strict code and every written module file is strict (an ES module, or a file that starts with
+`"use strict"`), because V8 gives `null` for the caller of a function called from strict code and
+`undefined` for `getFunction()` on strict frames. Bundles with sloppy code, which covers most
+webpack 4 and CommonJS bundles, are kept whole in the safe lane. The unsafe lane assumes no read
+of a function's caller or arguments reaches a bundled module's function and splits them anyway.
+An input is taken as an ES module, as node 22 takes it, when it is named `.mjs` or when its own text
+(before any pass runs) has module syntax: `import`/`export`, `import.meta` or top-level `await`, also
+in code a later pass removes. Any other `.js` input is a script or CommonJS. The module code of a
+bundle in an ES module input is strict, so its written module files get `"use strict"` (or are ES
+modules themselves), and when the passes remove the only module syntax of such an input, its
+output ends with `export {};` so that node still runs it as a module.
 This decodes more on aggressively protected code. It is the right choice when you trust that the
 input does not tamper with the runtime, and the wrong one for code written to fool analysis.
 

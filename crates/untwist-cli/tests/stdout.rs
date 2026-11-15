@@ -126,7 +126,7 @@ fn a_bundle_prints_the_same_bytes_plain_and_as_a_single_file() {
         String::from_utf8_lossy(&plain.stdout),
         "(function (e) {\n  var a = {};\n  function n(t) {\n    if (a[t]) {\n      return a[t].exports;\n    }\n    const r = a[t] = { exports: {} };\n    e[t].call(r.exports, r, r.exports, n);\n    return r.exports;\n  }\n  return n(n.s = 0);\n})([function (e, t, i) {\n  const lib = i(1);\n  console.log(lib);\n}, function (e, t, i) {\n  e.exports = 1;\n}]);\n"
     );
-    let single = stdin_output(WEBPACK_4, &["--single-file"]);
+    let single = stdin_output(WEBPACK_4, &["--unsafe", "--single-file"]);
     assert!(single.status.success());
     assert_eq!(
         String::from_utf8_lossy(&single.stdout),

@@ -31,7 +31,7 @@ fn a_runtime_binding_assigned_by_a_lazy_initialiser_reads_alike_before_and_after
     let options = Options {
         deobfuscate: false,
         unminify: false,
-        ..Options::default()
+        ..unsafe_lane()
     };
     let dir = tempfile::tempdir().expect("temp dir");
 
@@ -57,4 +57,11 @@ fn a_runtime_binding_assigned_by_a_lazy_initialiser_reads_alike_before_and_after
         .expect("terminates");
     assert_eq!(bundle.stdout, PRINTED);
     assert_eq!(unpacked.stdout, PRINTED);
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

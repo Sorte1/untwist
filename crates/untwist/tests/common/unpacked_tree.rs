@@ -20,6 +20,7 @@ impl Unpacked {
     pub fn of_many(inputs: &[&str], conservative: bool) -> Self {
         let options = Options {
             extended: !conservative,
+            unsafe_transforms: !conservative,
             deobfuscate: false,
             unminify: false,
             ..Options::default()

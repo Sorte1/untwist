@@ -35,11 +35,12 @@ fn unpacked(cell: &str) -> Option<usize> {
     (!refused).then_some(modules)
 }
 
-fn written(cell: &str, flags: &[&str]) -> (tempfile::TempDir, PathBuf) {
+fn written(cell: &str, flags: &[&str]) -> (tempfile::TempDir, PathBuf, String) {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("out");
     let run = bin()
         .args(flags)
+        .arg("-v")
         .arg("-o")
         .arg(&out)
         .arg(fixtures().join(cell).join("index.js"))
@@ -50,7 +51,8 @@ fn written(cell: &str, flags: &[&str]) -> (tempfile::TempDir, PathBuf) {
         "{cell}: {}",
         String::from_utf8_lossy(&run.stderr)
     );
-    (dir, out)
+    let stderr = String::from_utf8_lossy(&run.stderr).into_owned();
+    (dir, out, stderr)
 }
 
 fn modules(out: &Path) -> Option<usize> {
@@ -64,8 +66,12 @@ fn modules(out: &Path) -> Option<usize> {
 fn every_browser_pack_prelude_is_unpacked_in_every_lane() {
     for cell in cells() {
         for flags in LANES {
-            let (_dir, out) = written(&cell, flags);
-            assert_eq!(modules(&out), unpacked(&cell), "{cell} {flags:?}");
+            let (_dir, out, stderr) = written(&cell, flags);
+            let expected = match flags == DEFAULT && common::frame_refused(&stderr) {
+                true => None,
+                false => unpacked(&cell),
+            };
+            assert_eq!(modules(&out), expected, "{cell} {flags:?}: {stderr}");
         }
     }
 }
@@ -87,7 +93,7 @@ fn the_written_tree_prints_what_the_browserify_bundle_printed() {
             std::fs::read_to_string(fixtures().join("expected").join(format!("{cell}.stdout")))
                 .unwrap();
         for flags in LANES {
-            let (_dir, out) = written(&cell, flags);
+            let (_dir, out, _) = written(&cell, flags);
             let entry = match modules(&out) {
                 Some(_) => "index.js",
                 None => "deobfuscated.js",

@@ -23,7 +23,7 @@ const PARCEL_FIXTURE: &str = "../../fixtures/unpack-bundlers/parcel/min-parcel-h
 const PARCEL_FIRST_REGISTER: &str = "parcelRegister(\"d4t4A\"";
 
 fn unpacked(bundle: &str, module: &str) -> Unpacked {
-    let tree = Unpacked::of(bundle, false);
+    let tree = Unpacked::with(bundle, unsafe_lane());
     assert!(
         tree.has(module),
         "not unpacked: {:?}\n{bundle}",
@@ -155,7 +155,13 @@ function(module, exports, __webpack_require__) {var table = { "./utils": functio
 
 #[test]
 fn a_webpack_factory_var_named_require_still_runs_after_unminify() {
-    let tree = Unpacked::with(WEBPACK4_LOCAL_REQUIRE, untwist::Options::default());
+    let tree = Unpacked::with(
+        WEBPACK4_LOCAL_REQUIRE,
+        untwist::Options {
+            unsafe_transforms: true,
+            ..untwist::Options::default()
+        },
+    );
     assert!(tree.has("lib.js"), "not unpacked: {:?}", tree.notes());
     assert!(
         !tree.file("lib.js").contains("const require"),
@@ -163,4 +169,13 @@ fn a_webpack_factory_var_named_require_still_runs_after_unminify() {
         tree.file("lib.js")
     );
     tree.runs_like_the_bundle("{\"v\":\"utilsone\"} \n");
+}
+
+fn unsafe_lane() -> untwist::Options {
+    untwist::Options {
+        unsafe_transforms: true,
+        deobfuscate: false,
+        unminify: false,
+        ..untwist::Options::default()
+    }
 }

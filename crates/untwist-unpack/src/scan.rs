@@ -133,6 +133,14 @@ pub fn is_free(scoping: Option<&Scoping>, id: &IdentifierReference<'_>) -> bool 
         .is_none_or(|reference| scoping.get_reference(reference).symbol_id().is_none())
 }
 
+pub fn receiver_object<'k, 'a>(callee: &'k Expression<'a>) -> Option<&'k Expression<'a>> {
+    let member = match callee.without_parentheses() {
+        Expression::ChainExpression(chain) => chain.expression.as_member_expression(),
+        other => other.as_member_expression(),
+    }?;
+    Some(member.object().without_parentheses())
+}
+
 pub fn is_direct_eval(scoping: &Scoping, callee: &Expression<'_>) -> bool {
     let Expression::Identifier(id) = callee.without_parentheses() else {
         return false;

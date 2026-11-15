@@ -277,7 +277,12 @@ fn many_hoisted_segments_split_within_a_small_budget() {
     let out_dir = dir.path().join("out");
     let out = common::bin()
         .arg(&input)
-        .args(["--split-hoisted", "--no-deobfuscate", "--no-unminify"])
+        .args([
+            "--unsafe",
+            "--split-hoisted",
+            "--no-deobfuscate",
+            "--no-unminify",
+        ])
         .args(["--max-memory", "256MiB", "-o"])
         .arg(&out_dir)
         .output()

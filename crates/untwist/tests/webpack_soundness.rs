@@ -44,24 +44,43 @@ fn inputs(case: &str) -> Vec<String> {
         .collect()
 }
 
-fn lane(deobfuscate: bool) -> Options {
+const FRAME_NOTES: [&str; 2] = [
+    "the bundle is not strict code",
+    "would be written as a sloppy file",
+];
+
+fn lane(deobfuscate: bool, unsafe_transforms: bool) -> Options {
     Options {
         deobfuscate,
         unminify: deobfuscate,
+        unsafe_transforms,
         ..Options::default()
     }
 }
 
-fn check(case: &str, expect: &Expect, deobfuscate: bool, node: Option<&PathBuf>) -> Option<String> {
+fn check(
+    case: &str,
+    expect: &Expect,
+    (deobfuscate, unsafe_transforms): (bool, bool),
+    node: Option<&PathBuf>,
+) -> Option<String> {
     let texts = inputs(case);
     let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
-    let out = Pipeline::new(lane(deobfuscate)).run_many(&refs);
-    let lane = if deobfuscate {
-        "default"
-    } else {
-        "unpack-only"
+    let out = Pipeline::new(lane(deobfuscate, unsafe_transforms)).run_many(&refs);
+    let lane = match (deobfuscate, unsafe_transforms) {
+        (true, false) => "default",
+        (false, false) => "unpack-only",
+        (true, true) => "--unsafe",
+        (false, true) => "unpack-only --unsafe",
     };
     let notes: Vec<String> = out.notes.iter().map(|note| note.message.clone()).collect();
+    let kept_whole = out.bundle.is_none()
+        && notes
+            .iter()
+            .any(|note| FRAME_NOTES.iter().any(|frame| note.contains(frame)));
+    if !unsafe_transforms && kept_whole {
+        return None;
+    }
     match expect {
         Expect::Refused(reason) => {
             if out.bundle.is_some() {
@@ -102,7 +121,8 @@ fn hand_edited_webpack_inputs_are_refused_or_run_like_the_bundle() {
     let failures: Vec<String> = cases()
         .iter()
         .flat_map(|(case, expect)| {
-            [false, true].map(|deobfuscate| check(case, expect, deobfuscate, node.as_ref()))
+            [(false, false), (true, false), (false, true), (true, true)]
+                .map(|lane| check(case, expect, lane, node.as_ref()))
         })
         .flatten()
         .collect();

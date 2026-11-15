@@ -128,7 +128,7 @@ fn an_input_map_that_is_not_a_map_is_refused() {
 fn every_unpacked_module_file_gets_its_own_map() {
     let dir = tempfile::tempdir().unwrap();
     let input = written_input(dir.path(), "bundle.js", WEBPACK_4);
-    let out_dir = run_into(dir.path(), &input, &["--source-map=file"]);
+    let out_dir = run_into(dir.path(), &input, &["--unsafe", "--source-map=file"]);
     let modules: Vec<_> = std::fs::read_dir(&out_dir)
         .unwrap()
         .filter_map(Result::ok)

@@ -266,7 +266,7 @@ fn a_member_of_a_required_webpack_module_resolves_to_that_modules_export() {
         "/../../fixtures/unpack-bundlers/webpack/webpack5-prod.js"
     );
     let source = std::fs::read_to_string(path).unwrap();
-    let report = crate::report::run_report(&source, "", false);
+    let report = crate::report::run_report(&source, "--unsafe", false);
     let codes: Vec<String> = (0..report.module_count())
         .filter_map(|index| report.module_code(index))
         .collect();

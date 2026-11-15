@@ -27,7 +27,7 @@ fn unpacked(modules: &str, extended: bool) -> Unpacked {
         extended,
         deobfuscate: false,
         unminify: false,
-        ..Options::default()
+        ..unsafe_lane()
     };
     let out = Pipeline::new(options).run(&bundle);
     let dir = tempfile::tempdir().expect("temp dir");
@@ -96,4 +96,11 @@ const REQUEST_BY_MODULE_ID: &str = "({\n1:[function(require,module,exports){\nco
 fn a_request_outside_the_map_that_names_a_module_id_loads_that_module() {
     let unpacked = unpacked(REQUEST_BY_MODULE_ID, true);
     runs_like_the_bundle(&unpacked, "a uses 1.0 and 1.0 b uses 2.0\n");
+}
+
+fn unsafe_lane() -> Options {
+    Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    }
 }

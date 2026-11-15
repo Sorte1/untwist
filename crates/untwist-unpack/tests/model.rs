@@ -23,7 +23,10 @@ fn extraction_clones_the_body_and_leaves_the_source_alone() {
     let program = parse(&alloc, source);
     let extracted = module_from_body(&alloc, &program, first_factory_body(&program));
     let module = Module::new("3".to_string(), extracted, false);
-    assert_eq!(print_module(&module), "module.exports = 1;");
+    assert_eq!(
+        print_module(&module),
+        "\"use strict\";\nmodule.exports = 1;"
+    );
     assert_eq!(
         untwist_core::print::print(&program, untwist_core::print::PrintStyle::Compact),
         "(function(module,exports,require){\"use strict\";module.exports=1});"

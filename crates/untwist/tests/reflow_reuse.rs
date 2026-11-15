@@ -79,6 +79,7 @@ fn every_unpack_fixture_module_reflows_the_same_through_one_arena() {
         deobfuscate: false,
         unminify: false,
         jsx: false,
+        unsafe_transforms: true,
         ..Options::default()
     };
     let mut texts = Vec::new();
@@ -126,7 +127,10 @@ fn assert_widths_agree(source: &str, base: &Options, label: &str) {
 
 #[test]
 fn every_unpack_fixture_agrees_at_one_four_and_the_default_width() {
-    let base = Options::default();
+    let base = Options {
+        unsafe_transforms: true,
+        ..Options::default()
+    };
     for path in unpack_fixtures() {
         let source = std::fs::read_to_string(&path).expect("read an unpack fixture");
         assert_widths_agree(&source, &base, &path.display().to_string());
@@ -151,6 +155,7 @@ fn the_five_megabyte_bundle_agrees_at_one_four_and_the_default_width() {
         deobfuscate: false,
         unminify: false,
         jsx: false,
+        unsafe_transforms: true,
         ..Options::default()
     };
     assert_widths_agree(&source, &base, "webpack-5mb");

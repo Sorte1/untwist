@@ -71,7 +71,7 @@ fn unpacks_a_one_parameter_arrow_factory_and_leaves_computed_requires_alone() {
     assert_eq!(bundle.entry_id.as_deref(), Some("2"));
     assert_eq!(
         bundle.modules["3"].code().trim_end(),
-        "module.exports = \"foo\";"
+        "\"use strict\";\nmodule.exports = \"foo\";"
     );
     assert!(bundle.modules["2"]
         .code()
