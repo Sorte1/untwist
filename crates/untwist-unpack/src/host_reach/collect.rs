@@ -101,6 +101,10 @@ impl<'a> Reach<'_, 'a> {
                 AstKind::StaticMemberExpression(member) => same(&member.object, child),
                 AstKind::ComputedMemberExpression(member) => same(&member.object, child),
                 AstKind::ForInStatement(each) => same(&each.right, child),
+                AstKind::LogicalExpression(logical) => {
+                    logical.operator == LogicalOperator::And && same(&logical.left, child)
+                }
+                AstKind::ConditionalExpression(choice) => same(&choice.test, child),
                 AstKind::CallExpression(call) => {
                     !same(&call.callee, child) && self.lists_names(&call.callee)
                 }
