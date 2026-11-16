@@ -1,7 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 
-use super::allow::Root;
+use super::allow::{Root, BUILTIN_ROOTS};
 use super::keys::literal_text;
 use super::{Scan, This, GLOBAL_OBJECTS};
 
@@ -31,7 +31,9 @@ const CONTEXT_RUNNERS: [&str; 4] = [
     "compileFunction",
 ];
 
-const TIMERS: [&str; 2] = ["setTimeout", "setInterval"];
+pub(super) const TIMERS: [&str; 3] = ["setTimeout", "setInterval", "setImmediate"];
+
+const RECEIVER_METHODS: [&str; 1] = ["valueOf"];
 
 #[derive(Clone, Copy)]
 pub(super) enum Key<'k> {
@@ -150,14 +152,43 @@ impl Scan<'_> {
             return self.reached_member(object, key);
         }
         call_of(expression).is_some_and(|call| {
-            self.reads_prototypes(&call.callee) || self.is_reached(&call.callee)
+            self.reads_prototypes(&call.callee)
+                || self.is_reached(&call.callee)
+                || self.hands_back_a_root(&call.callee)
         })
+    }
+
+    fn hands_back_a_root(&self, callee: &Expression<'_>) -> bool {
+        let Some((object, key)) = member_of(callee) else {
+            return false;
+        };
+        let object = object.without_parentheses();
+        let name = match key {
+            Key::Name(name) => Some(name.to_string()),
+            Key::Other => None,
+            Key::Unknown(expression) => self.known_key(expression),
+        };
+        if self.is_maybe_global_this(object) || self.allow_root(object) == Some(Root::Global) {
+            return name.is_none_or(|name| RECEIVER_METHODS.contains(&name.as_str()));
+        }
+        if let Some(Root::Builtin(owner)) = self.allow_root(object) {
+            return name
+                .is_none_or(|name| !self.read_allowed(Root::Builtin(owner), Key::Name(&name)));
+        }
+        self.is_root(object)
     }
 
     fn reached_member(&self, object: &Expression<'_>, key: Key<'_>) -> bool {
         match key {
             Key::Name(name) if REACHING_KEYS.contains(&name) => true,
             Key::Name(name) if self.names_a_root(name) => true,
+            Key::Name(name)
+                if BUILTIN_ROOTS.contains(&name)
+                    || CODE_RUNNERS.contains(&name)
+                    || TIMERS.contains(&name) =>
+            {
+                self.is_reached(object)
+            }
             Key::Name(name) if GLOBAL_OBJECTS.contains(&name) => self.is_root(object),
             Key::Name("prototype") => self.is_reached(object) || self.is_named_root(object),
             Key::Name(name) if FORWARDING_KEYS.contains(&name) => {
@@ -220,10 +251,11 @@ impl Scan<'_> {
     }
 
     pub(super) fn is_code_runner_name(&self, expression: &Expression<'_>) -> bool {
-        match expression.without_parentheses() {
-            Expression::Identifier(id) => self.global_named(id, &CODE_RUNNERS),
-            _ => false,
-        }
+        matches!(self.allow_root(expression), Some(Root::Runner(_)))
+    }
+
+    fn timer_root(&self, expression: &Expression<'_>) -> bool {
+        matches!(self.allow_root(expression), Some(Root::Runner(name)) if TIMERS.contains(&name))
     }
 
     pub(super) fn runs_code(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
@@ -244,6 +276,9 @@ impl Scan<'_> {
             }
             _ => {}
         }
+        if self.timer_root(callee) {
+            return !self.calls_back(arguments.first());
+        }
         if self.is_code_runner_name(callee) || self.is_reached(callee) {
             return true;
         }
@@ -251,7 +286,7 @@ impl Scan<'_> {
             Expression::Identifier(id) => self.global_named(id, names),
             other => member_of(other).is_some_and(|(object, key)| {
                 matches!(key, Key::Name(name) if names.contains(&name))
-                    && self.is_global_object(object)
+                    && (self.is_global_object(object) || self.is_reached(object))
             }),
         };
         if named(&CODE_RUNNERS) {

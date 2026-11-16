@@ -390,3 +390,98 @@ fn listed_harmless_shapes_stay_intact() {
         );
     }
 }
+
+const ATOB: Reliance = Reliance {
+    roots: &["atob"],
+    members: &[],
+};
+
+#[test]
+fn a_method_result_on_a_root_or_reached_receiver_is_reached() {
+    for source in [
+        "[].__proto__.valueOf().concat = f;",
+        "[].__proto__.sort().concat = f;",
+        "var p = [].__proto__.valueOf();",
+        "var p = [].__proto__.reverse();",
+        "[].constructor.valueOf().prototype.concat = f;",
+        "({}).constructor.valueOf().getPrototypeOf([]).concat = f;",
+        "(function () {}).constructor.valueOf()('Array.prototype.concat = f')();",
+        "Object.assign([].__proto__.valueOf(), { concat: f });",
+        "globalThis.valueOf().Reflect.getPrototypeOf([]).concat = f;",
+        "var g = globalThis.valueOf();",
+        "var g = this.valueOf();",
+    ] {
+        assert_ne!(
+            verdict_for(source, &ARRAY_CONCAT),
+            Builtins::Intact,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_sloppy_this_reaches_every_built_in_root_and_code_runner() {
+    for source in [
+        "(function () { return this.Reflect.getPrototypeOf([]); })();",
+        "(function () { return this.valueOf(); })();",
+        "(function () { this.eval('atob = f'); })();",
+        "(function () { this.Function('atob = f')(); })();",
+        "(function () { var R = this.Reflect; })();",
+    ] {
+        assert_ne!(verdict_for(source, &ATOB), Builtins::Intact, "{source}");
+    }
+}
+
+#[test]
+fn a_code_runner_read_off_the_global_object_is_a_root() {
+    for source in [
+        "var e = globalThis.eval;",
+        "var F = globalThis.Function;",
+        "[globalThis.eval][0]('atob = f');",
+        "var e = window['eval'];",
+        "var e = this.eval;",
+    ] {
+        assert_ne!(verdict_for(source, &ATOB), Builtins::Intact, "{source}");
+    }
+}
+
+#[test]
+fn a_timer_is_a_code_runner_outside_a_direct_call_with_a_function() {
+    for source in [
+        "var t = setTimeout; t('atob = f', 0);",
+        "setTimeout.call(null, 'atob = f', 0);",
+        "setInterval.apply(null, ['atob = f', 0]);",
+        "var t = setTimeout.bind(null, 'atob = f');",
+        "var s = globalThis.setTimeout; s(function () {});",
+        "setImmediate('atob = f');",
+        "setTimeout(code, 0);",
+        "window.setInterval('atob = f', 1);",
+        "(function () { this.setTimeout('atob = f'); })();",
+        "var t = typeof setImmediate === 'function' ? setImmediate : setTimeout;",
+    ] {
+        assert_ne!(verdict_for(source, &ATOB), Builtins::Intact, "{source}");
+    }
+    for source in [
+        "setTimeout(function () {}, 1);",
+        "setInterval(() => 1, 5);",
+        "function tick() {} setImmediate(tick);",
+        "window.setTimeout(function () {}, 0);",
+        "typeof setTimeout;",
+    ] {
+        assert_eq!(verdict_for(source, &ATOB), Builtins::Intact, "{source}");
+    }
+}
+
+#[test]
+fn a_listed_static_or_a_global_function_hands_out_a_fresh_value() {
+    for source in [
+        "var k = Object.keys(o);",
+        "var a = Array.from(x);",
+        "var r = window.fetch(u);",
+        "var p = Promise.resolve(1);",
+        "var n = this.foo();",
+        "var s = (function () { return String(this.toString()); })();",
+    ] {
+        assert_eq!(verdict_for(source, &ATOB), Builtins::Intact, "{source}");
+    }
+}

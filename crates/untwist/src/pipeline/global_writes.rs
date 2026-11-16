@@ -19,12 +19,13 @@ const GLOBAL_OBJECTS: [&str; 7] = [
     "parent",
     "frames",
 ];
-const TEXT_RUNNERS: [&str; 5] = [
+const TEXT_RUNNERS: [&str; 6] = [
     "eval",
     "Function",
     "execScript",
     "setTimeout",
     "setInterval",
+    "setImmediate",
 ];
 const DEFINERS: [&str; 4] = [
     "defineProperty",
@@ -74,6 +75,8 @@ pub(super) static EVERY_ROOT: Reliance = Reliance {
         "undefined",
         "Infinity",
         "NaN",
+        "eval",
+        "execScript",
     ],
     members: &[],
 };
