@@ -10,6 +10,8 @@ pub mod detect;
 pub mod esbuild;
 pub mod frame;
 pub mod goal;
+pub mod host_keys;
+pub mod host_reach;
 pub mod host_request;
 pub mod host_text;
 pub mod inputs;

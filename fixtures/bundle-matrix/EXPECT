@@ -1,5 +1,33 @@
 # app/cell	lane	check	xfail|allow	reason
 # The first matching line wins. A bm-* reason names a gap in .superpowers/sdd/2026-11-05-v030/review/r51-bundle-gaps.md.
+base/esbuild0.14-esm	default	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/esbuild0.14-esm	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/esbuild0.21-esm	default	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/esbuild0.21-esm	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/esbuild0.28-esm	default	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/esbuild0.28-esm-min	default	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/esbuild0.28-esm-min	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/esbuild0.28-esm	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/esbuild0.28-iife-cjssrc	default	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/esbuild0.28-iife-cjssrc	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup2-cjs21-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup2-cjs22-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup2-cjs22-iife-strict-true	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup3-cjs24-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup3-cjs25-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup4-cjs25-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup4-cjs28-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup4-cjs29-iife+esbuild-min	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup4-cjs29-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup4-cjs29-iife-strict-auto	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup4-cjs29-iife-strict-false	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup4-cjs29-iife-strict-true	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup4-cjs29-iife+swc-min	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/rollup4-cjs29-iife+terser	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/vite4-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/vite5-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/vite6-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
+base/vite7-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
 base/browserify+uglify	*	recognised	xfail	bm-browserify-require-rebound: a module that redeclares its renamed require parameter (var e=e(...)) refuses the bundle
 base/webpack5-prod-node+obf-heavy	unsafe	clean	xfail	bm-obf-heavy-proxies: one CFF proxy object survives the unsafe lane in the webpack heavy cell
 *+obf*	default	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
