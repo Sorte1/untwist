@@ -45,11 +45,21 @@ struct Seen {
     rejected: bool,
 }
 
+fn located_in(stderr: &str, file: &Path) -> bool {
+    let path = file.display().to_string();
+    stderr.lines().any(|line| {
+        let line = line.strip_prefix("file://").unwrap_or(line);
+        line.strip_prefix(path.as_str())
+            .and_then(|rest| rest.strip_prefix(':'))
+            .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()))
+    })
+}
+
 fn seen(node: &Path, file: &Path) -> Seen {
     let observed: Observed = run(node, file).expect("spawn").expect("terminates");
     let rejected = observed.stderr.contains("SyntaxError")
         && observed.stdout.is_empty()
-        && observed.exit != Some(0);
+        && located_in(&observed.stderr, file);
     Seen {
         printed: (observed.stdout, observed.exit == Some(0)),
         rejected,
@@ -186,14 +196,14 @@ fn snippets() -> Vec<Snippet> {
         .collect()
 }
 
-fn snippet_seen(node: &Path, file: &Path) -> Seen {
-    let observed: Observed = run(node, file).expect("spawn").expect("terminates");
+fn snippet_seen(node: &Path, file: &Path) -> Option<Seen> {
+    let observed: Observed = run(node, file).expect("spawn")?;
     let rejected = observed.stderr.contains("SyntaxError")
         && !observed.stdout.lines().any(|line| line == "ran");
-    Seen {
+    Some(Seen {
         printed: (observed.stdout, observed.exit == Some(0)),
         rejected,
-    }
+    })
 }
 
 fn snippet_rows(node: &Path, snippet: &Snippet, dir: &Path) -> Vec<String> {
@@ -202,6 +212,16 @@ fn snippet_rows(node: &Path, snippet: &Snippet, dir: &Path) -> Vec<String> {
     std::fs::write(&input, &snippet.source).expect("write");
     let expected = snippet_seen(node, &input);
     let mut wrong = Vec::new();
+    let Some(expected) = expected else {
+        for lane in [false, true] {
+            let out = Pipeline::new(options(&file, lane)).run(&snippet.source);
+            let label = label_of(&format!("{:?}", out.notes), out.parse_errors);
+            if label == Label::Syntax {
+                wrong.push(format!("{}: node runs it, untwist: {label:?}", snippet.name));
+            }
+        }
+        return wrong;
+    };
     for lane in [false, true] {
         let row = format!("{}{}", snippet.name, if lane { " --unsafe" } else { "" });
         let out = Pipeline::new(options(&file, lane)).run(&snippet.source);
@@ -218,7 +238,10 @@ fn snippet_rows(node: &Path, snippet: &Snippet, dir: &Path) -> Vec<String> {
         }
         let output = dir.join(format!("output.{}", snippet.ext));
         std::fs::write(&output, out.code()).expect("write");
-        let got = snippet_seen(node, &output);
+        let Some(got) = snippet_seen(node, &output) else {
+            wrong.push(format!("{row}: the output does not terminate"));
+            continue;
+        };
         let same = match expected.rejected {
             true => got.rejected,
             false => got.printed == expected.printed,
