@@ -16,7 +16,9 @@ fn refused_by_the_namespace_scan(label: &str) -> bool {
         .any(|(refused, _)| *refused == label)
 }
 
-fn rows() -> Vec<(String, String)> {
+type Row = (String, String);
+
+fn rows() -> Vec<Row> {
     ROWS.lines()
         .filter(|line| !line.trim().is_empty())
         .filter_map(|line| line.split_once('|'))
@@ -105,7 +107,7 @@ fn the_sabotage_rows_diverge_from_node_under_the_native_map_pending_mutant() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let (refused, sabotage): (Vec<(String, String)>, Vec<(String, String)>) = rows()
+    let (refused, sabotage): (Vec<Row>, Vec<Row>) = rows()
         .into_iter()
         .filter(|(label, _)| label.starts_with("ref-"))
         .partition(|(label, _)| refused_by_the_namespace_scan(label));
