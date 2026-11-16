@@ -185,7 +185,7 @@ fn reading_through_a_reached_prototype_without_letting_it_go_is_intact() {
         "y = Object.prototype.hasOwnProperty.call(o, k);",
         "y = x.__proto__.toString.call(o);",
         "y = o instanceof x.constructor;",
-        "setTimeout(function () {}, 1); setTimeout(() => 1); function tick() {} setInterval(tick, 5); setTimeout(o.f.bind(o));",
+        "setTimeout(function () {}, 1); setTimeout(() => 1); function tick() {} setInterval(tick, 5); setTimeout(tick.bind(o));",
         "x.constructor.count = 1;",
         "\"Object\" === t && r.constructor && (t = r.constructor.name);",
         "y = (0, x.constructor, 1);",
