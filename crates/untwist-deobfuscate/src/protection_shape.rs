@@ -7,6 +7,7 @@ use oxc_ast::AstKind;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
+use oxc_syntax::identifier::is_identifier_name;
 use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -148,9 +149,26 @@ struct Shape<'k> {
     globals: Vec<String>,
     text: String,
     poisoned: bool,
+    named_keys: FxHashSet<Span>,
 }
 
 impl Shape<'_> {
+    fn node_type(&mut self, kind: AstKind<'_>) -> String {
+        match kind {
+            AstKind::ComputedMemberExpression(member) => match &member.expression {
+                Expression::StringLiteral(key) if is_identifier_name(&js_text(key.value)) => {
+                    self.named_keys.insert(key.span);
+                    "StaticMemberExpression".to_string()
+                }
+                _ => format!("{:?}", kind.ty()),
+            },
+            AstKind::StringLiteral(literal) if self.named_keys.contains(&literal.span) => {
+                "IdentifierName".to_string()
+            }
+            _ => format!("{:?}", kind.ty()),
+        }
+    }
+
     fn tag(&mut self, tag: impl std::fmt::Debug) {
         let _ = write!(self.text, " {tag:?}");
     }
@@ -330,7 +348,8 @@ impl<'a> VisitJs<'a> for Shape<'_> {
             self.text.push_str("(Callable");
             return;
         }
-        let _ = write!(self.text, "({:?}", kind.ty());
+        let ty = self.node_type(kind);
+        let _ = write!(self.text, "({ty}");
         let known = self.leaf(kind) || self.operator(kind) || self.flagged(kind);
         self.poisoned |= !known && !Self::is_plain(kind);
     }
@@ -386,6 +405,7 @@ fn shape(
         globals: Vec::new(),
         text: String::new(),
         poisoned: false,
+        named_keys: FxHashSet::default(),
     };
     shape.visit_formal_parameters(&function.params);
     shape.visit_function_body(body);

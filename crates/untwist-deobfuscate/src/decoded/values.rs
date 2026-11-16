@@ -131,7 +131,10 @@ pub(super) fn judge_resolved_roots<'p>(
 
 const INTRINSIC_KEYS: [&str; 3] = ["__proto__", "@@hasInstance", "Object"];
 
-fn reaches_intrinsics(write: &ProtoWrite<'_>, known: &dyn Fn(Span) -> Option<String>) -> bool {
+pub(super) fn reaches_intrinsics(
+    write: &ProtoWrite<'_>,
+    known: &dyn Fn(Span) -> Option<String>,
+) -> bool {
     match write.key {
         PatchKey::Named(name) => INTRINSIC_KEYS.contains(&name),
         PatchKey::Pending(span) => {

@@ -35,9 +35,12 @@ use crate::stamp::{
 
 mod budget;
 mod conflict;
+mod layered;
 mod reach;
 mod root_keys;
 mod syntactic_reach;
+pub(crate) use layered::settle as settle_layered;
+pub use layered::settle_observations as settle_layered_observations;
 pub(crate) use syntactic_reach::syntactic_global_reach;
 mod values;
 
@@ -263,6 +266,7 @@ fn judge_unit(
     resolved_roots: &FxHashSet<&'static str>,
     resolved_span: Option<Span>,
     (value_map, heap, late): Judged<'_, '_>,
+    waiver: &mut dyn FnMut(layered::Waive<'_>) -> bool,
 ) -> bool {
     let UnitRun {
         request,
@@ -287,8 +291,9 @@ fn judge_unit(
         record_decoded_name(decoded, request, &mut evaluator);
         return false;
     }
-    let relies_on_prototypes =
-        !evaluator.proto_reads.is_empty() && resolved_roots.contains(PROTOTYPE_LINKS);
+    let relies_on_prototypes = !evaluator.proto_reads.is_empty()
+        && resolved_roots.contains(PROTOTYPE_LINKS)
+        && !waiver(layered::Waive::Root(PROTOTYPE_LINKS));
     let replaced = if builtins_assumed_pristine() {
         None
     } else if relies_on_prototypes {
@@ -296,7 +301,7 @@ fn judge_unit(
     } else if let Some(name) = evaluator
         .builtin_roots
         .iter()
-        .find(|name| resolved_roots.contains(*name))
+        .find(|name| resolved_roots.contains(*name) && !waiver(layered::Waive::Root(name)))
     {
         Some((*name).to_string())
     } else {
@@ -305,7 +310,10 @@ fn judge_unit(
             &request.guard.proto_writes,
             value_map,
         )
-        .or_else(|| prototype_conflict(&evaluator.proto_reads, late, value_map))
+        .or_else(|| {
+            prototype_conflict(&evaluator.proto_reads, late, value_map)
+                .filter(|_| !waiver(layered::Waive::Late(&evaluator.proto_reads)))
+        })
         .map(|write| {
             #[cfg(feature = "refusal-spans")]
             crate::refusal_spans::record(
@@ -535,7 +543,7 @@ fn decode_program(
         &plan,
         (program, scoping, limits.nested_root),
         (&mut cache, heap),
-        limits.unsafe_lane,
+        (limits.unsafe_lane, limits.points_to),
     );
     if code_text {
         published.mark();
@@ -661,13 +669,22 @@ fn budget_refusal() -> String {
     format!("{}: the run reached its budget", hit.as_str())
 }
 
+type AliasKey = (usize, Span);
+
 thread_local! {
-    static ALIAS_REFUSED: std::cell::RefCell<FxHashMap<usize, (String, Span)>> =
+    static ALIAS_REFUSED: std::cell::RefCell<FxHashMap<AliasKey, (String, Span)>> =
         std::cell::RefCell::new(FxHashMap::default());
 }
 
 pub(crate) fn forget_alias_refusals() {
     ALIAS_REFUSED.with(|refused| refused.borrow_mut().clear());
+}
+
+fn alias_key(run: &UnitRun<'_, '_>) -> AliasKey {
+    (
+        run.request.unit,
+        run.request.program.string_array.function.span,
+    )
 }
 
 fn alias_refusals(
@@ -677,30 +694,28 @@ fn alias_refusals(
 ) -> FxHashMap<usize, (String, Span)> {
     ALIAS_REFUSED.with(|cell| {
         let mut cached = cell.borrow_mut();
-        let known = runs
-            .iter()
-            .all(|run| cached.contains_key(&run.request.unit));
+        let known = runs.iter().all(|run| cached.contains_key(&alias_key(run)));
         if !known {
             let sites = aliased_writes((program, scoping), runs, points_to);
             for run in runs {
-                if cached.contains_key(&run.request.unit) {
+                if cached.contains_key(&alias_key(run)) {
                     continue;
                 }
                 let Some(sites) = &sites else {
-                    cached.insert(run.request.unit, (budget_refusal(), Span::default()));
+                    cached.insert(alias_key(run), (budget_refusal(), Span::default()));
                     continue;
                 };
                 if let Some(refusal) =
                     alias_refusal(sites, &run.request.guard.used, program.source_text)
                 {
-                    cached.insert(run.request.unit, (refusal.message(), refusal.span));
+                    cached.insert(alias_key(run), (refusal.message(), refusal.span));
                 }
             }
         }
         runs.iter()
             .filter_map(|run| {
-                let unit = run.request.unit;
-                cached.get(&unit).map(|found| (unit, found.clone()))
+                let found = cached.get(&alias_key(run))?;
+                Some((run.request.unit, found.clone()))
             })
             .collect()
     })
@@ -712,7 +727,7 @@ fn judge_runs<'p>(
     plan: &DecodePlan<'p>,
     (program, scoping, nested_root): (&'p Program<'p>, &Scoping, bool),
     (cache, heap): (&mut ScanCache, &mut InputHeap),
-    unsafe_lane: bool,
+    (unsafe_lane, points_to): (bool, bool),
 ) -> bool {
     let (any_builtin_roots_touched, mut value_map) =
         value_map_for(&runs, plan, program, scoping, cache);
@@ -744,7 +759,11 @@ fn judge_runs<'p>(
         let unit = run.request.unit;
         let deferred = root_array_name(scoping, &run).filter(|_| watched && !spelled);
         let reached = reached.as_ref().filter(|_| !spelled);
-        if let Some((note, span)) = refused_before_judging(&run, reached, &decoding) {
+        let refusal = refused_before_judging(&run, reached, &decoding);
+        let speculated = refusal
+            .filter(|(note, _)| watched && *note == notes::STRING_ARRAY_GLOBAL_REACH)
+            .and_then(|_| layered::speculate((program, scoping), run.request));
+        if let Some((note, span)) = refusal.filter(|_| speculated.is_none()) {
             #[cfg(feature = "refusal-spans")]
             if note == notes::STRING_ARRAY_GLOBAL_REACH {
                 crate::refusal_spans::record(|| "GLOBAL_REACH".to_string(), span);
@@ -760,23 +779,42 @@ fn judge_runs<'p>(
             }
             continue;
         }
-        if let Some((message, span)) = alias_refused.get(&run.request.unit) {
+        let alias_refusal = alias_refused.get(&run.request.unit);
+        let speculated = match alias_refusal {
+            Some(_) if watched => layered::speculate_aliases(
+                (program, scoping),
+                run.request,
+                (speculated.clone(), points_to),
+            ),
+            _ => speculated,
+        };
+        if let Some((message, span)) = alias_refusal.filter(|_| speculated.is_none()) {
             decoded.notes.push((message.clone(), Some(*span)));
             continue;
         }
         let judged = (&value_map, &mut *heap, late.unwrap_or_default());
-        if judge_unit(
+        let request = run.request;
+        let mut speculated = speculated;
+        let mut waiver = |waive: layered::Waive<'_>| {
+            watched
+                && layered::speculate_waived((program, scoping), request, &mut speculated, waive)
+        };
+        let decoded_unit = judge_unit(
             decoded,
             run,
             spelled,
             &resolved_roots,
             resolved_span,
             judged,
-        ) {
+            &mut waiver,
+        );
+        if decoded_unit {
             decoding.push(unit);
             if let Some(name) = deferred {
                 crate::legacy_reach::verify(name);
             }
+        } else if let Some(token) = &speculated {
+            crate::legacy_reach::drop_layered(token);
         }
     }
     code_text
