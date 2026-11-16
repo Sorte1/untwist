@@ -480,6 +480,7 @@ fn a_listed_static_or_a_global_function_hands_out_a_fresh_value() {
         "var r = window.fetch(u);",
         "var p = Promise.resolve(1);",
         "var n = this.foo();",
+        "var s = (function () { return String(this.toString()); })();",
     ] {
         assert_eq!(verdict_for(source, &ATOB), Builtins::Intact, "{source}");
     }

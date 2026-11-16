@@ -33,14 +33,7 @@ const CONTEXT_RUNNERS: [&str; 4] = [
 
 pub(super) const TIMERS: [&str; 3] = ["setTimeout", "setInterval", "setImmediate"];
 
-const RECEIVER_METHODS: [&str; 6] = [
-    "valueOf",
-    "toString",
-    "toLocaleString",
-    "hasOwnProperty",
-    "isPrototypeOf",
-    "propertyIsEnumerable",
-];
+const RECEIVER_METHODS: [&str; 1] = ["valueOf"];
 
 #[derive(Clone, Copy)]
 pub(super) enum Key<'k> {
