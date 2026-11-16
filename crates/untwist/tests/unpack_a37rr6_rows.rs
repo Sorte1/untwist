@@ -227,7 +227,10 @@ fn snippet_rows(node: &Path, snippet: &Snippet, dir: &Path) -> Vec<String> {
             let out = Pipeline::new(options(&file, lane)).run(&snippet.source);
             let label = label_of(&format!("{:?}", out.notes), out.parse_errors);
             if label == Label::Syntax {
-                wrong.push(format!("{}: node runs it, untwist: {label:?}", snippet.name));
+                wrong.push(format!(
+                    "{}: node runs it, untwist: {label:?}",
+                    snippet.name
+                ));
             }
         }
         return wrong;

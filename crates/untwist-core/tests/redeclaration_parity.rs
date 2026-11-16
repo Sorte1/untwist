@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use oxc_allocator::Allocator;
-use untwist_core::parse::{early_errors, Early, has_error, parse_named_module, parse_named_script};
+use untwist_core::parse::{early_errors, has_error, parse_named_module, parse_named_script, Early};
 
 const NODE_VERSION: &str = "22.23.1";
 
@@ -57,5 +57,10 @@ fn every_pinned_redeclaration_is_refused_exactly_when_node_rejects_it() {
                 })
         })
         .collect();
-    assert!(wrong.is_empty(), "{} rows differ:\n{}", wrong.len(), wrong.join("\n"));
+    assert!(
+        wrong.is_empty(),
+        "{} rows differ:\n{}",
+        wrong.len(),
+        wrong.join("\n")
+    );
 }

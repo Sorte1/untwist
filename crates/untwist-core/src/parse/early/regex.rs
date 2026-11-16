@@ -54,8 +54,9 @@ impl<'a> Visit<'a> for Groups {
 }
 
 fn clamped(digits: &str) -> &str {
-    let large = digits.len() > 10
-        || digits
+    let significant = digits.trim_start_matches('0');
+    let large = significant.len() > 10
+        || significant
             .parse::<u64>()
             .is_ok_and(|value| value > V8_INFINITY);
     match large {
@@ -147,17 +148,18 @@ pub fn problem(pattern: &str, flags: &str) -> Option<String> {
         return Some("node 22 does not read regular expression modifiers".to_string());
     }
     if groups.buffer_assertion {
-        return Some("node 22 does not read `\\A`, `\\z` or `\\Z` in a regular expression".to_string());
+        return Some(
+            "node 22 does not read `\\A`, `\\z` or `\\Z` in a regular expression".to_string(),
+        );
     }
     if groups.unknown_script {
         return Some("node 22 does not read the script value `Hrkt`".to_string());
     }
     let mut names = groups.names;
     names.sort_unstable();
-    names
-        .windows(2)
-        .any(|pair| pair[0] == pair[1])
-        .then(|| "node 22 does not read a capture group name used twice in a regular expression".to_string())
+    names.windows(2).any(|pair| pair[0] == pair[1]).then(|| {
+        "node 22 does not read a capture group name used twice in a regular expression".to_string()
+    })
 }
 
 #[cfg(test)]
@@ -166,9 +168,19 @@ mod tests {
 
     #[test]
     fn braced_counts_above_v8s_limit_are_clamped_and_escapes_are_kept() {
-        assert_eq!(as_node_reads("a{99999999999999999999}", false), "a{2147483647}");
-        assert_eq!(as_node_reads("a{3000000000,2147483648}", false), "a{2147483647,2147483647}");
+        assert_eq!(
+            as_node_reads("a{99999999999999999999}", false),
+            "a{2147483647}"
+        );
+        assert_eq!(
+            as_node_reads("a{3000000000,2147483648}", false),
+            "a{2147483647,2147483647}"
+        );
         assert_eq!(as_node_reads("a{1,}", false), "a{1,}");
+        assert_eq!(
+            as_node_reads("a{000000000001,2}", false),
+            "a{000000000001,2}"
+        );
         assert_eq!(as_node_reads("\\u{99999999999}", true), "\\u{99999999999}");
         assert_eq!(as_node_reads("\\u{99999999999}", false), "\\u{2147483647}");
         assert_eq!(as_node_reads("\\p{WSpace}", true), "\\p{White_Space}");

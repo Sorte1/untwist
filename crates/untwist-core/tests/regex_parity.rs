@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use oxc_allocator::Allocator;
-use untwist_core::parse::{early_errors, Early, has_error, parse_program};
+use untwist_core::parse::{early_errors, has_error, parse_program, Early};
 
 const NODE_VERSION: &str = "22.23.1";
 
@@ -38,5 +38,10 @@ fn every_pinned_regular_expression_is_accepted_exactly_when_node_accepts_it() {
         .filter(|(ok, flags, pattern)| accepted(pattern, flags) != *ok)
         .map(|(ok, flags, pattern)| format!("/{pattern}/{flags}: node accepts it: {ok}"))
         .collect();
-    assert!(wrong.is_empty(), "{} rows differ:\n{}", wrong.len(), wrong.join("\n"));
+    assert!(
+        wrong.is_empty(),
+        "{} rows differ:\n{}",
+        wrong.len(),
+        wrong.join("\n")
+    );
 }

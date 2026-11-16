@@ -329,7 +329,10 @@ fn an_html_comment_opener_in_module_code_is_an_early_error_as_in_node() {
     assert!(early_errors(&script.program).is_clean());
     let tighter = parse_named_module(&alloc, "var a = 1, b = 5; var c = a<!--b + 1;");
     assert!(!early_errors(&tighter.program).is_clean());
-    let quoted = parse_named_module(&alloc, "var a = \"<!--\" + `<!--` + /<!--/.source; // <!--\n");
+    let quoted = parse_named_module(
+        &alloc,
+        "var a = \"<!--\" + `<!--` + /<!--/.source; // <!--\n",
+    );
     assert!(early_errors(&quoted.program).is_clean());
 }
 
