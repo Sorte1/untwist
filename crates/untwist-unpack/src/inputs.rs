@@ -6,11 +6,12 @@ use crate::browserify::notes as browserify_notes;
 use crate::browserify::resolve::left_request_reaching;
 use crate::detect::{refused_kind, unpack_program_linked};
 use crate::goal::written_module_syntax;
-use crate::host_request::{host_uses, unproven_import, HostUse};
+use crate::host_request::{host_uses, HostUse};
 use crate::links::{groups, Groups, Links};
 use crate::mappings::Mapping;
 use crate::merge::merge_noted;
 use crate::model::Bundle;
+use crate::relative_import::{imported_back, unproven_import};
 use crate::strict::{keep_strictness, mark_from_inputs, sloppy_written_module};
 use crate::{finish_with, notes, turbopack, UnpackOptions};
 use untwist_core::ast_util::naming_slot::scan_name_reads;
@@ -188,10 +189,19 @@ fn input_names(bundle: &Bundle<'_>, names: &[String]) -> Vec<String> {
         .collect()
 }
 
+fn imports_back(programs: &[Program<'_>], names: &[String], bundle: &Bundle<'_>) -> bool {
+    let inputs: Vec<(&str, &str)> = names
+        .iter()
+        .zip(programs.iter())
+        .map(|(name, program)| (name.as_str(), program.source_text))
+        .collect();
+    imported_back(bundle, &inputs)
+}
+
 fn host_checked(bundle: &mut Bundle<'_>, options: UnpackOptions) -> Result<(), HostUse> {
     match options.conservative {
         true => Ok(()),
-        false => host_uses(bundle),
+        false => host_uses(bundle, options.prove_frames),
     }
 }
 
@@ -265,7 +275,9 @@ pub fn unpack_named_inputs<'a>(
     if !options.conservative {
         mark_from_inputs(programs, &mut bundle);
     }
-    if let Some(found) = unproven_import(&bundle) {
+    let proves = !options.prove_frames;
+    let back = proves && !bundle.left_imports.is_empty() && imports_back(programs, names, &bundle);
+    if let Some(found) = unproven_import(&bundle, proves, back) {
         notes.push(note(notes::host_route(&found.id, &found.what)));
         return (None, notes);
     }

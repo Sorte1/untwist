@@ -104,7 +104,7 @@ fn written_noted(cell: &Cell, flags: &[&str]) -> (tempfile::TempDir, PathBuf, bo
     );
     let kept_whole = !flags.contains(&"--unsafe")
         && !out.join("bundle.json").exists()
-        && common::frame_refused(&String::from_utf8_lossy(&run.stderr));
+        && common::kept_whole_by_default(&String::from_utf8_lossy(&run.stderr));
     (dir, out, kept_whole)
 }
 

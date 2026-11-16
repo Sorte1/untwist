@@ -17,8 +17,8 @@ const LANES: [&[&str]; 5] = [
     &["--rename", "unique"],
 ];
 
-const RR4_WHOLE: [&str; 14] = [
-    "e12", "e14", "e18", "e19", "e2", "e20", "e3", "e6", "e7", "w2", "w3", "w4", "w6", "w8",
+const RR4_WHOLE: [&str; 15] = [
+    "e12", "e14", "e16", "e18", "e19", "e2", "e20", "e3", "e6", "e7", "w2", "w3", "w4", "w6", "w8",
 ];
 
 fn data(name: &str) -> PathBuf {

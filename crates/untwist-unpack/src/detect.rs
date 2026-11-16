@@ -690,8 +690,13 @@ fn extract_with<'a>(
     if let Some(mut bundle) = bundle {
         if let Some(site) = site.filter(|_| !options.conservative) {
             let scoping = scoping.unwrap_or_else(|| build_scoping(program).scoping);
-            bundle.around =
-                crate::beside::around(alloc, program, (site, bundle.recorded_wrapper), &scoping);
+            bundle.around = crate::beside::around(
+                alloc,
+                program,
+                (site, bundle.recorded_wrapper),
+                &scoping,
+                options.prove_frames,
+            );
         }
         mark_strict_sources(program, &mut bundle);
         return Some(bundle);

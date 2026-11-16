@@ -43,3 +43,14 @@ pub fn frame_refused(stderr: &str) -> bool {
             || line.contains("would be written as a sloppy file")
     })
 }
+
+pub fn relative_import_refused(stderr: &str) -> bool {
+    stderr.lines().any(|line| {
+        line.contains("which node answers from the file that holds it")
+            && (line.contains("uses import(\".") || line.contains("uses an import from \"."))
+    })
+}
+
+pub fn kept_whole_by_default(stderr: &str) -> bool {
+    frame_refused(stderr) || relative_import_refused(stderr)
+}
