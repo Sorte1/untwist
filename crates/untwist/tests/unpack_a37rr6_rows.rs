@@ -9,6 +9,18 @@ const WORKERS: usize = 16;
 
 const COMPILED_ON_CALL: [&str; 1] = ["f9.js"];
 
+const UNICODE_17: [&str; 15] = [
+    "hc:61", "hc:63", "hc:65", "hc:70", "hc:73", "hc:74", "rx0:126", "rx1:126", "rx3:126",
+    "rx4:126", "rx5:125", "rx5:259", "rx6:125", "rx6:126", "rx7:126",
+];
+
+fn reads_unicode_17(node: &Path) -> bool {
+    std::process::Command::new(node)
+        .args(["-p", "process.versions.unicode"])
+        .output()
+        .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "17.0")
+}
+
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/unpack-a37rr6")
 }
@@ -274,8 +286,12 @@ fn every_a37rr6_snippet_is_refused_exactly_when_node_rejects_it_in_both_lanes() 
     let Some(node) = require_node() else {
         return;
     };
-    let all = snippets();
-    assert!(all.len() >= 6000, "{}", all.len());
+    let unicode_17 = reads_unicode_17(&node);
+    let all: Vec<Snippet> = snippets()
+        .into_iter()
+        .filter(|snippet| unicode_17 || !UNICODE_17.contains(&snippet.name.as_str()))
+        .collect();
+    assert!(all.len() >= 5990, "{}", all.len());
     let wrong = parallel(&all, |snippet, dir| snippet_rows(&node, snippet, dir));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
