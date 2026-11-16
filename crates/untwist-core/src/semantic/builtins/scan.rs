@@ -675,13 +675,7 @@ impl Scan<'_> {
 
     fn visit_reached(&mut self, expression: &Expression<'_>) {
         if let Some(call) = call_of(expression) {
-            if self.runs_code(&call.callee, &call.arguments) {
-                self.aliased();
-            }
-            if !self.reads_prototypes(&call.callee) {
-                self.visit_callee(&call.callee);
-            }
-            self.visit_arguments(&call.arguments);
+            self.visit_call_expression(call);
             return;
         }
         let Some((object, _)) = member_of(expression) else {

@@ -1,6 +1,6 @@
 use oxc_ast::ast::*;
 
-use super::reach::{member_of, Key, CODE_RUNNERS, REACHING_KEYS};
+use super::reach::{member_of, Key, CODE_RUNNERS, REACHING_KEYS, TIMERS};
 use super::{Scan, This, GLOBAL_OBJECTS, LEGACY_DEFINERS};
 
 pub(super) const BUILTIN_ROOTS: &[&str] = &[
@@ -313,7 +313,7 @@ impl Scan<'_> {
     }
 
     fn root_named<'n>(&self, name: &'n str) -> Option<Root<'n>> {
-        if CODE_RUNNERS.contains(&name) {
+        if CODE_RUNNERS.contains(&name) || TIMERS.contains(&name) {
             return Some(Root::Runner(name));
         }
         if GLOBAL_OBJECTS.contains(&name) {
