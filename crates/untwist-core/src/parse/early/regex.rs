@@ -78,7 +78,7 @@ fn braced_quantifier(rest: &str) -> Option<(usize, String)> {
         return None;
     }
     let rewritten = match max {
-        Some(max) if max.is_empty() => format!("{{{},}}", clamped(min)),
+        Some("") => format!("{{{},}}", clamped(min)),
         Some(max) => format!("{{{},{}}}", clamped(min), clamped(max)),
         None => format!("{{{}}}", clamped(min)),
     };
