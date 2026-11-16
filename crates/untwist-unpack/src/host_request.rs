@@ -10,6 +10,7 @@ use untwist_core::semantic::build_scoping;
 
 use crate::browserify::requests::package_name;
 use crate::closed::calls_host_require;
+use crate::host_reach::{may_reach, program_reach, statements_reach};
 use crate::host_text::{
     creator_import, function_text_refused, global_object, member_name, runtime_line,
     script_text_refused, timer_text_refused, RuntimeLine, CODE_BUILTIN, CONSTRUCTOR, EVAL,
@@ -22,6 +23,7 @@ const NODE_SCHEME: &str = "node:";
 const LOADER_BUILTINS: [&str; 2] = ["module", "process"];
 const PROCESS: &str = "process";
 const LOADER_MEMBERS: [&str; 2] = ["mainModule", "getBuiltinModule"];
+const FUNCTION_MEMBERS: [&str; 3] = ["prototype", "name", "length"];
 pub const REQUIRE: &str = "require";
 
 pub fn reaches_the_loader(request: &str) -> bool {
@@ -342,6 +344,11 @@ impl<'a> VisitJs<'a> for HostUses<'_> {
         if is_direct_eval(&it.callee) && payload_imports(it) {
             self.note("import() through eval".to_string());
         }
+        if self.checks_own && is_direct_eval(&it.callee) && !it.arguments.is_empty() {
+            if let Some(why) = script_text_refused(it.arguments.first()) {
+                self.note(format!("eval with {why}"));
+            }
+        }
         if !it.optional && self.calls_host(&it.callee) {
             self.request(it);
         }
@@ -425,7 +432,8 @@ impl<'a> VisitJs<'a> for HostUses<'_> {
     }
 
     fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
-        if self.free(it.object(), FUNCTION) {
+        let plain = member_name(it).is_some_and(|name| FUNCTION_MEMBERS.contains(&name));
+        if plain && self.free(it.object(), FUNCTION) {
             self.clear(it.object().without_parentheses().span());
         }
         self.own_member(it);
@@ -588,7 +596,10 @@ pub fn beside_uses<'a>(
     for statement in statements {
         uses.visit_statement(statement);
     }
-    let (requests, imports, found) = uses.into_parts();
+    let (requests, imports, mut found) = uses.into_parts();
+    if checks_own && found.is_none() {
+        found = statements_reach(statements, scoping).map(str::to_string);
+    }
     match found {
         Some(what) => Err(what),
         None => Ok(BesideUses { requests, imports }),
@@ -620,14 +631,18 @@ pub fn host_uses(bundle: &mut Bundle<'_>, checks_own: bool) -> Result<(), HostUs
         }
         let program = module.program();
         let host_require = names_host_require(bundle, id, module);
-        if !mentions(program, host_require, shim.as_deref(), checks_own) {
+        let reaches = checks_own && may_reach(program);
+        if !reaches && !mentions(program, host_require, shim.as_deref(), checks_own) {
             continue;
         }
         let scoping = build_scoping(program).scoping;
         let mut uses = HostUses::new(&scoping, host_require, shim.as_deref())
             .checking_own(checks_own, Some(program));
         uses.visit_program(program);
-        let (requests, relative, found) = uses.into_parts();
+        let (requests, relative, mut found) = uses.into_parts();
+        if reaches && found.is_none() {
+            found = program_reach(program, &scoping).map(str::to_string);
+        }
         if let Some(what) = found {
             return Err(HostUse {
                 id: id.clone(),

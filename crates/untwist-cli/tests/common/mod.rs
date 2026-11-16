@@ -51,6 +51,20 @@ pub fn relative_import_refused(stderr: &str) -> bool {
     })
 }
 
+const REACH_REFUSALS: [&str; 4] = [
+    "may name a code runner",
+    "property descriptors taken as values",
+    "a property reader taken as a value",
+    "Reflect taken as a value",
+];
+
+pub fn runner_reach_refused(stderr: &str) -> bool {
+    stderr.lines().any(|line| {
+        line.contains("which node answers from the file that holds it")
+            && REACH_REFUSALS.iter().any(|reason| line.contains(reason))
+    })
+}
+
 pub fn kept_whole_by_default(stderr: &str) -> bool {
-    frame_refused(stderr) || relative_import_refused(stderr)
+    frame_refused(stderr) || relative_import_refused(stderr) || runner_reach_refused(stderr)
 }
