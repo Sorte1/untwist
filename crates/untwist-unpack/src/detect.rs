@@ -36,7 +36,8 @@ use crate::webpack::detect5::{
     detect_webpack5_noted, is_webpack5, webpack5_factories, webpack5_record,
 };
 use crate::webpack::extract::WEBPACK_PARAMS;
-use crate::webpack::module_object::{module_object_use, reads_own_this};
+use crate::webpack::injection_proof::reads_own_this;
+use crate::webpack::module_object::module_object_use;
 use crate::webpack::proof::Proving;
 use crate::webpack::require_form::Record;
 use crate::UnpackOptions;

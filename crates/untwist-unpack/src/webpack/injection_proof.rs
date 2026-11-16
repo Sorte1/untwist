@@ -75,6 +75,12 @@ impl<'a> VisitJs<'a> for Body<'a> {
     }
 }
 
+pub fn reads_own_this(body: &FunctionBody<'_>) -> bool {
+    let mut scan = Body::default();
+    scan.visit_function_body(body);
+    scan.reads_this
+}
+
 #[derive(Default)]
 struct Names<'a> {
     read: FxHashSet<&'a str>,

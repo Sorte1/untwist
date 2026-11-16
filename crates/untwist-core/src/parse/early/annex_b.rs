@@ -1,5 +1,8 @@
+use std::cell::Cell;
+
 use oxc_ast::ast::{
-    BlockStatement, CatchClause, Function, IfStatement, Program, Statement, SwitchStatement,
+    ArrowFunctionExpression, BlockStatement, CatchClause, Class, Function, IfStatement, Program,
+    Statement, StaticBlock, SwitchStatement, VariableDeclaration,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_diagnostics::OxcDiagnostic;
@@ -8,6 +11,8 @@ use oxc_span::Span;
 use oxc_str::Ident;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+
+use super::hoisting::{Collect, Hoisting};
 
 struct Candidate {
     symbol: Option<SymbolId>,
@@ -70,9 +75,40 @@ impl Scan {
 struct Walk<'s> {
     scan: Scan,
     scoping: &'s Scoping,
+    hoisting: Collect<'s>,
 }
 
 impl<'a> VisitJs<'a> for Walk<'_> {
+    fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &Cell<Option<ScopeId>>) {
+        self.hoisting.enter_scope(scope_id);
+    }
+
+    fn leave_scope(&mut self) {
+        self.hoisting.leave_scope();
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.hoisting.arrow();
+        walk_js::walk_arrow_function_expression(self, it);
+        self.hoisting.leave_frame();
+    }
+
+    fn visit_static_block(&mut self, it: &StaticBlock<'a>) {
+        self.hoisting.static_block(it);
+        walk_js::walk_static_block(self, it);
+        self.hoisting.leave_frame();
+    }
+
+    fn visit_class(&mut self, it: &Class<'a>) {
+        self.hoisting.class(it);
+        walk_js::walk_class(self, it);
+    }
+
+    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
+        self.hoisting.variable_declaration(it);
+        walk_js::walk_variable_declaration(self, it);
+    }
+
     fn visit_block_statement(&mut self, it: &BlockStatement<'a>) {
         let block = match self.scan.catch_bodies.last() {
             Some((body, clause)) if *body == it.span => *clause,
@@ -84,6 +120,7 @@ impl<'a> VisitJs<'a> for Walk<'_> {
     }
 
     fn visit_catch_clause(&mut self, it: &CatchClause<'a>) {
+        self.hoisting.catch_clause(it);
         self.scan.catch_bodies.push((it.body.span, it.span));
         walk_js::walk_catch_clause(self, it);
         self.scan.catch_bodies.pop();
@@ -115,7 +152,9 @@ impl<'a> VisitJs<'a> for Walk<'_> {
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         self.scan.declared(it, self.scoping);
+        self.hoisting.function(it);
         walk_js::walk_function(self, it, flags);
+        self.hoisting.leave_frame();
     }
 }
 
@@ -167,12 +206,14 @@ fn redeclaration_spans(diagnostic: &OxcDiagnostic) -> Option<Vec<Span>> {
 }
 
 impl AnnexB {
-    pub fn scan(program: &Program<'_>, scoping: &Scoping) -> Self {
+    pub fn scan(program: &Program<'_>, scoping: &Scoping) -> (Self, Hoisting) {
         let mut walk = Walk {
             scan: Scan::default(),
             scoping,
+            hoisting: Collect::new(scoping, program.source_type.is_module()),
         };
         walk.visit_program(program);
+        let hoisting = Hoisting::collected(walk.hoisting);
         let candidates = walk.scan.candidates;
         let unmodelled = candidates
             .iter()
@@ -183,11 +224,12 @@ impl AnnexB {
             .iter()
             .map(|candidate| clashes_outside(candidate, scoping))
             .collect();
-        AnnexB {
+        let annex_b = AnnexB {
             candidates,
             clashing,
             unmodelled,
-        }
+        };
+        (annex_b, hoisting)
     }
 
     pub fn unmodelled(&self) -> &[Span] {

@@ -1,14 +1,13 @@
-use oxc_ast::ast::{
-    ArrowFunctionExpression, BindingPattern, CatchClause, Class, Function, Program, StaticBlock,
-    VariableDeclaration, VariableDeclarationKind,
-};
 use std::cell::Cell;
 
-use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_ast::ast::{
+    BindingPattern, CatchClause, Class, Function, StaticBlock, VariableDeclaration,
+    VariableDeclarationKind,
+};
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_semantic::Scoping;
 use oxc_span::Span;
-use oxc_syntax::scope::{ScopeFlags, ScopeId};
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 
 struct VarName {
@@ -35,7 +34,7 @@ pub struct Hoisting {
     v8_reads: Vec<OxcDiagnostic>,
 }
 
-struct Walk<'s> {
+pub struct Collect<'s> {
     scoping: &'s Scoping,
     module: bool,
     var_level_functions: Vec<Span>,
@@ -53,7 +52,7 @@ struct Walk<'s> {
     scopes: Vec<Option<ScopeId>>,
 }
 
-impl Walk<'_> {
+impl Collect<'_> {
     fn simple_catch(&self, symbol: SymbolId) -> Option<ScopeId> {
         let span = self.scoping.symbol_span(symbol);
         self.simple_catch_names
@@ -67,7 +66,7 @@ impl Walk<'_> {
         flags.is_var() && !(self.module && flags.is_top())
     }
 
-    fn static_block(&self) -> Option<ScopeId> {
+    fn enclosing_static_block(&self) -> Option<ScopeId> {
         self.frames.last().copied().flatten()
     }
 
@@ -117,7 +116,7 @@ impl Walk<'_> {
             scope,
             span,
         });
-        match self.static_block() {
+        match self.enclosing_static_block() {
             Some(block) if block == scope => self.static_top_lexical.push(declared),
             Some(block) => self.static_nested_lexical.push((declared, block)),
             None => {}
@@ -149,16 +148,40 @@ fn names(pattern: &BindingPattern<'_>) -> Vec<VarName> {
         .collect()
 }
 
-impl<'a> VisitJs<'a> for Walk<'_> {
-    fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &Cell<Option<ScopeId>>) {
+impl<'s> Collect<'s> {
+    pub fn new(scoping: &'s Scoping, module: bool) -> Self {
+        Collect {
+            scoping,
+            module,
+            var_level_functions: Vec::new(),
+            lexicals: Vec::new(),
+            var_declarators: Vec::new(),
+            var_names: Vec::new(),
+            simple_catch_names: Vec::new(),
+            frames: Vec::new(),
+            static_blocks: Vec::new(),
+            static_vars: Vec::new(),
+            static_top_lexical: Vec::new(),
+            static_nested_lexical: Vec::new(),
+            catch_bodies: Vec::new(),
+            catch_param_clashes: Vec::new(),
+            scopes: Vec::new(),
+        }
+    }
+
+    pub fn enter_scope(&mut self, scope_id: &Cell<Option<ScopeId>>) {
         self.scopes.push(scope_id.get());
     }
 
-    fn leave_scope(&mut self) {
+    pub fn leave_scope(&mut self) {
         self.scopes.pop();
     }
 
-    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+    pub fn leave_frame(&mut self) {
+        self.frames.pop();
+    }
+
+    pub fn function(&mut self, it: &Function<'_>) {
         let parent = it
             .scope_id
             .get()
@@ -171,33 +194,26 @@ impl<'a> VisitJs<'a> for Walk<'_> {
             }
         }
         self.frames.push(None);
-        walk_js::walk_function(self, it, flags);
-        self.frames.pop();
     }
 
-    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+    pub fn arrow(&mut self) {
         self.frames.push(None);
-        walk_js::walk_arrow_function_expression(self, it);
-        self.frames.pop();
     }
 
-    fn visit_static_block(&mut self, it: &StaticBlock<'a>) {
+    pub fn static_block(&mut self, it: &StaticBlock<'_>) {
         let scope = it.scope_id.get();
         self.static_blocks.extend(scope);
         self.frames.push(scope);
-        walk_js::walk_static_block(self, it);
-        self.frames.pop();
     }
 
-    fn visit_class(&mut self, it: &Class<'a>) {
+    pub fn class(&mut self, it: &Class<'_>) {
         if let (true, Some(id)) = (it.is_declaration(), &it.id) {
             self.lexical(id.name.as_str(), id.span, self.current_scope());
         }
-        walk_js::walk_class(self, it);
     }
 
-    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
-        let static_block = self.static_block();
+    pub fn variable_declaration(&mut self, it: &VariableDeclaration<'_>) {
+        let static_block = self.enclosing_static_block();
         for declarator in &it.declarations {
             let mut declared = names(&declarator.id);
             if it.kind != VariableDeclarationKind::Var {
@@ -226,10 +242,9 @@ impl<'a> VisitJs<'a> for Walk<'_> {
             }
             self.var_names.extend(declared);
         }
-        walk_js::walk_variable_declaration(self, it);
     }
 
-    fn visit_catch_clause(&mut self, it: &CatchClause<'a>) {
+    pub fn catch_clause(&mut self, it: &CatchClause<'_>) {
         let simple = it.param.as_ref().map(|param| &param.pattern);
         if let (Some(BindingPattern::BindingIdentifier(ident)), Some(scope)) =
             (simple, it.scope_id.get())
@@ -254,7 +269,6 @@ impl<'a> VisitJs<'a> for Walk<'_> {
         if let Some(body) = it.body.scope_id.get() {
             self.catch_bodies.push((body, caught));
         }
-        walk_js::walk_catch_clause(self, it);
     }
 }
 
@@ -277,25 +291,7 @@ fn labelled(diagnostic: &OxcDiagnostic) -> Option<Vec<Span>> {
 }
 
 impl Hoisting {
-    pub fn scan(program: &Program<'_>, scoping: &Scoping) -> Self {
-        let mut walk = Walk {
-            scoping,
-            module: program.source_type.is_module(),
-            var_level_functions: Vec::new(),
-            lexicals: Vec::new(),
-            var_declarators: Vec::new(),
-            var_names: Vec::new(),
-            simple_catch_names: Vec::new(),
-            frames: Vec::new(),
-            static_blocks: Vec::new(),
-            static_vars: Vec::new(),
-            static_top_lexical: Vec::new(),
-            static_nested_lexical: Vec::new(),
-            catch_bodies: Vec::new(),
-            catch_param_clashes: Vec::new(),
-            scopes: Vec::new(),
-        };
-        walk.visit_program(program);
+    pub fn collected(walk: Collect<'_>) -> Self {
         let mut missed = Vec::new();
         let mut v8_reads = Vec::new();
         for var in &walk.var_names {

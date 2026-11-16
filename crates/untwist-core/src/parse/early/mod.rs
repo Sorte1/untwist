@@ -71,9 +71,8 @@ fn check(text: &str, source_type: SourceType) -> Early {
         .with_check_syntax_error(true)
         .build(&checked.program);
     let scoping = built.semantic.scoping();
-    let annex_b = annex_b::AnnexB::scan(&checked.program, scoping);
+    let (annex_b, mut hoisting) = annex_b::AnnexB::scan(&checked.program, scoping);
     let octals = class_octal::ClassOctals::scan(&checked.program, scoping);
-    let mut hoisting = hoisting::Hoisting::scan(&checked.program, scoping);
     let mut found = newer::unread_by_node(&checked.program);
     let (semantic, mut read_by_node): (Vec<_>, Vec<_>) = errors(built.diagnostics.into_vec())
         .into_iter()
