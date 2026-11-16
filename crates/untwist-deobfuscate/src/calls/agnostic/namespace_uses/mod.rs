@@ -1,3 +1,5 @@
+mod shapes;
+
 use std::borrow::Cow;
 
 use oxc_allocator::{Address, GetAddress, UnstableAddress};
@@ -112,6 +114,8 @@ struct Walker<'s, 'a> {
     arguments_used: FxHashSet<Address>,
     candidates: FxHashMap<SymbolId, Candidate<'a>>,
     aliases: FxHashMap<SymbolId, u8>,
+    receivers: FxHashMap<SymbolId, usize>,
+    fallbacks: FxHashMap<SymbolId, shapes::Fallback>,
     found: Vec<Span>,
 }
 
@@ -131,6 +135,8 @@ pub(super) fn loose_uses<'a>(
         arguments_used: FxHashSet::default(),
         candidates: FxHashMap::default(),
         aliases: FxHashMap::default(),
+        receivers: FxHashMap::default(),
+        fallbacks: FxHashMap::default(),
         found: Vec::new(),
     };
     walker.walk(program);
@@ -403,6 +409,9 @@ impl<'s, 'a> Walker<'s, 'a> {
                             .and_then(Argument::as_expression)
                             .is_some_and(|receiver| self.kind_here(receiver) & GLOBAL != 0);
                 }
+                AstKind::CallExpression(call) if self.phase == Phase::Check => {
+                    return self.wrapped_by_global(call, child);
+                }
                 _ => return false,
             }
         }
@@ -597,7 +606,8 @@ impl<'s, 'a> Walker<'s, 'a> {
                     return a
                         .left
                         .as_member_expression()
-                        .is_some_and(|m| member_address(m) == child);
+                        .is_some_and(|m| member_address(m) == child)
+                        || (kind == GLOBAL && self.global_fallback(a));
                 }
                 AstKind::AssignmentTargetWithDefault(t) => {
                     return t
@@ -701,6 +711,9 @@ impl<'s, 'a> Walker<'s, 'a> {
         }) else {
             return false;
         };
+        if kind == GLOBAL && self.wrapper_receiver(call) == Some(index) {
+            return true;
+        }
         if let Some((params, _)) = iife_function(&call.callee) {
             return params.items.get(index).is_some_and(|param| {
                 matches!(&param.pattern, BindingPattern::BindingIdentifier(id)
@@ -795,6 +808,7 @@ impl<'s, 'a> Walker<'s, 'a> {
                     self.arguments_used.insert(*function);
                 }
             }
+            AstKind::IdentifierReference(id) => self.collect_reference(id),
             _ => {}
         }
     }
