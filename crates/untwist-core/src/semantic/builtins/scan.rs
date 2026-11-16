@@ -11,12 +11,13 @@ use super::{Builtins, Reliance, Scanned};
 use crate::semantic::{is_foreign_global, program_is_strict};
 
 mod allow;
+mod functions;
 mod keys;
 mod reach;
 
 use allow::Root;
 
-use reach::{call_of, key_of, member_of, Key, REACHING_KEYS};
+use reach::{call_of, key_of, member_of, Key, CODE_RUNNERS, CONTEXT_RUNNERS, REACHING_KEYS};
 
 const GLOBAL_OBJECTS: [&str; 7] = [
     "globalThis",
@@ -196,6 +197,7 @@ impl Frame {
 struct Scan<'s> {
     program: &'s Program<'s>,
     consts: OnceCell<keys::ConstKeys>,
+    functions: OnceCell<functions::FunctionBindings>,
     reached: RefCell<FxHashMap<usize, bool>>,
     scoping: &'s Scoping,
     reliance: &'s Reliance,
@@ -279,6 +281,7 @@ impl<'s> Scan<'s> {
         Self {
             program,
             consts: OnceCell::new(),
+            functions: OnceCell::new(),
             reached: RefCell::new(FxHashMap::default()),
             scoping,
             reliance,
@@ -298,6 +301,13 @@ impl Scan<'_> {
             .get_or_init(|| keys::const_keys(self.program, self.scoping))
             .get(&symbol)
             .cloned()
+    }
+
+    pub(super) fn only_a_function(&self, symbol: SymbolId) -> bool {
+        self.functions
+            .get_or_init(|| functions::function_bindings(self.program))
+            .contains(&symbol)
+            && !self.scoping.symbol_is_mutated(symbol)
     }
 
     fn pattern_key_reaches(&self, computed: bool, key: &PropertyKey<'_>) -> bool {
@@ -320,7 +330,11 @@ impl Scan<'_> {
     }
 
     fn pattern_name_reaches(&self, name: &str) -> bool {
-        REACHING_KEYS.contains(&name) || name == REFLECT || self.names_a_root(name)
+        REACHING_KEYS.contains(&name)
+            || CODE_RUNNERS.contains(&name)
+            || CONTEXT_RUNNERS.contains(&name)
+            || name == REFLECT
+            || self.names_a_root(name)
     }
 
     fn pattern_read(&mut self, reaches: bool) {
@@ -594,17 +608,22 @@ impl Scan<'_> {
     }
 
     fn legacy_definition(&mut self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
-        let Expression::StaticMemberExpression(member) = callee.without_parentheses() else {
+        let Some((object, key)) = member_of(callee) else {
             return false;
         };
-        if !LEGACY_DEFINERS.contains(&member.property.name.as_str()) {
+        let name = match key {
+            Key::Name(name) => Some(name.to_string()),
+            Key::Unknown(expression) => self.known_key(expression),
+            Key::Other => None,
+        };
+        if !name.is_some_and(|name| LEGACY_DEFINERS.contains(&name.as_str())) {
             return false;
         }
         let key = arguments
             .first()
             .and_then(Argument::as_expression)
             .and_then(literal_key);
-        self.judge_write(&member.object, key)
+        self.judge_write(object, key)
     }
 
     fn visit_unless_root(&mut self, expression: &Expression<'_>) {
@@ -676,6 +695,10 @@ impl Scan<'_> {
     fn visit_reached(&mut self, expression: &Expression<'_>) {
         if let Some(call) = call_of(expression) {
             self.visit_call_expression(call);
+            return;
+        }
+        if let Expression::TaggedTemplateExpression(tagged) = expression.without_parentheses() {
+            self.visit_tagged_template_expression(tagged);
             return;
         }
         let Some((object, _)) = member_of(expression) else {
@@ -804,6 +827,23 @@ impl<'a> VisitJs<'a> for Scan<'_> {
             self.visit_callee(&it.callee);
         }
         self.visit_arguments(&it.arguments);
+    }
+
+    fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
+        if self.legacy_definition(&it.tag, &[]) {
+            self.written();
+            return;
+        }
+        if self.runs_code(&it.tag, &[]) {
+            self.aliased();
+        }
+        if self.calls_through_a_prototype(&it.tag) {
+            self.not_allowed();
+        }
+        if !self.reads_prototypes(&it.tag) {
+            self.visit_callee(&it.tag);
+        }
+        self.visit_template_literal(&it.quasi);
     }
 
     fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {

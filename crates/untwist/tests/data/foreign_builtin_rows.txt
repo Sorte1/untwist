@@ -22,3 +22,11 @@ a26rr3-ctor_valueof|(function () {}).constructor.valueOf()("atob = function () {
 a26rr3-proto_valueof|[].__proto__.valueOf().toString = function () { return "'+'patched"; }; @@ function f() { eval("console.log('or" + [] + "ig')"); } f();
 a26rr3-proto_sort|[].__proto__.sort().toString = function () { return "'+'patched"; }; @@ function f() { eval("console.log('or" + [] + "ig')"); } f();
 a26rr3-fcc|"".constructor.valueOf().fromCharCode = function () { return "console.log('F')"; }; @@ eval(String.fromCharCode(99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 52, 41));
+a26rr4-tag_key|var g = globalThis.valueOf``; var k = "atob"; g[k] = function () { console.log("foreign atob"); return "console.log(7)"; }; @@ eval(atob("Y29uc29sZS5sb2coMSk="));
+a26rr4-tag_eval|globalThis.valueOf``.eval("var atob = function () { console.log('foreign atob'); return 'console.log(7)'; };"); @@ eval(atob("Y29uc29sZS5sb2coMSk="));
+a26rr4-tag_proto|[].__proto__.valueOf``.toString = function () { return "'+'patched"; }; @@ function f() { eval("console.log('or" + [] + "ig')"); } f();
+a26rr4-legacy|[].__proto__["__defineGetter__"]("toString", function () { return function () { return "'+'patched"; }; }); @@ function f() { eval("console.log('or" + [] + "ig')"); } f();
+a26rr4-legacy_tpl|[].__proto__[`__defineGetter__`]("toString", function () { return function () { return "'+'patched"; }; }); @@ function f() { eval("console.log('or" + [] + "ig')"); } f();
+a26rr4-tag_fcc|"".constructor.valueOf``.fromCharCode = function () { return "console.log('F')"; }; @@ eval(String.fromCharCode(99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 52, 41));
+a26rr4-vm_value|var r = require("vm").runInThisContext; r("var atob = function () { console.log('foreign atob'); return 'console.log(7)'; };"); @@ eval(atob("Y29uc29sZS5sb2coMSk="));
+a26rr4-vm_tag|require("vm").runInThisContext`var atob = function () { console.log('foreign atob'); return 'console.log(7)'; };`; @@ eval(atob("Y29uc29sZS5sb2coMSk="));

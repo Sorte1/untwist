@@ -1,7 +1,7 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, AssignmentTarget, CallExpression, Expression, NewExpression, Program,
-    SimpleAssignmentTarget, UnaryExpression, UpdateExpression,
+    SimpleAssignmentTarget, TaggedTemplateExpression, UnaryExpression, UpdateExpression,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_syntax::operator::UnaryOperator;
@@ -243,6 +243,14 @@ impl<'a> Visit<'a> for Walk<'_> {
         }
         self.defines(&it.callee, &it.arguments);
         walk::walk_call_expression(self, it);
+    }
+
+    fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
+        if names_runner(&it.tag) {
+            self.out.every = true;
+        }
+        self.defines(&it.tag, &[]);
+        walk::walk_tagged_template_expression(self, it);
     }
 
     fn visit_new_expression(&mut self, it: &NewExpression<'a>) {

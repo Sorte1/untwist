@@ -24,11 +24,12 @@ pub(super) const CODE_RUNNERS: [&str; 3] = ["eval", "Function", "execScript"];
 
 const PROTOTYPE_READER_NAMES: [&str; 2] = ["getPrototypeOf", "get"];
 
-const CONTEXT_RUNNERS: [&str; 4] = [
+pub(super) const CONTEXT_RUNNERS: [&str; 5] = [
     "runInThisContext",
     "runInNewContext",
     "runInContext",
     "compileFunction",
+    "_compile",
 ];
 
 pub(super) const TIMERS: [&str; 3] = ["setTimeout", "setInterval", "setImmediate"];
@@ -118,6 +119,13 @@ pub(super) fn call_of<'e, 'a>(expression: &'e Expression<'a>) -> Option<&'e Call
     }
 }
 
+pub(super) fn callee_of<'e, 'a>(expression: &'e Expression<'a>) -> Option<&'e Expression<'a>> {
+    match expression.without_parentheses() {
+        Expression::TaggedTemplateExpression(tagged) => Some(&tagged.tag),
+        other => call_of(other).map(|call| &call.callee),
+    }
+}
+
 impl Scan<'_> {
     pub(super) fn reads_prototypes(&self, expression: &Expression<'_>) -> bool {
         let Some((object, Key::Name(name))) = member_of(expression) else {
@@ -151,10 +159,10 @@ impl Scan<'_> {
         if let Some((object, key)) = member_of(expression) {
             return self.reached_member(object, key);
         }
-        call_of(expression).is_some_and(|call| {
-            self.reads_prototypes(&call.callee)
-                || self.is_reached(&call.callee)
-                || self.hands_back_a_root(&call.callee)
+        callee_of(expression).is_some_and(|callee| {
+            self.reads_prototypes(callee)
+                || self.is_reached(callee)
+                || self.hands_back_a_root(callee)
         })
     }
 
@@ -182,11 +190,10 @@ impl Scan<'_> {
         match key {
             Key::Name(name) if REACHING_KEYS.contains(&name) => true,
             Key::Name(name) if self.names_a_root(name) => true,
-            Key::Name(name)
-                if BUILTIN_ROOTS.contains(&name)
-                    || CODE_RUNNERS.contains(&name)
-                    || TIMERS.contains(&name) =>
-            {
+            Key::Name(name) if CODE_RUNNERS.contains(&name) || CONTEXT_RUNNERS.contains(&name) => {
+                true
+            }
+            Key::Name(name) if BUILTIN_ROOTS.contains(&name) || TIMERS.contains(&name) => {
                 self.is_reached(object)
             }
             Key::Name(name) if GLOBAL_OBJECTS.contains(&name) => self.is_root(object),
@@ -289,28 +296,26 @@ impl Scan<'_> {
                     && (self.is_global_object(object) || self.is_reached(object))
             }),
         };
-        if named(&CODE_RUNNERS) {
-            return true;
-        }
-        let context = member_of(callee).is_some_and(
-            |(_, key)| matches!(key, Key::Name(name) if CONTEXT_RUNNERS.contains(&name)),
-        );
-        context || (named(&TIMERS) && !self.calls_back(arguments.first()))
+        named(&CODE_RUNNERS) || (named(&TIMERS) && !self.calls_back(arguments.first()))
     }
 
     fn calls_back(&self, first: Option<&Argument<'_>>) -> bool {
-        let Some(expression) = first.and_then(Argument::as_expression) else {
-            return false;
-        };
+        first
+            .and_then(Argument::as_expression)
+            .is_some_and(|expression| self.is_function_value(expression))
+    }
+
+    fn is_function_value(&self, expression: &Expression<'_>) -> bool {
         match expression.without_parentheses() {
             Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_) => true,
             Expression::Identifier(id) => id
                 .reference_id
                 .get()
                 .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
-                .is_some_and(|symbol| self.scoping.symbol_flags(symbol).is_function()),
-            other => call_of(other).is_some_and(|call| {
-                matches!(member_of(&call.callee), Some((_, Key::Name("bind"))))
+                .is_some_and(|symbol| self.only_a_function(symbol)),
+            other => call_of(other).is_some_and(|call| match member_of(&call.callee) {
+                Some((object, Key::Name("bind"))) => self.is_function_value(object),
+                _ => false,
             }),
         }
     }

@@ -150,3 +150,37 @@ a26rr3-ea|var g = globalThis.valueOf(); var k = 'atob'; g[k] = function () { ret
 a26rr3-eb|globalThis.valueOf().Object.assign(globalThis.valueOf(), { atob: function () { return 'patched'; } }); console.log(atob("aGk="));
 a26rr3-ec|var g = globalThis.valueOf(); g.Object.defineProperty(g, 'atob', { value: function () { return 'patched'; } }); console.log(atob("aGk="));
 control-a26rr3-ed|console.log(atob("aGk="));
+a26rr4-a2|var PATCH = function () { return "'+'patched"; }; var p = [].__proto__.valueOf``; p.toString = PATCH; function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-a5|var PATCH = function () { return "'+'patched"; }; [].__proto__.valueOf``.toString = PATCH; function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-d6|var PATCH = function () { return "'+'patched"; }; [].__proto__.valueOf`${0}`.toString = PATCH; function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-c1|var PATCH = function () { return "'+'patched"; }; Array.prototype.valueOf``.toString = PATCH; function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-c2|var PATCH = function () { return "'+'patched"; }; [].__proto__.reverse``.toString = PATCH; function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-c3|var PATCH = function () { return "'+'patched"; }; [].__proto__.fill``.toString = PATCH; function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-c6|var PATCH = function () { return "'+'patched"; }; [].constructor.valueOf``.prototype.toString = PATCH; function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-d5|var PATCH = function () { return "'+'patched"; }; Object.assign([].__proto__.valueOf``, { toString: PATCH }); function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-d3|var PATCH = function () { return "'+'patched"; }; (function () { return this.valueOf``; })().Reflect.getPrototypeOf([]).toString = PATCH; function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-x2|var PATCH = function () { return "'+'patched"; }; globalThis.valueOf``.Reflect.getPrototypeOf([]).toString = PATCH; function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-a1|var PATCH = function () { return "'+'patched"; }; [].__proto__["__defineGetter__"]("toString", function () { return PATCH; }); function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-a6|var PATCH = function () { return "'+'patched"; }; [].__proto__[`__defineGetter__`]("toString", function () { return PATCH; }); function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-c8|var PATCH = function () { return "'+'patched"; }; [].__proto__?.["__defineGetter__"]("toString", function () { return PATCH; }); function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-d4|var PATCH = function () { return "'+'patched"; }; [].constructor.prototype["__defineGetter__"]("toString", function () { return PATCH; }); function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-d2|var PATCH = function () { return "'+'patched"; }; [].__proto__["__defineSetter__"]("zz", function () {}); [].__proto__["__defineGetter__"]("join", function () { return PATCH; }); function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-x3|var PATCH = function () { return "'+'patched"; }; [].__proto__?.__defineGetter__("toString", function () { return PATCH; }); function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-x4|var PATCH = function () { return "'+'patched"; }; [].__proto__.valueOf``["__defineGetter__"]("toString", function () { return PATCH; }); function f() { eval("console.log('or" + [] + "ig')"); } try { f(); } catch (e) { console.log(e.name); }
+a26rr4-e4|var g = globalThis.valueOf``; var k = "atob"; g[k] = function () { return "patched"; }; console.log(atob("aGk="));
+a26rr4-f1|"".constructor.valueOf``; globalThis.valueOf``.eval("atob = function () { return \"patched\"; }"); console.log(atob("aGk="));
+a26rr4-f2|(function () { this.valueOf``.eval("atob = function () { return \"patched\"; }"); })(); console.log(atob("aGk="));
+a26rr4-f3|(function () {}).constructor.valueOf``("atob = function () { return \"patched\"; }")(); console.log(atob("aGk="));
+a26rr4-f8|var g = globalThis.valueOf``; g.Object.defineProperty(g, "atob", { value: function () { return "patched"; } }); console.log(atob("aGk="));
+a26rr4-h8|require("vm").runInThisContext`atob = function () { return \"patched\"; }`; console.log(atob("aGk="));
+a26rr4-h1|var r = require("vm").runInThisContext; r("atob = function () { return \"patched\"; }"); console.log(atob("aGk="));
+a26rr4-h2|module._compile("atob = function () { return \"patched\"; }", "x.js"); console.log(atob("aGk="));
+a26rr4-h3|var { runInThisContext } = require("vm"); runInThisContext("atob = function () { return \"patched\"; }"); console.log(atob("aGk="));
+a26rr4-h4|require("vm").runInThisContext.call(null, "atob = function () { return \"patched\"; }"); console.log(atob("aGk="));
+a26rr4-h7|var vm = require("vm"); var s = new vm.Script("atob = function () { return \"patched\"; }"); var run = s.runInThisContext.bind(s); run(); console.log(atob("aGk="));
+a26rr4-x5|var { runInThisContext: r } = require("vm"); r("atob = function () { return \"patched\"; }"); console.log(atob("aGk="));
+a26rr4-x6|require("vm")["runInThisContext"].apply(null, ["atob = function () { return \"patched\"; }"]); console.log(atob("aGk="));
+a26rr4-x7|module["_compile"]("atob = function () { return \"patched\"; }", "x.js"); console.log(atob("aGk="));
+a26rr4-x8|var c = module._compile; c.call(module, "atob = function () { return \"patched\"; }", "x.js"); console.log(atob("aGk="));
+a26rr4-x9|require("vm").compileFunction("atob = function () { return \"patched\"; }")(); console.log(atob("aGk="));
+a26rr4-y1|globalThis.valueOf``["__defineGetter__"]("atob", function () { return function () { return "patched"; }; }); console.log(atob("aGk="));
