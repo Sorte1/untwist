@@ -3,6 +3,17 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/native_map_pending_rows.txt");
 
+const REFUSED_BY_THE_NAMESPACE_SCAN: &[(&str, &str)] = &[(
+    "ref-map-pending-rebound",
+    "the rebound Map returns Reflect from a function, which the namespace allow-list pins before native-map-pending runs",
+)];
+
+fn refused_by_the_namespace_scan(label: &str) -> bool {
+    REFUSED_BY_THE_NAMESPACE_SCAN
+        .iter()
+        .any(|(refused, _)| *refused == label)
+}
+
 fn rows() -> Vec<(String, String)> {
     ROWS.lines()
         .filter(|line| !line.trim().is_empty())
@@ -94,7 +105,7 @@ fn the_sabotage_rows_diverge_from_node_under_the_native_map_pending_mutant() {
     };
     let sabotage: Vec<(String, String)> = rows()
         .into_iter()
-        .filter(|(label, _)| label.starts_with("ref-"))
+        .filter(|(label, _)| label.starts_with("ref-") && !refused_by_the_namespace_scan(label))
         .collect();
     let mutant = options(false, true);
     let run_mutant = |source: &str| transformed(&mutant, source);
@@ -108,6 +119,22 @@ fn the_sabotage_rows_diverge_from_node_under_the_native_map_pending_mutant() {
         assert!(
             names.contains(&label.as_str()),
             "{label} did not diverge from node under the mutant"
+        );
+    }
+}
+
+#[test]
+fn the_rows_the_namespace_scan_refuses_stay_undecoded_under_the_mutant() {
+    let mutant = options(false, true);
+    let programs = rows();
+    for (label, reason) in REFUSED_BY_THE_NAMESPACE_SCAN {
+        let (_, source) = programs
+            .iter()
+            .find(|(row, _)| row == label)
+            .unwrap_or_else(|| panic!("{label} is not a row"));
+        assert!(
+            transformed(&mutant, source).contains("console.log(bQ("),
+            "{label} decoded under the mutant, but {reason}"
         );
     }
 }
