@@ -196,7 +196,14 @@ pub fn detect_webpack5_noted<'a>(
         options,
     );
     if let Some(entry) = &entry {
-        let attached = attach(alloc, source, (entry, require_name), &mut bundle, bodies);
+        let attached = attach(
+            alloc,
+            source,
+            (entry, require_name),
+            &mut bundle,
+            bodies,
+            options.trust_names,
+        );
         if !attached && (loads_chunks || entry.returned.is_some()) {
             return proving.gate(Err(crate::notes::entry_not_shared()));
         }

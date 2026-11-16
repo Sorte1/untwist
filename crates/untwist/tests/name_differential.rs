@@ -31,9 +31,13 @@ const EVERY_FILE: [&str; 13] = [
     "builtin-replaced",
 ];
 const SAMPLED: [(&str, usize); 2] = [("untranspile", 16), ("unpack-bundlers", 1)];
-const UNMAPPED_CEILING: f64 = 0.15;
+const SINGLE_FILES: [&str; 1] = ["rollup-commonjs/formats/cjs-synthetic--plain.js"];
+const UNMAPPED_CEILING: f64 = 0.08;
+const ARROW_UNMAPPED_CEILING: f64 = 0.15;
+const METHOD_UNMAPPED_CEILING: f64 = 0.3;
 const ANONYMOUS_FLOOR: usize = 3000;
 const ARROW_FLOOR: usize = 800;
+const METHOD_FLOOR: usize = 120;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Inferred {
@@ -45,6 +49,7 @@ enum Inferred {
 enum Shape {
     Arrow(u32),
     Anonymous,
+    Method,
     Other,
 }
 
@@ -52,6 +57,7 @@ struct Names<'t> {
     text: &'t str,
     found: FxHashMap<u32, Inferred>,
     shapes: FxHashMap<u32, Shape>,
+    method_keys: FxHashMap<u32, u32>,
 }
 
 fn strip<'e, 'a>(expr: &'e Expression<'a>) -> &'e Expression<'a> {
@@ -123,7 +129,7 @@ impl<'a> Visit<'a> for Names<'_> {
             true => Shape::Anonymous,
             false => Shape::Other,
         };
-        self.shapes.insert(it.span.start, shape);
+        self.shapes.entry(it.span.start).or_insert(shape);
         if it.id.is_some() {
             self.found.insert(it.span.start, name);
         } else {
@@ -223,6 +229,9 @@ impl<'a> Visit<'a> for Names<'_> {
 
     fn visit_method_definition(&mut self, it: &MethodDefinition<'a>) {
         let name = method_prefixed(it.kind, key_name(&it.key, it.computed));
+        self.shapes.insert(it.value.span.start, Shape::Method);
+        self.method_keys
+            .insert(it.value.span.start, it.key.span().start);
         if it.value.id.is_none() {
             self.record(it.value.span.start, name);
         }
@@ -261,6 +270,7 @@ fn named<'a>(program: &'a Program<'a>) -> Names<'a> {
         text: program.source_text,
         found: FxHashMap::default(),
         shapes: FxHashMap::default(),
+        method_keys: FxHashMap::default(),
     };
     names.visit_program(program);
     names
@@ -270,15 +280,29 @@ fn inferred_names(program: &Program<'_>) -> FxHashMap<u32, Inferred> {
     named(program).found
 }
 
-fn innermost_arrow(shapes: &FxHashMap<u32, Shape>, at: u32) -> Option<u32> {
-    shapes
+fn arrows_holding(shapes: &FxHashMap<u32, Shape>, at: u32) -> Vec<(u32, u32)> {
+    let mut holding: Vec<(u32, u32)> = shapes
         .iter()
         .filter_map(|(start, shape)| match shape {
-            Shape::Arrow(end) if *start <= at && at < *end => Some((*start, *end - *start)),
+            Shape::Arrow(end) if *start <= at && at < *end => Some((*start, *end)),
             _ => None,
         })
-        .min_by_key(|(_, len)| *len)
-        .map(|(start, _)| start)
+        .collect();
+    holding.sort_by_key(|(start, end)| (end - start, *start));
+    holding
+}
+
+fn arrow_depth(shapes: &FxHashMap<u32, Shape>, arrow: u32, at: u32) -> usize {
+    arrows_holding(shapes, at)
+        .iter()
+        .take_while(|(start, _)| *start != arrow)
+        .count()
+}
+
+fn enclosing_arrow(shapes: &FxHashMap<u32, Shape>, at: u32, depth: usize) -> Option<u32> {
+    arrows_holding(shapes, at)
+        .get(depth)
+        .map(|(start, _)| *start)
 }
 
 struct Tokens {
@@ -299,12 +323,12 @@ impl Tokens {
         Self { starts: found }
     }
 
-    fn first_within(&self, start: u32, end: u32) -> Option<(u32, u32)> {
+    fn first_within(&self, start: u32, end: u32) -> Option<(u32, (u32, u32))> {
         let at = self.starts.partition_point(|(offset, _)| *offset < start);
         self.starts
             .get(at)
             .filter(|(offset, _)| *offset < end)
-            .map(|(_, source)| *source)
+            .copied()
     }
 }
 
@@ -340,10 +364,28 @@ struct Tally {
     compared: usize,
     anonymous: usize,
     arrows: usize,
+    methods: usize,
     unmapped: usize,
+    arrows_unmapped: usize,
+    methods_unmapped: usize,
     untokened: usize,
     trees: usize,
     unmapped_modules: usize,
+}
+
+impl Tally {
+    fn lost(&mut self, shape: Shape) {
+        self.unmapped += 1;
+        match shape {
+            Shape::Arrow(_) => self.arrows_unmapped += 1,
+            Shape::Method => self.methods_unmapped += 1,
+            Shape::Anonymous | Shape::Other => {}
+        }
+    }
+
+    fn share(lost: usize, compared: usize) -> f64 {
+        lost as f64 / (lost + compared).max(1) as f64
+    }
 }
 
 fn differences(
@@ -372,20 +414,34 @@ fn differences(
         let original = exact.and_then(|source| offset(input, &in_starts, source));
         let original = match (original, shape) {
             (Some(at), _) if before.found.contains_key(&at) => Some(at),
-            (_, Shape::Arrow(end)) => tokens
-                .first_within(*start, end)
-                .and_then(|source| offset(input, &in_starts, source))
-                .and_then(|at| innermost_arrow(&before.shapes, at)),
+            (_, Shape::Method) => after.method_keys.get(start).and_then(|key| {
+                let (line, column) = position(output, &out_starts, *key as usize);
+                let source = map
+                    .lookup_token(&table, line, column)
+                    .filter(|token| (token.get_dst_line(), token.get_dst_col()) == (line, column))
+                    .map(|token| (token.get_src_line(), token.get_src_col()))?;
+                let at = offset(input, &in_starts, source)?;
+                before
+                    .method_keys
+                    .iter()
+                    .find(|(_, key)| **key == at)
+                    .map(|(value, _)| *value)
+            }),
+            (_, Shape::Arrow(end)) => tokens.first_within(*start, end).and_then(|(at, source)| {
+                let depth = arrow_depth(&after.shapes, *start, at);
+                offset(input, &in_starts, source)
+                    .and_then(|from| enclosing_arrow(&before.shapes, from, depth))
+            }),
             (original, _) => original,
         };
         let Some(original) = original else {
             tally.untokened += usize::from(exact.is_none());
-            tally.unmapped += 1;
+            tally.lost(shape);
             continue;
         };
         let source = position(input, &in_starts, original as usize);
         let Some(was) = before.found.get(&original) else {
-            tally.unmapped += 1;
+            tally.lost(shape);
             continue;
         };
         if *was == Inferred::Unknown || *name == Inferred::Unknown {
@@ -395,6 +451,7 @@ fn differences(
         match shape {
             Shape::Arrow(_) => tally.arrows += 1,
             Shape::Anonymous => tally.anonymous += 1,
+            Shape::Method => tally.methods += 1,
             Shape::Other => {}
         }
         if was == name {
@@ -422,6 +479,11 @@ fn corpus() -> Vec<PathBuf> {
                 .step_by(every),
         );
     }
+    files.extend(
+        SINGLE_FILES
+            .iter()
+            .map(|file| Path::new(FIXTURES).join(file)),
+    );
     files
 }
 
@@ -534,24 +596,41 @@ fn every_function_keeps_its_inferred_name_in_the_default_lane_and_where_rename_p
                 &mut tally,
             ));
         }
-        let seen = tally.compared + tally.unmapped;
-        let share = tally.unmapped as f64 / seen.max(1) as f64;
+        let share = Tally::share(tally.unmapped, tally.compared);
+        let arrow_share = Tally::share(tally.arrows_unmapped, tally.arrows);
+        let method_share = Tally::share(tally.methods_unmapped, tally.methods);
         report.push(format!(
-            "{}: compared {} ({} anonymous function expressions, {} arrows), unmapped output functions {} ({:.1} %, {} with no token at their start), trees {}, outputs without a map {}",
+            "{}: compared {} ({} anonymous function expressions, {} arrows, {} class methods), unmapped output functions {} ({:.1} %, {} with no token at their start; arrows {} ({:.1} %), class methods {} ({:.1} %)), trees {}, outputs without a map {}",
             lane.name,
             tally.compared,
             tally.anonymous,
             tally.arrows,
+            tally.methods,
             tally.unmapped,
             share * 100.0,
             tally.untokened,
+            tally.arrows_unmapped,
+            arrow_share * 100.0,
+            tally.methods_unmapped,
+            method_share * 100.0,
             tally.trees,
             tally.unmapped_modules
         ));
         assert!(tally.compared > 2000, "{}", report.join("\n"));
         assert!(share < UNMAPPED_CEILING, "{}", report.join("\n"));
+        assert!(
+            arrow_share < ARROW_UNMAPPED_CEILING,
+            "{}",
+            report.join("\n")
+        );
+        assert!(
+            method_share < METHOD_UNMAPPED_CEILING,
+            "{}",
+            report.join("\n")
+        );
         assert!(tally.anonymous > ANONYMOUS_FLOOR, "{}", report.join("\n"));
         assert!(tally.arrows > ARROW_FLOOR, "{}", report.join("\n"));
+        assert!(tally.methods > METHOD_FLOOR, "{}", report.join("\n"));
         assert!(lane.renames || tally.trees > 0, "{}", report.join("\n"));
     }
     eprintln!("{}", report.join("\n"));
@@ -589,6 +668,26 @@ fn the_check_compares_anonymous_function_expressions_and_arrows_through_the_map(
     assert!(wrong.is_empty(), "{wrong:?}");
     assert_eq!((tally.anonymous, tally.arrows), (3, 2), "{}", output.code());
     assert_eq!(tally.unmapped, 0, "{}", output.code());
+}
+
+#[test]
+fn an_arrow_without_parameters_is_paired_with_its_own_input_arrow() {
+    let input = "var f = () => () => 1;\nconsole.log(f.name, f().name);\n";
+    let options = Options {
+        source_map: true,
+        ..Options::default()
+    };
+    let output = Pipeline::new(options).run(input);
+    let map = output
+        .source_maps
+        .first()
+        .cloned()
+        .flatten()
+        .expect("a map");
+    let mut tally = Tally::default();
+    let wrong = differences("probe", (input, output.code()), &map, &mut tally);
+    assert!(wrong.is_empty(), "{wrong:?}");
+    assert_eq!(tally.arrows, 2, "{}", output.code());
 }
 
 const MODEL_ROWS: [&str; 14] = [

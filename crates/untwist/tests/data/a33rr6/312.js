@@ -1,0 +1,1 @@
+(function () { var o = { f: function () {} }; var { f } = o; var { f: g = function () {} } = {}; var [h = () => 1] = []; var p = o.f; var { q = class {} } = {}; let r; ({ r = function () {} } = {}); let s; [s = class {}] = []; let t; ({ k: t = () => 1 } = {}); console.log([f.name, g.name, h.name, p.name, q.name, r.name, s.name, t.name].join("|")); })();

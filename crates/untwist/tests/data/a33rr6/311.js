@@ -1,0 +1,1 @@
+var E; (function (E) { E[E["A"] = 0] = "A"; E.f = function () {}; })(E || (E = {})); var M = M || function () {}; var NS = NS || {}; NS.f = NS.f || function () {}; console.log([E.f.name, M.name, NS.f.name].join("|"));

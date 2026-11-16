@@ -82,8 +82,18 @@ fn refused_body(body: &str) {
     refused(&bundle_with("", &entry_body(body)));
 }
 
+fn trusting_names() -> UnpackOptions {
+    UnpackOptions {
+        trust_names: true,
+        ..UnpackOptions::default()
+    }
+}
+
 fn taken_matches_cloned_by(text: &str, parser: Parser) -> Option<Out> {
-    let options = UnpackOptions::default();
+    taken_matches_cloned_with(text, parser, UnpackOptions::default())
+}
+
+fn taken_matches_cloned_with(text: &str, parser: Parser, options: UnpackOptions) -> Option<Out> {
     let cloned = extracted(text, options, (parser, false));
     let taken = extracted(text, options, (parser, true));
     assert_eq!(taken, cloned, "{text}");
@@ -273,8 +283,9 @@ fn a_bound_namespace_load_needs_a_literal_mode() {
             "var m = 3; Promise.resolve().then(__webpack_require__.t.bind(__webpack_require__, 1, {mode}));"
         ))
     };
-    let out = unpacked(&bundle_with(helper, &bound("3")));
+    let out = unpacked_with(&bundle_with(helper, &bound("3")), trusting_names());
     assert!(index(&out).is_some());
+    refused(&bundle_with(helper, &bound("3")));
     refused(&bundle_with(helper, &bound("m")));
 }
 
@@ -442,7 +453,8 @@ fn the_webpack5_fixtures_extract_alike_taken_and_cloned() {
             continue;
         }
         for parser in [parse as Parser, prepared] {
-            let out = taken_matches_cloned_by(&text, parser);
+            taken_matches_cloned_by(&text, parser);
+            let out = taken_matches_cloned_with(&text, parser, trusting_names());
             written += usize::from(out.is_some_and(|out| index(&out).is_some()));
         }
     }

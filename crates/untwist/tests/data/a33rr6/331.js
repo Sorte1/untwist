@@ -1,0 +1,1 @@
+function w() { return w.caller === null ? "null" : w.caller.name; } function main() { return (0, eval)("w()") + "/" + new Function("return w()")() + "/" + Function("return w();")(); } console.log(main());

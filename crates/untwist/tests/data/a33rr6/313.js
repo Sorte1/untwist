@@ -1,0 +1,1 @@
+(function () { var a = function () {}; a = a; var b; b = (b, function () {}); var c; c = (function () {}); var d; (d) = function () {}; var e; e = (0, class {}); var f = `${1}` && function () {}; var g; g = void 0 || function () {}; console.log([a.name, b.name, c.name, d.name, e.name, f.name, g.name].join("|")); })();

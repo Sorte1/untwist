@@ -453,6 +453,7 @@ struct Uses<'s> {
     scoping: &'s Scoping,
     require: &'s str,
     needs: Option<Needs>,
+    trust_names: bool,
     depth: u32,
     allowed: FxHashSet<usize>,
     refused: bool,
@@ -493,7 +494,7 @@ impl Uses<'_> {
         let Expression::StaticMemberExpression(member) = &call.callee else {
             return None;
         };
-        if member.optional || member.property.name != BIND {
+        if !self.trust_names || member.optional || member.property.name != BIND {
             return None;
         }
         let object = match &member.object {
@@ -549,7 +550,8 @@ impl<'a> VisitJs<'a> for Uses<'_> {
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
         if let Some(object) = self.free_require(&it.object) {
             let name = it.property.name.as_str();
-            if !it.optional && (self.routes(name) || name == BIND) {
+            let bound = self.trust_names && name == BIND;
+            if !it.optional && (self.routes(name) || bound) {
                 self.allow(object);
             }
         }
@@ -624,6 +626,7 @@ fn proven<'s>(
     site: &Site<'s, '_>,
     (text, require): (&str, &str),
     runtime: Option<&Runtime<'_>>,
+    trust_names: bool,
 ) -> Option<Option<&'s str>> {
     let scoping = build_scoping(program).scoping;
     let exports = exports_name(&scoping, site, (text, require))?;
@@ -631,6 +634,7 @@ fn proven<'s>(
         scoping: &scoping,
         require,
         needs: runtime.map(Needs::of),
+        trust_names,
         depth: 0,
         allowed: FxHashSet::default(),
         refused: false,
@@ -677,12 +681,21 @@ pub fn attach<'a>(
     (site, require): (&Site<'_, 'a>, &str),
     bundle: &mut Bundle<'a>,
     bodies: &mut Bodies<'a>,
+    trust_names: bool,
 ) -> bool {
     let planned = matches!(bodies, Bodies::Planned(_));
     let runtime = bundle.runtime.as_ref();
     if planned {
         let probe = module_from_body_with(alloc, source, site.body, &mut Bodies::Cloned);
-        if proven(&probe, site, (source.source_text, require), runtime).is_none() {
+        if proven(
+            &probe,
+            site,
+            (source.source_text, require),
+            runtime,
+            trust_names,
+        )
+        .is_none()
+        {
             return false;
         }
     }
@@ -691,8 +704,13 @@ pub fn attach<'a>(
     let exports = match planned {
         true => None,
         false => {
-            let Some(exports) = proven(&program, site, (source.source_text, require), runtime)
-            else {
+            let Some(exports) = proven(
+                &program,
+                site,
+                (source.source_text, require),
+                runtime,
+                trust_names,
+            ) else {
                 return false;
             };
             exports

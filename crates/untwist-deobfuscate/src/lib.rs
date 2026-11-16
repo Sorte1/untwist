@@ -16,6 +16,7 @@ pub mod decoder;
 pub mod directives;
 pub mod driver;
 pub mod evaluate_globals;
+mod flag_home;
 pub mod fold_chains;
 pub mod fused;
 pub mod init_order;

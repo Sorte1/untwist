@@ -1,0 +1,1 @@
+(function () { var x = eval("var q = function () {}; q"); var y = new Function("var z = function () {}; return z")(); var t = setTimeout; console.log(x.name, y.name); var d = eval("(function () { return function () {}; })")(); console.log(d.name); })();

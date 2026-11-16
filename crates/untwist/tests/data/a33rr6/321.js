@@ -1,0 +1,1 @@
+(function () { var f = new Function("a", "return a + 1"); console.log([f(1), f.length].join("|")); var g = Function("return function () {}")(); var h = eval("(function () {})"); var k = (0, eval)("(() => 1)"); var m = eval("(class {})"); console.log([g.name, h.name, k.name, m.name].join("|")); })();

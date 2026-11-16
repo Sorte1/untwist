@@ -1,0 +1,1 @@
+(function () { function A() {} A.prototype.m = function () {}; A.s = function () {}; A.prototype.n = () => 1; var B = function () { function B() {} B.prototype.x = function () {}; return B; }(); console.log([A.name, A.prototype.m.name, A.s.name, A.prototype.n.name, B.name, B.prototype.x.name, new B().constructor.name].join("|")); })();

@@ -1,0 +1,1 @@
+(function () { function f(a, b) { if (a === void 0) { a = function () {}; } if (b === undefined) b = class {}; var c = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : function () {}; return [a.name, b.name, c.name]; } console.log(f().join("|")); })();
