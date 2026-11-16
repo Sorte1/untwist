@@ -12,6 +12,8 @@ const NUMBER_NAMES: [&str; 3] = ["undefined", "NaN", "Infinity"];
 const NUMBER_CALLS: [&str; 3] = ["Number", "parseInt", "parseFloat"];
 const NUMBER_SPACES: [&str; 2] = ["Math", "Date"];
 const SYMBOL: &str = "Symbol";
+const OBJECT: &str = "Object";
+pub const NAME_LISTERS: [&str; 3] = ["getOwnPropertyNames", "keys", "getOwnPropertySymbols"];
 
 #[derive(Clone, Copy)]
 pub enum Write<'a> {
@@ -34,6 +36,7 @@ pub struct Writes<'a> {
     pub escaped: FxHashSet<SymbolId>,
     pub listers: FxHashSet<SymbolId>,
     pub reshaped: FxHashSet<SymbolId>,
+    pub stored: FxHashMap<SymbolId, Vec<&'a Expression<'a>>>,
     pub fn_params: FxHashMap<SymbolId, Vec<Option<SymbolId>>>,
 }
 
@@ -246,7 +249,7 @@ impl<'a> Keys<'_, 'a> {
                 if self.uncalled_param(symbol) {
                     return true;
                 }
-                if self.writes.escaped.contains(&symbol) || self.writes.reshaped.contains(&symbol) {
+                if self.writes.escaped.contains(&symbol) || self.reshaped(symbol) {
                     return false;
                 }
                 match self.writes.settled(self.scoping, symbol) {
@@ -255,6 +258,63 @@ impl<'a> Keys<'_, 'a> {
                 }
             }),
             other => literal_data(other),
+        }
+    }
+
+    fn reshaped(&self, symbol: SymbolId) -> bool {
+        self.writes.reshaped.contains(&symbol)
+            || self
+                .writes
+                .stored
+                .get(&symbol)
+                .is_some_and(|values| values.iter().any(|value| !self.primitive(value)))
+    }
+
+    fn primitive(&self, expr: &Expression<'a>) -> bool {
+        match expr.without_parentheses() {
+            Expression::StringLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::TemplateLiteral(_)
+            | Expression::UnaryExpression(_)
+            | Expression::UpdateExpression(_)
+            | Expression::BinaryExpression(_) => true,
+            other => self.numeric(other, DEPTH),
+        }
+    }
+
+    fn listed(&self, expr: &Expression<'_>) -> bool {
+        let Expression::Identifier(id) = expr.without_parentheses() else {
+            return false;
+        };
+        self.symbol(id)
+            .and_then(|symbol| self.writes.settled(self.scoping, symbol))
+            .is_some_and(|writes| {
+                !writes.is_empty()
+                    && writes.iter().all(|write| match write {
+                        Write::Value(value) => match value.without_parentheses() {
+                            Expression::CallExpression(call) => self.lister(&call.callee, true),
+                            _ => false,
+                        },
+                        _ => false,
+                    })
+            })
+    }
+
+    fn lister(&self, callee: &Expression<'_>, alias: bool) -> bool {
+        match callee.without_parentheses() {
+            Expression::Identifier(id) if alias => self
+                .symbol(id)
+                .and_then(|symbol| self.writes.settled(self.scoping, symbol))
+                .is_some_and(
+                    |writes| matches!(writes, [Write::Value(init)] if self.lister(init, false)),
+                ),
+            Expression::StaticMemberExpression(member) => {
+                self.free(&member.object, &[OBJECT])
+                    && NAME_LISTERS.contains(&member.property.name.as_str())
+            }
+            _ => false,
         }
     }
 
@@ -300,6 +360,12 @@ impl<'a> Keys<'_, 'a> {
         match (left.without_parentheses(), right.without_parentheses()) {
             (Expression::Identifier(a), Expression::Identifier(b)) => {
                 a.name == b.name && self.symbol(a) == self.symbol(b)
+            }
+            (Expression::ComputedMemberExpression(a), Expression::ComputedMemberExpression(b)) => {
+                self.listed(&a.object)
+                    && matches!(&a.expression, Expression::Identifier(_))
+                    && self.same_key(&a.object, &b.object)
+                    && self.same_key(&a.expression, &b.expression)
             }
             _ => false,
         }

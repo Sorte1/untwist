@@ -7,7 +7,7 @@ use oxc_syntax::operator::{LogicalOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::host_keys::{const_key, literal_data, runner_key, Keys, Write, Writes};
+use crate::host_keys::{const_key, literal_data, runner_key, Keys, Write, Writes, NAME_LISTERS};
 use crate::host_text::CONSTRUCTOR;
 
 mod collect;
@@ -35,7 +35,6 @@ const VALUE_SINKS: [&str; 7] = [
 ];
 const CONSOLE: &str = "console";
 const PROXY: &str = "Proxy";
-const NAME_LISTERS: [&str; 3] = ["getOwnPropertyNames", "keys", "getOwnPropertySymbols"];
 const UNDEFINED: &str = "undefined";
 const PASSES: usize = 6;
 

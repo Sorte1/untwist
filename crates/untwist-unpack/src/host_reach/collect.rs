@@ -80,10 +80,31 @@ impl<'a> Reach<'_, 'a> {
         if !reshapes || !self.written(at) {
             return;
         }
-        if let Expression::Identifier(id) = object.without_parentheses() {
-            if let Some(symbol) = self.symbol(id) {
+        let Expression::Identifier(id) = object.without_parentheses() else {
+            return;
+        };
+        let Some(symbol) = self.symbol(id) else {
+            return;
+        };
+        match self.stored_value(at) {
+            Some(None) => {}
+            Some(Some(value)) => self.writes.stored.entry(symbol).or_default().push(value),
+            None => {
                 self.writes.reshaped.insert(symbol);
             }
+        }
+    }
+
+    fn stored_value(&self, at: usize) -> Option<Option<&'a Expression<'a>>> {
+        let (up, _) = self.parent(at)?;
+        match self.stack[up] {
+            AstKind::UpdateExpression(_) => Some(None),
+            AstKind::AssignmentExpression(assign) => match assign.operator {
+                AssignmentOperator::Assign => Some(Some(&assign.right)),
+                operator if operator.is_logical() => None,
+                _ => Some(None),
+            },
+            _ => None,
         }
     }
 
