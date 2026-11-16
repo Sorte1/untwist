@@ -3,10 +3,12 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/native_map_pending_rows.txt");
 
-const REFUSED_BY_THE_NAMESPACE_SCAN: &[(&str, &str)] = &[(
-    "ref-map-pending-rebound",
-    "the rebound Map returns Reflect from a function, which the namespace allow-list pins before native-map-pending runs",
-)];
+const RETURNS_REFLECT: &str = "the rebound Map returns Reflect from a function, which the namespace allow-list pins before native-map-pending runs";
+
+const REFUSED_BY_THE_NAMESPACE_SCAN: &[(&str, &str)] = &[
+    ("ref-map-pending-rebound", RETURNS_REFLECT),
+    ("ref-map-pending-rebound-through-call", RETURNS_REFLECT),
+];
 
 fn refused_by_the_namespace_scan(label: &str) -> bool {
     REFUSED_BY_THE_NAMESPACE_SCAN
@@ -103,10 +105,16 @@ fn the_sabotage_rows_diverge_from_node_under_the_native_map_pending_mutant() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let sabotage: Vec<(String, String)> = rows()
+    let (refused, sabotage): (Vec<(String, String)>, Vec<(String, String)>) = rows()
         .into_iter()
-        .filter(|(label, _)| label.starts_with("ref-") && !refused_by_the_namespace_scan(label))
+        .filter(|(label, _)| label.starts_with("ref-"))
+        .partition(|(label, _)| refused_by_the_namespace_scan(label));
+    let refused_labels: Vec<&str> = refused.iter().map(|(label, _)| label.as_str()).collect();
+    let former_sabotage: Vec<&str> = REFUSED_BY_THE_NAMESPACE_SCAN
+        .iter()
+        .map(|(label, _)| *label)
         .collect();
+    assert_eq!(refused_labels, former_sabotage);
     let mutant = options(false, true);
     let run_mutant = |source: &str| transformed(&mutant, source);
     let modes: [Mode<'_>; 1] = [("mutant", &run_mutant)];
