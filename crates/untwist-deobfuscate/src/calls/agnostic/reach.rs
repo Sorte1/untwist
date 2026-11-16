@@ -467,6 +467,7 @@ impl<'a> Sites<'_, 'a> {
             return;
         }
         self.reach_reader_call(call, member, keys);
+        self.reach_fixed_writes(call, member, keys);
         let unknown = keys.iter().any(open);
         if unknown || (dynamic_paths() && names_one_of(keys, &VALUE_ENUMERATORS)) {
             self.reach_arguments(call);
@@ -516,8 +517,29 @@ impl<'a> Sites<'_, 'a> {
             .any(|key| !matches!(key, AKey::Named(_) | AKey::Index))
             && self.ambient_base(member.object()).is_some();
         if (named || opaque_builtin) && self.flow.sink_of(span).is_some() {
-            self.hit_reflective(span);
+            return self.hit_reflective(span);
         }
+        if self.flow.sink_of(span).is_some() {
+            self.reach_fixed_writer_read(keys, span);
+            if self.well_known_symbol_key(member) && self.fixed_watched() {
+                self.hit_reflective(span);
+            }
+        }
+    }
+
+    fn well_known_symbol_key(&self, member: &MemberExpression<'a>) -> bool {
+        let MemberExpression::ComputedMemberExpression(computed) = member else {
+            return false;
+        };
+        let Some(key) = computed
+            .expression
+            .without_parentheses()
+            .as_member_expression()
+        else {
+            return false;
+        };
+        matches!(key.object().without_parentheses(), Expression::Identifier(id)
+            if id.name == "Symbol" && self.fresh.symbol(id).is_none())
     }
 
     fn reach_arguments(&mut self, call: &CallExpression<'a>) {

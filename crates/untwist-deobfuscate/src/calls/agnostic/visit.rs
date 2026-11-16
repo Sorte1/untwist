@@ -254,6 +254,11 @@ impl<'s, 'a> Sites<'s, 'a> {
                 .map_or_else(|| Keys::Many(Vec::new()), |expr| self.key_set(expr)),
         };
         self.note_script_read(&keys);
+        let listed = match &keys {
+            Keys::One(key) => std::slice::from_ref(key),
+            Keys::Many(list) => list.as_slice(),
+        };
+        self.reach_fixed_writer_read(listed, span);
         for key in keys {
             self.mark_origin(origin_of(&key), span, "destructured read");
         }
@@ -632,7 +637,9 @@ impl<'s, 'a> VisitJs<'a> for Sites<'s, 'a> {
         &mut self,
         it: &AssignmentTargetPropertyIdentifier<'a>,
     ) {
-        let origin = origin_of(&AKey::Named(Cow::Borrowed(it.binding.name.as_str())));
+        let key = AKey::Named(Cow::Borrowed(it.binding.name.as_str()));
+        self.reach_fixed_writer_read(std::slice::from_ref(&key), it.span);
+        let origin = origin_of(&key);
         self.mark_origin(origin, it.span, "destructured read");
         walk_js::walk_assignment_target_property_identifier(self, it);
     }
