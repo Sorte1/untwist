@@ -18,9 +18,7 @@ fn rows(text: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-const DYNAMIC_PATH_WITNESSES: [&str; 22] = [
-    "amb-object-unknown",
-    "amb-reflect-unknown",
+const DYNAMIC_PATH_WITNESSES: [&str; 17] = [
     "dr-d12",
     "dr-d15",
     "dr-d16",
@@ -35,12 +33,9 @@ const DYNAMIC_PATH_WITNESSES: [&str; 22] = [
     "dr-n-param",
     "dr-n-rest",
     "dr-n-spread",
-    "s2-n-entries",
     "s2-n-forin",
     "s2-n-keys",
     "s2-n-stringify",
-    "s2-r14",
-    "sw-n-values",
 ];
 
 fn both_modes() -> [(&'static str, Options); 2] {

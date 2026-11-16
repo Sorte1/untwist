@@ -25,6 +25,7 @@ mod opaque;
 mod quiet;
 mod reach;
 mod reach_text;
+mod reader_reach;
 mod roles;
 mod script;
 mod settle;
