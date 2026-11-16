@@ -73,7 +73,7 @@ const CELLS: &[Cell] = &[
         name: "parcel-nohoist-min",
         family: "parcel",
         modules: 5,
-        lanes: &LANES,
+        lanes: &UNSAFE_ONLY,
     },
     Cell {
         app: "mini",

@@ -168,9 +168,13 @@ fn a_failed_patch_in_one_input_leaves_the_next_input_patching() {
     let alone = patched_on_one_thread(&[&source]);
     assert!(alone > 0, "{NAMED}: no round was patched");
     let poisoned = patched_on_one_thread(&[&poisoning]);
+    assert!(
+        poisoned < alone,
+        "{NAMED}: the poisoning input patched as much as the clean one"
+    );
     assert_eq!(
         patched_on_one_thread(&[&poisoning, &source]),
-        poisoned + alone,
+        patched_on_one_thread(&[&source, &poisoning]),
         "{NAMED}: an earlier input's failed patches kept this input from patching"
     );
 }

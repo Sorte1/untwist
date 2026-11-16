@@ -8,7 +8,8 @@ use untwist_core::semantic::{assume_shared_globals, build_scoping, SharedGlobals
 use untwist_deobfuscate::calls::agnostic::{names_reached_from, NamesReached};
 use untwist_eval::stack;
 
-use super::global_writes::{global_writes, GlobalWrites};
+use super::global_writes::{global_writes, GlobalWrites, EVERY_ROOT};
+use untwist_core::semantic::builtins;
 
 struct Seen {
     script: bool,
@@ -54,7 +55,7 @@ fn unreadable() -> Seen {
     }
 }
 
-fn seen(source: &str) -> Seen {
+fn seen(source: &str, unsafe_transforms: bool) -> Seen {
     if !fits_this_stack(source) {
         return unreadable();
     }
@@ -79,7 +80,14 @@ fn seen(source: &str) -> Seen {
             .filter(|(_, ids)| ids.iter().any(|id| scoping.get_reference(*id).is_write()))
             .map(|(name, _)| name.as_str().to_string())
             .collect(),
-        global_written: global_writes(&parsed.program),
+        global_written: {
+            let mut written = global_writes(&parsed.program);
+            let module = parsed.program.source_type.is_module();
+            let verdict =
+                builtins::scan(&parsed.program, &scoping, module, false, &EVERY_ROOT).verdict;
+            written.every |= !verdict.allows_safe(unsafe_transforms);
+            written
+        },
         keys: key_names(&parsed.program, &scoping)
             .into_iter()
             .chain(text_names(&parsed.program, &scoping))
@@ -111,11 +119,17 @@ fn other_script_names(all: &[Seen], own: usize) -> Vec<&str> {
     names
 }
 
-pub(super) fn shared_globals(sources: &[&str]) -> Vec<Option<SharedGlobals>> {
+pub(super) fn shared_globals(
+    sources: &[&str],
+    unsafe_transforms: bool,
+) -> Vec<Option<SharedGlobals>> {
     if sources.len() < 2 {
         return vec![None; sources.len()];
     }
-    let all: Vec<Seen> = sources.iter().map(|source| seen(source)).collect();
+    let all: Vec<Seen> = sources
+        .iter()
+        .map(|source| seen(source, unsafe_transforms))
+        .collect();
     let reached: Vec<NamesReached> = sources
         .iter()
         .enumerate()
