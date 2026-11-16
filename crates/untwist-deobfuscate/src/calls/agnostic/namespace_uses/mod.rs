@@ -349,14 +349,14 @@ impl<'s, 'a> Walker<'s, 'a> {
             .filter(|(symbol, candidate)| {
                 !self.scoping.symbol_is_mutated(**symbol)
                     && self.scoping.symbol_redeclarations(**symbol).is_empty()
-                    && !(self.script && self.scoping.symbol_scope_id(**symbol) == root)
                     && candidate
                         .function
                         .is_none_or(|function| !self.arguments_used.contains(&function))
             })
             .filter_map(|(symbol, _)| {
                 let kind = self.symbol_kind(*symbol, KIND_DEPTH, &mut Vec::new());
-                (kind != 0).then_some((*symbol, kind))
+                let shared = self.script && self.scoping.symbol_scope_id(*symbol) == root;
+                (kind != 0 && !(shared && kind & NAMESPACE != 0)).then_some((*symbol, kind))
             })
             .collect()
     }
