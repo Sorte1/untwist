@@ -7,7 +7,7 @@ use super::{function_literal, member_key, same, transparent, Walker, GLOBAL};
 
 const FORWARDS: [&str; 2] = ["apply", "call"];
 
-fn returned_function<'k, 'a>(init: &'k Expression<'a>) -> Option<&'k Function<'a>> {
+pub(super) fn returned_function<'k, 'a>(init: &'k Expression<'a>) -> Option<&'k Function<'a>> {
     match init.without_parentheses() {
         Expression::FunctionExpression(function) => Some(function),
         Expression::CallExpression(call) if call.arguments.is_empty() => {
@@ -79,10 +79,7 @@ impl<'s, 'a> Walker<'s, 'a> {
             return None;
         };
         let symbol = self.symbol(callee)?;
-        let wrapper = returned_function(self.candidates.get(&symbol)?.init)?;
-        if self.scoping.symbol_is_mutated(symbol) {
-            return None;
-        }
+        let wrapper = self.candidates.get(&symbol)?.wrapper?;
         let index = wrapper.params.items.iter().position(|param| {
             matches!(&param.pattern, BindingPattern::BindingIdentifier(id)
                 if param.initializer.is_none() && id.symbol_id.get().is_some_and(|param| self.receiver_only(param)))

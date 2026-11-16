@@ -27,16 +27,10 @@ impl<'s, 'a> Walker<'s, 'a> {
                 | AstKind::LogicalExpression(_)
                 | AstKind::SequenceExpression(_)
                 | AstKind::AwaitExpression(_) => {}
-                AstKind::VariableDeclarator(d) => return bare(&d.id),
+                AstKind::VariableDeclarator(_) => return true,
                 AstKind::AssignmentPattern(p) => return bare(&p.left),
                 AstKind::FormalParameter(p) => return bare(&p.pattern),
-                AstKind::AssignmentExpression(a) => {
-                    return !matches!(
-                        a.left,
-                        AssignmentTarget::ObjectAssignmentTarget(_)
-                            | AssignmentTarget::ArrayAssignmentTarget(_)
-                    ) || !same(&a.right, child);
-                }
+                AstKind::AssignmentExpression(_) => return true,
                 AstKind::AssignmentTargetWithDefault(t) => {
                     return !matches!(
                         t.binding,

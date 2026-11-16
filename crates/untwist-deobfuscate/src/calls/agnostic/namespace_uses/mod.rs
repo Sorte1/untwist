@@ -74,6 +74,7 @@ enum Phase {
 
 struct Candidate<'a> {
     init: &'a Expression<'a>,
+    wrapper: Option<&'a Function<'a>>,
     this_global: bool,
     function: Option<Address>,
 }
@@ -344,10 +345,19 @@ impl<'s, 'a> Walker<'s, 'a> {
         };
         let candidate = Candidate {
             init,
+            wrapper: self.unmutated_wrapper(symbol, init),
             this_global: self.this_is_global(),
             function: None,
         };
         self.candidates.insert(symbol, candidate);
+    }
+
+    fn unmutated_wrapper(
+        &self,
+        symbol: SymbolId,
+        init: &'a Expression<'a>,
+    ) -> Option<&'a Function<'a>> {
+        shapes::returned_function(init).filter(|_| !self.scoping.symbol_is_mutated(symbol))
     }
 
     fn collect_params(&mut self, call: &'a CallExpression<'a>) {
@@ -369,6 +379,7 @@ impl<'s, 'a> Walker<'s, 'a> {
             };
             let candidate = Candidate {
                 init,
+                wrapper: self.unmutated_wrapper(symbol, init),
                 this_global,
                 function,
             };
@@ -474,6 +485,22 @@ impl<'s, 'a> Walker<'s, 'a> {
         if taken.as_deref().is_some_and(namespace_key) {
             self.found.push(span);
         }
+        if taken.is_none() && key.is_expression() && !self.top_pattern() {
+            self.found.push(span);
+        }
+    }
+
+    fn top_pattern(&self) -> bool {
+        let up = |back: usize| self.stack.len().checked_sub(back).map(|at| &self.stack[at]);
+        match (up(2), up(3)) {
+            (Some(AstKind::ObjectPattern(_)), Some(AstKind::VariableDeclarator(d))) => {
+                d.init.is_some()
+            }
+            (Some(AstKind::ObjectAssignmentTarget(_)), Some(AstKind::AssignmentExpression(_))) => {
+                true
+            }
+            _ => false,
+        }
     }
 
     fn check_proto_property(&mut self, property: &ObjectProperty<'a>) {
@@ -553,6 +580,11 @@ impl<'s, 'a> Walker<'s, 'a> {
                 .expressions
                 .last()
                 .is_some_and(|last| self.proto_literal(last, next)),
+            Expression::CallExpression(call) => call
+                .callee
+                .without_parentheses()
+                .as_member_expression()
+                .is_some_and(|member| member_key(member, self.resolve).as_deref() == Some("bind")),
             other => other.as_member_expression().is_some_and(|member| {
                 member_key(member, self.resolve).as_deref() == Some("prototype")
                     && self.kind_here(member.object()) == 0
@@ -632,7 +664,7 @@ impl<'s, 'a> Walker<'s, 'a> {
                     if same(&c.callee, child) {
                         return kind & VALUE == 0;
                     }
-                    return false;
+                    return kind & VALUE == 0 && self.patched_namespace(at, c, child);
                 }
                 AstKind::NewExpression(n) => return same(&n.callee, child) && kind & VALUE == 0,
                 AstKind::VariableDeclarator(d) => {

@@ -126,3 +126,33 @@ impl Loose {
             .any(|(block, _)| block.start <= span.start && span.end <= block.end)
     }
 }
+
+const PATCHERS: [&str; 5] = [
+    "defineProperty",
+    "defineProperties",
+    "assign",
+    "set",
+    "deleteProperty",
+];
+
+impl<'s, 'a> Walker<'s, 'a> {
+    pub(super) fn patched_namespace(
+        &self,
+        at: usize,
+        call: &CallExpression<'a>,
+        child: oxc_allocator::Address,
+    ) -> bool {
+        let first = call.arguments.first().and_then(Argument::as_expression);
+        if !first.is_some_and(|first| super::same(first, child)) {
+            return false;
+        }
+        let Some(member) = call.callee.without_parentheses().as_member_expression() else {
+            return false;
+        };
+        let patches = super::member_key(member, self.resolve)
+            .is_some_and(|key| PATCHERS.contains(&key.as_ref()));
+        patches
+            && self.kind_here(member.object()) & super::NAMESPACE != 0
+            && self.allowed(at, super::VALUE)
+    }
+}
