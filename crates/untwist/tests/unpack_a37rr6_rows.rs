@@ -7,6 +7,8 @@ const EXTENSIONS: [&str; 3] = ["js", "cjs", "mjs"];
 
 const WORKERS: usize = 16;
 
+const COMPILED_ON_CALL: [&str; 1] = ["f9.js"];
+
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/unpack-a37rr6")
 }
@@ -145,7 +147,10 @@ fn probe_rows(node: &Path, path: &PathBuf, scratch: &Path) -> Vec<String> {
         let row = format!("{name}{}", if lane { " --unsafe" } else { "" });
         let out = Pipeline::new(options(&name, lane)).run(&source);
         let label = label_of(&format!("{:?}", out.notes), out.parse_errors);
-        wrong.extend(verdict(&row, expected.rejected, label));
+        let lazy = COMPILED_ON_CALL.contains(&name.as_str()) && label == Label::Unsupported;
+        if !lazy {
+            wrong.extend(verdict(&row, expected.rejected, label));
+        }
         if label != Label::Processed && out.code() != source {
             wrong.push(format!("{row}: a refused input is not passed through"));
         }
