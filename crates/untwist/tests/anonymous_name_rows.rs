@@ -516,10 +516,10 @@ const RR5_RENAME_PREMISE: [&str; 14] = [
     "rr5-c45", "rr5-c46", "rr5-c47", "rr5-c48", "rr5-c49", "rr5-c50",
 ];
 
-const RR5_UNSAFE_WITNESSES: [&str; 24] = [
+const RR5_UNSAFE_WITNESSES: [&str; 23] = [
     "rr5-c01", "rr5-c02", "rr5-c03", "rr5-c08", "rr5-c10", "rr5-c11", "rr5-c20", "rr5-c27",
     "rr5-c40", "rr5-c42", "rr5-c44", "rr5-c45", "rr5-c46", "rr5-c47", "rr5-c49", "rr5-c53",
-    "rr5-c54", "rr5-c55", "rr5-c60", "rr5-c61", "rr5-c62", "rr5-c66", "rr5-c75", "rr5-c78",
+    "rr5-c54", "rr5-c55", "rr5-c60", "rr5-c61", "rr5-c62", "rr5-c66", "rr5-c78",
 ];
 
 #[test]
