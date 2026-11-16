@@ -46,7 +46,11 @@ struct Seen {
 }
 
 fn located_in(stderr: &str, file: &Path) -> bool {
-    let path = file.display().to_string();
+    let path = file
+        .canonicalize()
+        .unwrap_or_else(|_| file.to_path_buf())
+        .display()
+        .to_string();
     stderr.lines().any(|line| {
         let line = line.strip_prefix("file://").unwrap_or(line);
         line.strip_prefix(path.as_str())
@@ -199,7 +203,8 @@ fn snippets() -> Vec<Snippet> {
 fn snippet_seen(node: &Path, file: &Path) -> Option<Seen> {
     let observed: Observed = run(node, file).expect("spawn")?;
     let rejected = observed.stderr.contains("SyntaxError")
-        && !observed.stdout.lines().any(|line| line == "ran");
+        && !observed.stdout.lines().any(|line| line == "ran")
+        && located_in(&observed.stderr, file);
     Some(Seen {
         printed: (observed.stdout, observed.exit == Some(0)),
         rejected,

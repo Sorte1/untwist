@@ -194,9 +194,16 @@ impl AnnexB {
         &self.unmodelled
     }
 
-    pub fn touches_unmodelled(&self, diagnostic: &OxcDiagnostic) -> bool {
-        redeclaration_spans(diagnostic)
-            .is_some_and(|spans| spans.iter().any(|span| self.unmodelled.contains(span)))
+    pub fn unmodelled_functions(&self) -> Vec<Span> {
+        self.candidates
+            .iter()
+            .filter(|candidate| candidate.clause && self.unmodelled.contains(&candidate.ident))
+            .map(|candidate| candidate.block)
+            .collect()
+    }
+
+    pub fn is_redeclaration(diagnostic: &OxcDiagnostic) -> bool {
+        redeclaration_spans(diagnostic).is_some()
     }
 
     pub fn explains(&self, diagnostic: &OxcDiagnostic) -> bool {

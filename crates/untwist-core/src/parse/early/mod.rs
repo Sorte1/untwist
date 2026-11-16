@@ -3,7 +3,7 @@ use oxc_ast::ast::Program;
 use oxc_diagnostics::{OxcDiagnostic, Severity};
 use oxc_parser::{ParseOptions, Parser};
 use oxc_semantic::SemanticBuilder;
-use oxc_span::Span;
+use oxc_span::{SourceType, Span};
 
 mod annex_b;
 mod class_octal;
@@ -36,14 +36,31 @@ fn errors(diagnostics: Vec<OxcDiagnostic>) -> Vec<OxcDiagnostic> {
 }
 
 pub fn early_errors(program: &Program<'_>) -> Early {
+    check(program.source_text, program.source_type)
+}
+
+fn blanked(text: &str, spans: &[Span]) -> String {
+    let mut bytes = text.as_bytes().to_vec();
+    for span in spans {
+        let range = span.start as usize..span.end as usize;
+        if let Some(part) = bytes.get_mut(range) {
+            part.fill(b' ');
+            if let Some(first) = part.first_mut() {
+                *first = b';';
+            }
+        }
+    }
+    String::from_utf8(bytes).unwrap_or_default()
+}
+
+fn check(text: &str, source_type: SourceType) -> Early {
     let alloc = Allocator::default();
-    let source_type = program.source_type;
     let options = ParseOptions {
         preserve_parens: true,
         allow_return_outside_function: !source_type.is_module(),
         ..ParseOptions::default()
     };
-    let checked = Parser::new(&alloc, program.source_text, source_type)
+    let checked = Parser::new(&alloc, text, source_type)
         .with_options(options)
         .parse();
     let parse_errors = errors(checked.diagnostics.into_vec());
@@ -72,14 +89,20 @@ pub fn early_errors(program: &Program<'_>) -> Early {
     found.extend(missed);
     read_by_node.extend(v8_reads);
     let spans = annex_b.unmodelled();
-    let unmodelled_only = !spans.is_empty()
-        && found
-            .iter()
-            .all(|diagnostic| annex_b.touches_unmodelled(diagnostic));
-    match (unmodelled_only, found.is_empty(), read_by_node.is_empty()) {
-        (false, false, _) => Early::SyntaxError(found),
-        (_, _, false) => Early::ReadByNode(read_by_node),
-        (true, _, true) => Early::UnmodelledAnnexB(spans.to_vec()),
-        (false, true, true) => Early::Clean,
+    if found.is_empty() {
+        return match (read_by_node.is_empty(), spans.is_empty()) {
+            (false, _) => Early::ReadByNode(read_by_node),
+            (true, true) => Early::Clean,
+            (true, false) => Early::UnmodelledAnnexB(spans.to_vec()),
+        };
+    }
+    let redeclared = found.iter().all(annex_b::AnnexB::is_redeclaration);
+    if spans.is_empty() || !redeclared {
+        return Early::SyntaxError(found);
+    }
+    let without = blanked(text, &annex_b.unmodelled_functions());
+    match check(&without, source_type) {
+        Early::SyntaxError(_) => Early::SyntaxError(found),
+        _ => Early::UnmodelledAnnexB(spans.to_vec()),
     }
 }

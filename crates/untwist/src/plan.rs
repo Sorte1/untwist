@@ -823,6 +823,21 @@ mod tests {
     }
 
     #[test]
+    fn a_cjs_or_mjs_input_keeps_its_extension_so_node_reads_the_same_goal() {
+        let one = output_with(vec!["code".to_string()], None);
+        let single = plan(Path::new("/out"), &one, &[PathBuf::from("a.cjs")]);
+        assert_eq!(relative_paths(&single), vec!["deobfuscated.cjs"]);
+
+        let two = output_with(vec!["first".to_string(), "second".to_string()], None);
+        let inputs = vec![PathBuf::from("a.cjs"), PathBuf::from("b.mjs")];
+        let several = plan(Path::new("/out"), &two, &inputs);
+        assert_eq!(
+            relative_paths(&several),
+            vec!["deobfuscated.a.cjs", "deobfuscated.b.mjs"]
+        );
+    }
+
+    #[test]
     fn an_input_name_too_long_for_a_file_name_gets_a_numbered_output_name() {
         let result = output_with(vec!["first".to_string(), "second".to_string()], None);
         let long = format!("{}.js", "a".repeat(MAX_SEGMENT_BYTES - 3));
