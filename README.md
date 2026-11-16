@@ -220,7 +220,7 @@ module objects or loader through `process` taken as a value (`var p = process; p
 computed member of `process`, or requests the `module` or `process` built-in is not split, but an
 alias is not followed, since most bundles pass `process` around. And
 no value the program tests is `document.all`, so `x != null ? x : y` becomes `x ?? y`: the two
-differ only for that object, which compares loosely equal to `null` without being nullish. Nor does any code read a function's caller through `.caller` or `arguments.callee.caller` to observe which function called it (the non-standard `Function.prototype.caller`; strict code cannot): inlining a control-flow object's call proxy removes the proxy's frame, so such a read would see the function that held the call instead of the proxy. Untwist also assumes no debugger or inspector session changes the program's values while it
+differ only for that object, which compares loosely equal to `null` without being nullish. Nor does any code read a function's caller through `.caller`, `arguments.callee.caller` or a stack frame (`Error.prepareStackTrace` call sites with `getFunction()` or `getFunctionName()`) to observe which function called it (the non-standard `Function.prototype.caller`; strict code cannot): inlining a control-flow object's call proxy removes the proxy's frame, so such a read would see the function that held the call instead of the proxy. Untwist also assumes no debugger or inspector session changes the program's values while it
 runs; every lane and every proof rests on this.
 [`docs/known-divergences/deobfuscate.md`](docs/known-divergences/deobfuscate.md) lists every
 premise.

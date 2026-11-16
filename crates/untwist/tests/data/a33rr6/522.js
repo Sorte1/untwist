@@ -1,0 +1,1 @@
+(function () { try { var o; o = true; var r = (n = console.log("side"), t) => { var e = o ? function () { if (t) { var r = t.apply(n, arguments); t = null; return r; } } : function () {}; o = false; return e; }; var s = r(undefined, function () { console.log('ran'); }); s(); console.log('after'); } catch (e) { console.log('threw', e.name); } })();
