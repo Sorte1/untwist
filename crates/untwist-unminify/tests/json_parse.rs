@@ -151,7 +151,7 @@ fn a_patched_json_parse_is_assumed_away_under_unsafe() {
     assert!(output.contains("console.log([1, 2]);"), "{output}");
 }
 
-const UNPATCHED_PARSE: [(&str, &str); 6] = [
+const UNPATCHED_PARSE: [(&str, &str); 5] = [
     (
         r#"console.log(JSON.parse("[1,2,3]"));"#,
         "console.log([1, 2, 3]);",
@@ -167,10 +167,6 @@ const UNPATCHED_PARSE: [(&str, &str); 6] = [
     (
         r#"function A() {} A.prototype.parse = function () { return 0; }; console.log(JSON.parse("null"), new A().parse());"#,
         "console.log(null, new A().parse());",
-    ),
-    (
-        r#"Array.prototype.last = function () { return this[this.length - 1]; }; console.log(JSON.parse("[1,2]").last());"#,
-        "console.log([1, 2].last());",
     ),
     (
         r#"var isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined"; console.log(JSON.parse("true"), isBrowser);"#,
@@ -204,4 +200,12 @@ fn json_parse_patched_through_a_value_keeps_its_calls_by_default() {
         assert!(output.contains("JSON.parse(\""), "{source}\n{output}");
         untwist_testing::node::assert_node_agrees(source, &output);
     }
+}
+
+#[test]
+fn a_new_member_on_a_built_in_prototype_keeps_json_parse_in_the_default_lane() {
+    let source = r#"Array.prototype.last = function () { return this[this.length - 1]; }; console.log(JSON.parse("[1,2]").last());"#;
+    let output = default_lane(source);
+    assert!(output.contains("JSON.parse(\"[1,2]\")"), "{output}");
+    untwist_testing::node::assert_node_agrees(source, &output);
 }

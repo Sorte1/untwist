@@ -237,10 +237,10 @@ fn a_global_a_block_function_declares_is_left_alone_in_the_default_lane() {
 }
 
 #[test]
-fn only_the_assigned_global_is_left_alone_in_the_default_lane() {
+fn a_built_in_used_as_a_value_keeps_every_global_call_in_the_default_lane() {
     assert_eq!(
         default_lane("atob = String;\nconsole.log(atob(\"aGk=\"), unescape(\"%41\"));"),
-        "atob = String;\nconsole.log(atob(\"aGk=\"), \"A\");"
+        "atob = String;\nconsole.log(atob(\"aGk=\"), unescape(\"%41\"));"
     );
 }
 
@@ -289,10 +289,10 @@ fn a_global_defined_on_the_global_object_is_left_alone_in_the_default_lane() {
 }
 
 #[test]
-fn only_the_global_replaced_through_the_global_object_is_left_alone_in_the_default_lane() {
+fn a_global_replaced_through_the_global_object_keeps_every_global_call_in_the_default_lane() {
     assert_eq!(
         default_lane("window.atob = String;\nconsole.log(atob(\"aGk=\"), unescape(\"%41\"));"),
-        "window.atob = String;\nconsole.log(atob(\"aGk=\"), \"A\");"
+        "window.atob = String;\nconsole.log(atob(\"aGk=\"), unescape(\"%41\"));"
     );
 }
 

@@ -128,7 +128,7 @@ fn a_replaced_array_method_is_assumed_away_under_unsafe() {
     assert!(output.contains("[0].filter((v) => v)"), "{output}");
 }
 
-const UNPATCHED_PREDICATES: [(&str, &str); 5] = [
+const UNPATCHED_PREDICATES: [(&str, &str); 4] = [
     (
         "console.log([0, 1, 2].filter((v) => !!v));",
         "[0, 1, 2].filter((v) => v)",
@@ -136,10 +136,6 @@ const UNPATCHED_PREDICATES: [(&str, &str); 5] = [
     (
         r#"console.log(["a", ""].some((v) => !!v), [1, 0].every((v) => !!v));"#,
         r#"["a", ""].some((v) => v), [1, 0].every((v) => v)"#,
-    ),
-    (
-        "Array.prototype.last = function () { return this[this.length - 1]; }; console.log([0, 3].filter((v) => !!v).last());",
-        "[0, 3].filter((v) => v)",
     ),
     (
         "var list = Array.from({ length: 2 }, function (_, i) { return i; }); console.log([0, 1].find((v) => !!v), list.length);",
@@ -184,4 +180,12 @@ fn an_array_method_patched_through_a_value_keeps_the_double_not_by_default() {
     for source in FILTER_REACHED_THROUGH_VALUES {
         assert_callback_keeps_its_double_not(source);
     }
+}
+
+#[test]
+fn a_new_member_on_a_built_in_prototype_keeps_the_double_not_in_the_default_lane() {
+    let source = "Array.prototype.last = function () { return this[this.length - 1]; }; console.log([0, 3].filter((v) => !!v).last());";
+    let output = default_lane(source);
+    assert!(output.contains("filter((v) => !!v)"), "{output}");
+    untwist_testing::node::assert_node_agrees(source, &output);
 }
