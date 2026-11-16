@@ -689,3 +689,27 @@ pub fn module_param_use(
     uses.visit_function_body(body);
     uses.found
 }
+
+#[derive(Default)]
+struct OwnThis {
+    functions: usize,
+    read: bool,
+}
+
+impl<'a> VisitJs<'a> for OwnThis {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.functions += 1;
+        walk_js::walk_function(self, it, flags);
+        self.functions -= 1;
+    }
+
+    fn visit_this_expression(&mut self, _it: &ThisExpression) {
+        self.read |= self.functions == 0;
+    }
+}
+
+pub fn reads_own_this(body: &FunctionBody<'_>) -> bool {
+    let mut scan = OwnThis::default();
+    scan.visit_function_body(body);
+    scan.read
+}

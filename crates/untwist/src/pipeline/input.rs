@@ -613,6 +613,10 @@ fn parse_outcome(
         false => match early_errors(&parsed.program) {
             Early::Clean => Vec::new(),
             Early::SyntaxError(found) => found,
+            Early::ReadByNode(found) => {
+                result.parse_refusal = Some(PARSE_UNSUPPORTED);
+                found
+            }
             Early::UnmodelledAnnexB(_) => {
                 result.parse_refusal = Some(ANNEX_B_UNMODELLED);
                 return Err(Step::Done(None));

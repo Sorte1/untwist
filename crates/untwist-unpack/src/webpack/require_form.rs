@@ -304,12 +304,18 @@ fn field_set<'k>(
     fits.then_some(key)
 }
 
-fn dispatch(expr: &Expression<'_>, module: &str, names: &Names<'_>) -> bool {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Receiver {
+    Container,
+    Exports,
+}
+
+fn dispatch(expr: &Expression<'_>, module: &str, names: &Names<'_>) -> Option<Receiver> {
     let Expression::CallExpression(call) = expr else {
-        return false;
+        return None;
     };
     if call.optional {
-        return false;
+        return None;
     }
     let arguments: Vec<&Expression<'_>> = call
         .arguments
@@ -317,17 +323,16 @@ fn dispatch(expr: &Expression<'_>, module: &str, names: &Names<'_>) -> bool {
         .filter_map(Argument::as_expression)
         .collect();
     if arguments.len() != call.arguments.len() {
-        return false;
+        return None;
     }
     let standard = |rest: &[&Expression<'_>]| matches!(rest, [m, e, r] if is_name(m, module) && exports_of(e, module) && is_name(r, names.require));
     if indexed(&call.callee, names.index) == Some(names.container) {
-        return standard(&arguments);
+        return standard(&arguments).then_some(Receiver::Container);
     }
-    let Some(target) = const_member(&call.callee, "call") else {
-        return false;
-    };
-    indexed(target, names.index) == Some(names.container)
-        && matches!(&arguments[..], [this, rest @ ..] if exports_of(this, module) && standard(rest))
+    let target = const_member(&call.callee, "call")?;
+    let fits = indexed(target, names.index) == Some(names.container)
+        && matches!(&arguments[..], [this, rest @ ..] if exports_of(this, module) && standard(rest));
+    fits.then_some(Receiver::Exports)
 }
 
 fn loaded<'k>(expr: &'k Expression<'_>, module: &str) -> Option<&'k str> {
@@ -349,6 +354,7 @@ fn loaded<'k>(expr: &'k Expression<'_>, module: &str) -> Option<&'k str> {
 pub struct Record {
     pub l: bool,
     pub loaded: bool,
+    pub exports_as_this: Option<bool>,
 }
 
 pub fn caching_cache<'k>(
@@ -423,14 +429,16 @@ pub fn caching_record<'k>(
         [Step::Effect(flag)] => Some(loaded(flag, module)?),
         _ => return None,
     };
+    let receiver = dispatch(call, module, &names);
     let fits = distinct
         && record_cache == cache
         && keys.contains(&EXPORTS)
-        && dispatch(call, module, &names)
+        && receiver.is_some()
         && exports_of(result, module);
     let record = Record {
         l: flag == Some(LOADED[0]) && keys.contains(&LOADED[0]),
         loaded: flag == Some(LOADED[1]) && keys.contains(&LOADED[1]),
+        exports_as_this: Some(receiver == Some(Receiver::Exports)),
     };
     fits.then_some((cache, record))
 }
@@ -446,5 +454,8 @@ pub fn declared_record(statements: &[Statement<'_>], require: &str, container: &
             }
             _ => None,
         })
-        .unwrap_or_default()
+        .unwrap_or(Record {
+            exports_as_this: Some(false),
+            ..Record::default()
+        })
 }

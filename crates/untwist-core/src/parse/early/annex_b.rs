@@ -154,6 +154,18 @@ fn clashes_outside(candidate: &Candidate, scoping: &Scoping) -> bool {
     outside.len() > 1 && outside.iter().any(|flags| flags.intersects(LEXICAL))
 }
 
+fn redeclaration_spans(diagnostic: &OxcDiagnostic) -> Option<Vec<Span>> {
+    let redeclared = diagnostic.message.ends_with("has already been declared")
+        && diagnostic.message.starts_with("Identifier `");
+    redeclared.then(|| {
+        diagnostic
+            .labels
+            .iter()
+            .map(|label| Span::sized(label.offset(), label.len()))
+            .collect()
+    })
+}
+
 impl AnnexB {
     pub fn scan(program: &Program<'_>, scoping: &Scoping) -> Self {
         let mut walk = Walk {
@@ -182,17 +194,15 @@ impl AnnexB {
         &self.unmodelled
     }
 
+    pub fn touches_unmodelled(&self, diagnostic: &OxcDiagnostic) -> bool {
+        redeclaration_spans(diagnostic)
+            .is_some_and(|spans| spans.iter().any(|span| self.unmodelled.contains(span)))
+    }
+
     pub fn explains(&self, diagnostic: &OxcDiagnostic) -> bool {
-        if !diagnostic.message.ends_with("has already been declared")
-            || !diagnostic.message.starts_with("Identifier `")
-        {
+        let Some(spans) = redeclaration_spans(diagnostic) else {
             return false;
-        }
-        let spans: Vec<Span> = diagnostic
-            .labels
-            .iter()
-            .map(|label| Span::sized(label.offset(), label.len()))
-            .collect();
+        };
         self.candidates
             .iter()
             .zip(&self.clashing)

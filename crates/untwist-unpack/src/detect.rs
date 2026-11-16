@@ -20,7 +20,9 @@ use crate::frame::Frame;
 use crate::links::Links;
 use crate::matcher::Factory;
 use crate::model::{body_key, Bodies, BodyKey, Bundle, BundleKind};
-use crate::notes::{factory_not_closed, module_object_used, require_not_shared};
+use crate::notes::{
+    factory_not_closed, factory_this_unproven, module_object_used, require_not_shared,
+};
 use crate::strict::{first_sloppy_function, mark_strict_sources};
 use crate::webpack::buildin::{polyfill_ids, Buildin};
 use crate::webpack::chunk::{
@@ -34,7 +36,7 @@ use crate::webpack::detect5::{
     detect_webpack5_noted, is_webpack5, webpack5_factories, webpack5_record,
 };
 use crate::webpack::extract::WEBPACK_PARAMS;
-use crate::webpack::module_object::module_object_use;
+use crate::webpack::module_object::{module_object_use, reads_own_this};
 use crate::webpack::proof::Proving;
 use crate::webpack::require_form::Record;
 use crate::UnpackOptions;
@@ -125,6 +127,15 @@ impl<'a> Extract<'a, '_, '_> {
         let (Some(factories), Some(scoping)) = (factories, self.scoping.as_ref()) else {
             return true;
         };
+        let this_unproven = record.exports_as_this == Some(false);
+        let reads_this = factories
+            .iter()
+            .find(|(_, factory)| this_unproven && !factory.arrow && reads_own_this(factory.body));
+        if let Some((id, _)) = reads_this {
+            self.unproven
+                .get_or_insert_with(|| factory_this_unproven(id));
+            return false;
+        }
         let buildins = factory_buildins(&factories);
         let lane = (&buildins, record, self.options.trust_builtins);
         let mut plain = Vec::new();

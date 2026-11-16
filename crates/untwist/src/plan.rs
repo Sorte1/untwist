@@ -42,17 +42,46 @@ pub fn is_safe_relative(path: &str) -> bool {
     !(first.len() >= 2 && first.as_bytes().get(1) == Some(&b':'))
 }
 
+const GOAL_EXTENSIONS: [&str; 2] = ["cjs", "mjs"];
+
+fn goal_extension(input: Option<&Path>) -> &'static str {
+    let extension = input
+        .and_then(Path::extension)
+        .and_then(|extension| extension.to_str());
+    GOAL_EXTENSIONS
+        .into_iter()
+        .find(|goal| extension == Some(*goal))
+        .unwrap_or("js")
+}
+
+fn shared_goal_extension(inputs: &[PathBuf]) -> &'static str {
+    let mut extensions = inputs.iter().map(|input| goal_extension(Some(input)));
+    let first = extensions.next().unwrap_or("js");
+    match extensions.all(|extension| extension == first) {
+        true => first,
+        false => "js",
+    }
+}
+
 fn deobfuscated_name(index: usize, total: usize, input: Option<&Path>) -> String {
+    let extension = goal_extension(input);
     if total <= 1 {
-        return DEOBFUSCATED.to_string();
+        return with_goal_extension(DEOBFUSCATED, extension);
     }
     input
         .and_then(Path::file_stem)
         .and_then(|stem| stem.to_str())
         .filter(|stem| is_safe_relative(stem))
-        .map(|stem| format!("deobfuscated.{stem}.js"))
+        .map(|stem| format!("deobfuscated.{stem}.{extension}"))
         .filter(|name| is_safe_relative(name))
-        .unwrap_or_else(|| format!("deobfuscated.input{index}.js"))
+        .unwrap_or_else(|| format!("deobfuscated.input{index}.{extension}"))
+}
+
+fn with_goal_extension(name: &str, extension: &str) -> String {
+    match name.strip_suffix(".js") {
+        Some(stem) => format!("{stem}.{extension}"),
+        None => name.to_string(),
+    }
 }
 
 fn absolute_parts(input: &Path) -> Option<Vec<String>> {
@@ -453,6 +482,7 @@ pub(crate) fn plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
 }
 
 fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
+    let name = with_goal_extension(DEOBFUSCATED, shared_goal_extension(inputs));
     let concatenated = result.concatenated();
     let map = match (result.bundle.as_ref(), result.source_maps.as_slice()) {
         (None, [Some(map)]) => Some(map),
@@ -460,14 +490,14 @@ fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
     };
     let linked = Linking::of(result, inputs)
         .zip(map)
-        .map(|(linking, map)| linking.linked(DEOBFUSCATED, &concatenated, map));
+        .map(|(linking, map)| linking.linked(&name, &concatenated, map));
     let (contents, map_file) = match linked {
         Some(linked) => linked,
         None => (concatenated.into_owned().into_bytes(), None),
     };
     let mut planner = Planner::default();
     let output = Candidate {
-        relative: typed_output(result, DEOBFUSCATED.to_string(), None),
+        relative: typed_output(result, name, None),
         contents,
         role: Role::Output,
         owner: OWNER_OUTPUT,

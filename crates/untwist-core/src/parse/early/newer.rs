@@ -1,54 +1,21 @@
 use oxc_ast::ast::{
-    AccessorProperty, BinaryExpression, Decorator, Expression, ImportDeclaration, ImportExpression,
-    Program, RegExpLiteral, UnaryExpression, UpdateExpression, VariableDeclaration, WithClause,
+    AccessorProperty, Decorator, ImportDeclaration, ImportExpression, JSXText, Program,
+    RegExpLiteral, StringLiteral, TemplateElement, VariableDeclaration, WithClause,
     WithClauseKeyword,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_diagnostics::OxcDiagnostic;
-use oxc_regular_expression::ast::{CapturingGroup, IgnoreGroup};
-use oxc_regular_expression::visit::{walk, Visit};
 use oxc_span::Span;
-use oxc_syntax::operator::{BinaryOperator, UnaryOperator, UpdateOperator};
+
+use super::regex;
 
 const NODE: &str = "node 22 does not read";
-
-#[derive(Default)]
-struct Groups {
-    names: Vec<String>,
-    modifiers: bool,
-}
-
-impl<'a> Visit<'a> for Groups {
-    fn visit_capturing_group(&mut self, it: &CapturingGroup<'a>) {
-        if let Some(name) = &it.name {
-            self.names.push(name.to_string());
-        }
-        walk::walk_capturing_group(self, it);
-    }
-
-    fn visit_ignore_group(&mut self, it: &IgnoreGroup<'a>) {
-        self.modifiers |= it.modifiers.is_some();
-        walk::walk_ignore_group(self, it);
-    }
-}
-
-fn pattern_problem(literal: &RegExpLiteral<'_>) -> Option<&'static str> {
-    let pattern = literal.regex.pattern.pattern.as_ref()?;
-    let mut groups = Groups::default();
-    groups.visit_pattern(pattern);
-    if groups.modifiers {
-        return Some("regular expression modifiers");
-    }
-    let mut names = groups.names;
-    names.sort_unstable();
-    let duplicated = names.windows(2).any(|pair| pair[0] == pair[1]);
-    duplicated.then_some("a capture group name used twice in a regular expression")
-}
 
 struct Walk<'s> {
     source: &'s str,
     module: bool,
     found: Vec<OxcDiagnostic>,
+    tokens: Vec<Span>,
 }
 
 impl Walk<'_> {
@@ -57,35 +24,11 @@ impl Walk<'_> {
             .push(OxcDiagnostic::error(format!("{NODE} {what}")).with_label(span));
     }
 
-    fn opens_html_comment(&self, binary: &BinaryExpression<'_>) -> bool {
-        if binary.operator != BinaryOperator::LessThan {
-            return false;
+    fn token(&mut self, span: Span) {
+        if self.module {
+            self.tokens.push(span);
         }
-        let Expression::UnaryExpression(not) = &binary.right else {
-            return false;
-        };
-        let decremented = matches!(
-            &not.argument,
-            Expression::UpdateExpression(update) if is_prefix_decrement(update)
-        );
-        let start = not.span.start as usize;
-        decremented
-            && is_logical_not(not)
-            && start > 0
-            && self.source.as_bytes().get(start - 1) == Some(&b'<')
-            && self
-                .source
-                .get(start..)
-                .is_some_and(|rest| rest.starts_with("!--"))
     }
-}
-
-fn is_logical_not(unary: &UnaryExpression<'_>) -> bool {
-    unary.operator == UnaryOperator::LogicalNot
-}
-
-fn is_prefix_decrement(update: &UpdateExpression<'_>) -> bool {
-    update.prefix && update.operator == UpdateOperator::Decrement
 }
 
 impl<'a> VisitJs<'a> for Walk<'_> {
@@ -128,30 +71,69 @@ impl<'a> VisitJs<'a> for Walk<'_> {
     }
 
     fn visit_reg_exp_literal(&mut self, it: &RegExpLiteral<'a>) {
-        if let Some(problem) = pattern_problem(it) {
-            self.unread(problem, it.span);
+        self.token(it.span);
+        let flags = self
+            .source
+            .get(it.span.start as usize..it.span.end as usize)
+            .and_then(|text| text.rsplit_once('/'))
+            .map_or("", |(_, flags)| flags);
+        if let Some(problem) = regex::problem(it.regex.pattern.text.as_str(), flags) {
+            self.found
+                .push(OxcDiagnostic::error(problem).with_label(it.span));
         }
     }
 
-    fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
-        if self.module && self.opens_html_comment(it) {
-            self.found.push(
-                OxcDiagnostic::error(
-                    "node reads `<!--` as an HTML comment opener, which a module may not hold",
-                )
-                .with_label(it.span),
-            );
-        }
-        walk_js::walk_binary_expression(self, it);
+    fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
+        self.token(it.span);
+    }
+
+    fn visit_template_element(&mut self, it: &TemplateElement<'a>) {
+        self.token(it.span);
+    }
+
+    fn visit_jsx_text(&mut self, it: &JSXText<'a>) {
+        self.token(it.span);
     }
 }
 
+fn html_comment_opener(program: &Program<'_>, tokens: &[Span]) -> Option<Span> {
+    let source = program.source_text;
+    let skipped = |at: u32| {
+        program
+            .comments
+            .iter()
+            .map(|comment| comment.span)
+            .chain(program.hashbang.as_ref().map(|hashbang| hashbang.span))
+            .chain(tokens.iter().copied())
+            .any(|span| span.start <= at && at < span.end)
+    };
+    source
+        .match_indices("<!--")
+        .filter_map(|(at, _)| u32::try_from(at).ok())
+        .find(|at| !skipped(*at))
+        .map(|at| Span::sized(at, 4))
+}
+
 pub fn unread_by_node(program: &Program<'_>) -> Vec<OxcDiagnostic> {
+    let module = program.source_type.is_module();
     let mut walk = Walk {
         source: program.source_text,
-        module: program.source_type.is_module(),
+        module: module && program.source_text.contains("<!--"),
         found: Vec::new(),
+        tokens: Vec::new(),
     };
     walk.visit_program(program);
+    let opener = match walk.module {
+        true => html_comment_opener(program, &walk.tokens),
+        false => None,
+    };
+    if let Some(span) = opener {
+        walk.found.push(
+            OxcDiagnostic::error(
+                "node reads `<!--` as an HTML comment opener, which a module may not hold",
+            )
+            .with_label(span),
+        );
+    }
     walk.found
 }
