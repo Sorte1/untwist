@@ -5,8 +5,8 @@ use rustc_hash::FxHashSet;
 use untwist_core::parse::parse_program;
 use untwist_core::semantic::{
     bindings_possibly_used_before, build_scoping, effectively_constant_bindings, has_module_syntax,
-    is_binding_possibly_used_before, is_constant_binding, parameter_symbols, read_reference_count,
-    rebuild_scoping, single_write_span, write_reference_count,
+    is_binding_possibly_used_before, is_constant_binding, may_call_eval, parameter_symbols,
+    read_reference_count, rebuild_scoping, single_write_span, write_reference_count,
 };
 
 #[test]
@@ -262,4 +262,22 @@ fn a_read_in_the_right_hand_side_still_counts_once_statements_have_moved() {
         "function f(g, a) { g(); a = a + 1; return a; }",
         "a"
     ));
+}
+
+#[test]
+fn eval_may_be_called_directly_however_the_name_is_bound() {
+    for (source, expected) in [
+        ("eval(s);", true),
+        ("var eval = globalThis.eval; eval(s);", true),
+        ("function f(eval, s) { return eval(s); }", true),
+        ("try {} catch (eval) { eval(s); }", true),
+        ("var { eval } = globalThis; eval(s);", true),
+        ("f(s);", false),
+        ("globalThis.eval(s);", false),
+    ] {
+        let alloc = Allocator::default();
+        let p = parse_program(&alloc, source);
+        let sem = build_scoping(&p.program);
+        assert_eq!(may_call_eval(&sem.scoping), expected, "{source}");
+    }
 }

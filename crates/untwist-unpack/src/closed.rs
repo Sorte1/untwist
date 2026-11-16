@@ -272,7 +272,7 @@ impl<'s, 'k, 'a> Check<'s, 'k, 'a> {
     }
 
     pub fn refuse_every_eval(&mut self, call: &CallExpression<'_>) {
-        if self.captured.is_none() && is_direct_eval(self.scoping, &call.callee) {
+        if self.captured.is_none() && is_direct_eval(&call.callee) {
             self.captured = Some(Captured::Eval);
         }
     }
@@ -316,7 +316,7 @@ impl<'a> Policy<'a> for Check<'_, '_, 'a> {
     }
 
     fn call(&mut self, _frame: Frame, it: &CallExpression<'a>) -> Step {
-        if self.captured.is_none() && is_direct_eval(self.scoping, &it.callee) {
+        if self.captured.is_none() && is_direct_eval(&it.callee) {
             self.captured = self.eval_capture(it);
         }
         Step::Walk
@@ -482,7 +482,7 @@ impl<'a> VisitJs<'a> for HostReads<'_, '_> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if is_direct_eval(self.scoping, &it.callee) {
+        if is_direct_eval(&it.callee) {
             for name in closed_eval_names(it).unwrap_or_default() {
                 self.note(&name);
             }
@@ -520,7 +520,7 @@ impl HostRequire<'_> {
 
 impl<'a> VisitJs<'a> for HostRequire<'_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        let reads = is_direct_eval(self.scoping, &it.callee)
+        let reads = is_direct_eval(&it.callee)
             && closed_eval_names(it)
                 .is_some_and(|names| names.iter().any(|name| name == SHIELDED_HOST));
         if reads {
@@ -614,9 +614,7 @@ fn evals_host_require(scoping: &Scoping, call: &CallExpression<'_>) -> bool {
     };
     let text = payload.value.as_str().unwrap_or_default().trim();
     let name = text.strip_suffix(';').unwrap_or(text).trim();
-    name == SHIELDED_HOST
-        && is_direct_eval(scoping, &call.callee)
-        && is_closed_eval_at(scoping, call)
+    name == SHIELDED_HOST && is_direct_eval(&call.callee) && is_closed_eval_at(scoping, call)
 }
 
 fn is_host_require_name(scoping: &Scoping, expr: &Expression<'_>) -> bool {

@@ -738,10 +738,7 @@ impl Gen<'_> {
             return Some(self.string(&text));
         }
         if let Expression::Identifier(id) = call.callee.without_parentheses() {
-            let direct = id.name == "eval"
-                && self.symbol_of(id).is_none()
-                && matches!(call.callee, Expression::Identifier(_));
-            if direct {
+            if id.name == "eval" {
                 self.fallback.get_or_insert("a direct eval");
             }
         }

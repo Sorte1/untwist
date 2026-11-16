@@ -11,7 +11,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::{call_parts, infinite_loop_body};
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::{eval_payload_names, has_module_syntax, AnnexBWrites};
+use untwist_core::semantic::{eval_payload_names, has_module_syntax, may_call_eval, AnnexBWrites};
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 use crate::calls::agnostic::{global_reach, ReachWatch};
@@ -146,7 +146,7 @@ struct Reach {
 impl Reach {
     fn of(program: &Program<'_>, cx: &Cx<'_, '_>) -> Self {
         let scoping = cx.scoping();
-        let eval_names = if scoping.root_unresolved_references().contains_key("eval") {
+        let eval_names = if may_call_eval(scoping) {
             eval_payload_names(program)
         } else {
             Vec::new()

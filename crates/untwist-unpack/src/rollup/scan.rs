@@ -246,7 +246,7 @@ impl<'a> Policy<'a> for Rules<'_> {
     }
 
     fn call(&mut self, _frame: Frame, it: &CallExpression<'a>) -> Step {
-        self.refused |= is_direct_eval(self.scoping, &it.callee);
+        self.refused |= is_direct_eval(&it.callee);
         if let Expression::Identifier(callee) = &it.callee {
             if callee.name == "require" && self.unresolved(callee) {
                 if self.context.module || !bare_specifier(&it.arguments) || it.optional {

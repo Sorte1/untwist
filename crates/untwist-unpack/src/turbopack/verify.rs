@@ -122,7 +122,7 @@ impl<'a> Policy<'a> for Rules<'_, '_> {
                 };
             return Step::Skip;
         }
-        if is_direct_eval(self.scoping, &it.callee) {
+        if is_direct_eval(&it.callee) {
             self.ok = false;
             return Step::Skip;
         }

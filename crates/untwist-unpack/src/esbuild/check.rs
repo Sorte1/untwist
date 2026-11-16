@@ -197,7 +197,7 @@ impl<'a> Policy<'a> for Check<'_, '_> {
     }
 
     fn call(&mut self, frame: Frame, it: &CallExpression<'a>) -> Step {
-        if is_direct_eval(self.proof.scoping, &it.callee) || self.module_receiver(&it.callee) {
+        if is_direct_eval(&it.callee) || self.module_receiver(&it.callee) {
             self.ok = false;
             return Step::Skip;
         }

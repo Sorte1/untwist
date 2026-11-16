@@ -32,8 +32,8 @@ pub use annex_b::{
 pub use blocked_hoists::{hoist_blockers, hoist_shadowing_catches, repair_blocked_hoists};
 pub use observers::{
     assume_observers, assumed_hazard, closed_eval_names, closed_evals_kept, eval_payload_names,
-    is_closed_eval_at, observers, observing_open, open_eval_sites, with_observes, Observers,
-    ObserversGuard,
+    is_closed_eval_at, may_call_eval, observers, observing_open, open_eval_sites, with_observes,
+    Observers, ObserversGuard,
 };
 #[cfg(feature = "test-hooks")]
 pub use refresh::{

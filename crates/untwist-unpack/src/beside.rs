@@ -162,7 +162,7 @@ impl<'a> VisitJs<'a> for Loose<'_> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if is_direct_eval(self.scoping, &it.callee) {
+        if is_direct_eval(&it.callee) {
             self.refuse("calls eval directly");
         }
         walk_js::walk_call_expression(self, it);

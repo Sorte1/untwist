@@ -169,7 +169,7 @@ fn a_factory_reading_a_bundle_function_is_refused() {
     assert!(refused("", "console.log(arguments);"));
     assert!(modules(&bundle_with("", "function f() { return arguments; }")).is_some());
     assert!(refused("", "eval('1');"));
-    assert!(modules(&bundle_with("", "var eval = String;\neval('1');")).is_some());
+    assert!(refused("", "var eval = String;\neval('1');"));
     assert!(modules(&bundle_with("", "(0, eval)('1');")).is_some());
     let global_loader = format!(
         "{LEAF}{}__r(0);\n",

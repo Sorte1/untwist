@@ -233,7 +233,7 @@ impl<'a> Policy<'a> for Rules<'_, '_> {
 
     fn call(&mut self, _frame: Frame, it: &CallExpression<'a>) -> Step {
         let receiver = self.load != Some(it.span) && self.module_receiver(&it.callee);
-        if receiver || is_direct_eval(self.scoping, &it.callee) {
+        if receiver || is_direct_eval(&it.callee) {
             self.ok = false;
             return Step::Skip;
         }

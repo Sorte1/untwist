@@ -230,6 +230,25 @@ fn a_direct_eval_or_with_statement_near_the_target_refuses_the_rename() {
 }
 
 #[test]
+fn a_direct_eval_through_a_local_binding_named_eval_refuses_the_rename() {
+    for source in [
+        "function g(s, require) { var eval = globalThis.eval; return eval(s); } n(0);",
+        "function g(s, require) { var { eval } = globalThis; return eval(s); } n(0);",
+        "function g(s, require) { let eval = globalThis.eval; return eval(s); } n(0);",
+        "var eval = globalThis.eval; function g(s, require) { return eval(s); } n(0);",
+        "function g(s, require) { try { throw globalThis.eval; } catch (eval) { return eval(s); } } n(0);",
+        "function g(eval, s, require) { return eval(s); } n(0);",
+        "function g(s, require) { return (function (eval) { return eval(s); })(globalThis.eval); } n(0);",
+        "function g(s) { var eval = globalThis.eval; eval(s); return n(0); }",
+    ] {
+        assert!(
+            rename_refusal(source, &["e", "t", "n"], &WEBPACK).is_some(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn a_rename_without_a_collision_or_hazard_is_not_refused() {
     for source in [
         "n(0);",

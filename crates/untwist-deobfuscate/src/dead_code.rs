@@ -14,7 +14,7 @@ use untwist_core::pass::{
     Cx, ExpressionKind, ExpressionVariants, Interest, Pass, StatementKind, StatementVariants,
 };
 use untwist_core::semantic::unbound::is_unbound_name;
-use untwist_core::semantic::{misbound_catch_vars, program_is_strict, scope_hazard};
+use untwist_core::semantic::{may_call_eval, misbound_catch_vars, program_is_strict, scope_hazard};
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 use crate::constant_test::literal_truthiness;
@@ -427,6 +427,7 @@ pub struct DeadCode<'a> {
     renames: Renames<'a>,
     strict: bool,
     with: Option<bool>,
+    eval: Option<bool>,
     unsafe_lane: bool,
     armed: usize,
     guarded: Vec<Span>,
@@ -557,7 +558,7 @@ impl<'a> DeadCode<'a> {
         }
         let unresolved = scoping.root_unresolved_references();
         if outer == scoping.root_scope_id()
-            || unresolved.contains_key("eval")
+            || *self.eval.get_or_insert_with(|| may_call_eval(scoping))
             || *self.with.get_or_insert_with(|| has_with(scoping))
         {
             return false;
@@ -991,6 +992,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         self.handed_out = FxHashSet::default();
         self.renames = Renames::new();
         self.with = None;
+        self.eval = None;
         self.guarded = Vec::new();
         self.callees = Vec::new();
     }

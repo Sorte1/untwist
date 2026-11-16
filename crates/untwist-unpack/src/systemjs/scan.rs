@@ -289,7 +289,7 @@ impl<'a> Policy<'a> for Scan<'_, 'a> {
         if self.context_call(it) {
             return Step::Skip;
         }
-        self.refused |= is_direct_eval(self.scoping, &it.callee);
+        self.refused |= is_direct_eval(&it.callee);
         self.mark_bad(&it.callee);
         Step::Walk
     }
