@@ -36,23 +36,23 @@ fn returned_function<'k, 'a>(init: &'k Expression<'a>) -> Option<&'k Function<'a
     match init.without_parentheses() {
         Expression::FunctionExpression(function) => Some(function),
         Expression::CallExpression(call) if call.arguments.is_empty() => {
-            let Expression::FunctionExpression(outer) = call.callee.without_parentheses() else {
-                return None;
+            let body = match call.callee.without_parentheses() {
+                Expression::FunctionExpression(outer) => outer.body.as_ref()?,
+                Expression::ArrowFunctionExpression(outer) => match &outer.body {
+                    ArrowFunctionBody::FunctionBody(body) => body,
+                    _ => return None,
+                },
+                _ => return None,
             };
-            outer
-                .body
-                .as_ref()?
-                .statements
-                .iter()
-                .find_map(|statement| {
-                    let Statement::ReturnStatement(ret) = statement else {
-                        return None;
-                    };
-                    match ret.argument.as_ref()?.without_parentheses() {
-                        Expression::FunctionExpression(function) => Some(&**function),
-                        _ => None,
-                    }
-                })
+            body.statements.iter().find_map(|statement| {
+                let Statement::ReturnStatement(ret) = statement else {
+                    return None;
+                };
+                match ret.argument.as_ref()?.without_parentheses() {
+                    Expression::FunctionExpression(function) => Some(&**function),
+                    _ => None,
+                }
+            })
         }
         _ => None,
     }
