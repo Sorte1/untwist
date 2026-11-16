@@ -8,7 +8,85 @@ const WORKERS: usize = 4;
 const LANES: [(&str, bool); 2] = [("default", false), ("unsafe", true)];
 const HEX_PREFIX: &str = "_0x";
 
-const REFUSED_LAYERS: [(&str, &str, &str); 0] = [];
+const CONSOLE_DISABLE_KEPT: &str = "the default lane leaves the layers undecoded because of the console-disable callback: it writes toString and __proto__ on Function.prototype.bind results, which the alias check cannot tell from built-ins the rc4 decoder uses, and below an outer layer it reads the global object it holds by keys that layer still encodes";
+
+const REFUSED_LAYERS: [(&str, &str, &str); 15] = [
+    (
+        "guarded-no-eval-n2--classes-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n3--classes-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n4--classes-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n2--functions-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n3--functions-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n4--functions-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n2--greeting-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n3--greeting-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n4--greeting-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n2--objects-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n3--objects-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n4--objects-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n2--strings-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n3--strings-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+    (
+        "guarded-no-eval-n4--strings-1.js",
+        "default",
+        CONSOLE_DISABLE_KEPT,
+    ),
+];
 
 #[derive(Clone)]
 struct Row {

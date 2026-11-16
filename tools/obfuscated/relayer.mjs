@@ -18,7 +18,9 @@ const acorn = require("acorn");
 const LAYERS = 4;
 const MAX_BYTES = 200_000;
 const PROGRAMS = ["greeting", "functions", "objects", "classes", "strings"];
-const HOSTILE = ["debugProtection", "domainLock"];
+const NO_EVAL = { target: "browser-no-eval" };
+const GUARDED = { debugProtection: true, debugProtectionInterval: 0, disableConsoleOutput: true };
+const WEB_STRINGS = { stringArrayEncoding: ["none", "base64", "rc4"], stringArrayThreshold: 0.75, stringArrayIndexesType: ["hexadecimal-number", "hexadecimal-numeric-string"], stringArrayWrappersCount: 1, stringArrayWrappersType: "variable", stringArrayWrappersParametersMaxCount: 2 };
 const WRAPPED = { stringArrayRotate: true, stringArrayShuffle: true, stringArrayThreshold: 1, stringArrayWrappersCount: 2, stringArrayWrappersType: "function", stringArrayWrappersParametersMaxCount: 4 };
 
 const SETS = {
@@ -35,6 +37,8 @@ const SETS = {
   keys: { transformObjectKeys: true },
   split: { splitStrings: true, splitStringsChunkLength: 3 },
   "rename-globals": { renameGlobals: true },
+  "guarded-no-eval": { ...NO_EVAL, ...GUARDED, stringArrayEncoding: ["rc4"], stringArrayThreshold: 1 },
+  "web-no-eval": { ...NO_EVAL, ...GUARDED, ...WEB_STRINGS, selfDefending: true, controlFlowFlattening: true, deadCodeInjection: true, numbersToExpressions: true, splitStrings: true, stringArrayCallsTransform: true, transformObjectKeys: true },
 };
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
@@ -55,7 +59,8 @@ function runNode(file) {
 function hostile(options) {
   const preset = options.optionsPreset ? Obfuscator.getOptionsByPreset(options.optionsPreset) : {};
   const merged = { ...preset, ...options };
-  return HOSTILE.some((key) => (Array.isArray(merged[key]) ? merged[key].length > 0 : merged[key] === true));
+  const interval = merged.debugProtection === true && merged.debugProtectionInterval > 0;
+  return interval || merged.domainLock?.length > 0;
 }
 
 function silenced(options) {
