@@ -727,6 +727,22 @@
   `window`, `globalThis` or `self`) or as obfuscator.io's whole interval IIFE. An IIFE that
   holds other statements loses the interval call and keeps the rest; a `setInterval` of an
   object the program built keeps the protection, with a note.
+  In a classic script, a top-level binding of a protection is a property of the global object,
+  and code text that runs in the global scope sees a top-level `let` or `const` too. The default
+  mode removes such a binding only when, in the program as it is with the protection's statements
+  taken out, no code may reach it by a key that may be its name, observe the global object's
+  names (`"g" in this`, `Object.keys(globalThis)`, a printing call), or run code text
+  (`(0, eval)("typeof g")`, `new Function(…)`). This is the reach and observation check of the
+  decoder machinery below, with the string-array machinery left out as it is there. Otherwise the
+  protection is kept with the `reference survives` note. A top-level control-flow object is
+  judged by the same check (in both modes, as before). A top-level decoder alias
+  (`var a = decoder;`, or an object that holds the decoder) has its calls inlined, but its
+  declaration stays and is removed together with the machinery, so it is kept exactly when the
+  machinery is. **Unsafe-lane premise (PN-unsafe-names)**: `--unsafe` assumes that no code observes
+  the obfuscator's machinery, protections or decoder aliases through the global object or global
+  code text, whatever runs that text (`(0, eval)`, `Function`, a timer string, or a runner that
+  code text hands back, such as `Function("return eval")()(s)`), so it skips the check for all
+  three and removes them as the reference deobfuscator does. Pinned by `crates/untwist/tests/a35r3_review_rows.rs`.
 - **A decoder-argument ternary the split cannot take apart reports nothing of its own.**
   `find-decoders` rewrites a decoder whose argument is a ternary into one declaration per branch;
   a branch it cannot split hands its symbols to the external-variable inlining that runs next,
@@ -1354,7 +1370,8 @@
   program's own code. Pinned by `crates/untwist/tests/observer_rows.rs` (node-checked; every `ref-`
   row diverges when every callee is taken as quiet). Anything not proven counts as observation, and the machinery is
   kept with the note `remove-decoder-machinery: code may observe the names of the global object …`.
-  The rule is the same in both modes. **Node-safe precision loss**: the self-defending code that
+  The rule is the same in the default and conservative modes; `--unsafe` skips it under the
+  PN-unsafe-names premise. **Node-safe precision loss**: the self-defending code that
   survives the default mode in `fixtures/reference/deobfuscate/obfuscator.io-high.js` disables the
   console by passing console methods read off the global object to an unknown `.bind`, which no
   proof clears, so the default mode keeps its machinery (25,856 bytes instead of 11,688);

@@ -1,0 +1,2 @@
+if (0) { class A { [await 0]() {} } }
+console.log(typeof this, (function(){ return typeof this })());

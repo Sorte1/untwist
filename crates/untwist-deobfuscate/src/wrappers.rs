@@ -1,7 +1,7 @@
 use oxc_allocator::GetAllocator;
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
-use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_ast_visit::{walk_js, VisitJs, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_str::Ident;
@@ -15,7 +15,10 @@ use untwist_core::ast_util::rename::Renames;
 use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::ast_util::search::{expression_at, statement_at};
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::{is_constant_binding, scope_hazard, write_reference_count};
+use untwist_core::semantic::{
+    has_module_syntax, is_constant_binding, observers, scope_hazard, write_reference_count,
+    Observers,
+};
 
 use crate::alias_forms::{
     alias_source, decoders_ignore_this, deleted_span, literal_headed_identifier, member_reads,
@@ -308,6 +311,7 @@ struct VariablePlan<'a> {
     budget: Vec<(Span, SymbolId)>,
     objects: Vec<(Span, Vec<Span>, Ident<'a>)>,
     collapses: Vec<(Span, Ident<'a>)>,
+    kept_statements: FxHashSet<Span>,
 }
 
 fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {
@@ -620,12 +624,110 @@ fn variable_alias_plan<'a>(
 
     collect_leftovers(&sites, &targets, &facts, cx.scoping(), &mut plan);
     let checked = !cx.opts.rule_disabled(ALIAS_FORM_CHECKS);
+    if !keeps_machinery && checked && keeps_script_global_aliases(program, cx) {
+        plan.kept_statements = script_global_statements(&sites, &forms.objects, cx.scoping());
+        drop_unread_kept_aliases(&mut plan, cx.scoping());
+    }
     if !keeps_machinery {
         plan.objects = object_rewrites(program, &forms.objects, &targets, &facts, cx, &mut plan);
     }
     plan.collapses = sequence_collapses(&forms, &targets, &plan, cx.scoping(), checked);
     plan.declarations = facts.declarations.found;
     plan
+}
+
+fn keeps_script_global_aliases(program: &Program<'_>, cx: &Cx<'_, '_>) -> bool {
+    !cx.opts.nested_root
+        && !cx.opts.unsafe_transforms
+        && observers() != Observers::None
+        && !program.source_type.is_module()
+        && !has_module_syntax(program)
+}
+
+fn script_global_statements(
+    sites: &[AliasSite],
+    objects: &[ObjectAlias],
+    scoping: &Scoping,
+) -> FxHashSet<Span> {
+    let root = scoping.root_scope_id();
+    let at_root = |symbol: SymbolId| scoping.symbol_scope_id(symbol) == root;
+    sites
+        .iter()
+        .filter(|site| at_root(site.symbol))
+        .map(|site| site.statement)
+        .chain(
+            objects
+                .iter()
+                .filter(|object| at_root(object.symbol))
+                .map(|object| object.statement),
+        )
+        .collect()
+}
+
+fn drop_unread_kept_aliases(plan: &mut VariablePlan<'_>, scoping: &Scoping) {
+    let unread: FxHashSet<SymbolId> = plan
+        .chosen
+        .iter()
+        .filter(|(symbol, statement, _)| {
+            plan.kept_statements.contains(statement)
+                && scoping.get_resolved_reference_ids(*symbol).is_empty()
+        })
+        .map(|(symbol, _, _)| *symbol)
+        .collect();
+    if unread.is_empty() {
+        return;
+    }
+    plan.chosen
+        .retain(|(symbol, _, _)| !unread.contains(symbol));
+    plan.aliases.retain(|symbol, _| !unread.contains(symbol));
+}
+
+fn kept_init<'a>(
+    program: &Program<'a>,
+    plan: &VariablePlan<'a>,
+    (symbol, statement, expression): (SymbolId, Span, Option<Span>),
+) -> Option<(Span, Ident<'a>)> {
+    if expression.is_some() {
+        return None;
+    }
+    let Some(Statement::VariableDeclaration(declaration)) = statement_at(program, statement) else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    let init = declarator.init.as_ref()?;
+    if matches!(init, Expression::Identifier(_)) {
+        return None;
+    }
+    Some((init.span(), *plan.aliases.get(&symbol)?))
+}
+
+fn kept_bindings<'a>(plan: &VariablePlan<'a>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {
+    plan.chosen
+        .iter()
+        .filter(|(_, statement, _)| plan.kept_statements.contains(statement))
+        .map(|(symbol, _, _)| {
+            let name = cx.scoping().symbol_name(*symbol);
+            (*symbol, Ident::from_str_in(name, cx))
+        })
+        .collect()
+}
+
+struct KeptBindings<'k, 'a> {
+    names: &'k FxHashMap<SymbolId, Ident<'a>>,
+}
+
+impl<'a> VisitMut<'a> for KeptBindings<'_, 'a> {
+    fn visit_binding_identifier(&mut self, it: &mut BindingIdentifier<'a>) {
+        if let Some(name) = it
+            .symbol_id
+            .get()
+            .and_then(|symbol| self.names.get(&symbol))
+        {
+            it.name = *name;
+        }
+    }
 }
 
 fn known_target<'a>(
@@ -826,15 +928,25 @@ fn inline_variable_aliases<'a>(
     if renames.meets_an_unbound_reference(cx.scoping()) {
         return 0;
     }
+    let kept = kept_bindings(&plan, cx);
     let mut renamed = renames.apply(program, cx.scoping());
+    if !kept.is_empty() {
+        KeptBindings { names: &kept }.visit_program(program);
+    }
 
     let mut removals = StmtEdits::new();
     let mut edits = ExprEdits::new();
     for site in plan.chosen.iter().copied() {
-        apply_alias_site(program, &plan, site, cx, &mut edits, &mut removals);
+        if !plan.kept_statements.contains(&site.1) {
+            apply_alias_site(program, &plan, site, cx, &mut edits, &mut removals);
+        } else if let Some((init, name)) = kept_init(program, &plan, site) {
+            edits.insert(init, Expression::new_identifier(init, name, &*cx));
+        }
     }
     for (statement, members, name) in &plan.objects {
-        removals.remove(*statement);
+        if !plan.kept_statements.contains(statement) {
+            removals.remove(*statement);
+        }
         for member in members {
             edits.insert(*member, Expression::new_identifier(*member, *name, &*cx));
         }

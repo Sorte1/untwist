@@ -39,7 +39,7 @@ pub(crate) fn observed_global_names(
     nested_root: bool,
 ) -> Observation {
     let stamped = find_stamped(program);
-    let units = units_of(program, &stamped);
+    let units = units_of(program, Some(scoping), &stamped);
     observed_names_of(program, scoping, nested_root, (&stamped, &units))
 }
 
@@ -71,6 +71,7 @@ fn observed_names_of(
             }
         }
     }
+    names.extend(units.iter().flat_map(Machinery::alias_names));
     if names.is_empty() {
         return Observation::default();
     }
@@ -106,20 +107,26 @@ pub struct Machinery {
     pub decoders: Vec<Span>,
     pub rotator: Option<Span>,
     pub rotator_sealed: bool,
+    pub aliases: Vec<(Span, String)>,
 }
 
 impl Machinery {
-    fn statements(&self) -> Vec<Span> {
+    pub(crate) fn statements(&self) -> Vec<Span> {
         let mut spans = Vec::new();
         spans.extend(self.array);
         spans.extend(self.rotator);
         spans.extend(self.decoders.iter().copied());
+        spans.extend(self.aliases.iter().map(|(span, _)| *span));
         spans
+    }
+
+    fn alias_names(&self) -> impl Iterator<Item = &str> {
+        self.aliases.iter().map(|(_, name)| name.as_str())
     }
 }
 
 pub fn machinery_units(program: &Program<'_>) -> Vec<Machinery> {
-    units_of(program, &find_stamped(program))
+    units_of(program, None, &find_stamped(program))
 }
 
 struct Owned<'s, 'p> {
@@ -157,12 +164,17 @@ impl<'s, 'p> Owned<'s, 'p> {
     }
 }
 
-fn units_of(program: &Program<'_>, stamped: &Stamped<'_>) -> Vec<Machinery> {
-    units_owned(program, stamped, &Owned::of(stamped))
+fn units_of(
+    program: &Program<'_>,
+    scoping: Option<&Scoping>,
+    stamped: &Stamped<'_>,
+) -> Vec<Machinery> {
+    units_owned(program, scoping, stamped, &Owned::of(stamped))
 }
 
 fn units_owned(
     program: &Program<'_>,
+    scoping: Option<&Scoping>,
     stamped: &Stamped<'_>,
     owned: &Owned<'_, '_>,
 ) -> Vec<Machinery> {
@@ -174,8 +186,10 @@ fn units_owned(
     let names: Vec<&str> = arrays.iter().map(|(_, array)| array.name).collect();
     let rotators = find_rotators(program, &names);
     let mut units = Vec::new();
+    let mut aliases = dead_aliases(program, scoping, owned);
     for ((unit, array), rotator) in arrays.into_iter().zip(rotators) {
         units.push(Machinery {
+            aliases: aliases.remove(&unit).unwrap_or_default(),
             unit,
             array: Some(array.statement),
             decoders: owned
@@ -188,6 +202,169 @@ fn units_owned(
         });
     }
     units
+}
+
+fn dead_aliases(
+    program: &Program<'_>,
+    scoping: Option<&Scoping>,
+    owned: &Owned<'_, '_>,
+) -> FxHashMap<usize, Vec<(Span, String)>> {
+    let decoders: FxHashMap<&str, usize> = owned
+        .decoders
+        .iter()
+        .flat_map(|(unit, entries)| entries.iter().map(move |entry| (entry.name, *unit)))
+        .collect();
+    let mut found: FxHashMap<usize, Vec<(Span, String)>> = FxHashMap::default();
+    for alias in dead_root_aliases(program, scoping, |name| decoders.get(name).copied()) {
+        let unit = found.entry(alias.owner).or_default();
+        if !unit.iter().any(|(span, _)| *span == alias.statement) {
+            unit.push((alias.statement, alias.name.to_string()));
+        }
+    }
+    found
+}
+
+pub(crate) fn dead_alias_statements(
+    program: &Program<'_>,
+    scoping: Option<&Scoping>,
+) -> FxHashSet<Span> {
+    dead_root_aliases(program, scoping, crate::stamp::decoder_index)
+        .into_iter()
+        .map(|alias| alias.statement)
+        .collect()
+}
+
+pub(crate) fn dead_alias_values(
+    program: &Program<'_>,
+    scoping: Option<&Scoping>,
+) -> FxHashSet<Span> {
+    dead_root_aliases(program, scoping, crate::stamp::decoder_index)
+        .into_iter()
+        .map(|alias| alias.value)
+        .collect()
+}
+
+struct DeadAlias<'p> {
+    owner: usize,
+    statement: Span,
+    value: Span,
+    name: &'p str,
+    symbol: Option<SymbolId>,
+}
+
+fn dead_root_aliases<'p>(
+    program: &'p Program<'_>,
+    scoping: Option<&Scoping>,
+    owner_of: impl Fn(&str) -> Option<usize>,
+) -> Vec<DeadAlias<'p>> {
+    if program.source_type.is_module() || untwist_core::semantic::has_module_syntax(program) {
+        return Vec::new();
+    }
+    let mut candidates: Vec<DeadAlias<'p>> = Vec::new();
+    for statement in &program.body {
+        let Statement::VariableDeclaration(declaration) = statement else {
+            continue;
+        };
+        let [declarator] = declaration.declarations.as_slice() else {
+            continue;
+        };
+        let (BindingPattern::BindingIdentifier(id), Some(init)) =
+            (&declarator.id, &declarator.init)
+        else {
+            continue;
+        };
+        if declaration.kind.is_using() {
+            continue;
+        }
+        let values = alias_values(init);
+        let owner = values
+            .first()
+            .and_then(|value| owner_of(value.name.as_str()));
+        let Some(owner) = owner.filter(|owner| {
+            values
+                .iter()
+                .all(|value| owner_of(value.name.as_str()) == Some(*owner))
+        }) else {
+            continue;
+        };
+        for value in values {
+            candidates.push(DeadAlias {
+                owner,
+                statement: declaration.span,
+                value: value.span,
+                name: id.name.as_str(),
+                symbol: id.symbol_id.get(),
+            });
+        }
+    }
+    if candidates.is_empty() {
+        return candidates;
+    }
+    let mut read = NamesRead {
+        names: candidates
+            .iter()
+            .map(|alias| (alias.name, alias.symbol))
+            .collect(),
+        scoping,
+        read: FxHashSet::default(),
+    };
+    read.visit_program(program);
+    candidates.retain(|alias| !read.read.contains(alias.name));
+    candidates
+}
+
+fn alias_values<'e, 'a>(init: &'e Expression<'a>) -> Vec<&'e IdentifierReference<'a>> {
+    match init {
+        Expression::Identifier(value) => vec![value],
+        Expression::ObjectExpression(object) => {
+            let mut values = Vec::new();
+            for property in &object.properties {
+                let ObjectPropertyKind::ObjectProperty(property) = property else {
+                    return Vec::new();
+                };
+                let Expression::Identifier(value) = &property.value else {
+                    return Vec::new();
+                };
+                if property.computed || property.method || property.kind != PropertyKind::Init {
+                    return Vec::new();
+                }
+                values.push(&**value);
+            }
+            values
+        }
+        _ => Vec::new(),
+    }
+}
+
+struct NamesRead<'n, 's> {
+    names: FxHashMap<&'n str, Option<SymbolId>>,
+    scoping: Option<&'s Scoping>,
+    read: FxHashSet<&'n str>,
+}
+
+impl NamesRead<'_, '_> {
+    fn reads(&self, it: &IdentifierReference<'_>, symbol: Option<SymbolId>) -> bool {
+        let (Some(scoping), Some(symbol)) = (self.scoping, symbol) else {
+            return true;
+        };
+        let Some(reference) = it.reference_id.get() else {
+            return true;
+        };
+        scoping
+            .get_reference(reference)
+            .symbol_id()
+            .is_none_or(|resolved| resolved == symbol)
+    }
+}
+
+impl<'a> VisitJs<'a> for NamesRead<'_, '_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if let Some((name, symbol)) = self.names.get_key_value(it.name.as_str()) {
+            if self.reads(it, *symbol) {
+                self.read.insert(name);
+            }
+        }
+    }
 }
 
 pub fn machinery(program: &Program<'_>) -> Machinery {
@@ -203,6 +380,7 @@ struct References<'w> {
     found: Vec<Vec<Span>>,
     listing: Option<&'w FxHashSet<Span>>,
     listed: FxHashSet<Span>,
+    aliases: FxHashSet<Span>,
 }
 
 fn units_by_name(units: &[MachineryDepth]) -> Option<FxHashMap<String, Vec<usize>>> {
@@ -268,6 +446,9 @@ impl<'a> VisitJs<'a> for References<'_> {
     }
 
     fn visit_statement(&mut self, it: &Statement<'a>) {
+        if self.aliases.contains(&it.span()) {
+            return;
+        }
         if let [units] = self.units.as_mut_slice() {
             let entered = units.enter(it);
             walk_js::walk_statement(self, it);
@@ -310,7 +491,7 @@ impl<'a> VisitJs<'a> for References<'_> {
 fn references_listing(
     program: &Program<'_>,
     units: Vec<MachineryDepth>,
-    listing: Option<&FxHashSet<Span>>,
+    (listing, aliases): (Option<&FxHashSet<Span>>, FxHashSet<Span>),
 ) -> (Vec<Vec<Span>>, FxHashSet<Span>) {
     let by_name = (units.len() > 1).then(|| units_by_name(&units)).flatten();
     let mut references = References {
@@ -319,13 +500,14 @@ fn references_listing(
         units,
         listing,
         listed: FxHashSet::default(),
+        aliases,
     };
     references.visit_program(program);
     (references.found, references.listed)
 }
 
 fn references(program: &Program<'_>, units: MachineryDepth) -> Vec<Span> {
-    references_listing(program, vec![units], None)
+    references_listing(program, vec![units], (None, FxHashSet::default()))
         .0
         .into_iter()
         .next()
@@ -414,9 +596,17 @@ fn plan(program: &Program<'_>, (owned, units): (&Owned<'_, '_>, &[Machinery])) -
     }
     let depths: Vec<MachineryDepth> = decoding
         .iter()
-        .map(|machinery| MachineryDepth::one_unit(owned.names_of(machinery.unit)))
+        .map(|machinery| {
+            let mut names = owned.names_of(machinery.unit);
+            names.extend(machinery.alias_names().map(str::to_string));
+            MachineryDepth::one_unit(names)
+        })
         .collect();
-    let (outstanding, members) = references_listing(program, depths, Some(&wanted));
+    let aliases: FxHashSet<Span> = decoding
+        .iter()
+        .flat_map(|machinery| machinery.aliases.iter().map(|(span, _)| *span))
+        .collect();
+    let (outstanding, members) = references_listing(program, depths, (Some(&wanted), aliases));
     for (machinery, outstanding) in decoding.into_iter().zip(outstanding) {
         plan.judge(machinery, &outstanding, &members);
     }
@@ -491,7 +681,7 @@ impl RemoveDecoderMachinery {
     fn removable(&self, program: &Program<'_>, cx: &mut Cx<'_, '_>) -> Vec<Span> {
         let stamped = find_stamped_named(program, cx.scoping(), is_unedited(cx));
         let owned = Owned::of(&stamped);
-        let mut units = units_owned(program, &stamped, &owned);
+        let mut units = units_owned(program, Some(cx.scoping()), &stamped, &owned);
         seal_rotators(program, cx.scoping(), &owned, &mut units);
         let Plan { kept, spans } = plan(program, (&owned, &units));
         for (message, span) in kept {

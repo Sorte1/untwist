@@ -30,6 +30,7 @@ pub(super) struct Watch<'k> {
     pub(super) printers_quiet: bool,
     pub(super) runner_texts: bool,
     pub(super) texts_in_every_lane: bool,
+    pub(super) sources_outside: bool,
 }
 
 const LINEAR_LOOKUP: usize = 16;
@@ -183,7 +184,13 @@ fn settle_ordered<'a>(
     scoping: &Scoping,
     (resolve, machinery, watch): Inputs<'_>,
 ) -> (Agnostic<'a>, Vec<SymbolId>) {
-    let mut bindings = Bindings::collect(program, scoping, !watch.names.is_empty(), resolve);
+    let exempt = if watch.sources_outside {
+        machinery
+    } else {
+        &[]
+    };
+    let mut bindings =
+        Bindings::collect(program, scoping, (!watch.names.is_empty(), exempt), resolve);
     let flow = Flow::new(program, scoping, resolve);
     let filters = std::rc::Rc::clone(&bindings.filters);
     let globals = script_globals(program, scoping);

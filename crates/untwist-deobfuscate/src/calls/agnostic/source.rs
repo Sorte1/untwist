@@ -83,12 +83,13 @@ pub(super) struct Frame {
 pub(super) struct Sources {
     frame: Frame,
     found: bool,
+    exempt: Vec<Span>,
     #[cfg(feature = "refusal-spans")]
     first: Option<(Span, &'static str)>,
 }
 
 impl Sources {
-    pub(super) fn new(program: &Program<'_>) -> Self {
+    pub(super) fn new(program: &Program<'_>, exempt: &[Span]) -> Self {
         let frame = Frame {
             this_global: !untwist_core::semantic::has_module_syntax(program),
             strict: untwist_core::semantic::program_is_strict(program),
@@ -97,6 +98,7 @@ impl Sources {
         Self {
             frame,
             found: false,
+            exempt: exempt.to_vec(),
             #[cfg(feature = "refusal-spans")]
             first: None,
         }
@@ -149,6 +151,13 @@ impl Sources {
     }
 
     pub(super) fn note(&mut self, span: Span, what: &'static str) {
+        let exempt = self
+            .exempt
+            .iter()
+            .any(|outer| outer.start <= span.start && span.end <= outer.end);
+        if exempt {
+            return;
+        }
         #[cfg(feature = "refusal-spans")]
         if self.first.is_none() {
             self.first = Some((span, what));

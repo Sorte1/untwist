@@ -50,7 +50,7 @@ const CLOSED: [(&str, &str); 4] = [
     ),
 ];
 
-const OPEN: [(&str, &str, &str); 8] = [
+const OPEN: [(&str, &str, &str); 10] = [
     (
         "a",
         "an argument that is not a literal",
@@ -65,6 +65,16 @@ const OPEN: [(&str, &str, &str); 8] = [
         "c",
         "a sloppy block function that redeclares a local",
         "function g() { var t = b(1); eval('{ function t() {} }'); return typeof t; }\nconsole.log(g());",
+    ),
+    (
+        "c",
+        "a brace-less block function under a catch parameter of its name",
+        "function g() { var t = b(1); eval('try { throw 1 } catch (t) { if (1) function t() {} }'); return typeof t; }\nconsole.log(g());",
+    ),
+    (
+        "c",
+        "a brace-less else function under a catch parameter of its name",
+        "function g() { var t = b(1); eval('try { throw 1 } catch (t) { if (0) ; else function t() {} }'); return typeof t; }\nconsole.log(g());",
     ),
     (
         "d",

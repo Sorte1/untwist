@@ -15,7 +15,9 @@ use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
 
-use crate::bindings::{has_stray_reference, reference_symbol};
+use crate::bindings::{
+    has_stray_reference, reaches_a_script_global_once_removed, reference_symbol,
+};
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
 use crate::flag_home::{is_private_local, Homes, ARGUMENTS, DIRECT_EVAL};
@@ -688,7 +690,7 @@ impl<'a> VisitJs<'a> for BareCalls<'_> {
 enum Plan {
     Nothing,
     Refused,
-    Remove(Vec<Span>),
+    Remove(Vec<Span>, FxHashSet<SymbolId>),
 }
 
 fn removals<'k>(
@@ -813,7 +815,7 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
         return Plan::Refused;
     }
     match (spans.is_empty(), kept) {
-        (false, _) => Plan::Remove(spans),
+        (false, _) => Plan::Remove(spans, tracked),
         (true, true) => Plan::Refused,
         (true, false) => Plan::Nothing,
     }
@@ -842,7 +844,13 @@ impl<'a> Pass<'a> for SelfDefending {
                 cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
                 return;
             }
-            Plan::Remove(spans) => spans,
+            Plan::Remove(spans, tracked) => {
+                if reaches_a_script_global_once_removed(&tracked, &spans, program, cx) {
+                    cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
+                    return;
+                }
+                spans
+            }
         };
         if crate::directives::removes_what_an_eval_reads(cx.scoping(), &spans) {
             cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);

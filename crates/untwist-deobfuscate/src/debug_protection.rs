@@ -9,7 +9,9 @@ use untwist_core::ast_util::global::{global_is_written, is_global_reference};
 use untwist_core::ast_util::matcher::{call_parts, statement_iife, var_function_or_declaration};
 use untwist_core::pass::{Cx, Interest, Pass};
 
-use crate::bindings::{has_stray_reference, reference_symbol};
+use crate::bindings::{
+    has_stray_reference, reaches_a_script_global_once_removed, reference_symbol,
+};
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
 use crate::notes;
@@ -159,7 +161,7 @@ pub(crate) fn protection_symbols(program: &Program<'_>, scoping: &Scoping) -> Fx
 enum Plan {
     Nothing,
     Refused,
-    Remove(Vec<Span>),
+    Remove(Vec<Span>, FxHashSet<SymbolId>),
 }
 
 fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
@@ -178,7 +180,7 @@ fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
     if has_stray_reference(program, &declarations.symbols, &spans, scoping) {
         return Plan::Refused;
     }
-    Plan::Remove(spans)
+    Plan::Remove(spans, declarations.symbols)
 }
 
 #[derive(Default)]
@@ -204,7 +206,13 @@ impl<'a> Pass<'a> for DebugProtection {
                 cx.note(notes::DEBUG_PROTECTION_REFERENCE_KEPT, None);
                 return;
             }
-            Plan::Remove(spans) => spans,
+            Plan::Remove(spans, symbols) => {
+                if reaches_a_script_global_once_removed(&symbols, &spans, program, cx) {
+                    cx.note(notes::DEBUG_PROTECTION_REFERENCE_KEPT, None);
+                    return;
+                }
+                spans
+            }
         };
         if crate::directives::removes_what_an_eval_reads(cx.scoping(), &spans) {
             cx.note(notes::DEBUG_PROTECTION_REFERENCE_KEPT, None);

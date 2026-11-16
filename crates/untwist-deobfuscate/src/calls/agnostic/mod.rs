@@ -169,6 +169,7 @@ fn reach_watch<'k>(reach: ReachWatch<'k>) -> settle::Watch<'k> {
         printers_quiet: false,
         runner_texts: true,
         texts_in_every_lane: false,
+        sources_outside: false,
     }
 }
 
@@ -296,6 +297,32 @@ pub fn names_reached_from<'a>(
     }
 }
 
+pub fn names_reached_outside<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    (names, props): (&[&str], &[&str]),
+    removed: &[Span],
+) -> NamesReached {
+    if names.is_empty() {
+        return NamesReached::default();
+    }
+    let reach = ReachWatch {
+        names,
+        props,
+        fns: &[],
+        observe: true,
+    };
+    let watch = settle::Watch {
+        sources_outside: true,
+        ..reach_watch(reach)
+    };
+    let found = reach_of(&settle(program, scoping, (None, removed, watch)).0);
+    NamesReached {
+        reached: found.reach.or(found.reach_by_code).is_some(),
+        observed: found.observed.is_some(),
+    }
+}
+
 pub fn script_lexicals_reachable_by_code<'a>(program: &'a Program<'a>, scoping: &Scoping) -> bool {
     let mut names = settle::script_lexicals(program, scoping)
         .into_iter()
@@ -336,6 +363,7 @@ fn text_reach<'a>(
         printers_quiet: false,
         runner_texts,
         texts_in_every_lane: false,
+        sources_outside: false,
     };
     let found = settle(program, scoping, (None, &[], watch)).0;
     let reached = found

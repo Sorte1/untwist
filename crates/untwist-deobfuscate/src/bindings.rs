@@ -1,11 +1,13 @@
+use oxc_allocator::{CloneIn, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
-use oxc_ast_visit::{walk_js, VisitJs};
-use oxc_semantic::Scoping;
+use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
+use oxc_semantic::{Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, Span};
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{block_function_symbols, declared_in_block, AnnexBWrites};
+use untwist_core::semantic::{observers, Observers};
 
 pub fn resolved_symbol(reference: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
     scoping
@@ -99,6 +101,100 @@ pub fn has_stray_reference(
     };
     stray.visit_program(program);
     stray.found
+}
+
+pub fn reaches_a_script_global(
+    symbols: &FxHashSet<SymbolId>,
+    removed: &[Span],
+    program: &Program<'_>,
+    scoping: &Scoping,
+) -> bool {
+    let Some((names, props)) = script_global_names(symbols, program, scoping) else {
+        return false;
+    };
+    untwist_core::semantic::observing_open(|| {
+        names_reached_beside_machinery(program, scoping, (&names, &props), removed)
+    })
+}
+
+pub fn reaches_a_script_global_once_removed<'a>(
+    symbols: &FxHashSet<SymbolId>,
+    removed: &[Span],
+    program: &Program<'a>,
+    cx: &Cx<'a, '_>,
+) -> bool {
+    if cx.opts.unsafe_transforms || observers() == Observers::None {
+        return false;
+    }
+    let Some((names, props)) = script_global_names(symbols, program, cx.scoping()) else {
+        return false;
+    };
+    let mut pruned = program.clone_in(cx.allocator());
+    Prune { removed }.visit_program(&mut pruned);
+    let scoping = SemanticBuilder::new()
+        .build(&pruned)
+        .semantic
+        .into_scoping();
+    names_reached_beside_machinery(&pruned, &scoping, (&names, &props), &[])
+}
+
+fn script_global_names<'s>(
+    symbols: &FxHashSet<SymbolId>,
+    program: &Program<'_>,
+    scoping: &'s Scoping,
+) -> Option<(Vec<&'s str>, Vec<&'s str>)> {
+    if program.source_type.is_module() || untwist_core::semantic::has_module_syntax(program) {
+        return None;
+    }
+    let root = scoping.root_scope_id();
+    let properties = SymbolFlags::FunctionScopedVariable.union(SymbolFlags::Function);
+    let mut names: Vec<&str> = Vec::new();
+    let mut props: Vec<&str> = Vec::new();
+    for symbol in symbols.iter().copied() {
+        if scoping.symbol_scope_id(symbol) != root {
+            continue;
+        }
+        let name = scoping.symbol_name(symbol);
+        names.push(name);
+        if scoping.symbol_flags(symbol).intersects(properties) {
+            props.push(name);
+        }
+    }
+    if names.is_empty() {
+        return None;
+    }
+    for list in [&mut names, &mut props] {
+        list.sort_unstable();
+        list.dedup();
+    }
+    Some((names, props))
+}
+
+fn names_reached_beside_machinery(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    (names, props): (&[&str], &[&str]),
+    removed: &[Span],
+) -> bool {
+    let mut outside: Vec<Span> = crate::removal::machinery_units(program)
+        .iter()
+        .flat_map(crate::removal::Machinery::statements)
+        .collect();
+    outside.extend_from_slice(removed);
+    let found =
+        crate::calls::agnostic::names_reached_outside(program, scoping, (names, props), &outside);
+    found.reached || (found.observed && !props.is_empty())
+}
+
+struct Prune<'r> {
+    removed: &'r [Span],
+}
+
+impl<'a> VisitMut<'a> for Prune<'_> {
+    fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
+        it.retain(|statement| !self.removed.contains(&statement.span()));
+        walk_mut::walk_statements(self, it);
+    }
 }
 
 pub fn unexposed_globals<T>(
