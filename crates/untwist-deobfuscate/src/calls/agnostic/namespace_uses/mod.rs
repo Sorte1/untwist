@@ -1,4 +1,5 @@
 mod blocks;
+mod flows;
 mod shapes;
 
 use std::borrow::Cow;
@@ -39,31 +40,6 @@ const UNSAFE_READS: [&str; 8] = [
     "constructor",
 ];
 
-const GLOBAL_FIRST_ARGUMENT: [&str; 22] = [
-    "defineProperty",
-    "deleteProperty",
-    "set",
-    "get",
-    "has",
-    "getOwnPropertyDescriptor",
-    "getOwnPropertyDescriptors",
-    "defineProperties",
-    "assign",
-    "keys",
-    "values",
-    "entries",
-    "getOwnPropertyNames",
-    "getOwnPropertySymbols",
-    "ownKeys",
-    "hasOwn",
-    "isExtensible",
-    "isFrozen",
-    "isSealed",
-    "freeze",
-    "seal",
-    "preventExtensions",
-];
-
 const GLOBAL_RECEIVER_READERS: [&str; 5] = [
     "hasOwnProperty",
     "propertyIsEnumerable",
@@ -71,8 +47,6 @@ const GLOBAL_RECEIVER_READERS: [&str; 5] = [
     "toString",
     "toLocaleString",
 ];
-
-const SET_RECEIVER: usize = 3;
 
 type Resolve<'r> = Option<&'r FxHashMap<Span, &'r JsString>>;
 
@@ -116,7 +90,6 @@ struct Walker<'s, 'a> {
     candidates: FxHashMap<SymbolId, Candidate<'a>>,
     aliases: FxHashMap<SymbolId, u8>,
     receivers: FxHashMap<SymbolId, usize>,
-    fallbacks: FxHashMap<SymbolId, shapes::Fallback>,
     protections: FxHashSet<SymbolId>,
     blocks: Vec<(Span, &'static [&'static str])>,
     found: Vec<Span>,
@@ -145,7 +118,6 @@ pub(super) fn loose_uses<'a>(
         candidates: FxHashMap::default(),
         aliases: FxHashMap::default(),
         receivers: FxHashMap::default(),
-        fallbacks: FxHashMap::default(),
         protections: FxHashSet::default(),
         blocks: Vec::new(),
         found: Vec::new(),
@@ -589,6 +561,9 @@ impl<'s, 'a> Walker<'s, 'a> {
     }
 
     fn allowed(&self, mut at: usize, kind: u8) -> bool {
+        if kind == GLOBAL {
+            return self.global_flow_allowed(at);
+        }
         let mut child = self.stack[at].address();
         while at > 0 {
             at -= 1;
@@ -631,8 +606,7 @@ impl<'s, 'a> Walker<'s, 'a> {
                     return a
                         .left
                         .as_member_expression()
-                        .is_some_and(|m| member_address(m) == child)
-                        || (kind == GLOBAL && self.global_fallback(a));
+                        .is_some_and(|m| member_address(m) == child);
                 }
                 AstKind::AssignmentTargetWithDefault(t) => {
                     return t
@@ -658,7 +632,7 @@ impl<'s, 'a> Walker<'s, 'a> {
                     if same(&c.callee, child) {
                         return kind & VALUE == 0;
                     }
-                    return self.argument_use(c, child, kind);
+                    return false;
                 }
                 AstKind::NewExpression(n) => return same(&n.callee, child) && kind & VALUE == 0,
                 AstKind::VariableDeclarator(d) => {
@@ -723,52 +697,6 @@ impl<'s, 'a> Walker<'s, 'a> {
             }
         }
         false
-    }
-
-    fn argument_use(&self, call: &CallExpression<'a>, child: Address, kind: u8) -> bool {
-        if kind & (NAMESPACE | VALUE) != 0 {
-            return false;
-        }
-        let Some(index) = call.arguments.iter().position(|argument| {
-            argument
-                .as_expression()
-                .is_some_and(|expr| same(expr, child))
-        }) else {
-            return false;
-        };
-        if kind == GLOBAL && self.wrapper_receiver(call) == Some(index) {
-            return true;
-        }
-        if let Some((params, _)) = iife_function(&call.callee) {
-            return params.items.get(index).is_some_and(|param| {
-                matches!(&param.pattern, BindingPattern::BindingIdentifier(id)
-                    if id.symbol_id.get().is_some_and(|symbol| self.aliases.contains_key(&symbol)))
-            });
-        }
-        let Some(member) = call.callee.without_parentheses().as_member_expression() else {
-            return false;
-        };
-        let Some(key) = member_key(member, self.resolve) else {
-            return false;
-        };
-        let object = member.object();
-        if self.kind_here(object) & NAMESPACE != 0 {
-            return (index == 0 && GLOBAL_FIRST_ARGUMENT.contains(&key.as_ref()))
-                || (index == SET_RECEIVER && key == "set");
-        }
-        if index != 0 || !matches!(key.as_ref(), "call" | "apply") {
-            return false;
-        }
-        if function_literal(object) {
-            return true;
-        }
-        object
-            .without_parentheses()
-            .as_member_expression()
-            .is_some_and(|reader| {
-                member_key(reader, self.resolve)
-                    .is_some_and(|name| GLOBAL_RECEIVER_READERS.contains(&name.as_ref()))
-            })
     }
 }
 
