@@ -3,10 +3,16 @@ use oxc_ast::ast::*;
 use oxc_ast::AstKind;
 use oxc_syntax::symbol::SymbolId;
 
-use super::{function_literal, member_key, same, transparent, unsafe_read, Walker, GLOBAL};
+use super::{
+    function_literal, member_key, same, str_const, transparent, unsafe_read, Walker, GLOBAL,
+    KIND_DEPTH,
+};
 use crate::proof::GLOBAL_OBJECTS;
+use oxc_syntax::symbol::SymbolFlags;
 
 const FORWARDS: [&str; 2] = ["apply", "call"];
+
+const TIMERS: [&str; 2] = ["setInterval", "setTimeout"];
 
 #[derive(Default)]
 pub(super) struct Fallback {
@@ -118,7 +124,7 @@ impl<'s, 'a> Walker<'s, 'a> {
             AstKind::AssignmentExpression(assign)
                 if assign.operator == AssignmentOperator::Assign =>
             {
-                if function_result(&assign.right) {
+                if function_result(&assign.right) || self.compiled_result(&assign.right) {
                     return Use::FunctionWrite;
                 }
                 let caught = self.stack[..up]
@@ -133,11 +139,74 @@ impl<'s, 'a> Walker<'s, 'a> {
             AstKind::StaticMemberExpression(member) if member.object.address() == child => {
                 self.safe_member_read(up, &member.property.name)
             }
+            AstKind::ComputedMemberExpression(member) if member.object.address() == child => {
+                match str_const(&member.expression, self.resolve, KIND_DEPTH) {
+                    Some(key) => self.safe_member_read(up, &key),
+                    None => Use::Other,
+                }
+            }
             _ => Use::Other,
         }
     }
 
+    fn compiled_result(&self, expr: &Expression<'a>) -> bool {
+        let Expression::CallExpression(call) = expr.without_parentheses() else {
+            return false;
+        };
+        let Expression::Identifier(callee) = call.callee.without_parentheses() else {
+            return false;
+        };
+        let Some(symbol) = self.symbol(callee) else {
+            return false;
+        };
+        !self.scoping.symbol_is_mutated(symbol)
+            && self.candidates.get(&symbol).is_some_and(|candidate| {
+                matches!(candidate.init.without_parentheses(), Expression::CallExpression(compile)
+                    if matches!(compile.callee.without_parentheses(), Expression::Identifier(id)
+                        if id.name == "Function" && self.symbol(id).is_none()))
+            })
+    }
+
+    fn timer_call(&self, at: usize, key: &str) -> bool {
+        if !TIMERS.contains(&key) {
+            return false;
+        }
+        let Some((up, child)) = self.parent(at) else {
+            return false;
+        };
+        let AstKind::CallExpression(call) = &self.stack[up] else {
+            return false;
+        };
+        same(&call.callee, child)
+            && call
+                .arguments
+                .first()
+                .and_then(Argument::as_expression)
+                .is_some_and(|first| self.function_value(first))
+    }
+
+    fn function_value(&self, expr: &Expression<'a>) -> bool {
+        match expr.without_parentheses() {
+            Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_) => true,
+            Expression::Identifier(id) => self.symbol(id).is_some_and(|symbol| {
+                !self.scoping.symbol_is_mutated(symbol)
+                    && (self
+                        .scoping
+                        .symbol_flags(symbol)
+                        .contains(SymbolFlags::Function)
+                        || self
+                            .candidates
+                            .get(&symbol)
+                            .is_some_and(|candidate| function_literal(candidate.init)))
+            }),
+            _ => false,
+        }
+    }
+
     fn safe_member_read(&self, at: usize, key: &str) -> Use {
+        if self.timer_call(at, key) {
+            return Use::Read;
+        }
         if unsafe_read(key) {
             return Use::Other;
         }
