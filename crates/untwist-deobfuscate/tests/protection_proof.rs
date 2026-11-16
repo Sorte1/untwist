@@ -174,3 +174,56 @@ fn a_format_check_written_as_a_declaration_is_removed() {
     let source = format!("{CONTROLLER}{THE_DECLARED_FORMAT_CHECK}{REST}");
     assert_eq!(safe(&source).trim(), REST);
 }
+
+const NO_EVAL_GLOBAL: &str = "typeof window !== \"undefined\" ? window : typeof process === \"object\" && typeof require === \"function\" && typeof global === \"object\" ? global : this";
+
+fn no_eval_console_disable() -> String {
+    format!(
+        "var cd = ctl(this, function () {{\n  const that = {NO_EVAL_GLOBAL};\n  const consoleObject = that.console = that.console || {{}};\n  const methods = [\"log\", \"warn\", \"info\", \"error\", \"exception\", \"table\", \"trace\"];\n  for (let index = 0; index < methods.length; index++) {{\n    const func = ctl.constructor.prototype.bind(ctl);\n    const methodName = methods[index];\n    const originalFunction = consoleObject[methodName] || func;\n    func.__proto__ = ctl.bind(ctl);\n    func.toString = originalFunction.toString.bind(originalFunction);\n    consoleObject[methodName] = func;\n  }}\n}});\ncd();\n"
+    )
+}
+
+const THE_NO_EVAL_DEBUG_PROTECTION: &str = "function dpf(ret) {\n  function debuggerProtection(counter) {\n    if (typeof counter === \"string\") {\n      const func = function () {\n        while (true) {}\n      };\n      return func();\n    } else if ((\"\" + counter / counter).length !== 1 || counter % 20 === 0) {\n      debugger;\n    } else {\n      debugger;\n    }\n    debuggerProtection(++counter);\n  }\n  try {\n    if (ret) {\n      return debuggerProtection;\n    } else {\n      debuggerProtection(0);\n    }\n  } catch (y) {}\n}\n";
+
+#[test]
+fn the_browser_no_eval_console_disable_is_removed_with_its_controller() {
+    let source = format!("{CONTROLLER}{}{REST}", no_eval_console_disable());
+    assert_eq!(safe(&source).trim(), REST);
+}
+
+#[test]
+fn a_browser_no_eval_console_disable_that_reads_a_replaced_global_is_kept() {
+    for patch in ["window = null;\n", "global = null;\n"] {
+        let source = format!("{patch}{CONTROLLER}{}{REST}", no_eval_console_disable());
+        assert_eq!(safe(&source), printed(&source), "{patch}");
+    }
+}
+
+#[test]
+fn a_browser_no_eval_console_disable_with_another_fallback_is_kept() {
+    let source = format!(
+        "{CONTROLLER}{}{REST}",
+        no_eval_console_disable().replacen("? global : this", "? global : {}", 1)
+    );
+    assert_eq!(safe(&source), printed(&source));
+}
+
+#[test]
+fn the_browser_no_eval_debug_protection_start_is_removed_with_the_protection_it_calls() {
+    let source =
+        format!("{CONTROLLER}{THE_NO_EVAL_DEBUG_PROTECTION}{THE_DEBUG_PROTECTION_START}{REST}");
+    assert_eq!(safe(&source).trim(), REST);
+}
+
+#[test]
+fn a_browser_no_eval_debug_protection_that_does_more_is_kept() {
+    let source = format!(
+        "{CONTROLLER}{}{THE_DEBUG_PROTECTION_START}{REST}",
+        THE_NO_EVAL_DEBUG_PROTECTION.replacen(
+            "      debugger;\n    } else {",
+            "      console.log(\"payload\");\n    } else {",
+            1
+        )
+    );
+    assert_eq!(safe(&source), printed(&source));
+}
