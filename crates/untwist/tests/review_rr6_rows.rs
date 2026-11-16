@@ -15,7 +15,7 @@ const MODES: [(&str, Lane); 6] = [
     ("rename unique", Lane::Rename(RenameMode::Unique)),
 ];
 
-const CALLER_THROUGH_A_PROXY: [&str; 4] = ["130", "131", "134", "136"];
+const CALLER_PREMISE: [&str; 4] = ["130", "131", "134", "136"];
 
 const RENAME_PREMISE: [&str; 8] = ["40", "42", "44", "45", "46", "47", "48", "49"];
 
@@ -24,7 +24,7 @@ const UNSAFE_WITNESSES: [&str; 13] = [
 ];
 
 fn expected_mismatches() -> Vec<String> {
-    let every_lane = CALLER_THROUGH_A_PROXY.iter().flat_map(|label| {
+    let every_lane = CALLER_PREMISE.iter().flat_map(|label| {
         MODES
             .iter()
             .map(move |(mode, _)| format!("{label} ({mode})"))

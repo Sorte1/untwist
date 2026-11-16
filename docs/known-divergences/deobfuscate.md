@@ -833,6 +833,17 @@
   or `.caller` member access anywhere in the program can see some function's parameters or caller. A note for work the
   pass never claimed is noise — one Rollup bundle produces hundreds of them. The reference deobfuscator has no such
   pass and reports nothing either way.
+- **Default-lane premise: no code reads a function's caller.** No code reads a function's caller
+  through `.caller` or `arguments.callee.caller` to observe which function called it (the
+  non-standard `Function.prototype.caller`; strict code cannot). `control-flow-object` inlines a
+  call proxy such as `{ abcde: function (a) { return a(); } }.abcde(w)` to `w()`, which removes the
+  proxy's frame: a sloppy `w` that reads `w.caller` sees the function that held the call, not the
+  proxy. A guard that keeps such calls when a frame read is reachable was measured and not shipped
+  (branch `fix/r51-nx7-frame-guard`): it cost obfuscator-io 16 safe fixtures (`pair-cff+debug` 9/10
+  to 0/10, `pair-cff+self` 9/10 to 2/10) and obfuscator-versions 7 cells, because the protections'
+  own `Function` and `.constructor` calls make a frame read reachable and they are only recognised
+  once their proxies are inlined. Rows 130, 131, 134 and 136 of
+  `crates/untwist/tests/review_rr6_rows.rs` are the premise rows.
 - **`Function#arguments` and `Function#caller` reads leave the function passes off in the safe lane.**
   In sloppy code `f.arguments` holds the parameter values of `f`'s active call and `f.caller` the
   function that called it. `var-transformation`, `function-to-arrow` and `default-parameters` leave
