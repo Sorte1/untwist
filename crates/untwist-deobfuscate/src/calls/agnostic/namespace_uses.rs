@@ -237,7 +237,9 @@ impl<'s, 'a> Walker<'s, 'a> {
     }
 
     fn symbol(&self, id: &IdentifierReference<'_>) -> Option<SymbolId> {
-        self.scoping.get_reference(id.reference_id()).symbol_id()
+        id.reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
     }
 
     fn this_is_global(&self) -> bool {
@@ -410,11 +412,14 @@ impl<'s, 'a> Walker<'s, 'a> {
     fn subject_kind(&self, kind: &AstKind<'a>) -> u8 {
         match kind {
             AstKind::IdentifierReference(id) => {
-                let reference = self.scoping.get_reference(id.reference_id());
-                if !reference.is_read() {
+                let reference = id
+                    .reference_id
+                    .get()
+                    .map(|reference| self.scoping.get_reference(reference));
+                if reference.is_some_and(|reference| !reference.is_read()) {
                     return 0;
                 }
-                match reference.symbol_id() {
+                match reference.and_then(|reference| reference.symbol_id()) {
                     None if NAMESPACES.contains(&id.name.as_str()) => NAMESPACE,
                     None if GLOBAL_OBJECTS.contains(&id.name.as_str()) => GLOBAL,
                     None => 0,
