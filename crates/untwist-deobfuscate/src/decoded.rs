@@ -799,6 +799,7 @@ fn judge_runs<'p>(
             watched
                 && layered::speculate_waived((program, scoping), request, &mut speculated, waive)
         };
+        let substituted = decoded.substitutions.len();
         let decoded_unit = judge_unit(
             decoded,
             run,
@@ -808,12 +809,13 @@ fn judge_runs<'p>(
             judged,
             &mut waiver,
         );
+        let untouched = decoded.substitutions.len() == substituted;
         if decoded_unit {
             decoding.push(unit);
             if let Some(name) = deferred {
                 crate::legacy_reach::verify(name);
             }
-        } else if let Some(token) = &speculated {
+        } else if let Some(token) = speculated.as_ref().filter(|_| untouched) {
             crate::legacy_reach::drop_layered(token);
         }
     }

@@ -142,6 +142,14 @@ pub fn machinery_units(program: &Program<'_>) -> Vec<Machinery> {
     units_of(program, None, &find_stamped(program))
 }
 
+pub(crate) fn removable_machinery(program: &Program<'_>, scoping: &Scoping) -> Vec<Span> {
+    let stamped = find_stamped(program);
+    let owned = Owned::of(&stamped);
+    let mut units = units_owned(program, Some(scoping), &stamped, &owned);
+    seal_rotators(program, scoping, &owned, &mut units);
+    plan(program, (&owned, &units)).spans
+}
+
 struct Owned<'s, 'p> {
     arrays: FxHashMap<usize, &'s StampedFn<'p>>,
     decoders: FxHashMap<usize, Vec<&'s StampedFn<'p>>>,
@@ -326,7 +334,7 @@ fn dead_root_aliases<'p>(
     candidates
 }
 
-fn alias_values<'e, 'a>(init: &'e Expression<'a>) -> Vec<&'e IdentifierReference<'a>> {
+pub(crate) fn alias_values<'e, 'a>(init: &'e Expression<'a>) -> Vec<&'e IdentifierReference<'a>> {
     match init {
         Expression::Identifier(value) => vec![value],
         Expression::ObjectExpression(object) => {

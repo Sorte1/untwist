@@ -446,6 +446,13 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
+        source: Source::Headed(
+            "var alias = __DECODE_0__;\nglobalThis.alias = function () { return 'x'; };\nconsole[alias(0)]();",
+        ),
+        expects: notes::WRAPPER_ALIAS_GLOBAL_REACH,
+        mode: Match::Contains,
+    },
+    Case {
         source: Source::Whole(
             "var A = { k: b }; function a() { const j = ['1', '3', 'hi', 'there', 'x']; a = function () { return j; }; return a(); } function b(c, e) { const f = a(); return b = function (g, h) { g = g - 0x0; let i = f[g]; return i; }, b(c, e) + (this && this.k ? '!' : ''); } (function (c, e) { const f = b, g = c(); while (!![]) { try { const h = parseInt(f(0x0)); if (h === e) break; else g['push'](g['shift']()); } catch (i) { g['push'](g['shift']()); } } }(a, 0x3)); console.log(A.k(0x2), b(0x3));",
         ),
@@ -478,6 +485,13 @@ pub const CASES: &[Case] = &[
             "function w(a, b) { return __DECODE_0__(a, b); }\nw = function () { return 1; };\nw(1, 2);",
         ),
         expects: notes::WRAPPER_BINDING_UNSTABLE,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Headed(
+            "function w(a, b) { return __DECODE_0__(a, b); }\nglobalThis.w = function () { return 1; };\nw(1, 2);",
+        ),
+        expects: notes::WRAPPER_GLOBAL_REACH,
         mode: Match::Contains,
     },
     Case {

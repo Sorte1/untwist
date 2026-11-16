@@ -72,6 +72,24 @@ pub(crate) fn defer_layered(token: String, layered: Layered) {
     DEFERRAL.with(|deferral| deferral.borrow_mut().layered.push((token, layered)));
 }
 
+pub(crate) fn defer_names(token: String, names: Vec<String>) {
+    let held = DEFERRAL.with(|deferral| {
+        deferral
+            .borrow()
+            .layered
+            .iter()
+            .any(|(pending, _)| *pending == token)
+    });
+    if held {
+        return;
+    }
+    let layered = Layered {
+        names,
+        ..Layered::default()
+    };
+    defer_layered(token, layered);
+}
+
 pub(crate) fn widen_layered(token: &str, used: Vec<String>, points_to: bool) {
     DEFERRAL.with(|deferral| {
         for (pending, layered) in &mut deferral.borrow_mut().layered {

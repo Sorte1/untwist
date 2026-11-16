@@ -15,6 +15,7 @@ use crate::bridge::DecodeRequest;
 use crate::calls::agnostic::{global_reach, guard_writes, ReachWatch};
 use crate::legacy_reach::{self, Layered};
 use crate::proof::{alias_refusal, alias_sites, builtin_aliases, points_to_sites, UsedNames};
+use crate::root_reach::root_alias_names;
 use untwist_core::ast_util::global::global_is_written;
 use untwist_eval::object::{ProtoRead, PROTOTYPE_LINKS};
 
@@ -138,14 +139,25 @@ fn holds_latent_layer(program: &Program<'_>, request: &DecodeRequest<'_>) -> boo
     latent.found
 }
 
-fn root_names(scoping: &Scoping, request: &DecodeRequest<'_>) -> Vec<String> {
+fn root_names(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    request: &DecodeRequest<'_>,
+) -> Vec<String> {
     let root = scoping.root_scope_id();
-    request
+    let roots: Vec<_> = request
         .guard
         .symbols
         .iter()
         .filter(|(symbol, _)| scoping.symbol_scope_id(*symbol) == root)
-        .map(|(_, name)| (*name).to_string())
+        .collect();
+    let targets: FxHashSet<_> = roots.iter().map(|(symbol, _)| *symbol).collect();
+    let aliases = root_alias_names(program, scoping, &targets);
+    roots
+        .iter()
+        .map(|(_, name)| *name)
+        .chain(aliases)
+        .map(str::to_string)
         .collect()
 }
 
@@ -156,7 +168,7 @@ pub(super) fn speculate(
     if !legacy_reach::defers() || !holds_latent_layer(program, request) {
         return None;
     }
-    let names = root_names(scoping, request);
+    let names = root_names(program, scoping, request);
     let first = names.first()?;
     let token = format!("{TOKEN_PREFIX}{first}");
     let layered = Layered {

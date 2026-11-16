@@ -41,7 +41,17 @@
   write, or a declarator that already has an initialiser, refuses the alias with `NOT_CONSTANT`,
   `EXTRA_WRITES` or `ALREADY_INITIALISED`. The reference deobfuscator inlines unconditionally and can miscompile
   the same input, substituting a value the binding no longer holds. Effect: Untwist keeps such
-  an alias and reports it.
+  an alias and reports it. In a classic script a top-level alias (`var a = decoder`, or an object
+  that holds the decoder) and a top-level wrapper function are properties of the global object,
+  so they can also be written or read through it (`globalThis.a = …`, `this["a"]`, a computed or
+  joined key, `Object.defineProperty`, global code text). Such an alias or wrapper is inlined only
+  when the global reach check the decoder's own name gets finds no key that may be its name or the
+  name of the function it stands for: in the default lane the check runs before the decode, and
+  when it is undecided only because keys are still encoded, the alias is inlined and the check is
+  run again at the end of the stage on the decoded program; if it still finds a reach the input is
+  run again with the alias left in place (note `may read or write this top-level alias`). Under
+  `--unsafe` the alias gets the lane's syntactic name check, as the decoder does. Pinned by
+  `crates/untwist/tests/global_alias_reach_rows.rs` and `global_alias_reach_sabotage.rs`.
 - **A self-assignment of the decoder does not count as a write**. `a = a`, in
   statement or expression form, is excluded from the one-write limit that gates the assignment
   form above: the statement form is removed outright and the expression form is a no-op recorded
@@ -759,12 +769,14 @@
   taken out, no code may reach it by a key that may be its name, observe the global object's
   names (`"g" in this`, `Object.keys(globalThis)`, a printing call), or run code text
   (`(0, eval)("typeof g")`, `new Function(…)`). This is the reach and observation check of the
-  decoder machinery below, with the string-array machinery left out as it is there. Otherwise the
+  decoder machinery below; string-array machinery that is still in the program is judged like any
+  other code (only statements the check is about to remove are left out). Otherwise the
   protection is kept with the `reference survives` note. A top-level control-flow object is
   judged by the same check (in both modes, as before). A top-level decoder alias
   (`var a = decoder;`, or an object that holds the decoder) has its calls inlined, but its
   declaration stays and is removed together with the machinery, so it is kept exactly when the
-  machinery is. **Unsafe-lane premise (PN-unsafe-names)**: `--unsafe` assumes that no code observes
+  machinery is; a read of the alias's name off the global object by a key that may be its name
+  (`typeof globalThis.a`, `var q = this.a`) keeps the machinery as an observation does. **Unsafe-lane premise (PN-unsafe-names)**: `--unsafe` assumes that no code observes
   the obfuscator's machinery, protections or decoder aliases through the global object or global
   code text, whatever runs that text (`(0, eval)`, `Function`, a timer string, or a runner that
   code text hands back, such as `Function("return eval")()(s)`), so it skips the check for all

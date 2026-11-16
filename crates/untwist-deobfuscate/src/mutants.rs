@@ -165,6 +165,17 @@ pub(crate) fn unsafe_names_trusted() -> bool {
     UNSAFE_NAMES_TRUSTED.load(Ordering::Relaxed)
 }
 
+static ROOT_ALIAS_REACH_TRUSTED: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn trust_root_alias_reach_for_tests(on: bool) {
+    ROOT_ALIAS_REACH_TRUSTED.store(on, Ordering::SeqCst);
+}
+
+pub(crate) fn root_alias_reach_trusted() -> bool {
+    ROOT_ALIAS_REACH_TRUSTED.load(Ordering::Relaxed)
+}
+
 static EARLY_READ_GUARDS_OFF: AtomicBool = AtomicBool::new(false);
 
 #[doc(hidden)]

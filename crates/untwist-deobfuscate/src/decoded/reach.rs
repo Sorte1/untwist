@@ -8,6 +8,7 @@ use super::{decoded_strings, UnitRun};
 use crate::bridge::DecodePlan;
 use crate::calls::agnostic::{global_reach, ReachWatch};
 use crate::mutants::decoder_name_watch_dropped;
+use crate::root_reach::root_alias_names;
 
 pub(super) type Reached = (FxHashSet<usize>, Span, Option<&'static str>);
 
@@ -17,7 +18,11 @@ pub(super) struct Watched<'p> {
     fns: Vec<SymbolId>,
 }
 
-fn watched_units<'p>(scoping: &Scoping, runs: &[UnitRun<'p, '_>]) -> Watched<'p> {
+fn watched_units<'p>(
+    program: &'p Program<'_>,
+    scoping: &Scoping,
+    runs: &[UnitRun<'p, '_>],
+) -> Watched<'p> {
     let root = scoping.root_scope_id();
     let mut watched = Watched {
         units: Vec::new(),
@@ -40,23 +45,28 @@ fn watched_units<'p>(scoping: &Scoping, runs: &[UnitRun<'p, '_>]) -> Watched<'p>
         if global.peek().is_some() {
             watched.units.push(run.request.unit);
         }
+        let mut targets = FxHashSet::default();
         for (symbol, name) in global {
             watched.names.push(name);
             watched.fns.push(*symbol);
+            targets.insert(*symbol);
         }
+        watched
+            .names
+            .extend(root_alias_names(program, scoping, &targets));
     }
     watched
 }
 
 pub(super) fn watched<'p>(
-    program: &Program<'_>,
+    program: &'p Program<'_>,
     scoping: &Scoping,
     runs: &[UnitRun<'p, '_>],
 ) -> Option<Watched<'p>> {
     if untwist_core::semantic::has_module_syntax(program) {
         return None;
     }
-    let watched = watched_units(scoping, runs);
+    let watched = watched_units(program, scoping, runs);
     (!watched.names.is_empty()).then_some(watched)
 }
 
@@ -106,14 +116,17 @@ impl<'p> Watched<'p> {
             if !self.units.contains(&run.request.unit) {
                 continue;
             }
-            let names: Vec<&str> = run
+            let roots: Vec<(SymbolId, &str)> = run
                 .request
                 .guard
                 .symbols
                 .iter()
                 .filter(|(symbol, _)| scoping.symbol_scope_id(*symbol) == root)
-                .map(|(_, name)| *name)
+                .map(|(symbol, name)| (*symbol, *name))
                 .collect();
+            let targets: FxHashSet<SymbolId> = roots.iter().map(|(symbol, _)| *symbol).collect();
+            let mut names: Vec<&str> = roots.iter().map(|(_, name)| *name).collect();
+            names.extend(root_alias_names(program, scoping, &targets));
             let reached = super::syntactic_reach::syntactic_global_reach(
                 (program, scoping),
                 &strings,
