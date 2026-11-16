@@ -159,12 +159,11 @@ impl<'s, 'a> Walker<'s, 'a> {
         let Some(symbol) = self.symbol(callee) else {
             return false;
         };
-        !self.scoping.symbol_is_mutated(symbol)
-            && self.candidates.get(&symbol).is_some_and(|candidate| {
-                matches!(candidate.init.without_parentheses(), Expression::CallExpression(compile)
-                    if matches!(compile.callee.without_parentheses(), Expression::Identifier(id)
-                        if id.name == "Function" && self.symbol(id).is_none()))
-            })
+        self.candidates.get(&symbol).is_some_and(|candidate| {
+            matches!(candidate.init.without_parentheses(), Expression::CallExpression(compile)
+                if matches!(compile.callee.without_parentheses(), Expression::Identifier(id)
+                    if id.name == "Function" && self.symbol(id).is_none()))
+        }) && !self.scoping.symbol_is_mutated(symbol)
     }
 
     fn timer_call(&self, at: usize, key: &str) -> bool {
@@ -256,10 +255,10 @@ impl<'s, 'a> Walker<'s, 'a> {
             return None;
         };
         let symbol = self.symbol(callee)?;
+        let wrapper = returned_function(self.candidates.get(&symbol)?.init)?;
         if self.scoping.symbol_is_mutated(symbol) {
             return None;
         }
-        let wrapper = returned_function(self.candidates.get(&symbol)?.init)?;
         let index = wrapper.params.items.iter().position(|param| {
             matches!(&param.pattern, BindingPattern::BindingIdentifier(id)
                 if param.initializer.is_none() && id.symbol_id.get().is_some_and(|param| self.receiver_only(param)))

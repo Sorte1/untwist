@@ -519,9 +519,9 @@ impl<'a> Sites<'_, 'a> {
         if (named || opaque_builtin) && self.flow.sink_of(span).is_some() {
             return self.hit_reflective(span);
         }
-        if self.flow.sink_of(span).is_some() {
+        if self.fixed_watched() && self.flow.sink_of(span).is_some() {
             self.reach_fixed_writer_read(keys, span);
-            if self.well_known_symbol_key(member) && self.fixed_watched() {
+            if self.well_known_symbol_key(member) {
                 self.hit_reflective(span);
             }
         }
