@@ -488,10 +488,10 @@ impl<'s, 'a> Walker<'s, 'a> {
             AstKind::AssignmentTargetPropertyProperty(property) => {
                 self.check_pattern_key(&property.name, property.span);
             }
-            AstKind::AssignmentTargetPropertyIdentifier(property) => {
-                if namespace_key(property.binding.name.as_str()) {
-                    self.found.push(property.span);
-                }
+            AstKind::AssignmentTargetPropertyIdentifier(property)
+                if namespace_key(property.binding.name.as_str()) =>
+            {
+                self.found.push(property.span);
             }
             _ => {}
         }
