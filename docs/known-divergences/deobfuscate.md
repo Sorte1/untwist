@@ -633,7 +633,8 @@
   and that no code reaches node's module objects or loader through `process` taken as a value
   (`var p = process; p.mainModule`) or read off the global object (`globalThis.process.mainModule`,
   `global.process`), since only `process.mainModule`, `process.getBuiltinModule`
-  and computed members of a free `process` are refused; under `--unsafe` the unpack stage also
+  and computed members of a free `process` are refused, and that no code reads file names out of a
+  stack trace (`new Error().stack`); under `--unsafe` the unpack stage also
   assumes that no code text reaches `import()`, the module objects or the loader, that the program
   does not read its own file name or the main module's path, and that the inputs given beside a
   bundle are the files its relative imports load ([`unpack.md`](unpack.md), "A request a module leaves to node must resolve alike from the bundle and from the written tree").

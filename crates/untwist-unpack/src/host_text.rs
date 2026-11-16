@@ -4,8 +4,10 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_span::{GetSpan, SourceType, Span};
 use rustc_hash::FxHashSet;
 use untwist_core::parse::{has_error, parse_with};
+use untwist_core::semantic::build_scoping;
 
 use crate::esbuild::layout::require_creators;
+use crate::host_reach::program_reach;
 use crate::rolldown::shape::require_shim;
 
 pub const FUNCTION: &str = "Function";
@@ -60,7 +62,9 @@ pub const PROCESS_MEMBERS: [&str; 40] = [
     "traceDeprecation",
     "domain",
 ];
-const TEXT_NAMES: [&str; 12] = [
+const TEXT_NAMES: [&str; 14] = [
+    "Reflect",
+    "Object",
     "require",
     "module",
     "exports",
@@ -116,7 +120,8 @@ fn reaches_host(text: &str) -> bool {
     }
     let mut uses = TextUses::default();
     uses.visit_program(&parsed.program);
-    uses.found
+    let scoping = build_scoping(&parsed.program).scoping;
+    uses.found || program_reach(&parsed.program, &scoping).is_some()
 }
 
 fn constant_text<'k>(argument: &'k Argument<'_>) -> Option<&'k str> {

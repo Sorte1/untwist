@@ -26,9 +26,16 @@ const PREMISE_ROWS: [(&str, &[&str]); 16] = [
     ("r5esbargv", UNSAFE),
     ("r5esbargvs", UNSAFE),
 ];
+const RUNNER_PREMISE_ROWS: [&str; 48] = [
+    "r6bsc", "r6c1", "r6c2", "r6c3", "r6c4", "r6c5", "r6c6", "r6c7", "r6d1", "r6d2", "r6d3",
+    "r6d4", "r6d5", "r6d6", "r6d7", "r6d8", "r6d9", "r6e1", "r6e10", "r6e11", "r6e12", "r6e5",
+    "r6e6", "r6escs", "r6g1", "r6g10", "r6g2", "r6g3", "r6g4", "r6g5", "r6g6", "r6g7", "r6g8",
+    "r6g9", "r6k1", "r6k2", "r6k3", "r6k5", "r6k6", "r6k7", "r6k8", "r6k9", "r6rdc", "r6t1",
+    "r6t2", "r6t3", "r6t4", "r6t5",
+];
 const DISPATCH_PREMISE_ROWS: [&str; 7] = ["e1", "e2", "r4n10", "r5pr1", "r5pr2", "r5pr4", "r5pr11"];
 const PROTOTYPE_PREMISE_ROWS: [&str; 9] = ["a27", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"];
-const OWN_NAME_ROWS: [&str; 2] = ["r5im2", "r5pr16"];
+const OWN_NAME_ROWS: [&str; 4] = ["r5im2", "r5pr16", "r6e6", "r6e11"];
 const PROTOTYPE_PREMISE_TREE: &str = "Some(0)\ntwo\n";
 const INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/browserify_review");
 const HOST_INPUTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/host_names_review");
@@ -114,9 +121,11 @@ fn tree_output(node: &Path, input: &Path, out: &Path, flags: &[&str]) -> (Option
 }
 
 fn premise(name: &str, flags: &[&str]) -> bool {
-    PREMISE_ROWS
-        .iter()
-        .any(|(row, lane)| *row == name && *lane == flags)
+    let runner = flags == UNSAFE && RUNNER_PREMISE_ROWS.contains(&name);
+    runner
+        || PREMISE_ROWS
+            .iter()
+            .any(|(row, lane)| *row == name && *lane == flags)
 }
 
 fn parity_failures(node: &Path, inputs: &[PathBuf]) -> Vec<String> {
@@ -227,7 +236,7 @@ fn host_route_probes_run_like_their_bundles_in_both_lanes() {
         return;
     };
     let inputs = inputs(ROUTE_INPUTS);
-    assert!(inputs.len() >= 101, "found {} inputs", inputs.len());
+    assert!(inputs.len() >= 151, "found {} inputs", inputs.len());
     let wrong = parity_failures(&node, &inputs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

@@ -281,7 +281,7 @@ input is not imported back by name; the safe lane keeps any bundle with a relati
 `import` or `export … from` whole. It assumes no code text (`Function`, indirect `eval`, a timer
 string) reaches `import()`, node's module objects or loader, and that the program does not read its
 own file name or the main module's path (`import.meta.url`, `__filename`, `require.main`,
-`process.argv`); the safe lane refuses those.
+`process.argv`); the safe lane refuses those. Both lanes assume no code reads file names out of a stack trace (`new Error().stack`).
 An input is taken as an ES module, as node 22 takes it, when it is named `.mjs`, when its own text
 (before any pass runs) does not parse as a script but parses as a module (`import`/`export`,
 `import.meta` or a top-level `await x`, also in code a later pass removes), or when it declares
