@@ -697,10 +697,24 @@
   callback. Only the shape obfuscator.io emits counts as a controller: a plain function or arrow
   that is neither `async` nor a generator, with no parameters, holding a single `var` or `let`
   flag set to `true`; a returned plain function (or a non-`async` arrow) with two distinct plain
-  parameters, no defaults and no rest; a result binding not named like the flag, either parameter
+  parameters, neither named `arguments` or `eval`, no defaults and no rest; a result binding not named like the flag, either parameter
   or `arguments`; and plain, parameterless inner functions that neither redeclare the parameters
   nor name the applied result like them. Anything else (a `const` flag, a generator or `async`
-  function anywhere in the shape, a default value, a shadowing name) is kept as it is. The default mode removes a callback run through one only when the callback is, node
+  function anywhere in the shape, a default value, a shadowing name) is kept as it is. The call
+  sites must be the ones obfuscator.io emits as well, in both modes: the controller and each
+  result binding (`var s = c(this, function () {…})`) are declared once, never redeclared (also
+  not by a block function under Annex B) and never written again; every registration
+  (`var s = c(…)`, `c(…)()`, or a parameterless, argumentless plain IIFE holding only `c(…)()`
+  calls) is a later statement of the list that declares the controller, or a statement of the
+  body of a plain function declaration with simple parameters that is itself a statement of that
+  list (or of such a body, nested), when nothing before the controller in its list can run code
+  (function declarations, declarations without a value or with a literal or function value, a
+  local flag set to a literal; not at the top level of a module), as obfuscator.io places the
+  check inside a function it found on the call graph; every bare `s()` is a later statement of
+  the list that declares `s`; the call has exactly two arguments, no spread,
+  `this` or a literal first and a function or arrow expression second, and `c(…)()` passes
+  nothing; and no statement of the construct sits inside a `with` body. Anything else keeps the
+  whole construct. The default mode removes a callback run through one only when the callback is, node
   for node, one of the bodies obfuscator.io emits: the source check
   (`return f.toString().search("(((.+)+)+)+$")…`), the format check, the console disable or the
   debug-protection start. Local names are free, and a local function the body only ever calls
@@ -722,7 +736,13 @@
   declared before `o = true` (not a `const`), inside a function, not a parameter, in a function with no `with` statement, no direct
   `eval` and no use of its own `arguments`; any other flag keeps the controller.
   `--unsafe` trusts the controller shape, as the reference deobfuscator does, so a domain lock
-  or a hand-written function run through such a helper is removed there. `debug-protection`
+  or a hand-written function run through such a helper is removed there; the call-site rules
+  above hold there too, except where the statements stand: as part of that trust in the
+  controller shape, `--unsafe` removes a registration and every bare `s()` wherever they are,
+  because a flattened build can run them in dispatcher order
+  rather than text order (Krunker 3.2.4 keeps `var s = c(this, …)`, `var c = …` and `s()` in
+  three `case`s of one `switch`), so a call that runs before its controller is set, or a `s()`
+  that runs before `s` is, throws in the input and not in the `--unsafe` output. `debug-protection`
   removes, in both modes, a function only when its body is the protection template, and an
   interval only as a statement `setInterval(f, n)` on the unwritten global (bare, or through
   `window`, `globalThis` or `self`) or as obfuscator.io's whole interval IIFE. An IIFE that
@@ -860,6 +880,10 @@
   or `.caller` member access anywhere in the program can see some function's parameters or caller. A note for work the
   pass never claimed is noise — one Rollup bundle produces hundreds of them. The reference deobfuscator has no such
   pass and reports nothing either way.
+- **Default-lane premise: the self-defending check would pass on the input.** A removed
+  self-defending callback is never run, so an input whose own check fails (it was reformatted,
+  so the source check backtracks until it throws `RangeError` or loops) runs normally once the
+  trap is removed: removing the trap may make an input that would trap run normally.
 - **Default-lane premise: no code reads a function's caller.** No code reads a function's caller
   through `.caller`, `arguments.callee.caller` or a stack frame (`Error.prepareStackTrace` call
   sites with `getFunction()` or `getFunctionName()`) to observe which function called it (the

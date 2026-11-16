@@ -206,13 +206,11 @@ fn controller_and_callback<'k, 'a>(
     call: &'k CallExpression<'a>,
 ) -> Option<(&'k Expression<'a>, &'k Expression<'a>)> {
     match call.arguments.as_slice() {
-        [Argument::ThisExpression(_), callback, ..] => {
-            Some((call.callee.without_parentheses(), callback.as_expression()?))
-        }
         [controller, Argument::ThisExpression(_), callback, ..] => Some((
             controller.as_expression()?.without_parentheses(),
             callback.as_expression()?,
         )),
+        [_, callback, ..] => Some((call.callee.without_parentheses(), callback.as_expression()?)),
         _ => None,
     }
 }

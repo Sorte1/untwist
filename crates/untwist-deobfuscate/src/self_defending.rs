@@ -3,7 +3,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
-use oxc_syntax::operator::AssignmentOperator;
+use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
@@ -14,9 +14,10 @@ use untwist_core::ast_util::matcher::{anonymous_function, call_parts, iife};
 use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
+use untwist_core::semantic::AnnexBWrites;
 
 use crate::bindings::{
-    has_stray_reference, reaches_a_script_global_once_removed, reference_symbol,
+    has_stray_reference, reaches_a_script_global_once_removed, reference_symbol, resolved_symbol,
 };
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
@@ -25,6 +26,8 @@ use crate::notes;
 use crate::protection_shape::{is_protection_callback, Roles};
 
 pub const PASS: &str = "self-defending";
+
+const RESERVED_PARAMS: [&str; 2] = [ARGUMENTS, "eval"];
 
 fn binding_name<'k>(pattern: &'k BindingPattern<'_>) -> Option<&'k str> {
     let BindingPattern::BindingIdentifier(id) = pattern else {
@@ -55,7 +58,8 @@ fn plain_params<'k>(params: &'k FormalParameters<'_>) -> Option<Vec<&'k str>> {
         .iter()
         .enumerate()
         .all(|(at, name)| !names[..at].contains(name));
-    distinct.then_some(names)
+    let reserved = names.iter().any(|name| RESERVED_PARAMS.contains(name));
+    (distinct && !reserved).then_some(names)
 }
 
 fn sole_declarator<'k, 'a>(
@@ -366,15 +370,19 @@ fn controller_variable(
     id.symbol_id.get()
 }
 
-fn is_bare_call(stmt: &Statement<'_>, variables: &FxHashSet<SymbolId>, scoping: &Scoping) -> bool {
+fn reference_symbol_of_bare_call(stmt: &Statement<'_>, scoping: &Scoping) -> Option<SymbolId> {
     let Statement::ExpressionStatement(stmt) = stmt else {
-        return false;
+        return None;
     };
-    let Some((callee, arguments)) = call_parts(&stmt.expression) else {
-        return false;
-    };
-    arguments.is_empty()
-        && reference_symbol(callee, scoping).is_some_and(|symbol| variables.contains(&symbol))
+    let (callee, arguments) = call_parts(&stmt.expression)?;
+    if !arguments.is_empty() {
+        return None;
+    }
+    reference_symbol(callee, scoping)
+}
+
+fn is_bare_call(stmt: &Statement<'_>, variable: SymbolId, scoping: &Scoping) -> bool {
+    reference_symbol_of_bare_call(stmt, scoping) == Some(variable)
 }
 
 fn shell_statements<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k AVec<'a, Statement<'a>>> {
@@ -382,7 +390,7 @@ fn shell_statements<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k AVec<'a, Stat
         return None;
     };
     let (function, arguments) = iife(&stmt.expression)?;
-    if !arguments.is_empty() || !function.params.items.is_empty() {
+    if !arguments.is_empty() || !has_no_params(function) || !is_plain_function(function) {
         return None;
     }
     Some(&function.body.as_ref()?.statements)
@@ -454,22 +462,23 @@ struct Controllers {
     found: FxHashSet<SymbolId>,
     inline: bool,
     returner_calls: Vec<Span>,
-    returner_variables: FxHashSet<SymbolId>,
     flags: Vec<FlagUse>,
     homes: Homes,
 }
 
-fn returner_variable(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
+fn is_returner_variable(stmt: &Statement<'_>, flags: &[&str]) -> bool {
     if flags.is_empty() {
-        return None;
+        return false;
     }
-    let (id, init) = single_declarator(stmt)?;
-    let (callee, arguments) = call_parts(init?)?;
+    let Some((_, Some(init))) = single_declarator(stmt) else {
+        return false;
+    };
+    let Some((callee, arguments)) = call_parts(init) else {
+        return false;
+    };
     let made =
         returner(callee.without_parentheses(), flags) || crate::mutants::inline_returners_trusted();
-    (arguments.len() == 2 && made)
-        .then(|| id.symbol_id.get())
-        .flatten()
+    arguments.len() == 2 && made
 }
 
 fn inline_controller_call(stmt: &Statement<'_>) -> bool {
@@ -508,10 +517,9 @@ impl<'a> VisitJs<'a> for Controllers {
                 self.inline = true;
                 self.returner_calls.push(stmt.span());
             }
-            if let Some(variable) = returner_variable(stmt, &flags) {
+            if is_returner_variable(stmt, &flags) {
                 self.inline = true;
                 self.returner_calls.push(stmt.span());
-                self.returner_variables.insert(variable);
             }
         }
         walk_js::walk_statements(self, it);
@@ -552,15 +560,66 @@ impl<'a> VisitJs<'a> for Controllers {
     }
 }
 
+#[derive(Default)]
+struct Frame {
+    declared: FxHashSet<SymbolId>,
+    reachable: FxHashSet<SymbolId>,
+}
+
+fn is_inert_value(expr: &Expression<'_>) -> bool {
+    matches!(
+        expr.without_parentheses(),
+        Expression::FunctionExpression(_)
+            | Expression::ArrowFunctionExpression(_)
+            | Expression::NullLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::StringLiteral(_)
+    )
+}
+
+fn is_inert_statement(stmt: &Statement<'_>) -> bool {
+    match stmt {
+        Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_) => true,
+        Statement::VariableDeclaration(declaration) => {
+            declaration.declarations.iter().all(|declarator| {
+                matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+                    && declarator.init.as_ref().is_none_or(is_inert_value)
+            })
+        }
+        _ => false,
+    }
+}
+
+fn hoisted_body<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k AVec<'a, Statement<'a>>> {
+    let Statement::FunctionDeclaration(function) = stmt else {
+        return None;
+    };
+    let simple = function.params.rest.is_none()
+        && function.params.items.iter().all(|item| {
+            item.initializer.is_none()
+                && matches!(item.pattern, BindingPattern::BindingIdentifier(_))
+        });
+    if !simple || !is_plain_function(function) {
+        return None;
+    }
+    Some(&function.body.as_ref()?.statements)
+}
+
 struct Removals<'k> {
     controllers: &'k FxHashSet<SymbolId>,
     scoping: &'k Scoping,
+    annex_b: &'k AnnexBWrites,
     spans: Vec<Span>,
     variables: FxHashSet<SymbolId>,
     returner_calls: &'k [Span],
     proof: Option<&'k FxHashSet<SymbolId>>,
     unproven: FxHashSet<SymbolId>,
     kept: bool,
+    frames: Vec<Frame>,
+    module: bool,
+    placed_anywhere: bool,
+    with_depth: usize,
 }
 
 fn registration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<(Option<SymbolId>, &'k Expression<'a>)> {
@@ -572,6 +631,54 @@ fn registration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<(Option<SymbolId>, &'
     };
     let (outer, _) = call_parts(&stmt.expression)?;
     Some((None, outer.without_parentheses()))
+}
+
+fn is_inert_context(expr: &Expression<'_>, scoping: &Scoping) -> bool {
+    match expr.without_parentheses() {
+        Expression::Identifier(id) => {
+            id.name == "undefined" && resolved_symbol(id, scoping).is_none()
+        }
+        Expression::ThisExpression(_)
+        | Expression::NullLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::StringLiteral(_) => true,
+        Expression::UnaryExpression(unary) => {
+            unary.operator == UnaryOperator::Void
+                && matches!(unary.argument, Expression::NumericLiteral(_))
+        }
+        _ => false,
+    }
+}
+
+fn is_callback_expression(expr: &Expression<'_>) -> bool {
+    matches!(
+        without_unnamed(expr.without_parentheses()).without_parentheses(),
+        Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_)
+    )
+}
+
+fn emitted_arguments(arguments: &[Argument<'_>], scoping: &Scoping) -> bool {
+    let [context, callback] = arguments else {
+        return false;
+    };
+    context
+        .as_expression()
+        .is_some_and(|context| is_inert_context(context, scoping))
+        && callback.as_expression().is_some_and(is_callback_expression)
+}
+
+fn emitted_call(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
+    if let Statement::ExpressionStatement(expression) = stmt {
+        let passes_nothing =
+            call_parts(&expression.expression).is_some_and(|(_, arguments)| arguments.is_empty());
+        if !passes_nothing {
+            return false;
+        }
+    }
+    registration(stmt)
+        .and_then(|(_, call)| call_parts(call.without_parentheses()))
+        .is_some_and(|(_, arguments)| emitted_arguments(arguments, scoping))
 }
 
 fn is_inline_returner_call(stmt: &Statement<'_>, flags: &[&str]) -> bool {
@@ -600,6 +707,7 @@ impl Removals<'_> {
         };
         body.iter().all(|inner| {
             is_immediate_controller_call(inner, self.controllers, self.scoping)
+                && self.emitted_site(inner)
                 && self.runs_only_protection(inner)
         })
     }
@@ -628,27 +736,67 @@ impl Removals<'_> {
         is_protection_callback(callback, roles, self.scoping)
     }
 
-    fn record(&mut self, stmt: &Statement<'_>) -> bool {
+    fn declared_once(&self, symbol: SymbolId) -> bool {
+        self.scoping.symbol_redeclarations(symbol).is_empty() && !self.annex_b.may_write(symbol)
+    }
+
+    fn controller_declared_before(&self, stmt: &Statement<'_>) -> bool {
+        let controller = registration(stmt)
+            .and_then(|(_, call)| call_parts(call.without_parentheses()))
+            .and_then(|(callee, _)| reference_symbol(callee, self.scoping));
+        self.placed_anywhere
+            || controller.is_none_or(|symbol| {
+                self.frames.last().is_some_and(|frame| {
+                    frame.declared.contains(&symbol) || frame.reachable.contains(&symbol)
+                })
+            })
+    }
+
+    fn emitted_site(&self, stmt: &Statement<'_>) -> bool {
+        self.with_depth == 0
+            && emitted_call(stmt, self.scoping)
+            && self.controller_declared_before(stmt)
+    }
+
+    fn record(&mut self, stmt: &Statement<'_>) -> Option<Option<SymbolId>> {
         let declared = single_declarator(stmt)
             .and_then(|(id, _)| id.symbol_id.get())
-            .is_some_and(|symbol| self.controllers.contains(&symbol));
-        if self.is_shell(stmt) || declared {
+            .filter(|symbol| self.controllers.contains(symbol));
+        if let Some(controller) = declared {
+            if self.with_depth > 0 {
+                self.unproven.insert(controller);
+                self.kept = true;
+                return None;
+            }
+            if let Some(frame) = self.frames.last_mut() {
+                frame.declared.insert(controller);
+            }
             self.spans.push(stmt.span());
-            return true;
+            return Some(None);
         }
-        let registers = is_immediate_controller_call(stmt, self.controllers, self.scoping)
-            || self.returner_calls.contains(&stmt.span());
-        let variable = controller_variable(stmt, self.controllers, self.scoping);
+        if self.is_shell(stmt) {
+            self.spans.push(stmt.span());
+            return Some(None);
+        }
+        let returner_call = self.returner_calls.contains(&stmt.span());
+        let registers =
+            is_immediate_controller_call(stmt, self.controllers, self.scoping) || returner_call;
+        let variable = controller_variable(stmt, self.controllers, self.scoping).or_else(|| {
+            returner_call
+                .then(|| single_declarator(stmt).and_then(|(id, _)| id.symbol_id.get()))
+                .flatten()
+        });
         if !(registers || variable.is_some()) {
-            return false;
+            return None;
         }
-        if !self.runs_only_protection(stmt) {
+        let sound_variable = variable.is_none_or(|symbol| self.declared_once(symbol));
+        if !sound_variable || !self.emitted_site(stmt) || !self.runs_only_protection(stmt) {
             self.keep(stmt);
-            return false;
+            return None;
         }
         self.spans.push(stmt.span());
         self.variables.extend(variable);
-        true
+        Some(variable)
     }
 
     fn keep(&mut self, stmt: &Statement<'_>) {
@@ -658,32 +806,74 @@ impl Removals<'_> {
         self.unproven.extend(controller);
         self.kept = true;
     }
+
+    fn sets_a_local(&self, stmt: &Statement<'_>) -> bool {
+        let root = self.scoping.root_scope_id();
+        set_flag(stmt)
+            .and_then(|target| resolved_symbol(target, self.scoping))
+            .is_some_and(|symbol| self.scoping.symbol_scope_id(symbol) != root)
+    }
+
+    fn declared_first(&self, statements: &[Statement<'_>]) -> FxHashSet<SymbolId> {
+        let mut found = FxHashSet::default();
+        if self.with_depth > 0 || (self.module && self.frames.is_empty()) {
+            return found;
+        }
+        for stmt in statements {
+            let controller = single_declarator(stmt)
+                .and_then(|(id, _)| id.symbol_id.get())
+                .filter(|symbol| self.controllers.contains(symbol));
+            match controller {
+                Some(symbol) => {
+                    found.insert(symbol);
+                }
+                None if is_inert_statement(stmt) || self.sets_a_local(stmt) => {}
+                None => break,
+            }
+        }
+        found
+    }
+
+    fn visit_list<'a>(&mut self, it: &AVec<'a, Statement<'a>>, reachable: FxHashSet<SymbolId>) {
+        let mut inherited = self.declared_first(it);
+        inherited.extend(reachable.iter().copied());
+        self.frames.push(Frame {
+            declared: FxHashSet::default(),
+            reachable,
+        });
+        for (at, stmt) in it.iter().enumerate() {
+            match self.record(stmt) {
+                Some(Some(variable)) if !self.placed_anywhere => {
+                    self.remove_later_calls(&it[at + 1..], variable);
+                }
+                Some(_) => {}
+                None => match hoisted_body(stmt) {
+                    Some(body) => self.visit_list(body, inherited.clone()),
+                    None => walk_js::walk_statement(self, stmt),
+                },
+            }
+        }
+        self.frames.pop();
+    }
+
+    fn remove_later_calls(&mut self, later: &[Statement<'_>], variable: SymbolId) {
+        let calls = later
+            .iter()
+            .filter(|stmt| is_bare_call(stmt, variable, self.scoping))
+            .map(GetSpan::span);
+        self.spans.extend(calls);
+    }
 }
 
 impl<'a> VisitJs<'a> for Removals<'_> {
     fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
-        for stmt in it {
-            if !self.record(stmt) {
-                walk_js::walk_statement(self, stmt);
-            }
-        }
+        self.visit_list(it, FxHashSet::default());
     }
-}
 
-struct BareCalls<'k> {
-    variables: &'k FxHashSet<SymbolId>,
-    scoping: &'k Scoping,
-    spans: Vec<Span>,
-}
-
-impl<'a> VisitJs<'a> for BareCalls<'_> {
-    fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
-        for stmt in it {
-            if is_bare_call(stmt, self.variables, self.scoping) {
-                self.spans.push(stmt.span());
-            }
-        }
-        walk_js::walk_statements(self, it);
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.with_depth += 1;
+        walk_js::walk_with_statement(self, it);
+        self.with_depth -= 1;
     }
 }
 
@@ -693,22 +883,60 @@ enum Plan {
     Remove(Vec<Span>, FxHashSet<SymbolId>),
 }
 
-fn removals<'k>(
-    program: &Program<'_>,
+struct BareCalls<'k> {
+    variables: &'k FxHashSet<SymbolId>,
     scoping: &'k Scoping,
-    controllers: &'k FxHashSet<SymbolId>,
+    spans: Vec<Span>,
+    with_depth: usize,
+}
+
+impl<'a> VisitJs<'a> for BareCalls<'_> {
+    fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
+        for stmt in it {
+            let called = self.with_depth == 0
+                && reference_symbol_of_bare_call(stmt, self.scoping)
+                    .is_some_and(|symbol| self.variables.contains(&symbol));
+            if called {
+                self.spans.push(stmt.span());
+            }
+        }
+        walk_js::walk_statements(self, it);
+    }
+
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.with_depth += 1;
+        walk_js::walk_with_statement(self, it);
+        self.with_depth -= 1;
+    }
+}
+
+struct Inputs<'k> {
+    scoping: &'k Scoping,
+    unsafe_lane: bool,
+    annex_b: &'k AnnexBWrites,
     returner_calls: &'k [Span],
     proof: Option<&'k FxHashSet<SymbolId>>,
+}
+
+fn removals<'k>(
+    program: &Program<'_>,
+    inputs: &Inputs<'k>,
+    controllers: &'k FxHashSet<SymbolId>,
 ) -> Removals<'k> {
     let mut removals = Removals {
         controllers,
-        scoping,
+        scoping: inputs.scoping,
+        annex_b: inputs.annex_b,
         spans: Vec::new(),
         variables: FxHashSet::default(),
-        returner_calls,
-        proof,
+        returner_calls: inputs.returner_calls,
+        proof: inputs.proof,
         unproven: FxHashSet::default(),
         kept: false,
+        frames: Vec::new(),
+        module: program.source_type.is_module(),
+        placed_anywhere: inputs.unsafe_lane,
+        with_depth: 0,
     };
     removals.visit_program(program);
     removals
@@ -770,39 +998,45 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     }
     let protections =
         (!unsafe_lane).then(|| crate::debug_protection::protection_symbols(program, scoping));
-    let proof = protections.as_ref();
-    let calls = controllers.returner_calls.as_slice();
-    let first = removals(program, scoping, &controllers.found, calls, proof);
-    let kept = first.kept;
-    let proven: FxHashSet<SymbolId> = controllers
+    let annex_b = AnnexBWrites::of(program, scoping);
+    let inputs = Inputs {
+        scoping,
+        unsafe_lane,
+        annex_b: &annex_b,
+        returner_calls: controllers.returner_calls.as_slice(),
+        proof: protections.as_ref(),
+    };
+    let declared_once: FxHashSet<SymbolId> = controllers
         .found
-        .difference(&first.unproven)
+        .iter()
         .copied()
+        .filter(|&symbol| {
+            scoping.symbol_redeclarations(symbol).is_empty() && !annex_b.may_write(symbol)
+        })
         .collect();
+    let first = removals(program, &inputs, &declared_once);
+    let kept = first.kept || declared_once.len() != controllers.found.len();
+    let proven: FxHashSet<SymbolId> = declared_once.difference(&first.unproven).copied().collect();
     let Removals {
         mut spans,
-        mut variables,
+        variables,
         ..
     } = if first.unproven.is_empty() {
         first
     } else {
-        removals(program, scoping, &proven, calls, proof)
+        removals(program, &inputs, &proven)
     };
-    variables.extend(
-        controllers
-            .returner_variables
-            .iter()
-            .copied()
-            .filter(|&variable| removed_declaration(&spans, scoping.symbol_span(variable))),
-    );
-    let mut bare = BareCalls {
-        variables: &variables,
-        scoping,
-        spans: Vec::new(),
-    };
-    bare.visit_program(program);
-    spans.extend(bare.spans);
-    let mut tracked = proven.clone();
+    if unsafe_lane {
+        let mut bare = BareCalls {
+            variables: &variables,
+            scoping,
+            spans: Vec::new(),
+            with_depth: 0,
+        };
+        bare.visit_program(program);
+        spans.extend(bare.spans);
+    }
+    let mut tracked = proven;
     tracked.extend(variables);
     if has_stray_reference(program, &tracked, &spans, scoping)
         || flag_read_elsewhere(
