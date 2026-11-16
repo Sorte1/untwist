@@ -1,3 +1,4 @@
+mod blocks;
 mod shapes;
 
 use std::borrow::Cow;
@@ -116,14 +117,22 @@ struct Walker<'s, 'a> {
     aliases: FxHashMap<SymbolId, u8>,
     receivers: FxHashMap<SymbolId, usize>,
     fallbacks: FxHashMap<SymbolId, shapes::Fallback>,
+    protections: FxHashSet<SymbolId>,
+    blocks: Vec<(Span, &'static [&'static str])>,
     found: Vec<Span>,
+}
+
+#[derive(Default)]
+pub(in crate::calls::agnostic) struct Loose {
+    pub(in crate::calls::agnostic) spans: Vec<Span>,
+    pub(in crate::calls::agnostic) blocks: Vec<(Span, &'static [&'static str])>,
 }
 
 pub(super) fn loose_uses<'a>(
     program: &'a Program<'a>,
     scoping: &Scoping,
     resolve: Resolve<'_>,
-) -> Vec<Span> {
+) -> Loose {
     let mut walker = Walker {
         scoping,
         resolve,
@@ -137,13 +146,26 @@ pub(super) fn loose_uses<'a>(
         aliases: FxHashMap::default(),
         receivers: FxHashMap::default(),
         fallbacks: FxHashMap::default(),
+        protections: FxHashSet::default(),
+        blocks: Vec::new(),
         found: Vec::new(),
     };
     walker.walk(program);
     walker.aliases = walker.qualified();
     walker.phase = Phase::Check;
     walker.walk(program);
-    walker.found
+    let mut loose = Loose {
+        spans: walker.found,
+        blocks: walker.blocks,
+    };
+    let kept: Vec<Span> = loose
+        .spans
+        .iter()
+        .copied()
+        .filter(|span| !loose.exempt(*span))
+        .collect();
+    loose.spans = kept;
+    loose
 }
 
 fn str_const(expr: &Expression<'_>, resolve: Resolve<'_>, depth: u8) -> Option<String> {
@@ -455,8 +477,11 @@ impl<'s, 'a> Walker<'s, 'a> {
         }
         match kind {
             AstKind::ObjectProperty(property) => self.check_proto_property(property),
+            AstKind::CallExpression(call) => {
+                self.check_blocks(call);
+                self.check_proto_call(call);
+            }
             AstKind::AssignmentExpression(assign) => self.check_proto_write(assign),
-            AstKind::CallExpression(call) => self.check_proto_call(call),
             AstKind::BindingProperty(property) => {
                 self.check_pattern_key(&property.key, property.span)
             }
@@ -801,7 +826,11 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
 impl<'s, 'a> Walker<'s, 'a> {
     fn collect(&mut self, kind: AstKind<'a>) {
         match kind {
-            AstKind::VariableDeclarator(declarator) => self.collect_declarator(declarator),
+            AstKind::VariableDeclarator(declarator) => {
+                self.collect_declarator(declarator);
+                self.collect_protection(kind);
+            }
+            AstKind::Function(_) => self.collect_protection(kind),
             AstKind::CallExpression(call) => self.collect_params(call),
             AstKind::IdentifierReference(id) if id.name == "arguments" => {
                 if let Some(function) = self.functions.last() {

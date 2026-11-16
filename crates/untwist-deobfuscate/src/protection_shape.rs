@@ -15,6 +15,9 @@ use untwist_core::ast_util::global::{global_is_written, is_global_reference};
 use untwist_core::ast_util::js_text::js_text;
 use untwist_core::parse::{parse_with, SourceType};
 use untwist_core::semantic::build_scoping;
+use untwist_eval::value::JsString;
+
+pub(crate) type Decoded<'k> = Option<&'k FxHashMap<Span, &'k JsString>>;
 
 const TEMPLATES: &str = include_str!("protection_shapes.js");
 const NODE_BUDGET: usize = 1024;
@@ -141,6 +144,7 @@ impl<'a> VisitJs<'a> for Locals {
 
 struct Shape<'k> {
     scoping: &'k Scoping,
+    decoded: Decoded<'k>,
     roles: Option<Roles<'k>>,
     any_number: bool,
     locals: FxHashSet<SymbolId>,
@@ -371,8 +375,46 @@ impl<'a> VisitJs<'a> for Shape<'_> {
     }
 
     fn visit_expression(&mut self, it: &Expression<'a>) {
-        if !self.poisoned {
-            walk_js::walk_expression(self, it);
+        if self.poisoned {
+            return;
+        }
+        if let Some(text) = self.decoded_text(it) {
+            return self.literal(&text);
+        }
+        walk_js::walk_expression(self, it);
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        match self.decoded_text(&it.expression) {
+            Some(key) => self.static_member(it, &key),
+            None => walk_js::walk_computed_member_expression(self, it),
+        }
+    }
+
+    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
+        if self.decoded.is_none() {
+            return walk_js::walk_variable_declaration(self, it);
+        }
+        for declarator in &it.declarations {
+            if self.decoder_alias(declarator) {
+                continue;
+            }
+            self.text.push_str("(VariableDeclaration");
+            self.declaration_kind(it.kind);
+            self.visit_variable_declarator(declarator);
+            self.text.push(')');
+        }
+    }
+
+    fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
+        let sequence = match it.expression.without_parentheses() {
+            Expression::SequenceExpression(sequence) if self.decoded.is_some() => sequence,
+            _ => return walk_js::walk_expression_statement(self, it),
+        };
+        for expression in &sequence.expressions {
+            self.text.push_str("(ExpressionStatement");
+            self.visit_expression(expression);
+            self.text.push(')');
         }
     }
 }
@@ -394,11 +436,64 @@ fn is_unread_bare_var(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
         })
 }
 
-fn shape(
+impl<'a> Shape<'_> {
+    fn decoded_text(&self, expr: &Expression<'a>) -> Option<String> {
+        let decoded = self.decoded?;
+        match expr.without_parentheses() {
+            Expression::CallExpression(call) => decoded.get(&call.span)?.as_string(),
+            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+                let left = self.piece(&binary.left)?;
+                let right = self.piece(&binary.right)?;
+                Some(left + &right)
+            }
+            Expression::StringLiteral(text) if self.decoded.is_some() => {
+                Some(js_text(text.value).into_owned())
+            }
+            _ => None,
+        }
+    }
+
+    fn piece(&self, expr: &Expression<'a>) -> Option<String> {
+        self.decoded_text(expr)
+    }
+
+    fn literal(&mut self, text: &str) {
+        self.text.push_str("(StringLiteral");
+        self.tag(text);
+        self.text.push(')');
+    }
+
+    fn static_member(&mut self, it: &ComputedMemberExpression<'a>, key: &str) {
+        self.text.push_str("(StaticMemberExpression");
+        self.tag(it.optional);
+        self.visit_expression(&it.object);
+        self.text.push_str("(IdentifierName");
+        self.tag(key);
+        self.text.push_str("))");
+    }
+
+    fn decoder_alias(&self, declarator: &VariableDeclarator<'a>) -> bool {
+        let (BindingPattern::BindingIdentifier(_), Some(Expression::Identifier(init))) = (
+            &declarator.id,
+            declarator
+                .init
+                .as_ref()
+                .map(Expression::without_parentheses),
+        ) else {
+            return false;
+        };
+        init.reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+            .is_some_and(|symbol| !self.locals.contains(&symbol))
+    }
+}
+
+fn shape<'k>(
     function: &Function<'_>,
-    scoping: &Scoping,
-    roles: Option<Roles<'_>>,
-    any_number: bool,
+    scoping: &'k Scoping,
+    roles: Option<Roles<'k>>,
+    (any_number, decoded): (bool, Decoded<'k>),
 ) -> Option<String> {
     if function.r#async || function.generator {
         return None;
@@ -418,6 +513,7 @@ fn shape(
     let callables = locals.callables(scoping);
     let mut shape = Shape {
         scoping,
+        decoded,
         roles,
         any_number,
         callables,
@@ -451,7 +547,7 @@ fn load() -> Templates {
         };
         let name = function.id.as_ref().map_or("", |id| id.name.as_str());
         let interval = name.starts_with("interval_");
-        let Some(text) = shape(function, &semantics.scoping, None, interval) else {
+        let Some(text) = shape(function, &semantics.scoping, None, (interval, None)) else {
             continue;
         };
         if interval {
@@ -475,16 +571,33 @@ pub(crate) fn is_protection_callback(
     roles: Roles<'_>,
     scoping: &Scoping,
 ) -> bool {
+    is_decoded_protection_callback(callback, roles, scoping, None)
+}
+
+pub(crate) fn is_decoded_protection_callback<'k>(
+    callback: &Expression<'_>,
+    roles: Roles<'k>,
+    scoping: &'k Scoping,
+    decoded: Decoded<'k>,
+) -> bool {
     let Expression::FunctionExpression(function) = callback.without_parentheses() else {
         return false;
     };
     function.id.is_none()
-        && shape(function, scoping, Some(roles), false)
+        && shape(function, scoping, Some(roles), (false, decoded))
             .is_some_and(|text| templates().callbacks.contains(&text))
 }
 
 pub(crate) fn is_protection_function(function: &Function<'_>, scoping: &Scoping) -> bool {
-    shape(function, scoping, Some(Roles::default()), false)
+    is_decoded_protection_function(function, scoping, None)
+}
+
+pub(crate) fn is_decoded_protection_function<'k>(
+    function: &Function<'_>,
+    scoping: &'k Scoping,
+    decoded: Decoded<'k>,
+) -> bool {
+    shape(function, scoping, Some(Roles::default()), (false, decoded))
         .is_some_and(|text| templates().protections.contains(&text))
 }
 
@@ -493,11 +606,20 @@ pub(crate) fn is_interval_function(
     protections: &FxHashSet<SymbolId>,
     scoping: &Scoping,
 ) -> bool {
+    is_decoded_interval_function(function, protections, scoping, None)
+}
+
+pub(crate) fn is_decoded_interval_function<'k>(
+    function: &Function<'_>,
+    protections: &'k FxHashSet<SymbolId>,
+    scoping: &'k Scoping,
+    decoded: Decoded<'k>,
+) -> bool {
     let roles = Roles {
         protections: Some(protections),
         ..Roles::default()
     };
-    shape(function, scoping, Some(roles), true)
+    shape(function, scoping, Some(roles), (true, decoded))
         .is_some_and(|text| templates().intervals.contains(&text))
 }
 

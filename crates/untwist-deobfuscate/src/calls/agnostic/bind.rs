@@ -263,7 +263,7 @@ pub(super) struct Bindings<'s, 'a> {
     pub(super) other_fields_written: FxHashSet<SymbolId>,
     pub(super) accessed: FxHashMap<SymbolId, Vec<&'a MemberExpression<'a>>>,
     pub(super) called: FxHashSet<u32>,
-    pub(super) loose: Vec<oxc_span::Span>,
+    pub(super) loose: super::namespace_uses::Loose,
 }
 
 impl<'s, 'a> Bindings<'s, 'a> {
@@ -313,7 +313,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             other_fields_written: FxHashSet::default(),
             accessed: FxHashMap::default(),
             called: FxHashSet::default(),
-            loose: Vec::new(),
+            loose: super::namespace_uses::Loose::default(),
         };
         bindings.visit_program(program);
         bindings.defs.finish();

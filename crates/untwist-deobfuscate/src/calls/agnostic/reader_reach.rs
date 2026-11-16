@@ -168,12 +168,14 @@ impl<'a> Sites<'_, 'a> {
 
     pub(super) fn reach_loose(&mut self) {
         let bindings = self.fresh.bindings;
-        if let Some(span) = bindings
+        let loose = bindings.loose.spans.iter().copied();
+        let effects = bindings
             .loose
+            .blocks
             .iter()
-            .copied()
-            .find(|span| self.watching(*span))
-        {
+            .filter(|(_, names)| names.iter().any(|name| self.watched_name(name)))
+            .map(|(span, _)| *span);
+        if let Some(span) = loose.chain(effects).find(|span| self.watching(*span)) {
             self.mark_source(
                 span,
                 "a namespace or the global object outside the safe forms",
