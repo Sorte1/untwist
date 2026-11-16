@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
 use oxc_ast::ast::{
-    BindingPattern, CatchClause, Class, Function, StaticBlock, VariableDeclaration,
-    VariableDeclarationKind,
+    BindingIdentifier, BindingPattern, CatchClause, Class, Function, StaticBlock,
+    VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_semantic::Scoping;
@@ -181,7 +181,7 @@ impl<'s> Collect<'s> {
         self.frames.pop();
     }
 
-    pub fn function(&mut self, it: &Function<'_>) {
+    pub fn function(&mut self, it: &Function<'_>, clause: bool) {
         let parent = it
             .scope_id
             .get()
@@ -189,7 +189,7 @@ impl<'s> Collect<'s> {
         if let (true, Some(id), Some(parent)) = (it.is_declaration(), &it.id, parent) {
             if self.var_level(parent) {
                 self.var_level_functions.push(id.span);
-            } else {
+            } else if !clause {
                 self.lexical(id.name.as_str(), id.span, Some(parent));
             }
         }
@@ -204,6 +204,10 @@ impl<'s> Collect<'s> {
         let scope = it.scope_id.get();
         self.static_blocks.extend(scope);
         self.frames.push(scope);
+    }
+
+    pub fn import(&mut self, local: &BindingIdentifier<'_>) {
+        self.lexical(local.name.as_str(), local.span, self.current_scope());
     }
 
     pub fn class(&mut self, it: &Class<'_>) {

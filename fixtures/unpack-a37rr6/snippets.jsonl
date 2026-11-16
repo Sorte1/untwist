@@ -6006,3 +6006,154 @@
 {"name": "rxa7:136", "ext": "js", "source": "var r = /[a}b]/v; console.log(r.source);\nconsole.log(\"ran\");\n"}
 {"name": "rxa7:137", "ext": "js", "source": "var r = /\\~/u; console.log(r.source);\nconsole.log(\"ran\");\n"}
 {"name": "rxa7:138", "ext": "js", "source": "var r = /(a)(?<n>b)\\~/v; console.log(r.source);\nconsole.log(\"ran\");\n"}
+{"name": "rr7:1", "ext": "mjs", "source": "import * as e from \"node:fs\"; if (0) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:2", "ext": "mjs", "source": "import e from \"node:fs\"; if (0) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:3", "ext": "mjs", "source": "import {readFileSync as e} from \"node:fs\"; if (0) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:4", "ext": "mjs", "source": "import {sep as e} from \"node:path\"; if (0) { try {} catch (e) { for (var e of []); } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:5", "ext": "mjs", "source": "import e from \"node:fs\"; if (0) { try {} catch (e) { try {} catch (e) { var e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:6", "ext": "mjs", "source": "import e from \"node:fs\"; try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:7", "ext": "mjs", "source": "import e from \"node:fs\"; { { try {} catch (e) { { var e; } } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:8", "ext": "mjs", "source": "if (0) { try {} catch (e) { var e; } } import e from \"node:fs\";\nconsole.log(\"ran\");\n"}
+{"name": "rr7:9", "ext": "mjs", "source": "import e from \"node:fs\"; function f() { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:10", "ext": "mjs", "source": "import e from \"node:fs\"; try {} catch ([e]) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:11", "ext": "mjs", "source": "import * as e from \"node:fs\"; try {} catch (f) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:12", "ext": "js", "source": "import * as e from \"node:fs\"; if (0) { try {} catch (e) { var e; } } export {};\nconsole.log(\"ran\");\n"}
+{"name": "rr7:13", "ext": "js", "source": "import e from \"node:fs\"; if (0) { try {} catch (e) { var e; } } export {};\nconsole.log(\"ran\");\n"}
+{"name": "rr7:14", "ext": "js", "source": "import {sep as e} from \"node:path\"; try {} catch (e) { var e; } export {};\nconsole.log(\"ran\");\n"}
+{"name": "rr7:15", "ext": "js", "source": "{ if (1) function e(){} try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:16", "ext": "js", "source": "{ if (0) ; else function e(){} try {} catch (e) { var e; } console.log(typeof e); }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:17", "ext": "js", "source": "function f() { { if (1) function e(){} try {} catch (e) { var e; } } return typeof e; } console.log(f());\nconsole.log(\"ran\");\n"}
+{"name": "rr7:18", "ext": "js", "source": "{ try {} catch (e) { var e; } if (1) function e(){} }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:19", "ext": "js", "source": "{ { if (1) function e(){} try {} catch (e) { var e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:20", "ext": "js", "source": "{ l: if (1) function e(){} try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:21", "ext": "js", "source": "{ if (1) l: function e(){} try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:22", "ext": "js", "source": "{ l: function e(){} try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:23", "ext": "js", "source": "{ function e(){} try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:24", "ext": "js", "source": "{ if (1) function e(){} let e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:25", "ext": "js", "source": "{ if (1) function e(){} var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:26", "ext": "js", "source": "try {} catch (e) { if (1) function e(){} }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:27", "ext": "js", "source": "{ if (1) { function e(){} } try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:28", "ext": "js", "source": "let e; try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:29", "ext": "js", "source": "const e = 1; try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:30", "ext": "js", "source": "class e {} try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:31", "ext": "js", "source": "function e(){} try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:32", "ext": "mjs", "source": "function e(){} try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:33", "ext": "mjs", "source": "import {readFileSync as e} from \"node:fs\"; try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:34", "ext": "mjs", "source": "import * as e from \"node:fs\"; try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:35", "ext": "mjs", "source": "import e from \"node:fs\"; try {} catch (e) { }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:36", "ext": "mjs", "source": "export class e {} try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:37", "ext": "mjs", "source": "export let e; try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:38", "ext": "js", "source": "try {} catch (e) { var e; } let e;\nconsole.log(\"ran\");\n"}
+{"name": "rr7:39", "ext": "js", "source": "try {} catch (e) { { var e; } } let e;\nconsole.log(\"ran\");\n"}
+{"name": "rr7:40", "ext": "js", "source": "try {} catch (e) { for (var e;;) break; } let e;\nconsole.log(\"ran\");\n"}
+{"name": "rr7:41", "ext": "js", "source": "try {} catch (e) { for (var e of []) ; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:42", "ext": "js", "source": "try {} catch (e) { for (var e in {}) ; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:43", "ext": "js", "source": "try {} catch (e) { for (var [e] of []) ; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:44", "ext": "js", "source": "let e; try {} catch (e) { for (var e in {}) ; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:45", "ext": "js", "source": "try {} catch (e) { var [e] = []; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:46", "ext": "js", "source": "try {} catch (e) { var {e} = {}; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:47", "ext": "js", "source": "let e; try {} catch (e) { var [e] = []; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:48", "ext": "js", "source": "let e; try {} catch (e) { var {a: e} = {}; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:49", "ext": "js", "source": "try {} catch (e) { try {} catch (e) { var e; } } let e;\nconsole.log(\"ran\");\n"}
+{"name": "rr7:50", "ext": "js", "source": "try {} catch ({e}) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:51", "ext": "js", "source": "try {} catch (e) { try {} catch ({e}) { } var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:52", "ext": "js", "source": "try {} catch (e) { try {} catch ({e}) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:53", "ext": "js", "source": "function f(e) { let x; try {} catch (e) { var e; } } f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:54", "ext": "js", "source": "function f() { try {} catch (e) { var e; } let e; } f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:55", "ext": "js", "source": "((e) => { try {} catch (e) { var e; } })();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:56", "ext": "js", "source": "function f(a = () => e, e) { try {} catch (e) { var e; } } f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:57", "ext": "js", "source": "switch (0) { case 0: let e; try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:58", "ext": "js", "source": "switch (0) { case 0: try {} catch (e) { var e; } default: let e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:59", "ext": "js", "source": "for (let e of []) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:60", "ext": "js", "source": "for (let e of []) try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:61", "ext": "js", "source": "for (const e in {}) try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:62", "ext": "js", "source": "for (let e = 0; e < 0;) try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:63", "ext": "js", "source": "try {} catch (e) { var e; } finally { let e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:64", "ext": "js", "source": "try { let e; } catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:65", "ext": "js", "source": "{ let e; } try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:66", "ext": "js", "source": "let e; (function(){ try {} catch (e) { var e; } })();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:67", "ext": "js", "source": "let e; (() => { try {} catch (e) { var e; } })();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:68", "ext": "js", "source": "let e; class A { static { try {} catch (e) { var e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:69", "ext": "js", "source": "let e; class A { m() { try {} catch (e) { var e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:70", "ext": "js", "source": "class A { static { let e; try {} catch (e) { var e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:71", "ext": "js", "source": "class A { static { try {} catch (e) { var e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:72", "ext": "js", "source": "class A { static { { let e; try {} catch (e) { var e; } } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:73", "ext": "js", "source": "class A { static { var e; { let e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:74", "ext": "js", "source": "class A { static { { let e; { var e; } } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:75", "ext": "js", "source": "class A { static { let e; { var e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:76", "ext": "js", "source": "class A { static { { let e; } { let e; } var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:77", "ext": "js", "source": "class A { static { { let e; { let e; } } var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:78", "ext": "js", "source": "class A { static { { let e; let e; } var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:79", "ext": "js", "source": "class A { static { { let e; let e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:80", "ext": "js", "source": "class A { static { { let e; var f; let f; } var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:81", "ext": "js", "source": "try {} catch (e) { let f; var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:82", "ext": "js", "source": "try {} catch (e) { let e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:83", "ext": "js", "source": "try {} catch (e) { { let e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:84", "ext": "js", "source": "try {} catch (e) { function e(){} }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:85", "ext": "js", "source": "try {} catch (e) { { function e(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:86", "ext": "js", "source": "try {} catch (e) { class e {} }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:87", "ext": "js", "source": "try {} catch ([e]) { function e(){} }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:88", "ext": "js", "source": "try {} catch ([e]) { { function e(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:89", "ext": "js", "source": "try {} catch (e) { var e; function e(){} }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:90", "ext": "js", "source": "try {} catch (e) { var e; { function e(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:91", "ext": "js", "source": "let e; try {} catch { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:92", "ext": "js", "source": "let e; l: try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:93", "ext": "js", "source": "let e; with ({}) try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:94", "ext": "js", "source": "let e; if (1) try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:95", "ext": "js", "source": "let e; if (1) { try {} catch (e) { var f; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:96", "ext": "js", "source": "function f() { let e; return () => { try {} catch (e) { var e; } }; } f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:97", "ext": "js", "source": "function f(e) { { let e; try {} catch (e) { var e; } } } f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:98", "ext": "js", "source": "function f() { try {} catch (e) { var e; } function e(){} } f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:99", "ext": "mjs", "source": "try {} catch (e) { var e; } function e(){}\nconsole.log(\"ran\");\n"}
+{"name": "rr7:100", "ext": "js", "source": "try {} catch (e) { var e; } function e(){}\nconsole.log(\"ran\");\n"}
+{"name": "rr7:101", "ext": "js", "source": "try {} catch (e) { var e; } { function e(){} }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:102", "ext": "js", "source": "{ function e(){} { try {} catch (e) { var e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:103", "ext": "js", "source": "{ try {} catch (e) { var e; } function e(){} }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:104", "ext": "js", "source": "if (1) function e(){} else try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:105", "ext": "js", "source": "{ let e; try {} catch (e) { try {} catch (e) { { var e; } } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:106", "ext": "js", "source": "{ let e; try {} catch (e) { var e = 1, f; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:107", "ext": "js", "source": "{ let f; try {} catch (e) { var e = 1, f; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:108", "ext": "js", "source": "{ class e {} try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:109", "ext": "js", "source": "{ const [e] = [1]; try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:110", "ext": "js", "source": "{ let {a: e} = {}; try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:111", "ext": "js", "source": "for (let [e] of []) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:112", "ext": "js", "source": "try {} catch (e) { var e; var e; } let e;\nconsole.log(\"ran\");\n"}
+{"name": "rr7:113", "ext": "mjs", "source": "import {readFileSync as e} from \"node:fs\"; if (0) try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:114", "ext": "mjs", "source": "import e from \"node:fs\"; { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:115", "ext": "mjs", "source": "import e from \"node:fs\"; if (0) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:116", "ext": "mjs", "source": "import e from \"node:fs\"; if (0) { try {} catch ([e]) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:117", "ext": "mjs", "source": "import e from \"node:fs\"; if (0) { try {} catch (e) { for (var e of []) ; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:118", "ext": "js", "source": "export {}; import * as e from \"node:fs\"; if (0) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:119", "ext": "js", "source": "eval(\"let e; try {} catch (e) { var e; }\");\nconsole.log(\"ran\");\n"}
+{"name": "rr7:120", "ext": "js", "source": "eval(\"if (0) { let e; try {} catch (e) { var e; } }\");\nconsole.log(\"ran\");\n"}
+{"name": "rr7:121", "ext": "js", "source": "new Function(\"let e; try {} catch (e) { var e; }\");\nconsole.log(\"ran\");\n"}
+{"name": "rr7:122", "ext": "js", "source": "switch (0) { case 0: function e(){} try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:123", "ext": "mjs", "source": "export default function e(){} try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:124", "ext": "mjs", "source": "export default class e {} try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:125", "ext": "mjs", "source": "export function e(){} if (0) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:126", "ext": "mjs", "source": "export const e = 1; if (0) { try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:127", "ext": "mjs", "source": "import e, * as f from \"node:fs\"; if (0) { try {} catch (f) { var f; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:128", "ext": "mjs", "source": "import e from \"node:fs\"; function g() { if (0) { try {} catch (e) { var e; } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:129", "ext": "mjs", "source": "import e from \"node:fs\"; { let e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:130", "ext": "mjs", "source": "import e from \"node:fs\"; try {} catch (e) { let x; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:131", "ext": "mjs", "source": "import e from \"node:fs\"; if (0) { try {} catch (e) { { function e(){} } } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:132", "ext": "mjs", "source": "import e from \"node:fs\"; if (0) { { function e(){} } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:133", "ext": "mjs", "source": "import e from \"node:fs\"; if (0) { if (1) function e(){} }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:134", "ext": "mjs", "source": "import e from \"node:fs\"; function e(){}\nconsole.log(\"ran\");\n"}
+{"name": "rr7:135", "ext": "js", "source": "{ async function e(){} try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:136", "ext": "js", "source": "{ function* e(){} try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:137", "ext": "js", "source": "if (1) function e(){} try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:138", "ext": "js", "source": "if (0) { if (1) function e(){} else try {} catch (e) { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:139", "ext": "js", "source": "for (let e in {}) { for (var q;;) { try {} catch (e) { var e; } break; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:140", "ext": "js", "source": "for (let e;;) { break; } try {} catch (e) { var e; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:141", "ext": "js", "source": "try {} catch (e) { var e; } for (let e;;) { break; }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:142", "ext": "js", "source": "class A { static { try {} catch (e) { var e; } let e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:143", "ext": "js", "source": "class A { static { try {} catch (e) { var e; } } } let e;\nconsole.log(\"ran\");\n"}
+{"name": "rr7:144", "ext": "js", "source": "function f() { class e {} if (0) { try {} catch (e) { var e; } } } f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:145", "ext": "js", "source": "function f(e = 1) { let x; try {} catch (e) { var e; } } f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:146", "ext": "js", "source": "function f() { var e; try {} catch (e) { var e; } } f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:147", "ext": "js", "source": "var f = function e() { try {} catch (e) { var e; } }; f();\nconsole.log(\"ran\");\n"}
+{"name": "rr7:148", "ext": "js", "source": "var f = class e { m() { try {} catch (e) { var e; } } };\nconsole.log(\"ran\");\n"}
+{"name": "rr7:149", "ext": "js", "source": "{ if (1) function e(){} { var e; } }\nconsole.log(\"ran\");\n"}
+{"name": "rr7:150", "ext": "js", "source": "if (1) function e(){} try {} catch (e) { var e; } let e;\nconsole.log(\"ran\");\n"}
+{"name": "rr7:151", "ext": "js", "source": "{ l: function e(){} { var e; } }\nconsole.log(\"ran\");\n"}

@@ -74,7 +74,12 @@ fn check(text: &str, source_type: SourceType) -> Early {
     let (annex_b, mut hoisting) = annex_b::AnnexB::scan(&checked.program, scoping);
     let octals = class_octal::ClassOctals::scan(&checked.program, scoping);
     let mut found = newer::unread_by_node(&checked.program);
-    let (semantic, mut read_by_node): (Vec<_>, Vec<_>) = errors(built.diagnostics.into_vec())
+    let diagnostics = errors(built.diagnostics.into_vec());
+    let hidden_by_clause = annex_b.clause_shares_name(scoping)
+        || diagnostics
+            .iter()
+            .any(|diagnostic| annex_b.explains_by_clause(diagnostic));
+    let (semantic, mut read_by_node): (Vec<_>, Vec<_>) = diagnostics
         .into_iter()
         .filter(|diagnostic| {
             templates::semantic_listed(diagnostic)
@@ -84,6 +89,12 @@ fn check(text: &str, source_type: SourceType) -> Early {
         })
         .partition(|diagnostic| !hoisting.read_by_v8(diagnostic));
     found.extend(semantic);
+    if hidden_by_clause {
+        let without = blanked(text, &annex_b.clause_functions());
+        if let Early::SyntaxError(behind) = check(&without, source_type) {
+            found.extend(behind);
+        }
+    }
     let (missed, v8_reads) = hoisting.take_found();
     found.extend(missed);
     read_by_node.extend(v8_reads);
