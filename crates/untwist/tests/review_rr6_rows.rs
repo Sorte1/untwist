@@ -15,7 +15,7 @@ const MODES: [(&str, Lane); 6] = [
     ("rename unique", Lane::Rename(RenameMode::Unique)),
 ];
 
-const CALLER_PREMISE: [&str; 4] = ["130", "131", "134", "136"];
+const CALLER_PREMISE: [&str; 6] = ["130", "131", "134", "136", "600", "601"];
 
 const RENAME_PREMISE: [&str; 8] = ["40", "42", "44", "45", "46", "47", "48", "49"];
 
@@ -160,6 +160,33 @@ fn a_flag_that_is_not_a_private_local_keeps_the_controller() {
         for (name, lane) in MODES {
             let code = transformed(lane, &source);
             assert!(code.contains("apply"), "{label} ({name}): {code}");
+        }
+    }
+}
+
+#[test]
+fn a_controller_obfuscator_io_does_not_emit_is_kept_in_every_lane() {
+    let kept = [
+        "501", "502", "503", "504", "505", "510", "511", "512", "513", "514", "515", "517", "518",
+        "519", "520", "521", "522", "523", "524", "525", "526", "527", "528", "529", "530", "531",
+        "534",
+    ];
+    for label in kept {
+        let source = std::fs::read_to_string(Path::new(DATA).join(format!("{label}.js"))).unwrap();
+        for (name, lane) in MODES {
+            let code = transformed(lane, &source);
+            assert!(code.contains("apply"), "{label} ({name}): {code}");
+        }
+    }
+}
+
+#[test]
+fn a_controller_obfuscator_io_emits_is_removed_in_every_lane() {
+    for label in ["516", "532", "533", "535"] {
+        let source = std::fs::read_to_string(Path::new(DATA).join(format!("{label}.js"))).unwrap();
+        for (name, lane) in MODES {
+            let code = transformed(lane, &source);
+            assert!(!code.contains("apply"), "{label} ({name}): {code}");
         }
     }
 }

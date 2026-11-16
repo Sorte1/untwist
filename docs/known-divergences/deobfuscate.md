@@ -693,7 +693,13 @@
 - **The default mode removes self-defending and debug-protection code only when the body is
   obfuscator.io's own.** A call controller (`var c = (function () { var first = true; return
   function (ctx, fn) { … }; })();`) runs any callback once, so its shape says nothing about the
-  callback. The default mode removes a callback run through one only when the callback is, node
+  callback. Only the shape obfuscator.io emits counts as a controller: a plain function or arrow
+  that is neither `async` nor a generator, with no parameters, holding a single `var` or `let`
+  flag set to `true`; a returned plain function (or a non-`async` arrow) with two distinct plain
+  parameters, no defaults and no rest; a result binding not named like the flag, either parameter
+  or `arguments`; and plain, parameterless inner functions that neither redeclare the parameters
+  nor name the applied result like them. Anything else (a `const` flag, a generator or `async`
+  function anywhere in the shape, a default value, a shadowing name) is kept as it is. The default mode removes a callback run through one only when the callback is, node
   for node, one of the bodies obfuscator.io emits: the source check
   (`return f.toString().search("(((.+)+)+)+$")…`), the format check, the console disable or the
   debug-protection start. Local names are free, and a local function the body only ever calls
@@ -711,8 +717,8 @@
   closure, or by an undeclared global `o`) keeps every call of the controller and the
   controller, with the same note. Some reads name no binding (`globalThis.o` or another script
   for a top-level `var`, `arguments[0]` or `caller.arguments` for a parameter, a `with` object,
-  an importer for an export, a direct `eval`), so `o` must also be a `var`, `let` or `const`
-  declared inside a function, not a parameter, in a function with no `with` statement, no direct
+  an importer for an export, a direct `eval`), so `o` must also be a `var`, or a `let`
+  declared before `o = true` (not a `const`), inside a function, not a parameter, in a function with no `with` statement, no direct
   `eval` and no use of its own `arguments`; any other flag keeps the controller.
   `--unsafe` trusts the controller shape, as the reference deobfuscator does, so a domain lock
   or a hand-written function run through such a helper is removed there. `debug-protection`
@@ -838,15 +844,16 @@
   pass never claimed is noise — one Rollup bundle produces hundreds of them. The reference deobfuscator has no such
   pass and reports nothing either way.
 - **Default-lane premise: no code reads a function's caller.** No code reads a function's caller
-  through `.caller` or `arguments.callee.caller` to observe which function called it (the
+  through `.caller`, `arguments.callee.caller` or a stack frame (`Error.prepareStackTrace` call
+  sites with `getFunction()` or `getFunctionName()`) to observe which function called it (the
   non-standard `Function.prototype.caller`; strict code cannot). `control-flow-object` inlines a
   call proxy such as `{ abcde: function (a) { return a(); } }.abcde(w)` to `w()`, which removes the
   proxy's frame: a sloppy `w` that reads `w.caller` sees the function that held the call, not the
-  proxy. A guard that keeps such calls when a frame read is reachable was measured and not shipped
+  proxy, and so does a frame's `getFunction()`. A guard that keeps such calls when a frame read is reachable was measured and not shipped
   (branch `fix/r51-nx7-frame-guard`): it cost obfuscator-io 16 safe fixtures (`pair-cff+debug` 9/10
   to 0/10, `pair-cff+self` 9/10 to 2/10) and obfuscator-versions 7 cells, because the protections'
   own `Function` and `.constructor` calls make a frame read reachable and they are only recognised
-  once their proxies are inlined. Rows 130, 131, 134 and 136 of
+  once their proxies are inlined. Rows 130, 131, 134, 136, 600 and 601 of
   `crates/untwist/tests/review_rr6_rows.rs` are the premise rows.
 - **`Function#arguments` and `Function#caller` reads leave the function passes off in the safe lane.**
   In sloppy code `f.arguments` holds the parameter values of `f`'s active call and `f.caller` the

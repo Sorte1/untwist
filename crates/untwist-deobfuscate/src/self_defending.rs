@@ -6,8 +6,9 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::ScopeFlags;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
+use untwist_core::ast_util::inline::is_plain_function;
 use untwist_core::ast_util::literal::{is_false_literal, is_true_literal};
 use untwist_core::ast_util::matcher::{anonymous_function, call_parts, iife};
 use untwist_core::ast_util::naming_slot::without_unnamed;
@@ -28,6 +29,40 @@ fn binding_name<'k>(pattern: &'k BindingPattern<'_>) -> Option<&'k str> {
         return None;
     };
     Some(id.name.as_str())
+}
+
+fn plain_function<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k Function<'a>> {
+    anonymous_function(expr).filter(|function| is_plain_function(function))
+}
+
+fn plain_params<'k>(params: &'k FormalParameters<'_>) -> Option<Vec<&'k str>> {
+    if params.rest.is_some() {
+        return None;
+    }
+    let names: Vec<&str> = params
+        .items
+        .iter()
+        .map(|item| {
+            item.initializer
+                .is_none()
+                .then(|| binding_name(&item.pattern))
+                .flatten()
+        })
+        .collect::<Option<_>>()?;
+    let distinct = names
+        .iter()
+        .enumerate()
+        .all(|(at, name)| !names[..at].contains(name));
+    distinct.then_some(names)
+}
+
+fn sole_declarator<'k, 'a>(
+    declaration: &'k VariableDeclaration<'a>,
+) -> Option<&'k VariableDeclarator<'a>> {
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    Some(declarator)
 }
 
 fn assigned_value<'k, 'a>(
@@ -116,7 +151,7 @@ fn applied_result<'k, 'a>(
     match live {
         [Statement::VariableDeclaration(declaration), Statement::ExpressionStatement(reset), Statement::ReturnStatement(ret)] =>
         {
-            let declarator = declaration.declarations.first()?;
+            let declarator = sole_declarator(declaration)?;
             let result = binding_name(&declarator.id)?;
             Some((result, declarator.init.as_ref()?, reset, ret))
         }
@@ -150,6 +185,9 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
     let Statement::BlockStatement(block) = &statement.consequent else {
         return false;
     };
+    if hoisted.is_some_and(|name| [context, fn_name, "arguments"].contains(&name)) {
+        return false;
+    }
     let mut declared: Vec<&str> = block.body.iter().filter_map(bare_name).collect();
     declared.extend(hoisted);
     let live = live_statements(&block.body, &[context, fn_name, "arguments"]);
@@ -160,15 +198,19 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
         && assigned_value(reset, fn_name)
             .is_some_and(|value| matches!(value, Expression::NullLiteral(_)))
         && ret.argument.as_ref().and_then(identifier_name) == Some(result)
-        && ![context, fn_name].contains(&result)
+        && ![context, fn_name, "arguments"].contains(&result)
 }
 
 fn is_empty_function(function: &Function<'_>) -> bool {
-    function.params.items.is_empty()
+    has_no_params(function)
         && function
             .body
             .as_ref()
             .is_some_and(|body| body.statements.is_empty())
+}
+
+fn has_no_params(function: &Function<'_>) -> bool {
+    function.params.items.is_empty() && function.params.rest.is_none()
 }
 
 fn chooses_the_guarded_function(init: &Expression<'_>, flag: &str, names: (&str, &str)) -> bool {
@@ -179,12 +221,12 @@ fn chooses_the_guarded_function(init: &Expression<'_>, flag: &str, names: (&str,
         return false;
     }
     let (Some(taken), Some(skipped)) = (
-        anonymous_function(&choice.consequent),
-        anonymous_function(&choice.alternate),
+        plain_function(&choice.consequent),
+        plain_function(&choice.alternate),
     ) else {
         return false;
     };
-    taken.params.items.is_empty()
+    has_no_params(taken)
         && returns_guarded_apply(taken, names.0, names.1)
         && is_empty_function(skipped)
 }
@@ -198,15 +240,15 @@ fn returner_matches(
     body: Option<&FunctionBody<'_>>,
     flag: &str,
 ) -> bool {
-    let [context, guarded] = params.items.as_slice() else {
+    let Some(names) = plain_params(params) else {
         return false;
     };
-    let (Some(context), Some(fn_name)) = (
-        binding_name(&context.pattern),
-        binding_name(&guarded.pattern),
-    ) else {
+    let &[context, fn_name] = names.as_slice() else {
         return false;
     };
+    if [context, fn_name].contains(&flag) {
+        return false;
+    }
     let Some(body) = body else {
         return false;
     };
@@ -216,20 +258,21 @@ fn returner_matches(
     else {
         return false;
     };
-    let Some(declarator) = declaration.declarations.first() else {
+    let Some(declarator) = sole_declarator(declaration) else {
         return false;
     };
     let (Some(rfn), Some(init)) = (binding_name(&declarator.id), declarator.init.as_ref()) else {
         return false;
     };
-    chooses_the_guarded_function(init, flag, (context, fn_name))
+    ![flag, context, fn_name, "arguments"].contains(&rfn)
+        && chooses_the_guarded_function(init, flag, (context, fn_name))
         && assigned_value(reset, flag).is_some_and(is_false_literal)
         && ret.argument.as_ref().and_then(identifier_name) == Some(rfn)
 }
 
 fn controller_body<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k FunctionBody<'a>> {
     if let Some((outer, arguments)) = iife(expr) {
-        if !arguments.is_empty() || !outer.params.items.is_empty() {
+        if !arguments.is_empty() || !has_no_params(outer) || !is_plain_function(outer) {
             return None;
         }
         return outer.body.as_deref();
@@ -258,7 +301,13 @@ pub fn is_call_controller(expr: &Expression<'_>) -> bool {
     else {
         return false;
     };
-    let Some(declarator) = first_call.declarations.first() else {
+    if !matches!(
+        first_call.kind,
+        VariableDeclarationKind::Var | VariableDeclarationKind::Let
+    ) {
+        return false;
+    }
+    let Some(declarator) = sole_declarator(first_call) else {
         return false;
     };
     let Some(flag) = binding_name(&declarator.id) else {
@@ -267,7 +316,7 @@ pub fn is_call_controller(expr: &Expression<'_>) -> bool {
     if !declarator.init.as_ref().is_some_and(is_true_literal) {
         return false;
     }
-    let Some(inner) = ret.argument.as_ref().and_then(anonymous_function) else {
+    let Some(inner) = ret.argument.as_ref().and_then(plain_function) else {
         return false;
     };
     inner_matches(inner, flag)
@@ -353,7 +402,9 @@ fn set_flag<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k IdentifierReference<'
 
 fn returner_flag<'f>(expr: &Expression<'_>, flags: &[&'f str]) -> Option<&'f str> {
     let (params, body) = match without_unnamed(expr.without_parentheses()).without_parentheses() {
-        Expression::FunctionExpression(function) if function.id.is_none() => {
+        Expression::FunctionExpression(function)
+            if function.id.is_none() && is_plain_function(function) =>
+        {
             (&function.params, function.body.as_deref())
         }
         Expression::ArrowFunctionExpression(arrow) if !arrow.r#async => match &arrow.body {
@@ -667,6 +718,15 @@ fn removed_declaration(spans: &[Span], declared: Span) -> bool {
         .any(|span| span.start <= declared.start && declared.end <= span.end)
 }
 
+fn is_settable_flag(scoping: &Scoping, symbol: SymbolId, set_at: Span) -> bool {
+    let flags = scoping.symbol_flags(symbol);
+    if flags.is_const_variable() {
+        return false;
+    }
+    flags.contains(SymbolFlags::FunctionScopedVariable)
+        || scoping.symbol_span(symbol).end <= set_at.start
+}
+
 fn flag_read_elsewhere(
     program: &Program<'_>,
     (flags, homes): (&[FlagUse], &Homes),
@@ -688,7 +748,9 @@ fn flag_read_elsewhere(
         let Some(symbol) = symbol else {
             return true;
         };
-        if !is_private_local(homes, scoping, symbol) {
+        if !is_settable_flag(scoping, symbol, flag.set_at)
+            || !is_private_local(homes, scoping, symbol)
+        {
             return true;
         }
         symbols.insert(symbol);
