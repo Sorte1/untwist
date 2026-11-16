@@ -301,6 +301,16 @@ fn early_errors_are_reported_for_strict_code_and_not_for_sloppy_code() {
         ("if (0) { using x = null; }", true),
         ("var z = 1 || @dec class {};", true),
         ("class A { accessor x = 1; }", true),
+        ("function g() {} for (var g = 0; g < 1; g++) ;", false),
+        ("function g() {} { var g; }", false),
+        ("class A { static { function f() {} var f; } }", false),
+        ("let e; try {} catch (e) { var e; }", true),
+        ("try {} catch ([e]) { try {} catch (e) { var e; } }", true),
+        ("function f(e) { try {} catch (e) { var e; } }", false),
+        ("if (0) { /\\A/u; }", true),
+        ("/\\p{sc=Hrkt}/u;", true),
+        ("/a{1,99999999999999999999}/;", false),
+        ("/\\p{WSpace}+/u;", false),
     ] {
         let alloc = Allocator::default();
         let p = parse_program(&alloc, source);
@@ -317,6 +327,13 @@ fn an_html_comment_opener_in_module_code_is_an_early_error_as_in_node() {
     assert!(!early_errors(&module.program).is_clean());
     let script = parse_program(&alloc, "var a = 1, b = 5; a<!--b\n;");
     assert!(early_errors(&script.program).is_clean());
+    let tighter = parse_named_module(&alloc, "var a = 1, b = 5; var c = a<!--b + 1;");
+    assert!(!early_errors(&tighter.program).is_clean());
+    let quoted = parse_named_module(
+        &alloc,
+        "var a = \"<!--\" + `<!--` + /<!--/.source; // <!--\n",
+    );
+    assert!(early_errors(&quoted.program).is_clean());
 }
 
 #[test]

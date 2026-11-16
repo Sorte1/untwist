@@ -14,7 +14,7 @@ mod forms;
 pub mod gate;
 mod guard;
 pub mod helpers;
-mod injection_proof;
+pub(crate) mod injection_proof;
 pub mod interop;
 pub mod library_head;
 mod library_head_forms;

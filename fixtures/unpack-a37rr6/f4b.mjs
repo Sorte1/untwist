@@ -1,0 +1,2 @@
+with ({}) ;
+console.log("ran");

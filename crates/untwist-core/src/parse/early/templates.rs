@@ -1,6 +1,6 @@
 use oxc_diagnostics::OxcDiagnostic;
 
-const PARSER: [&str; 99] = [
+const PARSER: [&str; 101] = [
     "'X' can only be used with function calls or in property accesses",
     "'X' declaration can only be used at the top level of a module",
     "'X' modifier cannot be used here.",
@@ -39,6 +39,7 @@ const PARSER: [&str; 99] = [
     "Expected `X` but found `X`",
     "Expected `X` or `X` but found `X`",
     "Expected a semicolon or an implicit semicolon after a statement, but found none",
+    "Expected function name",
     "Generators can only be declared at the top level or inside a block",
     "Identifier expected.",
     "Identifier expected. 'X' is a reserved word that cannot be used here.",
@@ -93,6 +94,7 @@ const PARSER: [&str; 99] = [
     "Unexpected new.target expression",
     "Unexpected private identifier",
     "Unexpected token",
+    "Unterminated multiline comment",
     "Unterminated regular expression",
     "Unterminated string",
     "`X` is only allowed within async functions and at the top levels of modules",

@@ -423,7 +423,7 @@ fn exports_name<'s>(
     (text, require): (&str, &str),
 ) -> Option<Option<&'s str>> {
     let mut found = None;
-    for name in scoping.root_unresolved_references().keys() {
+    for (name, references) in scoping.root_unresolved_references() {
         let name = name.as_str();
         if name == require {
             continue;
@@ -433,6 +433,12 @@ fn exports_name<'s>(
             .iter()
             .find(|(candidate, _)| *candidate == name);
         if let Some((candidate, declared)) = exports {
+            let written = references
+                .iter()
+                .any(|reference| scoping.get_reference(*reference).is_write());
+            if written {
+                return None;
+            }
             let skipped = skipped_spans(site, name, *declared);
             if found.is_none() && !mentioned_outside(text, name, &skipped) {
                 found = Some(*candidate);

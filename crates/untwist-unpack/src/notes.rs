@@ -252,6 +252,10 @@ pub fn module_object_used(id: impl Display, what: impl Display) -> String {
     format!("module {id} uses its module object ({what}), which a written file would take from node's module instead of the bundle's; no bundle is written")
 }
 
+pub fn factory_this_unproven(id: impl Display) -> String {
+    format!("module {id} reads its `this`, and the bundle's runtime is not proven to call it with the module's exports as `this`, as a written file would; no bundle is written")
+}
+
 pub fn library_head_unproven() -> String {
     "the code around the webpack bundle is not a recorded webpack library wrapper (umd, amd, system); no bundle is written".to_string()
 }

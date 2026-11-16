@@ -75,16 +75,13 @@ fn written_entry(input: &Path, out: &Path) -> PathBuf {
     if out.join("bundle.json").exists() {
         return out.join("index.js");
     }
-    let whole = out.join("deobfuscated.js");
     let module = input
         .extension()
         .is_some_and(|extension| extension == MODULE_EXTENSION);
-    if !module {
-        return whole;
+    match module {
+        true => out.join(format!("deobfuscated.{MODULE_EXTENSION}")),
+        false => out.join("deobfuscated.js"),
     }
-    let renamed = whole.with_extension(MODULE_EXTENSION);
-    std::fs::rename(&whole, &renamed).expect("rename output");
-    renamed
 }
 
 fn extra_flags(name: &str) -> &'static [&'static str] {

@@ -91,9 +91,15 @@ fn yield_iterated(source: &str, diagnostic: &OxcDiagnostic) -> bool {
     text == "yield" && word_follows(source[end..].trim_start(), "of")
 }
 
+fn private_optional_target(source: &str, diagnostic: &OxcDiagnostic) -> bool {
+    label_text(source, diagnostic).is_some_and(|(_, text)| text.contains("?.#"))
+}
+
 fn read_by_node(source: &str, diagnostic: &OxcDiagnostic) -> bool {
     match diagnostic.message.as_ref() {
-        CALL_TARGET => call_as_target(source, diagnostic),
+        CALL_TARGET => {
+            call_as_target(source, diagnostic) || private_optional_target(source, diagnostic)
+        }
         YIELD_NAME => yield_iterated(source, diagnostic),
         _ => false,
     }
