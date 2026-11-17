@@ -62,7 +62,7 @@ pub fn reference_symbol(expr: &Expression<'_>, scoping: &Scoping) -> Option<Symb
 
 struct Stray<'k> {
     tracked: &'k FxHashSet<SymbolId>,
-    removed: &'k [Span],
+    removed: FxHashSet<Span>,
     scoping: &'k Scoping,
     found: bool,
 }
@@ -95,7 +95,7 @@ pub fn has_stray_reference(
 ) -> bool {
     let mut stray = Stray {
         tracked,
-        removed,
+        removed: removed.iter().copied().collect(),
         scoping,
         found: false,
     };
@@ -130,7 +130,10 @@ pub fn reaches_a_script_global_once_removed<'a>(
         return false;
     };
     let mut pruned = program.clone_in(cx.allocator());
-    Prune { removed }.visit_program(&mut pruned);
+    Prune {
+        removed: removed.iter().copied().collect(),
+    }
+    .visit_program(&mut pruned);
     let scoping = SemanticBuilder::new()
         .build(&pruned)
         .semantic
@@ -183,11 +186,11 @@ fn names_reached_beside(
     found.reached || (found.observed && !props.is_empty())
 }
 
-struct Prune<'r> {
-    removed: &'r [Span],
+struct Prune {
+    removed: FxHashSet<Span>,
 }
 
-impl<'a> VisitMut<'a> for Prune<'_> {
+impl<'a> VisitMut<'a> for Prune {
     fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
         it.retain(|statement| !self.removed.contains(&statement.span()));
         walk_mut::walk_statements(self, it);

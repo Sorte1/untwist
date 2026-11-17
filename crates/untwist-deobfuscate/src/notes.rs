@@ -394,6 +394,9 @@ pub const PROTECTION_HOIST_BLOCKER_KEPT: &str =
 pub const SELF_DEFENDING_REFERENCE_KEPT: &str =
     "a call controller was found but a reference to it survives outside the statements this pass \
      removes, so the block was left in place";
+pub const SELF_DEFENDING_BUILTIN_PATCHED: &str =
+    "the program may replace a built-in the self-defending callback calls, so removing the \
+     callback would drop what the replacement does; the block was left in place";
 pub const SELF_DEFENDING_NO_USABLE_SPAN: &str =
     "a matched statement has no usable span, so the block was left in place";
 
@@ -723,6 +726,7 @@ catalogue!(
     DEAD_ASSIGNMENT_READ_BEFORE_THE_WRITE,
     INIT_ORDER_BUDGET,
     SELF_DEFENDING_REFERENCE_KEPT,
+    SELF_DEFENDING_BUILTIN_PATCHED,
     DEBUG_PROTECTION_REFERENCE_KEPT,
     PROTECTION_HOIST_BLOCKER_KEPT,
     SCOPE_HAZARD,

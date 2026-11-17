@@ -14,7 +14,8 @@ use untwist_core::ast_util::matcher::{anonymous_function, call_parts, iife};
 use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::AnnexBWrites;
+use untwist_core::semantic::builtins::{scan, Builtins, Reliance};
+use untwist_core::semantic::{has_module_syntax, AnnexBWrites};
 
 use crate::bindings::{
     has_stray_reference, reaches_a_script_global_once_removed, reference_symbol, resolved_symbol,
@@ -28,6 +29,11 @@ use crate::protection_shape::{is_protection_callback, Roles};
 pub const PASS: &str = "self-defending";
 
 const RESERVED_PARAMS: [&str; 2] = [ARGUMENTS, "eval"];
+
+static CALLBACK_RELIES_ON: Reliance = Reliance {
+    roots: &["Function", "String", "RegExp", "Symbol"],
+    members: &[],
+};
 
 fn binding_name<'k>(pattern: &'k BindingPattern<'_>) -> Option<&'k str> {
     let BindingPattern::BindingIdentifier(id) = pattern else {
@@ -635,6 +641,7 @@ struct Removals<'k> {
     scoping: &'k Scoping,
     annex_b: &'k AnnexBWrites,
     spans: Vec<Span>,
+    removed: FxHashSet<Span>,
     variables: FxHashSet<SymbolId>,
     returner_calls: &'k [Span],
     proof: Option<&'k FxHashSet<SymbolId>>,
@@ -795,11 +802,11 @@ impl Removals<'_> {
             if let Some(frame) = self.frames.last_mut() {
                 frame.declared.insert(controller);
             }
-            self.spans.push(stmt.span());
+            self.mark(stmt.span());
             return Some(None);
         }
         if self.is_shell(stmt) {
-            self.spans.push(stmt.span());
+            self.mark(stmt.span());
             return Some(None);
         }
         let returner_call = self.returner_calls.contains(&stmt.span());
@@ -818,9 +825,14 @@ impl Removals<'_> {
             self.keep(stmt);
             return None;
         }
-        self.spans.push(stmt.span());
+        self.mark(stmt.span());
         self.variables.extend(variable);
         Some(variable)
+    }
+
+    fn mark(&mut self, span: Span) {
+        self.spans.push(span);
+        self.removed.insert(span);
     }
 
     fn keep(&mut self, stmt: &Statement<'_>) {
@@ -864,7 +876,16 @@ impl Removals<'_> {
         reachable: FxHashSet<SymbolId>,
         leading: FxHashSet<SymbolId>,
     ) {
-        let mut inherited = self.declared_first(it);
+        let first = self.declared_first(it);
+        self.visit_list_after(it, first, (reachable, leading));
+    }
+
+    fn visit_list_after<'a>(
+        &mut self,
+        it: &AVec<'a, Statement<'a>>,
+        mut inherited: FxHashSet<SymbolId>,
+        (reachable, leading): (FxHashSet<SymbolId>, FxHashSet<SymbolId>),
+    ) {
         inherited.extend(reachable.iter().copied());
         let mut opening = reachable.clone();
         opening.extend(leading);
@@ -875,7 +896,7 @@ impl Removals<'_> {
         let mut armed = FxHashSet::default();
         let mut opening_run = true;
         for (at, stmt) in it.iter().enumerate() {
-            if opening_run && at > 0 && !self.spans.contains(&it[at - 1].span()) {
+            if opening_run && at > 0 && !self.removed.contains(&it[at - 1].span()) {
                 opening_run = false;
                 if let Some(frame) = self.frames.last_mut() {
                     frame.reachable.clone_from(&reachable);
@@ -933,11 +954,14 @@ impl Removals<'_> {
     }
 
     fn remove_later_calls(&mut self, later: &[Statement<'_>], variable: SymbolId) {
-        let calls = later
+        let calls: Vec<Span> = later
             .iter()
             .filter(|stmt| is_bare_call(stmt, variable, self.scoping))
-            .map(GetSpan::span);
-        self.spans.extend(calls);
+            .map(GetSpan::span)
+            .collect();
+        for span in calls {
+            self.mark(span);
+        }
     }
 }
 
@@ -950,6 +974,14 @@ impl<'a> VisitJs<'a> for Removals<'_> {
         self.with_depth += 1;
         walk_js::walk_with_statement(self, it);
         self.with_depth -= 1;
+    }
+
+    fn visit_switch_case(&mut self, it: &SwitchCase<'a>) {
+        if let Some(test) = &it.test {
+            self.visit_expression(test);
+        }
+        let none = FxHashSet::default;
+        self.visit_list_after(&it.consequent, none(), (none(), none()));
     }
 }
 
@@ -1004,6 +1036,7 @@ fn removals<'k>(
         scoping: inputs.scoping,
         annex_b: inputs.annex_b,
         spans: Vec::new(),
+        removed: FxHashSet::default(),
         variables: FxHashSet::default(),
         returner_calls: inputs.returner_calls,
         proof: inputs.proof,
@@ -1024,13 +1057,13 @@ fn removed_declaration(spans: &[Span], declared: Span) -> bool {
         .any(|span| span.start <= declared.start && declared.end <= span.end)
 }
 
-fn is_settable_flag(scoping: &Scoping, symbol: SymbolId, set_at: Span) -> bool {
+fn is_settable_flag(scoping: &Scoping, symbol: SymbolId, flag: &FlagUse) -> bool {
     let flags = scoping.symbol_flags(symbol);
     if flags.is_const_variable() {
         return false;
     }
     flags.contains(SymbolFlags::FunctionScopedVariable)
-        || scoping.symbol_span(symbol).end <= set_at.start
+        || scoping.symbol_span(symbol).end <= flag.set_at.start.min(flag.returner_at.start)
 }
 
 fn flag_read_elsewhere(
@@ -1054,9 +1087,7 @@ fn flag_read_elsewhere(
         let Some(symbol) = symbol else {
             return true;
         };
-        if !is_settable_flag(scoping, symbol, flag.set_at)
-            || !is_private_local(homes, scoping, symbol)
-        {
+        if !is_settable_flag(scoping, symbol, flag) || !is_private_local(homes, scoping, symbol) {
             return true;
         }
         symbols.insert(symbol);
@@ -1131,6 +1162,11 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     }
 }
 
+fn callback_built_ins_written(program: &Program<'_>, scoping: &Scoping) -> bool {
+    let module = has_module_syntax(program);
+    scan(program, scoping, module, false, &CALLBACK_RELIES_ON).verdict == Builtins::Written
+}
+
 #[derive(Default)]
 pub struct SelfDefending;
 
@@ -1155,6 +1191,10 @@ impl<'a> Pass<'a> for SelfDefending {
                 return;
             }
             Plan::Remove(spans, tracked) => {
+                if !cx.opts.unsafe_transforms && callback_built_ins_written(program, cx.scoping()) {
+                    cx.note(notes::SELF_DEFENDING_BUILTIN_PATCHED, None);
+                    return;
+                }
                 if reaches_a_script_global_once_removed(&tracked, &spans, program, cx) {
                     cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
                     return;
