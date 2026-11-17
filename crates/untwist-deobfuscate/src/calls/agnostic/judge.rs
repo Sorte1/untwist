@@ -416,6 +416,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         self.creations_native();
         self.out.saturated = true;
         self.out.pending_texts = self.pending_texts.take();
+        self.out.judged_texts = self.judged_texts.take();
         (self.out, true, true)
     }
 
@@ -457,6 +458,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             }
         }
         self.out.pending_texts = self.pending_texts.take();
+        self.out.judged_texts = self.judged_texts.take();
         (self.out, chains, natives)
     }
 

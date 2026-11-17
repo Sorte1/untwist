@@ -146,6 +146,7 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) noted_scripts: FxHashSet<u64>,
     pub(super) forward_calls: FxHashSet<Span>,
     pub(super) pending_texts: RefCell<Vec<String>>,
+    pub(super) judged_texts: RefCell<Vec<String>>,
     pub(super) flow: &'s Flow<'s, 'a>,
     pub(super) holds: Holds<'s, 'a>,
     pub(super) known_rests: FxHashMap<Span, Vec<AKey<'a>>>,
@@ -217,6 +218,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             noted_scripts: FxHashSet::default(),
             forward_calls: FxHashSet::default(),
             pending_texts: RefCell::default(),
+            judged_texts: RefCell::default(),
             flow,
             holds,
             known_rests: FxHashMap::default(),
@@ -260,6 +262,10 @@ impl<'s, 'a> Sites<'s, 'a> {
                 || (self.resolve.is_none() && matches!(key, AKey::Pending(_)))
                 || matches!(key, AKey::Filtered(filter) if self.filter_hits(filter));
             self.saturated |= open && root_folds(root);
+            let held = self
+                .site_target
+                .is_none_or(|target| !self.proven_non_global(target));
+            self.out.keyed_global |= open && held;
         }
         self.record_site(ASite {
             span,
