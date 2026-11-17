@@ -20,6 +20,7 @@ use untwist_core::semantic::{has_module_syntax, AnnexBWrites};
 use crate::bindings::{
     has_stray_reference, reaches_a_script_global_once_removed, reference_symbol, resolved_symbol,
 };
+use crate::builtin_values::exposes_a_builtin;
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
 use crate::flag_home::{is_private_local, Homes, ARGUMENTS, DIRECT_EVAL};
@@ -1165,6 +1166,7 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
 fn callback_built_ins_written(program: &Program<'_>, scoping: &Scoping) -> bool {
     let module = has_module_syntax(program);
     scan(program, scoping, module, false, &CALLBACK_RELIES_ON).verdict == Builtins::Written
+        || exposes_a_builtin(program, scoping, CALLBACK_RELIES_ON.roots)
 }
 
 #[derive(Default)]
