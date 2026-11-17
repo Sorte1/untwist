@@ -32,7 +32,18 @@ pub(super) const CONTEXT_RUNNERS: [&str; 5] = [
     "_compile",
 ];
 
-pub(super) const TIMERS: [&str; 3] = ["setTimeout", "setInterval", "setImmediate"];
+pub(super) const TIMERS: [&str; 10] = [
+    "setTimeout",
+    "setInterval",
+    "setImmediate",
+    "requestAnimationFrame",
+    "webkitRequestAnimationFrame",
+    "mozRequestAnimationFrame",
+    "msRequestAnimationFrame",
+    "requestIdleCallback",
+    "queueMicrotask",
+    "postTask",
+];
 
 const RECEIVER_METHODS: [&str; 1] = ["valueOf"];
 
@@ -202,6 +213,7 @@ impl Scan<'_> {
                 self.is_reached(object)
                     || self.reads_prototypes(object)
                     || self.is_code_runner_name(object)
+                    || self.timer_member(object).is_some()
                     || matches!(
                         self.allow_root(object),
                         Some(Root::Builtin(_) | Root::Global | Root::Runner(_))
@@ -261,6 +273,21 @@ impl Scan<'_> {
         matches!(self.allow_root(expression), Some(Root::Runner(_)))
     }
 
+    pub(super) fn timer_member<'e, 'a>(
+        &self,
+        expression: &'e Expression<'a>,
+    ) -> Option<&'e Expression<'a>> {
+        let (object, key) = member_of(expression)?;
+        let timer = match key {
+            Key::Name(name) => TIMERS.contains(&name),
+            Key::Other => false,
+            Key::Unknown(key) => self
+                .known_key(key)
+                .is_some_and(|name| TIMERS.contains(&name.as_str())),
+        };
+        timer.then_some(object)
+    }
+
     fn timer_root(&self, expression: &Expression<'_>) -> bool {
         matches!(self.allow_root(expression), Some(Root::Runner(name)) if TIMERS.contains(&name))
     }
@@ -288,6 +315,9 @@ impl Scan<'_> {
         }
         if self.is_code_runner_name(callee) || self.is_reached(callee) {
             return true;
+        }
+        if self.timer_member(callee).is_some() {
+            return !self.calls_back(arguments.first());
         }
         let named = |names: &[&str]| match callee.without_parentheses() {
             Expression::Identifier(id) => self.global_named(id, names),
