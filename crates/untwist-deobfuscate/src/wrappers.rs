@@ -31,6 +31,7 @@ use crate::init_order::{lend_order_with, note_overflow, sharing_mark, Declaratio
 use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
 use crate::proof::{has_with_statement, refuse_annex_b_bindings};
+use crate::root_reach::reached_roots;
 use crate::stamp::{find_stamped_named, is_unedited};
 use crate::units::MachineryDepth;
 use crate::wrapper_calls::inline_function_wrappers;
@@ -312,6 +313,7 @@ struct VariablePlan<'a> {
     objects: Vec<(Span, Vec<Span>, Ident<'a>)>,
     collapses: Vec<(Span, Ident<'a>)>,
     kept_statements: FxHashSet<Span>,
+    globally_reached: FxHashSet<SymbolId>,
 }
 
 fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {
@@ -577,7 +579,7 @@ fn variable_alias_plan<'a>(
     wanted: AliasTargets<'_>,
 ) -> VariablePlan<'a> {
     let mut plan = VariablePlan::default();
-    let (targets, keeps_machinery) = match wanted {
+    let (mut targets, keeps_machinery) = match wanted {
         AliasTargets::Decoders => (decoder_targets(program, cx), false),
         AliasTargets::Wrappers(kept) => (wrapper_targets(cx, kept), true),
     };
@@ -605,14 +607,48 @@ fn variable_alias_plan<'a>(
     };
     #[cfg(debug_assertions)]
     record_alias_facts(&sites, &facts);
+    choose_aliases(&sites, &targets, &facts, cx.scoping(), &mut plan);
+    if refuse_globally_reached(program, cx, &forms.objects, &mut targets, &mut plan) {
+        choose_aliases(&sites, &targets, &facts, cx.scoping(), &mut plan);
+    }
+
+    collect_leftovers(&sites, &targets, &facts, cx.scoping(), &mut plan);
+    let checked = !cx.opts.rule_disabled(ALIAS_FORM_CHECKS);
+    if !keeps_machinery && checked && keeps_script_global_aliases(program, cx) {
+        plan.kept_statements = script_global_statements(&sites, &forms.objects, cx.scoping());
+        drop_unread_kept_aliases(program, &mut plan, cx.scoping());
+    }
+    if !keeps_machinery {
+        plan.objects = object_rewrites(program, &forms.objects, &targets, &facts, cx, &mut plan);
+    }
+    plan.collapses = sequence_collapses(&forms, &targets, &plan, cx.scoping(), checked);
+    plan.declarations = facts.declarations.found;
+    plan
+}
+
+fn choose_aliases<'a>(
+    sites: &[AliasSite],
+    targets: &FxHashMap<SymbolId, Ident<'a>>,
+    facts: &AliasFacts,
+    scoping: &Scoping,
+    plan: &mut VariablePlan<'a>,
+) {
+    let mut noted: FxHashSet<SymbolId> = FxHashSet::default();
     let mut progressed = true;
     while progressed {
         progressed = false;
-        for site in &sites {
-            let Some(name) = alias_target(site, &targets, &plan) else {
+        for site in sites {
+            let Some(name) = alias_target(site, targets, plan) else {
                 continue;
             };
-            if rejection(site, &facts, cx.scoping()).is_some() {
+            if rejection(site, facts, scoping).is_some() {
+                continue;
+            }
+            if plan.globally_reached.contains(&site.symbol) {
+                if noted.insert(site.symbol) {
+                    plan.rejected
+                        .push((site.statement, notes::WRAPPER_ALIAS_GLOBAL_REACH));
+                }
                 continue;
             }
             plan.aliases.insert(site.symbol, name);
@@ -621,19 +657,34 @@ fn variable_alias_plan<'a>(
             progressed = true;
         }
     }
+}
 
-    collect_leftovers(&sites, &targets, &facts, cx.scoping(), &mut plan);
-    let checked = !cx.opts.rule_disabled(ALIAS_FORM_CHECKS);
-    if !keeps_machinery && checked && keeps_script_global_aliases(program, cx) {
-        plan.kept_statements = script_global_statements(&sites, &forms.objects, cx.scoping());
-        drop_unread_kept_aliases(&mut plan, cx.scoping());
-    }
-    if !keeps_machinery {
-        plan.objects = object_rewrites(program, &forms.objects, &targets, &facts, cx, &mut plan);
-    }
-    plan.collapses = sequence_collapses(&forms, &targets, &plan, cx.scoping(), checked);
-    plan.declarations = facts.declarations.found;
-    plan
+fn refuse_globally_reached<'a>(
+    program: &Program<'_>,
+    cx: &Cx<'a, '_>,
+    objects: &[ObjectAlias],
+    targets: &mut FxHashMap<SymbolId, Ident<'a>>,
+    plan: &mut VariablePlan<'a>,
+) -> bool {
+    let objects = objects
+        .iter()
+        .filter(|object| known_target(object.source, targets, plan).is_some())
+        .map(|object| object.symbol);
+    let bindings: Vec<SymbolId> = plan
+        .chosen
+        .iter()
+        .map(|(symbol, _, _)| *symbol)
+        .chain(objects)
+        .collect();
+    let wanted: Vec<SymbolId> = targets.keys().copied().collect();
+    let Some(reached) = reached_roots(program, cx, &wanted, &bindings) else {
+        return false;
+    };
+    targets.retain(|symbol, _| !reached.targets.contains(symbol));
+    plan.aliases.clear();
+    plan.chosen.clear();
+    plan.globally_reached = reached.bindings;
+    true
 }
 
 fn keeps_script_global_aliases(program: &Program<'_>, cx: &Cx<'_, '_>) -> bool {
@@ -664,13 +715,14 @@ fn script_global_statements(
         .collect()
 }
 
-fn drop_unread_kept_aliases(plan: &mut VariablePlan<'_>, scoping: &Scoping) {
+fn drop_unread_kept_aliases(program: &Program<'_>, plan: &mut VariablePlan<'_>, scoping: &Scoping) {
     let unread: FxHashSet<SymbolId> = plan
         .chosen
         .iter()
-        .filter(|(symbol, statement, _)| {
+        .filter(|(symbol, statement, expression)| {
             plan.kept_statements.contains(statement)
                 && scoping.get_resolved_reference_ids(*symbol).is_empty()
+                && wrapped_init(program, (*statement, *expression)).is_none()
         })
         .map(|(symbol, _, _)| *symbol)
         .collect();
@@ -682,11 +734,10 @@ fn drop_unread_kept_aliases(plan: &mut VariablePlan<'_>, scoping: &Scoping) {
     plan.aliases.retain(|symbol, _| !unread.contains(symbol));
 }
 
-fn kept_init<'a>(
-    program: &Program<'a>,
-    plan: &VariablePlan<'a>,
-    (symbol, statement, expression): (SymbolId, Span, Option<Span>),
-) -> Option<(Span, Ident<'a>)> {
+fn wrapped_init(
+    program: &Program<'_>,
+    (statement, expression): (Span, Option<Span>),
+) -> Option<Span> {
     if expression.is_some() {
         return None;
     }
@@ -697,10 +748,16 @@ fn kept_init<'a>(
         return None;
     };
     let init = declarator.init.as_ref()?;
-    if matches!(init, Expression::Identifier(_)) {
-        return None;
-    }
-    Some((init.span(), *plan.aliases.get(&symbol)?))
+    (!matches!(init, Expression::Identifier(_))).then(|| init.span())
+}
+
+fn kept_init<'a>(
+    program: &Program<'a>,
+    plan: &VariablePlan<'a>,
+    (symbol, statement, expression): (SymbolId, Span, Option<Span>),
+) -> Option<(Span, Ident<'a>)> {
+    let init = wrapped_init(program, (statement, expression))?;
+    Some((init, *plan.aliases.get(&symbol)?))
 }
 
 fn kept_bindings<'a>(plan: &VariablePlan<'a>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {
@@ -756,6 +813,11 @@ fn object_rewrites<'a>(
         let Some(name) = known_target(object.source, targets, plan) else {
             continue;
         };
+        if plan.globally_reached.contains(&object.symbol) {
+            plan.rejected
+                .push((object.statement, notes::WRAPPER_ALIAS_GLOBAL_REACH));
+            continue;
+        }
         let site = AliasSite {
             symbol: object.symbol,
             source: object.source,

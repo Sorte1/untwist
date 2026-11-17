@@ -47,6 +47,9 @@ pub const WRAPPER_ALIAS_NOT_AN_IDENTIFIER: &str =
 pub const WRAPPER_ALIAS_NO_SPAN: &str = "the alias assignment has no usable span";
 pub const WRAPPER_ALIAS_READ_BEFORE_THE_ALIAS: &str =
     "the alias may be read before its declaration runs, so it was left in place";
+pub const WRAPPER_ALIAS_GLOBAL_REACH: &str =
+    "code that may hold the global object, or code from text, may read or write this top-level \
+     alias or the function it names by its name, so it was left in place";
 pub const WRAPPER_ALIAS_SELF_ASSIGNMENT: &str =
     "a self-assignment of the decoder was left in place";
 pub const WRAPPER_OBJECT_ALIAS_THIS: &str =
@@ -70,6 +73,9 @@ pub const WRAPPER_SITE_IMPURE_ARGUMENT: &str =
 pub const WRAPPER_BODY_NOT_SELF_CONTAINED: &str =
     "the wrapper body reads something other than its own parameters and the stamped machinery, so \
      the clone would resolve it in the call site's scope and it was left in place";
+pub const WRAPPER_GLOBAL_REACH: &str =
+    "code that may hold the global object, or code from text, may read or write this top-level \
+     wrapper by its name, so a call may reach another function and it was left in place";
 pub const WRAPPER_BINDING_UNSTABLE: &str =
     "the wrapper's binding is written again, or it is declared in a block whose name code outside \
      the block may reach, so a call may reach another function and it was left in place";
@@ -612,6 +618,7 @@ catalogue!(
     WRAPPER_ALIAS_EXTRA_WRITES,
     WRAPPER_ALIAS_READ_BEFORE_THE_ALIAS,
     WRAPPER_ALIAS_SELF_ASSIGNMENT,
+    WRAPPER_ALIAS_GLOBAL_REACH,
     WRAPPER_OBJECT_ALIAS_THIS,
     WRAPPER_OBJECT_ALIAS_OTHER_USE,
     WRAPPER_SITE_KEPT,
@@ -621,6 +628,7 @@ catalogue!(
     WRAPPER_SITE_IMPURE_ARGUMENT,
     WRAPPER_BODY_NOT_SELF_CONTAINED,
     WRAPPER_BINDING_UNSTABLE,
+    WRAPPER_GLOBAL_REACH,
     WRAPPER_SIGNATURE_NOT_PLAIN,
     WRAPPER_READ_BEFORE_DECLARATION,
     WRAPPER_PARTIAL,

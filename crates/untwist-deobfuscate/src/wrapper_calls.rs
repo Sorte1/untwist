@@ -25,6 +25,7 @@ use crate::primitive_names::PrimitiveNames;
 use crate::probe::{expression_contains, holds_own_scope};
 use crate::proof::kept_in_its_block;
 use crate::proof::refuse_annex_b_bindings;
+use crate::root_reach::reached_roots;
 use crate::stamp::{declaration_symbol, decoder_index, is_machinery_name};
 use crate::units::MachineryDepth;
 use crate::wrapper_args::{kinds_fit, SiteView};
@@ -583,6 +584,27 @@ fn is_own_block_function(
         })
 }
 
+fn refuse_globally_reached_wrappers(
+    program: &Program<'_>,
+    cx: &Cx<'_, '_>,
+    found: &mut Vec<WrapperShape>,
+    rejected: &mut Rejected,
+) {
+    let symbols: Vec<SymbolId> = found.iter().map(|shape| shape.symbol).collect();
+    let Some(reached) = reached_roots(program, cx, &[], &symbols) else {
+        return;
+    };
+    let (refused, kept): (Vec<_>, Vec<_>) = std::mem::take(found)
+        .into_iter()
+        .partition(|shape| reached.bindings.contains(&shape.symbol));
+    *found = kept;
+    rejected.extend(
+        refused
+            .into_iter()
+            .map(|shape| (shape.statement, notes::WRAPPER_GLOBAL_REACH)),
+    );
+}
+
 fn find_wrappers(
     program: &Program<'_>,
     cx: &mut Cx<'_, '_>,
@@ -609,6 +631,7 @@ fn find_wrappers(
     promote_forwarders(forwarders, &mut found, cx.scoping());
     refuse_annex_b_wrappers(program, cx.scoping(), &mut found, &mut rejected);
     refuse_var_wrappers_read_early(program, cx.scoping(), &mut found, &mut rejected);
+    refuse_globally_reached_wrappers(program, cx, &mut found, &mut rejected);
     if checked {
         let site = |shape: &WrapperShape| (shape.statement, [shape.symbol]);
         refuse_annex_b_bindings(&mut found, site, program, cx);

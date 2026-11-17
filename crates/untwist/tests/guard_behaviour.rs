@@ -311,6 +311,7 @@ fn the_site_memo_reset_sample_loses_its_self_defending_check_under_unsafe() {
     let refusals = [
         untwist_deobfuscate::notes::BUILTIN_ALIAS_PATCHED,
         untwist_deobfuscate::notes::STRING_ARRAY_GLOBAL_REACH,
+        "decoder machinery kept",
     ];
     assert!(
         default.notes.iter().any(|note| refusals

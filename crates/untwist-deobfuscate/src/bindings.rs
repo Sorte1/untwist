@@ -113,7 +113,7 @@ pub fn reaches_a_script_global(
         return false;
     };
     untwist_core::semantic::observing_open(|| {
-        names_reached_beside_machinery(program, scoping, (&names, &props), removed)
+        names_reached_beside(program, scoping, (&names, &props), removed)
     })
 }
 
@@ -135,7 +135,7 @@ pub fn reaches_a_script_global_once_removed<'a>(
         .build(&pruned)
         .semantic
         .into_scoping();
-    names_reached_beside_machinery(&pruned, &scoping, (&names, &props), &[])
+    names_reached_beside(&pruned, &scoping, (&names, &props), &[])
 }
 
 fn script_global_names<'s>(
@@ -170,16 +170,13 @@ fn script_global_names<'s>(
     Some((names, props))
 }
 
-fn names_reached_beside_machinery(
+fn names_reached_beside(
     program: &Program<'_>,
     scoping: &Scoping,
     (names, props): (&[&str], &[&str]),
     removed: &[Span],
 ) -> bool {
-    let mut outside: Vec<Span> = crate::removal::machinery_units(program)
-        .iter()
-        .flat_map(crate::removal::Machinery::statements)
-        .collect();
+    let mut outside = crate::removal::removable_machinery(program, scoping);
     outside.extend_from_slice(removed);
     let found =
         crate::calls::agnostic::names_reached_outside(program, scoping, (names, props), &outside);

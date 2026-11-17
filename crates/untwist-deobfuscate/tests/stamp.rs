@@ -81,7 +81,9 @@ fn wrappers_find_the_decoders_stamped_earlier_in_the_same_traversal() {
         ],
         untwist_core::pass::PassOptions::default(),
     );
+    untwist_deobfuscate::mutants::trust_root_alias_reach_for_tests(true);
     untwist_core::pass::run_once(&alloc, &mut program, sem, &mut group);
+    untwist_deobfuscate::mutants::trust_root_alias_reach_for_tests(false);
     let code = untwist_core::print::print(&program, untwist_core::print::PrintStyle::Pretty);
     assert!(code.contains("console.log(__DECODE_0__(0));"), "{code}");
 }
