@@ -290,9 +290,13 @@ An input is taken as an ES module, as node 22 takes it, when it is named `.mjs`,
 `require`, `exports`, `module`, `__filename` or `__dirname` with a top-level `let`, `const` or `class`,
 which node's CommonJS wrapper does not allow. A `.cjs` input is always a script, as in node. Any
 other `.js` input is a script or CommonJS, also one that parses only by calling a global named
-`await` (`await (x)`). An input that node 22 rejects with a SyntaxError is passed through unchanged
-with an error: an early error (a legacy octal literal in strict code, an invalid regular
-expression pattern, a parenthesised destructuring target), syntax node 22 does not read (`using`,
+`await` (`await (x)`). Untwist decides between script and module from the file extension and the
+text only: it does not read the `"type"` field of the nearest `package.json`, so a `.js` file under
+`"type": "module"` (or a `.js` file with module syntax under `"type": "commonjs"`) is processed as
+node would process it with no `package.json`; name such a file `.mjs` or `.cjs`. An input that
+node 22 rejects with a SyntaxError is passed through unchanged with an error: an early error (a
+legacy octal literal in strict code, an invalid regular expression pattern, a parenthesised
+destructuring target), syntax node 22 does not read (`using`,
 decorators, `accessor`, `import defer`/`source`, `assert` import attributes, regular expression
 modifiers and repeated group names), and `<!--` in module code. Only the checks that a corpus of
 probes run against node 22 shows node also makes refuse an input, so for example a legacy octal

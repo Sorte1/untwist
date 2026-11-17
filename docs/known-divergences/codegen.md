@@ -197,6 +197,10 @@ fixture that then joins the differential.
   fails there, and node then runs the file as an ES module. A text that parses as a script stays one otherwise,
   also when it calls a global named `await` (`await (f)()`), as in node, which then throws for the undefined
   `await`. Such a module needs a `.mjs` name or module syntax to be read as one.
+  Untwist decides between script and module from the file extension and the text only: it does not read the
+  `"type"` field of the nearest `package.json`, so a `.js` file under `"type": "module"` (or a `.js` file with
+  module syntax under `"type": "commonjs"`) is processed as node would process it with no `package.json`. Name such
+  a file `.mjs` or `.cjs`; the CLI has no flag that sets the goal.
 - **An input that node rejects with a SyntaxError is passed through unchanged, with an error.** This covers the
   early errors oxc's parser and semantic checker report (a legacy octal literal or escape, `with`, `delete x`, an
   assignment to `eval` or a duplicate parameter in strict code, a redeclared `let`, an undefined label, ...), a
