@@ -26,13 +26,13 @@ const PREMISE_ROWS: [(&str, &[&str]); 16] = [
     ("r5esbargv", UNSAFE),
     ("r5esbargvs", UNSAFE),
 ];
-const RUNNER_PREMISE_ROWS: [&str; 59] = [
+const RUNNER_PREMISE_ROWS: [&str; 61] = [
     "r6bsc", "r6c1", "r6c2", "r6c3", "r6c4", "r6c5", "r6c6", "r6c7", "r6d1", "r6d2", "r6d3",
     "r6d4", "r6d5", "r6d6", "r6d7", "r6d8", "r6d9", "r6e1", "r6e10", "r6e11", "r6e12", "r6e5",
     "r6e6", "r6escs", "r6g1", "r6g10", "r6g2", "r6g3", "r6g4", "r6g5", "r6g6", "r6g7", "r6g8",
     "r6g9", "r6k1", "r6k2", "r6k3", "r6k5", "r6k6", "r6k7", "r6k8", "r6k9", "r6rdc", "r6t1",
-    "r6t2", "r6t3", "r6t4", "r6t5", "r7hv1", "r7n1", "r7n2", "r7n3", "r7rb1", "r7rb2", "r7rd1",
-    "r7rd2", "r7rd3", "r7sp1", "r7sp2",
+    "r6t2", "r6t3", "r6t4", "r6t5", "r7hv1", "r7l1", "r7l2", "r7n1", "r7n2", "r7n3", "r7rb1",
+    "r7rb2", "r7rd1", "r7rd2", "r7rd3", "r7sp1", "r7sp2",
 ];
 const DISPATCH_PREMISE_ROWS: [&str; 7] = ["e1", "e2", "r4n10", "r5pr1", "r5pr2", "r5pr4", "r5pr11"];
 const PROTOTYPE_PREMISE_ROWS: [&str; 9] = ["a27", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"];
@@ -237,7 +237,7 @@ fn host_route_probes_run_like_their_bundles_in_both_lanes() {
         return;
     };
     let inputs = inputs(ROUTE_INPUTS);
-    assert!(inputs.len() >= 162, "found {} inputs", inputs.len());
+    assert!(inputs.len() >= 164, "found {} inputs", inputs.len());
     let wrong = parity_failures(&node, &inputs);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
