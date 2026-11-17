@@ -2,9 +2,11 @@ use oxc_allocator::{Address, GetAddress};
 use oxc_ast::ast::*;
 use oxc_ast::AstKind;
 use oxc_syntax::symbol::SymbolFlags;
+use std::borrow::Cow;
 
 use super::{
-    function_literal, member_key, same, transparent, Walker, GLOBAL_RECEIVER_READERS, NAMESPACE,
+    function_literal, member_address, member_key, same, transparent, unsafe_read, Walker,
+    GLOBAL_RECEIVER_READERS, KIND_DEPTH, NAMESPACE, VALUE,
 };
 
 const FORWARDERS: [&str; 3] = ["call", "apply", "bind"];
@@ -88,5 +90,58 @@ impl<'s, 'a> Walker<'s, 'a> {
                     .is_some_and(|name| GLOBAL_RECEIVER_READERS.contains(&name.as_ref()))
             }),
         }
+    }
+
+    pub(super) fn member_use(&self, at: usize, kind: u8) -> bool {
+        if kind & VALUE != 0 {
+            return false;
+        }
+        if kind & NAMESPACE == 0 {
+            return true;
+        }
+        let member = &self.stack[at];
+        let address = member.address();
+        let key = match member {
+            AstKind::StaticMemberExpression(m) => Some(Cow::Borrowed(m.property.name.as_str())),
+            AstKind::ComputedMemberExpression(m) => {
+                self.key_text(&m.expression, KIND_DEPTH).map(Cow::Owned)
+            }
+            _ => None,
+        };
+        if self.called_or_written(at, address) {
+            return true;
+        }
+        if key.as_deref().is_some_and(|key| !unsafe_read(key)) {
+            return true;
+        }
+        self.allowed(at, VALUE)
+    }
+
+    fn called_or_written(&self, at: usize, member: Address) -> bool {
+        let mut child = member;
+        let mut up = at;
+        while up > 0 {
+            up -= 1;
+            match &self.stack[up] {
+                kind if transparent(kind) => child = kind.address(),
+                AstKind::CallExpression(c) => return c.callee.address() == child,
+                AstKind::NewExpression(n) => return n.callee.address() == child,
+                AstKind::AssignmentExpression(a) => {
+                    return a
+                        .left
+                        .as_member_expression()
+                        .is_some_and(|m| member_address(m) == member)
+                }
+                AstKind::UpdateExpression(_)
+                | AstKind::ArrayAssignmentTarget(_)
+                | AstKind::AssignmentTargetWithDefault(_)
+                | AstKind::AssignmentTargetPropertyProperty(_)
+                | AstKind::AssignmentTargetRest(_) => return true,
+                AstKind::ForInStatement(f) => return !same(&f.right, child),
+                AstKind::ForOfStatement(f) => return !same(&f.right, child),
+                _ => return false,
+            }
+        }
+        false
     }
 }
