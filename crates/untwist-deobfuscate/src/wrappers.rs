@@ -616,7 +616,7 @@ fn variable_alias_plan<'a>(
     let checked = !cx.opts.rule_disabled(ALIAS_FORM_CHECKS);
     if !keeps_machinery && checked && keeps_script_global_aliases(program, cx) {
         plan.kept_statements = script_global_statements(&sites, &forms.objects, cx.scoping());
-        drop_unread_kept_aliases(&mut plan, cx.scoping());
+        drop_unread_kept_aliases(program, &mut plan, cx.scoping());
     }
     if !keeps_machinery {
         plan.objects = object_rewrites(program, &forms.objects, &targets, &facts, cx, &mut plan);
@@ -715,13 +715,14 @@ fn script_global_statements(
         .collect()
 }
 
-fn drop_unread_kept_aliases(plan: &mut VariablePlan<'_>, scoping: &Scoping) {
+fn drop_unread_kept_aliases(program: &Program<'_>, plan: &mut VariablePlan<'_>, scoping: &Scoping) {
     let unread: FxHashSet<SymbolId> = plan
         .chosen
         .iter()
-        .filter(|(symbol, statement, _)| {
+        .filter(|(symbol, statement, expression)| {
             plan.kept_statements.contains(statement)
                 && scoping.get_resolved_reference_ids(*symbol).is_empty()
+                && wrapped_init(program, (*statement, *expression)).is_none()
         })
         .map(|(symbol, _, _)| *symbol)
         .collect();
@@ -733,11 +734,10 @@ fn drop_unread_kept_aliases(plan: &mut VariablePlan<'_>, scoping: &Scoping) {
     plan.aliases.retain(|symbol, _| !unread.contains(symbol));
 }
 
-fn kept_init<'a>(
-    program: &Program<'a>,
-    plan: &VariablePlan<'a>,
-    (symbol, statement, expression): (SymbolId, Span, Option<Span>),
-) -> Option<(Span, Ident<'a>)> {
+fn wrapped_init(
+    program: &Program<'_>,
+    (statement, expression): (Span, Option<Span>),
+) -> Option<Span> {
     if expression.is_some() {
         return None;
     }
@@ -748,10 +748,16 @@ fn kept_init<'a>(
         return None;
     };
     let init = declarator.init.as_ref()?;
-    if matches!(init, Expression::Identifier(_)) {
-        return None;
-    }
-    Some((init.span(), *plan.aliases.get(&symbol)?))
+    (!matches!(init, Expression::Identifier(_))).then(|| init.span())
+}
+
+fn kept_init<'a>(
+    program: &Program<'a>,
+    plan: &VariablePlan<'a>,
+    (symbol, statement, expression): (SymbolId, Span, Option<Span>),
+) -> Option<(Span, Ident<'a>)> {
+    let init = wrapped_init(program, (statement, expression))?;
+    Some((init, *plan.aliases.get(&symbol)?))
 }
 
 fn kept_bindings<'a>(plan: &VariablePlan<'a>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {

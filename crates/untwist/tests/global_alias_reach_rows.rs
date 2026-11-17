@@ -5,7 +5,7 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const WRITTEN_IN_BOTH_LANES: &[&str] = &[
     "ka03", "ka04", "ka05", "ka07", "ka11", "ka12", "ka15", "ka16", "ka17", "kl03", "ko01", "kw01",
-    "kw02", "kw03", "kw04", "al6", "al7", "wf0", "wf1", "wf2", "wf4",
+    "kw02", "kw03", "kw04", "al6", "al7", "iife", "wf0", "wf1", "wf2", "wf4",
 ];
 
 const DEFAULT_LANE_ONLY: &[&str] = &[
@@ -73,6 +73,8 @@ fn aliases_and_wrappers_nothing_reaches_are_still_inlined_and_decoded() {
         let wrapped = run(unsafe_transforms, RenameMode::None, &source("wf0"));
         assert!(wrapped.contains("\"hello, \""), "{wrapped}");
         assert!(!wrapped.contains("_0x463d34"), "{wrapped}");
+        let unread = run(unsafe_transforms, RenameMode::None, &source("iife"));
+        assert!(!unread.contains("_0x5258"), "{unread}");
         let refused = run(unsafe_transforms, RenameMode::None, &source("al7"));
         assert!(refused.contains("_0x44e3e4"), "{refused}");
     }
