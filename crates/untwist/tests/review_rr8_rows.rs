@@ -103,6 +103,7 @@ fn every_a33_rr8_call_site_probe_prints_what_node_prints() {
 fn obfuscator_io_call_sites_are_still_removed_in_every_lane() {
     for label in [
         "700", "703", "715", "716", "731", "733", "764", "766", "784", "743", "787", "789", "790",
+        "794", "795", "796", "806",
     ] {
         let source =
             std::fs::read_to_string(PathBuf::from(DATA).join(format!("{label}.js"))).unwrap();
@@ -110,5 +111,17 @@ fn obfuscator_io_call_sites_are_still_removed_in_every_lane() {
             let code = transformed(lane, &source);
             assert!(!code.contains("apply"), "{label} ({name}): {code}");
         }
+    }
+}
+
+#[test]
+fn a_registration_outside_the_called_body_shape_is_kept_by_default() {
+    for label in [
+        "797", "798", "799", "800", "801", "802", "803", "804", "805", "807",
+    ] {
+        let source =
+            std::fs::read_to_string(PathBuf::from(DATA).join(format!("{label}.js"))).unwrap();
+        let code = transformed(Lane::Default, &source);
+        assert!(code.contains("apply"), "{label}: {code}");
     }
 }

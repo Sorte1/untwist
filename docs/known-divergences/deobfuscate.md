@@ -710,7 +710,12 @@
   list (or of such a body, nested), when nothing before the controller in its list can run code
   (function declarations, declarations without a value or with a literal or function value, a
   local flag set to a literal; not at the top level of a module), as obfuscator.io places the
-  check inside a function it found on the call graph; every bare `s()` is a later statement of
+  check inside a function it found on the call graph; or it opens, alone or in a run of such
+  registrations each followed by its `s()`, the body of a parameterless, non-async, non-generator function or block-bodied arrow called at once
+  with no arguments as the value of a single declaration that is a later statement of the
+  controller's list, with only function declarations and declarations without a value or with a
+  literal or function value between the two, as obfuscator.io applied again places the check
+  inside the next controller's own function; every bare `s()` is a later statement of
   the list that declares `s`; the call has exactly two arguments, no spread,
   `this` or a literal first and a function or arrow expression second, and `c(…)()` passes
   nothing; and no statement of the construct sits inside a `with` body. Anything else keeps the

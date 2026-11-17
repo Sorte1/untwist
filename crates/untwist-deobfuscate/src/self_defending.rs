@@ -591,6 +591,30 @@ fn is_inert_statement(stmt: &Statement<'_>) -> bool {
     }
 }
 
+fn called_body<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k AVec<'a, Statement<'a>>> {
+    let (_, init) = single_declarator(stmt)?;
+    let (callee, arguments) = call_parts(init?.without_parentheses())?;
+    if !arguments.is_empty() {
+        return None;
+    }
+    match callee.without_parentheses() {
+        Expression::FunctionExpression(function)
+            if has_no_params(function) && is_plain_function(function) =>
+        {
+            Some(&function.body.as_ref()?.statements)
+        }
+        Expression::ArrowFunctionExpression(arrow)
+            if !arrow.r#async && arrow.params.items.is_empty() && arrow.params.rest.is_none() =>
+        {
+            match &arrow.body {
+                ArrowFunctionBody::FunctionBody(body) => Some(&body.statements),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 fn hoisted_body<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k AVec<'a, Statement<'a>>> {
     let Statement::FunctionDeclaration(function) = stmt else {
         return None;
@@ -834,26 +858,78 @@ impl Removals<'_> {
         found
     }
 
-    fn visit_list<'a>(&mut self, it: &AVec<'a, Statement<'a>>, reachable: FxHashSet<SymbolId>) {
+    fn visit_list<'a>(
+        &mut self,
+        it: &AVec<'a, Statement<'a>>,
+        reachable: FxHashSet<SymbolId>,
+        leading: FxHashSet<SymbolId>,
+    ) {
         let mut inherited = self.declared_first(it);
         inherited.extend(reachable.iter().copied());
+        let mut opening = reachable.clone();
+        opening.extend(leading);
         self.frames.push(Frame {
             declared: FxHashSet::default(),
-            reachable,
+            reachable: opening,
         });
+        let mut armed = FxHashSet::default();
+        let mut opening_run = true;
         for (at, stmt) in it.iter().enumerate() {
+            if opening_run && at > 0 && !self.spans.contains(&it[at - 1].span()) {
+                opening_run = false;
+                if let Some(frame) = self.frames.last_mut() {
+                    frame.reachable.clone_from(&reachable);
+                }
+            }
             match self.record(stmt) {
                 Some(Some(variable)) if !self.placed_anywhere => {
                     self.remove_later_calls(&it[at + 1..], variable);
                 }
                 Some(_) => {}
-                None => match hoisted_body(stmt) {
-                    Some(body) => self.visit_list(body, inherited.clone()),
-                    None => walk_js::walk_statement(self, stmt),
-                },
+                None => self.visit_unrecorded(stmt, &inherited, &armed),
             }
+            armed = self.armed_after(stmt, armed);
         }
         self.frames.pop();
+    }
+
+    fn visit_unrecorded<'a>(
+        &mut self,
+        stmt: &Statement<'a>,
+        inherited: &FxHashSet<SymbolId>,
+        armed: &FxHashSet<SymbolId>,
+    ) {
+        if let Some(body) = hoisted_body(stmt) {
+            self.visit_list(body, inherited.clone(), FxHashSet::default());
+            return;
+        }
+        match called_body(stmt) {
+            Some(body) if !armed.is_empty() => {
+                self.visit_list(body, FxHashSet::default(), armed.clone());
+            }
+            _ => walk_js::walk_statement(self, stmt),
+        }
+    }
+
+    fn armed_after(
+        &self,
+        stmt: &Statement<'_>,
+        mut armed: FxHashSet<SymbolId>,
+    ) -> FxHashSet<SymbolId> {
+        if self.with_depth > 0 {
+            return FxHashSet::default();
+        }
+        let declared = single_declarator(stmt)
+            .and_then(|(id, _)| id.symbol_id.get())
+            .filter(|symbol| self.controllers.contains(symbol));
+        match declared {
+            Some(symbol) => {
+                armed.insert(symbol);
+                armed
+            }
+            None if is_inert_statement(stmt) => armed,
+            None => FxHashSet::default(),
+        }
     }
 
     fn remove_later_calls(&mut self, later: &[Statement<'_>], variable: SymbolId) {
@@ -867,7 +943,7 @@ impl Removals<'_> {
 
 impl<'a> VisitJs<'a> for Removals<'_> {
     fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
-        self.visit_list(it, FxHashSet::default());
+        self.visit_list(it, FxHashSet::default(), FxHashSet::default());
     }
 
     fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
