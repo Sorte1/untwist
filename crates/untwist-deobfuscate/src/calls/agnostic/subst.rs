@@ -101,7 +101,11 @@ impl<'s, 'a> Sites<'s, 'a> {
             ) else {
                 return false;
             };
-            if aliased || self.fresh.scoping.symbol_is_mutated(symbol) {
+            let scoping = self.fresh.scoping;
+            if aliased
+                || scoping.symbol_is_mutated(symbol)
+                || !scoping.symbol_redeclarations(symbol).is_empty()
+            {
                 continue;
             }
             let arg = self.alloc_expr(arg);
