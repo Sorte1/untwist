@@ -6,7 +6,7 @@ use oxc_syntax::symbol::SymbolId;
 use super::*;
 
 impl<'a> Reach<'_, 'a> {
-    pub(super) fn getter(&self, at: usize, held: Held<'a>) -> bool {
+    pub(super) fn getter(&mut self, at: usize, held: Held<'a>) -> bool {
         let (Held::Read(Some(key)), AstKind::ArrowFunctionExpression(arrow)) =
             (held, self.stack[at])
         else {
@@ -17,7 +17,8 @@ impl<'a> Reach<'_, 'a> {
         };
         match self.stack[up] {
             AstKind::ObjectProperty(_) => {
-                self.getter_target(up, child, key) || self.proxy_trap(up, arrow, key)
+                let source = self.read_source(arrow);
+                self.getter_target(up, child, key, source) || self.proxy_trap(up, arrow, key)
             }
             AstKind::StaticMemberExpression(member) if member.property.name == "bind" => {
                 self.bound_getter(up, arrow, key)
@@ -27,7 +28,7 @@ impl<'a> Reach<'_, 'a> {
     }
 
     pub(super) fn bound_getter(
-        &self,
+        &mut self,
         at: usize,
         arrow: &ArrowFunctionExpression<'a>,
         key: &Expression<'a>,
@@ -65,12 +66,13 @@ impl<'a> Reach<'_, 'a> {
         let Some((property, child)) = self.parent(up) else {
             return false;
         };
+        let source = self.read_source(arrow);
         matches!(self.stack[property], AstKind::ObjectProperty(_))
-            && self.getter_target(property, child, bound)
+            && self.getter_target(property, child, bound, source)
     }
 
     pub(super) fn proxy_trap(
-        &self,
+        &mut self,
         at: usize,
         arrow: &ArrowFunctionExpression<'a>,
         key: &Expression<'a>,
@@ -100,22 +102,40 @@ impl<'a> Reach<'_, 'a> {
         let Some((up, _)) = self.parent(object_at) else {
             return false;
         };
-        let proxy = match self.stack[up] {
-            AstKind::NewExpression(call) => {
-                matches!(call.callee.without_parentheses(), Expression::Identifier(id)
-                    if id.name == PROXY && self.symbol(id).is_none())
-                    && call
-                        .arguments
-                        .get(1)
-                        .and_then(Argument::as_expression)
-                        .is_some_and(|handler| same(handler, object))
-            }
-            _ => false,
+        let AstKind::NewExpression(call) = self.stack[up] else {
+            return false;
         };
-        keyed && named_get && proxy
+        let proxy = matches!(call.callee.without_parentheses(), Expression::Identifier(id)
+            if id.name == PROXY && self.symbol(id).is_none())
+            && call
+                .arguments
+                .get(1)
+                .and_then(Argument::as_expression)
+                .is_some_and(|handler| same(handler, object));
+        let first = arrow
+            .params
+            .items
+            .first()
+            .and_then(|param| match &param.pattern {
+                BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
+                _ => None,
+            });
+        let reads_target = first.is_some() && self.read_source(arrow) == first;
+        let target = call
+            .arguments
+            .first()
+            .and_then(Argument::as_expression)
+            .and_then(|target| self.identifier_symbol(target));
+        keyed && named_get && proxy && reads_target && self.source_carries(target).is_none()
     }
 
-    pub(super) fn getter_target(&self, at: usize, child: Address, key: &Expression<'_>) -> bool {
+    pub(super) fn getter_target(
+        &mut self,
+        at: usize,
+        child: Address,
+        key: &'a Expression<'a>,
+        source: Option<SymbolId>,
+    ) -> bool {
         let AstKind::ObjectProperty(property) = self.stack[at] else {
             return false;
         };
@@ -148,10 +168,13 @@ impl<'a> Reach<'_, 'a> {
             .get(1)
             .and_then(Argument::as_expression)
             .is_some_and(|named| self.keys().same_key(key, named));
-        matches!(self.stack[object_at], AstKind::ObjectExpression(_))
-            && descriptor
+        let AstKind::ObjectExpression(object) = self.stack[object_at] else {
+            return false;
+        };
+        descriptor
             && same_key
             && self.defines(call)
+            && self.getter_carries(call, object, source, key)
     }
 
     pub(super) fn passed_on(
@@ -204,7 +227,12 @@ impl<'a> Reach<'_, 'a> {
         }
     }
 
-    pub(super) fn sink(&self, call: &CallExpression<'a>, child: Address, held: Held<'a>) -> bool {
+    pub(super) fn sink(
+        &mut self,
+        call: &'a CallExpression<'a>,
+        child: Address,
+        held: Held<'a>,
+    ) -> bool {
         let free_callee = |names: &[&str], expr: &Expression<'_>| {
             matches!(expr.without_parentheses(), Expression::Identifier(id)
                 if names.contains(&id.name.as_str()) && self.symbol(id).is_none())
@@ -233,7 +261,7 @@ impl<'a> Reach<'_, 'a> {
             (Held::Descriptor(Some(key)), Some(named)) => self.keys().same_key(key, named),
             _ => false,
         };
-        defines && at_value && same_key
+        defines && at_value && same_key && self.sink_carries(call, held)
     }
 
     pub(super) fn assigned(
@@ -264,19 +292,6 @@ impl<'a> Reach<'_, 'a> {
                 copy && self.carries(&member.object, held)
             }
             _ => false,
-        }
-    }
-
-    fn carries(&mut self, target: &Expression<'a>, held: Held<'a>) -> bool {
-        let Expression::Identifier(id) = target.without_parentheses() else {
-            return false;
-        };
-        match self.symbol(id) {
-            Some(symbol) => {
-                self.taint(symbol, held);
-                true
-            }
-            None => false,
         }
     }
 
