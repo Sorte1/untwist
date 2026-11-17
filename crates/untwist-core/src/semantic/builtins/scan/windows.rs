@@ -1,0 +1,220 @@
+use oxc_ast::ast::*;
+use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_semantic::Scoping;
+use oxc_syntax::symbol::SymbolId;
+use rustc_hash::FxHashSet;
+
+use super::reach::{key_of, member_of, Key, CODE_RUNNERS, TIMERS};
+use super::{Scan, This, GLOBAL_OBJECTS};
+
+const WINDOW_ROUTES: [&str; 9] = [
+    "defaultView",
+    "contentWindow",
+    "currentTarget",
+    "target",
+    "srcElement",
+    "view",
+    "source",
+    "opener",
+    "ownerGlobal",
+];
+
+pub(super) type WindowLocals = FxHashSet<SymbolId>;
+
+fn is_route(name: &str) -> bool {
+    WINDOW_ROUTES.contains(&name) || GLOBAL_OBJECTS.contains(&name)
+}
+
+fn routes_through(key: Key<'_>) -> bool {
+    matches!(key, Key::Name(name) if is_route(name))
+}
+
+fn property_route(key: &PropertyKey<'_>) -> bool {
+    key.static_name()
+        .is_some_and(|name| name.as_str().is_some_and(is_route))
+}
+
+pub(super) fn window_locals(program: &Program<'_>, scoping: &Scoping) -> WindowLocals {
+    let mut found = Windows {
+        scoping,
+        locals: FxHashSet::default(),
+        grew: true,
+    };
+    while found.grew {
+        found.grew = false;
+        found.visit_program(program);
+    }
+    found.locals
+}
+
+struct Windows<'s> {
+    scoping: &'s Scoping,
+    locals: WindowLocals,
+    grew: bool,
+}
+
+impl Windows<'_> {
+    fn symbol_of(&self, id: &IdentifierReference<'_>) -> Option<SymbolId> {
+        id.reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+    }
+
+    fn holds_window(&self, expression: &Expression<'_>) -> bool {
+        match expression.without_parentheses() {
+            Expression::Identifier(id) => match self.symbol_of(id) {
+                Some(symbol) => self.locals.contains(&symbol),
+                None => is_route(id.name.as_str()),
+            },
+            Expression::ConditionalExpression(conditional) => {
+                self.holds_window(&conditional.consequent)
+                    || self.holds_window(&conditional.alternate)
+            }
+            Expression::LogicalExpression(logical) => {
+                self.holds_window(&logical.left) || self.holds_window(&logical.right)
+            }
+            Expression::SequenceExpression(sequence) => sequence
+                .expressions
+                .last()
+                .is_some_and(|last| self.holds_window(last)),
+            Expression::AssignmentExpression(assignment) => self.holds_window(&assignment.right),
+            other => member_of(other).is_some_and(|(_, key)| routes_through(key)),
+        }
+    }
+
+    fn add(&mut self, symbol: Option<SymbolId>) {
+        if let Some(symbol) = symbol {
+            if self.locals.insert(symbol) {
+                self.grew = true;
+            }
+        }
+    }
+
+    fn add_binding(&mut self, pattern: &BindingPattern<'_>) {
+        match pattern {
+            BindingPattern::BindingIdentifier(id) => self.add(id.symbol_id.get()),
+            BindingPattern::AssignmentPattern(assignment) => self.add_binding(&assignment.left),
+            _ => {}
+        }
+    }
+
+    fn add_target(&mut self, target: &AssignmentTargetMaybeDefault<'_>) {
+        let target = match target {
+            AssignmentTargetMaybeDefault::AssignmentTargetWithDefault(with) => &with.binding,
+            other => match other.as_assignment_target() {
+                Some(target) => target,
+                None => return,
+            },
+        };
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = target {
+            self.add(self.symbol_of(id));
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for Windows<'_> {
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
+            if self.holds_window(init) {
+                self.add(id.symbol_id.get());
+            }
+        }
+        walk_js::walk_variable_declarator(self, it);
+    }
+
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
+            if self.holds_window(&it.right) {
+                self.add(self.symbol_of(id));
+            }
+        }
+        walk_js::walk_assignment_expression(self, it);
+    }
+
+    fn visit_binding_property(&mut self, it: &BindingProperty<'a>) {
+        if property_route(&it.key) {
+            self.add_binding(&it.value);
+        }
+        walk_js::walk_binding_property(self, it);
+    }
+
+    fn visit_assignment_target_property_property(
+        &mut self,
+        it: &AssignmentTargetPropertyProperty<'a>,
+    ) {
+        if property_route(&it.name) {
+            self.add_target(&it.binding);
+        }
+        walk_js::walk_assignment_target_property_property(self, it);
+    }
+
+    fn visit_assignment_target_property_identifier(
+        &mut self,
+        it: &AssignmentTargetPropertyIdentifier<'a>,
+    ) {
+        if is_route(it.binding.name.as_str()) {
+            self.add(self.symbol_of(&it.binding));
+        }
+        walk_js::walk_assignment_target_property_identifier(self, it);
+    }
+}
+
+impl Scan<'_> {
+    fn may_be_window(&self, expression: &Expression<'_>) -> bool {
+        match expression.without_parentheses() {
+            Expression::Identifier(id) => {
+                self.global_named(id, &GLOBAL_OBJECTS)
+                    || id
+                        .reference_id
+                        .get()
+                        .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                        .map_or(is_route(id.name.as_str()), |symbol| {
+                            self.window_local(symbol)
+                        })
+            }
+            Expression::ThisExpression(_) => self.this_value() != This::NotGlobal,
+            Expression::ConditionalExpression(conditional) => {
+                self.may_be_window(&conditional.consequent)
+                    || self.may_be_window(&conditional.alternate)
+            }
+            Expression::LogicalExpression(logical) => {
+                self.may_be_window(&logical.left) || self.may_be_window(&logical.right)
+            }
+            Expression::SequenceExpression(sequence) => sequence
+                .expressions
+                .last()
+                .is_some_and(|last| self.may_be_window(last)),
+            Expression::AssignmentExpression(assignment) => self.may_be_window(&assignment.right),
+            other => member_of(other).is_some_and(|(_, key)| match key {
+                Key::Unknown(key) => self.known_key(key).is_some_and(|name| is_route(&name)),
+                other => routes_through(other),
+            }),
+        }
+    }
+
+    fn is_window_slot(&self, name: &str) -> bool {
+        self.is_builtin_root_name(name)
+            || GLOBAL_OBJECTS.contains(&name)
+            || CODE_RUNNERS.contains(&name)
+            || TIMERS.contains(&name)
+    }
+
+    pub(super) fn writes_window_key(
+        &self,
+        object: &Expression<'_>,
+        key: Option<&Expression<'_>>,
+    ) -> bool {
+        self.may_be_window(object)
+            && key.is_none_or(|key| match key_of(key) {
+                Key::Other => false,
+                Key::Name(name) => self.is_window_slot(name),
+                Key::Unknown(key) => self
+                    .known_key(key)
+                    .is_none_or(|name| self.is_window_slot(&name)),
+            })
+    }
+
+    pub(super) fn writes_window_name(&self, object: &Expression<'_>, name: &str) -> bool {
+        self.may_be_window(object) && self.is_window_slot(name)
+    }
+}

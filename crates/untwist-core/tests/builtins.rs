@@ -185,7 +185,7 @@ fn reading_through_a_reached_prototype_without_letting_it_go_is_intact() {
         "y = Object.prototype.hasOwnProperty.call(o, k);",
         "y = x.__proto__.toString.call(o);",
         "y = o instanceof x.constructor;",
-        "setTimeout(function () {}, 1); setTimeout(() => 1); function tick() {} setInterval(tick, 5); setTimeout(tick.bind(o));",
+        "setTimeout(function () {}, 1); setTimeout(() => 1); (function () { function tick() {} setInterval(tick, 5); })();",
         "x.constructor.count = 1;",
         "\"Object\" === t && r.constructor && (t = r.constructor.name);",
         "y = (0, x.constructor, 1);",
@@ -455,6 +455,8 @@ fn a_timer_is_a_code_runner_outside_a_direct_call_with_a_function() {
         "var s = globalThis.setTimeout; s(function () {});",
         "setImmediate('atob = f');",
         "setTimeout(code, 0);",
+        "function tick() {} setImmediate(tick);",
+        "setTimeout(tick.bind(o));",
         "window.setInterval('atob = f', 1);",
         "(function () { this.setTimeout('atob = f'); })();",
         "var t = typeof setImmediate === 'function' ? setImmediate : setTimeout;",
@@ -464,7 +466,7 @@ fn a_timer_is_a_code_runner_outside_a_direct_call_with_a_function() {
     for source in [
         "setTimeout(function () {}, 1);",
         "setInterval(() => 1, 5);",
-        "function tick() {} setImmediate(tick);",
+        "(function () { function tick() {} setImmediate(tick); })();",
         "window.setTimeout(function () {}, 0);",
         "typeof setTimeout;",
     ] {

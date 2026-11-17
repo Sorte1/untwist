@@ -142,13 +142,13 @@ fn a_timer_callback_is_a_function_only_when_it_is_never_rewritten() {
     );
     assert_intact(
         &[
-            "function cb() {} setTimeout(cb, 0);",
-            "var cb = function () {}; setTimeout(cb, 0);",
+            "(function () { function cb() {} setTimeout(cb, 0); })();",
+            "(function () { var cb = function () {}; setTimeout(cb, 0); })();",
             "const cb = () => 1; setInterval(cb, 5);",
-            "setTimeout(function () { return 1; }.bind(null), 0);",
-            "setTimeout((() => 1).bind(null), 0);",
-            "function tick() {} setTimeout(tick.bind(null, 1), 0);",
-            "var cb = function () {}; setTimeout(cb.bind(null).bind(null), 0);",
+            "let cb = function () {}; setTimeout(cb, 0);",
+            "export function cb() {} setTimeout(cb, 0);",
+            "setTimeout(function () {}, 0);",
+            "setTimeout(() => 1, 0);",
         ],
         &ATOB,
     );
@@ -213,7 +213,7 @@ fn a_timer_named_member_on_any_receiver_is_judged_like_the_free_timer() {
         &[
             "document.defaultView.setTimeout(function () {}, 0);",
             "o.setInterval(() => 1, 5);",
-            "function cb() {} o.setTimeout(cb, 0);",
+            "(function () { function cb() {} o.setTimeout(cb, 0); })();",
             "var id = o.setTimeout(function () {}, 0); clearTimeout(id);",
             "this.t = o.setTimeout(function () {}, 0);",
             "o.requestAnimationFrame(function () {});",
@@ -264,8 +264,145 @@ fn a_strict_function_that_escapes_may_see_the_global_object_as_this() {
             "(function () { 'use strict'; var o = { m: function () { this[k] = 1; } }; o.m(); })();",
             "(function () { 'use strict'; function F() { this[k] = 1; } new F(); })();",
             "(function () { 'use strict'; function F() {} F.prototype.m = function () { this[k] = 1; }; new F().m(); })();",
-            "'use strict'; class A { m() { this[k] = 1; } } new A().m();",
+            "'use strict'; class A { constructor() { this[k] = 1; } } new A();",
             "(function () { 'use strict'; setTimeout(function () { this.x = 1; }, 0); })();",
+        ],
+        &ATOB,
+    );
+}
+
+#[test]
+fn a_code_runner_module_is_judged_by_the_module_not_the_member() {
+    assert_not_intact(
+        &[
+            "import { runInThisContext as r } from 'vm'; r('atob = f');",
+            "import { 'runInThisContext' as r } from 'vm'; r('atob = f');",
+            "import { runInThisContext } from 'node:vm'; runInThisContext('atob = f');",
+            "import vm, { compileFunction as c } from 'vm'; c('atob = f')();",
+            "import * as ns from 'vm'; Object.values(ns)[0]('atob = f');",
+            "import 'vm';",
+            "import { Worker } from 'worker_threads';",
+            "import { createRequire } from 'node:module';",
+            "export * from 'vm';",
+            "export { runInThisContext as r } from 'vm';",
+            "const { default: vm } = await import('vm'); Object.values(vm)[0]('atob = f');",
+            "import('node:repl');",
+            "var fns = Object.values(require('vm')); fns[0]('atob = f');",
+            "for (var fn of Object.values(require('vm'))) fn('atob = f');",
+            "new Map(Object.entries(require('vm'))).get('runInThisContext')('atob = f');",
+            "var o = Object.assign({}, require('node:vm'));",
+            "var { ...rest } = require('vm');",
+            "var vm = require('vm');",
+            "require('module');",
+            "require('node:worker_threads');",
+            "require('child_process');",
+            "require('repl');",
+            "var p = make(); require(p);",
+            "require('a' + b);",
+            "var r = require; r('vm');",
+            "require.call(null, 'vm');",
+            "module.require('vm');",
+            "var q = module.require; q('fs');",
+            "var { require: q } = module; q('vm');",
+            "process.getBuiltinModule('vm');",
+            "var g = process.getBuiltinModule; g('fs');",
+            "var { getBuiltinModule } = process;",
+            "var cr = m.createRequire;",
+            "createRequire(import.meta.url)('vm');",
+            "M.prototype._compile.call(mm, 'atob = f', 'x.js');",
+        ],
+        &ATOB,
+    );
+    assert_intact(
+        &[
+            "var fs = require('fs'); fs.readFileSync('x');",
+            "var path = require('node:path');",
+            "import fs from 'fs';",
+            "import { join } from 'node:path';",
+            "export { join } from 'node:path';",
+            "import('./x.js');",
+            "if (typeof require === 'function') {}",
+            "if (require.main === module) {}",
+        ],
+        &ATOB,
+    );
+}
+
+#[test]
+fn a_write_to_a_window_alias_under_a_key_the_scan_cannot_resolve_is_judged() {
+    assert_not_intact(
+        &[
+            "var k = 'atob'; document.defaultView[k] = f;",
+            "document.defaultView.Object.defineProperty(document.defaultView, 'at' + 'ob', { value: f });",
+            "document.defaultView.Object.defineProperty(document.defaultView, k, { value: f });",
+            "addEventListener('load', function (e) { var k = 'atob'; e.currentTarget[k] = f; });",
+            "Object.assign(document.defaultView, { atob: f });",
+            "Object.defineProperty(e.currentTarget, k, { value: f });",
+            "Reflect.set(frame.contentWindow, k, f);",
+            "var w = document.defaultView; w[k] = f;",
+            "var w; w = e.currentTarget; var v = w; v[k] = f;",
+            "var { defaultView: w } = document; w[k] = f;",
+            "var w; ({ contentWindow: w } = frame); w[k] = f;",
+            "opener[k] = f;",
+            "e.view.__defineGetter__(k, f);",
+        ],
+        &ATOB,
+    );
+    assert_intact(
+        &[
+            "document.defaultView.x = f;",
+            "var w = document.defaultView; w.foo = 1;",
+            "var o = {}; o[k] = f;",
+            "e.currentTarget.className = 'x';",
+            "e.target.value = '';",
+        ],
+        &ATOB,
+    );
+}
+
+#[test]
+fn a_strict_function_the_escape_walk_does_not_follow_may_see_the_global_object_as_this() {
+    assert_not_intact(
+        &[
+            "'use strict'; (function (cb = function () { var k = 'atob'; this[k] = f; }) { addEventListener('load', cb); })();",
+            "'use strict'; (function () { var { cb = function () { this[k] = f; } } = {}; addEventListener('load', cb); })();",
+            "'use strict'; (function () { var cb; [cb = function () { this[k] = f; }] = []; addEventListener('load', cb); })();",
+            "'use strict'; (async function () { var cb = await function () { this[k] = f; }; addEventListener('load', cb); })();",
+            "class C { m() { var k = 'atob'; this[k] = f; } } addEventListener('load', new C().m);",
+            "'use strict'; (function () { class D { static f = function () { this[k] = f; }; } addEventListener('load', D.f); })();",
+            "'use strict'; (function () { function cb() { this[k] = f; } var { x = cb } = {}; addEventListener('load', x); })();",
+            "'use strict'; (function () { function cb() { this[k] = f; } (function (x = cb) { addEventListener('load', x); })(); })();",
+            "'use strict'; (async function () { function cb() { this[k] = f; } var x = await cb; addEventListener('load', x); })();",
+            "'use strict'; (function () { function cb() { this[k] = f; } class D { static f = cb; } addEventListener('load', D.f); })();",
+            "class C { m() { this.atob = f; } }",
+        ],
+        &ATOB,
+    );
+    assert_intact(
+        &[
+            "'use strict'; class A { constructor() { this.x = 1; } } new A();",
+            "class A { m() { this.x = 1; } } new A().m();",
+            "'use strict'; (function () { this[k] = 1; })();",
+            "'use strict'; new (function () { this[k] = 1; })();",
+        ],
+        &ATOB,
+    );
+}
+
+#[test]
+fn a_timer_callback_bound_or_rebindable_through_the_global_object_is_not_a_function() {
+    assert_not_intact(
+        &[
+            "function cb() {} cb.bind = function () { return 'atob = f'; }; setTimeout(cb.bind(), 0);",
+            "function cb() {} window.cb = 'atob = f'; setTimeout(cb, 0);",
+            "function cb() {} this.cb = 'atob = f'; setTimeout(cb, 0);",
+            "function cb() {} setTimeout(cb, 0);",
+            "var cb = function () {}; setTimeout(cb, 0);",
+            "setTimeout(function () { return 1; }.bind(null), 0);",
+            "setTimeout((() => 1).bind(null), 0);",
+            "(function () { function tick() {} setTimeout(tick.bind(null, 1), 0); })();",
+            "setTimeout(make(), 0);",
+            "o.setTimeout(cb.bind(o), 0);",
         ],
         &ATOB,
     );
