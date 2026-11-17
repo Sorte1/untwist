@@ -53,6 +53,9 @@ impl<'a> Reach<'_, 'a> {
             return;
         };
         self.writes.record(symbol, Write::Value(init), false);
+        if self.builtin_member(init, &DEFINE_OWNERS, &[DEFINE]) {
+            self.writes.definers.insert(symbol);
+        }
         match init.without_parentheses() {
             Expression::ArrowFunctionExpression(arrow) => {
                 self.collect_params(symbol, &arrow.params, false);
@@ -63,9 +66,6 @@ impl<'a> Reach<'_, 'a> {
             other => match other.as_member_expression().and_then(member_key).as_deref() {
                 Some(DESCRIPTOR) => {
                     self.writes.readers.insert(symbol);
-                }
-                Some(DEFINE) => {
-                    self.writes.definers.insert(symbol);
                 }
                 Some(name) if NAME_LISTERS.contains(&name) => {
                     self.writes.listers.insert(symbol);

@@ -1,8 +1,12 @@
+use std::cell::Cell;
+
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::semantic::builtins::{scan, Builtins, Reliance};
+use untwist_core::semantic::has_module_syntax;
 
 use crate::host_text::{CONSTRUCTOR, EVAL, FUNCTION};
 
@@ -12,8 +16,54 @@ const NUMBER_NAMES: [&str; 3] = ["undefined", "NaN", "Infinity"];
 const NUMBER_CALLS: [&str; 3] = ["Number", "parseInt", "parseFloat"];
 const NUMBER_SPACES: [&str; 2] = ["Math", "Date"];
 const SYMBOL: &str = "Symbol";
+const SYMBOL_FOR: &str = "for";
 const OBJECT: &str = "Object";
 pub const NAME_LISTERS: [&str; 3] = ["getOwnPropertyNames", "keys", "getOwnPropertySymbols"];
+static KEY_BUILTINS: Reliance = Reliance {
+    roots: &[
+        SYMBOL,
+        "Math",
+        "Date",
+        "RegExp",
+        "Number",
+        "parseInt",
+        "parseFloat",
+        OBJECT,
+    ],
+    members: &[
+        (OBJECT, false, &[]),
+        (OBJECT, true, &["toString", "valueOf"]),
+    ],
+};
+
+thread_local! {
+    static TRUSTED: Cell<bool> = const { Cell::new(false) };
+}
+
+pub struct KeyTrust {
+    before: bool,
+}
+
+impl Drop for KeyTrust {
+    fn drop(&mut self) {
+        TRUSTED.with(|cell| cell.set(self.before));
+    }
+}
+
+pub fn trust_key_builtins(trusted: bool) -> KeyTrust {
+    KeyTrust {
+        before: TRUSTED.with(|cell| cell.replace(trusted)),
+    }
+}
+
+pub fn key_builtins_trusted() -> bool {
+    TRUSTED.with(Cell::get)
+}
+
+pub fn key_builtins_intact(program: &Program<'_>, scoping: &Scoping) -> bool {
+    let module = program.source_type.is_module() || has_module_syntax(program);
+    scan(program, scoping, module, false, &KEY_BUILTINS).verdict == Builtins::Intact
+}
 
 #[derive(Clone, Copy)]
 pub enum Write<'a> {
@@ -133,7 +183,6 @@ impl<'a> Keys<'_, 'a> {
             Expression::BooleanLiteral(_)
             | Expression::NullLiteral(_)
             | Expression::BigIntLiteral(_)
-            | Expression::RegExpLiteral(_)
             | Expression::UpdateExpression(_)
             | Expression::UnaryExpression(_) => true,
             Expression::Identifier(id) => match self.symbol(id) {
@@ -154,19 +203,26 @@ impl<'a> Keys<'_, 'a> {
                 .is_some_and(|last| self.safe_at(last, next, seen)),
             Expression::AssignmentExpression(assign) => self.safe_at(&assign.right, next, seen),
             Expression::TemplateLiteral(template) => outside_runner_keys(template),
-            Expression::StaticMemberExpression(member) => self.free(&member.object, &[SYMBOL]),
+            Expression::RegExpLiteral(_) => key_builtins_trusted(),
+            Expression::StaticMemberExpression(member) => {
+                key_builtins_trusted() && self.free(&member.object, &[SYMBOL])
+            }
             Expression::CallExpression(call) => self.numeric_call(&call.callee),
             _ => false,
         }
     }
 
     fn numeric_call(&self, callee: &Expression<'_>) -> bool {
+        if !key_builtins_trusted() {
+            return false;
+        }
         match callee.without_parentheses() {
             Expression::Identifier(_) => {
                 self.free(callee, &NUMBER_CALLS) || self.free(callee, &[SYMBOL])
             }
             Expression::StaticMemberExpression(member) => {
-                self.free(&member.object, &NUMBER_SPACES) || self.free(&member.object, &[SYMBOL])
+                self.free(&member.object, &NUMBER_SPACES)
+                    || (self.free(&member.object, &[SYMBOL]) && member.property.name == SYMBOL_FOR)
             }
             _ => false,
         }
@@ -394,12 +450,19 @@ pub fn literal_data(expr: &Expression<'_>) -> bool {
     }
 }
 
+fn cooked<'t>(quasi: &'t TemplateElement<'_>) -> Option<&'t str> {
+    quasi.value.cooked.as_ref().and_then(|text| text.as_str())
+}
+
 fn outside_runner_keys(template: &TemplateLiteral<'_>) -> bool {
-    let texts: Vec<&str> = template
+    let Some(texts) = template
         .quasis
         .iter()
-        .map(|quasi| quasi.value.raw.as_str())
-        .collect();
+        .map(cooked)
+        .collect::<Option<Vec<&str>>>()
+    else {
+        return false;
+    };
     let (Some(first), Some(last)) = (texts.first(), texts.last()) else {
         return false;
     };
@@ -418,10 +481,9 @@ fn leftmost_text(expr: &Expression<'_>, depth: u8) -> Option<String> {
         Expression::BinaryExpression(sum) if sum.operator == BinaryOperator::Addition => {
             leftmost_text(&sum.left, next)
         }
-        Expression::TemplateLiteral(template) => template
-            .quasis
-            .first()
-            .map(|quasi| quasi.value.raw.to_string()),
+        Expression::TemplateLiteral(template) => {
+            template.quasis.first().and_then(cooked).map(str::to_string)
+        }
         other => const_key(other),
     }
 }
@@ -432,10 +494,9 @@ fn rightmost_text(expr: &Expression<'_>, depth: u8) -> Option<String> {
         Expression::BinaryExpression(sum) if sum.operator == BinaryOperator::Addition => {
             rightmost_text(&sum.right, next)
         }
-        Expression::TemplateLiteral(template) => template
-            .quasis
-            .last()
-            .map(|quasi| quasi.value.raw.to_string()),
+        Expression::TemplateLiteral(template) => {
+            template.quasis.last().and_then(cooked).map(str::to_string)
+        }
         other => const_key(other),
     }
 }

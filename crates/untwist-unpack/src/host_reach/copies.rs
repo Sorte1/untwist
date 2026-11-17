@@ -151,7 +151,7 @@ impl<'a> Reach<'_, 'a> {
         matches!(self.stack[object_at], AstKind::ObjectExpression(_))
             && descriptor
             && same_key
-            && self.defines(&call.callee)
+            && self.defines(call)
     }
 
     pub(super) fn passed_on(
@@ -220,7 +220,7 @@ impl<'a> Reach<'_, 'a> {
         if console {
             return true;
         }
-        let defines = self.defines(&call.callee);
+        let defines = self.defines(call);
         let at_value = call
             .arguments
             .get(2)
@@ -256,12 +256,27 @@ impl<'a> Reach<'_, 'a> {
                 _ => false,
             },
             AssignmentTarget::ComputedMemberExpression(member) => {
-                matches!(held, Held::Read(_))
+                let copy = can_hold
+                    && matches!(held, Held::Read(_))
                     && held
                         .key()
-                        .is_some_and(|key| self.keys().same_key(key, &member.expression))
+                        .is_some_and(|key| self.keys().same_key(key, &member.expression));
+                copy && self.carries(&member.object, held)
             }
             _ => false,
+        }
+    }
+
+    fn carries(&mut self, target: &Expression<'a>, held: Held<'a>) -> bool {
+        let Expression::Identifier(id) = target.without_parentheses() else {
+            return false;
+        };
+        match self.symbol(id) {
+            Some(symbol) => {
+                self.taint(symbol, held);
+                true
+            }
+            None => false,
         }
     }
 
