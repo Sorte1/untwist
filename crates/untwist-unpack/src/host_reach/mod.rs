@@ -21,6 +21,8 @@ const DESCRIPTORS: &str = "getOwnPropertyDescriptors";
 const GET: &str = "get";
 const DEFINE: &str = "defineProperty";
 const COPIERS: [&str; 2] = ["defineProperties", "create"];
+const OBJECT: &str = "Object";
+const DEFINE_OWNERS: [&str; 2] = [OBJECT, REFLECT];
 const FORWARDERS: [&str; 3] = ["call", "apply", "bind"];
 const DESCRIPTOR_FIELDS: [&str; 3] = ["value", "get", "set"];
 const PROTO: &str = "__proto__";
@@ -420,13 +422,20 @@ impl<'a> Reach<'_, 'a> {
         }
     }
 
-    fn defines(&self, callee: &Expression<'_>) -> bool {
-        let named = callee
-            .without_parentheses()
+    fn builtin_member(&self, expr: &Expression<'_>, owners: &[&str], names: &[&str]) -> bool {
+        expr.without_parentheses()
             .as_member_expression()
-            .and_then(member_key)
-            .is_some_and(|name| name == DEFINE);
-        named || self.alias(callee, &self.writes.definers)
+            .is_some_and(|member| {
+                member_key(member).is_some_and(|name| names.contains(&name.as_str()))
+                    && matches!(member.object().without_parentheses(), Expression::Identifier(id)
+                        if owners.contains(&id.name.as_str()) && self.symbol(id).is_none())
+            })
+    }
+
+    fn defines(&self, call: &CallExpression<'_>) -> bool {
+        let named = self.builtin_member(&call.callee, &DEFINE_OWNERS, &[DEFINE]);
+        let spread = call.arguments.iter().any(Argument::is_spread);
+        !spread && (named || self.alias(&call.callee, &self.writes.definers))
     }
 
     fn aliased_reader(&self, at: usize) -> bool {
@@ -477,12 +486,14 @@ impl<'a> Reach<'_, 'a> {
     }
 
     fn check_read_call(&mut self, at: usize, call: &'a CallExpression<'a>, descriptor: bool) {
-        let key = match call.arguments.get(1) {
-            None => return,
-            Some(Argument::SpreadElement(_)) => None,
-            Some(argument) => argument.as_expression(),
+        if call.arguments.iter().any(Argument::is_spread) {
+            self.refuse(LOOSE_KEY);
+            return;
+        }
+        let Some(key) = call.arguments.get(1) else {
+            return;
         };
-        let Some(key) = key else {
+        let Some(key) = key.as_expression() else {
             self.refuse(LOOSE_KEY);
             return;
         };
@@ -506,12 +517,8 @@ impl<'a> Reach<'_, 'a> {
         self.parent(at)
             .is_some_and(|(up, child)| match self.stack[up] {
                 AstKind::CallExpression(call) => {
-                    let copier = call
-                        .callee
-                        .without_parentheses()
-                        .as_member_expression()
-                        .and_then(member_key)
-                        .is_some_and(|name| COPIERS.contains(&name.as_str()));
+                    let copier = self.builtin_member(&call.callee, &[OBJECT], &COPIERS)
+                        && !call.arguments.iter().any(Argument::is_spread);
                     let second = call
                         .arguments
                         .get(1)

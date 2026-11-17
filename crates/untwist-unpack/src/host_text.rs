@@ -7,6 +7,7 @@ use untwist_core::parse::{has_error, parse_with};
 use untwist_core::semantic::build_scoping;
 
 use crate::esbuild::layout::require_creators;
+use crate::host_keys::{key_builtins_intact, key_builtins_trusted, trust_key_builtins};
 use crate::host_reach::program_reach;
 use crate::rolldown::shape::require_shim;
 
@@ -121,6 +122,8 @@ fn reaches_host(text: &str) -> bool {
     let mut uses = TextUses::default();
     uses.visit_program(&parsed.program);
     let scoping = build_scoping(&parsed.program).scoping;
+    let trusted = key_builtins_trusted() && key_builtins_intact(&parsed.program, &scoping);
+    let _keys = trust_key_builtins(trusted);
     uses.found || program_reach(&parsed.program, &scoping).is_some()
 }
 

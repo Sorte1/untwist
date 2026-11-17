@@ -6,6 +6,7 @@ use crate::browserify::notes as browserify_notes;
 use crate::browserify::resolve::left_request_reaching;
 use crate::detect::{refused_kind, unpack_program_linked};
 use crate::goal::written_module_syntax;
+use crate::host_keys::{key_builtins_intact, trust_key_builtins};
 use crate::host_request::{host_uses, HostUse};
 use crate::links::{groups, Groups, Links};
 use crate::mappings::Mapping;
@@ -15,6 +16,7 @@ use crate::relative_import::{imported_back, unproven_import};
 use crate::strict::{keep_strictness, mark_from_inputs, sloppy_written_module};
 use crate::{finish_with, notes, turbopack, UnpackOptions};
 use untwist_core::ast_util::naming_slot::scan_name_reads;
+use untwist_core::semantic::build_scoping;
 use untwist_core::semantic::closed_evals_kept;
 
 const PASS_NAME: &str = "unpack";
@@ -198,6 +200,14 @@ fn imports_back(programs: &[Program<'_>], names: &[String], bundle: &Bundle<'_>)
     imported_back(bundle, &inputs)
 }
 
+fn keys_trusted(programs: &[Program<'_>], options: UnpackOptions) -> bool {
+    options.trust_builtins
+        || options.conservative
+        || programs
+            .iter()
+            .all(|program| key_builtins_intact(program, &build_scoping(program).scoping))
+}
+
 fn host_checked(bundle: &mut Bundle<'_>, options: UnpackOptions) -> Result<(), HostUse> {
     match options.conservative {
         true => Ok(()),
@@ -220,6 +230,7 @@ pub fn unpack_named_inputs<'a>(
     let mut notes = Vec::new();
     let mut refused_any = false;
     let _names = scan_name_reads(options.trust_names);
+    let _keys = trust_key_builtins(keys_trusted(programs, options));
     crate::rename::clear_rename_hazard();
     let mut found = detected(
         alloc,
