@@ -5,6 +5,7 @@ use untwist_testing::node_rows::patched_after_rotator;
 const GLOBAL_KEYED_WRITE: &str =
     "var g = this; function put(k, v) { g[k] = v; } put(String.fromCharCode(120), 1);";
 const READS_SLICE: &str = "i.slice(0) === i";
+const ESCAPED_READ: &str = "const o = {}; export function f(k) { var x = o[k]; x.call(String.prototype, 'slice', function () {}); }";
 
 fn recording(unsafe_transforms: bool, refusal_spans: bool) -> Pipeline {
     Pipeline::new(Options {
@@ -44,10 +45,7 @@ fn refused_as(out: &Output, prefix: &str) -> bool {
 
 #[test]
 fn an_escaped_read_is_reported_beside_the_refusal_it_causes_and_unsafe_decodes_past_it() {
-    let source = patched_after_rotator(
-        READS_SLICE,
-        "const o = {}; export function f(k) { var x = o[k]; x.call(String.prototype, 'slice', function () {}); }",
-    );
+    let source = patched_after_rotator(READS_SLICE, ESCAPED_READ);
     let at = position_of(&source, "o[k]");
     let out = run(&source, false);
     assert!(refused_as(&out, notes::BUILTIN_PATCHED), "{:#?}", out.notes);
@@ -135,7 +133,7 @@ fn nothing_is_recorded_unless_the_hook_asks_for_it() {
 
 #[test]
 fn several_inputs_name_the_input_each_span_belongs_to() {
-    let refused = patched_after_rotator("true", GLOBAL_KEYED_WRITE);
+    let refused = patched_after_rotator(READS_SLICE, ESCAPED_READ);
     let decoded = patched_after_rotator("true", "");
     let out = recording(false, true).run_many(&[&decoded, &refused]);
     assert!(!out.refusal_spans.is_empty());
