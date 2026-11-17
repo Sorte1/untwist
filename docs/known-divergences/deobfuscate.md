@@ -733,8 +733,11 @@
   whole construct. The default mode also keeps the whole construct, with a note, when the
   built-in scan finds a write to `Function`, `String`, `RegExp` or `Symbol` (a write whose
   target names the built-in, such as `String.prototype.search = …`, or a definer such as
-  `Object.defineProperty(Function.prototype, …)`): a removed callback would no longer run the
-  replaced member. The default mode removes a callback run through one only when the callback is, node
+  `Object.defineProperty(Function.prototype, …)`), or when one of these or its `prototype` is
+  used as a value anywhere but as the object of a member read, a call, `new`, `typeof`, an
+  equality or `instanceof` (stored in a binding, passed, returned, put in a literal or a
+  pattern: `var p = String.prototype; p.search = …`): a removed callback would no longer run
+  the replaced member. The default mode removes a callback run through one only when the callback is, node
   for node, one of the bodies obfuscator.io emits: the source check
   (`return f.toString().search("(((.+)+)+)+$")…`), the format check, the console disable or the
   debug-protection start. Local names are free, and a local function the body only ever calls
@@ -902,10 +905,7 @@
   or `.caller` member access anywhere in the program can see some function's parameters or caller. A note for work the
   pass never claimed is noise — one Rollup bundle produces hundreds of them. The reference deobfuscator has no such
   pass and reports nothing either way.
-- **Default-lane premise: the self-defending check would pass on the input.** The built-ins
-  the check calls are the standard ones: a write that names the built-in keeps the check (see
-  above), but a patch made through a value the program reads (`var p = String.prototype;
-  p.search = …`) is not looked for. A removed
+- **Default-lane premise: the self-defending check would pass on the input.** A removed
   self-defending callback is never run, so an input whose own check fails (it was reformatted,
   so the source check backtracks until it throws `RangeError` or loops) runs normally once the
   trap is removed: removing the trap may make an input that would trap run normally.

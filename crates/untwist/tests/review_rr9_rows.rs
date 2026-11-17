@@ -15,14 +15,16 @@ const MODES: [(&str, Lane); 3] = [
     ("rename smart", Lane::Rename(RenameMode::Smart)),
 ];
 
-const UNSAFE_PREMISE: [&str; 14] = [
+const UNSAFE_PREMISE: [&str; 20] = [
     "800", "807", "808", "809", "813", "830", "832", "873", "875", "877", "840", "841", "878",
-    "879",
+    "879", "880", "881", "882", "883", "884", "885",
 ];
 
 const SWITCH_CASE_FUNCTIONS: [&str; 7] = ["800", "808", "809", "832", "873", "875", "877"];
 const FLAG_IN_DEAD_ZONE: [&str; 4] = ["801", "802", "803", "872"];
-const PATCHED_BUILT_INS: [&str; 4] = ["840", "841", "878", "879"];
+const PATCHED_BUILT_INS: [&str; 10] = [
+    "840", "841", "878", "879", "880", "881", "882", "883", "884", "885",
+];
 
 type Run = Box<dyn Fn(&str) -> String>;
 
@@ -78,7 +80,7 @@ fn every_a33_rr9_probe_prints_what_node_prints() {
         return;
     };
     let programs = probes();
-    assert!(programs.len() >= 21, "found {} probes", programs.len());
+    assert!(programs.len() >= 27, "found {} probes", programs.len());
     let lanes: Vec<(&'static str, Run)> = MODES
         .iter()
         .map(|&(name, lane)| {
