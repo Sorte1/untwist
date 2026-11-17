@@ -4,6 +4,8 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/alias_form_rows.txt");
 
+type Row = (String, String);
+
 const READS_BY_UNPROVEN_KEY: &str = "the decoder reads the string array by an unproven key off a call result and returns it, which the namespace-by-key rule pins before the alias-form checks run";
 
 const REFUSED_BY_THE_NAMESPACE_SCAN: &[(&str, &str)] = &[
@@ -17,7 +19,7 @@ fn refused_by_the_namespace_scan(label: &str) -> bool {
         .any(|(refused, _)| *refused == label)
 }
 
-fn rows() -> Vec<(String, String)> {
+fn rows() -> Vec<Row> {
     ROWS.lines()
         .filter(|line| !line.trim().is_empty())
         .filter_map(|line| line.split_once('|'))
@@ -97,7 +99,7 @@ fn the_sabotage_rows_diverge_from_node_under_the_alias_form_checks_mutant() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let (refused, sabotage): (Vec<(String, String)>, Vec<(String, String)>) = rows()
+    let (refused, sabotage): (Vec<Row>, Vec<Row>) = rows()
         .into_iter()
         .filter(|(label, _)| label.starts_with("ref-"))
         .partition(|(label, _)| refused_by_the_namespace_scan(label));
