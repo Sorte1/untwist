@@ -102,12 +102,22 @@ pub(crate) fn widen_layered(token: &str, used: Vec<String>, points_to: bool) {
 }
 
 pub(crate) fn drop_layered(token: &str) {
-    verify(token);
     DEFERRAL.with(|deferral| {
-        deferral
-            .borrow_mut()
+        let mut deferral = deferral.borrow_mut();
+        if let Some(last) = deferral
+            .pending
+            .iter()
+            .rposition(|pending| pending == token)
+        {
+            deferral.pending.remove(last);
+        }
+        if let Some(last) = deferral
             .layered
-            .retain(|(pending, _)| pending != token)
+            .iter()
+            .rposition(|(pending, _)| pending == token)
+        {
+            deferral.layered.remove(last);
+        }
     });
 }
 
@@ -141,6 +151,20 @@ pub(crate) fn waive_observation(names: &[&str]) -> bool {
                 .any(|(_, layered)| layered.names.iter().any(|held| held == name))
         };
         if !deferral.open || names.is_empty() || !names.iter().all(pending) {
+            return false;
+        }
+        let names: Vec<String> = names.iter().map(|name| (*name).to_string()).collect();
+        if !deferral.observations.contains(&names) {
+            deferral.observations.push(names);
+        }
+        true
+    })
+}
+
+pub(crate) fn observe_at_stage_end(names: &[&str]) -> bool {
+    DEFERRAL.with(|deferral| {
+        let mut deferral = deferral.borrow_mut();
+        if !deferral.open || names.is_empty() {
             return false;
         }
         let names: Vec<String> = names.iter().map(|name| (*name).to_string()).collect();
@@ -228,5 +252,38 @@ impl Rerunnable {
 impl Drop for Rerunnable {
     fn drop(&mut self) {
         DEFERRAL.with(|deferral| deferral.borrow_mut().rerunnable = self.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn held(name: &str) -> Layered {
+        Layered {
+            names: vec![name.to_string()],
+            ..Layered::default()
+        }
+    }
+
+    fn counts() -> (usize, usize) {
+        DEFERRAL.with(|deferral| {
+            let deferral = deferral.borrow();
+            (deferral.pending.len(), deferral.layered.len())
+        })
+    }
+
+    #[test]
+    fn dropping_a_later_speculation_keeps_the_obligation_an_earlier_round_kept() {
+        forget();
+        defer_layered("layered:a".to_string(), held("a"));
+        defer_layered("layered:a".to_string(), held("a"));
+        drop_layered("layered:a");
+        let kept = counts();
+        drop_layered("layered:a");
+        let dropped = counts();
+        forget();
+        assert_eq!(kept, (1, 1));
+        assert_eq!(dropped, (0, 0));
     }
 }

@@ -54,7 +54,6 @@ impl<'a> Sites<'_, 'a> {
         self.watch.observe
             && !self.watch.props.is_empty()
             && self.out.observed.is_none()
-            && self.out.reach.is_none()
             && !self.in_machinery(span)
     }
 

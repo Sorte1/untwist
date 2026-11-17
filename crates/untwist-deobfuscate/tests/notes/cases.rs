@@ -1,4 +1,5 @@
 use untwist_core::pass::Note;
+use untwist_core::semantic::{assume_shared_globals, SharedGlobals};
 use untwist_deobfuscate::notes;
 
 const HEAD: &str = "function __STRING_ARRAY__() {\n  var h = ['log'];\n  __STRING_ARRAY__ = function () { return h; };\n  return __STRING_ARRAY__();\n}\nfunction __DECODE_0__(a, b) {\n  var e = __STRING_ARRAY__();\n  return e[a];\n}\n";
@@ -259,6 +260,7 @@ pub enum Source {
     Fueled(fn() -> String),
     Superset(&'static str),
     DefaultLane(&'static str),
+    SharedName(&'static str, &'static str),
 }
 
 pub enum Match {
@@ -274,9 +276,10 @@ pub struct Case {
 
 pub fn program(source: &Source) -> String {
     match source {
-        Source::Whole(text) | Source::Superset(text) | Source::DefaultLane(text) => {
-            (*text).to_string()
-        }
+        Source::Whole(text)
+        | Source::Superset(text)
+        | Source::DefaultLane(text)
+        | Source::SharedName(text, _) => (*text).to_string(),
         Source::Headed(body) => format!("{HEAD}{body}"),
         Source::Built(build) | Source::Fueled(build) => build(),
     }
@@ -287,6 +290,14 @@ pub fn stage_notes(case: &Case, source: &str) -> (String, Vec<Note>) {
         Source::Superset(_) => crate::common::run_all_stage_notes_extended(source),
         Source::DefaultLane(_) => crate::common::run_all_stage_notes_default_lane(source),
         Source::Fueled(_) => crate::common::run_all_stage_notes_fueled(source, SPINNING_UNIT_FUEL),
+        Source::SharedName(_, name) => {
+            let shared = SharedGlobals {
+                names: std::iter::once(name.to_string()).collect(),
+                ..SharedGlobals::default()
+            };
+            let _shared = assume_shared_globals(Some(shared));
+            crate::common::run_all_stage_notes(source)
+        }
         _ => crate::common::run_all_stage_notes(source),
     }
 }
@@ -687,6 +698,11 @@ pub const CASES: &[Case] = &[
     Case {
         source: Source::Whole(A_REASSIGNED_CONST_DECODER),
         expects: notes::MACHINERY_CONSTANT_WRITTEN,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::SharedName(WRAPPED_UNIT, "b"),
+        expects: notes::MACHINERY_SHARED_GLOBAL,
         mode: Match::Contains,
     },
     Case {

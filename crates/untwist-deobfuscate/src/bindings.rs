@@ -7,7 +7,7 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{block_function_symbols, declared_in_block, AnnexBWrites};
-use untwist_core::semantic::{observers, Observers};
+use untwist_core::semantic::{is_shared_global, observers, Observers};
 
 pub fn resolved_symbol(reference: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
     scoping
@@ -112,6 +112,9 @@ pub fn reaches_a_script_global(
     let Some((names, props)) = script_global_names(symbols, program, scoping) else {
         return false;
     };
+    if names.iter().copied().any(is_shared_global) {
+        return true;
+    }
     untwist_core::semantic::observing_open(|| {
         names_reached_beside(program, scoping, (&names, &props), removed)
     })
@@ -123,12 +126,15 @@ pub fn reaches_a_script_global_once_removed<'a>(
     program: &Program<'a>,
     cx: &Cx<'a, '_>,
 ) -> bool {
-    if cx.opts.unsafe_transforms || observers() == Observers::None {
-        return false;
-    }
     let Some((names, props)) = script_global_names(symbols, program, cx.scoping()) else {
         return false;
     };
+    if names.iter().copied().any(is_shared_global) {
+        return true;
+    }
+    if cx.opts.unsafe_transforms || observers() == Observers::None {
+        return false;
+    }
     let mut pruned = program.clone_in(cx.allocator());
     Prune {
         removed: removed.iter().copied().collect(),

@@ -267,6 +267,20 @@ pub fn names_reached_quietly<'a>(
     names_reach(program, scoping, watch).reach
 }
 
+pub fn names_observed<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    names: &[&str],
+) -> Option<Span> {
+    let watch = ReachWatch {
+        names,
+        props: names,
+        fns: &[],
+        observe: true,
+    };
+    names_reach(program, scoping, watch).observed
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct NamesReached {
     pub reached: bool,

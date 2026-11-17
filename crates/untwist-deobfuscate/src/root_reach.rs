@@ -7,7 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::Cx;
 use untwist_core::semantic::has_module_syntax;
 
-use crate::calls::agnostic::names_reached_quietly;
+use crate::calls::agnostic::{names_observed, names_reached_quietly};
 use crate::decoded::syntactic_global_reach;
 use crate::legacy_reach;
 use crate::mutants::root_alias_reach_trusted;
@@ -31,6 +31,28 @@ pub(crate) fn root_names_reached(
         return syntactic_global_reach((program, scoping), &strings, names, &[]);
     }
     names_reached_quietly(program, scoping, names)
+}
+
+pub(crate) fn observed_roots(
+    program: &Program<'_>,
+    cx: &Cx<'_, '_>,
+    bindings: &[SymbolId],
+) -> Option<FxHashSet<SymbolId>> {
+    let script = !cx.opts.nested_root && !has_module_syntax(program);
+    if cx.opts.unsafe_transforms || !script || root_alias_reach_trusted() {
+        return None;
+    }
+    let scoping = cx.scoping();
+    let bindings = root_symbols(scoping, bindings);
+    let names = names_of(program.source_text, scoping, &bindings);
+    if names.is_empty() {
+        return None;
+    }
+    names_observed(program, scoping, &names)?;
+    if legacy_reach::observe_at_stage_end(&names) {
+        return None;
+    }
+    Some(bindings.into_iter().collect())
 }
 
 pub(crate) struct ReachedRoots {

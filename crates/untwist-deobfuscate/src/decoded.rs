@@ -759,6 +759,13 @@ fn judge_runs<'p>(
         let unit = run.request.unit;
         let deferred = root_array_name(scoping, &run).filter(|_| watched && !spelled);
         let reached = reached.as_ref().filter(|_| !spelled);
+        if !nested_root && reach::names_shared(program, scoping, &run) {
+            let span = run.request.program.string_array.function.span;
+            decoded
+                .notes
+                .push((notes::STRING_ARRAY_GLOBAL_REACH.to_string(), Some(span)));
+            continue;
+        }
         let refusal = refused_before_judging(&run, reached, &decoding);
         let speculated = refusal
             .filter(|(note, _)| watched && *note == notes::STRING_ARRAY_GLOBAL_REACH)

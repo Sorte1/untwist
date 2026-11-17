@@ -16,6 +16,7 @@ use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 use untwist_core::ast_util::search::statements_at;
 use untwist_core::parse::{has_error, parse_with, SourceType};
 use untwist_core::pass::Cx;
+use untwist_core::semantic::is_shared_global;
 
 use super::array_declaration;
 use super::checksum::{
@@ -704,6 +705,10 @@ fn refusal(
     let statement = legacy.statement;
     if let Some(note) = dynamic.refusal(scoping, legacy.symbol) {
         return Some((note.to_string(), statement));
+    }
+    let root = scoping.symbol_scope_id(legacy.symbol) == scoping.root_scope_id();
+    if root && is_shared_global(scoping.symbol_name(legacy.symbol)) {
+        return Some((notes::LEGACY_ARRAY_REACHED.to_string(), statement));
     }
     if let Some(span) = reached_by_name(program, cx, legacy) {
         if cx.opts.unsafe_transforms || !legacy_reach::defers() {

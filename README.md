@@ -193,7 +193,8 @@ program. Several classic scripts given in one run share one global scope, as scr
 do: a top-level `var`, function, `let`, `const` or `class` of one is treated as read and written by
 the others when another input names it (a free reference or a top-level declaration of its own) or
 reaches globals through a computed key or code text, and is then not inlined away, removed or
-renamed. A built-in name (`eval`, `String`, `atob`, ...) that another input declares at its top level, assigns as a bare name, sets as a property of the global object (`this.X =`, `globalThis.X =`, `window["X"] =`, a definer such as `Object.defineProperty(globalThis, ...)`), or declares or assigns in a code text it runs (`eval`, `(0, eval)`, `Function`, a timer string) is not the built-in for any input, so no fold relies on it. A global-object write with a computed key, or a code text that is not a literal, counts for every name. In the default lane an input whose own built-in scan is not clean (it uses a built-in, the global object or a code runner outside the listed harmless shapes, or patches a built-in member) counts for every name too. The default lane also assumes no input hands code text to a DOM API that evaluates it (`document.write`, a `javascript:` URL, a script element's text, an event-handler attribute string). Renaming never renames a classic script's top-level bindings in the safe lane. Under `--unsafe`,
+renamed, in both lanes; a string array, decoder, decoder alias or protection named that way is kept
+and nothing is decoded through it. A built-in name (`eval`, `String`, `atob`, ...) that another input declares at its top level, assigns as a bare name, sets as a property of the global object (`this.X =`, `globalThis.X =`, `window["X"] =`, a definer such as `Object.defineProperty(globalThis, ...)`), or declares or assigns in a code text it runs (`eval`, `(0, eval)`, `Function`, a timer string) is not the built-in for any input, so no fold relies on it. A global-object write with a computed key, or a code text that is not a literal, counts for every name. In the default lane an input whose own built-in scan is not clean (it uses a built-in, the global object or a code runner outside the listed harmless shapes, or patches a built-in member) counts for every name too. The default lane also assumes no input hands code text to a DOM API that evaluates it (`document.write`, a `javascript:` URL, a script element's text, an event-handler attribute string). Renaming never renames a classic script's top-level bindings in the safe lane. Under `--unsafe`,
 when two or more classic scripts are given or another input may observe the global object's
 names, they keep their names too (`--rename unique`, whose counter is shared by every input,
 still renames them when only other scripts are the reason), and no input's new top-level name is a
@@ -262,7 +263,9 @@ are decoded, even when the program enumerates or tests the global object's names
 them by key, through `Object.assign`, `Reflect.set`, `Object.defineProperty` or a loop over keys,
 or runs code text through any runner, `(0, eval)`,
 `Function`, a timer string, or a runner that code text hands back such as
-`Function("return eval")()(s)`). A few passes that rest on
+`Function("return eval")()(s)`). No function declared in a block overwrites a decoder alias, a
+decoder wrapper or a constant used as a decoder argument through Annex B hoisting (`var d = dec;
+{ function d() {} } d(1)` is decoded as a call of `dec`). A few passes that rest on
 heuristics are allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).
 `dead-code`, which deletes branches behind constant comparisons, runs in both lanes.
 `fold-pure-calls` also folds calls to a pure helper that is passed around as a value or that the
