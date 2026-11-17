@@ -717,7 +717,8 @@
   (`var s = c(…)`, `c(…)()`, or a parameterless, argumentless plain IIFE holding only `c(…)()`
   calls) is a later statement of the list that declares the controller, or a statement of the
   body of a plain function declaration with simple parameters that is itself a statement of that
-  list (or of such a body, nested), when nothing before the controller in its list can run code
+  list (or of such a body, nested), when the list is not a `switch` case (another case can call
+  the function first) and nothing before the controller in its list can run code
   (function declarations, declarations without a value or with a literal or function value, a
   local flag set to a literal; not at the top level of a module), as obfuscator.io places the
   check inside a function it found on the call graph; or it opens, alone or in a run of such
@@ -729,7 +730,11 @@
   the list that declares `s`; the call has exactly two arguments, no spread,
   `this` or a literal first and a function or arrow expression second, and `c(…)()` passes
   nothing; and no statement of the construct sits inside a `with` body. Anything else keeps the
-  whole construct. The default mode removes a callback run through one only when the callback is, node
+  whole construct. The default mode also keeps the whole construct, with a note, when the
+  built-in scan finds a write to `Function`, `String`, `RegExp` or `Symbol` (a write whose
+  target names the built-in, such as `String.prototype.search = …`, or a definer such as
+  `Object.defineProperty(Function.prototype, …)`): a removed callback would no longer run the
+  replaced member. The default mode removes a callback run through one only when the callback is, node
   for node, one of the bodies obfuscator.io emits: the source check
   (`return f.toString().search("(((.+)+)+)+$")…`), the format check, the console disable or the
   debug-protection start. Local names are free, and a local function the body only ever calls
@@ -748,7 +753,7 @@
   controller, with the same note. Some reads name no binding (`globalThis.o` or another script
   for a top-level `var`, `arguments[0]` or `caller.arguments` for a parameter, a `with` object,
   an importer for an export, a direct `eval`), so `o` must also be a `var`, or a `let`
-  declared before `o = true` (not a `const`), inside a function, not a parameter, in a function with no `with` statement, no direct
+  declared before `o = true` and before the controller (not a `const`), inside a function, not a parameter, in a function with no `with` statement, no direct
   `eval` and no use of its own `arguments`; any other flag keeps the controller.
   `--unsafe` trusts the controller shape, as the reference deobfuscator does, so a domain lock
   or a hand-written function run through such a helper is removed there; the call-site rules
@@ -897,7 +902,10 @@
   or `.caller` member access anywhere in the program can see some function's parameters or caller. A note for work the
   pass never claimed is noise — one Rollup bundle produces hundreds of them. The reference deobfuscator has no such
   pass and reports nothing either way.
-- **Default-lane premise: the self-defending check would pass on the input.** A removed
+- **Default-lane premise: the self-defending check would pass on the input.** The built-ins
+  the check calls are the standard ones: a write that names the built-in keeps the check (see
+  above), but a patch made through a value the program reads (`var p = String.prototype;
+  p.search = …`) is not looked for. A removed
   self-defending callback is never run, so an input whose own check fails (it was reformatted,
   so the source check backtracks until it throws `RangeError` or loops) runs normally once the
   trap is removed: removing the trap may make an input that would trap run normally.
