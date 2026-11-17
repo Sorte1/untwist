@@ -1,6 +1,7 @@
 mod blocks;
 mod flows;
 mod holders;
+mod keys;
 mod shapes;
 
 use std::borrow::Cow;
@@ -92,6 +93,10 @@ struct Walker<'s, 'a> {
     arguments_used: FxHashSet<Address>,
     candidates: FxHashMap<SymbolId, Candidate<'a>>,
     array_functions: FxHashMap<SymbolId, Span>,
+    enumerations: FxHashMap<SymbolId, (keys::Holder<'a>, u32)>,
+    bound_keys: FxHashMap<SymbolId, SymbolId>,
+    trust_symbol: bool,
+    symbol_proof_used: std::cell::Cell<bool>,
     assigned_at: FxHashMap<SymbolId, Vec<Span>>,
     aliases: FxHashMap<SymbolId, u8>,
     receivers: FxHashMap<SymbolId, usize>,
@@ -104,12 +109,14 @@ struct Walker<'s, 'a> {
 pub(in crate::calls::agnostic) struct Loose {
     pub(in crate::calls::agnostic) spans: Vec<Span>,
     pub(in crate::calls::agnostic) blocks: Vec<(Span, &'static [&'static str])>,
+    pub(in crate::calls::agnostic) untrusted_symbol: Option<Vec<Span>>,
 }
 
 pub(super) fn loose_uses<'a>(
     program: &'a Program<'a>,
     scoping: &Scoping,
     resolve: Resolve<'_>,
+    trust_symbol: bool,
 ) -> Loose {
     let mut walker = Walker {
         scoping,
@@ -123,6 +130,10 @@ pub(super) fn loose_uses<'a>(
         arguments_used: FxHashSet::default(),
         candidates: FxHashMap::default(),
         array_functions: FxHashMap::default(),
+        enumerations: FxHashMap::default(),
+        bound_keys: FxHashMap::default(),
+        trust_symbol,
+        symbol_proof_used: std::cell::Cell::new(false),
         assigned_at: FxHashMap::default(),
         aliases: FxHashMap::default(),
         receivers: FxHashMap::default(),
@@ -134,17 +145,23 @@ pub(super) fn loose_uses<'a>(
     walker.aliases = walker.qualified();
     walker.phase = Phase::Check;
     walker.walk(program);
+    let trusted = std::mem::take(&mut walker.found);
+    let blocks = std::mem::take(&mut walker.blocks);
+    let untrusted = walker.symbol_proof_used.get().then(|| {
+        walker.trust_symbol = false;
+        walker.phase = Phase::Collect;
+        walker.aliases = walker.qualified();
+        walker.phase = Phase::Check;
+        walker.walk(program);
+        std::mem::take(&mut walker.found)
+    });
     let mut loose = Loose {
-        spans: walker.found,
-        blocks: walker.blocks,
+        spans: Vec::new(),
+        blocks,
+        untrusted_symbol: None,
     };
-    let kept: Vec<Span> = loose
-        .spans
-        .iter()
-        .copied()
-        .filter(|span| !loose.exempt(*span))
-        .collect();
-    loose.spans = kept;
+    loose.spans = loose.kept(trusted);
+    loose.untrusted_symbol = untrusted.map(|spans| loose.kept(spans));
     loose
 }
 
@@ -754,6 +771,7 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
 impl<'s, 'a> Walker<'s, 'a> {
     fn collect(&mut self, kind: AstKind<'a>) {
         self.collect_array_source(kind);
+        self.collect_enumeration(kind);
         match kind {
             AstKind::VariableDeclarator(declarator) => {
                 self.collect_declarator(declarator);

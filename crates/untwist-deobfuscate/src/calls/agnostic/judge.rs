@@ -415,6 +415,7 @@ impl<'s, 'a> Sites<'s, 'a> {
     fn into_saturated(mut self) -> (Agnostic<'a>, bool, bool) {
         self.creations_native();
         self.out.saturated = true;
+        self.judge_refined();
         self.out.pending_texts = self.pending_texts.take();
         self.out.judged_texts = self.judged_texts.take();
         (self.out, true, true)
@@ -457,6 +458,7 @@ impl<'s, 'a> Sites<'s, 'a> {
                 self.out.code_text.get_or_insert(span);
             }
         }
+        self.judge_refined();
         self.out.pending_texts = self.pending_texts.take();
         self.out.judged_texts = self.judged_texts.take();
         (self.out, chains, natives)

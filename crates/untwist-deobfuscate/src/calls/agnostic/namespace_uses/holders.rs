@@ -4,7 +4,8 @@ use oxc_syntax::operator::LogicalOperator;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use std::borrow::Cow;
 
-use super::{key_kind, str_const, Walker, KIND_DEPTH, NAMESPACE};
+use super::keys::KeyProof;
+use super::{key_kind, str_const, Walker, GLOBAL, KIND_DEPTH, NAMESPACE};
 use crate::proof::GLOBAL_OBJECTS;
 
 const BUILTIN_CONSTRUCTORS: [&str; 16] = [
@@ -19,9 +20,19 @@ impl<'s, 'a> Walker<'s, 'a> {
         key: &Expression<'a>,
         base: u8,
     ) -> u8 {
-        let key = self.key_text(key, KIND_DEPTH);
-        let open = key.is_none();
-        let kind = key_kind(key.map(Cow::Owned), base);
+        let text = self.key_text(key, KIND_DEPTH);
+        let open = text.is_none();
+        if open {
+            match self.key_proof(object, key) {
+                KeyProof::Open => {}
+                KeyProof::Symbol => return 0,
+                KeyProof::Enumerated => {
+                    let global = base & GLOBAL != 0 || self.may_hold_global(object, KIND_DEPTH);
+                    return if global { GLOBAL } else { 0 };
+                }
+            }
+        }
+        let kind = key_kind(text.map(Cow::Owned), base);
         if kind == 0 && open && self.may_hold_global(object, KIND_DEPTH) {
             return NAMESPACE;
         }

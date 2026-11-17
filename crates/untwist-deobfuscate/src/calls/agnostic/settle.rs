@@ -193,7 +193,8 @@ fn settle_ordered<'a>(
     let mut bindings =
         Bindings::collect(program, scoping, (!watch.names.is_empty(), exempt), resolve);
     if !watch.names.is_empty() {
-        bindings.loose = super::namespace_uses::loose_uses(program, scoping, resolve);
+        bindings.loose =
+            super::namespace_uses::loose_uses(program, scoping, resolve, bindings.symbol_safe());
     }
     let flow = Flow::new(program, scoping, resolve);
     let filters = std::rc::Rc::clone(&bindings.filters);

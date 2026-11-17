@@ -362,7 +362,19 @@ impl<'a> Sites<'_, 'a> {
 
     pub(super) fn key_hits(&self, expr: &Expression<'a>) -> bool {
         let keys = self.key_set(expr);
-        keys.iter().any(|key| self.may_hit(key)) && self.refined_hit(expr)
+        self.keys_hit(&keys, expr)
+    }
+
+    fn keys_hit(&self, keys: &[AKey<'a>], expr: &Expression<'a>) -> bool {
+        let may = keys.iter().any(|key| self.may_hit(key));
+        let open = keys
+            .iter()
+            .any(|key| matches!(key, AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown));
+        if !may && !open {
+            return false;
+        }
+        let refined = self.refined_hit(expr);
+        may && refined
     }
 
     fn refined_hit(&self, expr: &Expression<'a>) -> bool {
@@ -372,9 +384,9 @@ impl<'a> Sites<'_, 'a> {
         }
         match inner {
             Expression::Identifier(id) if self.substituted(id).is_none() => {
-                self.param_key_hits(id, VALUE_DEPTH).unwrap_or(true)
+                self.refined(self.param_key_hits(id, VALUE_DEPTH))
             }
-            Expression::BinaryExpression(binary) => self.sum_key_hits(binary).unwrap_or(true),
+            Expression::BinaryExpression(binary) => self.refined(self.sum_key_hits(binary)),
             _ => true,
         }
     }
@@ -441,11 +453,12 @@ impl<'a> Sites<'_, 'a> {
         }
         let candidate = match member {
             MemberExpression::StaticMemberExpression(m) => self.watched_name(&m.property.name),
-            MemberExpression::ComputedMemberExpression(m) => {
-                keys.iter().any(|key| self.may_hit(key)) && self.refined_hit(&m.expression)
-            }
+            MemberExpression::ComputedMemberExpression(m) => self.keys_hit(keys, &m.expression),
             MemberExpression::PrivateFieldExpression(_) => false,
         };
+        if !self.in_machinery(member.span()) {
+            self.note_refined(member.object());
+        }
         if candidate && !self.in_machinery(member.span()) {
             self.reach_base(member.object(), member.span());
         }
@@ -562,6 +575,7 @@ impl<'a> Sites<'_, 'a> {
         };
         if let KeyedArgument::Given(key) = key {
             if self.paired_sites_safe(base, key) {
+                self.note_refined(base);
                 return;
             }
         }
@@ -570,6 +584,7 @@ impl<'a> Sites<'_, 'a> {
             KeyedArgument::Absent => self.watched_name("undefined"),
             KeyedArgument::Spread => dynamic_paths(),
         };
+        self.note_refined(base);
         if hit {
             self.reach_base(base, span);
         }
@@ -597,6 +612,9 @@ impl<'a> Sites<'_, 'a> {
                     Some(None) => true,
                     Some(Some(expr)) => self.site_key_hits(expr, VALUE_DEPTH),
                 };
+                if !key_hits && value(key_at).is_some() {
+                    self.refined_away.set(true);
+                }
                 !key_hits
                     || match value(base_at) {
                         None => true,
@@ -618,7 +636,9 @@ impl<'a> Sites<'_, 'a> {
                 return self.hit_dynamic(call.span);
             };
             self.reach_enumerated(expr, call.span);
-            if self.source_may_hit(expr) {
+            let hit = self.source_may_hit(expr);
+            self.note_refined(target);
+            if hit {
                 self.reach_base(target, call.span);
             }
         }
@@ -668,6 +688,7 @@ impl<'a> Sites<'_, 'a> {
                 .properties
                 .iter()
                 .any(|property| self.binding_property_hits(property));
+        self.note_refined(base);
         if hit {
             self.reach_base(base, object.span);
         }
@@ -721,6 +742,7 @@ impl<'a> Sites<'_, 'a> {
                 .properties
                 .iter()
                 .any(|property| self.target_property_hits(property));
+        self.note_refined(base);
         if hit {
             self.reach_base(base, target.span);
         }

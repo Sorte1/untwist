@@ -168,7 +168,11 @@ impl<'a> Sites<'_, 'a> {
 
     pub(super) fn reach_loose(&mut self) {
         let bindings = self.fresh.bindings;
-        let loose = bindings.loose.spans.iter().copied();
+        let spans = match (&bindings.loose.untrusted_symbol, self.symbol_safe) {
+            (Some(untrusted), false) => untrusted,
+            _ => &bindings.loose.spans,
+        };
+        let loose = spans.iter().copied();
         let effects = bindings
             .loose
             .blocks
