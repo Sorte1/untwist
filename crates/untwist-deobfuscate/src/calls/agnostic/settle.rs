@@ -432,13 +432,16 @@ fn rebound_globals(
     } else {
         &[]
     };
-    if out.saturated || out.code_text.is_some() {
+    if out.saturated || out.code_text.is_some() || out.keyed_global {
         let watching = !watch.names.is_empty() && out.reach.or(out.reach_code).is_none();
         if !watching {
             return Vec::new();
         }
         if out.keyed_global {
             return unwatched_roots(globals.iter().chain(texts), bindings, watch);
+        }
+        if out.code_text.is_none() {
+            return Vec::new();
         }
     }
     let unseen = |symbol: &&SymbolId| !bindings.is_opaque(**symbol);
@@ -456,9 +459,11 @@ fn rebound_globals(
 }
 
 fn named_by_text(out: &Agnostic<'_>, name: &str) -> bool {
-    out.judged_texts
-        .iter()
-        .any(|text| crate::proof::names_a_token(text, &[name]))
+    out.code_text.is_some()
+        && out
+            .judged_texts
+            .iter()
+            .any(|text| crate::proof::names_a_token(text, &[name]))
 }
 
 fn unwatched_roots<'k>(

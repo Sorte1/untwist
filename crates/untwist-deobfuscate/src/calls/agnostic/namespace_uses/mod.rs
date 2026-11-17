@@ -91,6 +91,8 @@ struct Walker<'s, 'a> {
     functions: Vec<Address>,
     arguments_used: FxHashSet<Address>,
     candidates: FxHashMap<SymbolId, Candidate<'a>>,
+    array_functions: FxHashMap<SymbolId, Span>,
+    assigned_at: FxHashMap<SymbolId, Vec<Span>>,
     aliases: FxHashMap<SymbolId, u8>,
     receivers: FxHashMap<SymbolId, usize>,
     protections: FxHashSet<SymbolId>,
@@ -120,6 +122,8 @@ pub(super) fn loose_uses<'a>(
         functions: Vec::new(),
         arguments_used: FxHashSet::default(),
         candidates: FxHashMap::default(),
+        array_functions: FxHashMap::default(),
+        assigned_at: FxHashMap::default(),
         aliases: FxHashMap::default(),
         receivers: FxHashMap::default(),
         protections: FxHashSet::default(),
@@ -749,6 +753,7 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
 
 impl<'s, 'a> Walker<'s, 'a> {
     fn collect(&mut self, kind: AstKind<'a>) {
+        self.collect_array_source(kind);
         match kind {
             AstKind::VariableDeclarator(declarator) => {
                 self.collect_declarator(declarator);

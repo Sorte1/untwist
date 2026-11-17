@@ -264,7 +264,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             self.saturated |= open && root_folds(root);
             let held = self
                 .site_target
-                .is_none_or(|target| !self.proven_non_global(target));
+                .is_some_and(|target| !self.proven_non_global(target));
             self.out.keyed_global |= open && held;
         }
         self.record_site(ASite {

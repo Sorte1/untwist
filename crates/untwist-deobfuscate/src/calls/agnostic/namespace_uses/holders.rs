@@ -1,10 +1,16 @@
 use oxc_ast::ast::*;
+use oxc_ast::AstKind;
 use oxc_syntax::operator::LogicalOperator;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use std::borrow::Cow;
 
 use super::{key_kind, str_const, Walker, KIND_DEPTH, NAMESPACE};
 use crate::proof::GLOBAL_OBJECTS;
+
+const BUILTIN_CONSTRUCTORS: [&str; 16] = [
+    "Object", "Function", "Array", "String", "Number", "Boolean", "Symbol", "BigInt", "RegExp",
+    "Date", "Error", "Map", "Set", "WeakMap", "WeakSet", "Promise",
+];
 
 impl<'s, 'a> Walker<'s, 'a> {
     pub(super) fn computed_kind(
@@ -67,6 +73,8 @@ impl<'s, 'a> Walker<'s, 'a> {
                 Some(symbol) => self.symbol_may_hold_global(symbol, next),
             },
             Expression::ThisExpression(_) => self.this_open(),
+            Expression::CallExpression(call) => !self.array_source(call),
+            Expression::StaticMemberExpression(member) => !self.builtin_prototype(member),
             Expression::ConditionalExpression(c) => {
                 self.may_hold_global(&c.consequent, next)
                     || self.may_hold_global(&c.alternate, next)
@@ -101,5 +109,65 @@ impl<'s, 'a> Walker<'s, 'a> {
 
     fn this_open(&self) -> bool {
         self.this_open.last().copied().unwrap_or(true)
+    }
+
+    pub(super) fn collect_array_source(&mut self, kind: AstKind<'a>) {
+        match kind {
+            AstKind::Function(function) if function.is_declaration() => {
+                let Some(id) = function.id.as_ref() else {
+                    return;
+                };
+                let shaped = crate::string_array::is_string_array_function(function, &id.name);
+                if let (true, Some(symbol)) = (shaped, id.symbol_id.get()) {
+                    self.array_functions.insert(symbol, function.span);
+                }
+            }
+            AstKind::AssignmentExpression(assign) => {
+                let AssignmentTarget::AssignmentTargetIdentifier(target) = &assign.left else {
+                    return;
+                };
+                if let Some(symbol) = self.symbol(&**target) {
+                    self.assigned_at
+                        .entry(symbol)
+                        .or_default()
+                        .push(assign.span);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn array_source(&self, call: &CallExpression<'a>) -> bool {
+        let Expression::Identifier(callee) = call.callee.without_parentheses() else {
+            return false;
+        };
+        let Some(symbol) = self.symbol(callee) else {
+            return false;
+        };
+        let Some(span) = self.array_functions.get(&symbol) else {
+            return false;
+        };
+        let writes = self
+            .scoping
+            .get_resolved_reference_ids(symbol)
+            .iter()
+            .filter(|reference| self.scoping.get_reference(**reference).is_write())
+            .count();
+        let inside = self.assigned_at.get(&symbol).map_or(&[][..], Vec::as_slice);
+        call.arguments.is_empty()
+            && self.scoping.symbol_redeclarations(symbol).is_empty()
+            && inside.len() == writes
+            && inside
+                .iter()
+                .all(|write| span.start <= write.start && write.end <= span.end)
+    }
+
+    fn builtin_prototype(&self, member: &StaticMemberExpression<'a>) -> bool {
+        let Expression::Identifier(owner) = member.object.without_parentheses() else {
+            return false;
+        };
+        member.property.name == "prototype"
+            && self.symbol(owner).is_none()
+            && BUILTIN_CONSTRUCTORS.contains(&owner.name.as_str())
     }
 }
