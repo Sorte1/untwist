@@ -11,13 +11,16 @@ use super::{Builtins, Reliance, Scanned};
 use crate::semantic::{is_foreign_global, program_is_strict};
 
 mod allow;
+mod escapes;
 mod functions;
 mod keys;
 mod reach;
 
 use allow::Root;
 
-use reach::{call_of, key_of, member_of, Key, CODE_RUNNERS, CONTEXT_RUNNERS, REACHING_KEYS};
+use reach::{
+    call_of, key_of, member_of, Key, CODE_RUNNERS, CONTEXT_RUNNERS, REACHING_KEYS, TIMERS,
+};
 
 const GLOBAL_OBJECTS: [&str; 7] = [
     "globalThis",
@@ -198,6 +201,7 @@ struct Scan<'s> {
     program: &'s Program<'s>,
     consts: OnceCell<keys::ConstKeys>,
     functions: OnceCell<functions::FunctionBindings>,
+    escaping: OnceCell<escapes::Escaping>,
     reached: RefCell<FxHashMap<usize, bool>>,
     scoping: &'s Scoping,
     reliance: &'s Reliance,
@@ -282,6 +286,7 @@ impl<'s> Scan<'s> {
             program,
             consts: OnceCell::new(),
             functions: OnceCell::new(),
+            escaping: OnceCell::new(),
             reached: RefCell::new(FxHashMap::default()),
             scoping,
             reliance,
@@ -310,6 +315,12 @@ impl Scan<'_> {
             && !self.scoping.symbol_is_mutated(symbol)
     }
 
+    fn escapes(&self, function: &Function<'_>) -> bool {
+        self.escaping
+            .get_or_init(|| escapes::escaping_functions(self.program, self.scoping, self.module))
+            .contains(&escapes::function_address(function))
+    }
+
     fn pattern_key_reaches(&self, computed: bool, key: &PropertyKey<'_>) -> bool {
         let name = match (computed, key) {
             (true, PropertyKey::StaticIdentifier(_) | PropertyKey::PrivateIdentifier(_)) => None,
@@ -333,6 +344,7 @@ impl Scan<'_> {
         REACHING_KEYS.contains(&name)
             || CODE_RUNNERS.contains(&name)
             || CONTEXT_RUNNERS.contains(&name)
+            || TIMERS.contains(&name)
             || name == REFLECT
             || self.names_a_root(name)
     }
@@ -717,7 +729,23 @@ impl Scan<'_> {
         }
     }
 
+    fn visit_timer_member(&mut self, expression: &Expression<'_>) -> bool {
+        if self.timer_member(expression).is_none() {
+            return false;
+        }
+        if let Some((object, key)) = member_of(expression) {
+            self.visit_member_object(object, key);
+        }
+        if let Expression::ComputedMemberExpression(member) = expression.without_parentheses() {
+            self.visit_expression(&member.expression);
+        }
+        true
+    }
+
     fn visit_callee(&mut self, callee: &Expression<'_>) {
+        if !self.is_root(callee) && self.visit_timer_member(callee) {
+            return;
+        }
         match callee.without_parentheses() {
             Expression::ConditionalExpression(conditional) => {
                 self.visit_expression(&conditional.test);
@@ -764,6 +792,9 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     fn visit_expression(&mut self, it: &Expression<'a>) {
         if self.settled() {
             return;
+        }
+        if !self.writes_only && self.timer_member(it).is_some() && !self.is_root(it) {
+            self.aliased();
         }
         if !self.writes_only && (self.is_root(it) || self.reads_prototypes(it)) {
             self.aliased();
@@ -870,6 +901,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
         match it.operator {
             UnaryOperator::Typeof if self.is_root(&it.argument) => {}
+            UnaryOperator::Typeof if self.visit_timer_member(&it.argument) => {}
             UnaryOperator::LogicalNot | UnaryOperator::Void => self.visit_unless_root(&it.argument),
             UnaryOperator::Delete if self.member_write(&it.argument) => self.written(),
             UnaryOperator::Delete if self.reaches_promise(&it.argument) => {
@@ -986,7 +1018,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         let strict = self.frame().strict || it.has_use_strict_directive();
         let frame = Frame {
             strict,
-            this: if strict {
+            this: if strict && !self.escapes(it) {
                 This::NotGlobal
             } else {
                 This::MaybeGlobal
@@ -1007,7 +1039,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_super(&mut self, _it: &Super) {
-        if !self.writes_only && self.this_value() == This::MaybeGlobal {
+        if !self.writes_only && !self.frame().strict && self.this_value() == This::MaybeGlobal {
             self.aliased();
         }
     }

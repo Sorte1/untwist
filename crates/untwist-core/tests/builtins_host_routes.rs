@@ -181,3 +181,92 @@ fn a_runner_name_read_off_any_receiver_is_a_code_runner() {
         &ATOB,
     );
 }
+
+#[test]
+fn a_timer_named_member_on_any_receiver_is_judged_like_the_free_timer() {
+    assert_not_intact(
+        &[
+            "document.defaultView.setTimeout('atob = f');",
+            "var w = document.defaultView; w.setInterval('atob = f', 5);",
+            "o.setImmediate('atob = f');",
+            "o['setTimeout']('atob = f');",
+            "o[`setTimeout`]('atob = f');",
+            "o?.setTimeout('atob = f');",
+            "const k = 'setTimeout'; o[k]('atob = f');",
+            "o.setTimeout`atob = f`;",
+            "o.setTimeout.call(o, 'atob = f');",
+            "o.setTimeout.apply(o, ['atob = f']);",
+            "var t = o.setTimeout; t('atob = f');",
+            "var t = o.setTimeout.bind(o); t('atob = f');",
+            "var { setTimeout: t } = o; t('atob = f');",
+            "e.currentTarget.setTimeout(cb, 0);",
+            "addEventListener('load', function (e) { e.currentTarget.setTimeout('atob = f'); });",
+            "o.requestAnimationFrame(cb);",
+            "o.queueMicrotask(cb);",
+            "o.requestIdleCallback(cb);",
+            "requestAnimationFrame(cb);",
+            "queueMicrotask(cb);",
+        ],
+        &ATOB,
+    );
+    assert_intact(
+        &[
+            "document.defaultView.setTimeout(function () {}, 0);",
+            "o.setInterval(() => 1, 5);",
+            "function cb() {} o.setTimeout(cb, 0);",
+            "var id = o.setTimeout(function () {}, 0); clearTimeout(id);",
+            "this.t = o.setTimeout(function () {}, 0);",
+            "o.requestAnimationFrame(function () {});",
+            "requestAnimationFrame(function () {});",
+            "queueMicrotask(() => 1);",
+            "var t = typeof o.setTimeout;",
+        ],
+        &ATOB,
+    );
+}
+
+#[test]
+fn a_strict_function_that_escapes_may_see_the_global_object_as_this() {
+    assert_not_intact(
+        &[
+            "'use strict'; setTimeout(function () { var k = 'atob'; this[k] = f; }, 0);",
+            "setTimeout(function () { 'use strict'; var k = 'atob'; this[k] = f; }, 0);",
+            "(function () { 'use strict'; function cb() { this[k] = f; } addEventListener('load', cb); })();",
+            "(function () { 'use strict'; var cb = function () { this[k] = f; }; requestAnimationFrame(cb); })();",
+            "(function () { 'use strict'; var cb = function () { this[k] = f; }; var a = cb; setTimeout(a, 0); })();",
+            "(function () { 'use strict'; function cb() { this[k] = f; } cb.call(o); })();",
+            "(function () { 'use strict'; function cb() { this[k] = f; } setTimeout(cb.bind(o), 0); })();",
+            "(function () { 'use strict'; function cb() { var r = this[k]; } setTimeout(cb, 0); })();",
+            "'use strict'; onload = function () { this[k] = f; };",
+            "'use strict'; el.onclick = function () { this[k] = f; };",
+            "(function () { 'use strict'; var o = {}; o.onload = function () { this[k] = f; }; })();",
+            "'use strict'; window.cb = function () { this[k] = f; };",
+            "'use strict'; module.exports = function () { this[k] = f; };",
+            "(function () { 'use strict'; function make() { return function () { this[k] = f; }; } make(); })();",
+            "(function () { 'use strict'; var o = { m: function () { this[k] = f; } }; setTimeout(o.m, 0); })();",
+            "(function () { 'use strict'; var o = { m() { this[k] = f; } }; el.addEventListener('x', o.m); })();",
+            "(function () { 'use strict'; var o = {}; o.m = function () { this[k] = f; }; setTimeout(o.m, 0); })();",
+            "(function () { 'use strict'; [function () { this[k] = f; }].forEach(function (g) { g(); }); })();",
+            "'use strict'; setTimeout(function () { this.atob = f; }, 0);",
+            "'use strict'; setTimeout(function () { this['atob'] = f; }, 0);",
+            "'use strict'; setTimeout(function () { (() => { this[k] = f; })(); }, 0);",
+            "'use strict'; function cb() { this[k] = f; }",
+            "export default function () { this[k] = f; }",
+            "export function cb() { this[k] = f; }",
+            "function cb() { this[k] = f; } export { cb };",
+        ],
+        &ATOB,
+    );
+    assert_intact(
+        &[
+            "(function () { 'use strict'; function g() { this[k] = 1; } g(); })();",
+            "'use strict'; (function () { this[k] = 1; })();",
+            "(function () { 'use strict'; var o = { m: function () { this[k] = 1; } }; o.m(); })();",
+            "(function () { 'use strict'; function F() { this[k] = 1; } new F(); })();",
+            "(function () { 'use strict'; function F() {} F.prototype.m = function () { this[k] = 1; }; new F().m(); })();",
+            "'use strict'; class A { m() { this[k] = 1; } } new A().m();",
+            "(function () { 'use strict'; setTimeout(function () { this.x = 1; }, 0); })();",
+        ],
+        &ATOB,
+    );
+}
