@@ -10,6 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::host_keys::{const_key, literal_data, runner_key, Keys, Write, Writes, NAME_LISTERS};
 use crate::host_text::CONSTRUCTOR;
 
+mod carry;
 mod collect;
 mod copies;
 #[cfg(test)]
@@ -480,7 +481,7 @@ impl<'a> Reach<'_, 'a> {
             || (name == GET && (call.arguments.len() >= 2 || self.reflective(member.object())));
         if reads {
             self.check_read_call(at, call, name == DESCRIPTOR);
-        } else if name == DESCRIPTORS && !self.copied(at) {
+        } else if name == DESCRIPTORS && !self.copied(at, call) {
             self.refuse(DESCRIPTORS_TAKEN);
         }
     }
@@ -513,21 +514,21 @@ impl<'a> Reach<'_, 'a> {
         }
     }
 
-    fn copied(&self, at: usize) -> bool {
-        self.parent(at)
-            .is_some_and(|(up, child)| match self.stack[up] {
-                AstKind::CallExpression(call) => {
-                    let copier = self.builtin_member(&call.callee, &[OBJECT], &COPIERS)
-                        && !call.arguments.iter().any(Argument::is_spread);
-                    let second = call
-                        .arguments
-                        .get(1)
-                        .and_then(Argument::as_expression)
-                        .is_some_and(|argument| same(argument, child));
-                    copier && second
-                }
-                _ => false,
-            })
+    fn copied(&mut self, at: usize, descriptors: &'a CallExpression<'a>) -> bool {
+        let Some((up, child)) = self.parent(at) else {
+            return false;
+        };
+        let AstKind::CallExpression(call) = self.stack[up] else {
+            return false;
+        };
+        let copier = self.builtin_member(&call.callee, &[OBJECT], &COPIERS)
+            && !call.arguments.iter().any(Argument::is_spread);
+        let second = call
+            .arguments
+            .get(1)
+            .and_then(Argument::as_expression)
+            .is_some_and(|argument| same(argument, child));
+        copier && second && self.copies_carry(call, descriptors)
     }
 
     fn check_pattern_key(&mut self, key: &PropertyKey<'a>, computed: bool) {

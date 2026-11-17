@@ -98,7 +98,7 @@ impl<'a> Writes<'a> {
         }
     }
 
-    fn settled(&self, scoping: &Scoping, symbol: SymbolId) -> Option<&[Write<'a>]> {
+    pub fn settled(&self, scoping: &Scoping, symbol: SymbolId) -> Option<&[Write<'a>]> {
         if !self.declared.contains(&symbol) || self.loose.contains(&symbol) {
             return None;
         }
@@ -358,7 +358,7 @@ impl<'a> Keys<'_, 'a> {
             })
     }
 
-    fn lister(&self, callee: &Expression<'_>, alias: bool) -> bool {
+    pub fn lister(&self, callee: &Expression<'_>, alias: bool) -> bool {
         match callee.without_parentheses() {
             Expression::Identifier(id) if alias => self
                 .symbol(id)
