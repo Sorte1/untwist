@@ -158,6 +158,20 @@ function callback_console_disable_getter() {
   }
 }
 
+function callback_console_disable_no_eval() {
+  const v1 = typeof window !== "undefined" ? window : typeof process === "object" && typeof require === "function" && typeof global === "object" ? global : this;
+  const v4 = v1.console = v1.console || {};
+  const v5 = ["log", "warn", "info", "error", "exception", "table", "trace"];
+  for (let v6 = 0; v6 < v5.length; v6++) {
+    const v7 = CONTROLLER.constructor.prototype.bind(CONTROLLER);
+    const v8 = v5[v6];
+    const v9 = v4[v8] || v7;
+    v7.__proto__ = CONTROLLER.bind(CONTROLLER);
+    v7.toString = v9.toString.bind(v9);
+    v4[v8] = v7;
+  }
+}
+
 function protection_function(v1) {
   function v2(v3) {
     if (typeof v3 === "string") {
@@ -170,6 +184,29 @@ function protection_function(v1) {
       (function () {
         return false;
       }).constructor("debugger").apply("stateObject");
+    }
+    v2(++v3);
+  }
+  try {
+    if (v1) {
+      return v2;
+    } else {
+      v2(0);
+    }
+  } catch (v5) {}
+}
+
+function protection_function_no_eval(v1) {
+  function v2(v3) {
+    if (typeof v3 === "string") {
+      const v4 = function () {
+        while (true) {}
+      };
+      return v4();
+    } else if (("" + v3 / v3).length !== 1 || v3 % 20 === 0) {
+      debugger;
+    } else {
+      debugger;
     }
     v2(++v3);
   }
@@ -205,4 +242,9 @@ function interval_getter() {
   };
   const v4 = v1();
   v4.setInterval(PROTECTION, 4e3);
+}
+
+function interval_no_eval() {
+  const v1 = typeof window !== "undefined" ? window : typeof process === "object" && typeof require === "function" && typeof global === "object" ? global : this;
+  v1.setInterval(PROTECTION, 4e3);
 }

@@ -281,3 +281,79 @@ fn a_protection_that_blocks_a_block_function_hoist_is_kept() {
         "{notes:?}"
     );
 }
+
+const NO_EVAL_DPF: &str = "function dpf(ret) {\n  function debuggerProtection(counter) {\n    if (typeof counter === \"string\") {\n      const func = function () {\n        while (true) {}\n      };\n      return func();\n    } else if ((\"\" + counter / counter).length !== 1 || counter % 20 === 0) {\n      debugger;\n    } else {\n      debugger;\n    }\n    debuggerProtection(++counter);\n  }\n  try {\n    if (ret) {\n      return debuggerProtection;\n    } else {\n      debuggerProtection(0);\n    }\n  } catch (y) {}\n}\n";
+
+const NO_EVAL_INTERVAL: &str = "(function () {\n  const that = typeof window !== \"undefined\" ? window : typeof process === \"object\" && typeof require === \"function\" && typeof global === \"object\" ? global : this;\n  that.setInterval(dpf, 4000);\n})();\n";
+
+#[test]
+fn the_browser_no_eval_debug_protection_function_is_removed() {
+    let alloc = Allocator::default();
+    let source = format!("{NO_EVAL_DPF}console.log(1);");
+    assert_eq!(run(&alloc, &source).trim(), "console.log(1);");
+}
+
+#[test]
+fn the_browser_no_eval_form_with_an_arrow_loop_is_removed() {
+    let alloc = Allocator::default();
+    let source = format!(
+        "{}console.log(1);",
+        NO_EVAL_DPF.replacen("const func = function () {", "const func = () => {", 1)
+    );
+    assert_eq!(run(&alloc, &source).trim(), "console.log(1);");
+}
+
+#[test]
+fn the_browser_no_eval_interval_iife_is_removed_with_its_protection() {
+    let alloc = Allocator::default();
+    let source = format!("{NO_EVAL_DPF}{NO_EVAL_INTERVAL}console.log(1);");
+    assert_eq!(run(&alloc, &source).trim(), "console.log(1);");
+}
+
+#[test]
+fn an_unread_bare_var_left_by_a_removed_dead_branch_does_not_hide_the_protection() {
+    let alloc = Allocator::default();
+    let source = format!(
+        "{}console.log(1);",
+        NO_EVAL_DPF.replacen(
+            "    if (ret) {\n",
+            "    if (ret) {\n      var leftover;\n",
+            1
+        )
+    );
+    assert_eq!(run(&alloc, &source).trim(), "console.log(1);");
+}
+
+#[test]
+fn a_bare_var_the_protection_reads_keeps_it() {
+    let alloc = Allocator::default();
+    let source = format!(
+        "{}console.log(1);",
+        NO_EVAL_DPF
+            .replacen(
+                "    if (ret) {\n",
+                "    if (ret) {\n      var leftover;\n",
+                1
+            )
+            .replacen(
+                "return debuggerProtection;",
+                "return leftover || debuggerProtection;",
+                1
+            )
+    );
+    assert_eq!(run(&alloc, &source), printed(&source));
+}
+
+#[test]
+fn a_browser_no_eval_protection_whose_loop_does_work_is_kept() {
+    let alloc = Allocator::default();
+    let source = format!(
+        "{}console.log(1);",
+        NO_EVAL_DPF.replacen(
+            "while (true) {}",
+            "while (true) {\n          console.log(2);\n        }",
+            1
+        )
+    );
+    assert_eq!(run(&alloc, &source), printed(&source));
+}

@@ -324,6 +324,10 @@ impl Shape<'_> {
                 | AstKind::NewExpression(_)
                 | AstKind::ArrayExpression(_)
                 | AstKind::ObjectExpression(_)
+                | AstKind::ConditionalExpression(_)
+                | AstKind::ThisExpression(_)
+                | AstKind::WhileStatement(_)
+                | AstKind::DebuggerStatement(_)
         )
     }
 
@@ -361,7 +365,7 @@ impl<'a> VisitJs<'a> for Shape<'_> {
     }
 
     fn visit_statement(&mut self, it: &Statement<'a>) {
-        if !self.poisoned {
+        if !self.poisoned && !is_unread_bare_var(it, self.scoping) {
             walk_js::walk_statement(self, it);
         }
     }
@@ -371,6 +375,23 @@ impl<'a> VisitJs<'a> for Shape<'_> {
             walk_js::walk_expression(self, it);
         }
     }
+}
+
+fn is_unread_bare_var(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return false;
+    };
+    declaration.kind == VariableDeclarationKind::Var
+        && declaration.declarations.iter().all(|declarator| {
+            let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+                return false;
+            };
+            declarator.init.is_none()
+                && id.symbol_id.get().is_some_and(|symbol| {
+                    scoping.get_resolved_reference_ids(symbol).is_empty()
+                        && scoping.symbol_redeclarations(symbol).is_empty()
+                })
+        })
 }
 
 fn shape(
@@ -490,7 +511,7 @@ mod tests {
         let loaded = templates();
         let shaped = loaded.callbacks.len() + loaded.protections.len() + loaded.intervals.len();
         assert_eq!(shaped, declared);
-        assert_eq!(loaded.protections.len(), 1);
-        assert_eq!(loaded.intervals.len(), 2);
+        assert_eq!(loaded.protections.len(), 2);
+        assert_eq!(loaded.intervals.len(), 3);
     }
 }

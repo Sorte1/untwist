@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
 use oxc_ast::ast::{
-    ArrowFunctionExpression, BlockStatement, CatchClause, Class, Function, IfStatement, Program,
-    Statement, StaticBlock, SwitchStatement, VariableDeclaration,
+    ArrowFunctionExpression, BlockStatement, CatchClause, Class, Function, IfStatement,
+    ImportDeclaration, Program, Statement, StaticBlock, SwitchStatement, VariableDeclaration,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_diagnostics::OxcDiagnostic;
@@ -104,6 +104,13 @@ impl<'a> VisitJs<'a> for Walk<'_> {
         walk_js::walk_class(self, it);
     }
 
+    fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
+        for specifier in it.specifiers.iter().flatten() {
+            self.hoisting.import(specifier.local());
+        }
+        walk_js::walk_import_declaration(self, it);
+    }
+
     fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
         self.hoisting.variable_declaration(it);
         walk_js::walk_variable_declaration(self, it);
@@ -152,7 +159,8 @@ impl<'a> VisitJs<'a> for Walk<'_> {
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         self.scan.declared(it, self.scoping);
-        self.hoisting.function(it);
+        let clause = self.scan.clauses.last() == Some(&it.span);
+        self.hoisting.function(it, clause);
         walk_js::walk_function(self, it, flags);
         self.hoisting.leave_frame();
     }
@@ -249,18 +257,43 @@ impl AnnexB {
     }
 
     pub fn explains(&self, diagnostic: &OxcDiagnostic) -> bool {
-        let Some(spans) = redeclaration_spans(diagnostic) else {
-            return false;
-        };
+        self.explaining(diagnostic).is_some()
+    }
+
+    pub fn explains_by_clause(&self, diagnostic: &OxcDiagnostic) -> bool {
+        self.explaining(diagnostic)
+            .is_some_and(|candidate| candidate.clause)
+    }
+
+    pub fn clause_shares_name(&self, scoping: &Scoping) -> bool {
+        self.candidates.iter().any(|candidate| {
+            candidate.clause
+                && candidate
+                    .symbol
+                    .is_some_and(|symbol| !scoping.symbol_redeclarations(symbol).is_empty())
+        })
+    }
+
+    pub fn clause_functions(&self) -> Vec<Span> {
+        self.candidates
+            .iter()
+            .filter(|candidate| candidate.clause)
+            .map(|candidate| candidate.block)
+            .collect()
+    }
+
+    fn explaining(&self, diagnostic: &OxcDiagnostic) -> Option<&Candidate> {
+        let spans = redeclaration_spans(diagnostic)?;
         self.candidates
             .iter()
             .zip(&self.clashing)
-            .any(|(candidate, clashing)| {
-                !clashing
+            .find(|(candidate, clashing)| {
+                !**clashing
                     && spans.contains(&candidate.ident)
                     && spans.iter().any(|span| {
                         *span != candidate.ident && !candidate.block.contains_inclusive(*span)
                     })
             })
+            .map(|(candidate, _)| candidate)
     }
 }

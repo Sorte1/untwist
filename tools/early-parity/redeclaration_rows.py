@@ -33,5 +33,22 @@ for (n1, s1), inner in itertools.product(S, I):
         rows.add((s1 % (d + " " + inner)).strip())
         rows.add((s1 % (inner + " " + d)).strip())
         rows.add(((s1 % inner) + " " + d).strip())
+M = ['import x from "m";', 'import * as x from "m";', 'import {y as x} from "m";', 'import {x} from "m";']
+for imp, (n1, s1), inner in itertools.product(M, S, I):
+    rows.add(imp + " " + (s1 % inner))
+    rows.add((s1 % inner) + " " + imp)
+    rows.add(imp + " " + (s1 % ("try {} catch (x) { %s }" % inner)))
+    for n2, s2 in S:
+        rows.add(imp + " " + (s1 % (s2 % inner)))
+for imp, inner in itertools.product(M, I):
+    rows.add(imp + " " + inner)
+C = ["if (1) function x(){}", "if (0) ; else function x(){}", "if (1) l: function x(){}", "l: function x(){}", "l: if (1) function x(){}"]
+for clause, (n1, s1), inner in itertools.product(C, S, I):
+    rows.add(s1 % (clause + " " + inner))
+    rows.add(s1 % (inner + " " + clause))
+    rows.add(clause + " " + (s1 % inner))
+    for n2, s2 in S:
+        rows.add(s1 % (clause + " " + (s2 % inner)))
+        rows.add(s1 % (s2 % (clause + " " + inner)))
 for r in sorted(rows):
     print(r)
