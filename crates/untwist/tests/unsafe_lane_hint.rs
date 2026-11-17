@@ -1,6 +1,6 @@
 use untwist::{NoteKind, Options, Output, Pipeline, UNSAFE_LANE_DECODES};
 
-const HIGH: &str = include_str!("../../../fixtures/reference/deobfuscate/obfuscator.io-high.js");
+const HIGH: &str = include_str!("../../../fixtures/obfuscator-io/preset-medium--greeting-1.js");
 const PLAIN_ARRAY: &str =
     include_str!("../../../fixtures/reference/deobfuscate/obfuscator.io-multi-encoders.js");
 

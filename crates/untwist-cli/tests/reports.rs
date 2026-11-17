@@ -114,7 +114,7 @@ fn the_deobfuscate_stage_times_prepare_then_every_round_in_order() {
 
 #[test]
 fn a_default_lane_alias_refusal_prints_the_unsafe_hint_on_stderr() {
-    let high = include_str!("../../../fixtures/reference/deobfuscate/obfuscator.io-high.js");
+    let high = include_str!("../../../fixtures/obfuscator-io/preset-medium--greeting-1.js");
     let hint = untwist::UNSAFE_LANE_DECODES;
     let out = stdin_output(high, &[]);
     assert!(out.status.success());
