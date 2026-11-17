@@ -137,7 +137,7 @@ impl<'s, 'a> Walker<'s, 'a> {
                 let AssignmentTarget::AssignmentTargetIdentifier(target) = &assign.left else {
                     return;
                 };
-                if let Some(symbol) = self.symbol(&**target) {
+                if let Some(symbol) = self.symbol(target) {
                     self.assigned_at
                         .entry(symbol)
                         .or_default()
