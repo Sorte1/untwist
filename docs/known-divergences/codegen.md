@@ -139,7 +139,8 @@ fixture that then joins the differential.
   The G1 templates above are a recogniser, so a near-miss used to leave the target across lines
   and the output hung (javascript-obfuscator 5.10.1 with dead-code injection, R51-SD). Every input
   is now also checked for the G1 reader: a `var n = c(this, <parameterless function or arrow>)`
-  (block or expression body, extra arguments after the callback allowed),
+  (block or expression body, extra arguments after the callback allowed; the first argument
+  may be any expression or a spread, since self-defending removal keeps such calls),
   `n = c(this, …)` or the control-flow proxy form `n = t.k(c, this, …)`, whose callback holds a
   chain of at least three calls that passes `n` back in
   (`n.toString().search(r).toString().constructor(n)…`, or the older
