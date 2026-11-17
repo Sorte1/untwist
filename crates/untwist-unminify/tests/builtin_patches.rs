@@ -55,7 +55,7 @@ fn every_patch_spelling_keeps_the_program_output_by_default() {
 fn a_strict_function_or_class_this_leaves_the_rewrites_on() {
     let rows = [
         "(function () { \"use strict\"; var self = this; g(self); })();\nvar x = JSON.parse(\"[1]\");",
-        "class C { m() { return this; } }\nvar x = JSON.parse(\"[1]\");",
+        "class C { constructor() { g(this); } }\nnew C();\nvar x = JSON.parse(\"[1]\");",
     ];
     for source in rows {
         let output = default_lane(source);
