@@ -254,11 +254,13 @@ included, as does a read of the global object by a key the scan cannot resolve, 
 top-level name is a word that a string of the file spells, also when the string is joined
 through a constant binding (`Function("return typeof a")`). A value read by a key the scan
 cannot resolve is not taken to be a code runner, so calls made with it are not judged as code
-text (a runner read by name or by a key the scan resolves still is). No code observes the
-obfuscator's machinery, protections or decoder aliases through the global object or global code
-text (so a top-level string array, decoder, decoder alias, self-defending or debug-protection
-binding of a classic script is removed even when the program enumerates or tests the global
-object's names, reads them by key, or runs code text through any runner, `(0, eval)`,
+text (a runner read by name or by a key the scan resolves still is). No code observes or
+replaces the obfuscator's machinery, protections or decoder aliases through the global object,
+reflection or global code text (so a top-level string array, decoder, decoder alias,
+self-defending or debug-protection binding of a classic script is removed, and calls through it
+are decoded, even when the program enumerates or tests the global object's names, reads or writes
+them by key, through `Object.assign`, `Reflect.set`, `Object.defineProperty` or a loop over keys,
+or runs code text through any runner, `(0, eval)`,
 `Function`, a timer string, or a runner that code text hands back such as
 `Function("return eval")()(s)`). A few passes that rest on
 heuristics are allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).
