@@ -3,7 +3,22 @@ use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/native_map_pending_rows.txt");
 
-fn rows() -> Vec<(String, String)> {
+const RETURNS_REFLECT: &str = "the rebound Map returns Reflect from a function, which the namespace allow-list pins before native-map-pending runs";
+
+const REFUSED_BY_THE_NAMESPACE_SCAN: &[(&str, &str)] = &[
+    ("ref-map-pending-rebound", RETURNS_REFLECT),
+    ("ref-map-pending-rebound-through-call", RETURNS_REFLECT),
+];
+
+fn refused_by_the_namespace_scan(label: &str) -> bool {
+    REFUSED_BY_THE_NAMESPACE_SCAN
+        .iter()
+        .any(|(refused, _)| *refused == label)
+}
+
+type Row = (String, String);
+
+fn rows() -> Vec<Row> {
     ROWS.lines()
         .filter(|line| !line.trim().is_empty())
         .filter_map(|line| line.split_once('|'))
@@ -92,10 +107,16 @@ fn the_sabotage_rows_diverge_from_node_under_the_native_map_pending_mutant() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let sabotage: Vec<(String, String)> = rows()
+    let (refused, sabotage): (Vec<Row>, Vec<Row>) = rows()
         .into_iter()
         .filter(|(label, _)| label.starts_with("ref-"))
+        .partition(|(label, _)| refused_by_the_namespace_scan(label));
+    let refused_labels: Vec<&str> = refused.iter().map(|(label, _)| label.as_str()).collect();
+    let former_sabotage: Vec<&str> = REFUSED_BY_THE_NAMESPACE_SCAN
+        .iter()
+        .map(|(label, _)| *label)
         .collect();
+    assert_eq!(refused_labels, former_sabotage);
     let mutant = options(false, true);
     let run_mutant = |source: &str| transformed(&mutant, source);
     let modes: [Mode<'_>; 1] = [("mutant", &run_mutant)];
@@ -108,6 +129,22 @@ fn the_sabotage_rows_diverge_from_node_under_the_native_map_pending_mutant() {
         assert!(
             names.contains(&label.as_str()),
             "{label} did not diverge from node under the mutant"
+        );
+    }
+}
+
+#[test]
+fn the_rows_the_namespace_scan_refuses_stay_undecoded_under_the_mutant() {
+    let mutant = options(false, true);
+    let programs = rows();
+    for (label, reason) in REFUSED_BY_THE_NAMESPACE_SCAN {
+        let (_, source) = programs
+            .iter()
+            .find(|(row, _)| row == label)
+            .unwrap_or_else(|| panic!("{label} is not a row"));
+        assert!(
+            transformed(&mutant, source).contains("console.log(bQ("),
+            "{label} decoded under the mutant, but {reason}"
         );
     }
 }

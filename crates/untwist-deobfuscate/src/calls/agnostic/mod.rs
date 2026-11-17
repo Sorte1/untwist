@@ -19,6 +19,7 @@ mod keys;
 mod live;
 mod markup;
 mod name_keys;
+mod namespace_uses;
 mod native_map;
 mod observe;
 mod opaque;

@@ -114,6 +114,7 @@ pub(super) fn run<'s, 'a>(
     );
     sites.inline_budget = inline_budget(program);
     sites.visit_program(program);
+    sites.reach_loose();
     sites.judge_collected()
 }
 
@@ -191,6 +192,9 @@ fn settle_ordered<'a>(
     };
     let mut bindings =
         Bindings::collect(program, scoping, (!watch.names.is_empty(), exempt), resolve);
+    if !watch.names.is_empty() {
+        bindings.loose = super::namespace_uses::loose_uses(program, scoping, resolve);
+    }
     let flow = Flow::new(program, scoping, resolve);
     let filters = std::rc::Rc::clone(&bindings.filters);
     let globals = script_globals(program, scoping);
