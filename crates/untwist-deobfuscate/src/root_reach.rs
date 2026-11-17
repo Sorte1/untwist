@@ -7,7 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::Cx;
 use untwist_core::semantic::has_module_syntax;
 
-use crate::calls::agnostic::{global_reach, ReachWatch};
+use crate::calls::agnostic::names_reached_quietly;
 use crate::decoded::syntactic_global_reach;
 use crate::legacy_reach;
 use crate::mutants::root_alias_reach_trusted;
@@ -30,13 +30,7 @@ pub(crate) fn root_names_reached(
         let strings = FxHashMap::default();
         return syntactic_global_reach((program, scoping), &strings, names, &[]);
     }
-    let watch = ReachWatch {
-        names,
-        props: names,
-        fns: &[],
-        observe: false,
-    };
-    global_reach(program, scoping, (None, &[]), watch).reach
+    names_reached_quietly(program, scoping, names)
 }
 
 pub(crate) struct ReachedRoots {

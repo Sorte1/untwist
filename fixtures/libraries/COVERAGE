@@ -48,7 +48,7 @@ core-js/rollup-cjs.esbuild.js	209	209	209
 core-js/rollup-cjs.js	209	209	209
 core-js/rollup-cjs.swc.js	154	154	154
 core-js/rollup-cjs.terser.js	181	181	181
-core-js/rollup-cjs.terser.obf.js	20	181	181
+core-js/rollup-cjs.terser.obf.js	19	181	181
 core-js/vite.esbuild.js	181	181	181
 core-js/vite.none.js	180	180	180
 core-js/vite.terser.js	182	182	182
