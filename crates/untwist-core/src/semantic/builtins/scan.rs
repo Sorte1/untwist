@@ -14,7 +14,9 @@ mod allow;
 mod escapes;
 mod functions;
 mod keys;
+mod modules;
 mod reach;
+mod windows;
 
 use allow::Root;
 
@@ -43,30 +45,13 @@ const DEFINERS: [(&str, &str); 8] = [
     ("Reflect", "deleteProperty"),
 ];
 
+const KEYED_DEFINERS: [&str; 3] = ["defineProperty", "set", "deleteProperty"];
+
 const LEGACY_DEFINERS: [&str; 2] = ["__defineGetter__", "__defineSetter__"];
 
 const PROMISE: &str = "Promise";
 
 const REFLECT: &str = "Reflect";
-
-const TEXT_MODULE_SCHEMES: [&str; 3] = ["data:", "blob:", "javascript:"];
-
-fn is_text_module(specifier: &str) -> bool {
-    let lower = specifier.trim_start().to_ascii_lowercase();
-    TEXT_MODULE_SCHEMES
-        .iter()
-        .any(|scheme| lower.starts_with(scheme))
-}
-
-fn names_a_module(source: &Expression<'_>) -> bool {
-    match source.without_parentheses() {
-        Expression::StringLiteral(literal) => literal
-            .value
-            .as_str()
-            .is_some_and(|text| !is_text_module(text)),
-        _ => false,
-    }
-}
 
 fn literal_key<'k>(expression: &'k Expression<'_>) -> Option<&'k str> {
     match expression.without_parentheses() {
@@ -202,6 +187,7 @@ struct Scan<'s> {
     consts: OnceCell<keys::ConstKeys>,
     functions: OnceCell<functions::FunctionBindings>,
     escaping: OnceCell<escapes::Escaping>,
+    windows: OnceCell<windows::WindowLocals>,
     reached: RefCell<FxHashMap<usize, bool>>,
     scoping: &'s Scoping,
     reliance: &'s Reliance,
@@ -287,6 +273,7 @@ impl<'s> Scan<'s> {
             consts: OnceCell::new(),
             functions: OnceCell::new(),
             escaping: OnceCell::new(),
+            windows: OnceCell::new(),
             reached: RefCell::new(FxHashMap::default()),
             scoping,
             reliance,
@@ -313,6 +300,12 @@ impl Scan<'_> {
             .get_or_init(|| functions::function_bindings(self.program))
             .contains(&symbol)
             && !self.scoping.symbol_is_mutated(symbol)
+    }
+
+    pub(super) fn window_local(&self, symbol: SymbolId) -> bool {
+        self.windows
+            .get_or_init(|| windows::window_locals(self.program, self.scoping))
+            .contains(&symbol)
     }
 
     fn escapes(&self, function: &Function<'_>) -> bool {
@@ -346,6 +339,7 @@ impl Scan<'_> {
             || CONTEXT_RUNNERS.contains(&name)
             || TIMERS.contains(&name)
             || name == REFLECT
+            || modules::LOADERS.contains(&name)
             || self.names_a_root(name)
     }
 
@@ -533,6 +527,54 @@ impl Scan<'_> {
         }
     }
 
+    fn deletes_window_key(&self, target: &Expression<'_>) -> bool {
+        match target.without_parentheses() {
+            Expression::StaticMemberExpression(member) => {
+                self.writes_window_name(&member.object, member.property.name.as_str())
+            }
+            Expression::ComputedMemberExpression(member) => {
+                self.writes_window_key(&member.object, Some(&member.expression))
+            }
+            _ => false,
+        }
+    }
+
+    fn assigns_window_key(&self, target: &SimpleAssignmentTarget<'_>) -> bool {
+        match target {
+            SimpleAssignmentTarget::StaticMemberExpression(member) => {
+                self.writes_window_name(&member.object, member.property.name.as_str())
+            }
+            SimpleAssignmentTarget::ComputedMemberExpression(member) => {
+                self.writes_window_key(&member.object, Some(&member.expression))
+            }
+            _ => false,
+        }
+    }
+
+    fn judge_source(&mut self, source: Option<&StringLiteral<'_>>) {
+        let safe = source
+            .and_then(|source| source.value.as_str())
+            .is_some_and(modules::is_safe_specifier);
+        if !safe {
+            self.not_allowed();
+        }
+    }
+
+    fn visit_require(&mut self, call: &CallExpression<'_>) {
+        let first = call.arguments.first().and_then(Argument::as_expression);
+        if !modules::names_a_safe_module(first) {
+            self.not_allowed();
+        }
+        if let Some((object, key)) = member_of(&call.callee) {
+            self.visit_member_object(object, key);
+            if let Expression::ComputedMemberExpression(member) = call.callee.without_parentheses()
+            {
+                self.visit_expression(&member.expression);
+            }
+        }
+        self.visit_arguments(&call.arguments);
+    }
+
     fn written(&mut self) {
         self.verdict = Builtins::Written;
     }
@@ -610,6 +652,38 @@ impl Scan<'_> {
             .any(|(owner, method)| *method == name && self.global_named(root, &[owner]))
     }
 
+    fn definer_like(&self, callee: &Expression<'_>) -> Option<&'static str> {
+        let (object, Key::Name(name)) = member_of(callee)? else {
+            return None;
+        };
+        let owner = match object.without_parentheses() {
+            Expression::Identifier(id) => id.name.as_str(),
+            other => match member_of(other)? {
+                (_, Key::Name(name)) => name,
+                _ => return None,
+            },
+        };
+        DEFINERS
+            .iter()
+            .find(|(definer, method)| *definer == owner && *method == name)
+            .map(|(_, method)| *method)
+    }
+
+    fn defines_on_window(&self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
+        let Some(method) = self.definer_like(callee) else {
+            return false;
+        };
+        let mut parts = arguments.iter().map(Argument::as_expression);
+        let Some(Some(target)) = parts.next() else {
+            return false;
+        };
+        let key = match KEYED_DEFINERS.contains(&method) {
+            true => parts.next().flatten(),
+            false => None,
+        };
+        self.writes_window_key(target, key)
+    }
+
     fn defines_on_builtin(&mut self, arguments: &[Argument<'_>]) -> bool {
         let mut parts = arguments.iter().map(Argument::as_expression);
         let Some(Some(target)) = parts.next() else {
@@ -631,11 +705,11 @@ impl Scan<'_> {
         if !name.is_some_and(|name| LEGACY_DEFINERS.contains(&name.as_str())) {
             return false;
         }
-        let key = arguments
-            .first()
-            .and_then(Argument::as_expression)
-            .and_then(literal_key);
-        self.judge_write(object, key)
+        let first = arguments.first().and_then(Argument::as_expression);
+        if self.writes_window_key(object, first) {
+            self.not_allowed();
+        }
+        self.judge_write(object, first.and_then(literal_key))
     }
 
     fn visit_unless_root(&mut self, expression: &Expression<'_>) {
@@ -807,16 +881,32 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
-        self.visit_member_object(&it.object, Key::Name(it.property.name.as_str()));
+        let key = Key::Name(it.property.name.as_str());
+        if self.names_a_loader(key) {
+            self.not_allowed();
+        }
+        if !self.reads_off_require(&it.object, key) {
+            self.visit_member_object(&it.object, key);
+        }
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        self.visit_member_object(&it.object, key_of(&it.expression));
+        let key = key_of(&it.expression);
+        if self.names_a_loader(key) {
+            self.not_allowed();
+        }
+        if !self.reads_off_require(&it.object, key) {
+            self.visit_member_object(&it.object, key);
+        }
         self.visit_expression(&it.expression);
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if REACHING_KEYS.contains(&it.name.as_str()) && self.global_named(it, &REACHING_KEYS) {
+        let name = it.name.as_str();
+        if REACHING_KEYS.contains(&name) && self.global_named(it, &REACHING_KEYS) {
+            self.not_allowed();
+        }
+        if modules::LOADERS.contains(&name) {
             self.not_allowed();
         }
     }
@@ -827,19 +917,32 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {
-        if !names_a_module(&it.source) {
+        if !modules::names_a_safe_module(Some(&it.source)) {
             self.not_allowed();
         }
         walk_js::walk_import_expression(self, it);
     }
 
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
-        if it.source.value.as_str().is_some_and(is_text_module) {
-            self.not_allowed();
-        }
+        self.judge_source(Some(&it.source));
+    }
+
+    fn visit_export_all_declaration(&mut self, it: &ExportAllDeclaration<'a>) {
+        self.judge_source(Some(&it.source));
+    }
+
+    fn visit_export_from_declaration(&mut self, it: &ExportFromDeclaration<'a>) {
+        self.judge_source(Some(&it.source));
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.calls_require(&it.callee) {
+            self.visit_require(it);
+            return;
+        }
+        if self.defines_on_window(&it.callee, &it.arguments) {
+            self.not_allowed();
+        }
         if self.is_definer(&it.callee) && self.defines_on_promise(&it.arguments) {
             self.promise_written = true;
         }
@@ -901,8 +1004,13 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
         match it.operator {
             UnaryOperator::Typeof if self.is_root(&it.argument) => {}
+            UnaryOperator::Typeof if self.is_require_name(&it.argument) => {}
             UnaryOperator::Typeof if self.visit_timer_member(&it.argument) => {}
             UnaryOperator::LogicalNot | UnaryOperator::Void => self.visit_unless_root(&it.argument),
+            UnaryOperator::Delete if self.deletes_window_key(&it.argument) => {
+                self.not_allowed();
+                walk_js::walk_unary_expression(self, it);
+            }
             UnaryOperator::Delete if self.member_write(&it.argument) => self.written(),
             UnaryOperator::Delete if self.reaches_promise(&it.argument) => {
                 self.promise_written = true;
@@ -1003,6 +1111,9 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         if written {
             self.written();
             return;
+        }
+        if self.assigns_window_key(it) {
+            self.not_allowed();
         }
         let on_root = it.as_member_expression().is_some_and(|member| {
             self.allow_root(member.object())

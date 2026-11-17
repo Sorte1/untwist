@@ -21,6 +21,8 @@ struct Escapes<'s> {
     scoping: &'s Scoping,
     module: bool,
     functions: Escaping,
+    seen: Vec<usize>,
+    placed: FxHashSet<usize>,
     symbols: FxHashSet<SymbolId>,
     held_functions: FxHashMap<SymbolId, Vec<usize>>,
     held_symbols: FxHashMap<SymbolId, Vec<SymbolId>>,
@@ -35,6 +37,8 @@ pub(super) fn escaping_functions(
         scoping,
         module,
         functions: FxHashSet::default(),
+        seen: Vec::new(),
+        placed: FxHashSet::default(),
         symbols: FxHashSet::default(),
         held_functions: FxHashMap::default(),
         held_symbols: FxHashMap::default(),
@@ -75,6 +79,7 @@ impl Escapes<'_> {
     }
 
     fn function_flows(&mut self, address: usize, flow: Flow) {
+        self.placed.insert(address);
         match flow {
             Flow::Out => {
                 self.functions.insert(address);
@@ -142,6 +147,7 @@ impl Escapes<'_> {
                 }
             }
             Expression::AssignmentExpression(assignment) => self.flows(&assignment.right, flow),
+            Expression::AwaitExpression(awaited) => self.flows(&awaited.argument, flow),
             Expression::StaticMemberExpression(member) => self.flows(&member.object, flow),
             Expression::ComputedMemberExpression(member) => self.flows(&member.object, flow),
             Expression::ChainExpression(chain) => {
@@ -217,7 +223,20 @@ impl Escapes<'_> {
         }
     }
 
+    fn called_directly(&mut self, callee: &Expression<'_>) {
+        if let Expression::FunctionExpression(function) = callee.without_parentheses() {
+            self.placed.insert(function_address(function));
+        }
+    }
+
     fn close(mut self) -> Escaping {
+        let unplaced: Vec<usize> = self
+            .seen
+            .iter()
+            .copied()
+            .filter(|address| !self.placed.contains(address))
+            .collect();
+        self.functions.extend(unplaced);
         let mut pending: Vec<SymbolId> = self.symbols.iter().copied().collect();
         while let Some(symbol) = pending.pop() {
             if let Some(functions) = self.held_functions.get(&symbol) {
@@ -262,6 +281,7 @@ fn forwarded<'e, 'a>(callee: &'e Expression<'a>) -> Option<&'e Expression<'a>> {
 
 impl<'a> VisitJs<'a> for Escapes<'_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.called_directly(&it.callee);
         if let Some(object) = forwarded(&it.callee) {
             self.escapes(object);
         }
@@ -272,6 +292,7 @@ impl<'a> VisitJs<'a> for Escapes<'_> {
     }
 
     fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
+        self.called_directly(&it.callee);
         it.arguments
             .iter()
             .for_each(|argument| self.argument_escapes(argument));
@@ -340,10 +361,49 @@ impl<'a> VisitJs<'a> for Escapes<'_> {
     }
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.seen.push(function_address(it));
         if let Some(symbol) = it.id.as_ref().and_then(|id| id.symbol_id.get()) {
             self.function_flows(function_address(it), Flow::Into(symbol));
         }
         walk_js::walk_function(self, it, flags);
+    }
+
+    fn visit_method_definition(&mut self, it: &MethodDefinition<'a>) {
+        if it.kind == MethodDefinitionKind::Constructor {
+            self.placed.insert(function_address(&it.value));
+        }
+        walk_js::walk_method_definition(self, it);
+    }
+
+    fn visit_property_definition(&mut self, it: &PropertyDefinition<'a>) {
+        if let Some(value) = &it.value {
+            self.escapes(value);
+        }
+        walk_js::walk_property_definition(self, it);
+    }
+
+    fn visit_accessor_property(&mut self, it: &AccessorProperty<'a>) {
+        if let Some(value) = &it.value {
+            self.escapes(value);
+        }
+        walk_js::walk_accessor_property(self, it);
+    }
+
+    fn visit_formal_parameter(&mut self, it: &FormalParameter<'a>) {
+        if let Some(initializer) = &it.initializer {
+            self.escapes(initializer);
+        }
+        walk_js::walk_formal_parameter(self, it);
+    }
+
+    fn visit_assignment_pattern(&mut self, it: &AssignmentPattern<'a>) {
+        self.escapes(&it.right);
+        walk_js::walk_assignment_pattern(self, it);
+    }
+
+    fn visit_assignment_target_with_default(&mut self, it: &AssignmentTargetWithDefault<'a>) {
+        self.escapes(&it.init);
+        walk_js::walk_assignment_target_with_default(self, it);
     }
 
     fn visit_export_default_declaration(&mut self, it: &ExportDefaultDeclaration<'a>) {

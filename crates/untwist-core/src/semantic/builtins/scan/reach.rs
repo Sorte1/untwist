@@ -342,11 +342,10 @@ impl Scan<'_> {
                 .reference_id
                 .get()
                 .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
-                .is_some_and(|symbol| self.only_a_function(symbol)),
-            other => call_of(other).is_some_and(|call| match member_of(&call.callee) {
-                Some((object, Key::Name("bind"))) => self.is_function_value(object),
-                _ => false,
-            }),
+                .is_some_and(|symbol| {
+                    self.only_a_function(symbol) && !self.is_script_global(symbol)
+                }),
+            _ => false,
         }
     }
 }
