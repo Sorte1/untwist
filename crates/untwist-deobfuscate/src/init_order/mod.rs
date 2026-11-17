@@ -524,6 +524,11 @@ pub(crate) fn early_or_written(
     if early.contains(&symbol) {
         return Some(notes::MACHINERY_READ_BEFORE_DECLARATION);
     }
+    if scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
+        && untwist_core::semantic::is_shared_global(scoping.symbol_name(symbol))
+    {
+        return Some(notes::MACHINERY_SHARED_GLOBAL);
+    }
     (!early_read_guards_dropped() && constant_written(scoping, symbol))
         .then_some(notes::MACHINERY_CONSTANT_WRITTEN)
 }

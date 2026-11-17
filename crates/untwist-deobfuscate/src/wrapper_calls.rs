@@ -25,7 +25,7 @@ use crate::primitive_names::PrimitiveNames;
 use crate::probe::{expression_contains, holds_own_scope};
 use crate::proof::kept_in_its_block;
 use crate::proof::refuse_annex_b_bindings;
-use crate::root_reach::reached_roots;
+use crate::root_reach::{observed_roots, reached_roots};
 use crate::stamp::{declaration_symbol, decoder_index, is_machinery_name};
 use crate::units::MachineryDepth;
 use crate::wrapper_args::{kinds_fit, SiteView};
@@ -591,12 +591,14 @@ fn refuse_globally_reached_wrappers(
     rejected: &mut Rejected,
 ) {
     let symbols: Vec<SymbolId> = found.iter().map(|shape| shape.symbol).collect();
-    let Some(reached) = reached_roots(program, cx, &[], &symbols) else {
+    let Some(reached) = observed_roots(program, cx, &symbols)
+        .or_else(|| reached_roots(program, cx, &[], &symbols).map(|reached| reached.bindings))
+    else {
         return;
     };
     let (refused, kept): (Vec<_>, Vec<_>) = std::mem::take(found)
         .into_iter()
-        .partition(|shape| reached.bindings.contains(&shape.symbol));
+        .partition(|shape| reached.contains(&shape.symbol));
     *found = kept;
     rejected.extend(
         refused

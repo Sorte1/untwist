@@ -171,6 +171,9 @@ pub const MACHINERY_READ_BEFORE_DECLARATION: &str =
 pub const MACHINERY_CONSTANT_WRITTEN: &str =
     "the string array or a decoder is a const that code assigns to, and that assignment throws, so \
      it was left unstamped and its call sites undecoded";
+pub const MACHINERY_SHARED_GLOBAL: &str =
+    "another input given in the same run names the string array or a decoder, and the inputs \
+     share one global scope, so it was left unstamped and its call sites undecoded";
 pub const LEGACY_ARRAY_REACHED: &str =
     "this plain string array may be reached by name through the global object, a with statement \
      or a direct eval, so it was not turned into a string-array function and was left undecoded";
@@ -667,6 +670,7 @@ catalogue!(
     STRING_ARRAY_DECLARED_UNDEFINED,
     MACHINERY_READ_BEFORE_DECLARATION,
     MACHINERY_CONSTANT_WRITTEN,
+    MACHINERY_SHARED_GLOBAL,
     LEGACY_ARRAY_REACHED,
     LEGACY_DECODER_BEFORE_ARRAY,
     LEGACY_ROTATOR_AFTER_CODE,

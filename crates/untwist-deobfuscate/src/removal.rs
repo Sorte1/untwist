@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::StmtEdits;
 use untwist_core::ast_util::matcher::var_function_or_declaration;
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::{observers, Observers};
+use untwist_core::semantic::{is_shared_global, observers, Observers};
 
 use oxc_semantic::Scoping;
 use oxc_syntax::symbol::SymbolId;
@@ -49,10 +49,16 @@ fn observed_names_of(
     nested_root: bool,
     (stamped, units): (&Stamped<'_>, &[Machinery]),
 ) -> Observation {
-    if nested_root
-        || untwist_core::semantic::has_module_syntax(program)
-        || observers() == Observers::None
-    {
+    if nested_root || untwist_core::semantic::has_module_syntax(program) {
+        return Observation::default();
+    }
+    if let Some(span) = shared_machinery((program.source_text, scoping), (stamped, units)) {
+        return Observation {
+            observed: Some(span),
+            outside_premise: None,
+        };
+    }
+    if observers() == Observers::None {
         return Observation::default();
     }
     let root = scoping.root_scope_id();
@@ -86,9 +92,33 @@ fn observed_names_of(
     #[cfg(feature = "refusal-spans")]
     record_observed(&reach);
     Observation {
-        observed: reach.observed,
+        observed: reach.observed.or(reach.reach),
         outside_premise: reach.outside_premise,
     }
+}
+
+fn shared_machinery(
+    (source_text, scoping): (&str, &Scoping),
+    (stamped, units): (&Stamped<'_>, &[Machinery]),
+) -> Option<Span> {
+    let root = scoping.root_scope_id();
+    let shared_fn = stamped
+        .arrays
+        .iter()
+        .chain(stamped.decoders.iter())
+        .filter_map(|entry| Some((entry, entry.symbol?)))
+        .filter(|(_, symbol)| scoping.symbol_scope_id(*symbol) == root)
+        .find(|(entry, symbol)| {
+            is_shared_global(entry.name)
+                || original_name(source_text, scoping, *symbol).is_some_and(is_shared_global)
+        })
+        .map(|(entry, _)| entry.statement);
+    shared_fn.or_else(|| {
+        units
+            .iter()
+            .find(|unit| unit.alias_names().any(is_shared_global))
+            .and_then(|unit| unit.statements().first().copied())
+    })
 }
 
 #[cfg(feature = "refusal-spans")]
@@ -330,7 +360,7 @@ fn dead_root_aliases<'p>(
         read: FxHashSet::default(),
     };
     read.visit_program(program);
-    candidates.retain(|alias| !read.read.contains(alias.name));
+    candidates.retain(|alias| !read.read.contains(alias.name) && !is_shared_global(alias.name));
     candidates
 }
 

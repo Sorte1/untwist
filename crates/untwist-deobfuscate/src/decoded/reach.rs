@@ -9,6 +9,8 @@ use crate::bridge::DecodePlan;
 use crate::calls::agnostic::{global_reach, ReachWatch};
 use crate::mutants::decoder_name_watch_dropped;
 use crate::root_reach::root_alias_names;
+use crate::stamp::original_name;
+use untwist_core::semantic::is_shared_global;
 
 pub(super) type Reached = (FxHashSet<usize>, Span, Option<&'static str>);
 
@@ -56,6 +58,34 @@ fn watched_units<'p>(
             .extend(root_alias_names(program, scoping, &targets));
     }
     watched
+}
+
+pub(super) fn names_shared(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    run: &UnitRun<'_, '_>,
+) -> bool {
+    let root = scoping.root_scope_id();
+    let roots: Vec<(SymbolId, &str)> = run
+        .request
+        .guard
+        .symbols
+        .iter()
+        .filter(|(symbol, _)| scoping.symbol_scope_id(*symbol) == root)
+        .copied()
+        .collect();
+    let targets: FxHashSet<SymbolId> = roots.iter().map(|(symbol, _)| *symbol).collect();
+    roots
+        .iter()
+        .flat_map(|(symbol, name)| {
+            [
+                Some(*name),
+                original_name(program.source_text, scoping, *symbol),
+            ]
+        })
+        .flatten()
+        .chain(root_alias_names(program, scoping, &targets))
+        .any(is_shared_global)
 }
 
 pub(super) fn watched<'p>(

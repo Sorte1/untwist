@@ -15,6 +15,25 @@ const DEFAULT_LANE_ONLY: &[&str] = &[
     "mp05",
 ];
 
+const NAMES_TESTED: &[&str] = &[
+    "w01",
+    "w04",
+    "w05",
+    "w06",
+    "bh01",
+    "min2",
+    "min11",
+    "min18",
+    "w1-wrap-inlit-end",
+    "h-iW2-j0-k1-wrap-has",
+    "h-iW3-j0-k2-wrap-has",
+    "h-o3r-j0-k2-wrap-has",
+    "ln2-dec-has-end",
+    "ln2-arr-has-end",
+    "ln2-dec-hasown-end",
+    "e6",
+];
+
 fn data() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/global_alias_reach")
 }
@@ -47,6 +66,7 @@ fn every_row_prints_what_node_prints_in_the_safe_lanes() {
     let labels: Vec<&str> = WRITTEN_IN_BOTH_LANES
         .iter()
         .chain(DEFAULT_LANE_ONLY)
+        .chain(NAMES_TESTED)
         .copied()
         .collect();
     let default = |source: &str| run(false, RenameMode::None, source);

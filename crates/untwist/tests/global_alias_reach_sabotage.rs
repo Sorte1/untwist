@@ -4,9 +4,7 @@ use untwist::{Options, Pipeline};
 use untwist_deobfuscate::mutants::trust_root_alias_reach_for_tests;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const REFUSED: &[&str] = &[
-    "ka03", "ka15", "kw04", "ko01", "al6", "wf1", "wf6", "kd01", "ke01", "kf01",
-];
+const REFUSED: &[&str] = &["ka03", "ka15", "kw04", "ko01", "al6", "wf1", "wf6"];
 
 fn default_lane(source: &str) -> String {
     Pipeline::new(Options::default())
