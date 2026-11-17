@@ -381,3 +381,11 @@ fn an_import_anywhere_in_a_module_runs_before_the_rotator() {
     let local_export = format!("{NO_PARSE_INT}\nexport var y = 1;");
     assert_eq!(refusal(&local_export), None);
 }
+
+#[test]
+fn unused_uninitialised_vars_before_the_try_leave_a_rotator() {
+    assert!(found(&WHILE_FORM.replace(
+        "while (!![]) {\n    try {",
+        "while (!![]) {\n    var m;\n    let n;\n    try {"
+    )));
+}

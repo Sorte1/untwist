@@ -19,6 +19,7 @@ use untwist_core::ast_util::search::statements_at;
 use untwist_core::pass::{Cx, Interest, NoteKind, Pass, RepeatedSites};
 use untwist_core::semantic::is_constant_binding;
 
+use crate::inert_vars::{is_uninitialised, without_inert};
 use crate::init_order::{
     early_or_written, lend_order, pass_done, read_before_declaration, reads_are_initialised,
     refuse_read_before_declaration, InitOrder, LentOrder,
@@ -104,6 +105,12 @@ fn array_declaration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<(&'k str, usize)
     Some((id.name.as_str(), length))
 }
 
+fn first_initialised<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<&'k Statement<'a>> {
+    statements
+        .iter()
+        .find(|statement| !is_uninitialised(statement))
+}
+
 fn returns_array(expr: &Expression<'_>, array: &str) -> bool {
     let Expression::FunctionExpression(function) = expr else {
         return false;
@@ -114,10 +121,10 @@ fn returns_array(expr: &Expression<'_>, array: &str) -> bool {
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    if body.statements.len() != 1 {
+    let Some(statements) = without_inert(&body.statements, &[array]) else {
         return false;
-    }
-    let Some(Statement::ReturnStatement(statement)) = body.statements.first() else {
+    };
+    let [Statement::ReturnStatement(statement)] = statements.as_slice() else {
         return false;
     };
     statement
@@ -148,7 +155,10 @@ fn calls(expr: &Expression<'_>, name: &str) -> bool {
 }
 
 fn body_matches(statements: &[Statement<'_>], function: &str, array: &str) -> bool {
-    match statements {
+    let Some(statements) = without_inert(statements, &[function, array]) else {
+        return false;
+    };
+    match statements.as_slice() {
         [_, Statement::ReturnStatement(ret)] => {
             let Some(argument) = ret.argument.as_ref() else {
                 return false;
@@ -173,7 +183,7 @@ pub(crate) fn is_string_array_function(function: &Function<'_>, name: &str) -> b
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    let Some((array, _)) = body.statements.first().and_then(array_declaration) else {
+    let Some((array, _)) = first_initialised(&body.statements).and_then(array_declaration) else {
         return false;
     };
     body_matches(&body.statements, name, array)
@@ -185,7 +195,7 @@ pub fn match_string_array(stmt: &Statement<'_>) -> Option<ArrayShape> {
         return None;
     }
     let body = declaration.function.body.as_ref()?;
-    let first = body.statements.first()?;
+    let first = first_initialised(&body.statements)?;
     let (array, length) = array_declaration(first)?;
     if !body_matches(&body.statements, declaration.name, array) {
         return None;

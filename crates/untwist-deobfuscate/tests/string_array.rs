@@ -122,3 +122,60 @@ fn a_local_array_is_reachable_by_a_spelled_name_only_under_a_direct_eval() {
     );
     assert!(!stamped(&nested).contains("__STRING_ARRAY__"));
 }
+
+#[test]
+fn an_unused_uninitialised_var_in_the_array_function_is_tolerated() {
+    assert_transform!(
+        "function _0x528d() {\n  const _0x24d2 = ['log', 'test'];\n  _0x528d = function () { var _0x360a; return _0x24d2; };\n  return _0x528d();\n}\n_0x528d();",
+        [untwist_deobfuscate::string_array::boxed],
+        @r#"
+    function __STRING_ARRAY__() {
+      const _0x24d2 = ["log", "test"];
+      __STRING_ARRAY__ = function () {
+        var _0x360a;
+        return _0x24d2;
+      };
+      return __STRING_ARRAY__();
+    }
+    __STRING_ARRAY__();
+    "#
+    );
+}
+
+#[test]
+fn an_uninitialised_var_that_shadows_the_array_is_not_tolerated() {
+    assert_transform!(
+        "function _0x528d() {\n  const _0x24d2 = ['log', 'test'];\n  _0x528d = function () { var _0x24d2; return _0x24d2; };\n  return _0x528d();\n}\n_0x528d();",
+        [untwist_deobfuscate::string_array::boxed],
+        @r#"
+    function _0x528d() {
+      const _0x24d2 = ["log", "test"];
+      _0x528d = function () {
+        var _0x24d2;
+        return _0x24d2;
+      };
+      return _0x528d();
+    }
+    _0x528d();
+    "#
+    );
+}
+
+#[test]
+fn an_uninitialised_var_that_is_read_is_not_tolerated() {
+    assert_transform!(
+        "function _0x528d() {\n  var _0x5b;\n  const _0x24d2 = ['log', _0x5b];\n  _0x528d = function () { return _0x24d2; };\n  return _0x528d();\n}\n_0x528d();",
+        [untwist_deobfuscate::string_array::boxed],
+        @r#"
+    function _0x528d() {
+      var _0x5b;
+      const _0x24d2 = ["log", _0x5b];
+      _0x528d = function () {
+        return _0x24d2;
+      };
+      return _0x528d();
+    }
+    _0x528d();
+    "#
+    );
+}
