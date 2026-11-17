@@ -42,7 +42,7 @@ for imp, (n1, s1), inner in itertools.product(M, S, I):
         rows.add(imp + " " + (s1 % (s2 % inner)))
 for imp, inner in itertools.product(M, I):
     rows.add(imp + " " + inner)
-C = ["if (1) function x(){}", "if (0) ; else function x(){}", "if (1) l: function x(){}", "l: function x(){}", "l: if (1) function x(){}"]
+C = ["if (1) function x(){}", "if (0) ; else function x(){}", "if (1) l: function x(){}", "l: function x(){}", "l: if (1) function x(){}", "if (1) function x(){} else function y(){}", "if (1) function y(){} else function x(){}", "if (1) function x(){} else function x(){}"]
 for clause, (n1, s1), inner in itertools.product(C, S, I):
     rows.add(s1 % (clause + " " + inner))
     rows.add(s1 % (inner + " " + clause))

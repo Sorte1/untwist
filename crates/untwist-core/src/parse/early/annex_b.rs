@@ -52,7 +52,7 @@ impl Scan {
         if flags.is_strict_mode() {
             return;
         }
-        let clause = self.clauses.last() == Some(&function.span);
+        let clause = self.clauses.contains(&function.span);
         let block = match (clause, flags.is_var()) {
             (true, _) => function.span,
             (false, true) => return,
@@ -159,7 +159,7 @@ impl<'a> VisitJs<'a> for Walk<'_> {
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         self.scan.declared(it, self.scoping);
-        let clause = self.scan.clauses.last() == Some(&it.span);
+        let clause = self.scan.clauses.contains(&it.span);
         self.hoisting.function(it, clause);
         walk_js::walk_function(self, it, flags);
         self.hoisting.leave_frame();
