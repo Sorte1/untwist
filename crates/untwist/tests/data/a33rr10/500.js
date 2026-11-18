@@ -1,0 +1,41 @@
+(function () {
+  var y = function () { return 1; }, c = Math.random() < 2;
+  var x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12;
+  x1 = (y(), function () {});
+  x2 = c ? function () {} : function () {};
+  x3 = !0 ? function () {} : 0;
+  x4 = true && function () {};
+  x5 = (0, function () {});
+  x6 = (0, () => {});
+  x7 = (0, class {});
+  x8 = [function () {}][0];
+  x9 = false || (() => {});
+  x10 = void 0 ?? function () {};
+  x11 = 1 ? class {} : 0;
+  x12 = (function () {});
+  console.log([x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12].map(function (f) { return JSON.stringify(f.name); }).join(' '));
+  var z1 = (y(), function () {}), z2 = c ? function () {} : function () {}, z3 = !0 ? function () {} : 0, z4 = true && function () {}, z5 = (0, function () {}), z6 = 1 ? () => {} : 0, z7 = null ?? class {};
+  console.log([z1, z2, z3, z4, z5, z6, z7].map(function (f) { return JSON.stringify(f.name); }).join(' '));
+  var o = { a: (0, function () {}), b: !0 ? function () {} : 0, c: true && (() => {}), ['d' + 'e']: function () {}, f: (y(), class {}) };
+  console.log(Object.keys(o).map(function (k) { return JSON.stringify(o[k].name); }).join(' '));
+  var { p = (0, function () {}), q = 1 ? function () {} : 0 } = {};
+  var [r = true && function () {}] = [];
+  console.log(JSON.stringify(p.name), JSON.stringify(q.name), JSON.stringify(r.name));
+  function g(a = (0, function () {}), b = 1 ? () => {} : 0) { return JSON.stringify(a.name) + ' ' + JSON.stringify(b.name); }
+  console.log(g());
+  var w; w ||= (0, function () {}); var v; v ??= true && function () {};
+  console.log(JSON.stringify(w.name), JSON.stringify(v.name));
+  class K { m = (0, function () {}); static s = 1 ? function () {} : 0; static t = true && class {}; }
+  console.log(JSON.stringify(new K().m.name), JSON.stringify(K.s.name), JSON.stringify(K.t.name));
+  var h1 = function () { return function () {}; }(); var h2 = (function () { return () => {}; })();
+  console.log(JSON.stringify(h1.name), JSON.stringify(h2.name));
+  var t1; if (c) t1 = function () {}; else t1 = function () {};
+  var t2; c ? t2 = function () {} : t2 = () => {};
+  var t3; c && (t3 = function () {});
+  var t4 = {}; t4.k = (0, function () {}); t4.j = function () {};
+  console.log(JSON.stringify(t1.name), JSON.stringify(t2.name), JSON.stringify(t3.name), JSON.stringify(t4.k.name), JSON.stringify(t4.j.name));
+  var u = { a: function (a, b) { return a + b; }, b: function (f, x) { return f(x); }, c: 'k' };
+  var n1 = u.b(function (q) { return q; }, function () {});
+  var n2 = u.b(function (q) { return q; }, () => {});
+  console.log(JSON.stringify(n1.name), JSON.stringify(n2.name), u.a(1, 2), u.c);
+})();
