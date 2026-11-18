@@ -110,11 +110,28 @@ fn is_bare_var_declaration(statement: &Statement<'_>, shape_names: &[&str]) -> b
         })
 }
 
+fn declares_in_block(statement: &Statement<'_>) -> bool {
+    match statement {
+        Statement::FunctionDeclaration(_) | Statement::ClassDeclaration(_) => true,
+        Statement::VariableDeclaration(declaration) => declaration.kind.is_lexical(),
+        _ => false,
+    }
+}
+
+fn unbraced<'k, 'a>(statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] {
+    match statements {
+        [Statement::BlockStatement(block)] if !block.body.iter().any(declares_in_block) => {
+            unbraced(&block.body)
+        }
+        _ => statements,
+    }
+}
+
 fn live_statements<'k, 'a>(
     statements: &'k [Statement<'a>],
     shape_names: &[&str],
 ) -> Vec<&'k Statement<'a>> {
-    statements
+    unbraced(statements)
         .iter()
         .filter(|statement| !is_bare_var_declaration(statement, shape_names))
         .collect()
