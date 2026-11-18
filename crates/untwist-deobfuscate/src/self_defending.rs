@@ -147,6 +147,13 @@ fn bare_name<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
     binding_name(&declarator.id)
 }
 
+fn unbraced<'k, 'a>(mut statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] {
+    while let [Statement::BlockStatement(block)] = statements {
+        statements = &block.body;
+    }
+    statements
+}
+
 fn guarded_if<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Option<&'k str>, &'k IfStatement<'a>)> {
     match body {
         [Statement::IfStatement(statement)] => Some((None, statement)),
@@ -194,7 +201,7 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    let Some((hoisted, statement)) = guarded_if(&body.statements) else {
+    let Some((hoisted, statement)) = guarded_if(unbraced(&body.statements)) else {
         return false;
     };
     if identifier_name(&statement.test) != Some(fn_name) || statement.alternate.is_some() {
