@@ -83,8 +83,12 @@ fn seen(source: &str, unsafe_transforms: bool) -> Seen {
         global_written: {
             let mut written = global_writes(&parsed.program);
             let module = parsed.program.source_type.is_module();
-            let verdict =
-                builtins::scan(&parsed.program, &scoping, module, false, &EVERY_ROOT).verdict;
+            let verdict = builtins::scan_with_unknown_keys_plain(
+                &parsed.program,
+                &scoping,
+                module,
+                &EVERY_ROOT,
+            );
             written.every |= !verdict.allows_safe(unsafe_transforms);
             written
         },
@@ -148,19 +152,25 @@ pub(super) fn shared_globals(
         .collect();
     all.iter()
         .enumerate()
-        .map(|(index, _)| Some(shared_for(&all, &reached, index)))
+        .map(|(index, _)| Some(shared_for(&all, &reached, index, unsafe_transforms)))
         .collect()
 }
 
-fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGlobals {
+fn shared_for(
+    all: &[Seen],
+    reached: &[NamesReached],
+    own: usize,
+    unsafe_transforms: bool,
+) -> SharedGlobals {
     let others = || {
         all.iter()
             .enumerate()
             .filter(move |(index, _)| *index != own)
     };
+    let observed_elsewhere = others().any(|(index, _)| reached[index].observed);
     let every_name = !all[own].readable
-        || all[own].global_written.every
-        || others().any(|(index, _)| reached[index].reached);
+        || others().any(|(index, _)| reached[index].reached)
+        || (!unsafe_transforms && observed_elsewhere);
     let names = all[own]
         .bound
         .iter()
@@ -174,7 +184,6 @@ fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGloba
         ..
     } = foreign_of(all, own);
     let other_scripts = others().any(|(_, other)| other.script);
-    let observed_elsewhere = others().any(|(index, _)| reached[index].observed);
     let named_elsewhere = others()
         .flat_map(|(_, other)| other.named())
         .map(str::to_string)
@@ -195,7 +204,7 @@ fn shared_for(all: &[Seen], reached: &[NamesReached], own: usize) -> SharedGloba
 fn others_unknown(all: &[Seen], own: usize) -> bool {
     all.iter()
         .enumerate()
-        .any(|(index, other)| index != own && other.global_written.every)
+        .any(|(index, other)| index != own && !other.readable)
 }
 
 fn foreign_of(all: &[Seen], own: usize) -> SharedGlobals {

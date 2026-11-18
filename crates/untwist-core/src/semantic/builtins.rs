@@ -5,7 +5,7 @@ use crate::semantic::has_module_syntax;
 
 mod scan;
 
-pub use scan::{intact, scan};
+pub use scan::{intact, scan, scan_with_unknown_keys_plain};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Builtins {

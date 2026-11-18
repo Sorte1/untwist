@@ -708,7 +708,7 @@ fn refusal(
     }
     let root = scoping.symbol_scope_id(legacy.symbol) == scoping.root_scope_id();
     if root && is_shared_global(scoping.symbol_name(legacy.symbol)) {
-        return Some((notes::LEGACY_ARRAY_REACHED.to_string(), statement));
+        return Some((notes::LEGACY_ARRAY_SHARED_GLOBAL.to_string(), statement));
     }
     if let Some(span) = reached_by_name(program, cx, legacy) {
         if cx.opts.unsafe_transforms || !legacy_reach::defers() {

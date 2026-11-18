@@ -221,12 +221,10 @@ impl Scan<'_> {
             }
             Key::Name(name) if PROTOTYPE_READER_NAMES.contains(&name) => self.is_root(object),
             Key::Name(_) | Key::Other => false,
-            Key::Unknown(key) => {
-                self.is_root(object)
-                    || self
-                        .known_key(key)
-                        .is_none_or(|name| self.reached_member(object, Key::Name(&name)))
-            }
+            Key::Unknown(key) => match self.known_key(key) {
+                Some(name) => self.is_root(object) || self.reached_member(object, Key::Name(&name)),
+                None => self.is_root(object) || !self.unknown_keys_plain,
+            },
         }
     }
 

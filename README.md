@@ -263,9 +263,11 @@ are decoded, even when the program enumerates or tests the global object's names
 them by key, through `Object.assign`, `Reflect.set`, `Object.defineProperty` or a loop over keys,
 or runs code text through any runner, `(0, eval)`,
 `Function`, a timer string, or a runner that code text hands back such as
-`Function("return eval")()(s)`). No function declared in a block overwrites a decoder alias, a
-decoder wrapper or a constant used as a decoder argument through Annex B hoisting (`var d = dec;
-{ function d() {} } d(1)` is decoded as a call of `dec`). A few passes that rest on
+`Function("return eval")()(s)`). No function declared in a block or directly in an `if` clause
+overwrites a decoder alias, a decoder wrapper or a constant used as a decoder argument through
+Annex B hoisting, and no direct `eval` redeclares one in its own scope (`var d = dec;
+{ function d() {} } d(1)`, `var d = dec; if (1) function d() {} d(1)` and
+`var d = dec; eval("function d() {}"); d(1)` are each decoded as a call of `dec`). A few passes that rest on
 heuristics are allowed to run. These are `template-literals` and JSX reconstruction (`jsx`, `jsx-new`).
 `dead-code`, which deletes branches behind constant comparisons, runs in both lanes.
 `fold-pure-calls` also folds calls to a pure helper that is passed around as a value or that the
