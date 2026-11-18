@@ -744,13 +744,16 @@
   may be a function expression or an arrow with a block body; everything else has to match. The
   templates are in `crates/untwist-deobfuscate/src/protection_shapes.js`. One callback that does not match
   keeps every call of its controller and the controller itself, with the note `self-defending:
-  a call controller was found but a reference to it survives …`. In the default mode it also
-  keeps every other block registered through a call controller in the program, with the note
-  `self-defending: a block registered through a call controller was kept, so every other block
-  registered that way was kept with it …`: when two layers each disable the console, removing
-  one layer's block and keeping the other's moves the moment the console goes silent, and the
-  program prints lines that neither the input nor the source prints. `--unsafe` judges each
-  controller on its own. A callback whose strings are still encoded when the
+  a call controller was found but a reference to it survives …`. In the default mode a removal
+  that takes out a console disable while another controller block stays is only provisional:
+  when two layers each disable the console, removing one layer's block and keeping the other's
+  moves the moment the console goes silent, and the program prints lines that neither the input
+  nor the source prints. If a call controller is still in the output once the run ends, the
+  input is run again with such removals refused, and every block registered through a call
+  controller is then kept, with the note `self-defending: a block registered through a call
+  controller was kept, so every other block registered that way was kept with it …`. A
+  controller that the shape check does not recognise (for example one whose `apply` key is still
+  encoded) counts as kept. `--unsafe` judges each controller on its own. A callback whose strings are still encoded when the
   protections stage runs (`atob(…)`, a split string) only matches after cleanup has folded
   them, so the stage runs a second time after cleanup when cleanup changed the program.
   A controller that keeps its flag outside itself (`o = true; var r = (n, t) => { …; o = false;
