@@ -404,6 +404,10 @@ pub const PROTECTIONS_KEPT_TOGETHER: &str =
     "a block registered through a call controller was kept, so every other block registered \
      that way was kept with it: removing only some of them could change when the console is \
      silenced and what the program prints";
+pub const DEBUG_PROTECTION_KEPT_WITH_CONTROLLER: &str =
+    "a block registered through a call controller is still in place, so the debug protection \
+     was kept with it: its timer keeps the program running, and removing it while a kept block \
+     silences the console would make the program exit where the input keeps running";
 pub const DOMAIN_LOCK_KEPT: &str =
     "a domain lock was found: it reads the host's document and location and enumerates the names \
      of the global object, so whether it passes depends on where the program runs and it may \

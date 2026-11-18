@@ -161,10 +161,11 @@ pub(crate) fn protection_symbols(program: &Program<'_>, scoping: &Scoping) -> Fx
 enum Plan {
     Nothing,
     Refused,
-    Remove(Vec<Span>, FxHashSet<SymbolId>),
+    KeptWithController,
+    Remove(Vec<Span>, FxHashSet<SymbolId>, bool),
 }
 
-fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
+fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     let declarations = declarations(program, scoping);
     if declarations.symbols.is_empty() {
         return Plan::Nothing;
@@ -175,12 +176,18 @@ fn plan(program: &Program<'_>, scoping: &Scoping) -> Plan {
         spans: Vec::new(),
     };
     intervals.visit_program(program);
+    let provisional = !unsafe_lane
+        && !intervals.spans.is_empty()
+        && crate::self_defending::guarded_returners(program) > 0;
+    if provisional && crate::self_defending::partial_removals_forbidden() {
+        return Plan::KeptWithController;
+    }
     let mut spans = declarations.spans;
     spans.extend(intervals.spans);
     if has_stray_reference(program, &declarations.symbols, &spans, scoping) {
         return Plan::Refused;
     }
-    Plan::Remove(spans, declarations.symbols)
+    Plan::Remove(spans, declarations.symbols, provisional)
 }
 
 #[derive(Default)]
@@ -200,18 +207,22 @@ impl<'a> Pass<'a> for DebugProtection {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let spans = match plan(program, cx.scoping()) {
+        let (spans, provisional) = match plan(program, cx.scoping(), cx.opts.unsafe_transforms) {
             Plan::Nothing => return,
+            Plan::KeptWithController => {
+                cx.note(notes::DEBUG_PROTECTION_KEPT_WITH_CONTROLLER, None);
+                return;
+            }
             Plan::Refused => {
                 cx.note(notes::DEBUG_PROTECTION_REFERENCE_KEPT, None);
                 return;
             }
-            Plan::Remove(spans, symbols) => {
+            Plan::Remove(spans, symbols, provisional) => {
                 if reaches_a_script_global_once_removed(&symbols, &spans, program, cx) {
                     cx.note(notes::DEBUG_PROTECTION_REFERENCE_KEPT, None);
                     return;
                 }
-                spans
+                (spans, provisional)
             }
         };
         if crate::directives::removes_what_an_eval_reads(cx.scoping(), &spans) {
@@ -230,6 +241,9 @@ impl<'a> Pass<'a> for DebugProtection {
             }
         };
         cx.changed_by(applied);
+        if provisional && applied > 0 {
+            crate::self_defending::note_provisional_removal();
+        }
         if applied != wanted {
             cx.note(
                 notes::planned_and_applied_removals(PASS, wanted, applied),

@@ -721,7 +721,7 @@ impl<'a> VisitJs<'a> for GuardedReturners {
     }
 }
 
-fn guarded_returners(program: &Program<'_>) -> usize {
+pub(crate) fn guarded_returners(program: &Program<'_>) -> usize {
     let mut returners = GuardedReturners::default();
     returners.visit_program(program);
     returners.count
@@ -1269,6 +1269,10 @@ pub fn forget_partial_removals() {
     });
 }
 
+pub(crate) fn note_provisional_removal() {
+    update_partial(|state| state.applied = true);
+}
+
 pub struct PartialRemovalsForbidden(bool);
 
 impl PartialRemovalsForbidden {
@@ -1286,7 +1290,7 @@ impl Drop for PartialRemovalsForbidden {
     }
 }
 
-fn partial_removals_forbidden() -> bool {
+pub(crate) fn partial_removals_forbidden() -> bool {
     PARTIAL.with(|partial| partial.get().forbidden)
 }
 
@@ -1489,7 +1493,7 @@ fn remove<'a>(program: &mut Program<'a>, spans: &[Span], cx: &mut Cx<'a, '_>, pa
     };
     cx.changed_by(applied);
     if partial && applied > 0 {
-        update_partial(|state| state.applied = true);
+        note_provisional_removal();
     }
     if applied != wanted {
         cx.note(

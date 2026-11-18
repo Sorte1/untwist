@@ -753,7 +753,11 @@
   controller is then kept, with the note `self-defending: a block registered through a call
   controller was kept, so every other block registered that way was kept with it …`. A
   controller that the shape check does not recognise (for example one whose `apply` key is still
-  encoded) counts as kept. `--unsafe` judges each controller on its own. A callback whose strings are still encoded when the
+  encoded) counts as kept. Removing a debug protection that runs on a timer while a call
+  controller block stays is provisional in the same way, and the rerun keeps it
+  (`debug-protection: a block registered through a call controller is still in place, so the
+  debug protection was kept with it …`): the timer keeps the program running, and without it a
+  program whose console a kept block silences would exit where the input keeps running. `--unsafe` judges each controller on its own. A callback whose strings are still encoded when the
   protections stage runs (`atob(…)`, a split string) only matches after cleanup has folded
   them, so the stage runs a second time after cleanup when cleanup changed the program.
   A controller that keeps its flag outside itself (`o = true; var r = (n, t) => { …; o = false;
