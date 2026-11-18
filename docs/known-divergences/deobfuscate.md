@@ -751,7 +751,8 @@
   nor the source prints. If a call controller is still in the output once the run ends, the
   input is run again with such removals refused, and every block registered through a call
   controller is then kept, with the note `self-defending: a block registered through a call
-  controller was kept, so every other block registered that way was kept with it …`. A
+  controller may still run, so the default lane keeps it, and every other block registered that
+  way was kept with it …`: the default lane keeps a protection that may still run. A
   controller that the shape check does not recognise (for example one whose `apply` key is still
   encoded) counts as kept. Removing a debug protection that runs on a timer while a call
   controller block stays is provisional in the same way, and the rerun keeps it

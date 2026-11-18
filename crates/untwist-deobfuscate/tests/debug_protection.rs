@@ -357,3 +357,35 @@ fn a_browser_no_eval_protection_whose_loop_does_work_is_kept() {
     );
     assert_eq!(run(&alloc, &source), printed(&source));
 }
+
+const SERVICE_WORKER_INTERVAL: &str = "(function () {\n  const that = typeof global === \"object\" ? global : this;\n  that.setInterval(dpf, 4000);\n})();\n";
+
+#[test]
+fn the_service_worker_interval_iife_is_removed_with_its_protection() {
+    let alloc = Allocator::default();
+    let source = format!("{DPF}{SERVICE_WORKER_INTERVAL}console.log(1);");
+    assert_eq!(run(&alloc, &source).trim(), "console.log(1);");
+}
+
+#[test]
+fn a_service_worker_interval_on_a_replaced_global_refuses_the_removal() {
+    let alloc = Allocator::default();
+    let source = format!("global = {{}};\n{DPF}{SERVICE_WORKER_INTERVAL}console.log(1);");
+    let (out, notes) = run_with_notes(&alloc, &source);
+    assert!(out.contains("setInterval"), "{out}");
+    assert!(
+        notes.iter().any(|note| note.contains("debug protection")),
+        "{notes:?}"
+    );
+}
+
+#[test]
+fn a_service_worker_interval_with_another_fallback_refuses_the_removal() {
+    let alloc = Allocator::default();
+    let source = format!(
+        "{DPF}{}console.log(1);",
+        SERVICE_WORKER_INTERVAL.replacen("? global : this", "? global : self.other", 1)
+    );
+    let out = run(&alloc, &source);
+    assert!(out.contains("setInterval"), "{out}");
+}

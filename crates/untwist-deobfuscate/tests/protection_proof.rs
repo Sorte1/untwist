@@ -227,3 +227,42 @@ fn a_browser_no_eval_debug_protection_that_does_more_is_kept() {
     );
     assert_eq!(safe(&source), printed(&source));
 }
+
+const SERVICE_WORKER_GLOBAL: &str = "typeof global === \"object\" ? global : this";
+
+fn service_worker_console_disable() -> String {
+    no_eval_console_disable().replacen(NO_EVAL_GLOBAL, SERVICE_WORKER_GLOBAL, 1)
+}
+
+#[test]
+fn the_service_worker_console_disable_is_removed_with_its_controller() {
+    let source = format!("{CONTROLLER}{}{REST}", service_worker_console_disable());
+    assert_eq!(safe(&source).trim(), REST);
+}
+
+#[test]
+fn a_service_worker_console_disable_that_reads_a_replaced_global_is_kept() {
+    let source = format!(
+        "global = null;\n{CONTROLLER}{}{REST}",
+        service_worker_console_disable()
+    );
+    assert_eq!(safe(&source), printed(&source));
+}
+
+#[test]
+fn a_service_worker_console_disable_with_another_fallback_is_kept() {
+    let source = format!(
+        "{CONTROLLER}{}{REST}",
+        service_worker_console_disable().replacen("? global : this", "? global : {}", 1)
+    );
+    assert_eq!(safe(&source), printed(&source));
+}
+
+#[test]
+fn a_service_worker_console_disable_that_tests_another_type_is_kept() {
+    let source = format!(
+        "{CONTROLLER}{}{REST}",
+        service_worker_console_disable().replacen("\"object\"", "\"function\"", 1)
+    );
+    assert_eq!(safe(&source), printed(&source));
+}

@@ -634,6 +634,6 @@ mod tests {
         let shaped = loaded.callbacks.len() + loaded.protections.len() + loaded.intervals.len();
         assert_eq!(shaped, declared);
         assert_eq!(loaded.protections.len(), 2);
-        assert_eq!(loaded.intervals.len(), 3);
+        assert_eq!(loaded.intervals.len(), 4);
     }
 }
