@@ -8,7 +8,7 @@ use untwist_eval::decode::{decoded_to_expression, Call, Decoded, DecoderProgram,
 
 use crate::array_rotator::find_rotators;
 use crate::calls::{collect_base, Collected};
-use crate::dead_guards::{enclosing_guards, BranchGuard};
+use crate::dead_guards::{enclosing_guards, BranchGuard, EscapeGuards};
 use crate::notes;
 use crate::proof::{
     decoder_refusal, object_operand_is_intrinsic, patch_refusal, rotator_refusal_at, used_names,
@@ -37,7 +37,7 @@ pub struct DecodeRequest<'p> {
     pub guard: UnitGuard<'p>,
     pub unit: usize,
     pub reliance: Option<Reliance>,
-    pub dead_guards: Vec<Vec<BranchGuard>>,
+    pub escape_guards: EscapeGuards,
 }
 
 struct UnitInputs<'r, 'p> {
@@ -117,7 +117,7 @@ fn guarded_escapes(
     program: &Program<'_>,
     collected: &mut Collected<'_>,
     (sites, rotators): (&Sites, &FxHashMap<usize, Span>),
-) -> FxHashMap<usize, Vec<Vec<BranchGuard>>> {
+) -> FxHashMap<usize, EscapeGuards> {
     let in_own_rotator = |(index, span): &(usize, Span)| {
         sites
             .get(index)
@@ -125,7 +125,7 @@ fn guarded_escapes(
             .is_some_and(|rotator| rotator.start <= span.start && span.end <= rotator.end)
     };
     collected.dynamic_calls.retain(|call| !in_own_rotator(call));
-    let mut by_unit: FxHashMap<usize, Vec<Vec<BranchGuard>>> = FxHashMap::default();
+    let mut by_unit: FxHashMap<usize, EscapeGuards> = FxHashMap::default();
     let escapes: FxHashSet<Span> = collected
         .decoder_values
         .iter()
@@ -137,17 +137,15 @@ fn guarded_escapes(
     }
     let enclosing = enclosing_guards(program, &escapes);
     let mut unguarded: FxHashSet<usize> = FxHashSet::default();
-    let mut found: Vec<(usize, Vec<BranchGuard>)> = Vec::new();
-    for (index, span) in collected
-        .decoder_values
-        .iter()
-        .chain(&collected.dynamic_calls)
-    {
+    let mut found: Vec<(usize, bool, Vec<BranchGuard>)> = Vec::new();
+    let values = collected.decoder_values.iter().map(|escape| (escape, true));
+    let dynamic = collected.dynamic_calls.iter().map(|escape| (escape, false));
+    for ((index, span), is_value) in values.chain(dynamic) {
         let Some((unit, _)) = sites.get(index).copied() else {
             continue;
         };
         match enclosing.get(span).filter(|guards| !guards.is_empty()) {
-            Some(guards) => found.push((unit, guards.clone())),
+            Some(guards) => found.push((unit, is_value, guards.clone())),
             None => {
                 unguarded.insert(unit);
             }
@@ -164,9 +162,15 @@ fn guarded_escapes(
     collected
         .dynamic_calls
         .retain(|(index, _)| !is_guarded(index));
-    for (unit, guards) in found {
-        if !unguarded.contains(&unit) {
-            by_unit.entry(unit).or_default().push(guards);
+    for (unit, is_value, guards) in found {
+        if unguarded.contains(&unit) {
+            continue;
+        }
+        let entry = by_unit.entry(unit).or_default();
+        if is_value {
+            entry.values.push(guards);
+        } else {
+            entry.dynamic.push(guards);
         }
     }
     by_unit
@@ -459,7 +463,7 @@ fn plan_unit<'p>(
             guard: unstamp_only_guard(&inputs),
             unit,
             reliance: None,
-            dead_guards: Vec::new(),
+            escape_guards: EscapeGuards::default(),
         });
     }
     if let Some(refusal) = unit_refusal(unit, evidence) {
@@ -475,7 +479,7 @@ fn plan_unit<'p>(
         guard,
         unit,
         reliance: evidence.foreign.reliance(unit),
-        dead_guards: Vec::new(),
+        escape_guards: EscapeGuards::default(),
     })
 }
 
@@ -601,7 +605,7 @@ pub fn build_requests_in_lane<'p>(
             escaped_by_unit.remove(&unit).unwrap_or_default(),
         )
         .map(|request| DecodeRequest {
-            dead_guards: guarded.remove(&unit).unwrap_or_default(),
+            escape_guards: guarded.remove(&unit).unwrap_or_default(),
             ..request
         });
         push_outcome(&mut plan, outcome);

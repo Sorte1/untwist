@@ -53,6 +53,12 @@ fn comparison(test: &Expression<'_>) -> Option<Comparison> {
     (calls > 0).then_some((left, right, equal))
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct EscapeGuards {
+    pub values: Vec<Vec<BranchGuard>>,
+    pub dynamic: Vec<Vec<BranchGuard>>,
+}
+
 struct Enclosing<'e> {
     escapes: &'e FxHashSet<Span>,
     stack: Vec<BranchGuard>,

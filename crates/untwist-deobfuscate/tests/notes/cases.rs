@@ -176,6 +176,9 @@ const A_STRING_ARRAY_THAT_ESCAPES: &str =
 
 const A_DECODER_USED_AS_A_VALUE: &str = behaviour_unit!("[1].map(b);");
 
+const A_DECODER_USED_AS_A_VALUE_IN_A_LIVE_GUARDED_BRANCH: &str =
+    behaviour_unit!("if (b(0) === 'log') { [1].map(b); }");
+
 const A_WITH_STATEMENT: &str = behaviour_unit!("with ({}) {}");
 
 const A_DIRECT_EVAL: &str = behaviour_unit!("eval('1');");
@@ -713,6 +716,11 @@ pub const CASES: &[Case] = &[
     Case {
         source: Source::Whole(A_DECODER_USED_AS_A_VALUE),
         expects: notes::DECODER_USED_AS_VALUE,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Whole(A_DECODER_USED_AS_A_VALUE_IN_A_LIVE_GUARDED_BRANCH),
+        expects: notes::GUARDED_ESCAPE_LIVE,
         mode: Match::Contains,
     },
     Case {

@@ -189,7 +189,15 @@ fn record_builtin_patched(
 }
 
 fn guarded_escapes_dead(request: &DecodeRequest<'_>, values: &[Option<DecodedValue>]) -> bool {
-    if request.dead_guards.is_empty() {
+    let guards = &request.escape_guards;
+    let stateful = || {
+        !matches!(
+            untwist_eval::state::shape(&request.program),
+            untwist_eval::state::MachineryState::Stateless
+        )
+    };
+    let dynamic = !guards.dynamic.is_empty() && stateful();
+    if guards.values.is_empty() && !dynamic {
         return true;
     }
     let known: FxHashMap<Span, &DecodedValue> = request
@@ -198,7 +206,8 @@ fn guarded_escapes_dead(request: &DecodeRequest<'_>, values: &[Option<DecodedVal
         .zip(values)
         .filter_map(|(call, value)| Some((call.span, value.as_ref()?)))
         .collect();
-    crate::dead_guards::all_dead(&request.dead_guards, &known)
+    crate::dead_guards::all_dead(&guards.values, &known)
+        && (!dynamic || crate::dead_guards::all_dead(&guards.dynamic, &known))
 }
 
 fn apply_decoded_values<'a>(
