@@ -386,7 +386,11 @@ impl<'p> Branches<'p> {
             if found.contains(&owner) {
                 return true;
             }
-            pending.extend(found.into_iter().filter(|next| self.objects.contains_key(next)));
+            pending.extend(
+                found
+                    .into_iter()
+                    .filter(|next| self.objects.contains_key(next)),
+            );
         }
         false
     }
