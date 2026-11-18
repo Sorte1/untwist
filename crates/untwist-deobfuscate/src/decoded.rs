@@ -472,17 +472,11 @@ fn run_decode_units<'a, 'r>(
             continue;
         };
         let mut evaluator = heap.evaluator(unit_fuel);
-        let replaced = match unsafe_lane && is_scrambled(&request.program) {
-            true => reprinted
-                .get_or_insert_with(|| Reprinted::of(main))
-                .program(&request.program),
-            false => None,
-        };
-        let result = if heap.is_spent() {
+        let mut result = if heap.is_spent() {
             Err(Bail::Budget)
         } else {
             let decoded = evaluator.decode_partial_with_memo(
-                replaced.as_ref().unwrap_or(&request.program),
+                &request.program,
                 &request.calls,
                 memo,
                 &request.guard.escaped_decoders,
@@ -491,6 +485,33 @@ fn run_decode_units<'a, 'r>(
             heap.spend_fuel(evaluator.budget.steps_used());
             decoded
         };
+        let retried = matches!(result, Err(Bail::Unsupported(_)))
+            && unsafe_lane
+            && !heap.is_spent()
+            && is_scrambled(&request.program);
+        let replaced = match retried {
+            true => reprinted
+                .get_or_insert_with(|| Reprinted::of(main))
+                .program(&request.program),
+            false => None,
+        };
+        if let Some(replaced) = &replaced {
+            if let Some(unit_fuel) = heap.unit_fuel(fuel.for_unit(request)) {
+                let mut again = heap.evaluator(unit_fuel);
+                let decoded = again.decode_partial_with_memo(
+                    replaced,
+                    &request.calls,
+                    memo,
+                    &request.guard.escaped_decoders,
+                );
+                untwist_eval::stats::record(&again.budget);
+                heap.spend_fuel(again.budget.steps_used());
+                if decoded.is_ok() {
+                    evaluator = again;
+                    result = decoded;
+                }
+            }
+        }
         heap.settle(&result);
         runs.push(UnitRun {
             request,
