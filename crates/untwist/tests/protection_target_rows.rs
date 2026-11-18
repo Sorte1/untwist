@@ -1,6 +1,6 @@
 use untwist::{Options, Pipeline};
 
-const ROWS: &str = include_str!("data/protection_target_rows.txt");
+const ROWS: &str = include_str!("data/protection_target.rows");
 const DECODED: &str = "console.log(\"test\");";
 
 fn lanes() -> [(&'static str, Options); 2] {

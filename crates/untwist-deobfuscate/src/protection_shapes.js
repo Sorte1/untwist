@@ -172,6 +172,20 @@ function callback_console_disable_no_eval() {
   }
 }
 
+function callback_console_disable_service_worker() {
+  const v1 = typeof global === "object" ? global : this;
+  const v4 = v1.console = v1.console || {};
+  const v5 = ["log", "warn", "info", "error", "exception", "table", "trace"];
+  for (let v6 = 0; v6 < v5.length; v6++) {
+    const v7 = CONTROLLER.constructor.prototype.bind(CONTROLLER);
+    const v8 = v5[v6];
+    const v9 = v4[v8] || v7;
+    v7.__proto__ = CONTROLLER.bind(CONTROLLER);
+    v7.toString = v9.toString.bind(v9);
+    v4[v8] = v7;
+  }
+}
+
 function protection_function(v1) {
   function v2(v3) {
     if (typeof v3 === "string") {
@@ -246,5 +260,10 @@ function interval_getter() {
 
 function interval_no_eval() {
   const v1 = typeof window !== "undefined" ? window : typeof process === "object" && typeof require === "function" && typeof global === "object" ? global : this;
+  v1.setInterval(PROTECTION, 4e3);
+}
+
+function interval_service_worker() {
+  const v1 = typeof global === "object" ? global : this;
   v1.setInterval(PROTECTION, 4e3);
 }
