@@ -28,7 +28,11 @@ fn source(label: &str) -> String {
 
 fn default_lane(source: &str) -> (String, Vec<String>) {
     let result = Pipeline::new(Options::default()).run(source);
-    let notes = result.notes.iter().map(|note| note.message.clone()).collect();
+    let notes = result
+        .notes
+        .iter()
+        .map(|note| note.message.clone())
+        .collect();
     (result.code().to_string(), notes)
 }
 
@@ -76,7 +80,10 @@ fn the_unsafe_lane_still_removes_the_domain_lock() {
             unsafe_transforms: true,
             ..Options::default()
         };
-        let code = Pipeline::new(options).run(&source(label)).code().to_string();
+        let code = Pipeline::new(options)
+            .run(&source(label))
+            .code()
+            .to_string();
         assert!(!code.contains("for (const"), "{label}:\n{code}");
     }
 }
