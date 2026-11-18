@@ -89,16 +89,9 @@ struct Write<'p> {
     value: Option<bool>,
 }
 
-struct Read<'p> {
-    index: usize,
-    name: &'p str,
-    span: Span,
-}
-
 struct Access<'p> {
     index: usize,
     writes: Vec<Write<'p>>,
-    reads: Vec<Read<'p>>,
 }
 
 impl<'p> Access<'p> {
@@ -114,15 +107,6 @@ impl<'p> Access<'p> {
 }
 
 impl<'p> VisitJs<'p> for Access<'p> {
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'p>) {
-        let index = self.index;
-        self.reads.push(Read {
-            index,
-            name: it.name.as_str(),
-            span: it.span,
-        });
-    }
-
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'p>) {
         if let AssignmentTarget::AssignmentTargetIdentifier(target) = &it.left {
             let value = (it.operator == AssignmentOperator::Assign).then(|| is_constant(&it.right));
@@ -136,12 +120,6 @@ impl<'p> VisitJs<'p> for Access<'p> {
             self.write(target.name.as_str(), it.span, None);
         }
         walk_js::walk_update_expression(self, it);
-    }
-
-    fn visit_simple_assignment_target(&mut self, it: &SimpleAssignmentTarget<'p>) {
-        if !matches!(it, SimpleAssignmentTarget::AssignmentTargetIdentifier(_)) {
-            walk_js::walk_simple_assignment_target(self, it);
-        }
     }
 }
 
@@ -173,7 +151,6 @@ fn plan<'p>(arguments: &'p AVec<'p, Argument<'p>>) -> Plan {
     let mut access = Access {
         index: 0,
         writes: Vec::new(),
-        reads: Vec::new(),
     };
     for (index, argument) in arguments.iter().enumerate() {
         access.index = index;
@@ -191,11 +168,6 @@ fn plan<'p>(arguments: &'p AVec<'p, Argument<'p>>) -> Plan {
             plan.by_value.insert(write.span);
         } else {
             plan.unstable.insert(write.span);
-        }
-    }
-    for read in &access.reads {
-        if written_later(&access.writes, read.name, read.index, read.span) {
-            plan.unstable.insert(read.span);
         }
     }
     plan
@@ -229,12 +201,6 @@ impl<'a> VisitMut<'a> for Settled<'_, 'a, '_> {
             true => assignment.right.clone_in(self.cx.allocator()),
             false => Expression::new_identifier(assignment.span, target.name, self.cx),
         };
-    }
-
-    fn visit_identifier_reference(&mut self, it: &mut IdentifierReference<'a>) {
-        if self.plan.unstable.contains(&it.span) {
-            self.refused = true;
-        }
     }
 }
 
