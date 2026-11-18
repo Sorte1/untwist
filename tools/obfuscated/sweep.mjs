@@ -479,6 +479,12 @@ function untwist(file, lane, dir, config) {
   return { result, report };
 }
 
+function ending(run) {
+  if (run.timedOut) return "timeout";
+  if (/heap limit|heap out of memory/.test(run.stderr)) return "heap-limit";
+  return `exit ${run.status}`;
+}
+
 function laneRun(lane, obfFile, dir, config, expect) {
   const { result, report } = untwist(obfFile, lane, dir, config);
   const base = { lane, untwistMs: result.ms, status: result.status };
@@ -497,7 +503,7 @@ function laneRun(lane, obfFile, dir, config, expect) {
   const out = { ...base, budget, nodeMs: printed.ms, outBytes: Buffer.byteLength(report.code), notes, residue, leftover, panicked, stderr: printed.stderr, printed: printed.stdout.slice(0, 2000), timedOut: printed.timedOut, exit: printed.status };
   const sameAsSource = matches(printed.stdout) && printed.status === expect.source.status && !printed.timedOut;
   const hangsLikeObf = expect.hangs && printed.timedOut && matches(printed.stdout);
-  const sameAsObf = printed.stdout === expect.obf.stdout && (expect.hangs ? printed.timedOut : printed.status === expect.obf.status && !printed.timedOut);
+  const sameAsObf = printed.stdout === expect.obf.stdout && ending(printed) === ending(expect.obf);
   return judge({ ...out, sameAsSource, sameAsObf: sameAsObf || hangsLikeObf });
 }
 
@@ -558,7 +564,7 @@ function runCase(item, config, expected) {
     timings[`untwist-${lane}`] = lanes[lane].untwistMs;
     timings[`node-${lane}`] = lanes[lane].nodeMs;
   }
-  return finish({ ...item, verdict: "ran", bytes: made.code.length, obfRun: `${obf.stdout === source.stdout ? "same" : "silenced"}${hang ? "+hangs" : ""}`, lanes, timings });
+  return finish({ ...item, verdict: "ran", bytes: made.code.length, obfRun: `${obf.stdout === source.stdout ? "same" : "silenced"}${hang ? "+hangs" : ""}`, obfEnding: ending(obf), lanes, timings });
 
   function finish(row) {
     row.ms = performance.now() - started;
