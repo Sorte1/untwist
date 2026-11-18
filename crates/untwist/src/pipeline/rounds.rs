@@ -159,17 +159,26 @@ impl Pipeline {
             earlier,
         };
         let (front, decoded) = self.probe_stages(site, (fresh_round(site.program), &printed));
-        let capped = site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested;
-        if capped {
+        if site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested {
             site.pass_opts.round_cap_undo.set(RoundCapUndo::Replay);
-        }
-        if capped || !decoded {
-            return Next::Settled(settled_back(site, probe, sem, capped));
+            return Next::Settled(settled_back(site, probe, sem, true));
         }
         if let Some(peeled) = self.peel(site, &front, layering) {
             return Next::Exit(Staged::Peeled(peeled));
         }
+        if !decoded {
+            return Next::Settled(settled_back(site, probe, sem, false));
+        }
         drop(sem);
+        self.advance(site, (front, reservation), (probe, round, text))
+    }
+
+    fn advance<'a>(
+        &self,
+        site: &mut StageCx<'a, '_>,
+        (front, reservation): (Semantics, Reservation<'_>),
+        (probe, round, text): (Probe<'a>, Round, &'a str),
+    ) -> Next {
         let mut shaping = Shaping::default();
         let Some(shaped) = self.machinery_stages(site, front, reservation, &mut shaping) else {
             return Next::Exit(Staged::Done);
