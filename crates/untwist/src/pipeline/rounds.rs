@@ -42,6 +42,8 @@ const REMOVING_PASSES: [&str; 5] = [
     "debug-protection",
 ];
 
+const UNBLOCKED_PASSES: [&str; 2] = ["control-flow-object", "dead-code"];
+
 const LAYER_PASSES: [&str; 3] = [
     "remove-decoder-machinery",
     "self-defending",
@@ -229,7 +231,8 @@ impl Pipeline {
         if site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested {
             return (sem, true);
         }
-        if removals(&site.stages[opened..], &REMOVING_PASSES) == 0 {
+        let stages = &site.stages[opened..];
+        if removals(stages, &REMOVING_PASSES) == 0 && settled_rewrites(stages) == 0 {
             return (self.plugin_stage(Stage::AfterDeobfuscate, site, sem), false);
         }
         let (sem, _) = self.final_machinery_stage(site, sem);
@@ -276,6 +279,16 @@ fn removals(stages: &[StageReport], passes: &[&str]) -> u32 {
         .filter(|stage| MACHINERY_STAGES.contains(&stage.stage))
         .flat_map(|stage| stage.per_pass.iter())
         .filter(|(pass, _)| passes.contains(pass))
+        .map(|(_, count)| *count)
+        .fold(0, u32::saturating_add)
+}
+
+fn settled_rewrites(stages: &[StageReport]) -> u32 {
+    stages
+        .iter()
+        .filter(|stage| MACHINERY_STAGES.contains(&stage.stage))
+        .flat_map(|stage| stage.per_pass.iter().chain(&stage.fixpoint_per_pass))
+        .filter(|(pass, _)| UNBLOCKED_PASSES.contains(pass))
         .map(|(_, count)| *count)
         .fold(0, u32::saturating_add)
 }
