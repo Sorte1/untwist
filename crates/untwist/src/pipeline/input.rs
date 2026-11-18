@@ -410,7 +410,7 @@ impl Pipeline {
     }
 
     #[cfg(feature = "refusal-spans")]
-    fn records_refusal_spans(&self) -> bool {
+    pub(super) fn records_refusal_spans(&self) -> bool {
         self.options.refusal_spans || self.options.hooks().refusal_spans
     }
 
@@ -495,11 +495,13 @@ impl Pipeline {
             self.stage_layer(tree, (layer, undo), layering, result)
         }));
         let replay = matches!(staged, Ok(Staged::Replay));
+        #[cfg(feature = "refusal-spans")]
+        let reparsed = matches!(staged, Ok(Staged::Done(true)));
         if self.options.decoded_strings || self.options.refusal_spans {
             self.options.progress(Progress::StageBegins("locate"));
         }
         #[cfg(feature = "refusal-spans")]
-        if let Some((layer, recorder)) = recorder.filter(|_| !replay) {
+        if let Some((layer, recorder)) = recorder.filter(|_| !replay && !reparsed) {
             let sites = super::refusal_spans::located(text, layer, recorder.finish());
             result.refusal_sites.extend(sites);
         }
@@ -511,15 +513,15 @@ impl Pipeline {
             Ok(Staged::Replay) => Step::Replay,
             Ok(Staged::TypeScript) => Step::Done(None),
             Ok(Staged::Peeled(peeled)) => Step::Peel(peeled),
-            Ok(Staged::Done) => {
-                if first && self.options.statement_spans {
+            Ok(Staged::Done(reparsed)) => {
+                if first && !reparsed && self.options.statement_spans {
                     result.statement_spans = Some(statement_spans(&parsed.program));
                 }
                 result.readers = PendingReaders::of(&parsed.program);
                 self.options.progress(Progress::StageBegins("print"));
                 let printed = self.printed(&alloc, &mut parsed.program, errors == 0);
                 if let Some(origins) = origins {
-                    result.mapped = (layering.peeled() == 0)
+                    result.mapped = (layering.peeled() == 0 && !reparsed)
                         .then(|| source_map::mapped(&mut parsed.program, &origins.finish()))
                         .flatten();
                 }
@@ -574,7 +576,7 @@ impl Pipeline {
             return Staged::TypeScript;
         }
         let staged = self.run_layer_stages(&mut site, sem, reservation, layering);
-        if nested_root && matches!(staged, Staged::Done) {
+        if nested_root && matches!(staged, Staged::Done(_)) {
             scope_shell_body((alloc, program), scoped, &mut result.notes);
         }
         staged
@@ -590,15 +592,18 @@ impl Pipeline {
         if let Some(peeled) = self.peel(site, &sem, layering) {
             return Staged::Peeled(peeled);
         }
-        let sem = self.front_stages(site, sem);
-        if site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested {
-            return Staged::Replay;
+        if !site.pass_opts.extended {
+            let sem = self.front_stages(site, sem);
+            if site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested {
+                return Staged::Replay;
+            }
+            if let Some(peeled) = self.peel(site, &sem, layering) {
+                return Staged::Peeled(peeled);
+            }
+            self.shaping_stages(site, sem, reservation);
+            return Staged::Done(false);
         }
-        if let Some(peeled) = self.peel(site, &sem, layering) {
-            return Staged::Peeled(peeled);
-        }
-        self.shaping_stages(site, sem, reservation);
-        Staged::Done
+        self.layer_rounds(site, (sem, reservation), layering)
     }
 }
 
@@ -660,11 +665,11 @@ fn parse_outcome(
     }
 }
 
-enum Staged {
+pub(super) enum Staged {
     TypeScript,
     Peeled(Peeled),
     Replay,
-    Done,
+    Done(bool),
 }
 
 enum Step {

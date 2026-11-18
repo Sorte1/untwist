@@ -12,6 +12,7 @@ mod refusal;
 #[cfg(feature = "refusal-spans")]
 mod refusal_spans;
 mod relex;
+mod rounds;
 mod shared_scan;
 mod shell;
 mod snapshots;

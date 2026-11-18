@@ -69,6 +69,13 @@ pub use driver::{
     STRING_ARRAY_MAX_ITERATIONS,
 };
 
+pub fn reset_round_state() {
+    calls::forget_call_flags();
+    write_only::forget_write_only_flags();
+    decoded::forget_alias_refusals();
+    init_order::clear_kept_order();
+}
+
 pub fn reset_run_state() {
     calls::forget_call_flags();
     write_only::forget_write_only_flags();
