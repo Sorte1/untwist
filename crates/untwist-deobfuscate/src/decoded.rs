@@ -188,12 +188,32 @@ fn record_builtin_patched(
         .push((format!("{}: {replaced}", notes::BUILTIN_PATCHED), span));
 }
 
+fn guarded_escapes_dead(request: &DecodeRequest<'_>, values: &[Option<DecodedValue>]) -> bool {
+    if request.dead_guards.is_empty() {
+        return true;
+    }
+    let known: FxHashMap<Span, &DecodedValue> = request
+        .calls
+        .iter()
+        .zip(values)
+        .filter_map(|(call, value)| Some((call.span, value.as_ref()?)))
+        .collect();
+    crate::dead_guards::all_dead(&request.dead_guards, &known)
+}
+
 fn apply_decoded_values<'a>(
     decoded: &mut Decoded,
     (request, heap): (&DecodeRequest<'a>, &mut InputHeap),
     evaluator: &mut InterpEvaluator,
     values: Vec<Option<DecodedValue>>,
 ) -> bool {
+    if !guarded_escapes_dead(request, &values) {
+        decoded.notes.extend(drained(evaluator));
+        decoded
+            .notes
+            .push((notes::GUARDED_ESCAPE_LIVE.to_string(), None));
+        return false;
+    }
     let returned = values.len();
     let mut evaluated = 0;
     let mut inlined = true;

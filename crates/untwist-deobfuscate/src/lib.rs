@@ -10,6 +10,7 @@ pub mod control_flow_object;
 pub mod control_flow_switch;
 pub mod dead_assignment;
 pub mod dead_code;
+pub mod dead_guards;
 pub mod debug_protection;
 pub mod decoded;
 pub mod decoded_strings;

@@ -73,3 +73,28 @@ fn a_self_defending_block_a_later_layer_put_in_a_control_flow_function_is_remove
     assert!(!output.contains("_0x59eeab"), "{output}");
     assert!(!output.contains("setInterval"), "{output}");
 }
+
+#[test]
+fn a_decoder_reached_only_from_a_branch_the_decoded_strings_prove_dead_is_decoded_under_unsafe() {
+    let output = unsafe_lane(&read("guarded-escape-dead.js"));
+    assert!(output.contains("\"hello\""), "{output}");
+    assert!(!output.contains("TyxkK"), "{output}");
+}
+
+#[test]
+fn a_decoder_reached_from_a_live_guarded_branch_keeps_its_unit_under_unsafe() {
+    let output = unsafe_lane(&read("guarded-escape-live.js"));
+    assert!(output.contains("typeof d"), "{output}");
+    assert!(output.contains("TyxkK"), "{output}");
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let source = read("guarded-escape-live.js");
+    let expected = printed(&node, dir.path(), &source);
+    let actual = printed(&node, dir.path(), &output);
+    assert!(
+        expected.is_ok() && expected == actual,
+        "{expected:?} vs {actual:?}"
+    );
+}

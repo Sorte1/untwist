@@ -29,6 +29,8 @@ use crate::protection_shape::{is_protection_callback, Roles};
 
 pub const PASS: &str = "self-defending";
 
+const MAX_NARROWED_CONTROLLERS: usize = 16;
+
 const RESERVED_PARAMS: [&str; 2] = [ARGUMENTS, "eval"];
 
 static CALLBACK_RELIES_ON: Reliance = Reliance {
@@ -1124,7 +1126,10 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
         .collect();
     let incomplete = declared_once.len() != controllers.found.len();
     let whole = attempt(program, &inputs, &controllers, &declared_once, incomplete);
-    if !unsafe_lane || !matches!(whole, Plan::Refused) || declared_once.len() < 2 {
+    if !unsafe_lane
+        || !matches!(whole, Plan::Refused)
+        || !(2..=MAX_NARROWED_CONTROLLERS).contains(&declared_once.len())
+    {
         return whole;
     }
     narrowed(program, &inputs, &controllers, &declared_once)
