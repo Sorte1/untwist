@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 
+use oxc_span::Span;
+
 use crate::mutants::deferred_legacy_reach_trusted;
 
 #[derive(Clone, Debug, Default)]
@@ -21,6 +23,9 @@ struct Deferral {
     layered: Vec<(String, Layered)>,
     observations: Vec<Vec<String>>,
     unverified: bool,
+    escapes_open: bool,
+    escapes: Vec<Span>,
+    reached: bool,
 }
 
 thread_local! {
@@ -54,6 +59,48 @@ impl Drop for Stage {
             deferral.pending = std::mem::take(&mut self.pending);
             deferral.layered = std::mem::take(&mut self.layered);
         });
+    }
+}
+
+pub(crate) struct EscapeStage {
+    open: bool,
+    escapes: Vec<Span>,
+}
+
+pub(crate) fn open_escape_stage(on: bool) -> EscapeStage {
+    DEFERRAL.with(|deferral| {
+        let mut deferral = deferral.borrow_mut();
+        let open = on && deferral.rerunnable && !deferral.forbidden;
+        EscapeStage {
+            open: std::mem::replace(&mut deferral.escapes_open, open),
+            escapes: std::mem::take(&mut deferral.escapes),
+        }
+    })
+}
+
+impl Drop for EscapeStage {
+    fn drop(&mut self) {
+        DEFERRAL.with(|deferral| {
+            let mut deferral = deferral.borrow_mut();
+            deferral.unverified |= !deferral.escapes.is_empty();
+            deferral.escapes_open = self.open;
+            deferral.escapes = std::mem::take(&mut self.escapes);
+        });
+    }
+}
+
+pub(crate) fn speculates_escapes() -> bool {
+    DEFERRAL.with(|deferral| deferral.borrow().escapes_open)
+}
+
+pub(crate) fn defer_escapes(decoders: &[Span]) {
+    DEFERRAL.with(|deferral| deferral.borrow_mut().escapes.extend_from_slice(decoders));
+}
+
+pub(crate) fn settle_escapes(survives: impl FnOnce(&[Span]) -> bool) {
+    let escapes = DEFERRAL.with(|deferral| std::mem::take(&mut deferral.borrow_mut().escapes));
+    if !escapes.is_empty() && survives(&escapes) {
+        DEFERRAL.with(|deferral| deferral.borrow_mut().unverified = true);
     }
 }
 
@@ -198,7 +245,11 @@ pub fn settle_observations(mut observed: impl FnMut(&[&str]) -> bool) {
         observed(&names)
     });
     if failed {
-        DEFERRAL.with(|deferral| deferral.borrow_mut().unverified = true);
+        DEFERRAL.with(|deferral| {
+            let mut deferral = deferral.borrow_mut();
+            deferral.unverified = true;
+            deferral.reached = true;
+        });
     }
 }
 
@@ -207,6 +258,8 @@ pub(crate) fn settle_layered(mut holds: impl FnMut(&Layered) -> bool) {
     for (token, obligation) in layered {
         if holds(&obligation) {
             verify_one(&token);
+        } else {
+            DEFERRAL.with(|deferral| deferral.borrow_mut().reached = true);
         }
     }
 }
@@ -236,13 +289,19 @@ pub fn unverified() -> bool {
     })
 }
 
+pub fn reach_failed() -> bool {
+    DEFERRAL.with(|deferral| deferral.borrow().reached)
+}
+
 pub(crate) fn forget() {
     DEFERRAL.with(|deferral| {
         let mut deferral = deferral.borrow_mut();
         deferral.unverified = false;
+        deferral.reached = false;
         deferral.pending.clear();
         deferral.layered.clear();
         deferral.observations.clear();
+        deferral.escapes.clear();
     });
 }
 

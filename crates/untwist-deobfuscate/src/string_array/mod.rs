@@ -111,6 +111,13 @@ fn first_initialised<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<&'k Stat
         .find(|statement| !is_uninitialised(statement))
 }
 
+fn unbraced<'k, 'a>(mut statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] {
+    while let [Statement::BlockStatement(block)] = statements {
+        statements = &block.body;
+    }
+    statements
+}
+
 fn returns_array(expr: &Expression<'_>, array: &str) -> bool {
     let Expression::FunctionExpression(function) = expr else {
         return false;
@@ -121,7 +128,7 @@ fn returns_array(expr: &Expression<'_>, array: &str) -> bool {
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    let Some(statements) = without_inert(&body.statements, &[array]) else {
+    let Some(statements) = without_inert(unbraced(&body.statements), &[array]) else {
         return false;
     };
     let [Statement::ReturnStatement(statement)] = statements.as_slice() else {

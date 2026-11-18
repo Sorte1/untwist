@@ -208,6 +208,19 @@ pub fn global_reach<'a>(
     reach_of(&found)
 }
 
+pub fn global_observation<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    machinery: &[Span],
+    reach: ReachWatch<'_>,
+) -> Option<Span> {
+    let watch = settle::Watch {
+        printers_quiet: true,
+        ..reach_watch(reach)
+    };
+    reach_of(&settle(program, scoping, (None, machinery, watch)).0).observed
+}
+
 pub fn global_reach_with_texts<'a>(
     program: &'a Program<'a>,
     scoping: &Scoping,

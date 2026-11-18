@@ -9,6 +9,8 @@ use untwist_core::ast_util::js_text::js_text;
 use super::written::{text_template, WrittenKey};
 use crate::value_flow::{flow_rule_disabled, STORAGE_PROXY};
 
+const TEMPLATE_WEIGHT_CAP: usize = 4096;
+
 #[derive(Clone, Debug)]
 pub(super) enum StorageMember {
     Text(WrittenKey),
@@ -299,6 +301,13 @@ impl Storage<'_> {
         };
         let left = text_template(left.as_expression()?, Some(self))?;
         let right = text_template(right.as_expression()?, Some(self))?;
+        let joins = members
+            .values()
+            .filter(|value| matches!(value, StorageMember::Concat))
+            .count();
+        if (left.weight() + right.weight()).saturating_mul(joins) > TEMPLATE_WEIGHT_CAP {
+            return None;
+        }
         Self::choose(member, members, |value| match value {
             StorageMember::Concat => Some(WrittenKey::Concat(vec![left.clone(), right.clone()])),
             StorageMember::Text(_) | StorageMember::Other => None,

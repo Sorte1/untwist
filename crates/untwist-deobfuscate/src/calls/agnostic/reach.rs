@@ -12,6 +12,22 @@ use oxc_syntax::operator::BinaryOperator;
 use untwist_core::semantic::{observers, Observers};
 use untwist_eval::coerce::number_to_string;
 
+const FRESH_CONSTRUCTORS: [&str; 13] = [
+    "Error",
+    "EvalError",
+    "RangeError",
+    "ReferenceError",
+    "SyntaxError",
+    "TypeError",
+    "URIError",
+    "Date",
+    "RegExp",
+    "Map",
+    "Set",
+    "WeakMap",
+    "WeakSet",
+];
+
 #[derive(Default)]
 struct ReturnExprs<'a> {
     exprs: Vec<&'a Expression<'a>>,
@@ -166,6 +182,16 @@ impl<'a> Sites<'_, 'a> {
                 && self.fresh.bindings.is_array_function(symbol))
     }
 
+    pub(super) fn fresh_construction(&self, new: &NewExpression<'a>) -> bool {
+        let Expression::Identifier(callee) = new.callee.without_parentheses() else {
+            return false;
+        };
+        let name = callee.name.as_str();
+        FRESH_CONSTRUCTORS.contains(&name)
+            && self.fresh.symbol(callee).is_none()
+            && !self.name_assigned(name)
+    }
+
     fn ambient_creation(&self, expr: &Expression<'a>) -> bool {
         if !self.extended.get() {
             return false;
@@ -240,6 +266,7 @@ impl<'a> Sites<'_, 'a> {
                 self.identifier_non_global(id, depth)
             }
             Expression::CallExpression(call) => self.call_non_global(call, depth),
+            Expression::NewExpression(new) => self.fresh_construction(new),
             Expression::StaticMemberExpression(member) => {
                 member.property.name == "length" && self.fresh.holds_fresh_sequence(&member.object)
             }
@@ -306,11 +333,9 @@ impl<'a> Sites<'_, 'a> {
         if name_key {
             return true;
         }
-        if self
-            .fresh
-            .literal_init(id)
-            .is_some_and(|init| self.is_array_result(init) || self.ambient_creation(init))
-        {
+        if self.fresh.literal_init(id).is_some_and(|init| {
+            self.fresh.is_fresh(init) || self.is_array_result(init) || self.ambient_creation(init)
+        }) {
             return true;
         }
         let Some((symbol, func, index)) = self.resolvable_param(id) else {

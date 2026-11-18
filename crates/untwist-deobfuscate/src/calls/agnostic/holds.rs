@@ -76,7 +76,13 @@ fn prototype_base(member: &MemberExpression<'_>) -> bool {
 }
 
 fn literal_key(property: &ObjectProperty<'_>) -> bool {
-    !property.computed || matches!(property.key, PropertyKey::StringLiteral(_))
+    !property.computed
+        || matches!(
+            property.key,
+            PropertyKey::StringLiteral(_)
+                | PropertyKey::NumericLiteral(_)
+                | PropertyKey::Identifier(_)
+        )
 }
 
 impl<'a> Sites<'_, 'a> {
@@ -137,6 +143,7 @@ impl<'a> Sites<'_, 'a> {
                 None => self.binding_hold(inner, id, next, false),
             },
             Expression::CallExpression(call) => self.call_hold(call, next),
+            Expression::NewExpression(new) if self.fresh_instance(new, next) => Hold::Stored,
             _ if self.string_valued(inner) => Hold::No,
             _ => Hold::Yes,
         }
@@ -149,6 +156,15 @@ impl<'a> Sites<'_, 'a> {
             }
         }
         self.watched_element(expr) || self.str_value(expr, super::roles::KEY_DEPTH).is_some()
+    }
+
+    fn fresh_instance(&self, new: &NewExpression<'a>, depth: u8) -> bool {
+        self.fresh_construction(new)
+            && new.arguments.iter().all(|argument| {
+                argument
+                    .as_expression()
+                    .is_some_and(|expr| self.hold_at(expr, depth) == Hold::No)
+            })
     }
 
     fn call_hold(&self, call: &CallExpression<'a>, depth: u8) -> Hold {

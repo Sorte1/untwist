@@ -32,6 +32,7 @@ use crate::wrapper_args::{kinds_fit, SiteView};
 use crate::wrapper_chain::{drop_broken_chains, promote_forwarders, Candidate, Chain, Fits};
 use crate::wrapper_effects::{inline_keeping_effects, inline_local_writes};
 use crate::wrapper_sites::{called_expression, collect_sites, CallSite, FunctionsAt, Sites};
+use crate::wrapper_speculation;
 
 pub const WRAPPER_ROUND_CAP: usize = 16;
 
@@ -249,9 +250,11 @@ struct WrapperSearch<'p, 's> {
     scoping: &'s Scoping,
     units: MachineryDepth,
     checked: bool,
+    speculating: bool,
     found: Vec<WrapperShape>,
     forwarders: Vec<Candidate<'p>>,
     rejected: Vec<(Span, &'static str)>,
+    unstable: Vec<WrapperShape>,
 }
 
 impl<'p> WrapperSearch<'p, '_> {
@@ -274,6 +277,13 @@ impl<'p> WrapperSearch<'p, '_> {
         if !binding_is_stable(self.scoping, shape.symbol) {
             return Some(notes::WRAPPER_BINDING_UNSTABLE);
         }
+        self.refusal_of_body(function)
+    }
+
+    fn refusal_of_body(&self, function: &Function<'_>) -> Option<&'static str> {
+        if returns_nested_function(function) {
+            return Some(notes::WRAPPER_NESTED_FUNCTION);
+        }
         if !body_is_self_contained(function, self.scoping, None) {
             return Some(notes::WRAPPER_BODY_NOT_SELF_CONTAINED);
         }
@@ -293,6 +303,12 @@ impl<'p> WrapperSearch<'p, '_> {
             return;
         }
         match self.refusal(&shape, function) {
+            Some(notes::WRAPPER_BINDING_UNSTABLE) if self.speculating => {
+                match self.refusal_of_body(function) {
+                    Some(reason) => self.rejected.push((shape.statement, reason)),
+                    None => self.unstable.push(shape),
+                }
+            }
             Some(reason) => self.rejected.push((shape.statement, reason)),
             None => self.found.push(shape),
         }
@@ -616,17 +632,22 @@ fn find_wrappers(
         scoping: cx.scoping(),
         units: MachineryDepth::every_unit(),
         checked,
+        speculating: cx.opts.unsafe_transforms && crate::legacy_reach::speculates_escapes(),
         found: Vec::new(),
         forwarders: Vec::new(),
         rejected: Vec::new(),
+        unstable: Vec::new(),
     };
     search.visit_program(program);
     let WrapperSearch {
         mut found,
         forwarders,
         mut rejected,
+        unstable,
         ..
     } = search;
+    let admitted =
+        wrapper_speculation::admit(program, cx.scoping(), unstable, (&mut found, &mut rejected));
     if found.is_empty() && rejected.is_empty() {
         return None;
     }
@@ -639,6 +660,7 @@ fn find_wrappers(
         refuse_annex_b_bindings(&mut found, site, program, cx);
         drop_broken_chains(&mut found);
     }
+    wrapper_speculation::defer(cx.scoping(), &found, &admitted);
     Some((found, rejected))
 }
 
