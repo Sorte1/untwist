@@ -8,6 +8,7 @@ use untwist_eval::decode::{decoded_to_expression, Call, Decoded, DecoderProgram,
 
 use crate::array_rotator::find_rotators;
 use crate::calls::{collect_base, Collected};
+use crate::dead_guards::{enclosing_guards, BranchGuard, EscapeGuards};
 use crate::notes;
 use crate::proof::{
     decoder_refusal, object_operand_is_intrinsic, patch_refusal, rotator_refusal_at, used_names,
@@ -36,6 +37,7 @@ pub struct DecodeRequest<'p> {
     pub guard: UnitGuard<'p>,
     pub unit: usize,
     pub reliance: Option<Reliance>,
+    pub escape_guards: EscapeGuards,
 }
 
 struct UnitInputs<'r, 'p> {
@@ -106,6 +108,69 @@ fn escaped_decoders_by_unit(
     for (global_index, _) in references {
         if let Some((unit, local)) = sites.get(global_index).copied() {
             by_unit.entry(unit).or_default().insert(local);
+        }
+    }
+    by_unit
+}
+
+fn guarded_escapes(
+    program: &Program<'_>,
+    collected: &mut Collected<'_>,
+    (sites, rotators): (&Sites, &FxHashMap<usize, Span>),
+) -> FxHashMap<usize, EscapeGuards> {
+    let in_own_rotator = |(index, span): &(usize, Span)| {
+        sites
+            .get(index)
+            .and_then(|(unit, _)| rotators.get(unit))
+            .is_some_and(|rotator| rotator.start <= span.start && span.end <= rotator.end)
+    };
+    collected.dynamic_calls.retain(|call| !in_own_rotator(call));
+    let mut by_unit: FxHashMap<usize, EscapeGuards> = FxHashMap::default();
+    let escapes: FxHashSet<Span> = collected
+        .decoder_values
+        .iter()
+        .chain(&collected.dynamic_calls)
+        .map(|(_, span)| *span)
+        .collect();
+    if escapes.is_empty() {
+        return by_unit;
+    }
+    let enclosing = enclosing_guards(program, &escapes);
+    let mut unguarded: FxHashSet<usize> = FxHashSet::default();
+    let mut found: Vec<(usize, bool, Vec<BranchGuard>)> = Vec::new();
+    let values = collected.decoder_values.iter().map(|escape| (escape, true));
+    let dynamic = collected.dynamic_calls.iter().map(|escape| (escape, false));
+    for ((index, span), is_value) in values.chain(dynamic) {
+        let Some((unit, _)) = sites.get(index).copied() else {
+            continue;
+        };
+        match enclosing.get(span).filter(|guards| !guards.is_empty()) {
+            Some(guards) => found.push((unit, is_value, guards.clone())),
+            None => {
+                unguarded.insert(unit);
+            }
+        }
+    }
+    let is_guarded = |index: &usize| {
+        sites
+            .get(index)
+            .is_some_and(|(unit, _)| !unguarded.contains(unit))
+    };
+    collected
+        .decoder_values
+        .retain(|(index, _)| !is_guarded(index));
+    collected
+        .dynamic_calls
+        .retain(|(index, _)| !is_guarded(index));
+    for (unit, is_value, guards) in found {
+        if unguarded.contains(&unit) {
+            continue;
+        }
+        let entry = by_unit.entry(unit).or_default();
+        if is_value {
+            entry.values.push(guards);
+        } else {
+            entry.dynamic.push(guards);
         }
     }
     by_unit
@@ -398,6 +463,7 @@ fn plan_unit<'p>(
             guard: unstamp_only_guard(&inputs),
             unit,
             reliance: None,
+            escape_guards: EscapeGuards::default(),
         });
     }
     if let Some(refusal) = unit_refusal(unit, evidence) {
@@ -413,6 +479,7 @@ fn plan_unit<'p>(
         guard,
         unit,
         reliance: evidence.foreign.reliance(unit),
+        escape_guards: EscapeGuards::default(),
     })
 }
 
@@ -471,13 +538,14 @@ fn decoder_units_of(sites: &Sites) -> FxHashMap<usize, usize> {
 }
 
 pub fn build_requests<'p>(program: &'p Program<'p>, scoping: &Scoping) -> DecodePlan<'p> {
-    build_requests_named(program, scoping, false)
+    build_requests_in_lane(program, scoping, false, false)
 }
 
-pub fn build_requests_named<'p>(
+pub fn build_requests_in_lane<'p>(
     program: &'p Program<'p>,
     scoping: &Scoping,
     unedited: bool,
+    unsafe_lane: bool,
 ) -> DecodePlan<'p> {
     let stamped = find_stamped_named(program, scoping, unedited);
     if stamped.incomplete {
@@ -492,6 +560,23 @@ pub fn build_requests_named<'p>(
     }
     let sites = local_indices(&stamped, &members);
     let mut collected = collect_base(program, decoder_units_of(&sites));
+    let planned: Vec<(usize, &StampedFn<'p>, &Vec<usize>)> = stamped
+        .units()
+        .into_iter()
+        .filter_map(|unit| Some((unit, stamped.array(unit)?, members.get(&unit)?)))
+        .collect();
+    let names: Vec<&str> = planned.iter().map(|(_, array, _)| array.name).collect();
+    let rotators = find_rotators(program, &names);
+    let mut guarded = if unsafe_lane {
+        let rotator_spans: FxHashMap<usize, Span> = planned
+            .iter()
+            .zip(&rotators)
+            .filter_map(|((unit, _, _), located)| Some((*unit, located.as_ref()?.0)))
+            .collect();
+        guarded_escapes(program, &mut collected, (&sites, &rotator_spans))
+    } else {
+        FxHashMap::default()
+    };
     if !collected.decoder_values.is_empty() {
         let dead = crate::removal::dead_alias_values(program, Some(scoping));
         collected
@@ -506,13 +591,6 @@ pub fn build_requests_named<'p>(
         ..DecodePlan::default()
     };
     let mut calls = group_calls(std::mem::take(&mut collected.calls), &sites);
-    let planned: Vec<(usize, &StampedFn<'p>, &Vec<usize>)> = stamped
-        .units()
-        .into_iter()
-        .filter_map(|unit| Some((unit, stamped.array(unit)?, members.get(&unit)?)))
-        .collect();
-    let names: Vec<&str> = planned.iter().map(|(_, array, _)| array.name).collect();
-    let rotators = find_rotators(program, &names);
     for ((unit, array, positions), located) in planned.into_iter().zip(rotators) {
         let outcome = plan_unit(
             (program, located),
@@ -525,7 +603,11 @@ pub fn build_requests_named<'p>(
             &evidence,
             &collected.patches,
             escaped_by_unit.remove(&unit).unwrap_or_default(),
-        );
+        )
+        .map(|request| DecodeRequest {
+            escape_guards: guarded.remove(&unit).unwrap_or_default(),
+            ..request
+        });
         push_outcome(&mut plan, outcome);
     }
     finish_plan(plan, &stamped, &orphans)

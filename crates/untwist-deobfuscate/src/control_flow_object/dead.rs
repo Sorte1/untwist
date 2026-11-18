@@ -9,10 +9,12 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::global::{references_are_global, references_are_global_or};
 use untwist_core::ast_util::inline::{param_names, returned_expression};
 use untwist_core::ast_util::prop::member_parts;
+use untwist_core::ast_util::readonly::readonly_binding_uses;
 use untwist_core::pass::Cx;
 use untwist_eval::fold::{fold_binary, fold_to_const, fold_unary, Const, FoldOptions};
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 
 use super::CffValue;
 
@@ -81,43 +83,130 @@ struct Known<'k, 'p> {
     symbol: SymbolId,
     props: &'k [(Cow<'k, str>, CffValue<'k, 'p>)],
     scoping: &'k Scoping,
+    branches: &'k Branches<'p>,
 }
 
-impl<'p> Known<'_, 'p> {
-    fn prop(&self, member: &Expression<'_>) -> Option<&CffValue<'_, 'p>> {
-        if receiver_symbol(member, self.scoping)? != self.symbol {
+enum Resolved<'k, 'p> {
+    Value(Const),
+    Function(&'k Function<'p>),
+}
+
+type Env = FxHashMap<SymbolId, Const>;
+
+fn symbol_of(id: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
+    id.reference_id
+        .get()
+        .and_then(|reference| scoping.get_reference(reference).symbol_id())
+}
+
+fn param_symbols(function: &Function<'_>) -> Option<Vec<SymbolId>> {
+    if function.params.rest.is_some() {
+        return None;
+    }
+    function
+        .params
+        .items
+        .iter()
+        .map(|param| match &param.pattern {
+            BindingPattern::BindingIdentifier(id) if param.initializer.is_none() => {
+                id.symbol_id.get()
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn static_property<'p>(object: &'p ObjectExpression<'p>, name: &str) -> Option<&'p Expression<'p>> {
+    let mut found = None;
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        if property.method || property.kind != PropertyKind::Init {
             return None;
         }
+        let key = match &property.key {
+            PropertyKey::StaticIdentifier(id) if !property.computed => id.name.as_str(),
+            PropertyKey::StringLiteral(text) => text.value.as_str()?,
+            _ => return None,
+        };
+        if key == name {
+            found = Some(&property.value);
+        }
+    }
+    found
+}
+
+impl<'k, 'p> Known<'k, 'p> {
+    fn own(&self, member: &Expression<'_>) -> Option<Resolved<'k, 'p>> {
         let (_, name) = member_parts(member)?;
-        self.props
+        let value = self
+            .props
             .iter()
             .find(|(key, _)| key.as_ref() == name.as_ref())
-            .map(|(_, value)| value)
+            .map(|(_, value)| value)?;
+        match value {
+            CffValue::Text(literal) => literal
+                .value
+                .as_str()
+                .map(|text| Resolved::Value(Const::Str(text.to_string()))),
+            CffValue::Function(function) => Some(Resolved::Function(function)),
+        }
     }
 
-    fn value(&self, expr: &Expression<'_>, depth: usize) -> Option<Const> {
+    fn other(
+        &self,
+        receiver: SymbolId,
+        member: &Expression<'_>,
+        depth: usize,
+    ) -> Option<Resolved<'k, 'p>> {
+        let object = self
+            .branches
+            .readonly_object(receiver, self.symbol, self.scoping)?;
+        let (_, name) = member_parts(member)?;
+        match static_property(object, name.as_ref())?.without_parentheses() {
+            Expression::FunctionExpression(function) => Some(Resolved::Function(function)),
+            value => self
+                .value(value, &Env::default(), depth + 1)
+                .map(Resolved::Value),
+        }
+    }
+
+    fn member(&self, member: &Expression<'_>, depth: usize) -> Option<Resolved<'k, 'p>> {
+        let receiver = receiver_symbol(member, self.scoping)?;
+        if receiver == self.symbol {
+            return self.own(member);
+        }
+        self.other(receiver, member, depth)
+    }
+
+    fn value(&self, expr: &Expression<'_>, env: &Env, depth: usize) -> Option<Const> {
         if depth > MAX_TEST_DEPTH {
             return None;
         }
         let inner = expr.without_parentheses();
-        if let Some(value) = self.prop(inner) {
-            return match value {
-                CffValue::Text(literal) => literal
-                    .value
-                    .as_str()
-                    .map(|text| Const::Str(text.to_string())),
-                CffValue::Function(_) => None,
+        if receiver_symbol(inner, self.scoping).is_some() {
+            return match self.member(inner, depth)? {
+                Resolved::Value(value) => Some(value),
+                Resolved::Function(_) => None,
             };
         }
         match inner {
-            Expression::CallExpression(call) if !call.optional => self.call(call, depth),
+            Expression::Identifier(id) if !env.is_empty() => match symbol_of(id, self.scoping) {
+                Some(symbol) => env.get(&symbol).cloned(),
+                None => fold_to_const(inner, &FoldOptions::default()),
+            },
+            Expression::CallExpression(call) if !call.optional => self.call(call, env, depth),
             Expression::BinaryExpression(binary) => fold_binary(
                 binary.operator,
-                &self.value(&binary.left, depth + 1)?,
-                &self.value(&binary.right, depth + 1)?,
+                &self.value(&binary.left, env, depth + 1)?,
+                &self.value(&binary.right, env, depth + 1)?,
             ),
             Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::LogicalNot => {
-                fold_unary(unary.operator, &self.value(&unary.argument, depth + 1)?)
+                fold_unary(
+                    unary.operator,
+                    &self.value(&unary.argument, env, depth + 1)?,
+                )
             }
             _ if references_are_global(inner, self.scoping) => {
                 fold_to_const(inner, &FoldOptions::default())
@@ -126,38 +215,66 @@ impl<'p> Known<'_, 'p> {
         }
     }
 
-    fn call(&self, call: &CallExpression<'_>, depth: usize) -> Option<Const> {
-        let CffValue::Function(function) = self.prop(&call.callee)? else {
+    fn call(&self, call: &CallExpression<'_>, env: &Env, depth: usize) -> Option<Const> {
+        let Resolved::Function(function) = self.member(&call.callee, depth)? else {
             return None;
         };
-        let names = param_names(function)?;
-        if names.len() != call.arguments.len()
-            || names.iter().any(|name| FOLDED_GLOBALS.contains(name))
-            || !reads_only_own_or_globals(function, self.scoping)
-        {
+        let mut arguments = Vec::with_capacity(call.arguments.len());
+        for argument in &call.arguments {
+            arguments.push(self.value(argument.as_expression()?, env, depth + 1)?);
+        }
+        if let Some(value) = folded_own_body(function, &arguments, self.scoping) {
+            return Some(value);
+        }
+        let params = param_symbols(function)?;
+        if params.len() != arguments.len() {
             return None;
         }
-        let mut options = FoldOptions::default();
-        for (name, argument) in names.iter().zip(&call.arguments) {
-            let value = self.value(argument.as_expression()?, depth + 1)?;
-            options.bindings.insert((*name).to_string(), value);
+        let bound: Env = params.into_iter().zip(arguments).collect();
+        if bound.is_empty() {
+            return None;
         }
-        fold_to_const(returned_expression(function)?, &options)
+        self.value(returned_expression(function)?, &bound, depth + 1)
     }
+}
+
+fn folded_own_body(
+    function: &Function<'_>,
+    arguments: &[Const],
+    scoping: &Scoping,
+) -> Option<Const> {
+    let names = param_names(function)?;
+    if names.len() != arguments.len()
+        || names.iter().any(|name| FOLDED_GLOBALS.contains(name))
+        || !reads_only_own_or_globals(function, scoping)
+    {
+        return None;
+    }
+    let mut options = FoldOptions::default();
+    for (name, argument) in names.iter().zip(arguments) {
+        options
+            .bindings
+            .insert((*name).to_string(), argument.clone());
+    }
+    fold_to_const(returned_expression(function)?, &options)
 }
 
 fn decide<'p>(
     test: &Expression<'p>,
     symbol: SymbolId,
     props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
+    branches: &Branches<'p>,
     cx: &Cx<'_, '_>,
 ) -> Option<bool> {
     let known = Known {
         symbol,
         props,
         scoping: cx.scoping(),
+        branches,
     };
-    known.value(test, 0).map(|value| truthy(&value))
+    known
+        .value(test, &Env::default(), 0)
+        .map(|value| truthy(&value))
 }
 
 fn reads_only_own_or_globals(function: &Function<'_>, scoping: &Scoping) -> bool {
@@ -165,6 +282,30 @@ fn reads_only_own_or_globals(function: &Function<'_>, scoping: &Scoping) -> bool
     let is_own = |symbol| Some(scoping.symbol_scope_id(symbol)) == own;
     returned_expression(function)
         .is_some_and(|expr| references_are_global_or(expr, scoping, is_own))
+}
+
+struct Mentions<'s> {
+    scoping: &'s Scoping,
+    symbol: SymbolId,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for Mentions<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if symbol_of(it, self.scoping) == Some(self.symbol) {
+            self.found = true;
+        }
+    }
+}
+
+fn mentions(object: &ObjectExpression<'_>, symbol: SymbolId, scoping: &Scoping) -> bool {
+    let mut scan = Mentions {
+        scoping,
+        symbol,
+        found: false,
+    };
+    scan.visit_object_expression(object);
+    scan.found
 }
 
 #[derive(Clone, Copy)]
@@ -199,6 +340,40 @@ pub(super) struct Branch<'p> {
 pub(super) struct Branches<'p> {
     by_receiver: FxHashMap<SymbolId, Vec<Branch<'p>>>,
     statements: Vec<Span>,
+    objects: FxHashMap<SymbolId, &'p ObjectExpression<'p>>,
+    program: Option<&'p Program<'p>>,
+    readonly: RefCell<FxHashMap<SymbolId, bool>>,
+}
+
+impl<'p> Branches<'p> {
+    fn readonly_object(
+        &self,
+        receiver: SymbolId,
+        owner: SymbolId,
+        scoping: &Scoping,
+    ) -> Option<&'p ObjectExpression<'p>> {
+        let object = *self.objects.get(&receiver)?;
+        if !mentions(object, owner, scoping) {
+            return None;
+        }
+        let program = self.program?;
+        let known = self.readonly.borrow().get(&receiver).copied();
+        let readonly = known.unwrap_or_else(|| {
+            let readonly = readonly_binding_uses(program, scoping, receiver).is_some();
+            self.readonly.borrow_mut().insert(receiver, readonly);
+            readonly
+        });
+        readonly.then_some(object)
+    }
+
+    fn tested_by(&self, symbol: SymbolId) -> impl Iterator<Item = &Branch<'p>> {
+        self.by_receiver
+            .iter()
+            .filter(move |(receiver, _)| {
+                **receiver == symbol || self.objects.contains_key(receiver)
+            })
+            .flat_map(|(_, branches)| branches)
+    }
 }
 
 struct BranchScan<'s, 'p> {
@@ -231,6 +406,20 @@ impl<'p> BranchScan<'_, 'p> {
     }
 }
 
+impl<'p> BranchScan<'_, 'p> {
+    fn const_object(&mut self, declarator: &VariableDeclarator<'p>) {
+        let (BindingPattern::BindingIdentifier(id), Some(Expression::ObjectExpression(object))) =
+            (&declarator.id, &declarator.init)
+        else {
+            return;
+        };
+        if let Some(symbol) = id.symbol_id.get() {
+            let object: &'p ObjectExpression<'p> = self.alloc(&**object);
+            self.found.objects.insert(symbol, object);
+        }
+    }
+}
+
 impl<'p> VisitJs<'p> for BranchScan<'_, 'p> {
     fn visit_if_statement(&mut self, it: &IfStatement<'p>) {
         let it: &'p IfStatement<'p> = self.alloc(it);
@@ -250,6 +439,15 @@ impl<'p> VisitJs<'p> for BranchScan<'_, 'p> {
             Some(DeadPart::of_expression(&it.alternate)),
         );
         walk_js::walk_conditional_expression(self, it);
+    }
+
+    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'p>) {
+        if it.kind == VariableDeclarationKind::Const {
+            for declarator in &it.declarations {
+                self.const_object(declarator);
+            }
+        }
+        walk_js::walk_variable_declaration(self, it);
     }
 
     fn visit_statements(&mut self, it: &AVec<'p, Statement<'p>>) {
@@ -294,6 +492,7 @@ pub(super) fn predicate_branches<'p>(program: &'p Program<'p>, scoping: &Scoping
         found: Branches::default(),
     };
     scan.visit_program(program);
+    scan.found.program = Some(program);
     scan.found
 }
 
@@ -303,13 +502,12 @@ pub(super) fn dead_branch_parts<'p>(
     props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
     cx: &Cx<'_, '_>,
 ) -> Vec<DeadPart> {
-    let Some(tested) = branches.by_receiver.get(&symbol) else {
-        return Vec::new();
-    };
-    tested
-        .iter()
+    let mut seen = FxHashSet::default();
+    branches
+        .tested_by(symbol)
+        .filter(|branch| seen.insert(std::ptr::from_ref(branch.test) as usize))
         .filter_map(|branch| {
-            let taken = decide(branch.test, symbol, props, cx)?;
+            let taken = decide(branch.test, symbol, props, branches, cx)?;
             if taken {
                 branch.alternate
             } else {

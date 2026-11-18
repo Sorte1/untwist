@@ -277,6 +277,9 @@ pub const CONTROL_FLOW_NON_CONSTANT_KEY: &str =
 pub const CONTROL_FLOW_UNCALLED_FUNCTION_PROPERTY: &str =
     "control-flow object kept: a function property is read without being called, so its identity \
      must stay shared";
+pub const GUARDED_ESCAPE_LIVE: &str =
+    "a decoder of the unit is reached outside its literal calls inside a branch that the decoded \
+     strings do not prove dead, so the unit's call sites were left alone";
 pub const CONTROL_FLOW_USE_BEFORE_INIT: &str =
     "control_flow_use_before_init: a read of the control-flow object may run before the \
      declaration initialises it, so the object was left in place";
@@ -663,6 +666,7 @@ catalogue!(
     DIRECT_EVAL_SCOPE,
     MACHINERY_IN_A_BLOCK,
     DECODER_USED_AS_VALUE,
+    GUARDED_ESCAPE_LIVE,
     MACHINERY_NAME_SPELLED,
     MACHINERY_NAME_BOUND,
     DECODER_WRITTEN_OUTSIDE,

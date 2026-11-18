@@ -29,6 +29,8 @@ use crate::protection_shape::{is_protection_callback, Roles};
 
 pub const PASS: &str = "self-defending";
 
+const MAX_NARROWED_CONTROLLERS: usize = 16;
+
 const RESERVED_PARAMS: [&str; 2] = [ARGUMENTS, "eval"];
 
 static CALLBACK_RELIES_ON: Reliance = Reliance {
@@ -1122,8 +1124,51 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
             scoping.symbol_redeclarations(symbol).is_empty() && !annex_b.may_write(symbol)
         })
         .collect();
-    let first = removals(program, &inputs, &declared_once);
-    let kept = first.kept || declared_once.len() != controllers.found.len();
+    let incomplete = declared_once.len() != controllers.found.len();
+    let whole = attempt(program, &inputs, &controllers, &declared_once, incomplete);
+    if !unsafe_lane
+        || !matches!(whole, Plan::Refused)
+        || !(2..=MAX_NARROWED_CONTROLLERS).contains(&declared_once.len())
+    {
+        return whole;
+    }
+    narrowed(program, &inputs, &controllers, &declared_once)
+}
+
+fn narrowed(
+    program: &Program<'_>,
+    inputs: &Inputs<'_>,
+    controllers: &Controllers,
+    declared_once: &FxHashSet<SymbolId>,
+) -> Plan {
+    let mut candidates: Vec<SymbolId> = declared_once.iter().copied().collect();
+    candidates.sort_unstable();
+    let removable: FxHashSet<SymbolId> = candidates
+        .into_iter()
+        .filter(|&symbol| {
+            let single = std::iter::once(symbol).collect();
+            matches!(
+                attempt(program, inputs, controllers, &single, true),
+                Plan::Remove(..)
+            )
+        })
+        .collect();
+    if removable.is_empty() {
+        return Plan::Refused;
+    }
+    attempt(program, inputs, controllers, &removable, true)
+}
+
+fn attempt(
+    program: &Program<'_>,
+    inputs: &Inputs<'_>,
+    controllers: &Controllers,
+    declared_once: &FxHashSet<SymbolId>,
+    incomplete: bool,
+) -> Plan {
+    let scoping = inputs.scoping;
+    let first = removals(program, inputs, declared_once);
+    let kept = first.kept || incomplete;
     let proven: FxHashSet<SymbolId> = declared_once.difference(&first.unproven).copied().collect();
     let Removals {
         mut spans,
@@ -1132,9 +1177,9 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     } = if first.unproven.is_empty() {
         first
     } else {
-        removals(program, &inputs, &proven)
+        removals(program, inputs, &proven)
     };
-    if unsafe_lane {
+    if inputs.unsafe_lane {
         let mut bare = BareCalls {
             variables: &variables,
             scoping,

@@ -19,7 +19,7 @@ use untwist_eval::rotation::RotationMemo;
 use untwist_eval::value::JsString;
 
 use crate::bridge::{
-    build_requests_named, decoded_expression, primitive_value, DecodePlan, DecodeRequest,
+    build_requests_in_lane, decoded_expression, primitive_value, DecodePlan, DecodeRequest,
 };
 use crate::calls::{group_ternaries, normalize_calls};
 use crate::mutants::unsafe_names_trusted;
@@ -188,12 +188,41 @@ fn record_builtin_patched(
         .push((format!("{}: {replaced}", notes::BUILTIN_PATCHED), span));
 }
 
+fn guarded_escapes_dead(request: &DecodeRequest<'_>, values: &[Option<DecodedValue>]) -> bool {
+    let guards = &request.escape_guards;
+    let stateful = || {
+        !matches!(
+            untwist_eval::state::shape(&request.program),
+            untwist_eval::state::MachineryState::Stateless
+        )
+    };
+    let dynamic = !guards.dynamic.is_empty() && stateful();
+    if guards.values.is_empty() && !dynamic {
+        return true;
+    }
+    let known: FxHashMap<Span, &DecodedValue> = request
+        .calls
+        .iter()
+        .zip(values)
+        .filter_map(|(call, value)| Some((call.span, value.as_ref()?)))
+        .collect();
+    crate::dead_guards::all_dead(&guards.values, &known)
+        && (!dynamic || crate::dead_guards::all_dead(&guards.dynamic, &known))
+}
+
 fn apply_decoded_values<'a>(
     decoded: &mut Decoded,
     (request, heap): (&DecodeRequest<'a>, &mut InputHeap),
     evaluator: &mut InterpEvaluator,
     values: Vec<Option<DecodedValue>>,
 ) -> bool {
+    if !guarded_escapes_dead(request, &values) {
+        decoded.notes.extend(drained(evaluator));
+        decoded
+            .notes
+            .push((notes::GUARDED_ESCAPE_LIVE.to_string(), None));
+        return false;
+    }
     let returned = values.len();
     let mut evaluated = 0;
     let mut inlined = true;
@@ -499,7 +528,7 @@ fn decode_program(
     heap: &mut InputHeap,
     published: &CodeTextSeen,
 ) -> (Outcome, bool) {
-    let plan = build_requests_named(program, scoping, unedited);
+    let plan = build_requests_in_lane(program, scoping, unedited, limits.unsafe_lane);
     if plan.refused {
         return (Outcome::Refused, false);
     }
