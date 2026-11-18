@@ -110,6 +110,23 @@ mod tests {
     }
 
     #[test]
+    fn spans_taken_since_a_mark_come_back_when_put_back() {
+        let recorder = Recorder::start();
+        record(|| "kept".to_string(), Span::new(0, 1));
+        let mark = recorded();
+        record(|| "moved".to_string(), Span::new(2, 3));
+        let taken = taken_since(mark);
+        assert_eq!(recorded(), 1);
+        put_back(taken);
+        let whats: Vec<String> = recorder
+            .finish()
+            .into_iter()
+            .map(|span| span.what)
+            .collect();
+        assert_eq!(whats, ["kept", "moved"]);
+    }
+
+    #[test]
     fn a_dropped_recorder_stops_recording() {
         drop(Recorder::start());
         assert!(!active());

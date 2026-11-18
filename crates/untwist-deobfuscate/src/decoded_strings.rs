@@ -127,6 +127,26 @@ mod tests {
     }
 
     #[test]
+    fn strings_taken_since_a_mark_come_back_when_put_back() {
+        let recorder = Recorder::start();
+        record(Span::new(0, 1), text("kept"));
+        let mark = recorded();
+        record(Span::new(2, 3), text("moved"));
+        record(Span::new(4, 5), text("also"));
+        let taken = taken_since(mark);
+        assert_eq!(recorded(), 1);
+        let values: Vec<&str> = taken.iter().map(|found| found.value.as_str()).collect();
+        assert_eq!(values, ["moved", "also"]);
+        put_back(taken);
+        let values: Vec<String> = recorder
+            .finish()
+            .into_iter()
+            .map(|found| found.value)
+            .collect();
+        assert_eq!(values, ["kept", "moved", "also"]);
+    }
+
+    #[test]
     fn a_nested_recorder_hands_the_outer_one_back() {
         let outer = Recorder::start();
         record(Span::new(0, 1), text("first"));

@@ -102,3 +102,20 @@ impl<'t> Positions<'t> {
         Some(at.min(self.text.len()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Positions;
+
+    #[test]
+    fn an_offset_round_trips_through_its_line_and_utf16_column() {
+        let text = "ab\n\u{e9}\u{1f600}cd\nx";
+        let positions = Positions::new(text);
+        for offset in [0, 1, 3, 5, 9, 10, 12] {
+            let (line, column) = positions.of(offset);
+            assert_eq!(positions.offset(line, column), Some(offset), "{offset}");
+        }
+        assert_eq!(positions.offset(9, 0), None);
+        assert_eq!(positions.offset(0, 40), Some(2));
+    }
+}
