@@ -312,9 +312,10 @@ function run(command, args, cwd, timeoutMs, maxBuffer) {
 }
 
 const HOST_PRELOAD = 'globalThis.document = { domain: "example.com", location: { hostname: "example.com", href: "https://example.com/" } };\n';
+const PINNED_CONSOLE = 'for (const key of ["log", "warn", "info", "error", "exception", "table", "trace"]) Object.defineProperty(console, key, { value: console[key] ?? console.log, writable: false, configurable: false });\n';
 
-function runNode(file, cwd, config, seconds = config.timeout) {
-  const result = run("prlimit", ["--core=0", "timeout", "-k", "2", String(seconds), process.execPath, "--no-warnings", `--max-old-space-size=${config.nodeHeapMb}`, "--max-semi-space-size=8", "--require", join(config.out, "host.cjs"), file], cwd, (seconds + 5) * 1000, 4 * 1024 * 1024);
+function runNode(file, cwd, config, seconds = config.timeout, preload = "host.cjs") {
+  const result = run("prlimit", ["--core=0", "timeout", "-k", "2", String(seconds), process.execPath, "--no-warnings", `--max-old-space-size=${config.nodeHeapMb}`, "--max-semi-space-size=8", "--require", join(config.out, preload), file], cwd, (seconds + 5) * 1000, 4 * 1024 * 1024);
   if (result.error === "ENOBUFS") return { stdout: `${result.stdout.slice(0, 2000)}\n[floods stdout]`, status: null, timedOut: false, stderr: "output floods stdout past 4 MiB", ms: result.ms };
   return { stdout: result.stdout, status: result.status, timedOut: result.timedOut || result.status === 124 || result.status === 137, stderr: `${result.errorLine}\n${result.stderr.slice(0, 600)}`, ms: result.ms };
 }
@@ -545,9 +546,10 @@ function runCase(item, config, expected) {
   timings.nodeObf = obf.ms;
   const settled = hang ? obf.timedOut : !obf.timedOut;
   const same = obf.stdout === source.stdout && (hang || obf.status === source.status) && settled;
-  const silenced = silences(item.layers) && settled && (hang || obf.status === source.status);
+  const pinned = !same && silences(item.layers) ? runNode(obfFile, dir, config, hang ? config.hangTimeout : config.timeout, "host-pinned.cjs") : null;
+  const silenced = pinned !== null && pinned.stdout === source.stdout && (hang ? pinned.timedOut : !pinned.timedOut && pinned.status === source.status);
   if (!same && !silenced) {
-    return finish({ ...item, verdict: "skip", reason: "obfuscated-differs", detail: `exit ${obf.status}${obf.timedOut ? " timeout" : ""}: ${obf.stderr.split("\n")[0] || obf.stdout.slice(0, 120)}`, bytes: made.code.length });
+    return finish({ ...item, verdict: "skip", reason: "obfuscated-differs", detail: `exit ${(pinned ?? obf).status}${(pinned ?? obf).timedOut ? " timeout" : ""}: ${(pinned ?? obf).stderr.split("\n")[0] || (pinned ?? obf).stdout.slice(0, 120)}`, bytes: made.code.length });
   }
   const expect = { source, obf, hangs: hang };
   const lanes = {};
@@ -659,6 +661,7 @@ async function main() {
   if (!existsSync(config.untwist)) throw new Error(`no untwist binary at ${config.untwist}`);
   mkdirSync(config.out, { recursive: true });
   writeFileSync(join(config.out, "host.cjs"), HOST_PRELOAD);
+  writeFileSync(join(config.out, "host-pinned.cjs"), HOST_PRELOAD + PINNED_CONSOLE);
   for (const source of Object.keys(programs())) {
     const hits = fingerprints(programs()[source]).hits;
     if (hits.length > 0) throw new Error(`fingerprints fire on source ${source}: ${hits}`);

@@ -29,7 +29,8 @@ For each case it runs node on the obfuscated file and skips the case when that d
 the source prints (the obfuscator broke it, most often through `renameProperties` or a
 self-defending check that a later layer reformatted), when the input to a layer is over
 `--max-layer-input` bytes (100 KB) or when a layer's output is over `--max-bytes` (600 KB). A
-`disableConsoleOutput` file that prints nothing still counts. Every node run preloads a `document`
+file that `disableConsoleOutput` silences counts when, run again with the console methods made
+read-only so the silencing cannot take hold, it prints what the source prints. Every node run preloads a `document`
 on `example.com`, so the domain lock passes and stays testable. A file with debug protection on an
 interval never exits, so for those node runs stop after `--hang-timeout` seconds instead of
 `--timeout`, and the output must print the same and keep running. Then it runs Untwist in both lanes
