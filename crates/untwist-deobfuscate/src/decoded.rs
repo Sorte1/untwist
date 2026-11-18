@@ -19,7 +19,7 @@ use untwist_eval::rotation::RotationMemo;
 use untwist_eval::value::JsString;
 
 use crate::bridge::{
-    build_requests_named, decoded_expression, primitive_value, DecodePlan, DecodeRequest,
+    build_requests_in_lane, decoded_expression, primitive_value, DecodePlan, DecodeRequest,
 };
 use crate::calls::{group_ternaries, normalize_calls};
 use crate::mutants::unsafe_names_trusted;
@@ -499,7 +499,7 @@ fn decode_program(
     heap: &mut InputHeap,
     published: &CodeTextSeen,
 ) -> (Outcome, bool) {
-    let plan = build_requests_named(program, scoping, unedited);
+    let plan = build_requests_in_lane(program, scoping, unedited, limits.unsafe_lane);
     if plan.refused {
         return (Outcome::Refused, false);
     }

@@ -471,13 +471,14 @@ fn decoder_units_of(sites: &Sites) -> FxHashMap<usize, usize> {
 }
 
 pub fn build_requests<'p>(program: &'p Program<'p>, scoping: &Scoping) -> DecodePlan<'p> {
-    build_requests_named(program, scoping, false)
+    build_requests_in_lane(program, scoping, false, false)
 }
 
-pub fn build_requests_named<'p>(
+pub fn build_requests_in_lane<'p>(
     program: &'p Program<'p>,
     scoping: &Scoping,
     unedited: bool,
+    unsafe_lane: bool,
 ) -> DecodePlan<'p> {
     let stamped = find_stamped_named(program, scoping, unedited);
     if stamped.incomplete {
@@ -492,6 +493,10 @@ pub fn build_requests_named<'p>(
     }
     let sites = local_indices(&stamped, &members);
     let mut collected = collect_base(program, decoder_units_of(&sites));
+    if unsafe_lane {
+        collected.decoder_values.clear();
+        collected.dynamic_calls.clear();
+    }
     if !collected.decoder_values.is_empty() {
         let dead = crate::removal::dead_alias_values(program, Some(scoping));
         collected
