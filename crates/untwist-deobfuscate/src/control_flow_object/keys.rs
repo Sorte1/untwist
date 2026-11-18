@@ -22,7 +22,7 @@ struct KeyFold {
     duplicate: Option<String>,
 }
 
-fn key_assignment<'k, 'a>(
+pub(super) fn key_assignment<'k, 'a>(
     stmt: &'k Statement<'a>,
     object: &str,
 ) -> Option<(Cow<'k, str>, CffValue<'k, 'a>)> {
