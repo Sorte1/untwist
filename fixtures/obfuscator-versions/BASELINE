@@ -90,7 +90,7 @@
 0.18.8--plain-norot-t75--top--terser	1	1/1	1/1	-	0	-
 0.18.8--plain-norot-t75--wp4-module--terser	1	1/1	1/1	-	0	-
 0.18.8--plain-norot-t75-keys--top--none	1	0/1	0/1	-	0	legacy-array-reached (1)
-0.18.8--plain-norot-t75-self--wp4-module--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
+0.18.8--plain-norot-t75-self--wp4-module--uglify	1	1/1	1/1	-	0	-
 0.18.8--plain-norot-t75-unicode--iife--none	1	1/1	1/1	-	0	-
 0.18.8--plain-rot-t1-cff--iife--terser	1	1/1	1/1	-	0	-
 0.18.8--plain-rot-t1-cff--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -618,7 +618,7 @@
 2.9.6--rc4-rot-shuf-shift-istr-w2f5-t1-mangled--iife--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
 3.2.7--b64-norot-noshuf-noshift-inum-w1-nocalls-t1-mangled--iife--uglify	1	1/1	1/1	-	0	-
 3.2.7--b64-norot-noshuf-shift-istr-w0-nocalls-t1-dead--wp4-module--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
-3.2.7--b64-norot-noshuf-shift-istr-w2f5-nocalls-t75--wp4-bundle--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
+3.2.7--b64-norot-noshuf-shift-istr-w2f5-nocalls-t75--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-key-reach (1)
 3.2.7--b64-norot-noshuf-shift-istr-w3f-nocalls-t75-numbers--iife--none	1	1/1	1/1	-	0	-
 3.2.7--b64-norot-shuf-shift-inum-w2f5-calls-t75-cff--top--none	1	1/1	1/1	-	0	-
 3.2.7--b64-norot-shuf-shift-istr-w2u-calls-t1-keys--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-key-reach (1)
@@ -634,7 +634,7 @@
 3.2.7--plain-norot-shuf-noshift-inum-w2u-calls-t1-keys--top--uglify	1	1/1	1/1	-	0	-
 3.2.7--plain-norot-shuf-noshift-istr-w1-calls-t75-dead--iife--uglify	1	1/1	1/1	-	0	-
 3.2.7--plain-rot-noshuf-noshift-inum-w2f5-calls-t75-numbers--wp4-module--none	1	1/1	1/1	-	0	-
-3.2.7--plain-rot-noshuf-noshift-istr-w2f5-calls-t75--wp4-bundle--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
+3.2.7--plain-rot-noshuf-noshift-istr-w2f5-calls-t75--wp4-bundle--terser	1	1/1	1/1	-	0	-
 3.2.7--plain-rot-shuf-noshift-istr-w1-nocalls-t1--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 3.2.7--plain-rot-shuf-shift-istr-w0-calls-t75-unicode--top--none	1	1/1	1/1	-	0	-
 3.2.7--plain-rot-shuf-shift-istr-w2u-calls-t1-split--wp4-bundle--uglify	1	0/1	0/1	-	0	wrapper-alias-redeclared (2)
@@ -697,7 +697,7 @@
 5.9.1--b64-rot-noshuf-noshift-istr-w2f5-calls-t75-unicode--top--terser	1	1/1	1/1	-	0	-
 5.9.1--b64-rot-noshuf-shift-istr-w1-calls-t1-self--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 5.9.1--b64-rot-shuf-noshift-inum-w0-nocalls-t75-split--top--none	1	1/1	1/1	-	0	-
-5.9.1--b64-rot-shuf-noshift-inum-w2f5-calls-t1--wp4-bundle--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
+5.9.1--b64-rot-shuf-noshift-inum-w2f5-calls-t1--wp4-bundle--terser	1	0/1	1/1	-	0	safe-global-key-reach (1)
 5.9.1--b64-rot-shuf-noshift-istr-w2u-nocalls-t1-unicode--iife--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 5.9.1--b64-rot-shuf-noshift-istr-w3f-calls-t75-dead--wp4-module--none	1	1/1	1/1	-	0	-
 5.9.1--plain-norot-noshuf-noshift-inum-w3f-calls-t1-unicode--wp4-module--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
@@ -727,13 +727,13 @@
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
 legacy-array-reached	128	128	128	0	safe lane: code may reach the plain string array by name through the global object (an undecoded obj[dec(k)](...) may run code), a with statement or a direct eval, so it is not lifted and the unit is left undecoded
 builtin-replaced-decoded-key	74	74	74	0	a call or write on a built-in whose key is itself a decoder call is judged as a possible built-in patch, so a stateful base64 or rc4 unit is refused
-builtin-alias-patched	65	65	65	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
+builtin-alias-patched	61	61	61	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
 decoder-reads-outer-binding	58	58	59	0	a decoder reads a binding outside itself that is not a standard global (the old atob polyfill's window fallback), so the unit's calls are left alone
 namespace-by-key	48	48	48	0	safe lane: namespace read by unproven key; a read keyed by a decoder call, which the check cannot resolve before decoding, off a holder not proven to be something other than the global object is pinned like a spelled Reflect or Object (R51-RX8)
 safe-global-names	26	26	26	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
 array-reached-outside	12	12	24	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
+safe-global-key-reach	10	10	10	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 self-defending-passed-through	9	9	11	0	a self-defending check reads the source text of a function the output would print across lines (a minified or older template untwist cannot keep on one line), so the input is passed through unchanged
-safe-global-key-reach	8	8	8	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 object-keys-not-merged	6	6	7	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...) or a value may throw or run code (a member read, arithmetic on a binding)
 stateful-decoder-state	6	6	9	0	decoding bails: a stateful decoder keeps state that is not a proven memo or init gate
 decoder-used-as-value	3	3	6	0	a decoder of the unit is used other than as the callee of a call, so it may run from where no call site was collected, and the unit's calls are left alone
