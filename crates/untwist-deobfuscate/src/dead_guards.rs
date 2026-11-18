@@ -33,7 +33,9 @@ fn operand(expr: &Expression<'_>) -> Option<GuardOperand> {
     }
 }
 
-fn comparison(test: &Expression<'_>) -> Option<(GuardOperand, GuardOperand, bool)> {
+type Comparison = (GuardOperand, GuardOperand, bool);
+
+fn comparison(test: &Expression<'_>) -> Option<Comparison> {
     let Expression::BinaryExpression(binary) = test.without_parentheses() else {
         return None;
     };
@@ -64,51 +66,44 @@ impl Enclosing<'_> {
         }
     }
 
-    fn guarded<'a>(
-        &mut self,
-        test: &Expression<'a>,
-        branches: (&dyn Fn(&mut Self), Option<&dyn Fn(&mut Self)>),
-    ) -> bool {
-        let Some((left, right, equal)) = comparison(test) else {
-            return false;
-        };
-        self.visit_expression(test);
-        let (consequent, alternate) = branches;
-        for (visit, taken_when_equal) in [(Some(consequent), equal), (alternate, !equal)] {
-            let Some(visit) = visit else {
-                continue;
-            };
-            self.stack.push(BranchGuard {
-                left: left.clone(),
-                right: right.clone(),
-                taken_when_equal,
-            });
-            visit(self);
-            self.stack.pop();
-        }
-        true
+    fn enter(&mut self, (left, right, _): &Comparison, taken_when_equal: bool) {
+        self.stack.push(BranchGuard {
+            left: left.clone(),
+            right: right.clone(),
+            taken_when_equal,
+        });
     }
 }
 
 impl<'a> VisitJs<'a> for Enclosing<'_> {
     fn visit_if_statement(&mut self, it: &IfStatement<'a>) {
-        let consequent = |this: &mut Self| this.visit_statement(&it.consequent);
-        let alternate = it
-            .alternate
-            .as_ref()
-            .map(|alternate| move |this: &mut Self| this.visit_statement(alternate));
-        let alternate_ref = alternate.as_ref().map(|f| f as &dyn Fn(&mut Self));
-        if !self.guarded(&it.test, (&consequent, alternate_ref)) {
+        let Some(parts) = comparison(&it.test) else {
             walk_js::walk_if_statement(self, it);
+            return;
+        };
+        self.visit_expression(&it.test);
+        self.enter(&parts, parts.2);
+        self.visit_statement(&it.consequent);
+        self.stack.pop();
+        if let Some(alternate) = &it.alternate {
+            self.enter(&parts, !parts.2);
+            self.visit_statement(alternate);
+            self.stack.pop();
         }
     }
 
     fn visit_conditional_expression(&mut self, it: &ConditionalExpression<'a>) {
-        let consequent = |this: &mut Self| this.visit_expression(&it.consequent);
-        let alternate = |this: &mut Self| this.visit_expression(&it.alternate);
-        if !self.guarded(&it.test, (&consequent, Some(&alternate))) {
+        let Some(parts) = comparison(&it.test) else {
             walk_js::walk_conditional_expression(self, it);
-        }
+            return;
+        };
+        self.visit_expression(&it.test);
+        self.enter(&parts, parts.2);
+        self.visit_expression(&it.consequent);
+        self.stack.pop();
+        self.enter(&parts, !parts.2);
+        self.visit_expression(&it.alternate);
+        self.stack.pop();
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
