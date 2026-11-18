@@ -227,3 +227,77 @@ fn a_browser_no_eval_debug_protection_that_does_more_is_kept() {
     );
     assert_eq!(safe(&source), printed(&source));
 }
+
+const SERVICE_WORKER_GLOBAL: &str = "typeof global === \"object\" ? global : this";
+
+fn service_worker_console_disable() -> String {
+    no_eval_console_disable().replacen(NO_EVAL_GLOBAL, SERVICE_WORKER_GLOBAL, 1)
+}
+
+#[test]
+fn the_service_worker_console_disable_is_removed_with_its_controller() {
+    let source = format!("{CONTROLLER}{}{REST}", service_worker_console_disable());
+    assert_eq!(safe(&source).trim(), REST);
+}
+
+#[test]
+fn a_service_worker_console_disable_that_reads_a_replaced_global_is_kept() {
+    let source = format!(
+        "global = null;\n{CONTROLLER}{}{REST}",
+        service_worker_console_disable()
+    );
+    assert_eq!(safe(&source), printed(&source));
+}
+
+#[test]
+fn a_service_worker_console_disable_with_another_fallback_is_kept() {
+    let source = format!(
+        "{CONTROLLER}{}{REST}",
+        service_worker_console_disable().replacen("? global : this", "? global : {}", 1)
+    );
+    assert_eq!(safe(&source), printed(&source));
+}
+
+#[test]
+fn a_service_worker_console_disable_that_tests_another_type_is_kept() {
+    let source = format!(
+        "{CONTROLLER}{}{REST}",
+        service_worker_console_disable().replacen("\"object\"", "\"function\"", 1)
+    );
+    assert_eq!(safe(&source), printed(&source));
+}
+
+fn with_an_unread_console_block() -> String {
+    let unread = THE_CONSOLE_DISABLE
+        .replacen("var cd = ctl(", "var other = relay(", 1)
+        .replacen("cd();", "other();", 1);
+    format!(
+        "{CONTROLLER}function relay(context, callback) {{\n  return callback;\n}}\n{}function later() {{\n{unread}}}\nlater();\n{REST}",
+        service_worker_console_disable()
+    )
+}
+
+#[test]
+fn a_console_disable_is_kept_while_a_console_block_the_pass_cannot_read_survives() {
+    let source = with_an_unread_console_block();
+    let alloc = Allocator::default();
+    let (code, notes) = run_lane(&alloc, &source, true);
+    assert_eq!(code, printed(&source));
+    assert!(
+        notes
+            .iter()
+            .any(|note| note.contains("change where output starts")),
+        "{notes:?}"
+    );
+}
+
+#[test]
+fn a_console_disable_is_removed_when_the_other_block_has_no_loop() {
+    let source = format!(
+        "{CONTROLLER}function relay(context, callback) {{\n  return callback;\n}}\n{}relay(this, function () {{\n  console.log(\"y\");\n}})();\n{REST}",
+        service_worker_console_disable()
+    );
+    let alloc = Allocator::default();
+    let (code, _) = run_lane(&alloc, &source, true);
+    assert!(!code.contains("typeof global"), "{code}");
+}
