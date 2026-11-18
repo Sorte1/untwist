@@ -407,6 +407,16 @@ impl<'p> BranchScan<'_, 'p> {
 }
 
 impl<'p> BranchScan<'_, 'p> {
+    fn never_rebound(&self, declarator: &VariableDeclarator<'p>) -> bool {
+        let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+            return false;
+        };
+        id.symbol_id.get().is_some_and(|symbol| {
+            !self.scoping.symbol_is_mutated(symbol)
+                && self.scoping.symbol_redeclarations(symbol).is_empty()
+        })
+    }
+
     fn const_object(&mut self, declarator: &VariableDeclarator<'p>) {
         let (BindingPattern::BindingIdentifier(id), Some(Expression::ObjectExpression(object))) =
             (&declarator.id, &declarator.init)
@@ -442,8 +452,8 @@ impl<'p> VisitJs<'p> for BranchScan<'_, 'p> {
     }
 
     fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'p>) {
-        if it.kind == VariableDeclarationKind::Const {
-            for declarator in &it.declarations {
+        for declarator in &it.declarations {
+            if it.kind == VariableDeclarationKind::Const || self.never_rebound(declarator) {
                 self.const_object(declarator);
             }
         }
