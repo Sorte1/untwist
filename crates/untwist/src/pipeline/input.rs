@@ -238,7 +238,9 @@ impl Pipeline {
         let rerunnable = untwist_deobfuscate::legacy_reach::Rerunnable::enter();
         let first = self.run_admitted(source, reservation, (room.clone(), reserved));
         drop(rerunnable);
-        if !untwist_deobfuscate::legacy_reach::unverified() {
+        let unsettled = untwist_deobfuscate::self_defending::partial_removal_unsettled(&first.code);
+        let unverified = untwist_deobfuscate::legacy_reach::unverified();
+        if !unverified && !unsettled {
             return first;
         }
         let reached = reach_refusals(&first.notes);
@@ -248,7 +250,9 @@ impl Pipeline {
         let _ = crate::stats::RunStats::taken();
         untwist_deobfuscate::init_order::reset_capacity_hint();
         forget_failures();
-        let _forbidden = untwist_deobfuscate::legacy_reach::Forbidden::enter();
+        let _forbidden = unverified.then(untwist_deobfuscate::legacy_reach::Forbidden::enter);
+        let _whole =
+            unsettled.then(untwist_deobfuscate::self_defending::PartialRemovalsForbidden::enter);
         let mut second = self.run_admitted(source, reservation, (room, reserved));
         second.notes = carry_reach(std::mem::take(&mut second.notes), reached);
         second

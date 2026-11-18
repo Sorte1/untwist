@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
@@ -725,6 +727,52 @@ fn guarded_returners(program: &Program<'_>) -> usize {
     returners.count
 }
 
+const CONSOLE: &str = "console";
+const PRINTED_SKIPPED_RETURNER: &str = ": function () {}";
+
+#[derive(Default)]
+struct ConsoleNamed {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for ConsoleNamed {
+    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        self.found |= it.property.name == CONSOLE;
+        walk_js::walk_static_member_expression(self, it);
+    }
+
+    fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
+        self.found |= it.value == CONSOLE;
+    }
+}
+
+struct RemovedConsole<'k> {
+    spans: &'k [Span],
+    named: ConsoleNamed,
+}
+
+impl<'a> VisitJs<'a> for RemovedConsole<'_> {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        if self.named.found {
+            return;
+        }
+        if self.spans.contains(&it.span()) {
+            self.named.visit_statement(it);
+            return;
+        }
+        walk_js::walk_statement(self, it);
+    }
+}
+
+fn removes_console_silencing(program: &Program<'_>, spans: &[Span]) -> bool {
+    let mut removed = RemovedConsole {
+        spans,
+        named: ConsoleNamed::default(),
+    };
+    removed.visit_program(program);
+    removed.named.found
+}
+
 struct LockRegistrations<'k> {
     scoping: &'k Scoping,
     found: bool,
@@ -1078,6 +1126,7 @@ enum Plan {
     Refused,
     KeptTogether,
     LockKept,
+    Partial(Vec<Span>, FxHashSet<SymbolId>),
     Remove(Vec<Span>, FxHashSet<SymbolId>),
 }
 
@@ -1192,6 +1241,55 @@ fn unrecognized_controllers(program: &Program<'_>, controllers: &Controllers) ->
         || (!controllers.inline && guarded_returners(program) > controllers.found.len())
 }
 
+#[derive(Clone, Copy, Default)]
+struct PartialRemovals {
+    forbidden: bool,
+    applied: bool,
+}
+
+thread_local! {
+    static PARTIAL: Cell<PartialRemovals> = Cell::new(PartialRemovals::default());
+}
+
+fn update_partial(change: impl FnOnce(&mut PartialRemovals)) {
+    PARTIAL.with(|partial| {
+        let mut state = partial.get();
+        change(&mut state);
+        partial.set(state);
+    });
+}
+
+pub fn partial_removal_unsettled(output: &str) -> bool {
+    PARTIAL.with(|partial| partial.get().applied) && output.contains(PRINTED_SKIPPED_RETURNER)
+}
+
+pub fn forget_partial_removals() {
+    update_partial(|state| {
+        state.applied = false;
+    });
+}
+
+pub struct PartialRemovalsForbidden(bool);
+
+impl PartialRemovalsForbidden {
+    pub fn enter() -> Self {
+        let mut was = false;
+        update_partial(|state| was = std::mem::replace(&mut state.forbidden, true));
+        Self(was)
+    }
+}
+
+impl Drop for PartialRemovalsForbidden {
+    fn drop(&mut self) {
+        let was = self.0;
+        update_partial(|state| state.forbidden = was);
+    }
+}
+
+fn partial_removals_forbidden() -> bool {
+    PARTIAL.with(|partial| partial.get().forbidden)
+}
+
 fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     let mut controllers = Controllers::default();
     controllers.visit_program(program);
@@ -1302,7 +1400,12 @@ fn attempt(
         return Plan::Refused;
     }
     match (spans.is_empty(), kept) {
-        (false, true) if !inputs.unsafe_lane => Plan::KeptTogether,
+        (false, true) if !inputs.unsafe_lane && removes_console_silencing(program, &spans) => {
+            match partial_removals_forbidden() {
+                true => Plan::KeptTogether,
+                false => Plan::Partial(spans, tracked),
+            }
+        }
         (false, _) => Plan::Remove(spans, tracked),
         (true, true) => Plan::Refused,
         (true, false) => Plan::Nothing,
@@ -1332,7 +1435,8 @@ impl<'a> Pass<'a> for SelfDefending {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let spans = match plan(program, cx.scoping(), cx.opts.unsafe_transforms) {
+        let (spans, tracked, partial) = match plan(program, cx.scoping(), cx.opts.unsafe_transforms)
+        {
             Plan::Nothing => return,
             Plan::Refused => {
                 cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
@@ -1346,39 +1450,51 @@ impl<'a> Pass<'a> for SelfDefending {
                 cx.note(notes::DOMAIN_LOCK_KEPT, None);
                 return;
             }
-            Plan::Remove(spans, tracked) => {
-                if !cx.opts.unsafe_transforms && callback_built_ins_written(program, cx.scoping()) {
-                    cx.note(notes::SELF_DEFENDING_BUILTIN_PATCHED, None);
-                    return;
-                }
-                if reaches_a_script_global_once_removed(&tracked, &spans, program, cx) {
-                    cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
-                    return;
-                }
-                spans
-            }
+            Plan::Partial(spans, tracked) => (spans, tracked, true),
+            Plan::Remove(spans, tracked) => (spans, tracked, false),
         };
-        if crate::directives::removes_what_an_eval_reads(cx.scoping(), &spans) {
-            cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
+        match refusal(program, (&spans, &tracked), cx) {
+            Some(note) => cx.note(note, None),
+            None => remove(program, &spans, cx, partial),
+        }
+    }
+}
+
+fn refusal<'a>(
+    program: &Program<'a>,
+    (spans, tracked): (&[Span], &FxHashSet<SymbolId>),
+    cx: &Cx<'a, '_>,
+) -> Option<&'static str> {
+    if !cx.opts.unsafe_transforms && callback_built_ins_written(program, cx.scoping()) {
+        return Some(notes::SELF_DEFENDING_BUILTIN_PATCHED);
+    }
+    if reaches_a_script_global_once_removed(tracked, spans, program, cx)
+        || crate::directives::removes_what_an_eval_reads(cx.scoping(), spans)
+    {
+        return Some(notes::SELF_DEFENDING_REFERENCE_KEPT);
+    }
+    if crate::directives::removes_hoist_blocker(cx.scoping(), spans) {
+        return Some(notes::PROTECTION_HOIST_BLOCKER_KEPT);
+    }
+    None
+}
+
+fn remove<'a>(program: &mut Program<'a>, spans: &[Span], cx: &mut Cx<'a, '_>, partial: bool) {
+    let (wanted, applied) = match remove_protection_statements(program, spans, cx) {
+        Ok(counts) => counts,
+        Err(span) => {
+            cx.note(notes::SELF_DEFENDING_NO_USABLE_SPAN, Some(span));
             return;
         }
-        if crate::directives::removes_hoist_blocker(cx.scoping(), &spans) {
-            cx.note(notes::PROTECTION_HOIST_BLOCKER_KEPT, None);
-            return;
-        }
-        let (wanted, applied) = match remove_protection_statements(program, &spans, cx) {
-            Ok(counts) => counts,
-            Err(span) => {
-                cx.note(notes::SELF_DEFENDING_NO_USABLE_SPAN, Some(span));
-                return;
-            }
-        };
-        cx.changed_by(applied);
-        if applied != wanted {
-            cx.note(
-                notes::planned_and_applied_removals(PASS, wanted, applied),
-                None,
-            );
-        }
+    };
+    cx.changed_by(applied);
+    if partial && applied > 0 {
+        update_partial(|state| state.applied = true);
+    }
+    if applied != wanted {
+        cx.note(
+            notes::planned_and_applied_removals(PASS, wanted, applied),
+            None,
+        );
     }
 }
