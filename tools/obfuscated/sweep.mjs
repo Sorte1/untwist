@@ -41,7 +41,7 @@ const STRING_DOMAINS = {
 };
 const SUBSET_MIN = { stringArrayEncoding: 0, stringArrayIndexesType: 1 };
 const PRESETS = ["default", "low-obfuscation", "medium-obfuscation", "high-obfuscation"];
-const PREMISE_NOTE = /^(inline-decoded-strings|remove-decoder-machinery|inline-decoder-wrappers|self-defending|debug-protection|console|domain-lock|pipeline): .*(global object|code from text|standard built-in|replace a built-in|patched|outside-code premise|would hang where the input runs)/;
+const PREMISE_NOTE = /^(inline-decoded-strings|remove-decoder-machinery|inline-decoder-wrappers|self-defending|debug-protection|console|domain-lock|pipeline): .*(global object|code from text|standard built-in|replace a built-in|patched|outside-code premise|would hang where the input runs|may still run)/;
 const MACHINERY_PASSES = ["find-string-array", "find-decoders", "find-array-rotator", "inline-decoder-wrappers", "remove-decoder-machinery", "self-defending", "debug-protection", "console"];
 
 function readTyping(path) {
