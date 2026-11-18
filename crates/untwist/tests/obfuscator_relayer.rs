@@ -12,35 +12,7 @@ const CONSOLE_DISABLE_KEPT: &str = "the default lane leaves the layers undecoded
 
 const LAYERED_SAFE_UNIT_KEPT: &str = "the default lane leaves the outer unit of two layers of dead code, control flow flattening and rc4 undecoded, as main does, so neither layer decodes; the unsafe lane decodes both";
 
-const LAYERED_MEMO_SPANS: &str = "the unsafe lane refuses the inner rc4 unit in one run: its decoder still carries the spans the outer control flow flattening and dead code left, out of source order, and the memo and init-gate proof orders reads by span";
-
-const REFUSED_LAYERS: [(&str, &str, &str); 27] = [
-    (
-        "dead-cff-rc4-n2--classes-1.js",
-        "unsafe",
-        LAYERED_MEMO_SPANS,
-    ),
-    (
-        "dead-cff-rc4-n2--functions-1.js",
-        "unsafe",
-        LAYERED_MEMO_SPANS,
-    ),
-    (
-        "dead-cff-rc4-n2--greeting-1.js",
-        "unsafe",
-        LAYERED_MEMO_SPANS,
-    ),
-    (
-        "dead-cff-rc4-n2--objects-1.js",
-        "unsafe",
-        LAYERED_MEMO_SPANS,
-    ),
-    (
-        "dead-cff-rc4-n2--strings-1.js",
-        "unsafe",
-        LAYERED_MEMO_SPANS,
-    ),
-    ("dead-cff-rc4-n2--test-1.js", "unsafe", LAYERED_MEMO_SPANS),
+const REFUSED_LAYERS: [(&str, &str, &str); 21] = [
     (
         "dead-cff-rc4-n2--classes-1.js",
         "default",

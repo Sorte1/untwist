@@ -6,7 +6,7 @@ cff-n2	5	5/5	5/5	-	0	-
 cff-n3	5	5/5	5/5	-	0	-
 cff-n4	5	5/5	5/5	-	0	-
 dead-cff-rc4-n1	6	6/6	6/6	-	0	-
-dead-cff-rc4-n2	6	0/6	0/6	-	0	layered-memo-spans (6), layered-safe-unit-kept (6)
+dead-cff-rc4-n2	6	0/6	6/6	-	0	layered-safe-unit-kept (6)
 dead-n1	5	5/5	5/5	-	0	-
 dead-n2	5	5/5	5/5	-	0	-
 dead-n3	5	5/5	5/5	-	0	-
@@ -56,5 +56,4 @@ web-no-eval-n1	5	0/5	4/5	-	0	builtin-alias-patched (3), object-keys-not-merged (
 object-keys-not-merged	9	9	15	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...) or a value may throw or run code (a member read, arithmetic on a binding)
 safe-global-key-reach	6	20	20	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 builtin-alias-patched	4	15	15	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
-layered-memo-spans	1	6	6	0	unsafe lane: in one run the inner rc4 decoder still carries the spans the outer layer's control flow flattening and dead code left it (statements out of source order, nodes the rewrites made), and the memo and init-gate proof orders reads by span, so the inner unit is refused; a second run on the printed output decodes it
 layered-safe-unit-kept	1	6	6	0	safe lane, as on main: at two layers of dead code, control flow flattening and rc4 the outer unit is left undecoded with no refusal note (only its four alias declarations are counted), so neither layer decodes; the unsafe lane decodes both

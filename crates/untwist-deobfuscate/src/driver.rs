@@ -853,7 +853,11 @@ fn unguard_rotators<'a>(
     if !aggregate.notes.holds_message(notes::ROTATOR_NOT_SEALED) {
         return (sem, false);
     }
-    let mut group = group_of(&protections_ctors(), opts.clone());
+    let mut ctors = protections_ctors();
+    if opts.unsafe_transforms {
+        ctors.push(crate::merge_object_assignments::boxed);
+    }
+    let mut group = group_of(&ctors, opts.clone());
     let (sem, report) = run_to_fixpoint(alloc, program, sem, &mut group);
     (sem, report.total_changes > 0)
 }

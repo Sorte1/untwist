@@ -38,6 +38,7 @@ pub mod pure_calls;
 #[cfg(feature = "refusal-spans")]
 pub mod refusal_spans;
 pub mod removal;
+mod reprinted;
 mod root_reach;
 pub mod self_defending;
 pub mod shell_scope;

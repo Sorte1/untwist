@@ -29,6 +29,7 @@ use crate::proof::{
     encode_names, names_machinery, points_to_sites, reachable_by_name, scan_pending, AliasSite,
     EscapeContext, PendingSite, PreScan, ProtoWrite, BUILTIN_ALIAS_BITS,
 };
+use crate::reprinted::{is_scrambled, Reprinted};
 use crate::stamp::{
     is_unedited, unstamp_block_note, unstamp_blocked, unstamp_names, DynamicScopes, RefusedByDecode,
 };
@@ -448,13 +449,14 @@ fn reached_code_runner(runs: &[UnitRun<'_, '_>]) -> bool {
 }
 
 fn run_decode_units<'a, 'r>(
-    plan: &'r DecodePlan<'a>,
+    (plan, main, unsafe_lane): (&'r DecodePlan<'a>, &Program<'_>, bool),
     fuel: UnitFuel,
     memo: &mut RotationMemo,
     defer_all: bool,
     heap: &mut InputHeap,
 ) -> (Vec<UnitRun<'a, 'r>>, (bool, bool)) {
     let mut runs = Vec::new();
+    let mut reprinted: Option<Reprinted> = None;
     let mut deferred = false;
     let mut fuel_spent = false;
     for request in &plan.requests {
@@ -470,11 +472,17 @@ fn run_decode_units<'a, 'r>(
             continue;
         };
         let mut evaluator = heap.evaluator(unit_fuel);
+        let replaced = match unsafe_lane && is_scrambled(&request.program) {
+            true => reprinted
+                .get_or_insert_with(|| Reprinted::of(main))
+                .program(&request.program),
+            false => None,
+        };
         let result = if heap.is_spent() {
             Err(Bail::Budget)
         } else {
             let decoded = evaluator.decode_partial_with_memo(
-                &request.program,
+                replaced.as_ref().unwrap_or(&request.program),
                 &request.calls,
                 memo,
                 &request.guard.escaped_decoders,
@@ -544,8 +552,13 @@ fn decode_program(
         limits.defer_budget,
         &mut cache,
     );
-    let (runs, (deferred, fuel_spent)) =
-        run_decode_units(&plan, limits.fuel, memo, defer_all, heap);
+    let (runs, (deferred, fuel_spent)) = run_decode_units(
+        (&plan, program, limits.unsafe_lane),
+        limits.fuel,
+        memo,
+        defer_all,
+        heap,
+    );
     if fuel_spent {
         decoded.notes.push((notes::DECODE_FUEL_SPENT.into(), None));
     }
