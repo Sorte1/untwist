@@ -113,10 +113,12 @@ pub struct Agnostic<'a> {
     pub(super) observe_keyed: Vec<(Span, Cow<'a, str>)>,
     pub(super) ambient: Vec<(Span, &'a str, bool)>,
     pub(super) saturated: bool,
+    pub(super) keyed_global: bool,
     pub(super) global_source: bool,
     pub(super) observe_stored: Option<Span>,
     pub(super) stores_global: bool,
     pub(super) pending_texts: Vec<String>,
+    pub(super) judged_texts: Vec<String>,
     pub bootstrap: Option<&'static str>,
     #[cfg(feature = "refusal-spans")]
     pub(super) trail: Vec<crate::refusal_spans::RefusalSpan>,

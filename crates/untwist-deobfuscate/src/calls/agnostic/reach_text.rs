@@ -171,6 +171,7 @@ impl<'a> Sites<'_, 'a> {
     }
 
     fn names_reach(&self, text: &str) -> bool {
+        self.judged_texts.borrow_mut().push(text.to_string());
         let watched = (self.watch.names, self.watch.props);
         if !self.watch.defer {
             let judged = (

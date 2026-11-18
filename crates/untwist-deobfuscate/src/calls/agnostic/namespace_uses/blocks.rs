@@ -120,6 +120,13 @@ impl<'s, 'a> Walker<'s, 'a> {
 }
 
 impl Loose {
+    pub(super) fn kept(&self, spans: Vec<Span>) -> Vec<Span> {
+        spans
+            .into_iter()
+            .filter(|span| !self.exempt(*span))
+            .collect()
+    }
+
     pub(in crate::calls::agnostic) fn exempt(&self, span: Span) -> bool {
         self.blocks
             .iter()

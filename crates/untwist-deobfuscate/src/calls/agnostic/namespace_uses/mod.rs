@@ -1,5 +1,7 @@
 mod blocks;
 mod flows;
+mod holders;
+mod keys;
 mod shapes;
 
 use std::borrow::Cow;
@@ -86,9 +88,16 @@ struct Walker<'s, 'a> {
     phase: Phase,
     stack: Vec<AstKind<'a>>,
     this_global: Vec<bool>,
+    this_open: Vec<bool>,
     functions: Vec<Address>,
     arguments_used: FxHashSet<Address>,
     candidates: FxHashMap<SymbolId, Candidate<'a>>,
+    array_functions: FxHashMap<SymbolId, Span>,
+    enumerations: FxHashMap<SymbolId, (keys::Holder<'a>, u32)>,
+    bound_keys: FxHashMap<SymbolId, SymbolId>,
+    trust_symbol: bool,
+    symbol_proof_used: std::cell::Cell<bool>,
+    assigned_at: FxHashMap<SymbolId, Vec<Span>>,
     aliases: FxHashMap<SymbolId, u8>,
     receivers: FxHashMap<SymbolId, usize>,
     protections: FxHashSet<SymbolId>,
@@ -100,12 +109,14 @@ struct Walker<'s, 'a> {
 pub(in crate::calls::agnostic) struct Loose {
     pub(in crate::calls::agnostic) spans: Vec<Span>,
     pub(in crate::calls::agnostic) blocks: Vec<(Span, &'static [&'static str])>,
+    pub(in crate::calls::agnostic) untrusted_symbol: Option<Vec<Span>>,
 }
 
 pub(super) fn loose_uses<'a>(
     program: &'a Program<'a>,
     scoping: &Scoping,
     resolve: Resolve<'_>,
+    trust_symbol: bool,
 ) -> Loose {
     let mut walker = Walker {
         scoping,
@@ -114,9 +125,16 @@ pub(super) fn loose_uses<'a>(
         phase: Phase::Collect,
         stack: Vec::new(),
         this_global: Vec::new(),
+        this_open: Vec::new(),
         functions: Vec::new(),
         arguments_used: FxHashSet::default(),
         candidates: FxHashMap::default(),
+        array_functions: FxHashMap::default(),
+        enumerations: FxHashMap::default(),
+        bound_keys: FxHashMap::default(),
+        trust_symbol,
+        symbol_proof_used: std::cell::Cell::new(false),
+        assigned_at: FxHashMap::default(),
         aliases: FxHashMap::default(),
         receivers: FxHashMap::default(),
         protections: FxHashSet::default(),
@@ -127,17 +145,23 @@ pub(super) fn loose_uses<'a>(
     walker.aliases = walker.qualified();
     walker.phase = Phase::Check;
     walker.walk(program);
+    let trusted = std::mem::take(&mut walker.found);
+    let blocks = std::mem::take(&mut walker.blocks);
+    let untrusted = walker.symbol_proof_used.get().then(|| {
+        walker.trust_symbol = false;
+        walker.phase = Phase::Collect;
+        walker.aliases = walker.qualified();
+        walker.phase = Phase::Check;
+        walker.walk(program);
+        std::mem::take(&mut walker.found)
+    });
     let mut loose = Loose {
-        spans: walker.found,
-        blocks: walker.blocks,
+        spans: Vec::new(),
+        blocks,
+        untrusted_symbol: None,
     };
-    let kept: Vec<Span> = loose
-        .spans
-        .iter()
-        .copied()
-        .filter(|span| !loose.exempt(*span))
-        .collect();
-    loose.spans = kept;
+    loose.spans = loose.kept(trusted);
+    loose.untrusted_symbol = untrusted.map(|spans| loose.kept(spans));
     loose
 }
 
@@ -232,8 +256,10 @@ impl<'s, 'a> Walker<'s, 'a> {
     fn walk(&mut self, program: &'a Program<'a>) {
         self.stack.clear();
         self.this_global.clear();
+        self.this_open.clear();
         self.functions.clear();
         self.this_global.push(self.script);
+        self.this_open.push(self.script);
         self.visit_program(program);
     }
 
@@ -308,7 +334,12 @@ impl<'s, 'a> Walker<'s, 'a> {
     }
 
     fn member_kind(&self, member: &MemberExpression<'a>, base: u8) -> u8 {
-        key_kind(member_key(member, self.resolve), base)
+        match member {
+            MemberExpression::ComputedMemberExpression(m) => {
+                self.computed_kind(&m.object, &m.expression, base)
+            }
+            other => key_kind(member_key(other, self.resolve), base),
+        }
     }
 
     fn kind_here(&self, expr: &Expression<'a>) -> u8 {
@@ -445,10 +476,9 @@ impl<'s, 'a> Walker<'s, 'a> {
                 Some(Cow::Borrowed(m.property.name.as_str())),
                 self.kind_here(&m.object),
             ),
-            AstKind::ComputedMemberExpression(m) => key_kind(
-                str_const(&m.expression, self.resolve, KIND_DEPTH).map(Cow::Owned),
-                self.kind_here(&m.object),
-            ),
+            AstKind::ComputedMemberExpression(m) => {
+                self.computed_kind(&m.object, &m.expression, self.kind_here(&m.object))
+            }
             _ => 0,
         }
     }
@@ -677,59 +707,6 @@ impl<'s, 'a> Walker<'s, 'a> {
         }
         false
     }
-
-    fn member_use(&self, at: usize, kind: u8) -> bool {
-        if kind & VALUE != 0 {
-            return false;
-        }
-        if kind & NAMESPACE == 0 {
-            return true;
-        }
-        let member = &self.stack[at];
-        let address = member.address();
-        let key = match member {
-            AstKind::StaticMemberExpression(m) => Some(Cow::Borrowed(m.property.name.as_str())),
-            AstKind::ComputedMemberExpression(m) => {
-                str_const(&m.expression, self.resolve, KIND_DEPTH).map(Cow::Owned)
-            }
-            _ => None,
-        };
-        if self.called_or_written(at, address) {
-            return true;
-        }
-        if key.as_deref().is_some_and(|key| !unsafe_read(key)) {
-            return true;
-        }
-        self.allowed(at, VALUE)
-    }
-
-    fn called_or_written(&self, at: usize, member: Address) -> bool {
-        let mut child = member;
-        let mut up = at;
-        while up > 0 {
-            up -= 1;
-            match &self.stack[up] {
-                kind if transparent(kind) => child = kind.address(),
-                AstKind::CallExpression(c) => return c.callee.address() == child,
-                AstKind::NewExpression(n) => return n.callee.address() == child,
-                AstKind::AssignmentExpression(a) => {
-                    return a
-                        .left
-                        .as_member_expression()
-                        .is_some_and(|m| member_address(m) == member)
-                }
-                AstKind::UpdateExpression(_)
-                | AstKind::ArrayAssignmentTarget(_)
-                | AstKind::AssignmentTargetWithDefault(_)
-                | AstKind::AssignmentTargetPropertyProperty(_)
-                | AstKind::AssignmentTargetRest(_) => return true,
-                AstKind::ForInStatement(f) => return !same(&f.right, child),
-                AstKind::ForOfStatement(f) => return !same(&f.right, child),
-                _ => return false,
-            }
-        }
-        false
-    }
 }
 
 fn member_address(member: &MemberExpression<'_>) -> Address {
@@ -747,12 +724,18 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
             AstKind::Function(function) => {
                 let global = self.global_receiver_function();
                 self.this_global.push(global);
+                let strict = function
+                    .scope_id
+                    .get()
+                    .is_some_and(|scope| self.scoping.scope_flags(scope).is_strict_mode());
+                self.this_open.push(!strict);
                 self.functions.push(function.unstable_address());
             }
             AstKind::StaticBlock(_)
             | AstKind::PropertyDefinition(_)
             | AstKind::AccessorProperty(_) => {
                 self.this_global.push(false);
+                self.this_open.push(false);
             }
             _ => {}
         }
@@ -766,12 +749,14 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
         match kind {
             AstKind::Function(_) => {
                 self.this_global.pop();
+                self.this_open.pop();
                 self.functions.pop();
             }
             AstKind::StaticBlock(_)
             | AstKind::PropertyDefinition(_)
             | AstKind::AccessorProperty(_) => {
                 self.this_global.pop();
+                self.this_open.pop();
             }
             _ => {}
         }
@@ -785,6 +770,8 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
 
 impl<'s, 'a> Walker<'s, 'a> {
     fn collect(&mut self, kind: AstKind<'a>) {
+        self.collect_array_source(kind);
+        self.collect_enumeration(kind);
         match kind {
             AstKind::VariableDeclarator(declarator) => {
                 self.collect_declarator(declarator);

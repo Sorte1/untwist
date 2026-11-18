@@ -445,3 +445,24 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 }
+
+impl<'a> Sites<'_, 'a> {
+    pub(super) fn refined(&self, hit: Option<bool>) -> bool {
+        if hit == Some(false) {
+            self.refined_away.set(true);
+        }
+        hit.unwrap_or(true)
+    }
+
+    pub(super) fn note_refined(&mut self, base: &Expression<'a>) {
+        if self.refined_away.take() {
+            let base = self.alloc_expr(base);
+            self.refined_bases.push(base);
+        }
+    }
+
+    pub(super) fn judge_refined(&mut self) {
+        let bases = std::mem::take(&mut self.refined_bases);
+        self.out.keyed_global |= bases.iter().any(|base| !self.proven_non_global(base));
+    }
+}

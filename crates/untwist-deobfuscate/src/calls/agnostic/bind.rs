@@ -538,6 +538,11 @@ impl<'s, 'a> Bindings<'s, 'a> {
     }
 
     pub(super) fn never_reassigned(&self, symbol: SymbolId) -> bool {
+        let redeclared_param = self.params.contains_key(&symbol)
+            && !self.scoping.symbol_redeclarations(symbol).is_empty();
+        if redeclared_param {
+            return false;
+        }
         match self.defs.get(symbol) {
             Some(defs) => !defs.mutated && defs.writes.is_empty(),
             None => !self.scoping.symbol_is_mutated(symbol),

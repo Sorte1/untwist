@@ -193,11 +193,17 @@ fn settle_ordered<'a>(
     let mut bindings =
         Bindings::collect(program, scoping, (!watch.names.is_empty(), exempt), resolve);
     if !watch.names.is_empty() {
-        bindings.loose = super::namespace_uses::loose_uses(program, scoping, resolve);
+        bindings.loose =
+            super::namespace_uses::loose_uses(program, scoping, resolve, bindings.symbol_safe());
     }
     let flow = Flow::new(program, scoping, resolve);
     let filters = std::rc::Rc::clone(&bindings.filters);
     let globals = script_globals(program, scoping);
+    let lexicals = if watch.names.is_empty() {
+        Vec::new()
+    } else {
+        script_lexicals(program, scoping)
+    };
     let mut judged = Judged {
         source: bindings.global_source(),
         pristine: Pristine::of(&bindings),
@@ -226,7 +232,12 @@ fn settle_ordered<'a>(
         if !next.pristine.filters {
             filters.open();
         }
-        let rebound = rebound_globals(&out, &globals, &bindings, (next.source, &written));
+        let rebound = rebound_globals(
+            &out,
+            (&globals, &lexicals),
+            &bindings,
+            (next.source, &written, &watch),
+        );
         let broken = broken_tables(&out, &bindings.assembled, machinery);
         drop_tables(&mut bindings.assembled, &broken);
         if rebound.is_empty() && broken.is_empty() && next == judged {
@@ -413,19 +424,60 @@ impl<'k> Written<'k> {
 
 fn rebound_globals(
     out: &Agnostic<'_>,
-    globals: &[SymbolId],
+    (globals, lexicals): (&[SymbolId], &[SymbolId]),
     bindings: &Bindings<'_, '_>,
-    (source, written): (bool, &Written<'_>),
+    (source, written, watch): (bool, &Written<'_>, &Watch<'_>),
 ) -> Vec<SymbolId> {
-    if globals.is_empty() || out.saturated || out.code_text.is_some() {
-        return Vec::new();
+    let texts = if out.code_text.is_some() {
+        lexicals
+    } else {
+        &[]
+    };
+    if out.saturated || out.code_text.is_some() || out.keyed_global {
+        let watching = !watch.names.is_empty() && out.reach.or(out.reach_code).is_none();
+        if !watching {
+            return Vec::new();
+        }
+        if out.keyed_global {
+            return unwatched_roots(globals.iter().chain(texts), bindings, watch);
+        }
+        if out.code_text.is_none() {
+            return Vec::new();
+        }
     }
-    globals
+    let unseen = |symbol: &&SymbolId| !bindings.is_opaque(**symbol);
+    let rewritten = globals.iter().filter(unseen).filter(|symbol| {
+        let name = bindings.symbol_name(**symbol);
+        written.may_be(name)
+            || (source && bindings.state_written(**symbol, written))
+            || named_by_text(out, name)
+    });
+    let renamed = texts
         .iter()
+        .filter(unseen)
+        .filter(|symbol| named_by_text(out, bindings.symbol_name(**symbol)));
+    rewritten.chain(renamed).copied().collect()
+}
+
+fn named_by_text(out: &Agnostic<'_>, name: &str) -> bool {
+    out.code_text.is_some()
+        && out
+            .judged_texts
+            .iter()
+            .any(|text| crate::proof::names_a_token(text, &[name]))
+}
+
+fn unwatched_roots<'k>(
+    roots: impl Iterator<Item = &'k SymbolId>,
+    bindings: &Bindings<'_, '_>,
+    watch: &Watch<'_>,
+) -> Vec<SymbolId> {
+    roots
         .filter(|symbol| {
+            let name = bindings.symbol_name(**symbol);
             !bindings.is_opaque(**symbol)
-                && (written.may_be(bindings.symbol_name(**symbol))
-                    || (source && bindings.state_written(**symbol, written)))
+                && !watch.has_name(name)
+                && !crate::stamp::is_machinery_name(name)
         })
         .copied()
         .collect()

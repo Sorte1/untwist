@@ -18,7 +18,7 @@ fn rows(text: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-const DYNAMIC_PATH_WITNESSES: [&str; 17] = [
+const DYNAMIC_PATH_WITNESSES: [&str; 16] = [
     "dr-d12",
     "dr-d15",
     "dr-d16",
@@ -34,7 +34,6 @@ const DYNAMIC_PATH_WITNESSES: [&str; 17] = [
     "dr-n-rest",
     "dr-n-spread",
     "s2-n-forin",
-    "s2-n-keys",
     "s2-n-stringify",
 ];
 

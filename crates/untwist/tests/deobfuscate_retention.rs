@@ -75,10 +75,11 @@ fn assert_high_decodes_fully(label: &str, source: &str, observed: bool) {
         let output = Pipeline::new(options).run(source);
         let label_mode = format!("{label} ({mode})");
         if mode == "default" {
-            let aliased = decode_notes(&output)
-                .iter()
-                .any(|note| note.starts_with(untwist_deobfuscate::notes::BUILTIN_ALIAS_PATCHED));
-            assert!(aliased, "{label_mode}: {:?}", decode_notes(&output));
+            let refused = decode_notes(&output).iter().any(|note| {
+                note.starts_with(untwist_deobfuscate::notes::BUILTIN_ALIAS_PATCHED)
+                    || note.starts_with(untwist_deobfuscate::notes::STRING_ARRAY_GLOBAL_REACH)
+            });
+            assert!(refused, "{label_mode}: {:?}", decode_notes(&output));
             continue;
         }
         if observed {
