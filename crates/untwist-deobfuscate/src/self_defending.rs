@@ -110,20 +110,14 @@ fn is_bare_var_declaration(statement: &Statement<'_>, shape_names: &[&str]) -> b
         })
 }
 
-fn unbraced<'k, 'a>(statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] {
-    match statements {
-        [Statement::BlockStatement(block)] => unbraced(&block.body),
-        _ => statements,
-    }
-}
-
 fn live_statements<'k, 'a>(
     statements: &'k [Statement<'a>],
     shape_names: &[&str],
 ) -> Vec<&'k Statement<'a>> {
-    unbraced(statements)
+    statements
         .iter()
         .filter(|statement| !is_bare_var_declaration(statement, shape_names))
+        .filter(|statement| !is_inert_iife(statement))
         .collect()
 }
 
@@ -161,7 +155,9 @@ fn unbraced<'k, 'a>(mut statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] 
     statements
 }
 
-fn guarded_if<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Option<&'k str>, &'k IfStatement<'a>)> {
+fn guarded_if<'k, 'a>(
+    body: &[&'k Statement<'a>],
+) -> Option<(Option<&'k str>, &'k IfStatement<'a>)> {
     match body {
         [Statement::IfStatement(statement)] => Some((None, statement)),
         [declared, Statement::IfStatement(statement)] => {
@@ -208,7 +204,12 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    let Some((hoisted, statement)) = guarded_if(unbraced(&body.statements)) else {
+    let shape_names = [context, fn_name, ARGUMENTS];
+    let guarded: Vec<&Statement<'_>> = unbraced(&body.statements)
+        .iter()
+        .filter(|statement| !is_initialised_inert_local(statement, &shape_names))
+        .collect();
+    let Some((hoisted, statement)) = guarded_if(&guarded) else {
         return false;
     };
     if identifier_name(&statement.test) != Some(fn_name) || statement.alternate.is_some() {
@@ -730,6 +731,60 @@ fn is_inert_value(expr: &Expression<'_>) -> bool {
             | Expression::NumericLiteral(_)
             | Expression::StringLiteral(_)
     )
+}
+
+fn is_inert_object(expr: &Expression<'_>) -> bool {
+    let Expression::ObjectExpression(object) = expr.without_parentheses() else {
+        return false;
+    };
+    object.properties.iter().all(|property| {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return false;
+        };
+        !property.computed
+            && property.kind == PropertyKind::Init
+            && !matches!(&property.key, PropertyKey::StaticIdentifier(id) if id.name == "__proto__")
+            && (is_inert_value(&property.value) || is_inert_object(&property.value))
+    })
+}
+
+fn is_inert_local(stmt: &Statement<'_>) -> bool {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return false;
+    };
+    declaration.declarations.iter().all(|declarator| {
+        matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+            && declarator
+                .init
+                .as_ref()
+                .is_none_or(|init| is_inert_value(init) || is_inert_object(init))
+    })
+}
+
+fn is_initialised_inert_local(stmt: &Statement<'_>, shape_names: &[&str]) -> bool {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return false;
+    };
+    is_inert_local(stmt)
+        && declaration.declarations.iter().all(|declarator| {
+            declarator.init.is_some()
+                && binding_name(&declarator.id).is_some_and(|name| !shape_names.contains(&name))
+        })
+}
+
+fn is_inert_iife(stmt: &Statement<'_>) -> bool {
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return false;
+    };
+    let Some((function, arguments)) = iife(&stmt.expression) else {
+        return false;
+    };
+    arguments.is_empty()
+        && has_no_params(function)
+        && is_plain_function(function)
+        && function.body.as_ref().is_some_and(|body| {
+            body.directives.is_empty() && body.statements.iter().all(is_inert_local)
+        })
 }
 
 fn is_inert_statement(stmt: &Statement<'_>) -> bool {
