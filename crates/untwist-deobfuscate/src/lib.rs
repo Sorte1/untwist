@@ -16,6 +16,7 @@ pub mod decoded;
 pub mod decoded_strings;
 pub mod decoder;
 pub mod directives;
+mod domain_lock;
 pub mod driver;
 pub mod evaluate_globals;
 mod flag_home;

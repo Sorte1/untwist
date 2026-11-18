@@ -23,6 +23,7 @@ use crate::bindings::{
 use crate::builtin_values::exposes_a_builtin;
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
+use crate::domain_lock::is_domain_lock_callback;
 use crate::flag_home::{is_private_local, Homes, ARGUMENTS, DIRECT_EVAL};
 use crate::notes;
 use crate::protection_shape::{is_protection_callback, Roles};
@@ -228,7 +229,18 @@ fn has_no_params(function: &Function<'_>) -> bool {
     function.params.items.is_empty() && function.params.rest.is_none()
 }
 
-fn chooses_the_guarded_function(init: &Expression<'_>, flag: &str, names: (&str, &str)) -> bool {
+#[derive(Clone, Copy, PartialEq)]
+enum Apply {
+    Literal,
+    AnyKey,
+}
+
+fn chooses_the_guarded_function(
+    init: &Expression<'_>,
+    flag: &str,
+    names: (&str, &str),
+    apply: Apply,
+) -> bool {
     let Expression::ConditionalExpression(choice) = init else {
         return false;
     };
@@ -242,18 +254,27 @@ fn chooses_the_guarded_function(init: &Expression<'_>, flag: &str, names: (&str,
         return false;
     };
     has_no_params(taken)
-        && returns_guarded_apply(taken, names.0, names.1)
+        && (apply == Apply::AnyKey || returns_guarded_apply(taken, names.0, names.1))
         && is_empty_function(skipped)
 }
 
-fn inner_matches(inner: &Function<'_>, flag: &str) -> bool {
-    returner_matches(&inner.params, inner.body.as_deref(), flag)
+fn inner_matches(inner: &Function<'_>, flag: &str, apply: Apply) -> bool {
+    returner_shape(&inner.params, inner.body.as_deref(), flag, apply)
 }
 
 fn returner_matches(
     params: &FormalParameters<'_>,
     body: Option<&FunctionBody<'_>>,
     flag: &str,
+) -> bool {
+    returner_shape(params, body, flag, Apply::Literal)
+}
+
+fn returner_shape(
+    params: &FormalParameters<'_>,
+    body: Option<&FunctionBody<'_>>,
+    flag: &str,
+    apply: Apply,
 ) -> bool {
     let Some(names) = plain_params(params) else {
         return false;
@@ -280,7 +301,7 @@ fn returner_matches(
         return false;
     };
     ![flag, context, fn_name, "arguments"].contains(&rfn)
-        && chooses_the_guarded_function(init, flag, (context, fn_name))
+        && chooses_the_guarded_function(init, flag, (context, fn_name), apply)
         && assigned_value(reset, flag).is_some_and(is_false_literal)
         && ret.argument.as_ref().and_then(identifier_name) == Some(rfn)
 }
@@ -307,6 +328,10 @@ fn controller_body<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k FunctionBody<
 }
 
 pub fn is_call_controller(expr: &Expression<'_>) -> bool {
+    controller_shape(expr, Apply::Literal)
+}
+
+fn controller_shape(expr: &Expression<'_>, apply: Apply) -> bool {
     let Some(body) = controller_body(expr) else {
         return false;
     };
@@ -334,7 +359,15 @@ pub fn is_call_controller(expr: &Expression<'_>) -> bool {
     let Some(inner) = ret.argument.as_ref().and_then(plain_function) else {
         return false;
     };
-    inner_matches(inner, flag)
+    inner_matches(inner, flag, apply)
+}
+
+fn loose_controller_declaration(stmt: &Statement<'_>) -> Option<SymbolId> {
+    let (id, init) = single_declarator(stmt)?;
+    if !controller_shape(init?, Apply::AnyKey) {
+        return None;
+    }
+    id.symbol_id.get()
 }
 
 fn controller_declaration(stmt: &Statement<'_>) -> Option<SymbolId> {
@@ -469,6 +502,7 @@ fn flag_controller(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
 #[derive(Default)]
 struct Controllers {
     found: FxHashSet<SymbolId>,
+    loose: FxHashSet<SymbolId>,
     inline: bool,
     returner_calls: Vec<Span>,
     flags: Vec<FlagUse>,
@@ -518,6 +552,7 @@ impl<'a> VisitJs<'a> for Controllers {
             if let Some(symbol) = controller_declaration(stmt) {
                 self.found.insert(symbol);
             }
+            self.loose.extend(loose_controller_declaration(stmt));
             if let Some(symbol) = flag_controller(stmt, &flags) {
                 self.found.insert(symbol);
             }
@@ -665,6 +700,56 @@ fn registration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<(Option<SymbolId>, &'
     };
     let (outer, _) = call_parts(&stmt.expression)?;
     Some((None, outer.without_parentheses()))
+}
+
+#[derive(Default)]
+struct GuardedReturners {
+    count: usize,
+}
+
+impl<'a> VisitJs<'a> for GuardedReturners {
+    fn visit_conditional_expression(&mut self, it: &ConditionalExpression<'a>) {
+        let guarded = matches!(it.test.without_parentheses(), Expression::Identifier(_))
+            && plain_function(&it.consequent).is_some()
+            && plain_function(&it.alternate).is_some_and(is_empty_function);
+        if guarded {
+            self.count += 1;
+        }
+        walk_js::walk_conditional_expression(self, it);
+    }
+}
+
+fn guarded_returners(program: &Program<'_>) -> usize {
+    let mut returners = GuardedReturners::default();
+    returners.visit_program(program);
+    returners.count
+}
+
+struct LockRegistrations<'k> {
+    scoping: &'k Scoping,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for LockRegistrations<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.found {
+            return;
+        }
+        self.found = emitted_arguments(&it.arguments, self.scoping)
+            && it.arguments[1]
+                .as_expression()
+                .is_some_and(is_domain_lock_callback);
+        walk_js::walk_call_expression(self, it);
+    }
+}
+
+fn registers_a_domain_lock(program: &Program<'_>, scoping: &Scoping) -> bool {
+    let mut locks = LockRegistrations {
+        scoping,
+        found: false,
+    };
+    locks.visit_program(program);
+    locks.found
 }
 
 fn is_inert_context(expr: &Expression<'_>, scoping: &Scoping) -> bool {
@@ -991,6 +1076,8 @@ impl<'a> VisitJs<'a> for Removals<'_> {
 enum Plan {
     Nothing,
     Refused,
+    KeptTogether,
+    LockKept,
     Remove(Vec<Span>, FxHashSet<SymbolId>),
 }
 
@@ -1100,9 +1187,20 @@ fn flag_read_elsewhere(
     has_stray_reference(program, &symbols, &ignored, scoping)
 }
 
+fn unrecognized_controllers(program: &Program<'_>, controllers: &Controllers) -> bool {
+    !controllers.loose.is_subset(&controllers.found)
+        || (!controllers.inline && guarded_returners(program) > controllers.found.len())
+}
+
 fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     let mut controllers = Controllers::default();
     controllers.visit_program(program);
+    if controllers.found.is_empty() && controllers.loose.is_empty() && !controllers.inline {
+        return Plan::Nothing;
+    }
+    if !unsafe_lane && registers_a_domain_lock(program, scoping) {
+        return Plan::LockKept;
+    }
     if controllers.found.is_empty() && !controllers.inline {
         return Plan::Nothing;
     }
@@ -1168,7 +1266,9 @@ fn attempt(
 ) -> Plan {
     let scoping = inputs.scoping;
     let first = removals(program, inputs, declared_once);
-    let kept = first.kept || incomplete;
+    let kept = first.kept
+        || incomplete
+        || (!inputs.unsafe_lane && unrecognized_controllers(program, controllers));
     let proven: FxHashSet<SymbolId> = declared_once.difference(&first.unproven).copied().collect();
     let Removals {
         mut spans,
@@ -1202,6 +1302,7 @@ fn attempt(
         return Plan::Refused;
     }
     match (spans.is_empty(), kept) {
+        (false, true) if !inputs.unsafe_lane => Plan::KeptTogether,
         (false, _) => Plan::Remove(spans, tracked),
         (true, true) => Plan::Refused,
         (true, false) => Plan::Nothing,
@@ -1235,6 +1336,14 @@ impl<'a> Pass<'a> for SelfDefending {
             Plan::Nothing => return,
             Plan::Refused => {
                 cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
+                return;
+            }
+            Plan::KeptTogether => {
+                cx.note(notes::PROTECTIONS_KEPT_TOGETHER, None);
+                return;
+            }
+            Plan::LockKept => {
+                cx.note(notes::DOMAIN_LOCK_KEPT, None);
                 return;
             }
             Plan::Remove(spans, tracked) => {

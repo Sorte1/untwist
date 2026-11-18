@@ -400,6 +400,15 @@ pub const PROTECTION_HOIST_BLOCKER_KEPT: &str =
 pub const SELF_DEFENDING_REFERENCE_KEPT: &str =
     "a call controller was found but a reference to it survives outside the statements this pass \
      removes, so the block was left in place";
+pub const PROTECTIONS_KEPT_TOGETHER: &str =
+    "a block registered through a call controller was kept, so every other block registered \
+     that way was kept with it: removing only some of them could change when the console is \
+     silenced and what the program prints";
+pub const DOMAIN_LOCK_KEPT: &str =
+    "a domain lock was found: it reads the host's document and location and enumerates the names \
+     of the global object, so whether it passes depends on where the program runs and it may \
+     observe the machinery's names; the lock, the blocks registered with it and the machinery it \
+     can see were kept (`--unsafe` assumes the lock passes and removes it)";
 pub const SELF_DEFENDING_BUILTIN_PATCHED: &str =
     "the program may replace a built-in the self-defending callback calls, so removing the \
      callback would drop what the replacement does; the block was left in place";
