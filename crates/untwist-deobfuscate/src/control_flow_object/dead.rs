@@ -84,6 +84,7 @@ struct Known<'k, 'p> {
     props: &'k [(Cow<'k, str>, CffValue<'k, 'p>)],
     scoping: &'k Scoping,
     branches: &'k Branches<'p>,
+    builtins_unpatched: bool,
 }
 
 enum Resolved<'k, 'p> {
@@ -117,6 +118,21 @@ fn param_symbols(function: &Function<'_>) -> Option<Vec<SymbolId>> {
 }
 
 const PROTO_KEY: &str = "__proto__";
+
+const OBJECT_PROTOTYPE_KEYS: [&str; 12] = [
+    "constructor",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "toLocaleString",
+    "toString",
+    "valueOf",
+    PROTO_KEY,
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+];
 
 fn static_key<'p>(property: &'p ObjectProperty<'p>) -> Option<&'p str> {
     if property.method || property.computed || property.kind != PropertyKind::Init {
@@ -176,9 +192,12 @@ impl<'k, 'p> Known<'k, 'p> {
         member: &Expression<'_>,
         depth: usize,
     ) -> Option<Resolved<'k, 'p>> {
-        let object = self
-            .branches
-            .readonly_object(receiver, self.symbol, self.scoping)?;
+        let object = self.branches.readonly_object(
+            receiver,
+            self.symbol,
+            self.scoping,
+            self.builtins_unpatched,
+        )?;
         let (_, name) = member_parts(member)?;
         match static_property(object, name.as_ref())?.without_parentheses() {
             Expression::FunctionExpression(function) if is_plain_function(function) => {
@@ -293,6 +312,7 @@ fn decide<'p>(
         props,
         scoping: cx.scoping(),
         branches,
+        builtins_unpatched: cx.opts.unsafe_transforms,
     };
     known
         .value(test, &Env::default(), 0)
@@ -352,14 +372,19 @@ fn reaches_its_receiver(object: &ObjectExpression<'_>) -> bool {
     scan.found
 }
 
-fn reads_only_own_keys(object: &ObjectExpression<'_>, uses: &ObjectUses) -> bool {
+fn reads_only_own_or_absent_keys(
+    object: &ObjectExpression<'_>,
+    uses: &ObjectUses,
+    builtins_unpatched: bool,
+) -> bool {
     let Some(keys) = static_properties(object) else {
         return false;
     };
     let own: FxHashSet<&str> = keys.into_iter().map(|(key, _)| key).collect();
-    uses.reads
-        .iter()
-        .all(|read| own.contains(read.name.as_str()))
+    uses.reads.iter().all(|read| {
+        own.contains(read.name.as_str())
+            || (builtins_unpatched && !OBJECT_PROTOTYPE_KEYS.contains(&read.name.as_str()))
+    })
 }
 
 fn proven_readonly(
@@ -367,12 +392,13 @@ fn proven_readonly(
     object: &ObjectExpression<'_>,
     scoping: &Scoping,
     receiver: SymbolId,
+    builtins_unpatched: bool,
 ) -> bool {
     if reaches_its_receiver(object) {
         return false;
     }
     readonly_binding_uses(program, scoping, receiver)
-        .is_some_and(|uses| reads_only_own_keys(object, &uses))
+        .is_some_and(|uses| reads_only_own_or_absent_keys(object, &uses, builtins_unpatched))
 }
 
 #[derive(Clone, Copy)]
@@ -419,6 +445,7 @@ impl<'p> Branches<'p> {
         receiver: SymbolId,
         owner: SymbolId,
         scoping: &Scoping,
+        builtins_unpatched: bool,
     ) -> Option<&'p ObjectExpression<'p>> {
         let object = *self.objects.get(&receiver)?;
         if !self.reaches_owner(receiver, owner, scoping) {
@@ -427,7 +454,7 @@ impl<'p> Branches<'p> {
         let program = self.program?;
         let known = self.readonly.borrow().get(&receiver).copied();
         let readonly = known.unwrap_or_else(|| {
-            let readonly = proven_readonly(program, object, scoping, receiver);
+            let readonly = proven_readonly(program, object, scoping, receiver, builtins_unpatched);
             self.readonly.borrow_mut().insert(receiver, readonly);
             readonly
         });
