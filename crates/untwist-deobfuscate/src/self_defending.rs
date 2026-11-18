@@ -746,12 +746,12 @@ impl<'a> VisitJs<'a> for ConsoleNamed {
     }
 }
 
-struct RemovedConsole<'k> {
-    spans: &'k [Span],
+struct RemovedConsole {
+    spans: FxHashSet<Span>,
     named: ConsoleNamed,
 }
 
-impl<'a> VisitJs<'a> for RemovedConsole<'_> {
+impl<'a> VisitJs<'a> for RemovedConsole {
     fn visit_statement(&mut self, it: &Statement<'a>) {
         if self.named.found {
             return;
@@ -766,7 +766,7 @@ impl<'a> VisitJs<'a> for RemovedConsole<'_> {
 
 fn removes_console_silencing(program: &Program<'_>, spans: &[Span]) -> bool {
     let mut removed = RemovedConsole {
-        spans,
+        spans: spans.iter().copied().collect(),
         named: ConsoleNamed::default(),
     };
     removed.visit_program(program);
