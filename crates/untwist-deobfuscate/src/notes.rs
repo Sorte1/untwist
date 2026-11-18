@@ -401,9 +401,9 @@ pub const SELF_DEFENDING_REFERENCE_KEPT: &str =
     "a call controller was found but a reference to it survives outside the statements this pass \
      removes, so the block was left in place";
 pub const PROTECTIONS_KEPT_TOGETHER: &str =
-    "a block registered through a call controller was kept, so every other block registered \
-     that way was kept with it: removing only some of them could change when the console is \
-     silenced and what the program prints";
+    "a block registered through a call controller may still run, so the default lane keeps it, \
+     and every other block registered that way was kept with it: removing only some of them \
+     could change when the console is silenced and what the program prints";
 pub const DEBUG_PROTECTION_KEPT_WITH_CONTROLLER: &str =
     "a block registered through a call controller is still in place, so the debug protection \
      was kept with it: its timer keeps the program running, and removing it while a kept block \

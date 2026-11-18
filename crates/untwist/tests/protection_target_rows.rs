@@ -30,3 +30,25 @@ fn every_target_protection_row_decodes_fully_in_both_lanes() {
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+const LAYERED_SERVICE_WORKER: &str = include_str!("data/protection_target_pw007.rows");
+
+#[test]
+fn layered_service_worker_blocks_are_kept_together_in_the_default_lane() {
+    let [(_, default_lane), (_, unsafe_lane)] = lanes();
+    let kept = Pipeline::new(default_lane).run(LAYERED_SERVICE_WORKER);
+    assert!(
+        kept.notes
+            .iter()
+            .any(|note| note.message == untwist_deobfuscate::notes::PROTECTIONS_KEPT_TOGETHER),
+        "{:?}",
+        kept.notes
+    );
+    assert!(kept.code().contains("typeof global"), "{}", kept.code());
+    let decoded = Pipeline::new(unsafe_lane).run(LAYERED_SERVICE_WORKER);
+    assert!(
+        !decoded.code().contains("typeof global"),
+        "{}",
+        decoded.code()
+    );
+}
