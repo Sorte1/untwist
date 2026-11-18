@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
@@ -23,6 +25,7 @@ use crate::bindings::{
 use crate::builtin_values::exposes_a_builtin;
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
+use crate::domain_lock::is_domain_lock_callback;
 use crate::flag_home::{is_private_local, Homes, ARGUMENTS, DIRECT_EVAL};
 use crate::notes;
 use crate::protection_shape::{is_protection_callback, Roles};
@@ -228,7 +231,18 @@ fn has_no_params(function: &Function<'_>) -> bool {
     function.params.items.is_empty() && function.params.rest.is_none()
 }
 
-fn chooses_the_guarded_function(init: &Expression<'_>, flag: &str, names: (&str, &str)) -> bool {
+#[derive(Clone, Copy, PartialEq)]
+enum Apply {
+    Literal,
+    AnyKey,
+}
+
+fn chooses_the_guarded_function(
+    init: &Expression<'_>,
+    flag: &str,
+    names: (&str, &str),
+    apply: Apply,
+) -> bool {
     let Expression::ConditionalExpression(choice) = init else {
         return false;
     };
@@ -242,18 +256,27 @@ fn chooses_the_guarded_function(init: &Expression<'_>, flag: &str, names: (&str,
         return false;
     };
     has_no_params(taken)
-        && returns_guarded_apply(taken, names.0, names.1)
+        && (apply == Apply::AnyKey || returns_guarded_apply(taken, names.0, names.1))
         && is_empty_function(skipped)
 }
 
-fn inner_matches(inner: &Function<'_>, flag: &str) -> bool {
-    returner_matches(&inner.params, inner.body.as_deref(), flag)
+fn inner_matches(inner: &Function<'_>, flag: &str, apply: Apply) -> bool {
+    returner_shape(&inner.params, inner.body.as_deref(), flag, apply)
 }
 
 fn returner_matches(
     params: &FormalParameters<'_>,
     body: Option<&FunctionBody<'_>>,
     flag: &str,
+) -> bool {
+    returner_shape(params, body, flag, Apply::Literal)
+}
+
+fn returner_shape(
+    params: &FormalParameters<'_>,
+    body: Option<&FunctionBody<'_>>,
+    flag: &str,
+    apply: Apply,
 ) -> bool {
     let Some(names) = plain_params(params) else {
         return false;
@@ -280,7 +303,7 @@ fn returner_matches(
         return false;
     };
     ![flag, context, fn_name, "arguments"].contains(&rfn)
-        && chooses_the_guarded_function(init, flag, (context, fn_name))
+        && chooses_the_guarded_function(init, flag, (context, fn_name), apply)
         && assigned_value(reset, flag).is_some_and(is_false_literal)
         && ret.argument.as_ref().and_then(identifier_name) == Some(rfn)
 }
@@ -307,6 +330,10 @@ fn controller_body<'k, 'a>(expr: &'k Expression<'a>) -> Option<&'k FunctionBody<
 }
 
 pub fn is_call_controller(expr: &Expression<'_>) -> bool {
+    controller_shape(expr, Apply::Literal)
+}
+
+fn controller_shape(expr: &Expression<'_>, apply: Apply) -> bool {
     let Some(body) = controller_body(expr) else {
         return false;
     };
@@ -334,7 +361,15 @@ pub fn is_call_controller(expr: &Expression<'_>) -> bool {
     let Some(inner) = ret.argument.as_ref().and_then(plain_function) else {
         return false;
     };
-    inner_matches(inner, flag)
+    inner_matches(inner, flag, apply)
+}
+
+fn loose_controller_declaration(stmt: &Statement<'_>) -> Option<SymbolId> {
+    let (id, init) = single_declarator(stmt)?;
+    if !controller_shape(init?, Apply::AnyKey) {
+        return None;
+    }
+    id.symbol_id.get()
 }
 
 fn controller_declaration(stmt: &Statement<'_>) -> Option<SymbolId> {
@@ -469,6 +504,7 @@ fn flag_controller(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
 #[derive(Default)]
 struct Controllers {
     found: FxHashSet<SymbolId>,
+    loose: FxHashSet<SymbolId>,
     inline: bool,
     returner_calls: Vec<Span>,
     flags: Vec<FlagUse>,
@@ -518,6 +554,7 @@ impl<'a> VisitJs<'a> for Controllers {
             if let Some(symbol) = controller_declaration(stmt) {
                 self.found.insert(symbol);
             }
+            self.loose.extend(loose_controller_declaration(stmt));
             if let Some(symbol) = flag_controller(stmt, &flags) {
                 self.found.insert(symbol);
             }
@@ -665,6 +702,102 @@ fn registration<'k, 'a>(stmt: &'k Statement<'a>) -> Option<(Option<SymbolId>, &'
     };
     let (outer, _) = call_parts(&stmt.expression)?;
     Some((None, outer.without_parentheses()))
+}
+
+#[derive(Default)]
+struct GuardedReturners {
+    count: usize,
+}
+
+impl<'a> VisitJs<'a> for GuardedReturners {
+    fn visit_conditional_expression(&mut self, it: &ConditionalExpression<'a>) {
+        let guarded = matches!(it.test.without_parentheses(), Expression::Identifier(_))
+            && plain_function(&it.consequent).is_some()
+            && plain_function(&it.alternate).is_some_and(is_empty_function);
+        if guarded {
+            self.count += 1;
+        }
+        walk_js::walk_conditional_expression(self, it);
+    }
+}
+
+pub(crate) fn guarded_returners(program: &Program<'_>) -> usize {
+    let mut returners = GuardedReturners::default();
+    returners.visit_program(program);
+    returners.count
+}
+
+const CONSOLE: &str = "console";
+const PRINTED_SKIPPED_RETURNER: &str = ": function () {}";
+
+#[derive(Default)]
+struct ConsoleNamed {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for ConsoleNamed {
+    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        self.found |= it.property.name == CONSOLE;
+        walk_js::walk_static_member_expression(self, it);
+    }
+
+    fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
+        self.found |= it.value == CONSOLE;
+    }
+}
+
+struct RemovedConsole<'k> {
+    spans: &'k [Span],
+    named: ConsoleNamed,
+}
+
+impl<'a> VisitJs<'a> for RemovedConsole<'_> {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        if self.named.found {
+            return;
+        }
+        if self.spans.contains(&it.span()) {
+            self.named.visit_statement(it);
+            return;
+        }
+        walk_js::walk_statement(self, it);
+    }
+}
+
+fn removes_console_silencing(program: &Program<'_>, spans: &[Span]) -> bool {
+    let mut removed = RemovedConsole {
+        spans,
+        named: ConsoleNamed::default(),
+    };
+    removed.visit_program(program);
+    removed.named.found
+}
+
+struct LockRegistrations<'k> {
+    scoping: &'k Scoping,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for LockRegistrations<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.found {
+            return;
+        }
+        self.found = emitted_arguments(&it.arguments, self.scoping)
+            && it.arguments[1]
+                .as_expression()
+                .is_some_and(is_domain_lock_callback);
+        walk_js::walk_call_expression(self, it);
+    }
+}
+
+fn registers_a_domain_lock(program: &Program<'_>, scoping: &Scoping) -> bool {
+    let mut locks = LockRegistrations {
+        scoping,
+        found: false,
+    };
+    locks.visit_program(program);
+    locks.found
 }
 
 fn is_inert_context(expr: &Expression<'_>, scoping: &Scoping) -> bool {
@@ -991,6 +1124,9 @@ impl<'a> VisitJs<'a> for Removals<'_> {
 enum Plan {
     Nothing,
     Refused,
+    KeptTogether,
+    LockKept,
+    Partial(Vec<Span>, FxHashSet<SymbolId>),
     Remove(Vec<Span>, FxHashSet<SymbolId>),
 }
 
@@ -1100,9 +1236,73 @@ fn flag_read_elsewhere(
     has_stray_reference(program, &symbols, &ignored, scoping)
 }
 
+fn unrecognized_controllers(program: &Program<'_>, controllers: &Controllers) -> bool {
+    !controllers.loose.is_subset(&controllers.found)
+        || (!controllers.inline && guarded_returners(program) > controllers.found.len())
+}
+
+#[derive(Clone, Copy, Default)]
+struct PartialRemovals {
+    forbidden: bool,
+    applied: bool,
+}
+
+thread_local! {
+    static PARTIAL: Cell<PartialRemovals> = Cell::new(PartialRemovals::default());
+}
+
+fn update_partial(change: impl FnOnce(&mut PartialRemovals)) {
+    PARTIAL.with(|partial| {
+        let mut state = partial.get();
+        change(&mut state);
+        partial.set(state);
+    });
+}
+
+pub fn partial_removal_unsettled(output: &str) -> bool {
+    PARTIAL.with(|partial| partial.get().applied) && output.contains(PRINTED_SKIPPED_RETURNER)
+}
+
+pub fn forget_partial_removals() {
+    update_partial(|state| {
+        state.applied = false;
+    });
+}
+
+pub(crate) fn note_provisional_removal() {
+    update_partial(|state| state.applied = true);
+}
+
+pub struct PartialRemovalsForbidden(bool);
+
+impl PartialRemovalsForbidden {
+    pub fn enter() -> Self {
+        let mut was = false;
+        update_partial(|state| was = std::mem::replace(&mut state.forbidden, true));
+        Self(was)
+    }
+}
+
+impl Drop for PartialRemovalsForbidden {
+    fn drop(&mut self) {
+        let was = self.0;
+        update_partial(|state| state.forbidden = was);
+    }
+}
+
+pub(crate) fn partial_removals_forbidden() -> bool {
+    PARTIAL.with(|partial| partial.get().forbidden)
+}
+
 fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     let mut controllers = Controllers::default();
     controllers.visit_program(program);
+    if controllers.found.is_empty() && controllers.loose.is_empty() && !controllers.inline {
+        return Plan::Nothing;
+    }
+    if !unsafe_lane && registers_a_domain_lock(program, scoping) {
+        return Plan::LockKept;
+    }
     if controllers.found.is_empty() && !controllers.inline {
         return Plan::Nothing;
     }
@@ -1168,7 +1368,9 @@ fn attempt(
 ) -> Plan {
     let scoping = inputs.scoping;
     let first = removals(program, inputs, declared_once);
-    let kept = first.kept || incomplete;
+    let kept = first.kept
+        || incomplete
+        || (!inputs.unsafe_lane && unrecognized_controllers(program, controllers));
     let proven: FxHashSet<SymbolId> = declared_once.difference(&first.unproven).copied().collect();
     let Removals {
         mut spans,
@@ -1202,6 +1404,12 @@ fn attempt(
         return Plan::Refused;
     }
     match (spans.is_empty(), kept) {
+        (false, true) if !inputs.unsafe_lane && removes_console_silencing(program, &spans) => {
+            match partial_removals_forbidden() {
+                true => Plan::KeptTogether,
+                false => Plan::Partial(spans, tracked),
+            }
+        }
         (false, _) => Plan::Remove(spans, tracked),
         (true, true) => Plan::Refused,
         (true, false) => Plan::Nothing,
@@ -1231,45 +1439,66 @@ impl<'a> Pass<'a> for SelfDefending {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let spans = match plan(program, cx.scoping(), cx.opts.unsafe_transforms) {
+        let (spans, tracked, partial) = match plan(program, cx.scoping(), cx.opts.unsafe_transforms)
+        {
             Plan::Nothing => return,
             Plan::Refused => {
                 cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
                 return;
             }
-            Plan::Remove(spans, tracked) => {
-                if !cx.opts.unsafe_transforms && callback_built_ins_written(program, cx.scoping()) {
-                    cx.note(notes::SELF_DEFENDING_BUILTIN_PATCHED, None);
-                    return;
-                }
-                if reaches_a_script_global_once_removed(&tracked, &spans, program, cx) {
-                    cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
-                    return;
-                }
-                spans
-            }
-        };
-        if crate::directives::removes_what_an_eval_reads(cx.scoping(), &spans) {
-            cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
-            return;
-        }
-        if crate::directives::removes_hoist_blocker(cx.scoping(), &spans) {
-            cx.note(notes::PROTECTION_HOIST_BLOCKER_KEPT, None);
-            return;
-        }
-        let (wanted, applied) = match remove_protection_statements(program, &spans, cx) {
-            Ok(counts) => counts,
-            Err(span) => {
-                cx.note(notes::SELF_DEFENDING_NO_USABLE_SPAN, Some(span));
+            Plan::KeptTogether => {
+                cx.note(notes::PROTECTIONS_KEPT_TOGETHER, None);
                 return;
             }
+            Plan::LockKept => {
+                cx.note(notes::DOMAIN_LOCK_KEPT, None);
+                return;
+            }
+            Plan::Partial(spans, tracked) => (spans, tracked, true),
+            Plan::Remove(spans, tracked) => (spans, tracked, false),
         };
-        cx.changed_by(applied);
-        if applied != wanted {
-            cx.note(
-                notes::planned_and_applied_removals(PASS, wanted, applied),
-                None,
-            );
+        match refusal(program, (&spans, &tracked), cx) {
+            Some(note) => cx.note(note, None),
+            None => remove(program, &spans, cx, partial),
         }
+    }
+}
+
+fn refusal<'a>(
+    program: &Program<'a>,
+    (spans, tracked): (&[Span], &FxHashSet<SymbolId>),
+    cx: &Cx<'a, '_>,
+) -> Option<&'static str> {
+    if !cx.opts.unsafe_transforms && callback_built_ins_written(program, cx.scoping()) {
+        return Some(notes::SELF_DEFENDING_BUILTIN_PATCHED);
+    }
+    if reaches_a_script_global_once_removed(tracked, spans, program, cx)
+        || crate::directives::removes_what_an_eval_reads(cx.scoping(), spans)
+    {
+        return Some(notes::SELF_DEFENDING_REFERENCE_KEPT);
+    }
+    if crate::directives::removes_hoist_blocker(cx.scoping(), spans) {
+        return Some(notes::PROTECTION_HOIST_BLOCKER_KEPT);
+    }
+    None
+}
+
+fn remove<'a>(program: &mut Program<'a>, spans: &[Span], cx: &mut Cx<'a, '_>, partial: bool) {
+    let (wanted, applied) = match remove_protection_statements(program, spans, cx) {
+        Ok(counts) => counts,
+        Err(span) => {
+            cx.note(notes::SELF_DEFENDING_NO_USABLE_SPAN, Some(span));
+            return;
+        }
+    };
+    cx.changed_by(applied);
+    if partial && applied > 0 {
+        note_provisional_removal();
+    }
+    if applied != wanted {
+        cx.note(
+            notes::planned_and_applied_removals(PASS, wanted, applied),
+            None,
+        );
     }
 }

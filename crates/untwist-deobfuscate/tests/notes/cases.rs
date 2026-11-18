@@ -158,6 +158,10 @@ const A_SELF_DEFENDING_CONTROLLER_THAT_ESCAPES: &str = "var e = (function () {\n
 
 const A_SELF_DEFENDING_CALLBACK_WITH_A_PATCHED_BUILT_IN: &str = "String.prototype.search = function () { return 0; };\nvar c = (function () {\n  var o = true;\n  return function (n, t) {\n    var e = o ? function () {\n      if (t) {\n        var r = t.apply(n, arguments);\n        t = null;\n        return r;\n      }\n    } : function () {};\n    o = false;\n    return e;\n  };\n})();\nvar s = c(this, function () {\n  return s.toString().search(\"(((.+)+)+)+$\").toString().constructor(s).search(\"(((.+)+)+)+$\");\n});\ns();\nconsole.log(1);";
 
+const LAYERED_CONSOLE_SILENCING: &str =
+    include_str!("../../../untwist/tests/data/protection_layers/console-timing.js");
+const A_DOMAIN_LOCK: &str = include_str!("../../../untwist/tests/data/protection_layers/lock.js");
+const A_TIMED_DEBUG_PROTECTION_BESIDE_A_CONTROLLER: &str = "function dpf(ret) {\n  function debuggerProtection(counter) {\n    if (typeof counter === \"string\") {\n      return function (arg) {}.constructor(\"while (true) {}\").apply(\"counter\");\n    } else if ((\"\" + counter / counter).length !== 1 || counter % 20 === 0) {\n      (function () {\n        return true;\n      }).constructor(\"debugger\").call(\"action\");\n    } else {\n      (function () {\n        return false;\n      }).constructor(\"debugger\").apply(\"stateObject\");\n    }\n    debuggerProtection(++counter);\n  }\n  try {\n    if (ret) {\n      return debuggerProtection;\n    } else {\n      debuggerProtection(0);\n    }\n  } catch (y) {}\n}\nsetInterval(dpf, 4000);\nvar e = (function () {\n  var f = !![];\n  return function (g, h) {\n    var i = f ? function () {\n      if (h) {\n        var j = h['apply'](g, arguments);\n        h = null;\n        return j;\n      }\n    } : function () {};\n    f = ![];\n    return i;\n  };\n})();\nconsole.log(typeof e);";
 const A_DEBUG_PROTECTION_THAT_ESCAPES: &str = "function dpf(ret) {\n  function debuggerProtection(counter) {\n    if (typeof counter === \"string\") {\n      return function (arg) {}.constructor(\"while (true) {}\").apply(\"counter\");\n    } else if ((\"\" + counter / counter).length !== 1 || counter % 20 === 0) {\n      (function () {\n        return true;\n      }).constructor(\"debugger\").call(\"action\");\n    } else {\n      (function () {\n        return false;\n      }).constructor(\"debugger\").apply(\"stateObject\");\n    }\n    debuggerProtection(++counter);\n  }\n  try {\n    if (ret) {\n      return debuggerProtection;\n    } else {\n      debuggerProtection(0);\n    }\n  } catch (y) {}\n}\nconsole.log(typeof dpf);";
 
 macro_rules! behaviour_unit {
@@ -263,6 +267,7 @@ pub enum Source {
     Fueled(fn() -> String),
     Superset(&'static str),
     DefaultLane(&'static str),
+    WholeRerun(&'static str),
     SharedName(&'static str, &'static str),
 }
 
@@ -282,6 +287,7 @@ pub fn program(source: &Source) -> String {
         Source::Whole(text)
         | Source::Superset(text)
         | Source::DefaultLane(text)
+        | Source::WholeRerun(text)
         | Source::SharedName(text, _) => (*text).to_string(),
         Source::Headed(body) => format!("{HEAD}{body}"),
         Source::Built(build) | Source::Fueled(build) => build(),
@@ -292,6 +298,10 @@ pub fn stage_notes(case: &Case, source: &str) -> (String, Vec<Note>) {
     match case.source {
         Source::Superset(_) => crate::common::run_all_stage_notes_extended(source),
         Source::DefaultLane(_) => crate::common::run_all_stage_notes_default_lane(source),
+        Source::WholeRerun(_) => {
+            let _whole = untwist_deobfuscate::self_defending::PartialRemovalsForbidden::enter();
+            crate::common::run_all_stage_notes_default_lane(source)
+        }
         Source::Fueled(_) => crate::common::run_all_stage_notes_fueled(source, SPINNING_UNIT_FUEL),
         Source::SharedName(_, name) => {
             let shared = SharedGlobals {
@@ -995,6 +1005,21 @@ pub const CASES: &[Case] = &[
     Case {
         source: Source::DefaultLane(A_SELF_DEFENDING_CALLBACK_WITH_A_PATCHED_BUILT_IN),
         expects: notes::SELF_DEFENDING_BUILTIN_PATCHED,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::WholeRerun(LAYERED_CONSOLE_SILENCING),
+        expects: notes::PROTECTIONS_KEPT_TOGETHER,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::DefaultLane(A_DOMAIN_LOCK),
+        expects: notes::DOMAIN_LOCK_KEPT,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::WholeRerun(A_TIMED_DEBUG_PROTECTION_BESIDE_A_CONTROLLER),
+        expects: notes::DEBUG_PROTECTION_KEPT_WITH_CONTROLLER,
         mode: Match::Contains,
     },
     Case {

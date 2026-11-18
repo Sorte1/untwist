@@ -261,6 +261,29 @@ pub(super) fn consolidate_reach(mut notes: Vec<Note>) -> Vec<Note> {
     notes
 }
 
+pub(super) fn reach_refusals(notes: &[Note]) -> Vec<Note> {
+    notes
+        .iter()
+        .filter(|note| note.message == notes::STRING_ARRAY_GLOBAL_REACH)
+        .map(|note| Note {
+            kind: NoteKind::Refusal,
+            ..note.clone()
+        })
+        .collect()
+}
+
+pub(super) fn carry_reach(notes: Vec<Note>, earlier: Vec<Note>) -> Vec<Note> {
+    let judged = notes
+        .iter()
+        .any(|note| note.message == notes::STRING_ARRAY_GLOBAL_REACH);
+    if judged || earlier.is_empty() || !notes.iter().any(|note| kept_count(note).is_some()) {
+        return notes;
+    }
+    let mut carried = earlier;
+    carried.extend(notes);
+    consolidate_reach(carried)
+}
+
 pub(super) fn dedupe_spanned(notes: Vec<Note>) -> Vec<Note> {
     let mut seen: HashSet<Note> = HashSet::new();
     notes

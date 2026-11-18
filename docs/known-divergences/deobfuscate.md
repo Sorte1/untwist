@@ -744,8 +744,20 @@
   may be a function expression or an arrow with a block body; everything else has to match. The
   templates are in `crates/untwist-deobfuscate/src/protection_shapes.js`. One callback that does not match
   keeps every call of its controller and the controller itself, with the note `self-defending:
-  a call controller was found but a reference to it survives …`; other controllers of the same
-  program are judged on their own. A callback whose strings are still encoded when the
+  a call controller was found but a reference to it survives …`. In the default mode a removal
+  that takes out a console disable while another controller block stays is only provisional:
+  when two layers each disable the console, removing one layer's block and keeping the other's
+  moves the moment the console goes silent, and the program prints lines that neither the input
+  nor the source prints. If a call controller is still in the output once the run ends, the
+  input is run again with such removals refused, and every block registered through a call
+  controller is then kept, with the note `self-defending: a block registered through a call
+  controller was kept, so every other block registered that way was kept with it …`. A
+  controller that the shape check does not recognise (for example one whose `apply` key is still
+  encoded) counts as kept. Removing a debug protection that runs on a timer while a call
+  controller block stays is provisional in the same way, and the rerun keeps it
+  (`debug-protection: a block registered through a call controller is still in place, so the
+  debug protection was kept with it …`): the timer keeps the program running, and without it a
+  program whose console a kept block silences would exit where the input keeps running. `--unsafe` judges each controller on its own. A callback whose strings are still encoded when the
   protections stage runs (`atob(…)`, a split string) only matches after cleanup has folded
   them, so the stage runs a second time after cleanup when cleanup changed the program.
   A controller that keeps its flag outside itself (`o = true; var r = (n, t) => { …; o = false;
@@ -909,6 +921,14 @@
   self-defending callback is never run, so an input whose own check fails (it was reformatted,
   so the source check backtracks until it throws `RangeError` or loops) runs normally once the
   trap is removed: removing the trap may make an input that would trap run normally.
+- **Default lane: a domain lock is kept.** obfuscator.io's `domainLock` registers a callback
+  through a call controller that reads the host's `document` and `location` and enumerates the
+  names of the global object (`for (k in globalObject)`) to find them. Whether it passes depends
+  on where the program runs, which the text does not say, and its enumeration may see the names of
+  the string array and its decoders. The default lane keeps the lock, every block registered
+  through a call controller and the machinery the lock can see, with the note `self-defending: a
+  domain lock was found: it reads the host's document and location and enumerates the names of
+  the global object …`. `--unsafe` assumes the lock passes and removes it.
 - **Default-lane premise: no code reads a function's caller.** No code reads a function's caller
   through `.caller`, `arguments.callee.caller` or a stack frame (`Error.prepareStackTrace` call
   sites with `getFunction()` or `getFunctionName()`) to observe which function called it (the

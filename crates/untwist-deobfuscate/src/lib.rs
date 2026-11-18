@@ -16,6 +16,7 @@ pub mod decoded;
 pub mod decoded_strings;
 pub mod decoder;
 pub mod directives;
+mod domain_lock;
 pub mod driver;
 pub mod evaluate_globals;
 mod flag_home;
@@ -75,4 +76,5 @@ pub fn reset_run_state() {
     string_array::legacy::forget_lifts();
     legacy_reach::forget();
     init_order::clear_kept_order();
+    self_defending::forget_partial_removals();
 }
