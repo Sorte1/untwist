@@ -32,6 +32,12 @@ const SETTLE_ROUNDS: usize = 3;
 const SETTLE_CAPPED: &str = "settle: unminify and cleanup did not reach a fixpoint within \
      the extra rounds; running untwist on this output again may change it";
 
+#[derive(Default)]
+pub(super) struct Shaping {
+    runs: Vec<StageRun>,
+    latest: Option<usize>,
+}
+
 pub(super) struct StageCx<'a, 'r> {
     pub(super) alloc: &'a Allocator,
     pub(super) program: &'r mut Program<'a>,
@@ -94,8 +100,21 @@ impl Pipeline {
         sem: Semantics,
         reservation: Reservation<'_>,
     ) {
+        let mut shaping = Shaping::default();
+        if let Some(sem) = self.machinery_stages(site, sem, reservation, &mut shaping) {
+            self.closing_stages(site, sem, reservation, shaping);
+        }
+    }
+
+    pub(super) fn machinery_stages<'a>(
+        &self,
+        site: &mut StageCx<'a, '_>,
+        sem: Semantics,
+        reservation: Reservation<'_>,
+        shaping: &mut Shaping,
+    ) -> Option<Semantics> {
         let unminify = self.unminify_passes();
-        let mut runs: Vec<StageRun> = Vec::new();
+        let runs = &mut shaping.runs;
         let started = site.notes.len();
         let sem = match &unminify {
             Some(ctors) => self.stage("unminify", ctors, site, sem),
@@ -115,8 +134,8 @@ impl Pipeline {
         let mut slot = CleanupSlot::default();
         let cleaned = self.cleanup_stage(site, sem, &mut slot);
         runs.push(("cleanup", started, site.notes.len()));
-        let (sem, changes, latest) =
-            self.late_protections_stage(site, cleaned, &mut slot, &mut runs);
+        let (sem, changes, latest) = self.late_protections_stage(site, cleaned, &mut slot, runs);
+        shaping.latest = latest;
         if !extended {
             let (sem, changed) = self.final_machinery_stage(site, sem);
             let sem = match changed {
@@ -125,12 +144,22 @@ impl Pipeline {
             };
             let sem = self.modern_stage(site, sem);
             self.library_stage(site, sem);
-            settle_notes(site, &runs, latest);
-            return;
+            settle_notes(site, &shaping.runs, latest);
+            return None;
         }
         let settle_from = (changes, slot);
-        let sem = self.settle(site, sem, unminify.as_deref(), settle_from, &mut runs);
+        let sem = self.settle(site, sem, unminify.as_deref(), settle_from, runs);
         let (sem, _) = self.final_machinery_stage(site, sem);
+        Some(sem)
+    }
+
+    pub(super) fn closing_stages<'a>(
+        &self,
+        site: &mut StageCx<'a, '_>,
+        sem: Semantics,
+        reservation: Reservation<'_>,
+        shaping: Shaping,
+    ) {
         match self.lexical_stage(site, sem, reservation.shared.is_some()) {
             Some(sem) => {
                 let sem = self.rename_stage(site, sem, reservation);
@@ -143,7 +172,7 @@ impl Pipeline {
                 self.library_stage(site, sem);
             }
         }
-        settle_notes(site, &runs, latest);
+        settle_notes(site, &shaping.runs, shaping.latest);
     }
 
     #[cfg(not(feature = "modern"))]
@@ -348,7 +377,7 @@ impl Pipeline {
         (sem, changes)
     }
 
-    fn prepare_stage<'a>(
+    pub(super) fn prepare_stage<'a>(
         &self,
         site: &mut StageCx<'a, '_>,
         sem: Semantics,
@@ -365,7 +394,7 @@ impl Pipeline {
         (sem, PreparedSlot::settled(last))
     }
 
-    fn deobfuscate_stage<'a>(
+    pub(super) fn deobfuscate_stage<'a>(
         &self,
         site: &mut StageCx<'a, '_>,
         (sem, prepared): (Semantics, PreparedSlot),
@@ -393,7 +422,7 @@ impl Pipeline {
         sem
     }
 
-    fn final_machinery_stage<'a>(
+    pub(super) fn final_machinery_stage<'a>(
         &self,
         site: &mut StageCx<'a, '_>,
         sem: Semantics,
