@@ -1,12 +1,13 @@
-use oxc_allocator::Vec as AVec;
+use oxc_allocator::{Allocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
-use oxc_semantic::Scoping;
+use oxc_semantic::{Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::global::{global_is_written, is_global_reference};
 use untwist_core::ast_util::matcher::{call_parts, statement_iife, var_function_or_declaration};
+use untwist_core::parse::parse_program;
 use untwist_core::pass::{Cx, Interest, Pass};
 
 use crate::bindings::{
@@ -158,6 +159,23 @@ pub(crate) fn protection_symbols(program: &Program<'_>, scoping: &Scoping) -> Fx
     declarations(program, scoping).symbols
 }
 
+pub(crate) fn keeps_a_live_protection(output: &str) -> bool {
+    let allocator = Allocator::default();
+    let parsed = parse_program(&allocator, output);
+    let scoping = SemanticBuilder::new()
+        .build(&parsed.program)
+        .semantic
+        .into_scoping();
+    let declarations = declarations(&parsed.program, &scoping);
+    !declarations.symbols.is_empty()
+        && has_stray_reference(
+            &parsed.program,
+            &declarations.symbols,
+            &declarations.spans,
+            &scoping,
+        )
+}
+
 enum Plan {
     Nothing,
     Refused,
@@ -176,9 +194,7 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
         spans: Vec::new(),
     };
     intervals.visit_program(program);
-    let provisional = !unsafe_lane
-        && !intervals.spans.is_empty()
-        && crate::self_defending::guarded_returners(program) > 0;
+    let provisional = !unsafe_lane && !intervals.spans.is_empty();
     if provisional && crate::self_defending::partial_removals_forbidden() {
         return Plan::KeptWithController;
     }
@@ -219,7 +235,7 @@ impl<'a> Pass<'a> for DebugProtection {
             }
             Plan::Remove(spans, symbols, provisional) => {
                 if reaches_a_script_global_once_removed(&symbols, &spans, program, cx) {
-                    cx.note(notes::DEBUG_PROTECTION_REFERENCE_KEPT, None);
+                    cx.note(notes::DEBUG_PROTECTION_GLOBAL_REACH, None);
                     return;
                 }
                 (spans, provisional)

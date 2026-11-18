@@ -267,3 +267,42 @@ fn a_built_in_patched_through_a_shape_the_scan_skipped_prints_like_node_in_the_d
         .collect();
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+fn default_lane(source: &str) -> untwist::Output {
+    Pipeline::new(Options::default()).run(source)
+}
+
+fn has_note(output: &untwist::Output, message: &str) -> bool {
+    output.notes.iter().any(|note| note.message == message)
+}
+
+#[test]
+fn a_console_disable_is_kept_with_a_debug_protection_timer_the_default_lane_keeps() {
+    let output = default_lane(&read("console-beside-timer.js"));
+    let code = output.code();
+    assert!(code.contains("setInterval"), "{code}");
+    assert!(code.contains("\"exception\""), "{code}");
+    assert!(
+        has_note(
+            &output,
+            untwist_deobfuscate::notes::PROTECTIONS_KEPT_TOGETHER
+        ),
+        "{:?}",
+        output.notes
+    );
+    let decoded = unsafe_lane(&read("console-beside-timer.js"));
+    assert!(!decoded.contains("setInterval"), "{decoded}");
+    assert!(!decoded.contains("\"exception\""), "{decoded}");
+}
+
+#[test]
+fn a_dead_debug_protection_a_global_listing_may_reach_is_kept_with_a_premise_note() {
+    let output = default_lane(&read("dead-protections-listed.js"));
+    assert!(
+        has_note(
+            &output,
+            untwist_deobfuscate::notes::DEBUG_PROTECTION_GLOBAL_REACH
+        ),
+        "{:?}",
+        output.notes
+    );
+}
