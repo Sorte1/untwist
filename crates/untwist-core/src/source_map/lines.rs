@@ -87,4 +87,18 @@ impl<'t> Positions<'t> {
             self.units_before(offset) - self.units_before(start),
         )
     }
+
+    pub fn offset(&self, line: u32, column: u32) -> Option<usize> {
+        let mut at = *self.lines.get(usize::try_from(line).ok()?)?;
+        let mut units = 0u32;
+        while units < column && at < self.text.len() && line_break(self.text, at) == 0 {
+            let width = char_len(self.text[at]);
+            units += match width {
+                4 => 2,
+                _ => 1,
+            };
+            at += width;
+        }
+        Some(at.min(self.text.len()))
+    }
 }

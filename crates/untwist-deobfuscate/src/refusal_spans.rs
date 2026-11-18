@@ -50,6 +50,25 @@ pub(crate) fn record(what: impl FnOnce() -> String, span: Span) {
     });
 }
 
+pub fn recorded() -> usize {
+    SPANS.with(|spans| spans.borrow().as_ref().map_or(0, Vec::len))
+}
+
+pub fn taken_since(mark: usize) -> Vec<RefusalSpan> {
+    SPANS.with(|spans| {
+        spans
+            .borrow_mut()
+            .as_mut()
+            .filter(|spans| mark <= spans.len())
+            .map(|spans| spans.split_off(mark))
+            .unwrap_or_default()
+    })
+}
+
+pub fn put_back(found: Vec<RefusalSpan>) {
+    extend(&found);
+}
+
 pub(crate) fn extend(trail: &[RefusalSpan]) {
     SPANS.with(|spans| {
         if let Some(spans) = spans.borrow_mut().as_mut() {

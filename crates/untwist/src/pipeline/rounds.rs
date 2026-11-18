@@ -1,12 +1,20 @@
+use std::collections::HashSet;
+
 use oxc_ast::ast::Program;
+use oxc_ast::AstKind;
+use oxc_ast_visit::Visit;
+use oxc_span::{GetSpan, Span};
 use untwist_core::parse::{has_error, parse_with};
 use untwist_core::pass::{Note, NoteKind, RoundCapUndo};
 use untwist_core::print::pretty_codegen;
 use untwist_core::semantic::{build_scoping, forget_failures, Semantics};
+use untwist_core::source_map::origins::{self, Origins};
+use untwist_deobfuscate::notes::ROUND_CAP;
 
 use super::input::Staged;
 use super::layer::Layering;
 use super::stages::{Shaping, StageCx};
+use super::trail::Taps;
 use super::{Pipeline, Reservation};
 use crate::plugin::Stage;
 use crate::report::StageReport;
@@ -55,15 +63,16 @@ impl Round {
     }
 }
 
-struct Quiet {
-    _decoded: Option<untwist_deobfuscate::decoded_strings::Recorder>,
-    #[cfg(feature = "refusal-spans")]
-    _refusals: Option<untwist_deobfuscate::refusal_spans::Recorder>,
+struct Probe<'a> {
+    held: Program<'a>,
+    opened: Round,
+    taps: Taps,
+    earlier: Option<Origins>,
 }
 
 enum Next {
     Settled(Semantics),
-    Advanced(Semantics, Shaping, Round, Option<Quiet>),
+    Advanced(Semantics, Shaping, Round, Vec<Note>),
     Exit(Staged),
 }
 
@@ -82,37 +91,38 @@ impl Pipeline {
         }
         let mut shaping = Shaping::default();
         let Some(mut sem) = self.machinery_stages(site, front, reservation, &mut shaping) else {
-            return Staged::Done(false);
+            return Staged::Done;
         };
         let mut carried: Vec<Note> = Vec::new();
-        let mut quiet = None;
+        let mut taps = Taps::now();
         for _ in 1..LAYER_ROUNDS {
             if !worth_another(site, round) || untwist_core::budget::check().is_err() {
                 break;
             }
-            let quieted = quiet.is_some();
-            match self.next_round(site, (sem, reservation), (layering, quieted)) {
-                Next::Exit(staged) => return staged,
+            taps.settle(site.trail);
+            taps = Taps::now();
+            match self.next_round(site, (sem, reservation), (layering, round)) {
+                Next::Exit(staged) => {
+                    taps.rewind();
+                    return staged;
+                }
                 Next::Settled(settled) => {
                     sem = settled;
                     break;
                 }
-                Next::Advanced(advanced, shaped, opened, held) => {
-                    carried.extend(superseded(site.notes, round.notes, opened.notes));
-                    round = Round {
-                        notes: round.notes,
-                        ..opened
-                    };
+                Next::Advanced(advanced, shaped, opened, kept) => {
+                    carried.extend(kept);
+                    round = opened;
                     sem = advanced;
                     shaping = shaped;
-                    quiet = quiet.or(held);
                 }
             }
         }
         self.closing_stages(site, sem, reservation, shaping);
+        taps.settle(site.trail);
         let at = base.min(site.notes.len());
         site.notes.splice(at..at, carried);
-        Staged::Done(quiet.is_some())
+        Staged::Done
     }
 
     fn exits(
@@ -131,7 +141,7 @@ impl Pipeline {
         &self,
         site: &mut StageCx<'a, '_>,
         (sem, reservation): (Semantics, Reservation<'_>),
-        (layering, quieted): (&mut Layering, bool),
+        (layering, round): (&mut Layering, Round),
     ) -> Next {
         let printed = pretty_codegen(site.program);
         let text: &'a str = site.alloc.alloc_str(&printed);
@@ -139,26 +149,58 @@ impl Pipeline {
         if has_error(&parsed.diagnostics) {
             return Next::Settled(sem);
         }
-        let quiet = (!quieted).then(|| self.quiet());
+        let taps = Taps::now();
+        let earlier = origins::restart();
         let held = std::mem::replace(site.program, parsed.program);
-        let opened = Round::opened(site);
+        let probe = Probe {
+            held,
+            opened: Round::opened(site),
+            taps,
+            earlier,
+        };
         let (front, decoded) = self.probe_stages(site, (fresh_round(site.program), &printed));
-        if let Some(exit) = self.exits(site, &front, layering) {
-            return Next::Exit(exit);
+        let capped = site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested;
+        if capped {
+            site.pass_opts.round_cap_undo.set(RoundCapUndo::Replay);
         }
-        if !decoded {
-            *site.program = held;
-            site.notes.truncate(opened.notes);
-            untwist_deobfuscate::reset_round_state();
-            forget_failures();
-            return Next::Settled(sem);
+        if capped || !decoded {
+            return Next::Settled(settled_back(site, probe, sem, capped));
+        }
+        if let Some(peeled) = self.peel(site, &front, layering) {
+            return Next::Exit(Staged::Peeled(peeled));
         }
         drop(sem);
         let mut shaping = Shaping::default();
-        match self.machinery_stages(site, front, reservation, &mut shaping) {
-            Some(shaped) => Next::Advanced(shaped, shaping, opened, quiet),
-            None => Next::Exit(Staged::Done(true)),
+        let Some(shaped) = self.machinery_stages(site, front, reservation, &mut shaping) else {
+            return Next::Exit(Staged::Done);
+        };
+        let Probe {
+            mut held,
+            opened,
+            earlier,
+            ..
+        } = probe;
+        let kept = superseded(site, (round, opened), &held);
+        if self.traces_spans() {
+            site.trail.reprinted(&mut held, earlier, text);
         }
+        let next = Round {
+            notes: round.notes,
+            stages: opened.stages,
+        };
+        let drained = opened.notes - round.notes;
+        Next::Advanced(shaped, shaping.shifted(drained), next, kept)
+    }
+
+    fn traces_spans(&self) -> bool {
+        #[cfg(feature = "refusal-spans")]
+        let refusals = self.records_refusal_spans();
+        #[cfg(not(feature = "refusal-spans"))]
+        let refusals = false;
+        refusals
+            || self.options.source_map
+            || self.options.decoded_strings
+            || self.options.statement_spans
     }
 
     fn probe_stages<'a>(
@@ -189,19 +231,27 @@ impl Pipeline {
             decoded,
         )
     }
+}
 
-    fn quiet(&self) -> Quiet {
-        Quiet {
-            _decoded: self
-                .options
-                .decoded_strings
-                .then(untwist_deobfuscate::decoded_strings::Recorder::start),
-            #[cfg(feature = "refusal-spans")]
-            _refusals: self
-                .records_refusal_spans()
-                .then(untwist_deobfuscate::refusal_spans::Recorder::start),
-        }
-    }
+fn settled_back<'a>(
+    site: &mut StageCx<'a, '_>,
+    probe: Probe<'a>,
+    sem: Semantics,
+    capped: bool,
+) -> Semantics {
+    *site.program = probe.held;
+    let cap_notes: Vec<Note> = site.notes[probe.opened.notes..]
+        .iter()
+        .filter(|note| capped && note.message.starts_with(ROUND_CAP))
+        .cloned()
+        .collect();
+    site.notes.truncate(probe.opened.notes);
+    site.notes.extend(cap_notes);
+    probe.taps.rewind();
+    origins::resume(probe.earlier);
+    untwist_deobfuscate::reset_round_state();
+    forget_failures();
+    sem
 }
 
 fn changes(stages: &[StageReport]) -> u32 {
@@ -228,11 +278,60 @@ fn worth_another(site: &StageCx<'_, '_>, round: Round) -> bool {
             .any(|note| note.kind == NoteKind::Refusal && MACHINERY_PASSES.contains(&note.pass))
 }
 
-fn superseded(notes: &mut Vec<Note>, from: usize, to: usize) -> Vec<Note> {
-    notes
-        .drain(from..to)
-        .filter(|note| note.kind == NoteKind::Progress)
+fn superseded(
+    site: &mut StageCx<'_, '_>,
+    (round, opened): (Round, Round),
+    held: &Program<'_>,
+) -> Vec<Note> {
+    let judged: HashSet<&'static str> = site.notes[opened.notes..]
+        .iter()
+        .map(|note| note.pass)
+        .chain(
+            site.stages[opened.stages..]
+                .iter()
+                .flat_map(|stage| stage.per_pass.iter().map(|(pass, _)| *pass)),
+        )
+        .collect();
+    let wanted: HashSet<Span> = site.notes[round.notes..opened.notes]
+        .iter()
+        .filter(|note| note.kind == NoteKind::Refusal)
+        .filter_map(|note| note.span)
+        .collect();
+    let present = surviving(held, wanted);
+    site.notes
+        .drain(round.notes..opened.notes)
+        .filter(|note| match (note.kind, note.span) {
+            (NoteKind::Progress, _) => true,
+            (NoteKind::Refusal, Some(span)) => !present.contains(&span),
+            (NoteKind::Refusal, None) => !judged.contains(note.pass),
+        })
         .collect()
+}
+
+struct Present {
+    wanted: HashSet<Span>,
+    found: HashSet<Span>,
+}
+
+impl<'a> Visit<'a> for Present {
+    fn enter_node(&mut self, kind: AstKind<'a>) {
+        let span = kind.span();
+        if self.wanted.contains(&span) {
+            self.found.insert(span);
+        }
+    }
+}
+
+fn surviving(program: &Program<'_>, wanted: HashSet<Span>) -> HashSet<Span> {
+    if wanted.is_empty() {
+        return wanted;
+    }
+    let mut present = Present {
+        wanted,
+        found: HashSet::new(),
+    };
+    present.visit_program(program);
+    present.found
 }
 
 fn fresh_round(program: &Program<'_>) -> Semantics {

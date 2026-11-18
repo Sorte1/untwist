@@ -59,6 +59,21 @@ impl Drop for Recording {
     }
 }
 
+pub fn restart() -> Option<Origins> {
+    RECORDED.with(|recorded| recorded.borrow_mut().as_mut().map(std::mem::take))
+}
+
+pub fn resume(earlier: Option<Origins>) {
+    let Some(earlier) = earlier else {
+        return;
+    };
+    RECORDED.with(|recorded| {
+        if let Some(origins) = recorded.borrow_mut().as_mut() {
+            *origins = earlier;
+        }
+    });
+}
+
 pub fn is_recording() -> bool {
     RECORDED.with(|recorded| recorded.borrow().is_some())
 }

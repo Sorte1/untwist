@@ -22,6 +22,7 @@ use super::notes::{
     retain_last_spanned, retain_latest_protection_notes, StageRun, SLOT_NOT_RESERVED,
 };
 use super::snapshots::Snapshots;
+use super::trail::Trail;
 use super::{Pipeline, Reservation};
 use crate::options::Progress;
 use crate::plugin::Stage;
@@ -38,6 +39,17 @@ pub(super) struct Shaping {
     latest: Option<usize>,
 }
 
+impl Shaping {
+    pub(super) fn shifted(self, by: usize) -> Self {
+        let runs = self
+            .runs
+            .into_iter()
+            .map(|(stage, start, end)| (stage, start.saturating_sub(by), end.saturating_sub(by)))
+            .collect();
+        Self { runs, ..self }
+    }
+}
+
 pub(super) struct StageCx<'a, 'r> {
     pub(super) alloc: &'a Allocator,
     pub(super) program: &'r mut Program<'a>,
@@ -46,6 +58,7 @@ pub(super) struct StageCx<'a, 'r> {
     pub(super) notes: &'r mut Vec<Note>,
     pub(super) heap_peak: &'r mut u64,
     pub(super) snapshots: &'r mut Snapshots,
+    pub(super) trail: &'r mut Trail<'a>,
 }
 
 impl StageCx<'_, '_> {

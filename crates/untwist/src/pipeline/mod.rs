@@ -17,6 +17,7 @@ mod shared_scan;
 mod shell;
 mod snapshots;
 mod stages;
+mod trail;
 mod types;
 mod unpack;
 
