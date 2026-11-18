@@ -18,6 +18,7 @@ const acorn = require("acorn");
 const LAYERS = 4;
 const MAX_BYTES = 200_000;
 const PROGRAMS = ["greeting", "functions", "objects", "classes", "strings"];
+const STRAY_VAR_PROGRAMS = [...PROGRAMS, "test"];
 const NO_EVAL = { target: "browser-no-eval" };
 const GUARDED = { debugProtection: true, debugProtectionInterval: 0, disableConsoleOutput: true };
 const WEB_STRINGS = { stringArrayEncoding: ["none", "base64", "rc4"], stringArrayThreshold: 0.75, stringArrayIndexesType: ["hexadecimal-number", "hexadecimal-numeric-string"], stringArrayWrappersCount: 1, stringArrayWrappersType: "variable", stringArrayWrappersParametersMaxCount: 2 };
@@ -39,7 +40,9 @@ const SETS = {
   "rename-globals": { renameGlobals: true },
   "guarded-no-eval": { ...NO_EVAL, ...GUARDED, stringArrayEncoding: ["rc4"], stringArrayThreshold: 1 },
   "web-no-eval": { ...NO_EVAL, ...GUARDED, ...WEB_STRINGS, selfDefending: true, controlFlowFlattening: true, deadCodeInjection: true, numbersToExpressions: true, splitStrings: true, stringArrayCallsTransform: true, transformObjectKeys: true },
+  "dead-cff-rc4": { deadCodeInjection: true, deadCodeInjectionThreshold: 1, controlFlowFlattening: true, controlFlowFlatteningThreshold: 1, stringArrayEncoding: ["rc4"], stringArrayThreshold: 1 },
 };
+const STRAY_VAR_SETS = new Set(["dead-cff-rc4"]);
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 const seedOf = (set, program, layer) => parseInt(sha256(`relayer/${set}/${program}/${layer}`).slice(0, 8), 16) % 1_000_000_000;
@@ -118,12 +121,13 @@ function main() {
   const rows = [];
   const capped = [];
   const broken = [];
-  for (const program of PROGRAMS) {
+  for (const program of STRAY_VAR_PROGRAMS) {
     const file = join(SOURCES, `${program}.js`);
     const text = readFileSync(file, "utf8");
     const expected = runNode(file);
     writeFileSync(join(OUT, "expected", `${program}.stdout`), expected);
     for (const [set, options] of Object.entries(SETS)) {
+      if (!PROGRAMS.includes(program) && !STRAY_VAR_SETS.has(set)) continue;
       const made = chain(set, options, program, text, expected, version);
       rows.push(...made.rows);
       capped.push(...made.capped);

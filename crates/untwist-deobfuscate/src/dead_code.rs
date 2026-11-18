@@ -345,7 +345,11 @@ fn still_needed<'a>(
         .collect()
 }
 
-fn var_statement<'a>(names: &[(Ident<'a>, Option<SymbolId>)], cx: &Cx<'a, '_>) -> Statement<'a> {
+fn var_statement<'a>(
+    names: &[(Ident<'a>, Option<SymbolId>)],
+    span: Span,
+    cx: &Cx<'a, '_>,
+) -> Statement<'a> {
     let declarators = AVec::from_iter_in(
         names.iter().map(|&(name, symbol)| {
             let pattern = match symbol {
@@ -358,7 +362,23 @@ fn var_statement<'a>(names: &[(Ident<'a>, Option<SymbolId>)], cx: &Cx<'a, '_>) -
         }),
         cx,
     );
-    Statement::new_variable_declaration(SPAN, VariableDeclarationKind::Var, declarators, false, cx)
+    Statement::new_variable_declaration(span, VariableDeclarationKind::Var, declarators, false, cx)
+}
+
+fn hoisted_names<'a>(
+    declaration: &VariableDeclaration<'a>,
+) -> Option<Vec<(Ident<'a>, Option<SymbolId>)>> {
+    if declaration.kind != VariableDeclarationKind::Var {
+        return None;
+    }
+    declaration
+        .declarations
+        .iter()
+        .map(|declarator| match (&declarator.id, &declarator.init) {
+            (BindingPattern::BindingIdentifier(id), None) => Some((id.name, id.symbol_id.get())),
+            _ => None,
+        })
+        .collect()
 }
 
 fn declares_function(statement: &Statement<'_>) -> bool {
@@ -432,6 +452,8 @@ pub struct DeadCode<'a> {
     armed: usize,
     guarded: Vec<Span>,
     callees: Vec<Span>,
+    kept_vars: FxHashSet<Span>,
+    fresh_vars: FxHashSet<Span>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -468,6 +490,52 @@ impl<'a> DeadCode<'a> {
         }
     }
 
+    fn push_kept_vars(
+        &mut self,
+        names: &[(Ident<'a>, Option<SymbolId>)],
+        span: Span,
+        stmts: &mut AVec<'a, Statement<'a>>,
+        cx: &Cx<'a, '_>,
+    ) {
+        if names.is_empty() {
+            return;
+        }
+        self.fresh_vars.insert(span);
+        stmts.push(var_statement(names, span, cx));
+    }
+
+    fn prune_kept_vars(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &Cx<'a, '_>) -> usize {
+        let mut pruned = 0usize;
+        stmts.retain_mut(|statement| {
+            let Statement::VariableDeclaration(declaration) = statement else {
+                return true;
+            };
+            if !self.kept_vars.contains(&declaration.span) {
+                return true;
+            }
+            let Some(names) = hoisted_names(declaration) else {
+                return true;
+            };
+            let needed = still_needed(names, None, cx.scoping());
+            if needed.len() == declaration.declarations.len() {
+                return true;
+            }
+            pruned += 1;
+            if needed.is_empty() {
+                self.kept_vars.remove(&declaration.span);
+                return false;
+            }
+            declaration.declarations.retain(|declarator| {
+                declarator
+                    .id
+                    .get_binding_identifier()
+                    .is_some_and(|id| needed.iter().any(|(name, _)| *name == id.name))
+            });
+            true
+        });
+        pruned
+    }
+
     fn fold_dead_loop(
         &mut self,
         node: ABox<'a, WhileStatement<'a>>,
@@ -481,9 +549,7 @@ impl<'a> DeadCode<'a> {
             return false;
         }
         let names = still_needed(hoisted.names, Some(&node.body), cx.scoping());
-        if !names.is_empty() {
-            stmts.push(var_statement(&names, cx));
-        }
+        self.push_kept_vars(&names, node.body.span(), stmts, cx);
         true
     }
 
@@ -507,14 +573,13 @@ impl<'a> DeadCode<'a> {
             return false;
         }
         let names = still_needed(hoisted.names, dropped, cx.scoping());
+        let kept_span = dropped.map_or(node.span, GetSpan::span);
         let IfStatement {
             consequent,
             alternate,
             ..
         } = node.unbox();
-        if !names.is_empty() {
-            stmts.push(var_statement(&names, cx));
-        }
+        self.push_kept_vars(&names, kept_span, stmts, cx);
         match if value { Some(consequent) } else { alternate } {
             None => {}
             Some(block @ Statement::BlockStatement(_)) => self.keep_block(block, outer, stmts, cx),
@@ -847,9 +912,8 @@ impl<'a> DeadCode<'a> {
         });
         if let (true, false, Some(names)) = (cx.opts.unsafe_transforms, decision.literal, annex_b) {
             let names = still_needed(names, dropped, cx.scoping());
-            if !names.is_empty() {
-                stmts.push(var_statement(&names, cx));
-            }
+            let kept_span = dropped.map_or(span, GetSpan::span);
+            self.push_kept_vars(&names, kept_span, stmts, cx);
             self.merge_branch(node.unbox(), span, decision.value, outer, stmts, cx)
         } else {
             self.fold_soundly(node, decision.value, outer, stmts, cx)
@@ -904,6 +968,10 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        if !self.kept_vars.is_empty() {
+            let pruned = self.prune_kept_vars(stmts, cx);
+            cx.changed_by(pruned);
+        }
         if self.unsafe_lane {
             for stmt in stmts.iter_mut() {
                 if let Statement::IfStatement(node) = stmt {
@@ -1001,6 +1069,8 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         self.strict = program_is_strict(node);
         self.unsafe_lane = cx.opts.unsafe_transforms;
         self.armed = 0;
+        let fresh = std::mem::take(&mut self.fresh_vars);
+        self.kept_vars.extend(fresh);
     }
 
     fn exit_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {

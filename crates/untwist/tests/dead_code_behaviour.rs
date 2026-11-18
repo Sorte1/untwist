@@ -47,3 +47,41 @@ fn the_default_lane_folds_every_dead_code_fixture_but_the_refused_one() {
         assert_eq!(has_opaque_test(&code), kept, "{label}:\n{code}");
     }
 }
+
+const A_DEAD_BRANCH_READ_THROUGH_A_CONTROL_FLOW_OBJECT: &str = "function f(g) {\n  var o = { 'abc': function (a, b) { return a(b); }, 'def': function (a, b) { return a !== b; } };\n  if (o['def'](\"a\", \"a\")) {\n    var x = g;\n    return o['abc'](x, 1);\n  } else {\n    return o['abc'](g, 2);\n  }\n}\nconsole.log(f(String));";
+
+fn lanes(source: &str) -> Vec<String> {
+    [false, true]
+        .into_iter()
+        .map(|unsafe_transforms| {
+            Pipeline::new(Options {
+                unsafe_transforms,
+                ..Options::default()
+            })
+            .run(source)
+            .code()
+            .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn a_dead_branch_var_read_only_inside_the_branch_leaves_no_declaration_behind() {
+    for code in lanes(A_DEAD_BRANCH_READ_THROUGH_A_CONTROL_FLOW_OBJECT) {
+        assert_eq!(
+            code.trim(),
+            "function f(g) {\n  return g(2);\n}\nconsole.log(f(String));"
+        );
+    }
+}
+
+#[test]
+fn a_dead_branch_var_read_after_the_branch_keeps_its_declaration() {
+    let source = A_DEAD_BRANCH_READ_THROUGH_A_CONTROL_FLOW_OBJECT.replace(
+        "  } else {\n    return o['abc'](g, 2);\n  }\n}",
+        "  }\n  return x;\n}",
+    );
+    for code in lanes(&source) {
+        assert!(code.contains("let x;") || code.contains("var x;"), "{code}");
+    }
+}

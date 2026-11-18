@@ -20,6 +20,7 @@ pub mod evaluate_globals;
 mod flag_home;
 pub mod fold_chains;
 pub mod fused;
+mod inert_vars;
 pub mod init_order;
 pub mod layers;
 pub mod legacy_reach;
