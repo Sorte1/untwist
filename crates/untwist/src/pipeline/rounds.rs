@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use oxc_ast::ast::Program;
+use oxc_ast::ast::{Expression, Program, Statement, SwitchStatement};
 use oxc_ast::AstKind;
-use oxc_ast_visit::Visit;
+use oxc_ast_visit::{walk_js, Visit, VisitJs};
 use oxc_span::{GetSpan, Span};
 use untwist_core::parse::{has_error, parse_with};
 use untwist_core::pass::{Note, NoteKind, RoundCapUndo};
@@ -98,7 +98,8 @@ impl Pipeline {
         let mut carried: Vec<Note> = Vec::new();
         let mut taps = Taps::now();
         for _ in 1..LAYER_ROUNDS {
-            if !worth_another(site, round) || untwist_core::budget::check().is_err() {
+            let due = worth_another(site, round) || cleanup_due(site, round);
+            if !due || untwist_core::budget::check().is_err() {
                 break;
             }
             taps.settle(site.trail);
@@ -291,6 +292,40 @@ fn settled_rewrites(stages: &[StageReport]) -> u32 {
         .filter(|(pass, _)| UNBLOCKED_PASSES.contains(pass))
         .map(|(_, count)| *count)
         .fold(0, u32::saturating_add)
+}
+
+struct EmptiedDispatch {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for EmptiedDispatch {
+    fn visit_switch_statement(&mut self, it: &SwitchStatement<'a>) {
+        let dispatched = matches!(
+            &it.discriminant,
+            Expression::ComputedMemberExpression(member)
+                if matches!(member.expression, Expression::UpdateExpression(_))
+        );
+        let emptied = it.cases.iter().any(|case| {
+            matches!(
+                case.consequent.as_slice(),
+                [Statement::ContinueStatement(next)] if next.label.is_none()
+            )
+        });
+        if dispatched && emptied {
+            self.found = true;
+            return;
+        }
+        walk_js::walk_switch_statement(self, it);
+    }
+}
+
+fn cleanup_due(site: &StageCx<'_, '_>, round: Round) -> bool {
+    if removals(&site.stages[round.stages..], &LAYER_PASSES) == 0 {
+        return false;
+    }
+    let mut scan = EmptiedDispatch { found: false };
+    scan.visit_program(site.program);
+    scan.found
 }
 
 fn worth_another(site: &StageCx<'_, '_>, round: Round) -> bool {

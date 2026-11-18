@@ -132,6 +132,20 @@ pub(super) fn assembled_alias<'p>(
 }
 
 impl<'p> Assembled<'p> {
+    pub(super) fn plain(
+        symbol: SymbolId,
+        object: &'p ObjectExpression<'p>,
+        scoping: &Scoping,
+    ) -> Option<Self> {
+        let plain = is_constant_binding(scoping, symbol) && plain_literal_keys(object);
+        plain.then(|| Self {
+            base: symbol,
+            object,
+            added: Vec::new(),
+            exempt: FxHashSet::default(),
+        })
+    }
+
     pub(super) fn property(&self, name: &str) -> Option<&'p Expression<'p>> {
         if let Some((_, value)) = self.added.iter().rev().find(|(key, _)| *key == name) {
             return Some(value);
