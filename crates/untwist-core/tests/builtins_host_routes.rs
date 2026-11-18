@@ -509,7 +509,7 @@ fn a_window_alias_used_as_a_value_makes_the_result_unknown() {
             "var k = 'atob'; [document.defaultView][0][k] = f;",
             "for (var w of [document.defaultView]) { var k = 'atob'; w[k] = f; }",
             "var w; [w] = [document.defaultView]; var k = 'atob'; w[k] = f;",
-            "var w = document.defaultView; g(w);",
+            "var w = document.defaultView; g(w); o[k] = 1;",
             "var w = document.defaultView; var k = 'atob'; window.w[k] = f;",
             "x = document.defaultView; var k = 'atob'; globalThis.x[k] = f;",
         ],
@@ -520,6 +520,7 @@ fn a_window_alias_used_as_a_value_makes_the_result_unknown() {
             "(function () { var w = document.defaultView; console.log(w.innerWidth); w.focus(); })();",
             "(function () { var w = document.defaultView; if (w && typeof w === 'object') {} })();",
             "el.addEventListener('click', function (e) { console.log(e.target.id); });",
+            "var m = { exports: {} }; console.log(m.exports.self, m.parent); f(e.target);",
         ],
         &ATOB,
     );

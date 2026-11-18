@@ -5,7 +5,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, 
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashMap;
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 
 use super::{Builtins, Reliance, Scanned};
 use crate::semantic::{is_foreign_global, program_is_strict};
@@ -202,6 +202,8 @@ struct Scan<'s> {
     verdict: Builtins,
     promise_written: bool,
     host_member: Option<usize>,
+    window_escaped: bool,
+    window_writes: Cell<bool>,
 }
 
 fn names_a_foreign_root(scoping: &Scoping, reliance: &Reliance) -> bool {
@@ -253,6 +255,7 @@ pub fn scan(
     let mut scan = Scan::new(program, scoping, module, reliance);
     scan.writes_only = writes_only;
     scan.visit_program(program);
+    scan.settle_window_flows();
     Scanned {
         verdict: scan.verdict,
         promise_written: scan.promise_written,
@@ -275,6 +278,7 @@ pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: 
     let mut scan = Scan::new(program, scoping, module, reliance);
     scan.first_only = true;
     scan.visit_program(program);
+    scan.settle_window_flows();
     scan.verdict == Builtins::Intact
 }
 
@@ -302,6 +306,8 @@ impl<'s> Scan<'s> {
             verdict: first_verdict(scoping, reliance, module),
             promise_written: false,
             host_member: None,
+            window_escaped: false,
+            window_writes: Cell::new(false),
         }
     }
 }
@@ -882,7 +888,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
             self.aliased();
         }
         if !self.writes_only && self.window_value(it) {
-            self.aliased();
+            self.window_escaped = true;
         }
         if !self.writes_only && (self.is_root(it) || self.reads_prototypes(it)) {
             self.aliased();

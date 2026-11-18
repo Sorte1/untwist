@@ -260,17 +260,31 @@ impl Scan<'_> {
         object: &Expression<'_>,
         key: Option<&Expression<'_>>,
     ) -> bool {
-        self.may_be_window(object)
-            && key.is_none_or(|key| match key_of(key) {
-                Key::Other => false,
-                Key::Name(name) => self.is_window_slot(name),
-                Key::Unknown(key) => self
-                    .known_key(key)
-                    .is_none_or(|name| self.is_window_slot(&name)),
-            })
+        let slot = key.is_none_or(|key| match key_of(key) {
+            Key::Other => false,
+            Key::Name(name) => self.is_window_slot(name),
+            Key::Unknown(key) => self
+                .known_key(key)
+                .is_none_or(|name| self.is_window_slot(&name)),
+        });
+        self.judged_write(object, slot)
     }
 
     pub(super) fn writes_window_name(&self, object: &Expression<'_>, name: &str) -> bool {
-        self.may_be_window(object) && self.is_window_slot(name)
+        self.judged_write(object, self.is_window_slot(name))
+    }
+
+    fn judged_write(&self, object: &Expression<'_>, slot: bool) -> bool {
+        let window = self.may_be_window(object);
+        if slot && !window {
+            self.window_writes.set(true);
+        }
+        slot && window
+    }
+
+    pub(super) fn settle_window_flows(&mut self) {
+        if self.window_escaped && self.window_writes.get() {
+            self.not_allowed();
+        }
     }
 }
