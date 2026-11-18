@@ -297,7 +297,7 @@ fn returner_shape(
     let Some(body) = body else {
         return false;
     };
-    let live = live_statements(&body.statements, &[flag]);
+    let live = live_statements(unbraced(&body.statements), &[flag]);
     let [Statement::VariableDeclaration(declaration), Statement::ExpressionStatement(reset), Statement::ReturnStatement(ret)] =
         live.as_slice()
     else {
@@ -344,7 +344,7 @@ fn controller_shape(expr: &Expression<'_>, apply: Apply) -> bool {
     let Some(body) = controller_body(expr) else {
         return false;
     };
-    let live = live_statements(&body.statements, &[]);
+    let live = live_statements(unbraced(&body.statements), &[]);
     let [Statement::VariableDeclaration(first_call), Statement::ReturnStatement(ret)] =
         live.as_slice()
     else {

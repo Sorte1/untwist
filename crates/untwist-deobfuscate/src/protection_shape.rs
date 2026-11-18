@@ -406,6 +406,17 @@ impl<'a> VisitJs<'a> for Shape<'_> {
         }
     }
 
+    fn visit_function_body(&mut self, it: &FunctionBody<'a>) {
+        self.text.push_str("(FunctionBody");
+        for directive in &it.directives {
+            self.visit_directive(directive);
+        }
+        for statement in unbraced(&it.statements) {
+            self.visit_statement(statement);
+        }
+        self.text.push(')');
+    }
+
     fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
         let sequence = match it.expression.without_parentheses() {
             Expression::SequenceExpression(sequence) if self.decoded.is_some() => sequence,
@@ -417,6 +428,13 @@ impl<'a> VisitJs<'a> for Shape<'_> {
             self.text.push(')');
         }
     }
+}
+
+fn unbraced<'k, 'a>(mut statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] {
+    while let [Statement::BlockStatement(block)] = statements {
+        statements = &block.body;
+    }
+    statements
 }
 
 fn is_unread_bare_var(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
