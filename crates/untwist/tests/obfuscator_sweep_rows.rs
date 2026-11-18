@@ -239,3 +239,31 @@ fn a_wrapper_call_assigning_one_variable_twice_keeps_each_argument_under_unsafe(
         );
     }
 }
+
+const PATCH_SCAN: &[&str] = &[
+    "a03", "a04", "a07", "a20", "b21", "c03", "c04", "c05", "c06", "c13", "c17", "d01", "d03",
+    "d04", "d13", "n02", "n19", "n20",
+];
+
+#[test]
+fn a_built_in_patched_through_a_shape_the_scan_skipped_prints_like_node_in_the_default_lane() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let wrong: Vec<String> = PATCH_SCAN
+        .iter()
+        .filter_map(|label| {
+            let input = read(&format!("scan-{label}.js"));
+            let output = Pipeline::new(Options::default())
+                .run(&input)
+                .code()
+                .to_string();
+            let expected = printed(&node, dir.path(), &input);
+            let actual = printed(&node, dir.path(), &output);
+            (expected.is_err() || expected != actual)
+                .then(|| format!("{label}: {expected:?} vs {actual:?}"))
+        })
+        .collect();
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
