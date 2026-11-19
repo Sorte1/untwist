@@ -179,6 +179,7 @@ pub(crate) fn keeps_a_live_protection(output: &str) -> bool {
 enum Plan {
     Nothing,
     Refused,
+    KeptStillRunning,
     KeptWithController,
     Remove(Vec<Span>, FxHashSet<SymbolId>, bool),
 }
@@ -201,6 +202,10 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     let mut spans = declarations.spans;
     spans.extend(intervals.spans);
     if has_stray_reference(program, &declarations.symbols, &spans, scoping) {
+        let started = provisional || crate::self_defending::guarded_returners(program) > 0;
+        if !unsafe_lane && started {
+            return Plan::KeptStillRunning;
+        }
         return Plan::Refused;
     }
     Plan::Remove(spans, declarations.symbols, provisional)
@@ -227,6 +232,10 @@ impl<'a> Pass<'a> for DebugProtection {
             Plan::Nothing => return,
             Plan::KeptWithController => {
                 cx.note(notes::DEBUG_PROTECTION_KEPT_WITH_CONTROLLER, None);
+                return;
+            }
+            Plan::KeptStillRunning => {
+                cx.note(notes::DEBUG_PROTECTION_KEPT_STILL_RUNNING, None);
                 return;
             }
             Plan::Refused => {

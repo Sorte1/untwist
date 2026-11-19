@@ -25,6 +25,7 @@ use crate::notes;
 use crate::object_props::ambiguous_key;
 use crate::wrapper_calls::arguments_are_substitutable;
 
+mod aliases;
 mod dead;
 mod declared;
 mod hoisted;
@@ -37,6 +38,7 @@ mod sequenced;
 
 pub use declared::DeclaredObject;
 
+use aliases::fold_object_aliases;
 use declared::inline_declared_objects;
 use keys::fold_key_assignments;
 
@@ -652,6 +654,8 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
         let folded = fold_key_assignments(stmts, cx);
         cx.changed_by(folded);
+        let aliased = fold_object_aliases(stmts, cx);
+        cx.changed_by(aliased);
         let mut declared = hoisted::declare_assigned_objects(stmts, cx);
         if declared == 0 && self.callee_objects {
             declared = hoisted::declare_callee_objects(stmts, cx);
