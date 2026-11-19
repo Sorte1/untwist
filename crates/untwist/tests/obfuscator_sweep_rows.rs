@@ -22,6 +22,7 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "dp-late-object",
     "wrapper-dead-write",
     "dp-object-alias",
+    "dp-nested-dead-uses",
 ];
 
 const FINGERPRINTS: &[&str] = &[
