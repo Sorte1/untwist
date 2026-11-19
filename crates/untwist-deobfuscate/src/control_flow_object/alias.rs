@@ -48,6 +48,18 @@ fn assigned_object<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k IdentifierRefe
     (name != "__proto__").then_some(&**object)
 }
 
+fn const_declarator<'k, 'a>(
+    stmt: &'k Statement<'a>,
+) -> Option<(&'k BindingIdentifier<'a>, Option<&'k Expression<'a>>)> {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return None;
+    };
+    if declaration.kind != VariableDeclarationKind::Const {
+        return None;
+    }
+    single_declarator(stmt)
+}
+
 struct AliasSearch<'s, 'a> {
     scoping: &'s Scoping,
     extended: bool,
@@ -60,7 +72,7 @@ impl<'a> AliasSearch<'_, 'a> {
             return;
         };
         let Some((base, Some(object @ Expression::ObjectExpression(literal)))) =
-            single_declarator(first)
+            const_declarator(first)
         else {
             return;
         };
@@ -77,7 +89,7 @@ impl<'a> AliasSearch<'_, 'a> {
             assigned += 1;
         }
         let Some((alias, Some(Expression::Identifier(init)))) =
-            rest.get(assigned).and_then(single_declarator)
+            rest.get(assigned).and_then(const_declarator)
         else {
             return;
         };
