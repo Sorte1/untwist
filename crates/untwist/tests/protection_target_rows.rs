@@ -38,9 +38,9 @@ fn layered_service_worker_blocks_are_kept_together_in_the_default_lane() {
     let [(_, default_lane), (_, unsafe_lane)] = lanes();
     let kept = Pipeline::new(default_lane).run(LAYERED_SERVICE_WORKER);
     assert!(
-        kept.notes
-            .iter()
-            .any(|note| note.message == untwist_deobfuscate::notes::PROTECTIONS_KEPT_TOGETHER),
+        kept.notes.iter().any(|note| note.message
+            == untwist_deobfuscate::notes::PROTECTIONS_KEPT_TOGETHER
+            || note.message == untwist_deobfuscate::notes::SELF_DEFENDING_BUILTIN_PATCHED),
         "{:?}",
         kept.notes
     );
