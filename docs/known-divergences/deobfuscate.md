@@ -741,8 +741,8 @@
   `Object.getPrototypeOf(x)`, a computed key that may be `__proto__` or `constructor`) and no code
   run from a string: a removed callback would no longer run a replaced member. A computed key
   counts as harmless when it is a number: a numeric literal, the result of arithmetic other than
-  `+`, a unary `-`, `+`, `~` or `!`, an update, `+` of two such keys, or a binding whose every
-  write is such a value. That includes a parameter whose first statement is `p = p - N` and that
+  `+`, a unary `-`, `+`, `~` or `!`, an update, `+` of two such keys, a `+` whose left side is such a key (its text starts with a number, so it
+  is never `__proto__` or `constructor`), or a binding whose every write is such a value. That includes a parameter whose first statement is `p = p - N` and that
   is written nowhere else, in a function that is strict or does not use `arguments`, and a
   top-level binding of a script when no global-object write may name it (`window.i = …`,
   `this[k] = …`) and no other input names it. The default mode removes a callback run through one only when the callback is, node
