@@ -270,7 +270,7 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
             if own {
                 self.reads.insert(address_of(id));
             } else {
-                self.risky.insert(address_of(id));
+                self.live = true;
             }
         }
         match it {
