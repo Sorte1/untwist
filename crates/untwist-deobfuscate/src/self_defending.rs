@@ -147,6 +147,13 @@ fn bare_name<'k>(stmt: &'k Statement<'_>) -> Option<&'k str> {
     binding_name(&declarator.id)
 }
 
+fn unbraced<'k, 'a>(mut statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] {
+    while let [Statement::BlockStatement(block)] = statements {
+        statements = &block.body;
+    }
+    statements
+}
+
 fn guarded_if<'k, 'a>(body: &'k [Statement<'a>]) -> Option<(Option<&'k str>, &'k IfStatement<'a>)> {
     match body {
         [Statement::IfStatement(statement)] => Some((None, statement)),
@@ -194,7 +201,7 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    let Some((hoisted, statement)) = guarded_if(&body.statements) else {
+    let Some((hoisted, statement)) = guarded_if(unbraced(&body.statements)) else {
         return false;
     };
     if identifier_name(&statement.test) != Some(fn_name) || statement.alternate.is_some() {
@@ -290,7 +297,7 @@ fn returner_shape(
     let Some(body) = body else {
         return false;
     };
-    let live = live_statements(&body.statements, &[flag]);
+    let live = live_statements(unbraced(&body.statements), &[flag]);
     let [Statement::VariableDeclaration(declaration), Statement::ExpressionStatement(reset), Statement::ReturnStatement(ret)] =
         live.as_slice()
     else {
@@ -337,7 +344,7 @@ fn controller_shape(expr: &Expression<'_>, apply: Apply) -> bool {
     let Some(body) = controller_body(expr) else {
         return false;
     };
-    let live = live_statements(&body.statements, &[]);
+    let live = live_statements(unbraced(&body.statements), &[]);
     let [Statement::VariableDeclaration(first_call), Statement::ReturnStatement(ret)] =
         live.as_slice()
     else {

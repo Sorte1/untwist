@@ -705,6 +705,27 @@ impl<'a> DeadCode<'a> {
         }
     }
 
+    fn brace_decided_alternate(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
+        let mut current = stmt;
+        while let Statement::IfStatement(node) = current {
+            let decided = match &node.alternate {
+                Some(Statement::IfStatement(inner)) => self.decide(&inner.test, cx).is_some(),
+                _ => return,
+            };
+            if decided {
+                if let Some(alternate) = node.alternate.take() {
+                    node.alternate = Some(cx.block_of(alternate));
+                    cx.changed();
+                }
+                return;
+            }
+            let Some(next) = node.alternate.as_mut() else {
+                return;
+            };
+            current = next;
+        }
+    }
+
     fn decision_of_statement(
         &mut self,
         statement: &Statement<'a>,
@@ -971,6 +992,9 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         if !self.kept_vars.is_empty() {
             let pruned = self.prune_kept_vars(stmts, cx);
             cx.changed_by(pruned);
+        }
+        for stmt in stmts.iter_mut() {
+            self.brace_decided_alternate(stmt, cx);
         }
         if self.unsafe_lane {
             for stmt in stmts.iter_mut() {

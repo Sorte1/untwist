@@ -286,23 +286,19 @@ fn reads_only_own_or_globals(function: &Function<'_>, scoping: &Scoping) -> bool
 
 struct Mentions<'s> {
     scoping: &'s Scoping,
-    symbol: SymbolId,
-    found: bool,
+    found: FxHashSet<SymbolId>,
 }
 
 impl<'a> VisitJs<'a> for Mentions<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if symbol_of(it, self.scoping) == Some(self.symbol) {
-            self.found = true;
-        }
+        self.found.extend(symbol_of(it, self.scoping));
     }
 }
 
-fn mentions(object: &ObjectExpression<'_>, symbol: SymbolId, scoping: &Scoping) -> bool {
+fn mentioned(object: &ObjectExpression<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
     let mut scan = Mentions {
         scoping,
-        symbol,
-        found: false,
+        found: FxHashSet::default(),
     };
     scan.visit_object_expression(object);
     scan.found
@@ -343,6 +339,7 @@ pub(super) struct Branches<'p> {
     objects: FxHashMap<SymbolId, &'p ObjectExpression<'p>>,
     program: Option<&'p Program<'p>>,
     readonly: RefCell<FxHashMap<SymbolId, bool>>,
+    reached: RefCell<FxHashMap<(SymbolId, SymbolId), bool>>,
 }
 
 impl<'p> Branches<'p> {
@@ -353,7 +350,7 @@ impl<'p> Branches<'p> {
         scoping: &Scoping,
     ) -> Option<&'p ObjectExpression<'p>> {
         let object = *self.objects.get(&receiver)?;
-        if !mentions(object, owner, scoping) {
+        if !self.reaches_owner(receiver, owner, scoping) {
             return None;
         }
         let program = self.program?;
@@ -364,6 +361,38 @@ impl<'p> Branches<'p> {
             readonly
         });
         readonly.then_some(object)
+    }
+
+    fn reaches_owner(&self, receiver: SymbolId, owner: SymbolId, scoping: &Scoping) -> bool {
+        if let Some(known) = self.reached.borrow().get(&(receiver, owner)).copied() {
+            return known;
+        }
+        let reached = self.search_owner(receiver, owner, scoping);
+        self.reached.borrow_mut().insert((receiver, owner), reached);
+        reached
+    }
+
+    fn search_owner(&self, receiver: SymbolId, owner: SymbolId, scoping: &Scoping) -> bool {
+        let mut seen = FxHashSet::default();
+        let mut pending = vec![receiver];
+        while let Some(symbol) = pending.pop() {
+            if !seen.insert(symbol) {
+                continue;
+            }
+            let Some(object) = self.objects.get(&symbol) else {
+                continue;
+            };
+            let found = mentioned(object, scoping);
+            if found.contains(&owner) {
+                return true;
+            }
+            pending.extend(
+                found
+                    .into_iter()
+                    .filter(|next| self.objects.contains_key(next)),
+            );
+        }
+        false
     }
 
     fn tested_by(&self, symbol: SymbolId) -> impl Iterator<Item = &Branch<'p>> {
@@ -407,6 +436,16 @@ impl<'p> BranchScan<'_, 'p> {
 }
 
 impl<'p> BranchScan<'_, 'p> {
+    fn never_rebound(&self, declarator: &VariableDeclarator<'p>) -> bool {
+        let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+            return false;
+        };
+        id.symbol_id.get().is_some_and(|symbol| {
+            !self.scoping.symbol_is_mutated(symbol)
+                && self.scoping.symbol_redeclarations(symbol).is_empty()
+        })
+    }
+
     fn const_object(&mut self, declarator: &VariableDeclarator<'p>) {
         let (BindingPattern::BindingIdentifier(id), Some(Expression::ObjectExpression(object))) =
             (&declarator.id, &declarator.init)
@@ -442,8 +481,8 @@ impl<'p> VisitJs<'p> for BranchScan<'_, 'p> {
     }
 
     fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'p>) {
-        if it.kind == VariableDeclarationKind::Const {
-            for declarator in &it.declarations {
+        for declarator in &it.declarations {
+            if it.kind == VariableDeclarationKind::Const || self.never_rebound(declarator) {
                 self.const_object(declarator);
             }
         }

@@ -16,6 +16,10 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "stateful-outside-calls",
     "decoder-not-callee",
     "alias-before-declaration",
+    "dp-else-if-controller",
+    "dp-controller-blocks",
+    "dp-nested-var-object",
+    "dp-late-object",
 ];
 
 const FINGERPRINTS: &[&str] = &[
