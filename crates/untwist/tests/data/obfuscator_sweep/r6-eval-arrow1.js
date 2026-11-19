@@ -1,0 +1,10 @@
+function h(s) {
+  eval(s);
+  (() => {
+    const U = { a: "x", b: "y", eq: function (p, q) { return p === q; } };
+    const o = { k: U.a, t: function (p) { return p === undefined; } };
+    if (o.t("x")) { U.b = "changed"; }
+    console.log(U.b, U.eq(U.a, "x"));
+  })();
+}
+h("var undefined = 'x'");
