@@ -3,13 +3,14 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::prop::member_parts;
 use untwist_core::semantic::is_constant_binding;
 
 const PROTO_KEY: &str = "__proto__";
 
 pub(super) struct Assembled<'p> {
+    root: Option<&'p FunctionBody<'p>>,
     base: SymbolId,
     object: &'p ObjectExpression<'p>,
     added: Vec<(&'p str, &'p Expression<'p>)>,
@@ -121,6 +122,7 @@ pub(super) fn assembled_alias<'p>(
         return constant.then_some((
             alias,
             Assembled {
+                root: None,
                 base,
                 object,
                 added,
@@ -132,6 +134,10 @@ pub(super) fn assembled_alias<'p>(
 }
 
 impl<'p> Assembled<'p> {
+    pub(super) fn within(self, root: Option<&'p FunctionBody<'p>>) -> Self {
+        Self { root, ..self }
+    }
+
     pub(super) fn plain(
         symbol: SymbolId,
         object: &'p ObjectExpression<'p>,
@@ -139,6 +145,7 @@ impl<'p> Assembled<'p> {
     ) -> Option<Self> {
         let plain = is_constant_binding(scoping, symbol) && plain_literal_keys(object);
         plain.then(|| Self {
+            root: None,
             base: symbol,
             object,
             added: Vec::new(),
@@ -188,8 +195,7 @@ fn this_free_function(value: &Expression<'_>) -> bool {
 
 struct AliasUses<'s, 'k, 'p> {
     scoping: &'s Scoping,
-    alias: SymbolId,
-    assembled: &'k Assembled<'p>,
+    objects: FxHashMap<SymbolId, &'k Assembled<'p>>,
     dead: &'k FxHashSet<usize>,
     depth: usize,
     reads: FxHashSet<usize>,
@@ -197,18 +203,20 @@ struct AliasUses<'s, 'k, 'p> {
     live: bool,
 }
 
-impl AliasUses<'_, '_, '_> {
-    fn ours(&self, id: &IdentifierReference<'_>) -> bool {
-        resolved(id, self.scoping)
-            .is_some_and(|symbol| symbol == self.alias || symbol == self.assembled.base)
+impl<'k, 'p> AliasUses<'_, 'k, 'p> {
+    fn ours(&self, id: &IdentifierReference<'_>) -> Option<&'k Assembled<'p>> {
+        resolved(id, self.scoping).and_then(|symbol| self.objects.get(&symbol).copied())
     }
 
-    fn receiver<'e, 'a>(&self, expr: &'e Expression<'a>) -> Option<&'e IdentifierReference<'a>> {
+    fn receiver<'e, 'a>(
+        &self,
+        expr: &'e Expression<'a>,
+    ) -> Option<(&'e IdentifierReference<'a>, &'k Assembled<'p>)> {
         let (object, _) = member_parts(expr)?;
         let Expression::Identifier(id) = object else {
             return None;
         };
-        self.ours(id).then_some(&**id)
+        self.ours(id).map(|assembled| (&**id, assembled))
     }
 
     fn entering(&mut self, node: usize) -> bool {
@@ -220,7 +228,7 @@ impl AliasUses<'_, '_, '_> {
     }
 }
 
-impl<'a> VisitJs<'a> for AliasUses<'_, '_, 'a> {
+impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
     fn visit_statement(&mut self, it: &Statement<'a>) {
         let dead = self.entering(std::ptr::from_ref(it) as usize);
         walk_js::walk_statement(self, it);
@@ -231,15 +239,15 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, 'a> {
 
     fn visit_expression(&mut self, it: &Expression<'a>) {
         let dead = self.entering(std::ptr::from_ref(it) as usize);
-        if let Some(id) = self.receiver(it) {
+        if let Some((id, _)) = self.receiver(it) {
             self.reads.insert(address_of(id));
         }
         match it {
             Expression::CallExpression(call) => {
                 let callee = call.callee.without_parentheses();
-                if let Some(id) = self.receiver(callee) {
+                if let Some((id, assembled)) = self.receiver(callee) {
                     let safe = member_parts(callee)
-                        .and_then(|(_, name)| self.assembled.property(&name))
+                        .and_then(|(_, name)| assembled.property(&name))
                         .is_some_and(this_free_function);
                     if !safe {
                         self.risky.insert(address_of(id));
@@ -247,12 +255,12 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, 'a> {
                 }
             }
             Expression::TaggedTemplateExpression(tagged) => {
-                if let Some(id) = self.receiver(tagged.tag.without_parentheses()) {
+                if let Some((id, _)) = self.receiver(tagged.tag.without_parentheses()) {
                     self.risky.insert(address_of(id));
                 }
             }
             Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::Delete => {
-                if let Some(id) = self.receiver(unary.argument.without_parentheses()) {
+                if let Some((id, _)) = self.receiver(unary.argument.without_parentheses()) {
                     self.risky.insert(address_of(id));
                 }
             }
@@ -265,11 +273,14 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, 'a> {
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if self.depth > 0 || !self.ours(it) {
+        if self.depth > 0 || self.live {
             return;
         }
+        let Some(assembled) = self.ours(it) else {
+            return;
+        };
         let address = address_of(it);
-        if self.assembled.exempt.contains(&address) {
+        if assembled.exempt.contains(&address) {
             return;
         }
         if self.risky.contains(&address) || !self.reads.contains(&address) {
@@ -278,23 +289,44 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, 'a> {
     }
 }
 
-pub(super) fn alias_mutations_only_in_dead(
+pub(super) fn aliases_mutated_only_in_dead<'k, 'p>(
     program: &Program<'_>,
     scoping: &Scoping,
-    alias: SymbolId,
-    assembled: &Assembled<'_>,
+    used: impl Iterator<Item = (SymbolId, &'k Assembled<'p>)>,
     dead: &FxHashSet<usize>,
-) -> bool {
+) -> bool
+where
+    'p: 'k,
+{
+    let mut objects = FxHashMap::default();
+    for (alias, assembled) in used {
+        objects.insert(alias, assembled);
+        objects.insert(assembled.base, assembled);
+    }
+    let mut roots: Vec<&FunctionBody<'_>> = Vec::new();
+    let mut whole = false;
+    for assembled in objects.values() {
+        match assembled.root {
+            Some(root) if !roots.iter().any(|seen| std::ptr::eq(*seen, root)) => roots.push(root),
+            Some(_) => {}
+            None => whole = true,
+        }
+    }
     let mut uses = AliasUses {
         scoping,
-        alias,
-        assembled,
+        objects,
         dead,
         depth: 0,
         reads: FxHashSet::default(),
         risky: FxHashSet::default(),
         live: false,
     };
-    uses.visit_program(program);
+    if whole {
+        uses.visit_program(program);
+        return !uses.live;
+    }
+    for root in &roots {
+        uses.visit_function_body(root);
+    }
     !uses.live
 }
