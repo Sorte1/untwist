@@ -183,9 +183,6 @@ pub(super) fn fold_object_aliases<'a>(
     cx: &mut Cx<'a, '_>,
 ) -> usize {
     let scoping = cx.scoping();
-    if has_with(scoping) || may_call_eval(scoping) {
-        return 0;
-    }
     let extended = cx.opts.extended;
     let Some(fold) = (0..stmts.len())
         .filter_map(|index| plan_at(stmts, index, scoping, extended))
@@ -193,6 +190,9 @@ pub(super) fn fold_object_aliases<'a>(
     else {
         return 0;
     };
+    if has_with(scoping) || may_call_eval(scoping) {
+        return 0;
+    }
     commit(stmts, &fold, cx);
     1
 }
