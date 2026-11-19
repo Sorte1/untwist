@@ -730,14 +730,22 @@
   the list that declares `s`; the call has exactly two arguments, no spread,
   `this` or a literal first and a function or arrow expression second, and `c(…)()` passes
   nothing; and no statement of the construct sits inside a `with` body. Anything else keeps the
-  whole construct. The default mode also keeps the whole construct, with a note, when the
-  built-in scan finds a write to `Function`, `String`, `RegExp` or `Symbol` (a write whose
-  target names the built-in, such as `String.prototype.search = …`, or a definer such as
-  `Object.defineProperty(Function.prototype, …)`), or when one of these or its `prototype` is
-  used as a value anywhere but as the object of a member read, a call, `new`, `typeof`, an
-  equality or `instanceof` (stored in a binding, passed, returned, put in a literal or a
-  pattern: `var p = String.prototype; p.search = …`): a removed callback would no longer run
-  the replaced member. The default mode removes a callback run through one only when the callback is, node
+  whole construct. The default mode also keeps the whole construct, with a note, unless the
+  built-in scan proves `Function`, `String`, `Number`, `Boolean`, `RegExp`, `Symbol`, `Array` and
+  `Object` intact, judging the program without the statements this pass removes and without the
+  debug-protection templates the same run removes (a template that stays is judged): no write that
+  names one of them or its `prototype` (`String.prototype.search = …`,
+  `Object.defineProperty(Function.prototype, …)`), no use of one of them, its `prototype` or the
+  global object as a value (`var p = String.prototype; p.search = …`, a method returning `this`),
+  no prototype reached through a value (`''.__proto__`, `x.constructor.prototype`,
+  `Object.getPrototypeOf(x)`, a computed key that may be `__proto__` or `constructor`) and no code
+  run from a string: a removed callback would no longer run a replaced member. A computed key
+  counts as harmless when it is a number: a numeric literal, the result of arithmetic other than
+  `+`, a unary `-`, `+`, `~` or `!`, an update, `+` of two such keys, or a binding whose every
+  write is such a value. That includes a parameter whose first statement is `p = p - N` and that
+  is written nowhere else, in a function that is strict or does not use `arguments`, and a
+  top-level binding of a script when no global-object write may name it (`window.i = …`,
+  `this[k] = …`) and no other input names it. The default mode removes a callback run through one only when the callback is, node
   for node, one of the bodies obfuscator.io emits: the source check
   (`return f.toString().search("(((.+)+)+)+$")…`), the format check, the console disable or the
   debug-protection start. Local names are free, and a local function the body only ever calls

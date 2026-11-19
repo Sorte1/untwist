@@ -55,15 +55,12 @@ fn probes() -> Vec<(String, String)> {
 }
 
 #[test]
-fn every_a33_rr10_probe_but_the_unnamed_patches_prints_what_node_prints_by_default() {
+fn every_a33_rr10_probe_prints_what_node_prints_by_default() {
     let Some(node) = node_or_skip() else {
         return;
     };
-    let programs: Vec<(String, String)> = probes()
-        .into_iter()
-        .filter(|(label, _)| !PATCHED_WITHOUT_A_NAME.contains(&label.as_str()))
-        .collect();
-    assert!(programs.len() >= 80, "found {} probes", programs.len());
+    let programs = probes();
+    assert!(programs.len() >= 100, "found {} probes", programs.len());
     let run: Run = Box::new(|source| transformed(default_lane(), source));
     let modes: Vec<node_rows::Mode<'_>> = vec![("default", run.as_ref())];
     let wrong = node_rows::mismatches(&node, &programs, &modes);
@@ -77,6 +74,14 @@ fn a_let_flag_that_may_still_be_in_its_dead_zone_keeps_the_construct_in_both_lan
             let code = transformed(options, &probe(label));
             assert!(code.contains("apply"), "{label} ({name}): {code}");
         }
+    }
+}
+
+#[test]
+fn a_built_in_patched_without_naming_it_keeps_the_construct_by_default() {
+    for label in PATCHED_WITHOUT_A_NAME {
+        let code = transformed(default_lane(), &probe(label));
+        assert!(code.contains("apply"), "{label}: {code}");
     }
 }
 
