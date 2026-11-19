@@ -574,7 +574,7 @@ pub fn build_requests_in_lane<'p>(
         return finish_plan(DecodePlan::default(), &stamped, &orphans);
     }
     let sites = local_indices(&stamped, &members);
-    let mut collected = collect_base(program, decoder_units_of(&sites));
+    let mut collected = collect_base(program, decoder_units_of(&sites), unsafe_lane);
     let planned: Vec<(usize, &StampedFn<'p>, &Vec<usize>)> = stamped
         .units()
         .into_iter()

@@ -251,6 +251,8 @@ struct WrapperSearch<'p, 's> {
     units: MachineryDepth,
     checked: bool,
     speculating: bool,
+    foreign_inside: bool,
+    inside: FxHashSet<SymbolId>,
     found: Vec<WrapperShape>,
     forwarders: Vec<Candidate<'p>>,
     rejected: Vec<(Span, &'static str)>,
@@ -268,6 +270,19 @@ impl<'p> WrapperSearch<'p, '_> {
         }
         let reference = callee.reference_id.get()?;
         self.scoping.get_reference(reference).symbol_id().map(Some)
+    }
+
+    fn forwards_to_foreign_decoder(&self, it: &Statement<'_>) -> bool {
+        let Some(declaration) = var_function_or_declaration(it) else {
+            return false;
+        };
+        let Some(Expression::CallExpression(call)) =
+            returned_expression(declaration.function).map(Expression::without_parentheses)
+        else {
+            return false;
+        };
+        identifier_name(&call.callee)
+            .is_some_and(|name| decoder_index(name).is_some() && !self.units.exempts(name))
     }
 
     fn refusal(&self, shape: &WrapperShape, function: &Function<'_>) -> Option<&'static str> {
@@ -319,6 +334,9 @@ impl<'p> VisitJs<'p> for WrapperSearch<'p, '_> {
     fn visit_statement(&mut self, it: &Statement<'p>) {
         let entered = self.units.enter(it);
         if !self.units.inside() {
+            self.consider(it);
+        } else if self.foreign_inside && self.forwards_to_foreign_decoder(it) {
+            self.inside.extend(declaration_symbol(it));
             self.consider(it);
         }
         walk_js::walk_statement(self, it);
@@ -626,13 +644,15 @@ fn refuse_globally_reached_wrappers(
 fn find_wrappers(
     program: &Program<'_>,
     cx: &mut Cx<'_, '_>,
-) -> Option<(Vec<WrapperShape>, Rejected)> {
+) -> Option<(Vec<WrapperShape>, Rejected, FxHashSet<SymbolId>)> {
     let checked = call_checks_apply(cx.opts);
     let mut search = WrapperSearch {
         scoping: cx.scoping(),
         units: MachineryDepth::every_unit(),
         checked,
         speculating: cx.opts.unsafe_transforms && crate::legacy_reach::speculates_escapes(),
+        foreign_inside: cx.opts.unsafe_transforms,
+        inside: FxHashSet::default(),
         found: Vec::new(),
         forwarders: Vec::new(),
         rejected: Vec::new(),
@@ -644,6 +664,7 @@ fn find_wrappers(
         forwarders,
         mut rejected,
         unstable,
+        inside,
         ..
     } = search;
     let admitted =
@@ -661,7 +682,7 @@ fn find_wrappers(
         drop_broken_chains(&mut found);
     }
     wrapper_speculation::defer(cx.scoping(), &found, &admitted);
-    Some((found, rejected))
+    Some((found, rejected, inside))
 }
 
 fn plan_round<'p, 'a>(
@@ -669,10 +690,10 @@ fn plan_round<'p, 'a>(
     cx: &mut Cx<'a, '_>,
     poisoned: &mut FxHashSet<SymbolId>,
 ) -> Option<RoundPlan<'a>> {
-    let (found, rejected) = find_wrappers(program, cx)?;
+    let (found, rejected, inside) = find_wrappers(program, cx)?;
     let cx = &*cx;
     let checked = call_checks_apply(cx.opts);
-    let sites = collect_sites(program, cx.scoping(), &found);
+    let sites = collect_sites(program, cx.scoping(), &found, &inside);
     let primitives = if checked {
         PrimitiveNames::collect(program, cx.scoping())
     } else {

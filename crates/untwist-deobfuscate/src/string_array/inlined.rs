@@ -26,6 +26,7 @@ enum Kind {
     Loop,
     LoopWithArray,
     Checksum,
+    Called,
 }
 
 struct Plan {
@@ -404,6 +405,262 @@ fn checksum_plan(body: &[Statement<'_>], index: usize, scoping: &Scoping) -> Opt
     })
 }
 
+fn called_array<'k>(stmt: &'k Statement<'_>) -> Option<(&'k str, &'k str)> {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+        return None;
+    };
+    let Expression::CallExpression(call) = declarator.init.as_ref()?.without_parentheses() else {
+        return None;
+    };
+    let callee = identifier_name(&call.callee)?;
+    (declaration.kind == VariableDeclarationKind::Var
+        && call.arguments.is_empty()
+        && !call.optional)
+        .then_some((id.name.as_str(), callee))
+}
+
+fn declares_array_function(body: &[Statement<'_>], name: &str) -> bool {
+    body.iter().any(|stmt| match stmt {
+        Statement::FunctionDeclaration(function) => {
+            function.id.as_ref().is_some_and(|id| id.name == name)
+                && super::is_string_array_function(function, name)
+        }
+        _ => false,
+    })
+}
+
+#[derive(Default)]
+struct OwnFrame {
+    depth: usize,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for OwnFrame {
+    fn visit_this_expression(&mut self, _it: &ThisExpression) {
+        self.found |= self.depth == 0;
+    }
+
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        if matches!(it, Expression::NewTarget(_)) {
+            self.found |= self.depth == 0;
+        }
+        oxc_ast_visit::walk_js::walk_expression(self, it);
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= self.depth == 0 && it.name == "arguments";
+    }
+
+    fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+        self.depth += 1;
+        oxc_ast_visit::walk_js::walk_function(self, it, flags);
+        self.depth -= 1;
+    }
+}
+
+fn reads_own_frame(stmt: &Statement<'_>) -> bool {
+    let mut frame = OwnFrame::default();
+    frame.visit_statement(stmt);
+    frame.found
+}
+
+fn called_plan(body: &[Statement<'_>], index: usize, scoping: &Scoping) -> Option<Plan> {
+    let (alias, array) = called_array(&body[index])?;
+    if alias == array || !declares_array_function(body, array) {
+        return None;
+    }
+    let movers = body
+        .get(index + 1..)?
+        .iter()
+        .take_while(|stmt| matches!(stmt, Statement::FunctionDeclaration(_)))
+        .count();
+    let at = index + 1 + movers;
+    let rotator = body.get(at)?;
+    if !is_infinite_rotator_loop(rotator)
+        || !closed_loop(rotator, scoping)
+        || reads_own_frame(rotator)
+    {
+        return None;
+    }
+    let mut moved: Vec<usize> = (index..=at).collect();
+    loop {
+        let kept: Vec<usize> = moved
+            .iter()
+            .copied()
+            .filter(|i| *i == at || *i == index || owned_function(&body[*i], &moved, body, scoping))
+            .collect();
+        if kept.len() == moved.len() {
+            break;
+        }
+        moved = kept;
+    }
+    if !owned(&body[index], &moved, body, scoping) {
+        return None;
+    }
+    let original = body[index..=at]
+        .iter()
+        .all(|stmt| stmt.span().start < SYNTHETIC_BASE);
+    original.then(|| Plan {
+        first: index,
+        kind: Kind::Called,
+        moved,
+        array_name: array.to_string(),
+        target: alias.to_string(),
+        counter: String::new(),
+        count: 0,
+    })
+}
+
+fn owned_function(
+    stmt: &Statement<'_>,
+    moved: &[usize],
+    body: &[Statement<'_>],
+    scoping: &Scoping,
+) -> bool {
+    let Statement::FunctionDeclaration(function) = stmt else {
+        return false;
+    };
+    function
+        .id
+        .as_ref()
+        .and_then(|id| id.symbol_id.get())
+        .is_some_and(|symbol| used_only_in(scoping, symbol, moved.iter().map(|i| &body[*i])))
+}
+
+fn rewrite_called<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'a, '_>) -> bool {
+    let Some(mut wrapped) = parsed_statement("!function () { 0; }();", cx) else {
+        return false;
+    };
+    let Some(body) = function_body(&mut wrapped) else {
+        return false;
+    };
+    body.clear();
+    let Some(&at) = plan.moved.last() else {
+        return false;
+    };
+    for &index in &plan.moved {
+        body.push(it[index].take_in(cx));
+    }
+    it[at] = wrapped;
+    for &index in plan.moved.iter().rev().skip(1) {
+        it.remove(index);
+    }
+    true
+}
+
+fn block_declaration(stmt: &Statement<'_>) -> bool {
+    match stmt {
+        Statement::FunctionDeclaration(_) => true,
+        Statement::VariableDeclaration(declaration) => declaration
+            .declarations
+            .iter()
+            .all(|declarator| matches!(declarator.id, BindingPattern::BindingIdentifier(_))),
+        _ => false,
+    }
+}
+
+fn var_scoped_symbols(stmt: &Statement<'_>) -> Vec<Option<SymbolId>> {
+    match stmt {
+        Statement::FunctionDeclaration(function) => {
+            vec![function.id.as_ref().and_then(|id| id.symbol_id.get())]
+        }
+        Statement::VariableDeclaration(declaration)
+            if declaration.kind == VariableDeclarationKind::Var =>
+        {
+            declaration
+                .declarations
+                .iter()
+                .map(|declarator| match &declarator.id {
+                    BindingPattern::BindingIdentifier(id) => id.symbol_id.get(),
+                    _ => None,
+                })
+                .collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn rotated_alias(stmt: &Statement<'_>) -> Option<String> {
+    let found = std::cell::RefCell::new(None);
+    crate::probe::contains_expression(stmt, |expr| {
+        if let Some(target) = crate::array_rotator::push_shift_target(expr) {
+            found.borrow_mut().get_or_insert_with(|| target.to_string());
+        }
+        false
+    });
+    found.into_inner()
+}
+
+fn array_called(statements: &[Statement<'_>], alias: &str) -> bool {
+    statements.iter().any(|stmt| {
+        let Statement::VariableDeclaration(declaration) = stmt else {
+            return false;
+        };
+        declaration.declarations.iter().any(|declarator| {
+            let named = matches!(&declarator.id, BindingPattern::BindingIdentifier(id) if id.name == alias);
+            named
+                && matches!(declarator.init.as_ref().map(Expression::without_parentheses),
+                    Some(Expression::CallExpression(call))
+                        if call.arguments.is_empty()
+                            && !call.optional
+                            && matches!(call.callee.without_parentheses(), Expression::Identifier(_)))
+        })
+    })
+}
+
+fn block_rotator(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
+    let Statement::BlockStatement(block) = stmt else {
+        return false;
+    };
+    let Some((rotator, before)) = block.body.split_last() else {
+        return false;
+    };
+    if before.is_empty()
+        || !is_infinite_rotator_loop(rotator)
+        || !before.iter().all(block_declaration)
+        || reads_own_frame(stmt)
+        || stmt.span().start >= SYNTHETIC_BASE
+    {
+        return false;
+    }
+    let Some(alias) = rotated_alias(rotator) else {
+        return false;
+    };
+    array_called(before, &alias)
+        && before.iter().flat_map(var_scoped_symbols).all(|symbol| {
+            symbol.is_some_and(|symbol| used_only_in(scoping, symbol, block.body.iter()))
+        })
+}
+
+fn wrap_block_rotator<'a>(
+    it: &mut AVec<'a, Statement<'a>>,
+    scoping: &Scoping,
+    cx: &Cx<'a, '_>,
+) -> bool {
+    let Some(index) = it.iter().position(|stmt| block_rotator(stmt, scoping)) else {
+        return false;
+    };
+    let Some(mut wrapped) = parsed_statement("!function () { 0; }();", cx) else {
+        return false;
+    };
+    let Some(body) = function_body(&mut wrapped) else {
+        return false;
+    };
+    body.clear();
+    let Statement::BlockStatement(block) = it[index].take_in(cx) else {
+        return false;
+    };
+    body.extend(block.unbox().body);
+    it[index] = wrapped;
+    true
+}
+
 fn rewrite_checksum<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'a, '_>) -> bool {
     let text = format!("!function ({}) {{ 0; }}({});", plan.target, plan.array_name);
     let Some(mut wrapped) = parsed_statement(&text, cx) else {
@@ -474,6 +731,7 @@ fn plan(body: &[Statement<'_>], scoping: &Scoping) -> Option<Plan> {
         assigned_plan(body, index, scoping)
             .or_else(|| loop_plan(body, index, scoping))
             .or_else(|| checksum_plan(body, index, scoping))
+            .or_else(|| called_plan(body, index, scoping))
     })
 }
 
@@ -586,10 +844,14 @@ impl<'a> Inline<'_, 'a, '_> {
                 Kind::Assigned => rewrite(it, &plan, self.cx),
                 Kind::Loop | Kind::LoopWithArray => rewrite_loop(it, &plan, self.cx),
                 Kind::Checksum => rewrite_checksum(it, &plan, self.cx),
+                Kind::Called => rewrite_called(it, &plan, self.cx),
             };
             return usize::from(rewritten);
         }
         if wrap_inlined_cookie(it, self.cx) {
+            return 1;
+        }
+        if wrap_block_rotator(it, self.cx.scoping(), self.cx) {
             return 1;
         }
         hoist_decoded_arrays(it, self.cx)

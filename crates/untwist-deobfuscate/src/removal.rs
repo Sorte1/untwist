@@ -150,6 +150,7 @@ pub struct Machinery {
     pub decoders: Vec<Span>,
     pub rotator: Option<Span>,
     pub rotator_sealed: bool,
+    pub rotator_protected: bool,
     pub aliases: Vec<(Span, String)>,
 }
 
@@ -250,6 +251,7 @@ fn units_owned(
                 .collect(),
             rotator: rotator.map(|(span, _)| span),
             rotator_sealed: true,
+            rotator_protected: false,
         });
     }
     units
@@ -584,8 +586,11 @@ struct Plan {
 impl Plan {
     fn judge(&mut self, machinery: &Machinery, outstanding: &[Span], members: &FxHashSet<Span>) {
         if let Some(rotator) = machinery.rotator.filter(|_| !machinery.rotator_sealed) {
-            self.kept
-                .push((notes::ROTATOR_NOT_SEALED.to_string(), rotator));
+            let note = match machinery.rotator_protected {
+                true => notes::ROTATOR_HOLDS_PROTECTION,
+                false => notes::ROTATOR_NOT_SEALED,
+            };
+            self.kept.push((note.to_string(), rotator));
             return;
         }
         if let Some(first) = outstanding.first() {
@@ -627,8 +632,16 @@ fn seal_rotators(
                     .and_then(|array| array.symbol),
             )
             .collect();
-        machinery.rotator_sealed = statement_at(program, span)
-            .is_some_and(|statement| rotator_sealed(statement, scoping, &allowed));
+        let statement = statement_at(program, span);
+        machinery.rotator_sealed =
+            statement.is_some_and(|statement| rotator_sealed(statement, scoping, &allowed));
+        machinery.rotator_protected = !machinery.rotator_sealed
+            && statement.is_some_and(|statement| {
+                crate::probe::contains_expression(
+                    statement,
+                    crate::self_defending::is_call_controller,
+                )
+            });
     }
 }
 

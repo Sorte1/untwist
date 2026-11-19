@@ -65,6 +65,7 @@ struct Collector<'p> {
     decoder_values: Vec<(usize, Span)>,
     dynamic_calls: Vec<(usize, Span)>,
     patches: Vec<PatchSite<'p>>,
+    foreign_literals: bool,
 }
 
 impl<'p> Collector<'p> {
@@ -88,6 +89,10 @@ impl<'p> Collector<'p> {
             walk_js::walk_expression(self, it);
             return;
         };
+        if self.foreign_literals && literal_arguments(call) {
+            self.note_decoder_call(it, index, call);
+            return;
+        }
         self.dynamic_calls.push((index, call.span));
         for argument in &call.arguments {
             self.visit_argument(argument);
@@ -116,12 +121,7 @@ impl<'p> Collector<'p> {
         if self.note_ternary_call(index, call) {
             return;
         }
-        let literal = !call.arguments.is_empty()
-            && call
-                .arguments
-                .iter()
-                .all(|a| a.as_expression().is_some_and(is_decode_argument));
-        if !literal {
+        if !literal_arguments(call) {
             self.dynamic_calls.push((index, call.span));
             for argument in &call.arguments {
                 self.visit_argument(argument);
@@ -253,11 +253,21 @@ pub struct Collected<'p> {
     pub rotator_sites: Vec<(usize, RotatorSite)>,
 }
 
+fn literal_arguments(call: &CallExpression<'_>) -> bool {
+    !call.arguments.is_empty()
+        && call
+            .arguments
+            .iter()
+            .all(|a| a.as_expression().is_some_and(is_decode_argument))
+}
+
 pub fn collect_base<'p>(
     program: &'p Program<'p>,
     decoder_units: FxHashMap<usize, usize>,
+    foreign_literals: bool,
 ) -> Collected<'p> {
     let mut collector = Collector {
+        foreign_literals,
         units: MachineryDepth::owned_by(decoder_units),
         found: Vec::new(),
         escapes: Vec::new(),
@@ -283,5 +293,5 @@ pub fn collect_base<'p>(
 }
 
 pub fn collect_calls<'p>(program: &'p Program<'p>) -> Vec<Call<'p>> {
-    collect_base(program, FxHashMap::default()).calls
+    collect_base(program, FxHashMap::default(), false).calls
 }
