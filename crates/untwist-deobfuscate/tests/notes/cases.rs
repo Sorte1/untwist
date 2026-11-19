@@ -214,8 +214,18 @@ const A_REASSIGNED_CONST_DECODER: &str = "function a() { var h = ['p', 'q']; a =
 const A_ROTATOR_THAT_DEFINES_A_GLOBAL: &str =
     include_str!("../../../../fixtures/behaviour/13-rotator-defines-global.js");
 
-const A_ROTATOR_THAT_HOLDS_A_CALL_CONTROLLER: &str =
-    include_str!("../../../untwist/tests/data/obfuscator_sweep/rotator-holds-controller.js");
+const A_ROTATOR_THAT_HOLDS_A_CALL_CONTROLLER: &str = r#"
+function a() { var h = ['log', 'Hello World!', 'init']; a = function () { return h; }; return a(); }
+function b(c, d) { c = c - 0; var e = a(); return e[c]; }
+(function (c, d) {
+  const x = (function () { let X = !![]; return function (u, z) { const O = X ? function () { if (z) { const L = z['apply'](u, arguments); z = null; return L; } } : function () {}; X = ![]; return O; }; }());
+  (function () { x(this, function () { const t = new RegExp('function *\\( *\\)'); const z = g('init'); if (!t['test'](z + 'chain')) { z('0'); } else { g(); } })(); }());
+  var e = c();
+  while (!![]) { try { if (b(1) === d) break; else e['push'](e['shift']()); } catch (h) { e['push'](e['shift']()); } }
+})(a, 'Hello World!');
+function g(f) { function s(x) { if (typeof x === 'string') { return function () {}; } s(++x); } try { if (f) { return s; } else { s(0); } } catch (x) {} }
+console[b(0)](b(1));
+"#;
 
 const A_NAME_SPELLED_IN_A_STRING: &str =
     include_str!("../../../../fixtures/behaviour/04-eval-names-array.js");
@@ -735,7 +745,7 @@ pub const CASES: &[Case] = &[
         mode: Match::Contains,
     },
     Case {
-        source: Source::Whole(A_ROTATOR_THAT_HOLDS_A_CALL_CONTROLLER),
+        source: Source::DefaultLane(A_ROTATOR_THAT_HOLDS_A_CALL_CONTROLLER),
         expects: notes::ROTATOR_HOLDS_PROTECTION,
         mode: Match::Contains,
     },
