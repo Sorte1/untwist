@@ -281,8 +281,7 @@ impl<'p> WrapperSearch<'p, '_> {
         else {
             return false;
         };
-        identifier_name(&call.callee)
-            .is_some_and(|name| decoder_index(name).is_some() && !self.units.exempts(name))
+        identifier_name(&call.callee).is_some_and(|name| self.units.foreign(name))
     }
 
     fn refusal(&self, shape: &WrapperShape, function: &Function<'_>) -> Option<&'static str> {
@@ -648,7 +647,15 @@ fn find_wrappers(
     let checked = call_checks_apply(cx.opts);
     let mut search = WrapperSearch {
         scoping: cx.scoping(),
-        units: MachineryDepth::every_unit(),
+        units: if cx.opts.unsafe_transforms {
+            MachineryDepth::owned_by(crate::bridge::decoder_units(
+                program,
+                cx.scoping(),
+                crate::stamp::is_unedited(cx),
+            ))
+        } else {
+            MachineryDepth::every_unit()
+        },
         checked,
         speculating: cx.opts.unsafe_transforms && crate::legacy_reach::speculates_escapes(),
         foreign_inside: cx.opts.unsafe_transforms,

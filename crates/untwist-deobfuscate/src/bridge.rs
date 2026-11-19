@@ -552,6 +552,16 @@ fn decoder_units_of(sites: &Sites) -> FxHashMap<usize, usize> {
         .collect()
 }
 
+pub(crate) fn decoder_units(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    unedited: bool,
+) -> FxHashMap<usize, usize> {
+    let stamped = find_stamped_named(program, scoping, unedited);
+    let (members, _) = unit_members(&stamped);
+    decoder_units_of(&local_indices(&stamped, &members))
+}
+
 pub fn build_requests<'p>(program: &'p Program<'p>, scoping: &Scoping) -> DecodePlan<'p> {
     build_requests_in_lane(program, scoping, false, false)
 }

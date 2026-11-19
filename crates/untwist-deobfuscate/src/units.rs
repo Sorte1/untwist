@@ -54,6 +54,18 @@ impl MachineryDepth {
         self.owners.iter().all(|owner| *owner == Some(unit))
     }
 
+    pub fn foreign(&self, name: &str) -> bool {
+        if self.depth == 0 || decoder_index(name).is_none() {
+            return false;
+        }
+        let Some(unit) = self.unit_of(name) else {
+            return false;
+        };
+        self.owners
+            .iter()
+            .all(|owner| owner.is_some_and(|owner| owner != unit))
+    }
+
     pub fn names(&self) -> Option<&FxHashSet<String>> {
         self.names.as_ref()
     }

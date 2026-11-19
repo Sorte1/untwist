@@ -214,17 +214,8 @@ const A_REASSIGNED_CONST_DECODER: &str = "function a() { var h = ['p', 'q']; a =
 const A_ROTATOR_THAT_DEFINES_A_GLOBAL: &str =
     include_str!("../../../../fixtures/behaviour/13-rotator-defines-global.js");
 
-const A_ROTATOR_THAT_HOLDS_A_CALL_CONTROLLER: &str = r#"
-function a() { var h = ['log', 'Hello World!', 'deobfuscate']; a = function () { return h; }; return a(); }
-function b(c, d) { c = c - 0; var e = a(); return e[c]; }
-(function (c, d) {
-  const x = (function () { let X = !![]; return function (u, z) { const O = X ? function () { if (z) { const L = z['apply'](u, arguments); z = null; return L; } } : function () {}; X = ![]; return O; }; }());
-  (function () { x(this, function () { return 0; })(); }());
-  var e = c();
-  while (!![]) { try { if (b(1) === d) break; else e['push'](e['shift']()); } catch (h) { e['push'](e['shift']()); } }
-})(a, 'Hello World!');
-console[b(0)](b(1));
-"#;
+const A_ROTATOR_THAT_HOLDS_A_CALL_CONTROLLER: &str =
+    include_str!("../../../untwist/tests/data/obfuscator_sweep/rotator-holds-controller.js");
 
 const A_NAME_SPELLED_IN_A_STRING: &str =
     include_str!("../../../../fixtures/behaviour/04-eval-names-array.js");
