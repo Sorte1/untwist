@@ -20,6 +20,8 @@ pub(super) struct KeyBindings {
 
 const ARGUMENTS: &str = "arguments";
 
+const EVAL: &str = "eval";
+
 fn reference_symbol(id: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
     id.reference_id
         .get()
@@ -149,6 +151,7 @@ struct Collect<'s> {
     strict: Vec<bool>,
     global_keys: FxHashSet<String>,
     global_unknown: bool,
+    direct_eval: bool,
 }
 
 fn uses_arguments(function: &Function<'_>) -> bool {
@@ -294,6 +297,9 @@ impl Collect<'_> {
     }
 
     fn holds(&self, symbol: SymbolId) -> bool {
+        if self.direct_eval {
+            return false;
+        }
         let flags = self.scoping.symbol_flags(symbol);
         let variable = flags.is_variable()
             && !flags.intersects(
@@ -380,6 +386,13 @@ impl<'a> VisitJs<'a> for Collect<'_> {
         walk_js::walk_simple_assignment_target(self, it);
     }
 
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if let Expression::Identifier(callee) = it.callee.without_parentheses() {
+            self.direct_eval |= callee.name == EVAL;
+        }
+        walk_js::walk_call_expression(self, it);
+    }
+
     fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
         if let SimpleAssignmentTarget::AssignmentTargetIdentifier(target) = &it.argument {
             self.numeric_writes.extend(target.reference_id.get());
@@ -422,6 +435,7 @@ fn narrowed(
         strict: Vec::new(),
         global_keys: FxHashSet::default(),
         global_unknown: false,
+        direct_eval: false,
     };
     collect
         .strict
