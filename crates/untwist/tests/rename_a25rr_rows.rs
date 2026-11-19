@@ -27,8 +27,15 @@ const PN_UNSAFE_NAMES: &[&str] = &[
     "rx5-rd-t18.js",
 ];
 
-const UNSAFE_PREMISE_MULTI: &[(&str, RenameMode)] =
-    &[("u2", RenameMode::Unique), ("rx3-n3", RenameMode::Simple)];
+const UNSAFE_PREMISE_MULTI: &[(&str, RenameMode)] = &[
+    ("u2", RenameMode::Unique),
+    ("rx3-n3", RenameMode::Simple),
+    ("rx9-m21", RenameMode::None),
+    ("rx9-m21", RenameMode::Mangle),
+    ("rx9-m21", RenameMode::Simple),
+    ("rx9-m21", RenameMode::Unique),
+    ("rx9-m21", RenameMode::Smart),
+];
 
 const OBSERVED_INPUT: &str = "a.js";
 
