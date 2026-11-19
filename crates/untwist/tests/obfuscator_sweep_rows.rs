@@ -539,3 +539,36 @@ fn an_uglify_inlined_rotator_decodes_under_unsafe() {
     assert!(!output.contains("shift()"), "{output}");
     prints_the_same(&source, &output);
 }
+
+const ALIAS_BLOCK_FUNCTIONS: &[&str] = &[
+    "alias-annexb-lit-blockfn-i",
+    "alias-annexb-lit-blockfn-h",
+    "alias-annexb-lit-iffn-i",
+    "alias-annexb-lit-iffn-h",
+    "alias-annexb-lit-switchfn-i",
+    "alias-annexb-lit-tryfn-i",
+    "alias-annexb-lit-catchfn-h",
+    "alias-annexb-lit-loopfn-i",
+    "alias-annexb-lit-labelfn-i",
+    "alias-annexb-lit-deepfn-i",
+    "alias-annexb-key-blockfn-i",
+    "alias-annexb-key-blockfn-h",
+    "alias-annexb-key-iffn-i",
+    "alias-annexb-key-iffn-h",
+    "alias-annexb-key-switchfn-i",
+    "alias-annexb-key-tryfn-i",
+    "alias-annexb-key-catchfn-h",
+    "alias-annexb-key-loopfn-i",
+    "alias-annexb-key-labelfn-i",
+    "alias-annexb-key-deepfn-i",
+    "alias-annexb-f1a",
+    "alias-annexb-f1b",
+    "alias-annexb-f1c",
+    "alias-annexb-f1d",
+    "alias-annexb-f2",
+];
+
+#[test]
+fn an_object_alias_a_block_function_or_an_early_read_can_reach_prints_like_node_in_both_lanes() {
+    prints_like_node_in(ALIAS_BLOCK_FUNCTIONS, &[default_code, unsafe_lane]);
+}

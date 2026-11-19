@@ -1,11 +1,11 @@
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
-use oxc_ast_visit::{Visit, VisitMut};
+use oxc_ast_visit::{walk, Visit, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_str::Ident;
 use oxc_syntax::reference::ReferenceId;
-use oxc_syntax::scope::ScopeFlags;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
@@ -24,6 +24,35 @@ fn settled(symbol: SymbolId, scoping: &Scoping) -> bool {
     !scoping.symbol_is_mutated(symbol)
         && scoping.symbol_redeclarations(symbol).is_empty()
         && scoping.symbol_scope_id(symbol) != scoping.root_scope_id()
+}
+
+fn var_scope(scoping: &Scoping, scope: ScopeId) -> Option<ScopeId> {
+    scoping
+        .scope_ancestors(scope)
+        .find(|scope| scoping.scope_flags(*scope).is_var())
+}
+
+fn is_block_function(scoping: &Scoping, symbol: SymbolId) -> bool {
+    let flags = scoping.symbol_flags(symbol);
+    flags.contains(SymbolFlags::Function)
+        && !flags.contains(SymbolFlags::FunctionExpression)
+        && !scoping
+            .scope_flags(scoping.symbol_scope_id(symbol))
+            .is_var()
+}
+
+fn block_function_may_write(symbol: SymbolId, scoping: &Scoping) -> bool {
+    if crate::mutants::annex_b_writes_trusted() {
+        return false;
+    }
+    let name = scoping.symbol_name(symbol);
+    let home = var_scope(scoping, scoping.symbol_scope_id(symbol));
+    scoping.symbol_ids().any(|other| {
+        other != symbol
+            && is_block_function(scoping, other)
+            && scoping.symbol_name(other) == name
+            && var_scope(scoping, scoping.symbol_scope_id(other)) == home
+    })
 }
 
 fn is_var(stmt: &Statement<'_>) -> Option<bool> {
@@ -98,8 +127,13 @@ pub(super) fn plan_alias<'a>(
         alias,
         name,
     };
-    (reads_see_the_object(alias, object, name, scoping) && all_follow(stmts, &fold, scoping))
-        .then_some(fold)
+    let lexical = is_var(&stmts[alias_at]) == Some(false);
+    let follows = reads_see_the_object(alias, object, name, scoping)
+        && all_follow(stmts, &fold, lexical, scoping);
+    (follows
+        && !block_function_may_write(alias, scoping)
+        && !block_function_may_write(object, scoping))
+    .then_some(fold)
 }
 
 struct Redirect<'s, 'a> {
@@ -132,9 +166,18 @@ impl<'a> VisitMut<'a> for Redirect<'_, 'a> {
 struct Found<'s> {
     targets: &'s FxHashSet<ReferenceId>,
     found: usize,
+    hoisted_depth: usize,
+    in_hoisted: bool,
 }
 
 impl<'a> Visit<'a> for Found<'_> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        let hoisted = usize::from(it.is_declaration());
+        self.hoisted_depth += hoisted;
+        walk::walk_function(self, it, flags);
+        self.hoisted_depth -= hoisted;
+    }
+
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         if it
             .reference_id
@@ -142,6 +185,7 @@ impl<'a> Visit<'a> for Found<'_> {
             .is_some_and(|reference| self.targets.contains(&reference))
         {
             self.found += 1;
+            self.in_hoisted |= self.hoisted_depth > 0;
         }
     }
 }
@@ -154,16 +198,23 @@ fn alias_targets(fold: &AliasFold<'_>, scoping: &Scoping) -> FxHashSet<Reference
         .collect()
 }
 
-fn all_follow(stmts: &[Statement<'_>], fold: &AliasFold<'_>, scoping: &Scoping) -> bool {
+fn all_follow(
+    stmts: &[Statement<'_>],
+    fold: &AliasFold<'_>,
+    lexical: bool,
+    scoping: &Scoping,
+) -> bool {
     let targets = alias_targets(fold, scoping);
     let mut found = Found {
         targets: &targets,
         found: 0,
+        hoisted_depth: 0,
+        in_hoisted: false,
     };
     for stmt in stmts.iter().skip(fold.alias_at + 1) {
         found.visit_statement(stmt);
     }
-    found.found == targets.len()
+    found.found == targets.len() && !(lexical && found.in_hoisted)
 }
 
 fn commit<'a>(stmts: &mut AVec<'a, Statement<'a>>, fold: &AliasFold<'a>, cx: &mut Cx<'a, '_>) {
