@@ -410,7 +410,7 @@ fn a_plain_read_only_nested_object_still_decides_the_branch_in_both_lanes() {
 #[test]
 fn a_nested_object_whose_prototype_the_program_may_patch_keeps_the_branch_in_the_default_lane() {
     let source = read("nested-patched-prototype.js");
-    let output = default_lane(&source);
+    let output = default_code(&source);
     assert!(output.contains("\"changed\""), "{output}");
     let Some(node) = node_or_skip() else {
         return;
@@ -429,5 +429,5 @@ fn a_call_of_a_key_no_object_has_still_decides_the_branch_under_unsafe() {
     let source = read("nested-absent-key-call.js");
     let output = unsafe_lane(&source);
     assert!(!output.contains("missing"), "{output}");
-    assert!(default_lane(&source).contains("missing"));
+    assert!(default_code(&source).contains("missing"));
 }
