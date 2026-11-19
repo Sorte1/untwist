@@ -83,9 +83,7 @@ fn plan_at<'a>(
     if !settled(object, scoping) || !settled(alias, scoping) {
         return None;
     }
-    let Some((id, _)) = single_declarator(&stmts[index]) else {
-        return None;
-    };
+    let (id, _) = single_declarator(&stmts[index])?;
     let name = id.name;
     reads_see_the_object(alias, object, name, scoping).then_some(AliasFold {
         index,
