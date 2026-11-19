@@ -109,3 +109,38 @@ fn a_script_global_never_takes_a_name_a_module_input_reads_free() {
         .codes;
     assert!(!codes[0].contains("var a ="), "{}", codes[0]);
 }
+
+fn first_input(label: &str) -> String {
+    let (_, program) = rows()
+        .into_iter()
+        .find(|(row, _)| row == label)
+        .expect("a known row");
+    program
+        .split(INPUT_BREAK)
+        .next()
+        .expect("a first input")
+        .to_string()
+}
+
+#[test]
+fn a_string_array_beside_an_unrelated_script_or_module_is_decoded() {
+    let options = lane(false, RenameMode::None);
+    let unit = first_input("apart-a-string-array-beside-an-unrelated-script");
+    let plain = first_input("apart-a-plain-string-array-beside-an-unrelated-script");
+    let companions = [
+        "var other = 1;",
+        "export const z = 1;",
+        "var pairs = [1, 2]; function pick(i) { return pairs[i]; } console.log(pick(1));",
+    ];
+    for companion in companions {
+        let codes = Pipeline::new(options.clone())
+            .run_many(&[unit.as_str(), companion])
+            .codes;
+        assert!(!codes[0].contains("_0x331b"), "{companion}:\n{}", codes[0]);
+        assert!(codes[0].contains("hello "), "{companion}:\n{}", codes[0]);
+        let codes = Pipeline::new(options.clone())
+            .run_many(&[plain.as_str(), companion])
+            .codes;
+        assert!(!codes[0].contains("arr"), "{companion}:\n{}", codes[0]);
+    }
+}

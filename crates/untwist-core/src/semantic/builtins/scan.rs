@@ -192,6 +192,7 @@ struct Scan<'s> {
     scoping: &'s Scoping,
     reliance: &'s Reliance,
     writes_only: bool,
+    unknown_keys_plain: bool,
     first_only: bool,
     module: bool,
     frames: Vec<Frame>,
@@ -254,6 +255,18 @@ pub fn scan(
     }
 }
 
+pub fn scan_with_unknown_keys_plain(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    module: bool,
+    reliance: &Reliance,
+) -> Builtins {
+    let mut scan = Scan::new(program, scoping, module, reliance);
+    scan.unknown_keys_plain = true;
+    scan.visit_program(program);
+    scan.verdict
+}
+
 pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: &Reliance) -> bool {
     let mut scan = Scan::new(program, scoping, module, reliance);
     scan.first_only = true;
@@ -278,6 +291,7 @@ impl<'s> Scan<'s> {
             scoping,
             reliance,
             writes_only: false,
+            unknown_keys_plain: false,
             first_only: false,
             module,
             frames: vec![Frame::of_program(program, module)],
