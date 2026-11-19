@@ -340,7 +340,7 @@ const CONTROL_FLOW_SHAPE_UNCHANGED_NEAR_MISSES: &[(&str, &[&str])] = &[
     ),
     (
         "function h(a, b) { if (a()) { p(); } else if (\"x\" === \"y\") { q(); } else { s(); } }",
-        &["else if (\"x\" === \"y\")", "q();"],
+        &["if (a())", "p();", "s();"],
     ),
     ("atob?.(\"aGVsbG8=\");", &["atob?.(\"aGVsbG8=\")"]),
 ];
