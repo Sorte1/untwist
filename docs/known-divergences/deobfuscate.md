@@ -745,20 +745,26 @@
   templates are in `crates/untwist-deobfuscate/src/protection_shapes.js`. One callback that does not match
   keeps every call of its controller and the controller itself, with the note `self-defending:
   a call controller was found but a reference to it survives …`. In the default mode a removal
-  that takes out a console disable while another controller block stays is only provisional:
-  when two layers each disable the console, removing one layer's block and keeping the other's
-  moves the moment the console goes silent, and the program prints lines that neither the input
-  nor the source prints. If a call controller is still in the output once the run ends, the
-  input is run again with such removals refused, and every block registered through a call
-  controller is then kept, with the note `self-defending: a block registered through a call
-  controller may still run, so the default lane keeps it, and every other block registered that
-  way was kept with it …`: the default lane keeps a protection that may still run. A
-  controller that the shape check does not recognise (for example one whose `apply` key is still
-  encoded) counts as kept. Removing a debug protection that runs on a timer while a call
-  controller block stays is provisional in the same way, and the rerun keeps it
-  (`debug-protection: a block registered through a call controller is still in place, so the
-  debug protection was kept with it …`): the timer keeps the program running, and without it a
-  program whose console a kept block silences would exit where the input keeps running. `--unsafe` judges each controller on its own. A callback whose strings are still encoded when the
+  that takes out a console disable is only provisional, and so is one that takes out a debug
+  protection's timer: when two layers each disable the console, removing one layer's block and
+  keeping the other's moves the moment the console goes silent, and the program prints lines that
+  neither the input nor the source prints; removing the console disable while a debug-protection
+  timer stays prints the source's lines but keeps running where the source exits; and removing a
+  timer while a kept block silences the console makes the program exit where the input keeps
+  running. If a call controller, or a debug protection that something still references (its
+  timer or a call), is in the output once the run ends, the input is run again with such
+  removals refused, and every block registered through a call controller and every
+  debug-protection timer is then kept, with the notes `self-defending: a block registered through
+  a call controller or a debug-protection timer may still run, so the default lane keeps it, and
+  every block registered that way and every debug-protection timer was kept with it …` and
+  `debug-protection: a block registered through a call controller or another debug protection
+  may still run, so the default lane keeps it, and this debug protection was kept with it …`: the
+  default lane keeps a protection that may still run. A controller that the shape check does not
+  recognise (for example one whose `apply` key is still encoded) counts as kept. A debug
+  protection or call controller declared at the top level of a classic script is kept when code
+  that may hold the global object may reach or list its name (`debug-protection: a debug
+  protection function is a top-level name of a classic script, and code that may hold the global
+  object may reach it or list it by name …`, and the same for `self-defending`). `--unsafe` judges each controller on its own. A callback whose strings are still encoded when the
   protections stage runs (`atob(…)`, a split string) only matches after cleanup has folded
   them, so the stage runs a second time after cleanup when cleanup changed the program.
   A controller that keeps its flag outside itself (`o = true; var r = (n, t) => { …; o = false;

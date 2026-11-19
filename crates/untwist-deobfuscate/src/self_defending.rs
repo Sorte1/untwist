@@ -746,12 +746,12 @@ impl<'a> VisitJs<'a> for ConsoleNamed {
     }
 }
 
-struct RemovedConsole<'k> {
-    spans: &'k [Span],
+struct RemovedConsole {
+    spans: FxHashSet<Span>,
     named: ConsoleNamed,
 }
 
-impl<'a> VisitJs<'a> for RemovedConsole<'_> {
+impl<'a> VisitJs<'a> for RemovedConsole {
     fn visit_statement(&mut self, it: &Statement<'a>) {
         if self.named.found {
             return;
@@ -766,7 +766,7 @@ impl<'a> VisitJs<'a> for RemovedConsole<'_> {
 
 fn removes_console_silencing(program: &Program<'_>, spans: &[Span]) -> bool {
     let mut removed = RemovedConsole {
-        spans,
+        spans: spans.iter().copied().collect(),
         named: ConsoleNamed::default(),
     };
     removed.visit_program(program);
@@ -1260,7 +1260,9 @@ fn update_partial(change: impl FnOnce(&mut PartialRemovals)) {
 }
 
 pub fn partial_removal_unsettled(output: &str) -> bool {
-    PARTIAL.with(|partial| partial.get().applied) && output.contains(PRINTED_SKIPPED_RETURNER)
+    PARTIAL.with(|partial| partial.get().applied)
+        && (output.contains(PRINTED_SKIPPED_RETURNER)
+            || crate::debug_protection::keeps_a_live_protection(output))
 }
 
 pub fn forget_partial_removals() {
@@ -1404,7 +1406,7 @@ fn attempt(
         return Plan::Refused;
     }
     match (spans.is_empty(), kept) {
-        (false, true) if !inputs.unsafe_lane && removes_console_silencing(program, &spans) => {
+        (false, _) if !inputs.unsafe_lane && removes_console_silencing(program, &spans) => {
             match partial_removals_forbidden() {
                 true => Plan::KeptTogether,
                 false => Plan::Partial(spans, tracked),
@@ -1472,9 +1474,10 @@ fn refusal<'a>(
     if !cx.opts.unsafe_transforms && callback_built_ins_written(program, cx.scoping()) {
         return Some(notes::SELF_DEFENDING_BUILTIN_PATCHED);
     }
-    if reaches_a_script_global_once_removed(tracked, spans, program, cx)
-        || crate::directives::removes_what_an_eval_reads(cx.scoping(), spans)
-    {
+    if reaches_a_script_global_once_removed(tracked, spans, program, cx) {
+        return Some(notes::SELF_DEFENDING_GLOBAL_REACH);
+    }
+    if crate::directives::removes_what_an_eval_reads(cx.scoping(), spans) {
         return Some(notes::SELF_DEFENDING_REFERENCE_KEPT);
     }
     if crate::directives::removes_hoist_blocker(cx.scoping(), spans) {

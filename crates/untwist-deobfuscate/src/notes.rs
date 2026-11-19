@@ -407,13 +407,21 @@ pub const SELF_DEFENDING_REFERENCE_KEPT: &str =
     "a call controller was found but a reference to it survives outside the statements this pass \
      removes, so the block was left in place";
 pub const PROTECTIONS_KEPT_TOGETHER: &str =
-    "a block registered through a call controller may still run, so the default lane keeps it, \
-     and every other block registered that way was kept with it: removing only some of them \
-     could change when the console is silenced and what the program prints";
+    "a block registered through a call controller or a debug-protection timer may still run, so \
+     the default lane keeps it, and every block registered that way and every debug-protection \
+     timer was kept with it: removing only some of them could change when the console is \
+     silenced, what the program prints and whether it keeps running";
 pub const DEBUG_PROTECTION_KEPT_WITH_CONTROLLER: &str =
-    "a block registered through a call controller is still in place, so the debug protection \
-     was kept with it: its timer keeps the program running, and removing it while a kept block \
-     silences the console would make the program exit where the input keeps running";
+    "a block registered through a call controller or another debug protection may still run, so \
+     the default lane keeps it, and this debug protection was kept with it: its timer keeps the \
+     program running, and removing it while a kept block silences the console would make the \
+     program exit where the input keeps running";
+pub const SELF_DEFENDING_GLOBAL_REACH: &str =
+    "a call controller's binding is a top-level name of a classic script, and code that may hold \
+     the global object may reach it or list it by name, so the block was left in place";
+pub const DEBUG_PROTECTION_GLOBAL_REACH: &str =
+    "a debug protection function is a top-level name of a classic script, and code that may hold \
+     the global object may reach it or list it by name, so the function was left in place";
 pub const DOMAIN_LOCK_KEPT: &str =
     "a domain lock was found: it reads the host's document and location and enumerates the names \
      of the global object, so whether it passes depends on where the program runs and it may \
@@ -760,6 +768,8 @@ catalogue!(
     PROTECTIONS_KEPT_TOGETHER,
     DOMAIN_LOCK_KEPT,
     DEBUG_PROTECTION_KEPT_WITH_CONTROLLER,
+    SELF_DEFENDING_GLOBAL_REACH,
+    DEBUG_PROTECTION_GLOBAL_REACH,
     SCOPE_HAZARD,
     NO_STRING_ARRAY_NOTE,
 );
