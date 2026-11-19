@@ -3,7 +3,6 @@ pub mod array_rotator;
 pub mod bindings;
 mod branch_reach;
 pub mod bridge;
-mod builtin_values;
 pub mod call_checks;
 pub mod calls;
 mod constant_test;

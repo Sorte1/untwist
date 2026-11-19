@@ -360,7 +360,7 @@ impl Scan<'_> {
     }
 
     pub(super) fn read_allowed(&self, root: Root<'_>, key: Key<'_>) -> bool {
-        let name = match key {
+        let name = match self.sharpen(key) {
             Key::Name(name) => name.to_string(),
             Key::Other => return root == Root::Global,
             Key::Unknown(expression) => match self.known_key(expression) {

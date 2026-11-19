@@ -70,6 +70,13 @@ pub(super) fn key_of<'k>(expression: &'k Expression<'k>) -> Key<'k> {
         Expression::UpdateExpression(_) => Key::Other,
         Expression::UnaryExpression(unary) if is_numeric_unary(unary.operator) => Key::Other,
         Expression::BinaryExpression(binary) if is_numeric_binary(binary.operator) => Key::Other,
+        Expression::BinaryExpression(binary)
+            if binary.operator == BinaryOperator::Addition
+                && matches!(key_of(&binary.left), Key::Other)
+                && matches!(key_of(&binary.right), Key::Other) =>
+        {
+            Key::Other
+        }
         _ => Key::Unknown(expression),
     }
 }
@@ -77,7 +84,10 @@ pub(super) fn key_of<'k>(expression: &'k Expression<'k>) -> Key<'k> {
 fn is_numeric_unary(operator: UnaryOperator) -> bool {
     matches!(
         operator,
-        UnaryOperator::UnaryNegation | UnaryOperator::UnaryPlus | UnaryOperator::BitwiseNot
+        UnaryOperator::UnaryNegation
+            | UnaryOperator::UnaryPlus
+            | UnaryOperator::BitwiseNot
+            | UnaryOperator::LogicalNot
     )
 }
 
@@ -212,7 +222,7 @@ impl Scan<'_> {
     }
 
     fn reached_member(&self, object: &Expression<'_>, key: Key<'_>) -> bool {
-        match key {
+        match self.sharpen(key) {
             Key::Name(name) if REACHING_KEYS.contains(&name) => true,
             Key::Name(name) if self.names_a_root(name) => true,
             Key::Name(name) if CODE_RUNNERS.contains(&name) || CONTEXT_RUNNERS.contains(&name) => {

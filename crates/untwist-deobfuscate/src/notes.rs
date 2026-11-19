@@ -433,7 +433,8 @@ pub const DOMAIN_LOCK_KEPT: &str =
      can see were kept (`--unsafe` assumes the lock passes and removes it)";
 pub const SELF_DEFENDING_BUILTIN_PATCHED: &str =
     "the program may replace a built-in the self-defending callback calls, so removing the \
-     callback would drop what the replacement does; the block was left in place";
+     callback would drop what the replacement does: the default lane keeps a protection that may \
+     still run, and the block was left in place";
 pub const SELF_DEFENDING_NO_USABLE_SPAN: &str =
     "a matched statement has no usable span, so the block was left in place";
 

@@ -185,6 +185,37 @@ enum Plan {
 }
 
 fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
+    plan_beside(program, scoping, unsafe_lane, &[])
+}
+
+pub(crate) fn planned_removal<'a>(
+    program: &Program<'a>,
+    removed: &[Span],
+    cx: &Cx<'a, '_>,
+) -> Vec<Span> {
+    let scoping = cx.scoping();
+    let Plan::Remove(spans, symbols, _) =
+        plan_beside(program, scoping, cx.opts.unsafe_transforms, removed)
+    else {
+        return Vec::new();
+    };
+    let mut both = spans.clone();
+    both.extend_from_slice(removed);
+    let kept = reaches_a_script_global_once_removed(&symbols, &both, program, cx)
+        || crate::directives::removes_what_an_eval_reads(scoping, &spans)
+        || crate::directives::removes_hoist_blocker(scoping, &spans);
+    if kept {
+        return Vec::new();
+    }
+    spans
+}
+
+fn plan_beside(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    unsafe_lane: bool,
+    removed: &[Span],
+) -> Plan {
     let declarations = declarations(program, scoping);
     if declarations.symbols.is_empty() {
         return Plan::Nothing;
@@ -201,7 +232,9 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     }
     let mut spans = declarations.spans;
     spans.extend(intervals.spans);
-    if has_stray_reference(program, &declarations.symbols, &spans, scoping) {
+    let mut ignored = spans.clone();
+    ignored.extend_from_slice(removed);
+    if has_stray_reference(program, &declarations.symbols, &ignored, scoping) {
         let started = provisional || crate::self_defending::guarded_returners(program) > 0;
         if !unsafe_lane && started {
             return Plan::KeptStillRunning;
