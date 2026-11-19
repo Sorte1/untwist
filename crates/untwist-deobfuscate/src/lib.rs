@@ -1,6 +1,7 @@
 mod alias_forms;
 pub mod array_rotator;
 pub mod bindings;
+mod branch_reach;
 pub mod bridge;
 mod builtin_values;
 pub mod call_checks;
@@ -57,6 +58,7 @@ mod wrapper_consts;
 mod wrapper_effects;
 mod wrapper_immediate;
 mod wrapper_sites;
+mod wrapper_speculation;
 pub mod wrappers;
 mod write_only;
 

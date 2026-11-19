@@ -4,6 +4,8 @@ use oxc_semantic::{Scoping, SymbolId};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::scope::ScopeFlags;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use untwist_core::semantic::build_scoping;
 use untwist_eval::object::PROTOTYPE_LINKS;
@@ -67,7 +69,17 @@ fn is_function_literal(expr: &Expression<'_>) -> bool {
     )
 }
 
+type StrictKey = (Span, u32, Vec<bool>, u32);
+
+#[derive(Clone)]
+struct StrictScan {
+    pending: Vec<PendingSite>,
+    matched: FxHashSet<&'static str>,
+    found: Option<Span>,
+}
+
 struct Escape<'s> {
+    strict_scans: Rc<RefCell<FxHashMap<StrictKey, StrictScan>>>,
     scoping: &'s Scoping,
     globals: &'s FxHashSet<&'static str>,
     found: Option<Span>,
@@ -80,6 +92,7 @@ struct Escape<'s> {
     context: &'s EscapeContext,
     pending_exempt: Option<&'s FxHashSet<Span>>,
     pending: Vec<PendingSite>,
+    pending_seen: FxHashSet<String>,
     defer_object_operand: bool,
     object_operand: Option<Span>,
     written: Vec<WrittenKey>,
@@ -255,10 +268,11 @@ impl<'s> Escape<'s> {
         let key_span = key_call.span;
         let forcing = self.pending_call_span(&member.expression).is_some();
         let object_symbol = self.symbol_of(&member.object);
-        let mut strict = self.child_scan();
-        strict.visit_arguments(args, false);
-        self.pending.extend(strict.pending);
-        self.pending.push(PendingSite::ProxyKey {
+        let strict = self.strict_scan(call_span, args);
+        for site in strict.pending {
+            self.add_pending(site);
+        }
+        self.add_pending(PendingSite::ProxyKey {
             call_span,
             key_span,
             object_symbol,
@@ -268,8 +282,36 @@ impl<'s> Escape<'s> {
         });
     }
 
+    fn add_pending(&mut self, site: PendingSite) {
+        if self.pending_seen.insert(format!("{site:?}")) {
+            self.pending.push(site);
+        }
+    }
+
+    fn strict_scan(&self, call_span: Span, args: &[Argument<'_>]) -> StrictScan {
+        let key = (
+            call_span,
+            self.depth,
+            self.this_stack.clone(),
+            self.class_depth,
+        );
+        if let Some(known) = self.strict_scans.borrow().get(&key) {
+            return known.clone();
+        }
+        let mut strict = self.child_scan();
+        strict.visit_arguments(args, false);
+        let scanned = StrictScan {
+            pending: strict.pending,
+            matched: strict.matched,
+            found: strict.found,
+        };
+        self.strict_scans.borrow_mut().insert(key, scanned.clone());
+        scanned
+    }
+
     fn child_scan(&self) -> Escape<'s> {
         let mut child = Escape::new(self.scoping, self.globals, self.context, self.resolve);
+        child.strict_scans = Rc::clone(&self.strict_scans);
         child.depth = self.depth;
         child.this_stack = self.this_stack.clone();
         child.class_depth = self.class_depth;
@@ -284,6 +326,7 @@ impl<'s> Escape<'s> {
         resolve: Option<&'s dyn Fn(Span) -> Option<String>>,
     ) -> Self {
         Escape {
+            strict_scans: Rc::default(),
             scoping,
             globals,
             found: None,
@@ -296,6 +339,7 @@ impl<'s> Escape<'s> {
             context,
             pending_exempt: None,
             pending: Vec::new(),
+            pending_seen: FxHashSet::default(),
             defer_object_operand: false,
             object_operand: None,
             written: Vec::new(),
@@ -379,7 +423,7 @@ impl<'s> Escape<'s> {
             return false;
         }
         let forcing = self.template_forcing(&member.expression);
-        self.pending.push(PendingSite::GlobalKey {
+        self.add_pending(PendingSite::GlobalKey {
             outer_span: member.span,
             key,
             forcing,
@@ -410,7 +454,7 @@ impl<'s> Escape<'s> {
             return false;
         }
         let forcing = self.template_forcing(&member.expression);
-        self.pending.push(PendingSite::RootKey {
+        self.add_pending(PendingSite::RootKey {
             outer_span: member.span,
             root,
             key,
@@ -608,7 +652,7 @@ impl<'s> Escape<'s> {
         if self.pending_exempt.is_some() {
             if let Some(text) = self.pending_template(first) {
                 let forcing = self.template_forcing(first);
-                self.pending.push(PendingSite::Sink {
+                self.add_pending(PendingSite::Sink {
                     outer_span: span,
                     text,
                     forcing,

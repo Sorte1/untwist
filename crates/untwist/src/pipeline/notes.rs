@@ -262,14 +262,23 @@ pub(super) fn consolidate_reach(mut notes: Vec<Note>) -> Vec<Note> {
 }
 
 pub(super) fn reach_refusals(notes: &[Note]) -> Vec<Note> {
-    notes
+    let carried: Vec<Note> = notes
         .iter()
         .filter(|note| note.message == notes::STRING_ARRAY_GLOBAL_REACH)
         .map(|note| Note {
             kind: NoteKind::Refusal,
             ..note.clone()
         })
-        .collect()
+        .collect();
+    if !carried.is_empty() || !untwist_deobfuscate::legacy_reach::reach_failed() {
+        return carried;
+    }
+    vec![Note {
+        pass: "inline-decoded-strings",
+        kind: NoteKind::Refusal,
+        message: notes::STRING_ARRAY_GLOBAL_REACH.to_string(),
+        span: None,
+    }]
 }
 
 pub(super) fn carry_reach(notes: Vec<Note>, earlier: Vec<Note>) -> Vec<Note> {

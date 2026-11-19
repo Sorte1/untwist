@@ -7,6 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_eval::decode::{decoded_to_expression, Call, Decoded, DecoderProgram, FnRef};
 
 use crate::array_rotator::find_rotators;
+use crate::branch_reach::in_branches;
 use crate::calls::{collect_base, Collected};
 use crate::dead_guards::{enclosing_guards, BranchGuard, EscapeGuards};
 use crate::notes;
@@ -114,9 +115,10 @@ fn escaped_decoders_by_unit(
 }
 
 fn guarded_escapes(
-    program: &Program<'_>,
+    (program, scoping): (&Program<'_>, &Scoping),
     collected: &mut Collected<'_>,
     (sites, rotators): (&Sites, &FxHashMap<usize, Span>),
+    decoder_spans: impl Fn(usize) -> Vec<Span>,
 ) -> FxHashMap<usize, EscapeGuards> {
     let in_own_rotator = |(index, span): &(usize, Span)| {
         sites
@@ -136,7 +138,12 @@ fn guarded_escapes(
         return by_unit;
     }
     let enclosing = enclosing_guards(program, &escapes);
+    let branched = match crate::legacy_reach::speculates_escapes() {
+        true => in_branches(program, scoping, &escapes),
+        false => FxHashSet::default(),
+    };
     let mut unguarded: FxHashSet<usize> = FxHashSet::default();
+    let mut speculated: FxHashSet<usize> = FxHashSet::default();
     let mut found: Vec<(usize, bool, Vec<BranchGuard>)> = Vec::new();
     let values = collected.decoder_values.iter().map(|escape| (escape, true));
     let dynamic = collected.dynamic_calls.iter().map(|escape| (escape, false));
@@ -146,6 +153,9 @@ fn guarded_escapes(
         };
         match enclosing.get(span).filter(|guards| !guards.is_empty()) {
             Some(guards) => found.push((unit, is_value, guards.clone())),
+            None if branched.contains(span) => {
+                speculated.insert(unit);
+            }
             None => {
                 unguarded.insert(unit);
             }
@@ -162,6 +172,11 @@ fn guarded_escapes(
     collected
         .dynamic_calls
         .retain(|(index, _)| !is_guarded(index));
+    for unit in speculated {
+        if !unguarded.contains(&unit) {
+            by_unit.entry(unit).or_default().speculative = decoder_spans(unit);
+        }
+    }
     for (unit, is_value, guards) in found {
         if unguarded.contains(&unit) {
             continue;
@@ -573,7 +588,21 @@ pub fn build_requests_in_lane<'p>(
             .zip(&rotators)
             .filter_map(|((unit, _, _), located)| Some((*unit, located.as_ref()?.0)))
             .collect();
-        guarded_escapes(program, &mut collected, (&sites, &rotator_spans))
+        let decoder_spans = |unit: usize| -> Vec<Span> {
+            members
+                .get(&unit)
+                .into_iter()
+                .flatten()
+                .filter_map(|position| stamped.decoders.get(*position)?.symbol)
+                .map(|symbol| scoping.symbol_span(symbol))
+                .collect()
+        };
+        guarded_escapes(
+            (program, scoping),
+            &mut collected,
+            (&sites, &rotator_spans),
+            decoder_spans,
+        )
     } else {
         FxHashMap::default()
     };

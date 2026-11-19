@@ -250,6 +250,9 @@ fn apply_decoded_values<'a>(
     if returned != request.calls.len() {
         decoded.partial.push((returned, request.calls.len()));
     }
+    if evaluated > 0 {
+        crate::legacy_reach::defer_escapes(&request.escape_guards.speculative);
+    }
     inlined && returned == request.calls.len() && evaluated == returned
 }
 

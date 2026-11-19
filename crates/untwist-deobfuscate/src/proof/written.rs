@@ -19,6 +19,19 @@ pub enum WrittenKey {
 }
 
 impl WrittenKey {
+    pub fn weight(&self) -> usize {
+        match self {
+            WrittenKey::Name(_) | WrittenKey::Pending(_) => 1,
+            WrittenKey::Concat(parts) => 1 + parts.iter().map(WrittenKey::weight).sum::<usize>(),
+            WrittenKey::Choice { options, .. } => {
+                1 + options
+                    .iter()
+                    .map(|(_, option)| option.weight())
+                    .sum::<usize>()
+            }
+        }
+    }
+
     pub fn resolved(&self, resolve: &dyn Fn(Span) -> Option<String>) -> Option<String> {
         match self {
             WrittenKey::Name(name) => Some(name.clone()),

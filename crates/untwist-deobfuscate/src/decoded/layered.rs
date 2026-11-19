@@ -12,7 +12,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::conflict::prototype_conflict;
 use super::values::reaches_intrinsics;
 use crate::bridge::DecodeRequest;
-use crate::calls::agnostic::{global_reach, guard_writes, ReachWatch};
+use crate::calls::agnostic::{global_observation, global_reach, guard_writes, ReachWatch};
 use crate::legacy_reach::{self, Layered};
 use crate::proof::{alias_refusal, alias_sites, builtin_aliases, points_to_sites, UsedNames};
 use crate::root_reach::root_alias_names;
@@ -21,7 +21,7 @@ use untwist_eval::object::{ProtoRead, PROTOTYPE_LINKS};
 
 const TOKEN_PREFIX: &str = "layered:";
 
-const MIN_LATENT_ENTRIES: usize = 2;
+const MIN_LATENT_ENTRIES: usize = 1;
 
 #[derive(Default)]
 struct Frame {
@@ -352,8 +352,6 @@ pub fn settle_observations(program: &Program<'_>, scoping: &Scoping) {
             fns: &[],
             observe: true,
         };
-        global_reach(program, scoping, (None, machinery), watch)
-            .observed
-            .is_some()
+        global_observation(program, scoping, machinery, watch).is_some()
     });
 }

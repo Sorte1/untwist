@@ -98,7 +98,7 @@ impl<'a> Sites<'_, 'a> {
         }
     }
 
-    fn name_assigned(&self, name: &str) -> bool {
+    pub(super) fn name_assigned(&self, name: &str) -> bool {
         if is_foreign_global(name) {
             return true;
         }

@@ -20,6 +20,7 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "dp-controller-blocks",
     "dp-nested-var-object",
     "dp-late-object",
+    "wrapper-dead-write",
 ];
 
 const FINGERPRINTS: &[&str] = &[
@@ -53,6 +54,26 @@ fn traced(source: &str, unsafe_transforms: bool) -> Output {
         ..Options::default()
     };
     Pipeline::new(options).run(source)
+}
+
+fn default_code(source: &str) -> String {
+    Pipeline::new(Options::default())
+        .run(source)
+        .code()
+        .to_string()
+}
+
+fn prints_the_same(source: &str, output: &str) {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let expected = printed(&node, dir.path(), source);
+    let actual = printed(&node, dir.path(), output);
+    assert!(
+        expected.is_ok() && expected == actual,
+        "{expected:?} vs {actual:?}"
+    );
 }
 
 fn unsafe_lane(source: &str) -> String {
@@ -271,6 +292,7 @@ fn a_built_in_patched_through_a_shape_the_scan_skipped_prints_like_node_in_the_d
         .collect();
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
 fn default_lane(source: &str) -> untwist::Output {
     Pipeline::new(Options::default()).run(source)
 }
@@ -309,4 +331,29 @@ fn a_dead_debug_protection_a_global_listing_may_reach_is_kept_with_a_premise_not
         "{:?}",
         output.notes
     );
+}
+
+#[test]
+fn a_decoder_used_as_a_value_in_a_branch_that_runs_keeps_its_unit_under_unsafe() {
+    let source = read("branch-escape-live.js");
+    let output = unsafe_lane(&source);
+    assert!(output.contains("map(d)"), "{output}");
+    prints_the_same(&source, &output);
+}
+
+#[test]
+fn fresh_instances_handed_to_a_printer_do_not_keep_a_layered_unit() {
+    let source = read("fresh-instance-printed.js");
+    let output = default_code(&source);
+    assert!(!output.contains("_0xa"), "{output}");
+    assert!(!output.contains("_0xc"), "{output}");
+    prints_the_same(&source, &output);
+}
+
+#[test]
+fn an_outer_string_array_with_one_decoded_entry_is_decoded_in_the_default_lane() {
+    let output = default_code(&read("one-entry-outer-array.js"));
+    assert!(!output.contains("_0x5930"), "{output}");
+    assert!(!output.contains("_0x3980"), "{output}");
+    prints_the_same(&read("one-entry-outer-array.source.js"), &output);
 }

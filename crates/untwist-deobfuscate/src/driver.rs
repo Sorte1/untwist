@@ -942,6 +942,8 @@ fn deobfuscate_with<'a>(
     memo: &Rc<RefCell<RotationMemo>>,
 ) -> (Semantics, RunReport) {
     let _deferral = crate::legacy_reach::open_stage(!opts.unsafe_transforms && !opts.nested_root);
+    let _escapes =
+        crate::legacy_reach::open_escape_stage(opts.unsafe_transforms && !opts.nested_root);
     let mut aggregate = Aggregate::new();
     let sem = prepare(alloc, program, prepared, opts, &mut aggregate);
     if input_spells_the_stamp(program, &sem, opts) {
@@ -972,6 +974,11 @@ fn deobfuscate_with<'a>(
     if opts.round_cap_undo.get() == RoundCapUndo::Requested {
         return (sem, aggregate.finish());
     }
+    crate::legacy_reach::settle_escapes(|decoders| {
+        sem.scoping
+            .symbol_ids()
+            .any(|symbol| decoders.contains(&sem.scoping.symbol_span(symbol)))
+    });
     let sem = finalize_unresolved_machinery(alloc, program, sem, (opts, &shared), &mut aggregate);
     let sem = match &before {
         Some(before) => kept_when_stamps_survive(alloc, program, (sem, before), &mut aggregate),

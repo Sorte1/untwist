@@ -57,6 +57,7 @@ fn comparison(test: &Expression<'_>) -> Option<Comparison> {
 pub struct EscapeGuards {
     pub values: Vec<Vec<BranchGuard>>,
     pub dynamic: Vec<Vec<BranchGuard>>,
+    pub speculative: Vec<Span>,
 }
 
 struct Enclosing<'e> {
