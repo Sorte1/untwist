@@ -4,6 +4,7 @@ mod fill;
 mod inline;
 mod lines;
 pub mod origins;
+mod reprint;
 mod through;
 
 use std::borrow::Cow;
@@ -17,6 +18,7 @@ pub use fill::{fill_spans, fill_window};
 pub use inline::{decode_base64, inline_map, last_map_url};
 pub use lines::Positions;
 pub use origins::{note_replaced, Origins, Recording};
+pub use reprint::{composed, spots_back, Reprint, Spot};
 pub use through::Through;
 
 use crate::print::mapped_codegen;

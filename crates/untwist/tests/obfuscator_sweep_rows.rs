@@ -1,7 +1,15 @@
 use std::path::{Path, PathBuf};
 
-use untwist::{Options, Pipeline};
+use untwist::source_map::{self, OwnedSourceMap, Token};
+use untwist::{Options, Output, Pipeline};
+use untwist_core::pass::NoteKind;
+use untwist_deobfuscate::notes;
 use untwist_testing::node_rows::{node_or_skip, printed};
+
+const SECOND_ROUND: &str = "../../fixtures/obfuscator-versions/0.18.8--plain-norot-t75-self--wp4-module--uglify--control-1.js";
+
+const ASSIGNED_TWICE: &str =
+    "../../fixtures/obfuscator-versions/4.2.2--rc4-rot-noshuf-shift-inum-w2f5-nocalls-t1--iife--uglify--classes-1.js";
 
 const DECODED_UNDER_UNSAFE: &[&str] = &[
     "cfo-dead-branch",
@@ -26,6 +34,21 @@ fn data() -> PathBuf {
 
 fn read(name: &str) -> String {
     std::fs::read_to_string(data().join(name)).unwrap()
+}
+
+fn fixture(path: &str) -> String {
+    std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap()
+}
+
+fn traced(source: &str, unsafe_transforms: bool) -> Output {
+    let options = Options {
+        unsafe_transforms,
+        source_map: true,
+        decoded_strings: true,
+        statement_spans: true,
+        ..Options::default()
+    };
+    Pipeline::new(options).run(source)
 }
 
 fn unsafe_lane(source: &str) -> String {
@@ -97,4 +120,122 @@ fn a_decoder_reached_from_a_live_guarded_branch_keeps_its_unit_under_unsafe() {
         expected.is_ok() && expected == actual,
         "{expected:?} vs {actual:?}"
     );
+}
+
+#[test]
+fn a_later_round_keeps_the_reach_reason_of_the_layer_round_one_decoded() {
+    let output = Pipeline::new(Options::default()).run(&read("round-two-reach.js"));
+    let reach = output
+        .notes
+        .iter()
+        .any(|note| note.message == notes::STRING_ARRAY_GLOBAL_REACH);
+    let kept = output.notes.iter().find(|note| {
+        note.kind == NoteKind::Refusal && note.message.starts_with("decoder machinery kept: ")
+    });
+    assert!(reach, "{:#?}", output.notes);
+    let kept = kept.expect("a kept-machinery note");
+    assert!(
+        kept.message.contains("may hold the global object"),
+        "{}",
+        kept.message
+    );
+}
+
+fn utf16_len(line: &str) -> u32 {
+    u32::try_from(line.encode_utf16().count()).unwrap_or(u32::MAX)
+}
+
+fn mapped_tokens(map: &OwnedSourceMap, source: &str) -> Vec<Token> {
+    let lines: Vec<&str> = source.split('\n').collect();
+    let tokens: Vec<Token> = map
+        .get_tokens()
+        .filter(|token| token.get_source_id().is_some())
+        .collect();
+    for token in &tokens {
+        let line = lines[token.get_src_line() as usize];
+        assert!(
+            token.get_src_col() <= utf16_len(line),
+            "source column in range"
+        );
+    }
+    tokens
+}
+
+fn origin_of(map: &OwnedSourceMap, code: &str, needle: &str) -> Option<(u32, u32)> {
+    let at = code.find(needle)?;
+    let line = code[..at].matches('\n').count();
+    let start = code[..at].rfind('\n').map_or(0, |found| found + 1);
+    let column = utf16_len(&code[start..at]);
+    let line = u32::try_from(line).ok()?;
+    let table = map.generate_lookup_table();
+    let token = map.lookup_token(&table, line, column)?;
+    Some((token.get_src_line(), token.get_src_col()))
+}
+
+fn source_text_at(source: &str, (line, column): (u32, u32)) -> String {
+    let line = source.split('\n').nth(line as usize).unwrap_or_default();
+    line.chars().skip(column as usize).collect()
+}
+
+#[test]
+fn a_second_round_keeps_a_source_map_into_the_input_in_both_lanes() {
+    let source = fixture(SECOND_ROUND);
+    for unsafe_transforms in [false, true] {
+        let output = traced(&source, unsafe_transforms);
+        let map = output.source_maps[0].as_ref().expect("a map");
+        let map = source_map::parse(&map.to_json_string()).expect("the map parses back");
+        assert_eq!(map.get_source_content(0), Some(source.as_str()));
+        let tokens = mapped_tokens(&map, &source);
+        assert!(tokens.len() > 100, "{} mappings", tokens.len());
+        let origin = origin_of(&map, output.code(), "console.log(").expect("a mapped call");
+        assert!(
+            source_text_at(&source, origin).starts_with("console.log("),
+            "{:?}",
+            source_text_at(&source, origin)
+        );
+    }
+}
+
+#[test]
+fn a_second_round_maps_statement_spans_and_decoded_strings_into_the_input() {
+    let source = fixture(SECOND_ROUND);
+    let output = traced(&source, false);
+    let spans = output.statement_spans.expect("statement spans");
+    assert!(!spans.is_empty());
+    for (start, end) in spans {
+        assert!(
+            start < end && end as usize <= source.len(),
+            "{start}..{end}"
+        );
+    }
+    let sited: Vec<(u32, u32)> = output
+        .decoded_strings
+        .iter()
+        .filter_map(|site| site.span)
+        .collect();
+    assert!(sited.len() > 10, "{} sited strings", sited.len());
+    for (start, end) in sited {
+        let text = &source[start as usize..end as usize];
+        assert!(text.contains('('), "{text:?}");
+    }
+}
+
+#[test]
+fn a_wrapper_call_assigning_one_variable_twice_keeps_each_argument_under_unsafe() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    for source in [
+        read("wrapper-arguments-assign-twice.js"),
+        fixture(ASSIGNED_TWICE),
+    ] {
+        let output = unsafe_lane(&source);
+        let expected = printed(&node, dir.path(), &source);
+        let actual = printed(&node, dir.path(), &output);
+        assert!(
+            expected.is_ok() && expected == actual,
+            "{expected:?} vs {actual:?}\n{output}"
+        );
+    }
 }

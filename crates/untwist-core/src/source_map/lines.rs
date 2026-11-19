@@ -87,4 +87,35 @@ impl<'t> Positions<'t> {
             self.units_before(offset) - self.units_before(start),
         )
     }
+
+    pub fn offset(&self, line: u32, column: u32) -> Option<usize> {
+        let mut at = *self.lines.get(usize::try_from(line).ok()?)?;
+        let mut units = 0u32;
+        while units < column && at < self.text.len() && line_break(self.text, at) == 0 {
+            let width = char_len(self.text[at]);
+            units += match width {
+                4 => 2,
+                _ => 1,
+            };
+            at += width;
+        }
+        Some(at.min(self.text.len()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Positions;
+
+    #[test]
+    fn an_offset_round_trips_through_its_line_and_utf16_column() {
+        let text = "ab\n\u{e9}\u{1f600}cd\nx";
+        let positions = Positions::new(text);
+        for offset in [0, 1, 3, 5, 9, 10, 12] {
+            let (line, column) = positions.of(offset);
+            assert_eq!(positions.offset(line, column), Some(offset), "{offset}");
+        }
+        assert_eq!(positions.offset(9, 0), None);
+        assert_eq!(positions.offset(0, 40), Some(2));
+    }
 }

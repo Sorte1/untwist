@@ -50,6 +50,25 @@ pub(crate) fn record(what: impl FnOnce() -> String, span: Span) {
     });
 }
 
+pub fn recorded() -> usize {
+    SPANS.with(|spans| spans.borrow().as_ref().map_or(0, Vec::len))
+}
+
+pub fn taken_since(mark: usize) -> Vec<RefusalSpan> {
+    SPANS.with(|spans| {
+        spans
+            .borrow_mut()
+            .as_mut()
+            .filter(|spans| mark <= spans.len())
+            .map(|spans| spans.split_off(mark))
+            .unwrap_or_default()
+    })
+}
+
+pub fn put_back(found: Vec<RefusalSpan>) {
+    extend(&found);
+}
+
 pub(crate) fn extend(trail: &[RefusalSpan]) {
     SPANS.with(|spans| {
         if let Some(spans) = spans.borrow_mut().as_mut() {
@@ -88,6 +107,23 @@ mod tests {
         record(|| "third".to_string(), Span::new(2, 3));
         let whats: Vec<String> = outer.finish().into_iter().map(|span| span.what).collect();
         assert_eq!(whats, ["first", "third"]);
+    }
+
+    #[test]
+    fn spans_taken_since_a_mark_come_back_when_put_back() {
+        let recorder = Recorder::start();
+        record(|| "kept".to_string(), Span::new(0, 1));
+        let mark = recorded();
+        record(|| "moved".to_string(), Span::new(2, 3));
+        let taken = taken_since(mark);
+        assert_eq!(recorded(), 1);
+        put_back(taken);
+        let whats: Vec<String> = recorder
+            .finish()
+            .into_iter()
+            .map(|span| span.what)
+            .collect();
+        assert_eq!(whats, ["kept", "moved"]);
     }
 
     #[test]

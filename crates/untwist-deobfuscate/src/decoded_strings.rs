@@ -56,6 +56,38 @@ impl Drop for Recorder {
     }
 }
 
+pub fn recorded() -> usize {
+    FOUND.with(|found| found.borrow().as_ref().map_or(0, |found| found.rows.len()))
+}
+
+pub fn taken_since(mark: usize) -> Vec<DecodedString> {
+    FOUND.with(|found| {
+        let mut found = found.borrow_mut();
+        let Some(found) = found.as_mut().filter(|found| mark <= found.rows.len()) else {
+            return Vec::new();
+        };
+        let rows = found.rows.split_off(mark);
+        let text = rows
+            .first()
+            .map(|(_, start, _)| found.text.split_off(*start))
+            .unwrap_or_default();
+        let base = rows.first().map_or(0, |(_, start, _)| *start);
+        rows.into_iter()
+            .map(|(span, start, end)| DecodedString {
+                span,
+                value: text[start - base..end - base].to_string(),
+            })
+            .collect()
+    })
+}
+
+pub fn put_back(strings: Vec<DecodedString>) {
+    for string in strings {
+        let value = string.value;
+        record(string.span, move || Some(value));
+    }
+}
+
 pub(crate) fn record(span: Span, value: impl FnOnce() -> Option<String>) {
     FOUND.with(|found| {
         if let Some(found) = found.borrow_mut().as_mut() {
@@ -92,6 +124,26 @@ mod tests {
         drop(Recorder::start());
         record(Span::new(6, 7), text("lost"));
         assert!(Recorder::start().finish().is_empty());
+    }
+
+    #[test]
+    fn strings_taken_since_a_mark_come_back_when_put_back() {
+        let recorder = Recorder::start();
+        record(Span::new(0, 1), text("kept"));
+        let mark = recorded();
+        record(Span::new(2, 3), text("moved"));
+        record(Span::new(4, 5), text("also"));
+        let taken = taken_since(mark);
+        assert_eq!(recorded(), 1);
+        let values: Vec<&str> = taken.iter().map(|found| found.value.as_str()).collect();
+        assert_eq!(values, ["moved", "also"]);
+        put_back(taken);
+        let values: Vec<String> = recorder
+            .finish()
+            .into_iter()
+            .map(|found| found.value)
+            .collect();
+        assert_eq!(values, ["kept", "moved", "also"]);
     }
 
     #[test]
