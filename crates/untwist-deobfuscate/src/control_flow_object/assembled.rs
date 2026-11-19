@@ -2,7 +2,7 @@ use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::prop::member_parts;
 use untwist_core::semantic::is_constant_binding;
@@ -155,7 +155,11 @@ impl<'p> Assembled<'p> {
         object: &'p ObjectExpression<'p>,
         scoping: &Scoping,
     ) -> Option<Self> {
-        let plain = is_constant_binding(scoping, symbol) && plain_literal_keys(object);
+        let declared_const = scoping
+            .symbol_flags(symbol)
+            .contains(SymbolFlags::ConstVariable);
+        let plain =
+            declared_const && is_constant_binding(scoping, symbol) && plain_literal_keys(object);
         plain.then(|| Self {
             root: None,
             base: symbol,
