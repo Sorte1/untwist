@@ -26,19 +26,19 @@ preset-default-n2	5	5/5	5/5	-	0	-
 preset-default-n3	5	5/5	5/5	-	0	-
 preset-default-n4	5	5/5	5/5	-	0	-
 preset-high-n1	5	0/5	4/5	-	0	builtin-alias-patched (3), object-keys-not-merged (1), safe-global-key-reach (2)
-preset-low-n1	5	5/5	5/5	-	0	-
-preset-low-n2	5	5/5	5/5	-	0	-
-preset-low-n3	5	5/5	5/5	-	0	-
-preset-low-n4	5	5/5	5/5	-	0	-
+preset-low-n1	5	4/5	5/5	-	0	sd-this-value (1)
+preset-low-n2	5	0/5	5/5	-	0	sd-other-layer-kept (4), sd-this-value (1)
+preset-low-n3	5	0/5	5/5	-	0	sd-other-layer-kept (4), sd-this-value (1)
+preset-low-n4	5	0/5	5/5	-	0	sd-other-layer-kept (4), sd-this-value (1)
 preset-medium-n1	5	0/5	4/5	-	0	builtin-alias-patched (4), object-keys-not-merged (1), safe-global-key-reach (1)
 rename-globals-n1	5	5/5	5/5	-	0	-
 rename-globals-n2	5	5/5	5/5	-	0	-
 rename-globals-n3	5	5/5	5/5	-	0	-
 rename-globals-n4	5	5/5	5/5	-	0	-
-self-n1	5	5/5	5/5	-	0	-
-self-n2	5	5/5	5/5	-	0	-
-self-n3	5	5/5	5/5	-	0	-
-self-n4	5	5/5	5/5	-	0	-
+self-n1	5	4/5	5/5	-	0	sd-this-value (1)
+self-n2	5	1/5	5/5	-	0	sd-other-layer-kept (3), sd-this-value (1)
+self-n3	5	1/5	5/5	-	0	sd-other-layer-kept (3), sd-this-value (1)
+self-n4	5	1/5	5/5	-	0	sd-other-layer-kept (3), sd-this-value (1)
 split-n1	5	5/5	5/5	-	0	-
 split-n2	5	5/5	5/5	-	0	-
 split-n3	5	5/5	5/5	-	0	-
@@ -54,6 +54,8 @@ strings-rc4-n4	5	5/5	5/5	-	0	-
 web-no-eval-n1	5	0/5	4/5	-	0	builtin-alias-patched (3), object-keys-not-merged (1), safe-global-key-reach (2)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
 object-keys-not-merged	9	9	15	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...) or a value may throw or run code (a member read, arithmetic on a binding)
+sd-this-value	8	8	8	0	safe lane: a method returns this, so the built-in scan cannot prove that nothing replaces a built-in the self-defending callback calls; the default lane keeps that protection, and the machinery it can see stays with it
+sd-other-layer-kept	6	21	21	0	safe lane: another layer's protection or still-encoded machinery is in the program when the self-defending pass judges a layer, so the built-ins its callback calls are not proven unpatched, every layer's block is kept and the machinery it can see stays with it
 safe-global-key-reach	6	20	20	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
 builtin-alias-patched	4	15	15	0	safe lane: a write through a variable, parameter, this or computed object that may hold a standard built-in (an alias of a prototype, constructor or the global object) could replace a built-in the decoders or rotator use, so the unit is left undecoded
 layered-safe-unit-kept	1	6	6	0	safe lane, as on main: at two layers of dead code, control flow flattening and rc4 the outer unit is left undecoded with no refusal note (only its four alias declarations are counted), so neither layer decodes; the unsafe lane decodes both
