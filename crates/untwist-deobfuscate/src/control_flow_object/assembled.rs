@@ -7,6 +7,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::prop::member_parts;
 use untwist_core::semantic::is_constant_binding;
 
+use super::dead::OBJECT_PROTOTYPE_KEYS;
+
 const PROTO_KEY: &str = "__proto__";
 
 pub(super) struct Assembled<'p> {
@@ -47,11 +49,12 @@ fn plain_literal_keys(object: &ObjectExpression<'_>) -> bool {
             return false;
         };
         let key = match &property.key {
-            PropertyKey::StaticIdentifier(id) if !property.computed => Some(id.name.as_str()),
+            PropertyKey::StaticIdentifier(id) => Some(id.name.as_str()),
             PropertyKey::StringLiteral(text) => text.value.as_str(),
             _ => None,
         };
         !property.method
+            && !property.computed
             && property.kind == PropertyKind::Init
             && key.is_some_and(|key| key != PROTO_KEY)
     })
@@ -134,6 +137,15 @@ pub(super) fn assembled_alias<'p>(
 }
 
 impl<'p> Assembled<'p> {
+    pub(super) fn reaches_its_receiver(&self) -> bool {
+        let mut scan = ThisFree { found: false };
+        scan.visit_object_expression(self.object);
+        for (_, value) in &self.added {
+            scan.visit_expression(value);
+        }
+        scan.found
+    }
+
     pub(super) fn within(self, root: Option<&'p FunctionBody<'p>>) -> Self {
         Self { root, ..self }
     }
@@ -179,6 +191,16 @@ impl<'a> VisitJs<'a> for ThisFree {
     fn visit_this_expression(&mut self, _: &ThisExpression) {
         self.found = true;
     }
+
+    fn visit_super(&mut self, _: &Super) {
+        self.found = true;
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if matches!(it.name.as_str(), "arguments" | "eval") {
+            self.found = true;
+        }
+    }
 }
 
 fn this_free_function(value: &Expression<'_>) -> bool {
@@ -197,6 +219,7 @@ struct AliasUses<'s, 'k, 'p> {
     scoping: &'s Scoping,
     objects: FxHashMap<SymbolId, &'k Assembled<'p>>,
     dead: &'k FxHashSet<usize>,
+    builtins_unpatched: bool,
     depth: usize,
     reads: FxHashSet<usize>,
     risky: FxHashSet<usize>,
@@ -239,8 +262,16 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
 
     fn visit_expression(&mut self, it: &Expression<'a>) {
         let dead = self.entering(std::ptr::from_ref(it) as usize);
-        if let Some((id, _)) = self.receiver(it) {
-            self.reads.insert(address_of(id));
+        if let Some((id, assembled)) = self.receiver(it) {
+            let own = member_parts(it).is_some_and(|(_, name)| {
+                assembled.property(&name).is_some()
+                    || (self.builtins_unpatched && !OBJECT_PROTOTYPE_KEYS.contains(&name.as_ref()))
+            });
+            if own {
+                self.reads.insert(address_of(id));
+            } else {
+                self.risky.insert(address_of(id));
+            }
         }
         match it {
             Expression::CallExpression(call) => {
@@ -291,7 +322,7 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
 
 pub(super) fn aliases_mutated_only_in_dead<'k, 'p>(
     program: &Program<'_>,
-    scoping: &Scoping,
+    (scoping, builtins_unpatched): (&Scoping, bool),
     used: impl Iterator<Item = (SymbolId, &'k Assembled<'p>)>,
     dead: &FxHashSet<usize>,
 ) -> bool
@@ -316,6 +347,7 @@ where
         scoping,
         objects,
         dead,
+        builtins_unpatched,
         depth: 0,
         reads: FxHashSet::default(),
         risky: FxHashSet::default(),
