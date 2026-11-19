@@ -31,6 +31,7 @@ mod hoisted;
 mod inner_first;
 mod keys;
 mod nested;
+mod nested_proof;
 mod reach;
 mod sequenced;
 

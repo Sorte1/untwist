@@ -431,3 +431,73 @@ fn a_call_of_a_key_no_object_has_still_decides_the_branch_under_unsafe() {
     assert!(!output.contains("missing"), "{output}");
     assert!(default_code(&source).contains("missing"));
 }
+
+const NESTED_HAZARDS_BOTH_LANES: &[&str] = &[
+    "r5-f1",
+    "r5-this-factory",
+    "r5-this-member",
+    "r5-this-param",
+    "r5-this-builtin",
+    "r5-valueof-own",
+    "r5-this-delete",
+    "r5-tagged",
+    "r5-this-after-test",
+    "r5-chain-three",
+    "r5-this-ternary",
+    "r5-f3",
+    "r5-annexb-if",
+    "r5-annexb-switch",
+    "r5-annexb-nested-call",
+];
+
+const NESTED_HAZARDS_PATCHED_BUILTINS: &[&str] = &[
+    "r5-f2a",
+    "r5-f2b",
+    "r5-owner-member-undef",
+    "r5-b-math",
+    "r5-b-parseint",
+    "r5-b-string-fn",
+    "r5-b-fromcc",
+    "r5-b-json",
+    "r5-b-atob",
+    "r5-b-escape",
+    "r5-b-alias-patch",
+    "r5-body-valueof",
+    "r5-body-proto-read",
+    "r5-t-typeof",
+    "r5-t-cond",
+    "r5-t-idx",
+    "r5-t-num-member",
+    "r5-t-member-undef",
+    "r5-v-typeof",
+    "r5-v-member",
+];
+
+fn prints_like_node_in(labels: &[&str], lanes: &[fn(&str) -> String]) {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let mut wrong = Vec::new();
+    for label in labels {
+        let source = read(&format!("{label}.js"));
+        let expected = printed(&node, dir.path(), &source);
+        for lane in lanes {
+            let actual = printed(&node, dir.path(), &lane(&source));
+            if expected.is_err() || expected != actual {
+                wrong.push(format!("{label}: {expected:?} vs {actual:?}"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn a_nested_object_a_call_or_a_block_function_can_change_prints_like_node_in_both_lanes() {
+    prints_like_node_in(NESTED_HAZARDS_BOTH_LANES, &[default_code, unsafe_lane]);
+}
+
+#[test]
+fn a_fold_through_a_built_in_the_program_patches_prints_like_node_in_the_default_lane() {
+    prints_like_node_in(NESTED_HAZARDS_PATCHED_BUILTINS, &[default_code]);
+}
