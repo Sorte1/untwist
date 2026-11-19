@@ -281,6 +281,31 @@ pub(super) fn reach_refusals(notes: &[Note]) -> Vec<Note> {
     }]
 }
 
+pub(super) fn kept_protections(notes: &[Note]) -> Vec<Note> {
+    notes
+        .iter()
+        .filter(|note| note.message == notes::SELF_DEFENDING_BUILTIN_PATCHED)
+        .cloned()
+        .collect()
+}
+
+pub(super) fn carry_kept_protections(notes: Vec<Note>, earlier: Vec<Note>) -> Vec<Note> {
+    let check_survived = notes.iter().any(|note| {
+        note.message.starts_with(GUARD_ON_ONE_LINE)
+            || note.message.starts_with(GUARD_KEPT_ACROSS_LINES)
+    });
+    let noted = notes
+        .iter()
+        .any(|note| note.message == notes::SELF_DEFENDING_BUILTIN_PATCHED);
+    if !check_survived || noted || earlier.is_empty() {
+        return notes;
+    }
+    let mut carried = earlier;
+    carried.dedup();
+    carried.extend(notes);
+    carried
+}
+
 pub(super) fn carry_reach(notes: Vec<Note>, earlier: Vec<Note>) -> Vec<Note> {
     let judged = notes
         .iter()
