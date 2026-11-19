@@ -775,7 +775,9 @@
   controller, with the same note. Some reads name no binding (`globalThis.o` or another script
   for a top-level `var`, `arguments[0]` or `caller.arguments` for a parameter, a `with` object,
   an importer for an export, a direct `eval`), so `o` must also be a `var`, or a `let`
-  declared before `o = true` and before the controller (not a `const`), inside a function, not a parameter, in a function with no `with` statement, no direct
+  declared by a statement of the same statement list as `o = true` and the controller, before
+  both, and not in a `switch` case (a hoisted function or a `case` can run a later statement
+  before an earlier `let` is set; not a `const`), inside a function, not a parameter, in a function with no `with` statement, no direct
   `eval` and no use of its own `arguments`; any other flag keeps the controller.
   `--unsafe` trusts the controller shape, as the reference deobfuscator does, so a domain lock
   or a hand-written function run through such a helper is removed there; the call-site rules

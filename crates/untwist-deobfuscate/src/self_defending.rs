@@ -9,7 +9,7 @@ use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::inline::is_plain_function;
 use untwist_core::ast_util::literal::{is_false_literal, is_true_literal};
 use untwist_core::ast_util::matcher::{anonymous_function, call_parts, iife};
@@ -454,6 +454,21 @@ fn set_flag<'k, 'a>(stmt: &'k Statement<'a>) -> Option<&'k IdentifierReference<'
         .then_some(&**target)
 }
 
+fn reset_name<'k>(body: Option<&'k FunctionBody<'_>>) -> Option<&'k str> {
+    body?.statements.iter().find_map(|stmt| {
+        let Statement::ExpressionStatement(stmt) = stmt else {
+            return None;
+        };
+        let Expression::AssignmentExpression(assignment) = &stmt.expression else {
+            return None;
+        };
+        let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
+            return None;
+        };
+        Some(target.name.as_str())
+    })
+}
+
 fn returner_flag<'f>(expr: &Expression<'_>, flags: &[&'f str]) -> Option<&'f str> {
     let (params, body) = match without_unnamed(expr.without_parentheses()).without_parentheses() {
         Expression::FunctionExpression(function)
@@ -467,10 +482,9 @@ fn returner_flag<'f>(expr: &Expression<'_>, flags: &[&'f str]) -> Option<&'f str
         },
         _ => return None,
     };
-    flags
-        .iter()
-        .copied()
-        .find(|flag| returner_matches(params, body, flag))
+    let name = reset_name(body)?;
+    let flag = flags[flags.binary_search(&name).ok()?];
+    returner_matches(params, body, flag).then_some(flag)
 }
 
 fn returner(expr: &Expression<'_>, flags: &[&str]) -> bool {
@@ -490,10 +504,82 @@ fn flag_of_statement<'f>(stmt: &Statement<'_>, flags: &[&'f str]) -> Option<&'f 
     returner_flag(inner, flags)
 }
 
-struct FlagUse {
+struct FlagSet {
     reference: Option<ReferenceId>,
-    set_at: Span,
-    returner_at: Span,
+    at: Span,
+}
+
+struct FlagUse {
+    sets: Vec<FlagSet>,
+    returners: Vec<Span>,
+    declared_first: bool,
+}
+
+fn let_names<'k>(stmt: &'k Statement<'_>) -> impl Iterator<Item = &'k str> {
+    let declarations = match stmt {
+        Statement::VariableDeclaration(declaration)
+            if declaration.kind == VariableDeclarationKind::Let =>
+        {
+            declaration.declarations.as_slice()
+        }
+        _ => &[],
+    };
+    declarations
+        .iter()
+        .filter_map(|declarator| binding_name(&declarator.id))
+}
+
+struct FlagUses {
+    flag_use: FlagUse,
+    first_use: usize,
+    declared_at: Option<usize>,
+}
+
+fn flag_uses<'a>(
+    it: &AVec<'a, Statement<'a>>,
+    returners: FxHashMap<&str, Vec<(usize, Span)>>,
+    in_case: bool,
+) -> Vec<FlagUse> {
+    let mut uses: FxHashMap<&str, FlagUses> = returners
+        .into_iter()
+        .map(|(flag, found)| {
+            let first_use = found.first().map_or(0, |(at, _)| *at);
+            let flag_use = FlagUse {
+                sets: Vec::new(),
+                returners: found.into_iter().map(|(_, span)| span).collect(),
+                declared_first: false,
+            };
+            let uses = FlagUses {
+                flag_use,
+                first_use,
+                declared_at: None,
+            };
+            (flag, uses)
+        })
+        .collect();
+    for (at, stmt) in it.iter().enumerate() {
+        for name in let_names(stmt) {
+            if let Some(found) = uses.get_mut(name) {
+                found.declared_at.get_or_insert(at);
+            }
+        }
+        let Some(target) = set_flag(stmt) else {
+            continue;
+        };
+        if let Some(found) = uses.get_mut(target.name.as_str()) {
+            found.first_use = found.first_use.min(at);
+            found.flag_use.sets.push(FlagSet {
+                reference: target.reference_id.get(),
+                at: stmt.span(),
+            });
+        }
+    }
+    uses.into_values()
+        .map(|found| FlagUse {
+            declared_first: !in_case && found.declared_at.is_some_and(|at| at < found.first_use),
+            ..found.flag_use
+        })
+        .collect()
 }
 
 fn flag_controller(stmt: &Statement<'_>, flags: &[&str]) -> Option<SymbolId> {
@@ -506,9 +592,10 @@ struct Controllers {
     found: FxHashSet<SymbolId>,
     loose: FxHashSet<SymbolId>,
     inline: bool,
-    returner_calls: Vec<Span>,
+    returner_calls: FxHashSet<Span>,
     flags: Vec<FlagUse>,
     homes: Homes,
+    in_case: bool,
 }
 
 fn is_returner_variable(stmt: &Statement<'_>, flags: &[&str]) -> bool {
@@ -535,21 +622,17 @@ fn inline_controller_call(stmt: &Statement<'_>) -> bool {
 
 impl<'a> VisitJs<'a> for Controllers {
     fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
-        let set: Vec<(&IdentifierReference<'a>, Span)> = it
+        let in_case = std::mem::take(&mut self.in_case);
+        let mut flags: Vec<&str> = it
             .iter()
-            .filter_map(|stmt| set_flag(stmt).map(|target| (target, stmt.span())))
+            .filter_map(|stmt| set_flag(stmt).map(|target| target.name.as_str()))
             .collect();
-        let flags: Vec<&str> = set.iter().map(|(target, _)| target.name.as_str()).collect();
-        for stmt in it {
+        flags.sort_unstable();
+        flags.dedup();
+        let mut returners: FxHashMap<&str, Vec<(usize, Span)>> = FxHashMap::default();
+        for (at, stmt) in it.iter().enumerate() {
             if let Some(flag) = flag_of_statement(stmt, &flags) {
-                self.flags
-                    .extend(set.iter().filter(|(target, _)| target.name == flag).map(
-                        |(target, at)| FlagUse {
-                            reference: target.reference_id.get(),
-                            set_at: *at,
-                            returner_at: stmt.span(),
-                        },
-                    ));
+                returners.entry(flag).or_default().push((at, stmt.span()));
             }
             if let Some(symbol) = controller_declaration(stmt) {
                 self.found.insert(symbol);
@@ -561,14 +644,25 @@ impl<'a> VisitJs<'a> for Controllers {
             self.inline |= inline_controller_call(stmt);
             if is_inline_returner_call(stmt, &flags) {
                 self.inline = true;
-                self.returner_calls.push(stmt.span());
+                self.returner_calls.insert(stmt.span());
             }
             if is_returner_variable(stmt, &flags) {
                 self.inline = true;
-                self.returner_calls.push(stmt.span());
+                self.returner_calls.insert(stmt.span());
             }
         }
+        if !returners.is_empty() {
+            self.flags.extend(flag_uses(it, returners, in_case));
+        }
         walk_js::walk_statements(self, it);
+    }
+
+    fn visit_switch_case(&mut self, it: &SwitchCase<'a>) {
+        if let Some(test) = &it.test {
+            self.visit_expression(test);
+        }
+        self.in_case = true;
+        self.visit_statements(&it.consequent);
     }
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
@@ -683,7 +777,7 @@ struct Removals<'k> {
     spans: Vec<Span>,
     removed: FxHashSet<Span>,
     variables: FxHashSet<SymbolId>,
-    returner_calls: &'k [Span],
+    returner_calls: &'k FxHashSet<Span>,
     proof: Option<&'k FxHashSet<SymbolId>>,
     unproven: FxHashSet<SymbolId>,
     kept: bool,
@@ -1161,7 +1255,7 @@ struct Inputs<'k> {
     scoping: &'k Scoping,
     unsafe_lane: bool,
     annex_b: &'k AnnexBWrites,
-    returner_calls: &'k [Span],
+    returner_calls: &'k FxHashSet<Span>,
     proof: Option<&'k FxHashSet<SymbolId>>,
 }
 
@@ -1190,10 +1284,30 @@ fn removals<'k>(
     removals
 }
 
-fn removed_declaration(spans: &[Span], declared: Span) -> bool {
-    spans
-        .iter()
-        .any(|span| span.start <= declared.start && declared.end <= span.end)
+struct RemovedSpans {
+    starts: Vec<u32>,
+    reach: Vec<u32>,
+}
+
+impl RemovedSpans {
+    fn of(spans: &[Span]) -> Self {
+        let mut sorted = spans.to_vec();
+        sorted.sort_unstable_by_key(|span| span.start);
+        let starts = sorted.iter().map(|span| span.start).collect();
+        let reach = sorted
+            .iter()
+            .scan(0, |furthest, span| {
+                *furthest = span.end.max(*furthest);
+                Some(*furthest)
+            })
+            .collect();
+        Self { starts, reach }
+    }
+
+    fn contains(&self, inner: Span) -> bool {
+        let before = self.starts.partition_point(|&start| start <= inner.start);
+        before > 0 && inner.end <= self.reach[before - 1]
+    }
 }
 
 fn is_settable_flag(scoping: &Scoping, symbol: SymbolId, flag: &FlagUse) -> bool {
@@ -1202,7 +1316,7 @@ fn is_settable_flag(scoping: &Scoping, symbol: SymbolId, flag: &FlagUse) -> bool
         return false;
     }
     flags.contains(SymbolFlags::FunctionScopedVariable)
-        || scoping.symbol_span(symbol).end <= flag.set_at.start.min(flag.returner_at.start)
+        || (flags.contains(SymbolFlags::BlockScopedVariable) && flag.declared_first)
 }
 
 fn flag_read_elsewhere(
@@ -1211,28 +1325,40 @@ fn flag_read_elsewhere(
     spans: &[Span],
     scoping: &Scoping,
 ) -> bool {
+    let removed_spans = RemovedSpans::of(spans);
     let removed: Vec<&FlagUse> = flags
         .iter()
-        .filter(|flag| removed_declaration(spans, flag.returner_at))
+        .filter(|flag| {
+            flag.returners
+                .iter()
+                .any(|&returner| removed_spans.contains(returner))
+        })
         .collect();
     if removed.is_empty() {
         return false;
     }
     let mut symbols = FxHashSet::default();
     for flag in &removed {
-        let symbol = flag
-            .reference
-            .and_then(|reference| scoping.get_reference(reference).symbol_id());
-        let Some(symbol) = symbol else {
-            return true;
-        };
-        if !is_settable_flag(scoping, symbol, flag) || !is_private_local(homes, scoping, symbol) {
-            return true;
+        for set in &flag.sets {
+            let symbol = set
+                .reference
+                .and_then(|reference| scoping.get_reference(reference).symbol_id());
+            let Some(symbol) = symbol else {
+                return true;
+            };
+            if !is_settable_flag(scoping, symbol, flag) || !is_private_local(homes, scoping, symbol)
+            {
+                return true;
+            }
+            symbols.insert(symbol);
         }
-        symbols.insert(symbol);
     }
     let mut ignored = spans.to_vec();
-    ignored.extend(removed.iter().map(|flag| flag.set_at));
+    ignored.extend(
+        removed
+            .iter()
+            .flat_map(|flag| flag.sets.iter().map(|set| set.at)),
+    );
     has_stray_reference(program, &symbols, &ignored, scoping)
 }
 
@@ -1315,7 +1441,7 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
         scoping,
         unsafe_lane,
         annex_b: &annex_b,
-        returner_calls: controllers.returner_calls.as_slice(),
+        returner_calls: &controllers.returner_calls,
         proof: protections.as_ref(),
     };
     let declared_once: FxHashSet<SymbolId> = controllers
