@@ -21,6 +21,7 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "dp-nested-var-object",
     "dp-late-object",
     "wrapper-dead-write",
+    "dp-object-alias",
 ];
 
 const FINGERPRINTS: &[&str] = &[
