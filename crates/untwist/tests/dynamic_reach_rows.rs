@@ -58,10 +58,10 @@ const MACHINERY_NAME_WITNESSES: [&str; 1] =
     ["an unknown-key defineProperty on a maybe-global parameter"];
 
 #[test]
-fn a_recursive_helper_handing_on_an_element_read_by_an_unproven_key_refuses_by_default() {
+fn a_recursive_helper_handing_on_an_element_read_by_a_numeric_key_is_decoded() {
     let source = patched_after_rotator("true", RECURSIVE_HELPER);
     assert!(
-        !decoded(&source, Lane::Safe),
+        decoded(&source, Lane::Safe),
         "{}",
         run(&source, Lane::Safe).code()
     );
