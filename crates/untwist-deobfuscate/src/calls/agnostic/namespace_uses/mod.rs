@@ -5,6 +5,7 @@ mod holder_uses;
 mod holders;
 mod keys;
 mod numeric;
+mod proto_stores;
 mod shapes;
 
 use std::borrow::Cow;
@@ -19,6 +20,7 @@ use oxc_syntax::operator::{BinaryOperator, LogicalOperator};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::js_text::js_text;
+use untwist_core::semantic::AnnexBWrites;
 use untwist_eval::value::JsString;
 
 use super::roles::{reflective_access, READERS, RUNNERS};
@@ -111,6 +113,11 @@ struct Walker<'s, 'a> {
     chains_open: bool,
     numeric_writes: FxHashMap<SymbolId, Vec<numeric::NumericWrite<'a>>>,
     dynamic_scope: bool,
+    program: &'a Program<'a>,
+    intact: std::cell::OnceCell<bool>,
+    annex: AnnexBWrites,
+    proto_stores: Vec<Option<&'a Expression<'a>>>,
+    holders_open: bool,
 }
 
 #[derive(Default)]
@@ -126,14 +133,14 @@ pub(in crate::calls::agnostic) struct Judged<'k> {
     pub(in crate::calls::agnostic) texts_run: bool,
 }
 
-pub(super) fn loose_uses<'a>(
+fn walker_for<'s, 'a>(
     program: &'a Program<'a>,
-    scoping: &Scoping,
-    resolve: Resolve<'_>,
-    judged: Judged<'_>,
-) -> Loose {
+    scoping: &'s Scoping,
+    resolve: Resolve<'s>,
+    judged: Judged<'s>,
+) -> Walker<'s, 'a> {
     let script = !untwist_core::semantic::has_module_syntax(program);
-    let mut walker = Walker {
+    Walker {
         scoping,
         resolve,
         script,
@@ -160,9 +167,24 @@ pub(super) fn loose_uses<'a>(
         chains_open: false,
         numeric_writes: FxHashMap::default(),
         dynamic_scope: false,
-    };
+        program,
+        intact: std::cell::OnceCell::new(),
+        annex: AnnexBWrites::of(program, scoping),
+        proto_stores: Vec::new(),
+        holders_open: false,
+    }
+}
+
+pub(super) fn loose_uses<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+    resolve: Resolve<'_>,
+    judged: Judged<'_>,
+) -> Loose {
+    let texts_run = judged.texts_run;
+    let mut walker = walker_for(program, scoping, resolve, judged);
     walker.walk(program);
-    walker.settle_chains(judged.texts_run);
+    walker.settle_chains(texts_run);
     walker.aliases = walker.qualified();
     walker.phase = Phase::Check;
     walker.walk(program);
@@ -184,6 +206,22 @@ pub(super) fn loose_uses<'a>(
     loose.spans = loose.kept(trusted);
     loose.untrusted_symbol = untrusted.map(|spans| loose.kept(spans));
     loose
+}
+
+pub(in crate::calls::agnostic) fn chains_opened<'a>(
+    program: &'a Program<'a>,
+    scoping: &Scoping,
+) -> bool {
+    let opaque = FxHashSet::default();
+    let judged = Judged {
+        trust_symbol: false,
+        opaque: &opaque,
+        texts_run: false,
+    };
+    let mut walker = walker_for(program, scoping, None, judged);
+    walker.walk(program);
+    walker.settle_chains(false);
+    walker.opens_chains()
 }
 
 fn str_const(expr: &Expression<'_>, resolve: Resolve<'_>, depth: u8) -> Option<String> {
@@ -630,15 +668,7 @@ impl<'s, 'a> Walker<'s, 'a> {
                 .expressions
                 .last()
                 .is_some_and(|last| self.proto_literal(last, next)),
-            Expression::CallExpression(call) => call
-                .callee
-                .without_parentheses()
-                .as_member_expression()
-                .is_some_and(|member| member_key(member, self.resolve).as_deref() == Some("bind")),
-            other => other.as_member_expression().is_some_and(|member| {
-                member_key(member, self.resolve).as_deref() == Some("prototype")
-                    && self.kind_here(member.object()) == 0
-            }),
+            _ => false,
         }
     }
 
@@ -783,6 +813,7 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
 impl<'s, 'a> Walker<'s, 'a> {
     fn collect(&mut self, kind: AstKind<'a>) {
         self.collect_chain(kind);
+        self.collect_proto_store(kind);
         self.collect_numeric(kind);
         self.collect_array_source(kind);
         self.collect_enumeration(kind);

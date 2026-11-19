@@ -1,0 +1,3 @@
+function f(a) { return a + 1; }
+var i = 0; Object.defineProperty(globalThis, "i", { value: "Reflect" }); var [{ set: s }] = [globalThis[i]]; s(globalThis, "f", function () { return 99; });
+console.log(f(1), f(2));
