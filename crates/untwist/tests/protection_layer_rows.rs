@@ -16,6 +16,8 @@ const LOCK_ROWS: &[&str] = &["lock", "lock-string-array", "console-beside-lock"]
 
 const REACHED_ARRAY_ROWS: &[&str] = &["nested-array-reached", "self-defending-array-reached"];
 
+const KEPT_ARRAY_ROWS: &[&str] = &["self-defending-array-reached"];
+
 const REACH_REASON: &str = "code that may hold the global object, or code from text, may reach";
 
 fn data() -> PathBuf {
@@ -90,7 +92,7 @@ fn the_unsafe_lane_still_removes_the_domain_lock() {
 
 #[test]
 fn a_string_array_kept_after_the_verified_rerun_names_the_global_reach() {
-    for label in REACHED_ARRAY_ROWS {
+    for label in KEPT_ARRAY_ROWS {
         let (_, notes) = default_lane(&source(label));
         let kept = notes
             .iter()
@@ -100,4 +102,10 @@ fn a_string_array_kept_after_the_verified_rerun_names_the_global_reach() {
             "{label}: {notes:#?}"
         );
     }
+}
+
+#[test]
+fn a_one_entry_outer_array_under_a_reached_inner_array_decodes() {
+    let (code, notes) = default_lane(&source("nested-array-reached"));
+    assert_eq!(code.trim(), "console.log(\"\");", "{notes:#?}");
 }
