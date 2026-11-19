@@ -13,8 +13,8 @@ use untwist_core::semantic::may_call_eval;
 
 use super::{object_declaration, single_declarator};
 
-struct AliasFold<'a> {
-    index: usize,
+pub(super) struct AliasFold<'a> {
+    alias_at: usize,
     object: SymbolId,
     alias: SymbolId,
     name: Ident<'a>,
@@ -64,18 +64,22 @@ fn reads_see_the_object(
         })
 }
 
-fn plan_at<'a>(
+pub(super) fn opaque_scope(scoping: &Scoping) -> bool {
+    has_with(scoping) || may_call_eval(scoping)
+}
+
+pub(super) fn plan_alias<'a>(
     stmts: &[Statement<'a>],
-    index: usize,
+    (index, alias_at): (usize, usize),
     scoping: &Scoping,
-    extended: bool,
+    (extended, others_required): (bool, bool),
 ) -> Option<AliasFold<'a>> {
     let declared = object_declaration(stmts.get(index)?, extended)?;
-    let (alias, init) = single_declarator(stmts.get(index + 1)?)?;
+    let (alias, init) = single_declarator(stmts.get(alias_at)?)?;
     if init.and_then(identifier_name) != Some(declared.name) {
         return None;
     }
-    if !same_kind(&stmts[index], &stmts[index + 1]) {
+    if !same_kind(&stmts[index], &stmts[alias_at]) {
         return None;
     }
     let alias = alias.symbol_id.get()?;
@@ -83,17 +87,19 @@ fn plan_at<'a>(
     if !settled(object, scoping) || !settled(alias, scoping) {
         return None;
     }
-    if scoping.get_resolved_reference_ids(object).len() < 2 {
+    if others_required && scoping.get_resolved_reference_ids(object).len() < 2 {
         return None;
     }
     let (id, _) = single_declarator(&stmts[index])?;
     let name = id.name;
-    reads_see_the_object(alias, object, name, scoping).then_some(AliasFold {
-        index,
+    let fold = AliasFold {
+        alias_at,
         object,
         alias,
         name,
-    })
+    };
+    (reads_see_the_object(alias, object, name, scoping) && all_follow(stmts, &fold, scoping))
+        .then_some(fold)
 }
 
 struct Redirect<'s, 'a> {
@@ -154,7 +160,7 @@ fn all_follow(stmts: &[Statement<'_>], fold: &AliasFold<'_>, scoping: &Scoping) 
         targets: &targets,
         found: 0,
     };
-    for stmt in stmts.iter().skip(fold.index + 2) {
+    for stmt in stmts.iter().skip(fold.alias_at + 1) {
         found.visit_statement(stmt);
     }
     found.found == targets.len()
@@ -168,10 +174,10 @@ fn commit<'a>(stmts: &mut AVec<'a, Statement<'a>>, fold: &AliasFold<'a>, cx: &mu
         fold,
         redirected: 0,
     };
-    for stmt in stmts.iter_mut().skip(fold.index + 2) {
+    for stmt in stmts.iter_mut().skip(fold.alias_at + 1) {
         redirect.visit_statement(stmt);
     }
-    let removed = stmts.remove(fold.index + 1);
+    let removed = stmts.remove(fold.alias_at);
     let Some((_, Some(Expression::Identifier(init)))) = single_declarator(&removed) else {
         return;
     };
@@ -188,12 +194,11 @@ pub(super) fn fold_object_aliases<'a>(
     let scoping = cx.scoping();
     let extended = cx.opts.extended;
     let Some(fold) = (0..stmts.len())
-        .filter_map(|index| plan_at(stmts, index, scoping, extended))
-        .find(|fold| all_follow(stmts, fold, scoping))
+        .find_map(|index| plan_alias(stmts, (index, index + 1), scoping, (extended, true)))
     else {
         return 0;
     };
-    if has_with(scoping) || may_call_eval(scoping) {
+    if opaque_scope(scoping) {
         return 0;
     }
     commit(stmts, &fold, cx);

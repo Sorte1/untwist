@@ -86,6 +86,14 @@ fn plan_at(
         return None;
     }
     let into_object = scoping.get_resolved_reference_ids(temp.symbol).len() != assigned.len() + 1;
+    let alias_at = index + 1 + assigned.len();
+    if into_object
+        && (super::aliases::plan_alias(stmts, (index, alias_at), scoping, (extended, false))
+            .is_none()
+            || super::aliases::opaque_scope(scoping))
+    {
+        return None;
+    }
     let keys: Vec<String> = assigned
         .into_iter()
         .map(|(key, _)| key.into_owned())
