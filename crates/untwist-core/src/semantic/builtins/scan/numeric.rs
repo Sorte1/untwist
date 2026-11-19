@@ -13,6 +13,11 @@ use crate::semantic::is_foreign_global;
 
 pub(super) type NumericBindings = FxHashSet<SymbolId>;
 
+pub(super) struct KeyBindings {
+    numeric: NumericBindings,
+    led: NumericBindings,
+}
+
 const ARGUMENTS: &str = "arguments";
 
 fn reference_symbol(id: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
@@ -85,11 +90,55 @@ pub(super) fn is_numeric(
     }
 }
 
+fn is_led(
+    expression: &Expression<'_>,
+    scoping: &Scoping,
+    numeric: &NumericBindings,
+    led: &NumericBindings,
+) -> bool {
+    if is_numeric(expression, scoping, numeric) {
+        return true;
+    }
+    match expression.without_parentheses() {
+        Expression::BinaryExpression(binary) => {
+            binary.operator == BinaryOperator::Addition
+                && is_led(&binary.left, scoping, numeric, led)
+        }
+        Expression::Identifier(id) => {
+            reference_symbol(id, scoping).is_some_and(|symbol| led.contains(&symbol))
+        }
+        Expression::AssignmentExpression(assignment) => match assignment.operator {
+            AssignmentOperator::Assign => is_led(&assignment.right, scoping, numeric, led),
+            AssignmentOperator::Addition => assigned_symbol(&assignment.left, scoping)
+                .is_some_and(|symbol| led.contains(&symbol)),
+            _ => false,
+        },
+        Expression::SequenceExpression(sequence) => sequence
+            .expressions
+            .last()
+            .is_some_and(|last| is_led(last, scoping, numeric, led)),
+        Expression::ConditionalExpression(conditional) => {
+            is_led(&conditional.consequent, scoping, numeric, led)
+                && is_led(&conditional.alternate, scoping, numeric, led)
+        }
+        _ => false,
+    }
+}
+
+pub(super) fn is_harmless_key(
+    expression: &Expression<'_>,
+    scoping: &Scoping,
+    keys: &KeyBindings,
+) -> bool {
+    is_led(expression, scoping, &keys.numeric, &keys.led)
+}
+
 const MAX_PASSES: usize = 8;
 
 struct Collect<'s> {
     scoping: &'s Scoping,
     numeric: &'s NumericBindings,
+    led: Option<&'s NumericBindings>,
     module: bool,
     bindings: FxHashMap<SymbolId, usize>,
     plain_bindings: FxHashMap<SymbolId, usize>,
@@ -156,7 +205,17 @@ impl Collect<'_> {
     }
 
     fn numeric(&self, expression: &Expression<'_>) -> bool {
-        is_numeric(expression, self.scoping, self.numeric)
+        match self.led {
+            Some(led) => is_led(expression, self.scoping, self.numeric, led),
+            None => is_numeric(expression, self.scoping, self.numeric),
+        }
+    }
+
+    fn adds_to(&self, symbol: SymbolId, right: &Expression<'_>) -> bool {
+        match self.led {
+            Some(led) => led.contains(&symbol),
+            None => self.numeric.contains(&symbol) && self.numeric(right),
+        }
     }
 
     fn decoder_param(&mut self, function: &Function<'_>) {
@@ -303,11 +362,8 @@ impl<'a> VisitJs<'a> for Collect<'_> {
                 | AssignmentOperator::LogicalAnd
                 | AssignmentOperator::LogicalOr
                 | AssignmentOperator::LogicalNullish => self.numeric(&it.right),
-                AssignmentOperator::Addition => {
-                    reference_symbol(target, self.scoping)
-                        .is_some_and(|symbol| self.numeric.contains(&symbol))
-                        && self.numeric(&it.right)
-                }
+                AssignmentOperator::Addition => reference_symbol(target, self.scoping)
+                    .is_some_and(|symbol| self.adds_to(symbol, &it.right)),
                 operator => is_numeric_compound(operator),
             };
             if let (true, Some(reference)) = (numeric, target.reference_id.get()) {
@@ -350,11 +406,12 @@ fn narrowed(
     program: &Program<'_>,
     scoping: &Scoping,
     module: bool,
-    numeric: &NumericBindings,
+    (numeric, led): (&NumericBindings, Option<&NumericBindings>),
 ) -> NumericBindings {
     let mut collect = Collect {
         scoping,
         numeric,
+        led,
         module,
         bindings: FxHashMap::default(),
         plain_bindings: FxHashMap::default(),
@@ -370,25 +427,35 @@ fn narrowed(
         .strict
         .push(module || crate::semantic::program_is_strict(program));
     collect.visit_program(program);
-    numeric
+    led.unwrap_or(numeric)
         .iter()
         .copied()
         .filter(|&symbol| collect.holds(symbol))
         .collect()
 }
 
-pub(super) fn numeric_bindings(
+fn fixpoint(
     program: &Program<'_>,
     scoping: &Scoping,
     module: bool,
+    numeric: Option<&NumericBindings>,
 ) -> NumericBindings {
-    let mut numeric: NumericBindings = scoping.symbol_ids().collect();
+    let mut current: NumericBindings = scoping.symbol_ids().collect();
     for _ in 0..MAX_PASSES {
-        let next = narrowed(program, scoping, module, &numeric);
-        if next.len() == numeric.len() {
+        let next = match numeric {
+            Some(numeric) => narrowed(program, scoping, module, (numeric, Some(&current))),
+            None => narrowed(program, scoping, module, (&current, None)),
+        };
+        if next.len() == current.len() {
             return next;
         }
-        numeric = next;
+        current = next;
     }
     NumericBindings::default()
+}
+
+pub(super) fn key_bindings(program: &Program<'_>, scoping: &Scoping, module: bool) -> KeyBindings {
+    let numeric = fixpoint(program, scoping, module, None);
+    let led = fixpoint(program, scoping, module, Some(&numeric));
+    KeyBindings { numeric, led }
 }

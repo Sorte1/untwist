@@ -193,7 +193,7 @@ struct Scan<'s> {
     functions: OnceCell<functions::FunctionBindings>,
     escaping: OnceCell<escapes::Escaping>,
     windows: OnceCell<windows::WindowLocals>,
-    numeric: OnceCell<numeric::NumericBindings>,
+    numeric: OnceCell<numeric::KeyBindings>,
     reached: RefCell<FxHashMap<usize, bool>>,
     scoping: &'s Scoping,
     reliance: &'s Reliance,
@@ -343,8 +343,8 @@ impl Scan<'_> {
     pub(super) fn numeric_key(&self, key: &Expression<'_>) -> bool {
         let numeric = self
             .numeric
-            .get_or_init(|| numeric::numeric_bindings(self.program, self.scoping, self.module));
-        numeric::is_numeric(key, self.scoping, numeric)
+            .get_or_init(|| numeric::key_bindings(self.program, self.scoping, self.module));
+        numeric::is_harmless_key(key, self.scoping, numeric)
     }
 
     pub(super) fn sharpen<'k>(&self, key: Key<'k>) -> Key<'k> {
