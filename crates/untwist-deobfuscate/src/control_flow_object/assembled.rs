@@ -7,7 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::prop::member_parts;
 use untwist_core::semantic::is_constant_binding;
 
-use super::dead::OBJECT_PROTOTYPE_KEYS;
+use super::nested_proof::OBJECT_PROTOTYPE_KEYS;
 
 const PROTO_KEY: &str = "__proto__";
 
@@ -56,7 +56,7 @@ fn plain_literal_keys(object: &ObjectExpression<'_>) -> bool {
         !property.method
             && !property.computed
             && property.kind == PropertyKind::Init
-            && key.is_some_and(|key| key != PROTO_KEY)
+            && key.is_some_and(|key| key != PROTO_KEY && !OBJECT_PROTOTYPE_KEYS.contains(&key))
     })
 }
 
@@ -89,7 +89,10 @@ fn added_key<'p>(
     let Expression::Identifier(object) = object else {
         return None;
     };
-    if name == PROTO_KEY || resolved(object, scoping) != Some(base) {
+    if name == PROTO_KEY
+        || OBJECT_PROTOTYPE_KEYS.contains(&name)
+        || resolved(object, scoping) != Some(base)
+    {
         return None;
     }
     Some((name, &assignment.right, address_of(object)))
@@ -137,6 +140,10 @@ pub(super) fn assembled_alias<'p>(
 }
 
 impl<'p> Assembled<'p> {
+    pub(super) fn base(&self) -> SymbolId {
+        self.base
+    }
+
     pub(super) fn reaches_its_receiver(&self) -> bool {
         let mut scan = ThisFree { found: false };
         scan.visit_object_expression(self.object);

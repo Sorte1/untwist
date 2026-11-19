@@ -17,7 +17,8 @@ use std::cell::{OnceCell, RefCell};
 
 use super::assembled::{aliases_mutated_only_in_dead, assembled_alias, Assembled};
 use super::nested_proof::{
-    annex_b_written, builtins_proven_intact, proven_readonly, static_property, touches_builtins,
+    annex_b_written, builtins_proven_intact, proven_readonly, reaches_its_receiver,
+    static_property, touches_builtins,
 };
 use super::CffValue;
 
