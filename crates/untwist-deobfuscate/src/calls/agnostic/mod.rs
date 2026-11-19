@@ -4,6 +4,7 @@ mod bind;
 mod bootstrap;
 mod bound_once;
 mod bound_this;
+mod chain_text;
 mod consume;
 mod defs;
 mod filtered;
@@ -119,6 +120,9 @@ pub struct Agnostic<'a> {
     pub(super) stores_global: bool,
     pub(super) pending_texts: Vec<String>,
     pub(super) judged_texts: Vec<String>,
+    pub(super) symbol_text: bool,
+    pub(super) chain_text: bool,
+    pub(super) text_unknown: bool,
     pub bootstrap: Option<&'static str>,
     #[cfg(feature = "refusal-spans")]
     pub(super) trail: Vec<crate::refusal_spans::RefusalSpan>,
@@ -406,7 +410,7 @@ fn text_reach<'a>(
         defer: true,
         printers_quiet: false,
         runner_texts,
-        texts_in_every_lane: false,
+        texts_in_every_lane: true,
         sources_outside: false,
     };
     let found = settle(program, scoping, (None, &[], watch)).0;
@@ -591,4 +595,10 @@ pub fn fold_record(program: &Program<'_>, scoping: &Scoping) -> FoldRecord {
         keys,
         code_text: found.code_text.is_some() || found.saturated,
     }
+}
+
+pub(crate) fn rebound(scoping: &Scoping, symbol: SymbolId) -> bool {
+    scoping.symbol_is_mutated(symbol)
+        || (scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
+            && untwist_core::semantic::is_shared_global(scoping.symbol_name(symbol)))
 }

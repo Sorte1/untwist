@@ -195,7 +195,7 @@ fn inlinable_of(defs: &DefTable<'_>, scoping: &Scoping) -> FxHashSet<u32> {
     for (_, found) in defs.present() {
         if let Some(func) = inlinable_func(&found) {
             if plain_param_syms(func).iter().all(|sym| {
-                !scoping.symbol_is_mutated(*sym)
+                !crate::calls::agnostic::rebound(scoping, *sym)
                     && defs.get(*sym).is_none_or(|d| d.writes.is_empty())
             }) {
                 inlinable.insert(func.span.start);
@@ -322,7 +322,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
         bindings.unsealed_maps = std::mem::take(&mut bindings.map_uses).unsealed(resolve);
         let annex = std::mem::take(&mut bindings.annex);
         bindings.defs.each_present_mut(|symbol, def| {
-            def.set_to(MUTATED, scoping.symbol_is_mutated(symbol));
+            def.set_to(MUTATED, crate::calls::agnostic::rebound(scoping, symbol));
             if annex.contains(scoping.symbol_name(symbol)) {
                 def.set(OPAQUE);
             }
@@ -545,7 +545,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
         }
         match self.defs.get(symbol) {
             Some(defs) => !defs.mutated && defs.writes.is_empty(),
-            None => !self.scoping.symbol_is_mutated(symbol),
+            None => !crate::calls::agnostic::rebound(self.scoping, symbol),
         }
     }
 

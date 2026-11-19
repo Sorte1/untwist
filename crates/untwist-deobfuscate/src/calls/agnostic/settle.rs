@@ -3,9 +3,10 @@ use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::borrow::Cow;
 use std::cell::RefCell;
+use untwist_core::semantic::is_shared_global;
 
 use super::assembled::{broken_tables, drop_tables};
 use super::bind::Bindings;
@@ -14,6 +15,7 @@ use super::flow::Flow;
 use super::fresh::Fresh;
 use super::instance::Unwritten;
 use super::native_map;
+use super::reach_text::names_reach_text;
 use super::sites::*;
 use super::{AKey, ASite, Agnostic};
 use crate::proof::ProtoRoot;
@@ -145,9 +147,9 @@ impl Pristine {
         }
     }
 
-    fn after(self, written: &Written<'_>) -> Self {
+    fn after(self, written: &Written<'_>, symbol_text: bool) -> Self {
         Self {
-            symbol: self.symbol && !written.may_be("Symbol"),
+            symbol: self.symbol && !written.may_be("Symbol") && !symbol_text,
             map: self.map && !native_map::may_be_patched(written),
             unwritten: self.unwritten.after(written),
             filters: self.filters && !STRING_METHODS.iter().any(|name| written.may_be(name)),
@@ -192,20 +194,32 @@ fn settle_ordered<'a>(
     };
     let mut bindings =
         Bindings::collect(program, scoping, (!watch.names.is_empty(), exempt), resolve);
-    if !watch.names.is_empty() {
-        bindings.loose =
-            super::namespace_uses::loose_uses(program, scoping, resolve, bindings.symbol_safe());
-    }
-    let flow = Flow::new(program, scoping, resolve);
-    let filters = std::rc::Rc::clone(&bindings.filters);
     let globals = script_globals(program, scoping);
     let lexicals = if watch.names.is_empty() {
         Vec::new()
     } else {
         script_lexicals(program, scoping)
     };
+    let shared = shared_roots(program, scoping);
+    bindings.make_opaque(&shared);
+    let shared_source = !shared.is_empty();
+    let mut opaque: FxHashSet<SymbolId> = shared.into_iter().collect();
+    let mut texts_run = false;
+    let scan_loose = |bindings: &Bindings<'_, 'a>, opaque: &FxHashSet<SymbolId>, texts_run| {
+        let judged = super::namespace_uses::Judged {
+            trust_symbol: bindings.symbol_safe(),
+            opaque,
+            texts_run,
+        };
+        super::namespace_uses::loose_uses(program, scoping, resolve, judged)
+    };
+    if !watch.names.is_empty() {
+        bindings.loose = scan_loose(&bindings, &opaque, texts_run);
+    }
+    let flow = Flow::new(program, scoping, resolve);
+    let filters = std::rc::Rc::clone(&bindings.filters);
     let mut judged = Judged {
-        source: bindings.global_source(),
+        source: bindings.global_source() || shared_source,
         pristine: Pristine::of(&bindings),
     };
     if judged.source {
@@ -224,7 +238,7 @@ fn settle_ordered<'a>(
         let written = Written::of(&out.sites, machinery, (&filters, scoping));
         let next = Judged {
             source: judged.source || out.global_source,
-            pristine: judged.pristine.after(&written),
+            pristine: judged.pristine.after(&written, out.symbol_text),
         };
         if next.source && !judged.source {
             bindings.hide_calls(&globals);
@@ -240,7 +254,26 @@ fn settle_ordered<'a>(
         );
         let broken = broken_tables(&out, &bindings.assembled, machinery);
         drop_tables(&mut bindings.assembled, &broken);
-        if rebound.is_empty() && broken.is_empty() && next == judged {
+        let rescanned = !watch.names.is_empty() && {
+            let blocks: Vec<Span> = machinery
+                .iter()
+                .copied()
+                .chain(bindings.loose.blocks.iter().map(|(span, _)| *span))
+                .collect();
+            let unblocked = Written::of(&out.sites, &blocks, (&filters, scoping));
+            let roots = (globals.as_slice(), lexicals.as_slice());
+            let exposed = walker_rebound(&out, &unblocked, roots, (&bindings, next.source));
+            let before = opaque.len();
+            opaque.extend(exposed);
+            let ran = !texts_run && out.chain_text;
+            texts_run |= ran;
+            let grown = opaque.len() != before || ran;
+            if grown {
+                bindings.loose = scan_loose(&bindings, &opaque, texts_run);
+            }
+            grown
+        };
+        if rebound.is_empty() && broken.is_empty() && next == judged && !rescanned {
             let (reach, observed) = rebound_ambient(&out, scoping, &written);
             out.realm_rebound |= roots_rebound(scoping, &out.sites, machinery, &filters);
             out.global_source = judged.source;
@@ -309,6 +342,18 @@ pub(super) fn script_globals(program: &Program<'_>, scoping: &Scoping) -> Vec<Sy
 
 pub(super) fn script_lexicals(program: &Program<'_>, scoping: &Scoping) -> Vec<SymbolId> {
     root_bindings(program, scoping, true)
+}
+
+fn shared_roots(program: &Program<'_>, scoping: &Scoping) -> Vec<SymbolId> {
+    if untwist_core::semantic::has_module_syntax(program) {
+        return Vec::new();
+    }
+    scoping
+        .get_bindings(scoping.root_scope_id())
+        .iter()
+        .filter(|(name, _)| is_shared_global(name.as_str()))
+        .map(|(_, symbol)| *symbol)
+        .collect()
 }
 
 fn root_bindings(program: &Program<'_>, scoping: &Scoping, lexical: bool) -> Vec<SymbolId> {
@@ -446,25 +491,82 @@ fn rebound_globals(
         }
     }
     let unseen = |symbol: &&SymbolId| !bindings.is_opaque(**symbol);
+    let candidates: Vec<&str> = globals
+        .iter()
+        .chain(texts)
+        .filter(unseen)
+        .map(|symbol| bindings.symbol_name(*symbol))
+        .collect();
+    let named = names_by_text(out, &candidates);
     let rewritten = globals.iter().filter(unseen).filter(|symbol| {
         let name = bindings.symbol_name(**symbol);
         written.may_be(name)
             || (source && bindings.state_written(**symbol, written))
-            || named_by_text(out, name)
+            || named.contains(&name)
     });
     let renamed = texts
         .iter()
         .filter(unseen)
-        .filter(|symbol| named_by_text(out, bindings.symbol_name(**symbol)));
+        .filter(|symbol| named.contains(&bindings.symbol_name(**symbol)));
     rewritten.chain(renamed).copied().collect()
 }
 
-fn named_by_text(out: &Agnostic<'_>, name: &str) -> bool {
-    out.code_text.is_some()
-        && out
-            .judged_texts
-            .iter()
-            .any(|text| crate::proof::names_a_token(text, &[name]))
+fn walker_rebound(
+    out: &Agnostic<'_>,
+    written: &Written<'_>,
+    (globals, lexicals): (&[SymbolId], &[SymbolId]),
+    (bindings, source): (&Bindings<'_, '_>, bool),
+) -> Vec<SymbolId> {
+    let texts: &[SymbolId] = if out.code_text.is_some() {
+        lexicals
+    } else {
+        &[]
+    };
+    if out.text_unknown || out.keyed_global || written.any {
+        return globals.iter().chain(texts).copied().collect();
+    }
+    let candidates: Vec<&str> = globals
+        .iter()
+        .chain(texts)
+        .map(|symbol| bindings.symbol_name(*symbol))
+        .collect();
+    let named = names_by_text(out, &candidates);
+    let rewritten = globals.iter().filter(|symbol| {
+        let name = bindings.symbol_name(**symbol);
+        written.may_be(name)
+            || (source && bindings.state_written(**symbol, written))
+            || named.contains(&name)
+    });
+    let renamed = texts
+        .iter()
+        .filter(|symbol| named.contains(&bindings.symbol_name(**symbol)));
+    rewritten.chain(renamed).copied().collect()
+}
+
+fn names_by_text<'k>(out: &Agnostic<'_>, names: &[&'k str]) -> Vec<&'k str> {
+    if out.code_text.is_none() || names.is_empty() || out.judged_texts.is_empty() {
+        return Vec::new();
+    }
+    let mut sorted = names.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    let mut texts: Vec<&str> = out.judged_texts.iter().map(String::as_str).collect();
+    texts.sort_unstable();
+    texts.dedup();
+    let judged = (super::reach_text::TEXT_DEPTH, true);
+    let mut named = Vec::new();
+    for text in texts {
+        if !names_reach_text(text, (&sorted, &sorted), judged) {
+            continue;
+        }
+        for name in &sorted {
+            let one = [*name];
+            if !named.contains(name) && names_reach_text(text, (&one, &one), judged) {
+                named.push(*name);
+            }
+        }
+    }
+    named
 }
 
 fn unwatched_roots<'k>(

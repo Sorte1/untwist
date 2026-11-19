@@ -85,7 +85,7 @@ impl Literals<'_> {
         let Some((symbol, object)) = object_declarator(declarator) else {
             return;
         };
-        if self.tables.contains(&symbol) || self.scoping.symbol_is_mutated(symbol) {
+        if self.tables.contains(&symbol) || crate::calls::agnostic::rebound(self.scoping, symbol) {
             return;
         }
         if let Some(literal) = literal_of(object) {
@@ -125,8 +125,12 @@ impl Literals<'_> {
         let alias = self.alias_of(statements.get(next)?, table)?;
         let references = self.scoping.get_resolved_reference_ids(table).len();
         let unchecked = flow_rule_disabled(BUILT_LITERAL);
-        let sole = references == writes + 1 && !self.scoping.symbol_is_mutated(table);
-        if writes == 0 || !(unchecked || sole) || self.scoping.symbol_is_mutated(alias) {
+        let sole =
+            references == writes + 1 && !crate::calls::agnostic::rebound(self.scoping, table);
+        if writes == 0
+            || !(unchecked || sole)
+            || crate::calls::agnostic::rebound(self.scoping, alias)
+        {
             return None;
         }
         self.tables.insert(table);

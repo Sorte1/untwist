@@ -91,11 +91,11 @@ impl<'s, 'a> Walker<'s, 'a> {
     }
 
     fn settled(&self, symbol: SymbolId) -> bool {
-        !self.scoping.symbol_is_mutated(symbol)
+        !crate::calls::agnostic::rebound(self.scoping, symbol)
             && self.scoping.symbol_redeclarations(symbol).is_empty()
     }
 
-    fn free_written(&self, name: &str) -> bool {
+    pub(super) fn free_written(&self, name: &str) -> bool {
         self.scoping
             .root_unresolved_references()
             .get(name)

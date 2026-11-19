@@ -44,7 +44,7 @@ impl<'s, 'a> Walker<'s, 'a> {
         }
     }
 
-    fn parent(&self, at: usize) -> Option<(usize, Address)> {
+    pub(super) fn parent(&self, at: usize) -> Option<(usize, Address)> {
         let mut child = self.stack[at].address();
         let mut up = at;
         while up > 0 {

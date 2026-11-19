@@ -104,7 +104,7 @@ fn caches_confined(
             escapes: false,
         };
         uses.visit_program(program);
-        !uses.escapes && !scoping.symbol_is_mutated(symbol)
+        !uses.escapes && !crate::calls::agnostic::rebound(scoping, symbol)
     })
 }
 
@@ -229,7 +229,7 @@ pub(super) fn module_record<'a>(scoping: &Scoping, shape: &Shape<'a>) -> Option<
         return None;
     };
     let symbol = id.symbol_id.get()?;
-    if scoping.symbol_is_mutated(symbol) {
+    if crate::calls::agnostic::rebound(scoping, symbol) {
         return None;
     }
     let mut caches = Vec::new();
@@ -300,7 +300,7 @@ pub(super) fn dispatched_objects(
                 continue;
             }
             if let Some(symbol) = binding_symbol(param) {
-                if !scoping.symbol_is_mutated(symbol) {
+                if !crate::calls::agnostic::rebound(scoping, symbol) {
                     objects.push(symbol);
                 }
             }

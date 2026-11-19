@@ -1,12 +1,12 @@
 use oxc_ast::ast::*;
 use oxc_ast::AstKind;
 use oxc_syntax::operator::LogicalOperator;
-use oxc_syntax::symbol::{SymbolFlags, SymbolId};
+use oxc_syntax::symbol::SymbolId;
 use std::borrow::Cow;
+use untwist_core::semantic::is_shared_global;
 
 use super::keys::KeyProof;
-use super::{key_kind, str_const, Walker, GLOBAL, KIND_DEPTH, NAMESPACE};
-use crate::proof::GLOBAL_OBJECTS;
+use super::{key_kind, property_name, str_const, Resolve, Walker, GLOBAL, KIND_DEPTH, NAMESPACE};
 
 const BUILTIN_CONSTRUCTORS: [&str; 16] = [
     "Object", "Function", "Array", "String", "Number", "Boolean", "Symbol", "BigInt", "RegExp",
@@ -22,6 +22,10 @@ impl<'s, 'a> Walker<'s, 'a> {
     ) -> u8 {
         let text = self.key_text(key, KIND_DEPTH);
         let open = text.is_none();
+        if open && self.numeric_key(key, KIND_DEPTH) {
+            let global = base & GLOBAL != 0 || self.may_hold_global(object, KIND_DEPTH);
+            return if global { GLOBAL } else { 0 };
+        }
         if open {
             match self.key_proof(object, key) {
                 KeyProof::Open => {}
@@ -51,7 +55,7 @@ impl<'s, 'a> Walker<'s, 'a> {
 
     fn fixed_init(&self, symbol: SymbolId) -> Option<&'a Expression<'a>> {
         let candidate = self.candidates.get(&symbol)?;
-        let fixed = !self.scoping.symbol_is_mutated(symbol)
+        let fixed = !crate::calls::agnostic::rebound(self.scoping, symbol)
             && self.scoping.symbol_redeclarations(symbol).is_empty()
             && candidate
                 .function
@@ -59,33 +63,39 @@ impl<'s, 'a> Walker<'s, 'a> {
         fixed.then_some(candidate.init)
     }
 
-    fn may_hold_global(&self, expr: &Expression<'a>, depth: u8) -> bool {
+    pub(super) fn may_hold_global(&self, expr: &Expression<'a>, depth: u8) -> bool {
         let Some(next) = depth.checked_sub(1) else {
             return true;
         };
         match expr.without_parentheses() {
+            Expression::NullLiteral(_) => false,
             Expression::StringLiteral(_)
             | Expression::NumericLiteral(_)
             | Expression::BigIntLiteral(_)
             | Expression::BooleanLiteral(_)
-            | Expression::NullLiteral(_)
             | Expression::RegExpLiteral(_)
             | Expression::TemplateLiteral(_)
-            | Expression::ObjectExpression(_)
-            | Expression::ArrayExpression(_)
-            | Expression::FunctionExpression(_)
-            | Expression::ArrowFunctionExpression(_)
-            | Expression::ClassExpression(_)
             | Expression::UnaryExpression(_)
             | Expression::BinaryExpression(_)
-            | Expression::UpdateExpression(_) => false,
+            | Expression::UpdateExpression(_)
+            | Expression::ArrayExpression(_)
+            | Expression::FunctionExpression(_)
+            | Expression::ArrowFunctionExpression(_) => !self.builtins_trusted,
+            Expression::ClassExpression(class) => {
+                class.heritage.is_some() || !self.builtins_trusted
+            }
+            Expression::ObjectExpression(object) => {
+                !self.builtins_trusted || sets_own_chain(object, self.resolve)
+            }
             Expression::Identifier(id) => match self.symbol(id) {
-                None => GLOBAL_OBJECTS.contains(&id.name.as_str()),
+                None => true,
                 Some(symbol) => self.symbol_may_hold_global(symbol, next),
             },
-            Expression::ThisExpression(_) => self.this_open(),
-            Expression::CallExpression(call) => !self.array_source(call),
-            Expression::StaticMemberExpression(member) => !self.builtin_prototype(member),
+            Expression::ThisExpression(_) => true,
+            Expression::CallExpression(call) => !self.array_source(call) || !self.builtins_trusted,
+            Expression::StaticMemberExpression(member) => {
+                !self.builtin_prototype(member) || !self.builtins_trusted
+            }
             Expression::ConditionalExpression(c) => {
                 self.may_hold_global(&c.consequent, next)
                     || self.may_hold_global(&c.alternate, next)
@@ -105,21 +115,34 @@ impl<'s, 'a> Walker<'s, 'a> {
     }
 
     fn symbol_may_hold_global(&self, symbol: SymbolId, depth: u8) -> bool {
-        let fixed_callable = self
-            .scoping
-            .symbol_flags(symbol)
-            .intersects(SymbolFlags::Function | SymbolFlags::Class)
-            && !self.scoping.symbol_is_mutated(symbol)
-            && self.scoping.symbol_redeclarations(symbol).is_empty();
-        if fixed_callable {
-            return false;
+        if self.opaque.contains(&symbol) || self.shared_root(symbol) {
+            return true;
         }
-        self.fixed_init(symbol)
-            .is_none_or(|init| self.may_hold_global(init, depth))
+        let Some(init) = self.fixed_init(symbol) else {
+            return true;
+        };
+        let Some(uses) = self.holder_uses.get(&symbol) else {
+            return self.may_hold_global(init, depth);
+        };
+        if uses.escaped
+            || uses
+                .protos
+                .iter()
+                .any(|value| value.is_none_or(|value| self.may_hold_global(value, depth)))
+        {
+            return true;
+        }
+        let own_method = uses
+            .called
+            .iter()
+            .any(|key| uses.written.contains(key) || init_defines(init, key, self.resolve));
+        own_method || self.may_hold_global(init, depth)
     }
 
-    fn this_open(&self) -> bool {
-        self.this_open.last().copied().unwrap_or(true)
+    pub(super) fn shared_root(&self, symbol: SymbolId) -> bool {
+        self.script
+            && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
+            && is_shared_global(self.scoping.symbol_name(symbol))
     }
 
     pub(super) fn collect_array_source(&mut self, kind: AstKind<'a>) {
@@ -180,5 +203,35 @@ impl<'s, 'a> Walker<'s, 'a> {
         member.property.name == "prototype"
             && self.symbol(owner).is_none()
             && BUILTIN_CONSTRUCTORS.contains(&owner.name.as_str())
+            && !self.free_written(owner.name.as_str())
     }
+}
+
+fn sets_own_chain(object: &ObjectExpression<'_>, resolve: Resolve<'_>) -> bool {
+    object.properties.iter().any(|property| match property {
+        ObjectPropertyKind::ObjectProperty(p) => {
+            p.kind != PropertyKind::Init
+                || (!p.computed
+                    && !p.shorthand
+                    && !p.method
+                    && property_name(&p.key, resolve).as_deref() == Some("__proto__"))
+        }
+        ObjectPropertyKind::SpreadProperty(_) => false,
+    })
+}
+
+fn init_defines(init: &Expression<'_>, key: &str, resolve: Resolve<'_>) -> bool {
+    let object = match init.without_parentheses() {
+        Expression::ObjectExpression(object) => object,
+        Expression::ArrayExpression(_) => {
+            return key == "length" || key.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        _ => return false,
+    };
+    object.properties.iter().any(|property| match property {
+        ObjectPropertyKind::ObjectProperty(p) => {
+            property_name(&p.key, resolve).is_none_or(|name| name == key)
+        }
+        ObjectPropertyKind::SpreadProperty(_) => true,
+    })
 }

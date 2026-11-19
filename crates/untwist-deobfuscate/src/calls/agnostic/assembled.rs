@@ -159,7 +159,10 @@ impl<'a> Scan<'_, '_, 'a> {
         let alias = self.alias_of(statements.get(next)?, table)?;
         let references = self.scoping.get_resolved_reference_ids(table).len();
         let unchecked = flow_rule_disabled(BUILT_LITERAL);
-        if !unchecked && (references != writes.len() + 1 || self.scoping.symbol_is_mutated(table)) {
+        if !unchecked
+            && (references != writes.len() + 1
+                || crate::calls::agnostic::rebound(self.scoping, table))
+        {
             return None;
         }
         Some((alias, Assembled { fields, writes }))

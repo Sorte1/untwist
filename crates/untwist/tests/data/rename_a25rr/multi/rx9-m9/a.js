@@ -1,0 +1,1 @@
+globalThis.c = globalThis;
