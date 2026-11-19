@@ -324,7 +324,7 @@ fn shape<'a>(
         .id
         .as_ref()
         .and_then(|id| id.symbol_id.get())
-        .filter(|symbol| !scoping.symbol_is_mutated(*symbol))
+        .filter(|symbol| !crate::calls::agnostic::rebound(scoping, *symbol))
         .ok_or(DISPATCH_SHAPE)?;
     if dispatch.optional {
         return Err(DISPATCH_SHAPE);
@@ -452,7 +452,7 @@ impl<'a> Uses<'_, 'a> {
                 let escapes = self.helper_reads.iter().any(|read| read == name);
                 !escapes
                     && (dead
-                        || (!self.scoping.symbol_is_mutated(*symbol)
+                        || (!crate::calls::agnostic::rebound(self.scoping, *symbol)
                             && calls().all(|(_, call)| {
                                 call.arguments
                                     .get(at)
@@ -711,14 +711,14 @@ pub(super) fn prove<'a>(
     let (outer, shape) = found?;
     let table_symbol = outer.table;
     let table = table_of(scoping, outer.elements).ok_or(TABLE_NOT_LITERAL)?;
-    if scoping.symbol_is_mutated(table_symbol) || !outer.plain {
+    if crate::calls::agnostic::rebound(scoping, table_symbol) || !outer.plain {
         return Err(TABLE_ESCAPES);
     }
     let mut aliases = FxHashSet::default();
     for params in &table.functions {
         for index in &shape.aliases {
             if let Some(symbol) = params.items.get(*index).and_then(binding_symbol) {
-                if scoping.symbol_is_mutated(symbol) {
+                if crate::calls::agnostic::rebound(scoping, symbol) {
                     return Err(REQUIRE_ESCAPES);
                 }
                 aliases.insert(symbol);

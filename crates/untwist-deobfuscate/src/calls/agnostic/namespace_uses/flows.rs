@@ -83,7 +83,7 @@ impl<'s, 'a> Walker<'s, 'a> {
                         .candidates
                         .get(&symbol)
                         .is_some_and(|candidate| function_literal(candidate.init));
-                declared && !self.scoping.symbol_is_mutated(symbol)
+                declared && !crate::calls::agnostic::rebound(self.scoping, symbol)
             }),
             other => other.as_member_expression().is_some_and(|reader| {
                 member_key(reader, self.resolve)

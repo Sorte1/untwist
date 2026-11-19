@@ -59,7 +59,7 @@ fn for_in_pair<'a>(
     };
     let key = id.symbol_id.get()?;
     let plain = declarator.init.is_none()
-        && !scoping.symbol_is_mutated(key)
+        && !crate::calls::agnostic::rebound(scoping, key)
         && names(scoping, &each.right, definition);
     plain.then_some((key, &**each))
 }
@@ -126,7 +126,7 @@ pub(super) fn getter_read(
         return None;
     }
     let definition = params.items.get(1).and_then(binding_symbol)?;
-    if scoping.symbol_is_mutated(definition)
+    if crate::calls::agnostic::rebound(scoping, definition)
         || calls
             .iter()
             .any(|call| !call.arguments.get(1).is_some_and(function_literal))

@@ -103,7 +103,7 @@ impl<'s, 'a> Sites<'s, 'a> {
             };
             let scoping = self.fresh.scoping;
             if aliased
-                || scoping.symbol_is_mutated(symbol)
+                || crate::calls::agnostic::rebound(scoping, symbol)
                 || !scoping.symbol_redeclarations(symbol).is_empty()
             {
                 continue;
@@ -175,6 +175,7 @@ impl<'s, 'a> Sites<'s, 'a> {
 
     pub(super) fn inline_exhausted(&mut self, span: Span) {
         self.out.code_text.get_or_insert(span);
+        self.out.text_unknown = true;
         if !self.text_judged {
             self.out.reach_code.get_or_insert(span);
         }

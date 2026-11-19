@@ -1,0 +1,1 @@
+function later() { p = globalThis; }

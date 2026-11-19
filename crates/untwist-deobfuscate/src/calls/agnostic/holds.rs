@@ -56,7 +56,7 @@ impl<'a> VisitJs<'a> for MemberTarget {
     }
 }
 
-fn writes_a_member(target: &AssignmentTarget<'_>) -> bool {
+pub(in crate::calls::agnostic) fn writes_a_member(target: &AssignmentTarget<'_>) -> bool {
     let mut scan = MemberTarget::default();
     scan.visit_assignment_target(target);
     scan.found

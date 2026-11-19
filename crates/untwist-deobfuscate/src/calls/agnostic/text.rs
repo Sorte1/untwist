@@ -79,7 +79,24 @@ impl<'s, 'a> Sites<'s, 'a> {
         let plain = kind
             .plain()
             .is_some_and(|plain| self.text_unsafe(arguments, plain));
+        let texts: Vec<Option<&Expression<'a>>> =
+            arguments.iter().map(Argument::as_expression).collect();
+        let literal: Option<Vec<String>> = texts
+            .iter()
+            .map(|text| text.and_then(|expr| self.text_value(expr, KEY_DEPTH)))
+            .collect();
+        self.spare_texts(literal.as_deref());
         self.mark_judged(call_span, kind, plain);
+        self.spare_texts(None);
+    }
+
+    fn spare_texts(&self, texts: Option<&[String]>) {
+        let spared = |judge: fn(&str) -> bool| {
+            texts.is_some_and(|texts| texts.iter().all(|text| judge(text)))
+        };
+        self.symbol_spared.set(spared(text_spares_symbol));
+        self.chain_spared.set(spared(text_spares_chains));
+        self.literal_spared.set(texts.is_some());
     }
 
     fn mark_judged(&mut self, span: Span, kind: Text, plain: bool) {
@@ -119,7 +136,10 @@ impl<'s, 'a> Sites<'s, 'a> {
         };
         if writes(kind) {
             let plain = kind.plain().is_some_and(writes);
+            let texts = text.as_ref().map(|text| vec![text.to_string()]);
+            self.spare_texts(texts.as_deref());
             self.mark_judged(span, kind, plain);
+            self.spare_texts(None);
         }
     }
 
@@ -420,4 +440,15 @@ impl<'s, 'a> Sites<'s, 'a> {
             self.mark_code(call.span);
         }
     }
+}
+
+const SYMBOL: [&str; 1] = ["Symbol"];
+
+fn text_spares_chains(text: &str) -> bool {
+    super::chain_text::text_spares_chains(text, super::reach_text::TEXT_DEPTH)
+}
+
+fn text_spares_symbol(text: &str) -> bool {
+    let judged = (super::reach_text::TEXT_DEPTH, true);
+    !super::reach_text::names_reach_text(text, (&SYMBOL, &SYMBOL), judged)
 }

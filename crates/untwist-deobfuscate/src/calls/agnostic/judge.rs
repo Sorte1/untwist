@@ -424,11 +424,13 @@ impl<'s, 'a> Sites<'s, 'a> {
     pub(super) fn judge_collected(mut self) -> (Agnostic<'a>, bool, bool) {
         self.judge_script_sinks();
         if !self.walks_on() {
+            self.out.text_unknown = true;
             return self.into_saturated();
         }
         let calls = std::mem::take(&mut self.calls);
         for call in calls {
             if !self.walks_on() {
+                self.out.text_unknown = true;
                 return self.into_saturated();
             }
             self.judge_call(call);
@@ -447,7 +449,11 @@ impl<'s, 'a> Sites<'s, 'a> {
                 self.check_template(template.span, &template.quasi, self.unbounded_text());
             }
         }
-        if saturated_while_watching || !self.element_bounds_hold() {
+        if !self.element_bounds_hold() {
+            self.out.text_unknown |= !self.element_bounds_hold_beside_blocks();
+            return self.into_saturated();
+        }
+        if saturated_while_watching {
             return self.into_saturated();
         }
         let (chains, natives) = self.assumptions_hold();
@@ -465,18 +471,32 @@ impl<'s, 'a> Sites<'s, 'a> {
     }
 
     fn element_bounds_hold(&self) -> bool {
+        self.element_bounds_hold_without(|_| false)
+    }
+
+    fn element_bounds_hold_beside_blocks(&self) -> bool {
+        let blocks = &self.fresh.bindings.loose;
+        self.element_bounds_hold_without(|span| blocks.exempt(span) || self.in_machinery(span))
+    }
+
+    fn element_bounds_hold_without(&self, exempt: impl Fn(Span) -> bool) -> bool {
         !self.bounds_used.get()
-            || !self.out.sites.iter().any(|site| {
-                matches!(
-                    site.root,
-                    ProtoRoot::Array | ProtoRoot::Object | ProtoRoot::Either
-                ) && match &site.key {
-                    AKey::Named(name) => {
-                        !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit())
+            || !self
+                .out
+                .sites
+                .iter()
+                .filter(|site| !exempt(site.span))
+                .any(|site| {
+                    matches!(
+                        site.root,
+                        ProtoRoot::Array | ProtoRoot::Object | ProtoRoot::Either
+                    ) && match &site.key {
+                        AKey::Named(name) => {
+                            !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit())
+                        }
+                        AKey::Index | AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
                     }
-                    AKey::Index | AKey::Pending(_) | AKey::Filtered(_) | AKey::Unknown => true,
-                }
-            })
+                })
     }
 
     pub(super) fn assumptions_hold(&self) -> (bool, bool) {

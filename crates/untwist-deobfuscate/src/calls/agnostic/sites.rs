@@ -153,6 +153,9 @@ pub(super) struct Sites<'s, 'a> {
     pub(super) holds: Holds<'s, 'a>,
     pub(super) known_rests: FxHashMap<Span, Vec<AKey<'a>>>,
     pub(super) assigned_globals: std::cell::OnceCell<FxHashSet<&'s str>>,
+    pub(super) symbol_spared: Cell<bool>,
+    pub(super) chain_spared: Cell<bool>,
+    pub(super) literal_spared: Cell<bool>,
 }
 
 impl<'s, 'a> Sites<'s, 'a> {
@@ -227,6 +230,9 @@ impl<'s, 'a> Sites<'s, 'a> {
             holds,
             known_rests: FxHashMap::default(),
             assigned_globals: std::cell::OnceCell::new(),
+            symbol_spared: Cell::new(false),
+            chain_spared: Cell::new(false),
+            literal_spared: Cell::new(false),
         }
     }
 
@@ -383,6 +389,9 @@ impl<'s, 'a> Sites<'s, 'a> {
         if self.out.code_text.is_none() {
             self.out.code_text = Some(span);
         }
+        self.out.symbol_text |= !self.symbol_spared.get();
+        self.out.chain_text |= !self.chain_spared.get();
+        self.out.text_unknown |= !self.literal_spared.get();
         if !self.text_judged {
             self.out.reach_code.get_or_insert(span);
         }

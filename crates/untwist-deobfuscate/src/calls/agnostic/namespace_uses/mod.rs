@@ -1,7 +1,10 @@
 mod blocks;
+mod chains;
 mod flows;
+mod holder_uses;
 mod holders;
 mod keys;
+mod numeric;
 mod shapes;
 
 use std::borrow::Cow;
@@ -88,7 +91,6 @@ struct Walker<'s, 'a> {
     phase: Phase,
     stack: Vec<AstKind<'a>>,
     this_global: Vec<bool>,
-    this_open: Vec<bool>,
     functions: Vec<Address>,
     arguments_used: FxHashSet<Address>,
     candidates: FxHashMap<SymbolId, Candidate<'a>>,
@@ -103,6 +105,12 @@ struct Walker<'s, 'a> {
     protections: FxHashSet<SymbolId>,
     blocks: Vec<(Span, &'static [&'static str])>,
     found: Vec<Span>,
+    holder_uses: FxHashMap<SymbolId, holder_uses::HolderUses<'a>>,
+    opaque: &'s FxHashSet<SymbolId>,
+    builtins_trusted: bool,
+    chains_open: bool,
+    numeric_writes: FxHashMap<SymbolId, Vec<numeric::NumericWrite<'a>>>,
+    dynamic_scope: bool,
 }
 
 #[derive(Default)]
@@ -112,27 +120,33 @@ pub(in crate::calls::agnostic) struct Loose {
     pub(in crate::calls::agnostic) untrusted_symbol: Option<Vec<Span>>,
 }
 
+pub(in crate::calls::agnostic) struct Judged<'k> {
+    pub(in crate::calls::agnostic) trust_symbol: bool,
+    pub(in crate::calls::agnostic) opaque: &'k FxHashSet<SymbolId>,
+    pub(in crate::calls::agnostic) texts_run: bool,
+}
+
 pub(super) fn loose_uses<'a>(
     program: &'a Program<'a>,
     scoping: &Scoping,
     resolve: Resolve<'_>,
-    trust_symbol: bool,
+    judged: Judged<'_>,
 ) -> Loose {
+    let script = !untwist_core::semantic::has_module_syntax(program);
     let mut walker = Walker {
         scoping,
         resolve,
-        script: !untwist_core::semantic::has_module_syntax(program),
+        script,
         phase: Phase::Collect,
         stack: Vec::new(),
         this_global: Vec::new(),
-        this_open: Vec::new(),
         functions: Vec::new(),
         arguments_used: FxHashSet::default(),
         candidates: FxHashMap::default(),
         array_functions: FxHashMap::default(),
         enumerations: FxHashMap::default(),
         bound_keys: FxHashMap::default(),
-        trust_symbol,
+        trust_symbol: judged.trust_symbol,
         symbol_proof_used: std::cell::Cell::new(false),
         assigned_at: FxHashMap::default(),
         aliases: FxHashMap::default(),
@@ -140,8 +154,15 @@ pub(super) fn loose_uses<'a>(
         protections: FxHashSet::default(),
         blocks: Vec::new(),
         found: Vec::new(),
+        holder_uses: FxHashMap::default(),
+        opaque: judged.opaque,
+        builtins_trusted: true,
+        chains_open: false,
+        numeric_writes: FxHashMap::default(),
+        dynamic_scope: false,
     };
     walker.walk(program);
+    walker.settle_chains(judged.texts_run);
     walker.aliases = walker.qualified();
     walker.phase = Phase::Check;
     walker.walk(program);
@@ -256,10 +277,8 @@ impl<'s, 'a> Walker<'s, 'a> {
     fn walk(&mut self, program: &'a Program<'a>) {
         self.stack.clear();
         self.this_global.clear();
-        self.this_open.clear();
         self.functions.clear();
         self.this_global.push(self.script);
-        self.this_open.push(self.script);
         self.visit_program(program);
     }
 
@@ -351,7 +370,7 @@ impl<'s, 'a> Walker<'s, 'a> {
         self.candidates
             .iter()
             .filter(|(symbol, candidate)| {
-                !self.scoping.symbol_is_mutated(**symbol)
+                !crate::calls::agnostic::rebound(self.scoping, **symbol)
                     && self.scoping.symbol_redeclarations(**symbol).is_empty()
                     && candidate
                         .function
@@ -388,7 +407,8 @@ impl<'s, 'a> Walker<'s, 'a> {
         symbol: SymbolId,
         init: &'a Expression<'a>,
     ) -> Option<&'a Function<'a>> {
-        shapes::returned_function(init).filter(|_| !self.scoping.symbol_is_mutated(symbol))
+        shapes::returned_function(init)
+            .filter(|_| !crate::calls::agnostic::rebound(self.scoping, symbol))
     }
 
     fn collect_params(&mut self, call: &'a CallExpression<'a>) {
@@ -594,7 +614,7 @@ impl<'s, 'a> Walker<'s, 'a> {
                     self.scoping
                         .symbol_flags(symbol)
                         .intersects(SymbolFlags::Function | SymbolFlags::Class)
-                        && !self.scoping.symbol_is_mutated(symbol)
+                        && !crate::calls::agnostic::rebound(self.scoping, symbol)
                 }
             },
             Expression::LogicalExpression(l) if l.operator == LogicalOperator::And => {
@@ -724,18 +744,12 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
             AstKind::Function(function) => {
                 let global = self.global_receiver_function();
                 self.this_global.push(global);
-                let strict = function
-                    .scope_id
-                    .get()
-                    .is_some_and(|scope| self.scoping.scope_flags(scope).is_strict_mode());
-                self.this_open.push(!strict);
                 self.functions.push(function.unstable_address());
             }
             AstKind::StaticBlock(_)
             | AstKind::PropertyDefinition(_)
             | AstKind::AccessorProperty(_) => {
                 self.this_global.push(false);
-                self.this_open.push(false);
             }
             _ => {}
         }
@@ -749,14 +763,12 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
         match kind {
             AstKind::Function(_) => {
                 self.this_global.pop();
-                self.this_open.pop();
                 self.functions.pop();
             }
             AstKind::StaticBlock(_)
             | AstKind::PropertyDefinition(_)
             | AstKind::AccessorProperty(_) => {
                 self.this_global.pop();
-                self.this_open.pop();
             }
             _ => {}
         }
@@ -770,6 +782,8 @@ impl<'s, 'a> VisitJs<'a> for Walker<'s, 'a> {
 
 impl<'s, 'a> Walker<'s, 'a> {
     fn collect(&mut self, kind: AstKind<'a>) {
+        self.collect_chain(kind);
+        self.collect_numeric(kind);
         self.collect_array_source(kind);
         self.collect_enumeration(kind);
         match kind {
@@ -784,7 +798,10 @@ impl<'s, 'a> Walker<'s, 'a> {
                     self.arguments_used.insert(*function);
                 }
             }
-            AstKind::IdentifierReference(id) => self.collect_reference(id),
+            AstKind::IdentifierReference(id) => {
+                self.collect_reference(id);
+                self.collect_holder_use(id);
+            }
             _ => {}
         }
     }
