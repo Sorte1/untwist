@@ -5,7 +5,7 @@ use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, 
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashMap;
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 
 use super::{Builtins, Reliance, Scanned};
 use crate::semantic::{is_foreign_global, program_is_strict};
@@ -15,13 +15,16 @@ mod escapes;
 mod functions;
 mod keys;
 mod modules;
+mod parts;
 mod reach;
+mod targets;
 mod windows;
 
 use allow::Root;
 
 use reach::{
-    call_of, key_of, member_of, Key, CODE_RUNNERS, CONTEXT_RUNNERS, REACHING_KEYS, TIMERS,
+    call_of, key_of, member_of, member_parts, Key, CODE_RUNNERS, CONTEXT_RUNNERS, REACHING_KEYS,
+    TIMERS,
 };
 
 const GLOBAL_OBJECTS: [&str; 7] = [
@@ -198,6 +201,9 @@ struct Scan<'s> {
     frames: Vec<Frame>,
     verdict: Builtins,
     promise_written: bool,
+    host_member: Option<usize>,
+    window_escaped: bool,
+    window_writes: Cell<bool>,
 }
 
 fn names_a_foreign_root(scoping: &Scoping, reliance: &Reliance) -> bool {
@@ -249,6 +255,7 @@ pub fn scan(
     let mut scan = Scan::new(program, scoping, module, reliance);
     scan.writes_only = writes_only;
     scan.visit_program(program);
+    scan.settle_window_flows();
     Scanned {
         verdict: scan.verdict,
         promise_written: scan.promise_written,
@@ -271,6 +278,7 @@ pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: 
     let mut scan = Scan::new(program, scoping, module, reliance);
     scan.first_only = true;
     scan.visit_program(program);
+    scan.settle_window_flows();
     scan.verdict == Builtins::Intact
 }
 
@@ -297,6 +305,9 @@ impl<'s> Scan<'s> {
             frames: vec![Frame::of_program(program, module)],
             verdict: first_verdict(scoping, reliance, module),
             promise_written: false,
+            host_member: None,
+            window_escaped: false,
+            window_writes: Cell::new(false),
         }
     }
 }
@@ -318,7 +329,12 @@ impl Scan<'_> {
 
     pub(super) fn window_local(&self, symbol: SymbolId) -> bool {
         self.windows
-            .get_or_init(|| windows::window_locals(self.program, self.scoping))
+            .get_or_init(|| {
+                let consts = self
+                    .consts
+                    .get_or_init(|| keys::const_keys(self.program, self.scoping));
+                windows::window_locals(self.program, self.scoping, consts)
+            })
             .contains(&symbol)
     }
 
@@ -437,7 +453,7 @@ impl Scan<'_> {
         }
         matches!(
             self.allow_root(expression),
-            Some(Root::Builtin(_) | Root::Prototype(_) | Root::Global)
+            Some(Root::Builtin(_) | Root::Prototype(_) | Root::Global | Root::Host(_))
         )
     }
 
@@ -458,7 +474,9 @@ impl Scan<'_> {
     fn global_key(&self, object: &Expression<'_>, key: Option<&str>) -> bool {
         let named =
             |name: &str| self.reliance.roots.contains(&name) || GLOBAL_OBJECTS.contains(&name);
-        (self.is_global_object(object) || self.is_named_root(object) && !self.is_builtin(object))
+        let host = matches!(self.allow_root(object), Some(Root::Host(_)));
+        (self.is_global_object(object)
+            || self.is_named_root(object) && !self.is_builtin(object) && !host)
             && key.is_none_or(named)
     }
 
@@ -576,16 +594,11 @@ impl Scan<'_> {
 
     fn visit_require(&mut self, call: &CallExpression<'_>) {
         let first = call.arguments.first().and_then(Argument::as_expression);
-        if !modules::names_a_safe_module(first) {
+        let host_member = self.host_member == Some(std::ptr::from_ref(call).addr());
+        if !modules::names_a_safe_module(first) && !(host_member && self.requires_process(call)) {
             self.not_allowed();
         }
-        if let Some((object, key)) = member_of(&call.callee) {
-            self.visit_member_object(object, key);
-            if let Expression::ComputedMemberExpression(member) = call.callee.without_parentheses()
-            {
-                self.visit_expression(&member.expression);
-            }
-        }
+        self.visit_checked_member(&call.callee);
         self.visit_arguments(&call.arguments);
     }
 
@@ -751,10 +764,20 @@ impl Scan<'_> {
             }
             _ => {}
         }
-        if self.writes_only || !self.is_root(expression) {
+        if self.writes_only || !(self.is_root(expression) || self.window_value(expression)) {
             self.visit_expression(expression);
-        } else if self.is_reached(expression) {
-            self.visit_reached(expression);
+        } else {
+            self.visit_root_parts(expression);
+        }
+    }
+
+    fn visit_local_value(&mut self, symbol: Option<SymbolId>, expression: &Expression<'_>) {
+        let local = symbol.is_some_and(|symbol| !self.is_script_global(symbol));
+        if local && !self.writes_only && !self.is_root(expression) && self.window_value(expression)
+        {
+            self.visit_root_parts(expression);
+        } else {
+            self.visit_expression(expression);
         }
     }
 
@@ -770,13 +793,13 @@ impl Scan<'_> {
             if !self.read_allowed(root, key) {
                 self.not_allowed();
             }
-            if let Some((inner, inner_key)) = member_of(stripped) {
-                self.visit_member_object(inner, inner_key);
-                if let Expression::ComputedMemberExpression(member) = stripped {
-                    self.visit_expression(&member.expression);
-                }
-            }
+            self.visit_checked_member(stripped);
             return;
+        }
+        if let Some(call) = call_of(stripped) {
+            if self.requires_process(call) && self.reads_host_name(key) {
+                self.host_member = Some(std::ptr::from_ref(call).addr());
+            }
         }
         match stripped {
             Expression::LogicalExpression(_)
@@ -792,42 +815,22 @@ impl Scan<'_> {
             .is_some_and(|(object, _)| matches!(self.allow_root(object), Some(Root::Prototype(_))))
     }
 
-    fn visit_reached(&mut self, expression: &Expression<'_>) {
-        if let Some(call) = call_of(expression) {
-            self.visit_call_expression(call);
-            return;
-        }
-        if let Expression::TaggedTemplateExpression(tagged) = expression.without_parentheses() {
-            self.visit_tagged_template_expression(tagged);
-            return;
-        }
-        let Some((object, _)) = member_of(expression) else {
-            return;
+    fn visit_checked_member(&mut self, expression: &Expression<'_>) -> bool {
+        let Some((object, key)) = member_of(expression) else {
+            return self.visit_member_parts(expression);
         };
-        self.visit_unless_root(object);
-        if let Expression::ComputedMemberExpression(member) = expression.without_parentheses() {
-            self.visit_expression(&member.expression);
+        self.visit_member_object(object, key);
+        if let Some((_, Some(computed))) = member_parts(expression) {
+            self.visit_expression(computed);
         }
-        if let Expression::ChainExpression(chain) = expression.without_parentheses() {
-            if let Some(MemberExpression::ComputedMemberExpression(member)) =
-                chain.expression.as_member_expression()
-            {
-                self.visit_expression(&member.expression);
-            }
-        }
+        true
     }
 
     fn visit_timer_member(&mut self, expression: &Expression<'_>) -> bool {
         if self.timer_member(expression).is_none() {
             return false;
         }
-        if let Some((object, key)) = member_of(expression) {
-            self.visit_member_object(object, key);
-        }
-        if let Expression::ComputedMemberExpression(member) = expression.without_parentheses() {
-            self.visit_expression(&member.expression);
-        }
-        true
+        self.visit_checked_member(expression)
     }
 
     fn visit_callee(&mut self, callee: &Expression<'_>) {
@@ -884,11 +887,12 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         if !self.writes_only && self.timer_member(it).is_some() && !self.is_root(it) {
             self.aliased();
         }
+        if !self.writes_only && self.window_value(it) {
+            self.window_escaped = true;
+        }
         if !self.writes_only && (self.is_root(it) || self.reads_prototypes(it)) {
             self.aliased();
-            if self.is_reached(it) {
-                self.visit_reached(it);
-            }
+            self.visit_root_parts(it);
             return;
         }
         walk_js::walk_expression(self, it);
@@ -925,6 +929,15 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         }
     }
 
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) else {
+            walk_js::walk_variable_declarator(self, it);
+            return;
+        };
+        self.visit_binding_identifier(id);
+        self.visit_local_value(id.symbol_id.get(), init);
+    }
+
     fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
         self.not_allowed();
         walk_js::walk_with_statement(self, it);
@@ -939,14 +952,35 @@ impl<'a> VisitJs<'a> for Scan<'_> {
 
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
         self.judge_source(Some(&it.source));
+        let process = modules::source_is_process(&it.source);
+        for specifier in it.specifiers.iter().flatten() {
+            match specifier {
+                ImportDeclarationSpecifier::ImportSpecifier(named) => {
+                    self.judge_module_name(&named.imported, process);
+                }
+                ImportDeclarationSpecifier::ImportDefaultSpecifier(_)
+                | ImportDeclarationSpecifier::ImportNamespaceSpecifier(_) => {
+                    if process {
+                        self.not_allowed();
+                    }
+                }
+            }
+        }
     }
 
     fn visit_export_all_declaration(&mut self, it: &ExportAllDeclaration<'a>) {
         self.judge_source(Some(&it.source));
+        if modules::source_is_process(&it.source) {
+            self.not_allowed();
+        }
     }
 
     fn visit_export_from_declaration(&mut self, it: &ExportFromDeclaration<'a>) {
         self.judge_source(Some(&it.source));
+        let process = modules::source_is_process(&it.source);
+        for specifier in &it.specifiers {
+            self.judge_module_name(&specifier.local, process);
+        }
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
@@ -971,7 +1005,9 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         if self.calls_through_a_prototype(&it.callee) {
             self.not_allowed();
         }
-        if !self.reads_prototypes(&it.callee) {
+        if self.reads_prototypes(&it.callee) {
+            self.visit_member_parts(&it.callee);
+        } else {
             self.visit_callee(&it.callee);
         }
         self.visit_arguments(&it.arguments);
@@ -988,7 +1024,9 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         if self.calls_through_a_prototype(&it.tag) {
             self.not_allowed();
         }
-        if !self.reads_prototypes(&it.tag) {
+        if self.reads_prototypes(&it.tag) {
+            self.visit_member_parts(&it.tag);
+        } else {
             self.visit_callee(&it.tag);
         }
         self.visit_template_literal(&it.quasi);
@@ -1017,19 +1055,15 @@ impl<'a> VisitJs<'a> for Scan<'_> {
 
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
         match it.operator {
-            UnaryOperator::Typeof if self.is_root(&it.argument) => {}
             UnaryOperator::Typeof if self.is_require_name(&it.argument) => {}
             UnaryOperator::Typeof if self.visit_timer_member(&it.argument) => {}
-            UnaryOperator::LogicalNot | UnaryOperator::Void => self.visit_unless_root(&it.argument),
-            UnaryOperator::Delete if self.deletes_window_key(&it.argument) => {
-                self.not_allowed();
-                walk_js::walk_unary_expression(self, it);
+            UnaryOperator::Typeof | UnaryOperator::LogicalNot | UnaryOperator::Void => {
+                self.visit_unless_root(&it.argument);
             }
-            UnaryOperator::Delete if self.member_write(&it.argument) => self.written(),
-            UnaryOperator::Delete if self.reaches_promise(&it.argument) => {
-                self.promise_written = true;
+            UnaryOperator::Delete => self.visit_delete(it),
+            UnaryOperator::UnaryNegation | UnaryOperator::UnaryPlus | UnaryOperator::BitwiseNot => {
+                walk_js::walk_unary_expression(self, it)
             }
-            _ => walk_js::walk_unary_expression(self, it),
         }
     }
 
@@ -1058,6 +1092,18 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         if installs {
             self.not_allowed();
             self.visit_expression(&it.right);
+            return;
+        }
+        if it.operator != AssignmentOperator::Assign && self.target_reads_a_root(&it.left) {
+            self.not_allowed();
+        }
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
+            let symbol = id
+                .reference_id
+                .get()
+                .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+            self.visit_assignment_target(&it.left);
+            self.visit_local_value(symbol, &it.right);
             return;
         }
         walk_js::walk_assignment_expression(self, it);
@@ -1120,7 +1166,14 @@ impl<'a> VisitJs<'a> for Scan<'_> {
             SimpleAssignmentTarget::ComputedMemberExpression(member) => {
                 self.judge_write(&member.object, literal_key(&member.expression))
             }
-            _ => false,
+            SimpleAssignmentTarget::PrivateFieldExpression(_) => false,
+            SimpleAssignmentTarget::TSAsExpression(_)
+            | SimpleAssignmentTarget::TSSatisfiesExpression(_)
+            | SimpleAssignmentTarget::TSNonNullExpression(_)
+            | SimpleAssignmentTarget::TSTypeAssertion(_) => {
+                self.not_allowed();
+                false
+            }
         };
         if written {
             self.written();
@@ -1131,7 +1184,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         }
         let on_root = it.as_member_expression().is_some_and(|member| {
             self.allow_root(member.object())
-                .is_some_and(|root| root != Root::Global)
+                .is_some_and(|root| !matches!(root, Root::Global | Root::Host(_)))
         });
         if on_root {
             self.not_allowed();

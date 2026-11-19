@@ -1,5 +1,6 @@
 use oxc_ast::ast::*;
 
+use super::modules::LOADERS;
 use super::reach::{member_of, Key, CODE_RUNNERS, REACHING_KEYS, TIMERS};
 use super::{Scan, This, GLOBAL_OBJECTS, LEGACY_DEFINERS};
 
@@ -29,6 +30,10 @@ pub(super) const BUILTIN_ROOTS: &[&str] = &[
     "atob",
     "btoa",
 ];
+
+pub(super) const HOST_ROOTS: [&str; 1] = ["process"];
+
+const HOST_LOADERS: [&str; 3] = ["binding", "_linkedBinding", "dlopen"];
 
 const COMMON_STATICS: &[&str] = &["name", "length", "prototype"];
 
@@ -298,6 +303,7 @@ pub(super) enum Root<'n> {
     Prototype(&'n str),
     Global,
     Runner(&'n str),
+    Host(&'n str),
 }
 
 fn static_names(root: &str) -> &'static [&'static str] {
@@ -319,16 +325,21 @@ impl Scan<'_> {
         if GLOBAL_OBJECTS.contains(&name) {
             return Some(Root::Global);
         }
+        if HOST_ROOTS.contains(&name) {
+            return Some(Root::Host(name));
+        }
         self.is_builtin_root_name(name)
             .then_some(Root::Builtin(name))
     }
 
+    pub(super) fn allow_root_name<'e>(&self, id: &'e IdentifierReference<'_>) -> Option<Root<'e>> {
+        let root = self.root_named(id.name.as_str())?;
+        self.global_named(id, &[id.name.as_str()]).then_some(root)
+    }
+
     pub(super) fn allow_root<'e>(&self, expression: &'e Expression<'_>) -> Option<Root<'e>> {
         match expression.without_parentheses() {
-            Expression::Identifier(id) => {
-                let root = self.root_named(id.name.as_str())?;
-                self.global_named(id, &[id.name.as_str()]).then_some(root)
-            }
+            Expression::Identifier(id) => self.allow_root_name(id),
             Expression::ThisExpression(_) => {
                 (self.this_value() == This::Global).then_some(Root::Global)
             }
@@ -368,6 +379,7 @@ impl Scan<'_> {
             }
             Root::Prototype(_) => PROTOTYPE_METHODS.contains(&name),
             Root::Runner(owner) => owner == PROTOTYPE_OWNER && name == "prototype",
+            Root::Host(_) => !LOADERS.contains(&name) && !HOST_LOADERS.contains(&name),
         }
     }
 }

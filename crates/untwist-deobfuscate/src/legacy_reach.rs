@@ -7,6 +7,7 @@ pub(crate) struct Layered {
     pub(crate) names: Vec<String>,
     pub(crate) used: Option<Vec<String>>,
     pub(crate) points_to: bool,
+    pub(crate) both_sites: bool,
     pub(crate) late_reads: Option<Vec<untwist_eval::object::ProtoRead>>,
     pub(crate) roots: Vec<String>,
 }
@@ -90,14 +91,36 @@ pub(crate) fn defer_names(token: String, names: Vec<String>) {
     defer_layered(token, layered);
 }
 
-pub(crate) fn widen_layered(token: &str, used: Vec<String>, points_to: bool) {
+fn widen_newest(token: &str, widen: impl FnOnce(&mut Layered)) {
     DEFERRAL.with(|deferral| {
-        for (pending, layered) in &mut deferral.borrow_mut().layered {
-            if pending == token {
-                layered.used = Some(used.clone());
-                layered.points_to = points_to;
-            }
+        let mut deferral = deferral.borrow_mut();
+        if let Some((_, layered)) = deferral
+            .layered
+            .iter_mut()
+            .rev()
+            .find(|(pending, _)| pending == token)
+        {
+            widen(layered);
         }
+    });
+}
+
+fn merge<T: PartialEq + Clone>(held: &mut Option<Vec<T>>, more: &[T]) {
+    let held = held.get_or_insert_with(Vec::new);
+    for item in more {
+        if !held.contains(item) {
+            held.push(item.clone());
+        }
+    }
+}
+
+pub(crate) fn widen_layered(token: &str, used: Vec<String>, points_to: bool) {
+    widen_newest(token, |layered| {
+        match layered.used.is_some() {
+            true => layered.both_sites |= layered.points_to != points_to,
+            false => layered.points_to = points_to,
+        }
+        merge(&mut layered.used, &used);
     });
 }
 
@@ -122,21 +145,13 @@ pub(crate) fn drop_layered(token: &str) {
 }
 
 pub(crate) fn widen_late(token: &str, reads: &[untwist_eval::object::ProtoRead]) {
-    DEFERRAL.with(|deferral| {
-        for (pending, layered) in &mut deferral.borrow_mut().layered {
-            if pending == token {
-                layered.late_reads = Some(reads.to_vec());
-            }
-        }
-    });
+    widen_newest(token, |layered| merge(&mut layered.late_reads, reads));
 }
 
 pub(crate) fn widen_root(token: &str, root: &str) {
-    DEFERRAL.with(|deferral| {
-        for (pending, layered) in &mut deferral.borrow_mut().layered {
-            if pending == token && !layered.roots.iter().any(|held| held == root) {
-                layered.roots.push(root.to_string());
-            }
+    widen_newest(token, |layered| {
+        if !layered.roots.iter().any(|held| held == root) {
+            layered.roots.push(root.to_string());
         }
     });
 }
@@ -191,7 +206,7 @@ pub(crate) fn settle_layered(mut holds: impl FnMut(&Layered) -> bool) {
     let layered = DEFERRAL.with(|deferral| std::mem::take(&mut deferral.borrow_mut().layered));
     for (token, obligation) in layered {
         if holds(&obligation) {
-            verify(&token);
+            verify_one(&token);
         }
     }
 }
@@ -202,6 +217,15 @@ pub(crate) fn verify(name: &str) {
             .borrow_mut()
             .pending
             .retain(|pending| pending != name)
+    });
+}
+
+fn verify_one(name: &str) {
+    DEFERRAL.with(|deferral| {
+        let mut deferral = deferral.borrow_mut();
+        if let Some(last) = deferral.pending.iter().rposition(|pending| pending == name) {
+            deferral.pending.remove(last);
+        }
     });
 }
 
@@ -285,5 +309,62 @@ mod tests {
         forget();
         assert_eq!(kept, (1, 1));
         assert_eq!(dropped, (0, 0));
+    }
+
+    fn pending() -> usize {
+        DEFERRAL.with(|deferral| deferral.borrow().pending.len())
+    }
+
+    fn widened() -> Vec<Layered> {
+        DEFERRAL.with(|deferral| {
+            deferral
+                .borrow()
+                .layered
+                .iter()
+                .map(|(_, layered)| layered.clone())
+                .collect()
+        })
+    }
+
+    #[test]
+    fn widening_a_later_speculation_leaves_the_earlier_obligation_as_it_was() {
+        forget();
+        defer_layered("layered:a".to_string(), held("a"));
+        widen_layered("layered:a", vec!["x".to_string()], false);
+        defer_layered("layered:a".to_string(), held("a"));
+        widen_layered("layered:a", vec!["y".to_string()], true);
+        widen_root("layered:a", "Object");
+        let entries = widened();
+        forget();
+        assert_eq!(entries[0].used, Some(vec!["x".to_string()]));
+        assert!(!entries[0].points_to && entries[0].roots.is_empty());
+        assert_eq!(entries[1].used, Some(vec!["y".to_string()]));
+        assert!(entries[1].points_to);
+    }
+
+    #[test]
+    fn widening_one_obligation_twice_keeps_both_checks() {
+        forget();
+        defer_layered("layered:a".to_string(), held("a"));
+        widen_layered("layered:a", vec!["x".to_string()], false);
+        widen_layered("layered:a", vec!["y".to_string()], true);
+        let entries = widened();
+        forget();
+        assert_eq!(
+            entries[0].used,
+            Some(vec!["x".to_string(), "y".to_string()])
+        );
+        assert!(entries[0].both_sites);
+    }
+
+    #[test]
+    fn one_holding_obligation_verifies_only_its_own_pending_entry() {
+        forget();
+        defer_layered("layered:a".to_string(), held("a"));
+        defer_layered("layered:a".to_string(), held("b"));
+        settle_layered(|layered| layered.names == ["a"]);
+        let left = pending();
+        forget();
+        assert_eq!(left, 1);
     }
 }

@@ -175,6 +175,7 @@ pub(super) fn speculate(
         names,
         used: None,
         points_to: false,
+        both_sites: false,
         late_reads: None,
         roots: Vec::new(),
     };
@@ -323,15 +324,21 @@ pub(crate) fn settle(program: &Program<'_>, scoping: &Scoping) {
         let used = UsedNames {
             names: used.iter().map(String::as_str).collect(),
         };
-        let sites = match layered.points_to {
-            true => points_to_sites(program, scoping, &FxHashMap::default(), &[]),
-            false => alias_sites(
-                program,
-                &builtin_aliases(program, scoping, FxHashMap::default()),
-                &[],
-            ),
+        let kinds = match layered.both_sites {
+            true => vec![true, false],
+            false => vec![layered.points_to],
         };
-        alias_refusal(&sites, &used, program.source_text).is_none()
+        kinds.into_iter().all(|points_to| {
+            let sites = match points_to {
+                true => points_to_sites(program, scoping, &FxHashMap::default(), &[]),
+                false => alias_sites(
+                    program,
+                    &builtin_aliases(program, scoping, FxHashMap::default()),
+                    &[],
+                ),
+            };
+            alias_refusal(&sites, &used, program.source_text).is_none()
+        })
     });
 }
 

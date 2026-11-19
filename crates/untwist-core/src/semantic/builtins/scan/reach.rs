@@ -1,7 +1,7 @@
 use oxc_ast::ast::*;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 
-use super::allow::{Root, BUILTIN_ROOTS};
+use super::allow::{Root, BUILTIN_ROOTS, HOST_ROOTS};
 use super::keys::literal_text;
 use super::{Scan, This, GLOBAL_OBJECTS};
 
@@ -108,6 +108,21 @@ pub(super) fn member_of<'e, 'a>(
     }
 }
 
+pub(super) fn member_parts<'e, 'a>(
+    expression: &'e Expression<'a>,
+) -> Option<(&'e Expression<'a>, Option<&'e Expression<'a>>)> {
+    let member = match expression.without_parentheses() {
+        Expression::ChainExpression(chain) => chain.expression.as_member_expression()?,
+        other => other.as_member_expression()?,
+    };
+    let key = match member {
+        MemberExpression::ComputedMemberExpression(computed) => Some(&computed.expression),
+        MemberExpression::StaticMemberExpression(_)
+        | MemberExpression::PrivateFieldExpression(_) => None,
+    };
+    Some((member.object(), key))
+}
+
 fn last_of_sequence<'e, 'a>(expression: &'e Expression<'a>) -> &'e Expression<'a> {
     let mut current = expression.without_parentheses();
     while let Expression::SequenceExpression(sequence) = current {
@@ -190,9 +205,8 @@ impl Scan<'_> {
         if self.is_maybe_global_this(object) || self.allow_root(object) == Some(Root::Global) {
             return name.is_none_or(|name| RECEIVER_METHODS.contains(&name.as_str()));
         }
-        if let Some(Root::Builtin(owner)) = self.allow_root(object) {
-            return name
-                .is_none_or(|name| !self.read_allowed(Root::Builtin(owner), Key::Name(&name)));
+        if let Some(root @ (Root::Builtin(_) | Root::Host(_))) = self.allow_root(object) {
+            return name.is_none_or(|name| !self.read_allowed(root, Key::Name(&name)));
         }
         self.is_root(object)
     }
@@ -204,7 +218,11 @@ impl Scan<'_> {
             Key::Name(name) if CODE_RUNNERS.contains(&name) || CONTEXT_RUNNERS.contains(&name) => {
                 true
             }
-            Key::Name(name) if BUILTIN_ROOTS.contains(&name) || TIMERS.contains(&name) => {
+            Key::Name(name)
+                if BUILTIN_ROOTS.contains(&name)
+                    || TIMERS.contains(&name)
+                    || HOST_ROOTS.contains(&name) =>
+            {
                 self.is_reached(object)
             }
             Key::Name(name) if GLOBAL_OBJECTS.contains(&name) => self.is_root(object),

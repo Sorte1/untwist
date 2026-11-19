@@ -26,6 +26,8 @@ struct Escapes<'s> {
     symbols: FxHashSet<SymbolId>,
     held_functions: FxHashMap<SymbolId, Vec<usize>>,
     held_symbols: FxHashMap<SymbolId, Vec<SymbolId>>,
+    literal_holders: FxHashSet<SymbolId>,
+    derived: Vec<bool>,
 }
 
 pub(super) fn escaping_functions(
@@ -42,6 +44,8 @@ pub(super) fn escaping_functions(
         symbols: FxHashSet::default(),
         held_functions: FxHashMap::default(),
         held_symbols: FxHashMap::default(),
+        literal_holders: literal_holders(program, scoping),
+        derived: Vec::new(),
     };
     found.visit_program(program);
     found.script_globals_escape();
@@ -150,11 +154,23 @@ impl Escapes<'_> {
             Expression::AwaitExpression(awaited) => self.flows(&awaited.argument, flow),
             Expression::StaticMemberExpression(member) => self.flows(&member.object, flow),
             Expression::ComputedMemberExpression(member) => self.flows(&member.object, flow),
-            Expression::ChainExpression(chain) => {
-                if let Some(member) = chain.expression.as_member_expression() {
-                    self.flows(member.object(), flow);
+            Expression::ChainExpression(chain) => match &chain.expression {
+                ChainElement::CallExpression(call) => {
+                    if let Some(object) = forwarded(&call.callee) {
+                        self.flows(object, flow);
+                    }
                 }
-            }
+                ChainElement::TSNonNullExpression(non_null) => {
+                    self.flows(&non_null.expression, flow);
+                }
+                ChainElement::StaticMemberExpression(_)
+                | ChainElement::ComputedMemberExpression(_)
+                | ChainElement::PrivateFieldExpression(_) => {
+                    if let Some(member) = chain.expression.as_member_expression() {
+                        self.flows(member.object(), flow);
+                    }
+                }
+            },
             Expression::CallExpression(call) => {
                 if let Some(object) = forwarded(&call.callee) {
                     self.flows(object, flow);
@@ -180,17 +196,11 @@ impl Escapes<'_> {
     }
 
     fn member_holder(&self, object: &Expression<'_>) -> Option<SymbolId> {
-        let mut current = object.without_parentheses();
-        loop {
-            current = match current {
-                Expression::Identifier(id) => {
-                    return self.symbol_of(id);
-                }
-                Expression::StaticMemberExpression(member) => member.object.without_parentheses(),
-                Expression::ComputedMemberExpression(member) => member.object.without_parentheses(),
-                _ => return None,
-            };
-        }
+        let Expression::Identifier(id) = object.without_parentheses() else {
+            return None;
+        };
+        self.symbol_of(id)
+            .filter(|symbol| self.literal_holders.contains(symbol))
     }
 
     fn target_flow(&self, target: &AssignmentTarget<'_>) -> Flow {
@@ -256,6 +266,15 @@ impl Escapes<'_> {
 
 fn forwarded<'e, 'a>(callee: &'e Expression<'a>) -> Option<&'e Expression<'a>> {
     match callee.without_parentheses() {
+        Expression::ChainExpression(chain) => match chain.expression.as_member_expression()? {
+            MemberExpression::StaticMemberExpression(member) => FORWARDERS
+                .contains(&member.property.name.as_str())
+                .then_some(&member.object),
+            MemberExpression::ComputedMemberExpression(member) => {
+                forwarded_key(&member.expression).then_some(&member.object)
+            }
+            MemberExpression::PrivateFieldExpression(_) => None,
+        },
         Expression::StaticMemberExpression(member)
             if FORWARDERS.contains(&member.property.name.as_str()) =>
         {
@@ -361,15 +380,26 @@ impl<'a> VisitJs<'a> for Escapes<'_> {
     }
 
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        self.seen.push(function_address(it));
+        let address = function_address(it);
+        self.seen.push(address);
         if let Some(symbol) = it.id.as_ref().and_then(|id| id.symbol_id.get()) {
-            self.function_flows(function_address(it), Flow::Into(symbol));
+            match it.is_declaration() {
+                true => self.function_flows(address, Flow::Into(symbol)),
+                false => self.held_functions.entry(symbol).or_default().push(address),
+            }
         }
         walk_js::walk_function(self, it, flags);
     }
 
+    fn visit_class(&mut self, it: &Class<'a>) {
+        self.derived.push(it.heritage.is_some());
+        walk_js::walk_class(self, it);
+        self.derived.pop();
+    }
+
     fn visit_method_definition(&mut self, it: &MethodDefinition<'a>) {
-        if it.kind == MethodDefinitionKind::Constructor {
+        let derived = self.derived.last().copied().unwrap_or(true);
+        if it.kind == MethodDefinitionKind::Constructor && !derived {
             self.placed.insert(function_address(&it.value));
         }
         walk_js::walk_method_definition(self, it);
@@ -465,5 +495,46 @@ impl Escapes<'_> {
                 }
             }
         }
+    }
+}
+
+fn forwarded_key(key: &Expression<'_>) -> bool {
+    match key.without_parentheses() {
+        Expression::StringLiteral(literal) => literal
+            .value
+            .as_str()
+            .is_none_or(|name| FORWARDERS.contains(&name)),
+        _ => true,
+    }
+}
+
+struct LiteralHolders<'s> {
+    scoping: &'s Scoping,
+    found: FxHashSet<SymbolId>,
+}
+
+fn literal_holders(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
+    let mut holders = LiteralHolders {
+        scoping,
+        found: FxHashSet::default(),
+    };
+    holders.visit_program(program);
+    holders.found
+}
+
+impl<'a> VisitJs<'a> for LiteralHolders<'_> {
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        let literal = matches!(
+            it.init.as_ref().map(Expression::without_parentheses),
+            Some(Expression::ObjectExpression(_) | Expression::ArrayExpression(_))
+        );
+        if let (true, BindingPattern::BindingIdentifier(id)) = (literal, &it.id) {
+            let symbol = id
+                .symbol_id
+                .get()
+                .filter(|symbol| !self.scoping.symbol_is_mutated(*symbol));
+            self.found.extend(symbol);
+        }
+        walk_js::walk_variable_declarator(self, it);
     }
 }

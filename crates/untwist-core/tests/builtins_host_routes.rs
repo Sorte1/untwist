@@ -254,6 +254,12 @@ fn a_strict_function_that_escapes_may_see_the_global_object_as_this() {
             "export default function () { this[k] = f; }",
             "export function cb() { this[k] = f; }",
             "function cb() { this[k] = f; } export { cb };",
+            "(function () { 'use strict'; function F() {} F.prototype.m = function () { this[k] = 1; }; new F().m(); })();",
+            "(function () { 'use strict'; var w = document.defaultView; w.m = function () { var k = 'atob'; this[k] = f; }; w.m(); })();",
+            "addEventListener('load', function (e) { 'use strict'; e.currentTarget.m = function () { var k = 'atob'; this[k] = f; }; e.currentTarget.m(); });",
+            "(function () { 'use strict'; var f = function () { var k = 'atob'; this[k] = g; }; (f?.call)(document.defaultView); })();",
+            "(function () { 'use strict'; (function n() { var k = 'atob'; this[k] = g; }?.call)(document.defaultView); })();",
+            "(function () { 'use strict'; function B() { return document.defaultView; } class A extends B { constructor() { super(); var k = 'atob'; this[k] = f; } } new A(); })();",
         ],
         &ATOB,
     );
@@ -263,7 +269,7 @@ fn a_strict_function_that_escapes_may_see_the_global_object_as_this() {
             "'use strict'; (function () { this[k] = 1; })();",
             "(function () { 'use strict'; var o = { m: function () { this[k] = 1; } }; o.m(); })();",
             "(function () { 'use strict'; function F() { this[k] = 1; } new F(); })();",
-            "(function () { 'use strict'; function F() {} F.prototype.m = function () { this[k] = 1; }; new F().m(); })();",
+            "(function () { 'use strict'; var o = {}; o.m = function () { this[k] = 1; }; o.m(); })();",
             "'use strict'; class A { constructor() { this[k] = 1; } } new A();",
             "(function () { 'use strict'; setTimeout(function () { this.x = 1; }, 0); })();",
         ],
@@ -351,7 +357,7 @@ fn a_write_to_a_window_alias_under_a_key_the_scan_cannot_resolve_is_judged() {
     assert_intact(
         &[
             "document.defaultView.x = f;",
-            "var w = document.defaultView; w.foo = 1;",
+            "(function () { var w = document.defaultView; w.foo = 1; })();",
             "var o = {}; o[k] = f;",
             "e.currentTarget.className = 'x';",
             "e.target.value = '';",
@@ -406,4 +412,129 @@ fn a_timer_callback_bound_or_rebindable_through_the_global_object_is_not_a_funct
         ],
         &ATOB,
     );
+}
+
+#[test]
+fn a_callback_declared_in_a_loop_head_is_not_a_proven_function() {
+    assert_not_intact(
+        &[
+            "(function () { for (var cb = function () {} in { 'atob = f': 1 }) ; setTimeout(cb, 0); })();",
+            "(function () { for (var cb in { 'atob = f': 1 }) ; setTimeout(cb, 0); })();",
+        ],
+        &ATOB,
+    );
+    assert_intact(
+        &["(function () { var cb = function () {}; setTimeout(cb, 0); })();"],
+        &ATOB,
+    );
+}
+
+#[test]
+fn a_loader_imported_by_name_or_process_taken_as_a_value_is_judged() {
+    assert_not_intact(
+        &[
+            "import { getBuiltinModule as g } from 'node:process'; g('vm');",
+            "import { 'getBuiltinModule' as g } from 'process'; g('vm');",
+            "import { default as p } from 'process'; p.getBuiltinModule('vm');",
+            "import p from 'process'; Object.values(p);",
+            "import * as ns from 'process'; Object.values(ns);",
+            "export * from 'process';",
+            "export { getBuiltinModule } from 'process';",
+            "import { createRequire } from './x.js';",
+            "await import('process');",
+            "var g = Object.values(process).filter(Boolean)[0];",
+            "Object.values(require('process'));",
+            "var { ...r } = process;",
+            "f(process);",
+            "for (var k in process) ;",
+            "var o = { ...process };",
+            "var p = globalThis.process; p.mainModule;",
+            "process.binding('contextify');",
+            "x = process[k];",
+        ],
+        &ATOB,
+    );
+    assert_intact(
+        &[
+            "if (typeof process !== 'undefined' && process.env.NODE_ENV) {}",
+            "console.log(process.argv.length, process.env.HOME);",
+            "process.exitCode = 1;",
+            "var env = require('process').env;",
+            "import { argv } from 'node:process'; console.log(argv);",
+            "process.on('exit', function () {});",
+        ],
+        &ATOB,
+    );
+}
+
+#[test]
+fn a_specifier_the_url_parser_normalises_is_judged_after_normalising() {
+    assert_not_intact(
+        &[
+            "import 'da\\tta:text/javascript,atob = f';",
+            "import '\\x01data:text/javascript,atob = f';",
+            "import ' data:text/javascript,atob = f';",
+            "await import('d\\nata:text/javascript,atob = f');",
+            "import('DATA:text/javascript,atob = f');",
+            "import('weird-scheme:atob');",
+            "require('no\\tde:vm');",
+            "require('node:vm?x');",
+            "require('vm/');",
+        ],
+        &ATOB,
+    );
+    assert_intact(
+        &[
+            "import './x.js';",
+            "import 'node:fs';",
+            "import 'https://example.com/x.js';",
+            "require('fs');",
+        ],
+        &ATOB,
+    );
+}
+
+#[test]
+fn a_window_alias_used_as_a_value_makes_the_result_unknown() {
+    assert_not_intact(
+        &[
+            "(function (w) { var k = 'atob'; w[k] = f; })(document.defaultView);",
+            "var a = [document.defaultView]; var k = 'atob'; a[0][k] = f;",
+            "var k = 'atob'; var o = { w: document.defaultView }; o.w[k] = f;",
+            "function id() { return document.defaultView; } var k = 'atob'; id()[k] = f;",
+            "var id = () => document.defaultView; var k = 'atob'; id()[k] = f;",
+            "addEventListener('load', function (e) { var k = 'atob'; e.composedPath()[0][k] = f; });",
+            "var k = 'atob'; open('', '_self')[k] = f;",
+            "const r = 'defaultView'; var w = document[r]; var k = 'atob'; w[k] = f;",
+            "var k = 'atob'; [document.defaultView][0][k] = f;",
+            "for (var w of [document.defaultView]) { var k = 'atob'; w[k] = f; }",
+            "var w; [w] = [document.defaultView]; var k = 'atob'; w[k] = f;",
+            "var w = document.defaultView; g(w); o[k] = 1;",
+            "var w = document.defaultView; var k = 'atob'; window.w[k] = f;",
+            "x = document.defaultView; var k = 'atob'; globalThis.x[k] = f;",
+        ],
+        &ATOB,
+    );
+    assert_intact(
+        &[
+            "(function () { var w = document.defaultView; console.log(w.innerWidth); w.focus(); })();",
+            "(function () { var w = document.defaultView; if (w && typeof w === 'object') {} })();",
+            "el.addEventListener('click', function (e) { console.log(e.target.id); });",
+            "var m = { exports: {} }; console.log(m.exports.self, m.parent); f(e.target);",
+        ],
+        &ATOB,
+    );
+}
+
+#[test]
+fn deleting_a_global_slot_is_a_write() {
+    assert_eq!(
+        verdict_for("delete globalThis.atob;", &ATOB),
+        Builtins::Written
+    );
+    assert_eq!(
+        verdict_for("delete window['atob'];", &ATOB),
+        Builtins::Written
+    );
+    assert_eq!(verdict_for("delete atob;", &ATOB), Builtins::Written);
 }

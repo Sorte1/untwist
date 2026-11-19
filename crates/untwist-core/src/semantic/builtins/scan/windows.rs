@@ -4,8 +4,11 @@ use oxc_semantic::Scoping;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 
-use super::reach::{key_of, member_of, Key, CODE_RUNNERS, TIMERS};
+use super::keys::{literal_text, ConstKeys};
+use super::reach::{call_of, key_of, member_of, Key, CODE_RUNNERS, TIMERS};
 use super::{Scan, This, GLOBAL_OBJECTS};
+
+const WINDOW_CALLS: [&str; 2] = ["open", "composedPath"];
 
 const WINDOW_ROUTES: [&str; 9] = [
     "defaultView",
@@ -34,9 +37,30 @@ fn property_route(key: &PropertyKey<'_>) -> bool {
         .is_some_and(|name| name.as_str().is_some_and(is_route))
 }
 
-pub(super) fn window_locals(program: &Program<'_>, scoping: &Scoping) -> WindowLocals {
+fn calls_for_a_window(expression: &Expression<'_>) -> bool {
+    let Some(call) = call_of(expression) else {
+        return false;
+    };
+    match call.callee.without_parentheses() {
+        Expression::Identifier(id) => WINDOW_CALLS.contains(&id.name.as_str()),
+        other => member_of(other).is_some_and(|(_, key)| match key {
+            Key::Name(name) => WINDOW_CALLS.contains(&name),
+            Key::Other => false,
+            Key::Unknown(key) => {
+                literal_text(key).is_none_or(|name| WINDOW_CALLS.contains(&name.as_str()))
+            }
+        }),
+    }
+}
+
+pub(super) fn window_locals(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    consts: &ConstKeys,
+) -> WindowLocals {
     let mut found = Windows {
         scoping,
+        consts,
         locals: FxHashSet::default(),
         grew: true,
     };
@@ -49,6 +73,7 @@ pub(super) fn window_locals(program: &Program<'_>, scoping: &Scoping) -> WindowL
 
 struct Windows<'s> {
     scoping: &'s Scoping,
+    consts: &'s ConstKeys,
     locals: WindowLocals,
     grew: bool,
 }
@@ -78,8 +103,23 @@ impl Windows<'_> {
                 .last()
                 .is_some_and(|last| self.holds_window(last)),
             Expression::AssignmentExpression(assignment) => self.holds_window(&assignment.right),
-            other => member_of(other).is_some_and(|(_, key)| routes_through(key)),
+            other if calls_for_a_window(other) => true,
+            other => member_of(other).is_some_and(|(object, key)| match key {
+                Key::Other => self.holds_window(object),
+                Key::Unknown(key) => self.key_text(key).is_some_and(|name| is_route(&name)),
+                Key::Name(_) => routes_through(key),
+            }),
         }
+    }
+
+    fn key_text(&self, key: &Expression<'_>) -> Option<String> {
+        if let Some(text) = literal_text(key) {
+            return Some(text);
+        }
+        let Expression::Identifier(id) = key.without_parentheses() else {
+            return None;
+        };
+        self.consts.get(&self.symbol_of(id)?).cloned()
     }
 
     fn add(&mut self, symbol: Option<SymbolId>) {
@@ -185,10 +225,26 @@ impl Scan<'_> {
                 .last()
                 .is_some_and(|last| self.may_be_window(last)),
             Expression::AssignmentExpression(assignment) => self.may_be_window(&assignment.right),
-            other => member_of(other).is_some_and(|(_, key)| match key {
+            other if calls_for_a_window(other) => true,
+            other => member_of(other).is_some_and(|(object, key)| match key {
+                Key::Other => self.may_be_window(object),
                 Key::Unknown(key) => self.known_key(key).is_some_and(|name| is_route(&name)),
-                other => routes_through(other),
+                Key::Name(_) => routes_through(key),
             }),
+        }
+    }
+
+    pub(super) fn window_value(&self, expression: &Expression<'_>) -> bool {
+        match expression.without_parentheses() {
+            Expression::Identifier(id) => {
+                !self.global_named(id, &GLOBAL_OBJECTS) && self.may_be_window(expression)
+            }
+            Expression::ThisExpression(_)
+            | Expression::ConditionalExpression(_)
+            | Expression::LogicalExpression(_)
+            | Expression::SequenceExpression(_)
+            | Expression::AssignmentExpression(_) => false,
+            other => self.may_be_window(other),
         }
     }
 
@@ -204,17 +260,31 @@ impl Scan<'_> {
         object: &Expression<'_>,
         key: Option<&Expression<'_>>,
     ) -> bool {
-        self.may_be_window(object)
-            && key.is_none_or(|key| match key_of(key) {
-                Key::Other => false,
-                Key::Name(name) => self.is_window_slot(name),
-                Key::Unknown(key) => self
-                    .known_key(key)
-                    .is_none_or(|name| self.is_window_slot(&name)),
-            })
+        let slot = key.is_none_or(|key| match key_of(key) {
+            Key::Other => false,
+            Key::Name(name) => self.is_window_slot(name),
+            Key::Unknown(key) => self
+                .known_key(key)
+                .is_none_or(|name| self.is_window_slot(&name)),
+        });
+        self.judged_write(object, slot)
     }
 
     pub(super) fn writes_window_name(&self, object: &Expression<'_>, name: &str) -> bool {
-        self.may_be_window(object) && self.is_window_slot(name)
+        self.judged_write(object, self.is_window_slot(name))
+    }
+
+    fn judged_write(&self, object: &Expression<'_>, slot: bool) -> bool {
+        let window = self.may_be_window(object);
+        if slot && !window {
+            self.window_writes.set(true);
+        }
+        slot && window
+    }
+
+    pub(super) fn settle_window_flows(&mut self) {
+        if self.window_escaped && self.window_writes.get() {
+            self.not_allowed();
+        }
     }
 }
