@@ -437,6 +437,10 @@ pub const SELF_DEFENDING_NO_USABLE_SPAN: &str =
 pub const DEBUG_PROTECTION_REFERENCE_KEPT: &str =
     "a debug protection function was found but a reference to it survives outside the statements \
      this pass removes, so the function was left in place";
+pub const DEBUG_PROTECTION_KEPT_STILL_RUNNING: &str =
+    "a debug protection function is still referenced from code the default lane keeps, beside a \
+     timer or a call controller that can start it, so it was kept as a protection that may still \
+     run";
 pub const DEBUG_PROTECTION_NO_USABLE_SPAN: &str =
     "a matched statement has no usable span, so the function was left in place";
 
@@ -765,6 +769,7 @@ catalogue!(
     SELF_DEFENDING_REFERENCE_KEPT,
     SELF_DEFENDING_BUILTIN_PATCHED,
     DEBUG_PROTECTION_REFERENCE_KEPT,
+    DEBUG_PROTECTION_KEPT_STILL_RUNNING,
     PROTECTION_HOIST_BLOCKER_KEPT,
     PROTECTIONS_KEPT_TOGETHER,
     DOMAIN_LOCK_KEPT,

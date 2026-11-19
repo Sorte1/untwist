@@ -21,6 +21,8 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "dp-nested-var-object",
     "dp-late-object",
     "wrapper-dead-write",
+    "dp-object-alias",
+    "dp-nested-dead-uses",
     "cfo-alias-console",
     "round-unlocked-console",
     "braced-controller-lock",

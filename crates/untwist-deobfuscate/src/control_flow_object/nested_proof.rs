@@ -4,8 +4,9 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
-use untwist_core::ast_util::readonly::{readonly_binding_uses, ObjectUses};
+use untwist_core::ast_util::readonly::{scan_object_uses, ObjectUses};
 use untwist_core::semantic::builtins::{intact, Reliance};
+use untwist_core::semantic::is_constant_binding;
 use untwist_core::semantic::{has_module_syntax, AnnexBWrites};
 
 use std::sync::OnceLock;
@@ -180,21 +181,22 @@ fn reads_are_proven(
     })
 }
 
-pub(super) fn proven_readonly(
+pub(super) fn proven_readonly_uses(
     program: &Program<'_>,
     object: &ObjectExpression<'_>,
     scoping: &Scoping,
     receiver: SymbolId,
     builtins_unpatched: bool,
-) -> bool {
-    if reaches_its_receiver(object) {
-        return false;
+) -> Option<ObjectUses> {
+    if reaches_its_receiver(object) || !is_constant_binding(scoping, receiver) {
+        return None;
     }
-    let Some(uses) = readonly_binding_uses(program, scoping, receiver) else {
-        return false;
-    };
+    let uses = scan_object_uses(program, scoping, receiver);
+    if uses.reads.is_empty() {
+        return None;
+    }
     let callees = callee_spans(program, scoping, receiver);
-    reads_are_proven(object, &uses, &callees, builtins_unpatched)
+    reads_are_proven(object, &uses, &callees, builtins_unpatched).then_some(uses)
 }
 
 pub(super) fn annex_b_written(program: &Program<'_>, scoping: &Scoping) -> Option<AnnexBWrites> {

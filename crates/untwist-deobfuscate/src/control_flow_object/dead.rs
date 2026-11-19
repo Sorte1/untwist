@@ -9,6 +9,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::global::{references_are_global, references_are_global_or};
 use untwist_core::ast_util::inline::{is_plain_function, param_names, returned_expression};
 use untwist_core::ast_util::prop::member_parts;
+use untwist_core::ast_util::readonly::{
+    is_readonly_object, is_readonly_object_outside, ObjectUses,
+};
 use untwist_core::pass::Cx;
 use untwist_eval::fold::{fold_binary, fold_to_const, fold_unary, Const, FoldOptions};
 
@@ -17,7 +20,7 @@ use std::cell::{OnceCell, RefCell};
 
 use super::assembled::{aliases_mutated_only_in_dead, assembled_alias, Assembled};
 use super::nested_proof::{
-    annex_b_written, builtins_proven_intact, proven_readonly, reaches_its_receiver,
+    annex_b_written, builtins_proven_intact, proven_readonly_uses, reaches_its_receiver,
     static_property, touches_builtins,
 };
 use super::CffValue;
@@ -36,6 +39,7 @@ fn encloses(outer: Span, inner: Span) -> bool {
 }
 
 const MAX_TEST_DEPTH: usize = 16;
+const MAX_DEAD_ROUNDS: usize = 4;
 
 const FOLDED_GLOBALS: [&str; 3] = ["undefined", "NaN", "Infinity"];
 
@@ -360,7 +364,8 @@ pub(super) struct Branches<'p> {
     optimistic: FxHashMap<SymbolId, Assembled<'p>>,
     hazard: bool,
     program: Option<&'p Program<'p>>,
-    readonly: RefCell<FxHashMap<SymbolId, bool>>,
+    readonly: RefCell<FxHashMap<SymbolId, Option<ObjectUses>>>,
+    dead: RefCell<Vec<Span>>,
     reached: RefCell<FxHashMap<(SymbolId, SymbolId), bool>>,
     builtins: OnceCell<bool>,
 }
@@ -378,12 +383,18 @@ impl<'p> Branches<'p> {
             return None;
         }
         let program = self.program?;
-        let known = self.readonly.borrow().get(&receiver).copied();
-        let readonly = known.unwrap_or_else(|| {
-            let readonly = proven_readonly(program, object, scoping, receiver, builtins_unpatched);
-            self.readonly.borrow_mut().insert(receiver, readonly);
-            readonly
-        });
+        if !self.readonly.borrow().contains_key(&receiver) {
+            let uses = proven_readonly_uses(program, object, scoping, receiver, builtins_unpatched);
+            self.readonly.borrow_mut().insert(receiver, uses);
+        }
+        let readonly = self
+            .readonly
+            .borrow()
+            .get(&receiver)
+            .and_then(Option::as_ref)
+            .is_some_and(|uses| {
+                is_readonly_object(uses) || is_readonly_object_outside(uses, &self.dead.borrow())
+            });
         readonly.then_some(object)
     }
 
@@ -617,12 +628,32 @@ pub(super) fn dead_branch_parts<'p>(
 ) -> Vec<DeadPart> {
     let unpatched = cx.opts.unsafe_transforms;
     let lanes = (!branches.hazard, unpatched);
-    let (dead, used) = decided_parts(branches, symbol, props, lanes, cx.scoping());
+    let (dead, used) = settled_parts(branches, symbol, props, lanes, cx.scoping());
     let proven = (unpatched, cx.scoping());
     if used.is_empty() || assembled_uses_dead(branches, &used, &dead, proven) {
         return dead;
     }
-    decided_parts(branches, symbol, props, (false, unpatched), cx.scoping()).0
+    settled_parts(branches, symbol, props, (false, unpatched), cx.scoping()).0
+}
+
+fn settled_parts<'p>(
+    branches: &Branches<'p>,
+    symbol: SymbolId,
+    props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
+    lanes: (bool, bool),
+    scoping: &Scoping,
+) -> (Vec<DeadPart>, FxHashSet<SymbolId>) {
+    let (mut parts, mut used) = decided_parts(branches, symbol, props, lanes, scoping);
+    for _ in 0..MAX_DEAD_ROUNDS {
+        let spans: Vec<Span> = parts.iter().map(|part| part.span).collect();
+        if spans.len() <= branches.dead.borrow().len() {
+            break;
+        }
+        *branches.dead.borrow_mut() = spans;
+        (parts, used) = decided_parts(branches, symbol, props, lanes, scoping);
+    }
+    branches.dead.borrow_mut().clear();
+    (parts, used)
 }
 
 fn decided_parts<'p>(

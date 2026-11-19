@@ -17,6 +17,7 @@ use super::{accepted_keys, cff_value, object_declaration, single_declarator, Cff
 
 struct KeyFold {
     index: usize,
+    into_object: bool,
     object: Span,
     keys: Vec<String>,
     duplicate: Option<String>,
@@ -84,7 +85,13 @@ fn plan_at(
     {
         return None;
     }
-    if scoping.get_resolved_reference_ids(temp.symbol).len() != assigned.len() + 1 {
+    let into_object = scoping.get_resolved_reference_ids(temp.symbol).len() != assigned.len() + 1;
+    let alias_at = index + 1 + assigned.len();
+    if into_object
+        && (super::aliases::plan_alias(stmts, (index, alias_at), scoping, (extended, false))
+            .is_none()
+            || super::aliases::opaque_scope(scoping))
+    {
         return None;
     }
     let keys: Vec<String> = assigned
@@ -93,6 +100,7 @@ fn plan_at(
         .collect();
     Some(KeyFold {
         index,
+        into_object,
         object: temp.object,
         duplicate: duplicate_key(&temp.keys, &keys),
         keys,
@@ -186,7 +194,8 @@ fn give_alias_the_object<'a>(
     Some(())
 }
 
-fn fold_run_into_alias<'a>(run: &mut [Statement<'a>], keys: &[String], cx: &Cx<'a, '_>) -> bool {
+fn fold_run_into_alias<'a>(run: &mut [Statement<'a>], plan: &KeyFold, cx: &Cx<'a, '_>) -> bool {
+    let keys = plan.keys.as_slice();
     let Some((declaration, rest)) = run.split_first_mut() else {
         return false;
     };
@@ -217,6 +226,9 @@ fn fold_run_into_alias<'a>(run: &mut [Statement<'a>], keys: &[String], cx: &Cx<'
             cx,
         ));
     }
+    if plan.into_object {
+        return give_alias_the_object(declaration, object).is_some();
+    }
     let Some(alias) = alias.first_mut() else {
         return false;
     };
@@ -229,8 +241,12 @@ fn commit_key_fold<'a>(
     cx: &mut Cx<'a, '_>,
 ) -> bool {
     let end = plan.index + plan.keys.len() + 2;
-    if stmts.len() < end || !fold_run_into_alias(&mut stmts[plan.index..end], &plan.keys, &*cx) {
+    if stmts.len() < end || !fold_run_into_alias(&mut stmts[plan.index..end], plan, &*cx) {
         return false;
+    }
+    if plan.into_object {
+        stmts.drain(plan.index + 1..end - 1);
+        return true;
     }
     let mut run: Vec<Statement<'a>> = stmts.drain(plan.index..end).collect();
     let Some(alias) = run.pop() else {
