@@ -357,3 +357,77 @@ fn an_outer_string_array_with_one_decoded_entry_is_decoded_in_the_default_lane()
     assert!(!output.contains("_0x3980"), "{output}");
     prints_the_same(&read("one-entry-outer-array.source.js"), &output);
 }
+
+const NESTED_OBJECT_HAZARDS: &[&str] = &[
+    "nested-this-write",
+    "nested-this-returned",
+    "nested-this-arrow",
+    "nested-inherited-valueof",
+    "nested-inherited-definegetter",
+    "nested-async-property",
+    "nested-generator-property",
+    "nested-proto-string-key",
+    "nested-proto-identifier-key",
+];
+
+#[test]
+fn a_nested_object_that_can_change_or_is_not_plain_keeps_the_branch_in_both_lanes() {
+    for label in NESTED_OBJECT_HAZARDS {
+        let source = read(&format!("{label}.js"));
+        for output in [default_code(&source), unsafe_lane(&source)] {
+            assert!(output.contains("\"changed\""), "{label}:\n{output}");
+        }
+    }
+}
+
+#[test]
+fn a_nested_object_that_can_change_or_is_not_plain_prints_what_node_prints_in_both_lanes() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    for label in NESTED_OBJECT_HAZARDS {
+        let source = read(&format!("{label}.js"));
+        let expected = printed(&node, dir.path(), &source);
+        for output in [default_code(&source), unsafe_lane(&source)] {
+            let actual = printed(&node, dir.path(), &output);
+            assert!(
+                expected.is_ok() && expected == actual,
+                "{label}: {expected:?} vs {actual:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_plain_read_only_nested_object_still_decides_the_branch_in_both_lanes() {
+    let source = read("nested-plain-decided.js");
+    for output in [default_code(&source), unsafe_lane(&source)] {
+        assert!(!output.contains("\"changed\""), "{output}");
+    }
+}
+
+#[test]
+fn a_nested_object_whose_prototype_the_program_may_patch_keeps_the_branch_in_the_default_lane() {
+    let source = read("nested-patched-prototype.js");
+    let output = default_code(&source);
+    assert!(output.contains("\"changed\""), "{output}");
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let expected = printed(&node, dir.path(), &source);
+    let actual = printed(&node, dir.path(), &output);
+    assert!(
+        expected.is_ok() && expected == actual,
+        "{expected:?} vs {actual:?}"
+    );
+}
+
+#[test]
+fn a_call_of_a_key_no_object_has_still_decides_the_branch_under_unsafe() {
+    let source = read("nested-absent-key-call.js");
+    let output = unsafe_lane(&source);
+    assert!(!output.contains("missing"), "{output}");
+    assert!(default_code(&source).contains("missing"));
+}

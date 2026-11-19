@@ -7,9 +7,9 @@ use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::global::{references_are_global, references_are_global_or};
-use untwist_core::ast_util::inline::{param_names, returned_expression};
+use untwist_core::ast_util::inline::{is_plain_function, param_names, returned_expression};
 use untwist_core::ast_util::prop::member_parts;
-use untwist_core::ast_util::readonly::readonly_binding_uses;
+use untwist_core::ast_util::readonly::{readonly_binding_uses, ObjectUses};
 use untwist_core::pass::Cx;
 use untwist_eval::fold::{fold_binary, fold_to_const, fold_unary, Const, FoldOptions};
 
@@ -84,6 +84,7 @@ struct Known<'k, 'p> {
     props: &'k [(Cow<'k, str>, CffValue<'k, 'p>)],
     scoping: &'k Scoping,
     branches: &'k Branches<'p>,
+    builtins_unpatched: bool,
 }
 
 enum Resolved<'k, 'p> {
@@ -116,25 +117,56 @@ fn param_symbols(function: &Function<'_>) -> Option<Vec<SymbolId>> {
         .collect()
 }
 
-fn static_property<'p>(object: &'p ObjectExpression<'p>, name: &str) -> Option<&'p Expression<'p>> {
-    let mut found = None;
-    for property in &object.properties {
-        let ObjectPropertyKind::ObjectProperty(property) = property else {
-            return None;
-        };
-        if property.method || property.kind != PropertyKind::Init {
-            return None;
-        }
-        let key = match &property.key {
-            PropertyKey::StaticIdentifier(id) if !property.computed => id.name.as_str(),
-            PropertyKey::StringLiteral(text) => text.value.as_str()?,
-            _ => return None,
-        };
-        if key == name {
-            found = Some(&property.value);
-        }
+const PROTO_KEY: &str = "__proto__";
+
+const OBJECT_PROTOTYPE_KEYS: [&str; 12] = [
+    "constructor",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "toLocaleString",
+    "toString",
+    "valueOf",
+    PROTO_KEY,
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+];
+
+fn static_key<'p>(property: &'p ObjectProperty<'p>) -> Option<&'p str> {
+    if property.method || property.computed || property.kind != PropertyKind::Init {
+        return None;
     }
-    found
+    let key = match &property.key {
+        PropertyKey::StaticIdentifier(id) => id.name.as_str(),
+        PropertyKey::StringLiteral(text) => text.value.as_str()?,
+        _ => return None,
+    };
+    (key != PROTO_KEY).then_some(key)
+}
+
+fn static_properties<'p>(
+    object: &'p ObjectExpression<'p>,
+) -> Option<Vec<(&'p str, &'p Expression<'p>)>> {
+    object
+        .properties
+        .iter()
+        .map(|property| match property {
+            ObjectPropertyKind::ObjectProperty(property) => {
+                Some((static_key(property)?, &property.value))
+            }
+            ObjectPropertyKind::SpreadProperty(_) => None,
+        })
+        .collect()
+}
+
+fn static_property<'p>(object: &'p ObjectExpression<'p>, name: &str) -> Option<&'p Expression<'p>> {
+    static_properties(object)?
+        .into_iter()
+        .rev()
+        .find(|(key, _)| *key == name)
+        .map(|(_, value)| value)
 }
 
 impl<'k, 'p> Known<'k, 'p> {
@@ -160,12 +192,18 @@ impl<'k, 'p> Known<'k, 'p> {
         member: &Expression<'_>,
         depth: usize,
     ) -> Option<Resolved<'k, 'p>> {
-        let object = self
-            .branches
-            .readonly_object(receiver, self.symbol, self.scoping)?;
+        let object = self.branches.readonly_object(
+            receiver,
+            self.symbol,
+            self.scoping,
+            self.builtins_unpatched,
+        )?;
         let (_, name) = member_parts(member)?;
         match static_property(object, name.as_ref())?.without_parentheses() {
-            Expression::FunctionExpression(function) => Some(Resolved::Function(function)),
+            Expression::FunctionExpression(function) if is_plain_function(function) => {
+                Some(Resolved::Function(function))
+            }
+            Expression::FunctionExpression(_) => None,
             value => self
                 .value(value, &Env::default(), depth + 1)
                 .map(Resolved::Value),
@@ -219,6 +257,9 @@ impl<'k, 'p> Known<'k, 'p> {
         let Resolved::Function(function) = self.member(&call.callee, depth)? else {
             return None;
         };
+        if !is_plain_function(function) {
+            return None;
+        }
         let mut arguments = Vec::with_capacity(call.arguments.len());
         for argument in &call.arguments {
             arguments.push(self.value(argument.as_expression()?, env, depth + 1)?);
@@ -271,6 +312,7 @@ fn decide<'p>(
         props,
         scoping: cx.scoping(),
         branches,
+        builtins_unpatched: cx.opts.unsafe_transforms,
     };
     known
         .value(test, &Env::default(), 0)
@@ -302,6 +344,61 @@ fn mentioned(object: &ObjectExpression<'_>, scoping: &Scoping) -> FxHashSet<Symb
     };
     scan.visit_object_expression(object);
     scan.found
+}
+
+struct ReceiverUses {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for ReceiverUses {
+    fn visit_this_expression(&mut self, _: &ThisExpression) {
+        self.found = true;
+    }
+
+    fn visit_super(&mut self, _: &Super) {
+        self.found = true;
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if matches!(it.name.as_str(), "arguments" | "eval") {
+            self.found = true;
+        }
+    }
+}
+
+fn reaches_its_receiver(object: &ObjectExpression<'_>) -> bool {
+    let mut scan = ReceiverUses { found: false };
+    scan.visit_object_expression(object);
+    scan.found
+}
+
+fn reads_only_own_or_absent_keys(
+    object: &ObjectExpression<'_>,
+    uses: &ObjectUses,
+    builtins_unpatched: bool,
+) -> bool {
+    let Some(keys) = static_properties(object) else {
+        return false;
+    };
+    let own: FxHashSet<&str> = keys.into_iter().map(|(key, _)| key).collect();
+    uses.reads.iter().all(|read| {
+        own.contains(read.name.as_str())
+            || (builtins_unpatched && !OBJECT_PROTOTYPE_KEYS.contains(&read.name.as_str()))
+    })
+}
+
+fn proven_readonly(
+    program: &Program<'_>,
+    object: &ObjectExpression<'_>,
+    scoping: &Scoping,
+    receiver: SymbolId,
+    builtins_unpatched: bool,
+) -> bool {
+    if reaches_its_receiver(object) {
+        return false;
+    }
+    readonly_binding_uses(program, scoping, receiver)
+        .is_some_and(|uses| reads_only_own_or_absent_keys(object, &uses, builtins_unpatched))
 }
 
 #[derive(Clone, Copy)]
@@ -348,6 +445,7 @@ impl<'p> Branches<'p> {
         receiver: SymbolId,
         owner: SymbolId,
         scoping: &Scoping,
+        builtins_unpatched: bool,
     ) -> Option<&'p ObjectExpression<'p>> {
         let object = *self.objects.get(&receiver)?;
         if !self.reaches_owner(receiver, owner, scoping) {
@@ -356,7 +454,7 @@ impl<'p> Branches<'p> {
         let program = self.program?;
         let known = self.readonly.borrow().get(&receiver).copied();
         let readonly = known.unwrap_or_else(|| {
-            let readonly = readonly_binding_uses(program, scoping, receiver).is_some();
+            let readonly = proven_readonly(program, object, scoping, receiver, builtins_unpatched);
             self.readonly.borrow_mut().insert(receiver, readonly);
             readonly
         });
