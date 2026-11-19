@@ -9,13 +9,15 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::global::{references_are_global, references_are_global_or};
 use untwist_core::ast_util::inline::{is_plain_function, param_names, returned_expression};
 use untwist_core::ast_util::prop::member_parts;
-use untwist_core::ast_util::readonly::{readonly_binding_uses, ObjectUses};
 use untwist_core::pass::Cx;
 use untwist_eval::fold::{fold_binary, fold_to_const, fold_unary, Const, FoldOptions};
 
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 
+use super::nested_proof::{
+    annex_b_written, builtins_proven_intact, proven_readonly, static_property, touches_builtins,
+};
 use super::CffValue;
 
 fn truthy(value: &Const) -> bool {
@@ -117,58 +119,6 @@ fn param_symbols(function: &Function<'_>) -> Option<Vec<SymbolId>> {
         .collect()
 }
 
-const PROTO_KEY: &str = "__proto__";
-
-const OBJECT_PROTOTYPE_KEYS: [&str; 12] = [
-    "constructor",
-    "hasOwnProperty",
-    "isPrototypeOf",
-    "propertyIsEnumerable",
-    "toLocaleString",
-    "toString",
-    "valueOf",
-    PROTO_KEY,
-    "__defineGetter__",
-    "__defineSetter__",
-    "__lookupGetter__",
-    "__lookupSetter__",
-];
-
-fn static_key<'p>(property: &'p ObjectProperty<'p>) -> Option<&'p str> {
-    if property.method || property.computed || property.kind != PropertyKind::Init {
-        return None;
-    }
-    let key = match &property.key {
-        PropertyKey::StaticIdentifier(id) => id.name.as_str(),
-        PropertyKey::StringLiteral(text) => text.value.as_str()?,
-        _ => return None,
-    };
-    (key != PROTO_KEY).then_some(key)
-}
-
-fn static_properties<'p>(
-    object: &'p ObjectExpression<'p>,
-) -> Option<Vec<(&'p str, &'p Expression<'p>)>> {
-    object
-        .properties
-        .iter()
-        .map(|property| match property {
-            ObjectPropertyKind::ObjectProperty(property) => {
-                Some((static_key(property)?, &property.value))
-            }
-            ObjectPropertyKind::SpreadProperty(_) => None,
-        })
-        .collect()
-}
-
-fn static_property<'p>(object: &'p ObjectExpression<'p>, name: &str) -> Option<&'p Expression<'p>> {
-    static_properties(object)?
-        .into_iter()
-        .rev()
-        .find(|(key, _)| *key == name)
-        .map(|(_, value)| value)
-}
-
 impl<'k, 'p> Known<'k, 'p> {
     fn own(&self, member: &Expression<'_>) -> Option<Resolved<'k, 'p>> {
         let (_, name) = member_parts(member)?;
@@ -232,7 +182,7 @@ impl<'k, 'p> Known<'k, 'p> {
         match inner {
             Expression::Identifier(id) if !env.is_empty() => match symbol_of(id, self.scoping) {
                 Some(symbol) => env.get(&symbol).cloned(),
-                None => fold_to_const(inner, &FoldOptions::default()),
+                None => self.folded(inner, &FoldOptions::default()),
             },
             Expression::CallExpression(call) if !call.optional => self.call(call, env, depth),
             Expression::BinaryExpression(binary) => fold_binary(
@@ -247,10 +197,37 @@ impl<'k, 'p> Known<'k, 'p> {
                 )
             }
             _ if references_are_global(inner, self.scoping) => {
-                fold_to_const(inner, &FoldOptions::default())
+                self.folded(inner, &FoldOptions::default())
             }
             _ => None,
         }
+    }
+
+    fn folded(&self, expr: &Expression<'_>, options: &FoldOptions) -> Option<Const> {
+        if !self.builtins_unpatched
+            && touches_builtins(expr, self.scoping)
+            && !self.branches.builtins_intact(self.scoping)
+        {
+            return None;
+        }
+        fold_to_const(expr, options)
+    }
+
+    fn folded_own_body(&self, function: &Function<'_>, arguments: &[Const]) -> Option<Const> {
+        let names = param_names(function)?;
+        if names.len() != arguments.len()
+            || names.iter().any(|name| FOLDED_GLOBALS.contains(name))
+            || !reads_only_own_or_globals(function, self.scoping)
+        {
+            return None;
+        }
+        let mut options = FoldOptions::default();
+        for (name, argument) in names.iter().zip(arguments) {
+            options
+                .bindings
+                .insert((*name).to_string(), argument.clone());
+        }
+        self.folded(returned_expression(function)?, &options)
     }
 
     fn call(&self, call: &CallExpression<'_>, env: &Env, depth: usize) -> Option<Const> {
@@ -264,7 +241,7 @@ impl<'k, 'p> Known<'k, 'p> {
         for argument in &call.arguments {
             arguments.push(self.value(argument.as_expression()?, env, depth + 1)?);
         }
-        if let Some(value) = folded_own_body(function, &arguments, self.scoping) {
+        if let Some(value) = self.folded_own_body(function, &arguments) {
             return Some(value);
         }
         let params = param_symbols(function)?;
@@ -277,27 +254,6 @@ impl<'k, 'p> Known<'k, 'p> {
         }
         self.value(returned_expression(function)?, &bound, depth + 1)
     }
-}
-
-fn folded_own_body(
-    function: &Function<'_>,
-    arguments: &[Const],
-    scoping: &Scoping,
-) -> Option<Const> {
-    let names = param_names(function)?;
-    if names.len() != arguments.len()
-        || names.iter().any(|name| FOLDED_GLOBALS.contains(name))
-        || !reads_only_own_or_globals(function, scoping)
-    {
-        return None;
-    }
-    let mut options = FoldOptions::default();
-    for (name, argument) in names.iter().zip(arguments) {
-        options
-            .bindings
-            .insert((*name).to_string(), argument.clone());
-    }
-    fold_to_const(returned_expression(function)?, &options)
 }
 
 fn decide<'p>(
@@ -346,61 +302,6 @@ fn mentioned(object: &ObjectExpression<'_>, scoping: &Scoping) -> FxHashSet<Symb
     scan.found
 }
 
-struct ReceiverUses {
-    found: bool,
-}
-
-impl<'a> VisitJs<'a> for ReceiverUses {
-    fn visit_this_expression(&mut self, _: &ThisExpression) {
-        self.found = true;
-    }
-
-    fn visit_super(&mut self, _: &Super) {
-        self.found = true;
-    }
-
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if matches!(it.name.as_str(), "arguments" | "eval") {
-            self.found = true;
-        }
-    }
-}
-
-fn reaches_its_receiver(object: &ObjectExpression<'_>) -> bool {
-    let mut scan = ReceiverUses { found: false };
-    scan.visit_object_expression(object);
-    scan.found
-}
-
-fn reads_only_own_or_absent_keys(
-    object: &ObjectExpression<'_>,
-    uses: &ObjectUses,
-    builtins_unpatched: bool,
-) -> bool {
-    let Some(keys) = static_properties(object) else {
-        return false;
-    };
-    let own: FxHashSet<&str> = keys.into_iter().map(|(key, _)| key).collect();
-    uses.reads.iter().all(|read| {
-        own.contains(read.name.as_str())
-            || (builtins_unpatched && !OBJECT_PROTOTYPE_KEYS.contains(&read.name.as_str()))
-    })
-}
-
-fn proven_readonly(
-    program: &Program<'_>,
-    object: &ObjectExpression<'_>,
-    scoping: &Scoping,
-    receiver: SymbolId,
-    builtins_unpatched: bool,
-) -> bool {
-    if reaches_its_receiver(object) {
-        return false;
-    }
-    readonly_binding_uses(program, scoping, receiver)
-        .is_some_and(|uses| reads_only_own_or_absent_keys(object, &uses, builtins_unpatched))
-}
-
 #[derive(Clone, Copy)]
 pub(super) struct DeadPart {
     node: usize,
@@ -437,6 +338,7 @@ pub(super) struct Branches<'p> {
     program: Option<&'p Program<'p>>,
     readonly: RefCell<FxHashMap<SymbolId, bool>>,
     reached: RefCell<FxHashMap<(SymbolId, SymbolId), bool>>,
+    builtins: OnceCell<bool>,
 }
 
 impl<'p> Branches<'p> {
@@ -459,6 +361,13 @@ impl<'p> Branches<'p> {
             readonly
         });
         readonly.then_some(object)
+    }
+
+    fn builtins_intact(&self, scoping: &Scoping) -> bool {
+        *self.builtins.get_or_init(|| {
+            self.program
+                .is_some_and(|program| builtins_proven_intact(program, scoping))
+        })
     }
 
     fn reaches_owner(&self, receiver: SymbolId, owner: SymbolId, scoping: &Scoping) -> bool {
@@ -629,6 +538,11 @@ pub(super) fn predicate_branches<'p>(program: &'p Program<'p>, scoping: &Scoping
         found: Branches::default(),
     };
     scan.visit_program(program);
+    if let Some(writes) = annex_b_written(program, scoping) {
+        scan.found
+            .objects
+            .retain(|symbol, _| !writes.may_write(*symbol));
+    }
     scan.found.program = Some(program);
     scan.found
 }
