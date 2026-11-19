@@ -214,6 +214,9 @@ fn collapsible(scoping: &Scoping, symbol: SymbolId, seen: usize) -> bool {
 }
 
 pub(super) fn collapse_object_aliases<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) -> usize {
+    if untwist_core::semantic::scope_hazard(cx.scoping()).is_some() {
+        return 0;
+    }
     let mut search = AliasSearch {
         scoping: cx.scoping(),
         extended: cx.opts.extended,
@@ -235,7 +238,10 @@ pub(super) fn collapse_object_aliases<'a>(program: &mut Program<'a>, cx: &mut Cx
     let (refused, seen) = (shadowing.refused, shadowing.seen);
     collapses.retain(|symbol, collapse| {
         let outside = seen.get(symbol).copied().unwrap_or(0);
+        let root = cx.scoping().root_scope_id();
         !refused.contains(symbol)
+            && cx.scoping().symbol_scope_id(*symbol) != root
+            && cx.scoping().symbol_scope_id(collapse.target) != root
             && outside > collapse.exempt.len()
             && collapsible(cx.scoping(), *symbol, outside)
     });
