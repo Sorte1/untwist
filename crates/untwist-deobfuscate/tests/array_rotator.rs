@@ -35,7 +35,13 @@ fn rotator_refusal(
         found: Vec::new(),
     };
     sites.visit_program(program);
-    rotator_refusal_at(program, scoping, &sites.found, allowed, None)
+    rotator_refusal_at(
+        program,
+        scoping,
+        &sites.found,
+        allowed,
+        (None, &FxHashSet::default()),
+    )
 }
 
 const WHILE_FORM: &str = "\
