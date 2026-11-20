@@ -14,7 +14,7 @@ use super::bound_this;
 pub(super) use super::defs::Defs;
 use super::defs::{
     Def, DefTable, CALLABLE, CONSTRUCTS_FRESH, ESCAPES, ESCAPING_REF, FIELDS_WRITTEN,
-    METHOD_CALLED, MUTATED, OPAQUE, SEALED_CLASS,
+    METHOD_CALLED, MUTATED, OPAQUE, PROTOTYPE_SET, SEALED_CLASS,
 };
 use super::filtered::{self, Filters, Loop};
 use super::live::iife_returned;
@@ -205,6 +205,35 @@ fn inlinable_of(defs: &DefTable<'_>, scoping: &Scoping) -> FxHashSet<u32> {
     inlinable
 }
 
+fn names_prototype(member: &MemberExpression<'_>) -> bool {
+    member.static_property_name().is_none_or(|name| {
+        name.as_str()
+            .is_none_or(|name| matches!(name, "prototype" | "__proto__"))
+    })
+}
+
+fn fresh_prototype_store<'k, 'a>(
+    it: &'k AssignmentExpression<'a>,
+) -> Option<&'k MemberExpression<'a>> {
+    let member = it.left.as_member_expression()?;
+    let named = member.static_property_name().and_then(|name| name.as_str()) == Some("prototype");
+    let Expression::ObjectExpression(object) = it.right.without_parentheses() else {
+        return None;
+    };
+    let plain = object.properties.iter().all(|property| match property {
+        ObjectPropertyKind::ObjectProperty(entry) => {
+            !entry.computed
+                && entry
+                    .key
+                    .static_name()
+                    .and_then(|name| name.into_cow_str())
+                    .is_some_and(|name| name != "__proto__")
+        }
+        ObjectPropertyKind::SpreadProperty(_) => false,
+    });
+    (it.operator == AssignmentOperator::Assign && named && plain).then_some(member)
+}
+
 pub(super) fn function_constructs_fresh(function: &Function<'_>) -> bool {
     !function.generator && !function.r#async && !body_returns(function.body.as_deref())
 }
@@ -261,6 +290,7 @@ pub(super) struct Bindings<'s, 'a> {
     plain_element_writes: FxHashSet<u32>,
     pub(super) element_values: FxHashMap<SymbolId, Vec<&'a Expression<'a>>>,
     pub(super) other_fields_written: FxHashSet<SymbolId>,
+    fresh_prototype_stores: FxHashSet<u32>,
     pub(super) accessed: FxHashMap<SymbolId, Vec<&'a MemberExpression<'a>>>,
     pub(super) called: FxHashSet<u32>,
     pub(super) loose: super::namespace_uses::Loose,
@@ -311,6 +341,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             plain_element_writes: FxHashSet::default(),
             element_values: FxHashMap::default(),
             other_fields_written: FxHashSet::default(),
+            fresh_prototype_stores: FxHashSet::default(),
             accessed: FxHashMap::default(),
             called: FxHashSet::default(),
             loose: super::namespace_uses::Loose::default(),
@@ -634,7 +665,12 @@ impl<'s, 'a> Bindings<'s, 'a> {
     fn member_written(&mut self, member: &MemberExpression<'_>) {
         if let Expression::Identifier(id) = member.object().without_parentheses() {
             if let Some(symbol) = self.reference_symbol(id) {
+                let prototype = names_prototype(member)
+                    && !self.fresh_prototype_stores.contains(&member.span().start);
                 self.entry(symbol).set(FIELDS_WRITTEN);
+                if prototype {
+                    self.entry(symbol).set(PROTOTYPE_SET);
+                }
                 if !self.plain_element_writes.contains(&member.span().start) {
                     self.other_fields_written.insert(symbol);
                 }
@@ -799,6 +835,9 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
         if matches!(it.left, AssignmentTarget::ObjectAssignmentTarget(_)) {
             self.note_read_through(&it.right);
         }
+        if let Some(member) = fresh_prototype_store(it) {
+            self.fresh_prototype_stores.insert(member.span().start);
+        }
         self.note_element_write(it);
         if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
             if let Some(symbol) = self.reference_symbol(id) {
@@ -882,6 +921,15 @@ impl<'a> VisitJs<'a> for Bindings<'_, 'a> {
             }
         }
         walk_js::walk_call_expression(self, it);
+    }
+
+    fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
+        if let Expression::Identifier(id) = it.callee.without_parentheses() {
+            if let Some(symbol) = self.reference_symbol(id) {
+                self.entry(symbol).new_refs += 1;
+            }
+        }
+        walk_js::walk_new_expression(self, it);
     }
 
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {

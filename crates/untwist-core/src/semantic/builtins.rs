@@ -7,6 +7,8 @@ mod scan;
 
 pub use scan::{intact, scan, scan_with_unknown_keys_plain};
 
+use oxc_semantic::Scoping;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Builtins {
     Unknown,
@@ -47,6 +49,31 @@ impl Reliance {
             None => true,
         }
     }
+}
+
+pub fn patched_by_another_input(reliance: &Reliance) -> bool {
+    crate::semantic::every_global_foreign()
+        || reliance
+            .roots
+            .iter()
+            .any(|root| crate::semantic::is_foreign_global(root))
+}
+
+pub fn unpatched_in_every_input(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    reliance: &Reliance,
+) -> bool {
+    !patched_by_another_input(reliance)
+        && scan(
+            program,
+            scoping,
+            has_module_syntax(program),
+            false,
+            reliance,
+        )
+        .verdict
+            == Builtins::Intact
 }
 
 pub struct Scanned {

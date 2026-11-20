@@ -9,6 +9,8 @@ use super::{AKey, Agnostic};
 use crate::mutants::fresh_native_induction_trusted;
 use crate::proof::ProtoRoot;
 
+const FOREIGN_DEPTH: u8 = 6;
+
 impl<'s, 'a> Sites<'s, 'a> {
     pub(super) fn keys_of(&self, expr: &Expression<'a>, keys: &mut Vec<AKey<'a>>) {
         match expr.without_parentheses() {
@@ -374,6 +376,52 @@ impl<'s, 'a> Sites<'s, 'a> {
         }
     }
 
+    fn foreign_callee(&self, callee: &Expression<'a>) -> bool {
+        if !untwist_core::semantic::other_inputs_given() {
+            return false;
+        }
+        match callee.without_parentheses() {
+            Expression::Identifier(id) => self.foreign_valued(id, FOREIGN_DEPTH),
+            other => self.foreign_derived(other, FOREIGN_DEPTH),
+        }
+    }
+
+    fn foreign_derived(&self, expr: &Expression<'a>, depth: u8) -> bool {
+        let mut current = expr.without_parentheses();
+        let mut stepped = false;
+        loop {
+            current = match current {
+                Expression::CallExpression(call) => call.callee.without_parentheses(),
+                Expression::StaticMemberExpression(member) => member.object.without_parentheses(),
+                Expression::ComputedMemberExpression(member) => member.object.without_parentheses(),
+                Expression::Identifier(id) if stepped => {
+                    return match self.fresh.symbol(id) {
+                        None => untwist_core::semantic::is_foreign_global(id.name.as_str()),
+                        Some(_) => self.foreign_valued(id, depth),
+                    };
+                }
+                _ => return false,
+            };
+            stepped = true;
+        }
+    }
+
+    fn foreign_valued(&self, id: &IdentifierReference<'a>, depth: u8) -> bool {
+        let Some(symbol) = self.fresh.symbol(id) else {
+            return false;
+        };
+        let Some(next) = depth.checked_sub(1) else {
+            return true;
+        };
+        self.fresh.bindings.defs.get(symbol).is_some_and(|defs| {
+            defs.inits
+                .iter()
+                .chain(defs.writes.iter())
+                .flatten()
+                .any(|value| self.foreign_derived(value, next))
+        })
+    }
+
     pub(super) fn judge_call(&mut self, call: &'a CallExpression<'a>) {
         if self.runner_callee(&call.callee).is_none() {
             self.literal_texts(call);
@@ -389,6 +437,14 @@ impl<'s, 'a> Sites<'s, 'a> {
                 self.reach_text(call.span, &call.arguments, self.unbounded_text().function());
             }
             self.check_text(call.span, &call.arguments, self.unbounded_text());
+        }
+        if !runner
+            && untwist_core::semantic::observers() != untwist_core::semantic::Observers::None
+            && self.foreign_callee(&call.callee)
+            && self.text_unsafe(&call.arguments, Text::Function)
+        {
+            self.reach_text(call.span, &call.arguments, false);
+            self.check_text(call.span, &call.arguments, Text::Function);
         }
         if unbounded {
             self.generic(call);

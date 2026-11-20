@@ -176,6 +176,8 @@ impl<'s, 'a> Fresh<'s, 'a> {
                     .all(|init| init.is_some_and(|init| self.constructs_fresh(init, depth - 1)));
                 (defs.callable || !defs.inits.is_empty())
                     && (!defs.callable || defs.constructs_fresh)
+                    && !defs.prototype_set
+                    && defs.refs == defs.callee_refs + defs.new_refs
                     && inits_fresh
             }
             _ => false,

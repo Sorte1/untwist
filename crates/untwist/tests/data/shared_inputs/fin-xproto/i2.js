@@ -1,0 +1,4 @@
+function T(f){ try { return String(f()) } catch (e) { return e.name } }
+function act9(){
+console.log(typeof (1).gg9.call(undefined)[["_0", "x331b"].join("")]);
+}
