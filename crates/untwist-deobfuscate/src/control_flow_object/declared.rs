@@ -13,6 +13,7 @@ use untwist_core::ast_util::search::expressions_at;
 use untwist_core::pass::{Cx, NoteKind, RepeatedSites};
 use untwist_core::semantic::is_constant_binding;
 
+use crate::branch_reach::in_branches;
 use crate::init_order::{
     reads_are_initialised, refuse_read_before_declaration, scan_init_order, InitOrder,
 };
@@ -298,7 +299,12 @@ fn substitutable_uses<'u>(
     let branches = located.branches(cx.scoping());
     let dead = dead_branch_parts(branches, candidate.symbol, &props, &*cx);
     if dead.is_empty() {
-        return None;
+        return speculated_mutations(located.program, candidate, uses, cx).then_some(
+            Substitutable {
+                uses,
+                dead: Vec::new(),
+            },
+        );
     }
     let only_dead = !uses.reads.is_empty()
         && mutations_only_in_dead_parts(
@@ -308,7 +314,7 @@ fn substitutable_uses<'u>(
             &mutation_spans(uses),
             cx.scoping(),
         );
-    if !only_dead {
+    if !only_dead && !speculated_mutations(located.program, candidate, uses, cx) {
         cx.note(notes::CONTROL_FLOW_LIVE_MUTATION, Some(candidate.statement));
         return None;
     }
@@ -318,6 +324,29 @@ fn substitutable_uses<'u>(
         .filter(|span| !span.is_empty())
         .collect();
     Some(Substitutable { uses, dead })
+}
+
+fn speculated_mutations(
+    program: &Program<'_>,
+    candidate: &DeclaredObject,
+    uses: &ObjectUses,
+    cx: &Cx<'_, '_>,
+) -> bool {
+    if !cx.opts.unsafe_transforms
+        || !crate::legacy_reach::speculates_escapes()
+        || uses.reads.is_empty()
+    {
+        return false;
+    }
+    let mutations = mutation_spans(uses);
+    let spans: FxHashSet<Span> = mutations.iter().copied().collect();
+    if spans.is_empty() || in_branches(program, cx.scoping(), &spans).len() != spans.len() {
+        return false;
+    }
+    let mut deferred = vec![cx.scoping().symbol_span(candidate.symbol)];
+    deferred.extend(mutations);
+    crate::legacy_reach::defer_escapes(&deferred);
+    true
 }
 
 fn is_redeclared(scoping: &Scoping, symbol: SymbolId) -> bool {
