@@ -104,3 +104,15 @@ pub fn names_read_by_another_input() -> bool {
             .is_some_and(|shared| shared.names_read_elsewhere)
     })
 }
+
+pub fn every_global_foreign() -> bool {
+    SHARED_GLOBALS.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .is_some_and(|shared| shared.every_foreign)
+    })
+}
+
+pub fn other_inputs_given() -> bool {
+    SHARED_GLOBALS.with(|cell| cell.borrow().is_some())
+}

@@ -282,6 +282,7 @@ impl Pipeline {
         reservation: Reservation<'_>,
         (room, reserved): (Option<InputRoom>, u64),
     ) -> InputResult {
+        let shared_cause = reservation.shared_cause;
         let mut result = InputResult {
             snapshots: Snapshots::new(self.options.stage_snapshots),
             ..InputResult::default()
@@ -313,6 +314,9 @@ impl Pipeline {
             result.source_map = Some(final_map(source, &mut result));
         }
         result.notes = consolidate_reach(dedupe_spanned(std::mem::take(&mut result.notes)));
+        if let Some(cause) = shared_cause {
+            name_shared_cause(&mut result.notes, cause);
+        }
         if !self.options.unsafe_transforms {
             result.notes.extend(unsafe_lane_hint(&result.notes));
         }
@@ -802,6 +806,22 @@ fn readers_after_a_panic(program: &oxc_ast::ast::Program<'_>) -> PendingReaders 
         .unwrap_or(PendingReaders::Unresolved)
 }
 
+const SHARED_CAUSE_NOTES: [&str; 2] = [
+    untwist_deobfuscate::notes::MACHINERY_SHARED_GLOBAL,
+    untwist_deobfuscate::notes::LEGACY_ARRAY_SHARED_GLOBAL,
+];
+
+fn name_shared_cause(notes: &mut [Note], cause: &str) {
+    for note in notes {
+        if SHARED_CAUSE_NOTES.contains(&note.message.as_str()) {
+            note.message = format!(
+                "{}; the first code found that may do so is in {cause}",
+                note.message
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{Options, Pipeline, Reservation};
@@ -828,6 +848,7 @@ mod tests {
             stats: &stats,
             limits: untwist_core::budget::Limits::default(),
             shared: None,
+            shared_cause: None,
             module_named: false,
             script_named: false,
         };

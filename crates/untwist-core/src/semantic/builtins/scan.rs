@@ -8,7 +8,7 @@ use rustc_hash::FxHashMap;
 use std::cell::{Cell, OnceCell, RefCell};
 
 use super::{Builtins, Reliance, Scanned};
-use crate::semantic::{is_foreign_global, program_is_strict};
+use crate::semantic::{every_global_foreign, is_foreign_global, program_is_strict};
 
 mod allow;
 mod escapes;
@@ -239,7 +239,7 @@ fn first_verdict(scoping: &Scoping, reliance: &Reliance, module: bool) -> Builti
     if names_a_foreign_root(scoping, reliance) {
         return Builtins::Written;
     }
-    match declares_a_root_in_a_script(scoping, reliance, module) {
+    match every_global_foreign() || declares_a_root_in_a_script(scoping, reliance, module) {
         true => Builtins::Aliased,
         false => Builtins::Intact,
     }

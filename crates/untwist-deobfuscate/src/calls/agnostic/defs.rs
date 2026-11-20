@@ -11,6 +11,7 @@ pub(super) const MUTATED: u16 = 1 << 6;
 pub(super) const ESCAPING_REF: u16 = 1 << 7;
 const PRESENT: u16 = 1 << 8;
 pub(super) const SEALED_CLASS: u16 = 1 << 9;
+pub(super) const PROTOTYPE_SET: u16 = 1 << 10;
 
 type Value<'a> = Option<&'a Expression<'a>>;
 
@@ -19,6 +20,7 @@ pub(super) struct Def {
     func: u32,
     pub(super) refs: u32,
     pub(super) callee_refs: u32,
+    pub(super) new_refs: u32,
     pub(super) read_through: u32,
     start: u32,
     inits: u32,
@@ -50,6 +52,7 @@ pub(super) struct Defs<'b, 'a> {
     pub(super) func: Option<&'a Function<'a>>,
     pub(super) refs: u32,
     pub(super) callee_refs: u32,
+    pub(super) new_refs: u32,
     pub(super) read_through: u32,
     pub(super) callable: bool,
     pub(super) constructs_fresh: bool,
@@ -60,6 +63,7 @@ pub(super) struct Defs<'b, 'a> {
     pub(super) mutated: bool,
     pub(super) escaping_ref: bool,
     pub(super) sealed_class: bool,
+    pub(super) prototype_set: bool,
 }
 
 pub(super) struct DefTable<'a> {
@@ -178,6 +182,7 @@ impl<'a> DefTable<'a> {
             func: self.func_of(def),
             refs: def.refs,
             callee_refs: def.callee_refs,
+            new_refs: def.new_refs,
             read_through: def.read_through,
             callable: def.has(CALLABLE),
             constructs_fresh: def.has(CONSTRUCTS_FRESH),
@@ -188,6 +193,7 @@ impl<'a> DefTable<'a> {
             mutated: def.has(MUTATED),
             escaping_ref: def.has(ESCAPING_REF),
             sealed_class: def.has(SEALED_CLASS),
+            prototype_set: def.has(PROTOTYPE_SET),
         })
     }
 }

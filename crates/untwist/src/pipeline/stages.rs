@@ -127,6 +127,7 @@ impl Pipeline {
         shaping: &mut Shaping,
     ) -> Option<Semantics> {
         let unminify = self.unminify_passes();
+        untwist_deobfuscate::fold_chains::take_refused_for_builtins();
         let runs = &mut shaping.runs;
         let started = site.notes.len();
         let sem = match &unminify {
@@ -162,8 +163,15 @@ impl Pipeline {
         }
         let settle_from = (changes, slot);
         let sem = self.settle(site, sem, unminify.as_deref(), settle_from, runs);
-        let (sem, _) = self.final_machinery_stage(site, sem);
-        Some(sem)
+        let (sem, changed) = self.final_machinery_stage(site, sem);
+        let refused = untwist_deobfuscate::fold_chains::take_refused_for_builtins();
+        match changed && refused {
+            true => {
+                let again = (1, CleanupSlot::default());
+                Some(self.settle(site, sem, unminify.as_deref(), again, runs))
+            }
+            false => Some(sem),
+        }
     }
 
     pub(super) fn closing_stages<'a>(

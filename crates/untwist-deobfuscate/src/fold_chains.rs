@@ -8,6 +8,7 @@ use untwist_core::ast_util::global::references_are_global;
 use untwist_core::ast_util::matcher::call_parts;
 use untwist_core::ast_util::prop::member_parts;
 use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Pass};
+use untwist_core::semantic::builtins::{self, Reliance};
 use untwist_eval::fold::{const_to_expression, fold_literal_chain, fold_literal_chain_expression};
 
 use crate::calls::agnostic::{aroot_of, fold_record, ARoot, FoldRecord};
@@ -35,6 +36,19 @@ const IMPLICIT_KEYS: &[&str] = &[
     "flags",
     "lastIndex",
 ];
+
+static RELIED_ON: Reliance = Reliance {
+    roots: &["String", "Array", "Object", "Symbol", "Function"],
+    members: &[],
+};
+
+thread_local! {
+    static REFUSED_FOR_BUILTINS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub fn take_refused_for_builtins() -> bool {
+    REFUSED_FOR_BUILTINS.with(|refused| refused.replace(false))
+}
 
 const BUDGET_STRIDE: usize = 1 << 10;
 
@@ -415,7 +429,7 @@ fn may_be_patched(
 fn fold_call<'a>(
     expr: &mut Expression<'a>,
     cx: &mut Cx<'a, '_>,
-    a: Option<&FoldRecord>,
+    (a, intact): (Option<&FoldRecord>, bool),
     rooted: &mut FxHashMap<usize, bool>,
 ) {
     if literal_rooted(expr, rooted) != Some(true) {
@@ -428,6 +442,10 @@ fn fold_call<'a>(
         return;
     };
     if !references_are_global(expr, cx.scoping()) || may_be_patched(expr, root, cx, a) {
+        return;
+    }
+    if !intact {
+        REFUSED_FOR_BUILTINS.with(|refused| refused.set(true));
         return;
     }
     let span = expr.span();
@@ -484,11 +502,19 @@ fn char_code_patched(cx: &Cx<'_, '_>, a: Option<&FoldRecord>) -> bool {
 }
 
 #[inline(never)]
-fn fold_char_code<'a>(expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>, a: Option<&FoldRecord>) {
+fn fold_char_code<'a>(
+    expr: &mut Expression<'a>,
+    cx: &mut Cx<'a, '_>,
+    (a, intact): (Option<&FoldRecord>, bool),
+) {
     if !is_char_code_call(expr) || !references_are_global(expr, cx.scoping()) {
         return;
     }
     if !cx.opts.unsafe_transforms && char_code_patched(cx, a) {
+        return;
+    }
+    if !intact {
+        REFUSED_FOR_BUILTINS.with(|refused| refused.set(true));
         return;
     }
     let Some(replacement) = fold_literal_chain_expression(expr, expr.span(), &*cx) else {
@@ -498,11 +524,26 @@ fn fold_char_code<'a>(expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>, a: Option<
     cx.changed();
 }
 
-#[derive(Default)]
 pub struct FoldLiteralChains {
     eval_checked: bool,
     a: Option<FoldRecord>,
     rooted: FxHashMap<usize, bool>,
+    intact: bool,
+}
+
+impl Default for FoldLiteralChains {
+    fn default() -> Self {
+        Self {
+            eval_checked: false,
+            a: None,
+            rooted: FxHashMap::default(),
+            intact: true,
+        }
+    }
+}
+
+fn builtins_intact(cx: &Cx<'_, '_>) -> bool {
+    cx.opts.unsafe_transforms || !builtins::patched_by_another_input(&RELIED_ON)
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -540,15 +581,21 @@ impl<'a> Pass<'a> for FoldLiteralChains {
                 return;
             }
         }
+        let was_intact = std::mem::replace(&mut self.intact, builtins_intact(cx));
+        if self.intact && !was_intact {
+            cx.walk_whole_round();
+        }
         self.a = Some(fold_record(program, cx.scoping()));
     }
 
     fn exit_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
-        if matches!(expr, Expression::CallExpression(_)) {
-            fold_char_code(expr, cx, self.a.as_ref());
+        if !matches!(expr, Expression::CallExpression(_)) {
+            return;
         }
+        fold_char_code(expr, cx, (self.a.as_ref(), self.intact));
         if matches!(expr, Expression::CallExpression(_)) {
-            fold_call(expr, cx, self.a.as_ref(), &mut self.rooted);
+            let a = (self.a.as_ref(), self.intact);
+            fold_call(expr, cx, a, &mut self.rooted);
         }
     }
 }

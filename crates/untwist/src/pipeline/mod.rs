@@ -131,6 +131,7 @@ struct Reservation<'r> {
     stats: &'r std::sync::Mutex<crate::stats::RunStats>,
     limits: Limits,
     shared: Option<&'r untwist_core::semantic::SharedGlobals>,
+    shared_cause: Option<&'r str>,
     module_named: bool,
     script_named: bool,
 }
@@ -142,7 +143,7 @@ struct Batch<'s> {
     stack: StackReserve<'static>,
     stats: std::sync::Mutex<crate::stats::RunStats>,
     limits: Limits,
-    shared: Vec<Option<untwist_core::semantic::SharedGlobals>>,
+    shared: shared_scan::Shared,
 }
 
 impl<'s> Batch<'s> {
@@ -169,7 +170,8 @@ impl<'s> Batch<'s> {
             stack: &self.stack,
             stats: &self.stats,
             limits: self.limits,
-            shared: self.shared.get(index).and_then(Option::as_ref),
+            shared: self.shared.globals.get(index).and_then(Option::as_ref),
+            shared_cause: self.shared.causes.get(index).and_then(Option::as_deref),
             module_named: false,
             script_named: false,
         }

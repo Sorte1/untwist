@@ -304,6 +304,7 @@ pub fn names_observed<'a>(
 pub struct NamesReached {
     pub reached: bool,
     pub observed: bool,
+    pub at: Option<Span>,
 }
 
 pub fn names_reachable_from<'a>(
@@ -339,9 +340,11 @@ pub fn names_reached_from<'a>(
         observe: true,
     };
     let found = names_reach(program, scoping, watch);
+    let reach = found.reach.or(found.reach_by_code);
     NamesReached {
-        reached: found.reach.or(found.reach_by_code).is_some(),
+        reached: reach.is_some(),
         observed: found.observed.is_some(),
+        at: reach.or(found.observed),
     }
 }
 
@@ -365,9 +368,11 @@ pub fn names_reached_outside<'a>(
         ..reach_watch(reach)
     };
     let found = reach_of(&settle(program, scoping, (None, removed, watch)).0);
+    let reach = found.reach.or(found.reach_by_code);
     NamesReached {
-        reached: found.reach.or(found.reach_by_code).is_some(),
+        reached: reach.is_some(),
         observed: found.observed.is_some(),
+        at: reach.or(found.observed),
     }
 }
 
