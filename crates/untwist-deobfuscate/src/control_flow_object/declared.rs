@@ -338,7 +338,7 @@ fn speculated_mutations(
     {
         return false;
     }
-    if !hides_decoder_calls(program, cx.scoping(), candidate.symbol) {
+    if !passes_decoders_to_members(program) {
         return false;
     }
     let mutations = mutation_spans(uses);
@@ -352,33 +352,17 @@ fn speculated_mutations(
     true
 }
 
-struct DecoderArguments<'s> {
-    scoping: &'s Scoping,
-    object: SymbolId,
+#[derive(Default)]
+struct DecoderArguments {
     found: bool,
 }
 
-impl DecoderArguments<'_> {
-    fn on_object(&self, callee: &Expression<'_>) -> bool {
-        let Some(member) = callee.without_parentheses().as_member_expression() else {
-            return false;
-        };
-        let Expression::Identifier(id) = member.object().without_parentheses() else {
-            return false;
-        };
-        id.reference_id
-            .get()
-            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
-            == Some(self.object)
-    }
-}
-
-impl<'a> VisitJs<'a> for DecoderArguments<'_> {
+impl<'a> VisitJs<'a> for DecoderArguments {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if self.found {
             return;
         }
-        self.found = self.on_object(&it.callee)
+        self.found = it.callee.without_parentheses().is_member_expression()
             && it.arguments.iter().any(|argument| {
                 matches!(argument, Argument::Identifier(id)
                     if untwist_core::machinery_name::decoder_index(id.name.as_str()).is_some())
@@ -387,12 +371,8 @@ impl<'a> VisitJs<'a> for DecoderArguments<'_> {
     }
 }
 
-fn hides_decoder_calls(program: &Program<'_>, scoping: &Scoping, object: SymbolId) -> bool {
-    let mut search = DecoderArguments {
-        scoping,
-        object,
-        found: false,
-    };
+fn passes_decoders_to_members(program: &Program<'_>) -> bool {
+    let mut search = DecoderArguments::default();
     search.visit_program(program);
     search.found
 }
