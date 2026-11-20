@@ -9,7 +9,7 @@ use untwist_core::semantic::{is_foreign_global, observers, Observers};
 use super::keys::KeyProof;
 use super::{member_address, same, str_const, Walker, KIND_DEPTH};
 
-const CHAIN_KEYS: [&str; 3] = ["__proto__", "prototype", "constructor"];
+pub(super) const CHAIN_KEYS: [&str; 3] = ["__proto__", "prototype", "constructor"];
 
 pub(super) struct OpenRead<'a> {
     object: Option<&'a Expression<'a>>,
@@ -79,7 +79,7 @@ impl<'s, 'a> Walker<'s, 'a> {
     }
 
     fn note_open_read(&mut self, object: Option<&'a Expression<'a>>, key: &'a Expression<'a>) {
-        if !self.plain_store_target() {
+        if !self.plain_store_target() && !self.discarded_read() {
             let read = self.open_read(object, key);
             self.open_reads.push(read);
         }
@@ -103,6 +103,7 @@ impl<'s, 'a> Walker<'s, 'a> {
         let spread = call.arguments.iter().take(2).any(Argument::is_spread);
         match call.arguments.get(1).and_then(Argument::as_expression) {
             _ if spread => true,
+            Some(_) if self.discarded_read() => false,
             Some(key) => {
                 let object = call.arguments.first().and_then(Argument::as_expression);
                 let read = self.open_read(object, key);
@@ -155,7 +156,7 @@ impl<'s, 'a> Walker<'s, 'a> {
         {
             return false;
         }
-        if self.numeric_param(read.key) {
+        if self.safe_key_param(read.key) {
             return false;
         }
         read.object

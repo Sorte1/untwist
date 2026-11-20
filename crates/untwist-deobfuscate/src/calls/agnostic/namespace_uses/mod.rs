@@ -1,5 +1,6 @@
 mod blocks;
 mod chains;
+mod discarded;
 mod flows;
 mod holder_uses;
 mod holders;
@@ -123,6 +124,7 @@ struct Walker<'s, 'a> {
     open_reads: Vec<chains::OpenRead<'a>>,
     param_slots: FxHashMap<SymbolId, key_params::ParamSlot>,
     callee_calls: FxHashMap<SymbolId, Vec<&'a CallExpression<'a>>>,
+    unset: FxHashSet<SymbolId>,
 }
 
 #[derive(Default)]
@@ -180,6 +182,7 @@ fn walker_for<'s, 'a>(
         open_reads: Vec::new(),
         param_slots: FxHashMap::default(),
         callee_calls: FxHashMap::default(),
+        unset: FxHashSet::default(),
     }
 }
 
@@ -840,6 +843,7 @@ impl<'s, 'a> Walker<'s, 'a> {
         match kind {
             AstKind::VariableDeclarator(declarator) => {
                 self.collect_declarator(declarator);
+                self.collect_unset(declarator);
                 self.collect_protection(kind);
             }
             AstKind::Function(_) => self.collect_protection(kind),

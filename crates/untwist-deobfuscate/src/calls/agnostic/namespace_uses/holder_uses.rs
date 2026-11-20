@@ -41,7 +41,7 @@ const INSTANCE_CONSTRUCTORS: [&str; 16] = [
     "Date", "Error", "Map", "Set", "WeakMap", "WeakSet", "Promise",
 ];
 
-fn harmless_binary(operator: BinaryOperator, right: bool) -> bool {
+pub(super) fn harmless_binary(operator: BinaryOperator, right: bool) -> bool {
     matches!(
         operator,
         BinaryOperator::StrictEquality | BinaryOperator::StrictInequality

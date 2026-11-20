@@ -3,6 +3,7 @@ use oxc_ast::ast::*;
 use oxc_ast::AstKind;
 use oxc_syntax::symbol::SymbolId;
 
+use super::chains::CHAIN_KEYS;
 use super::{same, Walker, KIND_DEPTH};
 
 #[derive(Clone, Copy)]
@@ -91,7 +92,7 @@ impl<'s, 'a> Walker<'s, 'a> {
         }
     }
 
-    pub(super) fn numeric_param(&self, key: &Expression<'a>) -> bool {
+    pub(super) fn safe_key_param(&self, key: &Expression<'a>) -> bool {
         let Expression::Identifier(id) = key.without_parentheses() else {
             return false;
         };
@@ -112,10 +113,49 @@ impl<'s, 'a> Walker<'s, 'a> {
             && slot
                 .function
                 .is_none_or(|function| !self.arguments_used.contains(&function));
-        settled && self.writes_numeric(symbol) && self.called_with_numbers(slot)
+        settled && self.writes_numeric(symbol) && self.called_with_safe_keys(slot)
     }
 
-    fn called_with_numbers(&self, slot: ParamSlot) -> bool {
+    fn safe_key(&self, key: &Expression<'a>) -> bool {
+        match self.key_text(key, KIND_DEPTH) {
+            Some(text) => !CHAIN_KEYS.contains(&text.as_str()),
+            None => self.numeric_key(key, KIND_DEPTH) || self.unset_numeric(key),
+        }
+    }
+
+    pub(super) fn collect_unset(&mut self, declarator: &'a VariableDeclarator<'a>) {
+        let (BindingPattern::BindingIdentifier(id), None) = (&declarator.id, &declarator.init)
+        else {
+            return;
+        };
+        let looped = self.stack.len().checked_sub(3).is_some_and(|at| {
+            matches!(
+                self.stack[at],
+                AstKind::ForInStatement(_) | AstKind::ForOfStatement(_)
+            )
+        });
+        if let (false, Some(symbol)) = (looped, id.symbol_id.get()) {
+            self.unset.insert(symbol);
+        }
+    }
+
+    fn unset_numeric(&self, key: &Expression<'a>) -> bool {
+        let Expression::Identifier(id) = key.without_parentheses() else {
+            return false;
+        };
+        let Some(symbol) = self.symbol(id) else {
+            return false;
+        };
+        self.unset.contains(&symbol)
+            && !self.dynamic_scope
+            && !self.opaque.contains(&symbol)
+            && !self.shared_root(symbol)
+            && !self.annex.may_write(symbol)
+            && self.scoping.symbol_redeclarations(symbol).is_empty()
+            && self.writes_numeric(symbol)
+    }
+
+    fn called_with_safe_keys(&self, slot: ParamSlot) -> bool {
         let references = self.scoping.get_resolved_reference_ids(slot.binding).len();
         let Some(calls) = self.callee_calls.get(&slot.binding) else {
             return references == 0;
@@ -131,7 +171,7 @@ impl<'s, 'a> Walker<'s, 'a> {
                     .arguments
                     .get(slot.index)
                     .and_then(Argument::as_expression);
-                !spread && argument.is_some_and(|argument| self.numeric_key(argument, KIND_DEPTH))
+                !spread && argument.is_some_and(|argument| self.safe_key(argument))
             })
     }
 }

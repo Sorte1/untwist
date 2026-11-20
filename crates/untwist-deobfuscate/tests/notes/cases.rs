@@ -2,7 +2,7 @@ use untwist_core::pass::Note;
 use untwist_core::semantic::{assume_shared_globals, SharedGlobals};
 use untwist_deobfuscate::notes;
 
-const HEAD: &str = "function __STRING_ARRAY__() {\n  var h = ['log'];\n  __STRING_ARRAY__ = function () { return h; };\n  return __STRING_ARRAY__();\n}\nfunction __DECODE_0__(a, b) {\n  var e = __STRING_ARRAY__();\n  return e[a];\n}\n";
+const HEAD: &str = "function __STRING_ARRAY__() {\n  var h = ['log'];\n  __STRING_ARRAY__ = function () { return h; };\n  return __STRING_ARRAY__();\n}\nfunction __DECODE_0__(a, b) {\n  a = a - 0;\n  var e = __STRING_ARRAY__();\n  return e[a];\n}\n";
 
 const WRAPPED_UNIT: &str = "\
 function a() { var h = ['log', 'Hello World!']; a = function () { return h; }; return a(); }
