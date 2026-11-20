@@ -23,8 +23,8 @@ use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
 use crate::primitive_names::PrimitiveNames;
 use crate::probe::{expression_contains, holds_own_scope};
-use crate::proof::kept_in_its_block;
 use crate::proof::refuse_annex_b_bindings;
+use crate::proof::{kept_in_its_block, placed_in_its_block};
 use crate::root_reach::{observed_roots, reached_roots};
 use crate::stamp::{declaration_symbol, decoder_index, is_machinery_name};
 use crate::units::MachineryDepth;
@@ -223,10 +223,8 @@ pub(crate) fn binding_is_stable(scoping: &Scoping, symbol: SymbolId) -> bool {
     if !is_constant_binding(scoping, symbol) && !hoisted_and_kept_in_its_block(scoping, symbol) {
         return false;
     }
-    if scoping
-        .scope_flags(scoping.symbol_scope_id(symbol))
-        .is_var()
-    {
+    let flags = scoping.scope_flags(scoping.symbol_scope_id(symbol));
+    if flags.is_var() || flags.is_strict_mode() {
         return true;
     }
     let name = scoping.symbol_name(symbol);
@@ -576,8 +574,8 @@ fn refuse_var_wrappers_read_early(
 }
 
 fn refuse_annex_b_wrappers(
-    program: &Program<'_>,
-    scoping: &Scoping,
+    (program, scoping): (&Program<'_>, &Scoping),
+    admitted: &FxHashSet<SymbolId>,
     found: &mut Vec<WrapperShape>,
     rejected: &mut Rejected,
 ) {
@@ -590,8 +588,9 @@ fn refuse_annex_b_wrappers(
     }
     let functions = block_function_symbols(scoping);
     let (written, kept): (Vec<_>, Vec<_>) = std::mem::take(found).into_iter().partition(|shape| {
+        let speculated = admitted.contains(&shape.symbol);
         writes.may_write(shape.symbol)
-            && !is_own_block_function(&writes, &functions, scoping, shape.symbol)
+            && !is_own_block_function(&writes, &functions, scoping, (shape.symbol, speculated))
     });
     *found = kept;
     rejected.extend(
@@ -605,15 +604,19 @@ fn is_own_block_function(
     writes: &AnnexBWrites,
     functions: &FxHashSet<SymbolId>,
     scoping: &Scoping,
-    symbol: SymbolId,
+    (symbol, speculated): (SymbolId, bool),
 ) -> bool {
+    let kept = match speculated {
+        true => placed_in_its_block,
+        false => kept_in_its_block,
+    };
     writes
         .functions()
         .iter()
         .find(|function| function.function == symbol)
         .is_some_and(|function| {
             function.target.is_none_or(|target| target == symbol)
-                && kept_in_its_block(scoping, functions, symbol)
+                && kept(scoping, functions, symbol)
         })
 }
 
@@ -680,7 +683,12 @@ fn find_wrappers(
         return None;
     }
     promote_forwarders(forwarders, &mut found, cx.scoping());
-    refuse_annex_b_wrappers(program, cx.scoping(), &mut found, &mut rejected);
+    refuse_annex_b_wrappers(
+        (program, cx.scoping()),
+        &admitted,
+        &mut found,
+        &mut rejected,
+    );
     refuse_var_wrappers_read_early(program, cx.scoping(), &mut found, &mut rejected);
     refuse_globally_reached_wrappers(program, cx, &mut found, &mut rejected);
     if checked {

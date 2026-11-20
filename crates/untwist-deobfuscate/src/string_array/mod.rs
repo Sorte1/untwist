@@ -128,9 +128,18 @@ fn returns_array(expr: &Expression<'_>, array: &str) -> bool {
     let Some(body) = function.body.as_ref() else {
         return false;
     };
-    let Some(statements) = without_inert(unbraced(&body.statements), &[array]) else {
+    let Some(mut statements) = without_inert(unbraced(&body.statements), &[array]) else {
         return false;
     };
+    while let [only] = statements.as_slice() {
+        let Statement::BlockStatement(block) = *only else {
+            break;
+        };
+        let Some(inner) = without_inert(unbraced(&block.body), &[array]) else {
+            return false;
+        };
+        statements = inner;
+    }
     let [Statement::ReturnStatement(statement)] = statements.as_slice() else {
         return false;
     };

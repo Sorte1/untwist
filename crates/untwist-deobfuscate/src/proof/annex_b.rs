@@ -105,6 +105,14 @@ pub fn kept_in_its_block(
     functions: &FxHashSet<SymbolId>,
     function: SymbolId,
 ) -> bool {
+    !scoping.symbol_is_mutated(function) && placed_in_its_block(scoping, functions, function)
+}
+
+pub fn placed_in_its_block(
+    scoping: &Scoping,
+    functions: &FxHashSet<SymbolId>,
+    function: SymbolId,
+) -> bool {
     let Some(block) = declaring_block(scoping, function) else {
         return false;
     };
@@ -121,7 +129,6 @@ pub fn kept_in_its_block(
         .count()
         == 1;
     alone
-        && !scoping.symbol_is_mutated(function)
         && scoping.symbol_redeclarations(function).is_empty()
         && scoping
             .get_resolved_reference_ids(function)
