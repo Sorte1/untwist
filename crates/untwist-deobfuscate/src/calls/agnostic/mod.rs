@@ -9,6 +9,7 @@ mod consume;
 mod defs;
 mod filtered;
 mod flow;
+mod foreign;
 mod forward;
 mod fresh;
 mod global_text;
