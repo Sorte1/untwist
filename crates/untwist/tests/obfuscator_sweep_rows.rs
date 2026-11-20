@@ -29,6 +29,7 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "wrapper-in-inner-decoder",
     "strict-block-wrapper",
     "block-wrapper-dead-write",
+    "cfo-escape-in-branch",
 ];
 
 const FINGERPRINTS: &[&str] = &[
@@ -120,6 +121,14 @@ fn dead_code_and_control_flow_cases_print_the_source_output_under_unsafe() {
             "{label}: {expected:?} vs {actual:?}"
         );
     }
+}
+
+#[test]
+fn a_control_flow_object_that_escapes_in_a_live_branch_prints_like_node_under_unsafe() {
+    let source = read("cfo-live-escape.js");
+    let output = unsafe_lane(&source);
+    assert!(output.contains("[f].length"), "{output}");
+    prints_the_same(&source, &output);
 }
 
 #[test]
