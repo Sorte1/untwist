@@ -9,6 +9,7 @@ impl Scan<'_> {
         let Some((object, key)) = member_parts(expression) else {
             return false;
         };
+        self.judge_member_statics(expression);
         self.visit_unless_root(object);
         if let Some(key) = key {
             self.visit_expression(key);

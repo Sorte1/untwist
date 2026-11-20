@@ -9,7 +9,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::reach::{key_of, Key};
 use super::GLOBAL_OBJECTS;
-use crate::semantic::is_foreign_global;
+use crate::host_globals::{is_host_global, is_host_global_property};
+use crate::semantic::{is_foreign_global, AnnexBWrites};
 
 pub(super) type NumericBindings = FxHashSet<SymbolId>;
 
@@ -139,6 +140,7 @@ const MAX_PASSES: usize = 8;
 
 struct Collect<'s> {
     scoping: &'s Scoping,
+    annex_b: &'s AnnexBWrites,
     numeric: &'s NumericBindings,
     led: Option<&'s NumericBindings>,
     module: bool,
@@ -296,8 +298,15 @@ impl Collect<'_> {
         }
     }
 
+    fn host_provided(&self, symbol: SymbolId) -> bool {
+        let name = self.scoping.symbol_name(symbol);
+        name == ARGUMENTS
+            || (self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
+                && (is_host_global(name) || is_host_global_property(name)))
+    }
+
     fn holds(&self, symbol: SymbolId) -> bool {
-        if self.direct_eval {
+        if self.direct_eval || self.annex_b.may_write(symbol) || self.host_provided(symbol) {
             return false;
         }
         let flags = self.scoping.symbol_flags(symbol);
@@ -415,14 +424,26 @@ impl<'a> VisitJs<'a> for Collect<'_> {
     }
 }
 
-fn narrowed(
-    program: &Program<'_>,
-    scoping: &Scoping,
+struct Sources<'s, 'a> {
+    program: &'s Program<'a>,
+    scoping: &'s Scoping,
+    annex_b: &'s AnnexBWrites,
     module: bool,
+}
+
+fn narrowed(
+    sources: &Sources<'_, '_>,
     (numeric, led): (&NumericBindings, Option<&NumericBindings>),
 ) -> NumericBindings {
+    let Sources {
+        program,
+        scoping,
+        annex_b,
+        module,
+    } = *sources;
     let mut collect = Collect {
         scoping,
+        annex_b,
         numeric,
         led,
         module,
@@ -448,17 +469,12 @@ fn narrowed(
         .collect()
 }
 
-fn fixpoint(
-    program: &Program<'_>,
-    scoping: &Scoping,
-    module: bool,
-    numeric: Option<&NumericBindings>,
-) -> NumericBindings {
-    let mut current: NumericBindings = scoping.symbol_ids().collect();
+fn fixpoint(sources: &Sources<'_, '_>, numeric: Option<&NumericBindings>) -> NumericBindings {
+    let mut current: NumericBindings = sources.scoping.symbol_ids().collect();
     for _ in 0..MAX_PASSES {
         let next = match numeric {
-            Some(numeric) => narrowed(program, scoping, module, (numeric, Some(&current))),
-            None => narrowed(program, scoping, module, (&current, None)),
+            Some(numeric) => narrowed(sources, (numeric, Some(&current))),
+            None => narrowed(sources, (&current, None)),
         };
         if next.len() == current.len() {
             return next;
@@ -469,7 +485,14 @@ fn fixpoint(
 }
 
 pub(super) fn key_bindings(program: &Program<'_>, scoping: &Scoping, module: bool) -> KeyBindings {
-    let numeric = fixpoint(program, scoping, module, None);
-    let led = fixpoint(program, scoping, module, Some(&numeric));
+    let annex_b = AnnexBWrites::of(program, scoping);
+    let sources = Sources {
+        program,
+        scoping,
+        annex_b: &annex_b,
+        module,
+    };
+    let numeric = fixpoint(&sources, None);
+    let led = fixpoint(&sources, Some(&numeric));
     KeyBindings { numeric, led }
 }
