@@ -572,3 +572,60 @@ const ALIAS_BLOCK_FUNCTIONS: &[&str] = &[
 fn an_object_alias_a_block_function_or_an_early_read_can_reach_prints_like_node_in_both_lanes() {
     prints_like_node_in(ALIAS_BLOCK_FUNCTIONS, &[default_code, unsafe_lane]);
 }
+
+const FOLDED_NAME_HAZARDS_BOTH_LANES: &[&str] = &[
+    "r6-f1",
+    "r6-f1b",
+    "r6-f2",
+    "r6-name-Infinity",
+    "r6-name-isNaN",
+    "r6-name-Math",
+    "r6-name-NaN",
+    "r6-name-Number",
+    "r6-name-param-same",
+    "r6-name-parseInt",
+    "r6-name-String2",
+    "r6-name-String",
+    "r6-name-typeof",
+    "r6-name-undefined0",
+    "r6-name-undefined",
+    "r6-with-wrap1",
+    "r6-with-wrap2",
+    "r6-with-wrap3",
+    "r6-with-wrap4",
+    "r6-with-wrap5",
+];
+
+const FOLDED_NAME_HAZARDS_UNDER_EVAL: &[&str] = &[
+    "r6-f2b",
+    "r6-eval-after1",
+    "r6-eval-after2",
+    "r6-eval-after3",
+    "r6-eval-after4",
+    "r6-eval-after5",
+    "r6-eval-arrow1",
+    "r6-eval-arrow2",
+    "r6-eval-arrow3",
+    "r6-eval-arrow4",
+    "r6-eval-arrow5",
+    "r6-eval-lit1",
+    "r6-eval-lit2",
+    "r6-eval-lit3",
+    "r6-eval-lit4",
+    "r6-eval-lit5",
+    "r6-eval-wrap1",
+    "r6-eval-wrap2",
+    "r6-eval-wrap3",
+    "r6-eval-wrap4",
+    "r6-eval-wrap5",
+];
+
+#[test]
+fn a_body_that_reads_its_own_name_or_a_with_binding_prints_like_node_in_both_lanes() {
+    prints_like_node_in(FOLDED_NAME_HAZARDS_BOTH_LANES, &[default_code, unsafe_lane]);
+}
+
+#[test]
+fn a_body_under_a_direct_eval_that_declares_its_global_prints_like_node_in_the_default_lane() {
+    prints_like_node_in(FOLDED_NAME_HAZARDS_UNDER_EVAL, &[default_code]);
+}

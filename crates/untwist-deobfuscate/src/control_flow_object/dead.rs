@@ -220,7 +220,10 @@ impl<'k, 'p> Known<'k, 'p> {
         match inner {
             Expression::Identifier(id) if !env.is_empty() => match symbol_of(id, self.scoping) {
                 Some(symbol) => env.get(&symbol).cloned(),
-                None => self.folded(inner, &FoldOptions::default()),
+                None if references_are_global(inner, self.scoping) => {
+                    self.folded(inner, &FoldOptions::default())
+                }
+                None => None,
             },
             Expression::CallExpression(call) if !call.optional => self.call(call, env, depth),
             Expression::BinaryExpression(binary) => fold_binary(
@@ -254,8 +257,8 @@ impl<'k, 'p> Known<'k, 'p> {
     fn folded_own_body(&self, function: &Function<'_>, arguments: &[Const]) -> Option<Const> {
         let names = param_names(function)?;
         if names.len() != arguments.len()
-            || names.iter().any(|name| FOLDED_GLOBALS.contains(name))
-            || !reads_only_own_or_globals(function, self.scoping)
+            || names.iter().any(|name| names_a_global(name))
+            || !reads_only_params_or_globals(function, self.scoping)
         {
             return None;
         }
@@ -300,11 +303,17 @@ fn decide(test: &Expression<'_>, known: &Known<'_, '_>) -> Option<bool> {
         .map(|value| truthy(&value))
 }
 
-fn reads_only_own_or_globals(function: &Function<'_>, scoping: &Scoping) -> bool {
-    let own = function.scope_id.get();
-    let is_own = |symbol| Some(scoping.symbol_scope_id(symbol)) == own;
+fn names_a_global(name: &str) -> bool {
+    FOLDED_GLOBALS.contains(&name) || untwist_eval::builtins::all_root_names().contains(&name)
+}
+
+fn reads_only_params_or_globals(function: &Function<'_>, scoping: &Scoping) -> bool {
+    let Some(params) = param_symbols(function) else {
+        return false;
+    };
+    let is_param = |symbol| params.contains(&symbol);
     returned_expression(function)
-        .is_some_and(|expr| references_are_global_or(expr, scoping, is_own))
+        .is_some_and(|expr| references_are_global_or(expr, scoping, is_param))
 }
 
 struct Mentions<'s> {
