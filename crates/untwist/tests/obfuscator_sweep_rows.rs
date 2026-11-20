@@ -704,3 +704,49 @@ fn an_assembled_base_read_or_an_optional_method_call_prints_like_node_in_both_la
         &[default_code, unsafe_lane],
     );
 }
+
+const BLOCK_ROTATOR_ESCAPES: &[&str] = &[
+    "block-rotator-return",
+    "block-rotator-loop-var",
+    "block-rotator-checksum-var",
+    "block-rotator-for-init-var",
+    "block-rotator-loop-function",
+    "block-rotator-leading-function",
+    "block-rotator-outer-continue",
+    "block-rotator-outer-break",
+    "block-rotator-loop-await",
+    "block-rotator-loop-yield",
+    "block-rotator-loop-super",
+    "block-rotator-leading-await",
+    "block-rotator-leading-yield",
+    "block-rotator-leading-super",
+    "block-rotator-closed",
+];
+
+#[test]
+fn a_block_rotator_whose_loop_or_declarations_reach_outside_the_block_prints_like_node_in_both_lanes(
+) {
+    prints_like_node_in(BLOCK_ROTATOR_ESCAPES, &[default_code, unsafe_lane]);
+}
+
+#[test]
+fn a_block_rotator_whose_loop_or_declarations_reach_outside_the_block_is_not_wrapped_in_both_lanes()
+{
+    for label in BLOCK_ROTATOR_ESCAPES
+        .iter()
+        .filter(|label| **label != "block-rotator-closed")
+    {
+        let source = read(&format!("{label}.js"));
+        for output in [default_code(&source), unsafe_lane(&source)] {
+            assert!(!output.contains("})();"), "{label}:\n{output}");
+        }
+    }
+}
+
+#[test]
+fn a_closed_block_rotator_is_still_wrapped_in_both_lanes() {
+    let source = read("block-rotator-closed.js");
+    for output in [default_code(&source), unsafe_lane(&source)] {
+        assert!(output.contains("(function () {\n    const w"), "{output}");
+    }
+}
