@@ -644,12 +644,17 @@ fn settled_parts<'p>(
     scoping: &Scoping,
 ) -> (Vec<DeadPart>, FxHashSet<SymbolId>) {
     let (mut parts, mut used) = decided_parts(branches, symbol, props, lanes, scoping);
+    let mut seen = 0;
     for _ in 0..MAX_DEAD_ROUNDS {
-        let spans: Vec<Span> = parts.iter().map(|part| part.span).collect();
-        if spans.len() <= branches.dead.borrow().len() {
+        if parts.len() <= seen {
             break;
         }
-        *branches.dead.borrow_mut() = spans;
+        seen = parts.len();
+        *branches.dead.borrow_mut() = parts
+            .iter()
+            .map(|part| part.span)
+            .filter(|span| !span.is_empty())
+            .collect();
         (parts, used) = decided_parts(branches, symbol, props, lanes, scoping);
     }
     branches.dead.borrow_mut().clear();

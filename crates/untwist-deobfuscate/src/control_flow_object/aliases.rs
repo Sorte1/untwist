@@ -1,12 +1,13 @@
 use oxc_allocator::Vec as AVec;
 use oxc_ast::ast::*;
-use oxc_ast_visit::{Visit, VisitMut};
+use oxc_ast_visit::{walk, Visit, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_str::Ident;
 use oxc_syntax::reference::ReferenceId;
-use oxc_syntax::scope::ScopeFlags;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
+use std::cell::OnceCell;
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::may_call_eval;
@@ -24,6 +25,48 @@ fn settled(symbol: SymbolId, scoping: &Scoping) -> bool {
     !scoping.symbol_is_mutated(symbol)
         && scoping.symbol_redeclarations(symbol).is_empty()
         && scoping.symbol_scope_id(symbol) != scoping.root_scope_id()
+}
+
+fn var_scope(scoping: &Scoping, scope: ScopeId) -> Option<ScopeId> {
+    scoping
+        .scope_ancestors(scope)
+        .find(|scope| scoping.scope_flags(*scope).is_var())
+}
+
+fn is_block_function(scoping: &Scoping, symbol: SymbolId) -> bool {
+    let flags = scoping.symbol_flags(symbol);
+    flags.contains(SymbolFlags::Function)
+        && !flags.contains(SymbolFlags::FunctionExpression)
+        && !scoping
+            .scope_flags(scoping.symbol_scope_id(symbol))
+            .is_var()
+}
+
+#[derive(Default)]
+pub(super) struct BlockFunctions(OnceCell<FxHashSet<(String, Option<ScopeId>)>>);
+
+impl BlockFunctions {
+    fn index(&self, scoping: &Scoping) -> &FxHashSet<(String, Option<ScopeId>)> {
+        self.0.get_or_init(|| {
+            scoping
+                .symbol_ids()
+                .filter(|symbol| is_block_function(scoping, *symbol))
+                .map(|symbol| home_of(scoping, symbol))
+                .collect()
+        })
+    }
+
+    fn may_write(&self, symbol: SymbolId, scoping: &Scoping) -> bool {
+        !crate::mutants::annex_b_writes_trusted()
+            && self.index(scoping).contains(&home_of(scoping, symbol))
+    }
+}
+
+fn home_of(scoping: &Scoping, symbol: SymbolId) -> (String, Option<ScopeId>) {
+    (
+        scoping.symbol_name(symbol).to_owned(),
+        var_scope(scoping, scoping.symbol_scope_id(symbol)),
+    )
 }
 
 fn is_var(stmt: &Statement<'_>) -> Option<bool> {
@@ -73,6 +116,7 @@ pub(super) fn plan_alias<'a>(
     (index, alias_at): (usize, usize),
     scoping: &Scoping,
     (extended, others_required): (bool, bool),
+    block_functions: &BlockFunctions,
 ) -> Option<AliasFold<'a>> {
     let declared = object_declaration(stmts.get(index)?, extended)?;
     let (alias, init) = single_declarator(stmts.get(alias_at)?)?;
@@ -98,8 +142,13 @@ pub(super) fn plan_alias<'a>(
         alias,
         name,
     };
-    (reads_see_the_object(alias, object, name, scoping) && all_follow(stmts, &fold, scoping))
-        .then_some(fold)
+    let lexical = is_var(&stmts[alias_at]) == Some(false);
+    let follows = reads_see_the_object(alias, object, name, scoping)
+        && all_follow(stmts, &fold, lexical, scoping);
+    (follows
+        && !block_functions.may_write(alias, scoping)
+        && !block_functions.may_write(object, scoping))
+    .then_some(fold)
 }
 
 struct Redirect<'s, 'a> {
@@ -132,9 +181,18 @@ impl<'a> VisitMut<'a> for Redirect<'_, 'a> {
 struct Found<'s> {
     targets: &'s FxHashSet<ReferenceId>,
     found: usize,
+    hoisted_depth: usize,
+    in_hoisted: bool,
 }
 
 impl<'a> Visit<'a> for Found<'_> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        let hoisted = usize::from(it.is_declaration());
+        self.hoisted_depth += hoisted;
+        walk::walk_function(self, it, flags);
+        self.hoisted_depth -= hoisted;
+    }
+
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         if it
             .reference_id
@@ -142,6 +200,7 @@ impl<'a> Visit<'a> for Found<'_> {
             .is_some_and(|reference| self.targets.contains(&reference))
         {
             self.found += 1;
+            self.in_hoisted |= self.hoisted_depth > 0;
         }
     }
 }
@@ -154,16 +213,23 @@ fn alias_targets(fold: &AliasFold<'_>, scoping: &Scoping) -> FxHashSet<Reference
         .collect()
 }
 
-fn all_follow(stmts: &[Statement<'_>], fold: &AliasFold<'_>, scoping: &Scoping) -> bool {
+fn all_follow(
+    stmts: &[Statement<'_>],
+    fold: &AliasFold<'_>,
+    lexical: bool,
+    scoping: &Scoping,
+) -> bool {
     let targets = alias_targets(fold, scoping);
     let mut found = Found {
         targets: &targets,
         found: 0,
+        hoisted_depth: 0,
+        in_hoisted: false,
     };
     for stmt in stmts.iter().skip(fold.alias_at + 1) {
         found.visit_statement(stmt);
     }
-    found.found == targets.len()
+    found.found == targets.len() && !(lexical && found.in_hoisted)
 }
 
 fn commit<'a>(stmts: &mut AVec<'a, Statement<'a>>, fold: &AliasFold<'a>, cx: &mut Cx<'a, '_>) {
@@ -190,12 +256,19 @@ fn commit<'a>(stmts: &mut AVec<'a, Statement<'a>>, fold: &AliasFold<'a>, cx: &mu
 pub(super) fn fold_object_aliases<'a>(
     stmts: &mut AVec<'a, Statement<'a>>,
     cx: &mut Cx<'a, '_>,
+    block_functions: &BlockFunctions,
 ) -> usize {
     let scoping = cx.scoping();
     let extended = cx.opts.extended;
-    let Some(fold) = (0..stmts.len())
-        .find_map(|index| plan_alias(stmts, (index, index + 1), scoping, (extended, true)))
-    else {
+    let Some(fold) = (0..stmts.len()).find_map(|index| {
+        plan_alias(
+            stmts,
+            (index, index + 1),
+            scoping,
+            (extended, true),
+            block_functions,
+        )
+    }) else {
         return 0;
     };
     if opaque_scope(scoping) {

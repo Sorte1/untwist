@@ -22,6 +22,7 @@ struct Collapse<'a> {
     name: Ident<'a>,
     exempt: FxHashSet<usize>,
     removed: Option<Span>,
+    initialized_at: u32,
 }
 
 fn address_of(id: &IdentifierReference<'_>) -> usize {
@@ -111,6 +112,7 @@ impl<'a> AliasSearch<'_, 'a> {
                         name: base.name,
                         exempt: FxHashSet::default(),
                         removed: Some(rest[0].span()),
+                        initialized_at: rest[0].span().end,
                     },
                 );
             }
@@ -127,6 +129,7 @@ impl<'a> AliasSearch<'_, 'a> {
                 name: alias.name,
                 exempt,
                 removed: None,
+                initialized_at: rest[assigned].span().end,
             },
         );
     }
@@ -147,9 +150,17 @@ struct Shadowing<'s, 'k, 'a> {
     scopes: Vec<ScopeId>,
     refused: FxHashSet<SymbolId>,
     seen: FxHashMap<SymbolId, usize>,
+    hoisted_depth: usize,
 }
 
 impl<'a> VisitJs<'a> for Shadowing<'_, '_, 'a> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        let hoisted = usize::from(it.is_declaration());
+        self.hoisted_depth += hoisted;
+        walk_js::walk_function(self, it, flags);
+        self.hoisted_depth -= hoisted;
+    }
+
     fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &Cell<Option<ScopeId>>) {
         let scope = scope_id
             .get()
@@ -172,6 +183,9 @@ impl<'a> VisitJs<'a> for Shadowing<'_, '_, 'a> {
         *self.seen.entry(symbol).or_default() += 1;
         if collapse.exempt.contains(&address_of(it)) {
             return;
+        }
+        if self.hoisted_depth > 0 || it.span.start < collapse.initialized_at {
+            self.refused.insert(symbol);
         }
         let scope = self
             .scopes
@@ -233,6 +247,7 @@ pub(super) fn collapse_object_aliases<'a>(program: &mut Program<'a>, cx: &mut Cx
         scopes: Vec::new(),
         refused: FxHashSet::default(),
         seen: FxHashMap::default(),
+        hoisted_depth: 0,
     };
     shadowing.visit_program(program);
     let (refused, seen) = (shadowing.refused, shadowing.seen);
