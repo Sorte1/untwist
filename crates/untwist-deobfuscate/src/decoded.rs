@@ -217,7 +217,8 @@ fn apply_decoded_values<'a>(
     evaluator: &mut InterpEvaluator,
     values: Vec<Option<DecodedValue>>,
 ) -> bool {
-    if !guarded_escapes_dead(request, &values) {
+    let guards_dead = guarded_escapes_dead(request, &values);
+    if !guards_dead && request.escape_guards.fallback.is_empty() {
         decoded.notes.extend(drained(evaluator));
         decoded
             .notes
@@ -252,6 +253,9 @@ fn apply_decoded_values<'a>(
     }
     if evaluated > 0 {
         crate::legacy_reach::defer_escapes(&request.escape_guards.speculative);
+        if !guards_dead {
+            crate::legacy_reach::defer_escapes(&request.escape_guards.fallback);
+        }
     }
     inlined && returned == request.calls.len() && evaluated == returned
 }
@@ -819,7 +823,12 @@ fn judge_runs<'p>(
         .into_iter()
         .zip(spelled)
         .partition(|(run, _)| run.request.reliance.is_some());
-    let mut decoding = Vec::new();
+    let mut decoding: Vec<usize> = plan
+        .requests
+        .iter()
+        .filter(|request| unsafe_lane && request.calls.is_empty())
+        .map(|request| request.unit)
+        .collect();
     let watched = !unsafe_lane && !nested_root;
     for (run, spelled) in independent.into_iter().chain(relying) {
         let unit = run.request.unit;

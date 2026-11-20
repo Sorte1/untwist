@@ -4,6 +4,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_str::Ident;
 use oxc_syntax::symbol::SymbolId;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::{call_parts, var_function_or_declaration};
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::ast_util::rename::Renames;
@@ -19,6 +20,7 @@ use crate::stamp::{
     declaration_symbol, decoder_index, decoder_name, owning_unit, reached_outside_its_block,
     string_array_unit, IndexAllocator, RefusedByDecode,
 };
+use crate::wrapper_speculation::{branched_writes_outside, declared_by_function};
 
 const SHORT_DECODER_BODY: usize = 4;
 
@@ -232,8 +234,10 @@ impl<'a> Pass<'a> for FindDecoders {
             .map(|shape| (shape.statement, shape.symbol))
             .collect();
         let early = read_before_declaration(program, cx.scoping(), &bound);
+        let speculated = speculated_decoders(program, cx, &unstamped, &watched);
         let mut indices = IndexAllocator::decoders(cx.scoping());
         let mut renames = Renames::new();
+        let mut deferred = Vec::new();
         for (index, shape) in unstamped.iter().enumerate() {
             if refused.contains(&shape.statement) {
                 continue;
@@ -242,14 +246,21 @@ impl<'a> Pass<'a> for FindDecoders {
                 cx.note(note, Some(shape.statement));
                 continue;
             }
-            if let Some((note, span)) = decoder_refusal(cx.scoping(), shape, index, &watched) {
+            let written = speculated.get(&shape.symbol);
+            let checked = (cx.scoping(), &watched, written.is_some());
+            if let Some((note, span)) = decoder_refusal(checked, shape, index) {
                 cx.note(note, Some(span));
                 continue;
+            }
+            if let Some(writes) = written {
+                deferred.push(cx.scoping().symbol_span(shape.symbol));
+                deferred.extend(writes);
             }
             let name = decoder_name(indices.allocate());
             renames.insert(shape.symbol, Ident::from_str_in(&name, &*cx));
         }
         drop(refused);
+        crate::legacy_reach::defer_escapes(&deferred);
         if renames.is_empty() {
             return;
         }
@@ -260,19 +271,53 @@ impl<'a> Pass<'a> for FindDecoders {
     }
 }
 
+fn speculated_decoders(
+    program: &Program<'_>,
+    cx: &Cx<'_, '_>,
+    unstamped: &[DecoderShape],
+    watched: &Watched,
+) -> FxHashMap<SymbolId, Vec<Span>> {
+    if !cx.opts.unsafe_transforms || !crate::legacy_reach::speculates_escapes() {
+        return FxHashMap::default();
+    }
+    let scoping = cx.scoping();
+    let homes: FxHashMap<SymbolId, Span> = unstamped
+        .iter()
+        .enumerate()
+        .filter(|(index, shape)| {
+            !shape.bound
+                && declared_by_function(scoping, shape.symbol)
+                && writes_outside(
+                    scoping,
+                    shape.symbol,
+                    shape.statement,
+                    &watched.writes,
+                    *index,
+                )
+        })
+        .map(|(_, shape)| (shape.symbol, shape.statement))
+        .collect();
+    if homes.is_empty() {
+        return FxHashMap::default();
+    }
+    let candidates: FxHashSet<SymbolId> = homes.keys().copied().collect();
+    branched_writes_outside(program, scoping, &candidates, &homes)
+}
+
 fn decoder_refusal(
-    scoping: &Scoping,
+    (scoping, watched, speculated): (&Scoping, &Watched, bool),
     shape: &DecoderShape,
     index: usize,
-    watched: &Watched,
 ) -> Option<(&'static str, Span)> {
-    if writes_outside(
-        scoping,
-        shape.symbol,
-        shape.statement,
-        &watched.writes,
-        index,
-    ) {
+    if !speculated
+        && writes_outside(
+            scoping,
+            shape.symbol,
+            shape.statement,
+            &watched.writes,
+            index,
+        )
+    {
         return Some((notes::DECODER_WRITTEN_OUTSIDE, shape.statement));
     }
     if let Some(span) = watched.spelled.get(index).copied().flatten() {

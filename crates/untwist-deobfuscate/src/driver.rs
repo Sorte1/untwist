@@ -974,17 +974,12 @@ fn deobfuscate_with<'a>(
     if opts.round_cap_undo.get() == RoundCapUndo::Requested {
         return (sem, aggregate.finish());
     }
-    crate::legacy_reach::settle_escapes(|decoders| {
-        sem.scoping
-            .symbol_ids()
-            .any(|symbol| decoders.contains(&sem.scoping.symbol_span(symbol)))
-            || crate::legacy_reach::identifiers_survive(program, decoders)
-    });
     let sem = finalize_unresolved_machinery(alloc, program, sem, (opts, &shared), &mut aggregate);
     let sem = match &before {
         Some(before) => kept_when_stamps_survive(alloc, program, (sem, before), &mut aggregate),
         None => sem,
     };
+    crate::legacy_reach::settle_escapes(program, &sem.scoping);
 
     crate::decoded::settle_layered(program, &sem.scoping);
     let mut report = aggregate.finish();

@@ -64,7 +64,7 @@ impl<'r, 'p> ForeignUnit<'r, 'p> {
         functions.chain(statements).collect()
     }
 
-    fn touches_only_itself(&self, program: &Program<'p>, scoping: &Scoping) -> bool {
+    fn touches_only_itself(&self, program: &Program<'p>, scoping: &Scoping, decoded: bool) -> bool {
         let allowed = self.allowed();
         if uninitialised(scoping, &allowed, &FxHashSet::default()).is_some() {
             return false;
@@ -90,7 +90,7 @@ impl<'r, 'p> ForeignUnit<'r, 'p> {
         {
             return false;
         }
-        machinery_unreachable(scoping, &self.parts(program, &rotators))
+        decoded || machinery_unreachable(scoping, &self.parts(program, &rotators))
     }
 }
 
@@ -111,6 +111,7 @@ pub struct ForeignUnits<'r, 'p> {
     decoder_units: Vec<(SymbolId, usize)>,
     rotator_units: Vec<(Span, usize)>,
     relied: RefCell<Vec<(usize, usize, Span)>>,
+    pub decoded: FxHashSet<usize>,
 }
 
 fn is_host_sink(scoping: &Scoping, expr: &Expression<'_>) -> bool {
@@ -159,6 +160,7 @@ impl<'r, 'p> ForeignUnits<'r, 'p> {
                 .map(|(unit, site)| (site.span, *unit))
                 .collect(),
             relied: RefCell::new(Vec::new()),
+            decoded: FxHashSet::default(),
         }
     }
 
@@ -242,9 +244,10 @@ impl<'r, 'p> ForeignUnits<'r, 'p> {
             .iter()
             .find(|foreign| foreign.array.number == unit)
             .is_some_and(|foreign| {
-                *foreign
-                    .proven
-                    .get_or_init(|| foreign.touches_only_itself(program, scoping))
+                *foreign.proven.get_or_init(|| {
+                    let decoded = self.decoded.contains(&unit);
+                    foreign.touches_only_itself(program, scoping, decoded)
+                })
             })
     }
 

@@ -30,6 +30,8 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "strict-block-wrapper",
     "block-wrapper-dead-write",
     "cfo-escape-in-branch",
+    "interval-before-rotator",
+    "decoded-foreign-rotator",
 ];
 
 const FINGERPRINTS: &[&str] = &[

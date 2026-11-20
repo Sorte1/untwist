@@ -3,7 +3,7 @@ use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::branch_reach::in_branches;
 use crate::notes;
@@ -29,7 +29,7 @@ impl<'a> VisitJs<'a> for Writes<'_> {
     }
 }
 
-fn declared_by_function(scoping: &Scoping, symbol: SymbolId) -> bool {
+pub(crate) fn declared_by_function(scoping: &Scoping, symbol: SymbolId) -> bool {
     scoping.symbol_flags(symbol).is_function()
         && scoping
             .scope_flags(scoping.symbol_scope_id(symbol))
@@ -41,16 +41,39 @@ fn branched_writes_only(
     scoping: &Scoping,
     candidates: &FxHashSet<SymbolId>,
 ) -> FxHashSet<SymbolId> {
+    branched_writes_outside(program, scoping, candidates, &FxHashMap::default())
+        .into_keys()
+        .collect()
+}
+
+pub(crate) fn branched_writes_outside(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    candidates: &FxHashSet<SymbolId>,
+    homes: &FxHashMap<SymbolId, Span>,
+) -> FxHashMap<SymbolId, Vec<Span>> {
     let mut writes = Writes {
         scoping,
         symbols: candidates,
         found: Vec::new(),
     };
     writes.visit_program(program);
-    let spans: FxHashSet<Span> = writes.found.iter().map(|(_, span)| *span).collect();
+    let outside: Vec<(SymbolId, Span)> = writes
+        .found
+        .into_iter()
+        .filter(|(symbol, span)| {
+            homes
+                .get(symbol)
+                .is_none_or(|home| span.start < home.start || home.end < span.end)
+        })
+        .collect();
+    let spans: FxHashSet<Span> = outside.iter().map(|(_, span)| *span).collect();
     let branched = in_branches(program, scoping, &spans);
-    let mut held: FxHashSet<SymbolId> = writes.found.iter().map(|(symbol, _)| *symbol).collect();
-    for (symbol, span) in &writes.found {
+    let mut held: FxHashMap<SymbolId, Vec<Span>> = FxHashMap::default();
+    for (symbol, span) in &outside {
+        held.entry(*symbol).or_default().push(*span);
+    }
+    for (symbol, span) in &outside {
         if !branched.contains(span) {
             held.remove(symbol);
         }

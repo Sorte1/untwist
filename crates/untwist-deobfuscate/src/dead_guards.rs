@@ -58,6 +58,7 @@ pub struct EscapeGuards {
     pub values: Vec<Vec<BranchGuard>>,
     pub dynamic: Vec<Vec<BranchGuard>>,
     pub speculative: Vec<Span>,
+    pub fallback: Vec<Span>,
 }
 
 struct Enclosing<'e> {
