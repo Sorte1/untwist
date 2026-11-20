@@ -1,0 +1,1 @@
+var c9 = ["constr", "uctor"].join(""), l9 = ["proto", "type"].join(""); "x"[c9][l9].trim = function () { return "PATCHED"; }; [][c9][l9].join = function () { return "PATCHED"; }; "x"[c9].fromCharCode = function () { return "PATCHED"; };

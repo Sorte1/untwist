@@ -118,6 +118,7 @@ struct Walker<'s, 'a> {
     annex: AnnexBWrites,
     proto_stores: Vec<Option<&'a Expression<'a>>>,
     holders_open: bool,
+    open_reads: Vec<chains::OpenRead<'a>>,
 }
 
 #[derive(Default)]
@@ -172,6 +173,7 @@ fn walker_for<'s, 'a>(
         annex: AnnexBWrites::of(program, scoping),
         proto_stores: Vec::new(),
         holders_open: false,
+        open_reads: Vec::new(),
     }
 }
 
@@ -296,12 +298,23 @@ fn transparent(kind: &AstKind<'_>) -> bool {
 
 fn iife_function<'k, 'a>(
     callee: &'k Expression<'a>,
+    scoping: &Scoping,
 ) -> Option<(&'k FormalParameters<'a>, Option<Address>)> {
     match callee.without_parentheses() {
-        Expression::FunctionExpression(func) => Some((&func.params, Some(func.unstable_address()))),
+        Expression::FunctionExpression(func) if !self_named(func, scoping) => {
+            Some((&func.params, Some(func.unstable_address())))
+        }
         Expression::ArrowFunctionExpression(arrow) => Some((&arrow.params, None)),
         _ => None,
     }
+}
+
+fn self_named(func: &Function<'_>, scoping: &Scoping) -> bool {
+    func.id.as_ref().is_some_and(|id| {
+        id.symbol_id
+            .get()
+            .is_none_or(|symbol| !scoping.get_resolved_reference_ids(symbol).is_empty())
+    })
 }
 
 fn function_literal(expr: &Expression<'_>) -> bool {
@@ -450,7 +463,7 @@ impl<'s, 'a> Walker<'s, 'a> {
     }
 
     fn collect_params(&mut self, call: &'a CallExpression<'a>) {
-        let Some((params, function)) = iife_function(&call.callee) else {
+        let Some((params, function)) = iife_function(&call.callee, self.scoping) else {
             return;
         };
         if params.rest.is_some() || call.arguments.iter().any(Argument::is_spread) {
