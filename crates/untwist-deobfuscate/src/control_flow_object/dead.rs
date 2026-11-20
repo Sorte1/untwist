@@ -371,6 +371,7 @@ pub(super) struct Branches<'p> {
     objects: FxHashMap<SymbolId, &'p ObjectExpression<'p>>,
     assembled: FxHashMap<SymbolId, Assembled<'p>>,
     optimistic: FxHashMap<SymbolId, Assembled<'p>>,
+    rebuilt: FxHashSet<SymbolId>,
     hazard: bool,
     program: Option<&'p Program<'p>>,
     readonly: RefCell<FxHashMap<SymbolId, Option<ObjectUses>>>,
@@ -563,9 +564,13 @@ impl<'p> VisitJs<'p> for BranchScan<'_, 'p> {
             let Some(root) = self.bodies.last().copied() else {
                 break;
             };
-            let found = assembled_alias(&it[start..], self.scoping)
-                .filter(|(_, assembled)| !assembled.reaches_its_receiver());
-            if let Some((alias, assembled)) = found {
+            let Some((alias, assembled)) = assembled_alias(&it[start..], self.scoping) else {
+                continue;
+            };
+            if assembled.adds_keys() {
+                self.found.rebuilt.insert(assembled.base());
+            }
+            if !assembled.reaches_its_receiver() {
                 self.found
                     .assembled
                     .insert(alias, assembled.within(Some(root)));
@@ -623,6 +628,10 @@ pub(super) fn predicate_branches<'p>(program: &'p Program<'p>, scoping: &Scoping
         scan.found.assembled.retain(|alias, assembled| {
             !writes.may_write(*alias) && !writes.may_write(assembled.base())
         });
+    }
+    for base in std::mem::take(&mut scan.found.rebuilt) {
+        scan.found.objects.remove(&base);
+        scan.found.optimistic.remove(&base);
     }
     scan.found.program = Some(program);
     scan.found.hazard = untwist_core::semantic::scope_hazard(scoping).is_some();
