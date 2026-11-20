@@ -14,6 +14,7 @@ const CHAIN_KEYS: [&str; 3] = ["__proto__", "prototype", "constructor"];
 pub(super) struct OpenRead<'a> {
     object: Option<&'a Expression<'a>>,
     key: &'a Expression<'a>,
+    rewritten: Option<(oxc_syntax::symbol::SymbolId, oxc_allocator::Address)>,
 }
 
 const PROTOTYPE_READERS: [&str; 5] = [
@@ -79,13 +80,15 @@ impl<'s, 'a> Walker<'s, 'a> {
 
     fn note_open_read(&mut self, object: Option<&'a Expression<'a>>, key: &'a Expression<'a>) {
         if !self.plain_store_target() {
-            self.open_reads.push(OpenRead { object, key });
+            let read = self.open_read(object, key);
+            self.open_reads.push(read);
         }
     }
 
     fn note_open_key(&mut self, key: &'a PropertyKey<'a>) -> bool {
         if let Some(key) = key.as_expression() {
-            self.open_reads.push(OpenRead { object: None, key });
+            let read = self.open_read(None, key);
+            self.open_reads.push(read);
         }
         false
     }
@@ -102,10 +105,23 @@ impl<'s, 'a> Walker<'s, 'a> {
             _ if spread => true,
             Some(key) => {
                 let object = call.arguments.first().and_then(Argument::as_expression);
-                self.open_reads.push(OpenRead { object, key });
+                let read = self.open_read(object, key);
+                self.open_reads.push(read);
                 false
             }
             None => false,
+        }
+    }
+
+    fn open_read(
+        &self,
+        object: Option<&'a Expression<'a>>,
+        key: &'a Expression<'a>,
+    ) -> OpenRead<'a> {
+        OpenRead {
+            object,
+            key,
+            rewritten: self.rewritten_before_here(key),
         }
     }
 
@@ -131,6 +147,12 @@ impl<'s, 'a> Walker<'s, 'a> {
             return CHAIN_KEYS.contains(&text.as_str());
         }
         if self.numeric_key(read.key, KIND_DEPTH) {
+            return false;
+        }
+        if read
+            .rewritten
+            .is_some_and(|(symbol, function)| self.numeric_rewrite(symbol, function))
+        {
             return false;
         }
         read.object

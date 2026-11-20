@@ -6,6 +6,7 @@ mod holders;
 mod keys;
 mod numeric;
 mod proto_stores;
+mod rewritten;
 mod shapes;
 
 use std::borrow::Cow;
