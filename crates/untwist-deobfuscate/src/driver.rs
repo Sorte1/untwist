@@ -978,6 +978,7 @@ fn deobfuscate_with<'a>(
         sem.scoping
             .symbol_ids()
             .any(|symbol| decoders.contains(&sem.scoping.symbol_span(symbol)))
+            || crate::legacy_reach::identifiers_survive(program, decoders)
     });
     let sem = finalize_unresolved_machinery(alloc, program, sem, (opts, &shared), &mut aggregate);
     let sem = match &before {

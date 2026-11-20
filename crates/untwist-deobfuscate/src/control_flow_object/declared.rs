@@ -13,6 +13,7 @@ use untwist_core::ast_util::search::expressions_at;
 use untwist_core::pass::{Cx, NoteKind, RepeatedSites};
 use untwist_core::semantic::is_constant_binding;
 
+use crate::branch_reach::in_branches;
 use crate::init_order::{
     reads_are_initialised, refuse_read_before_declaration, scan_init_order, InitOrder,
 };
@@ -298,7 +299,12 @@ fn substitutable_uses<'u>(
     let branches = located.branches(cx.scoping());
     let dead = dead_branch_parts(branches, candidate.symbol, &props, &*cx);
     if dead.is_empty() {
-        return None;
+        return speculated_mutations(located.program, candidate, uses, cx).then_some(
+            Substitutable {
+                uses,
+                dead: Vec::new(),
+            },
+        );
     }
     let only_dead = !uses.reads.is_empty()
         && mutations_only_in_dead_parts(
@@ -308,7 +314,7 @@ fn substitutable_uses<'u>(
             &mutation_spans(uses),
             cx.scoping(),
         );
-    if !only_dead {
+    if !only_dead && !speculated_mutations(located.program, candidate, uses, cx) {
         cx.note(notes::CONTROL_FLOW_LIVE_MUTATION, Some(candidate.statement));
         return None;
     }
@@ -318,6 +324,57 @@ fn substitutable_uses<'u>(
         .filter(|span| !span.is_empty())
         .collect();
     Some(Substitutable { uses, dead })
+}
+
+fn speculated_mutations(
+    program: &Program<'_>,
+    candidate: &DeclaredObject,
+    uses: &ObjectUses,
+    cx: &Cx<'_, '_>,
+) -> bool {
+    if !cx.opts.unsafe_transforms
+        || !crate::legacy_reach::speculates_escapes()
+        || uses.reads.is_empty()
+    {
+        return false;
+    }
+    if !passes_decoders_to_members(program) {
+        return false;
+    }
+    let mutations = mutation_spans(uses);
+    let spans: FxHashSet<Span> = mutations.iter().copied().collect();
+    if spans.is_empty() || in_branches(program, cx.scoping(), &spans).len() != spans.len() {
+        return false;
+    }
+    let mut deferred = vec![cx.scoping().symbol_span(candidate.symbol)];
+    deferred.extend(mutations);
+    crate::legacy_reach::defer_escapes(&deferred);
+    true
+}
+
+#[derive(Default)]
+struct DecoderArguments {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for DecoderArguments {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.found {
+            return;
+        }
+        self.found = it.callee.without_parentheses().is_member_expression()
+            && it.arguments.iter().any(|argument| {
+                matches!(argument, Argument::Identifier(id)
+                    if untwist_core::machinery_name::decoder_index(id.name.as_str()).is_some())
+            });
+        walk_js::walk_call_expression(self, it);
+    }
+}
+
+fn passes_decoders_to_members(program: &Program<'_>) -> bool {
+    let mut search = DecoderArguments::default();
+    search.visit_program(program);
+    search.found
 }
 
 fn is_redeclared(scoping: &Scoping, symbol: SymbolId) -> bool {

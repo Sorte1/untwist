@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 
+use oxc_ast::ast::{BindingIdentifier, CallExpression, IdentifierReference, Program};
+use oxc_ast_visit::VisitJs;
 use oxc_span::Span;
 
 use crate::mutants::deferred_legacy_reach_trusted;
@@ -95,6 +97,35 @@ pub(crate) fn speculates_escapes() -> bool {
 
 pub(crate) fn defer_escapes(decoders: &[Span]) {
     DEFERRAL.with(|deferral| deferral.borrow_mut().escapes.extend_from_slice(decoders));
+}
+
+struct Surviving<'s> {
+    spans: &'s [Span],
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for Surviving<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= self.spans.contains(&it.span);
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.found |= self.spans.contains(&it.span);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        self.found |= self.spans.contains(&it.span);
+        oxc_ast_visit::walk_js::walk_call_expression(self, it);
+    }
+}
+
+pub(crate) fn identifiers_survive(program: &Program<'_>, spans: &[Span]) -> bool {
+    let mut surviving = Surviving {
+        spans,
+        found: false,
+    };
+    surviving.visit_program(program);
+    surviving.found
 }
 
 pub(crate) fn settle_escapes(survives: impl FnOnce(&[Span]) -> bool) {
