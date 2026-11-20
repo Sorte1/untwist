@@ -405,7 +405,8 @@ pub const PROTECTION_HOIST_BLOCKER_KEPT: &str =
      function, so removing it would change what that name reads; the block was left in place";
 pub const SELF_DEFENDING_REFERENCE_KEPT: &str =
     "a call controller was found but a reference to it survives outside the statements this pass \
-     removes, so the block was left in place";
+     removes, so the block was left in place, and the default lane keeps a protection that may \
+     still run";
 pub const PROTECTIONS_KEPT_TOGETHER: &str =
     "a block registered through a call controller or a debug-protection timer may still run, so \
      the default lane keeps it, and every block registered that way and every debug-protection \

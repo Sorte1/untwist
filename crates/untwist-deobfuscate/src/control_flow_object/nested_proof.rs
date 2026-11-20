@@ -13,7 +13,7 @@ use std::sync::OnceLock;
 
 const PROTO_KEY: &str = "__proto__";
 
-const OBJECT_PROTOTYPE_KEYS: [&str; 12] = [
+pub(super) const OBJECT_PROTOTYPE_KEYS: [&str; 12] = [
     "constructor",
     "hasOwnProperty",
     "isPrototypeOf",
@@ -92,7 +92,7 @@ impl<'a> VisitJs<'a> for ReceiverUses {
     }
 }
 
-fn reaches_its_receiver(object: &ObjectExpression<'_>) -> bool {
+pub(super) fn reaches_its_receiver(object: &ObjectExpression<'_>) -> bool {
     let mut scan = ReceiverUses { found: false };
     scan.visit_object_expression(object);
     scan.found

@@ -289,6 +289,25 @@ fn candidate_reads(uses: &ObjectUses) -> Reads<'_> {
     }
 }
 
+fn unreferenced_statements(
+    candidates: &[Declared],
+    keeps_root: bool,
+    scoping: &oxc_semantic::Scoping,
+) -> Vec<Span> {
+    candidates
+        .iter()
+        .filter(|declared| {
+            let root = scoping.symbol_scope_id(declared.symbol) == scoping.root_scope_id();
+            !(keeps_root && root)
+                && scoping
+                    .get_resolved_reference_ids(declared.symbol)
+                    .is_empty()
+                && scoping.symbol_redeclarations(declared.symbol).is_empty()
+        })
+        .map(|declared| declared.statement)
+        .collect()
+}
+
 #[derive(Default)]
 pub struct InlineObjectProps {
     superset_only: bool,
@@ -348,6 +367,8 @@ impl<'a> Pass<'a> for InlineObjectProps {
         let shares = cx.opts.shares_init_order;
         let wants_keyed = self.superset_only && !cx.opts.rule_disabled(KEYED_RULE);
         let (order, uses) = order_and_uses(program, cx, &symbols, wants_keyed);
+        let keeps_root = keeps_script_top_level(program, cx.opts);
+        let unreferenced = unreferenced_statements(&candidates, keeps_root, cx.scoping());
         candidates.retain(|declared| uses.contains_key(&declared.symbol));
         crate::proof::refuse_annex_b_bindings(
             &mut candidates,
@@ -375,7 +396,9 @@ impl<'a> Pass<'a> for InlineObjectProps {
         );
         let mut edits = spans::Edits::default();
         let mut removals = StmtEdits::new();
-        let keeps_root = keeps_script_top_level(program, cx.opts);
+        for statement in unreferenced {
+            removals.remove(statement);
+        }
         for (candidate, reads) in admitted {
             let kept = keeps_root && {
                 let scoping = cx.scoping();

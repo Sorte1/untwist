@@ -23,6 +23,9 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "wrapper-dead-write",
     "dp-object-alias",
     "dp-nested-dead-uses",
+    "cfo-alias-console",
+    "round-unlocked-console",
+    "braced-controller-lock",
 ];
 
 const FINGERPRINTS: &[&str] = &[
@@ -502,4 +505,11 @@ fn a_nested_object_a_call_or_a_block_function_can_change_prints_like_node_in_bot
 #[test]
 fn a_fold_through_a_built_in_the_program_patches_prints_like_node_in_the_default_lane() {
     prints_like_node_in(NESTED_HAZARDS_PATCHED_BUILTINS, &[default_code]);
+}
+
+#[test]
+fn a_domain_lock_registered_through_a_braced_call_controller_is_removed_under_unsafe() {
+    let output = unsafe_lane(&read("braced-controller-lock.js"));
+    assert!(!output.contains("RegExp"), "{output}");
+    assert!(!output.contains(".apply("), "{output}");
 }

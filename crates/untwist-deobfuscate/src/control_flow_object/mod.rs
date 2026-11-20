@@ -25,7 +25,9 @@ use crate::notes;
 use crate::object_props::ambiguous_key;
 use crate::wrapper_calls::arguments_are_substitutable;
 
+mod alias;
 mod aliases;
+mod assembled;
 mod dead;
 mod declared;
 mod hoisted;
@@ -532,6 +534,7 @@ pub struct ControlFlowObject<'a> {
     open_sites: Vec<Span>,
     refused_nest: Option<Span>,
     pending: FxHashSet<Span>,
+    collapsed: bool,
 }
 
 pub(super) const MAX_NEST: usize = 256;
@@ -647,6 +650,12 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
         self.open_sites.clear();
         self.refused_nest = None;
         self.pending.clear();
+        let collapsed = alias::collapse_object_aliases(program, cx);
+        self.collapsed = collapsed > 0;
+        if self.collapsed {
+            cx.changed_by(collapsed);
+            return;
+        }
         let applied = inline_declared_objects(program, cx);
         cx.changed_by(applied);
     }
@@ -732,6 +741,10 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
 
     fn exit_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         let mut edits = std::mem::take(&mut self.edits);
+        if self.collapsed {
+            self.logical_refusals = RepeatedSites::default();
+            return;
+        }
         if edits.forget_renamed_since_refresh(program) > 0 {
             cx.note(notes::CONTROL_FLOW_RENAMED_BEFORE_INSERTION, None);
         }

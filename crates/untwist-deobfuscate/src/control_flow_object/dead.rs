@@ -18,9 +18,10 @@ use untwist_eval::fold::{fold_binary, fold_to_const, fold_unary, Const, FoldOpti
 use std::borrow::Cow;
 use std::cell::{OnceCell, RefCell};
 
+use super::assembled::{aliases_mutated_only_in_dead, assembled_alias, Assembled};
 use super::nested_proof::{
-    annex_b_written, builtins_proven_intact, proven_readonly_uses, static_property,
-    touches_builtins,
+    annex_b_written, builtins_proven_intact, proven_readonly_uses, reaches_its_receiver,
+    static_property, touches_builtins,
 };
 use super::CffValue;
 
@@ -92,6 +93,8 @@ struct Known<'k, 'p> {
     scoping: &'k Scoping,
     branches: &'k Branches<'p>,
     builtins_unpatched: bool,
+    assembled: bool,
+    used: RefCell<FxHashSet<SymbolId>>,
 }
 
 enum Resolved<'k, 'p> {
@@ -147,14 +150,20 @@ impl<'k, 'p> Known<'k, 'p> {
         member: &Expression<'_>,
         depth: usize,
     ) -> Option<Resolved<'k, 'p>> {
-        let object = self.branches.readonly_object(
-            receiver,
-            self.symbol,
-            self.scoping,
-            self.builtins_unpatched,
-        )?;
         let (_, name) = member_parts(member)?;
-        match static_property(object, name.as_ref())?.without_parentheses() {
+        let value = match self.assembled_property(receiver, name.as_ref()) {
+            Some(value) => value,
+            None => match self.branches.readonly_object(
+                receiver,
+                self.symbol,
+                self.scoping,
+                self.builtins_unpatched,
+            ) {
+                Some(object) => static_property(object, name.as_ref())?,
+                None => self.optimistic_property(receiver, name.as_ref())?,
+            },
+        };
+        match value.without_parentheses() {
             Expression::FunctionExpression(function) if is_plain_function(function) => {
                 Some(Resolved::Function(function))
             }
@@ -163,6 +172,30 @@ impl<'k, 'p> Known<'k, 'p> {
                 .value(value, &Env::default(), depth + 1)
                 .map(Resolved::Value),
         }
+    }
+
+    fn assembled_property(&self, receiver: SymbolId, name: &str) -> Option<&'p Expression<'p>> {
+        if !self.assembled {
+            return None;
+        }
+        let value = self.branches.assembled.get(&receiver)?.property(name)?;
+        self.used.borrow_mut().insert(receiver);
+        Some(value)
+    }
+
+    fn optimistic_property(&self, receiver: SymbolId, name: &str) -> Option<&'p Expression<'p>> {
+        if !self.assembled {
+            return None;
+        }
+        if !self
+            .branches
+            .reaches_owner(receiver, self.symbol, self.scoping)
+        {
+            return None;
+        }
+        let value = self.branches.optimistic.get(&receiver)?.property(name)?;
+        self.used.borrow_mut().insert(receiver);
+        Some(value)
     }
 
     fn member(&self, member: &Expression<'_>, depth: usize) -> Option<Resolved<'k, 'p>> {
@@ -261,20 +294,7 @@ impl<'k, 'p> Known<'k, 'p> {
     }
 }
 
-fn decide<'p>(
-    test: &Expression<'p>,
-    symbol: SymbolId,
-    props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
-    branches: &Branches<'p>,
-    cx: &Cx<'_, '_>,
-) -> Option<bool> {
-    let known = Known {
-        symbol,
-        props,
-        scoping: cx.scoping(),
-        branches,
-        builtins_unpatched: cx.opts.unsafe_transforms,
-    };
+fn decide(test: &Expression<'_>, known: &Known<'_, '_>) -> Option<bool> {
     known
         .value(test, &Env::default(), 0)
         .map(|value| truthy(&value))
@@ -340,6 +360,9 @@ pub(super) struct Branches<'p> {
     by_receiver: FxHashMap<SymbolId, Vec<Branch<'p>>>,
     statements: Vec<Span>,
     objects: FxHashMap<SymbolId, &'p ObjectExpression<'p>>,
+    assembled: FxHashMap<SymbolId, Assembled<'p>>,
+    optimistic: FxHashMap<SymbolId, Assembled<'p>>,
+    hazard: bool,
     program: Option<&'p Program<'p>>,
     readonly: RefCell<FxHashMap<SymbolId, Option<ObjectUses>>>,
     dead: RefCell<Vec<Span>>,
@@ -418,7 +441,9 @@ impl<'p> Branches<'p> {
         self.by_receiver
             .iter()
             .filter(move |(receiver, _)| {
-                **receiver == symbol || self.objects.contains_key(receiver)
+                **receiver == symbol
+                    || self.objects.contains_key(receiver)
+                    || self.assembled.contains_key(receiver)
             })
             .flat_map(|(_, branches)| branches)
     }
@@ -427,6 +452,7 @@ impl<'p> Branches<'p> {
 struct BranchScan<'s, 'p> {
     scoping: &'s Scoping,
     found: Branches<'p>,
+    bodies: Vec<&'p FunctionBody<'p>>,
 }
 
 impl<'p> BranchScan<'_, 'p> {
@@ -474,11 +500,25 @@ impl<'p> BranchScan<'_, 'p> {
         if let Some(symbol) = id.symbol_id.get() {
             let object: &'p ObjectExpression<'p> = self.alloc(&**object);
             self.found.objects.insert(symbol, object);
+            let root = self.bodies.last().copied();
+            let plain = root
+                .filter(|_| !reaches_its_receiver(object))
+                .and_then(|_| Assembled::plain(symbol, object, self.scoping));
+            if let Some(plain) = plain {
+                self.found.optimistic.insert(symbol, plain.within(root));
+            }
         }
     }
 }
 
 impl<'p> VisitJs<'p> for BranchScan<'_, 'p> {
+    fn visit_function_body(&mut self, it: &FunctionBody<'p>) {
+        let it: &'p FunctionBody<'p> = self.alloc(it);
+        self.bodies.push(it);
+        walk_js::walk_function_body(self, it);
+        self.bodies.pop();
+    }
+
     fn visit_if_statement(&mut self, it: &IfStatement<'p>) {
         let it: &'p IfStatement<'p> = self.alloc(it);
         self.branch(
@@ -509,6 +549,19 @@ impl<'p> VisitJs<'p> for BranchScan<'_, 'p> {
     }
 
     fn visit_statements(&mut self, it: &AVec<'p, Statement<'p>>) {
+        let it: &'p AVec<'p, Statement<'p>> = self.alloc(it);
+        for start in 0..it.len() {
+            let Some(root) = self.bodies.last().copied() else {
+                break;
+            };
+            let found = assembled_alias(&it[start..], self.scoping)
+                .filter(|(_, assembled)| !assembled.reaches_its_receiver());
+            if let Some((alias, assembled)) = found {
+                self.found
+                    .assembled
+                    .insert(alias, assembled.within(Some(root)));
+            }
+        }
         self.found
             .statements
             .extend(it.iter().filter_map(|statement| match statement {
@@ -548,14 +601,22 @@ pub(super) fn predicate_branches<'p>(program: &'p Program<'p>, scoping: &Scoping
     let mut scan = BranchScan {
         scoping,
         found: Branches::default(),
+        bodies: Vec::new(),
     };
     scan.visit_program(program);
     if let Some(writes) = annex_b_written(program, scoping) {
         scan.found
             .objects
             .retain(|symbol, _| !writes.may_write(*symbol));
+        scan.found
+            .optimistic
+            .retain(|symbol, _| !writes.may_write(*symbol));
+        scan.found.assembled.retain(|alias, assembled| {
+            !writes.may_write(*alias) && !writes.may_write(assembled.base())
+        });
     }
     scan.found.program = Some(program);
+    scan.found.hazard = untwist_core::semantic::scope_hazard(scoping).is_some();
     scan.found
 }
 
@@ -565,38 +626,92 @@ pub(super) fn dead_branch_parts<'p>(
     props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
     cx: &Cx<'_, '_>,
 ) -> Vec<DeadPart> {
-    let mut parts = decided_parts(branches, symbol, props, cx);
+    let unpatched = cx.opts.unsafe_transforms;
+    let lanes = (!branches.hazard, unpatched);
+    let (dead, used) = settled_parts(branches, symbol, props, lanes, cx.scoping());
+    let proven = (unpatched, cx.scoping());
+    if used.is_empty() || assembled_uses_dead(branches, &used, &dead, proven) {
+        return dead;
+    }
+    settled_parts(branches, symbol, props, (false, unpatched), cx.scoping()).0
+}
+
+fn settled_parts<'p>(
+    branches: &Branches<'p>,
+    symbol: SymbolId,
+    props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
+    lanes: (bool, bool),
+    scoping: &Scoping,
+) -> (Vec<DeadPart>, FxHashSet<SymbolId>) {
+    let (mut parts, mut used) = decided_parts(branches, symbol, props, lanes, scoping);
     for _ in 0..MAX_DEAD_ROUNDS {
         let spans: Vec<Span> = parts.iter().map(|part| part.span).collect();
         if spans.len() <= branches.dead.borrow().len() {
             break;
         }
         *branches.dead.borrow_mut() = spans;
-        parts = decided_parts(branches, symbol, props, cx);
+        (parts, used) = decided_parts(branches, symbol, props, lanes, scoping);
     }
     branches.dead.borrow_mut().clear();
-    parts
+    (parts, used)
 }
 
 fn decided_parts<'p>(
     branches: &Branches<'p>,
     symbol: SymbolId,
     props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
-    cx: &Cx<'_, '_>,
-) -> Vec<DeadPart> {
+    (assembled, builtins_unpatched): (bool, bool),
+    scoping: &Scoping,
+) -> (Vec<DeadPart>, FxHashSet<SymbolId>) {
+    let known = Known {
+        symbol,
+        props,
+        scoping,
+        branches,
+        builtins_unpatched,
+        assembled,
+        used: RefCell::default(),
+    };
     let mut seen = FxHashSet::default();
-    branches
+    let dead = branches
         .tested_by(symbol)
         .filter(|branch| seen.insert(std::ptr::from_ref(branch.test) as usize))
         .filter_map(|branch| {
-            let taken = decide(branch.test, symbol, props, branches, cx)?;
+            let taken = decide(branch.test, &known)?;
             if taken {
                 branch.alternate
             } else {
                 Some(branch.consequent)
             }
         })
-        .collect()
+        .collect();
+    (dead, known.used.into_inner())
+}
+
+fn assembled_uses_dead(
+    branches: &Branches<'_>,
+    used: &FxHashSet<SymbolId>,
+    dead: &[DeadPart],
+    (builtins_unpatched, scoping): (bool, &Scoping),
+) -> bool {
+    let Some(program) = branches.program else {
+        return false;
+    };
+    let nodes: FxHashSet<usize> = dead.iter().map(|part| part.node).collect();
+    let objects: Option<Vec<_>> = used
+        .iter()
+        .map(|alias| {
+            branches
+                .assembled
+                .get(alias)
+                .or_else(|| branches.optimistic.get(alias))
+                .map(|assembled| (*alias, assembled))
+        })
+        .collect();
+    objects.is_some_and(|objects| {
+        let proven = (scoping, builtins_unpatched);
+        aliases_mutated_only_in_dead(program, proven, objects.into_iter(), &nodes)
+    })
 }
 
 pub(super) struct DeadWrites {
