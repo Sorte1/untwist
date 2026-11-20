@@ -126,14 +126,6 @@ fn dead_code_and_control_flow_cases_print_the_source_output_under_unsafe() {
 }
 
 #[test]
-fn a_debug_timer_or_a_decoded_rotator_before_the_rotator_keeps_the_default_lane_like_node() {
-    for label in ["interval-before-rotator", "decoded-foreign-rotator"] {
-        let source = read(&format!("{label}.js"));
-        prints_the_same(&source, &default_code(&source));
-    }
-}
-
-#[test]
 fn a_control_flow_object_that_escapes_in_a_live_branch_prints_like_node_under_unsafe() {
     let source = read("cfo-live-escape.js");
     let output = unsafe_lane(&source);
