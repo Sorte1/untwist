@@ -338,6 +338,9 @@ fn speculated_mutations(
     {
         return false;
     }
+    if !hides_decoder_calls(program, cx.scoping(), candidate.symbol) {
+        return false;
+    }
     let mutations = mutation_spans(uses);
     let spans: FxHashSet<Span> = mutations.iter().copied().collect();
     if spans.is_empty() || in_branches(program, cx.scoping(), &spans).len() != spans.len() {
@@ -347,6 +350,51 @@ fn speculated_mutations(
     deferred.extend(mutations);
     crate::legacy_reach::defer_escapes(&deferred);
     true
+}
+
+struct DecoderArguments<'s> {
+    scoping: &'s Scoping,
+    object: SymbolId,
+    found: bool,
+}
+
+impl DecoderArguments<'_> {
+    fn on_object(&self, callee: &Expression<'_>) -> bool {
+        let Some(member) = callee.without_parentheses().as_member_expression() else {
+            return false;
+        };
+        let Expression::Identifier(id) = member.object().without_parentheses() else {
+            return false;
+        };
+        id.reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+            == Some(self.object)
+    }
+}
+
+impl<'a> VisitJs<'a> for DecoderArguments<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.found {
+            return;
+        }
+        self.found = self.on_object(&it.callee)
+            && it.arguments.iter().any(|argument| {
+                matches!(argument, Argument::Identifier(id)
+                    if untwist_core::machinery_name::decoder_index(id.name.as_str()).is_some())
+            });
+        walk_js::walk_call_expression(self, it);
+    }
+}
+
+fn hides_decoder_calls(program: &Program<'_>, scoping: &Scoping, object: SymbolId) -> bool {
+    let mut search = DecoderArguments {
+        scoping,
+        object,
+        found: false,
+    };
+    search.visit_program(program);
+    search.found
 }
 
 fn is_redeclared(scoping: &Scoping, symbol: SymbolId) -> bool {
