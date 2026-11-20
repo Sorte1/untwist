@@ -880,3 +880,46 @@ fn a_controller_block_whose_name_only_a_discarded_copy_reads_is_merged_in_the_de
     assert!(!output.code().contains("{{const"), "{}", output.code());
     assert!(keeps_unproven_built_ins(&output), "{:?}", output.notes);
 }
+
+const RESPANNED_ESCAPES: &[&str] = &[
+    "d3-and_outer-if-dead",
+    "d3-and_outer-or-dead",
+    "d3-cfo_callee-if-live",
+    "d3-cfo_dormant-if-live",
+    "d3-cfo_dormant-or-live",
+    "d3-cfo_eq-if-live",
+    "d3-cfo_eq-or-live",
+    "d3-cfo_inarg-if-live",
+    "d3-cfo_inarg-or-live",
+    "d3-cfo_nested-if-live",
+    "d3-cfo_objarg-if-live",
+    "d3-cfo_plus-if-live",
+    "d3-cfo_plus-or-live",
+    "d3-cfo_three-if-live",
+    "d3-cfo_three-or-live",
+    "d3-computed_member-if-live",
+    "d3-computed_member-or-live",
+    "d3-cond_arg-if-live",
+    "d3-cond_arg-or-live",
+    "d3-default-if-live",
+    "d3-default-or-live",
+    "d3-f1a",
+    "d3-f1b",
+    "d3-f1c",
+    "d3-f1d",
+    "d3-f1e",
+    "d3-f1f",
+    "d3-ifx_outer-if-dead",
+    "d3-ifx_outer-or-dead",
+    "d3-ifx_outer_alias-if-dead",
+    "d3-ifx_outer_alias-or-dead",
+    "d3-label_fn-if-live",
+    "d3-label_fn-or-live",
+    "d3-ternary_test_outer-if-dead",
+    "d3-ternary_test_outer-or-dead",
+];
+
+#[test]
+fn an_escape_an_inlined_control_flow_call_respans_prints_like_node_in_both_lanes() {
+    prints_like_node_in(RESPANNED_ESCAPES, &[default_code, unsafe_lane]);
+}
