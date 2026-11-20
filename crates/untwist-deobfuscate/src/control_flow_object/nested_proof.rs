@@ -5,9 +5,9 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::readonly::{scan_object_uses, ObjectUses};
-use untwist_core::semantic::builtins::{intact, Reliance};
+use untwist_core::semantic::builtins::{unpatched_in_every_input, Reliance};
 use untwist_core::semantic::is_constant_binding;
-use untwist_core::semantic::{has_module_syntax, AnnexBWrites};
+use untwist_core::semantic::AnnexBWrites;
 
 use std::sync::OnceLock;
 
@@ -261,10 +261,5 @@ fn every_builtin() -> &'static Reliance {
 }
 
 pub(super) fn builtins_proven_intact(program: &Program<'_>, scoping: &Scoping) -> bool {
-    intact(
-        program,
-        scoping,
-        has_module_syntax(program),
-        every_builtin(),
-    )
+    unpatched_in_every_input(program, scoping, every_builtin())
 }
