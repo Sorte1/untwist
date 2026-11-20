@@ -32,6 +32,7 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "cfo-escape-in-branch",
     "interval-before-rotator",
     "decoded-foreign-rotator",
+    "runners-in-wrapper",
 ];
 
 const FINGERPRINTS: &[&str] = &[
@@ -770,4 +771,16 @@ fn a_closed_block_rotator_is_still_wrapped_in_both_lanes() {
     for output in [default_code(&source), unsafe_lane(&source)] {
         assert!(output.contains("(function () {\n    const w"), "{output}");
     }
+}
+
+#[test]
+fn protection_runners_at_the_head_of_a_decoder_are_dropped_under_unsafe() {
+    let output = unsafe_lane(&read("runner-in-decoder.js"));
+    assert_eq!(
+        output.trim(),
+        "console.log(\"hello, ada\");\nconsole.log(\"done\");",
+        "{output}"
+    );
+    let kept = default_code(&read("runner-in-decoder.js"));
+    assert!(kept.contains("_0x2a2695()"), "{kept}");
 }

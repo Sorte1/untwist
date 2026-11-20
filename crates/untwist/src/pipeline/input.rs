@@ -240,7 +240,12 @@ impl Pipeline {
         let carry = untwist_deobfuscate::legacy_reach::NameCarry::enter(
             self.options.rename == RenameMode::None,
         );
-        let first = self.run_admitted(source, reservation, (room.clone(), reserved));
+        let mut first = self.run_admitted(source, reservation, (room.clone(), reserved));
+        let _strips = untwist_deobfuscate::legacy_reach::strips_failed().then(|| {
+            let forbidden = untwist_deobfuscate::legacy_reach::StripsForbidden::enter();
+            first = self.rerun(source, reservation, (room.clone(), reserved));
+            forbidden
+        });
         drop(carry);
         drop(rerunnable);
         let forbidden = untwist_deobfuscate::legacy_reach::unverified()
@@ -520,6 +525,9 @@ impl Pipeline {
         if let Some((layer, recorder)) = decoding.filter(|_| !replay) {
             let found = super::decoded::sited(text.len(), layer, recorder.finish());
             result.decoded_strings.extend(found);
+        }
+        if !matches!(staged, Ok(Staged::Done)) {
+            untwist_deobfuscate::legacy_reach::abandon_strips();
         }
         match staged {
             Ok(Staged::Replay) => Step::Replay,

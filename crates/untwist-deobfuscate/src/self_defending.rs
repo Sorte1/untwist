@@ -156,18 +156,6 @@ fn unbraced<'k, 'a>(mut statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] 
     statements
 }
 
-fn guarded_if<'k, 'a>(
-    body: &[&'k Statement<'a>],
-) -> Option<(Option<&'k str>, &'k IfStatement<'a>)> {
-    match body {
-        [Statement::IfStatement(statement)] => Some((None, statement)),
-        [declared, Statement::IfStatement(statement)] => {
-            Some((Some(bare_name(declared)?), statement))
-        }
-        _ => None,
-    }
-}
-
 fn applied_result<'k, 'a>(
     live: &[&'k Statement<'a>],
     declared: &[&str],
@@ -210,7 +198,13 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
         .iter()
         .filter(|statement| !is_initialised_inert_local(statement, &shape_names))
         .collect();
-    let Some((hoisted, statement)) = guarded_if(&guarded) else {
+    let hoisted: Vec<&str> = guarded.iter().filter_map(|stmt| bare_name(stmt)).collect();
+    let rest: Vec<&Statement<'_>> = guarded
+        .iter()
+        .copied()
+        .filter(|stmt| bare_name(stmt).is_none())
+        .collect();
+    let [Statement::IfStatement(statement)] = rest.as_slice() else {
         return false;
     };
     if identifier_name(&statement.test) != Some(fn_name) || statement.alternate.is_some() {
@@ -219,7 +213,10 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
     let Statement::BlockStatement(block) = &statement.consequent else {
         return false;
     };
-    if hoisted.is_some_and(|name| [context, fn_name, "arguments"].contains(&name)) {
+    if hoisted
+        .iter()
+        .any(|name| [context, fn_name, "arguments"].contains(name))
+    {
         return false;
     }
     let mut declared: Vec<&str> = block.body.iter().filter_map(bare_name).collect();
@@ -378,6 +375,10 @@ fn controller_shape(expr: &Expression<'_>, apply: Apply) -> bool {
         return false;
     };
     inner_matches(inner, flag, apply)
+}
+
+pub(crate) fn is_loose_call_controller(expr: &Expression<'_>) -> bool {
+    controller_shape(expr, Apply::AnyKey)
 }
 
 fn loose_controller_declaration(stmt: &Statement<'_>) -> Option<SymbolId> {
