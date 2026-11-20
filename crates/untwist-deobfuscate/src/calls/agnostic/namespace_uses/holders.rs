@@ -1,11 +1,14 @@
 use oxc_ast::ast::*;
 use oxc_ast::AstKind;
+use oxc_ast_visit::VisitJs;
 use oxc_syntax::operator::LogicalOperator;
 use oxc_syntax::symbol::SymbolId;
 use std::borrow::Cow;
 use untwist_core::semantic::is_shared_global;
 
+use super::holder_uses::INSTANCEOF_BUILTIN;
 use super::keys::KeyProof;
+use super::proto_stores::{ARRAY_METHODS, OBJECT_METHODS};
 use super::{key_kind, property_name, str_const, Resolve, Walker, GLOBAL, KIND_DEPTH, NAMESPACE};
 
 const BUILTIN_CONSTRUCTORS: [&str; 16] = [
@@ -56,6 +59,9 @@ impl<'s, 'a> Walker<'s, 'a> {
     fn fixed_init(&self, symbol: SymbolId) -> Option<&'a Expression<'a>> {
         let candidate = self.candidates.get(&symbol)?;
         let fixed = !crate::calls::agnostic::rebound(self.scoping, symbol)
+            && !self.opaque.contains(&symbol)
+            && !self.shared_root(symbol)
+            && !self.annex.may_write(symbol)
             && self.scoping.symbol_redeclarations(symbol).is_empty()
             && candidate
                 .function
@@ -67,6 +73,9 @@ impl<'s, 'a> Walker<'s, 'a> {
         let Some(next) = depth.checked_sub(1) else {
             return true;
         };
+        if self.holders_open {
+            return true;
+        }
         match expr.without_parentheses() {
             Expression::NullLiteral(_) => false,
             Expression::StringLiteral(_)
@@ -132,11 +141,24 @@ impl<'s, 'a> Walker<'s, 'a> {
         {
             return true;
         }
-        let own_method = uses
-            .called
-            .iter()
-            .any(|key| uses.written.contains(key) || init_defines(init, key, self.resolve));
-        own_method || self.may_hold_global(init, depth)
+        let unsafe_call = uses.called.iter().any(|key| {
+            uses.written.contains(key)
+                || init_defines(init, key, self.resolve)
+                || !self.harmless_inherited(init, key)
+        });
+        unsafe_call || !self_free(init) || self.may_hold_global(init, depth)
+    }
+
+    fn harmless_inherited(&self, init: &Expression<'a>, key: &str) -> bool {
+        let listed = match init.without_parentheses() {
+            Expression::ObjectExpression(_) => OBJECT_METHODS.contains(&key),
+            Expression::ArrayExpression(_) => {
+                OBJECT_METHODS.contains(&key) || ARRAY_METHODS.contains(&key)
+            }
+            _ => false,
+        };
+        let instance = key == INSTANCEOF_BUILTIN;
+        (listed || instance) && self.builtins_intact()
     }
 
     pub(super) fn shared_root(&self, symbol: SymbolId) -> bool {
@@ -234,4 +256,53 @@ fn init_defines(init: &Expression<'_>, key: &str, resolve: Resolve<'_>) -> bool 
         }
         ObjectPropertyKind::SpreadProperty(_) => true,
     })
+}
+
+fn self_free(init: &Expression<'_>) -> bool {
+    let mut scan = SelfReference::default();
+    match init.without_parentheses() {
+        Expression::FunctionExpression(function) => {
+            scan.own = function.id.as_ref().map(|id| id.name.as_str().to_string());
+            scan.visit_function_body_of(function);
+        }
+        Expression::ClassExpression(class) => {
+            scan.own = class.id.as_ref().map(|id| id.name.as_str().to_string());
+            scan.visit_class(class);
+        }
+        _ => return true,
+    }
+    !scan.found
+}
+
+#[derive(Default)]
+struct SelfReference {
+    own: Option<String>,
+    found: bool,
+}
+
+impl SelfReference {
+    fn visit_function_body_of(&mut self, function: &Function<'_>) {
+        self.visit_formal_parameters(&function.params);
+        if let Some(body) = &function.body {
+            self.visit_function_body(body);
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for SelfReference {
+    fn visit_this_expression(&mut self, _: &ThisExpression) {
+        self.found = true;
+    }
+
+    fn visit_super(&mut self, _: &Super) {
+        self.found = true;
+    }
+
+    fn visit_new_target(&mut self, _: &NewTarget) {
+        self.found = true;
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= it.name == "arguments" || self.own.as_deref() == Some(it.name.as_str());
+    }
 }

@@ -5,7 +5,9 @@ use untwist_core::ast_util::naming_slot::reads_names;
 use untwist_core::depth::{limits_for, scan};
 use untwist_core::parse::{has_error, parse_program};
 use untwist_core::semantic::{assume_shared_globals, build_scoping, SharedGlobals};
-use untwist_deobfuscate::calls::agnostic::{names_reached_from, NamesReached};
+use untwist_deobfuscate::calls::agnostic::{
+    names_reached_from, opens_builtin_chains, NamesReached,
+};
 use untwist_eval::stack;
 
 use super::global_writes::{global_writes, GlobalWrites, EVERY_ROOT};
@@ -88,6 +90,7 @@ fn seen(source: &str, unsafe_transforms: bool) -> Seen {
         global_written: {
             let mut written = global_writes(&parsed.program);
             written.every |= !builtins.allows_safe(unsafe_transforms);
+            written.every |= !unsafe_transforms && opens_builtin_chains(&parsed.program, &scoping);
             written
         },
         keys: key_names(&parsed.program, &scoping)

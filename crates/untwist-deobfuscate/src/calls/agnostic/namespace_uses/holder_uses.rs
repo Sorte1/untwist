@@ -34,12 +34,18 @@ fn proto_key(key: &str) -> bool {
     PROTO_KEYS.contains(&key)
 }
 
+pub(super) const INSTANCEOF_BUILTIN: &str = "@instanceof";
+
+const INSTANCE_CONSTRUCTORS: [&str; 16] = [
+    "Object", "Function", "Array", "String", "Number", "Boolean", "Symbol", "BigInt", "RegExp",
+    "Date", "Error", "Map", "Set", "WeakMap", "WeakSet", "Promise",
+];
+
 fn harmless_binary(operator: BinaryOperator, right: bool) -> bool {
     matches!(
         operator,
         BinaryOperator::StrictEquality | BinaryOperator::StrictInequality
-    ) || (operator == BinaryOperator::Instanceof && !right)
-        || (operator == BinaryOperator::In && right)
+    ) || (operator == BinaryOperator::In && right)
 }
 
 impl<'s, 'a> Walker<'s, 'a> {
@@ -88,6 +94,13 @@ impl<'s, 'a> Walker<'s, 'a> {
             AstKind::BinaryExpression(b) if harmless_binary(b.operator, same(&b.right, child)) => {
                 Use::Plain
             }
+            AstKind::BinaryExpression(b)
+                if b.operator == BinaryOperator::Instanceof
+                    && same(&b.left, child)
+                    && self.builtin_constructor(&b.right) =>
+            {
+                Use::Called(Cow::Borrowed(INSTANCEOF_BUILTIN))
+            }
             AstKind::ExpressionStatement(_) => Use::Plain,
             AstKind::IfStatement(s) if same(&s.test, child) => Use::Plain,
             AstKind::ConditionalExpression(c) if same(&c.test, child) => Use::Plain,
@@ -124,6 +137,13 @@ impl<'s, 'a> Walker<'s, 'a> {
             | AstKind::AssignmentTargetRest(_) => self.target_use(key),
             _ => Use::Plain,
         }
+    }
+
+    fn builtin_constructor(&self, expr: &Expression<'a>) -> bool {
+        matches!(expr.without_parentheses(), Expression::Identifier(id)
+            if self.symbol(id).is_none()
+                && INSTANCE_CONSTRUCTORS.contains(&id.name.as_str())
+                && !self.free_written(id.name.as_str()))
     }
 
     fn targets(&self, left: &AssignmentTarget<'a>, child: oxc_allocator::Address) -> bool {

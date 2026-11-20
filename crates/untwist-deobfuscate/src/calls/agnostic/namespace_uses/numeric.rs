@@ -106,6 +106,7 @@ impl<'s, 'a> Walker<'s, 'a> {
         if self.dynamic_scope
             || self.opaque.contains(&symbol)
             || self.shared_root(symbol)
+            || self.annex.may_write(symbol)
             || !self.scoping.symbol_redeclarations(symbol).is_empty()
         {
             return false;

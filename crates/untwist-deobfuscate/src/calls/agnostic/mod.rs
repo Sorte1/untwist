@@ -607,3 +607,7 @@ pub(crate) fn rebound(scoping: &Scoping, symbol: SymbolId) -> bool {
         || (scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
             && untwist_core::semantic::is_shared_global(scoping.symbol_name(symbol)))
 }
+
+pub fn opens_builtin_chains<'a>(program: &'a Program<'a>, scoping: &Scoping) -> bool {
+    namespace_uses::chains_opened(program, scoping)
+}
