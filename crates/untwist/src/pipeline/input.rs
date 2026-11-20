@@ -237,7 +237,11 @@ impl Pipeline {
         (room, reserved): (Option<InputRoom>, u64),
     ) -> InputResult {
         let rerunnable = untwist_deobfuscate::legacy_reach::Rerunnable::enter();
+        let carry = untwist_deobfuscate::legacy_reach::NameCarry::enter(
+            self.options.rename == RenameMode::None,
+        );
         let first = self.run_admitted(source, reservation, (room.clone(), reserved));
+        drop(carry);
         drop(rerunnable);
         let forbidden = untwist_deobfuscate::legacy_reach::unverified()
             .then(untwist_deobfuscate::legacy_reach::Forbidden::enter);

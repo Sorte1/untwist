@@ -1,8 +1,10 @@
 use std::cell::RefCell;
 
-use oxc_ast::ast::{BindingIdentifier, CallExpression, IdentifierReference, Program};
+use oxc_ast::ast::{BindingIdentifier, CallExpression, Expression, IdentifierReference, Program};
 use oxc_ast_visit::VisitJs;
+use oxc_semantic::Scoping;
 use oxc_span::Span;
+use rustc_hash::FxHashSet;
 
 use crate::mutants::deferred_legacy_reach_trusted;
 
@@ -27,6 +29,9 @@ struct Deferral {
     unverified: bool,
     escapes_open: bool,
     escapes: Vec<Span>,
+    escape_names: Vec<Vec<String>>,
+    escape_names_opened: Vec<Vec<String>>,
+    carries_names: bool,
     reached: bool,
 }
 
@@ -101,37 +106,143 @@ pub(crate) fn defer_escapes(decoders: &[Span]) {
 
 struct Surviving<'s> {
     spans: &'s [Span],
-    found: bool,
+    found: Vec<Vec<String>>,
+    unnamed: bool,
+}
+
+impl Surviving<'_> {
+    fn note(&mut self, span: Span, name: &str) {
+        if self.spans.contains(&span) {
+            self.found.push(vec![name.to_string()]);
+        }
+    }
 }
 
 impl<'a> VisitJs<'a> for Surviving<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        self.found |= self.spans.contains(&it.span);
+        self.note(it.span, it.name.as_str());
     }
 
     fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
-        self.found |= self.spans.contains(&it.span);
+        self.note(it.span, it.name.as_str());
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        self.found |= self.spans.contains(&it.span);
+        if self.spans.contains(&it.span) {
+            match &it.callee {
+                Expression::Identifier(callee) => self.found.push(vec![callee.name.to_string()]),
+                _ => self.unnamed = true,
+            }
+        }
         oxc_ast_visit::walk_js::walk_call_expression(self, it);
     }
 }
 
-pub(crate) fn identifiers_survive(program: &Program<'_>, spans: &[Span]) -> bool {
-    let mut surviving = Surviving {
-        spans,
-        found: false,
-    };
-    surviving.visit_program(program);
-    surviving.found
+#[derive(Default)]
+struct Names {
+    present: FxHashSet<String>,
 }
 
-pub(crate) fn settle_escapes(survives: impl FnOnce(&[Span]) -> bool) {
-    let escapes = DEFERRAL.with(|deferral| std::mem::take(&mut deferral.borrow_mut().escapes));
-    if !escapes.is_empty() && survives(&escapes) {
+impl<'a> VisitJs<'a> for Names {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.present.insert(it.name.to_string());
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.present.insert(it.name.to_string());
+    }
+}
+
+fn surviving_names(
+    (program, scoping): (&Program<'_>, &Scoping),
+    escapes: &[Span],
+) -> Option<Vec<Vec<String>>> {
+    let mut surviving = Surviving {
+        spans: escapes,
+        found: Vec::new(),
+        unnamed: false,
+    };
+    surviving.visit_program(program);
+    for symbol in scoping.symbol_ids() {
+        let span = scoping.symbol_span(symbol);
+        if !escapes.contains(&span) {
+            continue;
+        }
+        let mut group = vec![scoping.symbol_name(symbol).to_string()];
+        if let Some(text) = program
+            .source_text
+            .get(span.start as usize..span.end as usize)
+        {
+            group.push(text.to_string());
+        }
+        surviving.found.push(group);
+    }
+    (!surviving.unnamed).then_some(surviving.found)
+}
+
+pub(crate) fn settle_escapes(program: &Program<'_>, scoping: &Scoping) {
+    let (escapes, carried, carries) = DEFERRAL.with(|deferral| {
+        let mut deferral = deferral.borrow_mut();
+        (
+            std::mem::take(&mut deferral.escapes),
+            std::mem::take(&mut deferral.escape_names),
+            deferral.carries_names,
+        )
+    });
+    if escapes.is_empty() && carried.is_empty() {
+        return;
+    }
+    let Some(mut pending) = surviving_names((program, scoping), &escapes) else {
         DEFERRAL.with(|deferral| deferral.borrow_mut().unverified = true);
+        return;
+    };
+    pending.extend(carried);
+    if pending.is_empty() {
+        return;
+    }
+    let mut names = Names::default();
+    names.visit_program(program);
+    pending.retain(|group| group.iter().any(|name| names.present.contains(name)));
+    if pending.is_empty() {
+        return;
+    }
+    DEFERRAL.with(|deferral| {
+        let mut deferral = deferral.borrow_mut();
+        match carries {
+            true => deferral.escape_names = pending,
+            false => deferral.unverified = true,
+        }
+    });
+}
+
+pub fn round_opened() {
+    DEFERRAL.with(|deferral| {
+        let mut deferral = deferral.borrow_mut();
+        deferral.escape_names_opened = deferral.escape_names.clone();
+    });
+}
+
+pub fn round_discarded() {
+    DEFERRAL.with(|deferral| {
+        let mut deferral = deferral.borrow_mut();
+        deferral.escape_names = std::mem::take(&mut deferral.escape_names_opened);
+    });
+}
+
+pub struct NameCarry(bool);
+
+impl NameCarry {
+    pub fn enter(on: bool) -> Self {
+        Self(
+            DEFERRAL
+                .with(|deferral| std::mem::replace(&mut deferral.borrow_mut().carries_names, on)),
+        )
+    }
+}
+
+impl Drop for NameCarry {
+    fn drop(&mut self) {
+        DEFERRAL.with(|deferral| deferral.borrow_mut().carries_names = self.0);
     }
 }
 
@@ -316,7 +427,9 @@ fn verify_one(name: &str) {
 pub fn unverified() -> bool {
     DEFERRAL.with(|deferral| {
         let deferral = deferral.borrow();
-        deferral.unverified || !deferral.observations.is_empty()
+        deferral.unverified
+            || !deferral.observations.is_empty()
+            || !deferral.escape_names.is_empty()
     })
 }
 
@@ -333,6 +446,8 @@ pub(crate) fn forget() {
         deferral.layered.clear();
         deferral.observations.clear();
         deferral.escapes.clear();
+        deferral.escape_names.clear();
+        deferral.escape_names_opened.clear();
     });
 }
 

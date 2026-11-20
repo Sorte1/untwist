@@ -159,6 +159,26 @@ pub(crate) fn protection_symbols(program: &Program<'_>, scoping: &Scoping) -> Fx
     declarations(program, scoping).symbols
 }
 
+pub(crate) fn interval_statements(program: &Program<'_>, scoping: &Scoping) -> FxHashSet<Span> {
+    let protections = protection_symbols(program, scoping);
+    if protections.is_empty() {
+        return FxHashSet::default();
+    }
+    let intervals = Intervals {
+        protections: &protections,
+        scoping,
+        spans: Vec::new(),
+    };
+    program
+        .body
+        .iter()
+        .filter(|statement| {
+            intervals.is_interval_shell(statement) || intervals.is_interval_statement(statement)
+        })
+        .map(GetSpan::span)
+        .collect()
+}
+
 pub(crate) fn keeps_a_live_protection(output: &str) -> bool {
     let allocator = Allocator::default();
     let parsed = parse_program(&allocator, output);

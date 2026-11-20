@@ -263,6 +263,7 @@ fn settled_back<'a>(
     probe.taps.rewind();
     origins::resume(probe.earlier);
     untwist_deobfuscate::reset_round_state();
+    untwist_deobfuscate::legacy_reach::round_discarded();
     forget_failures();
     sem
 }
@@ -393,6 +394,7 @@ fn surviving(program: &Program<'_>, wanted: HashSet<Span>) -> HashSet<Span> {
 
 fn fresh_round(program: &Program<'_>) -> Semantics {
     untwist_deobfuscate::reset_round_state();
+    untwist_deobfuscate::legacy_reach::round_opened();
     forget_failures();
     build_scoping(program)
 }

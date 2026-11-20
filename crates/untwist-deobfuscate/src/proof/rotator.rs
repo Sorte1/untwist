@@ -323,13 +323,17 @@ fn first_active<'s, 'a>(
     program: &Program<'a>,
     scoping: &Scoping,
     (prefix, scope): (&'s [Statement<'a>], Option<ScopeId>),
-    foreign: Option<(&ForeignUnits<'_, 'a>, usize)>,
+    (foreign, protections): (Option<(&ForeignUnits<'_, 'a>, usize)>, &FxHashSet<Span>),
 ) -> Option<&'s Statement<'a>> {
     if prefix.iter().all(trivially_inert) {
         return None;
     }
     let aliases = match scope {
-        None => crate::removal::dead_alias_statements(program, Some(scoping)),
+        None => {
+            let mut aliases = crate::removal::dead_alias_statements(program, Some(scoping));
+            aliases.extend(protections);
+            aliases
+        }
         Some(_) => FxHashSet::default(),
     };
     let inert = |statement: &Statement<'a>| {
@@ -405,7 +409,7 @@ pub fn rotator_refusal_at<'a>(
     scoping: &Scoping,
     sites: &[RotatorSite],
     allowed: &FxHashSet<SymbolId>,
-    foreign: Option<(&ForeignUnits<'_, 'a>, usize)>,
+    foreign: (Option<(&ForeignUnits<'_, 'a>, usize)>, &FxHashSet<Span>),
 ) -> Option<Refusal> {
     let mut first: Option<SiteList<'_, 'a>> = None;
     for site in sites {

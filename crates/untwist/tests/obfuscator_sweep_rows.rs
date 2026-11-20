@@ -30,6 +30,8 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "strict-block-wrapper",
     "block-wrapper-dead-write",
     "cfo-escape-in-branch",
+    "interval-before-rotator",
+    "decoded-foreign-rotator",
 ];
 
 const FINGERPRINTS: &[&str] = &[
@@ -120,6 +122,14 @@ fn dead_code_and_control_flow_cases_print_the_source_output_under_unsafe() {
             expected.is_ok() && expected == actual,
             "{label}: {expected:?} vs {actual:?}"
         );
+    }
+}
+
+#[test]
+fn a_debug_timer_or_a_decoded_rotator_before_the_rotator_keeps_the_default_lane_like_node() {
+    for label in ["interval-before-rotator", "decoded-foreign-rotator"] {
+        let source = read(&format!("{label}.js"));
+        prints_the_same(&source, &default_code(&source));
     }
 }
 

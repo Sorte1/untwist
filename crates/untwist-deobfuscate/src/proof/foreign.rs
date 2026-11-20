@@ -64,7 +64,12 @@ impl<'r, 'p> ForeignUnit<'r, 'p> {
         functions.chain(statements).collect()
     }
 
-    fn touches_only_itself(&self, program: &Program<'p>, scoping: &Scoping) -> bool {
+    fn touches_only_itself(
+        &self,
+        program: &Program<'p>,
+        scoping: &Scoping,
+        unsafe_lane: bool,
+    ) -> bool {
         let allowed = self.allowed();
         if uninitialised(scoping, &allowed, &FxHashSet::default()).is_some() {
             return false;
@@ -90,7 +95,7 @@ impl<'r, 'p> ForeignUnit<'r, 'p> {
         {
             return false;
         }
-        machinery_unreachable(scoping, &self.parts(program, &rotators))
+        unsafe_lane || machinery_unreachable(scoping, &self.parts(program, &rotators))
     }
 }
 
@@ -111,6 +116,7 @@ pub struct ForeignUnits<'r, 'p> {
     decoder_units: Vec<(SymbolId, usize)>,
     rotator_units: Vec<(Span, usize)>,
     relied: RefCell<Vec<(usize, usize, Span)>>,
+    pub unsafe_lane: bool,
 }
 
 fn is_host_sink(scoping: &Scoping, expr: &Expression<'_>) -> bool {
@@ -159,6 +165,7 @@ impl<'r, 'p> ForeignUnits<'r, 'p> {
                 .map(|(unit, site)| (site.span, *unit))
                 .collect(),
             relied: RefCell::new(Vec::new()),
+            unsafe_lane: false,
         }
     }
 
@@ -244,7 +251,7 @@ impl<'r, 'p> ForeignUnits<'r, 'p> {
             .is_some_and(|foreign| {
                 *foreign
                     .proven
-                    .get_or_init(|| foreign.touches_only_itself(program, scoping))
+                    .get_or_init(|| foreign.touches_only_itself(program, scoping, self.unsafe_lane))
             })
     }
 

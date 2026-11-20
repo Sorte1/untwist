@@ -114,7 +114,55 @@ fn escaped_decoders_by_unit(
     by_unit
 }
 
+fn speculated_array_escapes(
+    (program, scoping): (&Program<'_>, &Scoping),
+    collected: &mut Collected<'_>,
+    array_span: &impl Fn(usize) -> Option<Span>,
+) -> FxHashMap<usize, Span> {
+    if collected.escapes.is_empty() || !crate::legacy_reach::speculates_escapes() {
+        return FxHashMap::default();
+    }
+    let spans: FxHashSet<Span> = collected.escapes.iter().map(|(_, span)| *span).collect();
+    let branched = in_branches(program, scoping, &spans);
+    let unguarded: FxHashSet<usize> = collected
+        .escapes
+        .iter()
+        .filter(|(_, span)| !branched.contains(span))
+        .map(|(unit, _)| *unit)
+        .collect();
+    let speculated: FxHashMap<usize, Span> = collected
+        .escapes
+        .iter()
+        .map(|(unit, _)| *unit)
+        .filter(|unit| !unguarded.contains(unit))
+        .filter_map(|unit| Some((unit, array_span(unit)?)))
+        .collect();
+    collected
+        .escapes
+        .retain(|(unit, _)| !speculated.contains_key(unit));
+    speculated
+}
+
 fn guarded_escapes(
+    (program, scoping): (&Program<'_>, &Scoping),
+    collected: &mut Collected<'_>,
+    (sites, rotators): (&Sites, &FxHashMap<usize, Span>),
+    (decoder_spans, array_span): (impl Fn(usize) -> Vec<Span>, impl Fn(usize) -> Option<Span>),
+) -> FxHashMap<usize, EscapeGuards> {
+    let arrays = speculated_array_escapes((program, scoping), collected, &array_span);
+    let mut by_unit = guarded_decoder_escapes(
+        (program, scoping),
+        collected,
+        (sites, rotators),
+        decoder_spans,
+    );
+    for (unit, span) in arrays {
+        by_unit.entry(unit).or_default().speculative.push(span);
+    }
+    by_unit
+}
+
+fn guarded_decoder_escapes(
     (program, scoping): (&Program<'_>, &Scoping),
     collected: &mut Collected<'_>,
     (sites, rotators): (&Sites, &FxHashMap<usize, Span>),
@@ -144,6 +192,7 @@ fn guarded_escapes(
     };
     let mut unguarded: FxHashSet<usize> = FxHashSet::default();
     let mut speculated: FxHashSet<usize> = FxHashSet::default();
+    let mut unbranched: FxHashSet<usize> = FxHashSet::default();
     let mut found: Vec<(usize, bool, Vec<BranchGuard>)> = Vec::new();
     let values = collected.decoder_values.iter().map(|escape| (escape, true));
     let dynamic = collected.dynamic_calls.iter().map(|escape| (escape, false));
@@ -152,7 +201,12 @@ fn guarded_escapes(
             continue;
         };
         match enclosing.get(span).filter(|guards| !guards.is_empty()) {
-            Some(guards) => found.push((unit, is_value, guards.clone())),
+            Some(guards) => {
+                if !branched.contains(span) {
+                    unbranched.insert(unit);
+                }
+                found.push((unit, is_value, guards.clone()));
+            }
             None if branched.contains(span) => {
                 speculated.insert(unit);
             }
@@ -182,6 +236,9 @@ fn guarded_escapes(
             continue;
         }
         let entry = by_unit.entry(unit).or_default();
+        if !unbranched.contains(&unit) && entry.fallback.is_empty() {
+            entry.fallback = decoder_spans(unit);
+        }
         if is_value {
             entry.values.push(guards);
         } else {
@@ -212,6 +269,7 @@ struct Evidence<'r, 'p> {
     with_statement: Option<Span>,
     rotator_sites: Vec<(usize, RotatorSite)>,
     foreign: ForeignUnits<'r, 'p>,
+    protections: FxHashSet<Span>,
 }
 
 fn first_per_unit(found: impl Iterator<Item = (usize, Span)>) -> FxHashMap<usize, Span> {
@@ -248,6 +306,7 @@ fn evidence<'r, 'p>(
         with_statement: with_statement(program, scoping),
         rotator_sites: collected.rotator_sites.clone(),
         foreign: ForeignUnits::new(stamped, sites, &collected.rotator_sites),
+        protections: FxHashSet::default(),
     }
 }
 
@@ -282,7 +341,7 @@ fn rotator_check<'p>(
         .filter_map(|decoder| decoder.symbol)
         .chain(inputs.array.symbol)
         .collect();
-    let foreign = Some((&evidence.foreign, unit));
+    let foreign = (Some((&evidence.foreign, unit)), &evidence.protections);
     if let Some(refusal) =
         rotator_refusal_at(inputs.program, inputs.scoping, &sites, &allowed, foreign)
     {
@@ -508,12 +567,12 @@ fn orphan_entries<'p>(stamped: &Stamped<'p>, orphans: &[usize]) -> Vec<(&'p str,
 
 type PlanOutcome<'p> = Result<DecodeRequest<'p>, Refusal>;
 
-fn refuse_unsupported(plan: &mut DecodePlan<'_>) {
+fn refuse_unsupported(plan: &mut DecodePlan<'_>, unsafe_lane: bool) {
     loop {
         let decoding: Vec<usize> = plan
             .requests
             .iter()
-            .filter(|request| !request.calls.is_empty())
+            .filter(|request| unsafe_lane || !request.calls.is_empty())
             .map(|request| request.unit)
             .collect();
         let before = plan.requests.len();
@@ -581,7 +640,7 @@ pub fn build_requests_in_lane<'p>(
     }
     let (members, orphans) = unit_members(&stamped);
     if stamped.is_empty() {
-        return finish_plan(DecodePlan::default(), &stamped, &orphans);
+        return finish_plan(DecodePlan::default(), &stamped, (&orphans, unsafe_lane));
     }
     let sites = local_indices(&stamped, &members);
     let mut collected = collect_base(program, decoder_units_of(&sites), unsafe_lane);
@@ -607,11 +666,15 @@ pub fn build_requests_in_lane<'p>(
                 .map(|symbol| scoping.symbol_span(symbol))
                 .collect()
         };
+        let array_span = |unit: usize| -> Option<Span> {
+            let symbol = stamped.array(unit)?.symbol?;
+            Some(scoping.symbol_span(symbol))
+        };
         guarded_escapes(
             (program, scoping),
             &mut collected,
             (&sites, &rotator_spans),
-            decoder_spans,
+            (decoder_spans, array_span),
         )
     } else {
         FxHashMap::default()
@@ -622,7 +685,11 @@ pub fn build_requests_in_lane<'p>(
             .decoder_values
             .retain(|(_, span)| !dead.contains(span));
     }
-    let evidence = evidence(program, &stamped, &orphans, &collected, &sites, scoping);
+    let mut evidence = evidence(program, &stamped, &orphans, &collected, &sites, scoping);
+    if unsafe_lane {
+        evidence.protections = crate::debug_protection::interval_statements(program, scoping);
+        evidence.foreign.unsafe_lane = true;
+    }
     let mut escaped_by_unit = escaped_decoders_by_unit(&collected, &sites);
     let mut plan = DecodePlan {
         intrinsic_object: object_operand_is_intrinsic(&collected.patches),
@@ -649,15 +716,15 @@ pub fn build_requests_in_lane<'p>(
         });
         push_outcome(&mut plan, outcome);
     }
-    finish_plan(plan, &stamped, &orphans)
+    finish_plan(plan, &stamped, (&orphans, unsafe_lane))
 }
 
 fn finish_plan<'p>(
     mut plan: DecodePlan<'p>,
     stamped: &Stamped<'p>,
-    orphans: &[usize],
+    (orphans, unsafe_lane): (&[usize], bool),
 ) -> DecodePlan<'p> {
-    refuse_unsupported(&mut plan);
+    refuse_unsupported(&mut plan, unsafe_lane);
     plan.unattributed = orphan_entries(stamped, orphans);
     plan.refused = !stamped.is_empty()
         && plan.requests.is_empty()
