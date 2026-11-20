@@ -199,12 +199,14 @@ fn cause_of(
         return None;
     }
     if builtins_unclean(all, unsafe_transforms) {
-        let index = all
+        let (index, seen) = all
             .iter()
-            .position(|seen| seen.builtins != Builtins::Intact)?;
+            .enumerate()
+            .find(|(_, seen)| seen.builtins != Builtins::Intact)?;
         return Some(format!(
-            "input {}, which may write or hand on a built-in or one of its prototypes",
-            index + 1
+            "input {}, {}",
+            index + 1,
+            builtins_cause(seen.builtins)
         ));
     }
     let (index, found) = reached
@@ -220,6 +222,18 @@ fn cause_of(
         ),
         None => format!("input {}, which could not be read in full", index + 1),
     })
+}
+
+fn builtins_cause(verdict: Builtins) -> &'static str {
+    match verdict {
+        Builtins::Written => "which may write a built-in or one of its prototypes",
+        Builtins::Aliased => {
+            "which may hand on a built-in, one of its prototypes, the global object or a callback"
+        }
+        Builtins::Unknown | Builtins::Intact => {
+            "whose use of built-ins could not be judged in full"
+        }
+    }
 }
 
 fn shared_for(

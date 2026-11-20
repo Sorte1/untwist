@@ -115,6 +115,7 @@ pub(super) fn run<'s, 'a>(
         !untwist_core::semantic::has_module_syntax(program),
     );
     sites.inline_budget = inline_budget(program);
+    sites.foreign_sourced = super::foreign::sourced(program, scoping);
     sites.visit_program(program);
     sites.reach_loose();
     sites.judge_collected()
