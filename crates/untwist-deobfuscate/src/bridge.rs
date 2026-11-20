@@ -688,7 +688,6 @@ pub fn build_requests_in_lane<'p>(
     let mut evidence = evidence(program, &stamped, &orphans, &collected, &sites, scoping);
     if unsafe_lane {
         evidence.protections = crate::debug_protection::interval_statements(program, scoping);
-        evidence.foreign.unsafe_lane = true;
     }
     let mut escaped_by_unit = escaped_decoders_by_unit(&collected, &sites);
     let mut plan = DecodePlan {
@@ -697,6 +696,13 @@ pub fn build_requests_in_lane<'p>(
         ..DecodePlan::default()
     };
     let mut calls = group_calls(std::mem::take(&mut collected.calls), &sites);
+    if unsafe_lane {
+        evidence.foreign.decoded = planned
+            .iter()
+            .map(|(unit, _, _)| *unit)
+            .filter(|unit| !calls.contains_key(unit))
+            .collect();
+    }
     for ((unit, array, positions), located) in planned.into_iter().zip(rotators) {
         let outcome = plan_unit(
             (program, located),
