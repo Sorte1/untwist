@@ -27,6 +27,8 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "round-unlocked-console",
     "braced-controller-lock",
     "wrapper-in-inner-decoder",
+    "strict-block-wrapper",
+    "block-wrapper-dead-write",
 ];
 
 const FINGERPRINTS: &[&str] = &[
