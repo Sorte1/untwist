@@ -43,6 +43,7 @@ struct SiteSearch<'p, 's> {
     parameters: usize,
     stack: Vec<usize>,
     found: Vec<CallSite<'p>>,
+    inside: &'s FxHashSet<SymbolId>,
 }
 
 impl SiteSearch<'_, '_> {
@@ -85,11 +86,9 @@ impl<'p> VisitJs<'p> for SiteSearch<'p, '_> {
     }
 
     fn visit_expression(&mut self, it: &Expression<'p>) {
-        let wrapper = if self.machinery_functions > 0 {
-            None
-        } else {
-            self.called_wrapper(it)
-        };
+        let wrapper = self
+            .called_wrapper(it)
+            .filter(|wrapper| self.machinery_functions == 0 || self.inside.contains(wrapper));
         let Some(wrapper) = wrapper else {
             walk_js::walk_expression(self, it);
             return;
@@ -137,6 +136,7 @@ pub(crate) fn collect_sites<'p>(
     view: &Program<'p>,
     scoping: &Scoping,
     shapes: &[WrapperShape],
+    inside: &FxHashSet<SymbolId>,
 ) -> Sites<'p> {
     let mut search = SiteSearch {
         scoping,
@@ -147,6 +147,7 @@ pub(crate) fn collect_sites<'p>(
         parameters: 0,
         stack: Vec::new(),
         found: Vec::new(),
+        inside,
     };
     search.visit_program(view);
     let mut by_wrapper: FxHashMap<SymbolId, Vec<usize>> = FxHashMap::default();

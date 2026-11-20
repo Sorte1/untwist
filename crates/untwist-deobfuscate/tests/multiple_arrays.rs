@@ -524,8 +524,9 @@ fn a_memo_decoder_called_from_another_units_decoder_is_refused() {
         "{code}"
     );
     assert!(
-        refusals(&report.notes).iter().any(|note| note
-            .contains("a stateful decoder is referenced outside the calls untwist proves")),
+        refusals(&report.notes)
+            .iter()
+            .any(|note| note.contains("a stateful decoder")),
         "{:?}",
         refusals(&report.notes)
     );

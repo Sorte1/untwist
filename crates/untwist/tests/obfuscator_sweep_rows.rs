@@ -26,6 +26,9 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "cfo-alias-console",
     "round-unlocked-console",
     "braced-controller-lock",
+    "wrapper-in-inner-decoder",
+    "strict-block-wrapper",
+    "block-wrapper-dead-write",
 ];
 
 const FINGERPRINTS: &[&str] = &[
@@ -430,6 +433,19 @@ fn a_nested_object_whose_prototype_the_program_may_patch_keeps_the_branch_in_the
 }
 
 #[test]
+fn a_rotator_holding_a_call_controller_is_kept_with_a_premise_note_in_the_default_lane() {
+    let output = default_lane(&read("rotator-holds-controller.js"));
+    assert!(
+        has_note(
+            &output,
+            untwist_deobfuscate::notes::ROTATOR_HOLDS_PROTECTION
+        ),
+        "{:?}",
+        output.notes
+    );
+}
+
+#[test]
 fn a_call_of_a_key_no_object_has_still_decides_the_branch_under_unsafe() {
     let source = read("nested-absent-key-call.js");
     let output = unsafe_lane(&source);
@@ -512,4 +528,14 @@ fn a_domain_lock_registered_through_a_braced_call_controller_is_removed_under_un
     let output = unsafe_lane(&read("braced-controller-lock.js"));
     assert!(!output.contains("RegExp"), "{output}");
     assert!(!output.contains(".apply("), "{output}");
+}
+
+#[test]
+fn an_uglify_inlined_rotator_decodes_under_unsafe() {
+    let source = fixture(
+        "../../fixtures/obfuscator-versions/4.2.2--rc4-rot-noshuf-shift-inum-w2f5-nocalls-t1--iife--uglify--classes-1.js",
+    );
+    let output = unsafe_lane(&source);
+    assert!(!output.contains("shift()"), "{output}");
+    prints_the_same(&source, &output);
 }

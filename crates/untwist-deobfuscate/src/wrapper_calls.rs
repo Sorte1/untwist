@@ -23,8 +23,8 @@ use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
 use crate::primitive_names::PrimitiveNames;
 use crate::probe::{expression_contains, holds_own_scope};
-use crate::proof::kept_in_its_block;
 use crate::proof::refuse_annex_b_bindings;
+use crate::proof::{kept_in_its_block, placed_in_its_block};
 use crate::root_reach::{observed_roots, reached_roots};
 use crate::stamp::{declaration_symbol, decoder_index, is_machinery_name};
 use crate::units::MachineryDepth;
@@ -223,10 +223,8 @@ pub(crate) fn binding_is_stable(scoping: &Scoping, symbol: SymbolId) -> bool {
     if !is_constant_binding(scoping, symbol) && !hoisted_and_kept_in_its_block(scoping, symbol) {
         return false;
     }
-    if scoping
-        .scope_flags(scoping.symbol_scope_id(symbol))
-        .is_var()
-    {
+    let flags = scoping.scope_flags(scoping.symbol_scope_id(symbol));
+    if flags.is_var() || flags.is_strict_mode() {
         return true;
     }
     let name = scoping.symbol_name(symbol);
@@ -251,6 +249,8 @@ struct WrapperSearch<'p, 's> {
     units: MachineryDepth,
     checked: bool,
     speculating: bool,
+    foreign_inside: bool,
+    inside: FxHashSet<SymbolId>,
     found: Vec<WrapperShape>,
     forwarders: Vec<Candidate<'p>>,
     rejected: Vec<(Span, &'static str)>,
@@ -268,6 +268,18 @@ impl<'p> WrapperSearch<'p, '_> {
         }
         let reference = callee.reference_id.get()?;
         self.scoping.get_reference(reference).symbol_id().map(Some)
+    }
+
+    fn forwards_to_foreign_decoder(&self, it: &Statement<'_>) -> bool {
+        let Some(declaration) = var_function_or_declaration(it) else {
+            return false;
+        };
+        let Some(Expression::CallExpression(call)) =
+            returned_expression(declaration.function).map(Expression::without_parentheses)
+        else {
+            return false;
+        };
+        identifier_name(&call.callee).is_some_and(|name| self.units.foreign(name))
     }
 
     fn refusal(&self, shape: &WrapperShape, function: &Function<'_>) -> Option<&'static str> {
@@ -319,6 +331,9 @@ impl<'p> VisitJs<'p> for WrapperSearch<'p, '_> {
     fn visit_statement(&mut self, it: &Statement<'p>) {
         let entered = self.units.enter(it);
         if !self.units.inside() {
+            self.consider(it);
+        } else if self.foreign_inside && self.forwards_to_foreign_decoder(it) {
+            self.inside.extend(declaration_symbol(it));
             self.consider(it);
         }
         walk_js::walk_statement(self, it);
@@ -559,8 +574,8 @@ fn refuse_var_wrappers_read_early(
 }
 
 fn refuse_annex_b_wrappers(
-    program: &Program<'_>,
-    scoping: &Scoping,
+    (program, scoping): (&Program<'_>, &Scoping),
+    admitted: &FxHashSet<SymbolId>,
     found: &mut Vec<WrapperShape>,
     rejected: &mut Rejected,
 ) {
@@ -573,8 +588,9 @@ fn refuse_annex_b_wrappers(
     }
     let functions = block_function_symbols(scoping);
     let (written, kept): (Vec<_>, Vec<_>) = std::mem::take(found).into_iter().partition(|shape| {
+        let speculated = admitted.contains(&shape.symbol);
         writes.may_write(shape.symbol)
-            && !is_own_block_function(&writes, &functions, scoping, shape.symbol)
+            && !is_own_block_function(&writes, &functions, scoping, (shape.symbol, speculated))
     });
     *found = kept;
     rejected.extend(
@@ -588,15 +604,19 @@ fn is_own_block_function(
     writes: &AnnexBWrites,
     functions: &FxHashSet<SymbolId>,
     scoping: &Scoping,
-    symbol: SymbolId,
+    (symbol, speculated): (SymbolId, bool),
 ) -> bool {
+    let kept = match speculated {
+        true => placed_in_its_block,
+        false => kept_in_its_block,
+    };
     writes
         .functions()
         .iter()
         .find(|function| function.function == symbol)
         .is_some_and(|function| {
             function.target.is_none_or(|target| target == symbol)
-                && kept_in_its_block(scoping, functions, symbol)
+                && kept(scoping, functions, symbol)
         })
 }
 
@@ -626,13 +646,23 @@ fn refuse_globally_reached_wrappers(
 fn find_wrappers(
     program: &Program<'_>,
     cx: &mut Cx<'_, '_>,
-) -> Option<(Vec<WrapperShape>, Rejected)> {
+) -> Option<(Vec<WrapperShape>, Rejected, FxHashSet<SymbolId>)> {
     let checked = call_checks_apply(cx.opts);
     let mut search = WrapperSearch {
         scoping: cx.scoping(),
-        units: MachineryDepth::every_unit(),
+        units: if cx.opts.unsafe_transforms {
+            MachineryDepth::owned_by(crate::bridge::decoder_units(
+                program,
+                cx.scoping(),
+                crate::stamp::is_unedited(cx),
+            ))
+        } else {
+            MachineryDepth::every_unit()
+        },
         checked,
         speculating: cx.opts.unsafe_transforms && crate::legacy_reach::speculates_escapes(),
+        foreign_inside: cx.opts.unsafe_transforms,
+        inside: FxHashSet::default(),
         found: Vec::new(),
         forwarders: Vec::new(),
         rejected: Vec::new(),
@@ -644,6 +674,7 @@ fn find_wrappers(
         forwarders,
         mut rejected,
         unstable,
+        inside,
         ..
     } = search;
     let admitted =
@@ -652,7 +683,12 @@ fn find_wrappers(
         return None;
     }
     promote_forwarders(forwarders, &mut found, cx.scoping());
-    refuse_annex_b_wrappers(program, cx.scoping(), &mut found, &mut rejected);
+    refuse_annex_b_wrappers(
+        (program, cx.scoping()),
+        &admitted,
+        &mut found,
+        &mut rejected,
+    );
     refuse_var_wrappers_read_early(program, cx.scoping(), &mut found, &mut rejected);
     refuse_globally_reached_wrappers(program, cx, &mut found, &mut rejected);
     if checked {
@@ -661,7 +697,7 @@ fn find_wrappers(
         drop_broken_chains(&mut found);
     }
     wrapper_speculation::defer(cx.scoping(), &found, &admitted);
-    Some((found, rejected))
+    Some((found, rejected, inside))
 }
 
 fn plan_round<'p, 'a>(
@@ -669,10 +705,10 @@ fn plan_round<'p, 'a>(
     cx: &mut Cx<'a, '_>,
     poisoned: &mut FxHashSet<SymbolId>,
 ) -> Option<RoundPlan<'a>> {
-    let (found, rejected) = find_wrappers(program, cx)?;
+    let (found, rejected, inside) = find_wrappers(program, cx)?;
     let cx = &*cx;
     let checked = call_checks_apply(cx.opts);
-    let sites = collect_sites(program, cx.scoping(), &found);
+    let sites = collect_sites(program, cx.scoping(), &found, &inside);
     let primitives = if checked {
         PrimitiveNames::collect(program, cx.scoping())
     } else {

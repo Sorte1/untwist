@@ -136,6 +136,9 @@ pub const MACHINERY_NOT_INITIALISED: &str =
 pub const ROTATOR_NOT_SEALED: &str =
     "the rotator reads or writes something other than its own bindings, the string array and its \
      decoders, so its effect is not proven, and the unit's call sites were left alone";
+pub const ROTATOR_HOLDS_PROTECTION: &str =
+    "the rotator holds a block registered through a call controller, which may still run, so the \
+     default lane keeps the rotator and the string array it rotates";
 pub const WITH_STATEMENT: &str =
     "the program contains a with statement, under which an identifier may resolve to an object \
      property instead of the decoder, so no string-array unit was decoded";
@@ -694,6 +697,7 @@ catalogue!(
     CODE_BEFORE_ROTATOR,
     MACHINERY_NOT_INITIALISED,
     ROTATOR_NOT_SEALED,
+    ROTATOR_HOLDS_PROTECTION,
     WITH_STATEMENT,
     DIRECT_EVAL_SCOPE,
     MACHINERY_IN_A_BLOCK,
