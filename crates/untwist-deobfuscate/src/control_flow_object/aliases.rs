@@ -7,6 +7,7 @@ use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
+use std::cell::OnceCell;
 use untwist_core::ast_util::prop::identifier_name;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::may_call_eval;
@@ -41,18 +42,31 @@ fn is_block_function(scoping: &Scoping, symbol: SymbolId) -> bool {
             .is_var()
 }
 
-fn block_function_may_write(symbol: SymbolId, scoping: &Scoping) -> bool {
-    if crate::mutants::annex_b_writes_trusted() {
-        return false;
+#[derive(Default)]
+pub(super) struct BlockFunctions(OnceCell<FxHashSet<(String, Option<ScopeId>)>>);
+
+impl BlockFunctions {
+    fn index(&self, scoping: &Scoping) -> &FxHashSet<(String, Option<ScopeId>)> {
+        self.0.get_or_init(|| {
+            scoping
+                .symbol_ids()
+                .filter(|symbol| is_block_function(scoping, *symbol))
+                .map(|symbol| home_of(scoping, symbol))
+                .collect()
+        })
     }
-    let name = scoping.symbol_name(symbol);
-    let home = var_scope(scoping, scoping.symbol_scope_id(symbol));
-    scoping.symbol_ids().any(|other| {
-        other != symbol
-            && is_block_function(scoping, other)
-            && scoping.symbol_name(other) == name
-            && var_scope(scoping, scoping.symbol_scope_id(other)) == home
-    })
+
+    fn may_write(&self, symbol: SymbolId, scoping: &Scoping) -> bool {
+        !crate::mutants::annex_b_writes_trusted()
+            && self.index(scoping).contains(&home_of(scoping, symbol))
+    }
+}
+
+fn home_of(scoping: &Scoping, symbol: SymbolId) -> (String, Option<ScopeId>) {
+    (
+        scoping.symbol_name(symbol).to_owned(),
+        var_scope(scoping, scoping.symbol_scope_id(symbol)),
+    )
 }
 
 fn is_var(stmt: &Statement<'_>) -> Option<bool> {
@@ -102,6 +116,7 @@ pub(super) fn plan_alias<'a>(
     (index, alias_at): (usize, usize),
     scoping: &Scoping,
     (extended, others_required): (bool, bool),
+    block_functions: &BlockFunctions,
 ) -> Option<AliasFold<'a>> {
     let declared = object_declaration(stmts.get(index)?, extended)?;
     let (alias, init) = single_declarator(stmts.get(alias_at)?)?;
@@ -131,8 +146,8 @@ pub(super) fn plan_alias<'a>(
     let follows = reads_see_the_object(alias, object, name, scoping)
         && all_follow(stmts, &fold, lexical, scoping);
     (follows
-        && !block_function_may_write(alias, scoping)
-        && !block_function_may_write(object, scoping))
+        && !block_functions.may_write(alias, scoping)
+        && !block_functions.may_write(object, scoping))
     .then_some(fold)
 }
 
@@ -241,12 +256,19 @@ fn commit<'a>(stmts: &mut AVec<'a, Statement<'a>>, fold: &AliasFold<'a>, cx: &mu
 pub(super) fn fold_object_aliases<'a>(
     stmts: &mut AVec<'a, Statement<'a>>,
     cx: &mut Cx<'a, '_>,
+    block_functions: &BlockFunctions,
 ) -> usize {
     let scoping = cx.scoping();
     let extended = cx.opts.extended;
-    let Some(fold) = (0..stmts.len())
-        .find_map(|index| plan_alias(stmts, (index, index + 1), scoping, (extended, true)))
-    else {
+    let Some(fold) = (0..stmts.len()).find_map(|index| {
+        plan_alias(
+            stmts,
+            (index, index + 1),
+            scoping,
+            (extended, true),
+            block_functions,
+        )
+    }) else {
         return 0;
     };
     if opaque_scope(scoping) {

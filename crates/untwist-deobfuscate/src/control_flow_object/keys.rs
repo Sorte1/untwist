@@ -13,6 +13,7 @@ use std::borrow::Cow;
 
 use crate::notes;
 
+use super::aliases::BlockFunctions;
 use super::{accepted_keys, cff_value, object_declaration, single_declarator, CffValue};
 
 struct KeyFold {
@@ -64,6 +65,7 @@ fn plan_at(
     index: usize,
     scoping: &Scoping,
     extended: bool,
+    block_functions: &BlockFunctions,
 ) -> Option<KeyFold> {
     let temp = object_declaration(stmts.get(index)?, extended)?;
     let mut assigned = Vec::new();
@@ -88,8 +90,14 @@ fn plan_at(
     let into_object = scoping.get_resolved_reference_ids(temp.symbol).len() != assigned.len() + 1;
     let alias_at = index + 1 + assigned.len();
     if into_object
-        && (super::aliases::plan_alias(stmts, (index, alias_at), scoping, (extended, false))
-            .is_none()
+        && (super::aliases::plan_alias(
+            stmts,
+            (index, alias_at),
+            scoping,
+            (extended, false),
+            block_functions,
+        )
+        .is_none()
             || super::aliases::opaque_scope(scoping))
     {
         return None;
@@ -107,10 +115,15 @@ fn plan_at(
     })
 }
 
-fn plan_key_fold(stmts: &[Statement<'_>], scoping: &Scoping, extended: bool) -> Option<KeyFold> {
+fn plan_key_fold(
+    stmts: &[Statement<'_>],
+    scoping: &Scoping,
+    extended: bool,
+    block_functions: &BlockFunctions,
+) -> Option<KeyFold> {
     let mut refused: Option<KeyFold> = None;
     for index in 0..stmts.len() {
-        let Some(plan) = plan_at(stmts, index, scoping, extended) else {
+        let Some(plan) = plan_at(stmts, index, scoping, extended, block_functions) else {
             continue;
         };
         if plan.duplicate.is_none() {
@@ -259,8 +272,9 @@ fn commit_key_fold<'a>(
 pub(super) fn fold_key_assignments<'a>(
     stmts: &mut AVec<'a, Statement<'a>>,
     cx: &mut Cx<'a, '_>,
+    block_functions: &BlockFunctions,
 ) -> usize {
-    let Some(plan) = plan_key_fold(stmts, cx.scoping(), cx.opts.extended) else {
+    let Some(plan) = plan_key_fold(stmts, cx.scoping(), cx.opts.extended, block_functions) else {
         return 0;
     };
     if let Some(duplicate) = &plan.duplicate {

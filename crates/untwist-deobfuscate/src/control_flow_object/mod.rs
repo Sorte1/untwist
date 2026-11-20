@@ -40,7 +40,7 @@ mod sequenced;
 
 pub use declared::DeclaredObject;
 
-use aliases::fold_object_aliases;
+use aliases::{fold_object_aliases, BlockFunctions};
 use declared::inline_declared_objects;
 use keys::fold_key_assignments;
 
@@ -535,6 +535,7 @@ pub struct ControlFlowObject<'a> {
     refused_nest: Option<Span>,
     pending: FxHashSet<Span>,
     collapsed: bool,
+    block_functions: BlockFunctions,
 }
 
 pub(super) const MAX_NEST: usize = 256;
@@ -650,6 +651,7 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
         self.open_sites.clear();
         self.refused_nest = None;
         self.pending.clear();
+        self.block_functions = BlockFunctions::default();
         let collapsed = alias::collapse_object_aliases(program, cx);
         self.collapsed = collapsed > 0;
         if self.collapsed {
@@ -661,9 +663,9 @@ impl<'a> Pass<'a> for ControlFlowObject<'a> {
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
-        let folded = fold_key_assignments(stmts, cx);
+        let folded = fold_key_assignments(stmts, cx, &self.block_functions);
         cx.changed_by(folded);
-        let aliased = fold_object_aliases(stmts, cx);
+        let aliased = fold_object_aliases(stmts, cx, &self.block_functions);
         cx.changed_by(aliased);
         let mut declared = hoisted::declare_assigned_objects(stmts, cx);
         if declared == 0 && self.callee_objects {
