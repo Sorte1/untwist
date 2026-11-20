@@ -218,6 +218,23 @@ fn closed_loop_with(stmt: &Statement<'_>, scoping: &Scoping, dynamic: &DynamicSc
     !escapes.found && (!uses.found || minified_rotators_trusted()) && sealed
 }
 
+pub(super) fn closed_initialisers(stmt: &Statement<'_>) -> bool {
+    let Statement::VariableDeclaration(declaration) = stmt else {
+        return true;
+    };
+    declaration
+        .declarations
+        .iter()
+        .filter_map(|declarator| declarator.init.as_ref())
+        .all(|init| {
+            let mut escapes = LoopEscapes::default();
+            escapes.visit_expression(init);
+            let mut uses = LexicalUses::default();
+            uses.visit_expression(init);
+            !escapes.found && (!uses.found || minified_rotators_trusted())
+        })
+}
+
 fn sequence_head<'k, 'a>(expr: Option<&'k Expression<'a>>) -> Option<&'k Expression<'a>> {
     match expr.map(Expression::without_parentheses) {
         Some(Expression::SequenceExpression(sequence)) => sequence.expressions.first(),
