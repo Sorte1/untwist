@@ -144,6 +144,10 @@ impl<'p> Assembled<'p> {
         self.base
     }
 
+    pub(super) fn adds_keys(&self) -> bool {
+        !self.added.is_empty()
+    }
+
     pub(super) fn reaches_its_receiver(&self) -> bool {
         let mut scan = ThisFree { found: false };
         scan.visit_object_expression(self.object);
@@ -284,34 +288,39 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
                 self.live = true;
             }
         }
-        match it {
-            Expression::CallExpression(call) => {
-                let callee = call.callee.without_parentheses();
-                if let Some((id, assembled)) = self.receiver(callee) {
-                    let safe = member_parts(callee)
-                        .and_then(|(_, name)| assembled.property(&name))
-                        .is_some_and(this_free_function);
-                    if !safe {
-                        self.risky.insert(address_of(id));
-                    }
-                }
-            }
-            Expression::TaggedTemplateExpression(tagged) => {
-                if let Some((id, _)) = self.receiver(tagged.tag.without_parentheses()) {
-                    self.risky.insert(address_of(id));
-                }
-            }
-            Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::Delete => {
-                if let Some((id, _)) = self.receiver(unary.argument.without_parentheses()) {
-                    self.risky.insert(address_of(id));
-                }
-            }
-            _ => {}
-        }
         walk_js::walk_expression(self, it);
         if dead {
             self.depth -= 1;
         }
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        let callee = it.callee.without_parentheses();
+        if let Some((id, assembled)) = self.receiver(callee) {
+            let safe = member_parts(callee)
+                .and_then(|(_, name)| assembled.property(&name))
+                .is_some_and(this_free_function);
+            if !safe {
+                self.risky.insert(address_of(id));
+            }
+        }
+        walk_js::walk_call_expression(self, it);
+    }
+
+    fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
+        if let Some((id, _)) = self.receiver(it.tag.without_parentheses()) {
+            self.risky.insert(address_of(id));
+        }
+        walk_js::walk_tagged_template_expression(self, it);
+    }
+
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        if it.operator == UnaryOperator::Delete {
+            if let Some((id, _)) = self.receiver(it.argument.without_parentheses()) {
+                self.risky.insert(address_of(id));
+            }
+        }
+        walk_js::walk_unary_expression(self, it);
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
@@ -340,10 +349,10 @@ pub(super) fn aliases_mutated_only_in_dead<'k, 'p>(
 where
     'p: 'k,
 {
-    let mut objects = FxHashMap::default();
-    for (alias, assembled) in used {
-        objects.insert(alias, assembled);
-        objects.insert(assembled.base, assembled);
+    let used: Vec<(SymbolId, &'k Assembled<'p>)> = used.collect();
+    let mut objects: FxHashMap<SymbolId, &'k Assembled<'p>> = used.iter().copied().collect();
+    for (_, assembled) in &used {
+        objects.entry(assembled.base).or_insert(*assembled);
     }
     let mut roots: Vec<&FunctionBody<'_>> = Vec::new();
     let mut whole = false;
