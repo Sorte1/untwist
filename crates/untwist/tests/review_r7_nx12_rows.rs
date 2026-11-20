@@ -29,9 +29,6 @@ const STATICS_READ: [&str; 21] = [
     "m27-name-cat",
     "m28-name-cat-call",
     "c-static",
-    "n6-ctor-static",
-    "n7-ctor-var",
-    "n8-ctor-lastMatch",
 ];
 
 const NUMERIC_LOOKING_KEYS: [&str; 28] = [
