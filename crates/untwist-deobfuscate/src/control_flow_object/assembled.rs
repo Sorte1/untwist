@@ -233,6 +233,7 @@ fn this_free_function(value: &Expression<'_>) -> bool {
 struct AliasUses<'s, 'k, 'p> {
     scoping: &'s Scoping,
     objects: FxHashMap<SymbolId, &'k Assembled<'p>>,
+    growing_bases: FxHashSet<SymbolId>,
     dead: &'k FxHashSet<usize>,
     builtins_unpatched: bool,
     depth: usize,
@@ -297,9 +298,12 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         let callee = it.callee.without_parentheses();
         if let Some((id, assembled)) = self.receiver(callee) {
-            let safe = member_parts(callee)
-                .and_then(|(_, name)| assembled.property(&name))
-                .is_some_and(this_free_function);
+            let growing = resolved(id, self.scoping)
+                .is_some_and(|symbol| self.growing_bases.contains(&symbol));
+            let safe = !growing
+                && member_parts(callee)
+                    .and_then(|(_, name)| assembled.property(&name))
+                    .is_some_and(this_free_function);
             if !safe {
                 self.risky.insert(address_of(id));
             }
@@ -354,6 +358,11 @@ where
     for (_, assembled) in &used {
         objects.entry(assembled.base).or_insert(*assembled);
     }
+    let growing_bases = used
+        .iter()
+        .filter(|(_, assembled)| assembled.adds_keys())
+        .map(|(_, assembled)| assembled.base)
+        .collect();
     let mut roots: Vec<&FunctionBody<'_>> = Vec::new();
     let mut whole = false;
     for assembled in objects.values() {
@@ -366,6 +375,7 @@ where
     let mut uses = AliasUses {
         scoping,
         objects,
+        growing_bases,
         dead,
         builtins_unpatched,
         depth: 0,
