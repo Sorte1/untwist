@@ -9,6 +9,7 @@ use oxc_str::Ident;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::rename::{unique_name_avoiding, Renames};
+use untwist_core::ast_util::respan::{follow_spans, take_followed_spans};
 use untwist_core::semantic::scope_hazard;
 use untwist_core::semantic::unbound::is_unbound_name;
 
@@ -81,6 +82,7 @@ impl Drop for Stage {
 pub(crate) struct EscapeStage {
     open: bool,
     escapes: Vec<Span>,
+    followed: Vec<Span>,
 }
 
 pub(crate) fn open_escape_stage(on: bool) -> EscapeStage {
@@ -90,6 +92,7 @@ pub(crate) fn open_escape_stage(on: bool) -> EscapeStage {
         EscapeStage {
             open: std::mem::replace(&mut deferral.escapes_open, open),
             escapes: std::mem::take(&mut deferral.escapes),
+            followed: take_followed_spans(),
         }
     })
 }
@@ -102,6 +105,8 @@ impl Drop for EscapeStage {
             deferral.escapes_open = self.open;
             deferral.escapes = std::mem::take(&mut self.escapes);
         });
+        take_followed_spans();
+        follow_spans(&self.followed);
     }
 }
 
@@ -111,6 +116,7 @@ pub(crate) fn speculates_escapes() -> bool {
 
 pub(crate) fn defer_escapes(decoders: &[Span]) {
     DEFERRAL.with(|deferral| deferral.borrow_mut().escapes.extend_from_slice(decoders));
+    follow_spans(decoders);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -316,7 +322,7 @@ pub(crate) fn settle_escapes<'a>(
     scoping: &Scoping,
     alloc: &'a Allocator,
 ) {
-    let (escapes, carried, carries) = DEFERRAL.with(|deferral| {
+    let (mut escapes, carried, carries) = DEFERRAL.with(|deferral| {
         let mut deferral = deferral.borrow_mut();
         (
             std::mem::take(&mut deferral.escapes),
@@ -326,6 +332,9 @@ pub(crate) fn settle_escapes<'a>(
     });
     if escapes.is_empty() && carried.is_empty() {
         return;
+    }
+    if !escapes.is_empty() {
+        escapes.extend(take_followed_spans());
     }
     let Some(mut survivors) = surviving_names((program, scoping), &escapes) else {
         DEFERRAL.with(|deferral| deferral.borrow_mut().unverified = true);
