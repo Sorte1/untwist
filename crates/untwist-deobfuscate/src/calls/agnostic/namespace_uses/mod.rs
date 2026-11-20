@@ -3,6 +3,7 @@ mod chains;
 mod flows;
 mod holder_uses;
 mod holders;
+mod key_params;
 mod keys;
 mod numeric;
 mod proto_stores;
@@ -120,6 +121,8 @@ struct Walker<'s, 'a> {
     proto_stores: Vec<Option<&'a Expression<'a>>>,
     holders_open: bool,
     open_reads: Vec<chains::OpenRead<'a>>,
+    param_slots: FxHashMap<SymbolId, key_params::ParamSlot>,
+    callee_calls: FxHashMap<SymbolId, Vec<&'a CallExpression<'a>>>,
 }
 
 #[derive(Default)]
@@ -175,6 +178,8 @@ fn walker_for<'s, 'a>(
         proto_stores: Vec::new(),
         holders_open: false,
         open_reads: Vec::new(),
+        param_slots: FxHashMap::default(),
+        callee_calls: FxHashMap::default(),
     }
 }
 
@@ -831,6 +836,7 @@ impl<'s, 'a> Walker<'s, 'a> {
         self.collect_numeric(kind);
         self.collect_array_source(kind);
         self.collect_enumeration(kind);
+        self.collect_param_slots(kind);
         match kind {
             AstKind::VariableDeclarator(declarator) => {
                 self.collect_declarator(declarator);
@@ -846,6 +852,7 @@ impl<'s, 'a> Walker<'s, 'a> {
             AstKind::IdentifierReference(id) => {
                 self.collect_reference(id);
                 self.collect_holder_use(id);
+                self.collect_callee(id);
             }
             _ => {}
         }

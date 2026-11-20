@@ -51,14 +51,17 @@ impl<'s, 'a> Walker<'s, 'a> {
             && !self.annex.may_write(symbol)
             && self.scoping.symbol_redeclarations(symbol).is_empty()
             && !self.arguments_used.contains(&function);
-        settled
-            && self.numeric_writes.get(&symbol).is_some_and(|writes| {
-                writes.iter().all(|write| match write {
-                    NumericWrite::Numeric => true,
-                    NumericWrite::Value(value) => self.numeric_key(value, KIND_DEPTH),
-                    NumericWrite::Unknown => false,
-                })
+        settled && self.numeric_writes.contains_key(&symbol) && self.writes_numeric(symbol)
+    }
+
+    pub(super) fn writes_numeric(&self, symbol: SymbolId) -> bool {
+        self.numeric_writes.get(&symbol).is_none_or(|writes| {
+            writes.iter().all(|write| match write {
+                NumericWrite::Numeric => true,
+                NumericWrite::Value(value) => self.numeric_key(value, KIND_DEPTH),
+                NumericWrite::Unknown => false,
             })
+        })
     }
 }
 

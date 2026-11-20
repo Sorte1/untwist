@@ -155,6 +155,9 @@ impl<'s, 'a> Walker<'s, 'a> {
         {
             return false;
         }
+        if self.numeric_param(read.key) {
+            return false;
+        }
         read.object
             .is_none_or(|object| matches!(self.key_proof(object, read.key), KeyProof::Open))
     }
